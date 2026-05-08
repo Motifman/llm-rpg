@@ -1,0 +1,136 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "lantern_lifecycle_demo",
+    "title": "ランタンとマッチ — Phase 4-A item instance state デモ",
+    "description": "プレイヤーは未使用のマッチ instance (state: {used: false}) でランタンを点ける。点火 interaction の effect が item instance の state を {used: true} に書き換え、`last_used_tick` を記録する。一度使ったマッチでは精度の高い火種にならず、precondition `used: false` で他のオブジェクトを点けようとすると拒否される。Phase 4-A PR 1/2/3 (item instance state field + 操作 effect/precondition + use_item 配線) を 1 シナリオで通しで実証する。",
+    "theme": "crafting",
+    "difficulty": "easy",
+    "estimated_ticks": 10,
+    "author": "demo",
+    "tags": ["item_instance_state", "phase4_showcase"]
+  },
+  "item_specs": [
+    {"id": "match", "name": "マッチ", "description": "一度きりの火種。", "category": "MATERIAL"}
+  ],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "shrine",
+      "name": "祠",
+      "description": "石作りの小さな祠。中央と奥にランプが据えられている。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "lamp_a",
+            "name": "中央ランプ",
+            "description": "中央のランプ。火を入れれば明かりが灯る。",
+            "object_type": "OTHER",
+            "state": {"lit": false},
+            "interactions": [
+              {
+                "action_name": "light",
+                "display_label": "火を入れる",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "lamp_a",
+                    "required_state": {"lit": false},
+                    "failure_message": "ランプはすでに灯っている。"
+                  },
+                  {
+                    "condition_type": "ITEM_INSTANCE_STATE",
+                    "required_state": {"used": false},
+                    "failure_message": "そのマッチはすでに燃え尽きている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "lamp_a",
+                      "state_updates": {"lit": true}
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_ITEM_INSTANCE_STATE",
+                    "parameters": {"state_updates": {"used": true}}
+                  },
+                  {
+                    "effect_type": "RECORD_ITEM_INSTANCE_STATE_TICK",
+                    "parameters": {"state_key": "used_at_tick"}
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "マッチで中央ランプに火を入れた。マッチは燃え尽きた。"}
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "lamp_b",
+            "name": "奥のランプ",
+            "description": "奥のランプ。同じく未点灯。",
+            "object_type": "OTHER",
+            "state": {"lit": false},
+            "interactions": [
+              {
+                "action_name": "light",
+                "display_label": "火を入れる",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "lamp_b",
+                    "required_state": {"lit": false}
+                  },
+                  {
+                    "condition_type": "ITEM_INSTANCE_STATE",
+                    "required_state": {"used": false},
+                    "failure_message": "そのマッチはすでに燃え尽きている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "lamp_b",
+                      "state_updates": {"lit": true}
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_ITEM_INSTANCE_STATE",
+                    "parameters": {"state_updates": {"used": true}}
+                  },
+                  {
+                    "effect_type": "RECORD_ITEM_INSTANCE_STATE_TICK",
+                    "parameters": {"state_key": "used_at_tick"}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [],
+  "players": [
+    {"id": "player_a", "name": "巡礼者", "spawn_spot": "shrine", "initial_items": ["match", "match"]}
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 30}]
+  },
+  "initial_flags": [],
+  "scenario_events": []
+}

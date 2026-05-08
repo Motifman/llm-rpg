@@ -12,6 +12,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
@@ -79,6 +80,7 @@ class SpotInteractionApplicationService:
         *,
         interaction_parameters: Optional[Dict[str, Any]] = None,
         current_tick: Optional[WorldTick] = None,
+        acting_item_instance_id: Optional["ItemInstanceId"] = None,
     ) -> SpotInteractionResultDto:
         graph = self._spot_graph_repository.find_graph()
         entity_id = EntityId.create(int(player_id))
@@ -102,6 +104,22 @@ class SpotInteractionApplicationService:
         owned_counts = count_owned_item_instances_by_spec(inv, self._item_repository)
         world_flags = self._world_flag_state.as_frozen_set()
 
+        # Phase 4-A: 「使う対象 item instance」の解決。
+        # acting_item_instance_id が渡された場合のみ aggregate をロードし、
+        # interaction の effect / precondition から in-place に state を
+        # 操作できるよう domain service に渡す。後で state が変わった
+        # ときだけ item_repository に save する責務がここにある。
+        acting_item_aggregate = None
+        if acting_item_instance_id is not None:
+            acting_item_aggregate = self._item_repository.find_by_id(
+                acting_item_instance_id
+            )
+            if acting_item_aggregate is None:
+                raise ApplicationException(
+                    f"acting item instance が見つかりません: {acting_item_instance_id.value}",
+                    player_id=int(player_id),
+                )
+
         try:
             result = self._interaction.execute_interaction(
                 interior,
@@ -112,6 +130,7 @@ class SpotInteractionApplicationService:
                 interaction_parameters=interaction_parameters,
                 current_tick=current_tick,
                 owned_item_spec_counts=owned_counts,
+                acting_item_aggregate=acting_item_aggregate,
             )
         except InteractionNotAllowedException:
             # 前提条件で拒否された。InteractionDef.on_failure_observation が
@@ -162,6 +181,14 @@ class SpotInteractionApplicationService:
                         player_id=int(player_id),
                     )
             self._player_inventory_repository.save(inv2)
+
+        # Phase 4-A: acting item instance の state が effect で変わった場合、
+        # item_repository に save して永続化する。
+        if (
+            result.item_instance_state_changed
+            and acting_item_aggregate is not None
+        ):
+            self._item_repository.save(acting_item_aggregate)
 
         for spec in result.destroy_connection_specs:
             graph.remove_connection(ConnectionId.create(spec.connection_id))

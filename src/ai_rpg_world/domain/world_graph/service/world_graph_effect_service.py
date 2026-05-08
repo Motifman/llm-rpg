@@ -4,6 +4,7 @@ import logging
 from typing import Any, Iterable, List, Optional, Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
@@ -45,6 +46,7 @@ class WorldGraphEffectService:
         effects: Iterable[InteractionEffect],
         world_flags: frozenset[str],
         current_tick: Optional[WorldTick] = None,
+        acting_item_aggregate: Optional["ItemAggregate"] = None,
     ) -> WorldGraphEffectResult:
         flags: set[str] = set(world_flags)
         messages: List[str] = []
@@ -61,6 +63,15 @@ class WorldGraphEffectService:
         passage_specs: List[PassageStateUpdateSpec] = []
         current_interior = interior
         current_object = acting_object
+
+        # Phase 4-A: acting_item_aggregate の state は in-place で書き換える。
+        # 「変更があったか」を caller (app service の save 判断) に伝えるため、
+        # 適用前に snapshot を取り、ループ終了後に diff を取る。
+        # 将来的に effect ごとに細かい change tracking が必要になったら、
+        # _apply_effect の戻り値を拡張するか、専用 spec を追加する。
+        initial_item_state = (
+            dict(acting_item_aggregate.state) if acting_item_aggregate is not None else None
+        )
 
         for effect in effects:
             (
@@ -97,7 +108,13 @@ class WorldGraphEffectService:
                 satisfy_need_specs=satisfy_need_specs,
                 passage_specs=passage_specs,
                 current_tick=current_tick,
+                acting_item_aggregate=acting_item_aggregate,
             )
+
+        item_instance_state_changed = (
+            acting_item_aggregate is not None
+            and dict(acting_item_aggregate.state) != initial_item_state
+        )
 
         return WorldGraphEffectResult(
             new_interior=current_interior,
@@ -115,6 +132,7 @@ class WorldGraphEffectService:
             destroy_connection_specs=tuple(destroy_connection_specs),
             satisfy_need_specs=tuple(satisfy_need_specs),
             passage_state_updates=tuple(passage_specs),
+            item_instance_state_changed=item_instance_state_changed,
         )
 
     def _apply_effect(
@@ -137,6 +155,7 @@ class WorldGraphEffectService:
         satisfy_need_specs: List[SatisfyNeedSpec],
         passage_specs: List[PassageStateUpdateSpec],
         current_tick: Optional[WorldTick] = None,
+        acting_item_aggregate: Optional[ItemAggregate] = None,
     ) -> Tuple[
         SpotInterior,
         SpotObject | None,
@@ -323,6 +342,55 @@ class WorldGraphEffectService:
             amount = int(p.get("amount", 0))
             if need_type_name and amount > 0:
                 satisfy_need_specs.append(SatisfyNeedSpec(need_type_name=need_type_name, amount=amount))
+            return _all
+
+        if et == InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE:
+            # Phase 4-A: acting item instance の state を部分マージ更新する。
+            # acting_item_aggregate を caller (use_item 経由など) が
+            # 渡してこなかった場合は no-op + warn (silent failure 回避)。
+            updates = p.get("state_updates")
+            if not isinstance(updates, dict):
+                _logger.warning(
+                    "CHANGE_ITEM_INSTANCE_STATE: parameters.state_updates must be dict (got %s)",
+                    type(updates).__name__,
+                )
+                return _all
+            if acting_item_aggregate is None:
+                _logger.warning(
+                    "CHANGE_ITEM_INSTANCE_STATE: caller did not provide acting_item_aggregate; "
+                    "skipping state merge"
+                )
+                return _all
+            acting_item_aggregate.merge_state(updates)
+            return _all
+
+        if et == InteractionEffectTypeEnum.RECORD_ITEM_INSTANCE_STATE_TICK:
+            # Phase 4-A: current_tick.value を acting item の state[state_key] に書き込む。
+            # 「最後に使った tick」「最後に火を点けた tick」など、後で
+            # OBJECT_STATE_TICK_AT_LEAST に相当する item 側 predicate
+            # （後続 PR で導入予定）が読む timestamp を生成する。
+            state_key = p.get("state_key")
+            if not isinstance(state_key, str) or not state_key:
+                _logger.warning(
+                    "RECORD_ITEM_INSTANCE_STATE_TICK: state_key is required (got %r)",
+                    state_key,
+                )
+                return _all
+            if current_tick is None:
+                _logger.warning(
+                    "RECORD_ITEM_INSTANCE_STATE_TICK: caller did not provide current_tick; "
+                    "skipping write to state[%r]",
+                    state_key,
+                )
+                return _all
+            if acting_item_aggregate is None:
+                _logger.warning(
+                    "RECORD_ITEM_INSTANCE_STATE_TICK: caller did not provide "
+                    "acting_item_aggregate; skipping write to state[%r]",
+                    state_key,
+                )
+                return _all
+            acting_item_aggregate.merge_state({state_key: int(current_tick.value)})
             return _all
 
         if et == InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK:

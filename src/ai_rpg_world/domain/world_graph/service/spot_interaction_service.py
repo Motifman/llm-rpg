@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import FrozenSet, Mapping, Optional, Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
@@ -44,6 +45,7 @@ class SpotInteractionService:
         spot_presence_count: int = 1,
         interaction_parameters: Optional[dict] = None,
         owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
+        acting_item_aggregate: Optional["ItemAggregate"] = None,
     ) -> Tuple[bool, Optional[str]]:
         # `owned_item_spec_counts` が渡されない場合は「frozenset から各 1 個」
         # でフォールバックする（required_quantity=1 の既存挙動と互換）。
@@ -68,6 +70,7 @@ class SpotInteractionService:
                 spot_presence_count=spot_presence_count,
                 interaction_parameters=interaction_parameters,
                 owned_item_spec_counts=counts,
+                acting_item_aggregate=acting_item_aggregate,
             )
             if not ok:
                 return False, msg
@@ -82,6 +85,7 @@ class SpotInteractionService:
         spot_presence_count: int = 1,
         interaction_parameters: Optional[dict] = None,
         owned_item_spec_counts: Mapping[ItemSpecId, int],
+        acting_item_aggregate: Optional["ItemAggregate"] = None,
     ) -> Tuple[bool, Optional[str]]:
         t = cond.condition_type
         if t == InteractionConditionTypeEnum.ALWAYS:
@@ -141,6 +145,23 @@ class SpotInteractionService:
                 return False, cond.failure_message or "入力が正しくありません"
             return True, None
 
+        if t == InteractionConditionTypeEnum.ITEM_INSTANCE_STATE:
+            # Phase 4-A: acting item instance の state[k] が required_state の
+            # 全キー/値と一致しているかを判定する。
+            # acting_item_aggregate を渡してこなかった場合は precondition
+            # 失敗 (作家ミスを silent にしないため)。
+            if cond.required_state is None:
+                return False, cond.failure_message or "ITEM_INSTANCE_STATE に required_state がありません"
+            if acting_item_aggregate is None:
+                return False, (
+                    cond.failure_message
+                    or "ITEM_INSTANCE_STATE は acting item instance を必要とします (use_item 経路で評価される想定)"
+                )
+            for k, v in cond.required_state.items():
+                if acting_item_aggregate.state.get(k) != v:
+                    return False, cond.failure_message or "アイテムの状態が条件を満たしません"
+            return True, None
+
         if t == InteractionConditionTypeEnum.HAS_ITEMS:
             if not cond.required_item_spec_ids:
                 return False, cond.failure_message or "HAS_ITEMS に必要アイテムリストがありません"
@@ -166,6 +187,7 @@ class SpotInteractionService:
         interaction_parameters: Optional[dict] = None,
         current_tick: Optional[WorldTick] = None,
         owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
+        acting_item_aggregate: Optional[ItemAggregate] = None,
     ) -> InteractionExecutionResult:
         obj = interior.get_object(object_id)
         if obj is None:
@@ -178,6 +200,7 @@ class SpotInteractionService:
             spot_presence_count=spot_presence_count,
             interaction_parameters=interaction_parameters,
             owned_item_spec_counts=owned_item_spec_counts,
+            acting_item_aggregate=acting_item_aggregate,
         )
         if not ok:
             raise InteractionNotAllowedException(reason or "Interaction not allowed")
@@ -188,6 +211,7 @@ class SpotInteractionService:
             effects=idef.effects,
             world_flags=world_flags,
             current_tick=current_tick,
+            acting_item_aggregate=acting_item_aggregate,
         )
         return InteractionExecutionResult(
             new_interior=effect_result.new_interior,
@@ -203,4 +227,5 @@ class SpotInteractionService:
             destroy_connection_specs=effect_result.destroy_connection_specs,
             satisfy_need_specs=effect_result.satisfy_need_specs,
             passage_state_updates=effect_result.passage_state_updates,
+            item_instance_state_changed=effect_result.item_instance_state_changed,
         )

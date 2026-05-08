@@ -36,3 +36,7 @@ class WorldGraphEffectResult:
     destroy_connection_specs: Tuple[DestroyConnectionSpec, ...] = ()
     satisfy_need_specs: Tuple[SatisfyNeedSpec, ...] = ()
     passage_state_updates: Tuple[PassageStateUpdateSpec, ...] = ()
+    # Phase 4-A: acting item instance に対して state 変更が起きたかどうか。
+    # True なら caller (app service) が item_aggregate を save する責務を持つ。
+    # acting_item_aggregate を渡さなかった呼び出しでは常に False。
+    item_instance_state_changed: bool = False
