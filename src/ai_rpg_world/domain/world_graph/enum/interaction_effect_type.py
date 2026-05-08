@@ -27,3 +27,8 @@ class InteractionEffectTypeEnum(Enum):
     # acting item instance (use_item の対象 instance) を target にする。
     CHANGE_ITEM_INSTANCE_STATE = "CHANGE_ITEM_INSTANCE_STATE"
     RECORD_ITEM_INSTANCE_STATE_TICK = "RECORD_ITEM_INSTANCE_STATE_TICK"
+    # Phase 4-B: cross-instance interaction で「使う側 (acting)」と
+    # 「使われる側 (target)」を区別する。target_item_instance_id で
+    # 渡された 2 番目の instance を操作する。
+    CHANGE_TARGET_ITEM_INSTANCE_STATE = "CHANGE_TARGET_ITEM_INSTANCE_STATE"
+    RECORD_TARGET_ITEM_INSTANCE_STATE_TICK = "RECORD_TARGET_ITEM_INSTANCE_STATE_TICK"

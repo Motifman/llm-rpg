@@ -40,3 +40,6 @@ class WorldGraphEffectResult:
     # True なら caller (app service) が item_aggregate を save する責務を持つ。
     # acting_item_aggregate を渡さなかった呼び出しでは常に False。
     item_instance_state_changed: bool = False
+    # Phase 4-B: target item instance (cross-instance interaction の作用先)
+    # に対して state 変更が起きたかどうか。same semantics as acting 版。
+    target_item_instance_state_changed: bool = False

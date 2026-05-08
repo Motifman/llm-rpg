@@ -38,3 +38,6 @@ class InteractionExecutionResult:
     # Phase 4-A: acting item instance の state が変更されたか。True のとき
     # caller (SpotInteractionApplicationService 等) は item_aggregate を save する。
     item_instance_state_changed: bool = False
+    # Phase 4-B: target item instance (cross-instance interaction の作用先) の
+    # state が変更されたか。caller が target_item_aggregate を save するのに使う。
+    target_item_instance_state_changed: bool = False
