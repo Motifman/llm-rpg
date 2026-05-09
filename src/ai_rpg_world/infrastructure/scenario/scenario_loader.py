@@ -387,10 +387,53 @@ class ScenarioLoader:
             puzzle_input_key=raw.get("puzzle_input_key"),
             required_item_spec_ids=required_item_spec_ids,
             required_quantity=self._parse_required_quantity(raw),
-            need_type=raw.get("need_type"),
+            need_type=self._parse_need_type(raw),
             need_threshold=raw.get("need_threshold"),
-            hp_ratio=raw.get("hp_ratio"),
+            hp_ratio=self._parse_hp_ratio(raw),
         )
+
+    @staticmethod
+    def _parse_need_type(raw: Dict[str, Any]) -> Optional[str]:
+        """`need_type` が指定されていれば NeedType に存在する名前か load 時に検証する。
+
+        ランタイムまで silent に間違いを引きずると「interaction が永久に
+        発火しない」silent failure になるので boundary で弾く。
+        """
+        from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+
+        value = raw.get("need_type")
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ScenarioLoadError(
+                f"need_type must be a string (got {type(value).__name__})"
+            )
+        try:
+            NeedType(value)
+        except ValueError as exc:
+            valid = sorted(t.value for t in NeedType)
+            raise ScenarioLoadError(
+                f"need_type {value!r} is not a known NeedType. Valid values: {valid}"
+            ) from exc
+        return value
+
+    @staticmethod
+    def _parse_hp_ratio(raw: Dict[str, Any]) -> Optional[float]:
+        """`hp_ratio` を 0.0..1.0 の範囲で検証する。範囲外は load 時に拒否。"""
+        value = raw.get("hp_ratio")
+        if value is None:
+            return None
+        try:
+            f = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ScenarioLoadError(
+                f"hp_ratio must be a number (got {value!r})"
+            ) from exc
+        if not (0.0 <= f <= 1.0):
+            raise ScenarioLoadError(
+                f"hp_ratio must be in [0.0, 1.0] (got {f})"
+            )
+        return f
 
     @staticmethod
     def _parse_required_quantity(raw: Dict[str, Any]) -> int:

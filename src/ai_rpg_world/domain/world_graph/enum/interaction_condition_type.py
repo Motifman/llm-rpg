@@ -18,7 +18,7 @@ class InteractionConditionTypeEnum(Enum):
     TARGET_ITEM_INSTANCE_STATE = "TARGET_ITEM_INSTANCE_STATE"
     # Phase 4-D-1: プレイヤー状態 (needs / HP) を判定する precondition。
     # アイテムを使う前提として「空腹なときだけ」「HP が低いときだけ」など
-    # プレイヤー側の状況を組み合わせるために使う。
-    PLAYER_NEED_AT_LEAST = "PLAYER_NEED_AT_LEAST"
-    PLAYER_HP_RATIO_BELOW = "PLAYER_HP_RATIO_BELOW"
-    PLAYER_HP_RATIO_AT_LEAST = "PLAYER_HP_RATIO_AT_LEAST"
+    # プレイヤー側の状況を組み合わせるために使う。境界条件は名前と一致:
+    PLAYER_NEED_AT_LEAST = "PLAYER_NEED_AT_LEAST"  # need.value >= need_threshold
+    PLAYER_HP_RATIO_BELOW = "PLAYER_HP_RATIO_BELOW"  # hp.percentage < hp_ratio (strict <)
+    PLAYER_HP_RATIO_AT_LEAST = "PLAYER_HP_RATIO_AT_LEAST"  # hp.percentage >= hp_ratio
