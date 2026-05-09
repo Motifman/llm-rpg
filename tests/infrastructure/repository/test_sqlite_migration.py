@@ -145,7 +145,7 @@ class TestInitGameDbSchema:
         )
         applied = {row[0]: row[1] for row in cur.fetchall()}
         assert applied == {
-            "game_write": 22,
+            "game_write": 23,
             "global_market_listing_read_model": 1,
             "personal_trade_listing_read_model": 1,
             "trade_detail_read_model": 1,
