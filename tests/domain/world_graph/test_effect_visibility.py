@@ -116,8 +116,8 @@ def _make_object() -> SpotObject:
 class TestActorDirectDefaults:
     """行為者本人の体験はデフォルトで ACTOR_DIRECT に分類される。"""
 
-    def test_apply_damage_is_actor_direct_by_default(self) -> None:
-        """APPLY_DAMAGE はデフォルトで actor_direct_effects に入る。"""
+    def test_apply_damage_is_public_observable_by_default(self) -> None:
+        """APPLY_DAMAGE は同スポットの他者から見える物理現象として PUBLIC_OBSERVABLE が既定。"""
         svc = WorldGraphEffectService()
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.APPLY_DAMAGE,
@@ -129,13 +129,16 @@ class TestActorDirectDefaults:
             effects=[effect],
             world_flags=frozenset(),
         )
-        assert len(result.actor_direct_effects) == 1
-        assert result.actor_direct_effects[0].kind == AppliedEffectKind.DAMAGE
-        assert result.actor_direct_effects[0].visibility == EffectVisibility.ACTOR_DIRECT
-        assert result.public_observable_effects == ()
+        assert len(result.public_observable_effects) == 1
+        assert result.public_observable_effects[0].kind == AppliedEffectKind.DAMAGE
+        assert (
+            result.public_observable_effects[0].visibility
+            == EffectVisibility.PUBLIC_OBSERVABLE
+        )
+        assert result.actor_direct_effects == ()
         assert result.hidden_effects == ()
         # DamageSpec にも visibility が伝播
-        assert result.damage_specs[0].visibility == EffectVisibility.ACTOR_DIRECT
+        assert result.damage_specs[0].visibility == EffectVisibility.PUBLIC_OBSERVABLE
 
     def test_change_acting_item_state_is_actor_direct(self) -> None:
         """自分の使ったアイテム状態変化は ACTOR_DIRECT デフォルト。"""
@@ -229,19 +232,43 @@ class TestHiddenDefaults:
         assert result.public_observable_effects == ()
 
 
+class TestVisibilityFirstClassField:
+    """visibility は InteractionEffect の first-class 属性として渡せる。"""
+
+    def test_first_class_field_takes_precedence_over_parameters(self) -> None:
+        """`InteractionEffect.visibility` が parameters['visibility'] より優先される。"""
+        svc = WorldGraphEffectService()
+        # parameters 側は HIDDEN を指定するが、first-class 側で ACTOR_DIRECT を強制
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.APPLY_DAMAGE,
+            parameters={"damage": 2, "visibility": "HIDDEN"},
+            visibility=EffectVisibility.ACTOR_DIRECT,
+        )
+        result = svc.apply_effects(
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
+        )
+        assert len(result.actor_direct_effects) == 1
+        assert result.public_observable_effects == ()
+        assert result.hidden_effects == ()
+
+
 class TestVisibilityOverride:
     """シナリオ JSON が `visibility` を明示すれば既定を上書きできる。"""
 
     def test_player_state_can_be_lifted_to_actor_direct(self) -> None:
-        """毒だけど本人は痛みで分かる、というケースを actor_direct で表現できる。"""
+        """毒だけど本人は痛みで分かる、というケースを actor_direct で表現できる。
+
+        first-class field `visibility` で上書きできることを確認する。
+        """
         svc = WorldGraphEffectService()
         status = _player_status()
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.CHANGE_PLAYER_STATE,
-            parameters={
-                "state_updates": {"buff_strength": 2},
-                "visibility": "ACTOR_DIRECT",
-            },
+            parameters={"state_updates": {"buff_strength": 2}},
+            visibility=EffectVisibility.ACTOR_DIRECT,
         )
         result = svc.apply_effects(
             interior=_empty_interior(),
@@ -260,11 +287,8 @@ class TestVisibilityOverride:
         obj = _make_object()
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.CHANGE_OBJECT_STATE,
-            parameters={
-                "state_updates": {"trap_armed": True},
-                "object_id": 1,
-                "visibility": "HIDDEN",
-            },
+            parameters={"state_updates": {"trap_armed": True}, "object_id": 1},
+            visibility=EffectVisibility.HIDDEN,
         )
         result = svc.apply_effects(
             interior=_interior_with_object(obj),
@@ -276,14 +300,13 @@ class TestVisibilityOverride:
         assert result.public_observable_effects == ()
 
     def test_unknown_visibility_falls_back_to_default(self) -> None:
-        """未知の文字列が来たら既定値に落ちる（warning ログを出すだけで継続）。"""
+        """parameters に未知の visibility 値が来たら既定値に落ちる（legacy 経路）。"""
         svc = WorldGraphEffectService()
+        # parameters 経由は deprecated で warning ログが出るが、互換のため
+        # まだ受け付ける。値が壊れていても効果適用自体は続行する。
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.APPLY_DAMAGE,
-            parameters={
-                "damage": 3,
-                "visibility": "NOT_A_VISIBILITY",
-            },
+            parameters={"damage": 3, "visibility": "NOT_A_VISIBILITY"},
         )
         result = svc.apply_effects(
             interior=_empty_interior(),
@@ -291,7 +314,103 @@ class TestVisibilityOverride:
             effects=[effect],
             world_flags=frozenset(),
         )
-        assert len(result.actor_direct_effects) == 1
+        # APPLY_DAMAGE の既定は PUBLIC_OBSERVABLE
+        assert len(result.public_observable_effects) == 1
+
+
+class TestStateDeltaSemantics:
+    """state delta が missing/None/sequential 更新を正しく扱うこと。"""
+
+    def test_new_key_records_before_none(self) -> None:
+        """before に存在しなかったキーは before=None で記録される。"""
+        svc = WorldGraphEffectService()
+        item = _make_item(state={})  # 空 state
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE,
+            parameters={"state_updates": {"charges": 3}},
+        )
+        result = svc.apply_effects(
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
+            acting_item_aggregate=item,
+        )
+        deltas = result.actor_direct_effects[0].state_delta
+        assert len(deltas) == 1
+        assert deltas[0].key == "charges"
+        assert deltas[0].before is None
+        assert deltas[0].after == 3
+
+    def test_explicit_none_to_value_is_recorded(self) -> None:
+        """before に明示的に None が入っていた場合も差分として記録される。"""
+        svc = WorldGraphEffectService()
+        item = _make_item(state={"owner": None})
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE,
+            parameters={"state_updates": {"owner": "alice"}},
+        )
+        result = svc.apply_effects(
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
+            acting_item_aggregate=item,
+        )
+        deltas = result.actor_direct_effects[0].state_delta
+        owner = next(d for d in deltas if d.key == "owner")
+        assert owner.before is None
+        assert owner.after == "alice"
+
+    def test_sequential_mutations_capture_per_step_diff(self) -> None:
+        """同じキーを連続更新したとき、各サマリは自分の before/after を持つ。"""
+        svc = WorldGraphEffectService()
+        item = _make_item(state={"charges": 5})
+        e1 = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE,
+            parameters={"state_updates": {"charges": 3}},
+        )
+        e2 = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE,
+            parameters={"state_updates": {"charges": 1}},
+        )
+        result = svc.apply_effects(
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[e1, e2],
+            world_flags=frozenset(),
+            acting_item_aggregate=item,
+        )
+        # 2 つの ACTING_ITEM_STATE_CHANGE summary が出るはず。
+        item_summaries = [
+            s
+            for s in result.actor_direct_effects
+            if s.kind == AppliedEffectKind.ACTING_ITEM_STATE_CHANGE
+        ]
+        assert len(item_summaries) == 2
+        first = item_summaries[0].state_delta[0]
+        second = item_summaries[1].state_delta[0]
+        assert (first.before, first.after) == (5, 3)
+        assert (second.before, second.after) == (3, 1)
+
+    def test_no_op_update_yields_empty_delta(self) -> None:
+        """同じ値で merge しても state_delta は空。サマリは出る (0件 update もイベントとして残す方針)。"""
+        svc = WorldGraphEffectService()
+        item = _make_item(state={"charges": 3})
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE,
+            parameters={"state_updates": {"charges": 3}},
+        )
+        result = svc.apply_effects(
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
+            acting_item_aggregate=item,
+        )
+        s = result.actor_direct_effects[0]
+        assert s.kind == AppliedEffectKind.ACTING_ITEM_STATE_CHANGE
+        assert s.state_delta == ()
 
 
 class TestVisibilityBucketIsolation:
