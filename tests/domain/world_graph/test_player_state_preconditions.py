@@ -330,6 +330,117 @@ class TestPlayerHpRatioAtLeast:
         assert ok is False
 
 
+class TestZeroMaxHpEdge:
+    """max_hp == 0 (理論上ありうる退化ケース) は HP 系 precondition を必ず拒否する。"""
+
+    def test_below_rejects_when_max_hp_zero(self) -> None:
+        """max_hp=0 の player では PLAYER_HP_RATIO_BELOW が常に拒否される。"""
+        svc = SpotInteractionService()
+        status = _player_status(hp_value=0, hp_max=0)
+        cond = InteractionCondition(
+            condition_type=InteractionConditionTypeEnum.PLAYER_HP_RATIO_BELOW,
+            hp_ratio=0.5,
+        )
+        ok, _ = svc.can_interact(
+            _interaction_with(cond), _switch_object(),
+            owned_item_spec_ids=frozenset(),
+            world_flags=frozenset(),
+            acting_player_status=status,
+        )
+        assert ok is False
+
+    def test_at_least_rejects_when_max_hp_zero(self) -> None:
+        """max_hp=0 では PLAYER_HP_RATIO_AT_LEAST も拒否される (silent True 防止)。"""
+        svc = SpotInteractionService()
+        status = _player_status(hp_value=0, hp_max=0)
+        cond = InteractionCondition(
+            condition_type=InteractionConditionTypeEnum.PLAYER_HP_RATIO_AT_LEAST,
+            hp_ratio=0.0,
+        )
+        ok, _ = svc.can_interact(
+            _interaction_with(cond), _switch_object(),
+            owned_item_spec_ids=frozenset(),
+            world_flags=frozenset(),
+            acting_player_status=status,
+        )
+        assert ok is False
+
+
+class TestScenarioLoaderValidation:
+    """ScenarioLoader が need_type / hp_ratio を load 時に検証する。"""
+
+    def test_invalid_need_type_rejected_at_load(self) -> None:
+        """未知の need_type 文字列は ScenarioLoadError で拒否 (silent runtime 失敗を回避)。"""
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+            ScenarioLoadError, ScenarioLoader,
+        )
+
+        with pytest.raises(ScenarioLoadError, match="need_type"):
+            ScenarioLoader().load_from_dict(_minimal_scenario_with_precondition({
+                "condition_type": "PLAYER_NEED_AT_LEAST",
+                "need_type": "NOT_A_REAL_NEED",
+                "need_threshold": 50,
+            }))
+
+    def test_hp_ratio_out_of_range_rejected_at_load(self) -> None:
+        """hp_ratio が 0.0..1.0 の範囲外なら ScenarioLoadError で拒否。"""
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+            ScenarioLoadError, ScenarioLoader,
+        )
+
+        for bad in (-0.1, 1.5, 2.0):
+            with pytest.raises(ScenarioLoadError, match="hp_ratio"):
+                ScenarioLoader().load_from_dict(_minimal_scenario_with_precondition({
+                    "condition_type": "PLAYER_HP_RATIO_BELOW",
+                    "hp_ratio": bad,
+                }))
+
+    def test_hp_ratio_non_numeric_rejected(self) -> None:
+        """hp_ratio が数値でなければ拒否。"""
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+            ScenarioLoadError, ScenarioLoader,
+        )
+
+        with pytest.raises(ScenarioLoadError, match="hp_ratio"):
+            ScenarioLoader().load_from_dict(_minimal_scenario_with_precondition({
+                "condition_type": "PLAYER_HP_RATIO_BELOW",
+                "hp_ratio": "half",
+            }))
+
+
+def _minimal_scenario_with_precondition(precondition_raw: dict) -> dict:
+    """1 player + 1 spot + 1 object + 1 interaction で指定 precondition を持つ最小シナリオ。"""
+    return {
+        "scenario_format_version": "1.0",
+        "metadata": {
+            "id": "x", "title": "x", "description": "x",
+            "theme": "x", "difficulty": "easy", "estimated_ticks": 1,
+            "author": "x", "tags": [],
+        },
+        "item_specs": [],
+        "environment": {
+            "weather": {"enabled": False, "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+                        "update_interval_ticks": 100, "announce_changes": False},
+        },
+        "spots": [{
+            "id": "s", "name": "S", "description": "d", "category": "OTHER",
+            "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+            "interior": {"objects": [{
+                "id": "o", "name": "O", "description": "d", "object_type": "OTHER",
+                "state": {},
+                "interactions": [{
+                    "action_name": "x", "display_label": "X",
+                    "preconditions": [precondition_raw],
+                    "effects": [],
+                }],
+            }]},
+        }],
+        "connections": [],
+        "players": [{"id": "p", "name": "P", "spawn_spot": "s", "initial_items": []}],
+        "game_end_conditions": {"win": [], "lose": []},
+    }
+
+
 class TestScenarioLoaderParsesPlayerFields:
     """scenario_loader が need_type / need_threshold / hp_ratio を読み取れる。"""
 

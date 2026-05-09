@@ -9,18 +9,6 @@ from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
-
-
-def _hp_ratio(status: "PlayerStatusAggregate") -> Optional[float]:
-    """`PlayerStatusAggregate` から現在の HP の充足率 (0.0..1.0) を計算する。
-
-    max_hp が 0 のときは判定不能として None を返す (precondition 側で
-    not None チェックで弾く)。
-    """
-    hp = status.hp
-    if hp.max_hp <= 0:
-        return None
-    return hp.value / hp.max_hp
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
@@ -256,8 +244,14 @@ class SpotInteractionService:
                     cond.failure_message
                     or "PLAYER_HP_RATIO_BELOW は acting player status を必要とします"
                 )
-            ratio = _hp_ratio(acting_player_status)
-            if ratio is None or ratio >= float(cond.hp_ratio):
+            # `Hp.get_percentage()` は max_hp==0 で 0.0 を返す。本 precondition は
+            # 「HP 不足を確認する」用途なので、max_hp==0 のときは「条件を満たさない
+            # (=拒否)」が安全側。0.0 < hp_ratio で実際に True 判定されるとマズい
+            # のでここでは max_hp==0 を別経路で弾く。
+            if acting_player_status.hp.max_hp <= 0:
+                return False, cond.failure_message or "プレイヤーの HP 条件を満たしません (max_hp 不正)"
+            ratio = acting_player_status.hp.get_percentage()
+            if ratio >= float(cond.hp_ratio):
                 return False, cond.failure_message or "プレイヤーの HP 条件を満たしません"
             return True, None
 
@@ -271,8 +265,10 @@ class SpotInteractionService:
                     cond.failure_message
                     or "PLAYER_HP_RATIO_AT_LEAST は acting player status を必要とします"
                 )
-            ratio = _hp_ratio(acting_player_status)
-            if ratio is None or ratio < float(cond.hp_ratio):
+            if acting_player_status.hp.max_hp <= 0:
+                return False, cond.failure_message or "プレイヤーの HP 条件を満たしません (max_hp 不正)"
+            ratio = acting_player_status.hp.get_percentage()
+            if ratio < float(cond.hp_ratio):
                 return False, cond.failure_message or "プレイヤーの HP 条件を満たしません"
             return True, None
 
