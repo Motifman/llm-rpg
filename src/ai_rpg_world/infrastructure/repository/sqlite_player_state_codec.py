@@ -145,7 +145,29 @@ def build_player_status(*, row: object, path_rows: list[object], active_effect_r
         attention_level=AttentionLevel(str(row["attention_level"])),
         pursuit_state=pursuit_state,
         needs=_build_needs(need_rows or []),
+        # Phase 4-D-2: state_json 列が存在し非 NULL なら JSON 復元、
+        # それ以外 (旧 schema 由来 / NULL) は空 dict として扱う。
+        state=_state_from_row(row),
     )
+
+
+def _state_from_row(row) -> dict:
+    """row から state_json を読み出して dict に戻す。旧 schema との互換あり。"""
+    import json as _json
+    try:
+        keys = row.keys()
+    except Exception:
+        return {}
+    if "state_json" not in keys:
+        return {}
+    raw = row["state_json"]
+    if raw is None:
+        return {}
+    try:
+        loaded = _json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _build_needs(need_rows: list[object]) -> AgentNeeds:
