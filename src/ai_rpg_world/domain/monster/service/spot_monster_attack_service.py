@@ -98,6 +98,13 @@ class SpotMonsterAttackService:
             return MonsterAttackOutcome(executed=False, reason="target_down")
 
         damage = max(0, monster.template.base_stats.attack)
+        if damage == 0:
+            # `attack=0` のテンプレ（バリデーション上は許容）でも attack が
+            # 成立すると prose に「0 のダメージを受けた」と出てしまうため、
+            # 攻撃自体を不発扱いにして event を発火しない。cooldown 起点も
+            # 進めない（連射されても無害だが、明示的に no-op）。
+            return MonsterAttackOutcome(executed=False, reason="zero_damage")
+
         target_player.apply_damage(damage)
         monster.record_attack(current_tick)
 
