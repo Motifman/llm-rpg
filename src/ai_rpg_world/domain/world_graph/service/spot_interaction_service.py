@@ -46,7 +46,18 @@ class SpotInteractionService:
         interaction_parameters: Optional[dict] = None,
         owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
         acting_item_aggregate: Optional["ItemAggregate"] = None,
+        target_item_aggregate: Optional["ItemAggregate"] = None,
     ) -> Tuple[bool, Optional[str]]:
+        # Phase 4-B: 同一 instance を acting / target 両方として渡すのは
+        # wiring バグ。precondition 段階で弾く（apply_effects と同じガード）。
+        if (
+            acting_item_aggregate is not None
+            and acting_item_aggregate is target_item_aggregate
+        ):
+            raise ValueError(
+                "acting_item_aggregate and target_item_aggregate must be distinct "
+                "instances; passing the same aggregate as both indicates a wiring bug"
+            )
         # `owned_item_spec_counts` が渡されない場合は「frozenset から各 1 個」
         # でフォールバックする（required_quantity=1 の既存挙動と互換）。
         # ただし precondition のいずれかが required_quantity > 1 を要求する
@@ -71,6 +82,7 @@ class SpotInteractionService:
                 interaction_parameters=interaction_parameters,
                 owned_item_spec_counts=counts,
                 acting_item_aggregate=acting_item_aggregate,
+                target_item_aggregate=target_item_aggregate,
             )
             if not ok:
                 return False, msg
@@ -86,6 +98,7 @@ class SpotInteractionService:
         interaction_parameters: Optional[dict] = None,
         owned_item_spec_counts: Mapping[ItemSpecId, int],
         acting_item_aggregate: Optional["ItemAggregate"] = None,
+        target_item_aggregate: Optional["ItemAggregate"] = None,
     ) -> Tuple[bool, Optional[str]]:
         t = cond.condition_type
         if t == InteractionConditionTypeEnum.ALWAYS:
@@ -162,6 +175,21 @@ class SpotInteractionService:
                     return False, cond.failure_message or "アイテムの状態が条件を満たしません"
             return True, None
 
+        if t == InteractionConditionTypeEnum.TARGET_ITEM_INSTANCE_STATE:
+            # Phase 4-B: target item instance (cross-instance interaction の作用先)
+            # の state を判定する。acting 版と semantics は同じで対象だけが違う。
+            if cond.required_state is None:
+                return False, cond.failure_message or "TARGET_ITEM_INSTANCE_STATE に required_state がありません"
+            if target_item_aggregate is None:
+                return False, (
+                    cond.failure_message
+                    or "TARGET_ITEM_INSTANCE_STATE は target item instance を必要とします"
+                )
+            for k, v in cond.required_state.items():
+                if target_item_aggregate.state.get(k) != v:
+                    return False, cond.failure_message or "対象アイテムの状態が条件を満たしません"
+            return True, None
+
         if t == InteractionConditionTypeEnum.HAS_ITEMS:
             if not cond.required_item_spec_ids:
                 return False, cond.failure_message or "HAS_ITEMS に必要アイテムリストがありません"
@@ -188,6 +216,7 @@ class SpotInteractionService:
         current_tick: Optional[WorldTick] = None,
         owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
         acting_item_aggregate: Optional[ItemAggregate] = None,
+        target_item_aggregate: Optional[ItemAggregate] = None,
     ) -> InteractionExecutionResult:
         obj = interior.get_object(object_id)
         if obj is None:
@@ -201,6 +230,7 @@ class SpotInteractionService:
             interaction_parameters=interaction_parameters,
             owned_item_spec_counts=owned_item_spec_counts,
             acting_item_aggregate=acting_item_aggregate,
+            target_item_aggregate=target_item_aggregate,
         )
         if not ok:
             raise InteractionNotAllowedException(reason or "Interaction not allowed")
@@ -212,6 +242,7 @@ class SpotInteractionService:
             world_flags=world_flags,
             current_tick=current_tick,
             acting_item_aggregate=acting_item_aggregate,
+            target_item_aggregate=target_item_aggregate,
         )
         return InteractionExecutionResult(
             new_interior=effect_result.new_interior,
@@ -228,4 +259,5 @@ class SpotInteractionService:
             satisfy_need_specs=effect_result.satisfy_need_specs,
             passage_state_updates=effect_result.passage_state_updates,
             item_instance_state_changed=effect_result.item_instance_state_changed,
+            target_item_instance_state_changed=effect_result.target_item_instance_state_changed,
         )
