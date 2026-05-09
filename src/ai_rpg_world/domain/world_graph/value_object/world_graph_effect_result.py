@@ -5,6 +5,9 @@ from typing import FrozenSet, Optional, Tuple
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
+from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+    AppliedEffectSummary,
+)
 from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec import (
     AtmosphereUpdateSpec,
     CreateConnectionSpec,
@@ -46,3 +49,10 @@ class WorldGraphEffectResult:
     # Phase 4-D-2: 行動者プレイヤーの自由 state に変更が起きたかどうか。
     # True なら caller (app service) が player_status_repository.save() する。
     acting_player_state_changed: bool = False
+    # Phase 4-E: visibility 別の効果サマリ。
+    # actor_direct: 行為者のツール結果に返す
+    # public_observable: 同スポットの第三者に観測イベントとして配信
+    # hidden: ツール結果にも観測にも露出させない（本人プロンプトの現在状態のみ）
+    actor_direct_effects: Tuple[AppliedEffectSummary, ...] = ()
+    public_observable_effects: Tuple[AppliedEffectSummary, ...] = ()
+    hidden_effects: Tuple[AppliedEffectSummary, ...] = ()

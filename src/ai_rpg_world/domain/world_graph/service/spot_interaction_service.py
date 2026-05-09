@@ -351,4 +351,6 @@ class SpotInteractionService:
             item_instance_state_changed=effect_result.item_instance_state_changed,
             target_item_instance_state_changed=effect_result.target_item_instance_state_changed,
             acting_player_state_changed=effect_result.acting_player_state_changed,
+            direct_effects=effect_result.actor_direct_effects,
+            public_observable_effects=effect_result.public_observable_effects,
         )
