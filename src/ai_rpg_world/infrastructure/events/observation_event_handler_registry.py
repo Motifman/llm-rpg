@@ -10,6 +10,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectStateChangedEvent,
+    SpotPlayerStateChangedInSpotEvent,
 )
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxHitRecordedEvent,
@@ -211,6 +212,7 @@ _OBSERVED_EVENT_TYPES = (
     SpotExploredEvent,
     SpotObjectStateChangedEvent,
     ConnectionStateChangedEvent,
+    SpotPlayerStateChangedInSpotEvent,
 )
 
 

@@ -172,6 +172,9 @@ class SpotGraphCurrentStateBuilder:
                         )
                         for i in obj.interactions
                     )
+                    # Phase 4-E: スポットに居る全員から見える state を載せる。
+                    # `obj.visible_state()` が hidden_state_keys を除外して返す。
+                    visible_state = obj.visible_state()
                     objects.append(SpotGraphObjectEntry(
                         object_id=obj.object_id.value,
                         name=obj.name,
@@ -179,6 +182,7 @@ class SpotGraphCurrentStateBuilder:
                             world_flags, viewer_entity_id=player_id
                         ),
                         interactions=interactions,
+                        state=visible_state,
                     ))
                     actions = [i.action_name for i in obj.interactions]
                     act = " / ".join(actions) if actions else "—"
@@ -235,6 +239,14 @@ class SpotGraphCurrentStateBuilder:
         if player is not None:
             need_lines = player.needs.describe_all()
 
+        # Phase 4-E: 行動者本人の自由 state を snapshot に載せる。HIDDEN を
+        # 含む全項目を本人プロンプトに渡し、自己認識させる。第三者用の
+        # snapshot は別経路 (recipient strategy + 専用 event) なのでここでは
+        # 全部載せて問題ない。
+        player_state_snapshot: dict = (
+            dict(player.state) if player is not None else {}
+        )
+
         return SpotGraphPlayerSnapshotDto(
             current_spot_id=spot_id.value,
             current_spot_name=node.name,
@@ -252,6 +264,7 @@ class SpotGraphCurrentStateBuilder:
             connection_lines=connection_lines,
             sub_location_lines=sub_lines,
             object_lines=obj_lines,
+            player_state=player_state_snapshot,
         )
 
     def _entity_has_light_source(self, entity_id: int) -> bool:

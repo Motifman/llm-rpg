@@ -27,6 +27,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectInteractionFailedEvent,
     SpotPlayerPreparedActionEvent,
     SpotObjectStateChangedEvent,
+    SpotPlayerStateChangedInSpotEvent,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
@@ -93,7 +94,22 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         elif isinstance(event, ConnectionStateChangedEvent):
             self._resolve_connection_changed(event, add)
         elif isinstance(event, SpotObjectStateChangedEvent):
-            self._resolve_all_at_spot(event.spot_id, add)
+            # Phase 4-E: actor_entity_id が設定されていれば二重観測防止のため
+            # 行為者を除外する。world tick 等の非アクター由来 (None) では
+            # 同スポット全員が観測する従来動作。
+            if event.actor_entity_id is not None:
+                self._resolve_at_spot_excluding_actor(
+                    event.spot_id, event.actor_entity_id, add
+                )
+            else:
+                self._resolve_all_at_spot(event.spot_id, add)
+        elif isinstance(event, SpotPlayerStateChangedInSpotEvent):
+            # Phase 4-E: 公開可能なプレイヤー state 変化は同スポットの
+            # 他プレイヤーに届ける。本人は自分の state を current_state
+            # プロンプトで知るので除外。
+            self._resolve_at_spot_excluding_actor(
+                event.spot_id, event.entity_id, add
+            )
 
         return result
 
