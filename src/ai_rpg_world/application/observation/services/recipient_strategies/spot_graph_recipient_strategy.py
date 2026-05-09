@@ -22,6 +22,8 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
+    MonsterAppearedAtSpotEvent,
+    MonsterLeftSpotEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
@@ -131,6 +133,13 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         elif isinstance(event, ConnectionDestroyedEvent):
             self._resolve_all_at_spot(event.from_spot_id, add)
             self._resolve_all_at_spot(event.to_spot_id, add)
+        elif isinstance(event, MonsterAppearedAtSpotEvent):
+            # モンスター出現は同じスポットに居る全プレイヤーが目撃する。
+            # actor 概念は無い (graph aggregate / spawn ロジックが emit する)
+            # ため除外対象は無し。
+            self._resolve_all_at_spot(event.spot_id, add)
+        elif isinstance(event, MonsterLeftSpotEvent):
+            self._resolve_all_at_spot(event.spot_id, add)
 
         return result
 
