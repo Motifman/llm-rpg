@@ -159,40 +159,27 @@ def _instances_of(inventory_repo, item_repo, loaded, spec_string_id: str) -> lis
     return out
 
 
+def _set_item_state(item_repo, instance_id: ItemInstanceId, state: dict) -> None:
+    """テスト用ヘルパ: 指定 instance に initial state を仕込んで永続化する。
+
+    scenario_loader 側で initial_state を仕込む経路はまだ無いので、テスト
+    内で明示的に aggregate を初期化するのを 1 行で書けるようにする。
+    """
+    agg = item_repo.find_by_id(instance_id)
+    agg.merge_state(state)
+    item_repo.save(agg)
+
+
 class TestSwordRepairDemo:
     """Phase 4-B 全体: 物Aを物Bに使うインタラクションが end-to-end で動く。"""
-
-    def test_initial_state_repair_kit_unused_sword_rusty(self, smithy) -> None:
-        """初期状態を仕込む: 修理キット.used=false / 剣.rust=high。
-
-        scenario_loader 側で initial_state を仕込む経路はまだ無いので、
-        テスト内で明示的に aggregate を初期化する。
-        """
-        loaded, _, inv_repo, item_repo, _ = smithy
-        kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
-        sword = _instances_of(inv_repo, item_repo, loaded, "rusted_sword")[0]
-        kit_agg = item_repo.find_by_id(kit)
-        sword_agg = item_repo.find_by_id(sword)
-        kit_agg.merge_state({"used": False})
-        sword_agg.merge_state({"rust": "high"})
-        item_repo.save(kit_agg)
-        item_repo.save(sword_agg)
-
-        assert item_repo.find_by_id(kit).state == {"used": False}
-        assert item_repo.find_by_id(sword).state == {"rust": "high"}
 
     def test_repair_changes_both_kit_and_sword_state(self, smithy) -> None:
         """修理を実行すると 修理キット → used=true、剣 → rust=low + last_repaired_tick が永続化される。"""
         loaded, _, inv_repo, item_repo, app = smithy
         kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
         sword = _instances_of(inv_repo, item_repo, loaded, "rusted_sword")[0]
-        # initial_state を仕込む (scenario_loader 経路は未対応なので手動)
-        kit_agg = item_repo.find_by_id(kit)
-        kit_agg.merge_state({"used": False})
-        item_repo.save(kit_agg)
-        sword_agg = item_repo.find_by_id(sword)
-        sword_agg.merge_state({"rust": "high"})
-        item_repo.save(sword_agg)
+        _set_item_state(item_repo, kit, {"used": False})
+        _set_item_state(item_repo, sword, {"rust": "high"})
 
         app.execute_interaction(
             _player_id(loaded), _bench_id(loaded), "repair_with_kit",
@@ -214,8 +201,8 @@ class TestSwordRepairDemo:
         loaded, _, inv_repo, item_repo, app = smithy
         kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
         sword = _instances_of(inv_repo, item_repo, loaded, "rusted_sword")[0]
-        kit_agg = item_repo.find_by_id(kit); kit_agg.merge_state({"used": False}); item_repo.save(kit_agg)
-        sword_agg = item_repo.find_by_id(sword); sword_agg.merge_state({"rust": "high"}); item_repo.save(sword_agg)
+        _set_item_state(item_repo, kit, {"used": False})
+        _set_item_state(item_repo, sword, {"rust": "high"})
 
         # 1 回目は成功
         app.execute_interaction(
@@ -240,9 +227,9 @@ class TestSwordRepairDemo:
         loaded, _, inv_repo, item_repo, app = smithy
         kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
         sword = _instances_of(inv_repo, item_repo, loaded, "rusted_sword")[0]
-        kit_agg = item_repo.find_by_id(kit); kit_agg.merge_state({"used": False}); item_repo.save(kit_agg)
+        _set_item_state(item_repo, kit, {"used": False})
         # 剣は最初から rust=low (錆びていない)
-        sword_agg = item_repo.find_by_id(sword); sword_agg.merge_state({"rust": "low"}); item_repo.save(sword_agg)
+        _set_item_state(item_repo, sword, {"rust": "low"})
 
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
@@ -258,7 +245,7 @@ class TestSwordRepairDemo:
         """同じ item_instance_id を acting と target 両方に渡すと ApplicationException。"""
         loaded, _, inv_repo, item_repo, app = smithy
         kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
-        kit_agg = item_repo.find_by_id(kit); kit_agg.merge_state({"used": False}); item_repo.save(kit_agg)
+        _set_item_state(item_repo, kit, {"used": False})
 
         with pytest.raises(ApplicationException, match="同じ item_instance_id"):
             app.execute_interaction(
@@ -268,14 +255,56 @@ class TestSwordRepairDemo:
                 target_item_instance_id=kit,
             )
 
+    def test_target_item_instance_id_not_found_raises(self, smithy) -> None:
+        """target_item_instance_id が repository に存在しないと ApplicationException。
+
+        レビュー指摘 (HIGH): app service に「target が見つからない」分岐があるが
+        テストで網羅されていなかった。リファクタで guard を消しても気付ける
+        ようにレグレッションアンカーを置く。
+        """
+        loaded, _, inv_repo, item_repo, app = smithy
+        kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
+        _set_item_state(item_repo, kit, {"used": False})
+
+        # 永続化されていない instance id を渡す
+        ghost_id = ItemInstanceId(99999)
+        assert item_repo.find_by_id(ghost_id) is None
+
+        with pytest.raises(ApplicationException, match="target item instance"):
+            app.execute_interaction(
+                _player_id(loaded), _bench_id(loaded), "repair_with_kit",
+                current_tick=WorldTick(1),
+                acting_item_instance_id=kit,
+                target_item_instance_id=ghost_id,
+            )
+
+    def test_target_required_but_none_provided_rejected(self, smithy) -> None:
+        """TARGET_ITEM_INSTANCE_STATE precondition があるのに target が渡されないと拒否される。
+
+        ドメイン側ガード (silent pass 回避) の挙動が app 経路でも保たれていることを保証。
+        """
+        loaded, _, inv_repo, item_repo, app = smithy
+        kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
+        _set_item_state(item_repo, kit, {"used": False})
+
+        with pytest.raises(InteractionNotAllowedException):
+            app.execute_interaction(
+                _player_id(loaded), _bench_id(loaded), "repair_with_kit",
+                current_tick=WorldTick(1),
+                acting_item_instance_id=kit,
+                # target_item_instance_id を渡さない
+            )
+        # 修理キットの状態は変わらない (precondition で弾かれて effect 未発火)
+        assert item_repo.find_by_id(kit).state == {"used": False}
+
     def test_target_item_save_only_when_state_changed(self, smithy) -> None:
         """precondition で拒否された interaction では target item の save は呼ばれない。"""
         loaded, _, inv_repo, item_repo, app = smithy
         kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
         sword = _instances_of(inv_repo, item_repo, loaded, "rusted_sword")[0]
         # 修理キットを最初から used=true にして precondition を即落ちさせる
-        kit_agg = item_repo.find_by_id(kit); kit_agg.merge_state({"used": True}); item_repo.save(kit_agg)
-        sword_agg = item_repo.find_by_id(sword); sword_agg.merge_state({"rust": "high"}); item_repo.save(sword_agg)
+        _set_item_state(item_repo, kit, {"used": True})
+        _set_item_state(item_repo, sword, {"rust": "high"})
 
         save_count = {"n": 0}
         original_save = item_repo.save
