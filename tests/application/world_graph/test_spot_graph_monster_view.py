@@ -14,10 +14,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
+    HEALTH_BUCKET_JP,
     HEALTH_DEAD,
     HEALTH_DYING,
     HEALTH_HEALTHY,
     HEALTH_WOUNDED,
+    _bucket_hp,
     build_monster_view_provider,
 )
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
@@ -182,3 +184,34 @@ class TestNameFallback:
         view = build_monster_view_provider(lookup)(MonsterId.create(101))
 
         assert view.display_name == "何かのモンスター"
+
+
+class TestBucketHpDirect:
+    """`_bucket_hp` を直接呼ぶエッジケース検証。
+
+    通常パスでは `_resolve` が `status==DEAD` を先に処理するため value=0 は
+    到達しないが、関数単体の挙動として `value<=0` は dying を返すというガード
+    動作を保証する。
+    """
+
+    def test_value_ゼロは_dying(self) -> None:
+        """value=0, max_hp>0 のケースは dying（ガード動作）。"""
+        assert _bucket_hp(0, 100) == HEALTH_DYING
+
+    def test_負の_value_も_dying(self) -> None:
+        """value が負の異常値も dying に倒す（型安全のための保険）。"""
+        assert _bucket_hp(-5, 100) == HEALTH_DYING
+
+    def test_max_hp_ゼロは_healthy(self) -> None:
+        """HP を持たない概念モンスターは healthy 表示で扱う。"""
+        assert _bucket_hp(0, 0) == HEALTH_HEALTHY
+
+
+class TestHealthBucketJpMapping:
+    """共有定数 `HEALTH_BUCKET_JP` の網羅性。"""
+
+    def test_全ての_bucket_に日本語訳が存在する(self) -> None:
+        """4 つの bucket すべてが日本語マップに定義されている（drift 検知）。"""
+        for bucket in (HEALTH_HEALTHY, HEALTH_WOUNDED, HEALTH_DYING, HEALTH_DEAD):
+            assert bucket in HEALTH_BUCKET_JP
+            assert HEALTH_BUCKET_JP[bucket]  # 空文字でない
