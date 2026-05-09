@@ -93,14 +93,18 @@ ALTAR_OBJECT_ID = 10
 def _build_app(
     *,
     player_initial_state: dict | None = None,
-    interaction: InteractionDef,
+    interactions: tuple[InteractionDef, ...],
 ):
-    """player + 1 spot + 1 object (altar) を持つ最小ゲーム空間。"""
+    """player + 1 spot + 1 object (altar) を持つ最小ゲーム空間。
+
+    altar object に複数の interaction を持たせて、テスト本体から
+    interaction の組み合わせを直接構成できるようにする。
+    """
     altar = SpotObject(
         object_id=SpotObjectId.create(ALTAR_OBJECT_ID),
         name="altar", description="d",
         object_type=SpotObjectTypeEnum.OTHER,
-        state={}, interactions=(interaction,),
+        state={}, interactions=tuple(interactions),
     )
     spot = SpotNode(
         spot_id=SpotId.create(SPOT_ID), name="shrine", description="d",
@@ -171,7 +175,7 @@ class TestPlayerStateAppIntegration:
                 ),
             ),
         )
-        app, status_repo = _build_app(interaction=interaction)
+        app, status_repo = _build_app(interactions=(interaction,))
 
         app.execute_interaction(
             PlayerId(PLAYER_ID),
@@ -200,7 +204,7 @@ class TestPlayerStateAppIntegration:
             effects=(),
         )
         # 初期 state は空 → blessed=True を満たさない
-        app, status_repo = _build_app(interaction=interaction)
+        app, status_repo = _build_app(interactions=(interaction,))
 
         with pytest.raises(InteractionNotAllowedException, match="祝福"):
             app.execute_interaction(
@@ -227,25 +231,23 @@ class TestPlayerStateAppIntegration:
                 ),
             ),
         )
-        app, status_repo = _build_app(interaction=interaction)
+        app, status_repo = _build_app(interactions=(interaction,))
 
-        save_count = {"n": 0}
-        original_save = status_repo.save
+        # unittest.mock.patch.object で save を spy する。
+        # `wraps=` で本体ロジックは生かしつつ呼び出し回数を計測する。
+        from unittest.mock import patch
 
-        def counting_save(s):
-            save_count["n"] += 1
-            return original_save(s)
-
-        status_repo.save = counting_save  # type: ignore[assignment]
-
-        # precondition 拒否
-        with pytest.raises(InteractionNotAllowedException):
-            app.execute_interaction(
-                PlayerId(PLAYER_ID),
-                SpotObjectId.create(ALTAR_OBJECT_ID),
-                "touch_altar",
-            )
-        assert save_count["n"] == 0
+        with patch.object(
+            status_repo, "save", wraps=status_repo.save,
+        ) as save_spy:
+            # precondition 拒否
+            with pytest.raises(InteractionNotAllowedException):
+                app.execute_interaction(
+                    PlayerId(PLAYER_ID),
+                    SpotObjectId.create(ALTAR_OBJECT_ID),
+                    "touch_altar",
+                )
+            assert save_spy.call_count == 0
 
     def test_full_round_trip_change_then_match(self) -> None:
         """1 回目で CHANGE_PLAYER_STATE → 2 回目に PLAYER_STATE_IS で通過。"""
@@ -273,23 +275,9 @@ class TestPlayerStateAppIntegration:
             ),
             effects=(),
         )
-        # 1 つの object に 2 アクション持たせる
-        altar = SpotObject(
-            object_id=SpotObjectId.create(ALTAR_OBJECT_ID),
-            name="altar", description="d",
-            object_type=SpotObjectTypeEnum.OTHER,
-            state={}, interactions=(bless_interaction, require_interaction),
-        )
-        app, status_repo = _build_app(interaction=bless_interaction)
-        # 上の helper は 1 interaction のみ受け付けるので、interior を直接置き換える
-        # (test 専用 hack)
-        from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior as _Int
-        # 既存の interior を 2 アクションある altar で上書き
-        # 実装簡略化: helper を回避して 2 interaction の altar を再保存
-        from ai_rpg_world.domain.world.value_object.spot_id import SpotId as _SpotId
-        # InMemorySpotInteriorRepository は private 領域にアクセス
-        interior_repo = app._spot_interior_repository  # type: ignore[attr-defined]
-        interior_repo.save(_SpotId.create(SPOT_ID), _Int((), (altar,), (), ()))
+        # _build_app helper が複数 interaction を受け付けるので
+        # 直接渡せばよい (private 領域アクセスは不要)
+        app, status_repo = _build_app(interactions=(bless_interaction, require_interaction))
 
         # 1 回目: blessed=False のままなので enter_holy_zone は拒否
         with pytest.raises(InteractionNotAllowedException):
