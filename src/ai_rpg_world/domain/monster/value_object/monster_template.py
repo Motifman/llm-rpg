@@ -48,6 +48,12 @@ class MonsterTemplate:
     forage_threshold: float = 1.0
     hunger_decrease_on_feed: float = 0.0
     preferred_feed_item_spec_ids: Optional[Set["ItemSpecId"]] = None
+    # スポットグラフ戦闘用パラメータ。
+    # - `has_dark_vision`: True なら暗闇でもプレイヤーを視認できる。
+    # - `attack_cooldown_ticks`: 1 回攻撃した後、次の攻撃まで待つ tick 数。
+    #   1 にすると毎 tick 攻撃可能。0 以下は不正。
+    has_dark_vision: bool = False
+    attack_cooldown_ticks: int = 1
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
@@ -79,6 +85,21 @@ class MonsterTemplate:
             
         if not isinstance(self.faction, MonsterFactionEnum):
             raise MonsterTemplateValidationException(f"Invalid faction: {self.faction}")
+
+        if not isinstance(self.has_dark_vision, bool):
+            raise MonsterTemplateValidationException(
+                f"has_dark_vision must be bool, got {type(self.has_dark_vision).__name__}"
+            )
+        if not isinstance(self.attack_cooldown_ticks, int) or isinstance(
+            self.attack_cooldown_ticks, bool
+        ):
+            raise MonsterTemplateValidationException(
+                "attack_cooldown_ticks must be int"
+            )
+        if self.attack_cooldown_ticks < 1:
+            raise MonsterTemplateValidationException(
+                f"attack_cooldown_ticks must be >= 1, got {self.attack_cooldown_ticks}"
+            )
 
         if self.vision_range < 0:
             raise MonsterTemplateValidationException(
