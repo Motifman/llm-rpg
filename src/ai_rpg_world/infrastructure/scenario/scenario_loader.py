@@ -110,12 +110,19 @@ class InitialItemSpec:
 
 @dataclass(frozen=True)
 class PlayerSpawnConfig:
-    """プレイヤー初期配置。"""
+    """プレイヤー初期配置。
+
+    `initial_state` は Phase 4-D-2 PR 3 で追加。`PlayerStatusAggregate.state`
+    に渡せる JSON プリミティブの flat dict (str / int / float / bool / None)。
+    シナリオ JSON で `players[].initial_state` を省略すれば空 dict になり、
+    PR 1 までの挙動と同じ。
+    """
     string_id: str
     player_id: int
     name: str
     spawn_spot_id: SpotId
     initial_items: Tuple[InitialItemSpec, ...]
+    initial_state: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -953,14 +960,50 @@ class ScenarioLoader:
                 self._parse_initial_item(raw, mapper, owner_id=p["id"])
                 for raw in p.get("initial_items", [])
             )
+            initial_state = self._parse_player_initial_state(
+                p.get("initial_state", {}), owner_id=p["id"],
+            )
             spawns.append(PlayerSpawnConfig(
                 string_id=p["id"],
                 player_id=pid,
                 name=p["name"],
                 spawn_spot_id=spot_id,
                 initial_items=items,
+                initial_state=initial_state,
             ))
         return spawns
+
+    @staticmethod
+    def _parse_player_initial_state(
+        raw: Any, *, owner_id: str,
+    ) -> Dict[str, Any]:
+        """`players[].initial_state` を JSON プリミティブの flat dict に正規化。
+
+        `PlayerStatusAggregate.state` の制約 (str / int / float / bool / None) に
+        合わない値はシナリオ load 時点で `ScenarioLoadError` として弾く。
+        domain 層側でも `PlayerStateValidationException` として再検証されるが、
+        load 時点で落とせば「実行直前まで気付かない」事故が減る。
+        """
+        if raw is None:
+            return {}
+        if not isinstance(raw, dict):
+            raise ScenarioLoadError(
+                f"players[{owner_id}].initial_state must be an object "
+                f"(got {type(raw).__name__})"
+            )
+        allowed = (str, int, float, bool, type(None))
+        for key, value in raw.items():
+            if not isinstance(key, str):
+                raise ScenarioLoadError(
+                    f"players[{owner_id}].initial_state key must be string "
+                    f"(got {type(key).__name__}: {key!r})"
+                )
+            if not isinstance(value, allowed):
+                raise ScenarioLoadError(
+                    f"players[{owner_id}].initial_state[{key!r}] must be a JSON primitive "
+                    f"(str / int / float / bool / null), got {type(value).__name__}"
+                )
+        return dict(raw)
 
     def _parse_initial_item(
         self,
