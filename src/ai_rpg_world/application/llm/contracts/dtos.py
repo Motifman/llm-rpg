@@ -210,6 +210,10 @@ class ToolRuntimeTargetDto:
     shop_id: Optional[int] = None
     trade_id: Optional[int] = None
     listing_id: Optional[int] = None
+    # スポットグラフ上のモンスター個体ID。world_object_id とは別軸で管理される
+    # 個体識別子で、attack 等の戦闘ツールが target_label からモンスターを解決
+    # する際に使う（戦闘ツールは別 PR）。2D map 経路は引き続き world_object_id を使う。
+    monster_id: Optional[int] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.label, str):
@@ -292,6 +296,8 @@ class ToolRuntimeTargetDto:
             raise TypeError("trade_id must be int or None")
         if self.listing_id is not None and not isinstance(self.listing_id, int):
             raise TypeError("listing_id must be int or None")
+        if self.monster_id is not None and not isinstance(self.monster_id, int):
+            raise TypeError("monster_id must be int or None")
         if not isinstance(self.available_interactions, tuple):
             raise TypeError("available_interactions must be tuple")
         for value in self.available_interactions:
