@@ -1,0 +1,136 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "blessed_pilgrim_demo",
+    "title": "巡礼者の祈祷 — アイテム × プレイヤー状態の複合作用デモ",
+    "description": "プレイヤーは祠で香 (incense, 1 度きり) を焚いて祈祷を捧げる。祈祷の interaction は 1) 香の state を used=true に書き換え、2) プレイヤーの state を prayed_today=true に書き換え、3) prayed_at_tick を記録する。聖域への扉は PLAYER_STATE_IS で prayed_today=true を要求するため、祈祷を済ませた後だけ通れる。Phase 4-D-2 PR 1〜3 (player.state field + 操作 effect/precondition + scenario JSON 拡張 / players[].initial_state) を 1 シナリオで通しで実証する。",
+    "theme": "ritual",
+    "difficulty": "easy",
+    "estimated_ticks": 10,
+    "author": "demo",
+    "tags": ["player_state", "item_player_state_composite", "phase4d_showcase"]
+  },
+  "item_specs": [
+    {"id": "incense", "name": "香", "description": "1 度きりの祈祷の媒介。", "category": "MATERIAL"}
+  ],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "shrine",
+      "name": "祠",
+      "description": "石作りの祠。中央に祭壇、奥に閉じた聖域の扉が見える。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "altar",
+            "name": "祭壇",
+            "description": "香を焚いて祈祷を捧げる祭壇。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "pray",
+                "display_label": "香を焚いて祈祷する",
+                "preconditions": [
+                  {
+                    "condition_type": "ITEM_INSTANCE_STATE",
+                    "required_state": {"used": false},
+                    "failure_message": "その香はすでに焚き切られている。"
+                  },
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {"prayed_today": false},
+                    "failure_message": "今日はもう祈祷を済ませている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_ITEM_INSTANCE_STATE",
+                    "parameters": {"state_updates": {"used": true}}
+                  },
+                  {
+                    "effect_type": "CHANGE_PLAYER_STATE",
+                    "parameters": {"state_updates": {"prayed_today": true}}
+                  },
+                  {
+                    "effect_type": "RECORD_PLAYER_STATE_TICK",
+                    "parameters": {"state_key": "prayed_at_tick"}
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "香を焚いて祈祷を捧げた。心が澄んでいく。"}
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "sanctum_door",
+            "name": "聖域の扉",
+            "description": "閉ざされた扉。祈祷を済ませた者だけが通れる。",
+            "object_type": "OTHER",
+            "state": {"open": false},
+            "interactions": [
+              {
+                "action_name": "enter_sanctum",
+                "display_label": "聖域に入る",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "sanctum_door",
+                    "required_state": {"open": false}
+                  },
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {"prayed_today": true},
+                    "failure_message": "祈祷を済ませていない者は通れない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "sanctum_door",
+                      "state_updates": {"open": true}
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "扉が静かに開いた。"}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [],
+  "players": [
+    {
+      "id": "player_a",
+      "name": "巡礼者",
+      "spawn_spot": "shrine",
+      "initial_state": {"prayed_today": false},
+      "initial_items": [
+        {"spec": "incense", "state": {"used": false}}
+      ]
+    }
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 30}]
+  },
+  "initial_flags": [],
+  "scenario_events": []
+}
