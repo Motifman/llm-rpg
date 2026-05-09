@@ -15,6 +15,8 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
+    MonsterAppearedAtSpotEvent,
+    MonsterLeftSpotEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
@@ -71,6 +73,10 @@ class SpotGraphObservationFormatter:
             return self._format_connection_created(event, recipient_player_id)
         if isinstance(event, ConnectionDestroyedEvent):
             return self._format_connection_destroyed(event, recipient_player_id)
+        if isinstance(event, MonsterAppearedAtSpotEvent):
+            return self._format_monster_appeared(event, recipient_player_id)
+        if isinstance(event, MonsterLeftSpotEvent):
+            return self._format_monster_left(event, recipient_player_id)
         return None
 
     def _is_self(self, entity_id: Any, recipient_id: PlayerId) -> bool:
@@ -402,6 +408,61 @@ class SpotGraphObservationFormatter:
             "type": "connection_destroyed",
             "from_spot_name": from_name,
             "to_spot_name": to_name,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
+
+    def _format_monster_appeared(
+        self,
+        event: MonsterAppearedAtSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """同じスポットに居るプレイヤーへ「Xが現れた」を届ける。
+
+        recipient strategy 側で同スポット全員に配信されるため、ここでは
+        除外ロジックは持たない。モンスター名は ObservationNameResolver
+        経由で template.name に解決する。
+        """
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.monster_id
+        )
+        spot_name = self._resolve_spot_name(event.spot_id)
+        prose = f"{monster_name}が{spot_name}に現れた。"
+        structured = {
+            "type": "monster_appeared_at_spot",
+            "monster_name": monster_name,
+            "monster_id": event.monster_id.value,
+            "spot_name": spot_name,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
+
+    def _format_monster_left(
+        self,
+        event: MonsterLeftSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """同じスポットに居るプレイヤーへ「Xが居なくなった」を届ける。
+
+        despawn / 死亡 / 撤去いずれの片道遷移も同じプロセでカバーする。
+        死亡時など個別の文体が必要になったら専用 event に分離する方針。
+        """
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.monster_id
+        )
+        prose = f"{monster_name}の姿が見えなくなった。"
+        structured = {
+            "type": "monster_left_spot",
+            "monster_name": monster_name,
+            "monster_id": event.monster_id.value,
         }
         return ObservationOutput(
             prose=prose,
