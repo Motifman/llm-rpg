@@ -81,6 +81,33 @@ class SpotGraphAggregate(AggregateRoot):
         self._monster_presences: Dict[SpotId, MonsterSpotPresence] = dict(monster_presences or {})
         self._monster_spot: Dict[MonsterId, SpotId] = dict(monster_spot or {})
         self._navigation = SpotGraphNavigationService()
+        self._validate_monster_presence_consistency()
+
+    def _validate_monster_presence_consistency(self) -> None:
+        """`_monster_spot` と `_monster_presences` の二重インデックスが
+        コンストラクタ復元時に整合していることを保証する。
+
+        永続化レイヤから片方だけ欠けた状態でロードされると `unplace_monster`
+        が `_monster_spot.pop` だけ成功させてからスポット側 presence の
+        `remove` で例外を投げ、`_monster_spot` のみ消えるという食い違いが
+        発生し得る。ここで早期に弾けば、運用パスはどちらの辞書を信じても
+        同じ結果になる。
+        """
+        for monster_id, spot_id in self._monster_spot.items():
+            pres = self._monster_presences.get(spot_id)
+            if pres is None or monster_id not in pres.present_monster_ids:
+                raise MonsterPresenceInvariantException(
+                    f"Inconsistent monster presence on restore: {monster_id} "
+                    f"mapped to {spot_id} but not present in spot presence set"
+                )
+        for spot_id, pres in self._monster_presences.items():
+            for monster_id in pres.present_monster_ids:
+                mapped = self._monster_spot.get(monster_id)
+                if mapped != spot_id:
+                    raise MonsterPresenceInvariantException(
+                        f"Inconsistent monster presence on restore: {monster_id} "
+                        f"present at {spot_id} but mapping points to {mapped}"
+                    )
 
     @property
     def graph_id(self) -> SpotGraphId:
@@ -446,12 +473,22 @@ class SpotGraphAggregate(AggregateRoot):
         )
 
     def unplace_monster(self, monster_id: MonsterId) -> None:
-        """モンスター個体をグラフから取り除く（despawn / 死亡 / 撤去）。"""
+        """モンスター個体をグラフから取り除く（despawn / 死亡 / 撤去）。
+
+        `_monster_spot` と `_monster_presences` の両方を必ず一緒に更新する。
+        除去後に空になったスポットは `_monster_presences` からキー自体を
+        消し、永続化時に空レコードが残らないようにする。
+        """
         if monster_id not in self._monster_spot:
             raise MonsterNotInGraphException(f"Monster not placed: {monster_id}")
-        spot_id = self._monster_spot.pop(monster_id)
+        spot_id = self._monster_spot[monster_id]
         pres = self._monster_presences.get(spot_id, MonsterSpotPresence.empty(spot_id))
-        self._monster_presences[spot_id] = pres.remove(monster_id)
+        new_pres = pres.remove(monster_id)
+        if new_pres.count() == 0:
+            self._monster_presences.pop(spot_id, None)
+        else:
+            self._monster_presences[spot_id] = new_pres
+        del self._monster_spot[monster_id]
         self.add_event(
             MonsterLeftSpotEvent.create(
                 aggregate_id=self._graph_id,
@@ -475,3 +512,12 @@ class SpotGraphAggregate(AggregateRoot):
     def monster_spot_mapping(self) -> Dict[MonsterId, SpotId]:
         """モンスターの所在スポット（永続化用）。"""
         return dict(self._monster_spot)
+
+    def monster_presences_mapping(self) -> Dict[SpotId, MonsterSpotPresence]:
+        """スポット → モンスター在席集合（永続化用の防御的コピー）。
+
+        コンストラクタ引数 `monster_presences` と対称になる入出力。Sqlite
+        repository などが集約を復元する際は本メソッドの返値と
+        `monster_spot_mapping()` の両方を保存し、両方を合わせて読み戻す。
+        """
+        return dict(self._monster_presences)
