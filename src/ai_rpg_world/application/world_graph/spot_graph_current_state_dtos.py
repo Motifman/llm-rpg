@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 # --- 構造化エントリ（UiContextBuilder がラベル付与に使用） ---
@@ -36,6 +36,10 @@ class SpotGraphObjectEntry:
     name: str
     description: str
     interactions: Tuple[SpotGraphInteractionEntry, ...]
+    # Phase 4-E: スポット内オブジェクトの可観測な state 値 (扉が開いている、
+    # 燭台が点いている など)。プロンプト現在状態に「燭台: lit=True」のように
+    # 載せるための入力。スポットに居る全員から見える前提なので絞り込みは無し。
+    state: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -102,6 +106,11 @@ class SpotGraphPlayerSnapshotDto:
 
     # エージェントの欲求状態テキスト
     need_lines: Tuple[str, ...] = ()
+
+    # Phase 4-E: 行動者本人の自由 state (HIDDEN を含む全項目)。
+    # 自分自身の内面なので毒・呪い・隠しフラグも本人プロンプトには載せる。
+    # 第三者観測には流れない (formatter は他プレイヤー snapshot を作らない設計)。
+    player_state: Dict[str, Any] = field(default_factory=dict)
 
     # 後方互換用の文字列行（formatter のフォールバック用）
     connection_lines: List[str] = field(default_factory=list)

@@ -24,6 +24,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectStateChangedEvent,
+    SpotPlayerStateChangedInSpotEvent,
 )
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -54,6 +55,7 @@ def _make_strategy(entity_spot_mapping: dict) -> SpotGraphRecipientStrategy:
         SpotExploredEvent,
         ConnectionStateChangedEvent,
         SpotObjectStateChangedEvent,
+        SpotPlayerStateChangedInSpotEvent,
     ):
         registry_map[evt] = "spot_graph"
     registry = ObservedEventRegistry(event_to_strategy=registry_map)
@@ -198,6 +200,7 @@ class TestConnectionStateChanged:
 
 class TestSpotObjectStateChanged:
     def test_includes_all_at_spot(self):
+        """actor_entity_id 未指定なら従来通り同スポット全員に配信される。"""
         strategy = _make_strategy({1: 1, 2: 1, 3: 2})
         event = SpotObjectStateChangedEvent.create(
             aggregate_id=GRAPH_ID,
@@ -210,6 +213,45 @@ class TestSpotObjectStateChanged:
         recipients = strategy.resolve(event)
         ids = {r.value for r in recipients}
         assert 1 in ids
+        assert 2 in ids
+        assert 3 not in ids
+
+    def test_excludes_actor_when_actor_entity_id_set(self):
+        """Phase 4-E: actor_entity_id があれば二重観測防止のため行為者を除外する。"""
+        strategy = _make_strategy({1: 1, 2: 1, 3: 2})
+        event = SpotObjectStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            spot_id=SPOT_A,
+            object_id=OBJECT_1,
+            old_state={"lit": False},
+            new_state={"lit": True},
+            actor_entity_id=ENTITY_1,
+        )
+        recipients = strategy.resolve(event)
+        ids = {r.value for r in recipients}
+        assert 1 not in ids  # actor 除外
+        assert 2 in ids
+        assert 3 not in ids
+
+
+class TestSpotPlayerStateChangedInSpot:
+    """Phase 4-E: 公開可能なプレイヤー state 変化は同スポットの他プレイヤーに届く。"""
+
+    def test_excludes_actor(self):
+        """行為者本人は除外される (本人は current_state プロンプトで自己認識する)。"""
+        strategy = _make_strategy({1: 1, 2: 1, 3: 2})
+        event = SpotPlayerStateChangedInSpotEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            state_delta=(),
+            observation_message="変装が解けた",
+        )
+        recipients = strategy.resolve(event)
+        ids = {r.value for r in recipients}
+        assert 1 not in ids
         assert 2 in ids
         assert 3 not in ids
 

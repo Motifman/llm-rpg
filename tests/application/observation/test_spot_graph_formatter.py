@@ -281,8 +281,94 @@ class TestSpotObjectStateChanged:
         assert result is not None
         assert result.observation_category == "environment"
         assert "古びたドア" in result.prose
-        assert "変化" in result.prose
+        # Phase 4-E: 状態差分が具体的なテキストとして含まれる
+        assert "locked" in result.prose
         assert result.schedules_turn is True
+        # 構造化 state_delta も載る
+        assert result.structured["state_delta"] == [
+            {"key": "locked", "before": True, "after": False}
+        ]
+
+
+class TestSpotObjectStateChangedActorExclusion:
+    """Phase 4-E: actor_entity_id が自分のとき formatter が None を返す (二重ガード)。"""
+
+    def test_actor_self_returns_none(self, formatter):
+        from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+        event = SpotObjectStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            spot_id=SPOT_A,
+            object_id=OBJECT_1,
+            old_state={"lit": False},
+            new_state={"lit": True},
+            actor_entity_id=EntityId.create(PLAYER_1.value),
+        )
+        assert formatter.format(event, PLAYER_1) is None
+
+
+class TestSpotPlayerStateChangedInSpot:
+    """Phase 4-E: プレイヤー state 公開変化の formatter 出力を検証。"""
+
+    def test_renders_observation_message_when_present(self, formatter):
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            SpotPlayerStateChangedInSpotEvent,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+            StateDeltaEntry,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+        event = SpotPlayerStateChangedInSpotEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(PLAYER_2.value),
+            spot_id=SPOT_A,
+            state_delta=(StateDeltaEntry(key="disguised", before=True, after=False),),
+            observation_message="変装が解けた",
+        )
+        result = formatter.format(event, PLAYER_1)
+        assert result is not None
+        assert "変装が解けた" in result.prose
+        assert result.observation_category == "social"
+        assert result.structured["state_delta"] == [
+            {"key": "disguised", "before": True, "after": False}
+        ]
+
+    def test_renders_state_delta_when_no_message(self, formatter):
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            SpotPlayerStateChangedInSpotEvent,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+            StateDeltaEntry,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+        event = SpotPlayerStateChangedInSpotEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(PLAYER_2.value),
+            spot_id=SPOT_A,
+            state_delta=(StateDeltaEntry(key="posture", before="standing", after="kneeling"),),
+        )
+        result = formatter.format(event, PLAYER_1)
+        assert result is not None
+        assert "posture" in result.prose
+        assert "kneeling" in result.prose
+
+    def test_actor_self_returns_none(self, formatter):
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            SpotPlayerStateChangedInSpotEvent,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+        event = SpotPlayerStateChangedInSpotEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(PLAYER_1.value),
+            spot_id=SPOT_A,
+            state_delta=(),
+            observation_message="should not appear",
+        )
+        # 自分が actor の場合 formatter は None を返す (二重ガード)
+        assert formatter.format(event, PLAYER_1) is None
 
 
 class TestUnknownEvent:
