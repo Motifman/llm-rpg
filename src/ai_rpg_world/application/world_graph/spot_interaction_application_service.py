@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
+
+_logger = logging.getLogger(__name__)
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
@@ -30,12 +33,15 @@ from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+    AppliedEffectKind,
     AppliedEffectSummary,
 )
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
+    SpotObjectStateChangedEvent,
+    SpotPlayerStateChangedInSpotEvent,
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
@@ -304,12 +310,90 @@ class SpotInteractionApplicationService:
                 action_name=action_name,
                 result_message="；".join(result.messages) if result.messages else "",
             )
-            self._event_publisher.publish_all([*graph_events, interacted_event])
+            # Phase 4-E: PUBLIC_OBSERVABLE な効果サマリを同スポットの他プレイヤーに
+            # 観測として届ける。actor は recipient strategy 側で除外される。
+            # ACTOR_DIRECT は result.direct_effects 経由でツール結果として、
+            # HIDDEN は誰にも届けず本人プロンプトの現在状態にのみ載せる。
+            public_events = self._build_public_observable_events(
+                public_summaries=result.public_observable_effects,
+                graph_id=graph.graph_id,
+                spot_id=spot_id,
+                actor_entity_id=entity_id,
+                object_id=object_id,
+            )
+            self._event_publisher.publish_all(
+                [*graph_events, interacted_event, *public_events]
+            )
 
         return SpotInteractionResultDto(
             messages=result.messages,
             direct_effects=result.direct_effects,
         )
+
+    def _build_public_observable_events(
+        self,
+        *,
+        public_summaries: Tuple[AppliedEffectSummary, ...],
+        graph_id: Any,
+        spot_id: SpotId,
+        actor_entity_id: EntityId,
+        object_id: SpotObjectId,
+    ) -> list:
+        """PUBLIC_OBSERVABLE な AppliedEffectSummary を観測 event 列に翻訳する。
+
+        - SPOT_OBJECT_STATE_CHANGE → SpotObjectStateChangedEvent
+          (actor_entity_id を埋めて recipient 側で actor を除外)
+        - ACTING_PLAYER_STATE_CHANGE → SpotPlayerStateChangedInSpotEvent
+        - その他 (DAMAGE / TELEPORT / ATMOSPHERE / PASSAGE / CONNECTION 等) は
+          PR2 範囲では既存の専用 event 経路に任せる: ConnectionStateChangedEvent
+          は graph aggregate が独自に発火するため、ここで重複発火しない。
+          DAMAGE / ATMOSPHERE はまだ第三者観測経路を持たないが、必要になったら
+          後続 PR で追加する。
+        """
+        events: list = []
+        for summary in public_summaries:
+            if summary.kind == AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE:
+                events.append(
+                    SpotObjectStateChangedEvent.create(
+                        aggregate_id=graph_id,
+                        aggregate_type="SpotGraphAggregate",
+                        spot_id=spot_id,
+                        object_id=object_id,
+                        old_state=_state_from_delta_before(summary.state_delta),
+                        new_state=_state_from_delta_after(summary.state_delta),
+                        actor_entity_id=actor_entity_id,
+                        state_delta=summary.state_delta,
+                    )
+                )
+            elif summary.kind == AppliedEffectKind.ACTING_PLAYER_STATE_CHANGE:
+                # observation_message は空にする。AppliedEffectSummary.description
+                # は「プレイヤー自身の状態が変化した」のような汎用文字列で、
+                # bystander 視点では情報量が無い。formatter には state_delta から
+                # 「Aliceの〜が〜から〜に変わった」を組み立てさせる。
+                # シナリオ作家が具体的な観測テキストを出したい場合は
+                # 別 effect (例: SHOW_MESSAGE) を併用する想定。
+                events.append(
+                    SpotPlayerStateChangedInSpotEvent.create(
+                        aggregate_id=graph_id,
+                        aggregate_type="SpotGraphAggregate",
+                        entity_id=actor_entity_id,
+                        spot_id=spot_id,
+                        state_delta=summary.state_delta,
+                        observation_message="",
+                    )
+                )
+            else:
+                # TARGET_ITEM_STATE_CHANGE / DAMAGE / TELEPORT / ATMOSPHERE /
+                # PASSAGE_STATE_UPDATE / CONNECTION_* は PR2 範囲外。
+                # 既存の専用 event 経路 (ConnectionStateChangedEvent 等) と
+                # 重複しないよう、ここでは黙って skip する。silent failure を
+                # 検出しやすいよう debug ログを残す。
+                _logger.debug(
+                    "PR2: PUBLIC_OBSERVABLE summary kind %s is not yet "
+                    "translated to an observation event; skipping",
+                    summary.kind.value,
+                )
+        return events
 
     @staticmethod
     def _next_connection_id(graph) -> ConnectionId:
@@ -347,3 +431,24 @@ class SpotInteractionApplicationService:
             observation_message=idef.on_failure_observation,
         )
         self._event_publisher.publish_all([failed_event])
+
+
+def _state_from_delta_before(delta: Tuple[Any, ...]) -> Dict[str, Any]:
+    """state_delta の before 値から old_state 互換 dict を再構築する。
+
+    LOSSY: before が None だったキー (新規追加 / 元から None) は dict に
+    含めない。`SpotObjectStateChangedEvent` の old_state/new_state は既存
+    の event 署名を保ったままにするための互換ビューに過ぎず、formatter は
+    state_delta を優先して読む。before が None で値が新規追加されるケースを
+    正確に再構築したい future consumer は state_delta を直接読むこと。
+    """
+    return {d.key: d.before for d in delta if d.before is not None}
+
+
+def _state_from_delta_after(delta: Tuple[Any, ...]) -> Dict[str, Any]:
+    """state_delta の after 値から new_state 互換 dict を再構築する。
+
+    LOSSY: after が None (= 削除) のキーは dict に含めない。詳細は
+    `_state_from_delta_before` を参照。
+    """
+    return {d.key: d.after for d in delta if d.after is not None}

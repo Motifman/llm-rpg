@@ -8,6 +8,9 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+    StateDeltaEntry,
+)
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
@@ -52,12 +55,25 @@ class EntityEnteredSubLocationEvent(BaseDomainEvent[SpotGraphId, str]):
 
 @dataclass(frozen=True)
 class SpotObjectStateChangedEvent(BaseDomainEvent[SpotGraphId, str]):
-    """スポット内オブジェクトの状態が変化した"""
+    """スポット内オブジェクトの状態が変化した。
+
+    Phase 4-E: PUBLIC_OBSERVABLE な効果由来でこのイベントが発火する場合
+    `actor_entity_id` を行為者の EntityId に設定する。受信者解決時に同
+    プレイヤーは観測対象から除外される (二重観測防止)。世界 tick 等で
+    発火する非アクター由来の場合は None。
+
+    `state_delta` は formatter が「{key} が {before} から {after} に
+    変わった」というテキストを構築するための構造化差分。effect 適用側で
+    既に計算した `StateDeltaEntry` を渡す。空の場合 formatter は
+    `old_state`/`new_state` から導出する。
+    """
 
     spot_id: SpotId
     object_id: SpotObjectId
     old_state: Dict[str, Any]
     new_state: Dict[str, Any]
+    actor_entity_id: Optional[EntityId] = None
+    state_delta: Tuple[StateDeltaEntry, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -148,3 +164,23 @@ class ConnectionDestroyedEvent(BaseDomainEvent[SpotGraphId, str]):
     connection_id: ConnectionId
     from_spot_id: SpotId
     to_spot_id: SpotId
+
+
+@dataclass(frozen=True)
+class SpotPlayerStateChangedInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
+    """同スポット内のプレイヤーの公開可能な state が変化したことを第三者に伝える。
+
+    Phase 4-E: `CHANGE_PLAYER_STATE` のような effect が `PUBLIC_OBSERVABLE`
+    視認性で適用されたとき (例: 変装が解けた、姿勢が変わった、肉眼で
+    分かる buff が乗った) に発火する。受信者解決は actor を除外した同
+    スポット住人。本人は自分の state を current_state プロンプトで知る
+    ため、観測としては流さない。
+
+    内臓的な変化 (毒・呪い・隠しフラグ) はデフォルト HIDDEN なのでこの
+    event は発火しない。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    state_delta: Tuple[StateDeltaEntry, ...]
+    observation_message: str = ""

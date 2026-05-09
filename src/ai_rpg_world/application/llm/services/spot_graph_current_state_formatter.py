@@ -55,4 +55,39 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         else:
             lines.append("現在時刻: 不明")
 
+        # Phase 4-E: スポット内のオブジェクトに動的 state があれば表示。
+        # 「燭台: lit=True」のように LLM が読める形にする。
+        object_state_lines = []
+        for entry in snap.objects:
+            if entry.state:
+                rendered = ", ".join(
+                    f"{k}={_render_value(v)}" for k, v in sorted(entry.state.items())
+                )
+                object_state_lines.append(f"- {entry.name}: {rendered}")
+        if object_state_lines:
+            lines.append("スポット内オブジェクトの状態:")
+            lines.extend(object_state_lines)
+
+        # Phase 4-E: 自分の自由 state (毒・呪い・隠しフラグも含む全項目)。
+        # 第三者には流れない HIDDEN も本人プロンプトには載せて自己認識させる。
+        if snap.player_state:
+            rendered = ", ".join(
+                f"{k}={_render_value(v)}"
+                for k, v in sorted(snap.player_state.items())
+            )
+            lines.append(f"自分の状態: {rendered}")
+
         return "\n".join(lines)
+
+
+def _render_value(value: object) -> str:
+    """state 値を LLM 向けに短く表示する。dict/list は repr に倒す。"""
+    if value is None:
+        # repr(None) は "None" になり LLM が「文字列の "None"」と読んでしまう
+        # 余地があるので、明示的に null を出す。
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float, str)):
+        return str(value)
+    return repr(value)

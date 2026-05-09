@@ -20,6 +20,10 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectInteractionFailedEvent,
     SpotPlayerPreparedActionEvent,
     SpotObjectStateChangedEvent,
+    SpotPlayerStateChangedInSpotEvent,
+)
+from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+    StateDeltaEntry,
 )
 
 
@@ -55,6 +59,8 @@ class SpotGraphObservationFormatter:
             return self._format_connection_changed(event, recipient_player_id)
         if isinstance(event, SpotObjectStateChangedEvent):
             return self._format_object_state_changed(event, recipient_player_id)
+        if isinstance(event, SpotPlayerStateChangedInSpotEvent):
+            return self._format_player_state_changed_in_spot(event, recipient_player_id)
         return None
 
     def _is_self(self, entity_id: Any, recipient_id: PlayerId) -> bool:
@@ -230,11 +236,30 @@ class SpotGraphObservationFormatter:
     def _format_object_state_changed(
         self, event: SpotObjectStateChangedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
+        # Phase 4-E: actor を念のため二重ガード（recipient strategy 側でも除外済み）。
+        if (
+            event.actor_entity_id is not None
+            and self._is_self(event.actor_entity_id, recipient_id)
+        ):
+            return None
         obj_name = self._resolve_object_name(event.spot_id, event.object_id)
-        prose = f"{obj_name}の状態が変化した。"
+        delta = (
+            event.state_delta
+            if event.state_delta
+            else _derive_delta(event.old_state, event.new_state)
+        )
+        delta_text = _format_delta_text(delta)
+        if delta_text:
+            prose = f"{obj_name}の{delta_text}。"
+        else:
+            prose = f"{obj_name}の状態が変化した。"
         structured = {
             "type": "spot_object_state_changed",
             "object_name": obj_name,
+            "state_delta": [
+                {"key": d.key, "before": d.before, "after": d.after}
+                for d in delta
+            ],
         }
         return ObservationOutput(
             prose=prose,
@@ -242,3 +267,72 @@ class SpotGraphObservationFormatter:
             observation_category="environment",
             schedules_turn=True,
         )
+
+    def _format_player_state_changed_in_spot(
+        self,
+        event: SpotPlayerStateChangedInSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        # 行為者本人は除外（recipient strategy で既に除外済みだが二重ガード）。
+        if self._is_self(event.entity_id, recipient_id):
+            return None
+        actor = self._resolve_entity_name(event.entity_id)
+        delta_text = _format_delta_text(event.state_delta)
+        # シナリオが observation_message を明示していればそれを優先。
+        if event.observation_message:
+            prose = event.observation_message
+        elif delta_text:
+            prose = f"{actor}の{delta_text}。"
+        else:
+            prose = f"{actor}の様子が変わった。"
+        structured = {
+            "type": "spot_player_state_changed",
+            "actor_name": actor,
+            "state_delta": [
+                {"key": d.key, "before": d.before, "after": d.after}
+                for d in event.state_delta
+            ],
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
+        )
+
+
+def _derive_delta(old_state: dict, new_state: dict):
+    """formatter 側のフォールバック: event に state_delta が無いとき
+    old_state / new_state を比較して StateDeltaEntry tuple を作る。
+    """
+    keys = set(old_state.keys()) | set(new_state.keys())
+    out = []
+    _SENTINEL = object()
+    for key in sorted(keys, key=str):
+        b = old_state.get(key, _SENTINEL)
+        a = new_state.get(key, _SENTINEL)
+        if b == a:
+            continue
+        out.append(
+            StateDeltaEntry(
+                key=str(key),
+                before=None if b is _SENTINEL else b,
+                after=None if a is _SENTINEL else a,
+            )
+        )
+    return tuple(out)
+
+
+def _format_delta_text(delta) -> str:
+    """StateDeltaEntry tuple を観測テキスト用の短い日本語に変換する。"""
+    if not delta:
+        return ""
+    fragments = []
+    for d in delta:
+        if d.before is None and d.after is not None:
+            fragments.append(f"{d.key}が{d.after}になった")
+        elif d.after is None and d.before is not None:
+            fragments.append(f"{d.key}が消えた")
+        else:
+            fragments.append(f"{d.key}が{d.before}から{d.after}に変わった")
+    return "、".join(fragments)
