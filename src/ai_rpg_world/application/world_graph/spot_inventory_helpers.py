@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, FrozenSet, Mapping, Optional
+from typing import TYPE_CHECKING, Any, FrozenSet, Mapping, Optional
+
+if TYPE_CHECKING:
+    from ai_rpg_world.infrastructure.scenario.scenario_loader import InitialItemSpec
 
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -102,7 +105,6 @@ def grant_item_specs_to_inventory(
         return
     for spec_id in item_spec_ids:
         _create_and_acquire(
-            player_id=player_id,
             spec_id=spec_id,
             state=None,
             inventory=inv,
@@ -114,7 +116,7 @@ def grant_item_specs_to_inventory(
 
 def grant_initial_items_to_inventory(
     player_id: PlayerId,
-    initial_items: tuple,  # Tuple[InitialItemSpec, ...]
+    initial_items: "tuple[InitialItemSpec, ...]",
     item_repository: ItemRepository,
     item_spec_repository: ItemSpecRepository,
     player_inventory_repository: PlayerInventoryRepository,
@@ -131,10 +133,12 @@ def grant_initial_items_to_inventory(
     if inv is None:
         return
     for initial in initial_items:
+        # 空 dict と非空 dict を区別する必要は無い (どちらでも domain 側で
+        # 同じ「state を持たない instance」になる)。常に dict コピーを渡し、
+        # `if state else None` の falsy 判定で意味が変わる罠を避ける。
         _create_and_acquire(
-            player_id=player_id,
             spec_id=initial.spec_id,
-            state=dict(initial.state) if initial.state else None,
+            state=dict(initial.state),
             inventory=inv,
             item_repository=item_repository,
             item_spec_repository=item_spec_repository,
@@ -144,7 +148,6 @@ def grant_initial_items_to_inventory(
 
 def _create_and_acquire(
     *,
-    player_id: PlayerId,
     spec_id: ItemSpecId,
     state: Optional[Mapping[str, Any]],
     inventory: PlayerInventoryAggregate,
