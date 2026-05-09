@@ -33,6 +33,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectInteractedEvent,
     SpotObjectStateChangedEvent,
     SpotPlayerStateChangedInSpotEvent,
+    SpotPublicEffectObservedEvent,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
@@ -412,6 +413,276 @@ class TestInteractionEventPublication:
         # 念のため SpotObjectStateChangedEvent / SpotPlayerStateChangedInSpotEvent も無いことを確認
         assert not any(isinstance(e, SpotObjectStateChangedEvent) for e in published)
         assert not any(isinstance(e, SpotPlayerStateChangedInSpotEvent) for e in published)
+
+    def test_publishes_public_effect_observed_for_damage(self):
+        """Phase 4-E PR 3: APPLY_DAMAGE (PUBLIC_OBSERVABLE デフォルト) は
+        SpotPublicEffectObservedEvent kind=DAMAGE で publish される。"""
+        from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+            AppliedEffectKind,
+        )
+
+        spot_id = SpotId.create(1)
+        player_id = PlayerId(1)
+        entity_id = EntityId.create(1)
+        graph = _build_graph_with_entity(spot_id, entity_id)
+        spike = SpotObject(
+            object_id=SpotObjectId.create(70),
+            name="罠",
+            description="鋭い棘",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={},
+            interactions=(
+                InteractionDef(
+                    action_name="step",
+                    display_label="踏む",
+                    preconditions=(),
+                    effects=(
+                        InteractionEffect(
+                            effect_type=InteractionEffectTypeEnum.APPLY_DAMAGE,
+                            parameters={"damage": 7, "message": "棘に刺さった"},
+                        ),
+                    ),
+                ),
+            ),
+        )
+        interior = _make_interior(spike)
+
+        spot_graph_repo = MagicMock()
+        spot_graph_repo.find_graph.return_value = graph
+        spot_interior_repo = MagicMock()
+        spot_interior_repo.find_by_spot_id.return_value = interior
+        inv = PlayerInventoryAggregate(player_id=player_id)
+        player_inv_repo = MagicMock()
+        player_inv_repo.find_by_id.return_value = inv
+        item_repo = MagicMock()
+        item_repo.find_by_id.return_value = None
+        event_publisher = MagicMock()
+
+        svc = SpotInteractionApplicationService(
+            spot_graph_repository=spot_graph_repo,
+            spot_interior_repository=spot_interior_repo,
+            player_inventory_repository=player_inv_repo,
+            item_repository=item_repo,
+            item_spec_repository=MagicMock(),
+            world_flag_state=MutableWorldFlagState(),
+            event_publisher=event_publisher,
+        )
+
+        svc.execute_interaction(player_id, SpotObjectId.create(70), "step")
+
+        published = event_publisher.publish_all.call_args[0][0]
+        public_events = [
+            e for e in published if isinstance(e, SpotPublicEffectObservedEvent)
+        ]
+        assert len(public_events) == 1
+        ev = public_events[0]
+        assert ev.kind == AppliedEffectKind.DAMAGE
+        assert ev.actor_entity_id == entity_id
+
+    def test_publishes_public_effect_observed_for_atmosphere(self):
+        """Phase 4-E PR 3: CHANGE_ATMOSPHERE は SpotPublicEffectObservedEvent
+        kind=ATMOSPHERE_UPDATE で publish される。"""
+        from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+            AppliedEffectKind,
+        )
+
+        spot_id = SpotId.create(1)
+        player_id = PlayerId(1)
+        entity_id = EntityId.create(1)
+        graph = _build_graph_with_entity(spot_id, entity_id)
+        switch = SpotObject(
+            object_id=SpotObjectId.create(80),
+            name="照明スイッチ",
+            description="部屋の照明を切る",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={},
+            interactions=(
+                InteractionDef(
+                    action_name="off",
+                    display_label="消す",
+                    preconditions=(),
+                    effects=(
+                        InteractionEffect(
+                            effect_type=InteractionEffectTypeEnum.CHANGE_ATMOSPHERE,
+                            parameters={"spot_id": 1, "lighting": "DARK"},
+                        ),
+                    ),
+                ),
+            ),
+        )
+        interior = _make_interior(switch)
+
+        spot_graph_repo = MagicMock()
+        spot_graph_repo.find_graph.return_value = graph
+        spot_interior_repo = MagicMock()
+        spot_interior_repo.find_by_spot_id.return_value = interior
+        inv = PlayerInventoryAggregate(player_id=player_id)
+        player_inv_repo = MagicMock()
+        player_inv_repo.find_by_id.return_value = inv
+        item_repo = MagicMock()
+        item_repo.find_by_id.return_value = None
+        event_publisher = MagicMock()
+
+        svc = SpotInteractionApplicationService(
+            spot_graph_repository=spot_graph_repo,
+            spot_interior_repository=spot_interior_repo,
+            player_inventory_repository=player_inv_repo,
+            item_repository=item_repo,
+            item_spec_repository=MagicMock(),
+            world_flag_state=MutableWorldFlagState(),
+            event_publisher=event_publisher,
+        )
+
+        svc.execute_interaction(player_id, SpotObjectId.create(80), "off")
+
+        published = event_publisher.publish_all.call_args[0][0]
+        public_events = [
+            e for e in published if isinstance(e, SpotPublicEffectObservedEvent)
+        ]
+        assert len(public_events) == 1
+        assert public_events[0].kind == AppliedEffectKind.ATMOSPHERE_UPDATE
+
+    def test_publishes_public_effect_observed_for_status_effect_when_public(self):
+        """STATUS_EFFECT は既定 ACTOR_DIRECT だが、PUBLIC_OBSERVABLE 上書きで
+        SpotPublicEffectObservedEvent kind=STATUS_EFFECT が発火する。"""
+        from ai_rpg_world.domain.world_graph.enum.effect_visibility import (
+            EffectVisibility,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+            AppliedEffectKind,
+        )
+
+        spot_id = SpotId.create(1)
+        player_id = PlayerId(1)
+        entity_id = EntityId.create(1)
+        graph = _build_graph_with_entity(spot_id, entity_id)
+        paralysis_trap = SpotObject(
+            object_id=SpotObjectId.create(90),
+            name="麻痺ガス",
+            description="動けなくなる",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={},
+            interactions=(
+                InteractionDef(
+                    action_name="touch",
+                    display_label="触れる",
+                    preconditions=(),
+                    effects=(
+                        InteractionEffect(
+                            effect_type=InteractionEffectTypeEnum.APPLY_STATUS_EFFECT,
+                            parameters={
+                                "status_effect_type": "PARALYSIS",
+                                "value": 1.0,
+                                "duration_ticks": 30,
+                            },
+                            visibility=EffectVisibility.PUBLIC_OBSERVABLE,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        interior = _make_interior(paralysis_trap)
+
+        spot_graph_repo = MagicMock()
+        spot_graph_repo.find_graph.return_value = graph
+        spot_interior_repo = MagicMock()
+        spot_interior_repo.find_by_spot_id.return_value = interior
+        inv = PlayerInventoryAggregate(player_id=player_id)
+        player_inv_repo = MagicMock()
+        player_inv_repo.find_by_id.return_value = inv
+        item_repo = MagicMock()
+        item_repo.find_by_id.return_value = None
+        event_publisher = MagicMock()
+
+        svc = SpotInteractionApplicationService(
+            spot_graph_repository=spot_graph_repo,
+            spot_interior_repository=spot_interior_repo,
+            player_inventory_repository=player_inv_repo,
+            item_repository=item_repo,
+            item_spec_repository=MagicMock(),
+            world_flag_state=MutableWorldFlagState(),
+            event_publisher=event_publisher,
+        )
+
+        svc.execute_interaction(player_id, SpotObjectId.create(90), "touch")
+
+        published = event_publisher.publish_all.call_args[0][0]
+        public_events = [
+            e for e in published if isinstance(e, SpotPublicEffectObservedEvent)
+        ]
+        assert any(e.kind == AppliedEffectKind.STATUS_EFFECT for e in public_events)
+
+    def test_publishes_public_effect_observed_for_satisfy_need_when_public(self):
+        """SATISFY_NEED も PUBLIC_OBSERVABLE 上書きで観測 event が出る
+        (例: 派手に飲み食いする様子が他人に見える)。"""
+        from ai_rpg_world.domain.world_graph.enum.effect_visibility import (
+            EffectVisibility,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+            AppliedEffectKind,
+        )
+
+        spot_id = SpotId.create(1)
+        player_id = PlayerId(1)
+        entity_id = EntityId.create(1)
+        graph = _build_graph_with_entity(spot_id, entity_id)
+        feast = SpotObject(
+            object_id=SpotObjectId.create(91),
+            name="ごちそう",
+            description="豪華な料理",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={},
+            interactions=(
+                InteractionDef(
+                    action_name="feast",
+                    display_label="食らう",
+                    preconditions=(),
+                    effects=(
+                        InteractionEffect(
+                            effect_type=InteractionEffectTypeEnum.SATISFY_NEED,
+                            parameters={"need_type": "HUNGER", "amount": 50},
+                            visibility=EffectVisibility.PUBLIC_OBSERVABLE,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        interior = _make_interior(feast)
+
+        spot_graph_repo = MagicMock()
+        spot_graph_repo.find_graph.return_value = graph
+        spot_interior_repo = MagicMock()
+        spot_interior_repo.find_by_spot_id.return_value = interior
+        inv = PlayerInventoryAggregate(player_id=player_id)
+        player_inv_repo = MagicMock()
+        player_inv_repo.find_by_id.return_value = inv
+        item_repo = MagicMock()
+        item_repo.find_by_id.return_value = None
+        player_status = MagicMock()
+        player_status.satisfy_need = MagicMock()
+        player_status.state = {}
+        player_status_repo = MagicMock()
+        player_status_repo.find_by_id.return_value = player_status
+        event_publisher = MagicMock()
+
+        svc = SpotInteractionApplicationService(
+            spot_graph_repository=spot_graph_repo,
+            spot_interior_repository=spot_interior_repo,
+            player_inventory_repository=player_inv_repo,
+            item_repository=item_repo,
+            item_spec_repository=MagicMock(),
+            world_flag_state=MutableWorldFlagState(),
+            player_status_repository=player_status_repo,
+            event_publisher=event_publisher,
+        )
+
+        svc.execute_interaction(player_id, SpotObjectId.create(91), "feast")
+
+        published = event_publisher.publish_all.call_args[0][0]
+        public_events = [
+            e for e in published if isinstance(e, SpotPublicEffectObservedEvent)
+        ]
+        assert any(e.kind == AppliedEffectKind.SATISFY_NEED for e in public_events)
 
     def test_no_event_when_publisher_is_none(self):
         """event_publisher=None でもエラーにならない（後方互換）"""
