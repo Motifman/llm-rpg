@@ -1,4 +1,4 @@
-from typing import Optional, List, Literal
+from typing import Any, List, Literal, Mapping, Optional
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -82,15 +82,12 @@ from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedTy
 _ALLOWED_PLAYER_STATE_VALUE_TYPES = (str, int, float, bool, type(None))
 
 
-class PlayerStateValidationException(Exception):
-    """PlayerStatusAggregate.state に許容外の値型が混入した。
+def _validate_player_state_dict(state: Mapping[str, Any]) -> None:
+    """state 辞書が JSON プリミティブだけで構成されていることを検証する。"""
+    from ai_rpg_world.domain.player.exception.player_exceptions import (
+        PlayerStateValidationException,
+    )
 
-    state は永続化 (JSON シリアライズ) 対象なので、
-    str / int / float / bool / None のみを許容する。
-    """
-
-
-def _validate_player_state_dict(state) -> None:
     for key, value in state.items():
         if not isinstance(key, str):
             raise PlayerStateValidationException(
@@ -124,7 +121,7 @@ class PlayerStatusAggregate(AggregateRoot):
         pursuit_state: Optional[PlayerPursuitState] = None,
         spot_navigation_state: Optional[PlayerSpotNavigationState] = None,
         needs: Optional[AgentNeeds] = None,
-        state: Optional[dict] = None,
+        state: Optional[Mapping[str, Any]] = None,
     ):
         super().__init__()
         self._player_id = player_id
@@ -153,7 +150,7 @@ class PlayerStatusAggregate(AggregateRoot):
         # 同じ flat dict 規約: 値型は JSON プリミティブ限定 (永続化のため)。
         if state:
             _validate_player_state_dict(state)
-            self._state: dict = dict(state)
+            self._state: dict[str, Any] = dict(state)
         else:
             self._state = {}
 
@@ -234,7 +231,7 @@ class PlayerStatusAggregate(AggregateRoot):
             self._needs = self._needs.with_updated(need.satisfy(amount))
 
     @property
-    def state(self) -> dict:
+    def state(self) -> Mapping[str, Any]:
         """プレイヤー個別の自由 state (read-only view)。
 
         Phase 4-D-2: status effect / 変装 / 持続フラグ等、型固定フィールドが
@@ -244,12 +241,12 @@ class PlayerStatusAggregate(AggregateRoot):
         # 防御的コピーで返す。外部からの直接破壊で aggregate 整合性が崩れないように。
         return dict(self._state)
 
-    def replace_state(self, new_state) -> None:
+    def replace_state(self, new_state: Mapping[str, Any]) -> None:
         """state 全体を置き換える。値型は JSON プリミティブに制限。"""
         _validate_player_state_dict(new_state)
         self._state = dict(new_state)
 
-    def merge_state(self, updates) -> None:
+    def merge_state(self, updates: Mapping[str, Any]) -> None:
         """state にキー/値をマージする (部分上書き)。値型は JSON プリミティブに制限。"""
         _validate_player_state_dict(updates)
         for k, v in updates.items():

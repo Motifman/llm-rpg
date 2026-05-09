@@ -13,8 +13,10 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
-    PlayerStateValidationException,
     PlayerStatusAggregate,
+)
+from ai_rpg_world.domain.player.exception.player_exceptions import (
+    PlayerStateValidationException,
 )
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable

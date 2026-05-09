@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
@@ -153,7 +155,6 @@ def build_player_status(*, row: object, path_rows: list[object], active_effect_r
 
 def _state_from_row(row) -> dict:
     """row から state_json を読み出して dict に戻す。旧 schema との互換あり。"""
-    import json as _json
     try:
         keys = row.keys()
     except Exception:
@@ -164,7 +165,7 @@ def _state_from_row(row) -> dict:
     if raw is None:
         return {}
     try:
-        loaded = _json.loads(raw)
+        loaded = json.loads(raw)
     except (ValueError, TypeError):
         return {}
     return loaded if isinstance(loaded, dict) else {}
