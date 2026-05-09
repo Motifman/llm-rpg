@@ -12,6 +12,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     LlmUiContextDto,
+    MonsterToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
@@ -24,11 +25,17 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphPlayerSnapshotDto,
 )
 
+from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
+    HEALTH_BUCKET_JP,
+)
+
+
 PREFIX_CONNECTION = "S"
 PREFIX_OBJECT = "OBJ"
 PREFIX_SUB_LOCATION = "SL"
 PREFIX_ENTITY = "P"
 PREFIX_INVENTORY = "I"
+PREFIX_MONSTER = "M"
 
 
 def _current_sub_location_id_from_snapshot(
@@ -67,6 +74,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         self._build_object_section(snap, allocator, collector, extra_lines)
         self._build_sub_location_section(snap, allocator, collector, extra_lines)
         self._build_entity_section(snap, allocator, collector, extra_lines)
+        self._build_monster_section(snap, allocator, collector, extra_lines)
         self._build_inventory_section(snap, allocator, collector, extra_lines)
         self._build_needs_section(snap, extra_lines)
 
@@ -194,6 +202,46 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     kind="spot_graph_player",
                     display_name=name,
                     player_id=entry.entity_id,
+                ),
+            )
+
+    def _build_monster_section(
+        self,
+        snap: SpotGraphPlayerSnapshotDto,
+        allocator: LabelAllocator,
+        collector: RuntimeTargetCollector,
+        lines: List[str],
+    ) -> None:
+        """同スポットに居るモンスター個体に M1, M2, ... を割り当てる。
+
+        ラベルは揮発（既存パターン踏襲）。LLM がターンを跨いで個体を追跡したい
+        場合は description / 名前から再特定する想定で、ここでは安定ハンドルを
+        用意しない。戦闘ツールが導入された時に再評価する。
+
+        死体は生存個体と同じ section に並べるが、表記とラベル説明文を分ける。
+        現状では戦闘ツールがまだ無いため `available_interactions` は空。次の
+        戦闘 PR で attack 等が実装された時点で埋める。
+        """
+        if not snap.monsters_at_spot:
+            return
+        lines.append("同じ場所に居るモンスター:")
+        for entry in snap.monsters_at_spot:
+            label = allocator.next(PREFIX_MONSTER)
+            if entry.is_dead:
+                desc = "死骸"
+            else:
+                health_label = HEALTH_BUCKET_JP.get(
+                    entry.health_bucket, entry.health_bucket
+                )
+                desc = f"{entry.behavior_label}・{health_label}"
+            lines.append(f"  {label}: {entry.display_name}（{desc}）")
+            collector.add(
+                label,
+                MonsterToolRuntimeTargetDto(
+                    label=label,
+                    kind="spot_graph_monster",
+                    display_name=entry.display_name,
+                    monster_id=entry.monster_id,
                 ),
             )
 

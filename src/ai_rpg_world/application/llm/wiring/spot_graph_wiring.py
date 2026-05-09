@@ -271,12 +271,23 @@ def create_spot_graph_wiring(
             return frozenset()
         return collect_owned_item_spec_ids_from_inventory(inv, item_repository)
 
+    # モンスター個体 view の resolver。monster_repository が無い起動構成
+    # （プロト/テスト等）では None のまま渡し、builder 側で snapshot から
+    # モンスター section を黙って省略する。
+    monster_view_provider = None
+    if monster_repository is not None:
+        from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
+            build_monster_view_provider,
+        )
+        monster_view_provider = build_monster_view_provider(monster_repository)
+
     sg_builder = SpotGraphCurrentStateBuilder(
         spot_graph_repository=spot_graph_repository,
         spot_interior_repository=spot_interior_repository,
         player_status_repository=player_status_repository,
         light_source_item_spec_ids=light_source_item_spec_ids,
         owned_item_spec_ids_provider=_owned_item_spec_ids_provider,
+        monster_view_provider=monster_view_provider,
     )
     augmented_world_query = SpotGraphAugmentingWorldQueryService(
         inner=world_query_service,
