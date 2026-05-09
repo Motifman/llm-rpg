@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -213,3 +214,29 @@ class SpotPublicEffectObservedEvent(BaseDomainEvent[SpotGraphId, str]):
     description: str
     target_ref: str
     state_delta: Tuple[StateDeltaEntry, ...]
+
+
+@dataclass(frozen=True)
+class MonsterAppearedAtSpotEvent(BaseDomainEvent[SpotGraphId, str]):
+    """モンスター個体がスポットに出現した（spawn / 配置）。
+
+    ステップ1では「停止して居る」だけのライフサイクル開始イベント。
+    将来 spawn 由来 (spawn_table) と動的配置 (デバッグ・スクリプト) を
+    区別したくなったら `cause` 等のフィールドを足す方針。
+    """
+
+    monster_id: MonsterId
+    spot_id: SpotId
+
+
+@dataclass(frozen=True)
+class MonsterLeftSpotEvent(BaseDomainEvent[SpotGraphId, str]):
+    """モンスター個体がスポットから離れた（despawn / 死亡 / 撤去）。
+
+    ステップ1では移動が無いため、用途は撤去・死亡などの「居なくなる」
+    片道遷移。後続 PR で隣接スポットへの移動を実装する際は、Left →
+    Appeared を対で発火するか、専用の MovedEvent を追加するかを決める。
+    """
+
+    monster_id: MonsterId
+    spot_id: SpotId
