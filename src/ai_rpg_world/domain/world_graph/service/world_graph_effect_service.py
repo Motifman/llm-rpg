@@ -59,9 +59,17 @@ _DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
     InteractionEffectTypeEnum.RECORD_TARGET_ITEM_INSTANCE_STATE_TICK: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.CHANGE_PLAYER_STATE: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK: EffectVisibility.HIDDEN,
-    InteractionEffectTypeEnum.APPLY_DAMAGE: EffectVisibility.ACTOR_DIRECT,
+    # 痛みは内臓的だが、流血・よろめき・倒れるなどは同スポットの他者から見える。
+    # 「自分が痛い」は messages のテキストで本人に伝わるため、構造化サマリは
+    # 第三者観測側にデフォルトを倒す。本人は自分の HP / state 変化を
+    # 現在状態セクションから読む。
+    InteractionEffectTypeEnum.APPLY_DAMAGE: EffectVisibility.PUBLIC_OBSERVABLE,
+    # POISON のように内臓的なものから PARALYSIS のように見えるものまで幅がある。
+    # 既定は安全側 (ACTOR_DIRECT) に置き、シナリオ側で見える状態異常 (PARALYSIS,
+    # SLEEP 等) は visibility を PUBLIC_OBSERVABLE に明示する運用とする。
     InteractionEffectTypeEnum.APPLY_STATUS_EFFECT: EffectVisibility.ACTOR_DIRECT,
-    InteractionEffectTypeEnum.TELEPORT_ENTITY: EffectVisibility.ACTOR_DIRECT,
+    # 転移は同スポットの他者から「いきなり消えた」と見える物理現象。
+    InteractionEffectTypeEnum.TELEPORT_ENTITY: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.CHANGE_ATMOSPHERE: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.CREATE_CONNECTION: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.DESTROY_CONNECTION: EffectVisibility.PUBLIC_OBSERVABLE,
@@ -76,37 +84,71 @@ _DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
 
 
 def _resolve_visibility(effect: InteractionEffect) -> EffectVisibility:
-    """effect の visibility をシナリオ指定 → 既定値の順で解決する。"""
+    """effect の visibility を effect.visibility (first-class field) →
+    parameters['visibility'] (legacy 経路、警告ログ付き) → 既定値の順で解決する。
+
+    parameters 側の経路は scenario_loader 経由で過渡期に流入する可能性が
+    あるための後方互換であり、新規呼び出しは effect.visibility を使うこと。
+    """
+
+    if effect.visibility is not None:
+        return effect.visibility
 
     raw = effect.parameters.get("visibility")
-    if isinstance(raw, EffectVisibility):
-        return raw
-    if isinstance(raw, str) and raw:
-        try:
-            return EffectVisibility(raw)
-        except ValueError:
-            _logger.warning(
-                "Unknown effect visibility %r for %s; falling back to default",
-                raw,
-                effect.effect_type.value,
-            )
+    if raw is not None:
+        _logger.warning(
+            "InteractionEffect.parameters['visibility'] is deprecated for %s; "
+            "use the first-class `visibility` field instead",
+            effect.effect_type.value,
+        )
+        if isinstance(raw, EffectVisibility):
+            return raw
+        if isinstance(raw, str) and raw:
+            try:
+                return EffectVisibility(raw)
+            except ValueError:
+                _logger.warning(
+                    "Unknown effect visibility %r for %s; falling back to default",
+                    raw,
+                    effect.effect_type.value,
+                )
     return _DEFAULT_VISIBILITY.get(effect.effect_type, EffectVisibility.ACTOR_DIRECT)
+
+
+_MISSING = object()
 
 
 def _state_delta_entries(
     before: Optional[dict], after: dict
 ) -> Tuple[StateDeltaEntry, ...]:
-    """state map の before/after から変更箇所だけを抜き出す。"""
+    """state map の before/after から変更箇所だけを抜き出す。
+
+    `before` に存在しなかったキーと、`before` に明示的に `None` が入って
+    いたキーを区別する必要がある（後者を `before=None, after=...` として
+    残すため）。同様に `after` で消えたキーも、値が None なのか削除なのか
+    の判別が必要。`dict.get` の戻り値だけでは区別不能なので sentinel を使う。
+    `before==after` の場合はエントリを生成しない。
+    """
 
     if before is None:
         before = {}
     keys = set(before.keys()) | set(after.keys())
     entries: List[StateDeltaEntry] = []
-    for key in sorted(keys):
-        b = before.get(key)
-        a = after.get(key)
-        if b != a:
-            entries.append(StateDeltaEntry(key=str(key), before=b, after=a))
+    for key in sorted(keys, key=str):
+        b = before.get(key, _MISSING)
+        a = after.get(key, _MISSING)
+        if b == a:
+            continue
+        # sentinel が漏れないよう None に正規化して値オブジェクトに乗せる。
+        # before が _MISSING = キーが新しく追加された
+        # after が _MISSING = キーが削除された
+        entries.append(
+            StateDeltaEntry(
+                key=str(key),
+                before=None if b is _MISSING else b,
+                after=None if a is _MISSING else a,
+            )
+        )
     return tuple(entries)
 
 
