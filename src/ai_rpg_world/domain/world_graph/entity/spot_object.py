@@ -27,6 +27,12 @@ class SpotObject:
     trap: Optional[TrapDef] = None
     puzzle: Optional[PuzzleState] = None
     detail_read_by: FrozenSet[int] = frozenset()
+    # Phase 4-E: 第三者プロンプトに載せたくない state キー (例: trap_armed,
+    # secret_solution)。`SpotGraphCurrentStateBuilder` が
+    # `SpotGraphObjectEntry.state` を組み立てるときに除外する。
+    # effect の visibility (HIDDEN) とは独立で、こちらは「state 値そのもの
+    # を周囲のプレイヤーに常に見せない」という静的な視認性属性。
+    hidden_state_keys: FrozenSet[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -34,6 +40,18 @@ class SpotObject:
 
     def with_state(self, new_state: Dict[str, Any]) -> SpotObject:
         return replace(self, state=dict(new_state))
+
+    def visible_state(self) -> Dict[str, Any]:
+        """`hidden_state_keys` を除いた、第三者プロンプトに載せて良い state。
+
+        プロンプトの「スポット内オブジェクトの状態」セクションを組み立てる
+        builder から呼ばれる。effect 適用や永続化には影響しない。
+        """
+        if not self.hidden_state_keys:
+            return dict(self.state)
+        return {
+            k: v for k, v in self.state.items() if k not in self.hidden_state_keys
+        }
 
     def with_visible(self, visible: bool) -> SpotObject:
         return replace(self, is_visible=visible)
