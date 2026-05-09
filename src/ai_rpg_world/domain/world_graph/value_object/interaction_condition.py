@@ -26,3 +26,8 @@ class InteractionCondition:
     # HAS_ITEMS は「各 spec を quantity 個ずつ」とし、種ごとに別 quantity を
     # 表現したい場合は HAS_ITEM を複数列挙する想定。
     required_quantity: int = 1
+    # Phase 4-D-1: プレイヤー状態 (needs / HP) 連動の precondition 用フィールド。
+    # それぞれ対応する condition_type のときだけ意味を持つ。
+    need_type: Optional[str] = None  # PLAYER_NEED_AT_LEAST: "HUNGER" | "FATIGUE" 等
+    need_threshold: Optional[int] = None  # PLAYER_NEED_AT_LEAST: この値以上で成立
+    hp_ratio: Optional[float] = None  # PLAYER_HP_RATIO_BELOW / _AT_LEAST: 0.0..1.0
