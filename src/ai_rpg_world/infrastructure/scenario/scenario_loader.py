@@ -21,6 +21,7 @@ from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.entity.sub_location import SubLocation
+from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import DiscoveryConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
@@ -482,6 +483,25 @@ class ScenarioLoader:
     def _parse_interaction_effect(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionEffect:
         params = dict(raw.get("parameters", {}))
         effect_type_str = raw.get("effect_type", "")
+        # Phase 4-E: visibility は parameters dict ではなく first-class 属性で
+        # 持つ。トップレベル "visibility" を優先し、過渡期サポートとして
+        # parameters["visibility"] からも吸い上げる。両方あったら top-level 優先。
+        visibility_raw = raw.get("visibility")
+        if visibility_raw is None and "visibility" in params:
+            visibility_raw = params.pop("visibility")
+        else:
+            params.pop("visibility", None)
+        visibility: Optional[EffectVisibility] = None
+        if isinstance(visibility_raw, EffectVisibility):
+            visibility = visibility_raw
+        elif isinstance(visibility_raw, str) and visibility_raw:
+            try:
+                visibility = EffectVisibility(visibility_raw)
+            except ValueError:
+                # 値の妥当性は runtime 側でも警告ログを出すが、
+                # ここは「読み込めなかった」状態を残さず None に倒し
+                # 既定値が使われるようにする。
+                visibility = None
         # CHANGE_OBJECT_STATE は state_updates を正式名とする。
         # 過去シナリオ互換で new_state が来た場合は正規化して受け入れる。
         # 他の effect (CHANGE_PASSAGE_STATE 等) では new_state は別の意味で
@@ -505,6 +525,7 @@ class ScenarioLoader:
         return InteractionEffect(
             effect_type=InteractionEffectTypeEnum[raw["effect_type"]],
             parameters=params,
+            visibility=visibility,
         )
 
     def _parse_scenario_events(

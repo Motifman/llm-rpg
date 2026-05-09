@@ -11,9 +11,15 @@ from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
 )
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
+from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     UnsupportedInteractionEffectException,
+)
+from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+    AppliedEffectKind,
+    AppliedEffectSummary,
+    StateDeltaEntry,
 )
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
@@ -36,6 +42,114 @@ from ai_rpg_world.domain.world_graph.value_object.world_graph_effect_result impo
 
 
 _logger = logging.getLogger(__name__)
+
+
+# 効果ごとの既定の可視性。シナリオ JSON で `visibility` を明示すれば上書きされる。
+# - 行為者本人の体験 (痛み、回復、自分の持ち物変化) → ACTOR_DIRECT
+# - 環境・接続・対象オブジェクトの物理変化 → PUBLIC_OBSERVABLE
+# - 内部 bookkeeping (tick 記録、フラグ) → HIDDEN
+_DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
+    InteractionEffectTypeEnum.CHANGE_OBJECT_STATE: EffectVisibility.PUBLIC_OBSERVABLE,
+    InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK: EffectVisibility.HIDDEN,
+    InteractionEffectTypeEnum.REVEAL_OBJECT: EffectVisibility.PUBLIC_OBSERVABLE,
+    InteractionEffectTypeEnum.REVEAL_SUB_LOCATION: EffectVisibility.PUBLIC_OBSERVABLE,
+    InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE: EffectVisibility.ACTOR_DIRECT,
+    InteractionEffectTypeEnum.RECORD_ITEM_INSTANCE_STATE_TICK: EffectVisibility.HIDDEN,
+    InteractionEffectTypeEnum.CHANGE_TARGET_ITEM_INSTANCE_STATE: EffectVisibility.PUBLIC_OBSERVABLE,
+    InteractionEffectTypeEnum.RECORD_TARGET_ITEM_INSTANCE_STATE_TICK: EffectVisibility.HIDDEN,
+    InteractionEffectTypeEnum.CHANGE_PLAYER_STATE: EffectVisibility.HIDDEN,
+    InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK: EffectVisibility.HIDDEN,
+    # 痛みは内臓的だが、流血・よろめき・倒れるなどは同スポットの他者から見える。
+    # 「自分が痛い」は messages のテキストで本人に伝わるため、構造化サマリは
+    # 第三者観測側にデフォルトを倒す。本人は自分の HP / state 変化を
+    # 現在状態セクションから読む。
+    InteractionEffectTypeEnum.APPLY_DAMAGE: EffectVisibility.PUBLIC_OBSERVABLE,
+    # POISON のように内臓的なものから PARALYSIS のように見えるものまで幅がある。
+    # 既定は安全側 (ACTOR_DIRECT) に置き、シナリオ側で見える状態異常 (PARALYSIS,
+    # SLEEP 等) は visibility を PUBLIC_OBSERVABLE に明示する運用とする。
+    InteractionEffectTypeEnum.APPLY_STATUS_EFFECT: EffectVisibility.ACTOR_DIRECT,
+    # 転移は同スポットの他者から「いきなり消えた」と見える物理現象。
+    InteractionEffectTypeEnum.TELEPORT_ENTITY: EffectVisibility.PUBLIC_OBSERVABLE,
+    InteractionEffectTypeEnum.CHANGE_ATMOSPHERE: EffectVisibility.PUBLIC_OBSERVABLE,
+    InteractionEffectTypeEnum.CREATE_CONNECTION: EffectVisibility.PUBLIC_OBSERVABLE,
+    InteractionEffectTypeEnum.DESTROY_CONNECTION: EffectVisibility.PUBLIC_OBSERVABLE,
+    InteractionEffectTypeEnum.CHANGE_PASSAGE_STATE: EffectVisibility.PUBLIC_OBSERVABLE,
+    InteractionEffectTypeEnum.SATISFY_NEED: EffectVisibility.ACTOR_DIRECT,
+    InteractionEffectTypeEnum.SET_FLAG: EffectVisibility.HIDDEN,
+    InteractionEffectTypeEnum.SHOW_MESSAGE: EffectVisibility.ACTOR_DIRECT,
+    InteractionEffectTypeEnum.GIVE_ITEM: EffectVisibility.ACTOR_DIRECT,
+    InteractionEffectTypeEnum.REMOVE_ITEM: EffectVisibility.ACTOR_DIRECT,
+    InteractionEffectTypeEnum.COMBINE_ITEMS: EffectVisibility.ACTOR_DIRECT,
+}
+
+
+def _resolve_visibility(effect: InteractionEffect) -> EffectVisibility:
+    """effect の visibility を effect.visibility (first-class field) →
+    parameters['visibility'] (legacy 経路、警告ログ付き) → 既定値の順で解決する。
+
+    parameters 側の経路は scenario_loader 経由で過渡期に流入する可能性が
+    あるための後方互換であり、新規呼び出しは effect.visibility を使うこと。
+    """
+
+    if effect.visibility is not None:
+        return effect.visibility
+
+    raw = effect.parameters.get("visibility")
+    if raw is not None:
+        _logger.warning(
+            "InteractionEffect.parameters['visibility'] is deprecated for %s; "
+            "use the first-class `visibility` field instead",
+            effect.effect_type.value,
+        )
+        if isinstance(raw, EffectVisibility):
+            return raw
+        if isinstance(raw, str) and raw:
+            try:
+                return EffectVisibility(raw)
+            except ValueError:
+                _logger.warning(
+                    "Unknown effect visibility %r for %s; falling back to default",
+                    raw,
+                    effect.effect_type.value,
+                )
+    return _DEFAULT_VISIBILITY.get(effect.effect_type, EffectVisibility.ACTOR_DIRECT)
+
+
+_MISSING = object()
+
+
+def _state_delta_entries(
+    before: Optional[dict], after: dict
+) -> Tuple[StateDeltaEntry, ...]:
+    """state map の before/after から変更箇所だけを抜き出す。
+
+    `before` に存在しなかったキーと、`before` に明示的に `None` が入って
+    いたキーを区別する必要がある（後者を `before=None, after=...` として
+    残すため）。同様に `after` で消えたキーも、値が None なのか削除なのか
+    の判別が必要。`dict.get` の戻り値だけでは区別不能なので sentinel を使う。
+    `before==after` の場合はエントリを生成しない。
+    """
+
+    if before is None:
+        before = {}
+    keys = set(before.keys()) | set(after.keys())
+    entries: List[StateDeltaEntry] = []
+    for key in sorted(keys, key=str):
+        b = before.get(key, _MISSING)
+        a = after.get(key, _MISSING)
+        if b == a:
+            continue
+        # sentinel が漏れないよう None に正規化して値オブジェクトに乗せる。
+        # before が _MISSING = キーが新しく追加された
+        # after が _MISSING = キーが削除された
+        entries.append(
+            StateDeltaEntry(
+                key=str(key),
+                before=None if b is _MISSING else b,
+                after=None if a is _MISSING else a,
+            )
+        )
+    return tuple(entries)
 
 
 class WorldGraphEffectService:
@@ -79,6 +193,9 @@ class WorldGraphEffectService:
         destroy_connection_specs: List[DestroyConnectionSpec] = []
         satisfy_need_specs: List[SatisfyNeedSpec] = []
         passage_specs: List[PassageStateUpdateSpec] = []
+        # Phase 4-E: visibility 別バケットに集計する効果サマリ。各 _apply_effect
+        # 呼び出しで visibility を解決して append する。
+        summaries: List[AppliedEffectSummary] = []
         current_interior = interior
         current_object = acting_object
 
@@ -133,6 +250,7 @@ class WorldGraphEffectService:
                 destroy_connection_specs=destroy_connection_specs,
                 satisfy_need_specs=satisfy_need_specs,
                 passage_specs=passage_specs,
+                summaries=summaries,
                 current_tick=current_tick,
                 acting_item_aggregate=acting_item_aggregate,
                 target_item_aggregate=target_item_aggregate,
@@ -150,6 +268,16 @@ class WorldGraphEffectService:
         acting_player_state_changed = (
             acting_player_status is not None
             and dict(acting_player_status.state) != initial_player_state
+        )
+
+        actor_direct = tuple(
+            s for s in summaries if s.visibility == EffectVisibility.ACTOR_DIRECT
+        )
+        public_observable = tuple(
+            s for s in summaries if s.visibility == EffectVisibility.PUBLIC_OBSERVABLE
+        )
+        hidden = tuple(
+            s for s in summaries if s.visibility == EffectVisibility.HIDDEN
         )
 
         return WorldGraphEffectResult(
@@ -171,6 +299,9 @@ class WorldGraphEffectService:
             item_instance_state_changed=item_instance_state_changed,
             target_item_instance_state_changed=target_item_instance_state_changed,
             acting_player_state_changed=acting_player_state_changed,
+            actor_direct_effects=actor_direct,
+            public_observable_effects=public_observable,
+            hidden_effects=hidden,
         )
 
     def _apply_effect(
@@ -192,6 +323,7 @@ class WorldGraphEffectService:
         destroy_connection_specs: List[DestroyConnectionSpec],
         satisfy_need_specs: List[SatisfyNeedSpec],
         passage_specs: List[PassageStateUpdateSpec],
+        summaries: List[AppliedEffectSummary],
         current_tick: Optional[WorldTick] = None,
         acting_item_aggregate: Optional[ItemAggregate] = None,
         target_item_aggregate: Optional[ItemAggregate] = None,
@@ -215,6 +347,7 @@ class WorldGraphEffectService:
     ]:
         p = effect.parameters
         et = effect.effect_type
+        visibility = _resolve_visibility(effect)
         _all = (
             interior, acting_object, flags, grant, remove, messages,
             damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
@@ -252,6 +385,7 @@ class WorldGraphEffectService:
                 target = self._resolve_target_object(interior, acting_object, p)
                 if target is None:
                     return _all
+                before_state = dict(target.state)
                 new_state = dict(target.state)
                 for k, v in updates.items():
                     new_state[str(k)] = v
@@ -262,6 +396,15 @@ class WorldGraphEffectService:
                     and updated_target.object_id == acting_object.object_id
                 ):
                     acting_object = updated_target
+                summaries.append(
+                    AppliedEffectSummary(
+                        kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
+                        visibility=visibility,
+                        description=f"{updated_target.name} の状態が変化した",
+                        target_ref=updated_target.name,
+                        state_delta=_state_delta_entries(before_state, new_state),
+                    )
+                )
                 _all = (
                     interior, acting_object, flags, grant, remove, messages,
                     damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
@@ -300,7 +443,16 @@ class WorldGraphEffectService:
             damage_val = int(p.get("damage", 0))
             msg = str(p.get("message", ""))
             if damage_val > 0:
-                damage_specs.append(DamageSpec(damage=damage_val, message=msg))
+                damage_specs.append(
+                    DamageSpec(damage=damage_val, message=msg, visibility=visibility)
+                )
+                summaries.append(
+                    AppliedEffectSummary(
+                        kind=AppliedEffectKind.DAMAGE,
+                        visibility=visibility,
+                        description=msg or f"{damage_val} のダメージを受けた",
+                    )
+                )
             return _all
 
         if et == InteractionEffectTypeEnum.APPLY_STATUS_EFFECT:
@@ -313,6 +465,15 @@ class WorldGraphEffectService:
                         effect_type_name=effect_type_name,
                         value=value,
                         duration_ticks=duration_ticks,
+                        visibility=visibility,
+                    )
+                )
+                summaries.append(
+                    AppliedEffectSummary(
+                        kind=AppliedEffectKind.STATUS_EFFECT,
+                        visibility=visibility,
+                        description=f"{effect_type_name} の状態異常 (値={value}, {duration_ticks} ticks)",
+                        target_ref=effect_type_name,
                     )
                 )
             return _all
@@ -320,7 +481,17 @@ class WorldGraphEffectService:
         if et == InteractionEffectTypeEnum.TELEPORT_ENTITY:
             target_spot_id = int(p.get("spot_id", 0))
             if target_spot_id > 0:
-                teleport_specs.append(TeleportSpec(target_spot_id=target_spot_id))
+                teleport_specs.append(
+                    TeleportSpec(target_spot_id=target_spot_id, visibility=visibility)
+                )
+                summaries.append(
+                    AppliedEffectSummary(
+                        kind=AppliedEffectKind.TELEPORT,
+                        visibility=visibility,
+                        description=f"スポット {target_spot_id} へ転移した",
+                        target_ref=str(target_spot_id),
+                    )
+                )
             return _all
 
         if et == InteractionEffectTypeEnum.CHANGE_ATMOSPHERE:
@@ -333,6 +504,15 @@ class WorldGraphEffectService:
                         temperature=p.get("temperature"),
                         hazard_level=p.get("hazard_level"),
                         hazard_description=p.get("hazard_description"),
+                        visibility=visibility,
+                    )
+                )
+                summaries.append(
+                    AppliedEffectSummary(
+                        kind=AppliedEffectKind.ATMOSPHERE_UPDATE,
+                        visibility=visibility,
+                        description=f"スポット {spot_id} の雰囲気が変化した",
+                        target_ref=str(spot_id),
                     )
                 )
             return _all
@@ -368,20 +548,53 @@ class WorldGraphEffectService:
                     travel_ticks=int(p.get("travel_ticks", 1)),
                     is_bidirectional=bool(p.get("is_bidirectional", False)),
                     passage=Passage.from_dict(p.get("passage")),
+                    visibility=visibility,
                 ))
+                summaries.append(
+                    AppliedEffectSummary(
+                        kind=AppliedEffectKind.CONNECTION_CREATED,
+                        visibility=visibility,
+                        description=f"スポット {from_sid} と {to_sid} を結ぶ接続「{conn_name}」が現れた",
+                        target_ref=conn_name,
+                    )
+                )
             return _all
 
         if et == InteractionEffectTypeEnum.DESTROY_CONNECTION:
             cid = int(p.get("connection_id", 0))
             if cid > 0:
-                destroy_connection_specs.append(DestroyConnectionSpec(connection_id=cid))
+                destroy_connection_specs.append(
+                    DestroyConnectionSpec(connection_id=cid, visibility=visibility)
+                )
+                summaries.append(
+                    AppliedEffectSummary(
+                        kind=AppliedEffectKind.CONNECTION_DESTROYED,
+                        visibility=visibility,
+                        description=f"接続 {cid} が消滅した",
+                        target_ref=str(cid),
+                    )
+                )
             return _all
 
         if et == InteractionEffectTypeEnum.SATISFY_NEED:
             need_type_name = str(p.get("need_type", ""))
             amount = int(p.get("amount", 0))
             if need_type_name and amount > 0:
-                satisfy_need_specs.append(SatisfyNeedSpec(need_type_name=need_type_name, amount=amount))
+                satisfy_need_specs.append(
+                    SatisfyNeedSpec(
+                        need_type_name=need_type_name,
+                        amount=amount,
+                        visibility=visibility,
+                    )
+                )
+                summaries.append(
+                    AppliedEffectSummary(
+                        kind=AppliedEffectKind.SATISFY_NEED,
+                        visibility=visibility,
+                        description=f"{need_type_name} を {amount} 回復した",
+                        target_ref=need_type_name,
+                    )
+                )
             return _all
 
         if et == InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE:
@@ -401,7 +614,18 @@ class WorldGraphEffectService:
                     "skipping state merge"
                 )
                 return _all
+            before_state = dict(acting_item_aggregate.state)
             acting_item_aggregate.merge_state(updates)
+            after_state = dict(acting_item_aggregate.state)
+            summaries.append(
+                AppliedEffectSummary(
+                    kind=AppliedEffectKind.ACTING_ITEM_STATE_CHANGE,
+                    visibility=visibility,
+                    description="使ったアイテムの状態が変化した",
+                    target_ref=str(acting_item_aggregate.item_spec.item_spec_id.value),
+                    state_delta=_state_delta_entries(before_state, after_state),
+                )
+            )
             return _all
 
         if et == InteractionEffectTypeEnum.RECORD_ITEM_INSTANCE_STATE_TICK:
@@ -449,7 +673,18 @@ class WorldGraphEffectService:
                     "skipping state merge"
                 )
                 return _all
+            before_state = dict(target_item_aggregate.state)
             target_item_aggregate.merge_state(updates)
+            after_state = dict(target_item_aggregate.state)
+            summaries.append(
+                AppliedEffectSummary(
+                    kind=AppliedEffectKind.TARGET_ITEM_STATE_CHANGE,
+                    visibility=visibility,
+                    description="作用したアイテムの状態が変化した",
+                    target_ref=str(target_item_aggregate.item_spec.item_spec_id.value),
+                    state_delta=_state_delta_entries(before_state, after_state),
+                )
+            )
             return _all
 
         if et == InteractionEffectTypeEnum.RECORD_TARGET_ITEM_INSTANCE_STATE_TICK:
@@ -495,7 +730,17 @@ class WorldGraphEffectService:
                     "skipping state merge"
                 )
                 return _all
+            before_state = dict(acting_player_status.state)
             acting_player_status.merge_state(updates)
+            after_state = dict(acting_player_status.state)
+            summaries.append(
+                AppliedEffectSummary(
+                    kind=AppliedEffectKind.ACTING_PLAYER_STATE_CHANGE,
+                    visibility=visibility,
+                    description="プレイヤー自身の状態が変化した",
+                    state_delta=_state_delta_entries(before_state, after_state),
+                )
+            )
             return _all
 
         if et == InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK:
@@ -576,6 +821,15 @@ class WorldGraphEffectService:
                         new_state=new_state,
                         traversable_override=bool(trav) if trav is not None else None,
                         sound_permeability_override=float(sound) if sound is not None else None,
+                        visibility=visibility,
+                    )
+                )
+                summaries.append(
+                    AppliedEffectSummary(
+                        kind=AppliedEffectKind.PASSAGE_STATE_UPDATE,
+                        visibility=visibility,
+                        description=f"接続 {int(cid_raw)} の通過状態が {new_state} に変化した",
+                        target_ref=str(int(cid_raw)),
                     )
                 )
             return _all
