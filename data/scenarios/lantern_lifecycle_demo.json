@@ -125,7 +125,15 @@
   ],
   "connections": [],
   "players": [
-    {"id": "player_a", "name": "巡礼者", "spawn_spot": "shrine", "initial_items": ["match", "match"]}
+    {
+      "id": "player_a",
+      "name": "巡礼者",
+      "spawn_spot": "shrine",
+      "initial_items": [
+        {"spec": "match", "state": {"used": false}},
+        {"spec": "match", "state": {"used": false}}
+      ]
+    }
   ],
   "game_end_conditions": {
     "win": [],

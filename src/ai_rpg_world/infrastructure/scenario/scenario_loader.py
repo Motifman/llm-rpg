@@ -6,9 +6,9 @@ scenario_format_version "1.0" に対応。
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
@@ -94,13 +94,28 @@ class ItemSpecDefinition:
 
 
 @dataclass(frozen=True)
+class InitialItemSpec:
+    """シナリオで「プレイヤーに最初から持たせるアイテム」を表す値オブジェクト。
+
+    ItemSpecId に加えて per-instance state を仕込めるようにしたもの (Phase 4-D)。
+    state を持たない単純な所持なら空 dict を渡せば、PR #115 までの挙動と同じ。
+    state を入れた場合は ItemAggregate.create(state=...) 経由で初期 state を
+    持つ instance が生成され、`ITEM_INSTANCE_STATE` precondition や
+    reactive binding がそのまま機能する。
+    """
+
+    spec_id: ItemSpecId
+    state: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class PlayerSpawnConfig:
     """プレイヤー初期配置。"""
     string_id: str
     player_id: int
     name: str
     spawn_spot_id: SpotId
-    initial_item_spec_ids: Tuple[ItemSpecId, ...]
+    initial_items: Tuple[InitialItemSpec, ...]
 
 
 @dataclass(frozen=True)
@@ -889,17 +904,54 @@ class ScenarioLoader:
             spot_sid = p["spawn_spot"]
             spot_id = SpotId.create(mapper.get_int("spot", spot_sid))
             items = tuple(
-                ItemSpecId.create(mapper.get_int("item_spec", i))
-                for i in p.get("initial_items", [])
+                self._parse_initial_item(raw, mapper, owner_id=p["id"])
+                for raw in p.get("initial_items", [])
             )
             spawns.append(PlayerSpawnConfig(
                 string_id=p["id"],
                 player_id=pid,
                 name=p["name"],
                 spawn_spot_id=spot_id,
-                initial_item_spec_ids=items,
+                initial_items=items,
             ))
         return spawns
+
+    def _parse_initial_item(
+        self,
+        raw: Any,
+        mapper: ScenarioIdMapper,
+        *,
+        owner_id: str,
+    ) -> InitialItemSpec:
+        """`initial_items` の 1 要素を `InitialItemSpec` にパース。
+
+        受け付ける形式は 2 つ:
+          - `"spec_string_id"` (state なし、Phase 4-A 以前のシナリオと互換)
+          - `{"spec": "spec_string_id", "state": {...}}` (state を仕込める Phase 4-D 形式)
+        どちらも 1 つの InitialItemSpec に正規化される。
+        """
+        if isinstance(raw, str):
+            spec_id = ItemSpecId.create(mapper.get_int("item_spec", raw))
+            return InitialItemSpec(spec_id=spec_id, state={})
+        if isinstance(raw, dict):
+            spec_string = raw.get("spec")
+            if not isinstance(spec_string, str) or not spec_string:
+                raise ScenarioLoadError(
+                    f"players[{owner_id}].initial_items[*].spec is required "
+                    f"(got {spec_string!r})"
+                )
+            spec_id = ItemSpecId.create(mapper.get_int("item_spec", spec_string))
+            state_raw = raw.get("state", {})
+            if not isinstance(state_raw, dict):
+                raise ScenarioLoadError(
+                    f"players[{owner_id}].initial_items[*].state must be an object "
+                    f"(got {type(state_raw).__name__})"
+                )
+            return InitialItemSpec(spec_id=spec_id, state=dict(state_raw))
+        raise ScenarioLoadError(
+            f"players[{owner_id}].initial_items[*] must be a string or object "
+            f"(got {type(raw).__name__})"
+        )
 
     def _parse_end_conditions(
         self,

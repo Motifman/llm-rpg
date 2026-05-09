@@ -37,7 +37,7 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
-    grant_item_specs_to_inventory,
+    grant_initial_items_to_inventory,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -120,9 +120,9 @@ def greenhouse():
     for spawn in loaded.player_spawns:
         pid = PlayerId(spawn.player_id)
         inventory_repo.save(PlayerInventoryAggregate(player_id=pid))
-        if spawn.initial_item_spec_ids:
-            grant_item_specs_to_inventory(
-                pid, spawn.initial_item_spec_ids,
+        if spawn.initial_items:
+            grant_initial_items_to_inventory(
+                pid, spawn.initial_items,
                 item_repo, item_spec_repo, inventory_repo,
             )
 
