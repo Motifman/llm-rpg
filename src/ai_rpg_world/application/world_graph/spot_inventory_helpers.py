@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import FrozenSet, Mapping
+from typing import Any, FrozenSet, Mapping, Optional
 
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -91,25 +91,81 @@ def grant_item_specs_to_inventory(
     item_spec_repository: ItemSpecRepository,
     player_inventory_repository: PlayerInventoryRepository,
 ) -> None:
-    """各 ItemSpecId について新規 ItemAggregate を生成してインベントリに追加する。"""
+    """各 ItemSpecId について新規 ItemAggregate を生成してインベントリに追加する。
+
+    state を持たないシンプルな付与専用の旧 API。effect 駆動の `GIVE_ITEM` 等で
+    使われ続ける。シナリオ初期化で initial state を仕込みたい場合は
+    `grant_initial_items_to_inventory` を使う (Phase 4-D)。
+    """
     inv = player_inventory_repository.find_by_id(player_id)
     if inv is None:
         return
     for spec_id in item_spec_ids:
-        spec_union = item_spec_repository.find_by_id(spec_id)
-        if spec_union is None:
-            continue
-        spec = (
-            spec_union.to_item_spec()
-            if hasattr(spec_union, "to_item_spec")
-            else spec_union
+        _create_and_acquire(
+            player_id=player_id,
+            spec_id=spec_id,
+            state=None,
+            inventory=inv,
+            item_repository=item_repository,
+            item_spec_repository=item_spec_repository,
         )
-        instance_id = item_repository.generate_item_instance_id()
-        item_aggregate = ItemAggregate.create(
-            item_instance_id=instance_id,
-            item_spec=spec,
-            quantity=1,
-        )
-        item_repository.save(item_aggregate)
-        inv.acquire_item(instance_id, item_spec_id_value=spec.item_spec_id.value)
     player_inventory_repository.save(inv)
+
+
+def grant_initial_items_to_inventory(
+    player_id: PlayerId,
+    initial_items: tuple,  # Tuple[InitialItemSpec, ...]
+    item_repository: ItemRepository,
+    item_spec_repository: ItemSpecRepository,
+    player_inventory_repository: PlayerInventoryRepository,
+) -> None:
+    """シナリオ起動時のプレイヤー初期所持品を生成してインベントリに追加する。
+
+    各 `InitialItemSpec` (spec_id + state) ごとに新規 `ItemAggregate` を作り、
+    state を持つ場合は `ItemAggregate.create(state=...)` 経由で初期 state を
+    仕込んだ instance を生成する。effect 経由で生まれる instance (`GIVE_ITEM`)
+    とは別経路で、Phase 4-A 以降の per-instance state を JSON だけで初期化
+    できるようにするための helper。
+    """
+    inv = player_inventory_repository.find_by_id(player_id)
+    if inv is None:
+        return
+    for initial in initial_items:
+        _create_and_acquire(
+            player_id=player_id,
+            spec_id=initial.spec_id,
+            state=dict(initial.state) if initial.state else None,
+            inventory=inv,
+            item_repository=item_repository,
+            item_spec_repository=item_spec_repository,
+        )
+    player_inventory_repository.save(inv)
+
+
+def _create_and_acquire(
+    *,
+    player_id: PlayerId,
+    spec_id: ItemSpecId,
+    state: Optional[Mapping[str, Any]],
+    inventory: PlayerInventoryAggregate,
+    item_repository: ItemRepository,
+    item_spec_repository: ItemSpecRepository,
+) -> None:
+    """`ItemAggregate` を生成して inventory に acquire させる内部 helper。"""
+    spec_union = item_spec_repository.find_by_id(spec_id)
+    if spec_union is None:
+        return
+    spec = (
+        spec_union.to_item_spec()
+        if hasattr(spec_union, "to_item_spec")
+        else spec_union
+    )
+    instance_id = item_repository.generate_item_instance_id()
+    item_aggregate = ItemAggregate.create(
+        item_instance_id=instance_id,
+        item_spec=spec,
+        quantity=1,
+        state=state,
+    )
+    item_repository.save(item_aggregate)
+    inventory.acquire_item(instance_id, item_spec_id_value=spec.item_spec_id.value)
