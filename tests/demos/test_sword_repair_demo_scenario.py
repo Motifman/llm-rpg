@@ -30,7 +30,7 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
     SpotInteractionApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
-    grant_item_specs_to_inventory,
+    grant_initial_items_to_inventory,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -114,9 +114,9 @@ def smithy():
     for spawn in loaded.player_spawns:
         pid = PlayerId(spawn.player_id)
         inventory_repo.save(PlayerInventoryAggregate(player_id=pid))
-        if spawn.initial_item_spec_ids:
-            grant_item_specs_to_inventory(
-                pid, spawn.initial_item_spec_ids,
+        if spawn.initial_items:
+            grant_initial_items_to_inventory(
+                pid, spawn.initial_items,
                 item_repo, item_spec_repo, inventory_repo,
             )
 
@@ -173,13 +173,21 @@ def _set_item_state(item_repo, instance_id: ItemInstanceId, state: dict) -> None
 class TestSwordRepairDemo:
     """Phase 4-B 全体: 物Aを物Bに使うインタラクションが end-to-end で動く。"""
 
+    def test_initial_states_come_from_scenario_json(self, smithy) -> None:
+        """initial_items に仕込んだ state が instance に反映され、テスト前提が JSON で完結する。"""
+        loaded, _, inv_repo, item_repo, _ = smithy
+        kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
+        sword = _instances_of(inv_repo, item_repo, loaded, "rusted_sword")[0]
+        # シナリオ JSON 側に書いた state が instance に乗る (Phase 4-D で追加)
+        assert item_repo.find_by_id(kit).state == {"used": False}
+        assert item_repo.find_by_id(sword).state == {"rust": "high"}
+
     def test_repair_changes_both_kit_and_sword_state(self, smithy) -> None:
         """修理を実行すると 修理キット → used=true、剣 → rust=low + last_repaired_tick が永続化される。"""
         loaded, _, inv_repo, item_repo, app = smithy
         kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
         sword = _instances_of(inv_repo, item_repo, loaded, "rusted_sword")[0]
-        _set_item_state(item_repo, kit, {"used": False})
-        _set_item_state(item_repo, sword, {"rust": "high"})
+        # initial state はシナリオ JSON 側で仕込み済み
 
         app.execute_interaction(
             _player_id(loaded), _bench_id(loaded), "repair_with_kit",
@@ -201,8 +209,7 @@ class TestSwordRepairDemo:
         loaded, _, inv_repo, item_repo, app = smithy
         kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
         sword = _instances_of(inv_repo, item_repo, loaded, "rusted_sword")[0]
-        _set_item_state(item_repo, kit, {"used": False})
-        _set_item_state(item_repo, sword, {"rust": "high"})
+        # initial state は JSON 側で仕込み済み
 
         # 1 回目は成功
         app.execute_interaction(
@@ -227,8 +234,7 @@ class TestSwordRepairDemo:
         loaded, _, inv_repo, item_repo, app = smithy
         kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
         sword = _instances_of(inv_repo, item_repo, loaded, "rusted_sword")[0]
-        _set_item_state(item_repo, kit, {"used": False})
-        # 剣は最初から rust=low (錆びていない)
+        # シナリオ JSON は rust=high で仕込んでいるが、このケースだけ rust=low に上書きする
         _set_item_state(item_repo, sword, {"rust": "low"})
 
         with pytest.raises(InteractionNotAllowedException):
@@ -245,7 +251,7 @@ class TestSwordRepairDemo:
         """同じ item_instance_id を acting と target 両方に渡すと ApplicationException。"""
         loaded, _, inv_repo, item_repo, app = smithy
         kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
-        _set_item_state(item_repo, kit, {"used": False})
+        # initial state は JSON 側で仕込み済み
 
         with pytest.raises(ApplicationException, match="同じ item_instance_id"):
             app.execute_interaction(
@@ -264,7 +270,7 @@ class TestSwordRepairDemo:
         """
         loaded, _, inv_repo, item_repo, app = smithy
         kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
-        _set_item_state(item_repo, kit, {"used": False})
+        # initial state は JSON 側で仕込み済み
 
         # 永続化されていない instance id を渡す
         ghost_id = ItemInstanceId(99999)
@@ -285,7 +291,7 @@ class TestSwordRepairDemo:
         """
         loaded, _, inv_repo, item_repo, app = smithy
         kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
-        _set_item_state(item_repo, kit, {"used": False})
+        # initial state は JSON 側で仕込み済み
 
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
@@ -302,9 +308,9 @@ class TestSwordRepairDemo:
         loaded, _, inv_repo, item_repo, app = smithy
         kit = _instances_of(inv_repo, item_repo, loaded, "repair_kit")[0]
         sword = _instances_of(inv_repo, item_repo, loaded, "rusted_sword")[0]
-        # 修理キットを最初から used=true にして precondition を即落ちさせる
+        # 修理キットを used=true に上書きして precondition を即落ちさせる
+        # (シナリオ JSON では used=false で仕込まれているのでここで override)
         _set_item_state(item_repo, kit, {"used": True})
-        _set_item_state(item_repo, sword, {"rust": "high"})
 
         save_count = {"n": 0}
         original_save = item_repo.save

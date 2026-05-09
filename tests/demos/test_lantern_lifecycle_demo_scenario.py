@@ -25,7 +25,7 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
     SpotInteractionApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
-    grant_item_specs_to_inventory,
+    grant_initial_items_to_inventory,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -109,9 +109,9 @@ def shrine():
     for spawn in loaded.player_spawns:
         pid = PlayerId(spawn.player_id)
         inventory_repo.save(PlayerInventoryAggregate(player_id=pid))
-        if spawn.initial_item_spec_ids:
-            grant_item_specs_to_inventory(
-                pid, spawn.initial_item_spec_ids,
+        if spawn.initial_items:
+            grant_initial_items_to_inventory(
+                pid, spawn.initial_items,
                 item_repo, item_spec_repo, inventory_repo,
             )
 
@@ -164,50 +164,27 @@ def _match_instance_ids(inventory_repo, item_repo, loaded) -> list[ItemInstanceI
 class TestLanternLifecycleDemo:
     """Phase 4-A 全体: item instance state が effect / precondition で操作され、永続化される。"""
 
-    def test_initial_match_state_is_unused(self, shrine) -> None:
-        """初期状態: マッチ 2 本を所持し、いずれも state が空 (= 未使用)。"""
+    def test_initial_match_state_comes_from_scenario_json(self, shrine) -> None:
+        """初期状態: マッチ 2 本を所持し、いずれも JSON 由来の state {used: false} を持つ。
+
+        Phase 4-D 以降は initial_items に state を仕込めるので、
+        テスト内で `merge_state` を呼ぶ必要が無くなった。
+        """
         loaded, _, inv_repo, item_repo, _ = shrine
         match_ids = _match_instance_ids(inv_repo, item_repo, loaded)
         assert len(match_ids) == 2
         for iid in match_ids:
             agg = item_repo.find_by_id(iid)
             assert agg is not None
-            # 初期 state は空 dict (used キーは ITEM_INSTANCE_STATE precondition の
-            # required_state={used: false} を満たさない＝False になるが、最初の
-            # 点火試行では別の precondition が先に通る; ここでは state が空である
-            # ことだけ確認)
-            assert agg.state == {}
+            assert agg.state == {"used": False}
 
     def test_first_match_lights_lamp_a_and_records_state(self, shrine) -> None:
-        """マッチ A で中央ランプを点ける。
-        - lamp_a.lit が True に変わる
-        - match A.state が {used: true, used_at_tick: T} に書き換わる (PR 2 effect)
-        - item_repository に永続化される (PR 3 save)
-        """
+        """マッチ A で中央ランプを点けると、両者の state が同 tick で更新・永続化される。"""
         loaded, interior_repo, inv_repo, item_repo, app = shrine
         match_ids = _match_instance_ids(inv_repo, item_repo, loaded)
         match_a = match_ids[0]
 
-        # 最初の点火試行: マッチ A の state は空 dict なので
-        # ITEM_INSTANCE_STATE(required={used: false}) を満たさない（used キーが無い）。
-        # → 初期点火が成立する設計にはマッチ側 state を仕込んでおく必要がある。
-        # ここでは「state が空 → required {used: false} は不一致 → 拒否」を
-        # まず確認し、次に明示的に used=false を仕込んでから点火する流れにする。
-        with pytest.raises(InteractionNotAllowedException):
-            app.execute_interaction(
-                _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light",
-                current_tick=WorldTick(1),
-                acting_item_instance_id=match_a,
-            )
-
-        # マッチ A に明示的に used=false を仕込む (シナリオ作家が initial state で
-        # 仕込む代わりに、テスト内で aggregate 直接操作して状況を作る)
-        agg_a = item_repo.find_by_id(match_a)
-        assert agg_a is not None
-        agg_a.merge_state({"used": False})
-        item_repo.save(agg_a)
-
-        # 点火実行
+        # initial state は JSON 側で {used: false} を仕込み済み
         app.execute_interaction(
             _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light",
             current_tick=WorldTick(2),
@@ -227,10 +204,7 @@ class TestLanternLifecycleDemo:
         match_ids = _match_instance_ids(inv_repo, item_repo, loaded)
         match_a = match_ids[0]
 
-        # マッチ A を仕込み + 中央ランプ点火
-        agg_a = item_repo.find_by_id(match_a)
-        agg_a.merge_state({"used": False})
-        item_repo.save(agg_a)
+        # 中央ランプ点火 (initial state は JSON 側で仕込み済み)
         app.execute_interaction(
             _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light",
             current_tick=WorldTick(1),
@@ -257,20 +231,14 @@ class TestLanternLifecycleDemo:
         match_ids = _match_instance_ids(inv_repo, item_repo, loaded)
         match_a, match_b = match_ids[0], match_ids[1]
 
-        # マッチ A を仕込み + 中央ランプ点火
-        agg_a = item_repo.find_by_id(match_a)
-        agg_a.merge_state({"used": False})
-        item_repo.save(agg_a)
+        # 中央ランプ点火 → マッチ A.used=true
         app.execute_interaction(
             _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light",
             current_tick=WorldTick(1),
             acting_item_instance_id=match_a,
         )
 
-        # マッチ B を仕込み + 奥ランプ点火
-        agg_b = item_repo.find_by_id(match_b)
-        agg_b.merge_state({"used": False})
-        item_repo.save(agg_b)
+        # 奥ランプ点火 → マッチ B.used=true (B は別 instance なのでまだ unused)
         app.execute_interaction(
             _player_id(loaded), _lamp_id(loaded, "lamp_b"), "light",
             current_tick=WorldTick(3),
@@ -296,6 +264,12 @@ class TestLanternLifecycleDemo:
         loaded, _, inv_repo, item_repo, app = shrine
         match_a = _match_instance_ids(inv_repo, item_repo, loaded)[0]
 
+        # JSON が used=false で仕込んでいるので、used=true に上書きして
+        # precondition (required={used: false}) を即落ちさせる
+        agg = item_repo.find_by_id(match_a)
+        agg.replace_state({"used": True})
+        item_repo.save(agg)
+
         save_count = {"n": 0}
         original_save = item_repo.save
 
@@ -305,7 +279,7 @@ class TestLanternLifecycleDemo:
 
         item_repo.save = counting_save  # type: ignore[assignment]
 
-        # マッチ A は state が空のまま → ITEM_INSTANCE_STATE 拒否
+        # マッチ A は used=true なので ITEM_INSTANCE_STATE(required={used: false}) で拒否
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
                 _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light",

@@ -80,7 +80,15 @@
   ],
   "connections": [],
   "players": [
-    {"id": "player_a", "name": "鍛冶見習い", "spawn_spot": "smithy", "initial_items": ["repair_kit", "rusted_sword"]}
+    {
+      "id": "player_a",
+      "name": "鍛冶見習い",
+      "spawn_spot": "smithy",
+      "initial_items": [
+        {"spec": "repair_kit", "state": {"used": false}},
+        {"spec": "rusted_sword", "state": {"rust": "high"}}
+      ]
+    }
   ],
   "game_end_conditions": {
     "win": [],
