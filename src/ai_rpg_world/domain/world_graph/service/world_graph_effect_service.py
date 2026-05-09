@@ -6,6 +6,9 @@ from typing import Any, Iterable, List, Optional, Tuple
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
+    PlayerStatusAggregate,
+)
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
@@ -48,6 +51,7 @@ class WorldGraphEffectService:
         current_tick: Optional[WorldTick] = None,
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
+        acting_player_status: Optional["PlayerStatusAggregate"] = None,
     ) -> WorldGraphEffectResult:
         # Phase 4-B: 同一 instance を acting と target の両方として渡すのは
         # 作家ミスかコール元の wiring バグ。両側に同じ参照を入れると
@@ -90,6 +94,10 @@ class WorldGraphEffectService:
         initial_target_item_state = (
             dict(target_item_aggregate.state) if target_item_aggregate is not None else None
         )
+        # Phase 4-D-2: 行動者プレイヤーの自由 state も同じパターンで diff 検知。
+        initial_player_state = (
+            dict(acting_player_status.state) if acting_player_status is not None else None
+        )
 
         for effect in effects:
             (
@@ -128,6 +136,7 @@ class WorldGraphEffectService:
                 current_tick=current_tick,
                 acting_item_aggregate=acting_item_aggregate,
                 target_item_aggregate=target_item_aggregate,
+                acting_player_status=acting_player_status,
             )
 
         item_instance_state_changed = (
@@ -137,6 +146,10 @@ class WorldGraphEffectService:
         target_item_instance_state_changed = (
             target_item_aggregate is not None
             and dict(target_item_aggregate.state) != initial_target_item_state
+        )
+        acting_player_state_changed = (
+            acting_player_status is not None
+            and dict(acting_player_status.state) != initial_player_state
         )
 
         return WorldGraphEffectResult(
@@ -157,6 +170,7 @@ class WorldGraphEffectService:
             passage_state_updates=tuple(passage_specs),
             item_instance_state_changed=item_instance_state_changed,
             target_item_instance_state_changed=target_item_instance_state_changed,
+            acting_player_state_changed=acting_player_state_changed,
         )
 
     def _apply_effect(
@@ -181,6 +195,7 @@ class WorldGraphEffectService:
         current_tick: Optional[WorldTick] = None,
         acting_item_aggregate: Optional[ItemAggregate] = None,
         target_item_aggregate: Optional[ItemAggregate] = None,
+        acting_player_status: Optional[PlayerStatusAggregate] = None,
     ) -> Tuple[
         SpotInterior,
         SpotObject | None,
@@ -461,6 +476,53 @@ class WorldGraphEffectService:
                 )
                 return _all
             target_item_aggregate.merge_state({state_key: int(current_tick.value)})
+            return _all
+
+        if et == InteractionEffectTypeEnum.CHANGE_PLAYER_STATE:
+            # Phase 4-D-2: 行動者プレイヤーの自由 state に部分マージ更新。
+            # acting_player_status を caller が渡してこなかった場合は
+            # silent failure を避けるため warn + no-op (item 系と同じ規約)。
+            updates = p.get("state_updates")
+            if not isinstance(updates, dict):
+                _logger.warning(
+                    "CHANGE_PLAYER_STATE: parameters.state_updates must be dict (got %s)",
+                    type(updates).__name__,
+                )
+                return _all
+            if acting_player_status is None:
+                _logger.warning(
+                    "CHANGE_PLAYER_STATE: caller did not provide acting_player_status; "
+                    "skipping state merge"
+                )
+                return _all
+            acting_player_status.merge_state(updates)
+            return _all
+
+        if et == InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK:
+            # Phase 4-D-2: current_tick.value を player.state[state_key] に書き込む。
+            # 「アイテム使用時刻を記録、N tick 後に reactive binding が解除」用。
+            state_key = p.get("state_key")
+            if not isinstance(state_key, str) or not state_key:
+                _logger.warning(
+                    "RECORD_PLAYER_STATE_TICK: state_key is required (got %r)",
+                    state_key,
+                )
+                return _all
+            if current_tick is None:
+                _logger.warning(
+                    "RECORD_PLAYER_STATE_TICK: caller did not provide current_tick; "
+                    "skipping write to state[%r]",
+                    state_key,
+                )
+                return _all
+            if acting_player_status is None:
+                _logger.warning(
+                    "RECORD_PLAYER_STATE_TICK: caller did not provide "
+                    "acting_player_status; skipping write to state[%r]",
+                    state_key,
+                )
+                return _all
+            acting_player_status.merge_state({state_key: int(current_tick.value)})
             return _all
 
         if et == InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK:

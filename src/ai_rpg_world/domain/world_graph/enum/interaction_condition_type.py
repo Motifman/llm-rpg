@@ -22,3 +22,7 @@ class InteractionConditionTypeEnum(Enum):
     PLAYER_NEED_AT_LEAST = "PLAYER_NEED_AT_LEAST"  # need.value >= need_threshold
     PLAYER_HP_RATIO_BELOW = "PLAYER_HP_RATIO_BELOW"  # hp.percentage < hp_ratio (strict <)
     PLAYER_HP_RATIO_AT_LEAST = "PLAYER_HP_RATIO_AT_LEAST"  # hp.percentage >= hp_ratio
+    # Phase 4-D-2: プレイヤー個別の自由 state (PlayerStatusAggregate.state) を判定。
+    # 「変装中のプレイヤーだけ NPC が反応を変える」「呪いを受けてる時だけ祭壇が
+    # 光る」など、Phase 4-D-1 (HP/needs) では拾えない自由フィールドの判定用。
+    PLAYER_STATE_IS = "PLAYER_STATE_IS"

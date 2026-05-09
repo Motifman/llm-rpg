@@ -41,3 +41,6 @@ class InteractionExecutionResult:
     # Phase 4-B: target item instance (cross-instance interaction の作用先) の
     # state が変更されたか。caller が target_item_aggregate を save するのに使う。
     target_item_instance_state_changed: bool = False
+    # Phase 4-D-2: 行動者プレイヤーの自由 state が変更されたか。
+    # True のとき caller (アプリ層) が player_status_repository.save() する。
+    acting_player_state_changed: bool = False

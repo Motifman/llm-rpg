@@ -43,3 +43,6 @@ class WorldGraphEffectResult:
     # Phase 4-B: target item instance (cross-instance interaction の作用先)
     # に対して state 変更が起きたかどうか。same semantics as acting 版。
     target_item_instance_state_changed: bool = False
+    # Phase 4-D-2: 行動者プレイヤーの自由 state に変更が起きたかどうか。
+    # True なら caller (app service) が player_status_repository.save() する。
+    acting_player_state_changed: bool = False
