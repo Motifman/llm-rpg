@@ -105,6 +105,22 @@ class TestCooldown:
         assert agg.can_attack_now(WorldTick(11)) is False
         assert agg.can_attack_now(WorldTick(12)) is False
 
+    def test_record_attack_と同一_tickでは_can_attack_now_false(self) -> None:
+        """同じ tick で 2 回目を呼ぶと False（elapsed=0 < cooldown）。"""
+        agg = _aggregate(_template(attack_cooldown_ticks=1))
+        agg.record_attack(WorldTick(10))
+        # cooldown=1 でも record と同じ tick なら elapsed=0 で不可
+        assert agg.can_attack_now(WorldTick(10)) is False
+
+    def test_境界値_elapsed_が_cooldown_と等しいと_true(self) -> None:
+        """`elapsed == attack_cooldown_ticks` で can_attack_now=True（>= 比較）。"""
+        agg = _aggregate(_template(attack_cooldown_ticks=5))
+        agg.record_attack(WorldTick(10))
+        # 境界の少し下は False
+        assert agg.can_attack_now(WorldTick(14)) is False
+        # 境界ちょうどで True
+        assert agg.can_attack_now(WorldTick(15)) is True
+
     def test_record_attack_後_cooldown経過で_true(self) -> None:
         """`current_tick - last_attack_tick >= attack_cooldown_ticks` で True。"""
         agg = _aggregate(_template(attack_cooldown_ticks=3))

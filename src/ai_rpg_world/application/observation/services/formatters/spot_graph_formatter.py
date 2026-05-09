@@ -462,8 +462,13 @@ class SpotGraphObservationFormatter:
         - **被害者以外の同スポット第三者**:
           ・視認可なら「{monster}が{target_name}を攻撃した」
           ・視認不可（観測者から monster が見えない）なら「闇の中で何かが
-            動いた気がする」レベルに縮退（最小実装ではこの分岐を持たず、
-            常に名前付き prose にする。仕様確認後の拡張とする）
+            動いた気がする」レベルに縮退すべき
+          TODO(combat-pr-followup): 暗闇 + dark_vision モンスター × 第三者
+          観測者の組み合わせで、「灰色のオオカミが勇者を攻撃した」と完全な
+          情報が出てしまう。被害者には「暗闇から襲われた」と縮退するのに
+          第三者だけ完全情報を得る非対称が生じる。本 PR は最小実装で常に
+          名前付き prose にし、戦闘 PR 系列の次イテレーションで第三者向け
+          縮退表記を追加する（被害者と同じく effective_lighting で判定）。
         """
         is_victim = event.target_player_id.value == recipient_id.value
         monster_name = self._context.name_resolver.monster_name_by_monster_id(

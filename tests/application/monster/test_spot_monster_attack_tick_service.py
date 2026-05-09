@@ -103,6 +103,63 @@ def _make_player(*, player_id_value: int = 1, is_down: bool = False):
 class TestAttackHappens:
     """敵対モンスターが視認できる相手を攻撃する。"""
 
+    def test_攻撃成立時に_graph_も_save(self) -> None:
+        """attack 成立後は spot_graph_repository.save(graph) が呼ばれる。
+
+        graph aggregate に追加した MonsterAttackedPlayerInSpotEvent が観測
+        パイプラインに到達するために必須（save なしだと event がメモリ上で消失）。
+        """
+        graph = _make_graph()
+        monster = _make_monster()
+        player = _make_player()
+        graph.place_monster(MonsterId.create(101), SPOT_A)
+        graph.place_entity(EntityId.create(1), SPOT_A)
+        graph.clear_events()
+
+        spot_repo = MagicMock()
+        spot_repo.find_graph.return_value = graph
+        monster_repo = MagicMock()
+        monster_repo.find_by_id.return_value = monster
+        player_repo = MagicMock()
+        player_repo.find_by_id.return_value = player
+
+        svc = SpotMonsterAttackTickService(
+            spot_graph_repository=spot_repo,
+            monster_repository=monster_repo,
+            player_status_repository=player_repo,
+        )
+
+        svc.tick(WorldTick(10))
+
+        spot_repo.save.assert_called_once_with(graph)
+
+    def test_attack_未発生なら_graph_は_save_スキップ(self) -> None:
+        """attack が一度も成立しなければ graph.save はスキップされる（無駄な永続化を避ける）。"""
+        graph = _make_graph()
+        # cooldown 中で attack しないモンスター
+        monster = _make_monster(can_attack=False)
+        player = _make_player()
+        graph.place_monster(MonsterId.create(101), SPOT_A)
+        graph.place_entity(EntityId.create(1), SPOT_A)
+        graph.clear_events()
+
+        spot_repo = MagicMock()
+        spot_repo.find_graph.return_value = graph
+        monster_repo = MagicMock()
+        monster_repo.find_by_id.return_value = monster
+        player_repo = MagicMock()
+        player_repo.find_by_id.return_value = player
+
+        svc = SpotMonsterAttackTickService(
+            spot_graph_repository=spot_repo,
+            monster_repository=monster_repo,
+            player_status_repository=player_repo,
+        )
+
+        svc.tick(WorldTick(10))
+
+        spot_repo.save.assert_not_called()
+
     def test_event_が発火し_player_と_monster_を_save(self) -> None:
         """攻撃成立で SpotGraphAggregate に event 追加 + repository.save が両方呼ばれる。"""
         graph = _make_graph()

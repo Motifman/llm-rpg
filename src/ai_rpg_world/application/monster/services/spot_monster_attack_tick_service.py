@@ -6,11 +6,21 @@
 3. 視認 (環境光量 OR dark_vision) を満たすターゲットを 1 体選ぶ
 4. domain service の `try_attack` で実際にダメージを適用
 5. 成立したら `MonsterAttackedPlayerInSpotEvent` を SpotGraphAggregate に追加
-6. 集約を保存
+6. 関係する全集約 (graph + monster + player) を保存
 
 ターゲット選択は最小実装として「ID 昇順で先頭の生存プレイヤー 1 体」。複数
 プレイヤーが居ても 1 個体は 1 攻撃のみ。後で「最も近い」「HP 最少」等の
 戦略を入れる場合は本サービス内の `_pick_target` を差し替える。
+
+呼び出し導線:
+- 想定接続先は `application/llm/wiring/spot_graph_wiring.py` または
+  presentation 側の tick driver。本サービスは UoW を持たないため呼び出し側で
+  トランザクション境界を引く責任がある。
+- `tick()` 内で `spot_graph_repository.save(graph)` を呼ぶことで graph
+  aggregate の event 列がリポジトリ実装側のイベント発火経路（観測パイプ
+  ライン含む）に届く。spot graph の event 永続化は `get_events()` 経由で
+  observation 経路が拾うため、save 漏れは attack event の喪失を意味する
+  （PR #127 レビューの HIGH 指摘）。
 """
 
 from __future__ import annotations
@@ -85,11 +95,20 @@ class SpotMonsterAttackTickService:
     def tick(self, current_tick: WorldTick) -> List[MonsterAttackOutcome]:
         """1 tick 分のモンスター攻撃判定を一括実行する。
 
+        実装上の不変条件:
+        - 1 件以上の attack が成立した場合、ループ末尾で
+          `spot_graph_repository.save(graph)` を必ず呼ぶ。これにより graph
+          aggregate に追加された `MonsterAttackedPlayerInSpotEvent` が観測
+          パイプラインに到達する。save を省略すると event がメモリ上で消失する。
+        - 関与した monster / player aggregate もそれぞれ save する（HP 減少
+          や cooldown 起点の永続化）。
+
         Returns:
             当該 tick で実際に発生した attack の結果一覧（debug / 観測性用）。
         """
         graph = self._spot_graph_repository.find_graph()
         outcomes: List[MonsterAttackOutcome] = []
+        any_attack_executed = False
 
         # 全モンスター（スポットグラフ上に居る個体のみ）を ID 昇順に処理
         for monster_id in sorted(
@@ -151,6 +170,12 @@ class SpotMonsterAttackTickService:
             )
             self._monster_repository.save(monster)
             self._player_status_repository.save(target)
+            any_attack_executed = True
+
+        # graph aggregate の event を観測パイプラインに到達させるため、
+        # 1 件でも attack が成立した場合は graph を save する。
+        if any_attack_executed:
+            self._spot_graph_repository.save(graph)
 
         return outcomes
 

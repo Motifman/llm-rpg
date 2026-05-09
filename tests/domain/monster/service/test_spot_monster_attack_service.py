@@ -162,6 +162,21 @@ class TestSuccessfulAttack:
         player.apply_damage.assert_called_once_with(8)
         monster.record_attack.assert_called_once_with(WorldTick(20))
 
+    def test_attack_ゼロのテンプレは_executed_false(self) -> None:
+        """`base_stats.attack=0` のテンプレは event を発火させず cooldown も進めない。"""
+        svc = SpotMonsterAttackService()
+        monster = _make_monster(attack=0)
+        player = _make_player()
+
+        outcome = svc.try_attack(
+            monster, player, LightingEnum.BRIGHT, WorldTick(10)
+        )
+
+        assert outcome.executed is False
+        assert outcome.reason == "zero_damage"
+        player.apply_damage.assert_not_called()
+        monster.record_attack.assert_not_called()
+
     def test_ターゲットがダウンしたら_outcome_に反映される(self) -> None:
         """apply_damage 後に is_down=True になったら target_downed=True。"""
         svc = SpotMonsterAttackService()
