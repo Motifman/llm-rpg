@@ -458,11 +458,13 @@ class SpotGraphObservationFormatter:
         monster_name = self._context.name_resolver.monster_name_by_monster_id(
             event.monster_id
         )
+        spot_name = self._resolve_spot_name(event.spot_id)
         prose = f"{monster_name}の姿が見えなくなった。"
         structured = {
             "type": "monster_left_spot",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
+            "spot_name": spot_name,
         }
         return ObservationOutput(
             prose=prose,
