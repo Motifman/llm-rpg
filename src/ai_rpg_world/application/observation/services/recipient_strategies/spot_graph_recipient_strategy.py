@@ -28,6 +28,9 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPlayerPreparedActionEvent,
     SpotObjectStateChangedEvent,
     SpotPlayerStateChangedInSpotEvent,
+    SpotPublicEffectObservedEvent,
+    ConnectionCreatedEvent,
+    ConnectionDestroyedEvent,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
@@ -110,6 +113,24 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             self._resolve_at_spot_excluding_actor(
                 event.spot_id, event.entity_id, add
             )
+        elif isinstance(event, SpotPublicEffectObservedEvent):
+            # Phase 4-E PR 3: 汎用 public observable effect。actor は
+            # ツール結果 (direct_effects) と messages で受け取るのでここ
+            # では除外する。actor 不明 (世界 tick 由来等) は全員配信。
+            if event.actor_entity_id is not None:
+                self._resolve_at_spot_excluding_actor(
+                    event.spot_id, event.actor_entity_id, add
+                )
+            else:
+                self._resolve_all_at_spot(event.spot_id, add)
+        elif isinstance(event, ConnectionCreatedEvent):
+            # 動的に生成された接続は両端 spot 全員に通知。actor 概念は
+            # この event には無い (graph aggregate が emit するため)。
+            self._resolve_all_at_spot(event.from_spot_id, add)
+            self._resolve_all_at_spot(event.to_spot_id, add)
+        elif isinstance(event, ConnectionDestroyedEvent):
+            self._resolve_all_at_spot(event.from_spot_id, add)
+            self._resolve_all_at_spot(event.to_spot_id, add)
 
         return result
 

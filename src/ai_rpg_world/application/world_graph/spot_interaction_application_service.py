@@ -42,6 +42,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectInteractionFailedEvent,
     SpotObjectStateChangedEvent,
     SpotPlayerStateChangedInSpotEvent,
+    SpotPublicEffectObservedEvent,
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
@@ -382,15 +383,48 @@ class SpotInteractionApplicationService:
                         observation_message="",
                     )
                 )
-            else:
-                # TARGET_ITEM_STATE_CHANGE / DAMAGE / TELEPORT / ATMOSPHERE /
-                # PASSAGE_STATE_UPDATE / CONNECTION_* は PR2 範囲外。
-                # 既存の専用 event 経路 (ConnectionStateChangedEvent 等) と
-                # 重複しないよう、ここでは黙って skip する。silent failure を
-                # 検出しやすいよう debug ログを残す。
+            elif summary.kind in (
+                AppliedEffectKind.DAMAGE,
+                AppliedEffectKind.STATUS_EFFECT,
+                AppliedEffectKind.SATISFY_NEED,
+                AppliedEffectKind.ATMOSPHERE_UPDATE,
+                AppliedEffectKind.TARGET_ITEM_STATE_CHANGE,
+                AppliedEffectKind.ACTING_ITEM_STATE_CHANGE,
+            ):
+                # Phase 4-E PR 3: 専用 event を持たない汎用 public observable
+                # 効果は SpotPublicEffectObservedEvent に乗せて第三者へ届ける。
+                # ACTING_ITEM_STATE_CHANGE は通常 ACTOR_DIRECT (デフォルト) で
+                # ここに来ないが、シナリオが PUBLIC_OBSERVABLE に上書きした
+                # ケース (例: 派手に光るアイテムの状態変化) では届ける。
+                events.append(
+                    SpotPublicEffectObservedEvent.create(
+                        aggregate_id=graph_id,
+                        aggregate_type="SpotGraphAggregate",
+                        spot_id=spot_id,
+                        actor_entity_id=actor_entity_id,
+                        kind=summary.kind,
+                        description=summary.description,
+                        target_ref=summary.target_ref,
+                        state_delta=summary.state_delta,
+                    )
+                )
+            elif summary.kind == AppliedEffectKind.TELEPORT:
+                # TELEPORT_ENTITY effect は spec を生成するだけで実際の
+                # entity 移動はまだ実装されていない (dead code)。entity が
+                # 実際に消える瞬間は EntityLeftSpotEvent が担う設計のはずな
+                # ので、ここで重複発火しない。実装が入った時点で再評価する。
                 _logger.debug(
-                    "PR2: PUBLIC_OBSERVABLE summary kind %s is not yet "
-                    "translated to an observation event; skipping",
+                    "PR3: TELEPORT summary observed but entity movement is not "
+                    "wired yet; skipping observation event"
+                )
+            else:
+                # PASSAGE_STATE_UPDATE / CONNECTION_CREATED / CONNECTION_DESTROYED
+                # は graph aggregate が ConnectionStateChangedEvent /
+                # ConnectionCreatedEvent / ConnectionDestroyedEvent をそれぞれ
+                # 自前で発火するので、ここで重複発火しない。
+                _logger.debug(
+                    "PR3: summary kind %s is delivered via graph aggregate "
+                    "events; skipping",
                     summary.kind.value,
                 )
         return events

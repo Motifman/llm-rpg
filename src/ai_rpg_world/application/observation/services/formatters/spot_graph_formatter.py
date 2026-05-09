@@ -21,8 +21,12 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPlayerPreparedActionEvent,
     SpotObjectStateChangedEvent,
     SpotPlayerStateChangedInSpotEvent,
+    SpotPublicEffectObservedEvent,
+    ConnectionCreatedEvent,
+    ConnectionDestroyedEvent,
 )
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+    AppliedEffectKind,
     StateDeltaEntry,
 )
 
@@ -61,6 +65,12 @@ class SpotGraphObservationFormatter:
             return self._format_object_state_changed(event, recipient_player_id)
         if isinstance(event, SpotPlayerStateChangedInSpotEvent):
             return self._format_player_state_changed_in_spot(event, recipient_player_id)
+        if isinstance(event, SpotPublicEffectObservedEvent):
+            return self._format_public_effect_observed(event, recipient_player_id)
+        if isinstance(event, ConnectionCreatedEvent):
+            return self._format_connection_created(event, recipient_player_id)
+        if isinstance(event, ConnectionDestroyedEvent):
+            return self._format_connection_destroyed(event, recipient_player_id)
         return None
 
     def _is_self(self, entity_id: Any, recipient_id: PlayerId) -> bool:
@@ -260,6 +270,138 @@ class SpotGraphObservationFormatter:
                 {"key": d.key, "before": d.before, "after": d.after}
                 for d in delta
             ],
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
+
+    def _format_public_effect_observed(
+        self,
+        event: SpotPublicEffectObservedEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """汎用 public effect の観測。kind で分岐してプロセを組む。"""
+        # 二重ガード: actor 自身は除外
+        if (
+            event.actor_entity_id is not None
+            and self._is_self(event.actor_entity_id, recipient_id)
+        ):
+            return None
+        actor = (
+            self._resolve_entity_name(event.actor_entity_id)
+            if event.actor_entity_id is not None
+            else "誰か"
+        )
+        delta_text = _format_delta_text(event.state_delta)
+        kind = event.kind
+        # kind 別のプロセ。ふさわしいものが無いときは description にフォールバック。
+        if kind == AppliedEffectKind.DAMAGE:
+            # 現状の APPLY_DAMAGE は acting_player を対象にする仕様のため、
+            # actor == 受傷者として扱う。第三者にダメージを与える spec が
+            # 入った時点で event 側に target_entity_id を追加してプロセを
+            # 切り替える必要がある。
+            prose = (
+                f"{actor}が{event.description}"
+                if event.description
+                else f"{actor}がダメージを受けた"
+            )
+            category = "social"
+        elif kind == AppliedEffectKind.STATUS_EFFECT:
+            prose = (
+                f"{actor}に{event.description}が現れた"
+                if event.description
+                else f"{actor}に状態異常が現れた"
+            )
+            category = "social"
+        elif kind == AppliedEffectKind.SATISFY_NEED:
+            prose = (
+                f"{actor}が{event.description}"
+                if event.description
+                else f"{actor}が回復した様子だ"
+            )
+            category = "social"
+        elif kind == AppliedEffectKind.ATMOSPHERE_UPDATE:
+            # description は "スポット {id} の雰囲気が変化した" という汎用文字列
+            # なので、ここで spot 名と state_delta から具体プロセを組み立てる。
+            spot_name = self._resolve_spot_name(event.spot_id)
+            if delta_text:
+                prose = f"{spot_name}の{delta_text}"
+            else:
+                prose = f"{spot_name}の雰囲気が変わった"
+            category = "environment"
+        elif kind in (
+            AppliedEffectKind.TARGET_ITEM_STATE_CHANGE,
+            AppliedEffectKind.ACTING_ITEM_STATE_CHANGE,
+        ):
+            target = event.target_ref or "アイテム"
+            if delta_text:
+                prose = f"{target}の{delta_text}"
+            else:
+                prose = event.description or f"{target}の状態が変わった"
+            category = "environment"
+        # NOTE: TELEPORT は emitter 側で skip されるためこの formatter には
+        # 届かない (spec が dead code のため)。entity 移動が wire された後は
+        # EntityLeftSpotEvent が担う想定なので、本 formatter で TELEPORT を
+        # 処理する分岐は意図的に持たない。
+        else:
+            # 想定外 kind: description で代替
+            prose = event.description or f"{actor}に何かが起きた"
+            category = "social"
+        # 末尾句点
+        if not prose.endswith("。"):
+            prose = prose + "。"
+        structured = {
+            "type": "spot_public_effect_observed",
+            "kind": kind.value,
+            "actor_name": actor,
+            "target_ref": event.target_ref,
+            "state_delta": [
+                {"key": d.key, "before": d.before, "after": d.after}
+                for d in event.state_delta
+            ],
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category=category,
+            schedules_turn=True,
+        )
+
+    def _format_connection_created(
+        self,
+        event: ConnectionCreatedEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        from_name = self._resolve_spot_name(event.from_spot_id)
+        to_name = self._resolve_spot_name(event.to_spot_id)
+        prose = f"{from_name}と{to_name}を結ぶ新しい通路が現れた。"
+        structured = {
+            "type": "connection_created",
+            "from_spot_name": from_name,
+            "to_spot_name": to_name,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
+
+    def _format_connection_destroyed(
+        self,
+        event: ConnectionDestroyedEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        from_name = self._resolve_spot_name(event.from_spot_id)
+        to_name = self._resolve_spot_name(event.to_spot_id)
+        prose = f"{from_name}と{to_name}を結んでいた通路が崩れた。"
+        structured = {
+            "type": "connection_destroyed",
+            "from_spot_name": from_name,
+            "to_spot_name": to_name,
         }
         return ObservationOutput(
             prose=prose,

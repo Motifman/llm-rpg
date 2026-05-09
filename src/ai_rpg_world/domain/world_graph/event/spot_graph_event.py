@@ -9,6 +9,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+    AppliedEffectKind,
     StateDeltaEntry,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
@@ -184,3 +185,31 @@ class SpotPlayerStateChangedInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     spot_id: SpotId
     state_delta: Tuple[StateDeltaEntry, ...]
     observation_message: str = ""
+
+
+@dataclass(frozen=True)
+class SpotPublicEffectObservedEvent(BaseDomainEvent[SpotGraphId, str]):
+    """専用 event が無い種類の `PUBLIC_OBSERVABLE` 効果サマリを汎用に運ぶ event。
+
+    Phase 4-E PR 3: PR 1 で導入した `AppliedEffectSummary` のうち、
+    SPOT_OBJECT_STATE_CHANGE と ACTING_PLAYER_STATE_CHANGE 以外の
+    PUBLIC_OBSERVABLE な kind (DAMAGE / STATUS_EFFECT / SATISFY_NEED /
+    ATMOSPHERE_UPDATE / TARGET_ITEM_STATE_CHANGE / ACTING_ITEM_STATE_CHANGE
+    のうち PUBLIC 上書きされたもの) を、同スポットの第三者プレイヤーに
+    観測として届けるための catch-all。
+
+    formatter が `kind` で分岐して具体プロセを組み立てる。CONNECTION_*
+    と PASSAGE_STATE_UPDATE は graph aggregate が個別 event を発火するため
+    ここでは扱わない (重複発火防止)。TELEPORT は現状 spec 適用が未実装
+    (dead code) のため emitter 側で skip する。
+
+    `actor_entity_id` は二重観測防止のため受信者解決で行為者を除外する用。
+    actor 不明 (世界 tick 由来) の場合は None を入れる (現状そのケースは無い)。
+    """
+
+    spot_id: SpotId
+    actor_entity_id: Optional[EntityId]
+    kind: AppliedEffectKind
+    description: str
+    target_ref: str
+    state_delta: Tuple[StateDeltaEntry, ...]
