@@ -284,3 +284,5 @@ class TestFormatterMonsterLeft:
         assert result.structured["type"] == "monster_left_spot"
         assert result.structured["monster_id"] == 101
         assert result.structured["monster_name"] == "灰色のオオカミ"
+        # appeared 側と structured を対称にしておく（消えた場所も追える）。
+        assert result.structured["spot_name"] == "薄暗い森"
