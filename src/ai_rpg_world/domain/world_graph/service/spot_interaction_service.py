@@ -272,6 +272,22 @@ class SpotInteractionService:
                 return False, cond.failure_message or "プレイヤーの HP 条件を満たしません"
             return True, None
 
+        if t == InteractionConditionTypeEnum.PLAYER_STATE_IS:
+            # Phase 4-D-2: 行動者プレイヤーの自由 state が required_state と
+            # 全キー/値で一致するなら成立。「変装中のプレイヤーだけ」「呪い
+            # 状態のときだけ」のような分岐用。
+            if cond.required_state is None:
+                return False, cond.failure_message or "PLAYER_STATE_IS に required_state がありません"
+            if acting_player_status is None:
+                return False, (
+                    cond.failure_message
+                    or "PLAYER_STATE_IS は acting player status を必要とします"
+                )
+            for k, v in cond.required_state.items():
+                if acting_player_status.state.get(k) != v:
+                    return False, cond.failure_message or "プレイヤーの状態が条件を満たしません"
+            return True, None
+
         return False, cond.failure_message or "未対応の前提条件です"
 
     def execute_interaction(
@@ -316,6 +332,7 @@ class SpotInteractionService:
             current_tick=current_tick,
             acting_item_aggregate=acting_item_aggregate,
             target_item_aggregate=target_item_aggregate,
+            acting_player_status=acting_player_status,
         )
         return InteractionExecutionResult(
             new_interior=effect_result.new_interior,
@@ -333,4 +350,5 @@ class SpotInteractionService:
             passage_state_updates=effect_result.passage_state_updates,
             item_instance_state_changed=effect_result.item_instance_state_changed,
             target_item_instance_state_changed=effect_result.target_item_instance_state_changed,
+            acting_player_state_changed=effect_result.acting_player_state_changed,
         )

@@ -32,3 +32,8 @@ class InteractionEffectTypeEnum(Enum):
     # 渡された 2 番目の instance を操作する。
     CHANGE_TARGET_ITEM_INSTANCE_STATE = "CHANGE_TARGET_ITEM_INSTANCE_STATE"
     RECORD_TARGET_ITEM_INSTANCE_STATE_TICK = "RECORD_TARGET_ITEM_INSTANCE_STATE_TICK"
+    # Phase 4-D-2: 行動者プレイヤーの自由 state を操作する。
+    # 「アイテム使用で buff/curse/変装が付与され、N tick で reactive に解除」
+    # のような複合作用に使う。
+    CHANGE_PLAYER_STATE = "CHANGE_PLAYER_STATE"
+    RECORD_PLAYER_STATE_TICK = "RECORD_PLAYER_STATE_TICK"

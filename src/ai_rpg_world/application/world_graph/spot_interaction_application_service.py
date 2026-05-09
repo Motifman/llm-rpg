@@ -241,6 +241,16 @@ class SpotInteractionApplicationService:
         ):
             self._item_repository.save(target_item_aggregate)
 
+        # Phase 4-D-2: 行動者プレイヤーの自由 state が effect で変わった場合、
+        # player_status_repository に save して永続化する。
+        # in-place 変更された aggregate (acting_player_status) をそのまま渡す。
+        if (
+            result.acting_player_state_changed
+            and acting_player_status is not None
+            and self._player_status_repository is not None
+        ):
+            self._player_status_repository.save(acting_player_status)
+
         for spec in result.destroy_connection_specs:
             graph.remove_connection(ConnectionId.create(spec.connection_id))
 
