@@ -25,22 +25,17 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphPlayerSnapshotDto,
 )
 
+from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
+    HEALTH_BUCKET_JP,
+)
+
+
 PREFIX_CONNECTION = "S"
 PREFIX_OBJECT = "OBJ"
 PREFIX_SUB_LOCATION = "SL"
 PREFIX_ENTITY = "P"
 PREFIX_INVENTORY = "I"
 PREFIX_MONSTER = "M"
-
-# `SpotGraphMonsterEntry.health_bucket` を表記用の日本語に変換するマップ。
-# プロンプト内のラベル説明行で「弱っている灰色のオオカミ」のように出すため。
-# 戦闘ツール導入時にここの粒度を見直す可能性あり。
-_HEALTH_BUCKET_JP = {
-    "healthy": "健康",
-    "wounded": "傷を負っている",
-    "dying": "瀕死",
-    "dead": "死亡",
-}
 
 
 def _current_sub_location_id_from_snapshot(
@@ -235,7 +230,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             if entry.is_dead:
                 desc = "死骸"
             else:
-                health_label = _HEALTH_BUCKET_JP.get(
+                health_label = HEALTH_BUCKET_JP.get(
                     entry.health_bucket, entry.health_bucket
                 )
                 desc = f"{entry.behavior_label}・{health_label}"

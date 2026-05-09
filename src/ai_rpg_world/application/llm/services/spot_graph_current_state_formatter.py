@@ -5,6 +5,9 @@ from typing import List
 from ai_rpg_world.application.llm.contracts.interfaces import ICurrentStateFormatter
 from ai_rpg_world.application.llm.services.current_state_formatter import DefaultCurrentStateFormatter
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
+from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
+    HEALTH_BUCKET_JP,
+)
 
 
 class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
@@ -78,7 +81,7 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
                 if entry.is_dead:
                     lines.append(f"- {entry.display_name}（死骸）")
                 else:
-                    health_label = _HEALTH_BUCKET_JP.get(
+                    health_label = HEALTH_BUCKET_JP.get(
                         entry.health_bucket, entry.health_bucket
                     )
                     lines.append(
@@ -95,16 +98,6 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
             lines.append(f"自分の状態: {rendered}")
 
         return "\n".join(lines)
-
-
-# health_bucket（spot_graph_monster_view が出す英語ラベル）を LLM 向けの短い
-# 日本語に変換するマップ。`spot_graph_monster_view` 側の定数と合わせる。
-_HEALTH_BUCKET_JP = {
-    "healthy": "健康",
-    "wounded": "傷を負っている",
-    "dying": "瀕死",
-    "dead": "死亡",
-}
 
 
 def _render_value(value: object) -> str:

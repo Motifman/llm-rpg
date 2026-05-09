@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Callable, FrozenSet, Optional
 
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
@@ -28,6 +29,8 @@ from ai_rpg_world.domain.world_graph.service.spot_perception_service import Spot
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+
+logger = logging.getLogger(__name__)
 
 EntityNameResolver = Callable[[int], str]
 WeatherProvider = Callable[[], Optional[WeatherState]]
@@ -215,9 +218,11 @@ class SpotGraphCurrentStateBuilder:
             )
 
         # スポットに居るモンスター個体。`can_see` が False（暗闇）の場合は
-        # オブジェクトと同じく完全に隠す。将来は「気配がする」レベルの縮退
-        # 表記に拡張したいが、現時点では最小スコープでゲートのみ。
-        # TODO: 暗闇でも音や匂いで気配を感じる縮退表記を追加する。
+        # オブジェクトと同じく完全に隠す。
+        # TODO(combat-pr): 暗闇では「攻撃されているのに current_state に居ない」
+        # 状態が起き得る。戦闘ツール導入と同じ PR で「気配がする / うなり声」
+        # の縮退表記に拡張する。それまでは戦闘ツールが入る前提なので gameplay
+        # 上の不整合は発生しない（モンスターは行動できないため）。
         monsters_at_spot: list[SpotGraphMonsterEntry] = []
         if can_see and self._monster_view_provider is not None:
             monster_presence = graph.monster_presence_at(spot_id)
@@ -226,9 +231,16 @@ class SpotGraphCurrentStateBuilder:
             ):
                 view = self._monster_view_provider(monster_id)
                 if view is None:
-                    # 既に死んで掃除されたケース等は黙って除外（builder 側で
-                    # 例外にすると prompt 生成全体が止まるため、resolver 側で
-                    # None を返すことを許容する設計）。
+                    # 通常はターン中の race（aggregate と presence の一時的な
+                    # 不整合）で None になり得るため、例外ではなく黙って除外
+                    # する。ただし観測性のため debug ログだけは残す。バグ起因
+                    # の不整合（presence に残り続ける monster_id）も同パスを
+                    # 通るので、ログ無しでは追跡が難しくなる。
+                    logger.debug(
+                        "monster_view_provider returned None for monster_id=%s at spot_id=%s",
+                        monster_id.value,
+                        spot_id.value,
+                    )
                     continue
                 monsters_at_spot.append(view)
 

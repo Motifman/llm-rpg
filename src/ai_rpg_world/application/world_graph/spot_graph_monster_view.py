@@ -33,6 +33,16 @@ HEALTH_WOUNDED = "wounded"
 HEALTH_DYING = "dying"
 HEALTH_DEAD = "dead"
 
+# health_bucket（英語ラベル）→ LLM プロンプト向けの短い日本語表記。
+# formatter / ui_context_builder の両方から import して同一マップを共有する
+# (DRY)。新しい bucket を増やしたらここだけ更新すれば反映される。
+HEALTH_BUCKET_JP = {
+    HEALTH_HEALTHY: "健康",
+    HEALTH_WOUNDED: "傷を負っている",
+    HEALTH_DYING: "瀕死",
+    HEALTH_DEAD: "死亡",
+}
+
 # 0.0 〜 1.0 の HP 比率を 3 段階バケットに丸めるしきい値。
 # - dying: 30% 未満（明らかに弱っている）
 # - wounded: 30% 以上 70% 未満
@@ -67,7 +77,10 @@ def _bucket_hp(value: int, max_hp: int) -> str:
     """HP 比率から health バケット文字列を返す。
 
     max_hp が 0 のテンプレート（HP を持たない概念モンスター等）は healthy
-    扱い。value が 0 は dying（死亡時は別途 is_dead で扱うのでここには来ない想定）。
+    扱い。value が 0 以下は `dying` を返す。通常パスでは `_resolve` 側で
+    `status == DEAD` を先にハンドルするためここには到達しないが、ガードと
+    して残す（外部から `_bucket_hp` を直接呼び出すテスト・将来の他経路で
+    予期せぬ挙動になるのを防ぐ）。
     """
     if max_hp <= 0:
         return HEALTH_HEALTHY
