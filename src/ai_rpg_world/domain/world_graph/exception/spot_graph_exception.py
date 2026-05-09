@@ -68,6 +68,16 @@ class SpotPresenceInvariantException(SpotGraphDomainException, BusinessRuleExcep
     error_code = "WORLD_GRAPH.PRESENCE_INVARIANT"
 
 
+class MonsterNotInGraphException(SpotGraphDomainException, BusinessRuleException):
+    """モンスターがグラフ上に配置されていない"""
+    error_code = "WORLD_GRAPH.MONSTER_NOT_IN_GRAPH"
+
+
+class MonsterPresenceInvariantException(SpotGraphDomainException, BusinessRuleException):
+    """モンスター在席情報の不整合（重複配置・未配置に対する除去 等）"""
+    error_code = "WORLD_GRAPH.MONSTER_PRESENCE_INVARIANT"
+
+
 class SubLocationIdValidationException(SpotGraphDomainException, ValidationException):
     """サブロケーションIDバリデーション例外"""
     error_code = "WORLD_GRAPH.SUB_LOCATION_ID_VALIDATION"
