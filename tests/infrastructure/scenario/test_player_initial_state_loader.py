@@ -66,6 +66,13 @@ class TestPlayerInitialStateParsing:
         )
         assert result.player_spawns[0].initial_state == {}
 
+    def test_explicit_null_is_treated_as_empty(self) -> None:
+        """`initial_state: null` は空 dict として扱う (JSON null 明示の互換)。"""
+        result = ScenarioLoader().load_from_dict(
+            _scenario_with_player({"initial_state": None})
+        )
+        assert result.player_spawns[0].initial_state == {}
+
     def test_primitive_values_are_preserved(self) -> None:
         """JSON プリミティブ (str / int / float / bool / None) はそのまま保持される。"""
         result = ScenarioLoader().load_from_dict(

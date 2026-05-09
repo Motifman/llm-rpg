@@ -264,8 +264,10 @@ class TestBlessedPilgrimDemo:
             acting_item_instance_id=incense,
         )
 
-        # 同じ香 instance で 2 度目: ITEM_INSTANCE_STATE used:false に違反
-        with pytest.raises(InteractionNotAllowedException, match="燃え尽き|焚き切"):
+        # 同じ香 instance で 2 度目: ITEM_INSTANCE_STATE used:false に違反。
+        # match は scenario JSON 側の failure_message と完全一致させる
+        # (将来 message を変えたとき、誤った代替パターンに silent pass しないため)
+        with pytest.raises(InteractionNotAllowedException, match="焚き切"):
             app.execute_interaction(
                 _player_id(loaded), _altar_id(loaded), "pray",
                 current_tick=WorldTick(4),
