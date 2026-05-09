@@ -29,6 +29,9 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
+from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+    AppliedEffectSummary,
+)
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectInteractedEvent,
@@ -45,6 +48,9 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 @dataclass(frozen=True)
 class SpotInteractionResultDto:
     messages: Tuple[str, ...]
+    # Phase 4-E: 行為者本人にツール結果として返す直接効果サマリ。
+    # 観測ストリームには流さない（同じ事象を二重に受け取らないため）。
+    direct_effects: Tuple[AppliedEffectSummary, ...] = ()
 
 
 class SpotInteractionApplicationService:
@@ -300,7 +306,10 @@ class SpotInteractionApplicationService:
             )
             self._event_publisher.publish_all([*graph_events, interacted_event])
 
-        return SpotInteractionResultDto(messages=result.messages)
+        return SpotInteractionResultDto(
+            messages=result.messages,
+            direct_effects=result.direct_effects,
+        )
 
     @staticmethod
     def _next_connection_id(graph) -> ConnectionId:
