@@ -84,6 +84,28 @@ class SpotGraphNearbyEntityEntry:
     display_name: str = ""
 
 
+@dataclass(frozen=True)
+class SpotGraphMonsterEntry:
+    """同スポットに居るモンスター個体1件の構造化データ。
+
+    LLM プロンプトに「灰色のオオカミ（敵対的・弱っている）」のような形で
+    載せ、ラベル付与（M1, M2 等）と targeting に使う。
+
+    可視化方針:
+    - `display_name`: モンスターテンプレート名（種族名）
+    - `behavior_label`: idle/alert/hostile/fleeing 等を日本語化した短い表記
+    - `health_bucket`: 数値 HP は隠し、`healthy`/`wounded`/`dying` の 3 段階に丸める。
+      現実世界での観測（姿勢・出血・荒い呼吸）に近づける狙い
+    - `is_dead`: 死体の場合に True。生存個体とは表記を分ける
+    """
+
+    monster_id: int
+    display_name: str
+    behavior_label: str
+    health_bucket: str
+    is_dead: bool = False
+
+
 # --- スナップショット ---
 
 @dataclass(frozen=True)
@@ -101,6 +123,7 @@ class SpotGraphPlayerSnapshotDto:
     atmosphere: Optional[SpotGraphAtmosphereEntry] = None
     weather: Optional[SpotGraphWeatherEntry] = None
     nearby_entities: Tuple[SpotGraphNearbyEntityEntry, ...] = ()
+    monsters_at_spot: Tuple[SpotGraphMonsterEntry, ...] = ()
     inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
     ground_item_lines: List[str] = field(default_factory=list)
 

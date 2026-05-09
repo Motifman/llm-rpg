@@ -9,6 +9,7 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphConnectionEntry,
     SpotGraphInteractionEntry,
     SpotGraphInventoryItemEntry,
+    SpotGraphMonsterEntry,
     SpotGraphNearbyEntityEntry,
     SpotGraphObjectEntry,
     SpotGraphPlayerSnapshotDto,
@@ -16,6 +17,7 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphWeatherEntry,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -31,6 +33,10 @@ EntityNameResolver = Callable[[int], str]
 WeatherProvider = Callable[[], Optional[WeatherState]]
 WorldFlagsProvider = Callable[[], frozenset[str]]
 OwnedItemSpecIdsProvider = Callable[[int], FrozenSet[ItemSpecId]]
+# モンスター個体 ID から「肉眼で観測できる範囲の view DTO」を返す resolver。
+# 名前解決と内部 state の可視化（HP バケット化・behavior の日本語化）を application 層で行う。
+# None を返した場合は builder 側で当該個体を snapshot から黙って除外する（既に死んで掃除されたケース等）。
+MonsterViewProvider = Callable[[MonsterId], Optional[SpotGraphMonsterEntry]]
 
 
 class SpotGraphCurrentStateBuilder:
@@ -54,6 +60,7 @@ class SpotGraphCurrentStateBuilder:
         world_flags_provider: Optional[WorldFlagsProvider] = None,
         light_source_item_spec_ids: FrozenSet[ItemSpecId] = frozenset(),
         owned_item_spec_ids_provider: Optional[OwnedItemSpecIdsProvider] = None,
+        monster_view_provider: Optional[MonsterViewProvider] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -64,6 +71,7 @@ class SpotGraphCurrentStateBuilder:
         self._world_flags_provider = world_flags_provider
         self._light_source_item_spec_ids = light_source_item_spec_ids
         self._owned_item_spec_ids_provider = owned_item_spec_ids_provider
+        self._monster_view_provider = monster_view_provider
         self._perception = SpotPerceptionService()
 
     def build_snapshot(self, player_id: int) -> SpotGraphPlayerSnapshotDto | None:
@@ -206,6 +214,24 @@ class SpotGraphCurrentStateBuilder:
                 perception_note=perception_note,
             )
 
+        # スポットに居るモンスター個体。`can_see` が False（暗闇）の場合は
+        # オブジェクトと同じく完全に隠す。将来は「気配がする」レベルの縮退
+        # 表記に拡張したいが、現時点では最小スコープでゲートのみ。
+        # TODO: 暗闇でも音や匂いで気配を感じる縮退表記を追加する。
+        monsters_at_spot: list[SpotGraphMonsterEntry] = []
+        if can_see and self._monster_view_provider is not None:
+            monster_presence = graph.monster_presence_at(spot_id)
+            for monster_id in sorted(
+                monster_presence.present_monster_ids, key=lambda m: m.value
+            ):
+                view = self._monster_view_provider(monster_id)
+                if view is None:
+                    # 既に死んで掃除されたケース等は黙って除外（builder 側で
+                    # 例外にすると prompt 生成全体が止まるため、resolver 側で
+                    # None を返すことを許容する設計）。
+                    continue
+                monsters_at_spot.append(view)
+
         nearby_entities: list[SpotGraphNearbyEntityEntry] = []
         for other_eid in presence.present_entity_ids:
             if other_eid != eid:
@@ -258,6 +284,7 @@ class SpotGraphCurrentStateBuilder:
             atmosphere=atmosphere,
             weather=weather,
             nearby_entities=tuple(nearby_entities),
+            monsters_at_spot=tuple(monsters_at_spot),
             inventory_items=inventory_items,
             need_lines=need_lines,
             ground_item_lines=ground_lines,

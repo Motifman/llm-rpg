@@ -68,6 +68,23 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
             lines.append("スポット内オブジェクトの状態:")
             lines.extend(object_state_lines)
 
+        # 同スポットに居るモンスター個体。ラベルは UiContextBuilder 側で付与
+        # するため、ここでは概要だけ載せる（M1/M2 等のラベル付き行は
+        # SpotGraphUiContextBuilder._build_monster_section が augmented_text に追記）。
+        # 暗闇等で snapshot に居なければ何も出さない。
+        if snap.monsters_at_spot:
+            lines.append("同じ場所に居るモンスター:")
+            for entry in snap.monsters_at_spot:
+                if entry.is_dead:
+                    lines.append(f"- {entry.display_name}（死骸）")
+                else:
+                    health_label = _HEALTH_BUCKET_JP.get(
+                        entry.health_bucket, entry.health_bucket
+                    )
+                    lines.append(
+                        f"- {entry.display_name}（{entry.behavior_label}・{health_label}）"
+                    )
+
         # Phase 4-E: 自分の自由 state (毒・呪い・隠しフラグも含む全項目)。
         # 第三者には流れない HIDDEN も本人プロンプトには載せて自己認識させる。
         if snap.player_state:
@@ -78,6 +95,16 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
             lines.append(f"自分の状態: {rendered}")
 
         return "\n".join(lines)
+
+
+# health_bucket（spot_graph_monster_view が出す英語ラベル）を LLM 向けの短い
+# 日本語に変換するマップ。`spot_graph_monster_view` 側の定数と合わせる。
+_HEALTH_BUCKET_JP = {
+    "healthy": "健康",
+    "wounded": "傷を負っている",
+    "dying": "瀕死",
+    "dead": "死亡",
+}
 
 
 def _render_value(value: object) -> str:
