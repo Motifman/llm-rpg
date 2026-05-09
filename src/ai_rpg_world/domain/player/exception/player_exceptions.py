@@ -208,3 +208,13 @@ class ItemAlreadyReservedException(PlayerDomainException, BusinessRuleException)
 class ItemNotReservedException(PlayerDomainException, BusinessRuleException):
     """アイテム未予約例外"""
     error_code = "PLAYER.ITEM_NOT_RESERVED"
+
+
+class PlayerStateValidationException(PlayerDomainException, ValidationException):
+    """PlayerStatusAggregate.state に許容外の値型が混入した例外。
+
+    state は永続化 (JSON シリアライズ) 対象なので、
+    str / int / float / bool / None のみを許容する (Phase 4-D-2)。
+    datetime や domain 型を直接入れたい場合は文字列等に変換して渡す。
+    """
+    error_code = "PLAYER.STATE_VALIDATION"

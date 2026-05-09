@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import sqlite3
 from typing import Any, List, Optional
 
@@ -96,8 +97,8 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
                 current_spot_id, current_coordinate_x, current_coordinate_y, current_coordinate_z,
                 current_destination_x, current_destination_y, current_destination_z,
                 goal_destination_type, goal_spot_id, goal_location_area_id, goal_world_object_id,
-                is_down, attention_level
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                is_down, attention_level, state_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(player_id) DO UPDATE SET
                 base_max_hp = excluded.base_max_hp,
                 base_max_mp = excluded.base_max_mp,
@@ -137,7 +138,8 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
                 goal_location_area_id = excluded.goal_location_area_id,
                 goal_world_object_id = excluded.goal_world_object_id,
                 is_down = excluded.is_down,
-                attention_level = excluded.attention_level
+                attention_level = excluded.attention_level,
+                state_json = excluded.state_json
                 """,
                 (
                     player_id,
@@ -160,6 +162,9 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
                     None if status.goal_world_object_id is None else int(status.goal_world_object_id),
                     1 if status.is_down else 0,
                     status.attention_level.value,
+                    # Phase 4-D-2: 空 dict は NULL に保存して storage 節約 (旧行と互換)
+                    json.dumps(dict(status.state), ensure_ascii=False, sort_keys=True)
+                    if status.state else None,
                 ),
             )
             for table_name in (

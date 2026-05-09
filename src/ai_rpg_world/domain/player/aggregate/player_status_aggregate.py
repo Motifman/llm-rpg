@@ -1,4 +1,4 @@
-from typing import Optional, List, Literal
+from typing import Any, List, Literal, Mapping, Optional
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -76,6 +76,30 @@ from ai_rpg_world.domain.player.value_object.agent_needs import AgentNeeds
 from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
 
 
+# Phase 4-D-2: player.state に格納可能な値型は JSON プリミティブのみ。
+# 永続化 (sqlite state_json 列) を境界で保証するため domain 層で弾く。
+# 同じ規約は ItemInstance.state でも採用済み (ItemInstanceStateValidationException)。
+_ALLOWED_PLAYER_STATE_VALUE_TYPES = (str, int, float, bool, type(None))
+
+
+def _validate_player_state_dict(state: Mapping[str, Any]) -> None:
+    """state 辞書が JSON プリミティブだけで構成されていることを検証する。"""
+    from ai_rpg_world.domain.player.exception.player_exceptions import (
+        PlayerStateValidationException,
+    )
+
+    for key, value in state.items():
+        if not isinstance(key, str):
+            raise PlayerStateValidationException(
+                f"player state key must be str, got {type(key).__name__}: {key!r}"
+            )
+        if not isinstance(value, _ALLOWED_PLAYER_STATE_VALUE_TYPES):
+            raise PlayerStateValidationException(
+                f"player state[{key!r}] value type {type(value).__name__} is not "
+                f"JSON-serializable; allowed: str / int / float / bool / None"
+            )
+
+
 class PlayerStatusAggregate(AggregateRoot):
     """プレイヤーステータス集約"""
 
@@ -97,6 +121,7 @@ class PlayerStatusAggregate(AggregateRoot):
         pursuit_state: Optional[PlayerPursuitState] = None,
         spot_navigation_state: Optional[PlayerSpotNavigationState] = None,
         needs: Optional[AgentNeeds] = None,
+        state: Optional[Mapping[str, Any]] = None,
     ):
         super().__init__()
         self._player_id = player_id
@@ -119,6 +144,15 @@ class PlayerStatusAggregate(AggregateRoot):
         )
         self._spot_navigation_state = spot_navigation_state
         self._needs = needs if needs is not None else AgentNeeds.default()
+        # Phase 4-D-2: プレイヤー個別の自由 state。status effect / disguise /
+        # persistent flag / per-player branching 等、型固定フィールドが拾わない
+        # 任意のキー/値を保持する。SpotObject.state / ItemInstance.state と
+        # 同じ flat dict 規約: 値型は JSON プリミティブ限定 (永続化のため)。
+        if state:
+            _validate_player_state_dict(state)
+            self._state: dict[str, Any] = dict(state)
+        else:
+            self._state = {}
 
     @property
     def attention_level(self) -> AttentionLevel:
@@ -195,6 +229,28 @@ class PlayerStatusAggregate(AggregateRoot):
         need = self._needs.get(need_type)
         if need is not None:
             self._needs = self._needs.with_updated(need.satisfy(amount))
+
+    @property
+    def state(self) -> Mapping[str, Any]:
+        """プレイヤー個別の自由 state (read-only view)。
+
+        Phase 4-D-2: status effect / 変装 / 持続フラグ等、型固定フィールドが
+        拾わない情報を保持する flat dict。書き込みは `replace_state` /
+        `merge_state` 経由のみ。値型は JSON プリミティブに限定される。
+        """
+        # 防御的コピーで返す。外部からの直接破壊で aggregate 整合性が崩れないように。
+        return dict(self._state)
+
+    def replace_state(self, new_state: Mapping[str, Any]) -> None:
+        """state 全体を置き換える。値型は JSON プリミティブに制限。"""
+        _validate_player_state_dict(new_state)
+        self._state = dict(new_state)
+
+    def merge_state(self, updates: Mapping[str, Any]) -> None:
+        """state にキー/値をマージする (部分上書き)。値型は JSON プリミティブに制限。"""
+        _validate_player_state_dict(updates)
+        for k, v in updates.items():
+            self._state[k] = v
 
     @property
     def is_down(self) -> bool:
