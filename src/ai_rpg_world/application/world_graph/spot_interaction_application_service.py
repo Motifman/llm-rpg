@@ -81,6 +81,7 @@ class SpotInteractionApplicationService:
         interaction_parameters: Optional[Dict[str, Any]] = None,
         current_tick: Optional[WorldTick] = None,
         acting_item_instance_id: Optional["ItemInstanceId"] = None,
+        target_item_instance_id: Optional["ItemInstanceId"] = None,
     ) -> SpotInteractionResultDto:
         graph = self._spot_graph_repository.find_graph()
         entity_id = EntityId.create(int(player_id))
@@ -120,6 +121,32 @@ class SpotInteractionApplicationService:
                     player_id=int(player_id),
                 )
 
+        # Phase 4-B: 「使われる側 (target) item instance」の解決。
+        # 二者間の相互作用 (修理キットを錆びた剣に使う等) で、acting と
+        # 並列に target_item_instance_id を読み込み、domain service に渡す。
+        # state が変わったときだけ save する責務もここに置く。
+        target_item_aggregate = None
+        if target_item_instance_id is not None:
+            if (
+                acting_item_instance_id is not None
+                and acting_item_instance_id == target_item_instance_id
+            ):
+                # 同 ID を両方に渡すのは作家ミス。domain 層でも `is` 比較で
+                # 同じ aggregate を弾くが、ID 等価でも別 aggregate ロードに
+                # なるとガードを抜けてしまうので app 層でも値で弾く。
+                raise ApplicationException(
+                    "acting と target に同じ item_instance_id を渡すことはできません",
+                    player_id=int(player_id),
+                )
+            target_item_aggregate = self._item_repository.find_by_id(
+                target_item_instance_id
+            )
+            if target_item_aggregate is None:
+                raise ApplicationException(
+                    f"target item instance が見つかりません: {target_item_instance_id.value}",
+                    player_id=int(player_id),
+                )
+
         try:
             result = self._interaction.execute_interaction(
                 interior,
@@ -131,6 +158,7 @@ class SpotInteractionApplicationService:
                 current_tick=current_tick,
                 owned_item_spec_counts=owned_counts,
                 acting_item_aggregate=acting_item_aggregate,
+                target_item_aggregate=target_item_aggregate,
             )
         except InteractionNotAllowedException:
             # 前提条件で拒否された。InteractionDef.on_failure_observation が
@@ -189,6 +217,15 @@ class SpotInteractionApplicationService:
             and acting_item_aggregate is not None
         ):
             self._item_repository.save(acting_item_aggregate)
+
+        # Phase 4-B: target item instance の state が変わった場合も同じく save。
+        # acting と target は別 instance であることが domain layer のガードで
+        # 保証されているので、両方が同じ tick で save されても問題ない。
+        if (
+            result.target_item_instance_state_changed
+            and target_item_aggregate is not None
+        ):
+            self._item_repository.save(target_item_aggregate)
 
         for spec in result.destroy_connection_specs:
             graph.remove_connection(ConnectionId.create(spec.connection_id))

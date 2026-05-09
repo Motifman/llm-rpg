@@ -1,0 +1,91 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "sword_repair_demo",
+    "title": "修理キットで錆びた剣を直す — 物Aを物Bに使うデモ",
+    "description": "プレイヤーは修理キット (使う側) を 錆びた剣 (使われる側) に対して使うインタラクションを実行する。修理キットの state は used=true に書き換わって 1 度きりに、剣の rust は high → low に戻り last_repaired_tick が記録される。Phase 4-B の二者間相互作用 (cross-instance interaction) を end-to-end で実証する。",
+    "theme": "crafting",
+    "difficulty": "easy",
+    "estimated_ticks": 10,
+    "author": "demo",
+    "tags": ["item_target_interaction", "phase4b_showcase"]
+  },
+  "item_specs": [
+    {"id": "repair_kit", "name": "修理キット", "description": "1 度きりの修理工具。", "category": "MATERIAL"},
+    {"id": "rusted_sword", "name": "錆びた剣", "description": "整備すれば刃が戻る。", "category": "MATERIAL"}
+  ],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "smithy",
+      "name": "鍛冶場",
+      "description": "工具棚に修理用の作業台が置かれている。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "WARM"},
+      "interior": {
+        "objects": [
+          {
+            "id": "repair_bench",
+            "name": "作業台",
+            "description": "アイテムを整備するための作業台。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "repair_with_kit",
+                "display_label": "修理キットで剣を直す",
+                "preconditions": [
+                  {
+                    "condition_type": "ITEM_INSTANCE_STATE",
+                    "required_state": {"used": false},
+                    "failure_message": "修理キットはすでに使い切っている。"
+                  },
+                  {
+                    "condition_type": "TARGET_ITEM_INSTANCE_STATE",
+                    "required_state": {"rust": "high"},
+                    "failure_message": "この剣は錆びていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_ITEM_INSTANCE_STATE",
+                    "parameters": {"state_updates": {"used": true}}
+                  },
+                  {
+                    "effect_type": "CHANGE_TARGET_ITEM_INSTANCE_STATE",
+                    "parameters": {"state_updates": {"rust": "low"}}
+                  },
+                  {
+                    "effect_type": "RECORD_TARGET_ITEM_INSTANCE_STATE_TICK",
+                    "parameters": {"state_key": "last_repaired_tick"}
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "修理キットを使って剣の錆を磨き落とした。刃が蘇る。"}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [],
+  "players": [
+    {"id": "player_a", "name": "鍛冶見習い", "spawn_spot": "smithy", "initial_items": ["repair_kit", "rusted_sword"]}
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 30}]
+  },
+  "initial_flags": [],
+  "scenario_events": []
+}
