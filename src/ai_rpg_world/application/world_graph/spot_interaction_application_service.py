@@ -147,6 +147,14 @@ class SpotInteractionApplicationService:
                     player_id=int(player_id),
                 )
 
+        # Phase 4-D-1: プレイヤー状態 (HP / needs) を precondition から
+        # 参照できるように aggregate を load して domain service に渡す。
+        # repository 注入が無い場合は None を渡し、player precondition は
+        # silent failure 回避のため拒否する (silent pass を避ける domain 規約)。
+        acting_player_status = None
+        if self._player_status_repository is not None:
+            acting_player_status = self._player_status_repository.find_by_id(player_id)
+
         try:
             result = self._interaction.execute_interaction(
                 interior,
@@ -159,6 +167,7 @@ class SpotInteractionApplicationService:
                 owned_item_spec_counts=owned_counts,
                 acting_item_aggregate=acting_item_aggregate,
                 target_item_aggregate=target_item_aggregate,
+                acting_player_status=acting_player_status,
             )
         except InteractionNotAllowedException:
             # 前提条件で拒否された。InteractionDef.on_failure_observation が

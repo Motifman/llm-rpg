@@ -387,6 +387,9 @@ class ScenarioLoader:
             puzzle_input_key=raw.get("puzzle_input_key"),
             required_item_spec_ids=required_item_spec_ids,
             required_quantity=self._parse_required_quantity(raw),
+            need_type=raw.get("need_type"),
+            need_threshold=raw.get("need_threshold"),
+            hp_ratio=raw.get("hp_ratio"),
         )
 
     @staticmethod

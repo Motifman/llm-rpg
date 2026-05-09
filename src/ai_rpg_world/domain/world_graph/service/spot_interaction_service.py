@@ -5,6 +5,22 @@ from typing import FrozenSet, Mapping, Optional, Tuple
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
+    PlayerStatusAggregate,
+)
+from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+
+
+def _hp_ratio(status: "PlayerStatusAggregate") -> Optional[float]:
+    """`PlayerStatusAggregate` から現在の HP の充足率 (0.0..1.0) を計算する。
+
+    max_hp が 0 のときは判定不能として None を返す (precondition 側で
+    not None チェックで弾く)。
+    """
+    hp = status.hp
+    if hp.max_hp <= 0:
+        return None
+    return hp.value / hp.max_hp
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
@@ -47,6 +63,7 @@ class SpotInteractionService:
         owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
+        acting_player_status: Optional["PlayerStatusAggregate"] = None,
     ) -> Tuple[bool, Optional[str]]:
         # Phase 4-B: 同一 instance を acting / target 両方として渡すのは
         # wiring バグ。precondition 段階で弾く（apply_effects と同じガード）。
@@ -83,6 +100,7 @@ class SpotInteractionService:
                 owned_item_spec_counts=counts,
                 acting_item_aggregate=acting_item_aggregate,
                 target_item_aggregate=target_item_aggregate,
+                acting_player_status=acting_player_status,
             )
             if not ok:
                 return False, msg
@@ -99,6 +117,7 @@ class SpotInteractionService:
         owned_item_spec_counts: Mapping[ItemSpecId, int],
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
+        acting_player_status: Optional["PlayerStatusAggregate"] = None,
     ) -> Tuple[bool, Optional[str]]:
         t = cond.condition_type
         if t == InteractionConditionTypeEnum.ALWAYS:
@@ -201,6 +220,62 @@ class SpotInteractionService:
                     return False, cond.failure_message or "必要なアイテムが揃っていません"
             return True, None
 
+        if t == InteractionConditionTypeEnum.PLAYER_NEED_AT_LEAST:
+            # Phase 4-D-1: プレイヤーの欲求 (HUNGER / FATIGUE 等) が threshold
+            # 以上なら成立。「空腹なときだけ食物が効く」のような表現に使う。
+            if cond.need_type is None or cond.need_threshold is None:
+                return False, cond.failure_message or (
+                    "PLAYER_NEED_AT_LEAST には need_type と need_threshold が必要です"
+                )
+            if acting_player_status is None:
+                return False, (
+                    cond.failure_message
+                    or "PLAYER_NEED_AT_LEAST は acting player status を必要とします"
+                )
+            try:
+                need_type = NeedType(cond.need_type)
+            except ValueError:
+                return False, cond.failure_message or (
+                    f"PLAYER_NEED_AT_LEAST の need_type が不正: {cond.need_type!r}"
+                )
+            need = acting_player_status.needs.get(need_type)
+            if need is None:
+                # プレイヤーがその need を持たない (= 0 とみなす)
+                return False, cond.failure_message or "対応する need が登録されていません"
+            if need.value < int(cond.need_threshold):
+                return False, cond.failure_message or "プレイヤーの状態が条件を満たしません"
+            return True, None
+
+        if t == InteractionConditionTypeEnum.PLAYER_HP_RATIO_BELOW:
+            # 「HP が hp_ratio 未満なら成立」。「HP 半分以下のときだけ強い薬草」
+            # のような表現用。
+            if cond.hp_ratio is None:
+                return False, cond.failure_message or "PLAYER_HP_RATIO_BELOW には hp_ratio が必要です"
+            if acting_player_status is None:
+                return False, (
+                    cond.failure_message
+                    or "PLAYER_HP_RATIO_BELOW は acting player status を必要とします"
+                )
+            ratio = _hp_ratio(acting_player_status)
+            if ratio is None or ratio >= float(cond.hp_ratio):
+                return False, cond.failure_message or "プレイヤーの HP 条件を満たしません"
+            return True, None
+
+        if t == InteractionConditionTypeEnum.PLAYER_HP_RATIO_AT_LEAST:
+            # 「HP が hp_ratio 以上なら成立」。「HP 満タンに近いときだけ強行突破」
+            # のような表現用。BELOW の鏡像。
+            if cond.hp_ratio is None:
+                return False, cond.failure_message or "PLAYER_HP_RATIO_AT_LEAST には hp_ratio が必要です"
+            if acting_player_status is None:
+                return False, (
+                    cond.failure_message
+                    or "PLAYER_HP_RATIO_AT_LEAST は acting player status を必要とします"
+                )
+            ratio = _hp_ratio(acting_player_status)
+            if ratio is None or ratio < float(cond.hp_ratio):
+                return False, cond.failure_message or "プレイヤーの HP 条件を満たしません"
+            return True, None
+
         return False, cond.failure_message or "未対応の前提条件です"
 
     def execute_interaction(
@@ -217,6 +292,7 @@ class SpotInteractionService:
         owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
         acting_item_aggregate: Optional[ItemAggregate] = None,
         target_item_aggregate: Optional[ItemAggregate] = None,
+        acting_player_status: Optional[PlayerStatusAggregate] = None,
     ) -> InteractionExecutionResult:
         obj = interior.get_object(object_id)
         if obj is None:
@@ -231,6 +307,7 @@ class SpotInteractionService:
             owned_item_spec_counts=owned_item_spec_counts,
             acting_item_aggregate=acting_item_aggregate,
             target_item_aggregate=target_item_aggregate,
+            acting_player_status=acting_player_status,
         )
         if not ok:
             raise InteractionNotAllowedException(reason or "Interaction not allowed")

@@ -16,3 +16,9 @@ class InteractionConditionTypeEnum(Enum):
     # Phase 4-B: target item instance (作用される側) の state を判定する。
     # 例: 「修理キットを錆びた剣に使う」の precondition で剣側の rusty=true を要求。
     TARGET_ITEM_INSTANCE_STATE = "TARGET_ITEM_INSTANCE_STATE"
+    # Phase 4-D-1: プレイヤー状態 (needs / HP) を判定する precondition。
+    # アイテムを使う前提として「空腹なときだけ」「HP が低いときだけ」など
+    # プレイヤー側の状況を組み合わせるために使う。
+    PLAYER_NEED_AT_LEAST = "PLAYER_NEED_AT_LEAST"
+    PLAYER_HP_RATIO_BELOW = "PLAYER_HP_RATIO_BELOW"
+    PLAYER_HP_RATIO_AT_LEAST = "PLAYER_HP_RATIO_AT_LEAST"
