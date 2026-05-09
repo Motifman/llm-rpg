@@ -221,6 +221,11 @@ class SpotInteractionApplicationService:
         # Phase 4-B: target item instance の state が変わった場合も同じく save。
         # acting と target は別 instance であることが domain layer のガードで
         # 保証されているので、両方が同じ tick で save されても問題ない。
+        # TODO: SqliteItemRepository を本番投入する際は、acting / target の
+        # 2 回の save を 1 トランザクション (Unit of Work) にまとめる必要がある。
+        # 現状は in-memory のため partial failure が顕在化しないが、infra 層が
+        # SQLite に切り替わると acting だけ save されて target で失敗する
+        # ケースで state が壊れる。
         if (
             result.target_item_instance_state_changed
             and target_item_aggregate is not None
