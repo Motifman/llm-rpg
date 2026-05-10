@@ -173,3 +173,51 @@ class TestKillingBlow:
 
         died_events = [e for e in monster.get_events() if isinstance(e, MonsterDiedEvent)]
         assert len(died_events) == 1
+
+    def test_致命攻撃後も_spot_graph_の_presence_は維持される(self) -> None:
+        """本 PR では despawn を自動化しないため、致命攻撃後も
+        `SpotGraphAggregate.get_monster_spot(monster_id)` は成功する想定。
+        executor が event の `spot_id` を取得する際に依存している不変条件。
+
+        将来 `MonsterDiedEvent → unplace_monster` の配線が入った時点でこの
+        テストは破綻するため、その PR で executor 側の event 構築タイミングを
+        修正する合図になる。
+        """
+        from ai_rpg_world.domain.monster.value_object.monster_id import (
+            MonsterId as _MonsterId,
+        )
+        from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
+            SpotGraphAggregate,
+        )
+        from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
+        from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import (
+            SpotGraphId,
+        )
+
+        svc = SpotPlayerAttackService()
+        monster = _make_monster(hp_max=5)
+        graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        spot = SpotId.create(1)
+        graph.add_spot(
+            SpotNode(
+                spot_id=spot,
+                name="森",
+                description="",
+                category=SpotCategoryEnum.OTHER,
+                parent_id=None,
+            )
+        )
+        graph.place_monster(_MonsterId.create(101), spot)
+
+        outcome = svc.try_attack(
+            attacker=_make_player(attack=999),
+            target_monster=monster,
+            current_tick=WorldTick(20),
+        )
+
+        assert outcome.target_killed is True
+        # presence は引き続き居ると見える（自動除去は未配線）
+        assert graph.is_monster_present(_MonsterId.create(101)) is True
+        assert graph.get_monster_spot(_MonsterId.create(101)) == spot

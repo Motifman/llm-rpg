@@ -562,7 +562,13 @@ class MonsterAggregate(AggregateRoot):
         self._last_attack_tick = current_tick
 
     def record_evasion(self):
-        """回避を記録する（ALIVE時のみ）"""
+        """回避を記録する（ALIVE時のみ）。
+
+        2D マップ世界専用の API。`MonsterEvadedEvent` が `coordinate` フィールドを
+        必須で要求するため、coordinate ガードは意図的に残してある。スポット
+        グラフ世界で回避概念が必要になったら、event 側の coordinate を Optional
+        にするか、`record_evasion_in_spot` を別途追加するかを再検討する。
+        """
         if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
             if self._lifecycle_state.status == MonsterStatusEnum.DEAD and self._lifecycle_state.last_death_tick is None:
                 raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")

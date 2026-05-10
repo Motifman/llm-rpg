@@ -527,7 +527,7 @@ class SpotGraphObservationFormatter:
         )
         prose = f"{actor_name}が{monster_name}を攻撃した。"
         if event.target_killed:
-            prose = prose + f" 致命傷を与えて倒した。"
+            prose = prose + " 致命傷を与えて倒した。"
         structured = {
             "type": "player_attacked_monster",
             "actor_id": event.actor_entity_id.value,
