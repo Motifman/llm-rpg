@@ -27,6 +27,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterAteGroundItemEvent,
     MonsterAttackedPlayerInSpotEvent,
     MonsterFeltTemperatureDiscomfortInSpotEvent,
+    MonsterFollowedPackFleeInSpotEvent,
     MonsterLeftSpotEvent,
     MonsterPredatedMonsterInSpotEvent,
     MonsterRespondedToPackHelpInSpotEvent,
@@ -183,6 +184,10 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             self._resolve_all_at_spot(event.spot_id, add)
         elif isinstance(event, MonsterRespondedToPackHelpInSpotEvent):
             # pack 援護: responder の現在 spot 全員に「仲間が駆け付けた」観測。
+            self._resolve_all_at_spot(event.spot_id, add)
+        elif isinstance(event, MonsterFollowedPackFleeInSpotEvent):
+            # pack 群れ逃走: follower の現在 spot 全員に「リーダーに続いて
+            # 逃げ出した」観測。
             self._resolve_all_at_spot(event.spot_id, add)
 
         return result

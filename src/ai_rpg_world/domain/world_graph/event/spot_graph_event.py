@@ -519,3 +519,27 @@ class MonsterRespondedToPackHelpInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
                 "target_monster_id は片方だけ非 None である必要がある "
                 f"(player={self.target_player_id}, monster={self.target_monster_id})"
             )
+
+
+@dataclass(frozen=True)
+class MonsterFollowedPackFleeInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
+    """pack leader の FLEE に follower が追従して FLEE 状態に入った瞬間
+    (Phase 4-O C #2)。
+
+    leader 自身が FLEE に入る瞬間は既存の `MonsterStartedFleeingInSpotEvent`
+    で観測される。本 event は follower (= 同 pack の他 member) が「リーダー
+    の恐怖に引っ張られて」連動 FLEE に入ったことを別経路として識別するため
+    のもの。
+
+    観測 prose で「リーダー恐怖 → 群れ崩壊」を表現できる:
+    - leader: MonsterStartedFleeingInSpotEvent → 「リーダーが逃げ出した」
+    - follower: 本 event → 「{follower} もリーダーに続いて逃げ出した」
+
+    観測としては follower の現在 spot 全員に environment カテゴリで届く。
+    """
+
+    follower_monster_id: MonsterId
+    leader_monster_id: MonsterId
+    follower_spot_id: SpotId
+    # spot_id は recipient strategy 規約のため follower_spot_id と同じ値。
+    spot_id: SpotId

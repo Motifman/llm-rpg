@@ -132,7 +132,25 @@ def build_monster_template(
         max_pack_responders=_optional_int(
             row, "max_pack_responders", default=0,
         ),
+        # Phase 4-O C #2: pack 群れ逃走 (migration v27)
+        pack_flee_follower=_optional_bool(
+            row, "pack_flee_follower", default=False,
+        ),
+        pack_flee_follower_duration=_optional_int(
+            row, "pack_flee_follower_duration", default=0,
+        ),
     )
+
+
+def _optional_bool(row: object, key: str, *, default: bool) -> bool:
+    """row[key] が無い (旧スキーマ) なら default、あれば 0/1 を bool 化。"""
+    try:
+        value = row[key]
+    except (KeyError, IndexError):
+        return default
+    if value is None:
+        return default
+    return bool(int(value))
 
 
 def _optional_temperature(
