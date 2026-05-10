@@ -44,15 +44,15 @@ PLAYER_BYSTANDER = PlayerId(2)
 MONSTER = MonsterId.create(101)
 
 
-def _make_event(*, target_killed: bool = False, damage: int = 7):
+def _make_event(*, target_incapacitated: bool = False, damage: int = 7):
     return PlayerAttackedMonsterInSpotEvent.create(
         aggregate_id=GRAPH_ID,
         aggregate_type="SpotGraphAggregate",
-        actor_entity_id=EntityId.create(PLAYER_ATTACKER.value),
-        monster_id=MONSTER,
+        attacker_entity_id=EntityId.create(PLAYER_ATTACKER.value),
+        target_monster_id=MONSTER,
         spot_id=SPOT_A,
         damage=damage,
-        target_killed=target_killed,
+        target_incapacitated=target_incapacitated,
     )
 
 
@@ -127,16 +127,16 @@ class TestFormatter:
         assert "灰色のオオカミ" in result.prose
         assert result.observation_category == "social"
         assert result.structured["damage"] == 12
-        assert result.structured["target_killed"] is False
+        assert result.structured["target_incapacitated"] is False
 
-    def test_target_killed_で倒した_suffix(self) -> None:
-        """target_killed=True で「倒した」suffix が付く。"""
+    def test_target_incapacitated_で倒した_suffix(self) -> None:
+        """target_incapacitated=True で「倒した」suffix が付く。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
 
         result = formatter.format(
-            _make_event(target_killed=True), PLAYER_BYSTANDER
+            _make_event(target_incapacitated=True), PLAYER_BYSTANDER
         )
 
         assert result is not None
         assert "倒した" in result.prose
-        assert result.structured["target_killed"] is True
+        assert result.structured["target_incapacitated"] is True

@@ -246,13 +246,18 @@ class MonsterAttackedPlayerInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     という暗闇 prose を出す前提（暗闇でも dark_vision モンスターは攻撃可能）。
     現状は recipient 側で全員に同じ prose を出すが、将来的には受信者ごとに
     視認可否で分岐させる余地がある。
+
+    Field naming は `PlayerAttackedMonsterInSpotEvent` と対称（Phase B 統合）:
+    - `attacker_monster_id` ↔ `attacker_entity_id`（攻撃者）
+    - `target_player_id` ↔ `target_monster_id`（対象）
+    - `target_incapacitated`（共通: PlayerDowned / MonsterDead）
     """
 
-    monster_id: MonsterId
+    attacker_monster_id: MonsterId
     spot_id: SpotId
     target_player_id: EntityId
     damage: int
-    target_downed: bool
+    target_incapacitated: bool
     # 被害者から見て monster が「視認できているか」。被害者プレイヤーが暗闇に
     # 居て attacker 側だけ dark_vision を持つケースでは False。最小実装では
     # 被害者の視認も effective_lighting で判定し、attacker 側との非対称も
@@ -285,12 +290,19 @@ class PlayerAttackedMonsterInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     発火するが、それらは "monster" 戦略の別観測経路。本 event は spot graph
     視点での「誰が誰を殴ったか」の prose 構築を担う。
 
-    `target_killed` は致命攻撃で `MonsterStatusEnum.DEAD` に遷移したことを
-    意味する。観測 prose に「倒した」suffix を付けるために使う。
+    `target_incapacitated` は致命攻撃で `MonsterStatusEnum.DEAD` に遷移した
+    ことを意味する。観測 prose に「倒した」suffix を付けるために使う。
+    `MonsterAttackedPlayerInSpotEvent.target_incapacitated`（PlayerDowned）と
+    同じ field 名を採用し、両 event を対称化する（Phase B 統合）。
+
+    Field naming は `MonsterAttackedPlayerInSpotEvent` と対称:
+    - `attacker_entity_id` ↔ `attacker_monster_id`（攻撃者）
+    - `target_monster_id` ↔ `target_player_id`（対象）
+    - `target_incapacitated`（共通）
     """
 
-    actor_entity_id: EntityId
-    monster_id: MonsterId
+    attacker_entity_id: EntityId
+    target_monster_id: MonsterId
     spot_id: SpotId
     damage: int
-    target_killed: bool
+    target_incapacitated: bool
