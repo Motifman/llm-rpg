@@ -65,8 +65,14 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ConnectionNotPassableException,
 )
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    MonsterAteGroundItemEvent,
+)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
+)
+from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
+    ISpotInteriorRepository,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_attack_outcome import (
     AttackOutcome,
@@ -95,6 +101,7 @@ class SpotMonsterBehaviorTickService:
         *,
         random_source: Optional[random.Random] = None,
         world_flags_provider: Optional[WorldFlagsProvider] = None,
+        spot_interior_repository: Optional["ISpotInteriorRepository"] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._monster_repository = monster_repository
@@ -104,6 +111,9 @@ class SpotMonsterBehaviorTickService:
         # 本番運用では同じインスタンスを渡し続けることで再現性を制御できる。
         self._random = random_source or random.Random()
         self._world_flags_provider = world_flags_provider
+        # Phase 3a: 採食 (forage) で地面アイテムを消費する際に必要。注入されない
+        # 場合は forage 行動が常にスキップされる（後方互換 / 未配線構成許容）。
+        self._spot_interior_repository = spot_interior_repository
 
     def tick(self, current_tick: WorldTick) -> List[AttackOutcome]:
         """1 tick 分のモンスター行動を一括実行する。
@@ -115,7 +125,11 @@ class SpotMonsterBehaviorTickService:
         """
         graph = self._spot_graph_repository.find_graph()
         attack_outcomes: List[AttackOutcome] = []
-        any_movement = False
+        any_graph_change = False
+        # `any_state_changed` は forage/starve でも True に倒すが、それらは
+        # 関連リポジトリ（monster / interior）を既に save しているため
+        # `any_graph_change` の判定材料は graph 上で event が積まれた行動
+        # （forage と wander）のみで十分。
 
         for monster_id in sorted(
             graph.monster_spot_mapping().keys(), key=lambda m: m.value
@@ -131,6 +145,19 @@ class SpotMonsterBehaviorTickService:
                 continue
 
             if monster.status != MonsterStatusEnum.ALIVE:
+                continue
+
+            # --- 0. 飢餓 tick ---
+            # hunger を 1 tick 進め、starvation 閾値を一定 tick 超えたら
+            # `monster.starve()` で死亡させる。生存していればこの tick の
+            # 他のアクション（attack/forage/wander）も継続する。
+            died_of_starvation = self._tick_hunger_and_maybe_starve(
+                monster, current_tick
+            )
+            if died_of_starvation:
+                # 飢餓死した monster は graph presence からは自動除去しない
+                # （Phase 1 と同じ方針: despawn は別 PR）。MonsterDiedEvent は
+                # monster aggregate 側で発火済み。
                 continue
 
             # --- 1. attack 優先 ---
@@ -154,18 +181,32 @@ class SpotMonsterBehaviorTickService:
                 # / behavior_state を入れるときに「攻撃失敗 → 留まる」を別途
                 # 表現する想定。
 
-            # --- 2. wander フォールバック ---
-            if self._try_wander(monster, graph, spot_id):
-                any_movement = True
+            # --- 2. forage (採食) ---
+            # hunger >= forage_threshold + 同スポットに preferred 食材あり
+            # → 1 個食べて hunger 減少。graph に MonsterAteGroundItemEvent が
+            # 積まれるので tick 末で graph save が必要。
+            # 採食成立で `continue`（同 tick の wander スキップ）するのは:
+            # (a) 採食を 1 アクションとして消化し、満腹直後に動き回るのは
+            #     生物的に不自然
+            # (b) 1 tick = 1 行動の不変条件を attack/wander と同じく維持する
+            # 将来「採食 → そのまま移動」を許したい場合はこの continue を外し
+            # priority chain を「順次進む」モデルに変える必要がある。
+            if self._try_forage(monster, graph, spot_id):
+                any_graph_change = True
+                continue
 
-        # wander で graph state が変わった場合は明示 save。attack 経路は
+            # --- 3. wander フォールバック ---
+            if self._try_wander(monster, graph, spot_id):
+                any_graph_change = True
+
+        # forage / wander で graph state が変わった場合は明示 save。attack 経路は
         # orchestrator 側で graph.save() を呼ぶため、同 tick で「一部 monster
-        # が attack + 別 monster が wander」のケースでは graph.save() が 2 回
-        # 呼ばれる。SQLite / InMemory リポジトリでは冪等で問題ないが、将来的に
-        # 楽観ロック等を導入する場合は orchestrator から save を切り離して
-        # tick 末で 1 回に集約する設計に見直す必要がある（PR #131 レビューの
-        # MEDIUM 指摘）。
-        if any_movement:
+        # が attack + 別 monster が forage/wander」のケースでは graph.save() が
+        # 2 回呼ばれる。SQLite / InMemory リポジトリでは冪等で問題ないが、
+        # 将来的に楽観ロック等を導入する場合は orchestrator から save を
+        # 切り離して tick 末で 1 回に集約する設計に見直す必要がある
+        # （PR #131 レビューの MEDIUM 指摘）。
+        if any_graph_change:
             self._spot_graph_repository.save(graph)
 
         return attack_outcomes
@@ -287,4 +328,105 @@ class SpotMonsterBehaviorTickService:
                 picked.connection_id.value,
             )
             return False
+        return True
+
+    # ------------------------------------------------------------------
+    # 内部 - hunger / starvation
+    # ------------------------------------------------------------------
+
+    def _tick_hunger_and_maybe_starve(
+        self,
+        monster: MonsterAggregate,
+        current_tick: WorldTick,
+    ) -> bool:
+        """飢餓を 1 tick 進めて、しきい値超過なら starvation 死亡させる。
+
+        Returns:
+            True なら飢餓死した（監督 aggregate に MonsterDiedEvent 発火済み、
+            monster_repo に save 済み）。False なら生存継続（hunger は
+            進行している可能性あり、monster_repo に save 済み）。
+        """
+        # template の飢餓設定が無効なら no-op で False
+        if monster.template.starvation_ticks <= 0:
+            return False
+        if monster.template.hunger_increase_per_tick <= 0:
+            return False
+
+        should_starve = monster.tick_hunger(current_tick)
+        if should_starve:
+            monster.starve(current_tick)
+            self._monster_repository.save(monster)
+            return True
+
+        # hunger は進んだので monster_repo に save。
+        self._monster_repository.save(monster)
+        return False
+
+    # ------------------------------------------------------------------
+    # 内部 - forage (採食)
+    # ------------------------------------------------------------------
+
+    def _try_forage(
+        self,
+        monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+    ) -> bool:
+        """`hunger >= forage_threshold` のとき、同スポットの preferred 食材を
+        1 個食べる。
+
+        Returns:
+            実際に食べたら True（graph に event 積まれた + interior + monster
+            は save 済み）。食材が無い / 飢餓未閾値 / interior 未注入 で False。
+        """
+        if self._spot_interior_repository is None:
+            return False
+
+        template = monster.template
+        if template.starvation_ticks <= 0:
+            return False
+        if not template.preferred_feed_item_spec_ids:
+            return False
+        if template.hunger_decrease_on_feed <= 0.0:
+            # `record_feed` は `hunger_decrease <= 0` を no-op で抜ける仕様。
+            # アイテムだけ消費して hunger が回復しない silent failure を防ぐため、
+            # 採食自体をスキップしてテンプレ設定ミスを観測しやすくする。
+            return False
+
+        # MonsterAggregate.hunger プロパティ経由でアクセス。
+        if monster.hunger < template.forage_threshold:
+            return False
+
+        spot_node = graph.get_spot(spot_id)
+        interior = self._spot_interior_repository.find_by_spot_id(spot_id)
+        if interior is None:
+            return False
+
+        # preferred_feed_item_spec_ids にマッチするアイテムを `item_instance_id`
+        # 昇順で 1 つ選ぶ（決定的）。
+        preferred = template.preferred_feed_item_spec_ids
+        candidates = sorted(
+            (g for g in interior.ground_items if g.item_spec_id in preferred),
+            key=lambda g: g.item_instance_id.value,
+        )
+        if not candidates:
+            return False
+
+        eaten = candidates[0]
+        new_interior = interior.without_ground_item(eaten.item_instance_id)
+        self._spot_interior_repository.save(spot_id, new_interior)
+
+        monster.record_feed(template.hunger_decrease_on_feed)
+        self._monster_repository.save(monster)
+
+        graph.add_event(
+            MonsterAteGroundItemEvent.create(
+                aggregate_id=graph.graph_id,
+                aggregate_type="SpotGraphAggregate",
+                monster_id=monster.monster_id,
+                spot_id=spot_id,
+                item_instance_id=eaten.item_instance_id,
+                item_spec_id=eaten.item_spec_id,
+            )
+        )
         return True

@@ -397,6 +397,7 @@ def create_spot_graph_wiring(
             monster_repository=monster_repository,
             player_status_repository=player_status_repository,
             attack_orchestrator=attack_orchestrator,
+            spot_interior_repository=spot_interior_repository,
         )
 
     no_op_movement = SpotGraphNoOpMovementService()

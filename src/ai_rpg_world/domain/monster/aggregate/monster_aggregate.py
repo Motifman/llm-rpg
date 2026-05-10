@@ -688,24 +688,32 @@ class MonsterAggregate(AggregateRoot):
         ))
 
     def starve(self, current_tick: WorldTick) -> None:
-        """飢餓で死亡させる。ALIVE のときのみ有効。"""
+        """飢餓で死亡させる。ALIVE のときのみ有効。
+
+        位置情報（coordinate / spot_id）に依存しない純粋な lifecycle 操作。
+        2D マップ世界では `spawn()` 経由で必ず coordinate が設定されるため、
+        従来通り spawned 状態でしか到達しない。スポットグラフ世界では
+        coordinate が None のままでも飢餓死が成立する（位置の正当性は
+        呼び出し側の handler / domain service が責任を持つ）。
+        `apply_damage` の W-pattern 純粋化と同じ判断（PR #128）。
+        """
         if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
             if self._lifecycle_state.status == MonsterStatusEnum.DEAD and self._lifecycle_state.last_death_tick is None:
                 raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
             raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
-        if self._coordinate is None:
-            raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
         self._die(current_tick, cause=DeathCauseEnum.STARVATION)
 
     def tick_hunger(self, current_tick: WorldTick) -> bool:
         """
         1 tick 分の飢餓を適用し、飢餓死すべきか返す。
-        飢餓が無効（template.starvation_ticks <= 0）の場合は False。
-        ALIVE かつスポーン済みのときのみ有効。
+        飢餓が無効（template.starvation_ticks <= 0 または
+        hunger_increase_per_tick <= 0）の場合は False。
+        ALIVE のときのみ有効。
+
+        位置情報非依存（W-pattern）。スポットグラフ世界でも 2D マップ世界
+        でも同じ呼出シグネチャで動作する。
         """
         if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
-            return False
-        if self._coordinate is None:
             return False
         t = self._template
         if t.starvation_ticks <= 0 or t.hunger_increase_per_tick <= 0:
