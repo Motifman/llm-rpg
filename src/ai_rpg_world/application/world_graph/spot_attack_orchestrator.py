@@ -36,6 +36,9 @@ from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
 from ai_rpg_world.domain.monster.repository.monster_repository import (
     MonsterRepository,
 )
+from ai_rpg_world.domain.monster.service.monster_visibility_service import (
+    MonsterVisibilityService,
+)
 from ai_rpg_world.domain.monster.service.spot_monster_attack_service import (
     SpotMonsterAttackService,
 )
@@ -94,12 +97,18 @@ class SpotAttackOrchestrator:
         monster_attack_service: Optional[SpotMonsterAttackService] = None,
         player_attack_service: Optional[SpotPlayerAttackService] = None,
         perception_service: Optional[SpotPerceptionService] = None,
+        visibility_service: Optional[MonsterVisibilityService] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._monster_repository = monster_repository
         self._player_status_repository = player_status_repository
+        # 視認判定は player attack / predation で共有するため、orchestrator が
+        # 直接 instance を持つ。`SpotMonsterAttackService` の private フィールド
+        # への参照を避ける（PR #133 レビュー HIGH 指摘）。
+        self._visibility = visibility_service or MonsterVisibilityService()
         self._monster_attack_service = (
-            monster_attack_service or SpotMonsterAttackService()
+            monster_attack_service
+            or SpotMonsterAttackService(visibility_service=self._visibility)
         )
         self._player_attack_service = (
             player_attack_service or SpotPlayerAttackService()
@@ -258,7 +267,7 @@ class SpotAttackOrchestrator:
         # 視認: monster_attack の視認チェックと同じロジック（環境光量 +
         # attacker の dark_vision）。dark_vision 無し + 暗闇では狩らない。
         effective_lighting = self._compute_lighting(graph, spot_id)
-        if not self._monster_attack_service._visibility.can_see_target(  # noqa: SLF001
+        if not self._visibility.can_see_target(
             attacker_monster.template, effective_lighting
         ):
             return AttackOutcome(executed=False, reason="not_visible")
@@ -286,10 +295,7 @@ class SpotAttackOrchestrator:
 
         # Phase 4 用フック: 最後に攻撃された tick を prey 側に残す。
         # 致命攻撃で死んだ後の no-op は aggregate 側でガードされる。
-        prey_monster.record_attacked_by_in_spot(
-            attacker_id=attacker_monster.world_object_id,
-            current_tick=current_tick,
-        )
+        prey_monster.record_attacked_by_in_spot(current_tick=current_tick)
 
         graph.add_event(
             MonsterPredatedMonsterInSpotEvent.create(
