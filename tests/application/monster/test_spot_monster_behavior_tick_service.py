@@ -1,4 +1,4 @@
-"""SpotMonsterAttackTickService の統合テスト。
+"""SpotMonsterBehaviorTickService の統合テスト。
 
 検証範囲:
 - スポットに居る敵対モンスターが、同スポットの最初の生存プレイヤーに攻撃を当てる
@@ -13,8 +13,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ai_rpg_world.application.monster.services.spot_monster_attack_tick_service import (
-    SpotMonsterAttackTickService,
+from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_service import (
+    SpotMonsterBehaviorTickService,
 )
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
     SpotAttackOrchestrator,
@@ -78,12 +78,26 @@ def _make_monster(
     has_dark_vision: bool = False,
     faction: MonsterFactionEnum = MonsterFactionEnum.ENEMY,
     attack: int = 5,
+    idle_wander_chance: float = 0.0,
+    ecology_type=None,
 ):
-    """domain service が触る属性だけ持つ最小 mock。"""
+    """domain service が触る属性だけ持つ最小 mock。
+
+    既存 attack-only テストの挙動を維持するため、デフォルトでは
+    `idle_wander_chance=0.0` で wander を完全に無効化している。wander の
+    挙動を検証するテストは個別に明示的に値を設定する。
+    """
+    from ai_rpg_world.domain.monster.enum.monster_enum import EcologyTypeEnum
     monster = MagicMock()
+    # graph.move_monster は monster.monster_id を辞書キーとして使うため、
+    # 実 MonsterId 値オブジェクトを設定する必要がある（MagicMock 自動値だと
+    # graph 側のルックアップが失敗する）。
+    monster.monster_id = MonsterId.create(monster_id_value)
     monster.template.faction = faction
     monster.template.has_dark_vision = has_dark_vision
     monster.template.base_stats.attack = attack
+    monster.template.idle_wander_chance = idle_wander_chance
+    monster.template.ecology_type = ecology_type or EcologyTypeEnum.NORMAL
     monster.status = MonsterStatusEnum.ALIVE
     monster.can_attack_now.return_value = can_attack
     return monster
@@ -126,7 +140,7 @@ class TestAttackHappens:
         player_repo = MagicMock()
         player_repo.find_by_id.return_value = player
 
-        svc = SpotMonsterAttackTickService(
+        svc = SpotMonsterBehaviorTickService(
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
@@ -158,7 +172,7 @@ class TestAttackHappens:
         player_repo = MagicMock()
         player_repo.find_by_id.return_value = player
 
-        svc = SpotMonsterAttackTickService(
+        svc = SpotMonsterBehaviorTickService(
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
@@ -190,7 +204,7 @@ class TestAttackHappens:
         player_repo = MagicMock()
         player_repo.find_by_id.return_value = player
 
-        svc = SpotMonsterAttackTickService(
+        svc = SpotMonsterBehaviorTickService(
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
@@ -236,7 +250,7 @@ class TestCooldownSkip:
         player_repo = MagicMock()
         player_repo.find_by_id.return_value = player
 
-        svc = SpotMonsterAttackTickService(
+        svc = SpotMonsterBehaviorTickService(
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
@@ -276,7 +290,7 @@ class TestDarknessGate:
         player_repo = MagicMock()
         player_repo.find_by_id.return_value = player
 
-        svc = SpotMonsterAttackTickService(
+        svc = SpotMonsterBehaviorTickService(
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
@@ -311,7 +325,7 @@ class TestDarknessGate:
         player_repo = MagicMock()
         player_repo.find_by_id.return_value = player
 
-        svc = SpotMonsterAttackTickService(
+        svc = SpotMonsterBehaviorTickService(
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
@@ -349,7 +363,7 @@ class TestNoTarget:
         player_repo = MagicMock()
         player_repo.find_by_id.return_value = None  # presence にも居ない
 
-        svc = SpotMonsterAttackTickService(
+        svc = SpotMonsterBehaviorTickService(
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
@@ -389,7 +403,7 @@ class TestNonHostile:
         player_repo = MagicMock()
         player_repo.find_by_id.return_value = player
 
-        svc = SpotMonsterAttackTickService(
+        svc = SpotMonsterBehaviorTickService(
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
@@ -408,3 +422,199 @@ class TestNonHostile:
         ]
         assert events == []
         monster.can_attack_now.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Wander 行動 (Phase 1: ランダム徘徊)
+# ---------------------------------------------------------------------------
+
+import random as _random_mod  # noqa: E402
+
+from ai_rpg_world.domain.monster.enum.monster_enum import EcologyTypeEnum  # noqa: E402
+from ai_rpg_world.domain.world_graph.entity.spot_connection import (  # noqa: E402
+    SpotConnection,
+)
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (  # noqa: E402
+    MonsterAppearedAtSpotEvent,
+    MonsterLeftSpotEvent,
+)
+from ai_rpg_world.domain.world_graph.value_object.connection_id import (  # noqa: E402
+    ConnectionId,
+)
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage  # noqa: E402
+
+
+SPOT_B = SpotId.create(2)
+
+
+def _make_two_spot_graph(*, traversable_to_b: bool = True) -> SpotGraphAggregate:
+    g = SpotGraphAggregate.empty(GRAPH_ID)
+    g.add_spot(_node(lighting=LightingEnum.BRIGHT))
+    g.add_spot(
+        SpotNode(
+            spot_id=SPOT_B,
+            name="Spot B",
+            description="",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
+        )
+    )
+    g.add_connection(
+        SpotConnection(
+            connection_id=ConnectionId.create(10),
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            name="path",
+            description="",
+            travel_ticks=1,
+            is_bidirectional=False,
+            passage=(
+                Passage.open() if traversable_to_b
+                else Passage.open(traversable=False)
+            ),
+            passage_conditions=[],
+        )
+    )
+    return g
+
+
+def _make_svc(graph, monster, *, random_seed: int = 0):
+    spot_repo = MagicMock()
+    spot_repo.find_graph.return_value = graph
+    monster_repo = MagicMock()
+    monster_repo.find_by_id.return_value = monster
+    player_repo = MagicMock()
+    player_repo.find_by_id.return_value = None  # no players for wander tests
+    return (
+        SpotMonsterBehaviorTickService(
+            spot_graph_repository=spot_repo,
+            monster_repository=monster_repo,
+            player_status_repository=player_repo,
+            attack_orchestrator=SpotAttackOrchestrator(
+                spot_graph_repository=spot_repo,
+                monster_repository=monster_repo,
+                player_status_repository=player_repo,
+            ),
+            random_source=_random_mod.Random(random_seed),
+        ),
+        spot_repo,
+    )
+
+
+class TestWanderBasic:
+    """ランダム徘徊が `idle_wander_chance` で発火し、隣接 spot へ移動する。"""
+
+    def test_chance_1_で必ず移動する(self) -> None:
+        """idle_wander_chance=1.0 なら毎 tick 必ず passable 接続へ移動。"""
+        graph = _make_two_spot_graph()
+        monster = _make_monster(idle_wander_chance=1.0, can_attack=False)
+        graph.place_monster(MonsterId.create(101), SPOT_A)
+        graph.clear_events()
+
+        svc, spot_repo = _make_svc(graph, monster)
+        svc.tick(WorldTick(10))
+
+        # spot A から消えて spot B に居る
+        assert graph.get_monster_spot(MonsterId.create(101)) == SPOT_B
+        # Left + Appeared event の対が graph に積まれている
+        events = graph.get_events()
+        types = {type(e).__name__ for e in events}
+        assert "MonsterLeftSpotEvent" in types
+        assert "MonsterAppearedAtSpotEvent" in types
+        # graph save が tick 末で呼ばれている
+        spot_repo.save.assert_called_once_with(graph)
+
+    def test_chance_0_では移動しない(self) -> None:
+        """idle_wander_chance=0.0 なら徘徊試行せず position 維持。"""
+        graph = _make_two_spot_graph()
+        monster = _make_monster(idle_wander_chance=0.0, can_attack=False)
+        graph.place_monster(MonsterId.create(101), SPOT_A)
+        graph.clear_events()
+
+        svc, spot_repo = _make_svc(graph, monster)
+        svc.tick(WorldTick(10))
+
+        assert graph.get_monster_spot(MonsterId.create(101)) == SPOT_A
+        spot_repo.save.assert_not_called()
+
+
+class TestWanderEcology:
+    """ecology_type による徘徊抑制。"""
+
+    def test_ambush_は_chance_1_でも移動しない(self) -> None:
+        """AMBUSH は待ち伏せ習性で徘徊しない（idle_wander_chance によらず）。"""
+        graph = _make_two_spot_graph()
+        monster = _make_monster(
+            idle_wander_chance=1.0,
+            can_attack=False,
+            ecology_type=EcologyTypeEnum.AMBUSH,
+        )
+        graph.place_monster(MonsterId.create(101), SPOT_A)
+        graph.clear_events()
+
+        svc, spot_repo = _make_svc(graph, monster)
+        svc.tick(WorldTick(10))
+
+        assert graph.get_monster_spot(MonsterId.create(101)) == SPOT_A
+        spot_repo.save.assert_not_called()
+
+
+class TestWanderPassageGate:
+    """passage_conditions / traversable=False の通行不可は徘徊先から除外される。"""
+
+    def test_traversable_false_は徘徊先から除外される(self) -> None:
+        """traversable=False の接続しか無ければ徘徊しない。"""
+        graph = _make_two_spot_graph(traversable_to_b=False)
+        monster = _make_monster(idle_wander_chance=1.0, can_attack=False)
+        graph.place_monster(MonsterId.create(101), SPOT_A)
+        graph.clear_events()
+
+        svc, spot_repo = _make_svc(graph, monster)
+        svc.tick(WorldTick(10))
+
+        # 通行不可なので spot A に留まる
+        assert graph.get_monster_spot(MonsterId.create(101)) == SPOT_A
+        spot_repo.save.assert_not_called()
+
+
+class TestAttackPriorityOverWander:
+    """attack が成立する状況では wander を試みない（priority chain）。"""
+
+    def test_attack_成立時は移動しない(self) -> None:
+        """attack 成立 monster は同じ tick で wander 抽選すらしない。"""
+        graph = _make_two_spot_graph()
+        monster = _make_monster(idle_wander_chance=1.0, can_attack=True, attack=5)
+        graph.place_monster(MonsterId.create(101), SPOT_A)
+        graph.place_entity(EntityId.create(1), SPOT_A)
+        graph.clear_events()
+
+        # 攻撃ターゲット用 player
+        player = MagicMock()
+        player.player_id = PlayerId(1)
+        state = {"down": False}
+        type(player).is_down = property(lambda self: state["down"])
+        player.apply_damage.side_effect = lambda d: None
+
+        spot_repo = MagicMock()
+        spot_repo.find_graph.return_value = graph
+        monster_repo = MagicMock()
+        monster_repo.find_by_id.return_value = monster
+        player_repo = MagicMock()
+        player_repo.find_by_id.return_value = player
+
+        svc = SpotMonsterBehaviorTickService(
+            spot_graph_repository=spot_repo,
+            monster_repository=monster_repo,
+            player_status_repository=player_repo,
+            attack_orchestrator=SpotAttackOrchestrator(
+                spot_graph_repository=spot_repo,
+                monster_repository=monster_repo,
+                player_status_repository=player_repo,
+            ),
+            random_source=_random_mod.Random(0),
+        )
+        outcomes = svc.tick(WorldTick(10))
+
+        # 攻撃成立で位置は元のまま
+        assert len(outcomes) == 1 and outcomes[0].executed is True
+        assert graph.get_monster_spot(MonsterId.create(101)) == SPOT_A

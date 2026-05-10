@@ -1,0 +1,290 @@
+"""tick 駆動でスポットグラフ世界のモンスター行動を一括実行する。
+
+本サービスは「policy = 候補選び + 行動優先順位」を担当し、各行動の実体
+（attack / move）はそれぞれ専用のオーケストレーター・aggregate メソッドへ
+委譲する。
+
+各モンスターについて毎 tick 以下の優先順で 1 アクションを試みる:
+
+1. **attack**: ENEMY + ALIVE + cooldown 切れ + 同スポットに生存プレイヤーが
+   居る → `SpotAttackOrchestrator.execute_monster_attack`
+2. **wander**: 攻撃しなかった場合、`ecology_type != AMBUSH` かつ
+   `idle_wander_chance` で抽選に当選すれば隣接スポットへランダム移動
+
+複数の monster が居る tick では ID 昇順でループする（PR #127 と同じ policy）。
+1 tick で 1 monster 1 アクションが原則。
+
+呼び出し導線:
+- 想定接続先は presentation 側の tick driver / または将来の wiring。
+  attack 経路は orchestrator が graph save まで担うが、wander 経路は本
+  サービスが tick 末で graph save を行う（move_monster は monster aggregate
+  を変更しないため graph 単体の save で十分）。
+
+ランダムソース:
+- `random_source` を引数で受け取れるようにし、テストでは固定 seed の
+  `random.Random(seed)` を渡して決定的に検証する。
+
+世界フラグ:
+- `world_flags_provider` で passage 通行条件 (鍵フラグ等) を解決。未設定の
+  起動構成では空 frozenset を渡す（モンスターがフラグ依存通路を通れない
+  形になる、安全側）。
+"""
+
+from __future__ import annotations
+
+import logging
+import random
+from typing import Callable, FrozenSet, List, Optional
+
+from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
+    SpotAttackOrchestrator,
+)
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
+    MonsterAggregate,
+)
+from ai_rpg_world.domain.monster.enum.monster_enum import (
+    EcologyTypeEnum,
+    MonsterFactionEnum,
+    MonsterStatusEnum,
+)
+from ai_rpg_world.domain.monster.repository.monster_repository import (
+    MonsterRepository,
+)
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
+    PlayerStatusAggregate,
+)
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
+    SpotGraphAggregate,
+)
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    ConnectionNotPassableException,
+)
+from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
+    ISpotGraphRepository,
+)
+from ai_rpg_world.domain.world_graph.value_object.spot_attack_outcome import (
+    AttackOutcome,
+)
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
+logger = logging.getLogger(__name__)
+
+WorldFlagsProvider = Callable[[], FrozenSet[str]]
+
+
+class SpotMonsterBehaviorTickService:
+    """tick 単位でモンスター行動を統合実行する。
+
+    現状サポートする行動: attack / wander。後続フェーズで pursuit /
+    foraging / environment interaction が同じ priority chain に追加される
+    想定。
+    """
+
+    def __init__(
+        self,
+        spot_graph_repository: ISpotGraphRepository,
+        monster_repository: MonsterRepository,
+        player_status_repository: PlayerStatusRepository,
+        attack_orchestrator: SpotAttackOrchestrator,
+        *,
+        random_source: Optional[random.Random] = None,
+        world_flags_provider: Optional[WorldFlagsProvider] = None,
+    ) -> None:
+        self._spot_graph_repository = spot_graph_repository
+        self._monster_repository = monster_repository
+        self._player_status_repository = player_status_repository
+        self._orchestrator = attack_orchestrator
+        # 注入されない場合はモジュールデフォルトの Random（非決定的）を使う。
+        # 本番運用では同じインスタンスを渡し続けることで再現性を制御できる。
+        self._random = random_source or random.Random()
+        self._world_flags_provider = world_flags_provider
+
+    def tick(self, current_tick: WorldTick) -> List[AttackOutcome]:
+        """1 tick 分のモンスター行動を一括実行する。
+
+        Returns:
+            当該 tick で実際に発生した attack の結果一覧。
+            wander の結果は graph に積まれた event で観測されるためここでは
+            返さない（必要になったら戻り値型を BehaviorOutcome 系に拡張する）。
+        """
+        graph = self._spot_graph_repository.find_graph()
+        attack_outcomes: List[AttackOutcome] = []
+        any_movement = False
+
+        for monster_id in sorted(
+            graph.monster_spot_mapping().keys(), key=lambda m: m.value
+        ):
+            spot_id = graph.get_monster_spot(monster_id)
+            monster = self._monster_repository.find_by_id(monster_id)
+            if monster is None:
+                logger.debug(
+                    "tick: monster_repository returned None for %s (placed at %s)",
+                    monster_id.value,
+                    spot_id.value,
+                )
+                continue
+
+            if monster.status != MonsterStatusEnum.ALIVE:
+                continue
+
+            # --- 1. attack 優先 ---
+            # `_maybe_attack` は前提条件 (ENEMY / cooldown 切れ / 同スポット
+            # の生存プレイヤー有り) を満たした場合のみ実行を試みて
+            # `AttackOutcome` を返す。前提が欠けるなら None を返し、wander に
+            # フォールバックさせる。
+            attack_outcome = self._maybe_attack(
+                monster, graph, spot_id, current_tick
+            )
+            if attack_outcome is not None:
+                attack_outcomes.append(attack_outcome)
+                if attack_outcome.executed:
+                    # 攻撃成立で 1 tick の行動消化。orchestrator 側で graph
+                    # save 済み。
+                    continue
+                # 攻撃を試みたが不成立 (visibility / target_down / zero_damage)
+                # の場合、現状は wander にフォールバックする。「対象を見ながら
+                # wander で離れる」のは世界観的にやや不自然だが、最小実装では
+                # 動的態度 (FLEE 等) を持たないため許容する。Phase 2 で pursuit
+                # / behavior_state を入れるときに「攻撃失敗 → 留まる」を別途
+                # 表現する想定。
+
+            # --- 2. wander フォールバック ---
+            if self._try_wander(monster, graph, spot_id):
+                any_movement = True
+
+        # wander で graph state が変わった場合は明示 save。attack 経路は
+        # orchestrator 側で graph.save() を呼ぶため、同 tick で「一部 monster
+        # が attack + 別 monster が wander」のケースでは graph.save() が 2 回
+        # 呼ばれる。SQLite / InMemory リポジトリでは冪等で問題ないが、将来的に
+        # 楽観ロック等を導入する場合は orchestrator から save を切り離して
+        # tick 末で 1 回に集約する設計に見直す必要がある（PR #131 レビューの
+        # MEDIUM 指摘）。
+        if any_movement:
+            self._spot_graph_repository.save(graph)
+
+        return attack_outcomes
+
+    # ------------------------------------------------------------------
+    # 内部 - attack
+    # ------------------------------------------------------------------
+
+    def _maybe_attack(
+        self,
+        monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+        current_tick: WorldTick,
+    ) -> Optional[AttackOutcome]:
+        """攻撃の前提条件を満たせば実行を試みる。実行しない場合は None。"""
+        if monster.template.faction != MonsterFactionEnum.ENEMY:
+            return None
+        if not monster.can_attack_now(current_tick):
+            return None
+        target = self._pick_target(graph, spot_id)
+        if target is None:
+            return None
+        return self._orchestrator.execute_monster_attack(
+            attacker_monster=monster,
+            target_player=target,
+            graph=graph,
+            spot_id=spot_id,
+            current_tick=current_tick,
+        )
+
+    def _pick_target(
+        self, graph: SpotGraphAggregate, spot_id: SpotId
+    ) -> Optional[PlayerStatusAggregate]:
+        """同スポットに居るプレイヤーから ID 昇順で最初の生存者を返す。"""
+        presence = graph.presence_at(spot_id)
+        for entity_id in sorted(
+            presence.present_entity_ids, key=lambda e: e.value
+        ):
+            player = self._player_status_repository.find_by_id(
+                PlayerId(entity_id.value)
+            )
+            if player is None:
+                continue
+            if player.is_down:
+                continue
+            return player
+        return None
+
+    # ------------------------------------------------------------------
+    # 内部 - wander
+    # ------------------------------------------------------------------
+
+    def _try_wander(
+        self,
+        monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+    ) -> bool:
+        """`idle_wander_chance` で抽選し、当選すれば passable 接続を 1 つ選んで移動。
+
+        Returns:
+            実際に移動が行われたら True（graph state が変化したら True）。
+        """
+        if monster.template.ecology_type == EcologyTypeEnum.AMBUSH:
+            # 待ち伏せ型は徘徊しない（初期位置で獲物を待つ習性）。
+            return False
+        chance = monster.template.idle_wander_chance
+        if chance <= 0.0:
+            return False
+        if self._random.random() >= chance:
+            return False
+
+        connections = graph.iter_outgoing_connections_from(spot_id)
+        if not connections:
+            return False
+
+        world_flags = (
+            self._world_flags_provider()
+            if self._world_flags_provider is not None
+            else frozenset()
+        )
+        owned_item_spec_ids: FrozenSet[ItemSpecId] = frozenset()
+
+        # passable な接続だけ抽出。`can_traverse_connection` は traversable +
+        # passage_conditions の両方を見るので、鍵が要る扉やフラグ依存通路は
+        # この時点で除外される。connection_id 昇順でソートして決定的に。
+        passable = sorted(
+            (
+                conn for conn in connections
+                if graph.can_traverse_connection(
+                    conn.connection_id, owned_item_spec_ids, world_flags
+                )
+            ),
+            key=lambda c: c.connection_id.value,
+        )
+        if not passable:
+            return False
+
+        picked = self._random.choice(passable)
+        try:
+            graph.move_monster(
+                monster_id=monster.monster_id,
+                connection_id=picked.connection_id,
+                owned_item_spec_ids=owned_item_spec_ids,
+                world_flags=world_flags,
+            )
+        except ConnectionNotPassableException:
+            # 上の `can_traverse_connection` フィルタで除外されているはずなので
+            # 通常パスでは到達しない。到達する場合は (a) フィルタロジックの
+            # バグ、または (b) `move_monster` 内の `can_pass` と
+            # `can_traverse_connection` の判定が乖離する想定外ケース。
+            # 隠蔽せず warning で記録する。
+            logger.warning(
+                "tick: monster %s passed pre-filter but move_monster raised "
+                "ConnectionNotPassableException for connection %s "
+                "(filter/move logic out of sync)",
+                monster.monster_id.value,
+                picked.connection_id.value,
+            )
+            return False
+        return True
