@@ -58,7 +58,9 @@ class MonsterTemplate:
     # にこの確率で隣接スポットへランダム移動を試みる。0.0 で完全静止、1.0 で
     # 毎 tick 必ず移動を試みる。`ecology_type=AMBUSH` なら本値によらず
     # 移動しない。
-    idle_wander_chance: float = 0.5
+    # **デフォルトは 0.0 (静止)**。ボスや陳列目的の NPC モンスターが意図せず
+    # 動かないよう、徘徊させたいテンプレだけシナリオ側で明示する opt-in 方針。
+    idle_wander_chance: float = 0.0
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])

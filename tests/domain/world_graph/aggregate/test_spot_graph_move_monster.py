@@ -216,6 +216,128 @@ class TestMoveMonsterFailure:
             )
 
 
+class TestPassageConditions:
+    """passage_conditions (鍵 / 世界フラグ) を尊重するか。
+
+    モンスターは inventory を持たず world_flags も provider 任せのため、
+    鍵が要る扉やフラグ依存通路は通常通れない。"""
+
+    def _graph_with_item_required_door(self) -> SpotGraphAggregate:
+        from ai_rpg_world.domain.item.value_object.item_spec_id import (
+            ItemSpecId,
+        )
+        from ai_rpg_world.domain.world_graph.enum.passage_condition_type import (
+            PassageConditionTypeEnum,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.passage_condition import (
+            PassageCondition,
+        )
+
+        g = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        g.add_spot(_node(1))
+        g.add_spot(_node(2))
+        # 鍵が必要な扉（ITEM_REQUIRED）。traversable=True だが passage_conditions
+        # が満たされなければ通れない
+        g.add_connection(
+            SpotConnection(
+                connection_id=ConnectionId.create(10),
+                from_spot_id=SpotId.create(1),
+                to_spot_id=SpotId.create(2),
+                name="locked_door",
+                description="",
+                travel_ticks=1,
+                is_bidirectional=False,
+                passage=Passage.open(),
+                passage_conditions=[
+                    PassageCondition(
+                        condition_type=PassageConditionTypeEnum.ITEM_REQUIRED,
+                        item_spec_id=ItemSpecId(99),
+                        failure_message="鍵が必要だ",
+                    )
+                ],
+            )
+        )
+        return g
+
+    def test_鍵を持たないモンスターは通行不可と判定される(self) -> None:
+        """ITEM_REQUIRED の扉は鍵なし owned_item_spec_ids では can_traverse=False。"""
+        g = self._graph_with_item_required_door()
+
+        assert (
+            g.can_traverse_connection(
+                ConnectionId.create(10),
+                owned_item_spec_ids=frozenset(),
+                world_flags=frozenset(),
+            )
+            is False
+        )
+
+    def test_鍵を持たないモンスターの_move_は例外(self) -> None:
+        """ITEM_REQUIRED 未満足での move_monster は ConnectionNotPassableException。"""
+        g = self._graph_with_item_required_door()
+        m1 = MonsterId.create(101)
+        g.place_monster(m1, SpotId.create(1))
+
+        with pytest.raises(ConnectionNotPassableException):
+            g.move_monster(
+                monster_id=m1,
+                connection_id=ConnectionId.create(10),
+                owned_item_spec_ids=frozenset(),
+                world_flags=frozenset(),
+            )
+
+    def test_world_flag_依存通路はフラグ未設定で通行不可(self) -> None:
+        """FLAG_SET 未満足での can_traverse は False。"""
+        from ai_rpg_world.domain.world_graph.enum.passage_condition_type import (
+            PassageConditionTypeEnum,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.passage_condition import (
+            PassageCondition,
+        )
+
+        g = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        g.add_spot(_node(1))
+        g.add_spot(_node(2))
+        g.add_connection(
+            SpotConnection(
+                connection_id=ConnectionId.create(10),
+                from_spot_id=SpotId.create(1),
+                to_spot_id=SpotId.create(2),
+                name="flag_gate",
+                description="",
+                travel_ticks=1,
+                is_bidirectional=False,
+                passage=Passage.open(),
+                passage_conditions=[
+                    PassageCondition(
+                        condition_type=PassageConditionTypeEnum.FLAG_SET,
+                        flag_name="bridge_built",
+                        failure_message="橋がまだ無い",
+                    )
+                ],
+            )
+        )
+
+        # フラグ未設定では通行不可
+        assert (
+            g.can_traverse_connection(
+                ConnectionId.create(10),
+                owned_item_spec_ids=frozenset(),
+                world_flags=frozenset(),
+            )
+            is False
+        )
+        # フラグありなら通行可
+        assert (
+            g.can_traverse_connection(
+                ConnectionId.create(10),
+                owned_item_spec_ids=frozenset(),
+                world_flags=frozenset({"bridge_built"}),
+            )
+            is True
+        )
+
+
 class TestCanTraverseConnection:
     """can_traverse_connection の合否判定。"""
 
