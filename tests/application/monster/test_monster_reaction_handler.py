@@ -266,7 +266,7 @@ class TestChaseContinuationTick:
             current_tick=WorldTick(9), attacker_ref=ref,
         )
         # 直接 CHASE 状態に遷移させる (前 tick で入った想定)
-        monster.enter_chase_state(attacker_ref=ref, last_known_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
         graph = _graph()
         graph.place_monster(monster.monster_id, SPOT_A)
         graph.place_entity(EntityId.create(player.player_id.value), SPOT_A)
@@ -290,7 +290,7 @@ class TestChaseContinuationTick:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_known_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
         graph = _graph()
         graph.place_monster(monster.monster_id, SPOT_A)
         # player は配置しない
@@ -312,7 +312,7 @@ class TestChaseContinuationTick:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(2), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_known_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
         graph = _graph()
         graph.place_monster(monster.monster_id, SPOT_A)
 

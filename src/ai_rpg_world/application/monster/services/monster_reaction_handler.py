@@ -21,12 +21,14 @@
 
 from __future__ import annotations
 
-from typing import Callable, Literal, Optional
+import logging
+from typing import Callable, FrozenSet, Literal, Optional
 
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
     SpotAttackOrchestrator,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.enum.monster_enum import (
     BehaviorStateEnum,
@@ -49,9 +51,23 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    ConnectionNotPassableException,
+    EntityNotInGraphException,
+    MonsterNotInGraphException,
+)
+from ai_rpg_world.domain.world_graph.service.spot_path_finder import find_next_hop
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_attack_outcome import (
     AttackOutcome,
 )
+
+
+logger = logging.getLogger(__name__)
+
+
+# graph 上の鍵フラグを返す provider。tick service と共通のものを渡す。
+WorldFlagsProvider = Callable[[], FrozenSet[str]]
 
 
 # FLEE 中に呼ぶ wander 関数。tick service 側の `_try_wander_force` を渡す
@@ -83,11 +99,16 @@ class MonsterReactionHandler:
         player_status_repository: PlayerStatusRepository,
         attack_orchestrator: SpotAttackOrchestrator,
         force_wander_fn: ForceWanderFn,
+        *,
+        world_flags_provider: Optional[WorldFlagsProvider] = None,
     ) -> None:
         self._monster_repository = monster_repository
         self._player_status_repository = player_status_repository
         self._orchestrator = attack_orchestrator
         self._force_wander_fn = force_wander_fn
+        # multi-spot CHASE で BFS 経路探索の際に通行条件解決に使う。
+        # 注入されない場合は空 frozenset (= フラグ依存通路は塞がれる、安全側)。
+        self._world_flags_provider = world_flags_provider
 
     def try_react(
         self,
@@ -148,7 +169,7 @@ class MonsterReactionHandler:
                 return None
             monster.enter_chase_state(
                 attacker_ref=attacker_ref,
-                last_known_spot_id=spot_id,
+                last_observed_target_spot_id=spot_id,
             )
             self._monster_repository.save(monster)
             return self._continue_chase(monster, graph, spot_id, current_tick)
@@ -197,13 +218,19 @@ class MonsterReactionHandler:
         spot_id: SpotId,
         current_tick: WorldTick,
     ) -> Optional[AttackOutcome]:
-        """CHASE 中の 1 tick 行動: 同 spot に target が居れば攻撃。
+        """CHASE 中の 1 tick 行動。
 
-        - 追跡対象は CHASE 開始時に固定された `chase_attacker_ref` を使う
-          (`last_attacker_ref` は後続の被弾で上書きされうるため)。
-        - target が同 spot に居ない / grace 切れ / ref 不正の場合は IDLE
-          に戻して `None` を返し、priority chain の続行 (attack/forage/wander)
-          を許す。
+        分岐:
+        1. 追跡対象が同 spot に居る → 攻撃 (orchestrator に委譲)
+        2. 追跡対象が graph 上の他 spot に居る → BFS で next hop を計算し
+           1 spot 移動。`last_observed_target_spot_id` も更新する (Phase 4b: multi-spot)
+        3. 追跡対象が graph 上に居ない (despawn / 死亡) → IDLE に戻し chain 続行
+
+        終了条件:
+        - 追跡対象 ref が None (state 不整合)
+        - grace 切れ (`flee_grace_ticks` 経過)
+        - target が graph 上に居ない
+        - target spot への passable 経路が無い
         """
         attacker_ref: Optional[AttackerRef] = monster.chase_attacker_ref()
         if attacker_ref is None:
@@ -221,36 +248,135 @@ class MonsterReactionHandler:
             self._monster_repository.save(monster)
             return None
 
+        # 1. 同 spot 居れば攻撃
         if attacker_ref.is_player:
             target_player = self._find_player_at_spot(
                 graph, spot_id, attacker_ref.player_id
             )
-            if target_player is None:
-                monster.clear_behavior_state_to_idle()
-                self._monster_repository.save(monster)
-                return None
-            return self._orchestrator.execute_monster_attack(
-                attacker_monster=monster,
-                target_player=target_player,
-                graph=graph,
-                spot_id=spot_id,
-                current_tick=current_tick,
+            if target_player is not None:
+                return self._orchestrator.execute_monster_attack(
+                    attacker_monster=monster,
+                    target_player=target_player,
+                    graph=graph,
+                    spot_id=spot_id,
+                    current_tick=current_tick,
+                )
+        else:
+            target_monster = self._find_monster_at_spot(
+                graph, spot_id, attacker_ref.monster_id
             )
-        # monster の場合
-        target_monster = self._find_monster_at_spot(
-            graph, spot_id, attacker_ref.monster_id
-        )
-        if target_monster is None:
+            if target_monster is not None:
+                return self._orchestrator.execute_monster_to_monster_attack(
+                    attacker_monster=monster,
+                    target_monster=target_monster,
+                    graph=graph,
+                    spot_id=spot_id,
+                    current_tick=current_tick,
+                )
+
+        # 2. 同 spot に居なければ multi-spot 追跡を試みる
+        target_spot = self._resolve_target_spot(graph, attacker_ref)
+        if target_spot is None:
+            # 3. target が graph 上に居ない → CHASE 解除
             monster.clear_behavior_state_to_idle()
             self._monster_repository.save(monster)
             return None
-        return self._orchestrator.execute_monster_to_monster_attack(
-            attacker_monster=monster,
-            target_monster=target_monster,
+        # next hop を BFS で計算
+        moved = self._move_one_hop_toward(
+            monster=monster,
             graph=graph,
-            spot_id=spot_id,
-            current_tick=current_tick,
+            from_spot=spot_id,
+            target_spot=target_spot,
         )
+        if not moved:
+            # 経路が無い (passable な接続なし) → CHASE 解除
+            monster.clear_behavior_state_to_idle()
+            self._monster_repository.save(monster)
+            return None
+        # 1 hop 進んだ。`last_observed_target_spot_id` を「直近 target を
+        # 確認した spot」として更新し永続化する。target が次 tick でさらに
+        # 移動しても、この値は「monster が最後に target を確認した手がかり
+        # spot」として PR (b) の見失い → 探索フェーズで使う。
+        # 攻撃 outcome は無いが priority chain は止めたいので
+        # AttackOutcome(executed=False) で「他のアクションは試行しない」
+        # シグナルとして返す。
+        monster.update_chase_last_observed_target_spot(target_spot)
+        self._monster_repository.save(monster)
+        return AttackOutcome(executed=False, reason="chasing_to_other_spot")
+
+    def _resolve_target_spot(
+        self,
+        graph: SpotGraphAggregate,
+        attacker_ref: AttackerRef,
+    ) -> Optional[SpotId]:
+        """`attacker_ref` が指す対象が現在居る spot を返す。居なければ None。
+
+        Note: player の `EntityId` は `player_id.value` をそのまま整数空間で
+        共有する設計 (graph.place_entity 側と整合)。将来 player ID 空間が
+        変わる場合はこの変換も同期して更新する必要がある。
+        """
+        if attacker_ref.is_player:
+            try:
+                return graph.get_entity_spot(
+                    EntityId.create(attacker_ref.player_id.value)
+                )
+            except EntityNotInGraphException:
+                return None
+        try:
+            return graph.get_monster_spot(attacker_ref.monster_id)
+        except MonsterNotInGraphException:
+            return None
+
+    def _move_one_hop_toward(
+        self,
+        monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        from_spot: SpotId,
+        target_spot: SpotId,
+    ) -> bool:
+        """`target_spot` に向かう最短経路の 1 hop を実行する。成立なら True。"""
+        world_flags = (
+            self._world_flags_provider()
+            if self._world_flags_provider is not None
+            else frozenset()
+        )
+        owned_item_spec_ids: FrozenSet[ItemSpecId] = frozenset()
+
+        def _is_passable(conn) -> bool:
+            return graph.can_traverse_connection(
+                conn.connection_id, owned_item_spec_ids, world_flags
+            )
+
+        next_hop = find_next_hop(
+            graph=graph,
+            from_spot=from_spot,
+            target_spot=target_spot,
+            is_passable=_is_passable,
+            # TODO PR (c): MonsterTemplate.chase_max_distance に置き換える。
+            # 現状は実質無制限で BFS が全 spot を探索する。spot 数が大きくなる
+            # 環境では 1 tick の計算量が O(V+E) で増えるため打ち切り推奨。
+            max_distance=None,
+        )
+        if next_hop is None:
+            return False
+        try:
+            graph.move_monster(
+                monster_id=monster.monster_id,
+                connection_id=next_hop,
+                owned_item_spec_ids=owned_item_spec_ids,
+                world_flags=world_flags,
+            )
+        except ConnectionNotPassableException:
+            # BFS 時点で通行可と判定したが move_monster までの間に同 tick 内で
+            # 他のアクションが状態を変えた場合 (例: 別 monster が扉を閉めた)
+            # の TOCTOU。シングルスレッドの現状では稀だが防御的に処理する。
+            # CHASE 解除は呼び出し元 _continue_chase に委ねる。
+            logger.debug(
+                "CHASE: connection became not-passable after BFS for monster=%s",
+                monster.monster_id.value,
+            )
+            return False
+        return True
 
     def _find_player_at_spot(
         self,
