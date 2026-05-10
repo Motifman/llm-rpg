@@ -19,6 +19,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterAppearedAtSpotEvent,
     MonsterAteGroundItemEvent,
     MonsterAttackedPlayerInSpotEvent,
+    MonsterFeltTemperatureDiscomfortInSpotEvent,
     MonsterLeftSpotEvent,
     MonsterPredatedMonsterInSpotEvent,
     MonsterStartedChasingInSpotEvent,
@@ -105,6 +106,10 @@ class SpotGraphObservationFormatter:
             return self._format_monster_started_chasing(event, recipient_player_id)
         if isinstance(event, MonsterAbandonedChaseInSpotEvent):
             return self._format_monster_abandoned_chase(event, recipient_player_id)
+        if isinstance(event, MonsterFeltTemperatureDiscomfortInSpotEvent):
+            return self._format_monster_felt_temperature_discomfort(
+                event, recipient_player_id,
+            )
         return None
 
     def _is_self(self, entity_id: Any, recipient_id: PlayerId) -> bool:
@@ -773,6 +778,44 @@ class SpotGraphObservationFormatter:
             structured=structured,
             observation_category="environment",
             schedules_turn=True,
+        )
+
+    def _format_monster_felt_temperature_discomfort(
+        self,
+        event: MonsterFeltTemperatureDiscomfortInSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """温度不快ダメージ観測 (Phase 4-O B)。
+
+        kind に応じて寒さ / 暑さの prose を切り替える。第三者視点で
+        「monster が environment から圧を受けている」を観測させる。
+        """
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.monster_id
+        )
+        if event.kind == "too_cold":
+            prose = f"{monster_name}は寒さに身を震わせている。"
+        elif event.kind == "too_hot":
+            prose = f"{monster_name}は暑さで弱っている。"
+        else:
+            prose = f"{monster_name}は環境に苦しんでいる。"
+        structured = {
+            "type": "monster_felt_temperature_discomfort",
+            "monster_name": monster_name,
+            "monster_id": event.monster_id.value,
+            "kind": event.kind,
+            "damage_dealt": event.damage_dealt,
+        }
+        # `schedules_turn=False`: 温度不快は継続的な環境圧で毎 tick 発火する。
+        # turn を毎回トリガーすると LLM コストが線形に膨らむ (例: 100 tick
+        # 滞在 = 100 回 turn 誘発)。観測ログには残すが LLM ターンは誘発
+        # しない設計。FLEE/CHASE 等の急激な状態変化と異なり、温度ダメージ
+        # は数 tick まとめて反応すれば十分。
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=False,
         )
 
     def _format_player_state_changed_in_spot(

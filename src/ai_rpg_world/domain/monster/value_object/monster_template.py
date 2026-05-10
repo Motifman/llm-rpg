@@ -15,7 +15,9 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
     ActiveTimeType,
     EcologyTypeEnum,
     ReactionPolicyEnum,
+    TemperatureDiscomfortKind,
 )
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 
 
 @dataclass(frozen=True)
@@ -102,6 +104,15 @@ class MonsterTemplate:
     # 0 なら tick 制限なし。`flee_grace_ticks` (被弾以来の反応 tick) とは別軸で、
     # 「最初の被弾は古いが CHASE がまだ続く」状況での諦め基準として使う。
     chase_max_ticks: int = 20
+    # Phase 4-O B: 環境温度に対する快適範囲。`min` 未満 / `max` 超過の spot
+    # に居ると毎 tick `temperature_discomfort_damage_per_tick` HP 減少
+    # (severity 比較で判定、enum 値順序ではない)。
+    # default は FREEZING-HOT で「全温度で快適」(従来挙動互換)。
+    min_comfortable_temperature: TemperatureEnum = TemperatureEnum.FREEZING
+    max_comfortable_temperature: TemperatureEnum = TemperatureEnum.HOT
+    # 不快温度 1 tick あたりの HP 減少量。0 で無効化 (default)。1-3 程度で
+    # 「数十 tick で死ぬ」緩やかな圧、5+ で「直ぐ逃げないと死ぬ」強い圧。
+    temperature_discomfort_damage_per_tick: int = 0
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
@@ -204,6 +215,35 @@ class MonsterTemplate:
             raise MonsterTemplateValidationException(
                 f"chase_max_ticks must be >= 0, got {self.chase_max_ticks}"
             )
+        if not isinstance(self.min_comfortable_temperature, TemperatureEnum):
+            raise MonsterTemplateValidationException(
+                "min_comfortable_temperature must be TemperatureEnum, "
+                f"got {type(self.min_comfortable_temperature).__name__}"
+            )
+        if not isinstance(self.max_comfortable_temperature, TemperatureEnum):
+            raise MonsterTemplateValidationException(
+                "max_comfortable_temperature must be TemperatureEnum, "
+                f"got {type(self.max_comfortable_temperature).__name__}"
+            )
+        if (
+            self.min_comfortable_temperature.severity
+            > self.max_comfortable_temperature.severity
+        ):
+            raise MonsterTemplateValidationException(
+                f"min_comfortable_temperature ({self.min_comfortable_temperature}) "
+                f"must be <= max ({self.max_comfortable_temperature})"
+            )
+        if not isinstance(
+            self.temperature_discomfort_damage_per_tick, int,
+        ) or isinstance(self.temperature_discomfort_damage_per_tick, bool):
+            raise MonsterTemplateValidationException(
+                "temperature_discomfort_damage_per_tick must be int"
+            )
+        if self.temperature_discomfort_damage_per_tick < 0:
+            raise MonsterTemplateValidationException(
+                "temperature_discomfort_damage_per_tick must be >= 0, "
+                f"got {self.temperature_discomfort_damage_per_tick}"
+            )
 
         if self.vision_range < 0:
             raise MonsterTemplateValidationException(
@@ -304,3 +344,23 @@ class MonsterTemplate:
             raise MonsterTemplateValidationException(
                 f"hunger_decrease_on_feed cannot be negative: {self.hunger_decrease_on_feed}"
             )
+
+    def temperature_discomfort(
+        self, temperature: TemperatureEnum,
+    ) -> Optional[TemperatureDiscomfortKind]:
+        """指定温度が monster の comfort 範囲外なら不快タイプを返す。
+
+        Returns:
+            "too_cold": 温度が `min_comfortable_temperature` より低い
+            "too_hot":  温度が `max_comfortable_temperature` より高い
+            None: comfort 範囲内 (range の境界含む) または damage=0 で
+                  そもそも不快効果が無効化されている
+        """
+        if self.temperature_discomfort_damage_per_tick <= 0:
+            return None
+        sev = temperature.severity
+        if sev < self.min_comfortable_temperature.severity:
+            return "too_cold"
+        if sev > self.max_comfortable_temperature.severity:
+            return "too_hot"
+        return None

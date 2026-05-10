@@ -60,6 +60,10 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
     EcologyTypeEnum,
     MonsterFactionEnum,
     MonsterStatusEnum,
+    TemperatureDiscomfortKind,
+)
+from ai_rpg_world.domain.monster.exception.monster_exceptions import (
+    MonsterAlreadyDeadException,
 )
 from ai_rpg_world.domain.monster.repository.monster_repository import (
     MonsterRepository,
@@ -76,9 +80,11 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ConnectionNotPassableException,
+    SpotNotInGraphException,
 )
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterAteGroundItemEvent,
+    MonsterFeltTemperatureDiscomfortInSpotEvent,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
@@ -179,6 +185,18 @@ class SpotMonsterBehaviorTickService:
                 # 飢餓死した monster は graph presence からは自動除去しない
                 # （Phase 1 と同じ方針: despawn は別 PR）。MonsterDiedEvent は
                 # monster aggregate 側で発火済み。
+                continue
+
+            # --- 0.5. 温度不快 tick (Phase 4-O B) ---
+            # spot の温度が monster の comfort 範囲外なら HP を削る。
+            # 死亡したら以降の行動はスキップ (hunger と同じ扱い)。
+            # graph には MonsterFeltTemperatureDiscomfortInSpotEvent が
+            # 積まれて観測される。
+            died_of_temperature = self._tick_temperature_discomfort(
+                monster, graph, spot_id, current_tick,
+            )
+            if died_of_temperature:
+                any_graph_change = True
                 continue
 
             # --- 1. react_to_attack (反撃 / 逃走) ---
@@ -509,6 +527,74 @@ class SpotMonsterBehaviorTickService:
     # ------------------------------------------------------------------
     # 内部 - hunger / starvation
     # ------------------------------------------------------------------
+
+    def _tick_temperature_discomfort(
+        self,
+        monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+        current_tick: WorldTick,
+    ) -> bool:
+        """spot の温度が monster の comfort 範囲外なら HP を削る (Phase 4-O B)。
+
+        Returns:
+            True なら温度ダメージで monster が死亡した。呼び出し側は以降の
+            行動 (reaction / attack / wander) をスキップする。False なら
+            生存継続 (HP は減っている可能性あり、graph に観測 event は
+            積まれている)。
+
+        実装メモ:
+        - `temperature_discomfort_damage_per_tick=0` のテンプレでは早期 return
+        - spot 不在 / atmosphere 無しは想定外だが、`SpotNotInGraphException`
+          だけ握りつぶして安全側に倒す (それ以外の例外は明示的に伝播)
+        - 温度ダメージは `take_environmental_damage` 経由で適用し、致命時
+          `MonsterDiedEvent.cause=ENVIRONMENT` で記録される
+        """
+        kind = self._resolve_temperature_discomfort_kind(monster, graph, spot_id)
+        if kind is None:
+            return False
+
+        damage = monster.template.temperature_discomfort_damage_per_tick
+        # kind が non-None なら damage > 0 が事前保証されている
+        # (template.temperature_discomfort が damage<=0 で None 返却)。
+        try:
+            monster.take_environmental_damage(damage, current_tick)
+        except MonsterAlreadyDeadException:
+            # 既に DEAD (他経路で死亡済み) ならこの tick は何もしない
+            return False
+
+        graph.add_event(
+            MonsterFeltTemperatureDiscomfortInSpotEvent.create(
+                aggregate_id=graph.graph_id,
+                aggregate_type="SpotGraphAggregate",
+                monster_id=monster.monster_id,
+                spot_id=spot_id,
+                kind=kind,
+                damage_dealt=damage,
+            )
+        )
+        self._monster_repository.save(monster)
+        return monster.status != MonsterStatusEnum.ALIVE
+
+    def _resolve_temperature_discomfort_kind(
+        self,
+        monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+    ) -> Optional[TemperatureDiscomfortKind]:
+        """spot の温度を引き、template の comfort 範囲外なら kind を返す。"""
+        if monster.template.temperature_discomfort_damage_per_tick <= 0:
+            return None
+        try:
+            spot_node = graph.get_spot(spot_id)
+        except SpotNotInGraphException:
+            # graph に spot が無い (削除直後の race condition 等)。安全側で
+            # 効果無しとして扱う。それ以外の例外は明示的に伝播。
+            return None
+        # SpotNode.atmosphere は必須フィールド (None の場合は構造的バグ)
+        return monster.template.temperature_discomfort(
+            spot_node.atmosphere.temperature
+        )
 
     def _tick_hunger_and_maybe_starve(
         self,

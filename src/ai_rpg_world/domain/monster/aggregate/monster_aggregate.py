@@ -939,6 +939,39 @@ class MonsterAggregate(AggregateRoot):
             spot_id=spot_id_for_event,
         ))
 
+    def take_environmental_damage(
+        self, damage: int, current_tick: WorldTick,
+    ) -> None:
+        """環境ダメージを適用する (Phase 4-O B: 温度不快 / hazard 等)。
+
+        `apply_damage(attacker_id=None)` と異なり、`MonsterDiedEvent` の
+        `cause` を `ENVIRONMENT` として明示的に記録する。HP <= 0 で
+        `_die(cause=ENVIRONMENT)` 経由で死亡 event 発火。
+
+        ALIVE 以外で呼ばれた場合は MonsterAlreadyDeadException。
+        """
+        if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
+            if (
+                self._lifecycle_state.status == MonsterStatusEnum.DEAD
+                and self._lifecycle_state.last_death_tick is None
+            ):
+                raise MonsterNotSpawnedException(
+                    f"Monster {self._monster_id} is not spawned yet"
+                )
+            raise MonsterAlreadyDeadException(
+                f"Monster {self._monster_id} is not alive"
+            )
+        self._lifecycle_state = self._lifecycle_state.apply_damage(damage)
+        self.add_event(MonsterDamagedEvent.create(
+            aggregate_id=self._monster_id,
+            aggregate_type="MonsterAggregate",
+            damage=damage,
+            current_hp=self._lifecycle_state.hp.value,
+            attacker_id=None,
+        ))
+        if not self._lifecycle_state.hp.is_alive():
+            self._die(current_tick, cause=DeathCauseEnum.ENVIRONMENT)
+
     def starve(self, current_tick: WorldTick) -> None:
         """飢餓で死亡させる。ALIVE のときのみ有効。
 
