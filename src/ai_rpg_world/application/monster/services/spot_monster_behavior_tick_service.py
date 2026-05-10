@@ -7,12 +7,15 @@
 各モンスターについて毎 tick 以下の優先順で 1 アクションを試みる:
 
 0. **hunger tick**: 飢餓進行 → 閾値超過で starve（即死、後続スキップ）
-1. **attack player**: ENEMY + ALIVE + cooldown 切れ + 同スポットに生存
+1. **react_to_attack** (Phase 4a): 直近に攻撃を受けたモンスターが
+   `reaction_to_attack` policy に従って FLEE (逃走) / CHASE (反撃) を
+   実行。state は `_behavior_state` に永続化される
+2. **attack player**: ENEMY + ALIVE + cooldown 切れ + 同スポットに生存
    プレイヤーが居る → `SpotAttackOrchestrator.execute_monster_attack`
-2. **predation**: hungry + 同スポットに prey 種族の生存モンスターが居る →
+3. **predation**: hungry + 同スポットに prey 種族の生存モンスターが居る →
    `SpotAttackOrchestrator.execute_predation_attack`
-3. **forage**: hungry + 同スポットに preferred 食材アイテムが居る → 食べる
-4. **wander**: 上記いずれも発動しない場合、`ecology_type != AMBUSH` かつ
+4. **forage**: hungry + 同スポットに preferred 食材アイテムが居る → 食べる
+5. **wander**: 上記いずれも発動しない場合、`ecology_type != AMBUSH` かつ
    `idle_wander_chance` で抽選に当選すれば隣接スポットへランダム移動
 
 複数の monster が居る tick では ID 昇順でループする（PR #127 と同じ policy）。
@@ -48,12 +51,16 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
     MonsterAggregate,
 )
+from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.monster.enum.monster_enum import (
+    BehaviorStateEnum,
     EcologyTypeEnum,
     MonsterFactionEnum,
     MonsterStatusEnum,
+    ReactionPolicyEnum,
 )
 from ai_rpg_world.domain.monster.repository.monster_repository import (
     MonsterRepository,
@@ -166,7 +173,24 @@ class SpotMonsterBehaviorTickService:
                 # monster aggregate 側で発火済み。
                 continue
 
-            # --- 1. attack 優先 ---
+            # --- 1. react_to_attack (反撃 / 逃走) ---
+            # 直近 grace_ticks 以内に攻撃を受けた + reaction_to_attack !=
+            # PASSIVE の monster が、template policy に従って FLEE / CHASE
+            # 状態に遷移し、その状態に対応するアクション（逃走移動 or 反撃）を
+            # 1 つ実行する。state は ALIVE 中の `_behavior_state` に永続。
+            reaction_outcome = self._maybe_react_to_attack(
+                monster, graph, spot_id, current_tick
+            )
+            if reaction_outcome is not None:
+                if reaction_outcome.executed:
+                    attack_outcomes.append(reaction_outcome)
+                # state 遷移や move が起きた可能性があるので graph save 必要。
+                # graph に event が積まれていれば下の attack_outcomes と
+                # 並んで観測される。
+                any_graph_change = True
+                continue
+
+            # --- 2. attack 優先 ---
             # `_maybe_attack` は前提条件 (ENEMY / cooldown 切れ / 同スポット
             # の生存プレイヤー有り) を満たした場合のみ実行を試みて
             # `AttackOutcome` を返す。前提が欠けるなら None を返し、wander に
@@ -187,7 +211,7 @@ class SpotMonsterBehaviorTickService:
                 # / behavior_state を入れるときに「攻撃失敗 → 留まる」を別途
                 # 表現する想定。
 
-            # --- 2. predation (捕食) ---
+            # --- 3. predation (捕食) ---
             # hungry な捕食者で、同 spot に prey 種族の生存モンスターが居れば
             # 攻撃する（多 tick 戦闘モデル）。orchestrator が damage 適用 +
             # 致命時 hunger 回復 + record_attacked_by_in_spot を担当。
@@ -205,7 +229,7 @@ class SpotMonsterBehaviorTickService:
                 # 捕食を試みたが不成立 (cooldown / not_visible / zero_damage)
                 # の場合は forage / wander にフォールバック。
 
-            # --- 3. forage (採食) ---
+            # --- 4. forage (採食) ---
             # hunger >= forage_threshold + 同スポットに preferred 食材あり
             # → 1 個食べて hunger 減少。graph に MonsterAteGroundItemEvent が
             # 積まれるので tick 末で graph save が必要。
@@ -219,7 +243,7 @@ class SpotMonsterBehaviorTickService:
                 any_graph_change = True
                 continue
 
-            # --- 4. wander フォールバック ---
+            # --- 5. wander フォールバック ---
             if self._try_wander(monster, graph, spot_id):
                 any_graph_change = True
 
@@ -234,6 +258,263 @@ class SpotMonsterBehaviorTickService:
             self._spot_graph_repository.save(graph)
 
         return attack_outcomes
+
+    # ------------------------------------------------------------------
+    # 内部 - react_to_attack (Phase 4a)
+    # ------------------------------------------------------------------
+
+    def _maybe_react_to_attack(
+        self,
+        monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+        current_tick: WorldTick,
+    ) -> Optional[AttackOutcome]:
+        """直近に攻撃を受けた monster の反応 (FLEE / CHASE) を実行する。
+
+        処理フロー:
+        1. 既に FLEE 中なら継続行動 (隣接 spot へ逃走)、grace 切れで IDLE 化
+        2. 既に CHASE 中なら反撃攻撃を試みる、grace 切れで IDLE 化
+        3. どちらの state でもない場合、`reaction_to_attack` policy + 直近の
+           被弾 (`last_attacked_tick`) を見て FLEE/CHASE に遷移してアクション
+
+        Returns:
+            None: 反応する条件を満たさない（priority chain は次へ進む）
+            AttackOutcome: 反応の実行結果（成立 = continue、不成立 = chain 続行）
+            なお wander フォールバックは「反応試行があったら chain は止める」
+            設計（呼び出し側で None なら通常 chain 継続、None でなければ
+            continue）。
+        """
+        template = monster.template
+
+        # 状態継続: 既に FLEE / CHASE なら state に従って動く
+        if monster.is_fleeing(current_tick):
+            self._continue_flee(monster, graph, spot_id, current_tick)
+            # FLEE の継続行動は move + state なので「攻撃 outcome」は返らない。
+            # ただし priority chain は止める。executed=False で「他のアクション
+            # は試行しない」シグナルとして扱う。
+            return AttackOutcome(executed=False, reason="fleeing")
+        # FLEE が grace 切れで終わっていたら IDLE に戻す（次フレームに通常 chain）
+        if monster.behavior_state == BehaviorStateEnum.FLEE:
+            monster.clear_behavior_state_to_idle()
+            self._monster_repository.save(monster)
+
+        if monster.is_chasing():
+            outcome = self._continue_chase(monster, graph, spot_id, current_tick)
+            return outcome
+
+        # 状態遷移の判断: PASSIVE は何もしない
+        if template.reaction_to_attack == ReactionPolicyEnum.PASSIVE:
+            return None
+        # grace 内の被弾が無ければ反応しない
+        last_attacked = monster.last_attacked_tick
+        if last_attacked is None:
+            return None
+        if (current_tick.value - last_attacked.value) > template.flee_grace_ticks:
+            return None
+
+        # policy 別に FLEE / CHASE を決定
+        target = self._decide_reaction_target(monster, current_tick)
+        if target == "flee":
+            monster.enter_flee_state(current_tick, template.flee_grace_ticks)
+            self._continue_flee(monster, graph, spot_id, current_tick)
+            return AttackOutcome(executed=False, reason="fleeing")
+        if target == "chase":
+            attacker_ref = monster.last_attacker_ref
+            if attacker_ref is None:
+                # attacker_ref 不明では CHASE できない（PR #133 以前に作られた
+                # 古い監督 record のみ tick 持ち、ref 無し）。fall through。
+                return None
+            chase_target_id = self._resolve_attacker_world_object_id(attacker_ref)
+            if chase_target_id is None:
+                return None
+            monster.enter_chase_state(
+                target_id=chase_target_id,
+                last_known_spot_id=spot_id,
+            )
+            return self._continue_chase(monster, graph, spot_id, current_tick)
+        return None
+
+    def _decide_reaction_target(
+        self,
+        monster: MonsterAggregate,
+        current_tick: WorldTick,
+    ) -> Optional[str]:
+        """policy + HP 比から "flee" / "chase" / None を返す。"""
+        policy = monster.template.reaction_to_attack
+        if policy == ReactionPolicyEnum.ALWAYS_FLEE:
+            return "flee"
+        if policy == ReactionPolicyEnum.ALWAYS_RETALIATE:
+            return "chase"
+        if policy == ReactionPolicyEnum.FLEE_WHEN_LOW_HP:
+            hp = monster.hp
+            if hp.max_hp > 0:
+                ratio = hp.value / hp.max_hp
+                if ratio < monster.template.flee_threshold:
+                    return "flee"
+            return "chase"
+        return None
+
+    def _continue_flee(
+        self,
+        monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+        current_tick: WorldTick,
+    ) -> None:
+        """FLEE 中の 1 tick 行動: passable な隣接 spot へ移動を試みる。
+
+        wander 機構を流用。攻撃者の方向は避けたいが、最小実装では「ランダムな
+        passable 接続」を選ぶ。攻撃者が居なくなれば結果的に逃げ切れる。
+        """
+        # 通常 wander と同じ実装で OK。chance=1.0 相当で必ず動く。
+        self._try_wander_force(monster, graph, spot_id)
+
+    def _continue_chase(
+        self,
+        monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+        current_tick: WorldTick,
+    ) -> Optional[AttackOutcome]:
+        """CHASE 中の 1 tick 行動: 同 spot に target が居れば攻撃。
+
+        target が居なければ（既に他 spot に逃げた等）grace を経過したら
+        IDLE 化、未経過なら何もしない。
+        """
+        target_id = monster.chase_target_id()
+        if target_id is None:
+            # 不正状態。IDLE に戻す
+            monster.clear_behavior_state_to_idle()
+            self._monster_repository.save(monster)
+            return AttackOutcome(executed=False, reason="no_chase_target")
+
+        # grace 切れチェック
+        last_attacked = monster.last_attacked_tick
+        if last_attacked is not None and (
+            current_tick.value - last_attacked.value
+            > monster.template.flee_grace_ticks
+        ):
+            monster.clear_behavior_state_to_idle()
+            self._monster_repository.save(monster)
+            return AttackOutcome(executed=False, reason="chase_expired")
+
+        # target を同 spot で探す
+        attacker_ref = monster.last_attacker_ref
+        if attacker_ref is None:
+            return AttackOutcome(executed=False, reason="no_attacker_ref")
+
+        if attacker_ref.is_player:
+            # 同 spot に該当プレイヤーが居るか
+            target_player = self._find_player_at_spot(graph, spot_id, attacker_ref.player_id)
+            if target_player is None:
+                return AttackOutcome(executed=False, reason="target_not_at_spot")
+            return self._orchestrator.execute_monster_attack(
+                attacker_monster=monster,
+                target_player=target_player,
+                graph=graph,
+                spot_id=spot_id,
+                current_tick=current_tick,
+            )
+        # monster の場合
+        target_monster = self._find_monster_at_spot(
+            graph, spot_id, attacker_ref.monster_id
+        )
+        if target_monster is None:
+            return AttackOutcome(executed=False, reason="target_not_at_spot")
+        return self._orchestrator.execute_monster_to_monster_attack(
+            attacker_monster=monster,
+            target_monster=target_monster,
+            graph=graph,
+            spot_id=spot_id,
+            current_tick=current_tick,
+        )
+
+    def _resolve_attacker_world_object_id(
+        self, attacker_ref: "AttackerRef"
+    ) -> Optional[WorldObjectId]:
+        """AttackerRef を WorldObjectId に解決する（CHASE state の target_id 用）。
+
+        player の場合は PlayerId をそのまま WorldObjectId として扱う仕様
+        （既存 attack 経路でも player_id を world_object_id 互換で使っている）。
+        """
+        if attacker_ref.is_monster:
+            # monster の world_object_id は repository から引き直す。
+            attacker = self._monster_repository.find_by_id(attacker_ref.monster_id)
+            if attacker is None:
+                return None
+            return attacker.world_object_id
+        # player の world_object_id は player_id.value で代用
+        return WorldObjectId.create(attacker_ref.player_id.value)
+
+    def _find_player_at_spot(
+        self, graph: SpotGraphAggregate, spot_id: SpotId, player_id
+    ):
+        """同 spot に居る指定 player が居れば aggregate を返す、なければ None。"""
+        presence = graph.presence_at(spot_id)
+        for entity_id in presence.present_entity_ids:
+            if entity_id.value == player_id.value:
+                player = self._player_status_repository.find_by_id(player_id)
+                if player is not None and not player.is_down:
+                    return player
+        return None
+
+    def _find_monster_at_spot(
+        self,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+        target_monster_id,
+    ):
+        """同 spot に居る指定 monster が居れば aggregate を返す、なければ None。"""
+        presence = graph.monster_presence_at(spot_id)
+        if target_monster_id not in presence.present_monster_ids:
+            return None
+        target = self._monster_repository.find_by_id(target_monster_id)
+        if target is None or target.status != MonsterStatusEnum.ALIVE:
+            return None
+        return target
+
+    def _try_wander_force(
+        self,
+        monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+    ) -> bool:
+        """`idle_wander_chance` を無視した強制版 wander。FLEE で使う。
+
+        passable な接続が無ければ False（逃げ場なし、その場で立ち往生）。
+        """
+        connections = graph.iter_outgoing_connections_from(spot_id)
+        if not connections:
+            return False
+        world_flags = (
+            self._world_flags_provider()
+            if self._world_flags_provider is not None
+            else frozenset()
+        )
+        owned_item_spec_ids: FrozenSet[ItemSpecId] = frozenset()
+        passable = sorted(
+            (
+                conn for conn in connections
+                if graph.can_traverse_connection(
+                    conn.connection_id, owned_item_spec_ids, world_flags
+                )
+            ),
+            key=lambda c: c.connection_id.value,
+        )
+        if not passable:
+            return False
+        picked = self._random.choice(passable)
+        try:
+            graph.move_monster(
+                monster_id=monster.monster_id,
+                connection_id=picked.connection_id,
+                owned_item_spec_ids=owned_item_spec_ids,
+                world_flags=world_flags,
+            )
+        except ConnectionNotPassableException:
+            return False
+        return True
 
     # ------------------------------------------------------------------
     # 内部 - attack

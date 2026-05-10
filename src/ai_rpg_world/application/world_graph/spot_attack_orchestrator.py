@@ -45,6 +45,7 @@ from ai_rpg_world.domain.monster.service.spot_monster_attack_service import (
 from ai_rpg_world.domain.monster.service.spot_player_attack_service import (
     SpotPlayerAttackService,
 )
+from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
@@ -202,6 +203,13 @@ class SpotAttackOrchestrator:
             return outcome
 
         spot_id_for_event = graph.get_monster_spot(target_monster.monster_id)
+        # Phase 4a: 殴られた monster 側に attacker_ref を残す。CHASE/FLEE
+        # 判定で「誰に殴られたか」が必要になるため。aggregate 側で DEAD
+        # ガードが効くので致命攻撃直後でも安全に呼べる。
+        target_monster.record_attacked_by_in_spot(
+            current_tick=current_tick,
+            attacker_ref=AttackerRef.of_player(attacker_player.player_id),
+        )
         graph.add_event(
             PlayerAttackedMonsterInSpotEvent.create(
                 aggregate_id=graph.graph_id,
@@ -295,7 +303,11 @@ class SpotAttackOrchestrator:
 
         # Phase 4 用フック: 最後に攻撃された tick を prey 側に残す。
         # 致命攻撃で死んだ後の no-op は aggregate 側でガードされる。
-        prey_monster.record_attacked_by_in_spot(current_tick=current_tick)
+        # Phase 4a: attacker_ref 付きで記録（FLEE / CHASE 判定に使う）。
+        prey_monster.record_attacked_by_in_spot(
+            current_tick=current_tick,
+            attacker_ref=AttackerRef.of_monster(attacker_monster.monster_id),
+        )
 
         graph.add_event(
             MonsterPredatedMonsterInSpotEvent.create(
@@ -310,6 +322,86 @@ class SpotAttackOrchestrator:
         )
         self._monster_repository.save(attacker_monster)
         self._monster_repository.save(prey_monster)
+        self._spot_graph_repository.save(graph)
+
+        return AttackOutcome(
+            executed=True,
+            reason="ok",
+            damage=damage,
+            target_incapacitated=target_incapacitated,
+        )
+
+    # ------------------------------------------------------------------
+    # モンスター → モンスター反撃 (Phase 4a)
+    # ------------------------------------------------------------------
+
+    def execute_monster_to_monster_attack(
+        self,
+        *,
+        attacker_monster: MonsterAggregate,
+        target_monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+        current_tick: WorldTick,
+    ) -> AttackOutcome:
+        """モンスター同士の一般戦闘（捕食ではなく反撃）。
+
+        `execute_predation_attack` との違い:
+        - prey_races の race マッチング **なし**: 反撃は種族関係に依存しない
+        - 致命時の hunger 回復 **なし**: 食う行動ではなく報復行動
+        - その他 (cooldown / 視認 / damage 計算 / event 発火 / save) は同じ
+
+        反撃用の event は予測的に `MonsterPredatedMonsterInSpotEvent` を流用。
+        prose は formatter 側で同じ「{attacker}が{prey}に襲いかかった/仕留めた」
+        になるため、観察者から見た認知としては捕食と区別がつかないが、ゲーム
+        ロジック上は意味が異なる（hunger 回復なし）。将来「反撃 / 捕食」の
+        区別を観測 prose に出したくなったら専用 event を追加する。
+        """
+        if attacker_monster.status != MonsterStatusEnum.ALIVE:
+            return AttackOutcome(executed=False, reason="attacker_dead")
+        if not attacker_monster.can_attack_now(current_tick):
+            return AttackOutcome(executed=False, reason="cannot_attack")
+        if target_monster.status != MonsterStatusEnum.ALIVE:
+            return AttackOutcome(executed=False, reason="target_dead")
+
+        effective_lighting = self._compute_lighting(graph, spot_id)
+        if not self._visibility.can_see_target(
+            attacker_monster.template, effective_lighting
+        ):
+            return AttackOutcome(executed=False, reason="not_visible")
+
+        damage = max(0, attacker_monster.template.base_stats.attack)
+        if damage == 0:
+            return AttackOutcome(executed=False, reason="zero_damage")
+
+        target_monster.apply_damage(
+            final_damage=damage,
+            current_tick=current_tick,
+            attacker_id=attacker_monster.world_object_id,
+        )
+        attacker_monster.record_attack(current_tick)
+        target_incapacitated = target_monster.status != MonsterStatusEnum.ALIVE
+
+        # 反撃の連鎖を可能にするため、target 側にも attacker_ref を残す。
+        target_monster.record_attacked_by_in_spot(
+            current_tick=current_tick,
+            attacker_ref=AttackerRef.of_monster(attacker_monster.monster_id),
+        )
+
+        # 観測 event は predation と同じ型を流用（観察者から見た prose は同じ）。
+        graph.add_event(
+            MonsterPredatedMonsterInSpotEvent.create(
+                aggregate_id=graph.graph_id,
+                aggregate_type="SpotGraphAggregate",
+                attacker_monster_id=attacker_monster.monster_id,
+                target_monster_id=target_monster.monster_id,
+                spot_id=spot_id,
+                damage=damage,
+                target_incapacitated=target_incapacitated,
+            )
+        )
+        self._monster_repository.save(attacker_monster)
+        self._monster_repository.save(target_monster)
         self._spot_graph_repository.save(graph)
 
         return AttackOutcome(

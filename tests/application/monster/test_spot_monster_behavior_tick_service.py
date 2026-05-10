@@ -107,6 +107,20 @@ def _make_monster(
     monster.template.preferred_feed_item_spec_ids = frozenset()
     monster.status = MonsterStatusEnum.ALIVE
     monster.can_attack_now.return_value = can_attack
+    # Phase 4a 反撃/逃走系: 既存テスト挙動の維持。MagicMock の自動値は truthy
+    # なので明示的に「反応しない」値を設定する。
+    from ai_rpg_world.domain.monster.enum.monster_enum import (
+        BehaviorStateEnum,
+        ReactionPolicyEnum,
+    )
+    monster.is_fleeing.return_value = False
+    monster.is_chasing.return_value = False
+    monster.behavior_state = BehaviorStateEnum.IDLE
+    monster.last_attacked_tick = None
+    monster.last_attacker_ref = None
+    monster.template.reaction_to_attack = ReactionPolicyEnum.PASSIVE
+    monster.template.flee_grace_ticks = 3
+    monster.template.flee_threshold = 0.3
     return monster
 
 
