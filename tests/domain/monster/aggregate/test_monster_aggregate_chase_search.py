@@ -1,0 +1,217 @@
+"""MonsterAggregate の CHASE 探索フェーズ API の domain 単体テスト (Phase 4b PR b)。
+
+検証対象:
+- start_chase_search の no-op 経路 (CHASE 以外 / DEAD / 0 以下)
+- is_searching_lost_target の境界 (CHASE 以外で False)
+- tick_chase_search_timer の戻り値と timer 減算
+- reset_search_timer_on_rediscovery の no-op 経路と挙動
+- chase_last_observed_target_spot_id プロパティ
+"""
+
+from __future__ import annotations
+
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.enum.monster_enum import (
+    BehaviorStateEnum,
+    MonsterFactionEnum,
+    MonsterStatusEnum,
+)
+from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import (
+    MonsterLifecycleState,
+)
+from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+from ai_rpg_world.domain.monster.value_object.monster_template_id import (
+    MonsterTemplateId,
+)
+from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
+from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
+from ai_rpg_world.domain.player.enum.player_enum import Race
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
+    SkillLoadoutAggregate,
+)
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+
+
+def _template() -> MonsterTemplate:
+    return MonsterTemplate(
+        template_id=MonsterTemplateId.create(1),
+        name="Wolf",
+        base_stats=BaseStats(
+            max_hp=20, max_mp=0, attack=4,
+            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+        ),
+        reward_info=RewardInfo(exp=1, gold=1),
+        respawn_info=RespawnInfo(100, True),
+        race=Race.BEAST,
+        faction=MonsterFactionEnum.NEUTRAL,
+        description="A wolf.",
+    )
+
+
+def _aggregate(
+    *, status: MonsterStatusEnum = MonsterStatusEnum.ALIVE,
+) -> MonsterAggregate:
+    agg = MonsterAggregate(
+        monster_id=MonsterId.create(101),
+        template=_template(),
+        world_object_id=WorldObjectId.create(9001),
+        skill_loadout=SkillLoadoutAggregate.create(
+            SkillLoadoutId(1), owner_id=101,
+            normal_capacity=4, awakened_capacity=2,
+        ),
+        status=MonsterStatusEnum.ALIVE,
+        spawned_at_tick=WorldTick(0),
+    )
+    if status != MonsterStatusEnum.ALIVE:
+        agg._lifecycle_state = MonsterLifecycleState(
+            hp=agg._lifecycle_state.hp,
+            mp=agg._lifecycle_state.mp,
+            status=status,
+            last_death_tick=WorldTick(1),
+            spawned_at_tick=WorldTick(0),
+            hunger=0.0,
+            starvation_timer=0,
+        )
+    return agg
+
+
+def _enter_chase(agg: MonsterAggregate) -> None:
+    agg.enter_chase_state(
+        attacker_ref=AttackerRef.of_player(PlayerId(1)),
+        last_observed_target_spot_id=SpotId.create(1),
+    )
+
+
+class TestStartChaseSearch:
+    """start_chase_search の no-op 経路と正常系。"""
+
+    def test_CHASE_中に_timer_が_セットされる(self) -> None:
+        """CHASE 中に start_chase_search すると search_timer が設定される。"""
+        agg = _aggregate()
+        _enter_chase(agg)
+        agg.start_chase_search(3)
+        assert agg.is_searching_lost_target() is True
+        assert agg._behavior_state.search_timer == 3
+
+    def test_CHASE_でない_状態では_no_op(self) -> None:
+        """IDLE で start_chase_search を呼んでも timer は 0 のまま。"""
+        agg = _aggregate()
+        agg.start_chase_search(3)
+        assert agg._behavior_state.search_timer == 0
+        assert agg.is_searching_lost_target() is False
+
+    def test_DEAD_状態では_no_op(self) -> None:
+        agg = _aggregate(status=MonsterStatusEnum.DEAD)
+        # DEAD なので enter_chase_state も no-op、結果 IDLE のまま
+        _enter_chase(agg)
+        agg.start_chase_search(3)
+        assert agg._behavior_state.search_timer == 0
+
+    def test_search_ticks_0_以下は_no_op(self) -> None:
+        """search_ticks <= 0 は timer 設定しない。"""
+        agg = _aggregate()
+        _enter_chase(agg)
+        agg.start_chase_search(0)
+        assert agg._behavior_state.search_timer == 0
+        agg.start_chase_search(-1)
+        assert agg._behavior_state.search_timer == 0
+
+
+class TestIsSearchingLostTarget:
+    """is_searching_lost_target の境界条件。"""
+
+    def test_IDLE_で_False(self) -> None:
+        agg = _aggregate()
+        assert agg.is_searching_lost_target() is False
+
+    def test_CHASE_でも_search_timer_0_なら_False(self) -> None:
+        agg = _aggregate()
+        _enter_chase(agg)
+        assert agg.is_searching_lost_target() is False
+
+    def test_CHASE_で_search_timer_2_なら_True(self) -> None:
+        agg = _aggregate()
+        _enter_chase(agg)
+        agg.start_chase_search(2)
+        assert agg.is_searching_lost_target() is True
+
+
+class TestTickChaseSearchTimer:
+    """tick_chase_search_timer の戻り値と境界。"""
+
+    def test_timer_2_を_減算して_True_を_返す(self) -> None:
+        agg = _aggregate()
+        _enter_chase(agg)
+        agg.start_chase_search(2)
+        result = agg.tick_chase_search_timer()
+        assert result is True
+        assert agg._behavior_state.search_timer == 1
+
+    def test_timer_1_を_減算して_False_を_返す(self) -> None:
+        """timer=1 の最後の tick では減算後 False (timer 切れ)。"""
+        agg = _aggregate()
+        _enter_chase(agg)
+        agg.start_chase_search(1)
+        result = agg.tick_chase_search_timer()
+        assert result is False
+        assert agg._behavior_state.search_timer == 0
+
+    def test_timer_0_では_何もせず_False(self) -> None:
+        agg = _aggregate()
+        _enter_chase(agg)
+        result = agg.tick_chase_search_timer()
+        assert result is False
+
+    def test_CHASE_でない_と_False(self) -> None:
+        agg = _aggregate()
+        result = agg.tick_chase_search_timer()
+        assert result is False
+
+
+class TestResetSearchTimerOnRediscovery:
+    """reset_search_timer_on_rediscovery の no-op 経路と挙動。"""
+
+    def test_探索中なら_timer_を_0_に_戻し_CHASE_は_継続(self) -> None:
+        agg = _aggregate()
+        _enter_chase(agg)
+        agg.start_chase_search(3)
+        agg.reset_search_timer_on_rediscovery()
+        assert agg._behavior_state.search_timer == 0
+        assert agg.is_chasing() is True
+        # chase_attacker_ref / last_observed_target_spot_id は維持される
+        assert agg.chase_attacker_ref() == AttackerRef.of_player(PlayerId(1))
+        assert agg.chase_last_observed_target_spot_id == SpotId.create(1)
+
+    def test_探索中でない場合_no_op(self) -> None:
+        """CHASE 中だが timer 0 なら何もしない。"""
+        agg = _aggregate()
+        _enter_chase(agg)
+        # timer 0 のまま reset を呼ぶ
+        agg.reset_search_timer_on_rediscovery()
+        assert agg._behavior_state.search_timer == 0
+
+
+class TestChaseLastObservedProperty:
+    """chase_last_observed_target_spot_id プロパティ。"""
+
+    def test_CHASE_中は_state_の_値を_返す(self) -> None:
+        agg = _aggregate()
+        _enter_chase(agg)
+        assert agg.chase_last_observed_target_spot_id == SpotId.create(1)
+
+    def test_IDLE_では_None(self) -> None:
+        agg = _aggregate()
+        assert agg.chase_last_observed_target_spot_id is None
+
+    def test_CHASE_を_clear_すると_None(self) -> None:
+        agg = _aggregate()
+        _enter_chase(agg)
+        agg.clear_behavior_state_to_idle()
+        assert agg.chase_last_observed_target_spot_id is None

@@ -234,6 +234,25 @@ class MonsterBehaviorState:
             chase_attacker_ref=attacker_ref,
         )
 
+    def with_search_timer(self, search_timer: int) -> "MonsterBehaviorState":
+        """`search_timer` のみを書き換えた新しい state を返す。
+
+        Phase 4b PR (b): CHASE 中に target を見失った後の探索フェーズで
+        timer を初期化 / 減算する用途で使う。他のフィールドは維持する。
+        """
+        return MonsterBehaviorState(
+            state=self.state,
+            target_id=self.target_id,
+            last_known_position=self.last_known_position,
+            initial_position=self.initial_position,
+            patrol_index=self.patrol_index,
+            search_timer=max(0, search_timer),
+            failure_count=self.failure_count,
+            last_observed_target_spot_id=self.last_observed_target_spot_id,
+            flee_until_tick=self.flee_until_tick,
+            chase_attacker_ref=self.chase_attacker_ref,
+        )
+
     def with_chase_last_observed_target_spot_updated(
         self, spot_id: SpotId,
     ) -> "MonsterBehaviorState":

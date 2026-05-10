@@ -103,7 +103,11 @@ def _template(
     *,
     reaction: ReactionPolicyEnum = ReactionPolicyEnum.ALWAYS_RETALIATE,
     flee_grace_ticks: int = 10,
+    chase_search_ticks: int = 0,
 ) -> MonsterTemplate:
+    """multi-spot 追跡 (PR a) の検証では search phase を 0 にして
+    「target 見失い即 IDLE」の旧挙動を維持する。search phase 自体は
+    `test_monster_reaction_handler_search_phase.py` で別途検証する。"""
     return MonsterTemplate(
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
@@ -118,6 +122,7 @@ def _template(
         description="A wolf.",
         reaction_to_attack=reaction,
         flee_grace_ticks=flee_grace_ticks,
+        chase_search_ticks=chase_search_ticks,
     )
 
 
