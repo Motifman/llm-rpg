@@ -51,6 +51,11 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    MonsterAbandonedChaseInSpotEvent,
+    MonsterStartedChasingInSpotEvent,
+    MonsterStartedFleeingInSpotEvent,
+)
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ConnectionNotPassableException,
     EntityNotInGraphException,
@@ -135,7 +140,11 @@ class MonsterReactionHandler:
         if monster.is_fleeing(current_tick):
             self._continue_flee(monster, graph, spot_id)
             return AttackOutcome(executed=False, reason="fleeing")
-        # FLEE が grace 切れで終わっていたら IDLE に戻す（次フレームに通常 chain）
+        # FLEE が grace 切れで終わっていたら IDLE に戻す（次フレームに通常 chain）。
+        # FLEE 終了は「自然消滅」として扱い、observation event は発火しない
+        # (CHASE の Abandoned event とは意図的に非対称)。プレイヤー視点では
+        # 既存の MonsterLeft/Appeared (FLEE 中の wander 移動) で「逃げ去って
+        # 行った」が表現済みのため、追加の終了 event は冗長と判断。
         if monster.behavior_state == BehaviorStateEnum.FLEE:
             monster.clear_behavior_state_to_idle()
             self._monster_repository.save(monster)
@@ -157,9 +166,18 @@ class MonsterReactionHandler:
         target = self._decide_reaction_target(monster)
         if target == "flee":
             monster.enter_flee_state(current_tick, template.flee_grace_ticks)
-            # state 遷移を永続化。SQLite repo では save しないと次 tick で
-            # state が揮発する。
+            # state 遷移を永続化 + 観測 event 発火。SQLite repo では save
+            # しないと次 tick で state が揮発する。event は同 spot 全員へ
+            # 「相手が逃げ出した」prose として届く。
             self._monster_repository.save(monster)
+            graph.add_event(
+                MonsterStartedFleeingInSpotEvent.create(
+                    aggregate_id=graph.graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    monster_id=monster.monster_id,
+                    spot_id=spot_id,
+                )
+            )
             self._continue_flee(monster, graph, spot_id)
             return AttackOutcome(executed=False, reason="fleeing")
         if target == "chase":
@@ -173,6 +191,24 @@ class MonsterReactionHandler:
                 current_tick=current_tick,
             )
             self._monster_repository.save(monster)
+            # CHASE 開始 event 発火: target が player か monster かに応じて
+            # 該当 ID を埋める (discriminated union)。
+            graph.add_event(
+                MonsterStartedChasingInSpotEvent.create(
+                    aggregate_id=graph.graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    monster_id=monster.monster_id,
+                    spot_id=spot_id,
+                    target_player_id=(
+                        self._player_id_to_entity_id(attacker_ref.player_id)
+                        if attacker_ref.is_player else None
+                    ),
+                    target_monster_id=(
+                        attacker_ref.monster_id
+                        if attacker_ref.is_monster else None
+                    ),
+                )
+            )
             return self._continue_chase(monster, graph, spot_id, current_tick)
         return None
 
@@ -242,6 +278,15 @@ class MonsterReactionHandler:
         """
         attacker_ref: Optional[AttackerRef] = monster.chase_attacker_ref()
         if attacker_ref is None:
+            # 不整合系: CHASE 状態にあるのに追跡対象 ref が無い。実運用では
+            # DB マイグレーション後の残留 state 等で発生し得る。観測 prose
+            # に出すほどの意味がないため event は発火しないが、debug の
+            # 手がかりとして warning ログだけは残す。
+            logger.warning(
+                "CHASE state without chase_attacker_ref for monster=%s, "
+                "falling back to IDLE without event",
+                monster.monster_id.value,
+            )
             monster.clear_behavior_state_to_idle()
             self._monster_repository.save(monster)
             return None
@@ -252,8 +297,7 @@ class MonsterReactionHandler:
             current_tick.value - last_attacked.value
             > monster.template.flee_grace_ticks
         ):
-            monster.clear_behavior_state_to_idle()
-            self._monster_repository.save(monster)
+            self._abandon_chase(monster, graph, spot_id, reason="grace_expired")
             return None
 
         # CHASE 累積 tick 上限チェック (Phase 4b PR c)。
@@ -269,8 +313,9 @@ class MonsterReactionHandler:
             and chase_started is not None
             and (current_tick.value - chase_started.value) > chase_max_ticks
         ):
-            monster.clear_behavior_state_to_idle()
-            self._monster_repository.save(monster)
+            self._abandon_chase(
+                monster, graph, spot_id, reason="max_ticks_exceeded",
+            )
             return None
 
         # 1. 同 spot 居れば攻撃 (search 中であっても target 再発見なら攻撃に戻る)
@@ -316,6 +361,43 @@ class MonsterReactionHandler:
             monster=monster, graph=graph, current_spot=spot_id,
         )
 
+    @staticmethod
+    def _player_id_to_entity_id(player_id: PlayerId) -> EntityId:
+        """`PlayerId` を graph 上の `EntityId` に変換する。
+
+        現状の世界モデルでは「player_id.value (int) と entity_id.value (int)
+        が同一空間を共有する」前提で配線されている (graph.place_entity の
+        呼び出し側もこの規約に従う)。本 helper は変換を一箇所に集約し、
+        将来 player ID 空間が分離した場合の差し替えポイントを 1 つにする。
+        """
+        return EntityId.create(player_id.value)
+
+    def _abandon_chase(
+        self,
+        monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+        reason: str,
+    ) -> None:
+        """CHASE → IDLE に戻す + Abandoned event 発火 + save。
+
+        観測パイプラインで「相手が諦めて去っていった」prose を組み立てる
+        ための信号。`clear_behavior_state_to_idle()` 単独ではなく本 helper
+        経由で呼ぶことで、後続の wander 移動 (MonsterLeft/Appeared) と
+        意味的に紐付く。
+        """
+        monster.clear_behavior_state_to_idle()
+        graph.add_event(
+            MonsterAbandonedChaseInSpotEvent.create(
+                aggregate_id=graph.graph_id,
+                aggregate_type="SpotGraphAggregate",
+                monster_id=monster.monster_id,
+                spot_id=spot_id,
+                reason=reason,
+            )
+        )
+        self._monster_repository.save(monster)
+
     def _reset_search_on_rediscovery(self, monster: MonsterAggregate) -> None:
         """target を再発見した際に search_timer をリセットして即時 save。
 
@@ -342,8 +424,7 @@ class MonsterReactionHandler:
             from_spot=from_spot, target_spot=target_spot,
         )
         if not moved:
-            monster.clear_behavior_state_to_idle()
-            self._monster_repository.save(monster)
+            self._abandon_chase(monster, graph, from_spot, reason="no_path")
             return None
         # last_observed_target_spot_id を最新の target spot で更新。
         # 次 tick 以降の見失いフェーズで「ここに駆け付ける」手がかりになる。
@@ -364,8 +445,9 @@ class MonsterReactionHandler:
         last_observed = monster.chase_last_observed_target_spot_id
         if last_observed is None:
             # 手がかり無し → CHASE 解除
-            monster.clear_behavior_state_to_idle()
-            self._monster_repository.save(monster)
+            self._abandon_chase(
+                monster, graph, current_spot, reason="target_lost",
+            )
             return None
 
         # 探索フェーズ中?
@@ -375,8 +457,9 @@ class MonsterReactionHandler:
             still_running = monster.tick_chase_search_timer()
             if not still_running:
                 # timer 切れ → 諦めて IDLE
-                monster.clear_behavior_state_to_idle()
-                self._monster_repository.save(monster)
+                self._abandon_chase(
+                    monster, graph, current_spot, reason="search_expired",
+                )
                 return None
             self._monster_repository.save(monster)
             return AttackOutcome(executed=False, reason="searching_lost_target")
@@ -389,8 +472,9 @@ class MonsterReactionHandler:
                 from_spot=current_spot, target_spot=last_observed,
             )
             if not moved:
-                monster.clear_behavior_state_to_idle()
-                self._monster_repository.save(monster)
+                self._abandon_chase(
+                    monster, graph, current_spot, reason="no_path",
+                )
                 return None
             self._monster_repository.save(monster)
             return AttackOutcome(executed=False, reason="heading_to_last_observed")
@@ -399,8 +483,9 @@ class MonsterReactionHandler:
         search_ticks = monster.template.chase_search_ticks
         if search_ticks <= 0:
             # 探索無効テンプレ → 即 IDLE
-            monster.clear_behavior_state_to_idle()
-            self._monster_repository.save(monster)
+            self._abandon_chase(
+                monster, graph, current_spot, reason="search_expired",
+            )
             return None
         monster.start_chase_search(search_ticks)
         # 探索開始 tick も 1 tick 分のアクション (wander) として消費する。
@@ -410,8 +495,9 @@ class MonsterReactionHandler:
         self._force_wander_fn(monster, graph, current_spot)
         still_running = monster.tick_chase_search_timer()
         if not still_running:
-            monster.clear_behavior_state_to_idle()
-            self._monster_repository.save(monster)
+            self._abandon_chase(
+                monster, graph, current_spot, reason="search_expired",
+            )
             return None
         self._monster_repository.save(monster)
         return AttackOutcome(executed=False, reason="searching_lost_target")
@@ -430,7 +516,7 @@ class MonsterReactionHandler:
         if attacker_ref.is_player:
             try:
                 return graph.get_entity_spot(
-                    EntityId.create(attacker_ref.player_id.value)
+                    self._player_id_to_entity_id(attacker_ref.player_id)
                 )
             except EntityNotInGraphException:
                 return None

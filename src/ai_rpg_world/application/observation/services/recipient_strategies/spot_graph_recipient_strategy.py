@@ -22,11 +22,14 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
+    MonsterAbandonedChaseInSpotEvent,
     MonsterAppearedAtSpotEvent,
     MonsterAteGroundItemEvent,
     MonsterAttackedPlayerInSpotEvent,
     MonsterLeftSpotEvent,
     MonsterPredatedMonsterInSpotEvent,
+    MonsterStartedChasingInSpotEvent,
+    MonsterStartedFleeingInSpotEvent,
     PlayerAttackedMonsterInSpotEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
@@ -163,6 +166,15 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         elif isinstance(event, MonsterPredatedMonsterInSpotEvent):
             # 捕食観測: actor / target どちらも monster なので player の
             # self 除外は不要、同スポット全員が目撃する。
+            self._resolve_all_at_spot(event.spot_id, add)
+        elif isinstance(event, MonsterStartedFleeingInSpotEvent):
+            # FLEE 状態遷移: 同 spot 全員に「相手が逃げ出した」観測を届ける。
+            self._resolve_all_at_spot(event.spot_id, add)
+        elif isinstance(event, MonsterStartedChasingInSpotEvent):
+            # CHASE 状態遷移: 同 spot 全員に「相手が襲いかかってくる」観測。
+            self._resolve_all_at_spot(event.spot_id, add)
+        elif isinstance(event, MonsterAbandonedChaseInSpotEvent):
+            # CHASE 諦め: 同 spot 全員に「相手が諦めて去っていった」観測。
             self._resolve_all_at_spot(event.spot_id, add)
 
         return result
