@@ -187,6 +187,24 @@ class SpotMonsterBehaviorTickService:
         # `any_graph_change` の判定材料は graph 上で event が積まれた行動
         # （forage と wander）のみで十分。
 
+        # Phase 4-O C: pack 連動 handler 群 (flee/reinforcement/awareness)
+        # は同じ pack の member を毎回引くため、tick 単位で 1 度だけ
+        # `find_by_pack_id` した結果をキャッシュして共有する。これがないと
+        # 各 monster × 各 handler で N×N×3 query が発生する。tick 内で
+        # save された state 変化は cached aggregate には反映されないが、
+        # 後段 handler は state ガード (is_chasing/is_fleeing) で確認する
+        # ので大きな問題にならない (cache stale を許容する設計)。
+        pack_members_cache: dict = {}
+
+        def _get_pack_members(pack_id):
+            if pack_id is None:
+                return []
+            cached = pack_members_cache.get(pack_id)
+            if cached is None:
+                cached = self._monster_repository.find_by_pack_id(pack_id)
+                pack_members_cache[pack_id] = cached
+            return cached
+
         for monster_id in sorted(
             graph.monster_spot_mapping().keys(), key=lambda m: m.value
         ):
@@ -250,8 +268,11 @@ class SpotMonsterBehaviorTickService:
             # `pack_flee_follower=True` の monster) も連動 FLEE。
             # pack_reinforcement より先に置くことで、群れが崩壊している
             # 状況で個々が援護に向かう不自然さを回避する。
+            # pack 連動 handler に渡す pack member キャッシュ
+            cached_pack_members = _get_pack_members(monster.pack_id)
             if self._pack_flee.try_follow_pack_flee(
                 monster, graph, spot_id, current_tick,
+                pack_members=cached_pack_members or None,
             ):
                 any_graph_change = True
                 continue
@@ -263,6 +284,7 @@ class SpotMonsterBehaviorTickService:
             # reaction の CHASE と同じ chain で進行する。
             if self._pack_reinforcement.try_respond_to_pack_help(
                 monster, graph, spot_id, current_tick,
+                pack_members=cached_pack_members or None,
             ):
                 any_graph_change = True
                 continue
@@ -274,6 +296,7 @@ class SpotMonsterBehaviorTickService:
             # 後に置く (殴られた緊急事態 → 偵察情報の伝播 という優先順位)。
             if self._pack_awareness.try_alert_from_pack(
                 monster, graph, spot_id, current_tick,
+                pack_members=cached_pack_members or None,
             ):
                 any_graph_change = True
                 continue

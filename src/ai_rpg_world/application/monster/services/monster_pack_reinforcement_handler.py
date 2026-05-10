@@ -27,6 +27,9 @@ from __future__ import annotations
 import logging
 from typing import Callable, FrozenSet, List, Optional
 
+from ai_rpg_world.application.monster.services._pack_handler_helpers import (
+    resolve_monster_spot,
+)
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
     SpotAttackOrchestrator,
 )
@@ -86,8 +89,15 @@ class MonsterPackReinforcementHandler:
         graph: SpotGraphAggregate,
         spot_id: SpotId,
         current_tick: WorldTick,
+        *,
+        pack_members: Optional[List[MonsterAggregate]] = None,
     ) -> bool:
         """`monster` が同 pack 仲間の救援に応答して CHASE に入ったら True。
+
+        Args:
+            pack_members: 同 pack 内の member リスト。None なら handler 内で
+                `find_by_pack_id` を呼ぶ。tick service 側で 1 度だけ引いた
+                結果を渡すと N×N×3 (3 つの pack handler) を回避できる。
 
         以下のいずれかに該当する場合は早期 return False:
         - monster が pack に所属していない (`pack_id is None`)
@@ -106,14 +116,17 @@ class MonsterPackReinforcementHandler:
             return False
 
         # pack member を 1 回だけ引いて、victim 探索 / responder 集計の
-        # 両方で再利用する (HIGH #2 対応: 2 回 query を 1 回に削減)。
-        pack_members = self._monster_repository.find_by_pack_id(monster.pack_id)
+        # 両方で再利用する。tick service 側で渡された場合はそれを使う。
+        if pack_members is None:
+            pack_members = self._monster_repository.find_by_pack_id(
+                monster.pack_id
+            )
         victim = self._find_pack_victim_from(monster, pack_members, current_tick)
         if victim is None:
             return False
 
         # victim の現在 spot を引いて援護距離を測る
-        victim_spot = self._resolve_monster_spot(graph, victim)
+        victim_spot = resolve_monster_spot(graph, victim)
         if victim_spot is None:
             return False
         # 通行可否フィルタ: 鍵フラグ等を world_flags_provider から解決
@@ -266,13 +279,8 @@ class MonsterPackReinforcementHandler:
             return a.monster_id == b.monster_id
         return False
 
-    def _resolve_monster_spot(
-        self, graph: SpotGraphAggregate, monster: MonsterAggregate,
-    ) -> Optional[SpotId]:
-        try:
-            return graph.get_monster_spot(monster.monster_id)
-        except MonsterNotInGraphException:
-            return None
+    # `_resolve_monster_spot` は `_pack_handler_helpers.resolve_monster_spot`
+    # に統合した (HIGH #3 対応)。
 
     # `_bfs_distance` は `domain.world_graph.service.spot_path_finder.find_hop_distance`
     # に統合された (HIGH #3 対応: BFS 実装の重複を解消)。
