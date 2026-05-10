@@ -360,6 +360,8 @@ def create_spot_graph_wiring(
         time_provider=game_time_provider,
         spot_graph_repository=spot_graph_repository,
         sync_action_registry=sync_action_registry,
+        monster_repository=monster_repository,
+        player_status_repository=player_status_repository,
     )
     no_op_movement = SpotGraphNoOpMovementService()
 
