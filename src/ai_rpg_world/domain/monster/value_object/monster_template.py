@@ -134,6 +134,14 @@ class MonsterTemplate:
     # default 0 で明示設定された template だけが機能する (SQL 側の DEFAULT
     # と一致させ、旧スキーマからの読み出しでも整合する)。
     pack_flee_follower_duration: int = 0
+    # Phase 4-O C #3: pack 警戒共有を受信する距離 (BFS hop)。同 pack の
+    # 仲間 (scout) が target を見つけて CHASE 中なら、自分が scout から
+    # この hop 数以内に居れば同じ target を CHASE 開始する。0 で機能無効
+    # (default、後方互換)。pack 援護 (`pack_help_radius`) との違い:
+    # 援護は「殴られた仲間」を契機にするが、警戒共有は「scout が CHASE
+    # 中」(殴られていなくても target を視認した瞬間) を契機にする。
+    # ステルスゲームの「1 匹に見つかったら群れ全員が警戒」を表現できる。
+    pack_awareness_radius: int = 0
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
@@ -307,6 +315,16 @@ class MonsterTemplate:
                 "pack_flee_follower=True のとき pack_flee_follower_duration は "
                 "1 以上が必要 (= follower 機能を有効化するなら持続 tick も "
                 f"指定する) but got duration={self.pack_flee_follower_duration}"
+            )
+        if not isinstance(self.pack_awareness_radius, int) or isinstance(
+            self.pack_awareness_radius, bool,
+        ):
+            raise MonsterTemplateValidationException(
+                "pack_awareness_radius must be int"
+            )
+        if self.pack_awareness_radius < 0:
+            raise MonsterTemplateValidationException(
+                f"pack_awareness_radius must be >= 0, got {self.pack_awareness_radius}"
             )
 
         if self.vision_range < 0:

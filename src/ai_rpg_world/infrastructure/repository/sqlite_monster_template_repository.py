@@ -185,8 +185,9 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
                 min_comfortable_temperature, max_comfortable_temperature,
                 temperature_discomfort_damage_per_tick,
                 pack_help_radius, max_pack_responders,
-                pack_flee_follower, pack_flee_follower_duration
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                pack_flee_follower, pack_flee_follower_duration,
+                pack_awareness_radius
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(template_id) DO UPDATE SET
                 name = excluded.name,
                 description = excluded.description,
@@ -225,7 +226,8 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
                 pack_help_radius = excluded.pack_help_radius,
                 max_pack_responders = excluded.max_pack_responders,
                 pack_flee_follower = excluded.pack_flee_follower,
-                pack_flee_follower_duration = excluded.pack_flee_follower_duration
+                pack_flee_follower_duration = excluded.pack_flee_follower_duration,
+                pack_awareness_radius = excluded.pack_awareness_radius
             """,
             (
                 int(template.template_id),
@@ -272,6 +274,8 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
                 # Phase 4-O C #2: pack 群れ逃走 (migration v27)
                 int(template.pack_flee_follower),
                 template.pack_flee_follower_duration,
+                # Phase 4-O C #3: pack 警戒共有 (migration v28)
+                template.pack_awareness_radius,
             ),
         )
         for table_name in (

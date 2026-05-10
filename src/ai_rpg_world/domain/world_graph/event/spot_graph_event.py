@@ -543,3 +543,46 @@ class MonsterFollowedPackFleeInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     follower_spot_id: SpotId
     # spot_id は recipient strategy 規約のため follower_spot_id と同じ値。
     spot_id: SpotId
+
+
+@dataclass(frozen=True)
+class MonsterAlertedByPackInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
+    """pack 警戒共有: scout が target を見つけて CHASE 中なのを察知して、
+    近くの仲間が同じ target を CHASE 開始した瞬間 (Phase 4-O C #3)。
+
+    `responder_monster_id` が `scout_monster_id` の警戒情報を受け取って
+    CHASE に入ったことを示す。target は scout の `chase_attacker_ref` を
+    そのまま継承する (player or monster の discriminated union)。
+
+    pack 援護 (`MonsterRespondedToPackHelpInSpotEvent`) との違い:
+    - 援護は「殴られた仲間」を契機 (`victim` 概念あり)
+    - 警戒共有は「target を見つけた scout」を契機 (殴られていなくても発動)
+    - prose の文脈も異なる: 援護は「救援に駆け付ける」、警戒共有は
+      「警戒モードに入る」「気配を察する」
+
+    観測としては responder の現在 spot 全員に environment カテゴリで届く。
+    """
+
+    responder_monster_id: MonsterId
+    scout_monster_id: MonsterId
+    responder_spot_id: SpotId
+    # spot_id は recipient strategy 規約のため responder_spot_id と同じ値。
+    spot_id: SpotId
+    target_player_id: Optional[EntityId] = None
+    target_monster_id: Optional[MonsterId] = None
+
+    def __post_init__(self) -> None:
+        # discriminated union: target は片方だけ非 None。
+        both_none = (
+            self.target_player_id is None and self.target_monster_id is None
+        )
+        both_set = (
+            self.target_player_id is not None
+            and self.target_monster_id is not None
+        )
+        if both_none or both_set:
+            raise ValueError(
+                "MonsterAlertedByPackInSpotEvent: target_player_id と "
+                "target_monster_id は片方だけ非 None である必要がある "
+                f"(player={self.target_player_id}, monster={self.target_monster_id})"
+            )
