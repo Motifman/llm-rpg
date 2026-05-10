@@ -19,6 +19,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterAppearedAtSpotEvent,
     MonsterAteGroundItemEvent,
     MonsterAttackedPlayerInSpotEvent,
+    MonsterFeltTemperatureDiscomfortInSpotEvent,
     MonsterLeftSpotEvent,
     MonsterPredatedMonsterInSpotEvent,
     MonsterStartedChasingInSpotEvent,
@@ -105,6 +106,10 @@ class SpotGraphObservationFormatter:
             return self._format_monster_started_chasing(event, recipient_player_id)
         if isinstance(event, MonsterAbandonedChaseInSpotEvent):
             return self._format_monster_abandoned_chase(event, recipient_player_id)
+        if isinstance(event, MonsterFeltTemperatureDiscomfortInSpotEvent):
+            return self._format_monster_felt_temperature_discomfort(
+                event, recipient_player_id,
+            )
         return None
 
     def _is_self(self, entity_id: Any, recipient_id: PlayerId) -> bool:
@@ -767,6 +772,39 @@ class SpotGraphObservationFormatter:
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
             "reason": reason,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
+
+    def _format_monster_felt_temperature_discomfort(
+        self,
+        event: MonsterFeltTemperatureDiscomfortInSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """温度不快ダメージ観測 (Phase 4-O B)。
+
+        kind に応じて寒さ / 暑さの prose を切り替える。第三者視点で
+        「monster が environment から圧を受けている」を観測させる。
+        """
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.monster_id
+        )
+        if event.kind == "too_cold":
+            prose = f"{monster_name}は寒さに身を震わせている。"
+        elif event.kind == "too_hot":
+            prose = f"{monster_name}は暑さで弱っている。"
+        else:
+            prose = f"{monster_name}は環境に苦しんでいる。"
+        structured = {
+            "type": "monster_felt_temperature_discomfort",
+            "monster_name": monster_name,
+            "monster_id": event.monster_id.value,
+            "kind": event.kind,
+            "damage_dealt": event.damage_dealt,
         }
         return ObservationOutput(
             prose=prose,
