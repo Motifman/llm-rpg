@@ -25,6 +25,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterAppearedAtSpotEvent,
     MonsterAttackedPlayerInSpotEvent,
     MonsterLeftSpotEvent,
+    PlayerAttackedMonsterInSpotEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
@@ -146,6 +147,13 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             # ダメージはツール起因ではなく tick 駆動なので、被害者にも観測
             # として通知して「自分が襲われている」と認識させる必要がある。
             self._resolve_all_at_spot(event.spot_id, add)
+        elif isinstance(event, PlayerAttackedMonsterInSpotEvent):
+            # 行為者プレイヤー本人にはツール結果として個別 message が返るので
+            # 観測経路では除外する（二重観測防止）。同スポットの他プレイヤーには
+            # 「Aがオオカミを攻撃した」と social として届ける。
+            self._resolve_at_spot_excluding_actor(
+                event.spot_id, event.actor_entity_id, add
+            )
 
         return result
 

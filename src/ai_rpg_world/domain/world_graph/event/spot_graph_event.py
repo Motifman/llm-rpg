@@ -271,3 +271,26 @@ class MonsterLeftSpotEvent(BaseDomainEvent[SpotGraphId, str]):
 
     monster_id: MonsterId
     spot_id: SpotId
+
+
+@dataclass(frozen=True)
+class PlayerAttackedMonsterInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
+    """プレイヤーが同スポットのモンスターに攻撃を行った。
+
+    観測としては行為者プレイヤーを除く同スポット全員に social カテゴリで届く。
+    行為者本人にはツール結果として個別メッセージが返るので除外する
+    （二重観測防止 / `MonsterAttackedPlayerInSpotEvent` の actor 側ガードと対称）。
+
+    `MonsterDamagedEvent` / `MonsterDiedEvent` は monster aggregate 側で自動
+    発火するが、それらは "monster" 戦略の別観測経路。本 event は spot graph
+    視点での「誰が誰を殴ったか」の prose 構築を担う。
+
+    `target_killed` は致命攻撃で `MonsterStatusEnum.DEAD` に遷移したことを
+    意味する。観測 prose に「倒した」suffix を付けるために使う。
+    """
+
+    actor_entity_id: EntityId
+    monster_id: MonsterId
+    spot_id: SpotId
+    damage: int
+    target_killed: bool
