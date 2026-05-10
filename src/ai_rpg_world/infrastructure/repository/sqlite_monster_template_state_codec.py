@@ -122,9 +122,15 @@ def build_monster_template(
             row, "temperature_discomfort_damage_per_tick", default=0,
         ),
         # Phase 4-O C: pack 援護フィールド (migration v26)
+        # default は両方 0 = 援護機能無効。migration v26 の SQL DEFAULT と
+        # `MonsterTemplate.max_pack_responders=2` Python default は意味が
+        # 異なる: SQL default は「migration 直後の既存 row の値」で「機能
+        # 無効」を意図、Python default は「シナリオで明示しない場合の
+        # 推奨値」で「機能を使うなら 2 匹」を意図 (使うなら radius も
+        # 同時に 0 超に設定する想定)。
         pack_help_radius=_optional_int(row, "pack_help_radius", default=0),
         max_pack_responders=_optional_int(
-            row, "max_pack_responders", default=2,
+            row, "max_pack_responders", default=0,
         ),
     )
 

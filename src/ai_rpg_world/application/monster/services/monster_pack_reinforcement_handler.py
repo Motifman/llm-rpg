@@ -25,7 +25,6 @@ member が CHASE で駆け付ける」挙動を実装する。
 from __future__ import annotations
 
 import logging
-from collections import deque
 from typing import Callable, FrozenSet, List, Optional
 
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
@@ -50,6 +49,9 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     MonsterNotInGraphException,
+)
+from ai_rpg_world.domain.world_graph.service.spot_path_finder import (
+    find_hop_distance,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
@@ -103,7 +105,10 @@ class MonsterPackReinforcementHandler:
         if monster.is_fleeing(current_tick) or monster.is_chasing():
             return False
 
-        victim = self._find_pack_victim(monster, current_tick)
+        # pack member を 1 回だけ引いて、victim 探索 / responder 集計の
+        # 両方で再利用する (HIGH #2 対応: 2 回 query を 1 回に削減)。
+        pack_members = self._monster_repository.find_by_pack_id(monster.pack_id)
+        victim = self._find_pack_victim_from(monster, pack_members, current_tick)
         if victim is None:
             return False
 
@@ -111,10 +116,23 @@ class MonsterPackReinforcementHandler:
         victim_spot = self._resolve_monster_spot(graph, victim)
         if victim_spot is None:
             return False
-        distance = self._bfs_distance(
+        # 通行可否フィルタ: 鍵フラグ等を world_flags_provider から解決
+        world_flags = (
+            self._world_flags_provider()
+            if self._world_flags_provider is not None
+            else frozenset()
+        )
+
+        def _is_passable(conn) -> bool:
+            return graph.can_traverse_connection(
+                conn.connection_id, frozenset(), world_flags,
+            )
+
+        distance = find_hop_distance(
             graph=graph,
             from_spot=spot_id,
             target_spot=victim_spot,
+            is_passable=_is_passable,
             max_distance=template.pack_help_radius,
         )
         if distance is None:
@@ -123,7 +141,9 @@ class MonsterPackReinforcementHandler:
         # victim 側が指定する応答上限。victim の template が制限を持つ
         # (殴られた本人がどれだけ仲間を呼ぶかを決める)
         responder_cap = victim.template.max_pack_responders
-        if self._count_existing_responders(monster, victim) >= responder_cap:
+        if self._count_existing_responders_from(
+            monster, victim, pack_members,
+        ) >= responder_cap:
             return False
 
         # CHASE 状態に遷移 (victim を殴った相手を追跡)
@@ -162,15 +182,18 @@ class MonsterPackReinforcementHandler:
     # 内部 helper
     # ------------------------------------------------------------------
 
-    def _find_pack_victim(
-        self, monster: MonsterAggregate, current_tick: WorldTick,
+    def _find_pack_victim_from(
+        self,
+        monster: MonsterAggregate,
+        members: List[MonsterAggregate],
+        current_tick: WorldTick,
     ) -> Optional[MonsterAggregate]:
-        """同 pack で grace_ticks 以内に被弾した最初の生存 member を返す。
+        """与えられた pack member 群から条件を満たす victim を返す。
 
-        自分自身は除外。`last_attacker_ref` が無い member もスキップ。
-        複数該当する場合は monster_id 昇順で先頭を選ぶ (再現性確保)。
+        条件: ALIVE で、自分以外で、grace_ticks 以内に被弾していて、
+        attacker_ref が記録されている。複数該当する場合は monster_id 昇順
+        の先頭 (再現性確保)。
         """
-        members = self._monster_repository.find_by_pack_id(monster.pack_id)
         candidates: List[MonsterAggregate] = []
         for member in members:
             if member.monster_id == monster.monster_id:
@@ -193,19 +216,25 @@ class MonsterPackReinforcementHandler:
         candidates.sort(key=lambda m: m.monster_id.value)
         return candidates[0]
 
-    def _count_existing_responders(
-        self, current: MonsterAggregate, victim: MonsterAggregate,
+    def _count_existing_responders_from(
+        self,
+        current: MonsterAggregate,
+        victim: MonsterAggregate,
+        members: List[MonsterAggregate],
     ) -> int:
         """victim と同じ target を既に CHASE 中の同 pack member 数を数える。
 
         `current` (これから応答しようとしている自分) は数えない。`victim`
         本人 (CHASE には入れない) も数えない。`max_pack_responders` 上限
         判定で「既に 2 匹応答済みならこれ以上は来ない」を実現する。
+
+        Precondition: 呼び出し前に `current.is_chasing() == False` であること
+        (handler 冒頭の state ガードで保証)。`current` を数から除外している
+        のはこの前提に依存している。
         """
         if victim.last_attacker_ref is None:
             return 0
         target_ref = victim.last_attacker_ref
-        members = self._monster_repository.find_by_pack_id(victim.pack_id)
         count = 0
         for member in members:
             if member.monster_id == current.monster_id:
@@ -225,6 +254,12 @@ class MonsterPackReinforcementHandler:
 
     @staticmethod
     def _refs_equal(a: AttackerRef, b: AttackerRef) -> bool:
+        """2 つの AttackerRef が同じエンティティを指すか判定する。
+
+        - 両方 player → player_id で比較
+        - 両方 monster → monster_id で比較
+        - 種類が異なる → 常に False (player と monster を同一視しない)
+        """
         if a.is_player and b.is_player:
             return a.player_id == b.player_id
         if a.is_monster and b.is_monster:
@@ -239,51 +274,5 @@ class MonsterPackReinforcementHandler:
         except MonsterNotInGraphException:
             return None
 
-    def _bfs_distance(
-        self,
-        graph: SpotGraphAggregate,
-        from_spot: SpotId,
-        target_spot: SpotId,
-        max_distance: int,
-    ) -> Optional[int]:
-        """`from_spot` から `target_spot` までの最短 hop 数を返す。
-
-        到達不可 / max_distance 超過なら None。同 spot は 0。passable
-        フィルタは適用するが、所持アイテムは無し (鍵が要る通路は通れない
-        前提)。
-        """
-        if from_spot == target_spot:
-            return 0
-        world_flags = (
-            self._world_flags_provider()
-            if self._world_flags_provider is not None
-            else frozenset()
-        )
-
-        def _is_passable(conn) -> bool:
-            return graph.can_traverse_connection(
-                conn.connection_id, frozenset(), world_flags,
-            )
-
-        # BFS。max_distance を hop 上限として打ち切る。
-        queue: deque[tuple[SpotId, int]] = deque([(from_spot, 0)])
-        visited = {from_spot}
-        while queue:
-            current, depth = queue.popleft()
-            if depth >= max_distance:
-                continue
-            connections = sorted(
-                graph.iter_outgoing_connections_from(current),
-                key=lambda c: c.connection_id.value,
-            )
-            for conn in connections:
-                if not _is_passable(conn):
-                    continue
-                nxt = conn.to_spot_id
-                if nxt in visited:
-                    continue
-                visited.add(nxt)
-                if nxt == target_spot:
-                    return depth + 1
-                queue.append((nxt, depth + 1))
-        return None
+    # `_bfs_distance` は `domain.world_graph.service.spot_path_finder.find_hop_distance`
+    # に統合された (HIGH #3 対応: BFS 実装の重複を解消)。
