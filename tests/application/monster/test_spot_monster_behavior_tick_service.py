@@ -115,6 +115,7 @@ def _make_monster(
     )
     monster.is_fleeing.return_value = False
     monster.is_chasing.return_value = False
+    monster.chase_attacker_ref.return_value = None
     monster.behavior_state = BehaviorStateEnum.IDLE
     monster.last_attacked_tick = None
     monster.last_attacker_ref = None
