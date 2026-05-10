@@ -48,6 +48,8 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
     MonsterAggregate,
 )
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.monster.enum.monster_enum import (
     EcologyTypeEnum,
     MonsterFactionEnum,
@@ -329,8 +331,8 @@ class SpotMonsterBehaviorTickService:
         self,
         graph: SpotGraphAggregate,
         spot_id: SpotId,
-        prey_races,
-        attacker_monster_id,
+        prey_races: FrozenSet[Race],
+        attacker_monster_id: MonsterId,
     ) -> Optional[MonsterAggregate]:
         """同スポットの生存モンスターから prey 種族にマッチする 1 体を返す。
 

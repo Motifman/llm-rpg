@@ -567,7 +567,6 @@ class MonsterAggregate(AggregateRoot):
 
     def record_attacked_by_in_spot(
         self,
-        attacker_id: WorldObjectId,
         current_tick: WorldTick,
     ) -> None:
         """スポットグラフ世界用の「攻撃を受けた」記録 API。
@@ -582,13 +581,14 @@ class MonsterAggregate(AggregateRoot):
         値の記録までで、反撃ロジックは導入しない。
 
         ALIVE 状態でない場合は no-op（既に死んでいる相手の攻撃記録は意味が
-        ないため）。`attacker_id` は将来「誰に殴られたか」のフックを残すため
-        引数として受け取るが、現在は破棄する（_last_attacked_attacker_id
-        フィールドを足すかは実需に応じて Phase 4 で判断）。
+        ないため）。
+
+        TODO(Phase 4): 「誰に殴られたか」を残したくなったら `attacker_id:
+        WorldObjectId` 引数を追加し、`_last_attacked_attacker_id` フィールド
+        を持つ。YAGNI で本 PR では含めない（PR #133 レビュー MEDIUM 指摘）。
         """
         if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
             return
-        del attacker_id  # 将来用のフック; 現状は破棄
         self._last_attacked_tick = current_tick
 
     def record_attack(self, current_tick: WorldTick) -> None:
