@@ -297,10 +297,17 @@ class TestAbandonedChaseEvent:
         assert len(events) == 1
         assert events[0].reason == "max_ticks_exceeded"
 
-    def test_target_lost_で_event_発火(self) -> None:
-        """target が graph 上に居ない + chase_search_ticks=0 → IDLE。
-        last_observed=A, monster=A、player 不在 → 探索開始経路で
-        chase_search_ticks=0 のため search_expired として abandon される。"""
+    def test_search_disabled_テンプレ_で_search_expired_event_発火(self) -> None:
+        """`chase_search_ticks=0` のテンプレで last_observed 到着時に
+        探索フェーズなしで即 IDLE → reason=search_expired として abandon。
+
+        現状の handler コードでは `enter_chase_state` が必ず
+        `last_observed_target_spot_id` を渡すため、`target_lost` reason
+        (= last_observed が None で `_handle_lost_target` の冒頭分岐) に
+        到達する公開経路は存在しない。`target_lost` は将来「last_observed
+        を None にする経路」を導入したときに使えるよう reason 文字列だけ
+        予約してある状態 (event 定義側でテストする)。
+        """
         handler = _make_handler(player=None)
         monster, graph = self._setup_chasing_monster(
             handler,
