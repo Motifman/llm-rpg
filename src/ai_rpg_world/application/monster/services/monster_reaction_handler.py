@@ -261,11 +261,7 @@ class MonsterReactionHandler:
                 graph, spot_id, attacker_ref.player_id
             )
             if target_player is not None:
-                # 再発見したので search_timer もリセット (with_search_timer(0))
-                if monster.is_searching_lost_target():
-                    monster._behavior_state = (
-                        monster._behavior_state.with_search_timer(0)
-                    )
+                self._reset_search_on_rediscovery(monster)
                 return self._orchestrator.execute_monster_attack(
                     attacker_monster=monster,
                     target_player=target_player,
@@ -278,10 +274,7 @@ class MonsterReactionHandler:
                 graph, spot_id, attacker_ref.monster_id
             )
             if target_monster_obj is not None:
-                if monster.is_searching_lost_target():
-                    monster._behavior_state = (
-                        monster._behavior_state.with_search_timer(0)
-                    )
+                self._reset_search_on_rediscovery(monster)
                 return self._orchestrator.execute_monster_to_monster_attack(
                     attacker_monster=monster,
                     target_monster=target_monster_obj,
@@ -293,6 +286,8 @@ class MonsterReactionHandler:
         # 2. 追跡対象が graph 上の他 spot に居れば BFS 1 hop
         target_spot = self._resolve_target_spot(graph, attacker_ref)
         if target_spot is not None:
+            # 探索中だった場合は search_timer をリセットしてから移動 (再発見扱い)
+            self._reset_search_on_rediscovery(monster)
             return self._chase_visible_target(
                 monster=monster, graph=graph, from_spot=spot_id,
                 target_spot=target_spot,
@@ -302,6 +297,19 @@ class MonsterReactionHandler:
         return self._handle_lost_target(
             monster=monster, graph=graph, current_spot=spot_id,
         )
+
+    def _reset_search_on_rediscovery(self, monster: MonsterAggregate) -> None:
+        """target を再発見した際に search_timer をリセットして即時 save。
+
+        - search 中でない場合は no-op (集約 API 側でガード)
+        - リセットしたら save まで責任を持つ。攻撃が cooldown 等で不成立に
+          終わっても search_timer=0 が永続化されるよう、`save` を必ず呼ぶ。
+          これがないと SQLite 環境で次 tick に再度探索状態に戻る恐れがある。
+        """
+        if not monster.is_searching_lost_target():
+            return
+        monster.reset_search_timer_on_rediscovery()
+        self._monster_repository.save(monster)
 
     def _chase_visible_target(
         self,
@@ -335,7 +343,7 @@ class MonsterReactionHandler:
 
         last_observed_target_spot_id へ向かう / 着いたら探索 / timer 切れで IDLE。
         """
-        last_observed = monster._behavior_state.last_observed_target_spot_id
+        last_observed = monster.chase_last_observed_target_spot_id
         if last_observed is None:
             # 手がかり無し → CHASE 解除
             monster.clear_behavior_state_to_idle()
@@ -377,9 +385,11 @@ class MonsterReactionHandler:
             self._monster_repository.save(monster)
             return None
         monster.start_chase_search(search_ticks)
-        # 開始 tick も 1 hop wander を試みる
+        # 探索開始 tick も 1 tick 分のアクション (wander) として消費する。
+        # `chase_search_ticks=1` を指定した場合: wander 1 回 → 即 timer=0 → IDLE。
+        # `chase_search_ticks=N` (N>=2) の場合: 到着 tick で wander 1 回 + 後続
+        # (N-1) tick で wander → 計 N 回探索後 IDLE。
         self._force_wander_fn(monster, graph, current_spot)
-        # 開始時点で 1 tick 消費 → 残り timer を減算
         still_running = monster.tick_chase_search_timer()
         if not still_running:
             monster.clear_behavior_state_to_idle()

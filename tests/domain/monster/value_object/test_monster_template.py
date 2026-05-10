@@ -589,3 +589,78 @@ class TestMonsterTemplate:
                     description="X",
                     max_age_ticks=-1,
                 )
+
+
+    class TestChaseSearchTicks:
+        """Phase 4b PR (b): chase_search_ticks フィールドのバリデーション。"""
+
+        def test_create_with_default_value_3(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """default は 3 (諦め悪い敵を表現する自然な値)。"""
+            t = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="X",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="X",
+            )
+            assert t.chase_search_ticks == 3
+
+        def test_create_with_zero_value(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """0 は許容 (探索フェーズなしを意味する)。"""
+            t = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="X",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="X",
+                chase_search_ticks=0,
+            )
+            assert t.chase_search_ticks == 0
+
+        def test_create_fail_negative(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """負の値は ValidationException を投げる。"""
+            with pytest.raises(
+                MonsterTemplateValidationException, match="chase_search_ticks"
+            ):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    chase_search_ticks=-1,
+                )
+
+        def test_create_fail_bool(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """bool は int でないとして拒否される (Python の bool は int の派生)。"""
+            with pytest.raises(
+                MonsterTemplateValidationException, match="chase_search_ticks"
+            ):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    chase_search_ticks=True,
+                )

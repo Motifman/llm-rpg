@@ -77,6 +77,11 @@ class MonsterTemplate:
     # Phase 4b PR (b): CHASE 中に target を見失った場合、`last_observed_target_spot_id`
     # に到着した後にそのスポット周辺を探索する tick 数。0 なら探索フェーズなし
     # (見失い即 IDLE 復帰)。3-5 程度で「諦め悪い敵」を表現。
+    #
+    # 挙動:
+    # - 0: 探索フェーズなし。last_observed 到着 tick で即 IDLE。
+    # - 1: 到着 tick で wander 1 回実行 → 即 IDLE (1 tick 分の wander で消費)。
+    # - N (>=2): 到着 tick + 後続 (N-1) tick で計 N 回 wander → IDLE。
     chase_search_ticks: int = 3
 
     def __post_init__(self):

@@ -714,6 +714,30 @@ class MonsterAggregate(AggregateRoot):
         """CHASE 中で search_timer > 0 (探索フェーズ中) か。"""
         return self.is_chasing() and self._behavior_state.search_timer > 0
 
+    @property
+    def chase_last_observed_target_spot_id(self) -> Optional[SpotId]:
+        """CHASE 中に target を最後に確認した spot のスナップショット。
+
+        CHASE でない場合は None。`update_chase_last_observed_target_spot` で
+        更新される。見失い → 探索フェーズで「ここに駆け付ける」手がかりとして
+        使う。
+        """
+        if not self.is_chasing():
+            return None
+        return self._behavior_state.last_observed_target_spot_id
+
+    def reset_search_timer_on_rediscovery(self) -> None:
+        """探索フェーズ中に target を再発見した際、search_timer を 0 に戻す。
+
+        CHASE 以外 / 探索中でない / ALIVE 以外では no-op。`chase_attacker_ref`
+        や `last_observed_target_spot_id` は維持し、CHASE state は継続する。
+        """
+        if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
+            return
+        if not self.is_searching_lost_target():
+            return
+        self._behavior_state = self._behavior_state.with_search_timer(0)
+
     def tick_chase_search_timer(self) -> bool:
         """探索タイマーを 1 減らす。減らした結果まだ > 0 なら True を返す。
 
