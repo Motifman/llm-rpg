@@ -113,6 +113,14 @@ class MonsterTemplate:
     # 不快温度 1 tick あたりの HP 減少量。0 で無効化 (default)。1-3 程度で
     # 「数十 tick で死ぬ」緩やかな圧、5+ で「直ぐ逃げないと死ぬ」強い圧。
     temperature_discomfort_damage_per_tick: int = 0
+    # Phase 4-O C: pack 援護の最大距離 (BFS hop)。仲間が殴られたとき、自分が
+    # この hop 数以内に居れば援護に駆け付ける。0 で援護機能無効 (default、
+    # 後方互換)。1-3 で「近くの仲間だけ反応」、5+ で「広範囲援護」。
+    pack_help_radius: int = 0
+    # 1 つの援護要請に対して最大何匹が応答するかの上限。pack 全員が一斉に
+    # 来ると 10 匹単位の大惨事になるため、シナリオ作成側が制御できるように
+    # する。0 だと援護機能無効。
+    max_pack_responders: int = 2
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
@@ -243,6 +251,26 @@ class MonsterTemplate:
             raise MonsterTemplateValidationException(
                 "temperature_discomfort_damage_per_tick must be >= 0, "
                 f"got {self.temperature_discomfort_damage_per_tick}"
+            )
+        if not isinstance(self.pack_help_radius, int) or isinstance(
+            self.pack_help_radius, bool,
+        ):
+            raise MonsterTemplateValidationException(
+                "pack_help_radius must be int"
+            )
+        if self.pack_help_radius < 0:
+            raise MonsterTemplateValidationException(
+                f"pack_help_radius must be >= 0, got {self.pack_help_radius}"
+            )
+        if not isinstance(self.max_pack_responders, int) or isinstance(
+            self.max_pack_responders, bool,
+        ):
+            raise MonsterTemplateValidationException(
+                "max_pack_responders must be int"
+            )
+        if self.max_pack_responders < 0:
+            raise MonsterTemplateValidationException(
+                f"max_pack_responders must be >= 0, got {self.max_pack_responders}"
             )
 
         if self.vision_range < 0:

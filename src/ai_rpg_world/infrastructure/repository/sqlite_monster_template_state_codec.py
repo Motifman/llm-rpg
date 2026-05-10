@@ -121,6 +121,11 @@ def build_monster_template(
         temperature_discomfort_damage_per_tick=_optional_int(
             row, "temperature_discomfort_damage_per_tick", default=0,
         ),
+        # Phase 4-O C: pack 援護フィールド (migration v26)
+        pack_help_radius=_optional_int(row, "pack_help_radius", default=0),
+        max_pack_responders=_optional_int(
+            row, "max_pack_responders", default=2,
+        ),
     )
 
 

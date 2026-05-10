@@ -43,6 +43,9 @@ import logging
 import random
 from typing import Callable, FrozenSet, List, Optional
 
+from ai_rpg_world.application.monster.services.monster_pack_reinforcement_handler import (
+    MonsterPackReinforcementHandler,
+)
 from ai_rpg_world.application.monster.services.monster_reaction_handler import (
     MonsterReactionHandler,
 )
@@ -141,6 +144,13 @@ class SpotMonsterBehaviorTickService:
             force_wander_fn=self._try_wander_force,
             world_flags_provider=world_flags_provider,
         )
+        # Phase 4-O C: pack 援護。reaction の直後に呼ばれ、仲間が殴られて
+        # いれば CHASE で駆け付ける。reaction より優先度低 (= 自分が殴ら
+        # れたら自分の反応が先)。
+        self._pack_reinforcement = MonsterPackReinforcementHandler(
+            monster_repository=monster_repository,
+            world_flags_provider=world_flags_provider,
+        )
 
     def tick(self, current_tick: WorldTick) -> List[AttackOutcome]:
         """1 tick 分のモンスター行動を一括実行する。
@@ -213,6 +223,17 @@ class SpotMonsterBehaviorTickService:
                 # state 遷移や move が起きた可能性があるので graph save 必要。
                 # graph に event が積まれていれば下の attack_outcomes と
                 # 並んで観測される。
+                any_graph_change = True
+                continue
+
+            # --- 1.5. pack 援護 (Phase 4-O C) ---
+            # 同 pack の仲間が殴られていれば CHASE で駆け付ける。reaction
+            # の直後に置くことで「自分の反応 > 仲間の援護」の優先順位を
+            # 自然に表現する。次 tick から pack 援護で入った CHASE は
+            # reaction の CHASE と同じ chain で進行する。
+            if self._pack_reinforcement.try_respond_to_pack_help(
+                monster, graph, spot_id, current_tick,
+            ):
                 any_graph_change = True
                 continue
 
