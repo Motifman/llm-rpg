@@ -26,7 +26,6 @@ from ai_rpg_world.domain.monster.value_object.monster_template_id import (
 )
 from ai_rpg_world.domain.monster.value_object.monster_temperament_preset import (
     apply_temperament,
-    get_preset_values,
 )
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
@@ -52,21 +51,28 @@ def _base_template() -> MonsterTemplate:
 
 
 class TestPresetCoverage:
-    """全 TemperamentEnum に対して preset が定義されている。"""
+    """全 TemperamentEnum に対して preset が定義され、apply_temperament で
+    `MonsterTemplate.__post_init__` のバリデーションを通過する。"""
 
     @pytest.mark.parametrize("temperament", list(TemperamentEnum))
-    def test_全_TemperamentEnum_に_preset_が_定義されている(
+    def test_全_TemperamentEnum_で_apply_temperament_が_成功する(
         self, temperament: TemperamentEnum,
     ) -> None:
-        """get_preset_values が全 enum 値に対して KeyError を投げない。"""
-        preset = get_preset_values(temperament)
-        # 6 フィールド全てが取得できる
-        assert preset.reaction_to_attack is not None
-        assert preset.flee_grace_ticks >= 0
-        assert 0.0 <= preset.flee_threshold <= 1.0
-        assert preset.chase_max_distance >= 0
-        assert preset.chase_max_ticks >= 0
-        assert preset.chase_search_ticks >= 0
+        """全 enum 値で apply_temperament が KeyError も
+        ValidationException も投げず MonsterTemplate を返す。
+        これにより `__post_init__` 再実行も含めて preset 値が valid である
+        ことが保証される (HIGH #1: _PRESETS 網羅性 + MEDIUM: __post_init__
+        再実行検証を兼ねる)。"""
+        result = apply_temperament(_base_template(), temperament)
+        assert isinstance(result, MonsterTemplate)
+        # 6 フィールドが書き換わっている (default と異なる値か、もしくは
+        # 明示的に default 値が設定されている)
+        assert result.reaction_to_attack is not None
+        assert result.flee_grace_ticks >= 0
+        assert 0.0 <= result.flee_threshold <= 1.0
+        assert result.chase_max_distance >= 0
+        assert result.chase_max_ticks >= 0
+        assert result.chase_search_ticks >= 0
 
 
 class TestPassiveBeast:
