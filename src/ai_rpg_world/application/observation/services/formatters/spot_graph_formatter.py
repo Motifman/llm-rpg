@@ -15,11 +15,14 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
+    MonsterAbandonedChaseInSpotEvent,
     MonsterAppearedAtSpotEvent,
     MonsterAteGroundItemEvent,
     MonsterAttackedPlayerInSpotEvent,
     MonsterLeftSpotEvent,
     MonsterPredatedMonsterInSpotEvent,
+    MonsterStartedChasingInSpotEvent,
+    MonsterStartedFleeingInSpotEvent,
     PlayerAttackedMonsterInSpotEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
@@ -96,6 +99,12 @@ class SpotGraphObservationFormatter:
             return self._format_monster_ate_ground_item(event, recipient_player_id)
         if isinstance(event, MonsterPredatedMonsterInSpotEvent):
             return self._format_monster_predated_monster(event, recipient_player_id)
+        if isinstance(event, MonsterStartedFleeingInSpotEvent):
+            return self._format_monster_started_fleeing(event, recipient_player_id)
+        if isinstance(event, MonsterStartedChasingInSpotEvent):
+            return self._format_monster_started_chasing(event, recipient_player_id)
+        if isinstance(event, MonsterAbandonedChaseInSpotEvent):
+            return self._format_monster_abandoned_chase(event, recipient_player_id)
         return None
 
     def _is_self(self, entity_id: Any, recipient_id: PlayerId) -> bool:
@@ -645,6 +654,119 @@ class SpotGraphObservationFormatter:
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
             "spot_name": spot_name,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
+
+    def _format_monster_started_fleeing(
+        self,
+        event: MonsterStartedFleeingInSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """モンスターが FLEE 状態に遷移した瞬間 (Phase 4a)。
+
+        同 spot 全員に「相手が慌てて逃げ出した」を届ける。後続の
+        MonsterLeft/Appeared と組み合わせて「殴られて逃げ出した」prose を
+        構築する。
+        """
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.monster_id
+        )
+        prose = f"{monster_name}が怯えて逃げ出した。"
+        structured = {
+            "type": "monster_started_fleeing",
+            "monster_name": monster_name,
+            "monster_id": event.monster_id.value,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
+
+    def _format_monster_started_chasing(
+        self,
+        event: MonsterStartedChasingInSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """モンスターが CHASE 状態に遷移した瞬間 (Phase 4a)。
+
+        観測者が **target 本人** ならより緊張感のある prose に切り替える。
+        target が他 monster の場合や第三者観測者は中立 prose。
+        """
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.monster_id
+        )
+        is_target = (
+            event.target_player_id is not None
+            and event.target_player_id.value == recipient_id.value
+        )
+        if is_target:
+            prose = f"{monster_name}があなたを睨み、追跡を始めた。"
+        elif event.target_player_id is not None:
+            target_name = self._resolve_entity_name(event.target_player_id)
+            prose = f"{monster_name}が{target_name}を狙って追跡を始めた。"
+        elif event.target_monster_id is not None:
+            target_name = self._context.name_resolver.monster_name_by_monster_id(
+                event.target_monster_id
+            )
+            prose = f"{monster_name}が{target_name}を狙って追跡を始めた。"
+        else:
+            # target id 両方 None は不整合だが防御
+            prose = f"{monster_name}が何かを追い始めた。"
+        structured = {
+            "type": "monster_started_chasing",
+            "monster_name": monster_name,
+            "monster_id": event.monster_id.value,
+            "target_player_id": (
+                event.target_player_id.value
+                if event.target_player_id is not None else None
+            ),
+            "target_monster_id": (
+                event.target_monster_id.value
+                if event.target_monster_id is not None else None
+            ),
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
+
+    def _format_monster_abandoned_chase(
+        self,
+        event: MonsterAbandonedChaseInSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """モンスターが CHASE を諦めて IDLE に戻った瞬間 (Phase 4a/4b)。
+
+        理由 (`reason`) によって若干 prose のニュアンスを変える:
+        - grace_expired / max_ticks_exceeded: 「諦めて立ち去った」
+        - target_lost / search_expired: 「見失って戻っていった」
+        - no_path: 「進路を阻まれて引き返した」
+        """
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.monster_id
+        )
+        reason = event.reason
+        if reason in ("target_lost", "search_expired"):
+            prose = f"{monster_name}は獲物を見失い、追跡を諦めたようだ。"
+        elif reason == "no_path":
+            prose = f"{monster_name}は進路を阻まれ、追跡を諦めた。"
+        else:
+            # grace_expired / max_ticks_exceeded / 不明 reason の fallback
+            prose = f"{monster_name}は追跡を諦めて立ち去った。"
+        structured = {
+            "type": "monster_abandoned_chase",
+            "monster_name": monster_name,
+            "monster_id": event.monster_id.value,
+            "reason": reason,
         }
         return ObservationOutput(
             prose=prose,
