@@ -16,6 +16,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
     MonsterAppearedAtSpotEvent,
+    MonsterAttackedPlayerInSpotEvent,
     MonsterLeftSpotEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
@@ -77,6 +78,8 @@ class SpotGraphObservationFormatter:
             return self._format_monster_appeared(event, recipient_player_id)
         if isinstance(event, MonsterLeftSpotEvent):
             return self._format_monster_left(event, recipient_player_id)
+        if isinstance(event, MonsterAttackedPlayerInSpotEvent):
+            return self._format_monster_attacked_player(event, recipient_player_id)
         return None
 
     def _is_self(self, entity_id: Any, recipient_id: PlayerId) -> bool:
@@ -442,6 +445,65 @@ class SpotGraphObservationFormatter:
             prose=prose,
             structured=structured,
             observation_category="environment",
+            schedules_turn=True,
+        )
+
+    def _format_monster_attacked_player(
+        self,
+        event: MonsterAttackedPlayerInSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """モンスター攻撃の prose 生成。
+
+        受信者ごとに 3 通りの prose に切り替える:
+        - **被害者本人 (target_player_id == recipient)**:
+          ・視認可なら「{monster}に襲われ {damage} のダメージを受けた」
+          ・視認不可（暗闇 + dark_vision モンスター）なら「暗闇から襲われた」
+        - **被害者以外の同スポット第三者**:
+          ・視認可なら「{monster}が{target_name}を攻撃した」
+          ・視認不可（観測者から monster が見えない）なら「闇の中で何かが
+            動いた気がする」レベルに縮退すべき
+          TODO(combat-pr-followup): 暗闇 + dark_vision モンスター × 第三者
+          観測者の組み合わせで、「灰色のオオカミが勇者を攻撃した」と完全な
+          情報が出てしまう。被害者には「暗闇から襲われた」と縮退するのに
+          第三者だけ完全情報を得る非対称が生じる。本 PR は最小実装で常に
+          名前付き prose にし、戦闘 PR 系列の次イテレーションで第三者向け
+          縮退表記を追加する（被害者と同じく effective_lighting で判定）。
+        """
+        is_victim = event.target_player_id.value == recipient_id.value
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.monster_id
+        )
+        if is_victim:
+            if event.target_visible:
+                prose = (
+                    f"{monster_name}に襲われ {event.damage} のダメージを受けた。"
+                )
+            else:
+                prose = "暗闇から何かに襲われた。"
+        else:
+            target_name = self._context.name_resolver.player_name(
+                PlayerId(event.target_player_id.value)
+            )
+            prose = f"{monster_name}が{target_name}を攻撃した。"
+        if event.target_downed:
+            # 倒れた事実は受信者問わず追記。被害者本人に対しては「倒れた」、
+            # 第三者からは「{name} が倒れた」とより明確に出したいが、最小
+            # 実装では共通 suffix で済ませる。
+            prose = prose + " 致命的なダメージで倒れた。"
+        structured = {
+            "type": "monster_attacked_player",
+            "monster_id": event.monster_id.value,
+            "monster_name": monster_name,
+            "target_player_id": event.target_player_id.value,
+            "damage": event.damage,
+            "target_downed": event.target_downed,
+            "target_visible": event.target_visible,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
             schedules_turn=True,
         )
 

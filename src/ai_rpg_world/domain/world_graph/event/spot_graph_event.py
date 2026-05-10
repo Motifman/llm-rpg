@@ -230,6 +230,37 @@ class MonsterAppearedAtSpotEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class MonsterAttackedPlayerInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
+    """モンスターが同スポットのプレイヤー 1 体を攻撃した。
+
+    観測としては当該スポットの全プレイヤー（被害者本人を含む）に environment
+    カテゴリで届く。攻撃者である monster は PlayerId と同一空間ではないので
+    self 除外は不要。
+
+    被害者本人にもツール結果ではなく観測として届ける（観測 push のみ）。
+    プレイヤー側の HP 減少自体は PlayerStatusAggregate の `apply_damage` 経路
+    で別 event (PlayerDownedEvent 等) を発火する想定で、本 event は「何が
+    起きたか」の prose を組み立てる責任のみを持つ。
+
+    `target_visible` が False の場合は被害者プレイヤーから「何かに襲われた」
+    という暗闇 prose を出す前提（暗闇でも dark_vision モンスターは攻撃可能）。
+    現状は recipient 側で全員に同じ prose を出すが、将来的には受信者ごとに
+    視認可否で分岐させる余地がある。
+    """
+
+    monster_id: MonsterId
+    spot_id: SpotId
+    target_player_id: EntityId
+    damage: int
+    target_downed: bool
+    # 被害者から見て monster が「視認できているか」。被害者プレイヤーが暗闇に
+    # 居て attacker 側だけ dark_vision を持つケースでは False。最小実装では
+    # 被害者の視認も effective_lighting で判定し、attacker 側との非対称も
+    # 許容する。
+    target_visible: bool
+
+
+@dataclass(frozen=True)
 class MonsterLeftSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     """モンスター個体がスポットから離れた（despawn / 死亡 / 撤去）。
 
