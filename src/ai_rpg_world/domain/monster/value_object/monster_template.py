@@ -11,7 +11,11 @@ from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
-from ai_rpg_world.domain.monster.enum.monster_enum import EcologyTypeEnum, ActiveTimeType
+from ai_rpg_world.domain.monster.enum.monster_enum import (
+    ActiveTimeType,
+    EcologyTypeEnum,
+    ReactionPolicyEnum,
+)
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,12 @@ class MonsterTemplate:
     # **デフォルトは 0.0 (静止)**。ボスや陳列目的の NPC モンスターが意図せず
     # 動かないよう、徘徊させたいテンプレだけシナリオ側で明示する opt-in 方針。
     idle_wander_chance: float = 0.0
+    # Phase 4a: 攻撃を受けたときの反応 policy。詳細は `ReactionPolicyEnum`。
+    # デフォルトは PASSIVE で既存挙動と同じ（反応しない）。
+    reaction_to_attack: ReactionPolicyEnum = ReactionPolicyEnum.PASSIVE
+    # 攻撃を受けてから何 tick 反応 (FLEE / CHASE) を続けるか。0 で即時忘却 →
+    # 反応しない。3-5 程度が自然な動物行動の目安。
+    flee_grace_ticks: int = 3
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
@@ -120,6 +130,21 @@ class MonsterTemplate:
             raise MonsterTemplateValidationException(
                 f"idle_wander_chance must be between 0.0 and 1.0, "
                 f"got {self.idle_wander_chance}"
+            )
+        if not isinstance(self.reaction_to_attack, ReactionPolicyEnum):
+            raise MonsterTemplateValidationException(
+                f"reaction_to_attack must be ReactionPolicyEnum, "
+                f"got {type(self.reaction_to_attack).__name__}"
+            )
+        if not isinstance(self.flee_grace_ticks, int) or isinstance(
+            self.flee_grace_ticks, bool
+        ):
+            raise MonsterTemplateValidationException(
+                "flee_grace_ticks must be int"
+            )
+        if self.flee_grace_ticks < 0:
+            raise MonsterTemplateValidationException(
+                f"flee_grace_ticks must be >= 0, got {self.flee_grace_ticks}"
             )
 
         if self.vision_range < 0:
