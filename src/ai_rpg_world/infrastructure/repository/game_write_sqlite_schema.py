@@ -1826,6 +1826,31 @@ def _migration_v24(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v25(connection: sqlite3.Connection) -> None:
+    """Phase 4-O B: モンスターテンプレートに温度 comfort 範囲を追加。
+
+    `game_monster_templates` に 3 カラム追加:
+    - `min_comfortable_temperature TEXT`: TemperatureEnum value、default 'FREEZING'
+    - `max_comfortable_temperature TEXT`: 同、default 'HOT'
+    - `temperature_discomfort_damage_per_tick INTEGER`: default 0 (効果無効)
+
+    既存 row はすべて default 値で埋まり、温度効果無効の挙動を維持する
+    (後方互換)。
+    """
+    connection.execute(
+        "ALTER TABLE game_monster_templates "
+        "ADD COLUMN min_comfortable_temperature TEXT NOT NULL DEFAULT 'FREEZING'"
+    )
+    connection.execute(
+        "ALTER TABLE game_monster_templates "
+        "ADD COLUMN max_comfortable_temperature TEXT NOT NULL DEFAULT 'HOT'"
+    )
+    connection.execute(
+        "ALTER TABLE game_monster_templates "
+        "ADD COLUMN temperature_discomfort_damage_per_tick INTEGER NOT NULL DEFAULT 0"
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -1851,6 +1876,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=22, apply=_migration_v22),
     SqliteMigration(version=23, apply=_migration_v23),
     SqliteMigration(version=24, apply=_migration_v24),
+    SqliteMigration(version=25, apply=_migration_v25),
 )
 
 

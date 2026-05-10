@@ -26,6 +26,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterAppearedAtSpotEvent,
     MonsterAteGroundItemEvent,
     MonsterAttackedPlayerInSpotEvent,
+    MonsterFeltTemperatureDiscomfortInSpotEvent,
     MonsterLeftSpotEvent,
     MonsterPredatedMonsterInSpotEvent,
     MonsterStartedChasingInSpotEvent,
@@ -175,6 +176,9 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             self._resolve_all_at_spot(event.spot_id, add)
         elif isinstance(event, MonsterAbandonedChaseInSpotEvent):
             # CHASE 諦め: 同 spot 全員に「相手が諦めて去っていった」観測。
+            self._resolve_all_at_spot(event.spot_id, add)
+        elif isinstance(event, MonsterFeltTemperatureDiscomfortInSpotEvent):
+            # 温度不快: 同 spot 全員に「相手が寒さ/暑さで弱っている」観測。
             self._resolve_all_at_spot(event.spot_id, add)
 
         return result
