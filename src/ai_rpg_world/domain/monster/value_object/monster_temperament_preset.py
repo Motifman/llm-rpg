@@ -46,6 +46,12 @@ class _TemperamentPreset:
 # 各 temperament のプリセット値。数値の根拠は docstring 参照。
 _PRESETS: dict[TemperamentEnum, _TemperamentPreset] = {
     # 攻撃しない平和な動物。被弾しても無反応で立ち尽くす。
+    # 注: chase_max_* / chase_search_ticks は reaction=PASSIVE で `_continue_chase`
+    # に入らないため値は参照されない (デッドフィールド)。`0` が入っているが、
+    # これは BERSERKER の `0=無制限` と意味が異なる。仮に reaction を後から
+    # ALWAYS_RETALIATE に上書きすると CHASE 系挙動が「無制限執念深い」に
+    # 化けるので注意 (apply 後の `replace` で reaction を変えるなら chase
+    # 系も同時に上書きすること)。
     TemperamentEnum.PASSIVE_BEAST: _TemperamentPreset(
         reaction_to_attack=ReactionPolicyEnum.PASSIVE,
         flee_grace_ticks=0,
@@ -55,6 +61,8 @@ _PRESETS: dict[TemperamentEnum, _TemperamentPreset] = {
         chase_search_ticks=0,
     ),
     # 弱気な動物。被弾即逃走、追跡しない。
+    # 注: chase_* は ALWAYS_FLEE 経路では参照されないデッドフィールド
+    # (PASSIVE_BEAST と同じ注意事項が適用される)。
     TemperamentEnum.COWARD: _TemperamentPreset(
         reaction_to_attack=ReactionPolicyEnum.ALWAYS_FLEE,
         flee_grace_ticks=5,
@@ -102,6 +110,27 @@ _PRESETS: dict[TemperamentEnum, _TemperamentPreset] = {
 }
 
 
+def _validate_preset_coverage() -> None:
+    """モジュールロード時に `_PRESETS` が `TemperamentEnum` の全値を網羅
+    していることを assert する。enum 追加時にプリセット追加を忘れた場合、
+    import 時点で AssertionError として失敗する (フェイルファスト)。
+
+    PASSIVE_BEAST / COWARD のように chase 系フィールドが「reaction が
+    chase に入らないため意味を持たない」temperament でも、デッドフィールド
+    として 0 を入れている (BERSERKER の `0=無制限` と同じ値だが、reaction
+    が PASSIVE / ALWAYS_FLEE のため `_continue_chase` には入らないので
+    実害なし)。
+    """
+    missing = [t for t in TemperamentEnum if t not in _PRESETS]
+    if missing:
+        raise AssertionError(
+            f"_PRESETS に未登録の TemperamentEnum: {missing}"
+        )
+
+
+_validate_preset_coverage()
+
+
 def apply_temperament(
     base: MonsterTemplate,
     temperament: TemperamentEnum,
@@ -117,6 +146,10 @@ def apply_temperament(
     - chase_search_ticks
 
     その他のフィールド (HP / 攻撃力 / race / faction 等) は base のまま維持。
+
+    `dataclasses.replace` 経由のため `MonsterTemplate.__post_init__` の
+    バリデーションが再実行される。preset 値はバリデーションを通過する
+    前提で定義されている (テストで全 temperament を呼び出して確認済み)。
     """
     preset = _PRESETS[temperament]
     return replace(
@@ -128,8 +161,3 @@ def apply_temperament(
         chase_max_ticks=preset.chase_max_ticks,
         chase_search_ticks=preset.chase_search_ticks,
     )
-
-
-def get_preset_values(temperament: TemperamentEnum) -> _TemperamentPreset:
-    """テスト用にプリセット値を読み取る (read-only)。"""
-    return _PRESETS[temperament]
