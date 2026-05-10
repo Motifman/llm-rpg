@@ -62,6 +62,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 )
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
+from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_service import (
+    SpotMonsterBehaviorTickService,
+)
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
     SpotAttackOrchestrator,
 )
@@ -379,6 +382,23 @@ def create_spot_graph_wiring(
         player_status_repository=player_status_repository,
         attack_orchestrator=attack_orchestrator,
     )
+
+    # モンスター行動 tick サービス。世界 tick driver (presentation 層) が
+    # 1 tick ごとに `monster_behavior_tick_service.tick(current_tick)` を
+    # 呼び出すことで attack + wander を実行させる。本 wiring では構築のみ
+    # 担当し、実際の tick 駆動は presentation 側 (例: `spot_graph_game/server.py`
+    # のメインループ) で接続する。
+    # `monster_repository` 未設定の起動構成では None にしておき、tick driver
+    # 側で None ガードしてもらう。
+    monster_behavior_tick_service: Optional[SpotMonsterBehaviorTickService] = None
+    if monster_repository is not None and attack_orchestrator is not None:
+        monster_behavior_tick_service = SpotMonsterBehaviorTickService(
+            spot_graph_repository=spot_graph_repository,
+            monster_repository=monster_repository,
+            player_status_repository=player_status_repository,
+            attack_orchestrator=attack_orchestrator,
+        )
+
     no_op_movement = SpotGraphNoOpMovementService()
 
     tool_stack = _build_tool_stack(
@@ -581,6 +601,7 @@ def create_spot_graph_wiring(
         episodic_reinterpretation_journal_store=reinterpretation_journal,
         semantic_memory_store=semantic_memory_store,
         event_publisher=event_publisher,
+        monster_behavior_tick_service=monster_behavior_tick_service,
     )
 
 
