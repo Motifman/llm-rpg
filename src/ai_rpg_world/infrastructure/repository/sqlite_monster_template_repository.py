@@ -11,6 +11,7 @@ from ai_rpg_world.domain.monster.repository.monster_repository import (
 )
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     init_game_write_schema,
 )
@@ -121,8 +122,9 @@ class SqliteMonsterTemplateRepository(MonsterTemplateRepository):
             row=row,
             skill_ids=[int(skill_row["skill_id"]) for skill_row in skill_rows],
             phase_thresholds=[float(phase_row["threshold"]) for phase_row in phase_rows],
-            threat_races=[threat_row["race"] for threat_row in threat_rows],
-            prey_races=[prey_row["race"] for prey_row in prey_rows],
+            # SQLite には Race.value 文字列で保存。enum に戻す。
+            threat_races=[Race(threat_row["race"]) for threat_row in threat_rows],
+            prey_races=[Race(prey_row["race"]) for prey_row in prey_rows],
             growth_stage_rows=list(growth_rows),
             preferred_feed_item_spec_ids=[int(feed_row["item_spec_id"]) for feed_row in feed_rows],
             respawn_preferred_weather=[weather_row["weather_type"] for weather_row in respawn_weather_rows],
@@ -270,13 +272,24 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
             "INSERT INTO game_monster_template_phase_thresholds (template_id, threshold_index, threshold) VALUES (?, ?, ?)",
             [(int(template.template_id), index, value) for index, value in enumerate(template.phase_thresholds or [])],
         )
+        # Race enum を value 文字列で保存。順序は value の昇順で安定化する。
         self._conn.executemany(
             "INSERT INTO game_monster_template_threat_races (template_id, race_index, race) VALUES (?, ?, ?)",
-            [(int(template.template_id), index, value) for index, value in enumerate(sorted(template.threat_races or []))],
+            [
+                (int(template.template_id), index, race.value)
+                for index, race in enumerate(
+                    sorted(template.threat_races or [], key=lambda r: r.value)
+                )
+            ],
         )
         self._conn.executemany(
             "INSERT INTO game_monster_template_prey_races (template_id, race_index, race) VALUES (?, ?, ?)",
-            [(int(template.template_id), index, value) for index, value in enumerate(sorted(template.prey_races or []))],
+            [
+                (int(template.template_id), index, race.value)
+                for index, race in enumerate(
+                    sorted(template.prey_races or [], key=lambda r: r.value)
+                )
+            ],
         )
         self._conn.executemany(
             """
