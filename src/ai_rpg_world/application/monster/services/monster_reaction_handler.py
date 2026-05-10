@@ -140,7 +140,11 @@ class MonsterReactionHandler:
         if monster.is_fleeing(current_tick):
             self._continue_flee(monster, graph, spot_id)
             return AttackOutcome(executed=False, reason="fleeing")
-        # FLEE が grace 切れで終わっていたら IDLE に戻す（次フレームに通常 chain）
+        # FLEE が grace 切れで終わっていたら IDLE に戻す（次フレームに通常 chain）。
+        # FLEE 終了は「自然消滅」として扱い、observation event は発火しない
+        # (CHASE の Abandoned event とは意図的に非対称)。プレイヤー視点では
+        # 既存の MonsterLeft/Appeared (FLEE 中の wander 移動) で「逃げ去って
+        # 行った」が表現済みのため、追加の終了 event は冗長と判断。
         if monster.behavior_state == BehaviorStateEnum.FLEE:
             monster.clear_behavior_state_to_idle()
             self._monster_repository.save(monster)
@@ -196,7 +200,7 @@ class MonsterReactionHandler:
                     monster_id=monster.monster_id,
                     spot_id=spot_id,
                     target_player_id=(
-                        EntityId.create(attacker_ref.player_id.value)
+                        self._player_id_to_entity_id(attacker_ref.player_id)
                         if attacker_ref.is_player else None
                     ),
                     target_monster_id=(
@@ -274,7 +278,15 @@ class MonsterReactionHandler:
         """
         attacker_ref: Optional[AttackerRef] = monster.chase_attacker_ref()
         if attacker_ref is None:
-            # 不整合系。観測 prose に出すほどではないので bare clear。
+            # 不整合系: CHASE 状態にあるのに追跡対象 ref が無い。実運用では
+            # DB マイグレーション後の残留 state 等で発生し得る。観測 prose
+            # に出すほどの意味がないため event は発火しないが、debug の
+            # 手がかりとして warning ログだけは残す。
+            logger.warning(
+                "CHASE state without chase_attacker_ref for monster=%s, "
+                "falling back to IDLE without event",
+                monster.monster_id.value,
+            )
             monster.clear_behavior_state_to_idle()
             self._monster_repository.save(monster)
             return None
@@ -348,6 +360,17 @@ class MonsterReactionHandler:
         return self._handle_lost_target(
             monster=monster, graph=graph, current_spot=spot_id,
         )
+
+    @staticmethod
+    def _player_id_to_entity_id(player_id: PlayerId) -> EntityId:
+        """`PlayerId` を graph 上の `EntityId` に変換する。
+
+        現状の世界モデルでは「player_id.value (int) と entity_id.value (int)
+        が同一空間を共有する」前提で配線されている (graph.place_entity の
+        呼び出し側もこの規約に従う)。本 helper は変換を一箇所に集約し、
+        将来 player ID 空間が分離した場合の差し替えポイントを 1 つにする。
+        """
+        return EntityId.create(player_id.value)
 
     def _abandon_chase(
         self,
@@ -493,7 +516,7 @@ class MonsterReactionHandler:
         if attacker_ref.is_player:
             try:
                 return graph.get_entity_spot(
-                    EntityId.create(attacker_ref.player_id.value)
+                    self._player_id_to_entity_id(attacker_ref.player_id)
                 )
             except EntityNotInGraphException:
                 return None

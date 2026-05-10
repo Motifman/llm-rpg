@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Literal, Optional, Tuple
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -378,6 +378,17 @@ class MonsterStartedFleeingInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     spot_id: SpotId
 
 
+# Phase 4-O A: CHASE を諦める理由を表す Literal 型。formatter / handler /
+# test 全箇所で同じ型を共有することで typo を静的に検出可能にする。
+AbandonChaseReason = Literal[
+    "grace_expired",        # CHASE 中に flee_grace_ticks (被弾以来の反応 tick) が切れた
+    "max_ticks_exceeded",   # CHASE 累積 tick が chase_max_ticks を超えた
+    "target_lost",          # last_observed_target_spot_id が無く、target も graph 上に居ない
+    "search_expired",       # 探索フェーズの search_timer が満了 / chase_search_ticks=0
+    "no_path",              # passable な経路が無い (target / last_observed への到達不可)
+]
+
+
 @dataclass(frozen=True)
 class MonsterStartedChasingInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     """モンスターが CHASE 状態に遷移した (Phase 4a)。
@@ -399,20 +410,33 @@ class MonsterStartedChasingInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     target_player_id: Optional[EntityId] = None
     target_monster_id: Optional[MonsterId] = None
 
+    def __post_init__(self) -> None:
+        # discriminated union: 両方 None / 両方 non-None は不整合。
+        # event 生成時点で弾く (formatter の防御 fallback には頼らない)。
+        both_none = (
+            self.target_player_id is None and self.target_monster_id is None
+        )
+        both_set = (
+            self.target_player_id is not None
+            and self.target_monster_id is not None
+        )
+        if both_none or both_set:
+            raise ValueError(
+                "MonsterStartedChasingInSpotEvent: target_player_id と "
+                "target_monster_id は片方だけ非 None である必要がある "
+                f"(player={self.target_player_id}, monster={self.target_monster_id})"
+            )
+
 
 @dataclass(frozen=True)
 class MonsterAbandonedChaseInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     """モンスターが CHASE を諦めて IDLE に戻った (Phase 4a / 4b)。
 
-    以下のいずれかの理由で `clear_behavior_state_to_idle()` を呼んだ瞬間に
-    発火する:
-
-    - `grace_expired`: `flee_grace_ticks` 経過 (被弾以来の反応 tick 切れ)
-    - `max_ticks_exceeded`: `chase_max_ticks` 経過 (CHASE 累積 tick 切れ)
-    - `target_lost`: target が graph 上に居なくなり、見失い → 探索 → IDLE
-    - `no_path`: passable な経路が無い (target spot / last_observed への
-      到達不可)
-    - `search_expired`: `chase_search_ticks` 経過 (探索フェーズが完了)
+    `reason` の許容値は `AbandonChaseReason` Literal で定義 (FLEE の grace
+    切れではなく、CHASE 中の grace_expired / max_ticks / target_lost /
+    search_expired / no_path のいずれか)。FLEE の grace 切れ (FLEE → IDLE
+    の自然消滅) は本 event を発火しない (FLEE 終了用の専用 event 無し、
+    既存 wander の MonsterLeft/Appeared で表現)。
 
     観測としては同 spot 全員に environment カテゴリで届く。「相手が諦めて
     去っていった」prose を組み立てられる。CHASE 諦めの直後に通常 wander
@@ -422,4 +446,4 @@ class MonsterAbandonedChaseInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
 
     monster_id: MonsterId
     spot_id: SpotId
-    reason: str
+    reason: AbandonChaseReason
