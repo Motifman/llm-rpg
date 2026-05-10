@@ -54,6 +54,11 @@ class MonsterTemplate:
     #   1 にすると毎 tick 攻撃可能。0 以下は不正。
     has_dark_vision: bool = False
     attack_cooldown_ticks: int = 1
+    # スポットグラフ徘徊の確率 (0.0 〜 1.0)。tick service が「攻撃しない時」
+    # にこの確率で隣接スポットへランダム移動を試みる。0.0 で完全静止、1.0 で
+    # 毎 tick 必ず移動を試みる。`ecology_type=AMBUSH` なら本値によらず
+    # 移動しない。
+    idle_wander_chance: float = 0.5
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
@@ -99,6 +104,17 @@ class MonsterTemplate:
         if self.attack_cooldown_ticks < 1:
             raise MonsterTemplateValidationException(
                 f"attack_cooldown_ticks must be >= 1, got {self.attack_cooldown_ticks}"
+            )
+        if not isinstance(self.idle_wander_chance, (int, float)) or isinstance(
+            self.idle_wander_chance, bool
+        ):
+            raise MonsterTemplateValidationException(
+                "idle_wander_chance must be float"
+            )
+        if not (0.0 <= self.idle_wander_chance <= 1.0):
+            raise MonsterTemplateValidationException(
+                f"idle_wander_chance must be between 0.0 and 1.0, "
+                f"got {self.idle_wander_chance}"
             )
 
         if self.vision_range < 0:

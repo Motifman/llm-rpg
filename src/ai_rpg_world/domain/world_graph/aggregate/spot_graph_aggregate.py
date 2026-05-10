@@ -498,6 +498,92 @@ class SpotGraphAggregate(AggregateRoot):
             )
         )
 
+    def can_traverse_connection(
+        self,
+        connection_id: ConnectionId,
+        owned_item_spec_ids: FrozenSet[ItemSpecId],
+        world_flags: FrozenSet[str],
+    ) -> bool:
+        """指定接続が `Passage.traversable=True` かつ `passage_conditions` を
+        全て満たすかを返す。public 側から `_navigation.can_pass` を直接触らずに
+        合否だけ問い合わせるためのヘルパー。
+
+        モンスター徘徊の事前フィルタや、UI 側で "このプレイヤーがそこを通れるか"
+        を表示する用途に使う。
+        """
+        conn = self.get_connection(connection_id)
+        ok, _ = self._navigation.can_pass(conn, owned_item_spec_ids, world_flags)
+        return ok
+
+    def move_monster(
+        self,
+        monster_id: MonsterId,
+        connection_id: ConnectionId,
+        owned_item_spec_ids: FrozenSet[ItemSpecId],
+        world_flags: FrozenSet[str],
+    ) -> None:
+        """モンスター個体を接続経由で隣接スポットへ移動する。
+
+        プレイヤーの `move_entity` と対称構造。`Passage` の通行条件
+        (`SpotGraphNavigationService.can_pass`) を尊重するため、鍵が要る
+        扉やフラグ付き通路はモンスターも通れない。
+
+        emit する event は `MonsterLeftSpotEvent` → `MonsterAppearedAtSpotEvent`
+        の対。受信者解決はそれぞれ「元 spot 全員」「先 spot 全員」となるため、
+        観測パイプラインを書き換えずに移動を表現できる（PR #124 の docstring
+        で示唆していた選択肢のうち「Left → Appeared を対で発火」を採用）。
+
+        ALIVE/DEAD は集約レベルで管理しないため、`MonsterAggregate` の状態は
+        呼び出し側で確認する責任がある（ALIVE 以外を移動させたいケースは
+        無いはずだが、本メソッドはそのチェックを行わない）。
+        """
+        if monster_id not in self._monster_spot:
+            raise MonsterNotInGraphException(f"Monster not placed: {monster_id}")
+        conn = self.get_connection(connection_id)
+        from_spot = self._monster_spot[monster_id]
+        if from_spot != conn.from_spot_id:
+            raise SpotPresenceInvariantException(
+                f"Monster {monster_id} is at {from_spot}, "
+                f"not at connection origin {conn.from_spot_id}"
+            )
+        ok, reason = self._navigation.can_pass(conn, owned_item_spec_ids, world_flags)
+        if not ok:
+            raise ConnectionNotPassableException(reason or "Cannot pass")
+
+        to_spot = conn.to_spot_id
+
+        old_pres = self._monster_presences.get(
+            from_spot, MonsterSpotPresence.empty(from_spot)
+        )
+        new_old_pres = old_pres.remove(monster_id)
+        if new_old_pres.count() == 0:
+            self._monster_presences.pop(from_spot, None)
+        else:
+            self._monster_presences[from_spot] = new_old_pres
+
+        dest_pres = self._monster_presences.get(
+            to_spot, MonsterSpotPresence.empty(to_spot)
+        )
+        self._monster_presences[to_spot] = dest_pres.add(monster_id)
+        self._monster_spot[monster_id] = to_spot
+
+        self.add_event(
+            MonsterLeftSpotEvent.create(
+                aggregate_id=self._graph_id,
+                aggregate_type="SpotGraphAggregate",
+                monster_id=monster_id,
+                spot_id=from_spot,
+            )
+        )
+        self.add_event(
+            MonsterAppearedAtSpotEvent.create(
+                aggregate_id=self._graph_id,
+                aggregate_type="SpotGraphAggregate",
+                monster_id=monster_id,
+                spot_id=to_spot,
+            )
+        )
+
     def get_monster_spot(self, monster_id: MonsterId) -> SpotId:
         if monster_id not in self._monster_spot:
             raise MonsterNotInGraphException(f"Monster not placed: {monster_id}")
