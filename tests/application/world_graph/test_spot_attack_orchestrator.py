@@ -7,7 +7,7 @@
 - `execute_player_attack` 成立で PlayerAttackedMonsterInSpotEvent が追加され
   3 集約が save される
 - 暗闇 + dark_vision モンスター → 攻撃成立、target_visible=False で event 構築
-- AttackOutcome → event field 翻訳 (target_incapacitated → target_downed/target_killed)
+- AttackOutcome.target_incapacitated が event の同名 field に直接渡される
 """
 
 from __future__ import annotations
@@ -194,8 +194,12 @@ class TestExecuteMonsterAttack:
         player_repo.save.assert_not_called()
         spot_repo.save.assert_not_called()
 
-    def test_target_incapacitated_は_event_の_target_downed_に翻訳(self) -> None:
-        """`AttackOutcome.target_incapacitated=True` → event.target_downed=True。"""
+    def test_target_incapacitated_が_event_に直接そのまま渡される(self) -> None:
+        """`AttackOutcome.target_incapacitated=True` → event.target_incapacitated=True。
+
+        Phase B で event の field 名を統一したため翻訳が不要になった
+        （以前は target_downed という別 field 名だった）。
+        """
         graph = _make_graph()
         monster = _make_monster(attack=999)
         player = _make_player(is_down_before=False, is_down_after=True)  # 致命でダウン
@@ -214,7 +218,7 @@ class TestExecuteMonsterAttack:
         assert outcome.target_incapacitated is True
         events = [e for e in graph.get_events() if isinstance(e, MonsterAttackedPlayerInSpotEvent)]
         assert len(events) == 1
-        assert events[0].target_downed is True
+        assert events[0].target_incapacitated is True
 
 
 class TestExecutePlayerAttack:
@@ -299,8 +303,8 @@ class TestExecutePlayerAttack:
         events = [e for e in graph.get_events() if isinstance(e, PlayerAttackedMonsterInSpotEvent)]
         assert len(events) == 1
         assert events[0].damage == 10
-        assert events[0].actor_entity_id == EntityId.create(1)
-        assert events[0].monster_id == MonsterId.create(101)
+        assert events[0].attacker_entity_id == EntityId.create(1)
+        assert events[0].target_monster_id == MonsterId.create(101)
         monster_repo.save.assert_called_once_with(monster)
         player_repo.save.assert_called_once_with(attacker)
         spot_repo.save.assert_called_once_with(graph)

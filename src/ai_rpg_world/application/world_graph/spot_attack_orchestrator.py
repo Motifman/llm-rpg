@@ -15,9 +15,8 @@ orchestrator 自身は:
   `PlayerAttackedMonsterInSpotEvent` を SpotGraphAggregate に追加
 - 関係する全 aggregate (graph / monster / player) を save
 
-`AttackOutcome.target_incapacitated` は event 構築時にそれぞれの event の
-`target_downed` (player) / `target_killed` (monster) フィールドへ翻訳する。
-（event の field 名統一は別 PR の Phase B で扱う）
+`AttackOutcome.target_incapacitated` は両 event の同名 field にそのまま
+渡される（Phase B の event 対称化により翻訳が不要になった）。
 
 将来追加される攻撃種別（スキル攻撃・cross-domain effect 攻撃・範囲攻撃）も
 同じ orchestrator にメソッドを足すか、内部の domain service を差し替えるだけで
@@ -149,11 +148,11 @@ class SpotAttackOrchestrator:
             MonsterAttackedPlayerInSpotEvent.create(
                 aggregate_id=graph.graph_id,
                 aggregate_type="SpotGraphAggregate",
-                monster_id=attacker_monster.monster_id,
+                attacker_monster_id=attacker_monster.monster_id,
                 spot_id=spot_id,
                 target_player_id=EntityId.create(target_player.player_id.value),
                 damage=outcome.damage,
-                target_downed=outcome.target_incapacitated,
+                target_incapacitated=outcome.target_incapacitated,
                 target_visible=target_visible,
             )
         )
@@ -196,11 +195,11 @@ class SpotAttackOrchestrator:
             PlayerAttackedMonsterInSpotEvent.create(
                 aggregate_id=graph.graph_id,
                 aggregate_type="SpotGraphAggregate",
-                actor_entity_id=EntityId.create(attacker_player.player_id.value),
-                monster_id=target_monster.monster_id,
+                attacker_entity_id=EntityId.create(attacker_player.player_id.value),
+                target_monster_id=target_monster.monster_id,
                 spot_id=spot_id_for_event,
                 damage=outcome.damage,
-                target_killed=outcome.target_incapacitated,
+                target_incapacitated=outcome.target_incapacitated,
             )
         )
         self._monster_repository.save(target_monster)
