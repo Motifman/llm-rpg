@@ -625,17 +625,22 @@ class MonsterAggregate(AggregateRoot):
 
     def enter_chase_state(
         self,
-        target_id: WorldObjectId,
+        attacker_ref: "AttackerRef",
         last_known_spot_id: SpotId,
     ) -> None:
-        """CHASE 状態に遷移。target_id と last_known_spot_id を保持。
+        """CHASE 状態に遷移。追跡対象の attacker_ref をスナップショットとして
+        固定し、`last_known_spot_id` を保持する。
+
+        `last_attacker_ref` (集約フィールド) は後続の被弾で上書きされ得るが、
+        CHASE 中の追跡対象は state 内の ref で固定されるため、第三者から殴ら
+        れても target は変わらない。
 
         ALIVE 以外では no-op。
         """
         if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
             return
         self._behavior_state = self._behavior_state.with_spot_chase(
-            target_id=target_id,
+            attacker_ref=attacker_ref,
             last_known_spot_id=last_known_spot_id,
         )
 
@@ -662,11 +667,15 @@ class MonsterAggregate(AggregateRoot):
         """現在 CHASE 中か。"""
         return self._behavior_state.state == BehaviorStateEnum.CHASE
 
-    def chase_target_id(self) -> Optional[WorldObjectId]:
-        """CHASE 中の target_id を返す。CHASE でない場合は None。"""
+    def chase_attacker_ref(self) -> Optional["AttackerRef"]:
+        """CHASE 中の追跡対象 (attacker_ref スナップショット) を返す。
+
+        CHASE でない場合は None。`last_attacker_ref` と異なり後続の被弾で
+        上書きされない。
+        """
         if not self.is_chasing():
             return None
-        return self._behavior_state.target_id
+        return self._behavior_state.chase_attacker_ref
 
     def record_attack(self, current_tick: WorldTick) -> None:
         """攻撃を実行した事実を tick として記録する。cooldown の起点。

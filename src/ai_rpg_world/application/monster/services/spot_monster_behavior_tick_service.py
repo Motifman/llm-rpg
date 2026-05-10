@@ -53,7 +53,6 @@ from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
 )
 from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.monster.enum.monster_enum import (
     BehaviorStateEnum,
@@ -317,21 +316,23 @@ class SpotMonsterBehaviorTickService:
         target = self._decide_reaction_target(monster, current_tick)
         if target == "flee":
             monster.enter_flee_state(current_tick, template.flee_grace_ticks)
+            # state 遷移を永続化。SQLite repo では save しないと次 tick で
+            # state が揮発する。
+            self._monster_repository.save(monster)
             self._continue_flee(monster, graph, spot_id, current_tick)
             return AttackOutcome(executed=False, reason="fleeing")
         if target == "chase":
             attacker_ref = monster.last_attacker_ref
             if attacker_ref is None:
                 # attacker_ref 不明では CHASE できない（PR #133 以前に作られた
-                # 古い監督 record のみ tick 持ち、ref 無し）。fall through。
-                return None
-            chase_target_id = self._resolve_attacker_world_object_id(attacker_ref)
-            if chase_target_id is None:
+                # 古い record のみ tick 持ち、ref 無し）。fall through。
                 return None
             monster.enter_chase_state(
-                target_id=chase_target_id,
+                attacker_ref=attacker_ref,
                 last_known_spot_id=spot_id,
             )
+            # state 遷移を永続化。
+            self._monster_repository.save(monster)
             return self._continue_chase(monster, graph, spot_id, current_tick)
         return None
 
@@ -379,15 +380,18 @@ class SpotMonsterBehaviorTickService:
     ) -> Optional[AttackOutcome]:
         """CHASE 中の 1 tick 行動: 同 spot に target が居れば攻撃。
 
-        target が居なければ（既に他 spot に逃げた等）grace を経過したら
-        IDLE 化、未経過なら何もしない。
+        - 追跡対象は CHASE 開始時に固定された `chase_attacker_ref` を使う
+          (`last_attacker_ref` は後続の被弾で上書きされうるため)。
+        - target が同 spot に居ない / grace 切れ / ref 不正の場合は IDLE
+          に戻して `None` を返し、priority chain の続行 (attack/forage/wander)
+          を許す。
         """
-        target_id = monster.chase_target_id()
-        if target_id is None:
-            # 不正状態。IDLE に戻す
+        # 追跡対象は state に固定された ref を真とする
+        attacker_ref = monster.chase_attacker_ref()
+        if attacker_ref is None:
             monster.clear_behavior_state_to_idle()
             self._monster_repository.save(monster)
-            return AttackOutcome(executed=False, reason="no_chase_target")
+            return None
 
         # grace 切れチェック
         last_attacked = monster.last_attacked_tick
@@ -397,18 +401,17 @@ class SpotMonsterBehaviorTickService:
         ):
             monster.clear_behavior_state_to_idle()
             self._monster_repository.save(monster)
-            return AttackOutcome(executed=False, reason="chase_expired")
-
-        # target を同 spot で探す
-        attacker_ref = monster.last_attacker_ref
-        if attacker_ref is None:
-            return AttackOutcome(executed=False, reason="no_attacker_ref")
+            return None
 
         if attacker_ref.is_player:
-            # 同 spot に該当プレイヤーが居るか
-            target_player = self._find_player_at_spot(graph, spot_id, attacker_ref.player_id)
+            target_player = self._find_player_at_spot(
+                graph, spot_id, attacker_ref.player_id
+            )
             if target_player is None:
-                return AttackOutcome(executed=False, reason="target_not_at_spot")
+                # target が他 spot に移動済み。CHASE を解除して chain 続行。
+                monster.clear_behavior_state_to_idle()
+                self._monster_repository.save(monster)
+                return None
             return self._orchestrator.execute_monster_attack(
                 attacker_monster=monster,
                 target_player=target_player,
@@ -421,7 +424,9 @@ class SpotMonsterBehaviorTickService:
             graph, spot_id, attacker_ref.monster_id
         )
         if target_monster is None:
-            return AttackOutcome(executed=False, reason="target_not_at_spot")
+            monster.clear_behavior_state_to_idle()
+            self._monster_repository.save(monster)
+            return None
         return self._orchestrator.execute_monster_to_monster_attack(
             attacker_monster=monster,
             target_monster=target_monster,
@@ -430,26 +435,12 @@ class SpotMonsterBehaviorTickService:
             current_tick=current_tick,
         )
 
-    def _resolve_attacker_world_object_id(
-        self, attacker_ref: "AttackerRef"
-    ) -> Optional[WorldObjectId]:
-        """AttackerRef を WorldObjectId に解決する（CHASE state の target_id 用）。
-
-        player の場合は PlayerId をそのまま WorldObjectId として扱う仕様
-        （既存 attack 経路でも player_id を world_object_id 互換で使っている）。
-        """
-        if attacker_ref.is_monster:
-            # monster の world_object_id は repository から引き直す。
-            attacker = self._monster_repository.find_by_id(attacker_ref.monster_id)
-            if attacker is None:
-                return None
-            return attacker.world_object_id
-        # player の world_object_id は player_id.value で代用
-        return WorldObjectId.create(attacker_ref.player_id.value)
-
     def _find_player_at_spot(
-        self, graph: SpotGraphAggregate, spot_id: SpotId, player_id
-    ):
+        self,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+        player_id: PlayerId,
+    ) -> Optional[PlayerStatusAggregate]:
         """同 spot に居る指定 player が居れば aggregate を返す、なければ None。"""
         presence = graph.presence_at(spot_id)
         for entity_id in presence.present_entity_ids:
@@ -463,8 +454,8 @@ class SpotMonsterBehaviorTickService:
         self,
         graph: SpotGraphAggregate,
         spot_id: SpotId,
-        target_monster_id,
-    ):
+        target_monster_id: MonsterId,
+    ) -> Optional[MonsterAggregate]:
         """同 spot に居る指定 monster が居れば aggregate を返す、なければ None。"""
         presence = graph.monster_presence_at(spot_id)
         if target_monster_id not in presence.present_monster_ids:

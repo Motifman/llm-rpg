@@ -427,3 +427,103 @@ class TestFleeingShortCircuit:
         svc.tick(WorldTick(5))
 
         assert monster.behavior_state == BehaviorStateEnum.IDLE
+
+
+class TestStatePersistence:
+    """state 遷移時に monster_repository.save() が呼ばれる (SQLite 永続化用)。"""
+
+    def test_FLEE_遷移後に_monster_save_が_呼ばれる(self) -> None:
+        """ALWAYS_FLEE 反応で FLEE に入った直後に save される。"""
+        monster = _make_monster(
+            _template(reaction=ReactionPolicyEnum.ALWAYS_FLEE),
+        )
+        monster.record_attacked_by_in_spot(
+            current_tick=WorldTick(9),
+            attacker_ref=AttackerRef.of_player(PlayerId(1)),
+        )
+        graph = _make_graph()
+        graph.place_monster(monster.monster_id, SPOT_A)
+
+        svc, _spot_repo, monster_repo = _make_service(graph, monster)
+        svc.tick(WorldTick(10))
+
+        # FLEE 遷移時 + (wander で graph save はあるが monster save は state 用のみ)
+        assert monster_repo.save.call_count >= 1
+        assert any(
+            call.args and call.args[0] is monster
+            for call in monster_repo.save.call_args_list
+        )
+
+    def test_CHASE_遷移後に_monster_save_が_呼ばれる(self) -> None:
+        """ALWAYS_RETALIATE 反応で CHASE に入った直後に save される。"""
+        monster = _make_monster(
+            _template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE, attack=4),
+        )
+        player = _make_player(player_id_value=1)
+        monster.record_attacked_by_in_spot(
+            current_tick=WorldTick(9),
+            attacker_ref=AttackerRef.of_player(player.player_id),
+        )
+        graph = _make_graph()
+        graph.place_monster(monster.monster_id, SPOT_A)
+        graph.place_entity(EntityId.create(1), SPOT_A)
+
+        svc, _spot_repo, monster_repo = _make_service(graph, monster, player=player)
+        svc.tick(WorldTick(10))
+
+        # CHASE 遷移時 1 回 + orchestrator が attack 成立で 1 回 = >= 2
+        assert monster_repo.save.call_count >= 2
+
+
+class TestChaseTargetMissing:
+    """CHASE 中に target が同 spot から居なくなった場合は IDLE に戻る。"""
+
+    def test_target_player_が_別spot_に_移動済みなら_CHASE_を_解除(self) -> None:
+        """CHASE 中の player が同 spot に居なければ state クリア。"""
+        monster = _make_monster(
+            _template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE, attack=4),
+        )
+        # 事前に CHASE 状態に入れておく（player が居ない状況）
+        monster.record_attacked_by_in_spot(
+            current_tick=WorldTick(8),
+            attacker_ref=AttackerRef.of_player(PlayerId(1)),
+        )
+        monster.enter_chase_state(
+            attacker_ref=AttackerRef.of_player(PlayerId(1)),
+            last_known_spot_id=SPOT_A,
+        )
+        graph = _make_graph()
+        graph.place_monster(monster.monster_id, SPOT_A)
+        # player は graph 上に居ない (= 別 spot に移動済み)
+
+        # player_repo は呼ばれない経路のため None でも OK
+        svc, *_ = _make_service(graph, monster, player=None)
+        svc.tick(WorldTick(9))
+
+        assert monster.behavior_state == BehaviorStateEnum.IDLE
+
+
+class TestThirdPartyAttackerRefSafety:
+    """CHASE 中に第三者から殴られても追跡対象は変わらない。"""
+
+    def test_第三者の_record_attacked_by_in_spot_では_CHASE_target_は_不変(self) -> None:
+        """CHASE 中に新しい attacker_ref が記録されても chase target は固定。"""
+        monster = _make_monster(
+            _template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE, attack=4),
+        )
+        original = AttackerRef.of_player(PlayerId(1))
+        monster.record_attacked_by_in_spot(
+            current_tick=WorldTick(8), attacker_ref=original,
+        )
+        monster.enter_chase_state(
+            attacker_ref=original, last_known_spot_id=SPOT_A,
+        )
+        # 第三者から殴られる
+        intruder = AttackerRef.of_monster(MonsterId.create(999))
+        monster.record_attacked_by_in_spot(
+            current_tick=WorldTick(9), attacker_ref=intruder,
+        )
+
+        # chase 対象は最初の attacker のまま
+        assert monster.chase_attacker_ref() == original
+        assert monster.last_attacker_ref == intruder

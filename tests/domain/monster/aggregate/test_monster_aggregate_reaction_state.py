@@ -140,26 +140,42 @@ class TestFleeState:
 
 
 class TestChaseState:
-    """enter_chase_state / is_chasing / chase_target_id。"""
+    """enter_chase_state / is_chasing / chase_attacker_ref。"""
 
-    def test_enter_chase_state_で_CHASE_に_遷移し_target_を_保持(self) -> None:
-        """CHASE 遷移後、is_chasing と chase_target_id が一致する。"""
+    def test_enter_chase_state_で_CHASE_に_遷移し_attacker_ref_を_保持(self) -> None:
+        """CHASE 遷移後、is_chasing と chase_attacker_ref が一致する。"""
         agg = _aggregate()
-        target = WorldObjectId.create(7777)
-        agg.enter_chase_state(target_id=target, last_known_spot_id=SpotId.create(1))
+        ref = AttackerRef.of_player(PlayerId(7))
+        agg.enter_chase_state(attacker_ref=ref, last_known_spot_id=SpotId.create(1))
         assert agg.is_chasing() is True
-        assert agg.chase_target_id() == target
+        assert agg.chase_attacker_ref() == ref
 
-    def test_chase_中でないとき_chase_target_id_は_None(self) -> None:
-        """CHASE 状態でない場合は chase_target_id が None を返す。"""
+    def test_chase_中でないとき_chase_attacker_ref_は_None(self) -> None:
+        """CHASE 状態でない場合は chase_attacker_ref が None を返す。"""
         agg = _aggregate()
-        assert agg.chase_target_id() is None
+        assert agg.chase_attacker_ref() is None
+
+    def test_chase_attacker_ref_は_last_attacker_ref_の_上書きで変わらない(self) -> None:
+        """CHASE 開始後に新しい attacker から殴られても chase_attacker_ref は固定。"""
+        agg = _aggregate()
+        original_ref = AttackerRef.of_player(PlayerId(7))
+        agg.enter_chase_state(
+            attacker_ref=original_ref, last_known_spot_id=SpotId.create(1)
+        )
+        # 第三者から殴られて last_attacker_ref が上書きされる
+        agg.record_attacked_by_in_spot(
+            current_tick=WorldTick(20),
+            attacker_ref=AttackerRef.of_monster(MonsterId.create(999)),
+        )
+        # CHASE の追跡対象は変わらない
+        assert agg.chase_attacker_ref() == original_ref
+        assert agg.last_attacker_ref != original_ref
 
     def test_DEAD_状態では_no_op(self) -> None:
         """死亡済みなら CHASE 遷移しない。"""
         agg = _aggregate(status=MonsterStatusEnum.DEAD)
         agg.enter_chase_state(
-            target_id=WorldObjectId.create(7777),
+            attacker_ref=AttackerRef.of_player(PlayerId(7)),
             last_known_spot_id=SpotId.create(1),
         )
         assert agg.is_chasing() is False
@@ -177,12 +193,13 @@ class TestClearBehaviorState:
         assert agg.is_fleeing(WorldTick(10)) is False
 
     def test_CHASE_を_IDLE_に_クリアする(self) -> None:
-        """CHASE → clear → IDLE。"""
+        """CHASE → clear → IDLE。chase_attacker_ref も None に戻る。"""
         agg = _aggregate()
         agg.enter_chase_state(
-            target_id=WorldObjectId.create(7777),
+            attacker_ref=AttackerRef.of_player(PlayerId(7)),
             last_known_spot_id=SpotId.create(1),
         )
         agg.clear_behavior_state_to_idle()
         assert agg.behavior_state == BehaviorStateEnum.IDLE
         assert agg.is_chasing() is False
+        assert agg.chase_attacker_ref() is None
