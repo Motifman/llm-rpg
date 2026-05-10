@@ -101,6 +101,42 @@ class TestSqliteMonsterTemplateRepository:
         assert loaded.max_comfortable_temperature == TemperatureEnum.HOT
         assert loaded.temperature_discomfort_damage_per_tick == 0
 
+    def test_pack_awareness_radius_round_trip(
+        self, sqlite_conn: sqlite3.Connection,
+    ) -> None:
+        """Phase 4-O C #3: pack_awareness_radius が SQLite で round-trip
+        する (migration v28)。"""
+        writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
+        repo = SqliteMonsterTemplateRepository.for_connection(sqlite_conn)
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId(70),
+            name="WolfScout",
+            base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+            reward_info=RewardInfo(0, 0),
+            respawn_info=RespawnInfo(1, True),
+            race=Race.BEAST,
+            faction=MonsterFactionEnum.ENEMY,
+            description="A scout wolf.",
+            pack_awareness_radius=4,
+        )
+        writer.replace_template(template)
+
+        loaded = repo.find_by_id(MonsterTemplateId(70))
+        assert loaded is not None
+        assert loaded.pack_awareness_radius == 4
+
+    def test_default_pack_awareness_radius_is_disabled(
+        self, sqlite_conn: sqlite3.Connection,
+    ) -> None:
+        """default 値 (0) で機能無効状態が維持される。"""
+        writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
+        repo = SqliteMonsterTemplateRepository.for_connection(sqlite_conn)
+        writer.replace_template(_template(80, "DefaultBeast"))
+
+        loaded = repo.find_by_id(MonsterTemplateId(80))
+        assert loaded is not None
+        assert loaded.pack_awareness_radius == 0
+
     def test_pack_flee_follower_fields_round_trip(
         self, sqlite_conn: sqlite3.Connection,
     ) -> None:

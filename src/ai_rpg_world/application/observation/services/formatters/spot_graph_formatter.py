@@ -16,6 +16,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
     MonsterAbandonedChaseInSpotEvent,
+    MonsterAlertedByPackInSpotEvent,
     MonsterAppearedAtSpotEvent,
     MonsterAteGroundItemEvent,
     MonsterAttackedPlayerInSpotEvent,
@@ -118,6 +119,10 @@ class SpotGraphObservationFormatter:
             )
         if isinstance(event, MonsterFollowedPackFleeInSpotEvent):
             return self._format_monster_followed_pack_flee(
+                event, recipient_player_id,
+            )
+        if isinstance(event, MonsterAlertedByPackInSpotEvent):
+            return self._format_monster_alerted_by_pack(
                 event, recipient_player_id,
             )
         return None
@@ -901,6 +906,59 @@ class SpotGraphObservationFormatter:
             "follower_id": event.follower_monster_id.value,
             "leader_name": leader_name,
             "leader_id": event.leader_monster_id.value,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
+
+    def _format_monster_alerted_by_pack(
+        self,
+        event: MonsterAlertedByPackInSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """pack 警戒共有 prose (Phase 4-O C #3)。
+
+        target が観測者本人かで切り替え:
+        - 本人: 「気配を察した」+「あなたを警戒している」
+        - 第三者: 「{scout} の警戒を察して {responder} も追跡を始めた」
+        """
+        responder_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.responder_monster_id
+        )
+        scout_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.scout_monster_id
+        )
+        is_target_self = (
+            event.target_player_id is not None
+            and event.target_player_id.value == recipient_id.value
+        )
+        if is_target_self:
+            prose = (
+                f"{responder_name}が{scout_name}の警戒を察し、"
+                "あなたの方を睨み始めた。"
+            )
+        else:
+            prose = (
+                f"{responder_name}が{scout_name}の警戒を察して"
+                "追跡を始めた。"
+            )
+        structured = {
+            "type": "monster_alerted_by_pack",
+            "responder_name": responder_name,
+            "responder_id": event.responder_monster_id.value,
+            "scout_name": scout_name,
+            "scout_id": event.scout_monster_id.value,
+            "target_player_id": (
+                event.target_player_id.value
+                if event.target_player_id is not None else None
+            ),
+            "target_monster_id": (
+                event.target_monster_id.value
+                if event.target_monster_id is not None else None
+            ),
         }
         return ObservationOutput(
             prose=prose,
