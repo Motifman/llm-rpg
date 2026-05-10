@@ -62,6 +62,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 )
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
+from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
+    SpotAttackOrchestrator,
+)
 from ai_rpg_world.application.world_graph.spot_graph_augmenting_world_query import (
     SpotGraphAugmentingWorldQueryService,
 )
@@ -351,6 +354,18 @@ def create_spot_graph_wiring(
         semantic_store=semantic_memory_store,
         promotion_frontier=promotion_frontier,
     )
+    # 攻撃ユースケースのオーケストレーター。tool executor (player→monster)
+    # と将来の tick driver (monster→player) で同じ instance を共有する。
+    # monster_repository が未設定の起動構成（プロト・テスト等）では None
+    # にしておき、executor 側で「未対応」エラーを返す挙動を維持する。
+    attack_orchestrator: Optional[SpotAttackOrchestrator] = None
+    if monster_repository is not None:
+        attack_orchestrator = SpotAttackOrchestrator(
+            spot_graph_repository=spot_graph_repository,
+            monster_repository=monster_repository,
+            player_status_repository=player_status_repository,
+        )
+
     spot_graph_tool_executor = SpotGraphToolExecutor(
         spot_graph_world_services=spot_graph_world_services,
         player_inventory_repository=player_inventory_repository,
@@ -362,6 +377,7 @@ def create_spot_graph_wiring(
         sync_action_registry=sync_action_registry,
         monster_repository=monster_repository,
         player_status_repository=player_status_repository,
+        attack_orchestrator=attack_orchestrator,
     )
     no_op_movement = SpotGraphNoOpMovementService()
 

@@ -5,7 +5,7 @@
 - target が DEAD なら不発
 - damage=0 なら不発（PR #127 の対称ガード）
 - 成立時に monster.apply_damage が呼ばれて MonsterDamagedEvent が発火する
-- 致命攻撃で target_killed=True になり MonsterDiedEvent が発火する
+- 致命攻撃で target_incapacitated=True になり MonsterDiedEvent が発火する
 """
 
 from __future__ import annotations
@@ -149,7 +149,7 @@ class TestAttackHits:
         )
         assert outcome.executed is True
         assert outcome.damage == 8
-        assert outcome.target_killed is False
+        assert outcome.target_incapacitated is False
 
         events = [e for e in monster.get_events() if isinstance(e, MonsterDamagedEvent)]
         assert len(events) == 1
@@ -157,10 +157,10 @@ class TestAttackHits:
 
 
 class TestKillingBlow:
-    """致命攻撃で target_killed=True になり MonsterDiedEvent が発火する。"""
+    """致命攻撃で target_incapacitated=True になり MonsterDiedEvent が発火する。"""
 
-    def test_致命攻撃で_target_killed_true(self) -> None:
-        """attacker.attack >= monster.hp で target_killed=True。"""
+    def test_致命攻撃で_target_incapacitated_true(self) -> None:
+        """attacker.attack >= monster.hp で target_incapacitated=True。"""
         svc = SpotPlayerAttackService()
         monster = _make_monster(hp_max=10, attack=5)
         outcome = svc.try_attack(
@@ -169,7 +169,7 @@ class TestKillingBlow:
             current_tick=WorldTick(20),
         )
         assert outcome.executed is True
-        assert outcome.target_killed is True
+        assert outcome.target_incapacitated is True
 
         died_events = [e for e in monster.get_events() if isinstance(e, MonsterDiedEvent)]
         assert len(died_events) == 1
@@ -217,7 +217,7 @@ class TestKillingBlow:
             current_tick=WorldTick(20),
         )
 
-        assert outcome.target_killed is True
+        assert outcome.target_incapacitated is True
         # presence は引き続き居ると見える（自動除去は未配線）
         assert graph.is_monster_present(_MonsterId.create(101)) is True
         assert graph.get_monster_spot(_MonsterId.create(101)) == spot

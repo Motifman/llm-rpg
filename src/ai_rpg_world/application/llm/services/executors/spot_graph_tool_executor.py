@@ -25,10 +25,10 @@ from ai_rpg_world.application.world_graph.prepared_action_registry import Prepar
 from ai_rpg_world.application.world_graph.synchronized_action_registry import (
     SynchronizedActionRegistry,
 )
-from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
-from ai_rpg_world.domain.monster.service.spot_player_attack_service import (
-    SpotPlayerAttackService,
+from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
+    SpotAttackOrchestrator,
 )
+from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
@@ -47,7 +47,6 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-    PlayerAttackedMonsterInSpotEvent,
     SpotPlayerPreparedActionEvent,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -74,6 +73,7 @@ class SpotGraphToolExecutor:
         sync_action_registry: SynchronizedActionRegistry | None = None,
         monster_repository: Optional[MonsterRepository] = None,
         player_status_repository: Optional[PlayerStatusRepository] = None,
+        attack_orchestrator: Optional[SpotAttackOrchestrator] = None,
     ) -> None:
         if spot_graph_world_services.movement is None:
             raise TypeError("SpotGraphWorldServices.movement が必要です")
@@ -99,6 +99,10 @@ class SpotGraphToolExecutor:
         # のため）。
         self._monster_repository = monster_repository
         self._player_status_repository = player_status_repository
+        # attack_orchestrator が注入されていれば優先利用。注入されない場合は
+        # 内部でリポジトリから組み立てる（後方互換: 旧 wiring が orchestrator
+        # を渡さず monster/player リポジトリだけ渡してきても動く）。
+        self._attack_orchestrator = attack_orchestrator
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         return {
@@ -338,18 +342,20 @@ class SpotGraphToolExecutor:
         """`spot_graph_attack`: 同スポットのモンスターを攻撃する。
 
         resolver で `monster_id` / `target_display_name` まで解決済み。
-        本ハンドラは:
-        1. 必要なリポジトリと tick provider が wiring されているかチェック
-        2. monster と attacker player を ロード
-        3. `SpotPlayerAttackService.try_attack` で domain 層へ委譲
-        4. 成立したら graph に `PlayerAttackedMonsterInSpotEvent` を追加し、
-           graph + monster + attacker 全部を save する
+        実際の attack 処理は `SpotAttackOrchestrator` に委譲し、本ハンドラは:
+        1. 必要なリポジトリ + orchestrator + tick provider が揃っているか確認
+        2. attacker / target aggregate をロード
+        3. orchestrator.execute_player_attack に loaded aggregate を渡す
+        4. 戻ってきた `AttackOutcome` を LlmCommandResultDto に変換
 
-        失敗（cooldown / target_dead / damage=0 / wiring 不足）は LlmCommandResultDto
-        の `success=False` で返す。
+        save / event 発火は orchestrator が責任を持つ。失敗系
+        （cooldown / target_dead / damage=0 / wiring 不足）は
+        `success=False` で返す。
         """
+        orchestrator = self._resolve_attack_orchestrator()
         if (
-            self._monster_repository is None
+            orchestrator is None
+            or self._monster_repository is None
             or self._player_status_repository is None
             or self._spot_graph_repository is None
             or self._time_provider is None
@@ -388,9 +394,10 @@ class SpotGraphToolExecutor:
 
             graph = self._spot_graph_repository.find_graph()
             current_tick = self._time_provider.get_current_tick()
-            outcome = SpotPlayerAttackService().try_attack(
-                attacker=attacker,
+            outcome = orchestrator.execute_player_attack(
+                attacker_player=attacker,
                 target_monster=monster,
+                graph=graph,
                 current_tick=current_tick,
             )
             if not outcome.executed:
@@ -400,30 +407,8 @@ class SpotGraphToolExecutor:
                     error_code="ATTACK_FAILED",
                 )
 
-            # 死亡しても本 PR では graph 上の presence は自動除去しないため、
-            # `get_monster_spot` は成功する（despawn と死骸処理は別 PR で扱う）。
-            # 将来 MonsterDiedEvent → unplace_monster の自動配線が入った場合は
-            # このタイミングで graph に居なくなり MonsterNotInGraphException が
-            # 飛ぶ。その時は spot_id を outcome / attack 前のキャッシュから取る
-            # ように切り替える。
-            spot_id_for_event = graph.get_monster_spot(monster_id)
-            graph.add_event(
-                PlayerAttackedMonsterInSpotEvent.create(
-                    aggregate_id=graph.graph_id,
-                    aggregate_type="SpotGraphAggregate",
-                    actor_entity_id=EntityId.create(player_id),
-                    monster_id=monster_id,
-                    spot_id=spot_id_for_event,
-                    damage=outcome.damage,
-                    target_killed=outcome.target_killed,
-                )
-            )
-            self._monster_repository.save(monster)
-            self._player_status_repository.save(attacker)
-            self._spot_graph_repository.save(graph)
-
             base = f"{display_name}に {outcome.damage} のダメージを与えた。"
-            if outcome.target_killed:
+            if outcome.target_incapacitated:
                 base += " 致命傷で倒した。"
             return LlmCommandResultDto(
                 success=True,
@@ -431,6 +416,28 @@ class SpotGraphToolExecutor:
             )
         except Exception as e:
             return exception_result(e)
+
+    def _resolve_attack_orchestrator(self) -> Optional[SpotAttackOrchestrator]:
+        """attack_orchestrator が注入されていればそれを使い、無ければ
+        repository から動的に組み立てる（後方互換）。
+
+        将来、wiring が必ず orchestrator を渡すようになったら本メソッドと
+        その下の組み立てロジックは削除して `self._attack_orchestrator` を
+        直接使えば良い。
+        """
+        if self._attack_orchestrator is not None:
+            return self._attack_orchestrator
+        if (
+            self._monster_repository is None
+            or self._player_status_repository is None
+            or self._spot_graph_repository is None
+        ):
+            return None
+        return SpotAttackOrchestrator(
+            spot_graph_repository=self._spot_graph_repository,
+            monster_repository=self._monster_repository,
+            player_status_repository=self._player_status_repository,
+        )
 
     def _wait(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         del player_id
