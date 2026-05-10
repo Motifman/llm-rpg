@@ -55,3 +55,20 @@ class ActiveTimeType(Enum):
     DIURNAL = "diurnal"     # 昼行性（昼のみ）
     NOCTURNAL = "nocturnal"  # 夜行性（夜のみ）
     CREPUSCULAR = "crepuscular"  # 薄明性（朝・夕のみ）
+
+
+class ReactionPolicyEnum(Enum):
+    """攻撃を受けたときの反応 policy。
+
+    Phase 4a で導入。`MonsterTemplate.reaction_to_attack` が読み、
+    behavior tick service が `_react_to_attack` で実行する。
+
+    `EcologyTypeEnum` (通常時の habit) と直交する軸で、reactive 行動だけを
+    担う。例: 鹿は ecology=NORMAL + reaction=ALWAYS_FLEE、ボスは
+    ecology=AMBUSH + reaction=ALWAYS_RETALIATE。
+    """
+
+    PASSIVE = "passive"                    # 反応しない（既存挙動・既定）
+    ALWAYS_FLEE = "always_flee"            # 攻撃されたら必ず逃走
+    ALWAYS_RETALIATE = "always_retaliate"  # 攻撃されたら必ず反撃
+    FLEE_WHEN_LOW_HP = "flee_when_low_hp"  # HP < flee_threshold で逃走、それ以外は反撃

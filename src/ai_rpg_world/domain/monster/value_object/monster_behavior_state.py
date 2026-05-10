@@ -9,7 +9,9 @@ initial_position, patrol_index, search_timer, failure_count）をカプセル化
 from dataclasses import dataclass
 from typing import Optional, TYPE_CHECKING
 
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
@@ -21,6 +23,7 @@ if TYPE_CHECKING:
         AttackedTransitionResult,
         TransitionApplicationOutput,
     )
+    from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,18 @@ class MonsterBehaviorState:
     patrol_index: int
     search_timer: int
     failure_count: int
+    # Phase 4a: スポットグラフ世界用の拡張フィールド。2D 経路では使われず、
+    # 既存テストやコンストラクタは defaults で構築されるので互換性を維持する。
+    # `last_known_spot_id`: CHASE 中の追跡対象が最後に居た spot
+    last_known_spot_id: Optional[SpotId] = None
+    # `flee_until_tick`: FLEE 状態が自動解除される tick。state==FLEE のときの
+    # み意味を持つ。`current_tick > flee_until_tick` で IDLE に戻す判断材料。
+    flee_until_tick: Optional[WorldTick] = None
+    # `chase_attacker_ref`: CHASE 中の追跡対象（player or monster）のスナップ
+    # ショット。`state==CHASE` のときのみ意味を持ち、`last_attacker_ref` (集約
+    # フィールド) と独立に保持される。CHASE 中に第三者から殴られても
+    # `last_attacker_ref` だけが上書きされ、追跡対象はこちらの ref で維持される。
+    chase_attacker_ref: Optional["AttackerRef"] = None
 
     def __post_init__(self) -> None:
         if self.patrol_index < 0:
@@ -166,6 +181,73 @@ class MonsterBehaviorState:
             patrol_index=self.patrol_index,
             search_timer=0,
             failure_count=0,
+        )
+
+    def with_spot_flee(
+        self, flee_until_tick: WorldTick
+    ) -> "MonsterBehaviorState":
+        """スポットグラフ世界用 FLEE 状態への遷移。
+
+        `flee_until_tick` を指定して自動解除タイミングを設定する。
+        `target_id` / `last_known_position` はクリア（逃走中はターゲットを
+        持たない概念）。
+        """
+        return MonsterBehaviorState(
+            state=BehaviorStateEnum.FLEE,
+            target_id=None,
+            last_known_position=None,
+            initial_position=self.initial_position,
+            patrol_index=self.patrol_index,
+            search_timer=0,
+            failure_count=0,
+            last_known_spot_id=self.last_known_spot_id,
+            flee_until_tick=flee_until_tick,
+        )
+
+    def with_spot_chase(
+        self,
+        attacker_ref: "AttackerRef",
+        last_known_spot_id: SpotId,
+    ) -> "MonsterBehaviorState":
+        """スポットグラフ世界用 CHASE 状態への遷移。
+
+        `attacker_ref` (追跡対象 player or monster の参照) と
+        `last_known_spot_id` (最後に target を見た spot) をスナップショット
+        として保持する。`last_attacker_ref` (集約フィールド) と独立に固定
+        されるため、CHASE 中に第三者から殴られても追跡対象は変わらない。
+        `flee_until_tick` はクリア。`target_id` フィールドは 2D 経路の
+        互換性維持のため None。
+        """
+        return MonsterBehaviorState(
+            state=BehaviorStateEnum.CHASE,
+            target_id=None,
+            last_known_position=None,
+            initial_position=self.initial_position,
+            patrol_index=self.patrol_index,
+            search_timer=0,
+            failure_count=0,
+            last_known_spot_id=last_known_spot_id,
+            flee_until_tick=None,
+            chase_attacker_ref=attacker_ref,
+        )
+
+    def with_spot_idle(self) -> "MonsterBehaviorState":
+        """IDLE への手動リセット（FLEE / CHASE が解除条件を満たした際）。
+
+        `last_known_spot_id` / `flee_until_tick` / `chase_attacker_ref` を
+        全てクリアする。
+        """
+        return MonsterBehaviorState(
+            state=BehaviorStateEnum.IDLE,
+            target_id=None,
+            last_known_position=None,
+            initial_position=self.initial_position,
+            patrol_index=self.patrol_index,
+            search_timer=0,
+            failure_count=0,
+            last_known_spot_id=None,
+            flee_until_tick=None,
+            chase_attacker_ref=None,
         )
 
     def advance_patrol_index(self, patrol_points_count: int) -> "MonsterBehaviorState":

@@ -16,8 +16,10 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
     MonsterAppearedAtSpotEvent,
+    MonsterAteGroundItemEvent,
     MonsterAttackedPlayerInSpotEvent,
     MonsterLeftSpotEvent,
+    MonsterPredatedMonsterInSpotEvent,
     PlayerAttackedMonsterInSpotEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
@@ -90,6 +92,10 @@ class SpotGraphObservationFormatter:
             return self._format_monster_attacked_player(event, recipient_player_id)
         if isinstance(event, PlayerAttackedMonsterInSpotEvent):
             return self._format_player_attacked_monster(event, recipient_player_id)
+        if isinstance(event, MonsterAteGroundItemEvent):
+            return self._format_monster_ate_ground_item(event, recipient_player_id)
+        if isinstance(event, MonsterPredatedMonsterInSpotEvent):
+            return self._format_monster_predated_monster(event, recipient_player_id)
         return None
 
     def _is_self(self, entity_id: Any, recipient_id: PlayerId) -> bool:
@@ -541,6 +547,74 @@ class SpotGraphObservationFormatter:
             "actor_name": actor_name,
             "target_monster_id": event.target_monster_id.value,
             "monster_name": monster_name,
+            "damage": event.damage,
+            "target_incapacitated": event.target_incapacitated,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
+        )
+
+    def _format_monster_ate_ground_item(
+        self,
+        event: MonsterAteGroundItemEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """モンスター採食 prose: 「{monster_name}が{item_name}を食べた」。
+
+        actor が monster なので self 除外は無し。同スポット全員に届く。
+        """
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.monster_id
+        )
+        item_name = self._context.name_resolver.item_spec_name(
+            event.item_spec_id.value
+        )
+        prose = f"{monster_name}が{item_name}を食べた。"
+        structured = {
+            "type": "monster_ate_ground_item",
+            "monster_id": event.monster_id.value,
+            "monster_name": monster_name,
+            "item_instance_id": event.item_instance_id.value,
+            "item_spec_id": event.item_spec_id.value,
+            "item_name": item_name,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
+        )
+
+    def _format_monster_predated_monster(
+        self,
+        event: MonsterPredatedMonsterInSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """モンスター捕食 prose: 致命なら「{attacker}が{prey}を仕留めた」、
+        通常攻撃なら「{attacker}が{prey}に襲いかかった」。
+
+        actor / target どちらも monster なので player の self 除外は不要。
+        同スポット全員に social として届く。
+        """
+        attacker_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.attacker_monster_id
+        )
+        prey_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.target_monster_id
+        )
+        if event.target_incapacitated:
+            prose = f"{attacker_name}が{prey_name}を仕留めた。"
+        else:
+            prose = f"{attacker_name}が{prey_name}に襲いかかった。"
+        structured = {
+            "type": "monster_predated_monster",
+            "attacker_monster_id": event.attacker_monster_id.value,
+            "attacker_name": attacker_name,
+            "target_monster_id": event.target_monster_id.value,
+            "target_name": prey_name,
             "damage": event.damage,
             "target_incapacitated": event.target_incapacitated,
         }
