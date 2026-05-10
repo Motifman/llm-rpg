@@ -67,6 +67,61 @@ class TestSqliteMonsterAggregateRepository:
         with pytest.raises(RuntimeError, match="for_shared_unit_of_work"):
             repo.save(monster)
 
+    def test_flee_state_round_trip_persists_flee_until_tick(
+        self, sqlite_conn: sqlite3.Connection,
+    ) -> None:
+        """FLEE 状態の `flee_until_tick` が SQLite に正しく round-trip する。"""
+        repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
+        monster = MonsterAggregate.create(
+            MonsterId(301), _sample_template(),
+            WorldObjectId(4001), skill_loadout=_loadout(301),
+        )
+        monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+        # FLEE に遷移: current_tick=10、duration=50 → flee_until_tick=60
+        monster.enter_flee_state(WorldTick(10), duration_ticks=50)
+        repo.save(monster)
+
+        loaded = repo.find_by_id(MonsterId(301))
+        assert loaded is not None
+        assert loaded.persistence_flee_until_tick == WorldTick(60)
+        # is_fleeing の境界も復元後に正しく動作する
+        assert loaded.is_fleeing(WorldTick(60)) is True
+        assert loaded.is_fleeing(WorldTick(61)) is False
+
+    def test_chase_to_idle_clears_all_phase4ab_fields(
+        self, sqlite_conn: sqlite3.Connection,
+    ) -> None:
+        """CHASE で保存 → IDLE クリア → 再保存で Phase 4a/4b フィールドが
+        全て NULL に戻る (ON CONFLICT UPDATE が `excluded.*` で正しく
+        上書きする経路の検証)。"""
+        from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
+        monster = MonsterAggregate.create(
+            MonsterId(401), _sample_template(),
+            WorldObjectId(5001), skill_loadout=_loadout(401),
+        )
+        monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+        # 1) CHASE で保存
+        monster.enter_chase_state(
+            attacker_ref=AttackerRef.of_player(PlayerId(7)),
+            last_observed_target_spot_id=SpotId(5),
+            current_tick=WorldTick(42),
+        )
+        repo.save(monster)
+        # 2) IDLE にクリアして再保存
+        monster.clear_behavior_state_to_idle()
+        repo.save(monster)
+
+        loaded = repo.find_by_id(MonsterId(401))
+        assert loaded is not None
+        assert loaded.is_chasing() is False
+        assert loaded.chase_attacker_ref() is None
+        assert loaded.chase_last_observed_target_spot_id is None
+        assert loaded.chase_started_at_tick is None
+        assert loaded.persistence_flee_until_tick is None
+
     def test_chase_state_round_trip_persists_phase4ab_fields(
         self, sqlite_conn: sqlite3.Connection,
     ) -> None:

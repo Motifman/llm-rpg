@@ -241,21 +241,21 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     entity.behavior_search_timer,
                     entity.behavior_failure_count,
                     # Phase 4a/4b 永続化: spot graph 用 behavior_state 拡張フィールド
-                    None if entity.behavior_last_observed_target_spot_id is None
-                        else int(entity.behavior_last_observed_target_spot_id),
-                    None if entity.behavior_flee_until_tick is None
-                        else entity.behavior_flee_until_tick.value,
+                    None if entity.persistence_last_observed_target_spot_id is None
+                        else int(entity.persistence_last_observed_target_spot_id),
+                    None if entity.persistence_flee_until_tick is None
+                        else entity.persistence_flee_until_tick.value,
                     # AttackerRef は kind 'player'|'monster' + 該当 ID で 3 カラム表現
-                    None if entity.behavior_chase_attacker_ref is None
-                        else entity.behavior_chase_attacker_ref.kind.value,
-                    None if entity.behavior_chase_attacker_ref is None
-                        or not entity.behavior_chase_attacker_ref.is_player
-                        else int(entity.behavior_chase_attacker_ref.player_id),
-                    None if entity.behavior_chase_attacker_ref is None
-                        or not entity.behavior_chase_attacker_ref.is_monster
-                        else int(entity.behavior_chase_attacker_ref.monster_id),
-                    None if entity.behavior_chase_started_at_tick is None
-                        else entity.behavior_chase_started_at_tick.value,
+                    None if entity.persistence_chase_attacker_ref is None
+                        else entity.persistence_chase_attacker_ref.kind.value,
+                    None if entity.persistence_chase_attacker_ref is None
+                        or not entity.persistence_chase_attacker_ref.is_player
+                        else int(entity.persistence_chase_attacker_ref.player_id),
+                    None if entity.persistence_chase_attacker_ref is None
+                        or not entity.persistence_chase_attacker_ref.is_monster
+                        else int(entity.persistence_chase_attacker_ref.monster_id),
+                    None if entity.persistence_chase_started_at_tick is None
+                        else entity.persistence_chase_started_at_tick.value,
                     None if entity.pursuit_state is None or entity.pursuit_state.failure_reason is None else entity.pursuit_state.failure_reason.value,
                     entity.hunger,
                     entity._lifecycle_state.starvation_timer,

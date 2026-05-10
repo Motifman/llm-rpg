@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
@@ -28,6 +30,9 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+
+
+logger = logging.getLogger(__name__)
 
 
 def build_monster(
@@ -152,6 +157,10 @@ def _decode_attacker_ref(row: object) -> AttackerRef | None:
     kind=NULL なら None。kind='player' なら player_id 側、'monster' なら
     monster_id 側を読む。スキーマ未マイグレーション (kind カラム自体が無い)
     の場合も None として扱う。
+
+    DB 破損 (kind だけ入って ID が NULL / kind が想定外文字列) の場合は
+    error ログを出して None を返す (silent failure を避ける)。CHASE 状態
+    だった monster は読み戻し時に IDLE 化されるが、ゲームは継続する。
     """
     try:
         kind_value = row["behavior_chase_attacker_ref_kind"]
@@ -159,15 +168,29 @@ def _decode_attacker_ref(row: object) -> AttackerRef | None:
         return None
     if kind_value is None:
         return None
-    kind = AttackerKind(str(kind_value))
+    try:
+        kind = AttackerKind(str(kind_value))
+    except ValueError:
+        logger.error(
+            "AttackerRef DB corruption: unknown kind=%r, treating as None",
+            kind_value,
+        )
+        return None
     if kind == AttackerKind.PLAYER:
         player_id_value = row["behavior_chase_attacker_ref_player_id"]
         if player_id_value is None:
-            # kind だけセットされて ID 側が NULL は不整合だが防御
+            logger.error(
+                "AttackerRef DB corruption: kind=player but player_id is NULL "
+                "(monster row may be inconsistent), treating as None",
+            )
             return None
         return AttackerRef.of_player(PlayerId(int(player_id_value)))
     monster_id_value = row["behavior_chase_attacker_ref_monster_id"]
     if monster_id_value is None:
+        logger.error(
+            "AttackerRef DB corruption: kind=monster but monster_id is NULL "
+            "(monster row may be inconsistent), treating as None",
+        )
         return None
     return AttackerRef.of_monster(MonsterId(int(monster_id_value)))
 
