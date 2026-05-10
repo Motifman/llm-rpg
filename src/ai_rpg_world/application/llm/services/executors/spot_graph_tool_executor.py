@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
@@ -25,6 +25,14 @@ from ai_rpg_world.application.world_graph.prepared_action_registry import Prepar
 from ai_rpg_world.application.world_graph.synchronized_action_registry import (
     SynchronizedActionRegistry,
 )
+from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+from ai_rpg_world.domain.monster.service.spot_player_attack_service import (
+    SpotPlayerAttackService,
+)
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
@@ -39,6 +47,7 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    PlayerAttackedMonsterInSpotEvent,
     SpotPlayerPreparedActionEvent,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -63,8 +72,8 @@ class SpotGraphToolExecutor:
         time_provider: GameTimeProvider | None = None,
         spot_graph_repository: ISpotGraphRepository | None = None,
         sync_action_registry: SynchronizedActionRegistry | None = None,
-        monster_repository: Any = None,
-        player_status_repository: Any = None,
+        monster_repository: Optional[MonsterRepository] = None,
+        player_status_repository: Optional[PlayerStatusRepository] = None,
     ) -> None:
         if spot_graph_world_services.movement is None:
             raise TypeError("SpotGraphWorldServices.movement が必要です")
@@ -360,20 +369,8 @@ class SpotGraphToolExecutor:
             )
         display_name = str(args.get("target_display_name", "")).strip() or "モンスター"
 
+        monster_id = MonsterId.create(monster_id_int)
         try:
-            from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-            from ai_rpg_world.domain.monster.service.spot_player_attack_service import (
-                SpotPlayerAttackService,
-            )
-            from ai_rpg_world.domain.player.value_object.player_id import PlayerId as _PID
-            from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-                PlayerAttackedMonsterInSpotEvent,
-            )
-            from ai_rpg_world.domain.world_graph.value_object.entity_id import (
-                EntityId as _EID,
-            )
-
-            monster_id = MonsterId.create(monster_id_int)
             monster = self._monster_repository.find_by_id(monster_id)
             if monster is None:
                 return LlmCommandResultDto(
@@ -381,7 +378,7 @@ class SpotGraphToolExecutor:
                     message=f"対象のモンスターが見つかりません: {display_name}",
                     error_code="TARGET_NOT_FOUND",
                 )
-            attacker = self._player_status_repository.find_by_id(_PID(player_id))
+            attacker = self._player_status_repository.find_by_id(PlayerId(player_id))
             if attacker is None:
                 return LlmCommandResultDto(
                     success=False,
@@ -405,12 +402,16 @@ class SpotGraphToolExecutor:
 
             # 死亡しても本 PR では graph 上の presence は自動除去しないため、
             # `get_monster_spot` は成功する（despawn と死骸処理は別 PR で扱う）。
+            # 将来 MonsterDiedEvent → unplace_monster の自動配線が入った場合は
+            # このタイミングで graph に居なくなり MonsterNotInGraphException が
+            # 飛ぶ。その時は spot_id を outcome / attack 前のキャッシュから取る
+            # ように切り替える。
             spot_id_for_event = graph.get_monster_spot(monster_id)
             graph.add_event(
                 PlayerAttackedMonsterInSpotEvent.create(
                     aggregate_id=graph.graph_id,
                     aggregate_type="SpotGraphAggregate",
-                    actor_entity_id=_EID.create(player_id),
+                    actor_entity_id=EntityId.create(player_id),
                     monster_id=monster_id,
                     spot_id=spot_id_for_event,
                     damage=outcome.damage,
