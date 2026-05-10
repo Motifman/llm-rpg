@@ -133,6 +133,7 @@ class SpotMonsterBehaviorTickService:
             player_status_repository=player_status_repository,
             attack_orchestrator=attack_orchestrator,
             force_wander_fn=self._try_wander_force,
+            world_flags_provider=world_flags_provider,
         )
 
     def tick(self, current_tick: WorldTick) -> List[AttackOutcome]:
