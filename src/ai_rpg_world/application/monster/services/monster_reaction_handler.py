@@ -258,6 +258,10 @@ class MonsterReactionHandler:
 
         # CHASE 累積 tick 上限チェック (Phase 4b PR c)。
         # `chase_max_ticks=0` は「無制限」を意味するため、判定対象外。
+        # 比較は `>` (厳密超過) で実装している。つまり開始 tick から
+        # ちょうど `chase_max_ticks` 経過した時点はまだ CHASE 継続、
+        # `chase_max_ticks + 1` 経過で初めて IDLE 化する。grace 切れ判定と
+        # 統一した境界。
         chase_max_ticks = monster.template.chase_max_ticks
         chase_started = monster.chase_started_at_tick
         if (
