@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
+    MonsterToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
@@ -13,6 +14,7 @@ from ai_rpg_world.application.llm.services._resolver_helpers import (
     require_target_type,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
@@ -26,6 +28,7 @@ _SPOT_GRAPH_TOOLS = frozenset({
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_WAIT,
+    TOOL_NAME_SPOT_GRAPH_ATTACK,
 })
 
 
@@ -65,7 +68,46 @@ class SpotGraphArgumentResolver:
             )
         if tool_name == TOOL_NAME_SPOT_GRAPH_INTERACT:
             return self._resolve_interact(args, runtime_context)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_ATTACK:
+            return self._resolve_attack(args, runtime_context)
         return None
+
+    def _resolve_attack(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """`spot_graph_attack` の target_label をモンスター ID に解決する。
+
+        ラベルが MonsterToolRuntimeTargetDto に解決できない場合、または
+        monster_id が None の場合は `INVALID_TARGET_LABEL` で弾く。
+        """
+        label = args.get("target_label")
+        if not isinstance(label, str) or not label:
+            raise ToolArgumentResolutionException(
+                "攻撃対象ラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = require_target_type(
+            label,
+            runtime_context,
+            "攻撃対象ラベル",
+            (MonsterToolRuntimeTargetDto,),
+            invalid_label_code="INVALID_TARGET_LABEL",
+            invalid_kind_code="INVALID_TARGET_KIND",
+        )
+        if target.monster_id is None:
+            raise ToolArgumentResolutionException(
+                f"このラベルは攻撃対象ではありません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return _with_inner_thought(
+            {
+                "monster_id": target.monster_id,
+                "target_display_name": target.display_name,
+            },
+            args,
+        )
 
     def _resolve_travel_to(
         self,

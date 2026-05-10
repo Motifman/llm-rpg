@@ -489,14 +489,23 @@ class MonsterAggregate(AggregateRoot):
         ))
 
     def apply_damage(self, final_damage: int, current_tick: WorldTick, attacker_id: Optional[WorldObjectId] = None, killer_player_id: Optional[PlayerId] = None):
-        """計算済みのダメージを適用する"""
+        """計算済みのダメージを適用する。
+
+        位置情報（coordinate / spot_id）に依存しない純粋な lifecycle 操作。
+        2D マップ世界では `spawn()` 経由で必ず coordinate が設定されるため、
+        従来通り spawned 状態でしか到達しない。スポットグラフ世界では
+        coordinate が None のままでも attack が成立する（位置の正当性は
+        呼び出し側の handler / domain service が責任を持つ）。
+
+        - status が ALIVE 以外なら例外（DEAD/未出現/respawn 中は damage
+          を適用しない）
+        - status==DEAD かつ last_death_tick=None は「未出現」としてだけ
+          区別したいので MonsterNotSpawnedException を発火（既存契約維持）
+        """
         if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
             if self._lifecycle_state.status == MonsterStatusEnum.DEAD and self._lifecycle_state.last_death_tick is None:
                 raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
             raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
-
-        if self._coordinate is None:
-            raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
 
         self._lifecycle_state = self._lifecycle_state.apply_damage(final_damage)
         

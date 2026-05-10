@@ -11,6 +11,7 @@ from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     exception_result,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
@@ -62,6 +63,8 @@ class SpotGraphToolExecutor:
         time_provider: GameTimeProvider | None = None,
         spot_graph_repository: ISpotGraphRepository | None = None,
         sync_action_registry: SynchronizedActionRegistry | None = None,
+        monster_repository: Any = None,
+        player_status_repository: Any = None,
     ) -> None:
         if spot_graph_world_services.movement is None:
             raise TypeError("SpotGraphWorldServices.movement が必要です")
@@ -82,6 +85,11 @@ class SpotGraphToolExecutor:
             sync_action_registry
             or SynchronizedActionRegistry(spot_graph_world_services.world_flags)
         )
+        # 戦闘ツール (`spot_graph_attack`) で使用。注入されていない構成では
+        # `_attack` が「未対応」エラーを返す（後方互換 + minimal wiring 構成
+        # のため）。
+        self._monster_repository = monster_repository
+        self._player_status_repository = player_status_repository
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         return {
@@ -91,6 +99,7 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_INTERACT: self._interact,
             TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION: self._prepare_action,
             TOOL_NAME_SPOT_GRAPH_USE_ITEM: self._use_item,
+            TOOL_NAME_SPOT_GRAPH_ATTACK: self._attack,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
         }
 
@@ -315,6 +324,112 @@ class SpotGraphToolExecutor:
             )
         if events:
             self._event_publisher.publish_all(events)
+
+    def _attack(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        """`spot_graph_attack`: 同スポットのモンスターを攻撃する。
+
+        resolver で `monster_id` / `target_display_name` まで解決済み。
+        本ハンドラは:
+        1. 必要なリポジトリと tick provider が wiring されているかチェック
+        2. monster と attacker player を ロード
+        3. `SpotPlayerAttackService.try_attack` で domain 層へ委譲
+        4. 成立したら graph に `PlayerAttackedMonsterInSpotEvent` を追加し、
+           graph + monster + attacker 全部を save する
+
+        失敗（cooldown / target_dead / damage=0 / wiring 不足）は LlmCommandResultDto
+        の `success=False` で返す。
+        """
+        if (
+            self._monster_repository is None
+            or self._player_status_repository is None
+            or self._spot_graph_repository is None
+            or self._time_provider is None
+        ):
+            return LlmCommandResultDto(
+                success=False,
+                message="attack は現在のワイヤリングでは未対応です。",
+                error_code="UNSUPPORTED_TOOL",
+            )
+
+        monster_id_int = args.get("monster_id")
+        if not isinstance(monster_id_int, int):
+            return LlmCommandResultDto(
+                success=False,
+                message="monster_id が解決されていません。",
+                error_code="INVALID_TARGET_LABEL",
+            )
+        display_name = str(args.get("target_display_name", "")).strip() or "モンスター"
+
+        try:
+            from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+            from ai_rpg_world.domain.monster.service.spot_player_attack_service import (
+                SpotPlayerAttackService,
+            )
+            from ai_rpg_world.domain.player.value_object.player_id import PlayerId as _PID
+            from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+                PlayerAttackedMonsterInSpotEvent,
+            )
+            from ai_rpg_world.domain.world_graph.value_object.entity_id import (
+                EntityId as _EID,
+            )
+
+            monster_id = MonsterId.create(monster_id_int)
+            monster = self._monster_repository.find_by_id(monster_id)
+            if monster is None:
+                return LlmCommandResultDto(
+                    success=False,
+                    message=f"対象のモンスターが見つかりません: {display_name}",
+                    error_code="TARGET_NOT_FOUND",
+                )
+            attacker = self._player_status_repository.find_by_id(_PID(player_id))
+            if attacker is None:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="プレイヤー情報が見つかりません。",
+                    error_code="PLAYER_NOT_FOUND",
+                )
+
+            graph = self._spot_graph_repository.find_graph()
+            current_tick = self._time_provider.get_current_tick()
+            outcome = SpotPlayerAttackService().try_attack(
+                attacker=attacker,
+                target_monster=monster,
+                current_tick=current_tick,
+            )
+            if not outcome.executed:
+                return LlmCommandResultDto(
+                    success=False,
+                    message=f"{display_name}を攻撃できなかった ({outcome.reason})。",
+                    error_code="ATTACK_FAILED",
+                )
+
+            # 死亡しても本 PR では graph 上の presence は自動除去しないため、
+            # `get_monster_spot` は成功する（despawn と死骸処理は別 PR で扱う）。
+            spot_id_for_event = graph.get_monster_spot(monster_id)
+            graph.add_event(
+                PlayerAttackedMonsterInSpotEvent.create(
+                    aggregate_id=graph.graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    actor_entity_id=_EID.create(player_id),
+                    monster_id=monster_id,
+                    spot_id=spot_id_for_event,
+                    damage=outcome.damage,
+                    target_killed=outcome.target_killed,
+                )
+            )
+            self._monster_repository.save(monster)
+            self._player_status_repository.save(attacker)
+            self._spot_graph_repository.save(graph)
+
+            base = f"{display_name}に {outcome.damage} のダメージを与えた。"
+            if outcome.target_killed:
+                base += " 致命傷で倒した。"
+            return LlmCommandResultDto(
+                success=True,
+                message=append_inner_thought_to_message(base, args),
+            )
+        except Exception as e:
+            return exception_result(e)
 
     def _wait(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         del player_id
