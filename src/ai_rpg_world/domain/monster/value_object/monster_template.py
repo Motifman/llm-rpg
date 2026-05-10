@@ -128,9 +128,12 @@ class MonsterTemplate:
     # 入る (= leader 用フラグではなく follower 用フラグ)。
     pack_flee_follower: bool = False
     # follower が leader の FLEE に追従する際の FLEE 持続 tick 数。0 だと
-    # 機能無効。leader と同じ flee_grace_ticks を使うと leader の grace が
-    # 短い場合に follower が即抜けるため、follower 用の独立した値を持つ。
-    pack_flee_follower_duration: int = 5
+    # 機能無効 (`pack_flee_follower=True` でも duration=0 では handler が
+    # 早期 return)。leader と同じ flee_grace_ticks を使うと leader の grace
+    # が短い場合に follower が即抜けるため、follower 用の独立した値を持つ。
+    # default 0 で明示設定された template だけが機能する (SQL 側の DEFAULT
+    # と一致させ、旧スキーマからの読み出しでも整合する)。
+    pack_flee_follower_duration: int = 0
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
@@ -296,6 +299,14 @@ class MonsterTemplate:
             raise MonsterTemplateValidationException(
                 "pack_flee_follower_duration must be >= 0, "
                 f"got {self.pack_flee_follower_duration}"
+            )
+        # 矛盾組み合わせチェック: follower=True で duration=0 は「機能を有効化
+        # したのに効果ゼロ」で意図不明。シナリオ作成者の誤設定を弾く。
+        if self.pack_flee_follower and self.pack_flee_follower_duration <= 0:
+            raise MonsterTemplateValidationException(
+                "pack_flee_follower=True のとき pack_flee_follower_duration は "
+                "1 以上が必要 (= follower 機能を有効化するなら持続 tick も "
+                f"指定する) but got duration={self.pack_flee_follower_duration}"
             )
 
         if self.vision_range < 0:
