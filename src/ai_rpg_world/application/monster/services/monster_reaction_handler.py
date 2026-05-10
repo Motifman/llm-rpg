@@ -21,7 +21,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable, Literal, Optional
 
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
     SpotAttackOrchestrator,
@@ -36,6 +36,7 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
 from ai_rpg_world.domain.monster.repository.monster_repository import (
     MonsterRepository,
 )
+from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
@@ -59,11 +60,21 @@ ForceWanderFn = Callable[
     [MonsterAggregate, SpotGraphAggregate, SpotId], bool
 ]
 
+# `_decide_reaction_target` の戻り値。文字列リテラルではなく Literal で
+# タイプセーフに表現する (typo を型チェッカーで検出可能)。
+ReactionTarget = Literal["flee", "chase"]
+
 
 class MonsterReactionHandler:
     """直近被弾モンスターの FLEE / CHASE 反応を処理する。
 
     `SpotMonsterBehaviorTickService` の priority chain step 1 から呼ばれる。
+
+    既知の技術的負債:
+    - 1 tick 内で同一 monster に対して `monster_repository.save()` が複数回
+      呼ばれる経路が存在する (state 遷移 → orchestrator が attack save 等)。
+      InMemory / SQLite では冪等で問題ないが、将来 楽観ロックを導入する場合は
+      tick 末で 1 回に集約する必要がある (PR #131 レビュー MEDIUM 指摘と同根)。
     """
 
     def __init__(
@@ -131,7 +142,7 @@ class MonsterReactionHandler:
             self._continue_flee(monster, graph, spot_id)
             return AttackOutcome(executed=False, reason="fleeing")
         if target == "chase":
-            attacker_ref = monster.last_attacker_ref
+            attacker_ref: Optional[AttackerRef] = monster.last_attacker_ref
             if attacker_ref is None:
                 # attacker_ref 不明では CHASE できない。fall through。
                 return None
@@ -149,7 +160,7 @@ class MonsterReactionHandler:
 
     def _decide_reaction_target(
         self, monster: MonsterAggregate,
-    ) -> Optional[str]:
+    ) -> Optional[ReactionTarget]:
         """policy + HP 比から "flee" / "chase" / None を返す。"""
         policy = monster.template.reaction_to_attack
         if policy == ReactionPolicyEnum.ALWAYS_FLEE:
@@ -174,7 +185,8 @@ class MonsterReactionHandler:
         """FLEE 中の 1 tick 行動: passable な隣接 spot へ移動を試みる。
 
         攻撃者の方向は避けたいが、最小実装では「ランダムな passable 接続」を
-        選ぶ。攻撃者が居なくなれば結果的に逃げ切れる。
+        選ぶ。攻撃者が居なくなれば結果的に逃げ切れる。`current_tick` は
+        wander 経路では参照しないためシグネチャから除外している。
         """
         self._force_wander_fn(monster, graph, spot_id)
 
@@ -193,7 +205,7 @@ class MonsterReactionHandler:
           に戻して `None` を返し、priority chain の続行 (attack/forage/wander)
           を許す。
         """
-        attacker_ref = monster.chase_attacker_ref()
+        attacker_ref: Optional[AttackerRef] = monster.chase_attacker_ref()
         if attacker_ref is None:
             monster.clear_behavior_state_to_idle()
             self._monster_repository.save(monster)

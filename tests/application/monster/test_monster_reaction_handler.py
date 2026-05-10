@@ -41,6 +41,9 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.value_object.spot_attack_outcome import (
+    AttackOutcome,
+)
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
@@ -48,6 +51,7 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import (
     SpotAtmosphere,
 )
@@ -109,9 +113,13 @@ def _graph() -> SpotGraphAggregate:
     return g
 
 
-def _make_handler(*, force_wander_fn=None):
+def _make_handler(*, force_wander_fn=None, player=None):
     monster_repo = MagicMock()
     player_repo = MagicMock()
+    if player is not None:
+        player_repo.find_by_id.return_value = player
+    else:
+        player_repo.find_by_id.return_value = None
     spot_repo = MagicMock()
     orchestrator = SpotAttackOrchestrator(
         spot_graph_repository=spot_repo,
@@ -125,6 +133,15 @@ def _make_handler(*, force_wander_fn=None):
         force_wander_fn=force_wander_fn or MagicMock(return_value=False),
     )
     return handler, monster_repo, player_repo
+
+
+def _make_player(player_id_value: int = 1):
+    """is_down=False で apply_damage を吸収する MagicMock player。"""
+    player = MagicMock()
+    player.player_id = PlayerId(player_id_value)
+    type(player).is_down = property(lambda self: False)
+    player.apply_damage.side_effect = lambda damage: None
+    return player
 
 
 class TestPassivePolicy:
@@ -202,13 +219,13 @@ class TestForceWanderInjection:
         assert monster.behavior_state == BehaviorStateEnum.FLEE
 
 
-class TestChaseAttackerRefSnapshot:
-    """CHASE 開始時の attacker_ref スナップショット動作。"""
+class TestChaseTargetMissingClearsState:
+    """CHASE 遷移後 target 不在で IDLE に自動解除される。"""
 
-    def test_CHASE_遷移時に_chase_attacker_ref_が_固定される(self) -> None:
-        """ALWAYS_RETALIATE 反応で CHASE に遷移し、chase_attacker_ref に
-        last_attacker_ref のスナップショットが保存される。"""
-        handler, *_ = _make_handler()
+    def test_target_player_が_spot_に_居ない場合_IDLE_に_戻り_None_を_返す(self) -> None:
+        """ALWAYS_RETALIATE で CHASE に入ったが player が同 spot に居ないと、
+        state が IDLE に戻され `None` を返して chain は続行可能になる。"""
+        handler, monster_repo, _ = _make_handler()  # player_repo は None を返す
         monster = _monster(_template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE))
         original_ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
@@ -216,13 +233,120 @@ class TestChaseAttackerRefSnapshot:
         )
         graph = _graph()
         graph.place_monster(monster.monster_id, SPOT_A)
-        # player は spot に居ない → CHASE 解除されて None を返す経路だが、
-        # それ以前に chase_attacker_ref が一旦セットされる。
-        # ここで検証したいのは「セット → 即解除」ではなく state 遷移ロジックの
-        # 経路網羅。chase_attacker_ref が original_ref で記録されることを
-        # サブ経路で確認するため target が居る経路は別の統合テストでカバー。
+        # player は graph 上に居ない
+
         result = handler.try_react(monster, graph, SPOT_A, WorldTick(10))
-        # target 不在で IDLE に戻されるが、これは設計通り
+
+        # chain 続行を許す None
         assert result is None
-        # CHASE は解除済み
+        assert monster.is_chasing() is False
+        # CHASE 開始 save → target 不在で clear save = >= 2 回
+        assert monster_repo.save.call_count >= 2
+
+
+class TestChaseContinuationTick:
+    """既に CHASE 中のモンスターが次 tick で `_continue_chase` を直接通る経路。
+
+    リファクタで最もリグレッションしやすい部分: `try_react()` 冒頭の
+    `if monster.is_chasing():` 分岐。
+    """
+
+    def test_CHASE_継続_tick_で_orchestrator_に_委譲される(self) -> None:
+        """事前に CHASE 状態の monster が次 tick で `_continue_chase` を通り、
+        orchestrator に処理が委譲される (`is_chasing` 分岐の網羅)。
+
+        attack の成立 / 不成立 (faction ガード等) は orchestrator 側の責務
+        なのでここでは outcome の詳細は問わず、`AttackOutcome` が返ること
+        だけを確認する (None ではないこと = chain は止まる)。"""
+        player = _make_player(player_id_value=1)
+        handler, monster_repo, _ = _make_handler(player=player)
+        monster = _monster(_template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE))
+        ref = AttackerRef.of_player(player.player_id)
+        monster.record_attacked_by_in_spot(
+            current_tick=WorldTick(9), attacker_ref=ref,
+        )
+        # 直接 CHASE 状態に遷移させる (前 tick で入った想定)
+        monster.enter_chase_state(attacker_ref=ref, last_known_spot_id=SPOT_A)
+        graph = _graph()
+        graph.place_monster(monster.monster_id, SPOT_A)
+        graph.place_entity(EntityId.create(player.player_id.value), SPOT_A)
+
+        result = handler.try_react(monster, graph, SPOT_A, WorldTick(10))
+
+        # is_chasing=True の分岐に入って orchestrator が呼ばれた証
+        assert result is not None
+        assert isinstance(result, AttackOutcome)
+        # CHASE state はまだ継続中 (grace 切れではない / target 居る)
+        assert monster.is_chasing() is True
+
+    def test_CHASE_継続_tick_で_target_が_別spot_に_行ったら_IDLE_に_戻る(
+        self,
+    ) -> None:
+        """事前に CHASE 状態に入れた monster の target が graph に居なくなって
+        いる場合、`_continue_chase` が IDLE に戻して chain 続行を許す。"""
+        handler, monster_repo, _ = _make_handler()  # player_repo は None
+        monster = _monster(_template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE))
+        ref = AttackerRef.of_player(PlayerId(7))
+        monster.record_attacked_by_in_spot(
+            current_tick=WorldTick(9), attacker_ref=ref,
+        )
+        monster.enter_chase_state(attacker_ref=ref, last_known_spot_id=SPOT_A)
+        graph = _graph()
+        graph.place_monster(monster.monster_id, SPOT_A)
+        # player は配置しない
+
+        result = handler.try_react(monster, graph, SPOT_A, WorldTick(10))
+
+        assert result is None
+        assert monster.is_chasing() is False
+
+    def test_CHASE_継続_tick_で_grace_切れなら_IDLE_に_戻る(self) -> None:
+        """CHASE 状態でも last_attacked から grace_ticks 超過なら IDLE 化。"""
+        handler, monster_repo, _ = _make_handler()
+        monster = _monster(
+            _template(
+                reaction=ReactionPolicyEnum.ALWAYS_RETALIATE, flee_grace_ticks=3,
+            ),
+        )
+        ref = AttackerRef.of_player(PlayerId(7))
+        monster.record_attacked_by_in_spot(
+            current_tick=WorldTick(2), attacker_ref=ref,
+        )
+        monster.enter_chase_state(attacker_ref=ref, last_known_spot_id=SPOT_A)
+        graph = _graph()
+        graph.place_monster(monster.monster_id, SPOT_A)
+
+        # tick=10, last_attacked=2, grace=3 → 8 > 3 で grace 切れ
+        result = handler.try_react(monster, graph, SPOT_A, WorldTick(10))
+
+        assert result is None
+        assert monster.is_chasing() is False
+
+    def test_chase_attacker_ref_が_None_の_異常系で_IDLE_に_戻る(self) -> None:
+        """CHASE state だが何らかの理由で chase_attacker_ref が None の場合、
+        防御的に IDLE に戻して chain 続行を許す。"""
+        handler, *_ = _make_handler()
+        monster = _monster(_template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE))
+        # 直接 behavior_state を CHASE に書き換えるが chase_attacker_ref は
+        # None のまま (壊れた永続化を想定した防御)
+        from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
+        from ai_rpg_world.domain.monster.value_object.monster_behavior_state import (
+            MonsterBehaviorState,
+        )
+        monster._behavior_state = MonsterBehaviorState(
+            state=BehaviorStateEnum.CHASE,
+            target_id=None,
+            last_known_position=None,
+            initial_position=None,
+            patrol_index=0,
+            search_timer=0,
+            failure_count=0,
+            chase_attacker_ref=None,
+        )
+        graph = _graph()
+        graph.place_monster(monster.monster_id, SPOT_A)
+
+        result = handler.try_react(monster, graph, SPOT_A, WorldTick(10))
+
+        assert result is None
         assert monster.is_chasing() is False
