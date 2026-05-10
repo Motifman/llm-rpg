@@ -72,3 +72,25 @@ class ReactionPolicyEnum(Enum):
     ALWAYS_FLEE = "always_flee"            # 攻撃されたら必ず逃走
     ALWAYS_RETALIATE = "always_retaliate"  # 攻撃されたら必ず反撃
     FLEE_WHEN_LOW_HP = "flee_when_low_hp"  # HP < flee_threshold で逃走、それ以外は反撃
+
+
+class TemperamentEnum(Enum):
+    """モンスターの「性格」プリセット。Phase 4b PR (d)。
+
+    `reaction_to_attack` / `flee_grace_ticks` / `chase_max_distance` /
+    `chase_max_ticks` / `chase_search_ticks` / `flee_threshold` の組み合わせ
+    に名前を付けて宣言的に表現するための enum。
+
+    `apply_temperament(base_template, temperament)` で base template の各
+    フィールドが temperament の値で上書きされる (dataclasses.replace)。
+    既に明示的に値を設定したフィールドも上書きされるため、temperament で
+    一括設定したい場合に使う。個別に微調整したい場合は apply 後に
+    `dataclasses.replace(template, ...)` で上書きする。
+    """
+
+    PASSIVE_BEAST = "passive_beast"      # 攻撃しない平和な動物 (羊・うさぎ)
+    COWARD = "coward"                    # 弱気、被弾即逃走 (子兎・ネズミ)
+    WARY = "wary"                        # 警戒型、HP 低いと逃走 (野生動物)
+    AGGRESSIVE = "aggressive"            # 普通の敵、追跡型 (オオカミ・オーク)
+    FEROCIOUS = "ferocious"              # 執念深い長距離追跡型 (ボス・狂犬)
+    BERSERKER = "berserker"              # 距離 / tick 無制限の暴走 (狂戦士)
