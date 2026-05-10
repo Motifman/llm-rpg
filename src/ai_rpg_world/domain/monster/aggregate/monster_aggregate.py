@@ -100,6 +100,7 @@ class MonsterAggregate(AggregateRoot):
         pursuit_state: Optional[MonsterPursuitState] = None,
         hunger: float = 0.0,
         starvation_timer: int = 0,
+        last_attack_tick: Optional[WorldTick] = None,
     ):
         super().__init__()
         self._monster_id = monster_id
@@ -107,6 +108,7 @@ class MonsterAggregate(AggregateRoot):
         self._world_object_id = world_object_id
         self._coordinate = coordinate
         self._spot_id = spot_id
+        self._last_attack_tick = last_attack_tick
         self._active_effects = active_effects or []
         self._skill_loadout = skill_loadout
         self._pack_id = pack_id
@@ -514,6 +516,41 @@ class MonsterAggregate(AggregateRoot):
                 killer_world_object_id=attacker_id,
                 cause=cause if (killer_player_id or attacker_id) else None,
             )
+
+    @property
+    def last_attack_tick(self) -> Optional[WorldTick]:
+        """最後にこの個体が攻撃を実行した tick。未攻撃なら None。
+
+        スポットグラフ戦闘の cooldown 判定に使う。テンプレで定義された
+        `attack_cooldown_ticks` を経過していなければ攻撃不可。
+        """
+        return self._last_attack_tick
+
+    def can_attack_now(self, current_tick: WorldTick) -> bool:
+        """`current_tick` 時点で攻撃可能かを判定する。
+
+        - 状態が ALIVE 以外 → 不可
+        - 直前攻撃が無い (初撃) → 可
+        - `current_tick - last_attack_tick >= attack_cooldown_ticks` → 可
+        """
+        if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
+            return False
+        if self._last_attack_tick is None:
+            return True
+        elapsed = current_tick.value - self._last_attack_tick.value
+        return elapsed >= self._template.attack_cooldown_ticks
+
+    def record_attack(self, current_tick: WorldTick) -> None:
+        """攻撃を実行した事実を tick として記録する。cooldown の起点。
+
+        次回 `can_attack_now` は `attack_cooldown_ticks` 経過まで False を返す。
+        ALIVE 以外で呼ばれた場合は例外（呼び出し側でガードされている前提）。
+        """
+        if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
+            raise MonsterAlreadyDeadException(
+                f"Monster {self._monster_id} is not alive; cannot record attack"
+            )
+        self._last_attack_tick = current_tick
 
     def record_evasion(self):
         """回避を記録する（ALIVE時のみ）"""
