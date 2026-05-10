@@ -277,10 +277,32 @@ class TestPackAwarenessAlertProse:
         )
         result = formatter.format(ev, PLAYER_1)  # 第三者
         assert result is not None
+        # responder と scout の両方の名前を含む
+        assert "灰色のオオカミ" in result.prose  # responder
+        assert "迷子のうさぎ" in result.prose    # scout
         assert "あなた" not in result.prose
         assert "警戒" in result.prose
         assert result.observation_category == "environment"
         assert result.structured["type"] == "monster_alerted_by_pack"
+
+    def test_target_monster_でも_prose_が_生成される(
+        self, formatter: SpotGraphObservationFormatter,
+    ) -> None:
+        """target が monster の場合も第三者 prose で正常に処理される。"""
+        ev = MonsterAlertedByPackInSpotEvent.create(
+            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            responder_monster_id=MONSTER_WOLF,
+            scout_monster_id=MONSTER_TARGET,
+            responder_spot_id=SPOT_A,
+            spot_id=SPOT_A,
+            target_monster_id=MonsterId.create(303),  # 別 monster を target
+        )
+        result = formatter.format(ev, PLAYER_1)
+        assert result is not None
+        assert "灰色のオオカミ" in result.prose
+        assert "迷子のうさぎ" in result.prose
+        assert result.structured["target_monster_id"] == 303
+        assert result.structured["target_player_id"] is None
 
 
 class TestAbandonedChaseProse:

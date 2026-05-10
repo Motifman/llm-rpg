@@ -31,6 +31,9 @@ from __future__ import annotations
 import logging
 from typing import Callable, FrozenSet, List, Optional
 
+from ai_rpg_world.application.monster.services._pack_handler_helpers import (
+    resolve_monster_spot,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
@@ -116,7 +119,7 @@ class MonsterPackAwarenessHandler:
             return False
 
         # scout の現在 spot を引いて警戒共有距離を測る
-        scout_spot = self._resolve_monster_spot(graph, scout)
+        scout_spot = resolve_monster_spot(graph, scout)
         if scout_spot is None:
             return False
 
@@ -146,6 +149,14 @@ class MonsterPackAwarenessHandler:
         if scout_target_ref is None:
             return False  # 不整合系 (scout が CHASE 中だが ref 無し)
 
+        # `last_observed_target_spot_id` には scout の現在 spot を proxy
+        # として渡す。target の真の現在位置は responder からは不明なので、
+        # scout が直近で target に反応した位置を「最後に target を見た
+        # spot」として共有する近似モデル。target が scout から既に別 spot
+        # に移動済みの場合、responder は scout の spot に向かい、そこで
+        # target を見つけられなければ search → 諦める通常経路で動く。
+        # pack 援護 (`MonsterPackReinforcementHandler`) で victim_spot を
+        # proxy にしているのと同じ設計判断。
         monster.enter_chase_state(
             attacker_ref=scout_target_ref,
             last_observed_target_spot_id=scout_spot,
@@ -204,10 +215,5 @@ class MonsterPackAwarenessHandler:
         candidates.sort(key=lambda m: m.monster_id.value)
         return candidates[0]
 
-    def _resolve_monster_spot(
-        self, graph: SpotGraphAggregate, monster: MonsterAggregate,
-    ) -> Optional[SpotId]:
-        try:
-            return graph.get_monster_spot(monster.monster_id)
-        except MonsterNotInGraphException:
-            return None
+    # `_resolve_monster_spot` は `_pack_handler_helpers.resolve_monster_spot`
+    # に統合した (HIGH #3 対応: 援護ハンドラと完全重複していたため共通化)。

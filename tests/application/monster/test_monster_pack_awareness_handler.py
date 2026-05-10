@@ -315,6 +315,29 @@ class TestNoAlert:
         # 既存の CHASE 対象は変わらない
         assert responder.chase_attacker_ref().player_id == PlayerId(99)
 
+    def test_境界_radius_と_等しい_距離なら_連動する(self) -> None:
+        """radius=2、scout=A、responder=C (2 hop) → 包含境界で連動する。"""
+        scout = _make_monster(101)
+        scout.enter_chase_state(
+            attacker_ref=AttackerRef.of_player(PlayerId(7)),
+            last_observed_target_spot_id=SPOT_A,
+            current_tick=WorldTick(9),
+        )
+        responder = _make_monster(
+            102, template=_template(pack_awareness_radius=2),
+        )
+        repo = _make_repo(scout, responder)
+        handler = _make_handler(repo)
+
+        graph = _three_spot_chain_graph()
+        graph.place_monster(scout.monster_id, SPOT_A)
+        graph.place_monster(responder.monster_id, SPOT_C)
+
+        result = handler.try_alert_from_pack(
+            responder, graph, SPOT_C, WorldTick(10),
+        )
+        assert result is True
+
     def test_radius_を_超える_距離なら_無反応(self) -> None:
         """radius=1、scout=A、responder=C (2 hop) → 連動不可。"""
         scout = _make_monster(101)
