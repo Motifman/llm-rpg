@@ -626,10 +626,10 @@ class MonsterAggregate(AggregateRoot):
     def enter_chase_state(
         self,
         attacker_ref: "AttackerRef",
-        last_known_spot_id: SpotId,
+        last_observed_target_spot_id: SpotId,
     ) -> None:
         """CHASE 状態に遷移。追跡対象の attacker_ref をスナップショットとして
-        固定し、`last_known_spot_id` を保持する。
+        固定し、`last_observed_target_spot_id` を保持する。
 
         `last_attacker_ref` (集約フィールド) は後続の被弾で上書きされ得るが、
         CHASE 中の追跡対象は state 内の ref で固定されるため、第三者から殴ら
@@ -641,13 +641,13 @@ class MonsterAggregate(AggregateRoot):
             return
         self._behavior_state = self._behavior_state.with_spot_chase(
             attacker_ref=attacker_ref,
-            last_known_spot_id=last_known_spot_id,
+            last_observed_target_spot_id=last_observed_target_spot_id,
         )
 
     def clear_behavior_state_to_idle(self) -> None:
         """state を IDLE に戻す（FLEE 自動解除 / CHASE 終了時の手動リセット）。
 
-        spot graph 用フィールド (`last_known_spot_id` / `flee_until_tick`)
+        spot graph 用フィールド (`last_observed_target_spot_id` / `flee_until_tick`)
         も両方クリアする。
         """
         self._behavior_state = self._behavior_state.with_spot_idle()
@@ -677,7 +677,7 @@ class MonsterAggregate(AggregateRoot):
             return None
         return self._behavior_state.chase_attacker_ref
 
-    def update_chase_last_known_spot(self, spot_id: SpotId) -> None:
+    def update_chase_last_observed_target_spot(self, spot_id: SpotId) -> None:
         """CHASE 中に target を見た spot を更新する (multi-spot 追跡用)。
 
         CHASE でない場合 / ALIVE でない場合は no-op。`chase_attacker_ref` と
@@ -687,7 +687,7 @@ class MonsterAggregate(AggregateRoot):
             return
         if not self.is_chasing():
             return
-        self._behavior_state = self._behavior_state.with_chase_last_known_spot_updated(
+        self._behavior_state = self._behavior_state.with_chase_last_observed_target_spot_updated(
             spot_id
         )
 
