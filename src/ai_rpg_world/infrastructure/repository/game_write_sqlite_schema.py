@@ -1800,6 +1800,11 @@ def _migration_v24(connection: sqlite3.Connection) -> None:
 
     既存 row はすべて NULL として書き戻され、`MonsterBehaviorState.
     from_parts` の default (None) と整合する。
+
+    フレッシュ DB との関係: v1 の CREATE TABLE には新カラムを含めず、
+    fresh DB も migration system が v1 → ... → v24 と順次適用するので
+    本 migration でカラムが追加される。これにより v1 と v24 で同じカラム
+    定義が二重管理にならない (CREATE TABLE と ALTER TABLE が衝突しない)。
     """
     connection.execute(
         "ALTER TABLE game_monsters ADD COLUMN behavior_last_observed_target_spot_id INTEGER"
