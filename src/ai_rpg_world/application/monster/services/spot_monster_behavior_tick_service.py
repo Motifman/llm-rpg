@@ -185,6 +185,12 @@ class SpotMonsterBehaviorTickService:
             # hunger >= forage_threshold + 同スポットに preferred 食材あり
             # → 1 個食べて hunger 減少。graph に MonsterAteGroundItemEvent が
             # 積まれるので tick 末で graph save が必要。
+            # 採食成立で `continue`（同 tick の wander スキップ）するのは:
+            # (a) 採食を 1 アクションとして消化し、満腹直後に動き回るのは
+            #     生物的に不自然
+            # (b) 1 tick = 1 行動の不変条件を attack/wander と同じく維持する
+            # 将来「採食 → そのまま移動」を許したい場合はこの continue を外し
+            # priority chain を「順次進む」モデルに変える必要がある。
             if self._try_forage(monster, graph, spot_id):
                 any_graph_change = True
                 continue
@@ -381,13 +387,14 @@ class SpotMonsterBehaviorTickService:
             return False
         if not template.preferred_feed_item_spec_ids:
             return False
+        if template.hunger_decrease_on_feed <= 0.0:
+            # `record_feed` は `hunger_decrease <= 0` を no-op で抜ける仕様。
+            # アイテムだけ消費して hunger が回復しない silent failure を防ぐため、
+            # 採食自体をスキップしてテンプレ設定ミスを観測しやすくする。
+            return False
 
-        # `MonsterAggregate.hunger` プロパティが無いので _lifecycle_state.hunger
-        # を読み出す。ここはアクセサ経由が望ましいが、現状の lifecycle_state も
-        # private のため一時的に直接参照する。
-        # TODO: MonsterAggregate.hunger プロパティを公開して直接アクセス回避。
-        current_hunger = monster._lifecycle_state.hunger
-        if current_hunger < template.forage_threshold:
+        # MonsterAggregate.hunger プロパティ経由でアクセス。
+        if monster.hunger < template.forage_threshold:
             return False
 
         spot_node = graph.get_spot(spot_id)

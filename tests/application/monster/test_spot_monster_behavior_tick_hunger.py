@@ -205,6 +205,32 @@ class TestStarvationDeath:
         assert len(died_events) == 1
         assert monster.status != MonsterStatusEnum.ALIVE
 
+    def test_飢餓死後も_graph_の_presence_は維持される(self) -> None:
+        """Phase 1/2 と同方針: 死亡しても graph から自動除去しない。
+
+        次 tick で behavior service が `find_by_id` した monster は
+        `status != ALIVE` で `continue` する流れを確認するため、presence は
+        意図的に残している。despawn 自動化は別 PR で扱う。
+        """
+        template = _hungry_template(
+            starvation_ticks=1,
+            hunger_increase=1.0,
+        )
+        monster = _make_monster(template)
+        graph = _make_graph()
+        graph.place_monster(monster.monster_id, SPOT_A)
+
+        svc, _, _ = _make_svc(graph, monster)
+        svc.tick(WorldTick(10))
+        svc.tick(WorldTick(11))
+
+        # 飢餓死しているが graph 上の在席は維持
+        assert monster.status != MonsterStatusEnum.ALIVE
+        assert graph.is_monster_present(monster.monster_id) is True
+        assert (
+            graph.get_monster_spot(monster.monster_id) == SPOT_A
+        )
+
 
 class TestForage:
     """採食: 同スポットの preferred 食材を 1 個食べる。"""

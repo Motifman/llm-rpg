@@ -3,12 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+from typing import TYPE_CHECKING
+
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.entity.sub_location import SubLocation
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import UnknownSpotObjectException
 from ai_rpg_world.domain.world_graph.value_object.discoverable_item import DiscoverableItem
 from ai_rpg_world.domain.world_graph.value_object.ground_item import GroundItem
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 
 
 @dataclass(frozen=True)
@@ -60,7 +65,7 @@ class SpotInterior:
             discoverable_items=items,
         )
 
-    def without_ground_item(self, item_instance_id) -> SpotInterior:
+    def without_ground_item(self, item_instance_id: "ItemInstanceId") -> SpotInterior:
         """指定 instance の地面アイテムを除いた新しい SpotInterior を返す。
 
         モンスターが地面の餌を食べた、プレイヤーが拾い上げた、消滅処理で
