@@ -447,3 +447,29 @@ class MonsterAbandonedChaseInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     monster_id: MonsterId
     spot_id: SpotId
     reason: AbandonChaseReason
+
+
+# Phase 4-O B: 環境温度による不快の種別。formatter 側で寒さ/暑さで prose
+# を切り替えるため Literal 型として明示。
+TemperatureDiscomfortKind = Literal["too_cold", "too_hot"]
+
+
+@dataclass(frozen=True)
+class MonsterFeltTemperatureDiscomfortInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
+    """モンスターが spot の温度で不快を受けた瞬間 (Phase 4-O B)。
+
+    `MonsterTemplate.min/max_comfortable_temperature` の範囲外の spot に
+    居る間、`temperature_discomfort_damage_per_tick > 0` なら毎 tick HP が
+    削られる。本 event はその度に発火する観測信号。
+
+    `kind` で寒さ / 暑さを区別し、formatter で「身を震わせている」
+    「弱っている」等の prose を切り替える。`damage_dealt` は実際に減った
+    HP (clamping 等で template 値より小さくなる場合あり)。
+
+    観測としては同 spot 全員に environment カテゴリで届く。
+    """
+
+    monster_id: MonsterId
+    spot_id: SpotId
+    kind: TemperatureDiscomfortKind
+    damage_dealt: int

@@ -102,6 +102,9 @@ def _make_monster(
     # （`starvation_ticks=0` と `hunger_increase_per_tick=0` の二重 guard）。
     monster.template.starvation_ticks = 0
     monster.template.hunger_increase_per_tick = 0.0
+    # Phase 4-O B: 温度不快効果はデフォルト無効 (0)。
+    monster.template.temperature_discomfort_damage_per_tick = 0
+    monster.template.temperature_discomfort.return_value = None
     monster.template.hunger_decrease_on_feed = 0.0
     monster.template.forage_threshold = 1.0
     monster.template.preferred_feed_item_spec_ids = frozenset()
