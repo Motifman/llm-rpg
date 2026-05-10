@@ -145,9 +145,31 @@ class TestInitGameDbSchema:
         )
         applied = {row[0]: row[1] for row in cur.fetchall()}
         assert applied == {
-            "game_write": 23,
+            "game_write": 24,
             "global_market_listing_read_model": 1,
             "personal_trade_listing_read_model": 1,
             "trade_detail_read_model": 1,
             "trade_read_model": 1,
         }
+
+    def test_migration_v24_adds_six_phase4ab_columns(self) -> None:
+        """v24 適用後、game_monsters に Phase 4a/4b 用 6 カラムが追加されている。"""
+        import sqlite3
+
+        from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
+            init_game_write_schema,
+        )
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        init_game_write_schema(conn)
+        conn.commit()
+
+        cur = conn.execute("PRAGMA table_info(game_monsters)")
+        column_names = {row["name"] for row in cur.fetchall()}
+        assert "behavior_last_observed_target_spot_id" in column_names
+        assert "behavior_flee_until_tick" in column_names
+        assert "behavior_chase_attacker_ref_kind" in column_names
+        assert "behavior_chase_attacker_ref_player_id" in column_names
+        assert "behavior_chase_attacker_ref_monster_id" in column_names
+        assert "behavior_chase_started_at_tick" in column_names

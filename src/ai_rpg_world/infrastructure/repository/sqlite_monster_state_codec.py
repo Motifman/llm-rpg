@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import logging
+
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, MonsterStatusEnum
+from ai_rpg_world.domain.monster.value_object.attacker_ref import (
+    AttackerKind,
+    AttackerRef,
+)
 from ai_rpg_world.domain.monster.value_object.feed_memory import FeedMemory
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
@@ -14,6 +20,7 @@ from ai_rpg_world.domain.monster.value_object.monster_hp import MonsterHp
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
 from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import PursuitLastKnownState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
@@ -23,6 +30,9 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+
+
+logger = logging.getLogger(__name__)
 
 
 def build_monster(
@@ -51,6 +61,13 @@ def build_monster(
         patrol_index=int(row["behavior_patrol_index"]),
         search_timer=int(row["behavior_search_timer"]),
         failure_count=int(row["behavior_failure_count"]),
+        # Phase 4a/4b: spot graph 用フィールド復元 (migration v24)
+        last_observed_target_spot_id=_optional_spot_id(
+            row, "behavior_last_observed_target_spot_id"
+        ),
+        flee_until_tick=_optional_tick(row, "behavior_flee_until_tick"),
+        chase_attacker_ref=_decode_attacker_ref(row),
+        chase_started_at_tick=_optional_tick(row, "behavior_chase_started_at_tick"),
     )
     pursuit_state = _build_pursuit_state(
         world_object_id=int(row["world_object_id"]),
@@ -105,6 +122,77 @@ def build_monster(
     )
     monster.clear_events()
     return monster
+
+
+def _optional_spot_id(row: object, key: str) -> SpotId | None:
+    """row[key] が NULL なら None、そうでなければ SpotId を作る。
+
+    migration v24 で追加された行 (behavior_last_observed_target_spot_id 等)
+    用。古いスキーマで該当列が無い row では KeyError ではなく None を返す
+    (sqlite3.Row は対応列が無いと KeyError を投げるため、try/except でラップ)。
+    """
+    try:
+        value = row[key]
+    except (KeyError, IndexError):
+        return None
+    if value is None:
+        return None
+    return SpotId(int(value))
+
+
+def _optional_tick(row: object, key: str) -> WorldTick | None:
+    """row[key] が NULL なら None、そうでなければ WorldTick を作る。"""
+    try:
+        value = row[key]
+    except (KeyError, IndexError):
+        return None
+    if value is None:
+        return None
+    return WorldTick(int(value))
+
+
+def _decode_attacker_ref(row: object) -> AttackerRef | None:
+    """`behavior_chase_attacker_ref_kind` + 該当 ID から AttackerRef を復元。
+
+    kind=NULL なら None。kind='player' なら player_id 側、'monster' なら
+    monster_id 側を読む。スキーマ未マイグレーション (kind カラム自体が無い)
+    の場合も None として扱う。
+
+    DB 破損 (kind だけ入って ID が NULL / kind が想定外文字列) の場合は
+    error ログを出して None を返す (silent failure を避ける)。CHASE 状態
+    だった monster は読み戻し時に IDLE 化されるが、ゲームは継続する。
+    """
+    try:
+        kind_value = row["behavior_chase_attacker_ref_kind"]
+    except (KeyError, IndexError):
+        return None
+    if kind_value is None:
+        return None
+    try:
+        kind = AttackerKind(str(kind_value))
+    except ValueError:
+        logger.error(
+            "AttackerRef DB corruption: unknown kind=%r, treating as None",
+            kind_value,
+        )
+        return None
+    if kind == AttackerKind.PLAYER:
+        player_id_value = row["behavior_chase_attacker_ref_player_id"]
+        if player_id_value is None:
+            logger.error(
+                "AttackerRef DB corruption: kind=player but player_id is NULL "
+                "(monster row may be inconsistent), treating as None",
+            )
+            return None
+        return AttackerRef.of_player(PlayerId(int(player_id_value)))
+    monster_id_value = row["behavior_chase_attacker_ref_monster_id"]
+    if monster_id_value is None:
+        logger.error(
+            "AttackerRef DB corruption: kind=monster but monster_id is NULL "
+            "(monster row may be inconsistent), treating as None",
+        )
+        return None
+    return AttackerRef.of_monster(MonsterId(int(monster_id_value)))
 
 
 def _coordinate_or_none(x: object, y: object, z: object) -> Coordinate | None:

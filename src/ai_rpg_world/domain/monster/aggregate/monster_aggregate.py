@@ -374,6 +374,37 @@ class MonsterAggregate(AggregateRoot):
     def behavior_failure_count(self) -> int:
         return self._behavior_state.failure_count
 
+    # Phase 4a/4b: spot graph 用 behavior_state 拡張フィールドの永続化用
+    # アクセサ。**ゲームロジックでは使わないこと**: 既存の集約 API
+    # (`chase_attacker_ref()` メソッド / `is_fleeing()` 等) は CHASE/FLEE
+    # 状態を厳密にチェックして None を返すが、こちらは state にあれば
+    # そのまま返すため、IDLE 直前まで残っている古い値を見えてしまう。
+    # repository が SQLite に書き込む際の生データアクセス専用。
+
+    @property
+    def persistence_last_observed_target_spot_id(self) -> Optional[SpotId]:
+        """[永続化専用] state にあればそのまま返す。"""
+        return self._behavior_state.last_observed_target_spot_id
+
+    @property
+    def persistence_flee_until_tick(self) -> Optional[WorldTick]:
+        """[永続化専用] state にあればそのまま返す。"""
+        return self._behavior_state.flee_until_tick
+
+    @property
+    def persistence_chase_attacker_ref(self) -> Optional["AttackerRef"]:
+        """[永続化専用] state にあればそのまま返す。
+
+        ゲームロジック用には `chase_attacker_ref()` メソッド (CHASE 中のみ
+        返す) を使うこと。
+        """
+        return self._behavior_state.chase_attacker_ref
+
+    @property
+    def persistence_chase_started_at_tick(self) -> Optional[WorldTick]:
+        """[永続化専用] state にあればそのまま返す。"""
+        return self._behavior_state.chase_started_at_tick
+
     @property
     def pursuit_state(self) -> Optional[PursuitState]:
         if isinstance(self._pursuit_state, MonsterPursuitState):
