@@ -101,6 +101,46 @@ class TestSqliteMonsterTemplateRepository:
         assert loaded.max_comfortable_temperature == TemperatureEnum.HOT
         assert loaded.temperature_discomfort_damage_per_tick == 0
 
+    def test_pack_flee_follower_fields_round_trip(
+        self, sqlite_conn: sqlite3.Connection,
+    ) -> None:
+        """Phase 4-O C #2: pack_flee_follower / pack_flee_follower_duration
+        が SQLite で round-trip する (migration v27)。"""
+        writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
+        repo = SqliteMonsterTemplateRepository.for_connection(sqlite_conn)
+        # follower=True, duration=5 のテンプレ
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId(50),
+            name="WolfFollower",
+            base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+            reward_info=RewardInfo(0, 0),
+            respawn_info=RespawnInfo(1, True),
+            race=Race.BEAST,
+            faction=MonsterFactionEnum.ENEMY,
+            description="A follower wolf.",
+            pack_flee_follower=True,
+            pack_flee_follower_duration=5,
+        )
+        writer.replace_template(template)
+
+        loaded = repo.find_by_id(MonsterTemplateId(50))
+        assert loaded is not None
+        assert loaded.pack_flee_follower is True
+        assert loaded.pack_flee_follower_duration == 5
+
+    def test_default_pack_flee_fields_are_disabled(
+        self, sqlite_conn: sqlite3.Connection,
+    ) -> None:
+        """default 値 (False / 0) が round-trip し、機能無効状態を維持する。"""
+        writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
+        repo = SqliteMonsterTemplateRepository.for_connection(sqlite_conn)
+        writer.replace_template(_template(60, "DefaultBeast"))
+
+        loaded = repo.find_by_id(MonsterTemplateId(60))
+        assert loaded is not None
+        assert loaded.pack_flee_follower is False
+        assert loaded.pack_flee_follower_duration == 0
+
     def test_writer_replace_and_find_roundtrip(
         self, sqlite_conn: sqlite3.Connection
     ) -> None:

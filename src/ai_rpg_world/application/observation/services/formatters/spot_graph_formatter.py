@@ -20,6 +20,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterAteGroundItemEvent,
     MonsterAttackedPlayerInSpotEvent,
     MonsterFeltTemperatureDiscomfortInSpotEvent,
+    MonsterFollowedPackFleeInSpotEvent,
     MonsterLeftSpotEvent,
     MonsterPredatedMonsterInSpotEvent,
     MonsterRespondedToPackHelpInSpotEvent,
@@ -113,6 +114,10 @@ class SpotGraphObservationFormatter:
             )
         if isinstance(event, MonsterRespondedToPackHelpInSpotEvent):
             return self._format_monster_responded_to_pack_help(
+                event, recipient_player_id,
+            )
+        if isinstance(event, MonsterFollowedPackFleeInSpotEvent):
+            return self._format_monster_followed_pack_flee(
                 event, recipient_player_id,
             )
         return None
@@ -864,6 +869,38 @@ class SpotGraphObservationFormatter:
                 event.target_monster_id.value
                 if event.target_monster_id is not None else None
             ),
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
+
+    def _format_monster_followed_pack_flee(
+        self,
+        event: MonsterFollowedPackFleeInSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """pack 群れ逃走 prose (Phase 4-O C #2)。
+
+        leader 名と follower 名を含む「リーダーに続いて逃げ出した」prose。
+        leader 自身の FLEE 開始は別途 `MonsterStartedFleeingInSpotEvent`
+        で「{leader} が怯えて逃げ出した」と観測される。
+        """
+        follower_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.follower_monster_id
+        )
+        leader_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.leader_monster_id
+        )
+        prose = f"{follower_name}も{leader_name}に続いて逃げ出した。"
+        structured = {
+            "type": "monster_followed_pack_flee",
+            "follower_name": follower_name,
+            "follower_id": event.follower_monster_id.value,
+            "leader_name": leader_name,
+            "leader_id": event.leader_monster_id.value,
         }
         return ObservationOutput(
             prose=prose,
