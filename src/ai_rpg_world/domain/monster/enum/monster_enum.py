@@ -21,6 +21,14 @@ class DeathCauseEnum(Enum):
     KILLED_BY_MONSTER = "killed_by_monster"
     STARVATION = "starvation"
     NATURAL = "natural"  # 寿命（Phase 7 用）
+    ENVIRONMENT = "environment"  # Phase 4-O B: 温度・hazard 等の環境ダメージ
+
+
+# Phase 4-O B: 環境温度による不快の種別。formatter / template / event で
+# 共有する Literal 型。circular import を避けるため `Literal` で定義。
+from typing import Literal as _Literal
+
+TemperatureDiscomfortKind = _Literal["too_cold", "too_hot"]
 
 
 class BehaviorStateEnum(Enum):

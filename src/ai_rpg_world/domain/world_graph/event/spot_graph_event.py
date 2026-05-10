@@ -449,9 +449,12 @@ class MonsterAbandonedChaseInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     reason: AbandonChaseReason
 
 
-# Phase 4-O B: 環境温度による不快の種別。formatter 側で寒さ/暑さで prose
-# を切り替えるため Literal 型として明示。
-TemperatureDiscomfortKind = Literal["too_cold", "too_hot"]
+# Phase 4-O B: 環境温度による不快の種別は monster_enum.py に定義された
+# TemperatureDiscomfortKind を共有する (template / event / formatter で
+# 同じ Literal 型を使う)。
+from ai_rpg_world.domain.monster.enum.monster_enum import (
+    TemperatureDiscomfortKind,
+)
 
 
 @dataclass(frozen=True)

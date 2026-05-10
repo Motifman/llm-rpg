@@ -806,11 +806,16 @@ class SpotGraphObservationFormatter:
             "kind": event.kind,
             "damage_dealt": event.damage_dealt,
         }
+        # `schedules_turn=False`: 温度不快は継続的な環境圧で毎 tick 発火する。
+        # turn を毎回トリガーすると LLM コストが線形に膨らむ (例: 100 tick
+        # 滞在 = 100 回 turn 誘発)。観測ログには残すが LLM ターンは誘発
+        # しない設計。FLEE/CHASE 等の急激な状態変化と異なり、温度ダメージ
+        # は数 tick まとめて反応すれば十分。
         return ObservationOutput(
             prose=prose,
             structured=structured,
             observation_category="environment",
-            schedules_turn=True,
+            schedules_turn=False,
         )
 
     def _format_player_state_changed_in_spot(

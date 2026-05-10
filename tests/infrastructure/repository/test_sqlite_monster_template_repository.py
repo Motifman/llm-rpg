@@ -50,6 +50,57 @@ class TestSqliteMonsterTemplateRepository:
         repo = SqliteMonsterTemplateRepository.for_connection(sqlite_conn)
         assert repo.find_by_id(MonsterTemplateId(1)) is None
 
+    def test_temperature_comfort_fields_round_trip(
+        self, sqlite_conn: sqlite3.Connection,
+    ) -> None:
+        """Phase 4-O B: 温度 comfort 範囲 + discomfort_damage が SQLite で
+        round-trip する (migration v25)。"""
+        from ai_rpg_world.domain.world_graph.enum.temperature_enum import (
+            TemperatureEnum,
+        )
+
+        writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
+        repo = SqliteMonsterTemplateRepository.for_connection(sqlite_conn)
+        # 寒地に強い氷狼: COLD-NORMAL 快適、それ以外で 2 ダメージ
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId(42),
+            name="IceWolf",
+            base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+            reward_info=RewardInfo(0, 0),
+            respawn_info=RespawnInfo(1, True),
+            race=Race.BEAST,
+            faction=MonsterFactionEnum.ENEMY,
+            description="An ice wolf.",
+            min_comfortable_temperature=TemperatureEnum.FREEZING,
+            max_comfortable_temperature=TemperatureEnum.NORMAL,
+            temperature_discomfort_damage_per_tick=2,
+        )
+        writer.replace_template(template)
+
+        loaded = repo.find_by_id(MonsterTemplateId(42))
+        assert loaded is not None
+        assert loaded.min_comfortable_temperature == TemperatureEnum.FREEZING
+        assert loaded.max_comfortable_temperature == TemperatureEnum.NORMAL
+        assert loaded.temperature_discomfort_damage_per_tick == 2
+
+    def test_default_template_round_trips_with_default_temperature_fields(
+        self, sqlite_conn: sqlite3.Connection,
+    ) -> None:
+        """default 値 (FREEZING / HOT / 0) が round-trip する。"""
+        from ai_rpg_world.domain.world_graph.enum.temperature_enum import (
+            TemperatureEnum,
+        )
+
+        writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
+        repo = SqliteMonsterTemplateRepository.for_connection(sqlite_conn)
+        writer.replace_template(_template(1, "DefaultBeast"))
+
+        loaded = repo.find_by_id(MonsterTemplateId(1))
+        assert loaded is not None
+        assert loaded.min_comfortable_temperature == TemperatureEnum.FREEZING
+        assert loaded.max_comfortable_temperature == TemperatureEnum.HOT
+        assert loaded.temperature_discomfort_damage_per_tick == 0
+
     def test_writer_replace_and_find_roundtrip(
         self, sqlite_conn: sqlite3.Connection
     ) -> None:

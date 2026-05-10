@@ -15,6 +15,7 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
     ActiveTimeType,
     EcologyTypeEnum,
     ReactionPolicyEnum,
+    TemperatureDiscomfortKind,
 )
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 
@@ -346,7 +347,7 @@ class MonsterTemplate:
 
     def temperature_discomfort(
         self, temperature: TemperatureEnum,
-    ) -> Optional[str]:
+    ) -> Optional[TemperatureDiscomfortKind]:
         """指定温度が monster の comfort 範囲外なら不快タイプを返す。
 
         Returns:

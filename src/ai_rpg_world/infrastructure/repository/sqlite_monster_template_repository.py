@@ -181,8 +181,10 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
                 ecology_type, ambush_chase_range, territory_radius, active_time,
                 hunger_increase_per_tick, hunger_decrease_on_prey_kill,
                 hunger_starvation_threshold, starvation_ticks, max_age_ticks,
-                forage_threshold, hunger_decrease_on_feed
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                forage_threshold, hunger_decrease_on_feed,
+                min_comfortable_temperature, max_comfortable_temperature,
+                temperature_discomfort_damage_per_tick
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(template_id) DO UPDATE SET
                 name = excluded.name,
                 description = excluded.description,
@@ -214,7 +216,10 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
                 starvation_ticks = excluded.starvation_ticks,
                 max_age_ticks = excluded.max_age_ticks,
                 forage_threshold = excluded.forage_threshold,
-                hunger_decrease_on_feed = excluded.hunger_decrease_on_feed
+                hunger_decrease_on_feed = excluded.hunger_decrease_on_feed,
+                min_comfortable_temperature = excluded.min_comfortable_temperature,
+                max_comfortable_temperature = excluded.max_comfortable_temperature,
+                temperature_discomfort_damage_per_tick = excluded.temperature_discomfort_damage_per_tick
             """,
             (
                 int(template.template_id),
@@ -251,6 +256,10 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
                 template.max_age_ticks,
                 template.forage_threshold,
                 template.hunger_decrease_on_feed,
+                # Phase 4-O B: 温度 comfort 範囲 (migration v25)
+                template.min_comfortable_temperature.value,
+                template.max_comfortable_temperature.value,
+                template.temperature_discomfort_damage_per_tick,
             ),
         )
         for table_name in (

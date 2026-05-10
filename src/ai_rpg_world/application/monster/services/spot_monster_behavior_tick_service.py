@@ -60,6 +60,10 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
     EcologyTypeEnum,
     MonsterFactionEnum,
     MonsterStatusEnum,
+    TemperatureDiscomfortKind,
+)
+from ai_rpg_world.domain.monster.exception.monster_exceptions import (
+    MonsterAlreadyDeadException,
 )
 from ai_rpg_world.domain.monster.repository.monster_repository import (
     MonsterRepository,
@@ -76,6 +80,7 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ConnectionNotPassableException,
+    SpotNotInGraphException,
 )
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterAteGroundItemEvent,
@@ -540,26 +545,22 @@ class SpotMonsterBehaviorTickService:
 
         実装メモ:
         - `temperature_discomfort_damage_per_tick=0` のテンプレでは早期 return
-        - spot の取得失敗 (atmosphere 無し等) でも安全側で return False
-        - 温度ダメージは attacker_id=None で適用 (環境ダメージとして扱う)
-        - HP <= 0 になった場合は monster aggregate の `apply_damage` が
-          `MonsterDiedEvent` を発火する。観測 prose 用の
-          `MonsterFeltTemperatureDiscomfortInSpotEvent` も合わせて積む。
+        - spot 不在 / atmosphere 無しは想定外だが、`SpotNotInGraphException`
+          だけ握りつぶして安全側に倒す (それ以外の例外は明示的に伝播)
+        - 温度ダメージは `take_environmental_damage` 経由で適用し、致命時
+          `MonsterDiedEvent.cause=ENVIRONMENT` で記録される
         """
         kind = self._resolve_temperature_discomfort_kind(monster, graph, spot_id)
         if kind is None:
             return False
 
         damage = monster.template.temperature_discomfort_damage_per_tick
-        # damage は事前検証で >= 0、kind が non-None なら > 0 でもある
-        # (template.temperature_discomfort で kind=None を返すため)。
+        # kind が non-None なら damage > 0 が事前保証されている
+        # (template.temperature_discomfort が damage<=0 で None 返却)。
         try:
-            monster.apply_damage(
-                final_damage=damage,
-                current_tick=current_tick,
-                attacker_id=None,
-            )
-        except Exception:  # MonsterAlreadyDeadException 等の防御
+            monster.take_environmental_damage(damage, current_tick)
+        except MonsterAlreadyDeadException:
+            # 既に DEAD (他経路で死亡済み) ならこの tick は何もしない
             return False
 
         graph.add_event(
@@ -580,18 +581,20 @@ class SpotMonsterBehaviorTickService:
         monster: MonsterAggregate,
         graph: SpotGraphAggregate,
         spot_id: SpotId,
-    ) -> Optional[str]:
+    ) -> Optional[TemperatureDiscomfortKind]:
         """spot の温度を引き、template の comfort 範囲外なら kind を返す。"""
         if monster.template.temperature_discomfort_damage_per_tick <= 0:
             return None
         try:
             spot_node = graph.get_spot(spot_id)
-        except Exception:
+        except SpotNotInGraphException:
+            # graph に spot が無い (削除直後の race condition 等)。安全側で
+            # 効果無しとして扱う。それ以外の例外は明示的に伝播。
             return None
-        atmosphere = getattr(spot_node, "atmosphere", None)
-        if atmosphere is None:
-            return None
-        return monster.template.temperature_discomfort(atmosphere.temperature)
+        # SpotNode.atmosphere は必須フィールド (None の場合は構造的バグ)
+        return monster.template.temperature_discomfort(
+            spot_node.atmosphere.temperature
+        )
 
     def _tick_hunger_and_maybe_starve(
         self,
