@@ -677,6 +677,20 @@ class MonsterAggregate(AggregateRoot):
             return None
         return self._behavior_state.chase_attacker_ref
 
+    def update_chase_last_known_spot(self, spot_id: SpotId) -> None:
+        """CHASE 中に target を見た spot を更新する (multi-spot 追跡用)。
+
+        CHASE でない場合 / ALIVE でない場合は no-op。`chase_attacker_ref` と
+        `flee_until_tick` は維持する。
+        """
+        if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
+            return
+        if not self.is_chasing():
+            return
+        self._behavior_state = self._behavior_state.with_chase_last_known_spot_updated(
+            spot_id
+        )
+
     def record_attack(self, current_tick: WorldTick) -> None:
         """攻撃を実行した事実を tick として記録する。cooldown の起点。
 

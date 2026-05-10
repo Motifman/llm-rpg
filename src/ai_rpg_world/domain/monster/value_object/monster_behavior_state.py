@@ -231,6 +231,26 @@ class MonsterBehaviorState:
             chase_attacker_ref=attacker_ref,
         )
 
+    def with_chase_last_known_spot_updated(
+        self, spot_id: SpotId,
+    ) -> "MonsterBehaviorState":
+        """CHASE 中に target を見た spot を更新した新しい state を返す。
+
+        他のフィールドは維持する。state==CHASE の前提で呼ばれる。
+        """
+        return MonsterBehaviorState(
+            state=self.state,
+            target_id=self.target_id,
+            last_known_position=self.last_known_position,
+            initial_position=self.initial_position,
+            patrol_index=self.patrol_index,
+            search_timer=self.search_timer,
+            failure_count=self.failure_count,
+            last_known_spot_id=spot_id,
+            flee_until_tick=self.flee_until_tick,
+            chase_attacker_ref=self.chase_attacker_ref,
+        )
+
     def with_spot_idle(self) -> "MonsterBehaviorState":
         """IDLE への手動リセット（FLEE / CHASE が解除条件を満たした際）。
 
