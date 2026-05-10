@@ -146,7 +146,7 @@ class TestChaseState:
         """CHASE 遷移後、is_chasing と chase_attacker_ref が一致する。"""
         agg = _aggregate()
         ref = AttackerRef.of_player(PlayerId(7))
-        agg.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SpotId.create(1))
+        agg.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SpotId.create(1), current_tick=WorldTick(0))
         assert agg.is_chasing() is True
         assert agg.chase_attacker_ref() == ref
 
@@ -160,7 +160,8 @@ class TestChaseState:
         agg = _aggregate()
         original_ref = AttackerRef.of_player(PlayerId(7))
         agg.enter_chase_state(
-            attacker_ref=original_ref, last_observed_target_spot_id=SpotId.create(1)
+            attacker_ref=original_ref, last_observed_target_spot_id=SpotId.create(1),
+            current_tick=WorldTick(10),
         )
         # 第三者から殴られて last_attacker_ref が上書きされる
         agg.record_attacked_by_in_spot(
@@ -177,6 +178,7 @@ class TestChaseState:
         agg.enter_chase_state(
             attacker_ref=AttackerRef.of_player(PlayerId(7)),
             last_observed_target_spot_id=SpotId.create(1),
+            current_tick=WorldTick(0),
         )
         assert agg.is_chasing() is False
 
@@ -198,6 +200,7 @@ class TestClearBehaviorState:
         agg.enter_chase_state(
             attacker_ref=AttackerRef.of_player(PlayerId(7)),
             last_observed_target_spot_id=SpotId.create(1),
+            current_tick=WorldTick(0),
         )
         agg.clear_behavior_state_to_idle()
         assert agg.behavior_state == BehaviorStateEnum.IDLE

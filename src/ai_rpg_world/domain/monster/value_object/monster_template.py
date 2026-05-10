@@ -83,6 +83,16 @@ class MonsterTemplate:
     # - 1: 到着 tick で wander 1 回実行 → 即 IDLE (1 tick 分の wander で消費)。
     # - N (>=2): 到着 tick + 後続 (N-1) tick で計 N 回 wander → IDLE。
     chase_search_ticks: int = 3
+    # Phase 4b PR (c): CHASE で BFS が探索する最大 hop 数。これより遠い target
+    # spot は到達不可扱いとして CHASE を諦める。0 なら距離制限なし (グラフ
+    # 全体を探索)。小さい値 (1-3) で「近距離型」、大きい値 (10-) で「執念
+    # 深い長距離型」を表現。
+    chase_max_distance: int = 5
+    # Phase 4b PR (c): CHASE 状態に入ってからの累積 tick 上限。これを超えたら
+    # 諦めて IDLE 復帰。0 なら tick 制限なし。`flee_grace_ticks` (被弾以来の
+    # 反応 tick) とは別軸で、「最初の被弾は古いが CHASE がまだ続く」状況での
+    # 諦め基準として使う。
+    chase_max_ticks: int = 20
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
@@ -164,6 +174,26 @@ class MonsterTemplate:
         if self.chase_search_ticks < 0:
             raise MonsterTemplateValidationException(
                 f"chase_search_ticks must be >= 0, got {self.chase_search_ticks}"
+            )
+        if not isinstance(self.chase_max_distance, int) or isinstance(
+            self.chase_max_distance, bool
+        ):
+            raise MonsterTemplateValidationException(
+                "chase_max_distance must be int"
+            )
+        if self.chase_max_distance < 0:
+            raise MonsterTemplateValidationException(
+                f"chase_max_distance must be >= 0, got {self.chase_max_distance}"
+            )
+        if not isinstance(self.chase_max_ticks, int) or isinstance(
+            self.chase_max_ticks, bool
+        ):
+            raise MonsterTemplateValidationException(
+                "chase_max_ticks must be int"
+            )
+        if self.chase_max_ticks < 0:
+            raise MonsterTemplateValidationException(
+                f"chase_max_ticks must be >= 0, got {self.chase_max_ticks}"
             )
 
         if self.vision_range < 0:
