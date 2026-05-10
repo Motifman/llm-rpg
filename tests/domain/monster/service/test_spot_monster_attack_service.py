@@ -3,7 +3,7 @@
 検証対象:
 - 前提条件 (faction / cooldown / 視認 / target ダウン) の各分岐
 - 攻撃成立時に player.apply_damage と monster.record_attack が両方呼ばれる
-- 戻り値の MonsterAttackOutcome の中身（damage / target_downed）
+- 戻り値の MonsterAttackOutcome の中身（damage / target_incapacitated）
 """
 
 from __future__ import annotations
@@ -18,10 +18,12 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
     MonsterStatusEnum,
 )
 from ai_rpg_world.domain.monster.service.spot_monster_attack_service import (
-    MonsterAttackOutcome,
     SpotMonsterAttackService,
 )
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.domain.world_graph.value_object.spot_attack_outcome import (
+    AttackOutcome,
+)
 
 
 def _make_monster(
@@ -158,7 +160,7 @@ class TestSuccessfulAttack:
 
         assert outcome.executed is True
         assert outcome.damage == 8
-        assert outcome.target_downed is False
+        assert outcome.target_incapacitated is False
         player.apply_damage.assert_called_once_with(8)
         monster.record_attack.assert_called_once_with(WorldTick(20))
 
@@ -178,7 +180,7 @@ class TestSuccessfulAttack:
         monster.record_attack.assert_not_called()
 
     def test_ターゲットがダウンしたら_outcome_に反映される(self) -> None:
-        """apply_damage 後に is_down=True になったら target_downed=True。"""
+        """apply_damage 後に is_down=True になったら target_incapacitated=True。"""
         svc = SpotMonsterAttackService()
         monster = _make_monster(attack=999)
         # apply_damage 後にダウンする player
@@ -189,4 +191,4 @@ class TestSuccessfulAttack:
         )
 
         assert outcome.executed is True
-        assert outcome.target_downed is True
+        assert outcome.target_incapacitated is True
