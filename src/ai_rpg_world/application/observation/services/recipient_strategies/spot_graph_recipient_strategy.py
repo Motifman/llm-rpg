@@ -152,7 +152,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             # 観測経路では除外する（二重観測防止）。同スポットの他プレイヤーには
             # 「Aがオオカミを攻撃した」と social として届ける。
             self._resolve_at_spot_excluding_actor(
-                event.spot_id, event.actor_entity_id, add
+                event.spot_id, event.attacker_entity_id, add
             )
 
         return result

@@ -46,15 +46,15 @@ PLAYER_BYSTANDER = PlayerId(2)
 MONSTER = MonsterId.create(101)
 
 
-def _make_event(*, target_visible: bool = True, target_downed: bool = False, damage: int = 5):
+def _make_event(*, target_visible: bool = True, target_incapacitated: bool = False, damage: int = 5):
     return MonsterAttackedPlayerInSpotEvent.create(
         aggregate_id=GRAPH_ID,
         aggregate_type="SpotGraphAggregate",
-        monster_id=MONSTER,
+        attacker_monster_id=MONSTER,
         spot_id=SPOT_A,
         target_player_id=EntityId.create(PLAYER_VICTIM.value),
         damage=damage,
-        target_downed=target_downed,
+        target_incapacitated=target_incapacitated,
         target_visible=target_visible,
     )
 
@@ -155,17 +155,17 @@ class TestFormatterVictim:
         assert "暗闇" in result.prose
         assert "灰色のオオカミ" not in result.prose
 
-    def test_target_downed_で倒れた_suffix_が付く(self) -> None:
+    def test_target_incapacitated_で倒れた_suffix_が付く(self) -> None:
         """致命でダウンした場合、prose に「倒れた」suffix が追加される。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
 
         result = formatter.format(
-            _make_event(target_downed=True), PLAYER_VICTIM
+            _make_event(target_incapacitated=True), PLAYER_VICTIM
         )
 
         assert result is not None
         assert "倒れた" in result.prose
-        assert result.structured["target_downed"] is True
+        assert result.structured["target_incapacitated"] is True
 
 
 class TestFormatterBystander:
