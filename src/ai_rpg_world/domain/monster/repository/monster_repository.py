@@ -8,6 +8,7 @@ from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTem
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.domain.world.value_object.pack_id import PackId
     from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
@@ -32,6 +33,15 @@ class MonsterRepository(Repository[MonsterAggregate, MonsterId]):
     @abstractmethod
     def find_by_spot_id(self, spot_id: "SpotId") -> List[MonsterAggregate]:
         """指定スポットに紐づくモンスター一覧を取得（ALIVE/DEAD 問わず）。"""
+        pass
+
+    @abstractmethod
+    def find_by_pack_id(self, pack_id: "PackId") -> List[MonsterAggregate]:
+        """指定 pack_id に属するモンスター一覧を取得（ALIVE/DEAD 問わず）。
+
+        Phase 4-O C: pack 援護で「同 pack の他 member を探す」用途で使う。
+        DEAD member も返るので呼び出し側が ALIVE フィルタを行う責任を持つ。
+        """
         pass
 
 
