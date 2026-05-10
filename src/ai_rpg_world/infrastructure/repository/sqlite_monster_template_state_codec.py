@@ -21,6 +21,7 @@ from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.enum.world_enum import SpotTraitEnum
 from ai_rpg_world.domain.world.value_object.time_of_day import TimeOfDay
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 
 
 def build_monster_template(
@@ -109,5 +110,40 @@ def build_monster_template(
         preferred_feed_item_spec_ids=frozenset(
             ItemSpecId(item_spec_id) for item_spec_id in preferred_feed_item_spec_ids
         ),
+        # Phase 4-O B: 温度 comfort 範囲 (migration v25)。古い row はカラム
+        # default で埋まる (FREEZING / HOT / 0 = 効果無効)。
+        min_comfortable_temperature=_optional_temperature(
+            row, "min_comfortable_temperature", default=TemperatureEnum.FREEZING,
+        ),
+        max_comfortable_temperature=_optional_temperature(
+            row, "max_comfortable_temperature", default=TemperatureEnum.HOT,
+        ),
+        temperature_discomfort_damage_per_tick=_optional_int(
+            row, "temperature_discomfort_damage_per_tick", default=0,
+        ),
     )
+
+
+def _optional_temperature(
+    row: object, key: str, *, default: "TemperatureEnum",
+) -> "TemperatureEnum":
+    """row[key] が無い (旧スキーマ) なら default、あれば TemperatureEnum 化。"""
+    try:
+        value = row[key]
+    except (KeyError, IndexError):
+        return default
+    if value is None:
+        return default
+    return TemperatureEnum(str(value))
+
+
+def _optional_int(row: object, key: str, *, default: int) -> int:
+    """row[key] が無い (旧スキーマ) なら default、あれば int 化。"""
+    try:
+        value = row[key]
+    except (KeyError, IndexError):
+        return default
+    if value is None:
+        return default
+    return int(value)
 
