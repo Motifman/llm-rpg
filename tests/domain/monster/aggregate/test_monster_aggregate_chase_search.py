@@ -86,6 +86,7 @@ def _enter_chase(agg: MonsterAggregate) -> None:
     agg.enter_chase_state(
         attacker_ref=AttackerRef.of_player(PlayerId(1)),
         last_observed_target_spot_id=SpotId.create(1),
+        current_tick=WorldTick(0),
     )
 
 

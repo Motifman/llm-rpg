@@ -55,6 +55,10 @@ class MonsterBehaviorState:
     # フィールド) と独立に保持される。CHASE 中に第三者から殴られても
     # `last_attacker_ref` だけが上書きされ、追跡対象はこちらの ref で維持される。
     chase_attacker_ref: Optional["AttackerRef"] = None
+    # `chase_started_at_tick`: CHASE 状態に入った tick。`state==CHASE` の
+    # ときのみ意味を持つ。`current_tick - chase_started_at_tick > template
+    # .chase_max_ticks` で諦めて IDLE に戻る判断材料。Phase 4b PR (c)。
+    chase_started_at_tick: Optional[WorldTick] = None
 
     def __post_init__(self) -> None:
         if self.patrol_index < 0:
@@ -96,8 +100,23 @@ class MonsterBehaviorState:
         patrol_index: int = 0,
         search_timer: int = 0,
         failure_count: int = 0,
+        # Phase 4a / 4b で追加された spot graph 用フィールド。default は None
+        # で後方互換 (既存呼び出し側はこれらを渡さなくて済む)。永続化層が
+        # これらの値を読み戻す経路を実装した時点で渡されるようにする。
+        last_observed_target_spot_id: Optional[SpotId] = None,
+        flee_until_tick: Optional[WorldTick] = None,
+        chase_attacker_ref: Optional["AttackerRef"] = None,
+        chase_started_at_tick: Optional[WorldTick] = None,
     ) -> "MonsterBehaviorState":
-        """個別フィールドから値を組み立てて構築する（永続化層・テスト用）。"""
+        """個別フィールドから値を組み立てて構築する（永続化層・テスト用）。
+
+        既知のギャップ: 現状 SQLite codec はこれらのフィールドのうち
+        `last_observed_target_spot_id` / `flee_until_tick` / `chase_attacker_ref`
+        / `chase_started_at_tick` を読み書きしていない。本ファクトリは将来の
+        codec 拡張時に対応できるよう引数を用意しているが、ゲーム再起動を
+        またいだ Phase 4a/4b の挙動継続は別 PR で永続化スキーマを拡張する
+        まで保証されない。
+        """
         return cls(
             state=state,
             target_id=target_id,
@@ -106,6 +125,10 @@ class MonsterBehaviorState:
             patrol_index=max(0, patrol_index),
             search_timer=max(0, search_timer),
             failure_count=max(0, failure_count),
+            last_observed_target_spot_id=last_observed_target_spot_id,
+            flee_until_tick=flee_until_tick,
+            chase_attacker_ref=chase_attacker_ref,
+            chase_started_at_tick=chase_started_at_tick,
         )
 
     def with_attacked(
@@ -115,6 +138,9 @@ class MonsterBehaviorState:
         """
         被弾時の遷移結果を適用した新しい状態を返す。
         no_transition の場合は self を返す。
+
+        Phase 4a/4b で追加した spot graph 用フィールドは維持する (この遷移
+        は 2D 経路の state machine 用なので、spot graph 系の状態は変更しない)。
         """
         if transition.no_transition:
             return self
@@ -126,13 +152,20 @@ class MonsterBehaviorState:
             patrol_index=self.patrol_index,
             search_timer=self.search_timer,
             failure_count=self.failure_count,
+            last_observed_target_spot_id=self.last_observed_target_spot_id,
+            flee_until_tick=self.flee_until_tick,
+            chase_attacker_ref=self.chase_attacker_ref,
+            chase_started_at_tick=self.chase_started_at_tick,
         )
 
     def with_transition(
         self,
         output: "TransitionApplicationOutput",
     ) -> "MonsterBehaviorState":
-        """apply_behavior_transition の結果を適用した新しい状態を返す。"""
+        """apply_behavior_transition の結果を適用した新しい状態を返す。
+
+        Phase 4a/4b で追加した spot graph 用フィールドは維持する。
+        """
         return MonsterBehaviorState(
             state=output.final_state,
             target_id=output.final_target_id,
@@ -141,6 +174,10 @@ class MonsterBehaviorState:
             patrol_index=self.patrol_index,
             search_timer=self.search_timer,
             failure_count=self.failure_count,
+            last_observed_target_spot_id=self.last_observed_target_spot_id,
+            flee_until_tick=self.flee_until_tick,
+            chase_attacker_ref=self.chase_attacker_ref,
+            chase_started_at_tick=self.chase_started_at_tick,
         )
 
     def with_territory_return(self) -> "MonsterBehaviorState":
@@ -211,6 +248,7 @@ class MonsterBehaviorState:
         self,
         attacker_ref: "AttackerRef",
         last_observed_target_spot_id: SpotId,
+        chase_started_at_tick: WorldTick,
     ) -> "MonsterBehaviorState":
         """スポットグラフ世界用 CHASE 状態への遷移。
 
@@ -218,6 +256,8 @@ class MonsterBehaviorState:
         `last_observed_target_spot_id` (最後に target を見た spot) をスナップショット
         として保持する。`last_attacker_ref` (集約フィールド) と独立に固定
         されるため、CHASE 中に第三者から殴られても追跡対象は変わらない。
+        `chase_started_at_tick` は CHASE 状態に入った時点の tick で、
+        `chase_max_ticks` 経過判定に使う (Phase 4b PR c)。
         `flee_until_tick` はクリア。`target_id` フィールドは 2D 経路の
         互換性維持のため None。
         """
@@ -232,6 +272,7 @@ class MonsterBehaviorState:
             last_observed_target_spot_id=last_observed_target_spot_id,
             flee_until_tick=None,
             chase_attacker_ref=attacker_ref,
+            chase_started_at_tick=chase_started_at_tick,
         )
 
     def with_search_timer(self, search_timer: int) -> "MonsterBehaviorState":
@@ -251,6 +292,7 @@ class MonsterBehaviorState:
             last_observed_target_spot_id=self.last_observed_target_spot_id,
             flee_until_tick=self.flee_until_tick,
             chase_attacker_ref=self.chase_attacker_ref,
+            chase_started_at_tick=self.chase_started_at_tick,
         )
 
     def with_chase_last_observed_target_spot_updated(
@@ -271,13 +313,14 @@ class MonsterBehaviorState:
             last_observed_target_spot_id=spot_id,
             flee_until_tick=self.flee_until_tick,
             chase_attacker_ref=self.chase_attacker_ref,
+            chase_started_at_tick=self.chase_started_at_tick,
         )
 
     def with_spot_idle(self) -> "MonsterBehaviorState":
         """IDLE への手動リセット（FLEE / CHASE が解除条件を満たした際）。
 
-        `last_observed_target_spot_id` / `flee_until_tick` / `chase_attacker_ref` を
-        全てクリアする。
+        `last_observed_target_spot_id` / `flee_until_tick` /
+        `chase_attacker_ref` / `chase_started_at_tick` を全てクリアする。
         """
         return MonsterBehaviorState(
             state=BehaviorStateEnum.IDLE,
@@ -290,10 +333,16 @@ class MonsterBehaviorState:
             last_observed_target_spot_id=None,
             flee_until_tick=None,
             chase_attacker_ref=None,
+            chase_started_at_tick=None,
         )
 
     def advance_patrol_index(self, patrol_points_count: int) -> "MonsterBehaviorState":
-        """パトロール点に到達したときにインデックスを進めた新しい状態を返す。"""
+        """パトロール点に到達したときにインデックスを進めた新しい状態を返す。
+
+        Phase 4a/4b で追加した spot graph 用フィールドも維持する。PATROL は
+        2D 経路の state なので CHASE/FLEE と同時発生しない想定だが、フィールド
+        網羅性のため明示的に伝播する。
+        """
         if patrol_points_count <= 0:
             return self
         new_index = (self.patrol_index + 1) % patrol_points_count
@@ -305,4 +354,8 @@ class MonsterBehaviorState:
             patrol_index=new_index,
             search_timer=self.search_timer,
             failure_count=self.failure_count,
+            last_observed_target_spot_id=self.last_observed_target_spot_id,
+            flee_until_tick=self.flee_until_tick,
+            chase_attacker_ref=self.chase_attacker_ref,
+            chase_started_at_tick=self.chase_started_at_tick,
         )

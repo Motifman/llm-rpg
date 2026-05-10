@@ -170,6 +170,7 @@ class MonsterReactionHandler:
             monster.enter_chase_state(
                 attacker_ref=attacker_ref,
                 last_observed_target_spot_id=spot_id,
+                current_tick=current_tick,
             )
             self._monster_repository.save(monster)
             return self._continue_chase(monster, graph, spot_id, current_tick)
@@ -245,11 +246,28 @@ class MonsterReactionHandler:
             self._monster_repository.save(monster)
             return None
 
-        # grace 切れチェック
+        # grace 切れチェック (被弾以来の反応 tick)
         last_attacked = monster.last_attacked_tick
         if last_attacked is not None and (
             current_tick.value - last_attacked.value
             > monster.template.flee_grace_ticks
+        ):
+            monster.clear_behavior_state_to_idle()
+            self._monster_repository.save(monster)
+            return None
+
+        # CHASE 累積 tick 上限チェック (Phase 4b PR c)。
+        # `chase_max_ticks=0` は「無制限」を意味するため、判定対象外。
+        # 比較は `>` (厳密超過) で実装している。つまり開始 tick から
+        # ちょうど `chase_max_ticks` 経過した時点はまだ CHASE 継続、
+        # `chase_max_ticks + 1` 経過で初めて IDLE 化する。grace 切れ判定と
+        # 統一した境界。
+        chase_max_ticks = monster.template.chase_max_ticks
+        chase_started = monster.chase_started_at_tick
+        if (
+            chase_max_ticks > 0
+            and chase_started is not None
+            and (current_tick.value - chase_started.value) > chase_max_ticks
         ):
             monster.clear_behavior_state_to_idle()
             self._monster_repository.save(monster)
@@ -441,15 +459,18 @@ class MonsterReactionHandler:
                 conn.connection_id, owned_item_spec_ids, world_flags
             )
 
+        # Phase 4b PR (c): MonsterTemplate.chase_max_distance を BFS の
+        # 打ち切り基準にする。0 なら制限なし (`None` 扱い)。これにより
+        # 「target が遠ざかったら諦める」挙動を distance 単位で制御できる。
+        max_distance_setting = monster.template.chase_max_distance
+        max_distance = max_distance_setting if max_distance_setting > 0 else None
+
         next_hop = find_next_hop(
             graph=graph,
             from_spot=from_spot,
             target_spot=target_spot,
             is_passable=_is_passable,
-            # TODO PR (c): MonsterTemplate.chase_max_distance に置き換える。
-            # 現状は実質無制限で BFS が全 spot を探索する。spot 数が大きくなる
-            # 環境では 1 tick の計算量が O(V+E) で増えるため打ち切り推奨。
-            max_distance=None,
+            max_distance=max_distance,
         )
         if next_hop is None:
             return False
