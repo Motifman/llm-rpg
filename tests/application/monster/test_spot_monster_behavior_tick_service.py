@@ -98,6 +98,13 @@ def _make_monster(
     monster.template.base_stats.attack = attack
     monster.template.idle_wander_chance = idle_wander_chance
     monster.template.ecology_type = ecology_type or EcologyTypeEnum.NORMAL
+    # Phase 3a 飢餓系: 既存テストの挙動を維持するためデフォルトで無効化
+    # （`starvation_ticks=0` と `hunger_increase_per_tick=0` の二重 guard）。
+    monster.template.starvation_ticks = 0
+    monster.template.hunger_increase_per_tick = 0.0
+    monster.template.hunger_decrease_on_feed = 0.0
+    monster.template.forage_threshold = 1.0
+    monster.template.preferred_feed_item_spec_ids = frozenset()
     monster.status = MonsterStatusEnum.ALIVE
     monster.can_attack_now.return_value = can_attack
     return monster

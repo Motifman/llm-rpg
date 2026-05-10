@@ -59,3 +59,20 @@ class SpotInterior:
             ground_items=self.ground_items,
             discoverable_items=items,
         )
+
+    def without_ground_item(self, item_instance_id) -> SpotInterior:
+        """指定 instance の地面アイテムを除いた新しい SpotInterior を返す。
+
+        モンスターが地面の餌を食べた、プレイヤーが拾い上げた、消滅処理で
+        消えた等のシナリオで使う。指定 instance が存在しない場合は変更
+        なしの新インスタンスを返す（黙って no-op）。
+        """
+        new_items = tuple(
+            g for g in self.ground_items if g.item_instance_id != item_instance_id
+        )
+        return SpotInterior(
+            sub_locations=self.sub_locations,
+            objects=self.objects,
+            ground_items=new_items,
+            discoverable_items=self.discoverable_items,
+        )
