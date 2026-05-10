@@ -134,6 +134,10 @@ class SpotMonsterBehaviorTickService:
                 continue
 
             # --- 1. attack 優先 ---
+            # `_maybe_attack` は前提条件 (ENEMY / cooldown 切れ / 同スポット
+            # の生存プレイヤー有り) を満たした場合のみ実行を試みて
+            # `AttackOutcome` を返す。前提が欠けるなら None を返し、wander に
+            # フォールバックさせる。
             attack_outcome = self._maybe_attack(
                 monster, graph, spot_id, current_tick
             )
@@ -143,13 +147,24 @@ class SpotMonsterBehaviorTickService:
                     # 攻撃成立で 1 tick の行動消化。orchestrator 側で graph
                     # save 済み。
                     continue
+                # 攻撃を試みたが不成立 (visibility / target_down / zero_damage)
+                # の場合、現状は wander にフォールバックする。「対象を見ながら
+                # wander で離れる」のは世界観的にやや不自然だが、最小実装では
+                # 動的態度 (FLEE 等) を持たないため許容する。Phase 2 で pursuit
+                # / behavior_state を入れるときに「攻撃失敗 → 留まる」を別途
+                # 表現する想定。
 
             # --- 2. wander フォールバック ---
             if self._try_wander(monster, graph, spot_id):
                 any_movement = True
 
         # wander で graph state が変わった場合は明示 save。attack 経路は
-        # orchestrator 側で save するため重複する可能性があるが冪等。
+        # orchestrator 側で graph.save() を呼ぶため、同 tick で「一部 monster
+        # が attack + 別 monster が wander」のケースでは graph.save() が 2 回
+        # 呼ばれる。SQLite / InMemory リポジトリでは冪等で問題ないが、将来的に
+        # 楽観ロック等を導入する場合は orchestrator から save を切り離して
+        # tick 末で 1 回に集約する設計に見直す必要がある（PR #131 レビューの
+        # MEDIUM 指摘）。
         if any_movement:
             self._spot_graph_repository.save(graph)
 
@@ -259,9 +274,15 @@ class SpotMonsterBehaviorTickService:
                 world_flags=world_flags,
             )
         except ConnectionNotPassableException:
-            # 通常 fil ter 段階で除外されているが、防御的にハンドリング。
-            logger.debug(
-                "tick: monster %s could not pass connection %s",
+            # 上の `can_traverse_connection` フィルタで除外されているはずなので
+            # 通常パスでは到達しない。到達する場合は (a) フィルタロジックの
+            # バグ、または (b) `move_monster` 内の `can_pass` と
+            # `can_traverse_connection` の判定が乖離する想定外ケース。
+            # 隠蔽せず warning で記録する。
+            logger.warning(
+                "tick: monster %s passed pre-filter but move_monster raised "
+                "ConnectionNotPassableException for connection %s "
+                "(filter/move logic out of sync)",
                 monster.monster_id.value,
                 picked.connection_id.value,
             )

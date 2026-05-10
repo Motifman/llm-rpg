@@ -796,6 +796,7 @@ class LlmAgentWiringResult:
         ] = None,
         semantic_memory_store: Optional[ISemanticMemoryStore] = None,
         event_publisher: Optional[Any] = None,
+        monster_behavior_tick_service: Optional[Any] = None,
     ) -> None:
         self.observation_registry = observation_registry
         self.llm_turn_trigger = llm_turn_trigger
@@ -814,6 +815,10 @@ class LlmAgentWiringResult:
         self.episodic_recall_buffer_store = episodic_recall_buffer_store
         self.episodic_reinterpretation_journal_store = episodic_reinterpretation_journal_store
         self.semantic_memory_store = semantic_memory_store
+        # Phase 1 (PR #131): モンスター行動 tick サービス。presentation 側
+        # tick driver が `tick(current_tick)` を呼び出して attack + wander を
+        # 実行する。spot_graph_wiring 経由で構築された場合のみ非 None。
+        self.monster_behavior_tick_service = monster_behavior_tick_service
 
     def __iter__(self) -> Any:
         yield self.observation_registry
