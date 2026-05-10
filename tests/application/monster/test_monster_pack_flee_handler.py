@@ -153,6 +153,52 @@ def _events_of_type(graph: SpotGraphAggregate, evt_type) -> list:
     return [e for e in graph.get_events() if isinstance(e, evt_type)]
 
 
+class TestMultipleFollowers:
+    """同 pack に複数の follower が居る場合、各 follower が個別に連動 FLEE
+    する (上限なし、群れ全体崩壊の演出)。"""
+
+    def test_3_follower_全員が_連動_FLEE_に_遷移(self) -> None:
+        leader = _make_monster(101, template=_leader_template(), is_pack_leader=True)
+        leader.enter_flee_state(WorldTick(9), duration_ticks=10)
+        followers = [
+            _make_monster(102, template=_follower_template()),
+            _make_monster(103, template=_follower_template()),
+            _make_monster(104, template=_follower_template()),
+        ]
+        repo = _make_repo(leader, *followers)
+        handler = MonsterPackFleeHandler(monster_repository=repo)
+
+        graph = _two_spot_graph()
+        graph.place_monster(leader.monster_id, SPOT_A)
+        for f in followers:
+            graph.place_monster(f.monster_id, SPOT_B)
+        graph.clear_events()
+
+        # tick service 側で pack_members を 1 回だけ取得して各 follower
+        # に渡す最適化パスを再現 (HIGH #1 で追加した optional 引数経由)。
+        pack_members = repo.find_by_pack_id(WOLF_PACK)
+        repo.find_by_pack_id.reset_mock()
+
+        for f in followers:
+            result = handler.try_follow_pack_flee(
+                f, graph, SPOT_B, WorldTick(10),
+                pack_members=pack_members,
+            )
+            assert result is True
+            assert f.is_fleeing(WorldTick(10)) is True
+
+        # pack_members を渡しているため handler 内部から find_by_pack_id は
+        # 呼ばれない (N×N → 0 query 削減の検証)
+        repo.find_by_pack_id.assert_not_called()
+
+        # 全員分の event が発火
+        events = _events_of_type(graph, MonsterFollowedPackFleeInSpotEvent)
+        assert len(events) == 3
+        assert {e.follower_monster_id for e in events} == {
+            f.monster_id for f in followers
+        }
+
+
 class TestPackFleeFollowSuccess:
     """leader が FLEE 中なら follower も連動。"""
 
@@ -208,24 +254,22 @@ class TestNoFollow:
         assert result is False
         assert follower.is_fleeing(WorldTick(10)) is False
 
-    def test_duration_0_なら_連動しない(self) -> None:
-        """duration=0 は機能無効化と同じ扱い。"""
-        leader = _make_monster(101, template=_leader_template(), is_pack_leader=True)
-        leader.enter_flee_state(WorldTick(9), duration_ticks=10)
-        follower = _make_monster(
-            102, template=_follower_template(pack_flee_follower_duration=0),
+    def test_follower_True_かつ_duration_0_は_template_作成時に_例外(self) -> None:
+        """`pack_flee_follower=True, duration=0` の矛盾組み合わせは
+        `MonsterTemplate.__post_init__` のバリデーションで弾かれる
+        (handler に到達する前に template 作成が失敗する)。"""
+        import pytest as _pytest
+        from ai_rpg_world.domain.monster.exception.monster_exceptions import (
+            MonsterTemplateValidationException,
         )
-        repo = _make_repo(leader, follower)
-        handler = MonsterPackFleeHandler(monster_repository=repo)
 
-        graph = _two_spot_graph()
-        graph.place_monster(leader.monster_id, SPOT_A)
-        graph.place_monster(follower.monster_id, SPOT_B)
-
-        result = handler.try_follow_pack_flee(
-            follower, graph, SPOT_B, WorldTick(10),
-        )
-        assert result is False
+        with _pytest.raises(
+            MonsterTemplateValidationException,
+            match="pack_flee_follower_duration",
+        ):
+            _follower_template(
+                pack_flee_follower=True, pack_flee_follower_duration=0,
+            )
 
     def test_pack_id_None_なら_連動しない(self) -> None:
         leader = _make_monster(101, template=_leader_template(), is_pack_leader=True)

@@ -1878,10 +1878,15 @@ def _migration_v26(connection: sqlite3.Connection) -> None:
 def _migration_v27(connection: sqlite3.Connection) -> None:
     """Phase 4-O C #2: pack 群れ逃走 (leader 連動 FLEE) フィールドを追加。
 
-    `game_monster_templates` に 2 カラム追加:
-    - `pack_flee_follower INTEGER`: 0/1 boolean (default 0=機能無効、後方互換)
+    `game_monster_templates` に 2 カラム追加 (両方 default 0 = 機能無効、
+    後方互換):
+    - `pack_flee_follower INTEGER`: 0/1 boolean (default 0)
     - `pack_flee_follower_duration INTEGER`: follower の FLEE 持続 tick 数
-      (default 0=機能無効、follower=False と組み合わさるなら効果なし)
+      (default 0)
+
+    どちらも 0 の状態が「機能無効」を意味する。`MonsterTemplate.__post_init__`
+    の検証で「`follower=True` のとき `duration > 0` が必要」を強制するため、
+    この組み合わせ (True + 0) は実行時には到達しない。
     """
     connection.execute(
         "ALTER TABLE game_monster_templates "

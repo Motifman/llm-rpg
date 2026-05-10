@@ -28,6 +28,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterAbandonedChaseInSpotEvent,
+    MonsterFollowedPackFleeInSpotEvent,
     MonsterRespondedToPackHelpInSpotEvent,
     MonsterStartedChasingInSpotEvent,
     MonsterStartedFleeingInSpotEvent,
@@ -211,6 +212,33 @@ class TestPackHelpResponseProse:
         assert "救援" in result.prose
         assert result.observation_category == "environment"
         assert result.structured["type"] == "monster_responded_to_pack_help"
+
+
+class TestPackFleeFollowProse:
+    """pack 群れ逃走 follower 観測 prose (Phase 4-O C #2)。"""
+
+    def test_follower_と_leader_名_を_含む_prose(
+        self, formatter: SpotGraphObservationFormatter,
+    ) -> None:
+        """「{follower} も {leader} に続いて逃げ出した」prose。"""
+        ev = MonsterFollowedPackFleeInSpotEvent.create(
+            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            follower_monster_id=MONSTER_TARGET,    # うさぎ (follower 役)
+            leader_monster_id=MONSTER_WOLF,        # オオカミ (leader 役)
+            follower_spot_id=SPOT_A,
+            spot_id=SPOT_A,
+        )
+        result = formatter.format(ev, PLAYER_1)
+
+        assert result is not None
+        # follower 名と leader 名の両方が含まれる
+        assert "迷子のうさぎ" in result.prose
+        assert "灰色のオオカミ" in result.prose
+        assert "続いて" in result.prose
+        assert result.observation_category == "environment"
+        assert result.structured["type"] == "monster_followed_pack_flee"
+        assert result.structured["follower_id"] == MONSTER_TARGET.value
+        assert result.structured["leader_id"] == MONSTER_WOLF.value
 
 
 class TestAbandonedChaseProse:
