@@ -56,9 +56,11 @@ class MonsterDeathHungerHandler(EventHandler[MonsterDiedEvent]):
             )
             return
 
-        dead_race_value = dead_monster.template.race.value
+        # `prey_races` は Set[Race]、`template.race` も Race enum なので
+        # 直接 `in` 判定できる（型強化後）。
+        dead_race = dead_monster.template.race
         prey_races = killer_monster.template.prey_races
-        if not prey_races or dead_race_value not in prey_races:
+        if not prey_races or dead_race not in prey_races:
             return
 
         decrease = killer_monster.template.hunger_decrease_on_prey_kill
@@ -71,5 +73,5 @@ class MonsterDeathHungerHandler(EventHandler[MonsterDiedEvent]):
             "Reduced hunger for killer monster %s (prey %s race=%s)",
             killer_monster.monster_id,
             event.aggregate_id,
-            dead_race_value,
+            dead_race.value,
         )

@@ -62,7 +62,7 @@ def _template_with_prey(
         race=Race.BEAST,
         faction=MonsterFactionEnum.ENEMY,
         description="A wolf.",
-        prey_races=prey_races or frozenset({"goblin"}),
+        prey_races=prey_races or frozenset({Race.GOBLIN}),
         hunger_increase_per_tick=0.01,
         hunger_decrease_on_prey_kill=hunger_decrease_on_prey_kill,
         hunger_starvation_threshold=0.9,
@@ -90,7 +90,7 @@ class TestMonsterDeathHungerHandler:
         spot_id = SpotId(1)
         killer_world_id = WorldObjectId.create(100)
         dead_monster_id = MonsterId.create(1)
-        killer_template = _template_with_prey(1, frozenset({"goblin"}), 0.4)
+        killer_template = _template_with_prey(1, frozenset({Race.GOBLIN}), 0.4)
         dead_template = MonsterTemplate(
             template_id=MonsterTemplateId(2),
             name="Goblin",
@@ -184,7 +184,7 @@ class TestMonsterDeathHungerHandler:
         from ai_rpg_world.domain.common.value_object import WorldTick
         spot_id = SpotId(1)
         killer_world_id = WorldObjectId.create(100)
-        killer_template = _template_with_prey(1, frozenset({"orc"}))  # prey は orc のみ
+        killer_template = _template_with_prey(1, frozenset({Race.ORC}))  # prey は orc のみ
         dead_template = MonsterTemplate(
             template_id=MonsterTemplateId(2),
             name="Goblin",
