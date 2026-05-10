@@ -47,6 +47,10 @@ from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnectio
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    MonsterAttackedPlayerInSpotEvent,
+    MonsterPredatedMonsterInSpotEvent,
+)
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
@@ -172,7 +176,7 @@ class TestMultiSpotChasePlayer:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_known_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -199,7 +203,7 @@ class TestMultiSpotChasePlayer:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_known_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -220,7 +224,7 @@ class TestMultiSpotChasePlayer:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_known_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -235,12 +239,12 @@ class TestMultiSpotChasePlayer:
 
 
 class TestMultiSpotChaseLastKnownUpdate:
-    """multi-spot 移動時に `last_known_spot_id` が更新される。"""
+    """multi-spot 移動時に `last_observed_target_spot_id` が更新される。"""
 
-    def test_1hop_移動後の_last_known_spot_id_は_target_spot_を_指す(self) -> None:
-        """A→B 移動後、state.last_known_spot_id は target が居る B (or 探索先) を指す。
+    def test_1hop_移動後の_last_observed_target_spot_id_は_target_spot_を_指す(self) -> None:
+        """A→B 移動後、state.last_observed_target_spot_id は target が居る B (or 探索先) を指す。
 
-        現実装では `update_chase_last_known_spot(target_spot)` を呼ぶため
+        現実装では `update_chase_last_observed_target_spot(target_spot)` を呼ぶため
         `B` (target が居る spot) が記録される。"""
         player = _player(player_id_value=7)
         handler, _ = _make_handler(player=player)
@@ -249,7 +253,7 @@ class TestMultiSpotChaseLastKnownUpdate:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_known_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -257,18 +261,14 @@ class TestMultiSpotChaseLastKnownUpdate:
 
         handler.try_react(monster, graph, SPOT_A, WorldTick(10))
 
-        # 内部 state の last_known_spot_id が B を指す
-        assert monster._behavior_state.last_known_spot_id == SPOT_B
+        # 内部 state の last_observed_target_spot_id が B を指す
+        assert monster._behavior_state.last_observed_target_spot_id == SPOT_B
 
 
 class TestMultiSpotChaseAttackOnSameSpot:
     """target が同 spot に居る場合は移動せず攻撃する (既存挙動の維持)。"""
 
     def test_同_spot_の_player_には_攻撃_event_が_発火し_移動しない(self) -> None:
-        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-            MonsterAttackedPlayerInSpotEvent,
-        )
-
         player = _player(player_id_value=7)
         handler, _ = _make_handler(player=player)
         # ENEMY faction が必要
@@ -301,7 +301,7 @@ class TestMultiSpotChaseAttackOnSameSpot:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_known_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -318,3 +318,61 @@ class TestMultiSpotChaseAttackOnSameSpot:
         ]
         assert len(events) == 1
         assert graph.get_monster_spot(monster.monster_id) == SPOT_A
+
+class TestMultiSpotChaseMonster:
+    """target が monster (player ではなく) でも multi-spot 追跡できる。"""
+
+    def test_隣接_spot_の_monster_に_向かって_1hop_移動する(self) -> None:
+        """A に居る attacker が、B に居る target_monster を CHASE 中なら B へ 1 hop 移動。"""
+        handler, monster_repo = _make_handler(player=None)
+        attacker = _monster()
+        # target も同じ template だが別 monster_id
+        target = MonsterAggregate(
+            monster_id=MonsterId.create(202),
+            template=_template(),
+            world_object_id=WorldObjectId.create(9202),
+            skill_loadout=SkillLoadoutAggregate.create(
+                SkillLoadoutId(202), owner_id=202,
+                normal_capacity=4, awakened_capacity=2,
+            ),
+            status=MonsterStatusEnum.ALIVE,
+            spawned_at_tick=WorldTick(0),
+        )
+        ref = AttackerRef.of_monster(target.monster_id)
+        attacker.record_attacked_by_in_spot(
+            current_tick=WorldTick(9), attacker_ref=ref,
+        )
+        attacker.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
+
+        graph = _three_spot_chain_graph()
+        graph.place_monster(attacker.monster_id, SPOT_A)
+        graph.place_monster(target.monster_id, SPOT_B)
+
+        result = handler.try_react(attacker, graph, SPOT_A, WorldTick(10))
+
+        assert result is not None
+        assert result.executed is False
+        assert result.reason == "chasing_to_other_spot"
+        # attacker が B へ 1 hop 移動
+        assert graph.get_monster_spot(attacker.monster_id) == SPOT_B
+        assert attacker.is_chasing() is True
+
+    def test_target_monster_が_graph_に_居なければ_IDLE_に_戻る(self) -> None:
+        """target_monster が graph 上に居なければ追跡諦める。"""
+        handler, _ = _make_handler(player=None)
+        attacker = _monster()
+        ref = AttackerRef.of_monster(MonsterId.create(999))  # 居ない monster
+        attacker.record_attacked_by_in_spot(
+            current_tick=WorldTick(9), attacker_ref=ref,
+        )
+        attacker.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
+
+        graph = _three_spot_chain_graph()
+        graph.place_monster(attacker.monster_id, SPOT_A)
+        # target を graph に配置しない
+
+        result = handler.try_react(attacker, graph, SPOT_A, WorldTick(10))
+
+        assert result is None
+        assert attacker.is_chasing() is False
+        assert graph.get_monster_spot(attacker.monster_id) == SPOT_A

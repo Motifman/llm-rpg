@@ -54,8 +54,10 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ConnectionNotPassableException,
     EntityNotInGraphException,
+    MonsterNotInGraphException,
 )
 from ai_rpg_world.domain.world_graph.service.spot_path_finder import find_next_hop
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_attack_outcome import (
     AttackOutcome,
 )
@@ -167,7 +169,7 @@ class MonsterReactionHandler:
                 return None
             monster.enter_chase_state(
                 attacker_ref=attacker_ref,
-                last_known_spot_id=spot_id,
+                last_observed_target_spot_id=spot_id,
             )
             self._monster_repository.save(monster)
             return self._continue_chase(monster, graph, spot_id, current_tick)
@@ -221,7 +223,7 @@ class MonsterReactionHandler:
         分岐:
         1. 追跡対象が同 spot に居る → 攻撃 (orchestrator に委譲)
         2. 追跡対象が graph 上の他 spot に居る → BFS で next hop を計算し
-           1 spot 移動。`last_known_spot_id` も更新する (Phase 4b: multi-spot)
+           1 spot 移動。`last_observed_target_spot_id` も更新する (Phase 4b: multi-spot)
         3. 追跡対象が graph 上に居ない (despawn / 死亡) → IDLE に戻し chain 続行
 
         終了条件:
@@ -291,11 +293,14 @@ class MonsterReactionHandler:
             monster.clear_behavior_state_to_idle()
             self._monster_repository.save(monster)
             return None
-        # 1 hop 進んだ。state 上の last_known_spot_id を target_spot に更新し
-        # 永続化。「攻撃 outcome」は無いが priority chain は止めたいので
+        # 1 hop 進んだ。`last_observed_target_spot_id` を「直近 target を
+        # 確認した spot」として更新し永続化する。target が次 tick でさらに
+        # 移動しても、この値は「monster が最後に target を確認した手がかり
+        # spot」として PR (b) の見失い → 探索フェーズで使う。
+        # 攻撃 outcome は無いが priority chain は止めたいので
         # AttackOutcome(executed=False) で「他のアクションは試行しない」
         # シグナルとして返す。
-        monster.update_chase_last_known_spot(target_spot)
+        monster.update_chase_last_observed_target_spot(target_spot)
         self._monster_repository.save(monster)
         return AttackOutcome(executed=False, reason="chasing_to_other_spot")
 
@@ -304,12 +309,14 @@ class MonsterReactionHandler:
         graph: SpotGraphAggregate,
         attacker_ref: AttackerRef,
     ) -> Optional[SpotId]:
-        """`attacker_ref` が指す対象が現在居る spot を返す。居なければ None。"""
+        """`attacker_ref` が指す対象が現在居る spot を返す。居なければ None。
+
+        Note: player の `EntityId` は `player_id.value` をそのまま整数空間で
+        共有する設計 (graph.place_entity 側と整合)。将来 player ID 空間が
+        変わる場合はこの変換も同期して更新する必要がある。
+        """
         if attacker_ref.is_player:
             try:
-                from ai_rpg_world.domain.world_graph.value_object.entity_id import (
-                    EntityId,
-                )
                 return graph.get_entity_spot(
                     EntityId.create(attacker_ref.player_id.value)
                 )
@@ -317,7 +324,7 @@ class MonsterReactionHandler:
                 return None
         try:
             return graph.get_monster_spot(attacker_ref.monster_id)
-        except Exception:  # MonsterNotInGraphException 系
+        except MonsterNotInGraphException:
             return None
 
     def _move_one_hop_toward(
@@ -345,6 +352,10 @@ class MonsterReactionHandler:
             from_spot=from_spot,
             target_spot=target_spot,
             is_passable=_is_passable,
+            # TODO PR (c): MonsterTemplate.chase_max_distance に置き換える。
+            # 現状は実質無制限で BFS が全 spot を探索する。spot 数が大きくなる
+            # 環境では 1 tick の計算量が O(V+E) で増えるため打ち切り推奨。
+            max_distance=None,
         )
         if next_hop is None:
             return False
@@ -356,6 +367,10 @@ class MonsterReactionHandler:
                 world_flags=world_flags,
             )
         except ConnectionNotPassableException:
+            # BFS 時点で通行可と判定したが move_monster までの間に同 tick 内で
+            # 他のアクションが状態を変えた場合 (例: 別 monster が扉を閉めた)
+            # の TOCTOU。シングルスレッドの現状では稀だが防御的に処理する。
+            # CHASE 解除は呼び出し元 _continue_chase に委ねる。
             logger.debug(
                 "CHASE: connection became not-passable after BFS for monster=%s",
                 monster.monster_id.value,

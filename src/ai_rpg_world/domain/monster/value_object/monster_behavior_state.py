@@ -42,8 +42,11 @@ class MonsterBehaviorState:
     failure_count: int
     # Phase 4a: スポットグラフ世界用の拡張フィールド。2D 経路では使われず、
     # 既存テストやコンストラクタは defaults で構築されるので互換性を維持する。
-    # `last_known_spot_id`: CHASE 中の追跡対象が最後に居た spot
-    last_known_spot_id: Optional[SpotId] = None
+    # `last_observed_target_spot_id`: CHASE 中に target が居ることを最後に
+    # 確認した spot のスナップショット。target は移動している可能性があり、
+    # この値は「target を見失ったとき向かう手がかり」として PR (b) の探索
+    # フェーズで使う。multi-spot 追跡で target を確認するたびに更新する。
+    last_observed_target_spot_id: Optional[SpotId] = None
     # `flee_until_tick`: FLEE 状態が自動解除される tick。state==FLEE のときの
     # み意味を持つ。`current_tick > flee_until_tick` で IDLE に戻す判断材料。
     flee_until_tick: Optional[WorldTick] = None
@@ -200,19 +203,19 @@ class MonsterBehaviorState:
             patrol_index=self.patrol_index,
             search_timer=0,
             failure_count=0,
-            last_known_spot_id=self.last_known_spot_id,
+            last_observed_target_spot_id=self.last_observed_target_spot_id,
             flee_until_tick=flee_until_tick,
         )
 
     def with_spot_chase(
         self,
         attacker_ref: "AttackerRef",
-        last_known_spot_id: SpotId,
+        last_observed_target_spot_id: SpotId,
     ) -> "MonsterBehaviorState":
         """スポットグラフ世界用 CHASE 状態への遷移。
 
         `attacker_ref` (追跡対象 player or monster の参照) と
-        `last_known_spot_id` (最後に target を見た spot) をスナップショット
+        `last_observed_target_spot_id` (最後に target を見た spot) をスナップショット
         として保持する。`last_attacker_ref` (集約フィールド) と独立に固定
         されるため、CHASE 中に第三者から殴られても追跡対象は変わらない。
         `flee_until_tick` はクリア。`target_id` フィールドは 2D 経路の
@@ -226,12 +229,12 @@ class MonsterBehaviorState:
             patrol_index=self.patrol_index,
             search_timer=0,
             failure_count=0,
-            last_known_spot_id=last_known_spot_id,
+            last_observed_target_spot_id=last_observed_target_spot_id,
             flee_until_tick=None,
             chase_attacker_ref=attacker_ref,
         )
 
-    def with_chase_last_known_spot_updated(
+    def with_chase_last_observed_target_spot_updated(
         self, spot_id: SpotId,
     ) -> "MonsterBehaviorState":
         """CHASE 中に target を見た spot を更新した新しい state を返す。
@@ -246,7 +249,7 @@ class MonsterBehaviorState:
             patrol_index=self.patrol_index,
             search_timer=self.search_timer,
             failure_count=self.failure_count,
-            last_known_spot_id=spot_id,
+            last_observed_target_spot_id=spot_id,
             flee_until_tick=self.flee_until_tick,
             chase_attacker_ref=self.chase_attacker_ref,
         )
@@ -254,7 +257,7 @@ class MonsterBehaviorState:
     def with_spot_idle(self) -> "MonsterBehaviorState":
         """IDLE への手動リセット（FLEE / CHASE が解除条件を満たした際）。
 
-        `last_known_spot_id` / `flee_until_tick` / `chase_attacker_ref` を
+        `last_observed_target_spot_id` / `flee_until_tick` / `chase_attacker_ref` を
         全てクリアする。
         """
         return MonsterBehaviorState(
@@ -265,7 +268,7 @@ class MonsterBehaviorState:
             patrol_index=self.patrol_index,
             search_timer=0,
             failure_count=0,
-            last_known_spot_id=None,
+            last_observed_target_spot_id=None,
             flee_until_tick=None,
             chase_attacker_ref=None,
         )

@@ -65,7 +65,7 @@ def _none_passable(_conn) -> bool:
     return False
 
 
-class TestSamePot:
+class TestSameSpot:
     """from と target が同 spot の場合は None。"""
 
     def test_同_spot_は_None_を_返す(self) -> None:
