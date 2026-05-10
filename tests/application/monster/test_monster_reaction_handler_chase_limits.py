@@ -311,6 +311,82 @@ class TestChaseMaxTicks:
         assert result.reason == "chasing_to_other_spot"
         assert monster.is_chasing() is True
 
+    def test_境界_経過_ちょうど_max_ticks_は_継続(self) -> None:
+        """`chase_max_ticks=5`、開始 tick=10、現 tick=15 (経過ちょうど 5) は
+        まだ CHASE 継続 (`>` で実装しているため)。"""
+        player = _player(player_id_value=7)
+        handler, _ = _make_handler(player=player)
+        monster = _monster(_template(chase_max_ticks=5))
+        ref = AttackerRef.of_player(player.player_id)
+        monster.record_attacked_by_in_spot(
+            current_tick=WorldTick(10), attacker_ref=ref,
+        )
+        monster.enter_chase_state(
+            attacker_ref=ref,
+            last_observed_target_spot_id=SpotId.create(1),
+            current_tick=WorldTick(10),
+        )
+
+        graph = _long_chain_graph(2)
+        graph.place_monster(monster.monster_id, SpotId.create(1))
+        graph.place_entity(EntityId.create(player.player_id.value), SpotId.create(2))
+
+        result = handler.try_react(
+            monster, graph, SpotId.create(1), WorldTick(15),
+        )
+
+        assert result is not None
+        assert result.reason == "chasing_to_other_spot"
+        assert monster.is_chasing() is True
+
+    def test_search_中でも_max_ticks_超過で_IDLE(self) -> None:
+        """探索フェーズ (chase_search_ticks=3) 中に `chase_max_ticks=4` を
+        超えたら諦める。"""
+        handler, _ = _make_handler(player=None)
+        # search 中に超過する設定: chase_max_ticks=4
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId.create(1),
+            name="Wolf",
+            base_stats=BaseStats(
+                max_hp=20, max_mp=0, attack=4,
+                defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            ),
+            reward_info=RewardInfo(exp=1, gold=1),
+            respawn_info=RespawnInfo(100, True),
+            race=Race.BEAST,
+            faction=MonsterFactionEnum.NEUTRAL,
+            description="A wolf.",
+            reaction_to_attack=ReactionPolicyEnum.ALWAYS_RETALIATE,
+            flee_grace_ticks=999,
+            chase_search_ticks=10,  # 探索フェーズを長くして max_ticks に先に当てる
+            chase_max_distance=5,
+            chase_max_ticks=4,
+        )
+        monster = _monster(template)
+        ref = AttackerRef.of_player(PlayerId(7))
+        monster.record_attacked_by_in_spot(
+            current_tick=WorldTick(10), attacker_ref=ref,
+        )
+        monster.enter_chase_state(
+            attacker_ref=ref,
+            last_observed_target_spot_id=SpotId.create(1),
+            current_tick=WorldTick(10),
+        )
+        # 既に探索フェーズ中の状態にする
+        monster.start_chase_search(8)  # まだ timer 残ってる
+
+        graph = _long_chain_graph(2)
+        graph.place_monster(monster.monster_id, SpotId.create(1))
+        # player は graph に居ない (= search 経路に入る)
+
+        # max_ticks=4、開始 tick=10、現 tick=15 → 経過 5 > 4 で IDLE
+        result = handler.try_react(
+            monster, graph, SpotId.create(1), WorldTick(15),
+        )
+
+        assert result is None
+        assert monster.is_chasing() is False
+
     def test_chase_max_ticks_0_は_無制限_扱い(self) -> None:
         """`chase_max_ticks=0` なら経過 100 tick でも CHASE 継続。"""
         player = _player(player_id_value=7)

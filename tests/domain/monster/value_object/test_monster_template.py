@@ -756,3 +756,21 @@ class TestMonsterTemplate:
                     description="X",
                     chase_max_ticks=-1,
                 )
+
+        def test_create_fail_bool(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            with pytest.raises(
+                MonsterTemplateValidationException, match="chase_max_ticks"
+            ):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    chase_max_ticks=True,
+                )

@@ -84,14 +84,23 @@ class MonsterTemplate:
     # - N (>=2): 到着 tick + 後続 (N-1) tick で計 N 回 wander → IDLE。
     chase_search_ticks: int = 3
     # Phase 4b PR (c): CHASE で BFS が探索する最大 hop 数。これより遠い target
-    # spot は到達不可扱いとして CHASE を諦める。0 なら距離制限なし (グラフ
-    # 全体を探索)。小さい値 (1-3) で「近距離型」、大きい値 (10-) で「執念
-    # 深い長距離型」を表現。
+    # spot / last_observed_target_spot_id は到達不可扱いとして CHASE を諦める。
+    # 0 なら距離制限なし (グラフ全体を探索)。小さい値 (1-3) で「近距離型」、
+    # 大きい値 (10-) で「執念深い長距離型」を表現。
+    #
+    # 注意: 「target に向かう移動」と「target を見失った後 last_observed に
+    # 駆け付ける移動」の両方に同じ距離制限が適用される。これは「monster の
+    # 視野外まで離れたら諦める」という単純化した世界観に基づく。
+    #
+    # `0` の意味は他の `*_ticks` フィールドと逆 (flee_grace_ticks=0 は即時忘却
+    # = 反応しない、こちらは無制限) なので注意。これは「上限値」フィールドの
+    # 直感に合わせた選択。
     chase_max_distance: int = 5
-    # Phase 4b PR (c): CHASE 状態に入ってからの累積 tick 上限。これを超えたら
-    # 諦めて IDLE 復帰。0 なら tick 制限なし。`flee_grace_ticks` (被弾以来の
-    # 反応 tick) とは別軸で、「最初の被弾は古いが CHASE がまだ続く」状況での
-    # 諦め基準として使う。
+    # Phase 4b PR (c): CHASE 状態に入ってからの累積 tick 上限。これを **超えたら**
+    # (>) 諦めて IDLE 復帰。ちょうど `chase_max_ticks` 経過時点はまだ継続、
+    # `chase_max_ticks + 1` で初めて IDLE 化する (grace 切れ判定と統一した境界)。
+    # 0 なら tick 制限なし。`flee_grace_ticks` (被弾以来の反応 tick) とは別軸で、
+    # 「最初の被弾は古いが CHASE がまだ続く」状況での諦め基準として使う。
     chase_max_ticks: int = 20
 
     def __post_init__(self):
