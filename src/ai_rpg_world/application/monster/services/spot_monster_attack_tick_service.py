@@ -1,26 +1,23 @@
 """tick 駆動でスポットグラフ世界のモンスターにプレイヤー攻撃を試みさせる。
 
-世界 tick が 1 進むたびに本サービスを呼ぶ想定。各モンスターについて:
-1. cooldown 切れ + ALIVE + faction=ENEMY をチェック (domain service 側)
-2. 同スポットに居るプレイヤー集合を SpotGraphAggregate から取得
-3. 視認 (環境光量 OR dark_vision) を満たすターゲットを 1 体選ぶ
-4. domain service の `try_attack` で実際にダメージを適用
-5. 成立したら `MonsterAttackedPlayerInSpotEvent` を SpotGraphAggregate に追加
-6. 関係する全集約 (graph + monster + player) を保存
+世界 tick が 1 進むたびに本サービスを呼ぶ想定。本サービスは「policy = 候補
+選び」だけを担当し、実際の attack 処理（domain service 呼出 / event 発火 /
+全 aggregate save）は `SpotAttackOrchestrator` に委譲する。
 
-ターゲット選択は最小実装として「ID 昇順で先頭の生存プレイヤー 1 体」。複数
+各モンスターについて:
+1. ENEMY 以外 / DEAD / cooldown 中は事前スクリーニングで skip
+2. 同スポットに居る生存プレイヤーを ID 昇順で 1 体ターゲット選定
+3. orchestrator.execute_monster_attack に loaded aggregate を渡す
+4. 戻ってきた `AttackOutcome` を debug 用に集めて返す
+
+ターゲット選択は最小実装として「ID 昇順で先頭の生存プレイヤー」。複数
 プレイヤーが居ても 1 個体は 1 攻撃のみ。後で「最も近い」「HP 最少」等の
 戦略を入れる場合は本サービス内の `_pick_target` を差し替える。
 
 呼び出し導線:
 - 想定接続先は `application/llm/wiring/spot_graph_wiring.py` または
-  presentation 側の tick driver。本サービスは UoW を持たないため呼び出し側で
-  トランザクション境界を引く責任がある。
-- `tick()` 内で `spot_graph_repository.save(graph)` を呼ぶことで graph
-  aggregate の event 列がリポジトリ実装側のイベント発火経路（観測パイプ
-  ライン含む）に届く。spot graph の event 永続化は `get_events()` 経由で
-  observation 経路が拾うため、save 漏れは attack event の喪失を意味する
-  （PR #127 レビューの HIGH 指摘）。
+  presentation 側の tick driver。orchestrator が graph save まで責任を持つ
+  ため tick service 側で別途 save は不要。
 """
 
 from __future__ import annotations
@@ -28,20 +25,16 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
-    MonsterAggregate,
+from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
+    SpotAttackOrchestrator,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.enum.monster_enum import (
     MonsterFactionEnum,
     MonsterStatusEnum,
 )
 from ai_rpg_world.domain.monster.repository.monster_repository import (
     MonsterRepository,
-)
-from ai_rpg_world.domain.monster.service.spot_monster_attack_service import (
-    MonsterAttackOutcome,
-    SpotMonsterAttackService,
 )
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
@@ -53,17 +46,12 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
-from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
-from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-    MonsterAttackedPlayerInSpotEvent,
-)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
-from ai_rpg_world.domain.world_graph.service.spot_perception_service import (
-    SpotPerceptionService,
+from ai_rpg_world.domain.world_graph.value_object.spot_attack_outcome import (
+    AttackOutcome,
 )
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 logger = logging.getLogger(__name__)
@@ -72,10 +60,8 @@ logger = logging.getLogger(__name__)
 class SpotMonsterAttackTickService:
     """tick が進むたびにモンスターからの攻撃を 1 回ずつ試みる。
 
-    本サービスは UoW を持たず、呼び出し側 (presentation の tick driver や
-    test fixture) が `tick()` 後にリポジトリを保存する責務を持つ。実装上は
-    `monster_repository.save()` / `player_status_repository.save()` を内部で
-    呼ぶが、aggregate の event はそのまま `add_event` 経由で蓄積する。
+    本サービスは候補選定 (policy) のみ担当し、attack の実行/永続化は
+    `SpotAttackOrchestrator` に委譲する設計。
     """
 
     def __init__(
@@ -83,34 +69,22 @@ class SpotMonsterAttackTickService:
         spot_graph_repository: ISpotGraphRepository,
         monster_repository: MonsterRepository,
         player_status_repository: PlayerStatusRepository,
-        attack_service: Optional[SpotMonsterAttackService] = None,
-        perception_service: Optional[SpotPerceptionService] = None,
+        attack_orchestrator: SpotAttackOrchestrator,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._monster_repository = monster_repository
         self._player_status_repository = player_status_repository
-        self._attack_service = attack_service or SpotMonsterAttackService()
-        self._perception = perception_service or SpotPerceptionService()
+        self._orchestrator = attack_orchestrator
 
-    def tick(self, current_tick: WorldTick) -> List[MonsterAttackOutcome]:
+    def tick(self, current_tick: WorldTick) -> List[AttackOutcome]:
         """1 tick 分のモンスター攻撃判定を一括実行する。
-
-        実装上の不変条件:
-        - 1 件以上の attack が成立した場合、ループ末尾で
-          `spot_graph_repository.save(graph)` を必ず呼ぶ。これにより graph
-          aggregate に追加された `MonsterAttackedPlayerInSpotEvent` が観測
-          パイプラインに到達する。save を省略すると event がメモリ上で消失する。
-        - 関与した monster / player aggregate もそれぞれ save する（HP 減少
-          や cooldown 起点の永続化）。
 
         Returns:
             当該 tick で実際に発生した attack の結果一覧（debug / 観測性用）。
         """
         graph = self._spot_graph_repository.find_graph()
-        outcomes: List[MonsterAttackOutcome] = []
-        any_attack_executed = False
+        outcomes: List[AttackOutcome] = []
 
-        # 全モンスター（スポットグラフ上に居る個体のみ）を ID 昇順に処理
         for monster_id in sorted(
             graph.monster_spot_mapping().keys(), key=lambda m: m.value
         ):
@@ -124,8 +98,9 @@ class SpotMonsterAttackTickService:
                 )
                 continue
 
-            # 早期スクリーニング: ENEMY 以外と DEAD は domain service でも
-            # 弾かれるが、tick 全体のループ効率のため事前に飛ばす。
+            # 早期スクリーニング: ENEMY 以外と DEAD と cooldown 中は飛ばす。
+            # 同等チェックは domain service にもあるが、tick 全体のループ
+            # 効率と repository.save 不要を兼ねて事前で弾く。
             if monster.template.faction != MonsterFactionEnum.ENEMY:
                 continue
             if monster.status != MonsterStatusEnum.ALIVE:
@@ -137,45 +112,14 @@ class SpotMonsterAttackTickService:
             if target is None:
                 continue
 
-            effective_lighting = self._compute_lighting_for_spot(graph, spot_id)
-            outcome = self._attack_service.try_attack(
-                monster=monster,
+            outcome = self._orchestrator.execute_monster_attack(
+                attacker_monster=monster,
                 target_player=target,
-                effective_lighting=effective_lighting,
+                graph=graph,
+                spot_id=spot_id,
                 current_tick=current_tick,
             )
             outcomes.append(outcome)
-            if not outcome.executed:
-                continue
-
-            # 被害者から見た視認は本実装では attacker 視点と同じ判定（暗闇 +
-            # dark_vision で監督側だけ視認できるケースは「被害者は見えない」）。
-            # 受信者ごとの視認は formatter 側で target_visible を見て切り替える。
-            # 被害者は dark_vision を持たない前提のため、暗闇なら見えない。
-            target_visible = effective_lighting not in (
-                LightingEnum.DARK,
-                LightingEnum.PITCH_BLACK,
-            )
-            graph.add_event(
-                MonsterAttackedPlayerInSpotEvent.create(
-                    aggregate_id=graph.graph_id,
-                    aggregate_type="SpotGraphAggregate",
-                    monster_id=monster_id,
-                    spot_id=spot_id,
-                    target_player_id=EntityId.create(target.player_id.value),
-                    damage=outcome.damage,
-                    target_downed=outcome.target_downed,
-                    target_visible=target_visible,
-                )
-            )
-            self._monster_repository.save(monster)
-            self._player_status_repository.save(target)
-            any_attack_executed = True
-
-        # graph aggregate の event を観測パイプラインに到達させるため、
-        # 1 件でも attack が成立した場合は graph を save する。
-        if any_attack_executed:
-            self._spot_graph_repository.save(graph)
 
         return outcomes
 
@@ -191,30 +135,8 @@ class SpotMonsterAttackTickService:
                 PlayerId(entity_id.value)
             )
             if player is None:
-                # entity_id は presence に居るが player でない可能性 (NPC 等)。
-                # 最小実装ではプレイヤー以外を target にしないので skip。
                 continue
             if player.is_down:
                 continue
             return player
         return None
-
-    def _compute_lighting_for_spot(
-        self, graph: SpotGraphAggregate, spot_id: SpotId
-    ):
-        """スポットの実効照明。光源所持の判定は最小実装では行わず、
-        atmosphere 由来の base 照明を返す。
-
-        TODO: 本格的には `SpotGraphCurrentStateBuilder` と同じロジックで
-        光源持ちエンティティの有無を見て DIM へ引き上げる必要がある。
-        ただしそれはプレイヤーごとの inventory 解決を要するため tick 一度
-        の処理としてはコスト高。最小実装では「アトマンスフィアの素の値」
-        で代用する（光源を持って入っても暗闇判定が固定される副作用あり）。
-        """
-        node = graph.get_spot(spot_id)
-        atmosphere = node.atmosphere
-        return self._perception.compute_effective_lighting(
-            atmosphere, spot_has_any_light_bearer=False
-        )
-
-
