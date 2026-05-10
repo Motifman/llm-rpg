@@ -35,6 +35,13 @@ from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import 
 )
 
 
+# 攻撃で対象が「行動不能」になった際の suffix。被害者ごとに自然な日本語を
+# 維持するため、player target / monster target を分けて持つ（field 自体は
+# `target_incapacitated` で対称化済み）。
+_INCAPACITATION_SUFFIX_FOR_PLAYER_TARGET = " 致命的なダメージで倒れた。"
+_INCAPACITATION_SUFFIX_FOR_MONSTER_TARGET = " 致命傷を与えて倒した。"
+
+
 class SpotGraphObservationFormatter:
     """SpotGraph ドメインイベントを他プレイヤー向け観測に変換する。
 
@@ -475,7 +482,7 @@ class SpotGraphObservationFormatter:
         """
         is_victim = event.target_player_id.value == recipient_id.value
         monster_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.monster_id
+            event.attacker_monster_id
         )
         if is_victim:
             if event.target_visible:
@@ -489,18 +496,18 @@ class SpotGraphObservationFormatter:
                 PlayerId(event.target_player_id.value)
             )
             prose = f"{monster_name}が{target_name}を攻撃した。"
-        if event.target_downed:
+        if event.target_incapacitated:
             # 倒れた事実は受信者問わず追記。被害者本人に対しては「倒れた」、
             # 第三者からは「{name} が倒れた」とより明確に出したいが、最小
             # 実装では共通 suffix で済ませる。
-            prose = prose + " 致命的なダメージで倒れた。"
+            prose = prose + _INCAPACITATION_SUFFIX_FOR_PLAYER_TARGET
         structured = {
             "type": "monster_attacked_player",
-            "monster_id": event.monster_id.value,
+            "attacker_monster_id": event.attacker_monster_id.value,
             "monster_name": monster_name,
             "target_player_id": event.target_player_id.value,
             "damage": event.damage,
-            "target_downed": event.target_downed,
+            "target_incapacitated": event.target_incapacitated,
             "target_visible": event.target_visible,
         }
         return ObservationOutput(
@@ -521,21 +528,21 @@ class SpotGraphObservationFormatter:
         観測として「{actor}が{monster}を攻撃した」を出す。倒した場合は
         「倒した」suffix を追加。
         """
-        actor_name = self._resolve_entity_name(event.actor_entity_id)
+        actor_name = self._resolve_entity_name(event.attacker_entity_id)
         monster_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.monster_id
+            event.target_monster_id
         )
         prose = f"{actor_name}が{monster_name}を攻撃した。"
-        if event.target_killed:
-            prose = prose + " 致命傷を与えて倒した。"
+        if event.target_incapacitated:
+            prose = prose + _INCAPACITATION_SUFFIX_FOR_MONSTER_TARGET
         structured = {
             "type": "player_attacked_monster",
-            "actor_id": event.actor_entity_id.value,
+            "attacker_entity_id": event.attacker_entity_id.value,
             "actor_name": actor_name,
-            "monster_id": event.monster_id.value,
+            "target_monster_id": event.target_monster_id.value,
             "monster_name": monster_name,
             "damage": event.damage,
-            "target_killed": event.target_killed,
+            "target_incapacitated": event.target_incapacitated,
         }
         return ObservationOutput(
             prose=prose,
