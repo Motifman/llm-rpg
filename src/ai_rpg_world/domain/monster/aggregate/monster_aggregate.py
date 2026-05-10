@@ -627,13 +627,18 @@ class MonsterAggregate(AggregateRoot):
         self,
         attacker_ref: "AttackerRef",
         last_observed_target_spot_id: SpotId,
+        current_tick: WorldTick,
     ) -> None:
         """CHASE 状態に遷移。追跡対象の attacker_ref をスナップショットとして
-        固定し、`last_observed_target_spot_id` を保持する。
+        固定し、`last_observed_target_spot_id` と `chase_started_at_tick` を
+        保持する。
 
         `last_attacker_ref` (集約フィールド) は後続の被弾で上書きされ得るが、
         CHASE 中の追跡対象は state 内の ref で固定されるため、第三者から殴ら
         れても target は変わらない。
+
+        `current_tick` は CHASE 開始時刻として保存され、`chase_max_ticks`
+        経過判定の起点になる (Phase 4b PR c)。
 
         ALIVE 以外では no-op。
         """
@@ -642,7 +647,19 @@ class MonsterAggregate(AggregateRoot):
         self._behavior_state = self._behavior_state.with_spot_chase(
             attacker_ref=attacker_ref,
             last_observed_target_spot_id=last_observed_target_spot_id,
+            chase_started_at_tick=current_tick,
         )
+
+    @property
+    def chase_started_at_tick(self) -> Optional[WorldTick]:
+        """CHASE 状態に入った tick。CHASE でない場合は None。
+
+        `current_tick - chase_started_at_tick > template.chase_max_ticks` で
+        諦めて IDLE に戻る判断材料 (Phase 4b PR c)。
+        """
+        if not self.is_chasing():
+            return None
+        return self._behavior_state.chase_started_at_tick
 
     def clear_behavior_state_to_idle(self) -> None:
         """state を IDLE に戻す（FLEE 自動解除 / CHASE 終了時の手動リセット）。

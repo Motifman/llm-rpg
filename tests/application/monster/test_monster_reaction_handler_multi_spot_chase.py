@@ -181,7 +181,7 @@ class TestMultiSpotChasePlayer:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -208,7 +208,7 @@ class TestMultiSpotChasePlayer:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -229,7 +229,7 @@ class TestMultiSpotChasePlayer:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -258,7 +258,7 @@ class TestMultiSpotChaseLastKnownUpdate:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -306,7 +306,7 @@ class TestMultiSpotChaseAttackOnSameSpot:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -347,7 +347,7 @@ class TestMultiSpotChaseMonster:
         attacker.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        attacker.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
+        attacker.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
         graph = _three_spot_chain_graph()
         graph.place_monster(attacker.monster_id, SPOT_A)
@@ -370,7 +370,7 @@ class TestMultiSpotChaseMonster:
         attacker.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        attacker.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A)
+        attacker.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
         graph = _three_spot_chain_graph()
         graph.place_monster(attacker.monster_id, SPOT_A)

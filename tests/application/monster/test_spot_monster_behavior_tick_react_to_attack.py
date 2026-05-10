@@ -493,6 +493,7 @@ class TestChaseTargetMissing:
         monster.enter_chase_state(
             attacker_ref=AttackerRef.of_player(PlayerId(1)),
             last_observed_target_spot_id=SPOT_A,
+            current_tick=WorldTick(8),
         )
         graph = _make_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -519,6 +520,7 @@ class TestThirdPartyAttackerRefSafety:
         )
         monster.enter_chase_state(
             attacker_ref=original, last_observed_target_spot_id=SPOT_A,
+            current_tick=WorldTick(8),
         )
         # 第三者から殴られる
         intruder = AttackerRef.of_monster(MonsterId.create(999))
