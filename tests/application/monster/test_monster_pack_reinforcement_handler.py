@@ -352,6 +352,64 @@ class TestNoResponse:
         )
         assert result is False
 
+    def test_max_pack_responders_0_テンプレ_なら_応答しない(self) -> None:
+        """max_pack_responders=0 単独 (radius>0) でも援護機能無効。"""
+        victim = _make_monster(101)
+        victim.record_attacked_by_in_spot(
+            current_tick=WorldTick(9),
+            attacker_ref=AttackerRef.of_player(PlayerId(7)),
+        )
+        responder = _make_monster(
+            102, template=_template(
+                pack_help_radius=3, max_pack_responders=0,
+            ),
+        )
+        repo = _make_repo(victim, responder)
+        handler = _make_handler(repo)
+
+        graph = _three_spot_chain_graph()
+        graph.place_monster(victim.monster_id, SPOT_A)
+        graph.place_monster(responder.monster_id, SPOT_B)
+
+        result = handler.try_respond_to_pack_help(
+            responder, graph, SPOT_B, WorldTick(10),
+        )
+        assert result is False
+
+    def test_DEAD_の_victim_には_援護に_行かない(self) -> None:
+        """status=DEAD の仲間は援護対象外 (防御コードのテスト)。"""
+        from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import (
+            MonsterLifecycleState,
+        )
+
+        victim = _make_monster(101)
+        victim.record_attacked_by_in_spot(
+            current_tick=WorldTick(9),
+            attacker_ref=AttackerRef.of_player(PlayerId(7)),
+        )
+        # victim を DEAD に強制遷移
+        victim._lifecycle_state = MonsterLifecycleState(
+            hp=victim._lifecycle_state.hp,
+            mp=victim._lifecycle_state.mp,
+            status=MonsterStatusEnum.DEAD,
+            last_death_tick=WorldTick(10),
+            spawned_at_tick=WorldTick(0),
+            hunger=0.0,
+            starvation_timer=0,
+        )
+        responder = _make_monster(102)
+        repo = _make_repo(victim, responder)
+        handler = _make_handler(repo)
+
+        graph = _three_spot_chain_graph()
+        graph.place_monster(victim.monster_id, SPOT_A)
+        graph.place_monster(responder.monster_id, SPOT_B)
+
+        result = handler.try_respond_to_pack_help(
+            responder, graph, SPOT_B, WorldTick(10),
+        )
+        assert result is False
+
     def test_別_pack_の_monster_には_応答しない(self) -> None:
         """別 pack の victim には反応しない。"""
         other_pack = PackId.create("rabbit_pack")

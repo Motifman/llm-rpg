@@ -1854,9 +1854,16 @@ def _migration_v25(connection: sqlite3.Connection) -> None:
 def _migration_v26(connection: sqlite3.Connection) -> None:
     """Phase 4-O C: pack 援護用テンプレートフィールドを追加。
 
-    `game_monster_templates` に 2 カラム追加 (default 0 = 援護機能無効):
+    `game_monster_templates` に 2 カラム追加。両方 default 0 で「機能無効」を
+    意味する (handler の `pack_help_radius <= 0 or max_pack_responders <= 0`
+    早期 return ガードと整合)。
     - `pack_help_radius INTEGER`: BFS hop 距離上限 (0 で機能無効)
-    - `max_pack_responders INTEGER`: 1 援護要請への最大応答数
+    - `max_pack_responders INTEGER`: 1 援護要請への最大応答数 (0 で機能無効)
+
+    既存 row はすべて 0 で埋まり、援護機能が無効状態で起動する (後方互換)。
+    新しいテンプレを seed する側で意図的に値を設定したものだけが援護対応に
+    なる。default 2 にすると「migration 直後に既存 monster がいきなり pack
+    援護を始める」予期しない挙動になるため避ける。
     """
     connection.execute(
         "ALTER TABLE game_monster_templates "
@@ -1864,7 +1871,7 @@ def _migration_v26(connection: sqlite3.Connection) -> None:
     )
     connection.execute(
         "ALTER TABLE game_monster_templates "
-        "ADD COLUMN max_pack_responders INTEGER NOT NULL DEFAULT 2"
+        "ADD COLUMN max_pack_responders INTEGER NOT NULL DEFAULT 0"
     )
 
 
