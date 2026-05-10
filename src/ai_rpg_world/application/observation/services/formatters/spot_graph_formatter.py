@@ -16,6 +16,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
     MonsterAppearedAtSpotEvent,
+    MonsterAteGroundItemEvent,
     MonsterAttackedPlayerInSpotEvent,
     MonsterLeftSpotEvent,
     PlayerAttackedMonsterInSpotEvent,
@@ -90,6 +91,8 @@ class SpotGraphObservationFormatter:
             return self._format_monster_attacked_player(event, recipient_player_id)
         if isinstance(event, PlayerAttackedMonsterInSpotEvent):
             return self._format_player_attacked_monster(event, recipient_player_id)
+        if isinstance(event, MonsterAteGroundItemEvent):
+            return self._format_monster_ate_ground_item(event, recipient_player_id)
         return None
 
     def _is_self(self, entity_id: Any, recipient_id: PlayerId) -> bool:
@@ -543,6 +546,37 @@ class SpotGraphObservationFormatter:
             "monster_name": monster_name,
             "damage": event.damage,
             "target_incapacitated": event.target_incapacitated,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
+        )
+
+    def _format_monster_ate_ground_item(
+        self,
+        event: MonsterAteGroundItemEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """モンスター採食 prose: 「{monster_name}が{item_name}を食べた」。
+
+        actor が monster なので self 除外は無し。同スポット全員に届く。
+        """
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.monster_id
+        )
+        item_name = self._context.name_resolver.item_spec_name(
+            event.item_spec_id.value
+        )
+        prose = f"{monster_name}が{item_name}を食べた。"
+        structured = {
+            "type": "monster_ate_ground_item",
+            "monster_id": event.monster_id.value,
+            "monster_name": monster_name,
+            "item_instance_id": event.item_instance_id.value,
+            "item_spec_id": event.item_spec_id.value,
+            "item_name": item_name,
         }
         return ObservationOutput(
             prose=prose,

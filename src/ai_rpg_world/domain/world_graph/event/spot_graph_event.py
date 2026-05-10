@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -306,3 +307,24 @@ class PlayerAttackedMonsterInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     spot_id: SpotId
     damage: int
     target_incapacitated: bool
+
+
+@dataclass(frozen=True)
+class MonsterAteGroundItemEvent(BaseDomainEvent[SpotGraphId, str]):
+    """モンスターが地面のアイテムを食べた（採食）。
+
+    Phase 3a: 飢餓 tick で hunger が `forage_threshold` 以上に達したモンスターが、
+    同スポットの地面アイテムのうち `template.preferred_feed_item_spec_ids` に
+    含まれる種別を 1 つ消費したときに発火する。
+
+    観測としては同スポットの全プレイヤーに social カテゴリで届く。actor は
+    monster なので self 除外は不要。
+
+    `item_spec_id` は formatter で名前解決のために使う。`item_instance_id` は
+    structured 出力やログ照会向け（同種別が複数置かれている時の追跡用）。
+    """
+
+    monster_id: MonsterId
+    spot_id: SpotId
+    item_instance_id: ItemInstanceId
+    item_spec_id: ItemSpecId
