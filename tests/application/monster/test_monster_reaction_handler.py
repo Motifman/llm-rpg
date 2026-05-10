@@ -66,7 +66,11 @@ def _template(
     *,
     reaction: ReactionPolicyEnum = ReactionPolicyEnum.PASSIVE,
     flee_grace_ticks: int = 3,
+    chase_search_ticks: int = 0,
 ) -> MonsterTemplate:
+    """既存テストでは search phase を入れない (=0) ことで Phase 4b PR (a) の
+    挙動と同じ「target 見失い即 IDLE」を維持する。search phase 自体は
+    `test_monster_reaction_handler_search_phase.py` で別途検証する。"""
     return MonsterTemplate(
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
@@ -81,6 +85,7 @@ def _template(
         description="A wolf.",
         reaction_to_attack=reaction,
         flee_grace_ticks=flee_grace_ticks,
+        chase_search_ticks=chase_search_ticks,
     )
 
 

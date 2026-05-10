@@ -96,6 +96,7 @@ def _template(
     max_hp: int = 30,
     idle_wander_chance: float = 0.0,
     faction: MonsterFactionEnum = MonsterFactionEnum.ENEMY,
+    chase_search_ticks: int = 0,
 ) -> MonsterTemplate:
     return MonsterTemplate(
         template_id=MonsterTemplateId.create(1),
@@ -113,6 +114,7 @@ def _template(
         flee_grace_ticks=flee_grace_ticks,
         flee_threshold=flee_threshold,
         idle_wander_chance=idle_wander_chance,
+        chase_search_ticks=chase_search_ticks,
     )
 
 

@@ -691,6 +691,44 @@ class MonsterAggregate(AggregateRoot):
             spot_id
         )
 
+    # ------------------------------------------------------------------
+    # CHASE 探索フェーズ (Phase 4b PR b): target 見失い後の search_timer 操作
+    # ------------------------------------------------------------------
+
+    def start_chase_search(self, search_ticks: int) -> None:
+        """CHASE 中に target を見失い、`last_observed_target_spot_id` に到着
+        した時点で探索タイマーを開始する。
+
+        ALIVE 以外 / CHASE 以外では no-op。`search_ticks <= 0` も no-op
+        (テンプレで search 無効化された場合)。
+        """
+        if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
+            return
+        if not self.is_chasing():
+            return
+        if search_ticks <= 0:
+            return
+        self._behavior_state = self._behavior_state.with_search_timer(search_ticks)
+
+    def is_searching_lost_target(self) -> bool:
+        """CHASE 中で search_timer > 0 (探索フェーズ中) か。"""
+        return self.is_chasing() and self._behavior_state.search_timer > 0
+
+    def tick_chase_search_timer(self) -> bool:
+        """探索タイマーを 1 減らす。減らした結果まだ > 0 なら True を返す。
+
+        ALIVE 以外 / CHASE 以外 / search_timer == 0 では何もせず False。
+        """
+        if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
+            return False
+        if not self.is_chasing():
+            return False
+        if self._behavior_state.search_timer <= 0:
+            return False
+        new_timer = self._behavior_state.search_timer - 1
+        self._behavior_state = self._behavior_state.with_search_timer(new_timer)
+        return new_timer > 0
+
     def record_attack(self, current_tick: WorldTick) -> None:
         """攻撃を実行した事実を tick として記録する。cooldown の起点。
 
