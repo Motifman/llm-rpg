@@ -328,3 +328,32 @@ class MonsterAteGroundItemEvent(BaseDomainEvent[SpotGraphId, str]):
     spot_id: SpotId
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
+
+
+@dataclass(frozen=True)
+class MonsterPredatedMonsterInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
+    """モンスターが同スポットの prey モンスターを攻撃した（捕食）。
+
+    Phase 3b: hungry な捕食者が `template.prey_races` にマッチする生存
+    モンスターを攻撃したときに発火。多 tick 戦闘（モデル B）なので 1 撃で
+    必ずしも仕留めるわけではなく、`target_killed` で致命攻撃かを示す。
+
+    Field naming は `MonsterAttackedPlayerInSpotEvent` /
+    `PlayerAttackedMonsterInSpotEvent` と同じ規約:
+    - `attacker_monster_id`: 狩る側
+    - `target_monster_id`: 狩られる側
+    - `target_incapacitated`: 致命攻撃で MonsterDead に遷移したか
+      （hunger 回復はこの値が True のときに発生）
+
+    観測としては同 spot 全プレイヤーに social として届く。actor/target が
+    どちらも monster なので player の self 除外は不要。
+
+    Phase 4 (反撃 / 逃走) では prey 側がこの event を購読して FLEE 状態に
+    遷移する想定。
+    """
+
+    attacker_monster_id: MonsterId
+    target_monster_id: MonsterId
+    spot_id: SpotId
+    damage: int
+    target_incapacitated: bool

@@ -6,9 +6,13 @@
 
 各モンスターについて毎 tick 以下の優先順で 1 アクションを試みる:
 
-1. **attack**: ENEMY + ALIVE + cooldown 切れ + 同スポットに生存プレイヤーが
-   居る → `SpotAttackOrchestrator.execute_monster_attack`
-2. **wander**: 攻撃しなかった場合、`ecology_type != AMBUSH` かつ
+0. **hunger tick**: 飢餓進行 → 閾値超過で starve（即死、後続スキップ）
+1. **attack player**: ENEMY + ALIVE + cooldown 切れ + 同スポットに生存
+   プレイヤーが居る → `SpotAttackOrchestrator.execute_monster_attack`
+2. **predation**: hungry + 同スポットに prey 種族の生存モンスターが居る →
+   `SpotAttackOrchestrator.execute_predation_attack`
+3. **forage**: hungry + 同スポットに preferred 食材アイテムが居る → 食べる
+4. **wander**: 上記いずれも発動しない場合、`ecology_type != AMBUSH` かつ
    `idle_wander_chance` で抽選に当選すれば隣接スポットへランダム移動
 
 複数の monster が居る tick では ID 昇順でループする（PR #127 と同じ policy）。
@@ -181,7 +185,25 @@ class SpotMonsterBehaviorTickService:
                 # / behavior_state を入れるときに「攻撃失敗 → 留まる」を別途
                 # 表現する想定。
 
-            # --- 2. forage (採食) ---
+            # --- 2. predation (捕食) ---
+            # hungry な捕食者で、同 spot に prey 種族の生存モンスターが居れば
+            # 攻撃する（多 tick 戦闘モデル）。orchestrator が damage 適用 +
+            # 致命時 hunger 回復 + record_attacked_by_in_spot を担当。
+            # priority は player attack の後 / forage の前: プレイヤーが
+            # 目の前に居るときは player を優先（事前合意）。
+            predation_outcome = self._maybe_predate(
+                monster, graph, spot_id, current_tick
+            )
+            if predation_outcome is not None:
+                attack_outcomes.append(predation_outcome)
+                if predation_outcome.executed:
+                    # 捕食成立で 1 tick の行動消化。orchestrator 側で graph
+                    # save 済み。
+                    continue
+                # 捕食を試みたが不成立 (cooldown / not_visible / zero_damage)
+                # の場合は forage / wander にフォールバック。
+
+            # --- 3. forage (採食) ---
             # hunger >= forage_threshold + 同スポットに preferred 食材あり
             # → 1 個食べて hunger 減少。graph に MonsterAteGroundItemEvent が
             # 積まれるので tick 末で graph save が必要。
@@ -195,7 +217,7 @@ class SpotMonsterBehaviorTickService:
                 any_graph_change = True
                 continue
 
-            # --- 3. wander フォールバック ---
+            # --- 4. wander フォールバック ---
             if self._try_wander(monster, graph, spot_id):
                 any_graph_change = True
 
@@ -254,6 +276,81 @@ class SpotMonsterBehaviorTickService:
             if player.is_down:
                 continue
             return player
+        return None
+
+    # ------------------------------------------------------------------
+    # 内部 - predation (Phase 3b)
+    # ------------------------------------------------------------------
+
+    def _maybe_predate(
+        self,
+        monster: MonsterAggregate,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+        current_tick: WorldTick,
+    ) -> Optional[AttackOutcome]:
+        """hungry + 同スポットに prey 種族の生存モンスターが居れば捕食を試みる。
+
+        前提条件 (満たさなければ None を返す):
+        - `template.starvation_ticks > 0`（飢餓有効テンプレ）
+        - `template.prey_races` に少なくとも 1 種族登録
+        - `monster.hunger >= template.forage_threshold`（forage と同じ閾値を共有）
+        - `monster.can_attack_now(current_tick)` が True
+        - 同スポットに prey 種族の生存モンスターが少なくとも 1 体
+
+        実行:
+        - prey は ID 昇順で先頭の生存個体を選ぶ
+        - orchestrator.execute_predation_attack に loaded aggregate を渡す
+        - 戻り値の `AttackOutcome` をそのまま callers に返す
+        """
+        template = monster.template
+        if template.starvation_ticks <= 0:
+            return None
+        if not template.prey_races:
+            return None
+        if monster.hunger < template.forage_threshold:
+            return None
+        if not monster.can_attack_now(current_tick):
+            return None
+
+        prey = self._pick_prey(graph, spot_id, template.prey_races, monster.monster_id)
+        if prey is None:
+            return None
+
+        return self._orchestrator.execute_predation_attack(
+            attacker_monster=monster,
+            prey_monster=prey,
+            graph=graph,
+            spot_id=spot_id,
+            current_tick=current_tick,
+        )
+
+    def _pick_prey(
+        self,
+        graph: SpotGraphAggregate,
+        spot_id: SpotId,
+        prey_races,
+        attacker_monster_id,
+    ) -> Optional[MonsterAggregate]:
+        """同スポットの生存モンスターから prey 種族にマッチする 1 体を返す。
+
+        ID 昇順で先頭の生存個体を選ぶ。攻撃者自身は当然除外する（同種が
+        prey に含まれていても自分は襲わない）。
+        """
+        presence = graph.monster_presence_at(spot_id)
+        for candidate_id in sorted(
+            presence.present_monster_ids, key=lambda m: m.value
+        ):
+            if candidate_id == attacker_monster_id:
+                continue
+            candidate = self._monster_repository.find_by_id(candidate_id)
+            if candidate is None:
+                continue
+            if candidate.status != MonsterStatusEnum.ALIVE:
+                continue
+            if candidate.template.race not in prey_races:
+                continue
+            return candidate
         return None
 
     # ------------------------------------------------------------------

@@ -34,8 +34,11 @@ class MonsterTemplate:
     ambush_chase_range: Optional[int] = None
     territory_radius: Optional[int] = None
     active_time: ActiveTimeType = ActiveTimeType.ALWAYS
-    threat_races: Optional[Set[str]] = None
-    prey_races: Optional[Set[str]] = None
+    # `Race` enum セット: typo を template 構築時に弾き、IDE 補完を効かせる。
+    # SQLite 永続化では `Race.value` 文字列で保存し、読出時に `Race(...)` で
+    # enum に戻す（codec 側で吸収）。
+    threat_races: Optional[Set[Race]] = None
+    prey_races: Optional[Set[Race]] = None
     growth_stages: Optional[List[GrowthStage]] = None
     # Phase 6: 飢餓（None/0 で無効）
     hunger_increase_per_tick: float = 0.0
@@ -152,10 +155,20 @@ class MonsterTemplate:
             raise MonsterTemplateValidationException(
                 f"threat_races must be a set or frozenset, got {type(self.threat_races).__name__}"
             )
+        for r in self.threat_races or ():
+            if not isinstance(r, Race):
+                raise MonsterTemplateValidationException(
+                    f"threat_races must contain Race enum values, got {type(r).__name__}"
+                )
         if self.prey_races is not None and not isinstance(self.prey_races, (set, frozenset)):
             raise MonsterTemplateValidationException(
                 f"prey_races must be a set or frozenset, got {type(self.prey_races).__name__}"
             )
+        for r in self.prey_races or ():
+            if not isinstance(r, Race):
+                raise MonsterTemplateValidationException(
+                    f"prey_races must contain Race enum values, got {type(r).__name__}"
+                )
         if self.growth_stages is not None:
             if not isinstance(self.growth_stages, list):
                 raise MonsterTemplateValidationException(

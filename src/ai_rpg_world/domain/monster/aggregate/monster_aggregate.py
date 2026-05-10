@@ -101,6 +101,7 @@ class MonsterAggregate(AggregateRoot):
         hunger: float = 0.0,
         starvation_timer: int = 0,
         last_attack_tick: Optional[WorldTick] = None,
+        last_attacked_tick: Optional[WorldTick] = None,
     ):
         super().__init__()
         self._monster_id = monster_id
@@ -109,6 +110,11 @@ class MonsterAggregate(AggregateRoot):
         self._coordinate = coordinate
         self._spot_id = spot_id
         self._last_attack_tick = last_attack_tick
+        # Phase 3b: 「最後に外部から攻撃された tick」。Phase 4 (反撃 / 逃走)
+        # で behavior tick service が `current_tick - last_attacked_tick`
+        # を見て FLEE / RETALIATE 抽選するためのフック。本 PR では値を記録
+        # するだけで、利用は将来 PR で行う。
+        self._last_attacked_tick = last_attacked_tick
         self._active_effects = active_effects or []
         self._skill_loadout = skill_loadout
         self._pack_id = pack_id
@@ -548,6 +554,42 @@ class MonsterAggregate(AggregateRoot):
             return True
         elapsed = current_tick.value - self._last_attack_tick.value
         return elapsed >= self._template.attack_cooldown_ticks
+
+    @property
+    def last_attacked_tick(self) -> Optional[WorldTick]:
+        """このモンスターが最後に外部から攻撃を受けた tick。未被弾なら None。
+
+        Phase 3b で導入。攻撃者は player でも monster でもよく、攻撃の種別も
+        問わない。Phase 4 (反撃 / 逃走) で「直近に攻撃されたか？」を判定する
+        ためのフック。
+        """
+        return self._last_attacked_tick
+
+    def record_attacked_by_in_spot(
+        self,
+        attacker_id: WorldObjectId,
+        current_tick: WorldTick,
+    ) -> None:
+        """スポットグラフ世界用の「攻撃を受けた」記録 API。
+
+        2D マップ世界の `record_attacked_by` は coordinate と behavior_state
+        machine 連携を要求するため、スポットグラフ世界では使えなかった。
+        本 API は coordinate 非依存・state machine 非依存で「最後に攻撃を
+        受けた tick」だけを残す最小実装。
+
+        Phase 4 で「FLEE / RETALIATE 行動を決める」際に
+        `current_tick - last_attacked_tick` を見て抽選する想定。本 PR では
+        値の記録までで、反撃ロジックは導入しない。
+
+        ALIVE 状態でない場合は no-op（既に死んでいる相手の攻撃記録は意味が
+        ないため）。`attacker_id` は将来「誰に殴られたか」のフックを残すため
+        引数として受け取るが、現在は破棄する（_last_attacked_attacker_id
+        フィールドを足すかは実需に応じて Phase 4 で判断）。
+        """
+        if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
+            return
+        del attacker_id  # 将来用のフック; 現状は破棄
+        self._last_attacked_tick = current_tick
 
     def record_attack(self, current_tick: WorldTick) -> None:
         """攻撃を実行した事実を tick として記録する。cooldown の起点。
