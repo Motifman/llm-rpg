@@ -67,6 +67,82 @@ class TestSqliteMonsterAggregateRepository:
         with pytest.raises(RuntimeError, match="for_shared_unit_of_work"):
             repo.save(monster)
 
+    def test_chase_state_round_trip_persists_phase4ab_fields(
+        self, sqlite_conn: sqlite3.Connection,
+    ) -> None:
+        """Phase 4a/4b で追加した spot graph 用 behavior_state フィールドが
+        SQLite から正しく round-trip する (migration v24 の検証)。
+
+        - last_observed_target_spot_id
+        - flee_until_tick (今回 FLEE は試さないが None の確認)
+        - chase_attacker_ref (PLAYER と MONSTER の両方)
+        - chase_started_at_tick
+        """
+        from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
+        # 1) PLAYER attacker の CHASE 状態
+        m_player_chase = MonsterAggregate.create(
+            MonsterId(101), _sample_template(),
+            WorldObjectId(2001), skill_loadout=_loadout(101),
+        )
+        m_player_chase.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+        m_player_chase.enter_chase_state(
+            attacker_ref=AttackerRef.of_player(PlayerId(7)),
+            last_observed_target_spot_id=SpotId(5),
+            current_tick=WorldTick(42),
+        )
+        repo.save(m_player_chase)
+
+        # 2) MONSTER attacker の CHASE 状態
+        m_monster_chase = MonsterAggregate.create(
+            MonsterId(102), _sample_template(),
+            WorldObjectId(2002), skill_loadout=_loadout(102),
+        )
+        m_monster_chase.spawn(Coordinate(1, 1, 0), SpotId(1), WorldTick(0))
+        m_monster_chase.enter_chase_state(
+            attacker_ref=AttackerRef.of_monster(MonsterId(999)),
+            last_observed_target_spot_id=SpotId(8),
+            current_tick=WorldTick(50),
+        )
+        repo.save(m_monster_chase)
+
+        # 復元して全フィールドを検証
+        loaded_p = repo.find_by_id(MonsterId(101))
+        assert loaded_p is not None
+        assert loaded_p.is_chasing() is True
+        assert loaded_p.chase_attacker_ref() == AttackerRef.of_player(PlayerId(7))
+        assert loaded_p.chase_last_observed_target_spot_id == SpotId(5)
+        assert loaded_p.chase_started_at_tick == WorldTick(42)
+
+        loaded_m = repo.find_by_id(MonsterId(102))
+        assert loaded_m is not None
+        assert loaded_m.is_chasing() is True
+        assert loaded_m.chase_attacker_ref() == AttackerRef.of_monster(MonsterId(999))
+        assert loaded_m.chase_last_observed_target_spot_id == SpotId(8)
+        assert loaded_m.chase_started_at_tick == WorldTick(50)
+
+    def test_idle_state_persists_with_null_chase_fields(
+        self, sqlite_conn: sqlite3.Connection,
+    ) -> None:
+        """CHASE 状態でない (= IDLE) monster は新カラムが NULL で保存され、
+        復元時も None になる。"""
+        repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
+        monster = MonsterAggregate.create(
+            MonsterId(201), _sample_template(),
+            WorldObjectId(3001), skill_loadout=_loadout(201),
+        )
+        monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+        repo.save(monster)
+
+        loaded = repo.find_by_id(MonsterId(201))
+        assert loaded is not None
+        assert loaded.is_chasing() is False
+        assert loaded.chase_attacker_ref() is None
+        assert loaded.chase_last_observed_target_spot_id is None
+        assert loaded.chase_started_at_tick is None
+
     def test_save_and_find_roundtrip(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
         monster = MonsterAggregate.create(

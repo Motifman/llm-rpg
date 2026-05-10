@@ -374,6 +374,30 @@ class MonsterAggregate(AggregateRoot):
     def behavior_failure_count(self) -> int:
         return self._behavior_state.failure_count
 
+    # Phase 4a/4b: spot graph 用 behavior_state 拡張フィールドの永続化用
+    # アクセサ。CHASE/FLEE 状態でない限り None。これらは repository が
+    # SQLite に書き込む際に使う (PR (c) 永続化対応)。
+
+    @property
+    def behavior_last_observed_target_spot_id(self) -> Optional[SpotId]:
+        return self._behavior_state.last_observed_target_spot_id
+
+    @property
+    def behavior_flee_until_tick(self) -> Optional[WorldTick]:
+        return self._behavior_state.flee_until_tick
+
+    @property
+    def behavior_chase_attacker_ref(self) -> Optional["AttackerRef"]:
+        """state にスナップショットされた CHASE 追跡対象 ref。
+        `chase_attacker_ref()` メソッド (CHASE 中のみ) と異なり、state に
+        値があればそのまま返す (永続化用)。
+        """
+        return self._behavior_state.chase_attacker_ref
+
+    @property
+    def behavior_chase_started_at_tick(self) -> Optional[WorldTick]:
+        return self._behavior_state.chase_started_at_tick
+
     @property
     def pursuit_state(self) -> Optional[PursuitState]:
         if isinstance(self._pursuit_state, MonsterPursuitState):

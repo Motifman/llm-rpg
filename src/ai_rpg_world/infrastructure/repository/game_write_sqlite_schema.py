@@ -502,6 +502,10 @@ def _migration_v3(connection: sqlite3.Connection) -> None:
             behavior_patrol_index INTEGER NOT NULL,
             behavior_search_timer INTEGER NOT NULL,
             behavior_failure_count INTEGER NOT NULL,
+            -- Phase 4a/4b の spot graph 用 behavior_state 拡張フィールドは
+            -- migration v24 で追加される。本 v1 CREATE TABLE には含まない
+            -- (migration system がフレッシュ DB でも v1 → v2 → ... → v24 と
+            -- 順次適用するため、v24 が実行されればカラムが揃う)。
             pursuit_failure_reason TEXT,
             hunger REAL NOT NULL,
             starvation_timer INTEGER NOT NULL
@@ -1782,6 +1786,41 @@ def _migration_v23(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v24(connection: sqlite3.Connection) -> None:
+    """Phase 4b: spot graph 用 behavior_state 拡張フィールドを永続化。
+
+    Phase 4a (#134) で導入された `chase_attacker_ref` / `last_observed_target_spot_id`
+    / `flee_until_tick`、および Phase 4b PR (c) で導入された
+    `chase_started_at_tick` を SQLite に書き込めるよう、`game_monsters` に
+    カラムを追加する。
+
+    AttackerRef は discriminated union (PLAYER | MONSTER) なので
+    `kind` + 該当 ID の組で 3 カラムに分けて表現する。両 ID カラムは
+    互いに排他的で、片方が NULL になる。
+
+    既存 row はすべて NULL として書き戻され、`MonsterBehaviorState.
+    from_parts` の default (None) と整合する。
+    """
+    connection.execute(
+        "ALTER TABLE game_monsters ADD COLUMN behavior_last_observed_target_spot_id INTEGER"
+    )
+    connection.execute(
+        "ALTER TABLE game_monsters ADD COLUMN behavior_flee_until_tick INTEGER"
+    )
+    connection.execute(
+        "ALTER TABLE game_monsters ADD COLUMN behavior_chase_attacker_ref_kind TEXT"
+    )
+    connection.execute(
+        "ALTER TABLE game_monsters ADD COLUMN behavior_chase_attacker_ref_player_id INTEGER"
+    )
+    connection.execute(
+        "ALTER TABLE game_monsters ADD COLUMN behavior_chase_attacker_ref_monster_id INTEGER"
+    )
+    connection.execute(
+        "ALTER TABLE game_monsters ADD COLUMN behavior_chase_started_at_tick INTEGER"
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -1806,6 +1845,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=21, apply=_migration_v21),
     SqliteMigration(version=22, apply=_migration_v22),
     SqliteMigration(version=23, apply=_migration_v23),
+    SqliteMigration(version=24, apply=_migration_v24),
 )
 
 
