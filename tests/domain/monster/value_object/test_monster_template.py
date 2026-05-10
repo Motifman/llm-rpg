@@ -664,3 +664,113 @@ class TestMonsterTemplate:
                     description="X",
                     chase_search_ticks=True,
                 )
+
+
+    class TestChaseMaxDistance:
+        """Phase 4b PR (c): chase_max_distance フィールドのバリデーション。"""
+
+        def test_create_with_default_5(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            t = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="X",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="X",
+            )
+            assert t.chase_max_distance == 5
+
+        def test_create_fail_negative(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            with pytest.raises(
+                MonsterTemplateValidationException, match="chase_max_distance"
+            ):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    chase_max_distance=-1,
+                )
+
+        def test_create_fail_bool(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            with pytest.raises(
+                MonsterTemplateValidationException, match="chase_max_distance"
+            ):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    chase_max_distance=True,
+                )
+
+
+    class TestChaseMaxTicks:
+        """Phase 4b PR (c): chase_max_ticks フィールドのバリデーション。"""
+
+        def test_create_with_default_20(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            t = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="X",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="X",
+            )
+            assert t.chase_max_ticks == 20
+
+        def test_create_fail_negative(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            with pytest.raises(
+                MonsterTemplateValidationException, match="chase_max_ticks"
+            ):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    chase_max_ticks=-1,
+                )
+
+        def test_create_fail_bool(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            with pytest.raises(
+                MonsterTemplateValidationException, match="chase_max_ticks"
+            ):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    chase_max_ticks=True,
+                )

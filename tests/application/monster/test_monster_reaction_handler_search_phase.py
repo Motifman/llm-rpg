@@ -173,7 +173,7 @@ class TestHeadingToLastObserved:
             current_tick=WorldTick(9), attacker_ref=ref,
         )
         # CHASE 状態で last_observed=B、現在位置 A
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -198,6 +198,7 @@ class TestHeadingToLastObserved:
         )
         monster.enter_chase_state(
             attacker_ref=ref, last_observed_target_spot_id=SPOT_C,
+            current_tick=WorldTick(9),
         )
 
         # A spot 単独 (B, C への接続なし)
@@ -226,7 +227,7 @@ class TestSearchStart:
             current_tick=WorldTick(9), attacker_ref=ref,
         )
         # last_observed=B、現在位置 B (= 既に到着済みの状況)
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_B)
@@ -250,7 +251,7 @@ class TestSearchStart:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_B)
@@ -271,7 +272,7 @@ class TestSearchStart:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
 
         graph = _three_spot_chain_graph()
         graph.place_monster(monster.monster_id, SPOT_B)
@@ -294,7 +295,7 @@ class TestSearchContinuationAndExpiry:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
         # 既に探索フェーズ中 (timer=2)
         monster.start_chase_search(2)
 
@@ -318,7 +319,7 @@ class TestSearchContinuationAndExpiry:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
         monster.start_chase_search(1)
 
         graph = _three_spot_chain_graph()
@@ -349,7 +350,7 @@ class TestSearchRediscoveryOtherSpot:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
         monster.start_chase_search(2)
         assert monster.is_searching_lost_target() is True
 
@@ -404,7 +405,7 @@ class TestSearchRediscovery:
         monster.record_attacked_by_in_spot(
             current_tick=WorldTick(9), attacker_ref=ref,
         )
-        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B)
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
         monster.start_chase_search(2)
         assert monster.is_searching_lost_target() is True
 
