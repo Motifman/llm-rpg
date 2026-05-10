@@ -1875,6 +1875,24 @@ def _migration_v26(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v27(connection: sqlite3.Connection) -> None:
+    """Phase 4-O C #2: pack 群れ逃走 (leader 連動 FLEE) フィールドを追加。
+
+    `game_monster_templates` に 2 カラム追加:
+    - `pack_flee_follower INTEGER`: 0/1 boolean (default 0=機能無効、後方互換)
+    - `pack_flee_follower_duration INTEGER`: follower の FLEE 持続 tick 数
+      (default 0=機能無効、follower=False と組み合わさるなら効果なし)
+    """
+    connection.execute(
+        "ALTER TABLE game_monster_templates "
+        "ADD COLUMN pack_flee_follower INTEGER NOT NULL DEFAULT 0"
+    )
+    connection.execute(
+        "ALTER TABLE game_monster_templates "
+        "ADD COLUMN pack_flee_follower_duration INTEGER NOT NULL DEFAULT 0"
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -1902,6 +1920,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=24, apply=_migration_v24),
     SqliteMigration(version=25, apply=_migration_v25),
     SqliteMigration(version=26, apply=_migration_v26),
+    SqliteMigration(version=27, apply=_migration_v27),
 )
 
 
