@@ -43,6 +43,9 @@ import logging
 import random
 from typing import Callable, FrozenSet, List, Optional
 
+from ai_rpg_world.application.monster.services.monster_pack_flee_handler import (
+    MonsterPackFleeHandler,
+)
 from ai_rpg_world.application.monster.services.monster_pack_reinforcement_handler import (
     MonsterPackReinforcementHandler,
 )
@@ -151,6 +154,12 @@ class SpotMonsterBehaviorTickService:
             monster_repository=monster_repository,
             world_flags_provider=world_flags_provider,
         )
+        # Phase 4-O C #2: pack 群れ逃走。leader が FLEE 中なら follower も
+        # 連動 FLEE。pack_reinforcement より優先度高 (= 群れが崩壊している
+        # 状況で個々が援護に向かうのは不自然なので、FLEE 連動が先)。
+        self._pack_flee = MonsterPackFleeHandler(
+            monster_repository=monster_repository,
+        )
 
     def tick(self, current_tick: WorldTick) -> List[AttackOutcome]:
         """1 tick 分のモンスター行動を一括実行する。
@@ -223,6 +232,17 @@ class SpotMonsterBehaviorTickService:
                 # state 遷移や move が起きた可能性があるので graph save 必要。
                 # graph に event が積まれていれば下の attack_outcomes と
                 # 並んで観測される。
+                any_graph_change = True
+                continue
+
+            # --- 1.4. pack 群れ逃走 (Phase 4-O C #2) ---
+            # 同 pack の leader が FLEE 中なら、follower (= 自分が
+            # `pack_flee_follower=True` の monster) も連動 FLEE。
+            # pack_reinforcement より先に置くことで、群れが崩壊している
+            # 状況で個々が援護に向かう不自然さを回避する。
+            if self._pack_flee.try_follow_pack_flee(
+                monster, graph, spot_id, current_tick,
+            ):
                 any_graph_change = True
                 continue
 
