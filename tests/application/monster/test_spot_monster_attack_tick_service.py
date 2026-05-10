@@ -16,6 +16,9 @@ import pytest
 from ai_rpg_world.application.monster.services.spot_monster_attack_tick_service import (
     SpotMonsterAttackTickService,
 )
+from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
+    SpotAttackOrchestrator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.enum.monster_enum import (
     MonsterFactionEnum,
@@ -127,6 +130,11 @@ class TestAttackHappens:
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
+            attack_orchestrator=SpotAttackOrchestrator(
+                spot_graph_repository=spot_repo,
+                monster_repository=monster_repo,
+                player_status_repository=player_repo,
+            ),
         )
 
         svc.tick(WorldTick(10))
@@ -154,6 +162,11 @@ class TestAttackHappens:
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
+            attack_orchestrator=SpotAttackOrchestrator(
+                spot_graph_repository=spot_repo,
+                monster_repository=monster_repo,
+                player_status_repository=player_repo,
+            ),
         )
 
         svc.tick(WorldTick(10))
@@ -181,6 +194,11 @@ class TestAttackHappens:
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
+            attack_orchestrator=SpotAttackOrchestrator(
+                spot_graph_repository=spot_repo,
+                monster_repository=monster_repo,
+                player_status_repository=player_repo,
+            ),
         )
 
         outcomes = svc.tick(WorldTick(10))
@@ -222,6 +240,11 @@ class TestCooldownSkip:
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
+            attack_orchestrator=SpotAttackOrchestrator(
+                spot_graph_repository=spot_repo,
+                monster_repository=monster_repo,
+                player_status_repository=player_repo,
+            ),
         )
 
         svc.tick(WorldTick(10))
@@ -257,6 +280,11 @@ class TestDarknessGate:
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
+            attack_orchestrator=SpotAttackOrchestrator(
+                spot_graph_repository=spot_repo,
+                monster_repository=monster_repo,
+                player_status_repository=player_repo,
+            ),
         )
 
         svc.tick(WorldTick(10))
@@ -287,6 +315,11 @@ class TestDarknessGate:
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
+            attack_orchestrator=SpotAttackOrchestrator(
+                spot_graph_repository=spot_repo,
+                monster_repository=monster_repo,
+                player_status_repository=player_repo,
+            ),
         )
 
         svc.tick(WorldTick(10))
@@ -320,6 +353,11 @@ class TestNoTarget:
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
+            attack_orchestrator=SpotAttackOrchestrator(
+                spot_graph_repository=spot_repo,
+                monster_repository=monster_repo,
+                player_status_repository=player_repo,
+            ),
         )
 
         outcomes = svc.tick(WorldTick(10))
@@ -355,6 +393,11 @@ class TestNonHostile:
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
+            attack_orchestrator=SpotAttackOrchestrator(
+                spot_graph_repository=spot_repo,
+                monster_repository=monster_repo,
+                player_status_repository=player_repo,
+            ),
         )
 
         svc.tick(WorldTick(10))
