@@ -1898,6 +1898,20 @@ def _migration_v27(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v28(connection: sqlite3.Connection) -> None:
+    """Phase 4-O C #3: pack 警戒共有 (scout の CHASE 連動) フィールドを追加。
+
+    `game_monster_templates` に 1 カラム追加 (default 0 = 機能無効、後方互換):
+    - `pack_awareness_radius INTEGER`: 同 pack の scout が CHASE 中なら、
+      自分が scout からこの hop 数以内なら同じ target を CHASE 開始する。
+      0 で機能無効。
+    """
+    connection.execute(
+        "ALTER TABLE game_monster_templates "
+        "ADD COLUMN pack_awareness_radius INTEGER NOT NULL DEFAULT 0"
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -1926,6 +1940,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=25, apply=_migration_v25),
     SqliteMigration(version=26, apply=_migration_v26),
     SqliteMigration(version=27, apply=_migration_v27),
+    SqliteMigration(version=28, apply=_migration_v28),
 )
 
 

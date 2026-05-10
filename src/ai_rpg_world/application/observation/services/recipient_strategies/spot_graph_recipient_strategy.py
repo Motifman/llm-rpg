@@ -23,6 +23,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
     MonsterAbandonedChaseInSpotEvent,
+    MonsterAlertedByPackInSpotEvent,
     MonsterAppearedAtSpotEvent,
     MonsterAteGroundItemEvent,
     MonsterAttackedPlayerInSpotEvent,
@@ -188,6 +189,10 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         elif isinstance(event, MonsterFollowedPackFleeInSpotEvent):
             # pack 群れ逃走: follower の現在 spot 全員に「リーダーに続いて
             # 逃げ出した」観測。
+            self._resolve_all_at_spot(event.spot_id, add)
+        elif isinstance(event, MonsterAlertedByPackInSpotEvent):
+            # pack 警戒共有: responder の現在 spot 全員に「仲間の警戒を
+            # 察知した」観測。
             self._resolve_all_at_spot(event.spot_id, add)
 
         return result
