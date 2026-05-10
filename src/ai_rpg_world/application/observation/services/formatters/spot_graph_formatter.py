@@ -18,6 +18,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterAppearedAtSpotEvent,
     MonsterAttackedPlayerInSpotEvent,
     MonsterLeftSpotEvent,
+    PlayerAttackedMonsterInSpotEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
@@ -80,6 +81,8 @@ class SpotGraphObservationFormatter:
             return self._format_monster_left(event, recipient_player_id)
         if isinstance(event, MonsterAttackedPlayerInSpotEvent):
             return self._format_monster_attacked_player(event, recipient_player_id)
+        if isinstance(event, PlayerAttackedMonsterInSpotEvent):
+            return self._format_player_attacked_monster(event, recipient_player_id)
         return None
 
     def _is_self(self, entity_id: Any, recipient_id: PlayerId) -> bool:
@@ -499,6 +502,40 @@ class SpotGraphObservationFormatter:
             "damage": event.damage,
             "target_downed": event.target_downed,
             "target_visible": event.target_visible,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
+        )
+
+    def _format_player_attacked_monster(
+        self,
+        event: PlayerAttackedMonsterInSpotEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """プレイヤー → モンスター攻撃の prose を組む。
+
+        recipient_strategy 側で行為者本人は除外済みなので、ここでは常に第三者
+        観測として「{actor}が{monster}を攻撃した」を出す。倒した場合は
+        「倒した」suffix を追加。
+        """
+        actor_name = self._resolve_entity_name(event.actor_entity_id)
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(
+            event.monster_id
+        )
+        prose = f"{actor_name}が{monster_name}を攻撃した。"
+        if event.target_killed:
+            prose = prose + " 致命傷を与えて倒した。"
+        structured = {
+            "type": "player_attacked_monster",
+            "actor_id": event.actor_entity_id.value,
+            "actor_name": actor_name,
+            "monster_id": event.monster_id.value,
+            "monster_name": monster_name,
+            "damage": event.damage,
+            "target_killed": event.target_killed,
         }
         return ObservationOutput(
             prose=prose,
