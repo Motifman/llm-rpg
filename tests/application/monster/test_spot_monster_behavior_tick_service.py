@@ -113,6 +113,8 @@ def _make_monster(
     monster.template.pack_flee_follower = False
     monster.template.pack_flee_follower_duration = 0
     monster.is_pack_leader = False
+    # Phase 4-O C #3: pack 警戒共有もデフォルト無効。
+    monster.template.pack_awareness_radius = 0
     monster.template.hunger_decrease_on_feed = 0.0
     monster.template.forage_threshold = 1.0
     monster.template.preferred_feed_item_spec_ids = frozenset()

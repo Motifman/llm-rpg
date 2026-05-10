@@ -139,6 +139,10 @@ def build_monster_template(
         pack_flee_follower_duration=_optional_int(
             row, "pack_flee_follower_duration", default=0,
         ),
+        # Phase 4-O C #3: pack 警戒共有 (migration v28)
+        pack_awareness_radius=_optional_int(
+            row, "pack_awareness_radius", default=0,
+        ),
     )
 
 

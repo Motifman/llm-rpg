@@ -43,6 +43,9 @@ import logging
 import random
 from typing import Callable, FrozenSet, List, Optional
 
+from ai_rpg_world.application.monster.services.monster_pack_awareness_handler import (
+    MonsterPackAwarenessHandler,
+)
 from ai_rpg_world.application.monster.services.monster_pack_flee_handler import (
     MonsterPackFleeHandler,
 )
@@ -160,6 +163,13 @@ class SpotMonsterBehaviorTickService:
         self._pack_flee = MonsterPackFleeHandler(
             monster_repository=monster_repository,
         )
+        # Phase 4-O C #3: pack 警戒共有。同 pack の scout が CHASE 中なら
+        # 仲間も同じ target を CHASE。pack_reinforcement より低優先 (=
+        # 殴られた仲間への援護が CHASE 中の scout 連動より直感的に優先)。
+        self._pack_awareness = MonsterPackAwarenessHandler(
+            monster_repository=monster_repository,
+            world_flags_provider=world_flags_provider,
+        )
 
     def tick(self, current_tick: WorldTick) -> List[AttackOutcome]:
         """1 tick 分のモンスター行動を一括実行する。
@@ -252,6 +262,17 @@ class SpotMonsterBehaviorTickService:
             # 自然に表現する。次 tick から pack 援護で入った CHASE は
             # reaction の CHASE と同じ chain で進行する。
             if self._pack_reinforcement.try_respond_to_pack_help(
+                monster, graph, spot_id, current_tick,
+            ):
+                any_graph_change = True
+                continue
+
+            # --- 1.6. pack 警戒共有 (Phase 4-O C #3) ---
+            # 同 pack の scout が CHASE 中なら、近くの仲間も同じ target を
+            # CHASE 開始。援護 (1.5) と同じく CHASE 経路だが、トリガーが
+            # 「殴られた」ではなく「scout が見つけた」なので、援護より
+            # 後に置く (殴られた緊急事態 → 偵察情報の伝播 という優先順位)。
+            if self._pack_awareness.try_alert_from_pack(
                 monster, graph, spot_id, current_tick,
             ):
                 any_graph_change = True
