@@ -85,6 +85,52 @@ def find_next_hop(
     return None
 
 
+def find_hop_distance(
+    graph: SpotGraphAggregate,
+    from_spot: SpotId,
+    target_spot: SpotId,
+    is_passable: ConnectionPassableFilter,
+    *,
+    max_distance: Optional[int] = None,
+) -> Optional[int]:
+    """`from_spot` から `target_spot` までの最短 hop 数を返す。
+
+    Phase 4-O C: pack 援護で「仲間までの距離」を測る用途。
+    `find_next_hop` と同じ BFS ロジックを使うが、戻り値が「最初の hop の
+    接続 ID」ではなく「hop 数」になる版。
+
+    - 同 spot (from == target) → 0
+    - 到達不可 / max_distance を超える経路しかなければ None
+    - max_distance=None で無制限探索
+    """
+    if from_spot == target_spot:
+        return 0
+
+    queue: deque[tuple[SpotId, int]] = deque([(from_spot, 0)])
+    visited = {from_spot}
+
+    while queue:
+        current, depth = queue.popleft()
+        if max_distance is not None and depth >= max_distance:
+            continue
+        connections = sorted(
+            graph.iter_outgoing_connections_from(current),
+            key=lambda c: c.connection_id.value,
+        )
+        for conn in connections:
+            if not is_passable(conn):
+                continue
+            nxt = conn.to_spot_id
+            if nxt in visited:
+                continue
+            visited.add(nxt)
+            if nxt == target_spot:
+                return depth + 1
+            queue.append((nxt, depth + 1))
+
+    return None
+
+
 def _backtrack_first_hop(
     predecessor: Dict[SpotId, tuple[SpotId, ConnectionId]],
     from_spot: SpotId,

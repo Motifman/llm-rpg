@@ -105,6 +105,10 @@ def _make_monster(
     # Phase 4-O B: 温度不快効果はデフォルト無効 (0)。
     monster.template.temperature_discomfort_damage_per_tick = 0
     monster.template.temperature_discomfort.return_value = None
+    # Phase 4-O C: pack 援護機能はデフォルト無効。
+    monster.template.pack_help_radius = 0
+    monster.template.max_pack_responders = 0
+    monster.pack_id = None
     monster.template.hunger_decrease_on_feed = 0.0
     monster.template.forage_threshold = 1.0
     monster.template.preferred_feed_item_spec_ids = frozenset()

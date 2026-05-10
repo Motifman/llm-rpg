@@ -28,6 +28,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterAbandonedChaseInSpotEvent,
+    MonsterRespondedToPackHelpInSpotEvent,
     MonsterStartedChasingInSpotEvent,
     MonsterStartedFleeingInSpotEvent,
 )
@@ -168,6 +169,48 @@ class TestChasingProse:
         assert result is not None
         assert "迷子のうさぎ" in result.prose
         assert "灰色のオオカミ" in result.prose
+
+
+class TestPackHelpResponseProse:
+    """pack 援護応答 prose (Phase 4-O C)。"""
+
+    def test_target_本人には_あなたを_含む_緊張感_prose(
+        self, formatter: SpotGraphObservationFormatter,
+    ) -> None:
+        """target_player が観測者本人なら「あなたを睨んでいる」型 prose。"""
+        ev = MonsterRespondedToPackHelpInSpotEvent.create(
+            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            responder_monster_id=MONSTER_WOLF,
+            victim_monster_id=MONSTER_TARGET,
+            responder_spot_id=SPOT_A,
+            spot_id=SPOT_A,
+            target_player_id=EntityId.create(PLAYER_TARGET.value),
+        )
+        result = formatter.format(ev, PLAYER_TARGET)
+        assert result is not None
+        assert "灰色のオオカミ" in result.prose  # responder
+        assert "迷子のうさぎ" in result.prose  # victim
+        assert "救援" in result.prose
+        assert "あなた" in result.prose
+
+    def test_第三者観測者には_中立_prose(
+        self, formatter: SpotGraphObservationFormatter,
+    ) -> None:
+        """target ではない観測者には中立的な prose。"""
+        ev = MonsterRespondedToPackHelpInSpotEvent.create(
+            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            responder_monster_id=MONSTER_WOLF,
+            victim_monster_id=MONSTER_TARGET,
+            responder_spot_id=SPOT_A,
+            spot_id=SPOT_A,
+            target_player_id=EntityId.create(PLAYER_TARGET.value),
+        )
+        result = formatter.format(ev, PLAYER_1)  # 第三者
+        assert result is not None
+        assert "あなた" not in result.prose
+        assert "救援" in result.prose
+        assert result.observation_category == "environment"
+        assert result.structured["type"] == "monster_responded_to_pack_help"
 
 
 class TestAbandonedChaseProse:

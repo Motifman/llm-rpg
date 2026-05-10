@@ -476,3 +476,46 @@ class MonsterFeltTemperatureDiscomfortInSpotEvent(BaseDomainEvent[SpotGraphId, s
     spot_id: SpotId
     kind: TemperatureDiscomfortKind
     damage_dealt: int
+
+
+@dataclass(frozen=True)
+class MonsterRespondedToPackHelpInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
+    """pack member が仲間の救援要請に応答して CHASE 状態に入った瞬間
+    (Phase 4-O C)。
+
+    `responder_monster_id` が `victim_monster_id` の援護として CHASE に
+    入ったことを示す。target は victim を殴った相手 (player or monster) で、
+    `target_player_id` / `target_monster_id` のいずれかが設定される。
+
+    観測としては responder の現在 spot 全員に environment カテゴリで届く。
+    プレイヤーが仲間の monster を 1 匹殴ったとき「隣の spot から仲間が
+    駆け付けてきた」prose を組み立てられる。
+
+    `responder_spot_id` は responder の現在位置。CHASE で次 tick から
+    target spot に向かって移動する。
+    """
+
+    responder_monster_id: MonsterId
+    victim_monster_id: MonsterId
+    responder_spot_id: SpotId
+    # spot_id は base イベントとしての一貫性のため responder_spot_id と同じ
+    # 値を持たせる (recipient strategy が `event.spot_id` を見て解決する規約)。
+    spot_id: SpotId
+    target_player_id: Optional[EntityId] = None
+    target_monster_id: Optional[MonsterId] = None
+
+    def __post_init__(self) -> None:
+        # discriminated union: target は片方だけ非 None。
+        both_none = (
+            self.target_player_id is None and self.target_monster_id is None
+        )
+        both_set = (
+            self.target_player_id is not None
+            and self.target_monster_id is not None
+        )
+        if both_none or both_set:
+            raise ValueError(
+                "MonsterRespondedToPackHelpInSpotEvent: target_player_id と "
+                "target_monster_id は片方だけ非 None である必要がある "
+                f"(player={self.target_player_id}, monster={self.target_monster_id})"
+            )

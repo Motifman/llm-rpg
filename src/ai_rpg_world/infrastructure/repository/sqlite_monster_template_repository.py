@@ -183,8 +183,9 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
                 hunger_starvation_threshold, starvation_ticks, max_age_ticks,
                 forage_threshold, hunger_decrease_on_feed,
                 min_comfortable_temperature, max_comfortable_temperature,
-                temperature_discomfort_damage_per_tick
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                temperature_discomfort_damage_per_tick,
+                pack_help_radius, max_pack_responders
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(template_id) DO UPDATE SET
                 name = excluded.name,
                 description = excluded.description,
@@ -219,7 +220,9 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
                 hunger_decrease_on_feed = excluded.hunger_decrease_on_feed,
                 min_comfortable_temperature = excluded.min_comfortable_temperature,
                 max_comfortable_temperature = excluded.max_comfortable_temperature,
-                temperature_discomfort_damage_per_tick = excluded.temperature_discomfort_damage_per_tick
+                temperature_discomfort_damage_per_tick = excluded.temperature_discomfort_damage_per_tick,
+                pack_help_radius = excluded.pack_help_radius,
+                max_pack_responders = excluded.max_pack_responders
             """,
             (
                 int(template.template_id),
@@ -260,6 +263,9 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
                 template.min_comfortable_temperature.value,
                 template.max_comfortable_temperature.value,
                 template.temperature_discomfort_damage_per_tick,
+                # Phase 4-O C: pack 援護 (migration v26)
+                template.pack_help_radius,
+                template.max_pack_responders,
             ),
         )
         for table_name in (
