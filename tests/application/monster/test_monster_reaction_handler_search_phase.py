@@ -241,6 +241,28 @@ class TestSearchStart:
         assert monster.is_searching_lost_target() is True
         assert monster._behavior_state.search_timer == 2  # 3 - 1
 
+    def test_chase_search_ticks_1_は_wander_1回_即_IDLE(self) -> None:
+        """境界値 chase_search_ticks=1: 到着 tick で wander 1 回実行 → 即 IDLE。"""
+        wander_fn = MagicMock(return_value=True)
+        handler, _ = _make_handler(player=None, force_wander_fn=wander_fn)
+        monster = _monster(_template(chase_search_ticks=1))
+        ref = AttackerRef.of_player(PlayerId(7))
+        monster.record_attacked_by_in_spot(
+            current_tick=WorldTick(9), attacker_ref=ref,
+        )
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B)
+
+        graph = _three_spot_chain_graph()
+        graph.place_monster(monster.monster_id, SPOT_B)
+
+        result = handler.try_react(monster, graph, SPOT_B, WorldTick(10))
+
+        # 1 tick 探索 → 即 IDLE
+        assert result is None
+        assert monster.is_chasing() is False
+        # wander は 1 回呼ばれている (探索開始 tick の分)
+        wander_fn.assert_called_once()
+
     def test_chase_search_ticks_0_の_テンプレなら_即_IDLE(self) -> None:
         """chase_search_ticks=0 のテンプレでは last_observed 到着即 IDLE。"""
         handler, _ = _make_handler(player=None)
@@ -309,6 +331,43 @@ class TestSearchContinuationAndExpiry:
         assert monster.behavior_state == BehaviorStateEnum.IDLE
         # wander は呼ばれている (1 tick 分の探索)
         wander_fn.assert_called_once()
+
+
+class TestSearchRediscoveryOtherSpot:
+    """探索中に target が他 spot に出現したら追跡再開し、search_timer もリセット。"""
+
+    def test_探索中に_player_が_別spot_に_現れたら_追跡再開して_search_終了(
+        self,
+    ) -> None:
+        """探索フェーズ中 (search_timer=2) に player が SPOT_C に出現
+        → `_chase_visible_target` 経路に入り、search_timer は 0 にリセット
+        + 1 hop 移動。"""
+        player = _player(player_id_value=7)
+        handler, monster_repo = _make_handler(player=player)
+        monster = _monster(_template(chase_search_ticks=3))
+        ref = AttackerRef.of_player(player.player_id)
+        monster.record_attacked_by_in_spot(
+            current_tick=WorldTick(9), attacker_ref=ref,
+        )
+        monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B)
+        monster.start_chase_search(2)
+        assert monster.is_searching_lost_target() is True
+
+        graph = _three_spot_chain_graph()
+        graph.place_monster(monster.monster_id, SPOT_B)
+        # player は SPOT_C (= 隣) に居る
+        graph.place_entity(EntityId.create(player.player_id.value), SPOT_C)
+
+        result = handler.try_react(monster, graph, SPOT_B, WorldTick(10))
+
+        assert result is not None
+        assert result.reason == "chasing_to_other_spot"
+        # search_timer がリセットされている (HIGH #1 + #2 の修正検証)
+        assert monster._behavior_state.search_timer == 0
+        assert monster.is_searching_lost_target() is False
+        # B から SPOT_C への 1 hop 移動が成立している
+        assert graph.get_monster_spot(monster.monster_id) == SPOT_C
+        assert monster.is_chasing() is True
 
 
 class TestSearchRediscovery:
