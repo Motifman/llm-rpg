@@ -71,6 +71,17 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
                 result.append(self._clone(m))
         return result
 
+    def find_by_pack_id(self, pack_id) -> List[MonsterAggregate]:
+        """指定 pack_id に属するモンスター一覧（ALIVE/DEAD 問わず）。
+
+        Phase 4-O C: pack 援護で同 pack の member を引く用途。
+        """
+        result = []
+        for mid, m in self._monsters.items():
+            if m.pack_id is not None and m.pack_id == pack_id:
+                result.append(self._clone(m))
+        return result
+
     def save(self, entity: MonsterAggregate) -> MonsterAggregate:
         cloned = self._clone(entity)
 

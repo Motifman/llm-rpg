@@ -132,6 +132,17 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
         )
         return [copy.deepcopy(self._build_monster_from_row(row)) for row in cur.fetchall()]
 
+    def find_by_pack_id(self, pack_id) -> List[MonsterAggregate]:
+        """Phase 4-O C: 同 pack の member を引く。pack_id は str (PackId.value)。"""
+        cur = self._conn.execute(
+            "SELECT * FROM game_monsters WHERE pack_id = ? ORDER BY monster_id ASC",
+            (str(pack_id.value),),
+        )
+        return [
+            copy.deepcopy(self._build_monster_from_row(row))
+            for row in cur.fetchall()
+        ]
+
     def save(self, entity: MonsterAggregate) -> MonsterAggregate:
         self._assert_shared_transaction_active()
         self._maybe_emit_events(entity)

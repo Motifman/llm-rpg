@@ -122,6 +122,53 @@ class TestSqliteMonsterAggregateRepository:
         assert loaded.chase_started_at_tick is None
         assert loaded.persistence_flee_until_tick is None
 
+    def test_find_by_pack_id_returns_only_same_pack_members(
+        self, sqlite_conn: sqlite3.Connection,
+    ) -> None:
+        """Phase 4-O C: pack_id で絞り込んだ monster だけが返る。
+
+        - 同 pack の 2 匹は両方返る (monster_id 昇順)
+        - 別 pack の monster は返らない
+        - pack_id=None の monster も返らない
+        """
+        from ai_rpg_world.domain.world.value_object.pack_id import PackId
+
+        repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
+        wolf_pack = PackId.create("wolf_pack_1")
+        rabbit_pack = PackId.create("rabbit_pack_2")
+
+        # wolf_pack_1 に 2 匹 (spawn で pack_id を設定)
+        m1 = MonsterAggregate.create(
+            MonsterId(501), _sample_template(),
+            WorldObjectId(7001), skill_loadout=_loadout(501),
+        )
+        m1.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), pack_id=wolf_pack)
+        m2 = MonsterAggregate.create(
+            MonsterId(502), _sample_template(),
+            WorldObjectId(7002), skill_loadout=_loadout(502),
+        )
+        m2.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), pack_id=wolf_pack)
+        # rabbit_pack に 1 匹
+        m3 = MonsterAggregate.create(
+            MonsterId(503), _sample_template(),
+            WorldObjectId(7003), skill_loadout=_loadout(503),
+        )
+        m3.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), pack_id=rabbit_pack)
+        # pack 未所属
+        m4 = MonsterAggregate.create(
+            MonsterId(504), _sample_template(),
+            WorldObjectId(7004), skill_loadout=_loadout(504),
+        )
+        m4.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+
+        for m in (m1, m2, m3, m4):
+            repo.save(m)
+
+        result = repo.find_by_pack_id(wolf_pack)
+        assert {m.monster_id for m in result} == {MonsterId(501), MonsterId(502)}
+        # 順序は monster_id 昇順
+        assert [m.monster_id for m in result] == [MonsterId(501), MonsterId(502)]
+
     def test_chase_state_round_trip_persists_phase4ab_fields(
         self, sqlite_conn: sqlite3.Connection,
     ) -> None:
