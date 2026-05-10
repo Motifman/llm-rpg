@@ -23,8 +23,10 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
     MonsterAppearedAtSpotEvent,
+    MonsterAteGroundItemEvent,
     MonsterAttackedPlayerInSpotEvent,
     MonsterLeftSpotEvent,
+    MonsterPredatedMonsterInSpotEvent,
     PlayerAttackedMonsterInSpotEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
@@ -154,6 +156,14 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             self._resolve_at_spot_excluding_actor(
                 event.spot_id, event.attacker_entity_id, add
             )
+        elif isinstance(event, MonsterAteGroundItemEvent):
+            # 採食観測: monster が actor なので player の self 除外は不要、
+            # 同スポット全員が目撃する。
+            self._resolve_all_at_spot(event.spot_id, add)
+        elif isinstance(event, MonsterPredatedMonsterInSpotEvent):
+            # 捕食観測: actor / target どちらも monster なので player の
+            # self 除外は不要、同スポット全員が目撃する。
+            self._resolve_all_at_spot(event.spot_id, add)
 
         return result
 

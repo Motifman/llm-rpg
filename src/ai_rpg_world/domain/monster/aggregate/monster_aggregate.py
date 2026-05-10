@@ -71,6 +71,7 @@ from ai_rpg_world.domain.pursuit.event.pursuit_events import (
 )
 
 if TYPE_CHECKING:
+    from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
     from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 
@@ -101,6 +102,8 @@ class MonsterAggregate(AggregateRoot):
         hunger: float = 0.0,
         starvation_timer: int = 0,
         last_attack_tick: Optional[WorldTick] = None,
+        last_attacked_tick: Optional[WorldTick] = None,
+        last_attacker_ref: Optional["AttackerRef"] = None,
     ):
         super().__init__()
         self._monster_id = monster_id
@@ -109,6 +112,13 @@ class MonsterAggregate(AggregateRoot):
         self._coordinate = coordinate
         self._spot_id = spot_id
         self._last_attack_tick = last_attack_tick
+        # Phase 3b: 「最後に外部から攻撃された tick」。Phase 4 (反撃 / 逃走)
+        # で behavior tick service が `current_tick - last_attacked_tick`
+        # を見て FLEE / RETALIATE 抽選するためのフック。
+        self._last_attacked_tick = last_attacked_tick
+        # Phase 4a: 攻撃者の参照（player or monster）。RETALIATE で誰を
+        # 反撃するかの target 解決に使う。
+        self._last_attacker_ref: Optional["AttackerRef"] = last_attacker_ref
         self._active_effects = active_effects or []
         self._skill_loadout = skill_loadout
         self._pack_id = pack_id
@@ -549,6 +559,124 @@ class MonsterAggregate(AggregateRoot):
         elapsed = current_tick.value - self._last_attack_tick.value
         return elapsed >= self._template.attack_cooldown_ticks
 
+    @property
+    def last_attacked_tick(self) -> Optional[WorldTick]:
+        """このモンスターが最後に外部から攻撃を受けた tick。未被弾なら None。
+
+        Phase 3b で導入。攻撃者は player でも monster でもよく、攻撃の種別も
+        問わない。Phase 4 (反撃 / 逃走) で「直近に攻撃されたか？」を判定する
+        ためのフック。
+        """
+        return self._last_attacked_tick
+
+    def record_attacked_by_in_spot(
+        self,
+        current_tick: WorldTick,
+        attacker_ref: Optional["AttackerRef"] = None,
+    ) -> None:
+        """スポットグラフ世界用の「攻撃を受けた」記録 API。
+
+        Phase 3b: tick だけ残す版を導入
+        Phase 4a: `attacker_ref` (player or monster) も残す版に拡張
+
+        2D マップ世界の `record_attacked_by` は coordinate と behavior_state
+        machine 連携を要求するため、スポットグラフ世界では使えなかった。
+        本 API は coordinate 非依存・state machine 非依存で「最後に攻撃を
+        受けた tick + 誰に攻撃されたか」を残す最小実装。
+
+        ALIVE 状態でない場合は no-op（既に死んでいる相手の攻撃記録は意味が
+        ないため）。`attacker_ref=None` なら従来通り tick だけ更新。
+        """
+        if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
+            return
+        self._last_attacked_tick = current_tick
+        if attacker_ref is not None:
+            self._last_attacker_ref = attacker_ref
+
+    @property
+    def last_attacker_ref(self) -> Optional["AttackerRef"]:
+        """最後にこのモンスターを攻撃した者の参照（player or monster）。
+
+        Phase 4a で導入。RETALIATE 時に誰を target にするかの解決に使う。
+        attacker_ref を渡さずに記録された場合や攻撃を受けていない場合は None。
+        """
+        return self._last_attacker_ref
+
+    # ------------------------------------------------------------------
+    # スポットグラフ用の behavior state 高レベル API (Phase 4a)
+    # ------------------------------------------------------------------
+
+    def enter_flee_state(
+        self,
+        current_tick: WorldTick,
+        duration_ticks: int,
+    ) -> None:
+        """FLEE 状態に遷移。`duration_ticks` 経過で自動解除。
+
+        ALIVE 以外では no-op。`duration_ticks <= 0` なら遷移しない（policy
+        側でガードされている前提だが防御）。
+        """
+        if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
+            return
+        if duration_ticks <= 0:
+            return
+        flee_until = WorldTick(current_tick.value + duration_ticks)
+        self._behavior_state = self._behavior_state.with_spot_flee(flee_until)
+
+    def enter_chase_state(
+        self,
+        attacker_ref: "AttackerRef",
+        last_known_spot_id: SpotId,
+    ) -> None:
+        """CHASE 状態に遷移。追跡対象の attacker_ref をスナップショットとして
+        固定し、`last_known_spot_id` を保持する。
+
+        `last_attacker_ref` (集約フィールド) は後続の被弾で上書きされ得るが、
+        CHASE 中の追跡対象は state 内の ref で固定されるため、第三者から殴ら
+        れても target は変わらない。
+
+        ALIVE 以外では no-op。
+        """
+        if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
+            return
+        self._behavior_state = self._behavior_state.with_spot_chase(
+            attacker_ref=attacker_ref,
+            last_known_spot_id=last_known_spot_id,
+        )
+
+    def clear_behavior_state_to_idle(self) -> None:
+        """state を IDLE に戻す（FLEE 自動解除 / CHASE 終了時の手動リセット）。
+
+        spot graph 用フィールド (`last_known_spot_id` / `flee_until_tick`)
+        も両方クリアする。
+        """
+        self._behavior_state = self._behavior_state.with_spot_idle()
+
+    def is_fleeing(self, current_tick: WorldTick) -> bool:
+        """現在 FLEE 中か。`flee_until_tick` 経過なら自動的に False を返す
+        （状態は呼び出し側で `clear_behavior_state_to_idle` を呼んでクリアする）。
+        """
+        if self._behavior_state.state != BehaviorStateEnum.FLEE:
+            return False
+        flee_until = self._behavior_state.flee_until_tick
+        if flee_until is None:
+            return True  # 期限なし FLEE (現状想定なし、防御)
+        return current_tick.value <= flee_until.value
+
+    def is_chasing(self) -> bool:
+        """現在 CHASE 中か。"""
+        return self._behavior_state.state == BehaviorStateEnum.CHASE
+
+    def chase_attacker_ref(self) -> Optional["AttackerRef"]:
+        """CHASE 中の追跡対象 (attacker_ref スナップショット) を返す。
+
+        CHASE でない場合は None。`last_attacker_ref` と異なり後続の被弾で
+        上書きされない。
+        """
+        if not self.is_chasing():
+            return None
+        return self._behavior_state.chase_attacker_ref
+
     def record_attack(self, current_tick: WorldTick) -> None:
         """攻撃を実行した事実を tick として記録する。cooldown の起点。
 
@@ -688,24 +816,32 @@ class MonsterAggregate(AggregateRoot):
         ))
 
     def starve(self, current_tick: WorldTick) -> None:
-        """飢餓で死亡させる。ALIVE のときのみ有効。"""
+        """飢餓で死亡させる。ALIVE のときのみ有効。
+
+        位置情報（coordinate / spot_id）に依存しない純粋な lifecycle 操作。
+        2D マップ世界では `spawn()` 経由で必ず coordinate が設定されるため、
+        従来通り spawned 状態でしか到達しない。スポットグラフ世界では
+        coordinate が None のままでも飢餓死が成立する（位置の正当性は
+        呼び出し側の handler / domain service が責任を持つ）。
+        `apply_damage` の W-pattern 純粋化と同じ判断（PR #128）。
+        """
         if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
             if self._lifecycle_state.status == MonsterStatusEnum.DEAD and self._lifecycle_state.last_death_tick is None:
                 raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
             raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
-        if self._coordinate is None:
-            raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
         self._die(current_tick, cause=DeathCauseEnum.STARVATION)
 
     def tick_hunger(self, current_tick: WorldTick) -> bool:
         """
         1 tick 分の飢餓を適用し、飢餓死すべきか返す。
-        飢餓が無効（template.starvation_ticks <= 0）の場合は False。
-        ALIVE かつスポーン済みのときのみ有効。
+        飢餓が無効（template.starvation_ticks <= 0 または
+        hunger_increase_per_tick <= 0）の場合は False。
+        ALIVE のときのみ有効。
+
+        位置情報非依存（W-pattern）。スポットグラフ世界でも 2D マップ世界
+        でも同じ呼出シグネチャで動作する。
         """
         if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
-            return False
-        if self._coordinate is None:
             return False
         t = self._template
         if t.starvation_ticks <= 0 or t.hunger_increase_per_tick <= 0:

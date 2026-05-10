@@ -11,7 +11,11 @@ from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
-from ai_rpg_world.domain.monster.enum.monster_enum import EcologyTypeEnum, ActiveTimeType
+from ai_rpg_world.domain.monster.enum.monster_enum import (
+    ActiveTimeType,
+    EcologyTypeEnum,
+    ReactionPolicyEnum,
+)
 
 
 @dataclass(frozen=True)
@@ -34,8 +38,11 @@ class MonsterTemplate:
     ambush_chase_range: Optional[int] = None
     territory_radius: Optional[int] = None
     active_time: ActiveTimeType = ActiveTimeType.ALWAYS
-    threat_races: Optional[Set[str]] = None
-    prey_races: Optional[Set[str]] = None
+    # `Race` enum セット: typo を template 構築時に弾き、IDE 補完を効かせる。
+    # SQLite 永続化では `Race.value` 文字列で保存し、読出時に `Race(...)` で
+    # enum に戻す（codec 側で吸収）。
+    threat_races: Optional[Set[Race]] = None
+    prey_races: Optional[Set[Race]] = None
     growth_stages: Optional[List[GrowthStage]] = None
     # Phase 6: 飢餓（None/0 で無効）
     hunger_increase_per_tick: float = 0.0
@@ -61,6 +68,12 @@ class MonsterTemplate:
     # **デフォルトは 0.0 (静止)**。ボスや陳列目的の NPC モンスターが意図せず
     # 動かないよう、徘徊させたいテンプレだけシナリオ側で明示する opt-in 方針。
     idle_wander_chance: float = 0.0
+    # Phase 4a: 攻撃を受けたときの反応 policy。詳細は `ReactionPolicyEnum`。
+    # デフォルトは PASSIVE で既存挙動と同じ（反応しない）。
+    reaction_to_attack: ReactionPolicyEnum = ReactionPolicyEnum.PASSIVE
+    # 攻撃を受けてから何 tick 反応 (FLEE / CHASE) を続けるか。0 で即時忘却 →
+    # 反応しない。3-5 程度が自然な動物行動の目安。
+    flee_grace_ticks: int = 3
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
@@ -118,6 +131,21 @@ class MonsterTemplate:
                 f"idle_wander_chance must be between 0.0 and 1.0, "
                 f"got {self.idle_wander_chance}"
             )
+        if not isinstance(self.reaction_to_attack, ReactionPolicyEnum):
+            raise MonsterTemplateValidationException(
+                f"reaction_to_attack must be ReactionPolicyEnum, "
+                f"got {type(self.reaction_to_attack).__name__}"
+            )
+        if not isinstance(self.flee_grace_ticks, int) or isinstance(
+            self.flee_grace_ticks, bool
+        ):
+            raise MonsterTemplateValidationException(
+                "flee_grace_ticks must be int"
+            )
+        if self.flee_grace_ticks < 0:
+            raise MonsterTemplateValidationException(
+                f"flee_grace_ticks must be >= 0, got {self.flee_grace_ticks}"
+            )
 
         if self.vision_range < 0:
             raise MonsterTemplateValidationException(
@@ -152,10 +180,20 @@ class MonsterTemplate:
             raise MonsterTemplateValidationException(
                 f"threat_races must be a set or frozenset, got {type(self.threat_races).__name__}"
             )
+        for r in self.threat_races or ():
+            if not isinstance(r, Race):
+                raise MonsterTemplateValidationException(
+                    f"threat_races must contain Race enum values, got {type(r).__name__}"
+                )
         if self.prey_races is not None and not isinstance(self.prey_races, (set, frozenset)):
             raise MonsterTemplateValidationException(
                 f"prey_races must be a set or frozenset, got {type(self.prey_races).__name__}"
             )
+        for r in self.prey_races or ():
+            if not isinstance(r, Race):
+                raise MonsterTemplateValidationException(
+                    f"prey_races must contain Race enum values, got {type(r).__name__}"
+                )
         if self.growth_stages is not None:
             if not isinstance(self.growth_stages, list):
                 raise MonsterTemplateValidationException(

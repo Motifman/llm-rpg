@@ -98,8 +98,30 @@ def _make_monster(
     monster.template.base_stats.attack = attack
     monster.template.idle_wander_chance = idle_wander_chance
     monster.template.ecology_type = ecology_type or EcologyTypeEnum.NORMAL
+    # Phase 3a 飢餓系: 既存テストの挙動を維持するためデフォルトで無効化
+    # （`starvation_ticks=0` と `hunger_increase_per_tick=0` の二重 guard）。
+    monster.template.starvation_ticks = 0
+    monster.template.hunger_increase_per_tick = 0.0
+    monster.template.hunger_decrease_on_feed = 0.0
+    monster.template.forage_threshold = 1.0
+    monster.template.preferred_feed_item_spec_ids = frozenset()
     monster.status = MonsterStatusEnum.ALIVE
     monster.can_attack_now.return_value = can_attack
+    # Phase 4a 反撃/逃走系: 既存テスト挙動の維持。MagicMock の自動値は truthy
+    # なので明示的に「反応しない」値を設定する。
+    from ai_rpg_world.domain.monster.enum.monster_enum import (
+        BehaviorStateEnum,
+        ReactionPolicyEnum,
+    )
+    monster.is_fleeing.return_value = False
+    monster.is_chasing.return_value = False
+    monster.chase_attacker_ref.return_value = None
+    monster.behavior_state = BehaviorStateEnum.IDLE
+    monster.last_attacked_tick = None
+    monster.last_attacker_ref = None
+    monster.template.reaction_to_attack = ReactionPolicyEnum.PASSIVE
+    monster.template.flee_grace_ticks = 3
+    monster.template.flee_threshold = 0.3
     return monster
 
 

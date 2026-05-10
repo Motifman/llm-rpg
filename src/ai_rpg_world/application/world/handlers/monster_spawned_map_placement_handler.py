@@ -108,8 +108,18 @@ class MonsterSpawnedMapPlacementHandler(
             ambush_chase_range=template.ambush_chase_range,
             territory_radius=template.territory_radius,
             active_time=template.active_time,
-            threat_races=set(template.threat_races) if template.threat_races else None,
-            prey_races=set(template.prey_races) if template.prey_races else None,
+            # ActorComponent は string ベースのまま。boundary で Race.value 変換。
+            # ActorComponent 全体の型移行はスコープ外（2D combat 経路に影響大）。
+            threat_races=(
+                {r.value for r in template.threat_races}
+                if template.threat_races
+                else None
+            ),
+            prey_races=(
+                {r.value for r in template.prey_races}
+                if template.prey_races
+                else None
+            ),
             initial_position=coordinate,
         )
 
