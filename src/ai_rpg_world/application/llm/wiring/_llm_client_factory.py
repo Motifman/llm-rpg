@@ -8,6 +8,7 @@ from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 _VALID_LLM_CLIENT_VALUES = frozenset({"stub", "litellm"})
 _ENV_LLM_CLIENT = "LLM_CLIENT"
 _DEFAULT_LLM_CLIENT = "stub"
+_ENV_LLM_MODEL = "LLM_MODEL"
 
 
 def create_llm_client_from_env() -> ILLMClient:
@@ -18,6 +19,11 @@ def create_llm_client_from_env() -> ILLMClient:
             f"LLM_CLIENT must be one of {sorted(_VALID_LLM_CLIENT_VALUES)}, got: {value!r}"
         )
     if value == "litellm":
-        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-        return LiteLLMClient()
+        from ai_rpg_world.infrastructure.llm.litellm_client import (
+            DEFAULT_LLM_MODEL,
+            LiteLLMClient,
+        )
+
+        configured = (os.environ.get(_ENV_LLM_MODEL) or "").strip()
+        return LiteLLMClient(model=(configured or DEFAULT_LLM_MODEL))
     return StubLlmClient()

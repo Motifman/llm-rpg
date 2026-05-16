@@ -39,8 +39,27 @@ logger = logging.getLogger(__name__)
 
 _ENV_TICK_INTERVAL = "SPOT_GRAPH_TICK_INTERVAL_SEC"
 _ENV_TICK_LOOP_ENABLED = "SPOT_GRAPH_TICK_LOOP_ENABLED"
+_ENV_GAME_SERVER_LOGGING_INFO_ALL = "GAME_SERVER_LOGGING_INFO_ALL"
 _DEFAULT_TICK_INTERVAL_SEC = 1.0
 _MIN_SAFE_INTERVAL_SEC = 0.01
+
+
+def _maybe_configure_verbose_logging_if_requested() -> None:
+    """オペレーション向け: 開発時に aiohttp などのログを INFO で流す設定を付ける。
+
+    uvicorn の ``factory`` では ``server:create_app_from_env`` だけが import 経路となる
+    ケースがあるため、この設定は :func:`create_game_app` 側で共通適用する。
+    """
+    if os.getenv(_ENV_GAME_SERVER_LOGGING_INFO_ALL, "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(levelname)s:%(name)s:%(message)s",
+        )
 
 
 def _read_tick_loop_config() -> tuple[bool, float]:
@@ -94,6 +113,7 @@ def create_game_app(
     cors_origins:
         Allowed CORS origins.  Defaults to common local-dev addresses.
     """
+    _maybe_configure_verbose_logging_if_requested()
     if scenarios_dir is None:
         scenarios_dir = Path("data/scenarios")
     if cors_origins is None:
