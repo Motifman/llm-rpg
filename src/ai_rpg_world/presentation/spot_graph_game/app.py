@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
@@ -24,9 +26,54 @@ from ai_rpg_world.presentation.spot_graph_game.routers import (
     sessions,
     worlds,
 )
+from ai_rpg_world.presentation.spot_graph_game.tick_loop import (
+    SimulationTickLoop,
+)
 from ai_rpg_world.presentation.spot_graph_game.websocket_handler import (
     game_event_websocket,
 )
+
+logger = logging.getLogger(__name__)
+
+
+_ENV_TICK_INTERVAL = "SPOT_GRAPH_TICK_INTERVAL_SEC"
+_ENV_TICK_LOOP_ENABLED = "SPOT_GRAPH_TICK_LOOP_ENABLED"
+_DEFAULT_TICK_INTERVAL_SEC = 1.0
+_MIN_SAFE_INTERVAL_SEC = 0.01
+
+
+def _read_tick_loop_config() -> tuple[bool, float]:
+    """Parse env vars controlling the background tick loop.
+
+    Disabled by setting ``SPOT_GRAPH_TICK_LOOP_ENABLED`` to a falsy value;
+    this is important for unit/integration tests that don't want a
+    background task firing while the FastAPI ``TestClient`` is alive.
+    """
+    enabled_raw = os.getenv(_ENV_TICK_LOOP_ENABLED, "true").strip().lower()
+    enabled = enabled_raw in ("1", "true", "yes", "on")
+    try:
+        interval = float(
+            os.getenv(_ENV_TICK_INTERVAL, str(_DEFAULT_TICK_INTERVAL_SEC))
+        )
+    except ValueError:
+        logger.warning(
+            "Invalid %s value; falling back to %.3fs",
+            _ENV_TICK_INTERVAL,
+            _DEFAULT_TICK_INTERVAL_SEC,
+        )
+        interval = _DEFAULT_TICK_INTERVAL_SEC
+    # Guard against zero / negative values so the loop constructor does not
+    # raise during FastAPI startup and crash the whole server.
+    if interval < _MIN_SAFE_INTERVAL_SEC:
+        logger.warning(
+            "%s=%s is below the safe minimum (%.3fs); falling back to %.3fs",
+            _ENV_TICK_INTERVAL,
+            interval,
+            _MIN_SAFE_INTERVAL_SEC,
+            _DEFAULT_TICK_INTERVAL_SEC,
+        )
+        interval = _DEFAULT_TICK_INTERVAL_SEC
+    return enabled, interval
 
 
 def create_game_app(
@@ -55,11 +102,33 @@ def create_game_app(
         ]
 
     manager = GameRuntimeManager(scenarios_dir=scenarios_dir)
+    tick_loop_enabled, tick_interval = _read_tick_loop_config()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         set_runtime_manager(manager)
-        yield
+        tick_loop: SimulationTickLoop | None = None
+        if tick_loop_enabled:
+            tick_loop = SimulationTickLoop(
+                manager=manager,
+                interval_seconds=tick_interval,
+            )
+            tick_loop.start()
+            logger.info(
+                "Spot graph tick loop enabled (interval=%.3fs)", tick_interval
+            )
+        else:
+            logger.info("Spot graph tick loop disabled via %s", _ENV_TICK_LOOP_ENABLED)
+        try:
+            yield
+        finally:
+            if tick_loop is not None:
+                # Suppress errors so a stop() failure does not mask any
+                # exception that was already propagating through yield.
+                try:
+                    await tick_loop.stop()
+                except Exception:
+                    logger.exception("Tick loop stop() raised on shutdown")
 
     app = FastAPI(
         title="Virtual World AI Character Game",
