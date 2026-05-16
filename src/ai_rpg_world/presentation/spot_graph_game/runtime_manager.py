@@ -17,6 +17,13 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMPlayerResolver
+from ai_rpg_world.application.intent.action_failed_observation_emitter import (
+    ActionFailedObservationEmitter,
+)
+from ai_rpg_world.application.intent.intent_id_generator import (
+    IntentIdGenerator,
+)
+from ai_rpg_world.application.intent.tool_phase_mapping import phase_for_tool
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.observation_appender import (
     ObservationAppender,
@@ -42,6 +49,8 @@ from ai_rpg_world.application.llm.tool_constants import (
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_llm_client_from_env,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.intent.value_object.intent import Intent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
@@ -172,12 +181,36 @@ class _EscapeGameLlmTurnTrigger:
 
 @dataclass
 class _EscapeGameLlmWiring:
-    """Session-local LLM loop for the escape-game runtime."""
+    """Session-local LLM loop for the escape-game runtime.
+
+    **Two-phase construction invariant**:
+    ``action_failed_emitter`` と ``intent_id_generator`` は ``ObservationTurnScheduler``
+    → ``ActionFailedObservationEmitter`` の構築連鎖が ``llm_turn_trigger`` を
+    必要とするため、本クラスの ``__init__`` 直後に注入する必要がある。
+    ``create_session`` の流れは:
+
+        1. ``_EscapeGameLlmWiring(...)`` を ctor で作成 (内部で trigger 生成)
+        2. ``ObservationTurnScheduler`` を trigger を使って組み立て
+        3. ``ActionFailedObservationEmitter`` を scheduler を使って組み立て
+        4. ``attach_action_failed_wiring(emitter, generator)`` を呼ぶ
+        5. ``self._sessions[sid]`` に登録 (これ以降 tick loop から見える)
+
+    手順 4 を踏まずに 5 に到達すると、失敗 DTO が出ても観測化されない silent
+    bug になる。アサーションで防げないため (Optional として動かす設計)、本
+    docstring の手順を守ること。
+    """
 
     runtime: Any
     observation_buffer: Any
     llm_client: Any = field(default_factory=create_llm_client_from_env)
     max_turns: int = 5
+    # 失敗 DTO を ActionFailed 観測に変換する emitter (Optional)。
+    # ``attach_action_failed_wiring`` で配線される。None の場合は失敗観測を
+    # 発行しない (後方互換 / テスト用ショートカット)。
+    action_failed_emitter: Optional[ActionFailedObservationEmitter] = None
+    # ActionFailed 観測の intent.intent_id を払い出すカウンタ。
+    # action_failed_emitter とセットで使う想定。
+    intent_id_generator: Optional[IntentIdGenerator] = None
 
     def __post_init__(self) -> None:
         self.observation_appender = ObservationAppender(self.observation_buffer)
@@ -185,6 +218,19 @@ class _EscapeGameLlmWiring:
             wiring=self,
             max_turns=self.max_turns,
         )
+
+    def attach_action_failed_wiring(
+        self,
+        emitter: ActionFailedObservationEmitter,
+        generator: IntentIdGenerator,
+    ) -> None:
+        """二段構築の 2 段目: ActionFailed 観測の依存を後付け注入する。
+
+        ``create_session`` でのみ呼ぶ想定。両方セットで呼ぶことで、
+        emitter だけ刺さって generator が None という中間状態を避ける。
+        """
+        self.action_failed_emitter = emitter
+        self.intent_id_generator = generator
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         prompt = self.runtime.build_full_prompt(player_id)
@@ -247,7 +293,55 @@ class _EscapeGameLlmWiring:
                 f"{name}({json.dumps(arguments, ensure_ascii=False)})",
                 result.message,
             )
+        # 失敗 DTO のとき ActionFailed 観測を該当プレイヤーへ投入する。
+        # post-hoc に Intent VO を構築し observer に渡す (intent queue 経由は
+        # しない — 即時 path で意味のある最小 wire-in)。LLM API レベルや
+        # 配線エラーは emitter 側で除外される。
+        if not result.success:
+            self._emit_action_failed_observation(player_id, name, arguments, result)
         return result
+
+    def _emit_action_failed_observation(
+        self,
+        player_id: PlayerId,
+        tool_name: str,
+        arguments: dict[str, Any],
+        result: LlmCommandResultDto,
+    ) -> None:
+        if self.action_failed_emitter is None or self.intent_id_generator is None:
+            return
+        # 空 tool_name は LLM 出力の欠陥 (例: ``{"name": ""}``)。Intent VO は
+        # 非空 str を要求するため "unknown" 等で穴埋めすると観測の tool_name
+        # フィールドが false-positive な値で汚れる。診断用に warning を残し、
+        # 観測そのものは emit しない (LLM API レベル失敗の扱いに準じる)。
+        if not tool_name:
+            logger.warning(
+                "Skipping ActionFailed emission: empty tool_name from LLM "
+                "(player=%s error_code=%s)",
+                player_id.value,
+                result.error_code,
+            )
+            return
+        try:
+            current_tick_value = int(self.runtime.current_tick())
+            tick = WorldTick(current_tick_value)
+            intent = Intent(
+                intent_id=self.intent_id_generator.next_id(),
+                player_id=player_id,
+                tool_name=tool_name,
+                arguments=dict(arguments),
+                phase=phase_for_tool(tool_name),
+                submitted_at_tick=tick,
+                complete_at_tick=tick,
+            )
+            self.action_failed_emitter.on_resolution_failure(intent, result)
+        except Exception:
+            # observer 発火が turn 結果を倒さないよう吸収 (best-effort)。
+            logger.exception(
+                "Failed to emit ActionFailed observation for player=%s tool=%s",
+                player_id.value,
+                tool_name,
+            )
 
     def _coerce_arguments(self, raw_arguments: Any) -> dict[str, Any]:
         if isinstance(raw_arguments, dict):
@@ -657,9 +751,18 @@ class GameRuntimeManager:
         runtime = create_escape_game_runtime(
             scenario_path, escape_character=escape_character
         )
-        llm_wiring = _EscapeGameLlmWiring(runtime=runtime, observation_buffer=runtime._obs_buffer)
         spawn_ids = frozenset(int(sp.player_id) for sp in runtime.scenario.player_spawns)
         llm_resolver = _EscapeSpawnAllPlayersLlmResolver(spawn_player_ids=spawn_ids)
+        # appender / turn_scheduler は heartbeat と ActionFailed の両方で
+        # 共有する (同じ observation buffer に書き込み、同じ turn trigger を
+        # 呼ぶため)。
+        appender = ObservationAppender(runtime._obs_buffer)
+        # 注意: llm_wiring を構築する前に turn_scheduler を作る必要がある
+        # ため、最初に空の wiring を作り、それから scheduler / emitter を
+        # 組み立てて wiring に注入する流れにする。
+        llm_wiring = _EscapeGameLlmWiring(
+            runtime=runtime, observation_buffer=runtime._obs_buffer
+        )
         turn_scheduler = ObservationTurnScheduler(
             turn_trigger=llm_wiring.llm_turn_trigger,
             llm_player_resolver=llm_resolver,
@@ -669,9 +772,21 @@ class GameRuntimeManager:
             return tuple(PlayerId(int(sp.player_id)) for sp in runtime.scenario.player_spawns)
 
         heartbeat_emitter = HeartbeatObservationEmitter(
-            ObservationAppender(runtime._obs_buffer),
+            appender,
             turn_scheduler,
             _heartbeat_llm_player_ids,
+        )
+        # ActionFailed 観測の wire: 失敗 DTO を当該プレイヤーへの観測に変換する。
+        # ``intent_id_generator`` は wiring と emitter で共有しないが、wiring 側
+        # で intent_id を払い出して emitter に渡す形を取る (emitter は受け取った
+        # intent をそのまま使う最小役割)。
+        action_failed_emitter = ActionFailedObservationEmitter(
+            observation_appender=appender,
+            turn_scheduler=turn_scheduler,
+        )
+        llm_wiring.attach_action_failed_wiring(
+            emitter=action_failed_emitter,
+            generator=IntentIdGenerator(),
         )
         runtime.set_simulation_llm_turn_trigger(llm_wiring.llm_turn_trigger)
         runtime.set_simulation_heartbeat_emitter(heartbeat_emitter)
