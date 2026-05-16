@@ -8,11 +8,15 @@ from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
+from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
+    SoundIntensityEnum,
+)
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionCreatedEvent,
     ConnectionDestroyedEvent,
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
+    SpotSoundHeardEvent,
     EntityLeftSpotEvent,
     MonsterAppearedAtSpotEvent,
     MonsterLeftSpotEvent,
@@ -237,7 +241,11 @@ class SpotGraphAggregate(AggregateRoot):
         return self._connections_by_id[connection_id]
 
     def place_entity(self, entity_id: EntityId, spot_id: SpotId) -> None:
-        """初回配置。from_spot_id=None の EntityEnteredSpotEvent を発行。"""
+        """初回配置。from_spot_id=None の EntityEnteredSpotEvent を発行。
+
+        Phase 5: spot の `sound_intensity` が SILENT より大きい場合、
+        `SpotSoundHeardEvent` も発行して受動的な環境音観測を agent に届ける。
+        """
         if entity_id in self._entity_spot:
             raise SpotPresenceInvariantException(f"Entity already placed: {entity_id}")
         if spot_id not in self._spots:
@@ -253,6 +261,7 @@ class SpotGraphAggregate(AggregateRoot):
             from_spot_id=None,
         )
         self.add_event(ev)
+        self._maybe_emit_spot_sound_heard(entity_id, spot_id)
 
     def unplace_entity(self, entity_id: EntityId) -> None:
         """エンティティをグラフから取り除く。
@@ -312,6 +321,35 @@ class SpotGraphAggregate(AggregateRoot):
                 entity_id=entity_id,
                 spot_id=to_spot,
                 from_spot_id=from_spot,
+            )
+        )
+        # Phase 5: 移動先の spot に環境音があれば観測 event を発火
+        self._maybe_emit_spot_sound_heard(entity_id, to_spot)
+
+    def _maybe_emit_spot_sound_heard(
+        self, entity_id: EntityId, spot_id: SpotId,
+    ) -> None:
+        """spot の sound_intensity が SILENT 以外なら SpotSoundHeardEvent を発火。
+
+        Phase 5: 入場 / 移動時の受動的な環境音観測。`source_spot_id == spot_id`
+        (自分が居る spot から聞こえる音) として発火する。将来の「耳を澄ます」
+        ツール (PR-2) では隣接 spot を音源にして同じ event を発火する。
+        """
+        node = self._spots.get(spot_id)
+        if node is None or node.atmosphere is None:
+            return
+        intensity = node.atmosphere.sound_intensity
+        if intensity == SoundIntensityEnum.SILENT:
+            return
+        self.add_event(
+            SpotSoundHeardEvent.create(
+                aggregate_id=self._graph_id,
+                aggregate_type="SpotGraphAggregate",
+                entity_id=entity_id,
+                spot_id=spot_id,
+                source_spot_id=spot_id,
+                intensity=intensity.value,
+                ambient_description=node.atmosphere.sound_ambient,
             )
         )
 
@@ -453,6 +491,11 @@ class SpotGraphAggregate(AggregateRoot):
 
         既に配置済みの monster_id を再配置しようとした場合は不変条件
         違反として `MonsterPresenceInvariantException` を投げる。
+
+        Phase 5: `place_entity` (player) と異なり、monster 出現では
+        `SpotSoundHeardEvent` を発火しない。SpotSoundHeardEvent は LLM
+        プレイヤーに観測として届けるためのものであり、monster は観測
+        パイプラインの recipient にならない設計のため。
         """
         if spot_id not in self._spots:
             raise SpotNotInGraphException(f"Unknown spot: {spot_id}")
@@ -536,6 +579,9 @@ class SpotGraphAggregate(AggregateRoot):
         ALIVE/DEAD は集約レベルで管理しないため、`MonsterAggregate` の状態は
         呼び出し側で確認する責任がある（ALIVE 以外を移動させたいケースは
         無いはずだが、本メソッドはそのチェックを行わない）。
+
+        Phase 5: `move_entity` (player) と異なり、monster 移動では
+        `SpotSoundHeardEvent` を発火しない (player 観測パイプライン専用)。
         """
         if monster_id not in self._monster_spot:
             raise MonsterNotInGraphException(f"Monster not placed: {monster_id}")

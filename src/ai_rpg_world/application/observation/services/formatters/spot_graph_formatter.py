@@ -28,6 +28,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterStartedChasingInSpotEvent,
     MonsterStartedFleeingInSpotEvent,
     PlayerAttackedMonsterInSpotEvent,
+    SpotSoundHeardEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
@@ -37,6 +38,9 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPublicEffectObservedEvent,
     ConnectionCreatedEvent,
     ConnectionDestroyedEvent,
+)
+from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
+    SoundIntensityEnum,
 )
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
@@ -125,6 +129,8 @@ class SpotGraphObservationFormatter:
             return self._format_monster_alerted_by_pack(
                 event, recipient_player_id,
             )
+        if isinstance(event, SpotSoundHeardEvent):
+            return self._format_spot_sound_heard(event, recipient_player_id)
         return None
 
     def _is_self(self, entity_id: Any, recipient_id: PlayerId) -> bool:
@@ -967,6 +973,65 @@ class SpotGraphObservationFormatter:
             schedules_turn=True,
         )
 
+    def _format_spot_sound_heard(
+        self,
+        event: SpotSoundHeardEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """環境音観測 prose (Phase 5)。
+
+        intensity (FAINT/MODERATE/LOUD) と ambient_description を組み合わせ。
+        source_spot_id が spot_id と異なる (= 隣接 spot からの音、PR-2 で使う)
+        場合は「どこかから漏れ聞こえる」表現に切り替える。
+        """
+        # 自分宛でなければ何も返さない (recipient strategy で既に絞られている
+        # はずだが防御)
+        if event.entity_id.value != recipient_id.value:
+            return None
+
+        # SILENT 相当の event が誤って発火された場合の防御 (Phase 5 PR-2 で
+        # 減衰計算のバグで起きうる: 例えば FAINT を 1 hop 減衰すると SILENT
+        # になるが event を発火してしまった等)。SILENT は「聞こえない」が
+        # 意味なので prose 生成自体を止める。
+        if event.intensity == "SILENT":
+            return None
+
+        intensity_prose = _INTENSITY_PROSE.get(event.intensity, "音")
+        is_adjacent = event.source_spot_id != event.spot_id
+
+        if event.ambient_description:
+            if is_adjacent:
+                prose = (
+                    f"隣の spot から{intensity_prose}が漏れ聞こえる "
+                    f"({event.ambient_description})。"
+                )
+            else:
+                prose = f"{intensity_prose}が聞こえる ({event.ambient_description})。"
+        else:
+            if is_adjacent:
+                prose = f"隣の spot から{intensity_prose}が漏れ聞こえる。"
+            else:
+                prose = f"{intensity_prose}が聞こえる。"
+
+        structured = {
+            "type": "spot_sound_heard",
+            "intensity": event.intensity,
+            "ambient_description": event.ambient_description,
+            "source_spot_id": event.source_spot_id.value,
+            "is_adjacent": is_adjacent,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            # 環境音は受動的に毎入場で発火する。turn 誘発するかは intensity で
+            # 切り替え: LOUD なら緊急性が高いので turn 誘発、それ以外は静か
+            # な受動観測として turn 誘発しない (LLM コスト膨張を抑制)。
+            # SoundIntensityEnum.LOUD.value と比較することで、enum 側で値を
+            # 変えた場合の追従漏れを防ぐ。
+            schedules_turn=(event.intensity == SoundIntensityEnum.LOUD.value),
+        )
+
     def _format_player_state_changed_in_spot(
         self,
         event: SpotPlayerStateChangedInSpotEvent,
@@ -1035,3 +1100,13 @@ def _format_delta_text(delta) -> str:
         else:
             fragments.append(f"{d.key}が{d.before}から{d.after}に変わった")
     return "、".join(fragments)
+
+
+# Phase 5: SpotSoundHeardEvent.intensity (str) を prose 用文言にマッピング。
+# SoundIntensityEnum.value と同じ文字列をキーに使う。
+_INTENSITY_PROSE: dict[str, str] = {
+    "FAINT": "かすかな音",
+    "MODERATE": "音",
+    "LOUD": "大きな音",
+    # SILENT はそもそも event 発火しないので prose 不要
+}

@@ -586,3 +586,42 @@ class MonsterAlertedByPackInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
                 "target_monster_id は片方だけ非 None である必要がある "
                 f"(player={self.target_player_id}, monster={self.target_monster_id})"
             )
+
+
+# Phase 5: SpotSoundHeardEvent.intensity の許容値。
+# SILENT は event 自体が発火しない (音なしで観測不要) ので除外。
+# SoundIntensityEnum と同じ文字列値を共有することで、event 経由でも
+# enum.value で値を統一できる。typo を静的に検出可能にするための Literal。
+AudibleSoundIntensity = Literal["FAINT", "MODERATE", "LOUD"]
+
+
+@dataclass(frozen=True)
+class SpotSoundHeardEvent(BaseDomainEvent[SpotGraphId, str]):
+    """spot に居る entity が環境音を聞いた (Phase 5 五感観察)。
+
+    spot 入場時 / 「耳を澄ます」ツール実行時など、`SpotAtmosphere.sound_intensity`
+    が SILENT より大きい spot に entity が居る場合に発火する。
+
+    `intensity` は減衰後の強度。spot 入場 (= 自分が居る spot) では
+    spot の sound_intensity そのもの。「耳を澄ます」ツール経由で隣接 spot
+    の音を聞く場合は 1 hop 分減衰した値が入る (PR-2)。SILENT 相当 (減衰
+    しきって聞こえない) は呼び出し側で event 発火を抑制すること。
+
+    `source_spot_id` は音の発生源 spot で、`spot_id` (= entity が居る spot)
+    と異なる場合がある (隣接 spot の音を聞いた時)。同じ spot なら両者一致。
+
+    `ambient_description` は人間向けの自由記述 (例: 「川のせせらぎ」)。
+    sound_ambient が None の spot では None。
+
+    `entity_id` は常に player の ID を想定 (`PlayerId.value` と整合する
+    整数空間)。monster の `EntityId` を渡した場合、observer pipeline で
+    recipient が空になり観測として消費されない。
+    """
+
+    entity_id: EntityId
+    # 観測者が居る spot (recipient 解決用、base event の規約)
+    spot_id: SpotId
+    # 音の発生源 spot (隣接 spot からの音だと spot_id と異なる)
+    source_spot_id: SpotId
+    intensity: AudibleSoundIntensity
+    ambient_description: Optional[str] = None
