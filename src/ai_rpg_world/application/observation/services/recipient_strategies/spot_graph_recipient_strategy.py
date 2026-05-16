@@ -207,13 +207,11 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         """`entity_id` が known player の ID と一致するなら recipient に追加。
 
         Phase 5 環境音観測など「entity 本人にだけ届く」観測で使う。
+        `find_all()` を呼ばず `find_by_id` で 1 件だけ引いて O(N) → O(1)。
         """
-        known_player_ids: Set[int] = {
-            s.player_id.value
-            for s in self._player_status_repository.find_all()
-        }
-        if entity_id.value in known_player_ids:
-            add(PlayerId(entity_id.value))
+        player_id = PlayerId(entity_id.value)
+        if self._player_status_repository.find_by_id(player_id) is not None:
+            add(player_id)
 
     def _players_at_spot_on_graph(self, spot_id: SpotId) -> List[PlayerId]:
         """グラフ上の指定スポットにいるプレイヤーの一覧を返す。"""

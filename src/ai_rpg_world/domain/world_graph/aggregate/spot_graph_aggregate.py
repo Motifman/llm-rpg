@@ -491,6 +491,11 @@ class SpotGraphAggregate(AggregateRoot):
 
         既に配置済みの monster_id を再配置しようとした場合は不変条件
         違反として `MonsterPresenceInvariantException` を投げる。
+
+        Phase 5: `place_entity` (player) と異なり、monster 出現では
+        `SpotSoundHeardEvent` を発火しない。SpotSoundHeardEvent は LLM
+        プレイヤーに観測として届けるためのものであり、monster は観測
+        パイプラインの recipient にならない設計のため。
         """
         if spot_id not in self._spots:
             raise SpotNotInGraphException(f"Unknown spot: {spot_id}")
@@ -574,6 +579,9 @@ class SpotGraphAggregate(AggregateRoot):
         ALIVE/DEAD は集約レベルで管理しないため、`MonsterAggregate` の状態は
         呼び出し側で確認する責任がある（ALIVE 以外を移動させたいケースは
         無いはずだが、本メソッドはそのチェックを行わない）。
+
+        Phase 5: `move_entity` (player) と異なり、monster 移動では
+        `SpotSoundHeardEvent` を発火しない (player 観測パイプライン専用)。
         """
         if monster_id not in self._monster_spot:
             raise MonsterNotInGraphException(f"Monster not placed: {monster_id}")

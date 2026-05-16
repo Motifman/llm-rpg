@@ -39,6 +39,9 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionCreatedEvent,
     ConnectionDestroyedEvent,
 )
+from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
+    SoundIntensityEnum,
+)
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
     StateDeltaEntry,
@@ -986,6 +989,13 @@ class SpotGraphObservationFormatter:
         if event.entity_id.value != recipient_id.value:
             return None
 
+        # SILENT 相当の event が誤って発火された場合の防御 (Phase 5 PR-2 で
+        # 減衰計算のバグで起きうる: 例えば FAINT を 1 hop 減衰すると SILENT
+        # になるが event を発火してしまった等)。SILENT は「聞こえない」が
+        # 意味なので prose 生成自体を止める。
+        if event.intensity == "SILENT":
+            return None
+
         intensity_prose = _INTENSITY_PROSE.get(event.intensity, "音")
         is_adjacent = event.source_spot_id != event.spot_id
 
@@ -1017,7 +1027,9 @@ class SpotGraphObservationFormatter:
             # 環境音は受動的に毎入場で発火する。turn 誘発するかは intensity で
             # 切り替え: LOUD なら緊急性が高いので turn 誘発、それ以外は静か
             # な受動観測として turn 誘発しない (LLM コスト膨張を抑制)。
-            schedules_turn=(event.intensity == "LOUD"),
+            # SoundIntensityEnum.LOUD.value と比較することで、enum 側で値を
+            # 変えた場合の追従漏れを防ぐ。
+            schedules_turn=(event.intensity == SoundIntensityEnum.LOUD.value),
         )
 
     def _format_player_state_changed_in_spot(
