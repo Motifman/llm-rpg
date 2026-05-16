@@ -39,6 +39,10 @@ logger = logging.getLogger(__name__)
 
 _MIN_INTERVAL_SECONDS = 0.01
 _STOP_GRACE_SECONDS = 2.0
+# 連続して同一セッションが N 回失敗したら ERROR で警告する閾値。
+# 通常の transient エラーは黙って log.exception に乗せるが、長期間
+# 同じセッションが詰まり続けるとオペレータに気付かせる。
+_CONSECUTIVE_FAILURE_ALERT_THRESHOLD = 5
 
 
 def _validate_interval(seconds: float) -> None:
@@ -56,6 +60,9 @@ class SimulationTickLoop:
     interval_seconds: float = 1.0
     _task: Optional[asyncio.Task[None]] = field(default=None, init=False, repr=False)
     _stop_event: Optional[asyncio.Event] = field(default=None, init=False, repr=False)
+    _consecutive_failures: dict[str, int] = field(
+        default_factory=dict, init=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         _validate_interval(self.interval_seconds)
@@ -135,7 +142,9 @@ class SimulationTickLoop:
     def _tick_all_running_sessions(self) -> None:
         # Iterate via a snapshot so concurrent session creation/removal
         # during a tick does not raise RuntimeError on dict mutation.
+        active_session_ids: set[str] = set()
         for session_id, runtime in list(self.manager.iter_running_runtimes()):
+            active_session_ids.add(session_id)
             try:
                 tick_value = runtime.advance_tick()
                 logger.debug(
@@ -143,8 +152,29 @@ class SimulationTickLoop:
                     session_id,
                     tick_value,
                 )
+                # 成功したら連続失敗カウントをリセット
+                if session_id in self._consecutive_failures:
+                    del self._consecutive_failures[session_id]
             except Exception:
-                # One bad session must not kill the loop or other sessions.
+                # 1 セッションの失敗は loop 自体や他セッションを止めない。
+                # ただし連続失敗が閾値を超えたら ERROR レベルでオペレータに
+                # 通知する (silent な log.exception 連発で詰まりを見落とすのを
+                # 防ぐ)。
+                count = self._consecutive_failures.get(session_id, 0) + 1
+                self._consecutive_failures[session_id] = count
+                if count == _CONSECUTIVE_FAILURE_ALERT_THRESHOLD:
+                    logger.error(
+                        "session=%s has failed %d ticks in a row; "
+                        "manual intervention may be required",
+                        session_id,
+                        count,
+                    )
                 logger.exception(
-                    "advance_tick failed for session %s", session_id
+                    "advance_tick failed for session %s (consecutive=%d)",
+                    session_id,
+                    count,
                 )
+        # 既に running でなくなったセッションのカウンタを掃除
+        for stale_id in list(self._consecutive_failures.keys()):
+            if stale_id not in active_session_ids:
+                del self._consecutive_failures[stale_id]
