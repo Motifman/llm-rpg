@@ -6,8 +6,13 @@
 - 減衰結果が SILENT の隣接 spot は event 発火しない
 - 同 spot に複数 connection が向いていても 1 件に dedup される
 - 自 spot が SILENT でも隣接 spot に音があれば隣接分は発火する
-- 通行不可な接続でも音は届く (壁越しに聞こえる)
+- 通行不可だが permeability が高い接続 (barrier 等) でも音は届く
 - entity が graph 上に居なければ EntityNotInGraphException
+
+NOTE: Phase 5 PR-3 で接続種別による減衰補正が入り、壁 INTACT (permeability
+0.1) は実質的に音を遮断するモデルになった。「permeability に応じた hops」
+の挙動は `test_spot_graph_sound_permeability_attenuation.py` で詳細にカバー
+する。本ファイルは「自 spot + 隣接 dedup + 例外」の挙動を中心に検証する。
 """
 
 from __future__ import annotations
@@ -148,11 +153,26 @@ class TestEmitListenCarefullyAdjacent:
         g.emit_listen_carefully(eid)
         assert _events(g) == []  # FAINT - 1 = SILENT なので発火しない
 
-    def test_通行不可な_接続でも_音は_届く(self) -> None:
+    def test_traversable_でなくても_permeability_が_高ければ_音は_届く(
+        self,
+    ) -> None:
+        """barrier ACTIVE (traversable=False, permeability=1.0) は通行不可
+        だが音は通る、を表す。Phase 5 PR-3 で permeability ベースの伝搬に
+        移行した後も `traversable` 単独では音を遮らないことを保証する。
+        """
+        from ai_rpg_world.domain.world_graph.enum.passage_kind import (
+            BarrierStateEnum,
+        )
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A))
         g.add_spot(_node(SPOT_B, intensity=SoundIntensityEnum.MODERATE))
-        g.add_connection(_conn(10, SPOT_A, SPOT_B, traversable=False))
+        g.add_connection(SpotConnection(
+            connection_id=ConnectionId.create(10),
+            from_spot_id=SPOT_A, to_spot_id=SPOT_B,
+            name="barrier", description="", travel_ticks=1,
+            is_bidirectional=False,
+            passage=Passage.barrier(BarrierStateEnum.ACTIVE),
+        ))
         eid = EntityId.create(7)
         g.place_entity(eid, SPOT_A)
         g.clear_events()
@@ -162,6 +182,8 @@ class TestEmitListenCarefullyAdjacent:
         events = _events(g)
         assert len(events) == 1
         assert events[0].source_spot_id == SPOT_B
+        # permeability 1.0 → 1 hop → MODERATE - 1 = FAINT
+        assert events[0].intensity == "FAINT"
 
 
 class TestEmitListenCarefullyDedup:

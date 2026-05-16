@@ -79,6 +79,29 @@ def _default_for(kind: PassageKindEnum, state: str) -> Tuple[bool, float]:
     return _DEFAULT_TABLE[key]
 
 
+# Phase 5 PR-3: 音透過率 (連続値 0..1) を SoundIntensityEnum.attenuate に
+# 渡す離散 hop 数 (1..4) に量子化する。
+#
+# 4 段階の SoundIntensityEnum (SILENT/FAINT/MODERATE/LOUD) と相性が良いように、
+# 「LOUD でも 3 hops 減衰すれば SILENT」になる境界で区切る:
+#
+# - permeability >= 0.7: 開いた扉 / 開口部 / 壊れた壁。減衰なし (1 hop)
+# - 0.4 <= p < 0.7: 閉じた扉 / 鍵付き扉 / ヒビ壁。1 段階追加 (2 hops)。
+#   LOUD はかすかに、MODERATE 以下は完全に遮断
+# - 0.1 <= p < 0.4: 隙間程度。2 段階追加 (3 hops)。LOUD ですら SILENT に落ちる
+# - p < 0.1: 完全遮音 (4 hops)。現 _DEFAULT_TABLE では未使用だが、シナリオ
+#   が override で 0.05 等を指定した場合の動作を定義しておく
+def sound_permeability_to_hops(permeability: float) -> int:
+    """Passage の音透過率を離散 hop 数 (>=1) に量子化する。"""
+    if permeability >= 0.7:
+        return 1
+    if permeability >= 0.4:
+        return 2
+    if permeability >= 0.1:
+        return 3
+    return 4
+
+
 @dataclass(frozen=True)
 class Passage:
     """スポット接続の通過形態と、現在の通行可否・音透過率。
