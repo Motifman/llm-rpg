@@ -18,6 +18,9 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
+    from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
+        HeartbeatObservationEmitter,
+    )
 
 
 class SpotGraphSimulationApplicationService:
@@ -35,6 +38,7 @@ class SpotGraphSimulationApplicationService:
         environment_stage: Optional["_SpotGraphTickStage"] = None,
         needs_decay_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
+        heartbeat_emitter: Optional["HeartbeatObservationEmitter"] = None,
     ) -> None:
         self._time_provider = time_provider
         self._unit_of_work = unit_of_work
@@ -46,6 +50,7 @@ class SpotGraphSimulationApplicationService:
         self._environment_stage = environment_stage
         self._needs_decay_stage = needs_decay_stage
         self._llm_turn_trigger = llm_turn_trigger
+        self._heartbeat_emitter = heartbeat_emitter
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
@@ -91,8 +96,20 @@ class SpotGraphSimulationApplicationService:
 
     def _run_post_tick_hooks(self, current_tick: WorldTick) -> None:
         failures: list[tuple[str, Exception]] = []
+        # 順序が重要: heartbeat → llm_turn_trigger。heartbeat が
+        # ``schedules_turn=True`` の観測を enqueue した直後に turn trigger が
+        # それを実行することで「idle tick でも NPC が動く」状態が成立する。
         hooks = (
-            ("llm_turn_trigger", self._llm_turn_trigger, lambda hook: hook.run_scheduled_turns()),
+            (
+                "heartbeat_emitter",
+                self._heartbeat_emitter,
+                lambda hook: hook.run(current_tick),
+            ),
+            (
+                "llm_turn_trigger",
+                self._llm_turn_trigger,
+                lambda hook: hook.run_scheduled_turns(),
+            ),
         )
         for hook_name, hook, runner in hooks:
             if hook is None:
