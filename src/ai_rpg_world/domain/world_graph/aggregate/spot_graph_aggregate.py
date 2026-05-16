@@ -39,7 +39,10 @@ from ai_rpg_world.domain.world_graph.value_object.monster_spot_presence import (
 from ai_rpg_world.domain.world_graph.service.spot_graph_navigation_service import SpotGraphNavigationService
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.domain.world_graph.value_object.passage import Passage
+from ai_rpg_world.domain.world_graph.value_object.passage import (
+    Passage,
+    sound_permeability_to_hops,
+)
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_presence import SpotPresence
@@ -339,19 +342,22 @@ class SpotGraphAggregate(AggregateRoot):
         self._emit_sound_heard(entity_id, spot_id, spot_id)
 
     def emit_listen_carefully(self, entity_id: EntityId) -> None:
-        """「耳を澄ます」ツール (Phase 5 PR-2) の event 発火。
+        """「耳を澄ます」ツール (Phase 5 PR-2 / PR-3) の event 発火。
 
-        entity が居る spot および全隣接 spot (1 hop) の sound_intensity を
-        観測する `SpotSoundHeardEvent` を `add_event` する。
+        entity が居る spot および全隣接 spot の sound_intensity を観測する
+        `SpotSoundHeardEvent` を `add_event` する。
 
         伝搬モデル:
         - 自 spot: `SoundIntensityEnum` をそのまま (減衰なし)
-        - 隣接 spot: `attenuate(1)` で 1 段階下げる
-        - 減衰結果が SILENT になった spot は event 発火しない (聞こえない)
-        - 隣接 spot の重複 (複数 connection で同 spot に繋がる場合) は dedup
+        - 隣接 spot: 接続の `passage.sound_permeability` を
+          `sound_permeability_to_hops` で量子化した hop 数で減衰する
+          (開口部: 1 hop / 閉じた扉: 2 hops / 壁: 3-4 hops)
+        - 減衰結果が SILENT になった spot は event 発火しない
+        - 同一隣接 spot に複数 connection が向く場合は最も透過率が高い
+          (= hops 最小) ものを採用する (音は最も通りやすい経路を辿る)
 
-        通行可否は無視 (壁越し / 閉じた扉越しでも音は届く)。接続種別による
-        減衰補正は将来 PR のスコープ。
+        通行可否は無視 (壁越し / 閉じた扉越しでも音は届きうるが、
+        permeability で減衰する)。
 
         Raises:
             EntityNotInGraphException: entity が graph 上に配置されていない
@@ -359,17 +365,23 @@ class SpotGraphAggregate(AggregateRoot):
         current_spot = self.get_entity_spot(entity_id)
         self._emit_sound_heard(entity_id, current_spot, current_spot)
 
-        seen_adjacent: set = set()
+        # 隣接 spot ごとに最小 hops を集計 (複数 connection があれば最良経路)
+        min_hops_by_adjacent: Dict[SpotId, int] = {}
         for conn in self.iter_outgoing_connections_from(current_spot):
             adj_spot = conn.to_spot_id
-            if adj_spot == current_spot or adj_spot in seen_adjacent:
+            if adj_spot == current_spot:
                 continue
-            seen_adjacent.add(adj_spot)
+            hops = sound_permeability_to_hops(conn.passage.sound_permeability)
+            prev = min_hops_by_adjacent.get(adj_spot)
+            if prev is None or hops < prev:
+                min_hops_by_adjacent[adj_spot] = hops
+
+        for adj_spot, hops in min_hops_by_adjacent.items():
             self._emit_sound_heard(
                 entity_id,
                 listener_spot_id=current_spot,
                 source_spot_id=adj_spot,
-                attenuation_hops=1,
+                attenuation_hops=hops,
             )
 
     def _emit_sound_heard(
