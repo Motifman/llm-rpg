@@ -153,3 +153,22 @@ class HeartbeatObservationEmitter:
             self._last_emitted_tick[player_id.value] = current_tick.value
             return False
         return (current_tick.value - last) >= self._interval_ticks
+
+    def forget_player(self, player_id: PlayerId) -> None:
+        """指定プレイヤーの内部状態を破棄する (session 終了時呼ばれる想定)。"""
+        self._last_emitted_tick.pop(player_id.value, None)
+
+    def prune_inactive(self, active_player_ids: "Iterable[PlayerId]") -> int:
+        """``active_player_ids`` に含まれないプレイヤーの記録を一括削除する。
+
+        long-running サーバでセッションが回転していくと
+        ``_last_emitted_tick`` が無制限に増大する。提供者側 (例:
+        ``GameRuntimeManager`` のセッション cleanup hook) からアクティブな
+        プレイヤー集合を渡してもらい、それ以外を破棄するためのヘルパー。
+        戻り値は削除件数。
+        """
+        active = {pid.value for pid in active_player_ids}
+        stale = [pid for pid in self._last_emitted_tick.keys() if pid not in active]
+        for pid in stale:
+            del self._last_emitted_tick[pid]
+        return len(stale)

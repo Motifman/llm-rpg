@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -62,11 +63,13 @@ def _read_tick_loop_config() -> tuple[bool, float]:
             _DEFAULT_TICK_INTERVAL_SEC,
         )
         interval = _DEFAULT_TICK_INTERVAL_SEC
-    # Guard against zero / negative values so the loop constructor does not
-    # raise during FastAPI startup and crash the whole server.
-    if interval < _MIN_SAFE_INTERVAL_SEC:
+    # Guard against zero / negative / NaN / inf so the loop constructor does
+    # not raise during FastAPI startup and crash the whole server.
+    # float("nan") < x は False になるため、明示的に isfinite チェックを噛ます。
+    if not math.isfinite(interval) or interval < _MIN_SAFE_INTERVAL_SEC:
         logger.warning(
-            "%s=%s is below the safe minimum (%.3fs); falling back to %.3fs",
+            "%s=%s is invalid or below the safe minimum (%.3fs); "
+            "falling back to %.3fs",
             _ENV_TICK_INTERVAL,
             interval,
             _MIN_SAFE_INTERVAL_SEC,
