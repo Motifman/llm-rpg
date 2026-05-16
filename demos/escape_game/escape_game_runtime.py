@@ -10,11 +10,14 @@ LLM エージェントが**実際に**受け取る観測テキスト・ツール
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -243,6 +246,10 @@ class EscapeGameRuntime:
     _escape_llm_system_prompt: str = field(default="", repr=False)
     _todo_store: InMemoryTodoStore = field(default_factory=InMemoryTodoStore, repr=False)
     _todo_tool_executor: Optional[TodoToolExecutor] = field(default=None, repr=False)
+    # B-4: LLM に提示するツールセットの mode。``True`` (既定) なら TODO 系も
+    # 含む従来構成、``False`` なら純スポットグラフ + speech のみ。
+    # Issue #155 (TODO 設計の再評価) の判断材料を取るための比較実験用。
+    _include_todo_tools: bool = field(default=True, repr=False)
 
     @property
     def id_mapper(self) -> ScenarioIdMapper:
@@ -348,8 +355,16 @@ class EscapeGameRuntime:
         )
 
     def get_tool_definitions(self) -> List[ToolDefinitionDto]:
-        """LLM に渡されるツール定義（OpenAI tools 形式）を返す。"""
+        """LLM に渡されるツール定義（OpenAI tools 形式）を返す。
+
+        ``_include_todo_tools=False`` の場合は TODO 系 (todo_add / todo_list /
+        todo_complete) を除外し、spot_graph_* + speech (say / whisper) のみ
+        を返す。LLM が「TODO 操作の連打」に逃げない条件で挙動を比較するため
+        の純スポットグラフモード (B-4 / Issue #155 の判断材料)。
+        """
         spot = [defn for defn, _ in get_spot_graph_specs()]
+        if not self._include_todo_tools:
+            return spot
         todo = [defn for defn, _ in get_memory_specs(todo_enabled=True)]
         return spot + todo
 
@@ -710,11 +725,52 @@ def _escape_llm_ssot_enabled_from_env() -> bool:
     return v in ("1", "true", "yes", "on")
 
 
+_ENV_LLM_TOOL_MODE = "LLM_TOOL_MODE"
+_LLM_TOOL_MODE_DEFAULT = "default"
+_LLM_TOOL_MODE_PURE_SPOT_GRAPH = "pure_spot_graph"
+# TODO(#155): 「TODO 系の有無」以外の軸が増えたら bool 戻り値ではなく
+# ``_resolve_tool_mode_from_env() -> str`` に書き直す。例: "no_memory" や
+# "minimal_combat" のような細かい mode が要る場合。binary で済む間は単純化
+# を優先。
+_VALID_LLM_TOOL_MODES = frozenset(
+    {_LLM_TOOL_MODE_DEFAULT, _LLM_TOOL_MODE_PURE_SPOT_GRAPH}
+)
+
+
+def _include_todo_tools_from_env() -> bool:
+    """環境変数 ``LLM_TOOL_MODE`` を解釈し TODO 系ツールを含めるかを返す。
+
+    - ``default`` (既定 / 未設定): TODO 系を含める従来構成
+    - ``pure_spot_graph``: TODO 系を除外、spot_graph_* + speech のみ
+    - 未知の値: warning ログを残して既定 (TODO 含む) にフォールバック
+
+    システムプロンプト側には mode のヒントを意図的に伝えない (B-4 設計判断)。
+    LLM が「TODO 系が無い環境でどう動くか」を観察するための実験なので、
+    プロンプトで「TODO ツールは使えません」と教えると測定が汚染される。
+    現代のツール呼び出しモデルは tools リストに無いツールを呼ばないという
+    前提に依存している。
+    """
+    raw = os.environ.get(_ENV_LLM_TOOL_MODE, "").strip().lower()
+    if not raw:
+        return True  # 既定は TODO 含む
+    if raw not in _VALID_LLM_TOOL_MODES:
+        logger.warning(
+            "Unknown %s=%r; valid values are %s. Falling back to %r.",
+            _ENV_LLM_TOOL_MODE,
+            raw,
+            sorted(_VALID_LLM_TOOL_MODES),
+            _LLM_TOOL_MODE_DEFAULT,
+        )
+        return True
+    return raw != _LLM_TOOL_MODE_PURE_SPOT_GRAPH
+
+
 def create_escape_game_runtime(
     scenario_path: Path,
     *,
     escape_character: Optional[EscapeCharacterPromptInput] = None,
     llm_turn_trigger: Optional[ILlmTurnTrigger] = None,
+    include_todo_tools: Optional[bool] = None,
 ) -> EscapeGameRuntime:
     """シナリオ JSON からゲームランタイムを構築する。
 
@@ -722,6 +778,10 @@ def create_escape_game_runtime(
         llm_turn_trigger: 省略時は :class:`EscapeGameStandaloneNoopLlmTurnTrigger`。
             スポットグラフのティック後フック用。プレゼン層のセッションでは
             ``runtime.set_simulation_llm_turn_trigger(…)`` で本物に差し替え可能。
+        include_todo_tools: ``True`` で TODO 系を含める従来構成、``False`` で
+            純スポットグラフモード (TODO 系を除外、speech は残す)。``None``
+            (既定) の場合は環境変数 ``LLM_TOOL_MODE`` から解決する。Issue #155
+            (TODO 設計の再評価) の判断材料を取るための比較実験用。
     """
     loader = ScenarioLoader()
     scenario = loader.load_from_file(scenario_path)
@@ -1039,6 +1099,11 @@ def create_escape_game_runtime(
         _environment_stage=environment_stage,
         _current_weather=weather_holder,
         _escape_llm_system_prompt=system_prompt_text,
+        _include_todo_tools=(
+            include_todo_tools
+            if include_todo_tools is not None
+            else _include_todo_tools_from_env()
+        ),
     )
     scenario_event_stage.set_message_callback(
         runtime._append_scenario_event_observation
