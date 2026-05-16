@@ -96,6 +96,20 @@ class IntentResolutionService:
         失敗時 (handler が見つからない / queue が拒否する) は失敗 DTO を返し、
         intent は queue に残らない。
         """
+        # 空 tool_name は intent VO の構築前に弾く。fallthrough すると
+        # phase=OTHER + handler_map.get("") = None → UNKNOWN_TOOL となり、
+        # 「LLM 応答に tool_name が無かった」という根本原因が UNKNOWN_TOOL
+        # に化けて診断が困難になる。
+        if not isinstance(tool_name, str) or not tool_name:
+            logger.warning(
+                "submit_and_resolve_immediately got empty tool_name player=%s",
+                player_id,
+            )
+            return LlmCommandResultDto(
+                success=False,
+                message="ツール名が指定されていません。",
+                error_code="NO_TOOL_CALL",
+            )
         current_tick = self._tick_provider()
         intent = self._build_intent(
             player_id_int=player_id,
@@ -105,32 +119,25 @@ class IntentResolutionService:
         )
         try:
             self._intent_queue.submit(intent)
-        except Exception as exc:
-            logger.warning(
-                "Intent submission rejected: tool=%s player=%s err=%s",
+        except Exception:
+            # サニタイズした応答メッセージのみ LLM 側へ返す (str(exc) は
+            # サーバログだけに残す)。
+            logger.exception(
+                "Intent submission rejected: tool=%s player=%s",
                 tool_name,
                 player_id,
-                exc,
             )
             return LlmCommandResultDto(
                 success=False,
-                message=f"intent の登録に失敗しました: {exc}",
+                message="intent の登録に失敗しました。",
                 error_code="INTENT_SUBMISSION_REJECTED",
             )
-        try:
-            extracted = self._intent_queue.remove(intent.intent_id)
-        except Exception:
-            # submit 直後に他者が remove することは現状の単一スレッド前提では
-            # 起きないが、防御的にハンドリングする。
-            logger.exception(
-                "submitted intent %s vanished from queue before extract",
-                intent.intent_id.value,
-            )
-            return LlmCommandResultDto(
-                success=False,
-                message="intent の解決に失敗しました (内部エラー)。",
-                error_code="INTENT_RESOLVE_INTERNAL",
-            )
+        # submit 成功直後の remove は単一スレッド前提では必ず成功する。
+        # 失敗した場合はプログラミングエラー (queue 集約の不変条件破壊) なので
+        # ソフト DTO に丸めず raise させる。これを DTO で吸収すると、submit
+        # した intent が queue に orphan として残り、後続の drain で他者の
+        # tick に紛れ込む状態破壊リスクが生じる。
+        extracted = self._intent_queue.remove(intent.intent_id)
         dto = self._resolve_one(extracted)
         self._notify_failure(extracted, dto)
         return dto
@@ -180,7 +187,11 @@ class IntentResolutionService:
             )
         try:
             return handler(intent.player_id.value, dict(intent.arguments))
-        except Exception as exc:
+        except Exception:
+            # 例外の詳細はサーバ側 (logger.exception) にだけ残し、LLM へ返す
+            # 文字列にはファイルパス / DB 接続文字列 / locals 等が混入しうる
+            # str(exc) を含めない。LLM プロンプト経路への情報漏洩 +
+            # exception-message ベースの prompt injection 経路を塞ぐ。
             logger.exception(
                 "Intent handler raised for tool=%s player=%s",
                 intent.tool_name,
@@ -188,7 +199,7 @@ class IntentResolutionService:
             )
             return LlmCommandResultDto(
                 success=False,
-                message=f"ツール実行中に例外が発生しました: {exc}",
+                message="ツール実行中に内部エラーが発生しました。",
                 error_code="INTENT_HANDLER_RAISED",
             )
 
