@@ -61,5 +61,7 @@ class DefaultSlidingWindowMemory(ISlidingWindowMemory):
         key = self._key(player_id)
         entries = self._store.get(key, [])
         # 新しい順（occurred_at 降順）で返す。同一時刻は append 順を維持
-        sorted_entries = sorted(entries, key=lambda e: e.occurred_at, reverse=True)
+        sorted_entries = sorted(
+            entries, key=lambda e: e.occurred_at.timestamp(), reverse=True
+        )
         return sorted_entries[:limit]

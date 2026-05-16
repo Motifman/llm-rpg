@@ -93,7 +93,7 @@ def merge_observations_and_action_results_to_unified_timeline(
                 text=format_action_result_line_for_recent_events(e),
             )
         )
-    merged.sort(key=lambda line: line.occurred_at, reverse=False)
+    merged.sort(key=lambda line: line.occurred_at.timestamp(), reverse=False)
     return tuple(merged)
 
 
