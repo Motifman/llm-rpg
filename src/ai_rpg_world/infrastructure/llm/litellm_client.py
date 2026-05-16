@@ -26,6 +26,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 
 _DEFAULT_MODEL = "openai/gpt-5-mini"
+DEFAULT_LLM_MODEL = _DEFAULT_MODEL
 _ENV_VAR_API_KEY = "OPENAI_API_KEY"
 
 
