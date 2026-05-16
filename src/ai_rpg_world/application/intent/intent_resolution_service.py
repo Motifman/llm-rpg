@@ -29,7 +29,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 from ai_rpg_world.application.intent.intent_id_generator import (
     IntentIdGenerator,
@@ -47,6 +47,9 @@ logger = logging.getLogger(__name__)
 # (player_id_int, args_dict) -> LlmCommandResultDto
 ToolHandler = Callable[[int, Mapping[str, Any]], LlmCommandResultDto]
 
+# (intent, dto) -> None — 解決後に呼ばれるオブザーバ (PR5: ActionFailed 観測)
+ResolutionObserver = Callable[[Intent, LlmCommandResultDto], None]
+
 
 class IntentResolutionService:
     """Intent 経由でツール実行を行うアプリケーションサービス。"""
@@ -57,6 +60,7 @@ class IntentResolutionService:
         intent_queue: IntentQueue,
         intent_id_generator: IntentIdGenerator,
         tick_provider: Callable[[], WorldTick],
+        failure_observer: Optional[ResolutionObserver] = None,
     ) -> None:
         if not isinstance(handler_map, Mapping):
             raise TypeError("handler_map must be Mapping")
@@ -68,10 +72,13 @@ class IntentResolutionService:
             )
         if not callable(tick_provider):
             raise TypeError("tick_provider must be callable")
+        if failure_observer is not None and not callable(failure_observer):
+            raise TypeError("failure_observer must be callable or None")
         self._handler_map: dict[str, ToolHandler] = dict(handler_map)
         self._intent_queue = intent_queue
         self._intent_id_generator = intent_id_generator
         self._tick_provider = tick_provider
+        self._failure_observer = failure_observer
 
     def submit_and_resolve_immediately(
         self,
@@ -124,7 +131,9 @@ class IntentResolutionService:
                 message="intent の解決に失敗しました (内部エラー)。",
                 error_code="INTENT_RESOLVE_INTERNAL",
             )
-        return self._resolve_one(extracted)
+        dto = self._resolve_one(extracted)
+        self._notify_failure(extracted, dto)
+        return dto
 
     def _resolve_drained(
         self, intents: Sequence[Intent]
@@ -138,8 +147,27 @@ class IntentResolutionService:
         results: list[tuple[Intent, LlmCommandResultDto]] = []
         for intent in intents:
             dto = self._resolve_one(intent)
+            self._notify_failure(intent, dto)
             results.append((intent, dto))
         return results
+
+    def _notify_failure(
+        self, intent: Intent, dto: LlmCommandResultDto
+    ) -> None:
+        """失敗 DTO の場合に failure_observer を呼ぶ。
+
+        observer の例外は resolve 結果を倒さないように吸収する (best-effort)。
+        """
+        if dto.success or self._failure_observer is None:
+            return
+        try:
+            self._failure_observer(intent, dto)
+        except Exception:
+            logger.exception(
+                "failure_observer raised for intent=%s tool=%s",
+                intent.intent_id.value,
+                intent.tool_name,
+            )
 
     def _resolve_one(self, intent: Intent) -> LlmCommandResultDto:
         handler = self._handler_map.get(intent.tool_name)
