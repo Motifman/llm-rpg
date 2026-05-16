@@ -10,15 +10,22 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from ai_rpg_world.application.llm.contracts.interfaces import ILLMPlayerResolver
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.observation_appender import (
     ObservationAppender,
+)
+from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
+    ObservationTurnScheduler,
+)
+from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
+    HeartbeatObservationEmitter,
 )
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
@@ -91,6 +98,16 @@ def _character_to_escape_prompt_input(
 
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+@dataclass
+class _EscapeSpawnAllPlayersLlmResolver(ILLMPlayerResolver):
+    """スポーンした全員をプレゼン層脱出セッションでは LLM ターン対象とみなす。"""
+
+    spawn_player_ids: frozenset[int]
+
+    def is_llm_controlled(self, player_id: PlayerId) -> bool:
+        return player_id.value in self.spawn_player_ids
 
 
 def _safe_get_str(mapper: Any, namespace: str, numeric_id: int) -> str:
@@ -641,7 +658,23 @@ class GameRuntimeManager:
             scenario_path, escape_character=escape_character
         )
         llm_wiring = _EscapeGameLlmWiring(runtime=runtime, observation_buffer=runtime._obs_buffer)
+        spawn_ids = frozenset(int(sp.player_id) for sp in runtime.scenario.player_spawns)
+        llm_resolver = _EscapeSpawnAllPlayersLlmResolver(spawn_player_ids=spawn_ids)
+        turn_scheduler = ObservationTurnScheduler(
+            turn_trigger=llm_wiring.llm_turn_trigger,
+            llm_player_resolver=llm_resolver,
+        )
+
+        def _heartbeat_llm_player_ids() -> Iterable[PlayerId]:
+            return tuple(PlayerId(int(sp.player_id)) for sp in runtime.scenario.player_spawns)
+
+        heartbeat_emitter = HeartbeatObservationEmitter(
+            ObservationAppender(runtime._obs_buffer),
+            turn_scheduler,
+            _heartbeat_llm_player_ids,
+        )
         runtime.set_simulation_llm_turn_trigger(llm_wiring.llm_turn_trigger)
+        runtime.set_simulation_heartbeat_emitter(heartbeat_emitter)
 
         sid = uuid.uuid4().hex[:12]
         title = runtime.metadata.title
