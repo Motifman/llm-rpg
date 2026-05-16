@@ -126,6 +126,9 @@ from ai_rpg_world.application.llm.services.escape_llm_prompt import (
     safe_world_intro_text,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
+from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
+    HeartbeatObservationEmitter,
+)
 from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
 from ai_rpg_world.application.observation.services.observation_pipeline import ObservationPipeline
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
@@ -275,6 +278,15 @@ class EscapeGameRuntime:
         切り替える。単体デモの既定は :class:`EscapeGameStandaloneNoopLlmTurnTrigger`。
         """
         self._simulation_service.set_llm_turn_trigger(trigger)
+
+    def set_simulation_heartbeat_emitter(
+        self, emitter: Optional[HeartbeatObservationEmitter]
+    ) -> None:
+        """ティック後の heartbeat emitter を注入する（未設定なら送信しない）。
+
+        ``SpotGraphSimulationApplicationService`` の post-tick フックに委譲する。
+        """
+        self._simulation_service.set_heartbeat_emitter(emitter)
 
     # ── 後方互換ヘルパー（テスト用） ──
 
