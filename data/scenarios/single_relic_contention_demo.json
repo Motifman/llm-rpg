@@ -1,0 +1,124 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "single_relic_contention_demo",
+    "title": "古代遺物の争奪 — 単一遺物の同時取得デモ",
+    "description": "祭壇の上に古代の遺物が一つだけ置かれている。2 人の調査員が同じ部屋にスポーンし、どちらが先に遺物に触れるかが世界に記録される。同じ tick に挑むと、敗者は『遺物は既に光を失っている』という失敗観測を受け取る。intent キューの『同時性』と『失敗を一級観測として返す』性質を最小構成で可視化するためのデモ。",
+    "theme": "contention",
+    "difficulty": "easy",
+    "estimated_ticks": 20,
+    "author": "ai_rpg_world_demo",
+    "tags": [
+      "contention",
+      "intent_queue",
+      "action_failed",
+      "two_agent"
+    ],
+    "llm_public_intro": "古い祭壇の間。中央の台座に光を放つ遺物が一つだけ置かれている。あなたと相方の調査員はこの瞬間、同じ部屋に居る。遺物に触れた者は記録に名を残せるが、機会は一度きり。"
+  },
+  "item_specs": [],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "altar_room",
+      "name": "祭壇の間",
+      "description": "石造りの静かな部屋。中央に古代の遺物が置かれた台座がある。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "ancient_relic",
+            "name": "古代の遺物",
+            "description": "鈍く光を放つ拳大の宝玉。台座の中央に静かに置かれている。",
+            "object_type": "OTHER",
+            "state": {
+              "claimed": false
+            },
+            "interactions": [
+              {
+                "action_name": "claim",
+                "display_label": "遺物に触れる",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "ancient_relic",
+                    "required_state": {
+                      "claimed": false
+                    },
+                    "failure_message": "遺物は既に光を失っている。誰かが先に触れたようだ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "ancient_relic",
+                      "state_updates": {
+                        "claimed": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "relic_claimed"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "遺物が一閃の光を放ち、台座に静かに沈黙する。世界に記録が刻まれた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [],
+  "players": [
+    {
+      "id": "investigator_a",
+      "name": "A（先輩調査員）",
+      "spawn_spot": "altar_room",
+      "initial_items": []
+    },
+    {
+      "id": "investigator_b",
+      "name": "B（新人調査員）",
+      "spawn_spot": "altar_room",
+      "initial_items": []
+    }
+  ],
+  "game_end_conditions": {
+    "win": [
+      {
+        "type": "FLAG_SET",
+        "target_flag": "relic_claimed"
+      }
+    ],
+    "lose": [
+      {
+        "type": "TICK_LIMIT",
+        "tick_limit": 30
+      }
+    ]
+  },
+  "initial_flags": [],
+  "scenario_events": [],
+  "reactive_bindings": {}
+}
