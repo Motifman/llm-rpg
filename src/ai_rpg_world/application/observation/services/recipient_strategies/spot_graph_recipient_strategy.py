@@ -35,6 +35,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterStartedChasingInSpotEvent,
     MonsterStartedFleeingInSpotEvent,
     PlayerAttackedMonsterInSpotEvent,
+    SpotSoundHeardEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
@@ -194,8 +195,25 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             # pack 警戒共有: responder の現在 spot 全員に「仲間の警戒を
             # 察知した」観測。
             self._resolve_all_at_spot(event.spot_id, add)
+        elif isinstance(event, SpotSoundHeardEvent):
+            # Phase 5: 環境音観測。聞いた本人 (entity_id) だけに届ける。
+            # entity_id が known player の ID と一致する場合のみ追加。
+            # monster の入退場 (= 自分が聞いた音) は player 観測しない。
+            self._resolve_known_player_entity(event.entity_id, add)
 
         return result
+
+    def _resolve_known_player_entity(self, entity_id: EntityId, add) -> None:
+        """`entity_id` が known player の ID と一致するなら recipient に追加。
+
+        Phase 5 環境音観測など「entity 本人にだけ届く」観測で使う。
+        """
+        known_player_ids: Set[int] = {
+            s.player_id.value
+            for s in self._player_status_repository.find_all()
+        }
+        if entity_id.value in known_player_ids:
+            add(PlayerId(entity_id.value))
 
     def _players_at_spot_on_graph(self, spot_id: SpotId) -> List[PlayerId]:
         """グラフ上の指定スポットにいるプレイヤーの一覧を返す。"""
