@@ -536,6 +536,24 @@ def create_spot_graph_wiring(
     )
     llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner, max_turns=max_turns)
 
+    # TODO(intent-wiring): IntentResolutionService + ActionFailedObservationEmitter
+    # を本配線に組み込む際は、ここで:
+    #   1. `intent_queue = IntentQueue()`
+    #   2. `intent_id_gen = IntentIdGenerator()`
+    #   3. `action_failed = ActionFailedObservationEmitter(
+    #          observation_appender=observation_appender,
+    #          turn_scheduler=turn_scheduler,
+    #      )`
+    #   4. `intent_service = IntentResolutionService(
+    #          handler_map=tool_handler_map,
+    #          intent_queue=intent_queue,
+    #          intent_id_generator=intent_id_gen,
+    #          tick_provider=game_time_provider.get_current_tick,
+    #          failure_observer=action_failed.on_resolution_failure,
+    #      )`
+    #   5. ToolCommandMapper に `intent_resolution_service=intent_service` を渡す
+    # を行う。詳細は docs/demos/two_agent_world_issue.md の DoD #5 と
+    # PR #151 のリビュー (Issue 3) を参照。
     observation_appender = ObservationAppender(buffer)
 
     formatter = observation_formatter
