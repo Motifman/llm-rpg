@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -108,6 +108,34 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         )
         assert "[失敗]" in timeline[0].text
         assert "error_code=BAD_ARG" in timeline[0].text
+
+    def test_naive_and_utc_aware_unified_timeline_sorted_without_type_error(
+        self,
+    ) -> None:
+        """occurred_at が naive / aware 混在でも timestamp 昇順へ並べ、TypeError にならない。"""
+        utc = timezone.utc
+        obs_naive = ObservationEntry(
+            occurred_at=datetime(2025, 8, 1, 14, 0, 0),
+            output=ObservationOutput(
+                prose="na",
+                structured={},
+                observation_category="environment",
+            ),
+        )
+        obs_utc = ObservationEntry(
+            occurred_at=datetime(2025, 8, 2, 0, 0, 0, tzinfo=utc),
+            output=ObservationOutput(
+                prose="utc",
+                structured={},
+                observation_category="environment",
+            ),
+        )
+        timeline = merge_observations_and_action_results_to_unified_timeline(
+            [obs_utc, obs_naive], ()
+        )
+        assert len(timeline) == 2
+        stamps = tuple(line.occurred_at.timestamp() for line in timeline)
+        assert stamps == tuple(sorted(stamps))
 
 
 class TestChunkEncodingInput:
