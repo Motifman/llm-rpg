@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -728,6 +729,21 @@ class GameRuntimeManager:
             return False
         state.speed_multiplier = speed_multiplier
         return True
+
+    def iter_running_runtimes(self) -> "Iterator[tuple[str, Any]]":
+        """Yield ``(session_id, runtime)`` pairs for sessions in 'running' status.
+
+        Used by the background tick loop to advance game time. Skips
+        paused/ended sessions and sessions without a runtime (legacy stubs).
+
+        The runtime is typed as ``Any`` because multiple runtime classes
+        (escape game, future spot-graph standalone, etc.) share only the
+        informal duck-typed ``advance_tick()`` contract.
+        """
+        for session_id, state in self._sessions.items():
+            if state.status != "running" or state.runtime is None:
+                continue
+            yield session_id, state.runtime
 
     def run_scheduled_llm_turns(self, session_id: str) -> bool:
         state = self._sessions.get(session_id)
