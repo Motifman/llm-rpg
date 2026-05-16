@@ -383,6 +383,9 @@ class _EscapeGameLlmWiring:
                 error_code="UNSUPPORTED_TOOL",
             )
 
+        # NOTE: pure_spot_graph mode (B-4 / Issue #155) では TODO ツールは LLM
+        # の tools リストに含まれないため、このディスパッチは通常到達しない。
+        # 安全側のフォールバックとして残してあるだけで、deletion 候補ではない。
         if name in (
             TOOL_NAME_TODO_ADD,
             TOOL_NAME_TODO_LIST,
