@@ -586,3 +586,30 @@ class MonsterAlertedByPackInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
                 "target_monster_id は片方だけ非 None である必要がある "
                 f"(player={self.target_player_id}, monster={self.target_monster_id})"
             )
+
+
+@dataclass(frozen=True)
+class SpotSoundHeardEvent(BaseDomainEvent[SpotGraphId, str]):
+    """spot に居る entity が環境音を聞いた (Phase 5 五感観察)。
+
+    spot 入場時 / 「耳を澄ます」ツール実行時など、`SpotAtmosphere.sound_intensity`
+    が SILENT より大きい spot に entity が居る場合に発火する。
+
+    `intensity` は減衰後の強度。spot 入場 (= 自分が居る spot) では
+    spot の sound_intensity そのもの。「耳を澄ます」ツール経由で隣接 spot
+    の音を聞く場合は 1 hop 分減衰した値が入る (PR-2)。
+
+    `source_spot_id` は音の発生源 spot で、`spot_id` (= entity が居る spot)
+    と異なる場合がある (隣接 spot の音を聞いた時)。同じ spot なら両者一致。
+
+    `ambient_description` は人間向けの自由記述 (例: 「川のせせらぎ」)。
+    sound_ambient が None の spot では None。
+    """
+
+    entity_id: EntityId
+    # 観測者が居る spot (recipient 解決用、base event の規約)
+    spot_id: SpotId
+    # 音の発生源 spot (隣接 spot からの音だと spot_id と異なる)
+    source_spot_id: SpotId
+    intensity: str  # SoundIntensityEnum.value (FAINT / MODERATE / LOUD)
+    ambient_description: Optional[str] = None

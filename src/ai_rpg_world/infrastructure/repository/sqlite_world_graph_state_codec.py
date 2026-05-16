@@ -24,6 +24,9 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import Interac
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.passage_kind import PassageKindEnum
+from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
+    SoundIntensityEnum,
+)
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
@@ -228,6 +231,8 @@ def _spot_atmosphere_to_dict(a: SpotAtmosphere) -> dict[str, Any]:
         "sound_ambient": a.sound_ambient,
         "temperature": _enum_name(a.temperature),
         "smell": a.smell,
+        # Phase 5: 環境音の強度 (default SILENT で後方互換)
+        "sound_intensity": _enum_name(a.sound_intensity),
     }
 
 
@@ -237,6 +242,11 @@ def _spot_atmosphere_from_dict(d: dict[str, Any]) -> SpotAtmosphere:
         sound_ambient=d.get("sound_ambient"),
         temperature=_parse_enum(TemperatureEnum, d.get("temperature", "NORMAL")),
         smell=d.get("smell"),
+        # Phase 5: 旧スキーマ row には sound_intensity が無いので SILENT
+        # を default として返す (= 「音なし」と同等で後方互換)。
+        sound_intensity=_parse_enum(
+            SoundIntensityEnum, d.get("sound_intensity", "SILENT"),
+        ),
     )
 
 
