@@ -1,7 +1,7 @@
 """DefaultSlidingWindowMemory のテスト（正常・境界・例外）"""
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
@@ -124,6 +124,29 @@ class TestDefaultSlidingWindowMemory:
         assert len(got) == 2
         assert got[0].output.prose == "3"
         assert got[1].output.prose == "2"
+
+    def test_get_recent_mixed_naive_and_tz_sorted_by_timestamp_without_type_error(
+        self, memory
+    ) -> None:
+        """occurred_at が naive / aware が混ざっても get_recent が TypeError にならず timestamp 順になる。"""
+        player_id = PlayerId(10)
+        naive_dt = ObservationEntry(
+            occurred_at=datetime(2025, 3, 1, 18, 0, 0),
+            output=ObservationOutput(
+                prose="n", structured={}, observation_category="self_only"
+            ),
+        )
+        utc_dt = ObservationEntry(
+            occurred_at=datetime(2025, 3, 2, 0, 0, 0, tzinfo=timezone.utc),
+            output=ObservationOutput(
+                prose="u", structured={}, observation_category="self_only"
+            ),
+        )
+        memory.append(player_id, utc_dt)
+        memory.append(player_id, naive_dt)
+        recent = memory.get_recent(player_id, 10)
+        stamps = tuple(e.occurred_at.timestamp() for e in recent)
+        assert stamps == tuple(sorted(stamps, reverse=True))
 
     def test_init_max_entries_zero_raises_value_error(self):
         """max_entries_per_player が 0 以下で ValueError"""
