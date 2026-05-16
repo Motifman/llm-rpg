@@ -25,6 +25,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectInteractedEvent,
     SpotObjectStateChangedEvent,
     SpotPlayerStateChangedInSpotEvent,
+    SpotSoundHeardEvent,
 )
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -75,11 +76,14 @@ def _make_strategy(entity_spot_mapping: dict) -> SpotGraphRecipientStrategy:
         all_player_ids.add(eid)
 
     statuses = []
+    by_id: dict[int, object] = {}
     for pid in all_player_ids:
         status = MagicMock()
         status.player_id = PlayerId(pid)
         statuses.append(status)
+        by_id[pid] = status
     player_status_repo.find_all.return_value = statuses
+    player_status_repo.find_by_id.side_effect = lambda pid: by_id.get(pid.value)
 
     return SpotGraphRecipientStrategy(
         observed_event_registry=registry,
@@ -254,6 +258,92 @@ class TestSpotPlayerStateChangedInSpot:
         assert 1 not in ids
         assert 2 in ids
         assert 3 not in ids
+
+
+class TestSpotSoundHeardRecipientResolution:
+    """SpotSoundHeardEvent は entity_id 本人 (player) にだけ届ける。"""
+
+    def _make_with_sound_event(self, entity_spot_mapping: dict):
+        """SpotSoundHeardEvent も registry に含めた strategy を返す。"""
+        registry_map = {SpotSoundHeardEvent: "spot_graph"}
+        registry = ObservedEventRegistry(event_to_strategy=registry_map)
+
+        graph = MagicMock()
+        graph.entity_spot_mapping.return_value = {
+            EntityId.create(eid): SpotId(sid)
+            for eid, sid in entity_spot_mapping.items()
+        }
+        repo = MagicMock()
+        repo.find_graph.return_value = graph
+
+        player_status_repo = MagicMock()
+        statuses = []
+        by_id: dict[int, object] = {}
+        for pid in entity_spot_mapping:
+            status = MagicMock()
+            status.player_id = PlayerId(pid)
+            statuses.append(status)
+            by_id[pid] = status
+        player_status_repo.find_all.return_value = statuses
+        player_status_repo.find_by_id.side_effect = (
+            lambda pid: by_id.get(pid.value)
+        )
+
+        return SpotGraphRecipientStrategy(
+            observed_event_registry=registry,
+            spot_graph_repository=repo,
+            player_status_repository=player_status_repo,
+        )
+
+    def test_known_player_entity_に届く(self):
+        """entity_id が known player なら recipient に含まれる。"""
+        strategy = self._make_with_sound_event({1: 1, 2: 1})
+        event = SpotSoundHeardEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            source_spot_id=SPOT_A,
+            intensity="MODERATE",
+            ambient_description="川のせせらぎ",
+        )
+        recipients = strategy.resolve(event)
+        ids = {p.value for p in recipients}
+        assert ids == {1}
+
+    def test_unknown_entity_には届かない(self):
+        """player として登録されていない entity_id は recipient に含まれない。
+
+        monster の `EntityId` を渡したケースを想定。
+        """
+        strategy = self._make_with_sound_event({1: 1})
+        event = SpotSoundHeardEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_2,  # 2 は player として未登録
+            spot_id=SPOT_A,
+            source_spot_id=SPOT_A,
+            intensity="FAINT",
+            ambient_description=None,
+        )
+        recipients = strategy.resolve(event)
+        assert recipients == []
+
+    def test_他のplayerには漏れない(self):
+        """同じ spot に居る他 player には届かない (本人だけ)。"""
+        strategy = self._make_with_sound_event({1: 1, 2: 1, 3: 1})
+        event = SpotSoundHeardEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            source_spot_id=SPOT_A,
+            intensity="LOUD",
+            ambient_description=None,
+        )
+        recipients = strategy.resolve(event)
+        ids = {p.value for p in recipients}
+        assert ids == {1}
 
 
 class TestSupports:

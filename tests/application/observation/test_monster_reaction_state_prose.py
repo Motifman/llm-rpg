@@ -33,6 +33,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterRespondedToPackHelpInSpotEvent,
     MonsterStartedChasingInSpotEvent,
     MonsterStartedFleeingInSpotEvent,
+    SpotSoundHeardEvent,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
@@ -303,6 +304,78 @@ class TestPackAwarenessAlertProse:
         assert "迷子のうさぎ" in result.prose
         assert result.structured["target_monster_id"] == 303
         assert result.structured["target_player_id"] is None
+
+
+class TestSpotSoundHeardProse:
+    """SpotSoundHeardEvent の prose 生成 (Phase 5)。"""
+
+    def test_自分宛_MODERATE_with_ambient(
+        self, formatter: SpotGraphObservationFormatter,
+    ) -> None:
+        ev = SpotSoundHeardEvent.create(
+            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(PLAYER_1.value),
+            spot_id=SPOT_A,
+            source_spot_id=SPOT_A,
+            intensity="MODERATE",
+            ambient_description="川のせせらぎ",
+        )
+        result = formatter.format(ev, PLAYER_1)
+        assert result is not None
+        assert "川のせせらぎ" in result.prose
+        assert "聞こえる" in result.prose
+        assert result.observation_category == "environment"
+        # MODERATE は turn 誘発しない
+        assert result.schedules_turn is False
+
+    def test_LOUD_は_turn_誘発(
+        self, formatter: SpotGraphObservationFormatter,
+    ) -> None:
+        ev = SpotSoundHeardEvent.create(
+            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(PLAYER_1.value),
+            spot_id=SPOT_A,
+            source_spot_id=SPOT_A,
+            intensity="LOUD",
+            ambient_description="戦闘音",
+        )
+        result = formatter.format(ev, PLAYER_1)
+        assert result is not None
+        assert "大きな音" in result.prose
+        assert "戦闘音" in result.prose
+        # LOUD は緊急性ありで turn 誘発
+        assert result.schedules_turn is True
+
+    def test_隣接_spot_の_音_は_漏れ聞こえる_prose(
+        self, formatter: SpotGraphObservationFormatter,
+    ) -> None:
+        """source_spot_id != spot_id なら「隣の spot から漏れ聞こえる」表現。"""
+        ev = SpotSoundHeardEvent.create(
+            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(PLAYER_1.value),
+            spot_id=SPOT_A,
+            source_spot_id=SpotId(99),  # 別 spot
+            intensity="FAINT",
+            ambient_description=None,
+        )
+        result = formatter.format(ev, PLAYER_1)
+        assert result is not None
+        assert "漏れ聞こえる" in result.prose
+        assert result.structured["is_adjacent"] is True
+
+    def test_他_player_宛_は_None_を_返す(
+        self, formatter: SpotGraphObservationFormatter,
+    ) -> None:
+        """entity_id が recipient と異なれば None (受信者ガード)。"""
+        ev = SpotSoundHeardEvent.create(
+            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(PLAYER_TARGET.value),  # 別 player
+            spot_id=SPOT_A,
+            source_spot_id=SPOT_A,
+            intensity="MODERATE",
+        )
+        result = formatter.format(ev, PLAYER_1)
+        assert result is None
 
 
 class TestAbandonedChaseProse:
