@@ -12,6 +12,7 @@ from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
@@ -22,6 +23,7 @@ _ESCAPE_INNER_THOUGHT_REQUIRED: FrozenSet[str] = frozenset(
         TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
         TOOL_NAME_SPOT_GRAPH_EXPLORE,
         TOOL_NAME_SPOT_GRAPH_INTERACT,
+        TOOL_NAME_SPOT_GRAPH_LISTEN,
         TOOL_NAME_SPOT_GRAPH_WAIT,
     }
 )

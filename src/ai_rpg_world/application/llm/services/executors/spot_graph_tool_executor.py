@@ -14,6 +14,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
@@ -113,6 +114,7 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION: self._prepare_action,
             TOOL_NAME_SPOT_GRAPH_USE_ITEM: self._use_item,
             TOOL_NAME_SPOT_GRAPH_ATTACK: self._attack,
+            TOOL_NAME_SPOT_GRAPH_LISTEN: self._listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
         }
 
@@ -438,6 +440,47 @@ class SpotGraphToolExecutor:
             monster_repository=self._monster_repository,
             player_status_repository=self._player_status_repository,
         )
+
+    def _listen(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        """`spot_graph_listen`: 自 spot + 隣接 spot (1 hop 減衰) の環境音を観測する。
+
+        Phase 5 PR-2。`SpotGraphAggregate.emit_listen_carefully` に
+        集約された 1 hop 伝搬モデルで `SpotSoundHeardEvent` を発火し、
+        recipient strategy 経由で本人にだけ届ける (observer pipeline で
+        formatter が prose を組み立てる)。
+
+        本ハンドラは state を変更しないため `save(graph)` は呼ばない。
+        event は graph aggregate に積まれるので `get_events()` で抜き、
+        `event_publisher.publish_all` で publish する。
+        """
+        if self._spot_graph_repository is None or self._event_publisher is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="listen は現在のワイヤリングでは未対応です。",
+                error_code="UNSUPPORTED_TOOL",
+            )
+        try:
+            graph = self._spot_graph_repository.find_graph()
+            entity_id = EntityId.create(player_id)
+            graph.emit_listen_carefully(entity_id)
+            events = list(graph.get_events())
+            graph.clear_events()
+            if events:
+                self._event_publisher.publish_all(events)
+                base = (
+                    "耳を澄ました。周囲の音が観測として届いた。"
+                    if len(events) == 1
+                    else f"耳を澄ました。{len(events)} 箇所からの音が観測として届いた。"
+                )
+            else:
+                # 全 spot が SILENT、または減衰しきって聞こえない場合
+                base = "耳を澄ましたが、何も聞こえなかった。"
+            return LlmCommandResultDto(
+                success=True,
+                message=append_inner_thought_to_message(base, args),
+            )
+        except Exception as e:
+            return exception_result(e)
 
     def _wait(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         del player_id
