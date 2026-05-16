@@ -332,13 +332,64 @@ class SpotGraphAggregate(AggregateRoot):
         """spot の sound_intensity が SILENT 以外なら SpotSoundHeardEvent を発火。
 
         Phase 5: 入場 / 移動時の受動的な環境音観測。`source_spot_id == spot_id`
-        (自分が居る spot から聞こえる音) として発火する。将来の「耳を澄ます」
-        ツール (PR-2) では隣接 spot を音源にして同じ event を発火する。
+        (自分が居る spot から聞こえる音) として発火する。PR-2 の
+        `emit_listen_carefully` も同じ helper を共有することで、減衰なし発火
+        の挙動を一箇所に集約する。
         """
-        node = self._spots.get(spot_id)
+        self._emit_sound_heard(entity_id, spot_id, spot_id)
+
+    def emit_listen_carefully(self, entity_id: EntityId) -> None:
+        """「耳を澄ます」ツール (Phase 5 PR-2) の event 発火。
+
+        entity が居る spot および全隣接 spot (1 hop) の sound_intensity を
+        観測する `SpotSoundHeardEvent` を `add_event` する。
+
+        伝搬モデル:
+        - 自 spot: `SoundIntensityEnum` をそのまま (減衰なし)
+        - 隣接 spot: `attenuate(1)` で 1 段階下げる
+        - 減衰結果が SILENT になった spot は event 発火しない (聞こえない)
+        - 隣接 spot の重複 (複数 connection で同 spot に繋がる場合) は dedup
+
+        通行可否は無視 (壁越し / 閉じた扉越しでも音は届く)。接続種別による
+        減衰補正は将来 PR のスコープ。
+
+        Raises:
+            EntityNotInGraphException: entity が graph 上に配置されていない
+        """
+        current_spot = self.get_entity_spot(entity_id)
+        self._emit_sound_heard(entity_id, current_spot, current_spot)
+
+        seen_adjacent: set = set()
+        for conn in self.iter_outgoing_connections_from(current_spot):
+            adj_spot = conn.to_spot_id
+            if adj_spot == current_spot or adj_spot in seen_adjacent:
+                continue
+            seen_adjacent.add(adj_spot)
+            self._emit_sound_heard(
+                entity_id,
+                listener_spot_id=current_spot,
+                source_spot_id=adj_spot,
+                attenuation_hops=1,
+            )
+
+    def _emit_sound_heard(
+        self,
+        entity_id: EntityId,
+        listener_spot_id: SpotId,
+        source_spot_id: SpotId,
+        attenuation_hops: int = 0,
+    ) -> None:
+        """source_spot の sound_intensity を attenuate して event を発火する。
+
+        - 音源 spot 自体が無い / atmosphere 無し → 何もしない
+        - 減衰後 SILENT → 何もしない (聞こえないので observation 不要)
+        """
+        node = self._spots.get(source_spot_id)
         if node is None or node.atmosphere is None:
             return
         intensity = node.atmosphere.sound_intensity
+        if attenuation_hops > 0:
+            intensity = intensity.attenuate(attenuation_hops)
         if intensity == SoundIntensityEnum.SILENT:
             return
         self.add_event(
@@ -346,8 +397,8 @@ class SpotGraphAggregate(AggregateRoot):
                 aggregate_id=self._graph_id,
                 aggregate_type="SpotGraphAggregate",
                 entity_id=entity_id,
-                spot_id=spot_id,
-                source_spot_id=spot_id,
+                spot_id=listener_spot_id,
+                source_spot_id=source_spot_id,
                 intensity=intensity.value,
                 ambient_description=node.atmosphere.sound_ambient,
             )
