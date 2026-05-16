@@ -14,11 +14,48 @@ Why a presentation-layer loop:
     FastAPI lifespan) rather than a domain or application concern.
 
 Concurrency note:
-    The loop runs in the same asyncio event loop as FastAPI request
-    handlers. ``advance_tick()`` is synchronous and currently fast (in-
-    memory repositories, no I/O). If it ever becomes slow we should
-    offload it via ``run_in_executor``; for now keeping things synchronous
-    keeps reasoning simple and avoids races on the in-memory state.
+    Issue #154 reported that synchronous LLM I/O (litellm.completion) inside
+    ``advance_tick()`` blocked the event loop for seconds at a time, so
+    HTTP routes and WebSocket pushes stalled during ticks (wall-clock 2.82×
+    expected). To keep the event loop responsive, this loop **offloads
+    ``advance_tick()`` to ``asyncio.run_in_executor``** (default thread
+    pool). Each tick interval runs sessions sequentially within the worker
+    thread; cross-session parallelism is deferred (would need per-session
+    locking against HTTP handlers that mutate the same in-memory state).
+
+    Trade-off (read carefully): HTTP handlers and tick now run on
+    different threads. Single Python dict / set / list ops are GIL-atomic,
+    but **compound operations are not**. Known compound-op sites that can
+    race with tick at demo scale:
+
+    - ``runtime_manager.py:971-972``: ``self._chat_histories.setdefault(
+      key, []).append(message)`` (chat write)
+    - ``runtime_manager.py:962``: ``state.pending_llm_turns.add(value)``
+      followed by tick draining the same set in
+      ``llm_turn_trigger.run_scheduled_turns()``
+
+    At single-session demo scale (Issue #154) these races are unlikely to
+    manifest. The safe upgrade path is a per-session ``threading.Lock``
+    shared between tick and route handlers — the seam is intentionally
+    narrow so that the future change touches only this file plus
+    ``runtime_manager.py``.
+
+Executor pool sharing:
+    ``run_in_executor(None, ...)`` uses the default ``ThreadPoolExecutor``
+    which CPython sizes at ``min(32, os.cpu_count() + 4)``. FastAPI's sync
+    route handlers also borrow from this pool. With 1 tick task in flight
+    contention is negligible, but heavy sync routes + many sessions could
+    starve the pool — at that point, build a dedicated executor for tick
+    and inject it.
+
+Stop semantics:
+    ``stop()`` cancels the asyncio task wrapping the executor call, but the
+    underlying worker thread keeps running until its current
+    ``advance_tick`` completes. Python's interpreter exit handles thread
+    cleanup via ``ThreadPoolExecutor.shutdown(wait=False)``, so this is
+    benign for game-server shutdown. Tests that re-create loops within a
+    process should not depend on the thread being gone immediately after
+    ``stop()`` returns.
 """
 
 from __future__ import annotations
@@ -60,6 +97,9 @@ class SimulationTickLoop:
     interval_seconds: float = 1.0
     _task: Optional[asyncio.Task[None]] = field(default=None, init=False, repr=False)
     _stop_event: Optional[asyncio.Event] = field(default=None, init=False, repr=False)
+    # NOTE: mutated only from the executor thread inside
+    # `_tick_all_running_sessions`. If a future change exposes it to the
+    # event loop (e.g. a health endpoint reads it), guard with a lock.
     _consecutive_failures: dict[str, int] = field(
         default_factory=dict, init=False, repr=False
     )
@@ -118,17 +158,19 @@ class SimulationTickLoop:
             raise RuntimeError(
                 "_run() called without a stop event; use start() instead"
             )
+        loop = asyncio.get_running_loop()
         logger.info(
             "Spot graph tick loop started: interval=%.3fs",
             self.interval_seconds,
         )
         try:
             while not stop_event.is_set():
-                # NOTE: advance_tick runs before sleep — if it ever becomes
-                # slow (>10ms), offload via run_in_executor so the cadence
-                # stays close to interval_seconds. Currently all runtimes
-                # operate on in-memory state so the cost is negligible.
-                self._tick_all_running_sessions()
+                # advance_tick は LLM 同期 I/O を含むため event loop を直接
+                # ブロックしないよう default thread pool に offload する。
+                # これで tick 中も HTTP/WebSocket がレスポンスを返せる。
+                await loop.run_in_executor(
+                    None, self._tick_all_running_sessions
+                )
                 try:
                     await asyncio.wait_for(
                         stop_event.wait(),
