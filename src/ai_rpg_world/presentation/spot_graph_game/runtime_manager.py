@@ -119,6 +119,47 @@ class _EscapeSpawnAllPlayersLlmResolver(ILLMPlayerResolver):
         return player_id.value in self.spawn_player_ids
 
 
+# ──────────────────────────────────────────────────────────────────
+# F1: 失敗 message に有効ラベル一覧を埋め込むためのヘルパー群。
+# LLM (Gemma 4 / gpt-5-mini 両方で観測) は ``object_label`` 等に display
+# name (例: ``"操作盤"``) を渡してしまい INVALID_TARGET_LABEL で失敗を
+# 繰り返す癖がある。失敗 message に valid ラベル一覧 (例: ``OBJ1 (操作盤)``)
+# を載せると、次の試行で正しい label を選べるようになる。Issue #154 デモ
+# 報告の F1 対応。
+# ──────────────────────────────────────────────────────────────────
+
+
+def _list_targets_of_kind(targets: Dict[str, Any], kind: str) -> str:
+    """``targets`` の dict から指定 kind の項目を ``"L1 (display) / L2 (...)"``
+    形式の文字列で返す。空なら空文字列。
+
+    LLM 向けに **ラベルを先頭**、display name を括弧内に置く順序にする
+    (LLM が ``object_label`` に何を入れるべきかを最初に目に入れるため)。
+    """
+    items = []
+    for label, target in targets.items():
+        if getattr(target, "kind", None) != kind:
+            continue
+        display = getattr(target, "display_name", "") or ""
+        items.append(f"{label} ({display})" if display else label)
+    return " / ".join(items)
+
+
+def _list_object_labels(targets: Dict[str, Any]) -> str:
+    """interact 系の object_label 候補を列挙。"""
+    return _list_targets_of_kind(targets, "spot_graph_object")
+
+
+def _list_destination_labels(targets: Dict[str, Any]) -> str:
+    """travel_to の destination_label 候補を列挙。"""
+    return _list_targets_of_kind(targets, "spot_graph_destination")
+
+
+def _list_player_labels(targets: Dict[str, Any]) -> str:
+    """whisper の target_label 候補 (同 spot の他プレイヤー)。"""
+    return _list_targets_of_kind(targets, "spot_graph_player")
+
+
 def _safe_get_str(mapper: Any, namespace: str, numeric_id: int) -> str:
     """Return the string ID for *numeric_id*, falling back to str(numeric_id)."""
     try:
@@ -378,11 +419,22 @@ class _EscapeGameLlmWiring:
         targets = getattr(runtime_context, "targets", {})
         if name == TOOL_NAME_SPOT_GRAPH_EXPLORE:
             result = self.runtime.do_explore(player_id)
-            message = (
-                "新しい発見はなかった"
-                if not result.discovery_descriptions
-                else "発見: " + " / ".join(result.discovery_descriptions)
-            )
+            if result.discovery_descriptions:
+                message = "発見: " + " / ".join(result.discovery_descriptions)
+            else:
+                # F2: 「新しい発見はなかった」だけだと LLM が「部屋に何もない」
+                # と誤解し interact しなくなる癖がある。spot view に既に表示
+                # されている可視オブジェクトを併記して、LLM の "見えない"
+                # 誤認を防ぐ。
+                visible_objects = _list_object_labels(targets)
+                if visible_objects:
+                    message = (
+                        "新しい発見はなかった。"
+                        f"既に見えているオブジェクト: {visible_objects} "
+                        "(interact するにはこのラベルを object_label に指定する)"
+                    )
+                else:
+                    message = "新しい発見はなかった (この場所に interactable なオブジェクトは無い)"
             return with_inner_thought_empty_warning(
                 name, arguments, LlmCommandResultDto(success=True, message=message)
             )
@@ -391,11 +443,21 @@ class _EscapeGameLlmWiring:
             label = str(arguments.get("destination_label", ""))
             target = targets.get(label)
             if target is None or target.spot_id is None:
+                # F1: 失敗時に有効ラベルを列挙して LLM が次の試行で正しい値を
+                # 選べるようにする (前回は message に valid 一覧が無く同じ
+                # 失敗を繰り返していた)。
+                valid_destinations = _list_destination_labels(targets)
                 return LlmCommandResultDto(
                     success=False,
-                    message=f"移動先ラベルが見つかりません: {label}",
+                    message=(
+                        f"移動先ラベルが見つかりません: {label}。"
+                        f"有効な destination_label: {valid_destinations or '(この場所からの移動先なし)'}"
+                    ),
                     error_code="INVALID_DESTINATION_LABEL",
-                    remediation="現在の状況に表示された接続先ラベルを指定してください。",
+                    remediation=(
+                        "destination_label には現在の状況に表示された S1, S2 等の "
+                        "ラベル (display name ではなく) を指定してください。"
+                    ),
                 )
             destination_id = self.runtime.id_mapper.get_str("spot", target.spot_id)
             self.runtime.do_move(player_id, destination_id)
@@ -413,11 +475,23 @@ class _EscapeGameLlmWiring:
             action_name = str(arguments.get("action_name", ""))
             target = targets.get(label)
             if target is None or target.world_object_id is None:
+                # F1: 失敗時に有効ラベルを列挙。Issue #154 デモで Gemma 4 /
+                # gpt-5-mini ともに ``object_label="操作盤"`` (display name)
+                # を使い続けて同じ失敗を繰り返した。実際には ``OBJ1`` が
+                # 正しい label。message で valid 一覧を見せて次の試行で
+                # 正しい値が選べるようにする。
+                valid_objects = _list_object_labels(targets)
                 return LlmCommandResultDto(
                     success=False,
-                    message=f"オブジェクトラベルが見つかりません: {label}",
+                    message=(
+                        f"オブジェクトラベルが見つかりません: {label}。"
+                        f"有効な object_label: {valid_objects or '(この場所に interactable なオブジェクトなし)'}"
+                    ),
                     error_code="INVALID_TARGET_LABEL",
-                    remediation="現在の状況に表示されたオブジェクトラベルを指定してください。",
+                    remediation=(
+                        "object_label には現在の状況に表示された OBJ1, OBJ2 等の "
+                        "ラベル (display name ではなく) を指定してください。"
+                    ),
                 )
             object_id = self.runtime.id_mapper.get_str("object", target.world_object_id)
             result = self.runtime.do_interact(player_id, object_id, action_name)
@@ -493,10 +567,24 @@ class _EscapeGameLlmWiring:
             target_label = str(arguments.get("target_label", ""))
             target = targets.get(target_label)
             if not content or target is None or target.player_id is None:
+                # F1: 失敗時の診断性向上。content 空 / 宛先未解決のどちらの
+                # 失敗かを明示し、宛先 (player) 候補を列挙する。
+                if not content:
+                    detail = "content が空です。"
+                else:
+                    valid_players = _list_player_labels(targets)
+                    detail = (
+                        f"target_label={target_label!r} が見つかりません。"
+                        f"有効な target_label: {valid_players or '(同 spot に他プレイヤーなし)'}"
+                    )
                 return LlmCommandResultDto(
                     success=False,
-                    message="囁きの宛先または内容が不正です。",
+                    message=f"囁きを送れませんでした: {detail}",
                     error_code="INVALID_WHISPER",
+                    remediation=(
+                        "target_label には現在の状況に表示された P1, P2 等の "
+                        "ラベル (display name ではなく) を指定してください。"
+                    ),
                 )
             self._append_agent_speech(
                 player_id,
