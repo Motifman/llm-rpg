@@ -47,6 +47,7 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "MISSING_CURRENT_AREA": "現在地がロケーションエリアに含まれていません。ギルドはロケーション内で作成してください。",
     "MISSING_GUILD_NAME": "ギルド名を指定してください。",
     "INVALID_ROLE": "役職は leader / officer / member のいずれかを指定してください。",
+    "ACTIVE_APP_CONFLICT": "既に別アプリ (SNS / 取引所など) を開いています。exit してから再度 enter してください。",
 }
 
 
