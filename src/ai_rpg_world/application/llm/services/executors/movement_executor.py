@@ -65,6 +65,44 @@ class MovementToolExecutor:
         self._movement_service = movement_service
         self._pursuit_service = pursuit_service
 
+    @staticmethod
+    def _move_result_to_llm_dto(
+        result: MoveResultDto, *, default_error_code: str = "MOVEMENT_FAILED"
+    ) -> LlmCommandResultDto:
+        """``MoveResultDto`` を LLM 向け DTO に変換する。
+
+        失敗時 (``success=False``) は ``error_code`` / ``remediation`` を必ず
+        付ける (Issue #168)。``MoveResultDto`` 側に ``error_code`` フィールドが
+        無いため、入口で ``default_error_code`` (ツール別) にフォールバックする。
+        """
+        if result.success:
+            return LlmCommandResultDto(success=True, message=result.message)
+        return LlmCommandResultDto(
+            success=False,
+            message=result.error_message or result.message,
+            error_code=default_error_code,
+            remediation=get_remediation(default_error_code),
+        )
+
+    @staticmethod
+    def _pursuit_result_to_llm_dto(
+        result: PursuitCommandResultDto,
+        *,
+        default_error_code: str = "PURSUIT_FAILED",
+    ) -> LlmCommandResultDto:
+        """``PursuitCommandResultDto`` → LLM 向け DTO。no_op は成功扱いを継承。"""
+        if result.success:
+            return LlmCommandResultDto(
+                success=True, message=result.message, was_no_op=result.no_op
+            )
+        return LlmCommandResultDto(
+            success=False,
+            message=result.message,
+            error_code=default_error_code,
+            remediation=get_remediation(default_error_code),
+            was_no_op=result.no_op,
+        )
+
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。"""
         result: Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]] = {
@@ -109,9 +147,8 @@ class MovementToolExecutor:
                 target_location_area_id=target_location_area_id_opt,
                 target_world_object_id=target_world_object_id_opt,
             )
-            return LlmCommandResultDto(
-                success=result.success,
-                message=result.message if result.success else (result.error_message or result.message),
+            return self._move_result_to_llm_dto(
+                result, default_error_code="MOVEMENT_FAILED"
             )
         except Exception as e:
             error_code = getattr(e, "error_code", "SYSTEM_ERROR")
@@ -139,9 +176,8 @@ class MovementToolExecutor:
             result: MoveResultDto = self._movement_service.move_tile(
                 MoveTileCommand(player_id=player_id, direction=direction)
             )
-            return LlmCommandResultDto(
-                success=result.success,
-                message=result.message if result.success else (result.error_message or result.message),
+            return self._move_result_to_llm_dto(
+                result, default_error_code="MOVEMENT_INVALID"
             )
         except Exception as e:
             error_code = getattr(e, "error_code", "SYSTEM_ERROR")
@@ -162,9 +198,8 @@ class MovementToolExecutor:
             result: MoveResultDto = self._movement_service.cancel_movement(
                 CancelMovementCommand(player_id=player_id)
             )
-            return LlmCommandResultDto(
-                success=result.success,
-                message=result.message if result.success else (result.error_message or result.message),
+            return self._move_result_to_llm_dto(
+                result, default_error_code="MOVEMENT_FAILED"
             )
         except Exception as e:
             error_code = getattr(e, "error_code", "SYSTEM_ERROR")
@@ -194,10 +229,8 @@ class MovementToolExecutor:
                     ),
                 )
             )
-            return LlmCommandResultDto(
-                success=result.success,
-                message=result.message,
-                was_no_op=result.no_op,
+            return self._pursuit_result_to_llm_dto(
+                result, default_error_code="PURSUIT_START_FAILED"
             )
         except Exception as e:
             return exception_result(e)
@@ -214,10 +247,8 @@ class MovementToolExecutor:
             result: PursuitCommandResultDto = self._pursuit_service.cancel_pursuit(
                 CancelPursuitCommand(player_id=player_id)
             )
-            return LlmCommandResultDto(
-                success=result.success,
-                message=result.message,
-                was_no_op=result.no_op,
+            return self._pursuit_result_to_llm_dto(
+                result, default_error_code="PURSUIT_CANCEL_FAILED"
             )
         except Exception as e:
             return exception_result(e)
