@@ -266,6 +266,105 @@ class TestConnectionStateChanged:
         assert result is not None
         assert "通行不能" in result.prose
 
+    def test_default_cause_uses_plain_prose(self, formatter):
+        """既定の UNKNOWN cause では従来通り素朴な prose (後方互換)。"""
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=False,
+        )
+        result = formatter.format(event, PLAYER_1)
+        assert result is not None
+        # 既存挙動: 「ガチャッと」「ひとりでに」等のオノマトペは付かない
+        assert "ガチャッと" not in result.prose
+        assert "ひとりでに" not in result.prose
+
+    def test_actor_action_cause_yields_active_onomatopoeia(self, formatter):
+        """Issue #180: actor 由来は「ガチャッと」で能動感を伝える。"""
+        from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+            PassageChangeCauseEnum,
+        )
+
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=False,
+            cause=PassageChangeCauseEnum.ACTOR_ACTION,
+        )
+        result = formatter.format(event, PLAYER_1)
+        assert result is not None
+        assert "ガチャッと" in result.prose
+        assert "通行不能" in result.prose
+        # 「誰が」は秘匿される
+        assert result.structured["cause"] == "ACTOR_ACTION"
+
+    def test_reactive_cause_yields_passive_onomatopoeia(self, formatter):
+        """Issue #180: reactive_binding 由来は「ひとりでに」で自動感を伝える。"""
+        from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+            PassageChangeCauseEnum,
+        )
+
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=False,
+            cause=PassageChangeCauseEnum.REACTIVE,
+        )
+        result = formatter.format(event, PLAYER_1)
+        assert result is not None
+        assert "ひとりでに" in result.prose
+        assert "通行不能" in result.prose
+        assert result.structured["cause"] == "REACTIVE"
+
+    def test_synchronized_action_cause_yields_linked_prose(self, formatter):
+        """SYNCHRONIZED_ACTION 由来は「連動して」と表現される。"""
+        from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+            PassageChangeCauseEnum,
+        )
+
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=True,
+            cause=PassageChangeCauseEnum.SYNCHRONIZED_ACTION,
+        )
+        result = formatter.format(event, PLAYER_1)
+        assert result is not None
+        assert "連動" in result.prose
+        assert result.structured["cause"] == "SYNCHRONIZED_ACTION"
+
+    def test_scenario_event_cause_yields_distinct_prose(self, formatter):
+        """SCENARIO_EVENT 由来は「何かの拍子に」と表現される。"""
+        from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+            PassageChangeCauseEnum,
+        )
+
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=False,
+            cause=PassageChangeCauseEnum.SCENARIO_EVENT,
+        )
+        result = formatter.format(event, PLAYER_1)
+        assert result is not None
+        assert "何かの拍子" in result.prose
+        assert result.structured["cause"] == "SCENARIO_EVENT"
+
 
 class TestSpotObjectStateChanged:
     def test_returns_environment(self, formatter):

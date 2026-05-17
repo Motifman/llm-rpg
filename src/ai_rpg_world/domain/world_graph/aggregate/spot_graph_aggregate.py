@@ -8,6 +8,9 @@ from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
+from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+    PassageChangeCauseEnum,
+)
 from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
     SoundIntensityEnum,
 )
@@ -417,11 +420,17 @@ class SpotGraphAggregate(AggregateRoot):
         )
 
     def set_connection_passage(
-        self, connection_id: ConnectionId, new_passage: Passage
+        self,
+        connection_id: ConnectionId,
+        new_passage: Passage,
+        *,
+        cause: PassageChangeCauseEnum = PassageChangeCauseEnum.UNKNOWN,
     ) -> None:
         """接続の Passage を新しい値に置換する。
 
         通行可否が変化した場合は ConnectionStateChangedEvent も発火する。
+        ``cause`` は変化の発生原因 (Issue #180)。default は UNKNOWN で
+        既存呼び出しは後方互換。
         """
         conn = self.get_connection(connection_id)
         prev_traversable = conn.passage.traversable
@@ -436,6 +445,7 @@ class SpotGraphAggregate(AggregateRoot):
                     from_spot_id=conn.from_spot_id,
                     to_spot_id=conn.to_spot_id,
                     traversable=new_conn.passage.traversable,
+                    cause=cause,
                 )
             )
 
@@ -446,6 +456,7 @@ class SpotGraphAggregate(AggregateRoot):
         *,
         traversable_override: Optional[bool] = None,
         sound_permeability_override: Optional[float] = None,
+        cause: PassageChangeCauseEnum = PassageChangeCauseEnum.UNKNOWN,
     ) -> None:
         """既存の Passage と同じ kind を維持したまま状態だけ遷移させる。"""
         conn = self.get_connection(connection_id)
@@ -454,7 +465,7 @@ class SpotGraphAggregate(AggregateRoot):
             traversable=traversable_override,
             sound_permeability=sound_permeability_override,
         )
-        self.set_connection_passage(connection_id, new_passage)
+        self.set_connection_passage(connection_id, new_passage, cause=cause)
 
     def remove_connection(self, connection_id: ConnectionId) -> None:
         """接続をグラフから完全に削除する。双方向の場合は逆方向も削除。"""

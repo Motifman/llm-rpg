@@ -24,6 +24,9 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPlayerStateChangedInSpotEvent,
     SpotPublicEffectObservedEvent,
 )
+from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+    PassageChangeCauseEnum,
+)
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
 )
@@ -110,14 +113,29 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             except Exception:
                 pass
 
-        if event.traversable:
-            prose = f"{conn_name}が通行可能になった。"
+        # Issue #180: cause で prose を分岐し、観測者が「能動 / 自動」を
+        # 推測できるようにする。誰が何のために行ったかは情報秘匿し、
+        # オノマトペで質感だけ伝える。
+        base = "通行可能になった" if event.traversable else "通行不能になった"
+        if event.cause == PassageChangeCauseEnum.ACTOR_ACTION:
+            # 能動操作 (interaction effect): 誰かが何かを操作した気配
+            prose = f"{conn_name}がガチャッと{base}。"
+        elif event.cause == PassageChangeCauseEnum.REACTIVE:
+            # reactive_passage_binding: 自動制御で勝手に変わった気配
+            prose = f"{conn_name}がひとりでに{base}。"
+        elif event.cause == PassageChangeCauseEnum.SYNCHRONIZED_ACTION:
+            # 協力ギミック (#13) の同期完了
+            prose = f"{conn_name}が連動して{base}。"
+        elif event.cause == PassageChangeCauseEnum.SCENARIO_EVENT:
+            # シナリオタイマ / scenario_events 由来
+            prose = f"{conn_name}が何かの拍子に{base}。"
         else:
-            prose = f"{conn_name}が通行不能になった。"
+            prose = f"{conn_name}が{base}。"
         structured = {
             "type": "connection_state_changed",
             "connection_name": conn_name,
             "traversable": event.traversable,
+            "cause": event.cause.value,
         }
         return ObservationOutput(
             prose=prose,

@@ -243,3 +243,46 @@ class TestReactivePassageBindingStage:
         loaded = repo.find_graph()
         assert loaded.get_connection(ConnectionId.create(10)).passage.state == "OPEN"
         assert loaded.get_connection(ConnectionId.create(11)).passage.state == "LOCKED"
+
+
+class TestReactivePassageBindingCause:
+    """Issue #180: reactive_passage_binding 経由の state 変化は
+    ConnectionStateChangedEvent.cause=REACTIVE で発火する。"""
+
+    def test_reactive_change_emits_event_with_reactive_cause(self) -> None:
+        """passage state を切り替えると cause=REACTIVE の event が graph に積まれる。"""
+        from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+            PassageChangeCauseEnum,
+        )
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            ConnectionStateChangedEvent,
+        )
+
+        graph = _build_relay_graph()
+        # 誰も control_room に居ない → predicate=NOT(PLAYER_AT_SPOT control_room) は True
+        not_at_control = ScenarioEventCondition(
+            condition_type="NOT",
+            children=(
+                ScenarioEventCondition(
+                    condition_type="PLAYER_AT_SPOT", spot_id=1,
+                ),
+            ),
+        )
+        # LOCKED 初期状態から OPEN に遷移する binding
+        binding = ReactivePassageBinding(
+            target_connection_id=ConnectionId.create(10),
+            predicate=not_at_control,
+            on_true_state="OPEN",
+            on_false_state="LOCKED",
+        )
+        stage, repo, _ = _build_stage(graph, bindings=(binding,))
+        stage.run(WorldTick(1))
+        loaded = repo.find_graph()
+        # traversable が変わったので event が積まれているはず
+        events = [
+            e for e in loaded.get_events()
+            if isinstance(e, ConnectionStateChangedEvent)
+        ]
+        assert len(events) == 1
+        assert events[0].cause == PassageChangeCauseEnum.REACTIVE
+        assert events[0].traversable is True

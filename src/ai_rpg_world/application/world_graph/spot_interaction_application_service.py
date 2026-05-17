@@ -26,6 +26,9 @@ from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
+from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+    PassageChangeCauseEnum,
+)
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -202,6 +205,7 @@ class SpotInteractionApplicationService:
                 spec.new_state,
                 traversable_override=spec.traversable_override,
                 sound_permeability_override=spec.sound_permeability_override,
+                cause=PassageChangeCauseEnum.ACTOR_ACTION,
             )
 
         if result.item_spec_ids_to_grant:
