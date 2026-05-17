@@ -8,7 +8,8 @@
     "difficulty": "easy",
     "estimated_ticks": 30,
     "author": "demo",
-    "tags": ["co-op", "relay", "reactive_binding", "control_panel"]
+    "tags": ["co-op", "relay", "reactive_binding", "control_panel"],
+    "llm_public_intro": "あなたたちは協力して『金庫室』へたどり着くことを目指している。制御室の操作盤と廊下の電子ロック扉が立ちはだかり、二人が同時に金庫室まで進む単純なやり方は通用しない。周囲の貼り紙・操作盤・扉の様子を観察し、役割分担と連携の手順を組み立てて進むこと。"
   },
   "item_specs": [],
   "environment": {
@@ -90,6 +91,28 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "operations_memo",
+            "name": "作戦メモ",
+            "description": "机に置かれた古びたメモ用紙。担当者の走り書きが残っている。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "メモを読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "メモ:『操作盤の電源を入れている間だけ、奥の金庫扉のロックが外れる。ただしこの制御室から人が完全に居なくなると安全装置で電源が切れる。誰かが制御室に残り、もう一方が金庫室まで進む役割分担が必要だ。』"
+                    }
+                  }
+                ]
+              }
+            ]
           }
         ]
       }
@@ -97,18 +120,68 @@
     {
       "id": "corridor",
       "name": "中央廊下",
-      "description": "制御室と金庫室を繋ぐ廊下。",
+      "description": "制御室と金庫室を繋ぐ廊下。両端の扉に方角案内板が貼られている。",
       "category": "OTHER",
       "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
-      "interior": {"objects": []}
+      "interior": {
+        "objects": [
+          {
+            "id": "corridor_signboard",
+            "name": "方角案内板",
+            "description": "廊下の壁に貼られた案内板。両端の部屋の案内が記されている。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "案内板を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "案内板:『← 制御室（操作盤）  /  金庫室 →（電子ロック扉。制御室の操作盤の電源が入っている間だけ通行可）』。下部に小さく『目的地: 金庫室。二人とも金庫室に到達すれば任務完了。』と書き添えられている。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "id": "vault",
       "name": "金庫室",
-      "description": "重厚な扉の奥にある秘密の部屋。",
+      "description": "重厚な扉の奥にある秘密の部屋。中央に到達確認用の記録装置が置かれている。",
       "category": "OTHER",
       "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
-      "interior": {"objects": []}
+      "interior": {
+        "objects": [
+          {
+            "id": "arrival_recorder",
+            "name": "到達記録装置",
+            "description": "金庫室の中央に据えられた装置。二人がここに揃ったことを記録する。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "装置を確認する",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "装置に銘板:『この金庫室に二人とも到達すれば任務完了。ここが本シナリオの目的地である。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     }
   ],
   "connections": [
