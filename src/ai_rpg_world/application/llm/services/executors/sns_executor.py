@@ -4,6 +4,7 @@ import logging
 from typing import Any, Callable, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 
 logger = logging.getLogger(__name__)
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
@@ -549,6 +550,8 @@ class SnsToolExecutor:
                     LlmCommandResultDto(
                         success=False,
                         message="post_ref が無効か、古い世代です。画面を再取得してください。",
+                        error_code="SNS_REF_STALE",
+                        remediation=get_remediation("SNS_REF_STALE"),
                     ),
                 )
             return post_id, None
@@ -571,6 +574,8 @@ class SnsToolExecutor:
                     LlmCommandResultDto(
                         success=False,
                         message="reply_ref が無効か、古い世代です。画面を再取得してください。",
+                        error_code="SNS_REF_STALE",
+                        remediation=get_remediation("SNS_REF_STALE"),
                     ),
                 )
             return reply_id, None
@@ -595,6 +600,8 @@ class SnsToolExecutor:
                     LlmCommandResultDto(
                         success=False,
                         message="notification_ref が無効か、古い世代です。画面を再取得してください。",
+                        error_code="SNS_REF_STALE",
+                        remediation=get_remediation("SNS_REF_STALE"),
                     ),
                 )
             return notification_id, None
@@ -617,6 +624,8 @@ class SnsToolExecutor:
                     LlmCommandResultDto(
                         success=False,
                         message="target_user_ref が無効か、古い世代です。画面を再取得してください。",
+                        error_code="SNS_REF_STALE",
+                        remediation=get_remediation("SNS_REF_STALE"),
                     ),
                 )
             return user_id, None
@@ -725,6 +734,8 @@ class SnsToolExecutor:
                     return LlmCommandResultDto(
                         success=False,
                         message="post_ref が無効か、古い世代です。画面を再取得してください。",
+                        error_code="SNS_REF_STALE",
+                        remediation=get_remediation("SNS_REF_STALE"),
                     )
                 sess.set_page_kind(player_id, SnsVirtualPageKind.POST_DETAIL)
                 sess.set_post_detail_root_post_id(player_id, pid)
@@ -750,6 +761,8 @@ class SnsToolExecutor:
                     return LlmCommandResultDto(
                         success=False,
                         message="profile_user_ref が無効か、古い世代です。",
+                        error_code="SNS_REF_STALE",
+                        remediation=get_remediation("SNS_REF_STALE"),
                     )
                 sess.set_page_kind(player_id, SnsVirtualPageKind.PROFILE)
                 sess.set_profile_target_user_id(player_id, uid)
@@ -761,7 +774,12 @@ class SnsToolExecutor:
                 return LlmCommandResultDto(success=True, message="通知一覧へ遷移しました。")
         except Exception as e:
             return exception_result(e)
-        return LlmCommandResultDto(success=False, message="未対応の画面です。")
+        return LlmCommandResultDto(
+            success=False,
+            message="未対応の画面です。",
+            error_code="SNS_PAGE_NOT_SUPPORTED",
+            remediation=get_remediation("SNS_PAGE_NOT_SUPPORTED"),
+        )
 
     def _execute_open_ref(
         self, player_id: int, args: Dict[str, Any]
@@ -792,12 +810,19 @@ class SnsToolExecutor:
                     return unknown_tool("リプライ参照を解決できません。")
                 r = self._reply_query_service.get_reply_by_id(rid, player_id)
                 if r is None:
-                    return LlmCommandResultDto(success=False, message="リプライが見つかりません。")
+                    return LlmCommandResultDto(
+                        success=False,
+                        message="リプライが見つかりません。",
+                        error_code="SNS_REF_STALE",
+                        remediation=get_remediation("SNS_REF_STALE"),
+                    )
                 root = r.parent_post_id
                 if root is None:
                     return LlmCommandResultDto(
                         success=False,
                         message="リプライの親投稿を特定できません。",
+                        error_code="SNS_REF_STALE",
+                        remediation=get_remediation("SNS_REF_STALE"),
                     )
                 sess.set_page_kind(player_id, SnsVirtualPageKind.POST_DETAIL)
                 sess.set_post_detail_root_post_id(player_id, root)
@@ -810,6 +835,8 @@ class SnsToolExecutor:
                     return LlmCommandResultDto(
                         success=False,
                         message="通知が見つからないか、一覧の範囲外です。",
+                        error_code="SNS_REF_STALE",
+                        remediation=get_remediation("SNS_REF_STALE"),
                     )
                 if n.related_post_id is not None:
                     sess.set_page_kind(player_id, SnsVirtualPageKind.POST_DETAIL)
@@ -828,7 +855,9 @@ class SnsToolExecutor:
                 if n.actor_user_id is None:
                     return LlmCommandResultDto(
                         success=False,
-                        message="この通知からは遷移できません。",
+                        message="この通知からは遷移できません (関連先が未設定)。",
+                        error_code="SNS_PAGE_NOT_SUPPORTED",
+                        remediation=get_remediation("SNS_PAGE_NOT_SUPPORTED"),
                     )
                 sess.set_page_kind(player_id, SnsVirtualPageKind.PROFILE)
                 sess.set_profile_target_user_id(player_id, n.actor_user_id)
@@ -839,6 +868,8 @@ class SnsToolExecutor:
         return LlmCommandResultDto(
             success=False,
             message="ref が解決できません。スナップショットを再取得し、有効な ref を指定してください。",
+            error_code="SNS_REF_STALE",
+            remediation=get_remediation("SNS_REF_STALE"),
         )
 
     def _execute_page_next(
@@ -867,7 +898,9 @@ class SnsToolExecutor:
         if st.page_kind != SnsVirtualPageKind.HOME:
             return LlmCommandResultDto(
                 success=False,
-                message="home 画面でのみタブを切り替えられます。",
+                message="home 画面でのみタブを切り替えられます。先に open_page(home) で home へ遷移してください。",
+                error_code="SNS_PAGE_NOT_SUPPORTED",
+                remediation=get_remediation("SNS_PAGE_NOT_SUPPORTED"),
             )
         try:
             self._sns_page_session.set_home_tab(player_id, tab)
