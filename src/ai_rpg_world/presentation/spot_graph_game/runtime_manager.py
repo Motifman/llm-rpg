@@ -365,6 +365,7 @@ class _EscapeGameLlmWiring:
             TOOL_NAME_SAY,
             TOOL_NAME_SPOT_GRAPH_EXPLORE,
             TOOL_NAME_SPOT_GRAPH_INTERACT,
+            TOOL_NAME_SPOT_GRAPH_LISTEN,
             TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
             TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
             TOOL_NAME_SPOT_GRAPH_WAIT,
@@ -427,6 +428,40 @@ class _EscapeGameLlmWiring:
                     success=True,
                     message="; ".join(result.messages) if result.messages else "完了",
                 ),
+            )
+
+        if name == TOOL_NAME_SPOT_GRAPH_LISTEN:
+            # tool catalog に LISTEN_DEFINITION があるのに dispatch が無く
+            # UNSUPPORTED_TOOL に化けていた配線漏れ (Issue #154 デモで観測) を
+            # 修正。runtime.do_listen が SpotSoundHeardEvent を発火し、
+            # observation pipeline で本人にだけ観測が届く (formatter が prose
+            # を構築するので、ここでは件数ベースのサマリだけ返す)。
+            try:
+                event_count = self.runtime.do_listen(player_id)
+            except Exception as exc:
+                logger.exception(
+                    "do_listen failed for player=%s", player_id.value
+                )
+                return LlmCommandResultDto(
+                    success=False,
+                    message=(
+                        "耳を澄ますに失敗しました。"
+                    ),
+                    error_code="LLM_TOOL_EXECUTION_FAILED",
+                    remediation="やり直すか別のツールを使ってください。",
+                )
+            if event_count == 0:
+                base_message = "耳を澄ましたが、何も聞こえなかった。"
+            elif event_count == 1:
+                base_message = "耳を澄ました。周囲の音が観測として届いた。"
+            else:
+                base_message = (
+                    f"耳を澄ました。{event_count} 箇所からの音が観測として届いた。"
+                )
+            return with_inner_thought_empty_warning(
+                name,
+                arguments,
+                LlmCommandResultDto(success=True, message=base_message),
             )
 
         if name == TOOL_NAME_SPOT_GRAPH_WAIT:

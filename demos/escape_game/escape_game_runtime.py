@@ -567,6 +567,29 @@ class EscapeGameRuntime:
         )
         return result
 
+    def do_listen(self, player_id: PlayerId) -> int:
+        """「耳を澄ます」: 自 spot + 隣接 spot の環境音観測を投入する。
+
+        ``SpotGraphAggregate.emit_listen_carefully`` で
+        ``SpotSoundHeardEvent`` を発火し、観測パイプラインで recipient
+        strategy がプレイヤー本人にだけ届ける (formatter が prose を組む)。
+
+        Returns:
+            発火した event 数 (= 観測が届いた spot の数)。「何も聞こえない」
+            ケース (全 spot SILENT または減衰しきり) は 0。
+        """
+        graph = self._spot_graph_repo.find_graph()
+        eid = EntityId.create(int(player_id))
+        # `add_event` は graph 集約内に積むだけで保存はしない。
+        # `_process_graph_events` が `get_events` で取り出して observation
+        # pipeline に流す。
+        graph.emit_listen_carefully(eid)
+        events = list(graph.get_events())
+        event_count = len(events)
+        # _process_graph_events 内部で clear するので、ここでは再取得しない。
+        self._process_graph_events()
+        return event_count
+
     def do_explore(self, player_id: PlayerId) -> SpotExplorationResultDto:
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotExploredEvent
         graph = self._spot_graph_repo.find_graph()
