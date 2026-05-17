@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeTargetDto
 from ai_rpg_world.application.llm.services.llm_client_stub import (
     StubLlmClient,
 )
@@ -61,10 +62,13 @@ def _create_relay_session(
     return state
 
 
-class _FakeTarget:
-    def __init__(self, kind: str, display_name: str) -> None:
-        self.kind = kind
-        self.display_name = display_name
+def _make_target(label: str, kind: str, display_name: str) -> ToolRuntimeTargetDto:
+    """テスト用ヘルパー: 必須フィールドだけ埋めた ``ToolRuntimeTargetDto``。
+
+    本番と同じ frozen dataclass を使うことで、helper の型契約が
+    ``ToolRuntimeTargetDto`` に固定されていることを保証する (review HIGH 反映)。
+    """
+    return ToolRuntimeTargetDto(label=label, kind=kind, display_name=display_name)
 
 
 class TestListTargetsHelpers:
@@ -73,9 +77,9 @@ class TestListTargetsHelpers:
     def test_lists_label_with_display_name(self) -> None:
         """ラベルを先頭、display name を括弧内に置く形式で出力する。"""
         targets = {
-            "OBJ1": _FakeTarget("spot_graph_object", "操作盤"),
-            "OBJ2": _FakeTarget("spot_graph_object", "コンソール"),
-            "S1": _FakeTarget("spot_graph_destination", "中央廊下"),
+            "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
+            "OBJ2": _make_target("OBJ2", "spot_graph_object", "コンソール"),
+            "S1": _make_target("S1", "spot_graph_destination", "中央廊下"),
         }
         result = _list_object_labels(targets)
         assert result == "OBJ1 (操作盤) / OBJ2 (コンソール)"
@@ -83,8 +87,8 @@ class TestListTargetsHelpers:
     def test_destination_helper_filters_by_kind(self) -> None:
         """destination 用 helper は object kind を含めない。"""
         targets = {
-            "OBJ1": _FakeTarget("spot_graph_object", "操作盤"),
-            "S1": _FakeTarget("spot_graph_destination", "中央廊下"),
+            "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
+            "S1": _make_target("S1", "spot_graph_destination", "中央廊下"),
         }
         result = _list_destination_labels(targets)
         assert result == "S1 (中央廊下)"
@@ -92,21 +96,21 @@ class TestListTargetsHelpers:
     def test_player_helper_filters_by_kind(self) -> None:
         """player 用 helper は player kind だけ列挙。"""
         targets = {
-            "P1": _FakeTarget("spot_graph_player", "B（侵入者）"),
-            "OBJ1": _FakeTarget("spot_graph_object", "操作盤"),
+            "P1": _make_target("P1", "spot_graph_player", "B（侵入者）"),
+            "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
         }
         result = _list_player_labels(targets)
         assert result == "P1 (B（侵入者）)"
 
     def test_empty_targets_returns_empty_string(self) -> None:
         """対応 kind が無いと空文字列を返す。"""
-        targets = {"S1": _FakeTarget("spot_graph_destination", "廊下")}
+        targets = {"S1": _make_target("S1", "spot_graph_destination", "廊下")}
         assert _list_object_labels(targets) == ""
         assert _list_player_labels(targets) == ""
 
     def test_unknown_kind_is_ignored(self) -> None:
         """未知 kind は出力に含めない (新 kind 追加時の安全側挙動)。"""
-        targets = {"X1": _FakeTarget("some_future_kind", "未来")}
+        targets = {"X1": _make_target("X1", "some_future_kind", "未来")}
         assert _list_targets_of_kind(targets, "spot_graph_object") == ""
 
 
@@ -172,13 +176,12 @@ class TestInvalidDestinationLabelMessage:
 class TestInvalidWhisperMessage:
     """INVALID_WHISPER の learnable message。"""
 
-    def test_failure_message_distinguishes_empty_content_from_unknown_target(
+    def test_failure_message_with_empty_content_shows_content_error(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """content 空のときは「content が空です」、宛先未解決のときは候補列挙。"""
-        # content 空のケース
+        """content 空のときは「content が空です」と明示し、原因を診断可能にする。"""
         stub_empty = StubLlmClient(
             tool_call_to_return={
                 "name": "speech_whisper",

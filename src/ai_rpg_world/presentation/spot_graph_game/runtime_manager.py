@@ -34,7 +34,10 @@ from ai_rpg_world.application.observation.services.observation_turn_scheduler im
 from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
     HeartbeatObservationEmitter,
 )
-from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.contracts.dtos import (
+    LlmCommandResultDto,
+    ToolRuntimeTargetDto,
+)
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     with_inner_thought_empty_warning,
 )
@@ -129,7 +132,9 @@ class _EscapeSpawnAllPlayersLlmResolver(ILLMPlayerResolver):
 # ──────────────────────────────────────────────────────────────────
 
 
-def _list_targets_of_kind(targets: Dict[str, Any], kind: str) -> str:
+def _list_targets_of_kind(
+    targets: Dict[str, ToolRuntimeTargetDto], kind: str
+) -> str:
     """``targets`` の dict から指定 kind の項目を ``"L1 (display) / L2 (...)"``
     形式の文字列で返す。空なら空文字列。
 
@@ -138,24 +143,30 @@ def _list_targets_of_kind(targets: Dict[str, Any], kind: str) -> str:
     """
     items = []
     for label, target in targets.items():
-        if getattr(target, "kind", None) != kind:
+        if target.kind != kind:
             continue
-        display = getattr(target, "display_name", "") or ""
+        display = target.display_name or ""
         items.append(f"{label} ({display})" if display else label)
     return " / ".join(items)
 
 
-def _list_object_labels(targets: Dict[str, Any]) -> str:
+def _list_object_labels(
+    targets: Dict[str, ToolRuntimeTargetDto],
+) -> str:
     """interact 系の object_label 候補を列挙。"""
     return _list_targets_of_kind(targets, "spot_graph_object")
 
 
-def _list_destination_labels(targets: Dict[str, Any]) -> str:
+def _list_destination_labels(
+    targets: Dict[str, ToolRuntimeTargetDto],
+) -> str:
     """travel_to の destination_label 候補を列挙。"""
     return _list_targets_of_kind(targets, "spot_graph_destination")
 
 
-def _list_player_labels(targets: Dict[str, Any]) -> str:
+def _list_player_labels(
+    targets: Dict[str, ToolRuntimeTargetDto],
+) -> str:
     """whisper の target_label 候補 (同 spot の他プレイヤー)。"""
     return _list_targets_of_kind(targets, "spot_graph_player")
 
@@ -430,8 +441,8 @@ class _EscapeGameLlmWiring:
                 if visible_objects:
                     message = (
                         "新しい発見はなかった。"
-                        f"既に見えているオブジェクト: {visible_objects} "
-                        "(interact するにはこのラベルを object_label に指定する)"
+                        f"既に見えているオブジェクト: {visible_objects}"
+                        " (interact するにはこのラベルを object_label に指定する)"
                     )
                 else:
                     message = "新しい発見はなかった (この場所に interactable なオブジェクトは無い)"
