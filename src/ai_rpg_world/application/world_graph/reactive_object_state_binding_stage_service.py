@@ -18,6 +18,9 @@ from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
 )
 from ai_rpg_world.application.world_graph.spot_object_lookup import find_object_with_owner
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    SpotObjectStateChangedEvent,
+)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
@@ -26,6 +29,9 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
 )
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
     ISpotInteriorRepository,
+)
+from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+    StateDeltaEntry,
 )
 from ai_rpg_world.domain.world_graph.value_object.reactive_object_state_binding import (
     ReactiveObjectStateBinding,
@@ -87,6 +93,7 @@ class ReactiveObjectStateBindingStageService:
         # state を一切 touch せず save を発火しない。
         if all(target.state.get(k) == v for k, v in updates.items()):
             return
+        old_state = dict(target.state)
         new_state = dict(target.state)
         for k, v in updates.items():
             new_state[k] = v
@@ -96,6 +103,28 @@ class ReactiveObjectStateBindingStageService:
             return
         new_interior = interior.replace_object(new_target)
         self._spot_interior_repository.save(owner_spot, new_interior)
+        # Issue #179: state が実際に変わったとき SpotObjectStateChangedEvent を
+        # graph aggregate に積み、observation pipeline 経由で同 spot の
+        # observer (= NPC / 残留 agent) に届ける。reactive 由来は actor 無し
+        # なので actor_entity_id=None。
+        delta = tuple(
+            StateDeltaEntry(key=k, before=old_state.get(k), after=v)
+            for k, v in updates.items()
+            if old_state.get(k) != v
+        )
+        if delta:
+            graph.add_event(
+                SpotObjectStateChangedEvent.create(
+                    aggregate_id=graph.graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    spot_id=owner_spot,
+                    object_id=binding.target_object_id,
+                    old_state=old_state,
+                    new_state=new_state,
+                    actor_entity_id=None,
+                    state_delta=delta,
+                )
+            )
 
     @property
     def managed_state_keys_per_object(self) -> Mapping[int, Tuple[str, ...]]:

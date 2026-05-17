@@ -17,6 +17,9 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    SpotObjectStateChangedEvent,
+)
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
@@ -299,3 +302,136 @@ class TestReactiveObjectStateBindingStage:
         with caplog.at_level("WARNING"):
             stage.run(WorldTick(1))
         assert any("999" in r.message for r in caplog.records)
+
+
+class TestReactiveObjectStateChangedEventEmission:
+    """Issue #179: state が変化したとき SpotObjectStateChangedEvent が
+    graph aggregate に積まれて observation pipeline に流せること。"""
+
+    def _make_binding(
+        self,
+        *,
+        flag_name: str = "ready",
+        true_updates=(("power_on", True),),
+        false_updates=(("power_on", False),),
+    ) -> ReactiveObjectStateBinding:
+        return ReactiveObjectStateBinding(
+            target_object_id=SpotObjectId.create(7),
+            predicate=ScenarioEventCondition(
+                condition_type="FLAG_SET", flag_name=flag_name
+            ),
+            on_true_state_updates=true_updates,
+            on_false_state_updates=false_updates,
+        )
+
+    def test_state_change_emits_object_state_changed_event(self) -> None:
+        """state が変化したら SpotObjectStateChangedEvent が graph に積まれる。"""
+        repo, interior_repo, flags, evaluator = _build_world_with_object(
+            {"power_on": False}
+        )
+        flags.add("ready")
+        stage = ReactiveObjectStateBindingStageService(
+            bindings=(self._make_binding(),),
+            spot_graph_repository=repo,
+            spot_interior_repository=interior_repo,
+            condition_evaluator=evaluator,
+        )
+        stage.run(WorldTick(10))
+        events = list(repo.find_graph().get_events())
+        state_events = [
+            e for e in events if isinstance(e, SpotObjectStateChangedEvent)
+        ]
+        assert len(state_events) == 1
+        ev = state_events[0]
+        assert ev.spot_id == SpotId.create(1)
+        assert ev.object_id == SpotObjectId.create(7)
+        assert ev.old_state == {"power_on": False}
+        assert ev.new_state == {"power_on": True}
+        # reactive 由来は actor 無し (= 「ひとりでに」相当)
+        assert ev.actor_entity_id is None
+        # state_delta が正しい
+        assert len(ev.state_delta) == 1
+        assert ev.state_delta[0].key == "power_on"
+        assert ev.state_delta[0].before is False
+        assert ev.state_delta[0].after is True
+
+    def test_no_change_emits_no_event(self) -> None:
+        """既に同じ値なら event は積まれない (no-op の不変条件)。"""
+        repo, interior_repo, flags, evaluator = _build_world_with_object(
+            {"power_on": True}
+        )
+        flags.add("ready")
+        stage = ReactiveObjectStateBindingStageService(
+            bindings=(self._make_binding(),),
+            spot_graph_repository=repo,
+            spot_interior_repository=interior_repo,
+            condition_evaluator=evaluator,
+        )
+        stage.run(WorldTick(10))
+        events = [
+            e for e in repo.find_graph().get_events()
+            if isinstance(e, SpotObjectStateChangedEvent)
+        ]
+        assert events == []
+
+    def test_multiple_bindings_emit_one_event_each(self) -> None:
+        """複数 binding が同 tick で発火したら、それぞれ独立に event が出る。"""
+        repo, interior_repo, flags, evaluator = _build_world_with_object(
+            {"power_on": False, "alarm": False}
+        )
+        flags.add("ready")
+        binding1 = self._make_binding(true_updates=(("power_on", True),))
+        binding2 = ReactiveObjectStateBinding(
+            target_object_id=SpotObjectId.create(7),
+            predicate=ScenarioEventCondition(
+                condition_type="FLAG_SET", flag_name="ready"
+            ),
+            on_true_state_updates=(("alarm", True),),
+            on_false_state_updates=(("alarm", False),),
+        )
+        stage = ReactiveObjectStateBindingStageService(
+            bindings=(binding1, binding2),
+            spot_graph_repository=repo,
+            spot_interior_repository=interior_repo,
+            condition_evaluator=evaluator,
+        )
+        stage.run(WorldTick(1))
+        events = [
+            e for e in repo.find_graph().get_events()
+            if isinstance(e, SpotObjectStateChangedEvent)
+        ]
+        assert len(events) == 2
+        keys = {e.state_delta[0].key for e in events}
+        assert keys == {"power_on", "alarm"}
+
+    def test_partial_match_emits_event_for_actual_diffs_only(self) -> None:
+        """updates 中、実際に変化した key だけが state_delta に入る。"""
+        # 初期 state: power_on=False, alarm=True
+        # binding: on_true で power_on=True, alarm=True (alarm は既に一致)
+        repo, interior_repo, flags, evaluator = _build_world_with_object(
+            {"power_on": False, "alarm": True}
+        )
+        flags.add("ready")
+        binding = ReactiveObjectStateBinding(
+            target_object_id=SpotObjectId.create(7),
+            predicate=ScenarioEventCondition(
+                condition_type="FLAG_SET", flag_name="ready"
+            ),
+            on_true_state_updates=(("power_on", True), ("alarm", True)),
+            on_false_state_updates=(("power_on", False), ("alarm", False)),
+        )
+        stage = ReactiveObjectStateBindingStageService(
+            bindings=(binding,),
+            spot_graph_repository=repo,
+            spot_interior_repository=interior_repo,
+            condition_evaluator=evaluator,
+        )
+        stage.run(WorldTick(1))
+        events = [
+            e for e in repo.find_graph().get_events()
+            if isinstance(e, SpotObjectStateChangedEvent)
+        ]
+        # alarm は変化していないので state_delta には含まれない
+        assert len(events) == 1
+        delta_keys = {d.key for d in events[0].state_delta}
+        assert delta_keys == {"power_on"}
