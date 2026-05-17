@@ -1,8 +1,11 @@
 """SNS ツール（create_post, create_reply, like_post, like_reply, follow, block 等）の実行。"""
 
+import logging
 from typing import Any, Callable, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+
+logger = logging.getLogger(__name__)
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     exception_result,
     invalid_arg_result,
@@ -177,7 +180,27 @@ class SnsToolExecutor:
         try:
             self._sns_mode_session.enter_sns_mode(player_id)
         except ActiveGameAppConflictError as e:
-            return LlmCommandResultDto(success=False, message=str(e))
+            # PR #156 と同パターン: str(e) を LLM 側 message に embed すると
+            # 例外メッセージに含まれうる内部情報 (path / 内部 ID / 連結された
+            # フィールド) が漏洩する。サニタイズ済の固定文言 + 構造化情報
+            # (active_kind / requested_kind) だけを LLM に渡す。
+            logger.warning(
+                "SNS enter rejected by active app conflict: player=%s active=%s requested=%s",
+                e.player_id,
+                e.active_kind,
+                e.requested_kind,
+            )
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"既に別アプリ ({e.active_kind.value}) を開いています。"
+                    "SNS を開くには先にそちらを閉じてください。"
+                ),
+                error_code="ACTIVE_APP_CONFLICT",
+                remediation=(
+                    "現在開いている別アプリを exit してから enter してください。"
+                ),
+            )
         if self._sns_page_session is not None:
             self._sns_page_session.on_enter_sns(player_id)
         return LlmCommandResultDto(
