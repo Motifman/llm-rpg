@@ -4,9 +4,12 @@ Trade ツール（offer, accept, cancel）の実行。
 ToolCommandMapper のサブマッパーとして、取引関連のツール実行のみを担当する。
 """
 
+import logging
 from typing import Any, Callable, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+
+logger = logging.getLogger(__name__)
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     exception_result,
     invalid_arg_result,
@@ -138,7 +141,25 @@ class TradeToolExecutor:
         try:
             self._sns_mode_session.enter_trade_mode(player_id)
         except ActiveGameAppConflictError as e:
-            return LlmCommandResultDto(success=False, message=str(e))
+            # PR #156 と同パターン: str(e) の path / 内部 ID 漏洩を防ぎ、
+            # 構造化情報 (active_kind / requested_kind) だけを LLM に渡す。
+            logger.warning(
+                "Trade enter rejected by active app conflict: player=%s active=%s requested=%s",
+                e.player_id,
+                e.active_kind,
+                e.requested_kind,
+            )
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"既に別アプリ ({e.active_kind.value}) を開いています。"
+                    "取引所を開くには先にそちらを閉じてください。"
+                ),
+                error_code="ACTIVE_APP_CONFLICT",
+                remediation=(
+                    "現在開いている別アプリを exit してから enter してください。"
+                ),
+            )
         if self._trade_page_session is not None:
             self._trade_page_session.on_enter_trade(player_id)
         return LlmCommandResultDto(success=True, message="取引所を開きました。")
