@@ -575,20 +575,29 @@ class EscapeGameRuntime:
         strategy がプレイヤー本人にだけ届ける (formatter が prose を組む)。
 
         Returns:
-            発火した event 数 (= 観測が届いた spot の数)。「何も聞こえない」
-            ケース (全 spot SILENT または減衰しきり) は 0。
+            **本 listen 呼び出しで新たに発火した** event 数 (= 観測が届いた
+            spot の数)。「何も聞こえない」ケース (全 spot SILENT または
+            減衰しきり) は 0。
+
+        Note:
+            graph 集約の event queue は本メソッド呼び出し前にも他経路
+            (tick 内の他 stage / 並行 do_* 呼び出し等) が積んだ stale event
+            を含みうる。``emit_listen_carefully`` 前後で長さを snapshot して
+            **差分** をカウントすることで、メッセージ上の「N 箇所から」が
+            実際の listen 結果と一致するようにする (review HIGH-1 反映)。
         """
         graph = self._spot_graph_repo.find_graph()
         eid = EntityId.create(int(player_id))
+        pre_count = len(list(graph.get_events()))
         # `add_event` は graph 集約内に積むだけで保存はしない。
         # `_process_graph_events` が `get_events` で取り出して observation
         # pipeline に流す。
         graph.emit_listen_carefully(eid)
-        events = list(graph.get_events())
-        event_count = len(events)
+        post_count = len(list(graph.get_events()))
+        new_event_count = max(0, post_count - pre_count)
         # _process_graph_events 内部で clear するので、ここでは再取得しない。
         self._process_graph_events()
-        return event_count
+        return new_event_count
 
     def do_explore(self, player_id: PlayerId) -> SpotExplorationResultDto:
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotExploredEvent

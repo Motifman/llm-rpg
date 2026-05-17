@@ -116,6 +116,54 @@ class TestSessionListenWiring:
         assert result.success is True
         assert "聞こえなかった" in result.message
 
+    def test_listen_event_count_isolates_new_events_only(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """事前に stale event が graph に積まれていても、listen の戻りは
+        新規 event 差分だけをカウントする (review HIGH-1 回帰防止)。
+
+        graph.event queue は他経路 (tick 内 stage / 並行 do_* 等) が
+        積んだ stale event を持ちうる。snapshot 差分で正しく分離する。
+        """
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": "spot_graph_listen",
+                "arguments": {"inner_thought": "耳を澄ます"},
+            }
+        )
+        state = _create_session_with_stub(monkeypatch, tmp_path, stub)
+        runtime = state.runtime
+
+        # 事前に stale event を 1 件積む (他経路の混入を模倣)
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            SpotExploredEvent,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.entity_id import (
+            EntityId,
+        )
+
+        graph = runtime._spot_graph_repo.find_graph()
+        target_pid = runtime.get_player_ids()[0]
+        eid = EntityId.create(int(target_pid))
+        spot_id = graph.get_entity_spot(eid)
+        stale_event = SpotExploredEvent.create(
+            aggregate_id=graph._graph_id,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=eid,
+            spot_id=spot_id,
+            discoveries=(),
+        )
+        graph.add_event(stale_event)
+        runtime._spot_graph_repo.save(graph)
+
+        # listen は stale event を含めない差分だけを数える: silent spot
+        # でも「N 箇所からの音が観測として届いた」にならず「聞こえなかった」
+        result = state.llm_wiring.run_turn(target_pid)
+        assert result.success is True
+        assert "聞こえなかった" in result.message
+
     def test_listen_does_not_emit_action_failed_observation(
         self,
         monkeypatch: pytest.MonkeyPatch,
