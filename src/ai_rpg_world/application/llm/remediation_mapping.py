@@ -47,6 +47,15 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "MISSING_CURRENT_AREA": "現在地がロケーションエリアに含まれていません。ギルドはロケーション内で作成してください。",
     "MISSING_GUILD_NAME": "ギルド名を指定してください。",
     "INVALID_ROLE": "役職は leader / officer / member のいずれかを指定してください。",
+    # Issue #168 で導入した executor 横断の learnable failure 用 code 群。
+    # application/llm/services/failure_helpers.py のファクトリから参照される。
+    "INVALID_ARGUMENT": "ツール引数の型 / 必須項目を確認してください。",
+    "SNS_REF_STALE": "SNS の ref は世代管理されています。ページを再読込してから ref を取得し直してください。",
+    "TRADE_ARG_MISSING": "取引ツールの必須引数 (item_instance_id / slot_id / requested_gold / trade_ref 等) を確認してください。",
+    "TRADE_PAGE_NOT_SUPPORTED": "現在の SNS / Trade ページではこの操作は実行できません。対応するページに遷移してください。",
+    "ATTACK_PRECONDITION_FAILED": "攻撃の前提条件 (クールダウン / 対象の生死 / 攻撃力など) を確認し、必要なら待機または別行動を選んでください。",
+    "INVENTORY_NOT_FOUND": "プレイヤーのインベントリが見つかりません。プレイヤー初期化が完了しているか確認してください。",
+    "ITEM_NOT_CONSUMABLE": "そのアイテムは使用 (consume) できません。別のアイテムを指定するか、別ツールで操作してください。",
     "ACTIVE_APP_CONFLICT": "既に別アプリ (SNS / 取引所など) を開いています。exit してから再度 enter してください。",
 }
 
