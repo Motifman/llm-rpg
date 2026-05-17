@@ -3,12 +3,12 @@
   "metadata": {
     "id": "relay_puzzle_demo",
     "title": "役割分担リレー — 最小デモ",
-    "description": "いずれかのプレイヤーが制御室に居る間だけ、廊下の奥の鍵付き扉が開く。誰もいなくなった瞬間に扉は再ロックされる。役割分担して協力すること（A が制御室に残り、B が金庫室まで進むのが基本戦略）。",
+    "description": "制御室の操作盤に電源を入れている間だけ、廊下の奥の金庫扉のロックが外れる。電源は操作盤を操作して入れる必要があり、また制御室から人が完全に居なくなると安全装置で自動的に電源が切れる。役割分担して協力すること（A が制御室に残って電源を維持し、B が金庫室まで進むのが基本戦略）。",
     "theme": "co-op",
     "difficulty": "easy",
     "estimated_ticks": 30,
     "author": "demo",
-    "tags": ["co-op", "relay", "reactive_binding"]
+    "tags": ["co-op", "relay", "reactive_binding", "control_panel"]
   },
   "item_specs": [],
   "environment": {
@@ -23,10 +23,76 @@
     {
       "id": "control_room",
       "name": "制御室",
-      "description": "金庫扉を制御する操作盤がある狭い部屋。電源を入れている間、奥の扉のロックが外れる。",
+      "description": "金庫扉を制御する操作盤がある狭い部屋。操作盤の電源を入れている間、奥の金庫扉のロックが外れる。ただし制御室から人が居なくなると安全装置で電源が切れる仕組み。",
       "category": "OTHER",
       "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
-      "interior": {"objects": []}
+      "interior": {
+        "objects": [
+          {
+            "id": "control_panel",
+            "name": "操作盤",
+            "description": "金庫扉のロックを制御する操作盤。中央に電源スイッチがある。",
+            "object_type": "SWITCH",
+            "state": {"power_on": false},
+            "interactions": [
+              {
+                "action_name": "power_on",
+                "display_label": "電源を入れる",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "control_panel",
+                    "required_state": {"power_on": false},
+                    "failure_message": "操作盤は既に電源が入っている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "control_panel",
+                      "state_updates": {"power_on": true}
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "操作盤に電源が入った。奥の金庫扉のロックが外れた気配がする。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "power_off",
+                "display_label": "電源を切る",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "control_panel",
+                    "required_state": {"power_on": true},
+                    "failure_message": "操作盤の電源は既に切れている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "control_panel",
+                      "state_updates": {"power_on": false}
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "操作盤の電源を切った。奥の金庫扉のロックが掛かり直した。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "id": "corridor",
@@ -61,7 +127,7 @@
       "from": "corridor",
       "to": "vault",
       "name": "金庫扉",
-      "description": "電子ロック付きの分厚い扉。制御室から電源が入っている間だけ開く。",
+      "description": "電子ロック付きの分厚い扉。制御室の操作盤に電源が入っている間だけ開く。",
       "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {"kind": "DOOR", "state": "LOCKED", "sound_permeability": 0.3}
@@ -82,11 +148,27 @@
       {
         "target": "corridor_to_vault",
         "predicate": {
-          "condition_type": "PLAYER_AT_SPOT",
-          "target_spot": "control_room"
+          "condition_type": "OBJECT_STATE",
+          "target_object": "control_panel",
+          "required_state": {"power_on": true}
         },
         "on_true_state": "OPEN",
         "on_false_state": "LOCKED"
+      }
+    ],
+    "objects": [
+      {
+        "target": "control_panel",
+        "predicate": {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "PLAYER_AT_SPOT",
+              "target_spot": "control_room"
+            }
+          ]
+        },
+        "on_true_state_updates": {"power_on": false}
       }
     ]
   }
