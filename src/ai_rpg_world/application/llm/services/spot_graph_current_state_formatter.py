@@ -58,6 +58,15 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         else:
             lines.append("現在時刻: 不明")
 
+        # シナリオに TICK_LIMIT lose_condition があれば「残り猶予」だけ伝える。
+        # 勝利条件には触れない (171a: meta-info のみ。導線はシナリオ責務で別途整備)。
+        if dto.tick_budget_remaining is not None:
+            remaining = dto.tick_budget_remaining
+            if remaining <= 0:
+                lines.append("残り行動可能 tick: 0 (時間切れ寸前)")
+            else:
+                lines.append(f"残り行動可能 tick: {remaining}")
+
         # Phase 4-E: スポット内のオブジェクトに動的 state があれば表示。
         # 「燭台: lit=True」のように LLM が読める形にする。
         object_state_lines = []

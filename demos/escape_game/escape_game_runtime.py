@@ -325,6 +325,26 @@ class EscapeGameRuntime:
         base_text = self._formatter.format(dto)
         return self._ui_context_builder.build(base_text, dto)
 
+    def _compute_tick_budget_remaining(self) -> Optional[int]:
+        """シナリオの lose_conditions に TICK_LIMIT があれば残り tick を返す。
+
+        WIN 条件には触れず「時間切れまでの猶予」だけ LLM に伝えるためのメタ情報。
+        複数の TICK_LIMIT 条件があるときは最小値 (一番早く切れるもの) を採用。
+        """
+        from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
+            GameEndConditionTypeEnum,
+        )
+        limits: List[int] = []
+        for lc in self.scenario.lose_conditions:
+            if lc.condition_type != GameEndConditionTypeEnum.TICK_LIMIT:
+                continue
+            if lc.tick_limit is None:
+                continue
+            limits.append(int(lc.tick_limit))
+        if not limits:
+            return None
+        return max(0, min(limits) - self._tick)
+
     def _build_minimal_player_state_dto(
         self, player_id: PlayerId, snap: Any,
     ) -> PlayerCurrentStateDto:
@@ -352,6 +372,7 @@ class EscapeGameRuntime:
             attention_level=AttentionLevel.FULL,
             spot_graph_snapshot=snap,
             current_game_time_label=time_label,
+            tick_budget_remaining=self._compute_tick_budget_remaining(),
         )
 
     def get_tool_definitions(self) -> List[ToolDefinitionDto]:

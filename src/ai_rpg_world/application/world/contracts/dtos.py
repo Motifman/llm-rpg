@@ -523,6 +523,10 @@ class PlayerCurrentStateDto:
     visible_tile_map: Optional["VisibleTileMapDto"] = None
     # ゲーム内現在時刻（game_time_provider と world_time_config が設定されているときのみ）
     current_game_time_label: Optional[str] = None
+    # シナリオに TICK_LIMIT 系の lose_condition があるときの「残り tick 数」。
+    # WIN 条件を漏らさないメタ情報として、LLM に「時間切れまでの猶予」だけ伝える。
+    # シナリオに時間制限が無い場合は None。
+    tick_budget_remaining: Optional[int] = None
     # ゲーム内 SNS アプリを開いている（認証ではない UI メタファ）。ツール一覧の SNS/Trade 露出に利用。
     # active_game_app が真実。後方互換のため __post_init__ で整える。
     is_sns_mode_active: bool = False
