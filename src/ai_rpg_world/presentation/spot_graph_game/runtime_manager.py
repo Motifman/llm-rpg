@@ -123,52 +123,21 @@ class _EscapeSpawnAllPlayersLlmResolver(ILLMPlayerResolver):
 
 
 # ──────────────────────────────────────────────────────────────────
-# F1: 失敗 message に有効ラベル一覧を埋め込むためのヘルパー群。
-# LLM (Gemma 4 / gpt-5-mini 両方で観測) は ``object_label`` 等に display
-# name (例: ``"操作盤"``) を渡してしまい INVALID_TARGET_LABEL で失敗を
-# 繰り返す癖がある。失敗 message に valid ラベル一覧 (例: ``OBJ1 (操作盤)``)
-# を載せると、次の試行で正しい label を選べるようになる。Issue #154 デモ
-# 報告の F1 対応。
+# 失敗 message learnable 化ヘルパーは ``application/llm/services/
+# failure_helpers.py`` に集約済 (Issue #168 で executor 横断展開のため
+# 共通モジュールへ昇格)。本ファイル内では既存呼び出し / テストの後方
+# 互換のため private alias を再エクスポートする。
+#
+# 旧: ``runtime_manager._list_object_labels(targets)``
+# 新: ``failure_helpers.list_object_labels(targets)`` と同じ実装が動く。
 # ──────────────────────────────────────────────────────────────────
 
-
-def _list_targets_of_kind(
-    targets: Dict[str, ToolRuntimeTargetDto], kind: str
-) -> str:
-    """``targets`` の dict から指定 kind の項目を ``"L1 (display) / L2 (...)"``
-    形式の文字列で返す。空なら空文字列。
-
-    LLM 向けに **ラベルを先頭**、display name を括弧内に置く順序にする
-    (LLM が ``object_label`` に何を入れるべきかを最初に目に入れるため)。
-    """
-    items = []
-    for label, target in targets.items():
-        if target.kind != kind:
-            continue
-        display = target.display_name or ""
-        items.append(f"{label} ({display})" if display else label)
-    return " / ".join(items)
-
-
-def _list_object_labels(
-    targets: Dict[str, ToolRuntimeTargetDto],
-) -> str:
-    """interact 系の object_label 候補を列挙。"""
-    return _list_targets_of_kind(targets, "spot_graph_object")
-
-
-def _list_destination_labels(
-    targets: Dict[str, ToolRuntimeTargetDto],
-) -> str:
-    """travel_to の destination_label 候補を列挙。"""
-    return _list_targets_of_kind(targets, "spot_graph_destination")
-
-
-def _list_player_labels(
-    targets: Dict[str, ToolRuntimeTargetDto],
-) -> str:
-    """whisper の target_label 候補 (同 spot の他プレイヤー)。"""
-    return _list_targets_of_kind(targets, "spot_graph_player")
+from ai_rpg_world.application.llm.services.failure_helpers import (  # noqa: E402
+    list_destination_labels as _list_destination_labels,
+    list_object_labels as _list_object_labels,
+    list_player_labels as _list_player_labels,
+    list_targets_of_kind as _list_targets_of_kind,
+)
 
 
 def _safe_get_str(mapper: Any, namespace: str, numeric_id: int) -> str:
