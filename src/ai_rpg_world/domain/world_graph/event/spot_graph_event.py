@@ -44,9 +44,15 @@ class EntityLeftSpotEvent(BaseDomainEvent[SpotGraphId, str]):
 class ConnectionStateChangedEvent(BaseDomainEvent[SpotGraphId, str]):
     """接続の通行可否が変化した。
 
-    ``cause`` は変化の発生原因を表す (Issue #180)。formatter は cause を見て
-    prose を「ガチャッと」「ひとりでに」のように分岐する。default は
-    ``PassageChangeCauseEnum.UNKNOWN`` で後方互換を保つ。
+    ``cause`` は変化の発生原因 (Issue #180)。structured metadata として保持し、
+    formatter / 観測モデルが「何の仕組みで変わったか」を機械可読に参照する。
+    prose には焼き込まない (それは観測者の位置情報を反映する軸 3 の仕事)。
+
+    ``original_actor_entity_id`` は連鎖の起点となった actor を追跡する
+    (Issue #183, 軸 1+4)。``ACTOR_ACTION`` 由来なら actor の EntityId、
+    ``REACTIVE`` / ``SCENARIO_EVENT`` のような世界 tick 由来は ``None``。
+    観測者が actor と同 spot に居て視認可能な場合のみ、formatter / prompt
+    builder 側でこの ID を使って「誰の行動だったか」を組み立てる。
     """
 
     connection_id: ConnectionId
@@ -54,6 +60,7 @@ class ConnectionStateChangedEvent(BaseDomainEvent[SpotGraphId, str]):
     to_spot_id: SpotId
     traversable: bool
     cause: PassageChangeCauseEnum = PassageChangeCauseEnum.UNKNOWN
+    original_actor_entity_id: Optional[EntityId] = None
 
 
 @dataclass(frozen=True)
