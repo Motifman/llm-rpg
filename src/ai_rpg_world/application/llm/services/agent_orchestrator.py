@@ -43,11 +43,21 @@ from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import
 from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
     EpisodicSemanticClusterPromotionService,
 )
+from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+    MemoCompletionHintService,
+)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
     TOOL_NAME_TODO_LIST,
+)
+
+# memo 系ツール (todo_* alias と同じ文字列) の実行時は hint を出さない:
+# memo_done を呼んだ直後にさらに hint を出すと冗長で、memo_add / memo_list 中も
+# memo 内容に対する augment は意味がない (LLM が能動的に memo を操作している場面)
+_MEMO_TOOLS_SKIPPING_HINT: frozenset[str] = frozenset(
+    {TOOL_NAME_TODO_ADD, TOOL_NAME_TODO_LIST, TOOL_NAME_TODO_COMPLETE}
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -161,6 +171,7 @@ class LlmAgentOrchestrator:
         episodic_reinterpretation_coordinator: Optional[EpisodicReinterpretationCoordinator] = None,
         episodic_semantic_promotion: Optional[EpisodicSemanticClusterPromotionService] = None,
         game_time_label_provider: Optional[Callable[[], Optional[str]]] = None,
+        memo_completion_hint_service: Optional[MemoCompletionHintService] = None,
     ) -> None:
         if not isinstance(prompt_builder, IPromptBuilder):
             raise TypeError("prompt_builder must be IPromptBuilder")
@@ -202,7 +213,14 @@ class LlmAgentOrchestrator:
             raise TypeError(
                 "game_time_label_provider must be Callable[[], Optional[str]] or None"
             )
+        if memo_completion_hint_service is not None and not isinstance(
+            memo_completion_hint_service, MemoCompletionHintService
+        ):
+            raise TypeError(
+                "memo_completion_hint_service must be MemoCompletionHintService or None"
+            )
         self._game_time_label_provider = game_time_label_provider
+        self._memo_completion_hint_service = memo_completion_hint_service
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
         self._tool_command_mapper = tool_command_mapper
@@ -230,6 +248,30 @@ class LlmAgentOrchestrator:
         finally:
             if self._episodic_reinterpretation_coordinator is not None:
                 self._episodic_reinterpretation_coordinator.after_turn_completed(player_id)
+
+    def _maybe_augment_with_memo_hint(
+        self,
+        player_id: PlayerId,
+        tool_name: str,
+        action_summary: str,
+        result_summary: str,
+    ) -> str:
+        """Issue #188 Phase 1c: memo 完了 hint を result_summary に付与する。
+
+        memo_* ツールの実行直後は hint を出さない (冗長 / 自己参照ループ防止)。
+        service が未注入なら無加工で返す。
+        """
+        if self._memo_completion_hint_service is None:
+            return result_summary
+        if tool_name in _MEMO_TOOLS_SKIPPING_HINT:
+            return result_summary
+        try:
+            return self._memo_completion_hint_service.augment_result_summary(
+                player_id, action_summary, result_summary
+            )
+        except Exception:
+            # hint 失敗で本体パイプラインを壊さない: silent fallback
+            return result_summary
 
     def _run_turn_core(self, player_id: PlayerId) -> LlmCommandResultDto:
         request = self._prompt_builder.build(player_id)
@@ -352,6 +394,9 @@ class LlmAgentOrchestrator:
         )
         action_summary = _format_action_summary(name, arguments)
         result_summary = build_result_summary(result_dto)
+        result_summary = self._maybe_augment_with_memo_hint(
+            player_id, name, action_summary, result_summary
+        )
         _append_to_action_store(
             self._action_result_store,
             player_id,

@@ -561,6 +561,10 @@ def create_spot_graph_wiring(
     else:
         game_time_label_provider = None
 
+    from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+        MemoCompletionHintService,
+    )
+    memo_completion_hint_service = MemoCompletionHintService(memo_store=todo_store)
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
         llm_client=client,
@@ -571,6 +575,7 @@ def create_spot_graph_wiring(
         episodic_reinterpretation_coordinator=reinterpretation_coord,
         episodic_semantic_promotion=episodic_semantic_promotion,
         game_time_label_provider=game_time_label_provider,
+        memo_completion_hint_service=memo_completion_hint_service,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
