@@ -8,10 +8,12 @@ from typing import Any, Dict, List, Optional
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     LlmUiContextDto,
+    MemoEntry,
+    MemoFulfillmentContext,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
     ToolRuntimeContextDto,
-    TodoEntry,
+    TodoEntry,  # backward-compat alias for MemoEntry
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
@@ -67,28 +69,54 @@ class IActionResultStore(ABC):
         pass
 
 
-class ITodoStore(ABC):
-    """プレイヤーごとの TODO を保持する。"""
+class IMemoStore(ABC):
+    """プレイヤーごとの memo を保持する。
+
+    Issue #188 Phase 1a で ``ITodoStore`` から改名。LLM が context に固定
+    したい情報 (タスク / 目標 / 戦略メモ / 注意事項など) を扱う。
+
+    ``add`` には optional な ``current_tick`` を渡せる: age 表示 / stale 判定
+    用。``complete`` には fulfillment_context (周辺 sliding_window 抜粋) を
+    渡せる: 後で episodic cue 経由で recall するときに「達成時の状況」を辿る
+    情報源となる。
+    """
 
     @abstractmethod
-    def add(self, player_id: PlayerId, content: str) -> str:
-        """TODO を追加する。"""
+    def add(
+        self,
+        player_id: PlayerId,
+        content: str,
+        *,
+        current_tick: Optional[int] = None,
+    ) -> str:
+        """memo を追加し、生成された ID を返す。"""
         pass
 
     @abstractmethod
-    def list_uncompleted(self, player_id: PlayerId) -> List[TodoEntry]:
-        """未完了 TODO を返す。"""
+    def list_uncompleted(self, player_id: PlayerId) -> List[MemoEntry]:
+        """未完了 memo を新しい順で返す。"""
         pass
 
     @abstractmethod
-    def complete(self, player_id: PlayerId, todo_id: str) -> bool:
-        """TODO を完了する。存在しなければ False。"""
+    def complete(
+        self,
+        player_id: PlayerId,
+        memo_id: str,
+        *,
+        fulfillment_context: Optional[MemoFulfillmentContext] = None,
+    ) -> bool:
+        """memo を完了する。存在しなければ False。"""
         pass
 
     @abstractmethod
-    def remove(self, player_id: PlayerId, todo_id: str) -> bool:
-        """TODO を削除する。存在しなければ False。"""
+    def remove(self, player_id: PlayerId, memo_id: str) -> bool:
+        """memo を削除する。存在しなければ False。"""
         pass
+
+
+# 後方互換: 旧名 ``ITodoStore`` は ``IMemoStore`` のエイリアス。
+# 新規コードは IMemoStore を使うこと。
+ITodoStore = IMemoStore
 
 
 class ICurrentStateFormatter(ABC):
@@ -127,7 +155,7 @@ class IRecentEventsFormatter(ABC):
 
 
 class IContextFormatStrategy(ABC):
-    """現在状態・直近出来事を user prompt 用コンテキストへ整形する。"""
+    """現在状態・直近出来事・LLM が固定した memo を user prompt 用コンテキストへ整形する。"""
 
     @abstractmethod
     def format(
@@ -135,8 +163,14 @@ class IContextFormatStrategy(ABC):
         current_state_text: str,
         recent_events_text: str,
         relevant_memories_text: str = "",
+        active_memos_text: str = "",
     ) -> str:
-        """user prompt に入れる文脈テキストを返す。"""
+        """user prompt に入れる文脈テキストを返す。
+
+        ``active_memos_text`` は LLM が ``memo_add`` で固定した「進行中のメモ」
+        section に表示するテキスト (Issue #188 Phase 1a)。空文字なら section を
+        出さない。
+        """
         pass
 
 
