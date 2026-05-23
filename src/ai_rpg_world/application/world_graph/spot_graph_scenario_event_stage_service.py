@@ -28,6 +28,9 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+    PassageChangeCauseEnum,
+)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
@@ -169,6 +172,7 @@ class SpotGraphScenarioEventStageService:
                 spec.new_state,
                 traversable_override=spec.traversable_override,
                 sound_permeability_override=spec.sound_permeability_override,
+                cause=PassageChangeCauseEnum.SCENARIO_EVENT,
             )
 
         for spec in effect_result.destroy_connection_specs:

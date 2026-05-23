@@ -29,6 +29,9 @@ from ai_rpg_world.application.world_graph.synchronized_action_registry import (
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+    PassageChangeCauseEnum,
+)
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -169,6 +172,7 @@ class SynchronizedActionResolverStageService:
                 spec.new_state,
                 traversable_override=spec.traversable_override,
                 sound_permeability_override=spec.sound_permeability_override,
+                cause=PassageChangeCauseEnum.SYNCHRONIZED_ACTION,
             )
 
     def _clear_group_preps(self, group: SynchronizedActionGroup) -> None:

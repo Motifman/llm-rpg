@@ -110,6 +110,12 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             except Exception:
                 pass
 
+        # Issue #180: prose は観測者が本当に観測できる「事実」だけに留める。
+        # cause を文体 (オノマトペ等) に焼き込まないこと: 別 spot からは本来
+        # 区別できない情報を漏らすことになる。誰がどうトリガしたかの推論は、
+        # interaction event の同時観測など他の経路から LLM が組み立てる責務。
+        # 機械可読の補助情報として ``structured.cause`` には残し、将来の
+        # 観測モデル拡張 (位置に応じた prose 差分化、軸 3) で活用する。
         if event.traversable:
             prose = f"{conn_name}が通行可能になった。"
         else:
@@ -118,6 +124,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             "type": "connection_state_changed",
             "connection_name": conn_name,
             "traversable": event.traversable,
+            "cause": event.cause.value,
         }
         return ObservationOutput(
             prose=prose,
