@@ -173,6 +173,11 @@ class SynchronizedActionResolverStageService:
                 traversable_override=spec.traversable_override,
                 sound_permeability_override=spec.sound_permeability_override,
                 cause=PassageChangeCauseEnum.SYNCHRONIZED_ACTION,
+                # Issue #183: 複数 actor が prepare → resolve の連鎖を構成するため
+                # 単一の起点 actor が選べない。多人数を 1 名に縮約すると誤解を
+                # 招くので、現状は None (= 主体不明) として扱う。将来 actor 群
+                # を保持できる構造を導入したら見直す。
+                actor_entity_id=None,
             )
 
     def _clear_group_preps(self, group: SynchronizedActionGroup) -> None:

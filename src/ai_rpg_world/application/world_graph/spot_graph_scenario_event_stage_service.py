@@ -173,6 +173,9 @@ class SpotGraphScenarioEventStageService:
                 traversable_override=spec.traversable_override,
                 sound_permeability_override=spec.sound_permeability_override,
                 cause=PassageChangeCauseEnum.SCENARIO_EVENT,
+                # Issue #183: scenario_event は世界タイマ / scripted trigger 由来。
+                # 起点に明確な actor が居ないため None。
+                actor_entity_id=None,
             )
 
         for spec in effect_result.destroy_connection_specs:

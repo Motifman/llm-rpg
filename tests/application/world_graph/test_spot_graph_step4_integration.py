@@ -150,6 +150,62 @@ def test_interaction_sets_flag_and_unlocks_connection() -> None:
     assert r.messages == ()
 
 
+def test_interaction_propagates_actor_to_connection_state_event() -> None:
+    """Issue #183: interaction 経由の passage 変化は ConnectionStateChangedEvent
+    の original_actor_entity_id に actor を伝播する (軸 1+4)。
+
+    SpotInteractionApplicationService は ``graph.get_events()`` で集めた
+    domain event を ``event_publisher.publish_all`` 経由で送り出すので、
+    publisher を inject してそこに流れた event を検査する。
+    """
+    from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+        PassageChangeCauseEnum,
+    )
+    from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+        ConnectionStateChangedEvent,
+    )
+
+    graph = _graph_with_locked_connection()
+    graph_repo = InMemorySpotGraphRepository(graph)
+    interior_repo = InMemorySpotInteriorRepository({SpotId.create(1): _switch_interior()})
+    store = InMemoryDataStore()
+    player_repo = InMemoryPlayerStatusRepository(store)
+    inv_repo = InMemoryPlayerInventoryRepository(store)
+    player_repo.save(create_test_status_aggregate(player_id=1))
+    inv_repo.save(PlayerInventoryAggregate.create_new_inventory(PlayerId(1)))
+
+    published: list = []
+
+    class _CapturingPublisher:
+        def publish(self, event):
+            published.append(event)
+
+        def publish_all(self, events):
+            published.extend(events)
+
+    flags = MutableWorldFlagState()
+    svc = SpotInteractionApplicationService(
+        spot_graph_repository=graph_repo,
+        spot_interior_repository=interior_repo,
+        player_inventory_repository=inv_repo,
+        item_repository=InMemoryItemRepository(store),
+        item_spec_repository=_StubItemSpecRepo(),
+        world_flag_state=flags,
+        event_publisher=_CapturingPublisher(),
+    )
+
+    svc.execute_interaction(PlayerId(1), SpotObjectId.create(2), "use")
+    conn_events = [
+        e for e in published if isinstance(e, ConnectionStateChangedEvent)
+    ]
+    assert len(conn_events) == 1
+    # cause は ACTOR_ACTION (PR #182 で設定済み)
+    assert conn_events[0].cause == PassageChangeCauseEnum.ACTOR_ACTION
+    # 軸 1+4: 起点 actor (PlayerId=1) が EntityId として乗る
+    assert conn_events[0].original_actor_entity_id is not None
+    assert conn_events[0].original_actor_entity_id.value == 1
+
+
 def test_create_spot_graph_world_services_bundle() -> None:
     graph = _graph_with_locked_connection()
     graph_repo = InMemorySpotGraphRepository(graph)

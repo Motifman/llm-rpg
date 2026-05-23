@@ -425,12 +425,17 @@ class SpotGraphAggregate(AggregateRoot):
         new_passage: Passage,
         *,
         cause: PassageChangeCauseEnum = PassageChangeCauseEnum.UNKNOWN,
+        actor_entity_id: Optional[EntityId] = None,
     ) -> None:
         """接続の Passage を新しい値に置換する。
 
         通行可否が変化した場合は ConnectionStateChangedEvent も発火する。
-        ``cause`` は変化の発生原因 (Issue #180)。default は UNKNOWN で
-        既存呼び出しは後方互換。
+
+        ``cause`` は変化の発生原因 (Issue #180)。default は UNKNOWN で後方互換。
+        ``actor_entity_id`` は連鎖の起点となった actor (Issue #183、軸 1+4)。
+        ``ACTOR_ACTION`` 由来なら interaction を起こした EntityId、reactive /
+        scenario 由来は None。observation pipeline で「誰の行動の波及か」を
+        観測者ごとに判定するために使う。
         """
         conn = self.get_connection(connection_id)
         prev_traversable = conn.passage.traversable
@@ -446,6 +451,7 @@ class SpotGraphAggregate(AggregateRoot):
                     to_spot_id=conn.to_spot_id,
                     traversable=new_conn.passage.traversable,
                     cause=cause,
+                    original_actor_entity_id=actor_entity_id,
                 )
             )
 
@@ -457,6 +463,7 @@ class SpotGraphAggregate(AggregateRoot):
         traversable_override: Optional[bool] = None,
         sound_permeability_override: Optional[float] = None,
         cause: PassageChangeCauseEnum = PassageChangeCauseEnum.UNKNOWN,
+        actor_entity_id: Optional[EntityId] = None,
     ) -> None:
         """既存の Passage と同じ kind を維持したまま状態だけ遷移させる。"""
         conn = self.get_connection(connection_id)
@@ -465,7 +472,12 @@ class SpotGraphAggregate(AggregateRoot):
             traversable=traversable_override,
             sound_permeability=sound_permeability_override,
         )
-        self.set_connection_passage(connection_id, new_passage, cause=cause)
+        self.set_connection_passage(
+            connection_id,
+            new_passage,
+            cause=cause,
+            actor_entity_id=actor_entity_id,
+        )
 
     def remove_connection(self, connection_id: ConnectionId) -> None:
         """接続をグラフから完全に削除する。双方向の場合は逆方向も削除。"""
