@@ -109,6 +109,103 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         assert "[失敗]" in timeline[0].text
         assert "error_code=BAD_ARG" in timeline[0].text
 
+    def test_action_line_with_game_time_label(self) -> None:
+        """Issue #188: action_result に game_time_label があれば観測と
+        同じ ``[時刻] [行動] ...`` の prefix が付く。"""
+        from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+            format_action_result_line_for_recent_events,
+        )
+
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="speech_say を実行しました。",
+            result_summary="発言しました。",
+            success=True,
+            game_time_label="深夜 0:20",
+        )
+        text = format_action_result_line_for_recent_events(entry)
+        assert text.startswith("[深夜 0:20] [行動] ")
+        assert "→ [結果] 発言しました。" in text
+
+    def test_action_line_without_game_time_label_is_backward_compat(self) -> None:
+        """game_time_label 未指定なら従来通り ``[行動]`` 始まり (時刻 prefix なし)。"""
+        from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+            format_action_result_line_for_recent_events,
+        )
+
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="x を実行しました。",
+            result_summary="成功。",
+            success=True,
+        )
+        text = format_action_result_line_for_recent_events(entry)
+        # 時刻 prefix が無い = 先頭が `[行動]` (時刻なしの従来形式)
+        assert text.startswith("[行動] x")
+        assert "[行動]" in text
+        # 時刻 prefix 「[XX:YY]」のような時刻形式 prefix が無いことを別の手段で確認
+        assert " [行動]" not in text  # スペース + [行動] は時刻 prefix がある時に発生
+
+    def test_action_line_omit_result_when_success(self) -> None:
+        """Issue #188: omit_result_in_prompt=True かつ success=True なら
+        ``→ [結果] ...`` 部分を省略する (speech_say の result ノイズ削減)。"""
+        from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+            format_action_result_line_for_recent_events,
+        )
+
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary='speech_say({"content": "Hi"}) を実行しました。',
+            result_summary="発言しました。",
+            success=True,
+            omit_result_in_prompt=True,
+        )
+        text = format_action_result_line_for_recent_events(entry)
+        # → [結果] が出ない
+        assert "→ [結果]" not in text
+        assert "発言しました。" not in text
+        # action_summary は出る
+        assert "speech_say" in text
+        assert "Hi" in text
+
+    def test_action_line_omit_result_ignored_on_failure(self) -> None:
+        """失敗時は omit_result_in_prompt=True でも error_code / 対処を出す
+        (LLM が修正できるよう情報を保つ)。"""
+        from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+            format_action_result_line_for_recent_events,
+        )
+
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary='speech_say を実行しました。',
+            result_summary="失敗。content は必須",
+            success=False,
+            error_code="INVALID_ARGUMENT",
+            omit_result_in_prompt=True,
+        )
+        text = format_action_result_line_for_recent_events(entry)
+        assert "[失敗]" in text
+        assert "error_code=INVALID_ARGUMENT" in text
+
+    def test_action_line_omit_result_with_time_label(self) -> None:
+        """time_label と omit_result_in_prompt を同時に使ったとき:
+        ``[時刻] [行動] {summary}`` の形になる。"""
+        from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+            format_action_result_line_for_recent_events,
+        )
+
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary='speech_say({"content": "yo"}) を実行しました。',
+            result_summary="発言しました。",
+            success=True,
+            game_time_label="0:30",
+            omit_result_in_prompt=True,
+        )
+        text = format_action_result_line_for_recent_events(entry)
+        assert text.startswith("[0:30] [行動] ")
+        assert "→ [結果]" not in text
+
     def test_naive_and_utc_aware_unified_timeline_sorted_without_type_error(
         self,
     ) -> None:

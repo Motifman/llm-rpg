@@ -125,6 +125,36 @@ class TestExceptionSanitization:
         assert "internal detail" not in result.message
 
 
+class TestSpeechOmitResultInPrompt:
+    """Issue #188: 成功時の speech_say / speech_whisper は ``omit_result_in_prompt=True``
+    を返し、prompt の「直近の出来事」で「発言しました。」結果を省略させる。"""
+
+    def test_say_success_sets_omit_result_flag(self) -> None:
+        executor = _build_executor()
+        result = executor._execute_say(
+            player_id=1, args={"content": "Hello"}
+        )
+        assert result.success is True
+        assert result.omit_result_in_prompt is True
+
+    def test_whisper_success_sets_omit_result_flag(self) -> None:
+        executor = _build_executor()
+        result = executor._execute_whisper(
+            player_id=1,
+            args={"target_player_id": 2, "content": "Hi"},
+        )
+        assert result.success is True
+        assert result.omit_result_in_prompt is True
+
+    def test_failure_does_not_set_omit_result_flag(self) -> None:
+        """失敗時は省略しない (LLM が remediation を見て修正できるように)。"""
+        executor = _build_executor()
+        result = executor._execute_say(player_id=1, args={})  # content 欠落
+        assert result.success is False
+        # default False のまま
+        assert result.omit_result_in_prompt is False
+
+
 class TestUnwiredSpeechService:
     """speech_service が None のときは UNKNOWN_TOOL を返す (既存挙動)。"""
 

@@ -39,6 +39,12 @@ class LlmCommandResultDto:
     オーケストレータがツール実行結果を IActionResultStore に渡す際の標準形。
     成功時は message に成功メッセージ、失敗時は message にエラー内容、remediation に対処ヒントを入れる。
     should_reschedule: 次 tick で再スケジュールすべきか（1起動1ツール前提の継続契約用）。
+
+    ``omit_result_in_prompt``: True にすると、成功時にプロンプトの「直近の出来事」
+    セクションで ``→ [結果] {result_summary}`` 部分を省略する (Issue #188 改善)。
+    速度速報のような自明な結果 (例: ``speech_say`` の「発言しました。」) は LLM
+    に情報を足さないため、ノイズを減らすために省略できるようにする。
+    失敗時は省略せず remediation を必ず見せる (LLM が修正できるように)。
     """
 
     success: bool
@@ -47,6 +53,7 @@ class LlmCommandResultDto:
     remediation: Optional[str] = None
     should_reschedule: bool = False
     was_no_op: bool = False
+    omit_result_in_prompt: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.success, bool):
@@ -61,6 +68,8 @@ class LlmCommandResultDto:
             raise TypeError("should_reschedule must be bool")
         if not isinstance(self.was_no_op, bool):
             raise TypeError("was_no_op must be bool")
+        if not isinstance(self.omit_result_in_prompt, bool):
+            raise TypeError("omit_result_in_prompt must be bool")
 
 
 @dataclass(frozen=True)
@@ -91,7 +100,12 @@ class SystemPromptPlayerInfoDto:
 
 @dataclass(frozen=True)
 class ActionResultEntry:
-    """行動結果 1 件（直近の出来事のマージ用）"""
+    """行動結果 1 件（直近の出来事のマージ用）。
+
+    ``game_time_label`` は観測との時刻表示の対称性のため (Issue #188 改善)。
+    ``omit_result_in_prompt`` は成功時の result_summary 省略フラグ。
+    どちらも既定 None / False で後方互換。
+    """
 
     occurred_at: datetime
     action_summary: str
@@ -101,6 +115,8 @@ class ActionResultEntry:
     tool_name: Optional[str] = None
     argument_fingerprint: Optional[str] = None
     should_reschedule: bool = False
+    game_time_label: Optional[str] = None
+    omit_result_in_prompt: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.occurred_at, datetime):
@@ -121,6 +137,12 @@ class ActionResultEntry:
             raise TypeError("argument_fingerprint must be str or None")
         if not isinstance(self.should_reschedule, bool):
             raise TypeError("should_reschedule must be bool")
+        if self.game_time_label is not None and not isinstance(
+            self.game_time_label, str
+        ):
+            raise TypeError("game_time_label must be str or None")
+        if not isinstance(self.omit_result_in_prompt, bool):
+            raise TypeError("omit_result_in_prompt must be bool")
 
 
 EMOTION_HINT_VALUES: Tuple[str, ...] = (

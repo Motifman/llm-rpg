@@ -30,13 +30,25 @@ def format_observation_line_for_recent_events(entry: ObservationEntry) -> str:
 
 
 def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str:
-    """行動結果 1 件を直近出来事テキストの 1 行にする（成功・失敗の整形は RecentEventsFormatter と同一）。"""
+    """行動結果 1 件を直近出来事テキストの 1 行にする（成功・失敗の整形は RecentEventsFormatter と同一）。
+
+    Issue #188 改善:
+    - ``game_time_label`` があれば観測と同じ ``[時刻] ...`` 形式で先頭に prefix。
+    - ``omit_result_in_prompt=True`` の成功時は ``→ [結果] ...`` を省略し、
+      ``[行動] {action_summary}`` だけにする (speech_say の「発言しました。」
+      のような自明な結果のノイズ削減)。失敗時は省略しない (LLM 学習用)。
+    """
     if not isinstance(entry, ActionResultEntry):
         raise TypeError("entry must be ActionResultEntry")
+    time_prefix = f"[{entry.game_time_label}] " if entry.game_time_label else ""
     if entry.success:
-        return f"[行動] {entry.action_summary} → [結果] {entry.result_summary}"
+        if entry.omit_result_in_prompt:
+            return f"{time_prefix}[行動] {entry.action_summary}"
+        return (
+            f"{time_prefix}[行動] {entry.action_summary} → [結果] {entry.result_summary}"
+        )
     parts = [
-        f"[行動] {entry.action_summary} → [失敗]",
+        f"{time_prefix}[行動] {entry.action_summary} → [失敗]",
         f"error_code={entry.error_code or '不明'}",
     ]
     if entry.tool_name:
