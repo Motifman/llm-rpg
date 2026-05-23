@@ -206,6 +206,10 @@ class SpotInteractionApplicationService:
                 traversable_override=spec.traversable_override,
                 sound_permeability_override=spec.sound_permeability_override,
                 cause=PassageChangeCauseEnum.ACTOR_ACTION,
+                # Issue #183: 連鎖の起点を ConnectionStateChangedEvent に伝える。
+                # observer 側で「同 spot で actor を視認できるか」を判定して
+                # prose を組み立てるために使う (軸 1 + 4)。
+                actor_entity_id=entity_id,
             )
 
         if result.item_spec_ids_to_grant:

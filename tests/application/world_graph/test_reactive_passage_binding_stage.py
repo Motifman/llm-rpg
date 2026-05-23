@@ -286,3 +286,5 @@ class TestReactivePassageBindingCause:
         assert len(events) == 1
         assert events[0].cause == PassageChangeCauseEnum.REACTIVE
         assert events[0].traversable is True
+        # Issue #183: reactive 由来は actor 不在を明示的に表現
+        assert events[0].original_actor_entity_id is None

@@ -322,6 +322,75 @@ class TestConnectionState:
             g.set_connection_passage_state(ConnectionId.create(99), "OPEN")
 
 
+class TestConnectionStateChangedActor:
+    """Issue #183: ConnectionStateChangedEvent.original_actor_entity_id の挙動。"""
+
+    def _build_graph(self) -> SpotGraphAggregate:
+        g = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        g.add_spot(_node(1))
+        g.add_spot(_node(2))
+        g.add_connection(
+            SpotConnection(
+                connection_id=ConnectionId.create(1),
+                from_spot_id=SpotId.create(1),
+                to_spot_id=SpotId.create(2),
+                name="d",
+                description="",
+                travel_ticks=0,
+                is_bidirectional=False,
+                passage=Passage.door(DoorStateEnum.LOCKED),
+            )
+        )
+        g.clear_events()
+        return g
+
+    def test_default_actor_is_none(self) -> None:
+        """actor_entity_id 未指定なら event には None が乗る (後方互換)。"""
+        g = self._build_graph()
+        g.set_connection_passage_state(ConnectionId.create(1), "OPEN")
+        evs = g.get_events()
+        assert len(evs) == 1
+        assert evs[0].original_actor_entity_id is None
+
+    def test_actor_is_propagated_to_event(self) -> None:
+        """``actor_entity_id`` を渡すと event の ``original_actor_entity_id`` に伝播。"""
+        g = self._build_graph()
+        actor = EntityId.create(42)
+        g.set_connection_passage_state(
+            ConnectionId.create(1), "OPEN", actor_entity_id=actor,
+        )
+        evs = g.get_events()
+        assert len(evs) == 1
+        assert evs[0].original_actor_entity_id == actor
+
+    def test_actor_propagates_through_set_connection_passage(self) -> None:
+        """下位 ``set_connection_passage`` 経由でも actor が event に伝わる。"""
+        g = self._build_graph()
+        actor = EntityId.create(7)
+        g.set_connection_passage(
+            ConnectionId.create(1),
+            Passage.door(DoorStateEnum.OPEN),
+            actor_entity_id=actor,
+        )
+        evs = g.get_events()
+        assert len(evs) == 1
+        assert evs[0].original_actor_entity_id == actor
+
+    def test_no_event_no_actor_leak(self) -> None:
+        """traversable が変わらないときは event 自体が出ない (actor も漏れない)。"""
+        g = self._build_graph()
+        # LOCKED → LOCKED (state は同じ、actor を渡しても event は出ない)
+        # 注: set_connection_passage_state は kind を保ち state を切り替える。
+        # LOCKED → CLOSED など traversable が変わらないバリアントを使うのが
+        # 厳密だが、本テストでは下位 API で同 passage を渡して検証する。
+        g.set_connection_passage(
+            ConnectionId.create(1),
+            Passage.door(DoorStateEnum.LOCKED),  # 元と同じ
+            actor_entity_id=EntityId.create(99),
+        )
+        assert g.get_events() == []
+
+
 class TestConnectionRecords:
     def test_iter_connection_records_preserves_parallel_edges(self):
         g = SpotGraphAggregate.empty(SpotGraphId.create(1))
