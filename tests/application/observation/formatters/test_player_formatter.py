@@ -303,6 +303,87 @@ class TestPlayerObservationFormatterPlayerSpoke:
         assert out.structured.get("type") == "player_spoke"
 
 
+class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
+    """Issue #188: 話者本人への speech observation は suppress する。
+
+    第 5 回 LLM 実験で「自分が言った内容を三人称 prose で受け取り、自己同
+    一性を見失う」現象 (Bさん 自己三人称ループ) が観測された。formatter が
+    本人へは ``None`` を返すことで回避する。
+    """
+
+    def _make_speaker_ctx(self, speaker_name: str = "探索者B"):
+        profile_repo = MagicMock()
+        profile = MagicMock()
+        profile.name.value = speaker_name
+        profile_repo.find_by_id.return_value = profile
+        return _make_context(player_profile_repository=profile_repo)
+
+    def test_self_say_returns_none(self):
+        """SAY を自分自身に対しては formatter が None を返す。"""
+        ctx = self._make_speaker_ctx()
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(2),
+            aggregate_type="PlayerStatusAggregate",
+            content="私は廊下で待機する",
+            channel=SpeechChannel.SAY,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+        )
+        out = formatter.format(event, PlayerId(2))  # 話者本人
+        assert out is None
+
+    def test_self_shout_returns_none(self):
+        """SHOUT も同様に話者本人には届けない。"""
+        ctx = self._make_speaker_ctx()
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(2),
+            aggregate_type="PlayerStatusAggregate",
+            content="助けて！",
+            channel=SpeechChannel.SHOUT,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+        )
+        out = formatter.format(event, PlayerId(2))
+        assert out is None
+
+    def test_self_whisper_returns_none(self):
+        """WHISPER も話者本人には届けない (action_result_store で十分)。"""
+        ctx = self._make_speaker_ctx()
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(2),
+            aggregate_type="PlayerStatusAggregate",
+            content="内緒だよ",
+            channel=SpeechChannel.WHISPER,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=PlayerId(3),
+        )
+        out = formatter.format(event, PlayerId(2))
+        assert out is None
+
+    def test_other_recipient_still_receives_prose(self):
+        """他者 (話者ではない recipient) には引き続き prose が届く。"""
+        ctx = self._make_speaker_ctx("Bob")
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(2),
+            aggregate_type="PlayerStatusAggregate",
+            content="こんにちは",
+            channel=SpeechChannel.SAY,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+        )
+        out = formatter.format(event, PlayerId(1))  # 別人 recipient
+        assert out is not None
+        assert "Bob" in out.prose
+        assert "こんにちは" in out.prose
+        assert out.observation_category == "social"
+        assert out.structured.get("role") == "other"
+
+
 class TestPlayerObservationFormatterUnknownEvent:
     """対象外イベントのテスト"""
 
