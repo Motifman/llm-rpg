@@ -96,17 +96,19 @@ class PlayerObservationFormatter:
         self, event: PlayerDownedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         is_self = event.aggregate_id.value == recipient_id.value
+        killer_player_id = getattr(event, "killer_player_id", None)
         killer_name = (
-            self._context.name_resolver.player_name(event.killer_player_id)
-            if getattr(event, "killer_player_id", None) is not None
+            self._context.name_resolver.player_name(killer_player_id)
+            if killer_player_id is not None
             else None
         )
         killer_id = (
-            getattr(event.killer_player_id, "value", None)
-            if getattr(event, "killer_player_id", None)
+            getattr(killer_player_id, "value", None)
+            if killer_player_id is not None
             else None
         )
         if is_self:
+            # 本人視点では誰に倒されたかは当然分かる。
             prose = "戦闘不能になりました。"
             if killer_name:
                 prose = f"{killer_name}に倒されました。"
@@ -118,11 +120,34 @@ class PlayerObservationFormatter:
                 schedules_turn=True,
                 breaks_movement=True,
             )
+        # Issue #185: 第三者観測の killer 視認チェック。
+        # killer の位置が recipient と同じ spot のときだけ killer 名を出す。
+        # 別 spot に killer がいるケースで killer 名を出すと、観測者が本来
+        # 知り得ない「誰が倒したか」を漏らす経路になる。
+        # 位置不明 (graph 未注入 / lookup 失敗) は安全側に倒し、killer 名を出さない。
+        killer_visible = False
+        if killer_player_id is not None:
+            recipient_spot = self._context.lookup_recipient_spot(recipient_id)
+            killer_spot = self._context.lookup_recipient_spot(killer_player_id)
+            if (
+                recipient_spot is not None
+                and killer_spot is not None
+                and recipient_spot == killer_spot
+            ):
+                killer_visible = True
         actor_name = self._context.name_resolver.player_name(event.aggregate_id)
-        prose = f"{actor_name}が戦闘不能になりました。"
-        if killer_name:
+        if killer_visible and killer_name:
             prose = f"{actor_name}が{killer_name}に倒されました。"
-        structured = {"type": "player_downed", "actor": actor_name}
+        else:
+            prose = f"{actor_name}が戦闘不能になりました。"
+        structured = {
+            "type": "player_downed",
+            "actor": actor_name,
+            # killer 情報は structured には残す (機械可読、解析用)。
+            # prose で出すかどうかは観測可能性で判定する (上述)。
+            "killer_player_id": killer_id,
+            "killer_visible_to_recipient": killer_visible,
+        }
         return ObservationOutput(
             prose=prose, structured=structured, observation_category="social"
         )

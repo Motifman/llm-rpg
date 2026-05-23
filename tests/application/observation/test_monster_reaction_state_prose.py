@@ -379,21 +379,26 @@ class TestSpotSoundHeardProse:
 
 
 class TestAbandonedChaseProse:
-    """abandon の reason 別 prose 切替。"""
+    """Issue #185: abandon の prose は単一の事実描写に統一する。
+
+    観測者は「モンスターが追跡をやめた」事実は見えても、内部理由
+    (target_lost / no_path / 等) は普通推測できない。reason を prose に
+    焼き込むと観測者が本来知り得ない情報を漏らすため、prose は固定文に
+    集約し reason は ``structured`` に残す。
+    """
 
     @pytest.mark.parametrize(
-        "reason,expected_keyword",
+        "reason",
         [
-            ("target_lost", "見失"),
-            ("search_expired", "見失"),
-            ("no_path", "進路"),
-            ("grace_expired", "立ち去"),
-            ("max_ticks_exceeded", "立ち去"),
+            "target_lost",
+            "search_expired",
+            "no_path",
+            "grace_expired",
+            "max_ticks_exceeded",
         ],
     )
-    def test_reason_別_prose(
-        self, formatter: SpotGraphObservationFormatter,
-        reason: str, expected_keyword: str,
+    def test_reason_に依らず単一の事実prose(
+        self, formatter: SpotGraphObservationFormatter, reason: str,
     ) -> None:
         ev = MonsterAbandonedChaseInSpotEvent.create(
             aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
@@ -402,6 +407,16 @@ class TestAbandonedChaseProse:
         result = formatter.format(ev, PLAYER_1)
 
         assert result is not None
-        assert expected_keyword in result.prose
+        # 全 reason で同じ事実描写
+        assert "追跡を諦めて立ち去った" in result.prose
         assert "灰色のオオカミ" in result.prose
+        # 観測者が知り得ない内部理由を prose に漏らさない
+        for leak in ("見失", "進路", "範囲外", "諦めて立ち去った。"):
+            # 「諦めて立ち去った」は事実なので OK
+            if leak == "諦めて立ち去った。":
+                continue
+            assert leak not in result.prose, (
+                f"reason={reason!r} で prose に観測モデルを破る語 {leak!r} が混入: {result.prose!r}"
+            )
+        # 機械可読の structured には reason を保持
         assert result.structured["reason"] == reason

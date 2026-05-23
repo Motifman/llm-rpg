@@ -119,6 +119,11 @@ class GuildObservationFormatter:
     def _format_guild_bank_deposited(
         self, event: GuildBankDepositedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
+        # Issue #185: guild bank の入出金は ギルド内アナウンス系の情報として
+        # 全 member に公開される設計 (現実のギルド帳簿に相当)。observer の
+        # 位置に依らず actor 名を prose に出すのは意図的で、観測モデルの
+        # 「位置で隠す」原則の例外。位置ベース秘匿が必要な操作は guild bank
+        # ではなく interaction event 側で扱う。
         actor = self._context.name_resolver.player_name(event.deposited_by)
         prose = f"{actor}がギルド金庫に{event.amount}ゴールドを入金しました。"
         guild_id_value = event.aggregate_id.value
