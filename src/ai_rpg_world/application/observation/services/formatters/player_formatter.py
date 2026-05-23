@@ -211,6 +211,20 @@ class PlayerObservationFormatter:
     def _format_player_spoke(
         self, event: PlayerSpokeEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
+        # Issue #188 第5回実験で観測された「自己三人称ループ」の修正。
+        # 話者本人は自分の speech_say の結果を ``action_result_store`` 経由で
+        # **一人称ベースの行動 summary** として既に受け取っており、追加で
+        # 「{自分の display_name} が『X』と言った」という三人称 observation を
+        # 渡すと、Gemma 等の小さい LLM が「自分を三人称で語る主体」と誤認識
+        # し、自分や相手を「Bさん」のように呼ぶループに陥る経路になっていた
+        # (R1_default LOSE の主因)。
+        # ``speech_recipient_strategy.py`` の設計コメントでも「自分が言った
+        # 内容を観測として持つかは formatter 側で制御可」と委ねられており、
+        # formatter が「持たせない」と判断するのが正しい責務分担。
+        is_self = event.aggregate_id.value == recipient_id.value
+        if is_self:
+            return None
+
         speaker_name = self._context.name_resolver.player_name(event.aggregate_id)
         if event.channel == SpeechChannel.WHISPER:
             verb = "囁いた"
@@ -218,16 +232,15 @@ class PlayerObservationFormatter:
             verb = "言った"
         else:
             verb = "叫んだ"
-        is_self = event.aggregate_id.value == recipient_id.value
         structured_base = {
             "type": "player_spoke",
             "speaker": speaker_name,
             "speaker_player_id": event.aggregate_id.value,
             "channel": event.channel.value,
             "content": event.content,
-            "role": "self" if is_self else "other",
+            "role": "other",
         }
-        category = "self_only" if is_self else "social"
+        category = "social"
 
         repo = self._context.spot_graph_repository
         svc = self._context.sound_propagation_service
@@ -249,13 +262,16 @@ class PlayerObservationFormatter:
             except EntityNotInGraphException:
                 pass
             else:
+                # is_self は上で早期 return 済みなので、ここに来るのは
+                # 「話者ではない recipient」のケースのみ。
                 if event.channel == SpeechChannel.WHISPER:
-                    if not is_self:
-                        if (
-                            event.target_player_id is None
-                            or event.target_player_id.value != recipient_id.value
-                        ):
-                            return None
+                    # 囁き: 宛先 (target_player_id) と recipient が一致する
+                    # ときだけ届ける。他は同 spot にいても観測しない。
+                    if (
+                        event.target_player_id is None
+                        or event.target_player_id.value != recipient_id.value
+                    ):
+                        return None
                     clarity = SoundClarityEnum.CLEAR
                 else:
                     volume = speech_channel_to_sound_volume(event.channel)
@@ -276,7 +292,9 @@ class PlayerObservationFormatter:
 
                 structured = dict(structured_base)
                 structured["sound_clarity"] = clarity.value
-                if clarity == SoundClarityEnum.FAINT and not is_self:
+                if clarity == SoundClarityEnum.FAINT:
+                    # FAINT は内容を秘匿する (聞き取れていない)。話者本人は
+                    # この経路に来ないので is_self ガードは不要。
                     structured["content"] = ""
                 return ObservationOutput(
                     prose=prose, structured=structured, observation_category=category
