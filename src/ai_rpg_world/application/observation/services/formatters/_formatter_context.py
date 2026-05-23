@@ -7,6 +7,9 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
     ObservationNameResolver,
 )
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -84,3 +87,22 @@ class ObservationFormatterContext:
     item_repository: Optional["ItemRepository"]
     spot_graph_repository: Optional["ISpotGraphRepository"] = None
     sound_propagation_service: Optional["SoundPropagationService"] = None
+
+    def lookup_recipient_spot(
+        self, recipient_player_id: PlayerId
+    ) -> Optional[SpotId]:
+        """observer (player) の現在 spot を引く。
+
+        Issue #184 (軸 3) の位置ベース prose 分岐用。spot_graph_repository が
+        未注入 / entity がグラフ上に置かれていない場合は ``None`` を返し、
+        formatter 側で位置非依存の fallback prose に倒せるようにする。
+        """
+        if self.spot_graph_repository is None:
+            return None
+        try:
+            graph = self.spot_graph_repository.find_graph()
+            return graph.get_entity_spot(EntityId.create(int(recipient_player_id)))
+        except Exception:
+            # 例外の種類はリポジトリ実装依存。観測 prose に失敗を漏らさず
+            # 「位置不明」として None を返すのが正しい振る舞い。
+            return None
