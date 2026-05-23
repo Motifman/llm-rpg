@@ -202,6 +202,158 @@ class TestConnectionStateChanged:
         assert len(recipients) == 2
 
 
+class TestConnectionStateChangedAdjacentDelivery:
+    """Issue #184: 隣接 spot に居る player にも音として配信する (軸 3)。"""
+
+    def _make_strategy_with_adjacency(
+        self,
+        entity_spot_mapping: dict,
+        adjacency: dict,
+    ):
+        """from/to spot の周辺 connection を設定できる strategy。
+
+        adjacency: {source_spot_id: [(to_spot_id, sound_permeability), ...]}
+        """
+        from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_recipient_strategy import (
+            SpotGraphRecipientStrategy,
+        )
+
+        registry_map = {ConnectionStateChangedEvent: "spot_graph"}
+        registry = ObservedEventRegistry(event_to_strategy=registry_map)
+
+        graph = MagicMock()
+        graph.entity_spot_mapping.return_value = {
+            EntityId.create(eid): SpotId(sid)
+            for eid, sid in entity_spot_mapping.items()
+        }
+
+        def _iter_outgoing(spot_id):
+            conns = []
+            for to_sid, permeability in adjacency.get(spot_id.value, []):
+                conn = MagicMock()
+                conn.to_spot_id = SpotId(to_sid)
+                conn.passage.sound_permeability = permeability
+                conns.append(conn)
+            return conns
+
+        graph.iter_outgoing_connections_from.side_effect = _iter_outgoing
+
+        repo = MagicMock()
+        repo.find_graph.return_value = graph
+
+        player_status_repo = MagicMock()
+        statuses = []
+        by_id: dict[int, object] = {}
+        for pid in entity_spot_mapping:
+            status = MagicMock()
+            status.player_id = PlayerId(pid)
+            statuses.append(status)
+            by_id[pid] = status
+        player_status_repo.find_all.return_value = statuses
+        player_status_repo.find_by_id.side_effect = lambda pid: by_id.get(pid.value)
+
+        return SpotGraphRecipientStrategy(
+            observed_event_registry=registry,
+            spot_graph_repository=repo,
+            player_status_repository=player_status_repo,
+        )
+
+    def test_includes_player_in_audible_neighbor_spot(self):
+        """SPOT_A → SPOT_C が permeability=0.5 (可聴) なら C にいる人にも届く。"""
+        SPOT_C = 3
+        strategy = self._make_strategy_with_adjacency(
+            entity_spot_mapping={1: 1, 2: 2, 3: SPOT_C},  # P3 が SPOT_C
+            adjacency={
+                1: [(SPOT_C, 0.5)],  # SPOT_A → SPOT_C は半透過
+                2: [],
+                SPOT_C: [],
+            },
+        )
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=False,
+        )
+        recipients = strategy.resolve(event)
+        ids = {r.value for r in recipients}
+        # 直接観測の P1 (at A), P2 (at B) と、隣接観測の P3 (at C) が全員届く
+        assert ids == {1, 2, 3}
+
+    def test_excludes_neighbor_when_passage_is_soundproof(self):
+        """permeability < 0.1 は完全遮音 → 隣接 spot の人には届かない。"""
+        SPOT_C = 3
+        strategy = self._make_strategy_with_adjacency(
+            entity_spot_mapping={1: 1, 3: SPOT_C},
+            adjacency={
+                1: [(SPOT_C, 0.05)],  # ほぼ完全遮音
+                SPOT_C: [],
+            },
+        )
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=False,
+        )
+        recipients = strategy.resolve(event)
+        ids = {r.value for r in recipients}
+        # P1 だけ直接観測。P3 (隣接だが遮音) は届かない
+        assert ids == {1}
+
+    def test_neighbor_via_to_spot_is_also_audible(self):
+        """to_spot から出る隣接 connection も配信対象になる。"""
+        SPOT_D = 4
+        strategy = self._make_strategy_with_adjacency(
+            entity_spot_mapping={2: 2, 4: SPOT_D},
+            adjacency={
+                1: [],
+                2: [(SPOT_D, 0.7)],  # SPOT_B → SPOT_D は高透過
+                SPOT_D: [],
+            },
+        )
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=True,
+        )
+        recipients = strategy.resolve(event)
+        ids = {r.value for r in recipients}
+        # P2 (at B, 直接) + P4 (at D, 隣接)
+        assert ids == {2, 4}
+
+    def test_direct_recipient_not_double_counted_as_neighbor(self):
+        """直接観測 spot に居る人が隣接探索でも引かれた場合、重複しない。"""
+        # 仮想的: SPOT_A → SPOT_B も双方向 connection があるとして、
+        # SPOT_B にいる P2 は直接観測 (to_spot) と隣接観測の両方の候補になる
+        strategy = self._make_strategy_with_adjacency(
+            entity_spot_mapping={2: 2},
+            adjacency={
+                1: [(2, 0.7)],  # SPOT_A → SPOT_B 自体
+                2: [(1, 0.7)],  # SPOT_B → SPOT_A 自体
+            },
+        )
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=False,
+        )
+        recipients = strategy.resolve(event)
+        ids = [r.value for r in recipients]
+        # 重複なし
+        assert ids.count(2) == 1
+
+
 class TestSpotObjectStateChanged:
     def test_includes_all_at_spot(self):
         """actor_entity_id 未指定なら従来通り同スポット全員に配信される。"""
