@@ -142,27 +142,24 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
     ) -> Optional[ObservationOutput]:
         """モンスターが CHASE を諦めて IDLE に戻った瞬間 (Phase 4a/4b)。
 
-        理由 (`reason`) によって若干 prose のニュアンスを変える:
-        - grace_expired / max_ticks_exceeded: 「諦めて立ち去った」
-        - target_lost / search_expired: 「見失って戻っていった」
-        - no_path: 「進路を阻まれて引き返した」
+        Issue #185: 観測者は「モンスターが追跡をやめた」事実は見えるが、
+        その内部理由 (target_lost / no_path / grace_expired 等) は普通は
+        推測できない。reason を prose に焼き込むと、観測者が本来知り得ない
+        情報を漏らす経路になるため、prose は単一の事実描写に統一し、
+        reason は ``structured`` に残して機械可読の補助情報とする。
+        観測者の位置が advanced して「進路の障害物が見える」「相手が捜索
+        範囲外に出るのを見届けた」などの判定ができるようになったら、
+        位置 / 状況ベースで prose を分岐させる (軸 3 の自然な拡張)。
         """
         monster_name = self._context.name_resolver.monster_name_by_monster_id(
             event.monster_id
         )
-        reason = event.reason
-        if reason in ("target_lost", "search_expired"):
-            prose = f"{monster_name}は獲物を見失い、追跡を諦めたようだ。"
-        elif reason == "no_path":
-            prose = f"{monster_name}は進路を阻まれ、追跡を諦めた。"
-        else:
-            # grace_expired / max_ticks_exceeded / 不明 reason の fallback
-            prose = f"{monster_name}は追跡を諦めて立ち去った。"
+        prose = f"{monster_name}は追跡を諦めて立ち去った。"
         structured = {
             "type": "monster_abandoned_chase",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
-            "reason": reason,
+            "reason": event.reason,
         }
         return ObservationOutput(
             prose=prose,

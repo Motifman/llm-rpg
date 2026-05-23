@@ -176,6 +176,148 @@ class TestPlayerObservationFormatterPlayerDowned:
         assert "倒され" in out.prose
 
 
+class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
+    """Issue #185: 第三者観測の killer 視認チェック。
+
+    別 spot に killer がいるケースで killer 名を prose に出すと、観測者が
+    本来知り得ない「誰が倒したか」を漏らす経路になる。同 spot のときだけ
+    killer 名を出す。位置不明 fallback は安全側 (killer 名を出さない)。
+    """
+
+    def _make_ctx_with_positions(
+        self,
+        recipient_spot,
+        killer_spot,
+        killer_name: str = "Alice",
+        victim_name: str = "Victor",
+    ):
+        """recipient と killer の位置を任意に設定できる context。
+
+        victim (PlayerId=1) と killer (PlayerId=2) で別名を返すよう
+        profile_repo.find_by_id を id 別に振り分ける。
+        """
+        from ai_rpg_world.application.observation.services.formatters._formatter_context import (
+            ObservationFormatterContext,
+        )
+
+        profile_repo = MagicMock()
+
+        def _find_profile(pid):
+            p = MagicMock()
+            if pid.value == 1:
+                p.name.value = victim_name
+            elif pid.value == 2:
+                p.name.value = killer_name
+            else:
+                p.name.value = f"Player{pid.value}"
+            return p
+
+        profile_repo.find_by_id.side_effect = _find_profile
+        name_resolver = ObservationNameResolver(
+            spot_repository=None,
+            player_profile_repository=profile_repo,
+            item_spec_repository=None,
+            item_repository=None,
+            shop_repository=None,
+            guild_repository=None,
+            monster_repository=None,
+            skill_spec_repository=None,
+            sns_user_repository=None,
+        )
+
+        # spot_graph_repository.find_graph().get_entity_spot を player_id 別に返す
+        graph = MagicMock()
+
+        def _get_entity_spot(entity_id):
+            v = entity_id.value
+            if v == 100:  # recipient
+                return recipient_spot
+            if v == 2:  # killer
+                return killer_spot
+            return None
+
+        graph.get_entity_spot.side_effect = _get_entity_spot
+        spot_repo = MagicMock()
+        spot_repo.find_graph.return_value = graph
+
+        return ObservationFormatterContext(
+            name_resolver=name_resolver,
+            item_repository=None,
+            spot_graph_repository=spot_repo,
+        )
+
+    def test_third_party_same_spot_as_killer_includes_killer_name(self):
+        """observer が killer と同 spot に居れば killer 名が prose に出る。"""
+        ctx = self._make_ctx_with_positions(
+            recipient_spot=SpotId(5), killer_spot=SpotId(5)
+        )
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),  # victim
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=PlayerId(2),  # killer
+        )
+        out = formatter.format(event, PlayerId(100))  # third-party observer
+        assert out is not None
+        assert "Alice" in out.prose
+        assert "倒され" in out.prose
+        assert out.structured["killer_visible_to_recipient"] is True
+
+    def test_third_party_different_spot_from_killer_hides_killer_name(self):
+        """observer が killer と別 spot なら killer 名は prose に出ない。"""
+        ctx = self._make_ctx_with_positions(
+            recipient_spot=SpotId(5), killer_spot=SpotId(99)
+        )
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=PlayerId(2),
+        )
+        out = formatter.format(event, PlayerId(100))
+        assert out is not None
+        # victim の事実 prose
+        assert "戦闘不能" in out.prose
+        # killer 名は秘匿
+        assert "Alice" not in out.prose
+        assert out.structured["killer_visible_to_recipient"] is False
+        # structured には killer_id を残す (機械可読、解析用)
+        assert out.structured["killer_player_id"] == 2
+
+    def test_third_party_position_unknown_hides_killer_name(self):
+        """位置不明 (graph 未注入 等) は安全側に倒し killer 名を出さない。"""
+        ctx = self._make_ctx_with_positions(
+            recipient_spot=None, killer_spot=None
+        )
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=PlayerId(2),
+        )
+        out = formatter.format(event, PlayerId(100))
+        assert out is not None
+        assert "戦闘不能" in out.prose
+        assert "Alice" not in out.prose
+        assert out.structured["killer_visible_to_recipient"] is False
+
+    def test_third_party_no_killer_still_outputs_victim_prose(self):
+        """killer 不明 (event.killer_player_id=None) は victim 名のみで prose 出す。"""
+        ctx = self._make_ctx_with_positions(
+            recipient_spot=SpotId(5), killer_spot=SpotId(5)
+        )
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            # killer_player_id 未指定
+        )
+        out = formatter.format(event, PlayerId(100))
+        assert out is not None
+        assert "戦闘不能" in out.prose
+        assert out.structured["killer_visible_to_recipient"] is False
+
+
 class TestPlayerObservationFormatterPlayerRevived:
     """PlayerRevivedEvent のフォーマットテスト"""
 
