@@ -433,7 +433,12 @@ class EscapeGameRuntime:
         """TODO ツール実行器を遅延初期化する。"""
         if self._todo_tool_executor is not None:
             return
-        self._todo_tool_executor = TodoToolExecutor(self._todo_store)
+        self._todo_tool_executor = TodoToolExecutor(
+            self._todo_store,
+            sliding_window=self._sliding_window,
+            action_result_store=self._action_result_store,
+            current_tick_provider=self.current_tick,
+        )
 
     def run_llm_auxiliary_tool(
         self, player_id: PlayerId, name: str, arguments: Dict[str, Any]
@@ -473,6 +478,31 @@ class EscapeGameRuntime:
                 lines.append(f"- {name}")
         return "\n".join(lines) if lines else "（なし）"
 
+    def _format_active_memos(self, player_id: PlayerId, *, stale_age_ticks: int = 20) -> str:
+        """LLM が memo_add で固定した未完了 memo を整形する。空なら ""。"""
+        entries = self._todo_store.list_uncompleted(player_id)
+        if not entries:
+            return ""
+        current_tick = self.current_tick()
+        lines: List[str] = []
+        for memo in entries:
+            stale_prefix = ""
+            age_part = ""
+            if memo.added_at_tick is not None:
+                elapsed = max(0, current_tick - memo.added_at_tick)
+                age_part = f", 経過 {elapsed} tick"
+                if elapsed >= stale_age_ticks:
+                    stale_prefix = "[STALE] "
+            tick_part = (
+                f"tick={memo.added_at_tick}"
+                if memo.added_at_tick is not None
+                else memo.added_at.strftime("%H:%M")
+            )
+            lines.append(
+                f"- {stale_prefix}[{tick_part}{age_part}] {memo.content} (id: {memo.id})"
+            )
+        return "\n".join(lines)
+
     # ── 完全プロンプト構築 ──
 
     def build_full_prompt(self, player_id: PlayerId) -> dict:
@@ -489,15 +519,20 @@ class EscapeGameRuntime:
         recent_events_text = recent_fmt.format(recent_obs, recent_acts)
 
         inventory_block = self._format_inventory_evidence(player_id)
+        active_memos_block = self._format_active_memos(player_id)
 
-        user_content = "\n".join(
+        sections: List[str] = [
+            "【現在の目的】",
+            "- この廃墟から外へ脱出する。",
+            "- 必要なら手がかり（物証・記録）を集め、判断材料にする。",
+            "",
+            "【現在地と周囲】",
+            current_state_text.strip() or "（情報なし）",
+        ]
+        if active_memos_block:
+            sections.extend(["", "【進行中のメモ】", active_memos_block])
+        sections.extend(
             [
-                "【現在の目的】",
-                "- この廃墟から外へ脱出する。",
-                "- 必要なら手がかり（物証・記録）を集め、判断材料にする。",
-                "",
-                "【現在地と周囲】",
-                current_state_text.strip() or "（情報なし）",
                 "",
                 "【直近の出来事】",
                 "観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。",
@@ -509,6 +544,7 @@ class EscapeGameRuntime:
                 "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
             ]
         )
+        user_content = "\n".join(sections)
 
         system_content = self.build_system_prompt(player_id)
         return {

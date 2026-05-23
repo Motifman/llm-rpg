@@ -27,11 +27,11 @@ def test_system_prompt_does_not_advertise_memory_tools() -> None:
     assert "episodic" not in prompt
     assert "facts" not in prompt
     assert "laws" not in prompt
-    assert "todo_add" in prompt
+    assert "memo_add" in prompt
 
 
-def test_default_tools_register_todo_without_memory_tools() -> None:
-    """ツールカタログは TODO を残し、記憶検索・想起ツールを登録しない。"""
+def test_default_tools_register_memo_without_memory_tools() -> None:
+    """ツールカタログは memo を残し、記憶検索・想起ツールを登録しない。"""
     registry = DefaultGameToolRegistry()
 
     register_default_tools(registry, todo_enabled=True, include_movement_tools=False)
@@ -41,7 +41,7 @@ def test_default_tools_register_todo_without_memory_tools() -> None:
         if resolver.is_available(None)
     }
 
-    assert {"todo_add", "todo_list", "todo_complete"} <= names
+    assert {"memo_add", "memo_list", "memo_done"} <= names
     assert "memory_query" not in names
     assert "memory_recall_subjective" not in names
     assert "memory_working_memory_append" not in names

@@ -40,9 +40,9 @@ class TestEscapeGameRuntimeToolMode:
         monkeypatch.delenv("LLM_TOOL_MODE", raising=False)
         rt = create_escape_game_runtime(_SCENARIO_PATH)
         names = _tool_names(rt)
-        assert "todo_add" in names
-        assert "todo_list" in names
-        assert "todo_complete" in names
+        assert "memo_add" in names
+        assert "memo_list" in names
+        assert "memo_done" in names
 
     def test_default_mode_explicit_env_includes_todo_tools(
         self, monkeypatch: pytest.MonkeyPatch
@@ -50,7 +50,7 @@ class TestEscapeGameRuntimeToolMode:
         """LLM_TOOL_MODE=default は TODO 含む構成と同じ挙動。"""
         monkeypatch.setenv("LLM_TOOL_MODE", "default")
         rt = create_escape_game_runtime(_SCENARIO_PATH)
-        assert "todo_add" in _tool_names(rt)
+        assert "memo_add" in _tool_names(rt)
 
     def test_pure_spot_graph_mode_excludes_todo_tools(
         self, monkeypatch: pytest.MonkeyPatch
@@ -59,9 +59,9 @@ class TestEscapeGameRuntimeToolMode:
         monkeypatch.setenv("LLM_TOOL_MODE", "pure_spot_graph")
         rt = create_escape_game_runtime(_SCENARIO_PATH)
         names = _tool_names(rt)
-        assert "todo_add" not in names
-        assert "todo_list" not in names
-        assert "todo_complete" not in names
+        assert "memo_add" not in names
+        assert "memo_list" not in names
+        assert "memo_done" not in names
 
     def test_pure_spot_graph_mode_keeps_speech_tools(
         self, monkeypatch: pytest.MonkeyPatch
@@ -104,7 +104,7 @@ class TestEscapeGameRuntimeToolMode:
         ):
             rt = create_escape_game_runtime(_SCENARIO_PATH)
         # TODO は含まれる (fallback)
-        assert "todo_add" in _tool_names(rt)
+        assert "memo_add" in _tool_names(rt)
         # warning が記録される
         assert any("Unknown LLM_TOOL_MODE" in r.message for r in caplog.records)
 
@@ -116,7 +116,7 @@ class TestEscapeGameRuntimeToolMode:
         rt = create_escape_game_runtime(
             _SCENARIO_PATH, include_todo_tools=False
         )
-        assert "todo_add" not in _tool_names(rt)
+        assert "memo_add" not in _tool_names(rt)
 
     def test_explicit_argument_true_keeps_todo_even_when_env_pure(
         self, monkeypatch: pytest.MonkeyPatch
@@ -126,4 +126,4 @@ class TestEscapeGameRuntimeToolMode:
         rt = create_escape_game_runtime(
             _SCENARIO_PATH, include_todo_tools=True
         )
-        assert "todo_add" in _tool_names(rt)
+        assert "memo_add" in _tool_names(rt)
