@@ -110,21 +110,42 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             except Exception:
                 pass
 
-        # Issue #180: prose は観測者が本当に観測できる「事実」だけに留める。
-        # cause を文体 (オノマトペ等) に焼き込まないこと: 別 spot からは本来
-        # 区別できない情報を漏らすことになる。誰がどうトリガしたかの推論は、
-        # interaction event の同時観測など他の経路から LLM が組み立てる責務。
-        # 機械可読の補助情報として ``structured.cause`` には残し、将来の
-        # 観測モデル拡張 (位置に応じた prose 差分化、軸 3) で活用する。
-        if event.traversable:
-            prose = f"{conn_name}が通行可能になった。"
+        # Issue #184 (軸 3): 観測者の位置で prose を分岐する。
+        # - 両端 spot に居れば「直接観測」: 状態変化を素朴に prose 化
+        # - 隣接 spot に居れば「間接観測 (音)」: 通行可否ではなく音だけ
+        # - それ以外: recipient_strategy 側で配信を弾いている想定だが、
+        #   防御的に直接観測の prose にフォールバック
+        recipient_spot = self._context.lookup_recipient_spot(recipient_id)
+        is_direct = recipient_spot in (event.from_spot_id, event.to_spot_id)
+        is_neighbor = (
+            recipient_spot is not None and not is_direct
+        )
+        if is_neighbor:
+            # 音だけ。「通行可能/不能」のような確定的な状態判断は本人が
+            # 隣接 spot からでは知り得ないので、観測としては「音がした」止まり。
+            prose = f"遠くで{conn_name}が動く音がした。"
+            recipient_position = "adjacent"
         else:
-            prose = f"{conn_name}が通行不能になった。"
+            # 直接観測 (両端 spot 内、または位置不明な fallback)。
+            # 因果は同 spot で interaction event を別途観測した recipient が
+            # 自力で組み立てる。formatter は事実のみを描く (PR #182 の方針)。
+            if event.traversable:
+                prose = f"{conn_name}が通行可能になった。"
+            else:
+                prose = f"{conn_name}が通行不能になった。"
+            recipient_position = (
+                "at_from"
+                if recipient_spot == event.from_spot_id
+                else "at_to"
+                if recipient_spot == event.to_spot_id
+                else "unknown"
+            )
         structured = {
             "type": "connection_state_changed",
             "connection_name": conn_name,
             "traversable": event.traversable,
             "cause": event.cause.value,
+            "recipient_position": recipient_position,
         }
         return ObservationOutput(
             prose=prose,

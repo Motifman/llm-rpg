@@ -93,6 +93,11 @@ def _make_context(
 
     graph.get_connection.side_effect = get_connection
 
+    # Issue #184: 位置ベース prose 分岐用に get_entity_spot を default で
+    # 「位置不明」(None) にしておく。位置を要する個別テストは side_effect
+    # を上書きして特定 spot を返すこと。
+    graph.get_entity_spot.return_value = None
+
     return ObservationFormatterContext(
         name_resolver=name_resolver,
         item_repository=None,
@@ -326,6 +331,95 @@ class TestConnectionStateChanged:
         )
         result2 = formatter.format(event2, PLAYER_1)
         assert result2.structured["cause"] == "UNKNOWN"
+
+
+class TestConnectionStateChangedPositionAware:
+    """Issue #184: 観測者の位置で prose を分岐する (軸 3)。
+
+    直接観測 (両端 spot 内) は素朴な「通行可能/不能になった」prose。
+    間接観測 (隣接 spot) は「遠くで...動く音がした」と音だけに縮退する。
+    """
+
+    def _build_ctx_with_position(self, recipient_spot):
+        """recipient の位置を任意の SpotId にできる context を作る。"""
+        ctx = _make_context(
+            connection_names={"200": "金庫扉"},
+        )
+        # ObservationFormatterContext は frozen dataclass なので
+        # 内部の repo モックの get_entity_spot を上書きする
+        graph = ctx.spot_graph_repository.find_graph()
+        graph.get_entity_spot.return_value = recipient_spot
+        return ctx
+
+    def test_recipient_at_from_spot_gets_direct_prose(self):
+        """from_spot にいる observer は素朴な「通行不能になった」prose。"""
+        ctx = self._build_ctx_with_position(SPOT_A)
+        formatter = SpotGraphObservationFormatter(ctx)
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=False,
+        )
+        result = formatter.format(event, PLAYER_1)
+        assert "通行不能になった" in result.prose
+        assert "遠くで" not in result.prose
+        assert result.structured["recipient_position"] == "at_from"
+
+    def test_recipient_at_to_spot_gets_direct_prose(self):
+        """to_spot にいる observer も直接観測扱い。"""
+        ctx = self._build_ctx_with_position(SPOT_B)
+        formatter = SpotGraphObservationFormatter(ctx)
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=True,
+        )
+        result = formatter.format(event, PLAYER_1)
+        assert "通行可能になった" in result.prose
+        assert result.structured["recipient_position"] == "at_to"
+
+    def test_recipient_at_adjacent_spot_gets_sound_only_prose(self):
+        """隣接 spot にいる observer は音だけ伝わる: 通行可否情報は得られない。"""
+        SPOT_NEIGHBOR = SpotId(99)
+        ctx = self._build_ctx_with_position(SPOT_NEIGHBOR)
+        formatter = SpotGraphObservationFormatter(ctx)
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=False,
+        )
+        result = formatter.format(event, PLAYER_1)
+        # 音だけ。「通行不能」のような確定状態は隣接からは知り得ない
+        assert "遠くで" in result.prose
+        assert "動く音がした" in result.prose
+        assert "通行不能" not in result.prose
+        assert "通行可能" not in result.prose
+        assert result.structured["recipient_position"] == "adjacent"
+
+    def test_recipient_position_unknown_falls_back_to_direct_prose(self):
+        """位置不明 (graph 上に居ない / 引けない) は直接観測 fallback。"""
+        ctx = self._build_ctx_with_position(None)  # 引けない
+        formatter = SpotGraphObservationFormatter(ctx)
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=False,
+        )
+        result = formatter.format(event, PLAYER_1)
+        assert "通行不能になった" in result.prose
+        assert result.structured["recipient_position"] == "unknown"
 
 
 class TestSpotObjectStateChanged:
