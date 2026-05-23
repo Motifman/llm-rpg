@@ -32,6 +32,8 @@ class DefaultActionResultStore(IActionResultStore):
         tool_name: Optional[str] = None,
         argument_fingerprint: Optional[str] = None,
         should_reschedule: bool = False,
+        game_time_label: Optional[str] = None,
+        omit_result_in_prompt: bool = False,
     ) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -53,6 +55,10 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("argument_fingerprint must be str or None")
         if not isinstance(should_reschedule, bool):
             raise TypeError("should_reschedule must be bool")
+        if game_time_label is not None and not isinstance(game_time_label, str):
+            raise TypeError("game_time_label must be str or None")
+        if not isinstance(omit_result_in_prompt, bool):
+            raise TypeError("omit_result_in_prompt must be bool")
         at = occurred_at if occurred_at is not None else datetime.now()
         entry = ActionResultEntry(
             occurred_at=at,
@@ -63,6 +69,8 @@ class DefaultActionResultStore(IActionResultStore):
             tool_name=tool_name,
             argument_fingerprint=argument_fingerprint,
             should_reschedule=should_reschedule,
+            game_time_label=game_time_label,
+            omit_result_in_prompt=omit_result_in_prompt,
         )
         key = self._key(player_id)
         if key not in self._store:
