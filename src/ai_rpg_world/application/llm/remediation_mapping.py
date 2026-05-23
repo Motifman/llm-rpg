@@ -51,6 +51,7 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     # application/llm/services/failure_helpers.py のファクトリから参照される。
     "INVALID_ARGUMENT": "ツール引数の型 / 必須項目を確認してください。",
     "SNS_REF_STALE": "SNS の ref は世代管理されています。ページを再読込してから ref を取得し直してください。",
+    "SNS_PAGE_NOT_SUPPORTED": "現在の SNS ページではこの操作は実行できません。open_page で適切なページに遷移してから再度試してください。",
     "TRADE_ARG_MISSING": "取引ツールの必須引数 (item_instance_id / slot_id / requested_gold / trade_ref 等) を確認してください。",
     "TRADE_PAGE_NOT_SUPPORTED": "現在の SNS / Trade ページではこの操作は実行できません。対応するページに遷移してください。",
     "ATTACK_PRECONDITION_FAILED": "攻撃の前提条件 (クールダウン / 対象の生死 / 攻撃力など) を確認し、必要なら待機または別行動を選んでください。",
