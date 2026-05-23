@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IContextFormatStrategy,
     ICurrentStateFormatter,
     ILlmUiContextBuilder,
+    IMemoStore,
     IPromptBuilder,
     IRecentEventsFormatter,
     ISlidingWindowMemory,
@@ -109,6 +110,9 @@ class DefaultPromptBuilder(IPromptBuilder):
         episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
         episodic_reinterpretation_journal_store: Optional[IEpisodicReinterpretationJournalStore] = None,
         episodic_turn_index_provider: Optional[Callable[[PlayerId], int]] = None,
+        memo_store: Optional["IMemoStore"] = None,
+        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        memo_stale_age_ticks: int = 20,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -178,6 +182,16 @@ class DefaultPromptBuilder(IPromptBuilder):
             episodic_turn_index_provider
         ):
             raise TypeError("episodic_turn_index_provider must be callable or None")
+        if memo_store is not None and not isinstance(memo_store, IMemoStore):
+            raise TypeError("memo_store must be IMemoStore or None")
+        if current_tick_provider is not None and not callable(current_tick_provider):
+            raise TypeError("current_tick_provider must be callable or None")
+        if memo_stale_age_ticks < 0:
+            raise ValueError("memo_stale_age_ticks must be 0 or greater")
+
+        self._memo_store = memo_store
+        self._current_tick_provider = current_tick_provider
+        self._memo_stale_age_ticks = memo_stale_age_ticks
 
         self._observation_buffer = observation_buffer
         self._sliding_window = sliding_window_memory
@@ -335,8 +349,16 @@ class DefaultPromptBuilder(IPromptBuilder):
                             exc_info=True,
                         )
 
+        # 6c. 進行中のメモ (Issue #188 Phase 1a): LLM が memo_add で context に
+        # 固定した未完了 memo を整形する。age + stale フラグで「古くなった
+        # メモは review してほしい」を視覚化。
+        active_memos_text = self._build_active_memos_text(player_id)
+
         context = self._context_format_strategy.format(
-            current_state_text, recent_events_text, relevant_memories_text
+            current_state_text,
+            recent_events_text,
+            relevant_memories_text,
+            active_memos_text,
         )
 
         # 6b. 直前ターン失敗時の補正（user 先頭に差し込み、次の 1 ツール向け）
@@ -367,3 +389,51 @@ class DefaultPromptBuilder(IPromptBuilder):
         result["current_beliefs_snapshot"] = relevant_memories_text
         result["persona_snapshot"] = player_info.persona_block
         return result
+
+    def _build_active_memos_text(self, player_id: PlayerId) -> str:
+        """LLM が固定した未完了 memo を「進行中のメモ」用テキストに整形する。
+
+        Issue #188 Phase 1a:
+        - memo_store 未注入なら空文字 (section ごと出さない)
+        - 未完了メモがゼロなら空文字
+        - 各 memo に age (経過 tick) と stale フラグを付与:
+          - ``added_at_tick`` と現在 tick の差が ``memo_stale_age_ticks``
+            (default 20) 以上なら ``[STALE]`` を付ける
+          - LLM が「達成根拠が sliding_window から外れた可能性」を察知できる
+        """
+        if self._memo_store is None:
+            return ""
+        try:
+            entries = self._memo_store.list_uncompleted(player_id)
+        except Exception:
+            return ""
+        if not entries:
+            return ""
+        current_tick = (
+            self._current_tick_provider()
+            if self._current_tick_provider is not None
+            else None
+        )
+        lines = []
+        for memo in entries:
+            stale_prefix = ""
+            age_part = ""
+            if (
+                current_tick is not None
+                and memo.added_at_tick is not None
+            ):
+                elapsed = current_tick - memo.added_at_tick
+                if elapsed < 0:
+                    elapsed = 0
+                age_part = f", 経過 {elapsed} tick"
+                if elapsed >= self._memo_stale_age_ticks:
+                    stale_prefix = "[STALE] "
+            tick_part = (
+                f"tick={memo.added_at_tick}" if memo.added_at_tick is not None
+                else memo.added_at.strftime("%H:%M")
+            )
+            lines.append(
+                f"- {stale_prefix}[{tick_part}{age_part}] {memo.content} "
+                f"(id: {memo.id})"
+            )
+        return "\n".join(lines)
