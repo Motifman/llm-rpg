@@ -8,6 +8,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 
 logger = logging.getLogger(__name__)
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
@@ -249,7 +250,12 @@ class TradeToolExecutor:
                 return LlmCommandResultDto(success=True, message="自分の取引一覧へ遷移しました。")
         except Exception as e:
             return exception_result(e)
-        return LlmCommandResultDto(success=False, message="未対応の画面です。")
+        return LlmCommandResultDto(
+            success=False,
+            message="未対応の画面です。",
+            error_code="TRADE_PAGE_NOT_SUPPORTED",
+            remediation=get_remediation("TRADE_PAGE_NOT_SUPPORTED"),
+        )
 
     def _execute_page_next(
         self, player_id: int, args: Dict[str, Any]
@@ -279,7 +285,9 @@ class TradeToolExecutor:
         if st.page_kind != TradeVirtualPageKind.MY_TRADES:
             return LlmCommandResultDto(
                 success=False,
-                message="my_trades 画面でのみタブを切り替えられます。",
+                message="my_trades 画面でのみタブを切り替えられます。先に open_page(my_trades) で my_trades へ遷移してください。",
+                error_code="TRADE_PAGE_NOT_SUPPORTED",
+                remediation=get_remediation("TRADE_PAGE_NOT_SUPPORTED"),
             )
         try:
             self._trade_page_session.set_my_trades_tab(player_id, tab)
