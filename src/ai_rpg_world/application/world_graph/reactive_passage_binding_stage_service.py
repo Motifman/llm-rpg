@@ -58,6 +58,9 @@ class ReactivePassageBindingStageService:
                 binding.target_connection_id,
                 target_state,
                 cause=PassageChangeCauseEnum.REACTIVE,
+                # Issue #183: 世界 tick 由来の自動評価なので actor は不在。
+                # 明示的に None を渡し、将来 actor を埋めようとした設計ミスを防ぐ。
+                actor_entity_id=None,
             )
             graph_dirty = True
         if graph_dirty:
