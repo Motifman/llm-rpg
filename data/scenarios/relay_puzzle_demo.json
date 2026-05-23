@@ -3,7 +3,7 @@
   "metadata": {
     "id": "relay_puzzle_demo",
     "title": "役割分担リレー — 最小デモ",
-    "description": "制御室の操作盤に電源を入れている間だけ、廊下の奥の金庫扉のロックが外れる。電源は操作盤を操作して入れる必要があり、また制御室から人が完全に居なくなると安全装置で自動的に電源が切れる。役割分担して協力すること（カイトが制御室に残って電源を維持し、リンが金庫室まで進むのが基本戦略）。",
+    "description": "制御室の操作盤に電源を入れている間だけ、廊下の奥の金庫扉のロックが外れる。電源は操作盤を操作して入れる必要があり、また制御室から人が完全に居なくなると安全装置で自動的に電源が切れる。金庫室内には扉を物理的に固定する非常用スイッチがあり、それを押せば電源を切っても扉は開いたままになる。役割分担して協力すること（カイトが制御室に残って電源を維持し、リンが金庫室まで進み扉固定スイッチを押し、その後カイトが合流するのが基本戦略）。",
     "theme": "co-op",
     "difficulty": "easy",
     "estimated_ticks": 30,
@@ -107,7 +107,7 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "メモ:『操作盤の電源を入れている間だけ、奥の金庫扉のロックが外れる。ただしこの制御室から人が完全に居なくなると安全装置で電源が切れる。誰かが制御室に残り、もう一方が金庫室まで進む役割分担が必要だ。』"
+                      "message": "メモ:『操作盤の電源を入れている間だけ、奥の金庫扉のロックが外れる。ただしこの制御室から人が完全に居なくなると安全装置で電源が切れる。誰かが制御室に残り、もう一方が金庫室まで進む役割分担が必要だ。なお、金庫室内には扉を物理的に固定する非常用装置があるはずだ——そちらを使えば電源管理者も後から合流できる。』"
                     }
                   }
                 ]
@@ -153,7 +153,7 @@
     {
       "id": "vault",
       "name": "金庫室",
-      "description": "重厚な扉の奥にある秘密の部屋。中央に到達確認用の記録装置が置かれている。",
+      "description": "重厚な扉の奥にある秘密の部屋。中央に到達確認用の記録装置と、壁際に扉固定スイッチが備えられている。",
       "category": "OTHER",
       "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
       "interior": {
@@ -174,6 +174,42 @@
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
                       "message": "装置に銘板:『この金庫室に二人とも到達すれば任務完了。ここが本シナリオの目的地である。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "door_latch",
+            "name": "扉固定スイッチ",
+            "description": "金庫扉のロックを物理的に固定する非常用スイッチ。一度押すと操作盤の電源が切れても金庫扉は開いたままになる。制御室の電源管理者がこちらへ移動する前に押すこと。",
+            "object_type": "SWITCH",
+            "state": {"engaged": false},
+            "interactions": [
+              {
+                "action_name": "press",
+                "display_label": "スイッチを押す",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "door_latch",
+                    "required_state": {"engaged": false},
+                    "failure_message": "扉固定スイッチは既に押されている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "door_latch",
+                      "state_updates": {"engaged": true}
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "扉固定スイッチが押された。金庫扉が物理的に固定され、操作盤の電源が切れてもロックがかからなくなった。"
                     }
                   }
                 ]
@@ -221,9 +257,19 @@
       {
         "target": "corridor_to_vault",
         "predicate": {
-          "condition_type": "OBJECT_STATE",
-          "target_object": "control_panel",
-          "required_state": {"power_on": true}
+          "condition_type": "OR",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE",
+              "target_object": "control_panel",
+              "required_state": {"power_on": true}
+            },
+            {
+              "condition_type": "OBJECT_STATE",
+              "target_object": "door_latch",
+              "required_state": {"engaged": true}
+            }
+          ]
         },
         "on_true_state": "OPEN",
         "on_false_state": "LOCKED"
