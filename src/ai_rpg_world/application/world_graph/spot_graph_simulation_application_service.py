@@ -79,14 +79,23 @@ class SpotGraphSimulationApplicationService:
                 self._travel_stage.run(current_tick)
             if self._scenario_event_stage is not None:
                 self._scenario_event_stage.run(current_tick)
-            if self._reactive_binding_stage is not None:
-                # scenario_event の flag 更新を同 tick で反映するため、
-                # scenario_event_stage の後に走らせる。
-                self._reactive_binding_stage.run(current_tick)
             if self._reactive_object_state_stage is not None:
-                # object 状態の reactive 評価。passage と同じく scenario_event
-                # 後の flag/state を読みたいので reactive_binding_stage の後。
+                # Issue #188 Step 3: passage より先に object state を評価する。
+                # 旧順序 (passage → object) では、object state の変化 (例:
+                # 「制御室から人が居なくなって power_on=false」) が、同 tick の
+                # passage 評価に反映されず 1 tick の grace period を生んでいた。
+                # この timing exploit は relay_puzzle で operator が「黙って
+                # 制御室を離れて vault に駆け込む」抜け道として悪用されうる。
+                # 新順序 (object → passage) では、object state 変化が即 passage
+                # 評価に反映され、因果として自然な「object が変わったら passage
+                # が連動する」挙動になる。
+                # latch mechanism (Step 2) が正規の relay 解法を提供するので、
+                # この順序変更で scenario は依然解ける。
                 self._reactive_object_state_stage.run(current_tick)
+            if self._reactive_binding_stage is not None:
+                # scenario_event の flag 更新 + reactive_object の object state
+                # 更新を同 tick で読みたいので、両者の後に走らせる。
+                self._reactive_binding_stage.run(current_tick)
             if self._sync_action_resolver_stage is not None:
                 # sync group の判定はその tick の prepare（ツール実行で
                 # 既に flag 化されている）を見るため、reactive 反映の
