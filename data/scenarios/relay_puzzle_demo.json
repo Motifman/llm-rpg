@@ -3,7 +3,7 @@
   "metadata": {
     "id": "relay_puzzle_demo",
     "title": "役割分担リレー — 最小デモ",
-    "description": "制御室の操作盤に電源を入れている間だけ、廊下の奥の金庫扉のロックが外れる。電源は操作盤を操作して入れる必要があり、また制御室から人が完全に居なくなると安全装置で自動的に電源が切れる。役割分担して協力すること（A が制御室に残って電源を維持し、B が金庫室まで進むのが基本戦略）。",
+    "description": "制御室の操作盤に電源を入れている間だけ、廊下の奥の金庫扉のロックが外れる。電源は操作盤を操作して入れる必要があり、また制御室から人が完全に居なくなると安全装置で自動的に電源が切れる。役割分担して協力すること（カイトが制御室に残って電源を維持し、リンが金庫室まで進むのが基本戦略）。",
     "theme": "co-op",
     "difficulty": "easy",
     "estimated_ticks": 30,
@@ -207,8 +207,8 @@
     }
   ],
   "players": [
-    {"id": "player_a", "name": "A（オペレーター）", "spawn_spot": "control_room", "initial_items": []},
-    {"id": "player_b", "name": "B（侵入者）", "spawn_spot": "corridor", "initial_items": []}
+    {"id": "player_a", "name": "カイト", "spawn_spot": "control_room", "initial_items": []},
+    {"id": "player_b", "name": "リン", "spawn_spot": "corridor", "initial_items": []}
   ],
   "game_end_conditions": {
     "win": [{"type": "ALL_AT_SPOT", "target_spot": "vault"}],

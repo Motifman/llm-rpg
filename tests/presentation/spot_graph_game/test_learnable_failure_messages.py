@@ -96,11 +96,11 @@ class TestListTargetsHelpers:
     def test_player_helper_filters_by_kind(self) -> None:
         """player 用 helper は player kind だけ列挙。"""
         targets = {
-            "P1": _make_target("P1", "spot_graph_player", "B（侵入者）"),
+            "P1": _make_target("P1", "spot_graph_player", "リン"),
             "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
         }
         result = _list_player_labels(targets)
-        assert result == "P1 (B（侵入者）)"
+        assert result == "P1 (リン)"
 
     def test_empty_targets_returns_empty_string(self) -> None:
         """対応 kind が無いと空文字列を返す。"""
