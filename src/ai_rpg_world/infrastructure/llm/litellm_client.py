@@ -4,6 +4,10 @@ LiteLLM を用いた ILLMClient 実装。
 API Key: コンストラクタで api_key を渡さない場合は環境変数 OPENAI_API_KEY を参照する。
 api_key 未指定時は .env を自動で読み込み、その後に環境変数を参照する。
 .env は .gitignore に含めること。
+
+OpenAI 互換エンドポイント（SSH 越しの vLLM 等）: ``OPENAI_API_BASE`` に
+``http://127.0.0.1:8000/v1`` のようなベース URL を設定する。
+その場合 OPENAI_API_KEY が空でも ``EMPTY`` を送り続行する（vLLM 既定の無認証構成向け）。
 """
 
 import json
@@ -28,6 +32,8 @@ from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 _DEFAULT_MODEL = "openai/gpt-5-mini"
 DEFAULT_LLM_MODEL = _DEFAULT_MODEL
 _ENV_VAR_API_KEY = "OPENAI_API_KEY"
+_ENV_VAR_API_BASE = "OPENAI_API_BASE"
+_VLLM_DEFAULT_PLACEHOLDER_KEY = "EMPTY"
 
 
 def _extract_first_json_object(text: str) -> str:
@@ -91,6 +97,7 @@ class LiteLLMClient(
         model: str = _DEFAULT_MODEL,
         api_key: Optional[str] = None,
         api_key_env_var: str = _ENV_VAR_API_KEY,
+        api_base: Optional[str] = None,
     ) -> None:
         if not isinstance(model, str) or not model.strip():
             raise ValueError("model must be a non-empty string")
@@ -98,24 +105,49 @@ class LiteLLMClient(
             raise ValueError("api_key_env_var must be a non-empty string")
         if api_key is not None and not isinstance(api_key, str):
             raise TypeError("api_key must be str or None")
+        if api_base is not None and not isinstance(api_base, str):
+            raise TypeError("api_base must be str or None")
+        if api_key is None or api_base is None:
+            _load_dotenv_if_available()
         self._model = model.strip()
         self._api_key_env_var = api_key_env_var
         if api_key is not None:
-            # 明示的に渡されたとき（空文字含む）はその値を使う。空なら invoke で LLM_API_KEY_MISSING になる。
+            # 明示的に渡されたとき（空文字含む）はその値を使う。カスタム base 無しかつ空なら invoke で LLM_API_KEY_MISSING。
             self._api_key = (api_key.strip() if isinstance(api_key, str) else "")
         else:
-            _load_dotenv_if_available()
             self._api_key = (os.environ.get(api_key_env_var) or "").strip()
+
+        resolved_base = ""
+        if api_base is not None:
+            resolved_base = api_base.strip()
+        else:
+            resolved_base = (os.environ.get(_ENV_VAR_API_BASE) or "").strip()
+        self._api_base = resolved_base or None
+
         self._logger = logging.getLogger(self.__class__.__name__)
 
+    def _lite_api_key(self) -> str:
+        """litellm.completion に渡す API キー（vLLM 向けカスタム base では空でもプレースホルダを使う）。"""
+        raw = self._api_key.strip() if isinstance(self._api_key, str) else ""
+        if self._api_base:
+            return raw if raw else _VLLM_DEFAULT_PLACEHOLDER_KEY
+        return raw
+
+    def _assert_can_call_litellm(self) -> None:
+        if self._lite_api_key():
+            return
+        raise LlmApiCallException(
+            f"API key is not set. Set {self._api_key_env_var} or pass api_key to the client.",
+            error_code="LLM_API_KEY_MISSING",
+        )
+
     def completion_base_kwargs(self) -> Dict[str, Any]:
-        """ツール無しの chat completion 用（Episode Encoder 等）。api_key 未設定時は例外。"""
-        if not self._api_key:
-            raise LlmApiCallException(
-                f"API key is not set. Set {self._api_key_env_var} or pass api_key to the client.",
-                error_code="LLM_API_KEY_MISSING",
-            )
-        return {"model": self._model, "api_key": self._api_key}
+        """ツール無しの chat completion 用（Episode Encoder 等）。カスタム base 無しでは api_key が必須。"""
+        self._assert_can_call_litellm()
+        base: Dict[str, Any] = {"model": self._model, "api_key": self._lite_api_key()}
+        if self._api_base is not None:
+            base["api_base"] = self._api_base
+        return base
 
     def invoke(
         self,
@@ -128,19 +160,18 @@ class LiteLLMClient(
         tool_call が無い場合やパースに失敗した場合は None を返す。
         API エラー時は LlmApiCallException を投げる。
         """
-        if not self._api_key:
-            raise LlmApiCallException(
-                f"API key is not set. Set {self._api_key_env_var} or pass api_key to the client.",
-                error_code="LLM_API_KEY_MISSING",
-            )
+        self._assert_can_call_litellm()
         try:
-            response = litellm.completion(
-                model=self._model,
-                messages=messages,
-                tools=tools,
-                tool_choice=tool_choice,
-                api_key=self._api_key,
-            )
+            completion_kw: Dict[str, Any] = {
+                "model": self._model,
+                "messages": messages,
+                "tools": tools,
+                "tool_choice": tool_choice,
+                "api_key": self._lite_api_key(),
+            }
+            if self._api_base is not None:
+                completion_kw["api_base"] = self._api_base
+            response = litellm.completion(**completion_kw)
         except Exception as e:
             self._logger.exception("LiteLLM completion failed: %s", e)
             error_code = "LLM_API_CALL_FAILED"
