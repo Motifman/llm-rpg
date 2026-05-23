@@ -340,6 +340,20 @@ def create_spot_graph_wiring(
     runtime_tool_state = _build_runtime_tool_state()
     todo_store = runtime_tool_state.todo_store
 
+    def _current_tick_provider() -> Optional[int]:
+        if game_time_provider is None:
+            return None
+        try:
+            tick = game_time_provider.get_current_tick()
+        except Exception:
+            return None
+        value = getattr(tick, "value", None)
+        return value if isinstance(value, int) else None
+
+    current_tick_provider = (
+        _current_tick_provider if game_time_provider is not None else None
+    )
+
     client = llm_client if llm_client is not None else create_llm_client_from_env()
     shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
     link_store, semantic_memory_store = default_link_and_semantic_stores_for_episode_store(
@@ -444,6 +458,9 @@ def create_spot_graph_wiring(
         spot_graph_tool_executor=spot_graph_tool_executor,
         episodic_memory_explore_executor=mem_bundle.memory_explore_executor(),
         episodic_explore_related_enabled=True,
+        sliding_window=sliding_window,
+        action_result_store=action_result_store,
+        current_tick_provider=current_tick_provider,
     )
     available_tools_provider = tool_stack.available_tools_provider
     tool_command_mapper = tool_stack.tool_command_mapper
@@ -515,6 +532,8 @@ def create_spot_graph_wiring(
         episodic_recall_buffer_store=prompt_recall_buffer,
         episodic_reinterpretation_journal_store=reinterpretation_journal,
         episodic_turn_index_provider=reinterpretation_coord.current_turn_index,
+        memo_store=todo_store,
+        current_tick_provider=current_tick_provider,
     )
 
     # Issue #188 改善: action_result に観測と同じ時刻ラベルを乗せる。

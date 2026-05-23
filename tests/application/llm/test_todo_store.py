@@ -94,7 +94,7 @@ class TestInMemoryTodoStore:
 
     def test_complete_todo_id_none_raises_type_error(self, store):
         """complete に todo_id が str でないとき TypeError"""
-        with pytest.raises(TypeError, match="todo_id must be str"):
+        with pytest.raises(TypeError, match="memo_id must be str"):
             store.complete(PlayerId(1), None)  # type: ignore[arg-type]
 
     def test_remove_player_id_none_raises_type_error(self, store):
@@ -104,7 +104,7 @@ class TestInMemoryTodoStore:
 
     def test_remove_todo_id_none_raises_type_error(self, store):
         """remove に todo_id が str でないとき TypeError"""
-        with pytest.raises(TypeError, match="todo_id must be str"):
+        with pytest.raises(TypeError, match="memo_id must be str"):
             store.remove(PlayerId(1), 123)  # type: ignore[arg-type]
 
     def test_complete_already_completed_returns_true(self, store):
