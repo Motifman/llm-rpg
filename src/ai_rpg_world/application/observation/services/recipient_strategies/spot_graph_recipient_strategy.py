@@ -247,10 +247,61 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
     def _resolve_connection_changed(
         self, event: ConnectionStateChangedEvent, add
     ) -> None:
+        """ConnectionStateChangedEvent の配信先を解決する。
+
+        Issue #184 (軸 3): 観測者の位置に応じた段階的な観測を実装する。
+        - 直接観測 (両端 spot): 状態変化を明示的に観測する
+        - 間接観測 (隣接 spot 経由で sound_permeability >= 0.1): 「音」として
+          観測する。formatter 側で recipient の位置を見て prose を切り替える
+        - その他: 配信しない
+
+        sound_permeability の閾値は ``passage.sound_permeability_to_hops`` の
+        既定モデル (>=0.1 で可聴) と整合させる。完全遮音 (0.1 未満) の
+        connection は隣接にも音が漏れない。
+        """
+        # 直接観測: 両端 spot の全員
+        direct_recipients: Set[int] = set()
         for pid in self._players_at_spot_on_graph(event.from_spot_id):
             add(pid)
+            direct_recipients.add(pid.value)
         for pid in self._players_at_spot_on_graph(event.to_spot_id):
             add(pid)
+            direct_recipients.add(pid.value)
+
+        # 間接観測: from_spot / to_spot に隣接する spot で、その connection の
+        # 音が漏れ伝わる位置にいる人に届ける。直接観測者は除外 (重複防止)。
+        for pid in self._audible_neighbor_recipients(event):
+            if pid.value in direct_recipients:
+                continue
+            add(pid)
+
+    def _audible_neighbor_recipients(
+        self, event: ConnectionStateChangedEvent
+    ) -> List[PlayerId]:
+        """変化した connection の音が漏れ届く隣接 spot の player を返す。
+
+        from_spot と to_spot それぞれから 1 hop 出ていく接続のうち、
+        その接続自体の sound_permeability が ``0.1`` 以上のものを通って
+        隣接 spot に音が伝わるモデル。完全遮音 (permeability < 0.1) の
+        connection は隣接観測を生まない。
+        """
+        graph = self._spot_graph_repository.find_graph()
+        # source = 変化が起きた connection の両端
+        sources: Set[SpotId] = {event.from_spot_id, event.to_spot_id}
+        neighbor_spots: Set[SpotId] = set()
+        for source_spot in sources:
+            for conn in graph.iter_outgoing_connections_from(source_spot):
+                # この path 自体が完全遮音なら隣接にも音は漏れない
+                if conn.passage.sound_permeability < 0.1:
+                    continue
+                other = conn.to_spot_id
+                if other in sources:
+                    continue  # 直接観測の対象なのでスキップ
+                neighbor_spots.add(other)
+        result: List[PlayerId] = []
+        for spot_id in neighbor_spots:
+            result.extend(self._players_at_spot_on_graph(spot_id))
+        return result
 
     def _resolve_all_at_spot(self, spot_id: SpotId, add) -> None:
         for pid in self._players_at_spot_on_graph(spot_id):
