@@ -57,6 +57,10 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "INVENTORY_NOT_FOUND": "プレイヤーのインベントリが見つかりません。プレイヤー初期化が完了しているか確認してください。",
     "ITEM_NOT_CONSUMABLE": "そのアイテムは使用 (consume) できません。別のアイテムを指定するか、別ツールで操作してください。",
     "ACTIVE_APP_CONFLICT": "既に別アプリ (SNS / 取引所など) を開いています。exit してから再度 enter してください。",
+    "INVALID_DIRECTION": "方向は 北 / 北東 / 東 / 南東 / 南 / 南西 / 西 / 北西 のいずれかを指定してください。",
+    "PURSUIT_FAILED": "追跡対象が視界外か既に去っている可能性があります。対象を再確認してください。",
+    "PURSUIT_START_FAILED": "追跡対象を確認してください (視界内か / 同じスポットか)。",
+    "PURSUIT_CANCEL_FAILED": "追跡中の状態を確認してください。既に中断済みの可能性があります。",
 }
 
 
