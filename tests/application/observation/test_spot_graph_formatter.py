@@ -266,6 +266,67 @@ class TestConnectionStateChanged:
         assert result is not None
         assert "通行不能" in result.prose
 
+    def test_prose_is_fact_only_regardless_of_cause(self, formatter):
+        """Issue #180 再設計: prose は cause に関わらず事実だけ。
+
+        観測者が本来知り得ない因果情報を文体に焼き込まない (オノマトペや
+        「ひとりでに」のような hint を付けない)。観測者ごとの prose 差分化は
+        軸 3 (recipient_id の位置による分岐) で別途扱う。
+        """
+        from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+            PassageChangeCauseEnum,
+        )
+
+        for cause in PassageChangeCauseEnum:
+            event = ConnectionStateChangedEvent.create(
+                aggregate_id=GRAPH_ID,
+                aggregate_type="SpotGraphAggregate",
+                connection_id=CONN_1,
+                from_spot_id=SPOT_A,
+                to_spot_id=SPOT_B,
+                traversable=False,
+                cause=cause,
+            )
+            result = formatter.format(event, PLAYER_1)
+            assert result is not None
+            # 観測者に「誰がトリガしたか」を匂わせる表現を漏らさない
+            for leak in ("ガチャッと", "ひとりでに", "連動", "何かの拍子"):
+                assert leak not in result.prose, (
+                    f"cause={cause} で prose に観測モデルを破る語 {leak!r} が混入: {result.prose!r}"
+                )
+            # 事実だけが prose に出る
+            assert "通行不能になった" in result.prose
+
+    def test_structured_payload_carries_cause_for_machine_use(self, formatter):
+        """cause は structured に残し、機械可読 / 解析 / 将来の位置分岐用に保つ。"""
+        from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+            PassageChangeCauseEnum,
+        )
+
+        event = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=False,
+            cause=PassageChangeCauseEnum.REACTIVE,
+        )
+        result = formatter.format(event, PLAYER_1)
+        assert result is not None
+        assert result.structured["cause"] == "REACTIVE"
+        # default UNKNOWN も structured に表現される
+        event2 = ConnectionStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            connection_id=CONN_1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            traversable=True,
+        )
+        result2 = formatter.format(event2, PLAYER_1)
+        assert result2.structured["cause"] == "UNKNOWN"
+
 
 class TestSpotObjectStateChanged:
     def test_returns_environment(self, formatter):

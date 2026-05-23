@@ -16,6 +16,9 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
+from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+    PassageChangeCauseEnum,
+)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
@@ -54,6 +57,7 @@ class ReactivePassageBindingStageService:
             graph.set_connection_passage_state(
                 binding.target_connection_id,
                 target_state,
+                cause=PassageChangeCauseEnum.REACTIVE,
             )
             graph_dirty = True
         if graph_dirty:

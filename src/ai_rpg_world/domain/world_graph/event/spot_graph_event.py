@@ -10,6 +10,9 @@ from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+    PassageChangeCauseEnum,
+)
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
     StateDeltaEntry,
@@ -39,12 +42,18 @@ class EntityLeftSpotEvent(BaseDomainEvent[SpotGraphId, str]):
 
 @dataclass(frozen=True)
 class ConnectionStateChangedEvent(BaseDomainEvent[SpotGraphId, str]):
-    """接続の通行可否が変化した"""
+    """接続の通行可否が変化した。
+
+    ``cause`` は変化の発生原因を表す (Issue #180)。formatter は cause を見て
+    prose を「ガチャッと」「ひとりでに」のように分岐する。default は
+    ``PassageChangeCauseEnum.UNKNOWN`` で後方互換を保つ。
+    """
 
     connection_id: ConnectionId
     from_spot_id: SpotId
     to_spot_id: SpotId
     traversable: bool
+    cause: PassageChangeCauseEnum = PassageChangeCauseEnum.UNKNOWN
 
 
 @dataclass(frozen=True)
