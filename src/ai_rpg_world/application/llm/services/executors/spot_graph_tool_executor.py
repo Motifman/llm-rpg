@@ -6,6 +6,10 @@ from typing import Any, Callable, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
+from ai_rpg_world.application.llm.services.failure_helpers import (
+    build_invalid_arg_failure,
+    build_sanitized_exception_failure,
+)
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     append_inner_thought_to_message,
     exception_result,
@@ -130,11 +134,19 @@ class SpotGraphToolExecutor:
                 remediation=get_remediation("INVALID_ARGUMENT"),
             )
         if dest <= 0:
-            return LlmCommandResultDto(success=False, message="destination_spot_id は正の整数です。")
+            return build_invalid_arg_failure(
+                arg_name="destination_spot_id",
+                detail="正の整数を指定してください",
+            )
         try:
             inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
             if inv is None:
-                return LlmCommandResultDto(success=False, message="インベントリが見つかりません。")
+                return LlmCommandResultDto(
+                    success=False,
+                    message="インベントリが見つかりません。",
+                    error_code="PLAYER_NOT_FOUND",
+                    remediation=get_remediation("PLAYER_NOT_FOUND"),
+                )
             owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repository)
             flags = self._svc.world_flags.as_frozen_set()
             self._svc.movement.start_travel_to_spot(
@@ -159,7 +171,10 @@ class SpotGraphToolExecutor:
             else:
                 sub = SubLocationId.create(int(raw))
         except (TypeError, ValueError):
-            return LlmCommandResultDto(success=False, message="sub_location_id が不正です。")
+            return build_invalid_arg_failure(
+                arg_name="sub_location_id",
+                detail="正の整数または 0/None を指定してください",
+            )
         try:
             self._svc.movement.move_to_sub_location(PlayerId(player_id), sub)
             return LlmCommandResultDto(
@@ -189,9 +204,15 @@ class SpotGraphToolExecutor:
             oid = int(args.get("object_id", 0))
             action = str(args.get("action_name", "")).strip()
         except (TypeError, ValueError):
-            return LlmCommandResultDto(success=False, message="object_id / action_name が不正です。")
+            return build_invalid_arg_failure(
+                arg_name="object_id / action_name",
+                detail="object_id は正の整数、action_name は非空の文字列",
+            )
         if oid <= 0 or not action:
-            return LlmCommandResultDto(success=False, message="object_id と action_name を指定してください。")
+            return build_invalid_arg_failure(
+                arg_name="object_id / action_name",
+                detail="object_id (正の整数) と action_name (非空文字列) を必ず指定してください",
+            )
         interaction_parameters = args.get("parameters")
         try:
             out = self._svc.interaction.execute_interaction(
@@ -211,16 +232,27 @@ class SpotGraphToolExecutor:
     def _use_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         item_spec_id = args.get("item_spec_id")
         if item_spec_id is None:
-            return LlmCommandResultDto(success=False, message="item_spec_id を指定してください。")
+            return build_invalid_arg_failure(
+                arg_name="item_spec_id",
+                detail="使用するアイテムの spec_id (正の整数) を指定してください",
+            )
         try:
             item_spec_id_int = int(item_spec_id)
         except (TypeError, ValueError):
-            return LlmCommandResultDto(success=False, message="item_spec_id が不正です。")
+            return build_invalid_arg_failure(
+                arg_name="item_spec_id",
+                detail="正の整数を指定してください",
+            )
         try:
             from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId as ISpecId
             inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
             if inv is None:
-                return LlmCommandResultDto(success=False, message="インベントリが見つかりません。")
+                return LlmCommandResultDto(
+                    success=False,
+                    message="インベントリが見つかりません。",
+                    error_code="PLAYER_NOT_FOUND",
+                    remediation=get_remediation("PLAYER_NOT_FOUND"),
+                )
             target_spec = ISpecId.create(item_spec_id_int)
             # インベントリからアイテムインスタンスを探す
             item_instance = None
@@ -232,10 +264,20 @@ class SpotGraphToolExecutor:
                     item_instance = item
                     break
             if item_instance is None:
-                return LlmCommandResultDto(success=False, message="そのアイテムは持っていません。")
+                return LlmCommandResultDto(
+                    success=False,
+                    message="指定したアイテムは持っていません。",
+                    error_code="ITEM_NOT_FOUND",
+                    remediation=get_remediation("ITEM_NOT_FOUND"),
+                )
             from ai_rpg_world.domain.item.enum.item_enum import ItemType
             if item_instance.item_spec.item_type != ItemType.CONSUMABLE:
-                return LlmCommandResultDto(success=False, message="このアイテムは消費できません。")
+                return LlmCommandResultDto(
+                    success=False,
+                    message="このアイテムは消費できません (CONSUMABLE 種別ではない)。",
+                    error_code="ITEM_NOT_CONSUMABLE",
+                    remediation=get_remediation("ITEM_NOT_CONSUMABLE"),
+                )
             item_instance.use()
             if item_instance.quantity == 0:
                 self._item_repository.delete(item_instance.item_instance_id)
@@ -271,7 +313,10 @@ class SpotGraphToolExecutor:
     def _prepare_action(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         action_id = str(args.get("action_id", "")).strip()
         if not action_id:
-            return LlmCommandResultDto(success=False, message="action_id を指定してください。")
+            return build_invalid_arg_failure(
+                arg_name="action_id",
+                detail="準備するアクションの ID (非空文字列) を指定してください",
+            )
         try:
             registry = PreparedActionRegistry(self._svc.world_flags)
             registry.prepare(player_id=player_id, action_id=action_id)
@@ -284,7 +329,21 @@ class SpotGraphToolExecutor:
                 message=append_inner_thought_to_message(base, args),
             )
         except ValueError as ve:
-            return LlmCommandResultDto(success=False, message=str(ve))
+            # ValueError は registry の引数検証 (action_id 空など) で起きる想定。
+            # str(ve) を LLM に直渡しすると path / 内部 ID を漏らす経路になり得るので、
+            # サニタイズ + サーバ側ログを残す (PR #170 と同じ pattern)。
+            return build_sanitized_exception_failure(
+                exc=ve,
+                log_context=(
+                    f"spot_graph_prepare_action validation failure "
+                    f"player_id={player_id} action_id={action_id!r}"
+                ),
+                public_message=(
+                    f"action_id={action_id!r} の準備に失敗しました。"
+                    "シナリオで定義済みの action_id を指定してください。"
+                ),
+                error_code="INVALID_ARGUMENT",
+            )
         except Exception as e:
             return exception_result(e)
 
