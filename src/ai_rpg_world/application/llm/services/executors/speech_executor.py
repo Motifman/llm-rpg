@@ -81,6 +81,10 @@ class SpeechToolExecutor:
             return LlmCommandResultDto(
                 success=True,
                 message=append_inner_thought_to_message("囁きを送信しました。", args),
+                # Issue #188: 発話内容は ``action_summary`` の引数部分に
+                # 一人称で含まれており、result_summary 「囁きを送信しました。」
+                # は情報量ゼロのノイズ。prompt 表示から省略する。
+                omit_result_in_prompt=True,
             )
         except Exception as e:
             # speech_service が ApplicationException を投げた場合は error_code を
@@ -126,6 +130,11 @@ class SpeechToolExecutor:
             return LlmCommandResultDto(
                 success=True,
                 message=append_inner_thought_to_message("発言しました。", args),
+                # Issue #188: 発話内容は ``action_summary`` の引数部分に既に
+                # 含まれている。result_summary 「発言しました。」は情報量
+                # ゼロのノイズなので prompt 表示から省略する (失敗時は
+                # remediation を見せるため省略しない)。
+                omit_result_in_prompt=True,
             )
         except Exception as e:
             error_code = getattr(e, "error_code", "SYSTEM_ERROR")
