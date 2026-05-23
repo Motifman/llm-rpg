@@ -615,8 +615,14 @@ class TestObservationFormatter:
         assert "叫んだ" in out.prose
         assert out.structured.get("channel") == "shout"
 
-    def test_format_player_spoke_self_category_is_self_only(self, formatter):
-        """発言者本人への観測は self_only"""
+    def test_format_player_spoke_self_returns_none(self, formatter):
+        """Issue #188: 発言者本人への観測は出さない (None を返す)。
+
+        話者本人は ``action_result_store`` 経由で自分の speech_say を
+        一人称形の行動 summary として既に受け取っているため、追加で
+        三人称 prose を渡すと自己同一性の混乱を招く (Bさん 自己三人称
+        ループ)。formatter が source of truth として「持たせない」と判断。
+        """
         event = PlayerSpokeEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerStatusAggregate",
@@ -627,9 +633,7 @@ class TestObservationFormatter:
             target_player_id=None,
         )
         out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert out.observation_category == "self_only"
-        assert out.structured.get("role") == "self"
+        assert out is None
 
     def test_format_spot_weather_changed_returns_old_new_in_prose_and_schedules_turn(self, formatter):
         """SpotWeatherChangedEvent: 天気変化のプローズ・構造化・schedules_turn（環境通知）"""
