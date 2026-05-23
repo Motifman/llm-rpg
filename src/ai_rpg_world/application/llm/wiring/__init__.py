@@ -94,6 +94,9 @@ from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
     IEpisodicReinterpretationJournalStore,
 )
 from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
+from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+    MemoCompletionHintService,
+)
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
 )
@@ -1132,6 +1135,7 @@ def create_llm_agent_wiring(
         memo_store=todo_store,
         current_tick_provider=current_tick_provider,
     )
+    memo_completion_hint_service = MemoCompletionHintService(memo_store=todo_store)
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
         llm_client=client,
@@ -1141,6 +1145,7 @@ def create_llm_agent_wiring(
         episodic_chunk_coordinator=episodic_coord,
         episodic_reinterpretation_coordinator=reinterpretation_coord,
         episodic_semantic_promotion=episodic_semantic_promotion,
+        memo_completion_hint_service=memo_completion_hint_service,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
