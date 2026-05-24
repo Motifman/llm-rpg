@@ -19,7 +19,10 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts.build_trace_viewer import (  # noqa: E402
     _format_event_body,
+    build_memo_state_timeline,
+    build_position_timeline,
     collect_players,
+    compute_event_heatmap,
     group_events_by_tick,
     load_scenario_topology,
     render_viewer_html,
@@ -349,3 +352,91 @@ class TestMainCli:
             assert e.code == 2
         else:
             raise AssertionError("expected SystemExit for missing trace.jsonl")
+
+
+class TestPositionTimeline:
+    """build_position_timeline の挙動 (PR γ playback の入力)。"""
+
+    def test_各_tick_でのスナップショットを返す(self) -> None:
+        """各 position_change tick のスナップショットが順に積まれる。"""
+        events = _sample_events()
+        timeline = build_position_timeline(
+            events, spot_name_to_id={"制御室": "s1", "廊下": "s2", "金庫室": "s3"}
+        )
+        # tick 0: カイト=s1, リン=s2 (初期配置)
+        assert timeline[0] == {1: "s1", 2: "s2"}
+        # tick 2: リンが移動 → カイトはまだ s1, リン=s3
+        assert timeline[2] == {1: "s1", 2: "s3"}
+
+    def test_position_change_の無い_tick_はスナップショット未登録(self) -> None:
+        """変化が無い tick はキーが入らない (JS 側で前進補間する想定)。"""
+        events = _sample_events()
+        timeline = build_position_timeline(events)
+        # tick 1 は position_change なし (action のみ)
+        assert 1 not in timeline
+
+
+class TestMemoStateTimeline:
+    """build_memo_state_timeline の挙動 (PR γ memo panel 用)。"""
+
+    def test_memo_add_で_active_な_memo_が記録される(self) -> None:
+        """memo_add 発生 tick のスナップショットに該当 memo が active で含まれる。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.MEMO_ADD,
+                tick=3,
+                player_id=1,
+                payload={"memo_id": "m1", "content": "扉を固定"},
+            ),
+        ]
+        timeline = build_memo_state_timeline(events)
+        snap = timeline[3]
+        assert len(snap) == 1
+        assert snap[0]["memo_id"] == "m1"
+        assert snap[0]["status"] == "active"
+        assert snap[0]["added_tick"] == 3
+
+    def test_memo_done_で_status_が_done_になる(self) -> None:
+        """memo_done 後のスナップショットで該当 memo の status=done。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.MEMO_ADD,
+                tick=3,
+                player_id=1,
+                payload={"memo_id": "m1", "content": "x"},
+            ),
+            TraceEvent(
+                seq=2,
+                timestamp="t",
+                kind=TraceEventKind.MEMO_DONE,
+                tick=10,
+                player_id=1,
+                payload={"memo_id": "m1"},
+            ),
+        ]
+        timeline = build_memo_state_timeline(events)
+        # tick 3 の時点では active
+        assert timeline[3][0]["status"] == "active"
+        # tick 10 で done
+        done = timeline[10][0]
+        assert done["status"] == "done"
+        assert done["done_tick"] == 10
+
+
+class TestEventHeatmap:
+    """compute_event_heatmap の出力。"""
+
+    def test_kind_別に_tick_配列を返す(self) -> None:
+        """action / observation / memo / position_change それぞれの tick 配列が揃う。"""
+        events = _sample_events()
+        hm = compute_event_heatmap(events)
+        assert "ticks" in hm and "action" in hm and "memo" in hm
+        # tick 1 に action が 1 件あった
+        assert hm["action"][1] >= 1
+        # 全配列長は ticks と同じ
+        n = len(hm["ticks"])
+        assert all(len(hm[k]) == n for k in ("action", "observation", "memo", "position_change"))
