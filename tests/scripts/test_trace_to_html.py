@@ -94,6 +94,48 @@ class TestRenderHtml:
         out = render_html(events)
         assert "[NG]" in out
 
+    def test_mermaid_arrows_は_raw_の_リテラル_矢印で_出力される(self) -> None:
+        """Mermaid のシーケンス矢印 ``->>`` / ``-->>`` が HTML エスケープされず
+        リテラルで出力されること (描画バグの回帰防止)。
+
+        ``&gt;&gt;`` になるとブラウザ環境によっては Mermaid パーサが
+        decode しきれず syntax error になり描画されなくなる。
+        """
+        out = render_html(_sample_events(), title="my-run")
+        # `<pre class="mermaid">` ブロック内に raw の `->>` / `-->>` がある
+        # (fallback の raw-mermaid ブロックは html.escape 済みなのでそちらの
+        # &gt;&gt; は OK)
+        # 簡単にチェック: 全体に少なくとも 1 つ raw `->>` リテラルがある
+        assert "->>" in out, "raw `->>` arrow not found in HTML"
+        assert "-->>" in out, "raw `-->>` arrow not found in HTML"
+
+    def test_actor_label_の_HTML_特殊文字は_全角化される(self) -> None:
+        """player_name に ``<`` / ``>`` / ``&`` が混入してもタグ解釈されない。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="2026-05-24T00:00:00+00:00",
+                kind=TraceEventKind.ACTION,
+                tick=1,
+                player_id=1,
+                payload={
+                    "tool": "noop",
+                    "player_name": "<script>alert(1)</script>",
+                },
+            ),
+        ]
+        out = render_html(events)
+        # `<script>` が raw のまま actor 定義に埋め込まれていない
+        assert "actor P1 as <script>" not in out
+        # 代わりに全角化された文字列が入っている
+        assert "＜script＞" in out
+
+    def test_fallback_の_raw_mermaid_ブロックが含まれる(self) -> None:
+        """CDN ブロック時用に mermaid raw source の <details> と mermaid.live リンクがある。"""
+        out = render_html(_sample_events())
+        assert "raw-mermaid" in out
+        assert "mermaid.live" in out
+
 
 class TestMain:
     """CLI main エントリポイントの基本動作。"""
