@@ -97,6 +97,7 @@ from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrc
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
 )
+from ai_rpg_world.application.trace import ITraceRecorder
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
 )
@@ -327,6 +328,7 @@ def _build_tool_handler_map(
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
     spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
     episodic_memory_explore_executor: Optional[EpisodicMemoryExploreToolExecutor] = None,
+    trace_recorder: Optional["ITraceRecorder"] = None,
 ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
     """
     Executor 群を組み立て、tool_name → handler の辞書を返す。
@@ -377,6 +379,7 @@ def _build_tool_handler_map(
             sliding_window=sliding_window,
             action_result_store=action_result_store,
             current_tick_provider=current_tick_provider,
+            trace_recorder=trace_recorder,
         ).get_handlers()
     )
     handler_map.update(
@@ -475,6 +478,7 @@ def _build_tool_stack(
     sliding_window: Optional[ISlidingWindowMemory] = None,
     action_result_store: Optional[IActionResultStore] = None,
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+    trace_recorder: Optional["ITraceRecorder"] = None,
 ) -> _ToolStackResult:
     """
     register_default_tools, available_tools_provider, tool_command_mapper, tool_argument_resolver を構築する。
@@ -556,6 +560,7 @@ def _build_tool_stack(
         current_tick_provider=current_tick_provider,
         spot_graph_tool_executor=spot_graph_tool_executor,
         episodic_memory_explore_executor=episodic_memory_explore_executor,
+        trace_recorder=trace_recorder,
     )
     tool_command_mapper = ToolCommandMapper(handler_map=handler_map)
     tool_argument_resolver = DefaultToolArgumentResolver(
@@ -922,6 +927,7 @@ def create_llm_agent_wiring(
     chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder] = None,
     episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
     episodic_chunk_subjective_completion: Optional[IEpisodicChunkSubjectiveCompletionPort] = None,
+    trace_recorder: Optional["ITraceRecorder"] = None,
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
@@ -1061,6 +1067,7 @@ def create_llm_agent_wiring(
         sliding_window=sliding_window,
         action_result_store=action_result_store,
         current_tick_provider=current_tick_provider,
+        trace_recorder=trace_recorder,
     )
     available_tools_provider = tool_stack.available_tools_provider
     tool_command_mapper = tool_stack.tool_command_mapper
@@ -1146,6 +1153,8 @@ def create_llm_agent_wiring(
         episodic_reinterpretation_coordinator=reinterpretation_coord,
         episodic_semantic_promotion=episodic_semantic_promotion,
         memo_completion_hint_service=memo_completion_hint_service,
+        trace_recorder=trace_recorder,
+        tick_provider=current_tick_provider,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,

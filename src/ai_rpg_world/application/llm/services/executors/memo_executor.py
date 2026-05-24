@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IMemoStore,
     ISlidingWindowMemory,
 )
+from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     exception_result,
@@ -59,6 +60,7 @@ class MemoToolExecutor:
         action_result_store: Optional[IActionResultStore] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
         todo_store: Optional[IMemoStore] = None,
+        trace_recorder: Optional[ITraceRecorder] = None,
     ) -> None:
         # 後方互換: 旧 kwarg ``todo_store`` を受け付ける (Issue #188 リネーム)。
         # 両方指定なら memo_store を優先。
@@ -68,6 +70,7 @@ class MemoToolExecutor:
         self._sliding_window = sliding_window
         self._action_result_store = action_result_store
         self._current_tick_provider = current_tick_provider
+        self._trace_recorder: ITraceRecorder = trace_recorder or NullTraceRecorder()
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。memo_store が None の場合は空辞書。"""
@@ -103,6 +106,13 @@ class MemoToolExecutor:
                 )
             memo_id = self._memo_store.add(
                 PlayerId(player_id), content, current_tick=self._current_tick()
+            )
+            self._trace_recorder.record(
+                TraceEventKind.MEMO_ADD,
+                tick=self._current_tick(),
+                player_id=player_id,
+                memo_id=memo_id,
+                content=content,
             )
             return LlmCommandResultDto(
                 success=True,
@@ -156,6 +166,12 @@ class MemoToolExecutor:
                 pid, memo_id, fulfillment_context=fulfillment_context
             )
             if ok:
+                self._trace_recorder.record(
+                    TraceEventKind.MEMO_DONE,
+                    tick=self._current_tick(),
+                    player_id=player_id,
+                    memo_id=memo_id,
+                )
                 return LlmCommandResultDto(
                     success=True,
                     message=f"メモ {memo_id} を完了にしました。",
