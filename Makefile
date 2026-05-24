@@ -2,7 +2,8 @@
 	web-demo-db web-demo-db-reset web-backend web-frontend-install \
 	web-frontend-test web-frontend-build web-frontend \
 	asset-pipeline-sync asset-pipeline-sync-rembg asset-pipeline \
-	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud
+	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud \
+	experiment
 
 WEB_GAME_DB ?= var/game/ai_rpg_world.db
 WEB_MANUAL_PLAYER_IDS ?= 1
@@ -125,3 +126,27 @@ experiment-relay-cloud:
 	OPENAI_API_BASE= LLM_MODEL=$(CLOUD_LLM_MODEL) \
 	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default,R2_pure \
 	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
+
+# 汎用シナリオ実験 (Issue #188 Phase 1d) — 任意 scenario JSON で実行し
+# trace.jsonl + report.md + trace.html を出力する。
+#
+# 使い方:
+#   make experiment SCENARIO=data/scenarios/relay_puzzle_demo.json
+#   make experiment SCENARIO=data/scenarios/foo.json MAX_TICKS=50 OUT=var/runs/foo-001
+#
+# 環境変数:
+#   SCENARIO       実行するシナリオ JSON のパス (必須)
+#   MAX_TICKS      外側ループ回数 (既定 30)
+#   OUT            出力ディレクトリ (省略時 var/runs/<scenario>-<timestamp>)
+#   OPENAI_API_BASE / LLM_MODEL / OPENAI_API_KEY  litellm の接続先
+MAX_TICKS ?= 30
+experiment:
+	@if [ -z "$(SCENARIO)" ]; then \
+		echo "SCENARIO is required. e.g. make experiment SCENARIO=data/scenarios/relay_puzzle_demo.json"; \
+		exit 2; \
+	fi
+	@mkdir -p var/runs
+	$(PYTHON) scripts/run_scenario_experiment.py \
+		--scenario $(SCENARIO) \
+		--max-ticks $(MAX_TICKS) \
+		$(if $(OUT),--out $(OUT),)
