@@ -253,6 +253,26 @@ def main(argv: Optional[List[str]] = None) -> int:
         action="store_true",
         help="Skip HTML generation (still emits trace.jsonl + report.md)",
     )
+    parser.add_argument(
+        "--publish-gist",
+        action="store_true",
+        help=(
+            "After the run finishes, upload trace.jsonl + report.md + trace.html "
+            "(and the scenario JSON) to a secret gist via gh CLI. "
+            "Requires `gh auth status` to be authenticated."
+        ),
+    )
+    parser.add_argument(
+        "--publish-gist-public",
+        action="store_true",
+        help="Make the published gist public instead of secret (default secret)",
+    )
+    parser.add_argument(
+        "--publish-gist-desc",
+        type=str,
+        default=None,
+        help="Optional description override for the published gist",
+    )
     args = parser.parse_args(argv)
 
     if not args.scenario.exists():
@@ -308,6 +328,36 @@ def main(argv: Optional[List[str]] = None) -> int:
         f"elapsed={summary['elapsed_sec']:.1f}s",
         flush=True,
     )
+
+    if args.publish_gist:
+        # シナリオ JSON も gist に同梱して再現性を担保 (差分が見えるように)
+        scenario_copy = out_dir / "scenario.json"
+        try:
+            scenario_copy.write_bytes(args.scenario.read_bytes())
+        except OSError as e:
+            logger.warning("failed to copy scenario JSON into run dir: %s", e)
+
+        from scripts.publish_experiment_gist import (  # noqa: WPS433
+            GistPublishError,
+            publish,
+        )
+
+        desc = args.publish_gist_desc or (
+            f"llm-rpg experiment: {args.scenario.stem} "
+            f"outcome={summary['outcome']} tick={summary['last_tick']}"
+        )
+        try:
+            result = publish(
+                out_dir,
+                description=desc,
+                secret=not args.publish_gist_public,
+            )
+        except GistPublishError as e:
+            print(f"[gist-error] {e}", flush=True)
+            return 1
+        print(f"[gist] {result['gist_url']}", flush=True)
+        if result.get("html_preview_url"):
+            print(f"[html-preview] {result['html_preview_url']}", flush=True)
     return 0
 
 
