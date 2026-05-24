@@ -17,7 +17,10 @@
 #   - `code` ブロック内のコメント説明 → 必要なら ALLOW_LIST 行で対応
 #
 # 設定:
-#   ALLOW_LIST に正規表現を 1 行 1 件追加すると除外できる。
+#   ALLOW_LIST に正規表現を 1 行 1 件追加すると文字列単位で除外できる。
+#   ファイル単位で除外したい場合は、対象ファイル先頭 30 行内に
+#     # check-no-internal-hostnames: allow-file
+#   を 1 行入れる。
 
 set -euo pipefail
 
@@ -45,6 +48,21 @@ your-org\.(ac|go|lg)\.jp
 foo\.bar\.(ac|go|lg)\.jp
 EOF
 
+# ファイル単位のスキップマーカー。当該ファイルの先頭 30 行内に
+#   # check-no-internal-hostnames: allow-file
+# とコメントを書くと、そのファイル全体をスキャン対象から除外する。
+#
+# 主な用途:
+#   - docs/security_hosts_policy.md (漏洩パターンを「書いてはいけない例」として
+#     掲載するため、本文中に FQDN を含む必要がある)
+#   - tests/scripts/test_check_no_internal_hostnames.sh (検出ロジック自体を
+#     検証するため、テスト用の FQDN リテラルを含む必要がある)
+ALLOW_FILE_MARKER='check-no-internal-hostnames:[[:space:]]*allow-file'
+
+has_allow_file_marker() {
+  head -n 30 "$1" 2>/dev/null | grep -Eq "$ALLOW_FILE_MARKER"
+}
+
 if $STAGED_ONLY; then
   # ステージ済み差分のみ
   target_files() {
@@ -67,6 +85,10 @@ violations=0
 while IFS= read -r f; do
   [[ -z "$f" ]] && continue
   [[ -f "$f" ]] || continue
+  # ファイル先頭の allow-file マーカーがあればスキャン対象外
+  if has_allow_file_marker "$f"; then
+    continue
+  fi
   # 大文字を許容するため -i
   matches=$(scan "$f" 2>/dev/null | grep -EioI "$PATTERN" || true)
   [[ -z "$matches" ]] && continue

@@ -1,3 +1,7 @@
+<!-- check-no-internal-hostnames: allow-file
+このドキュメントは「書いてはいけない例」を意図的に掲載するため、本文中に
+実 FQDN を含む。漏洩防止チェックの対象外として扱う。 -->
+
 # インフラ識別情報を public リポジトリに書かない方針
 
 ## 何を守るか
@@ -57,7 +61,22 @@ bash scripts/check_no_internal_hostnames.sh --staged
 make check-no-internal-hostnames
 ```
 
-教材・サンプル URL は ALLOW_LIST (スクリプト内) に正規表現で追加して例外化できます。
+教材・サンプル URL は `ALLOW_LIST` (スクリプト内) に正規表現で追加して例外化できます。
+
+**ファイル単位の例外** (本ドキュメントのように「漏洩例」を意図的に掲載する場合): 対象ファイルの先頭 30 行内に以下のコメントを 1 行入れます。
+
+```text
+# check-no-internal-hostnames: allow-file
+```
+
+(Markdown では `<!-- check-no-internal-hostnames: allow-file -->` 形式で OK)
+
+このリポジトリで現在マーカー指定されているのは:
+
+- `docs/security_hosts_policy.md` (本ドキュメント。漏洩例を掲載するため)
+- `tests/scripts/test_check_no_internal_hostnames.sh` (検出ロジックを試すため、テスト用ダミー FQDN を含む)
+
+新規ファイルにマーカーを足す場合は、その理由をコメントに併記してください。
 
 ## pre-commit hook の推奨設定
 
