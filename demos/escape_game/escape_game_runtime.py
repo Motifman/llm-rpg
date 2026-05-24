@@ -828,6 +828,26 @@ class EscapeGameRuntime:
         spot_id = graph.get_entity_spot(eid)
         return graph.get_spot(spot_id).name
 
+    def get_player_spot_id(self, player_id: PlayerId) -> Optional[str]:
+        """プレイヤーが現在いる spot の生 ID 文字列を返す (見つからなければ None)。
+
+        trace の ``position_change`` event payload に乗せる用途。
+        例: スポット間移動の trail 描画。
+        """
+        try:
+            graph = self._spot_graph_repo.find_graph()
+            eid = EntityId.create(int(player_id))
+            spot_id = graph.get_entity_spot(eid)
+        except Exception:
+            return None
+        if spot_id is None:
+            return None
+        # SpotId は value_object なので value を取り出す
+        value = getattr(spot_id, "value", None)
+        if value is None:
+            return str(spot_id)
+        return str(value)
+
 
 def _escape_llm_ssot_enabled_from_env() -> bool:
     """環境変数 ESCAPE_LLM_SSOT が 1/true/yes/on のいずれかなら SSoT を有効にする。"""
