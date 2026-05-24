@@ -3,7 +3,8 @@
 	web-frontend-test web-frontend-build web-frontend \
 	asset-pipeline-sync asset-pipeline-sync-rembg asset-pipeline \
 	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud \
-	experiment experiment-publish vllm-tunnel vllm-check check-no-internal-hostnames
+	experiment experiment-publish vllm-tunnel vllm-check check-no-internal-hostnames \
+	build-trace-viewer
 
 WEB_GAME_DB ?= var/game/ai_rpg_world.db
 WEB_MANUAL_PLAYER_IDS ?= 1
@@ -171,3 +172,12 @@ vllm-check:
 # 内部ホスト名 / 組織 FQDN の混入チェック (docs/security_hosts_policy.md)
 check-no-internal-hostnames:
 	@./scripts/check_no_internal_hostnames.sh
+
+# Trace viewer の生成 (Issue #188 Phase 1d β)
+# 使い方: make build-trace-viewer RUN_DIR=var/runs/foo
+build-trace-viewer:
+	@if [ -z "$(RUN_DIR)" ]; then \
+		echo "RUN_DIR is required. e.g. make build-trace-viewer RUN_DIR=var/runs/foo"; \
+		exit 2; \
+	fi
+	$(PYTHON) scripts/build_trace_viewer.py $(RUN_DIR)
