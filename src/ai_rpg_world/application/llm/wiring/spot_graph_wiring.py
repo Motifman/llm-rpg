@@ -179,6 +179,7 @@ def create_spot_graph_wiring(
     episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
     episodic_chunk_subjective_completion: Optional[IEpisodicChunkSubjectiveCompletionPort] = None,
     event_publisher: Optional[Any] = None,
+    trace_recorder: Optional[Any] = None,
 ) -> "LlmAgentWiringResult":
     """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。
 
@@ -461,6 +462,7 @@ def create_spot_graph_wiring(
         sliding_window=sliding_window,
         action_result_store=action_result_store,
         current_tick_provider=current_tick_provider,
+        trace_recorder=trace_recorder,
     )
     available_tools_provider = tool_stack.available_tools_provider
     tool_command_mapper = tool_stack.tool_command_mapper
@@ -576,6 +578,8 @@ def create_spot_graph_wiring(
         episodic_semantic_promotion=episodic_semantic_promotion,
         game_time_label_provider=game_time_label_provider,
         memo_completion_hint_service=memo_completion_hint_service,
+        trace_recorder=trace_recorder,
+        tick_provider=current_tick_provider,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
