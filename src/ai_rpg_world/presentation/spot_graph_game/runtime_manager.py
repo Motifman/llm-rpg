@@ -289,6 +289,26 @@ class _EscapeGameLlmWiring:
 
         name = str(tool_call.get("name", ""))
         arguments = self._coerce_arguments(tool_call.get("arguments"))
+        # Phase 1d: ACTION 自動 trace (実行前)。runtime に trace_recorder が
+        # 注入されていれば記録。LlmAgentOrchestrator 経路を通らない escape_game
+        # 専用 wiring のための補完。
+        trace_recorder = getattr(self.runtime, "trace_recorder", None)
+        current_tick: Optional[int] = None
+        if trace_recorder is not None:
+            try:
+                current_tick = int(self.runtime.current_tick())
+            except Exception:
+                current_tick = None
+            try:
+                trace_recorder.record(
+                    "action",
+                    tick=current_tick,
+                    player_id=int(player_id.value),
+                    tool=name,
+                    arguments=arguments,
+                )
+            except Exception:
+                logger.exception("trace_recorder.record(action) failed")
         try:
             result = self._execute_tool(
                 player_id,
@@ -314,6 +334,19 @@ class _EscapeGameLlmWiring:
                 f"{name}({json.dumps(arguments, ensure_ascii=False)})",
                 result.message,
             )
+        if trace_recorder is not None:
+            try:
+                trace_recorder.record(
+                    "action_result",
+                    tick=current_tick,
+                    player_id=int(player_id.value),
+                    tool=name,
+                    success=result.success,
+                    error_code=result.error_code,
+                    result_summary=result.message,
+                )
+            except Exception:
+                logger.exception("trace_recorder.record(action_result) failed")
         # 失敗 DTO のとき ActionFailed 観測を該当プレイヤーへ投入する。
         # post-hoc に Intent VO を構築し observer に渡す (intent queue 経由は
         # しない — 即時 path で意味のある最小 wire-in)。LLM API レベルや
