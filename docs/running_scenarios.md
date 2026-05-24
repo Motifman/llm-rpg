@@ -51,7 +51,7 @@ scenario 固有の集計が欲しくなったら、`scripts/issue154_full_tables
 
 ### Gist 自動 publish (リモート実験を依頼者と共有)
 
-実行終了時に成果物 (trace.jsonl + report.md + trace.html + scenario.json) を **secret gist に一括アップロード**し、`htmlpreview.github.io` 経由の Mermaid プレビュー URL も同時表示します。
+実行終了時に成果物 (trace.jsonl + report.md + trace.html + scenario.json + **viewer.html**) を **secret gist に一括アップロード**し、`htmlpreview.github.io` 経由のプレビュー URL も同時表示します。
 
 ```bash
 # make 経由 (推奨)
@@ -70,8 +70,11 @@ python scripts/run_scenario_experiment.py \
 
 ```
 [gist] https://gist.github.com/<user>/<id>
-[html-preview] https://htmlpreview.github.io/?https://gist.githubusercontent.com/<user>/<id>/raw/03_trace.html
+[viewer] https://htmlpreview.github.io/?https://gist.githubusercontent.com/<user>/<id>/raw/06_viewer.html
+[legacy-html] https://htmlpreview.github.io/?https://gist.githubusercontent.com/<user>/<id>/raw/03_trace.html
 ```
+
+`[viewer]` URL を開くと **playback 再生 + 空間マップ + memo パネル付き** の Cytoscape インタラクティブ viewer (PR #213 系) が表示されます。`[legacy-html]` は旧 Mermaid シーケンス図 viewer (jq/grep 派向け)。
 
 オプション:
 
@@ -80,10 +83,19 @@ python scripts/run_scenario_experiment.py \
 | `--publish-gist-public` | secret ではなく public gist にする (既定 secret) |
 | `--publish-gist-desc "..."` | gist の説明文を上書き |
 
+#### viewer.html の自動生成
+
+`publish_experiment_gist.py` は publish 直前に `viewer.html` を build します (既に存在すれば skip)。`trace.jsonl` と `scenario.json` (任意) から自動的に Cytoscape inline viewer を生成。
+
+Cytoscape の取得 (初回のみネット越し、以降キャッシュ) が失敗した場合は警告のみで publish は続行します (旧 trace.html はあるので可視化手段はゼロにならない)。
+
+`--no-build-viewer` で viewer 自動生成を抑止できます。
+
 #### 後追い publish (実験はすでに済んでいるが、後から gist 化したい)
 
 ```bash
 python scripts/publish_experiment_gist.py var/runs/relay_puzzle_demo-20260524-xxx
+# viewer.html が無ければ自動で build される
 ```
 
 #### 前提
@@ -91,6 +103,7 @@ python scripts/publish_experiment_gist.py var/runs/relay_puzzle_demo-20260524-xx
 - `gh` CLI がインストール済み (`gh --version`)
 - `gh auth status` で認証済み
 - gist 作成権限 (`gist` scope)
+- viewer 自動生成のため初回のみ Cytoscape の download (~400KB)。以降は `~/.cache/llm-rpg-viewer/` から読む
 
 ---
 

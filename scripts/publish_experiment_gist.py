@@ -35,6 +35,9 @@ _FILENAME_PREFIXES = {
     "trace.html": "03_trace.html",
     "scenario.json": "04_scenario.json",
     "run_info.md": "05_run_info.md",
+    # PR δ (#213): build_trace_viewer.py が生成する Cytoscape inline viewer。
+    # ファイル名は 06_ で並び順を後ろにし、htmlpreview ボタンとして強調する想定。
+    "viewer.html": "06_viewer.html",
 }
 
 
@@ -160,16 +163,79 @@ def _resolve_gh_user() -> Optional[str]:
     return name or None
 
 
+def _maybe_build_viewer(run_dir: Path) -> Optional[Path]:
+    """run_dir 内に trace.jsonl があり viewer.html が無ければ build を試みる。
+
+    PR δ (#213): publish 時に viewer.html を自動同梱する。Cytoscape 取得 (初回)
+    のためのネット越し依存があるため、失敗時は警告のみで publish は続行する
+    (trace.html が既にあるので可視化手段はゼロにならない)。
+
+    Returns:
+        生成 / 既存の viewer.html パス。生成できなかったら None。
+    """
+    viewer_path = run_dir / "viewer.html"
+    trace_path = run_dir / "trace.jsonl"
+    if viewer_path.exists():
+        return viewer_path
+    if not trace_path.exists():
+        return None
+    try:
+        # import を関数内に閉じ込めて、build_trace_viewer 依存を publish 単体
+        # ユースケース (viewer 無しの run dir) から外しておく
+        from scripts.build_trace_viewer import (  # noqa: WPS433
+            fetch_cytoscape,
+            load_scenario_topology,
+            render_viewer_html,
+        )
+        from ai_rpg_world.application.trace.recorder import (  # noqa: WPS433
+            load_trace_events,
+        )
+    except Exception as e:
+        logger.warning("failed to import build_trace_viewer dependencies: %s", e)
+        return None
+    try:
+        asset = fetch_cytoscape()
+    except Exception as e:
+        # Cytoscape 取得 (ネット) 失敗。trace.html だけで諦める
+        logger.warning(
+            "skipping viewer.html build (Cytoscape fetch failed): %s", e
+        )
+        return None
+    try:
+        events = list(load_trace_events(trace_path))
+        topology = load_scenario_topology(run_dir / "scenario.json")
+        html_str = render_viewer_html(
+            title=run_dir.name,
+            events=events,
+            scenario_topology=topology,
+            cytoscape_js_src=asset.content,
+        )
+        viewer_path.write_text(html_str, encoding="utf-8")
+        return viewer_path
+    except Exception as e:
+        logger.warning("failed to build viewer.html: %s", e)
+        return None
+
+
 def publish(
     run_dir: Path,
     *,
     description: Optional[str] = None,
     secret: bool = True,
+    build_viewer: bool = True,
 ) -> dict:
     """run_dir の中身を 1 つの gist として publish する。
 
-    Returns: ``{"gist_url": ..., "gist_id": ..., "html_preview_url": ...}``
+    Args:
+        build_viewer: True (既定) なら publish 直前に viewer.html を build (既存なら
+            上書きしない)。Cytoscape を取得できない環境 (offline / 認証付き proxy 等)
+            では black warning して publish は続行する。
+
+    Returns: ``{"gist_url", "gist_id", "html_preview_url", "viewer_preview_url"}``
     """
+    if build_viewer:
+        _maybe_build_viewer(run_dir)
+
     files = _collect_files(run_dir)
     desc = description or f"llm-rpg experiment run: {run_dir.name}"
 
@@ -194,15 +260,36 @@ def publish(
     gist_id = _extract_gist_id(gist_url)
     html_files = [name for _, name in files if name.endswith(".html")]
     user = _resolve_gh_user() if gist_id and html_files else None
+    # viewer.html (新 viewer) と trace.html (Mermaid 旧 viewer) を分けて URL 化
+    # gist 内ファイル名は prefixed なので "06_viewer.html" / "03_trace.html" を探す
+    viewer_files = [n for n in html_files if "viewer" in n]
+    legacy_files = [n for n in html_files if "viewer" not in n]
+    primary_html = (viewer_files or legacy_files or [None])[0]
+    legacy_html = (legacy_files or [None])[0] if viewer_files else None
     html_preview_url = (
-        _html_preview_url(gist_id, user, html_files[0])
-        if gist_id and user and html_files
+        _html_preview_url(gist_id, user, primary_html)
+        if gist_id and user and primary_html
+        else None
+    )
+    viewer_preview_url = (
+        _html_preview_url(gist_id, user, viewer_files[0])
+        if gist_id and user and viewer_files
+        else None
+    )
+    legacy_preview_url = (
+        _html_preview_url(gist_id, user, legacy_html)
+        if gist_id and user and legacy_html
         else None
     )
     return {
         "gist_url": gist_url,
         "gist_id": gist_id,
+        # 後方互換: 既存のテスト/呼び出しは html_preview_url を見る
         "html_preview_url": html_preview_url,
+        # 新 viewer の URL (推奨)。viewer.html を含む gist でだけ非 None
+        "viewer_preview_url": viewer_preview_url,
+        # 旧 Mermaid trace.html の URL。両方ある場合に役立つ
+        "legacy_preview_url": legacy_preview_url,
     }
 
 
@@ -225,6 +312,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         action="store_true",
         help="Create a public gist instead of secret (default secret)",
     )
+    parser.add_argument(
+        "--no-build-viewer",
+        action="store_true",
+        help="Skip auto-building viewer.html from trace.jsonl + scenario.json",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -233,13 +325,20 @@ def main(argv: Optional[List[str]] = None) -> int:
             args.run_dir,
             description=args.description,
             secret=not args.public,
+            build_viewer=not args.no_build_viewer,
         )
     except GistPublishError as e:
         print(f"[error] {e}", file=sys.stderr)
         return 2
 
     print(f"[gist] {result['gist_url']}")
-    if result.get("html_preview_url"):
+    # PR δ: viewer.html (interactive Cytoscape playback) を最優先で出す。
+    # 旧 Mermaid trace.html も一緒に gist にあるなら別行で出す。
+    if result.get("viewer_preview_url"):
+        print(f"[viewer] {result['viewer_preview_url']}")
+        if result.get("legacy_preview_url"):
+            print(f"[legacy-html] {result['legacy_preview_url']}")
+    elif result.get("html_preview_url"):
         print(f"[html] {result['html_preview_url']}")
     return 0
 

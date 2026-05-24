@@ -123,7 +123,7 @@ class TestPublishWithMock:
             return stub
 
         with patch.object(subprocess, "run", side_effect=fake_run):
-            result = publish(run_dir, description="t", secret=True)
+            result = publish(run_dir, description="t", secret=True, build_viewer=False)
 
         assert result["gist_url"].endswith("abc123")
         assert result["gist_id"] == "abc123"
@@ -222,3 +222,159 @@ class TestPublishWithMock:
         with patch.object(subprocess, "run", side_effect=fake_run):
             with pytest.raises(GistPublishError, match="gh CLI not found"):
                 publish(run_dir, secret=True)
+
+
+class TestViewerIntegration:
+    """PR δ: viewer.html 同梱機構。"""
+
+    def test_viewer_html_があれば_viewer_preview_url_が返る(self, tmp_path: Path) -> None:
+        """run_dir に viewer.html があれば gist に含まれ、viewer URL が出る。"""
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        (run_dir / "report.md").write_text("# r")
+        (run_dir / "viewer.html").write_text("<html>viewer</html>")
+        (run_dir / "trace.html").write_text("<html>trace</html>")
+
+        def fake_run(cmd, **kwargs):
+            stub = subprocess.CompletedProcess(args=cmd, returncode=0)
+            stub.stderr = ""
+            if cmd[:3] == ["gh", "gist", "create"]:
+                stub.stdout = "https://gist.github.com/Motifman/xyz\n"
+            else:
+                stub.stdout = "Motifman\n"
+            return stub
+
+        with patch.object(subprocess, "run", side_effect=fake_run):
+            # build_viewer=False: 既存 viewer.html を使う (再 build しない)
+            result = publish(run_dir, secret=True, build_viewer=False)
+
+        assert "06_viewer.html" in result["viewer_preview_url"]
+        # 旧 trace.html も legacy として参照可能
+        assert "03_trace.html" in result["legacy_preview_url"]
+        # 後方互換: html_preview_url は viewer (primary) を指す
+        assert "06_viewer.html" in result["html_preview_url"]
+
+    def test_viewer_html_だけの場合は_legacy_は_None(self, tmp_path: Path) -> None:
+        """viewer.html のみで trace.html (Mermaid 版) が無い場合、legacy は None。"""
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        (run_dir / "report.md").write_text("# r")
+        (run_dir / "viewer.html").write_text("<html>viewer</html>")
+
+        def fake_run(cmd, **kwargs):
+            stub = subprocess.CompletedProcess(args=cmd, returncode=0)
+            stub.stderr = ""
+            if cmd[:3] == ["gh", "gist", "create"]:
+                stub.stdout = "https://gist.github.com/Motifman/y\n"
+            else:
+                stub.stdout = "Motifman\n"
+            return stub
+
+        with patch.object(subprocess, "run", side_effect=fake_run):
+            result = publish(run_dir, secret=True, build_viewer=False)
+
+        assert result["viewer_preview_url"] is not None
+        assert "06_viewer.html" in result["viewer_preview_url"]
+        assert result["legacy_preview_url"] is None
+
+    def test_no_viewer_no_trace_html_は_全部_None(self, tmp_path: Path) -> None:
+        """HTML 1 つも無ければ viewer / legacy / html すべて None。"""
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        (run_dir / "report.md").write_text("# r")
+
+        def fake_run(cmd, **kwargs):
+            stub = subprocess.CompletedProcess(args=cmd, returncode=0)
+            stub.stderr = ""
+            if cmd[:3] == ["gh", "gist", "create"]:
+                stub.stdout = "https://gist.github.com/Motifman/z\n"
+            else:
+                stub.stdout = "Motifman\n"
+            return stub
+
+        with patch.object(subprocess, "run", side_effect=fake_run):
+            result = publish(run_dir, secret=True, build_viewer=False)
+
+        assert result["viewer_preview_url"] is None
+        assert result["legacy_preview_url"] is None
+        assert result["html_preview_url"] is None
+
+    def test_build_viewer_True_で_trace_jsonl_から_viewer_を_自動生成(
+        self, tmp_path: Path
+    ) -> None:
+        """build_viewer=True かつ trace.jsonl があれば publish 前に viewer.html を build。"""
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        (run_dir / "report.md").write_text("# r")
+        # trace.jsonl だけ用意 (viewer.html は未生成)
+        from ai_rpg_world.application.trace.recorder import JsonlTraceRecorder
+        from ai_rpg_world.application.trace.events import TraceEventKind
+
+        with JsonlTraceRecorder(run_dir / "trace.jsonl") as rec:
+            rec.record(TraceEventKind.RUN_START)
+            rec.record(TraceEventKind.RUN_END, outcome="WIN")
+
+        # build_trace_viewer.fetch_cytoscape をモック
+        from scripts._viewer_vendor import VendorAsset
+        fake_asset = VendorAsset(
+            name="cytoscape",
+            version="0.0.0-test",
+            content="/* fake */ var cytoscape = function() {};",
+            sha256="0" * 64,
+        )
+
+        def fake_run(cmd, **kwargs):
+            stub = subprocess.CompletedProcess(args=cmd, returncode=0)
+            stub.stderr = ""
+            if cmd[:3] == ["gh", "gist", "create"]:
+                stub.stdout = "https://gist.github.com/Motifman/built\n"
+            else:
+                stub.stdout = "Motifman\n"
+            return stub
+
+        from scripts import build_trace_viewer
+
+        with patch.object(build_trace_viewer, "fetch_cytoscape", return_value=fake_asset):
+            with patch.object(subprocess, "run", side_effect=fake_run):
+                result = publish(run_dir, secret=True, build_viewer=True)
+
+        assert (run_dir / "viewer.html").exists()
+        assert "06_viewer.html" in result["viewer_preview_url"]
+
+    def test_build_viewer_True_でも_Cytoscape_取得失敗時は_publish_続行(
+        self, tmp_path: Path
+    ) -> None:
+        """ネット越し取得が失敗しても publish 全体は止まらない (trace.html の代替がある想定)。"""
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        (run_dir / "report.md").write_text("# r")
+        from ai_rpg_world.application.trace.recorder import JsonlTraceRecorder
+        from ai_rpg_world.application.trace.events import TraceEventKind
+
+        with JsonlTraceRecorder(run_dir / "trace.jsonl") as rec:
+            rec.record(TraceEventKind.RUN_START)
+
+        from scripts._viewer_vendor import VendorFetchError
+
+        def fake_run(cmd, **kwargs):
+            stub = subprocess.CompletedProcess(args=cmd, returncode=0)
+            stub.stderr = ""
+            if cmd[:3] == ["gh", "gist", "create"]:
+                stub.stdout = "https://gist.github.com/Motifman/noffer\n"
+            else:
+                stub.stdout = "Motifman\n"
+            return stub
+
+        from scripts import build_trace_viewer
+
+        def raise_fetch(*a, **kw):
+            raise VendorFetchError("offline")
+
+        with patch.object(build_trace_viewer, "fetch_cytoscape", side_effect=raise_fetch):
+            with patch.object(subprocess, "run", side_effect=fake_run):
+                result = publish(run_dir, secret=True, build_viewer=True)
+
+        # publish は成功 (gist URL がある)、viewer は生成されなかった
+        assert result["gist_url"].endswith("noffer")
+        assert not (run_dir / "viewer.html").exists()
+        assert result["viewer_preview_url"] is None
