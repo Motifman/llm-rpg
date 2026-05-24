@@ -3,7 +3,7 @@
 	web-frontend-test web-frontend-build web-frontend \
 	asset-pipeline-sync asset-pipeline-sync-rembg asset-pipeline \
 	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud \
-	experiment
+	experiment vllm-tunnel vllm-check check-no-internal-hostnames
 
 WEB_GAME_DB ?= var/game/ai_rpg_world.db
 WEB_MANUAL_PLAYER_IDS ?= 1
@@ -13,7 +13,9 @@ ASSET_PIPELINE_DIR := tools/asset_pipeline
 PYTHON ?= $(shell if [ -x venv/bin/python ]; then echo venv/bin/python; else echo python3; fi)
 ISSUE154_MAX_TICKS ?= 30
 EXPERIMENT_OUTPUT ?= var/experiment_relay_report.md
-VLLM_OPENAI_API_BASE ?= http://127.0.0.1:8001/v1
+VLLM_LOCAL_PORT ?= 18001
+VLLM_OPENAI_API_BASE ?= http://127.0.0.1:$(VLLM_LOCAL_PORT)/v1
+VLLM_SSH_HOST ?= v108-vllm
 VLLM_LLM_MODEL ?= openai/gemma-4-31b-it-nvfp4
 CLOUD_LLM_MODEL ?= openai/gpt-5-mini
 
@@ -40,6 +42,8 @@ help:
 	@echo "  make experiment-relay-r1      - R1 のみ"
 	@echo "  make experiment-relay-r2      - R2 のみ"
 	@echo "  make experiment-relay-cloud   - OpenAI クラウド（OPENAI_API_BASE 空）"
+	@echo "  make vllm-tunnel              - v108 vLLM 用 SSH トンネル起動 (port $(VLLM_LOCAL_PORT))"
+	@echo "  make vllm-check               - トンネル + vLLM 応答確認"
 
 # 依存関係のインストール
 install:
@@ -150,3 +154,15 @@ experiment:
 		--scenario $(SCENARIO) \
 		--max-ticks $(MAX_TICKS) \
 		$(if $(OUT),--out $(OUT),)
+
+# vLLM への SSH トンネル (~/.ssh/config の Host エイリアス、既定 v108-vllm)
+# 実 FQDN は本リポジトリには書かない。docs/security_hosts_policy.md 参照。
+vllm-tunnel:
+	@./scripts/ensure_vllm_tunnel.sh
+
+vllm-check:
+	@./scripts/ensure_vllm_tunnel.sh --check
+
+# 内部ホスト名 / 組織 FQDN の混入チェック (docs/security_hosts_policy.md)
+check-no-internal-hostnames:
+	@./scripts/check_no_internal_hostnames.sh
