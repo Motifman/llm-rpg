@@ -1,37 +1,39 @@
-<!-- check-no-internal-hostnames: allow-file
-このドキュメントは「書いてはいけない例」を意図的に掲載するため、本文中に
-実 FQDN を含む。漏洩防止チェックの対象外として扱う。 -->
-
 # インフラ識別情報を public リポジトリに書かない方針
+
+<!-- このドキュメント自身が「具体名は伏せる」を実践する。検出器パターンも組織固有名を含めない。 -->
 
 ## 何を守るか
 
 本リポジトリは public OSS であり、git history (PR / Issue / commit 本文 / diff) はすべて世界中から参照可能です。
-**実 FQDN・組織ドメイン・ジャンプホスト名などのインフラ識別情報** が混入すると、以下のリスクが生じます:
+**実 FQDN・組織ドメイン・ジャンプホスト名・プライベート IP・組織メールアドレス** などのインフラ識別情報が混入すると、以下のリスクが生じます:
 
-- **組織特定**: ドメインから所属研究室・大学が逆引きできる
+- **組織特定**: ドメインから所属組織が逆引きできる
 - **外部からの probe**: 攻撃者が DNS lookup → ポートスキャンに利用
 - **OSINT 連鎖**: 著者の他リポジトリ・SNS と紐付けて行動範囲を推測可能
 - **委託先・連携先の暴露**: ジャンプホスト名から内部ネットワーク構造を推測される
 
-## 書いてはいけない例
+## 書いてはいけないカテゴリ (具体名は意図的に伏せる)
 
-```
-<redacted-host>         # NG: 完全な FQDN
-<redacted-jump-host>         # NG: ジャンプホスト名
-192.168.x.x / 10.x.x.x           # NG: プライベート IP の具体値
-*.ac.jp / *.go.jp 系 FQDN         # NG: 組織グループを示唆
-user@machine.internal-domain     # NG: メールアドレス + 内部ドメイン
-```
+| カテゴリ | 例の形式 | なぜ NG か |
+|---|---|---|
+| 完全 FQDN | `<host>.<org>.<tld>` | DNS lookup で実在確認可能 |
+| ジャンプ / 踏み台ホスト名 | 同上 | 内部ネットワーク構造を露出 |
+| プライベート IP の具体値 | `10.X.Y.Z`, `192.168.X.Y`, `172.16-31.X.Y` | サブネット設計を露出 |
+| 公的・組織グループドメイン | `.ac.jp` / `.go.jp` / `.lg.jp` 等の階層付き FQDN | 所属カテゴリの示唆 |
+| 組織メールアドレス | `user@<organization-domain>` | 個人 + 所属の特定 |
+| 社内システム識別子 | プロダクト名 + 環境名の組み合わせ | 内部命名規則の露出 |
+
+> **本ドキュメント自身が原則を守ること**: 具体名 (どの大学・研究室・ホスト) は書かない。検出器スクリプトも具体名でなくカテゴリで判定する。
 
 ## 書いてよい例 (プレースホルダ)
 
 ```
-<vllm-host>                       # OK: 各自が ~/.ssh/config で実値に差し替える
-<jump-host>                       # OK: 同上
-my-vllm                           # OK: ホストエイリアス (任意の文字列、組織情報なし)
-127.0.0.1:18001                   # OK: localhost + ローカルポート
-example.ac.jp                     # OK: 教材用ダミー (ALLOW_LIST 済み)
+<vllm-host>          各自が ~/.ssh/config で実値に差し替える
+<jump-host>          同上
+my-vllm              ホストエイリアス (任意の文字列、組織情報なし)
+127.0.0.1:18001      localhost + ローカルポート
+example.ac.jp        IANA 予約の教材用 TLD (ALLOW_LIST 済み)
+192.0.2.1            RFC 5737 ドキュメント用 IP
 ```
 
 ## どこに実値を書くか
@@ -44,11 +46,10 @@ example.ac.jp                     # OK: 教材用ダミー (ALLOW_LIST 済み)
 
 ## 自動チェック
 
-`scripts/check_no_internal_hostnames.sh` が以下のパターンを検出します:
+`scripts/check_no_internal_hostnames.sh` が以下の**カテゴリ**を検出します (組織固有名は意図的に含めない):
 
-- `*.ac.jp` / `*.go.jp` / `*.lg.jp` 系の FQDN
-- 既知 internal ラボドメイン (`<redacted-internal>.*`, `tesla<redacted-internal>*`)
-- `*.<redacted-domain>`
+- `.ac.jp` / `.go.jp` / `.lg.jp` 階層の 3 段 FQDN
+- プライベート IP の具体値 (`10.x.x.x`, `192.168.x.x`, `172.16-31.x.x`)
 
 ```bash
 # 作業ツリー全体
@@ -61,9 +62,9 @@ bash scripts/check_no_internal_hostnames.sh --staged
 make check-no-internal-hostnames
 ```
 
-教材・サンプル URL は `ALLOW_LIST` (スクリプト内) に正規表現で追加して例外化できます。
+教材・サンプル URL (`example.ac.jp` 等の IANA 予約 TLD) は `ALLOW_LIST` (スクリプト内) に正規表現で追加して例外化できます。
 
-**ファイル単位の例外** (本ドキュメントのように「漏洩例」を意図的に掲載する場合): 対象ファイルの先頭 30 行内に以下のコメントを 1 行入れます。
+**ファイル単位の例外**: 検出パターンを意図的に含めたいファイル (検出ロジック自身を試す test など) の先頭 30 行内に以下のコメントを 1 行入れます。
 
 ```text
 # check-no-internal-hostnames: allow-file
@@ -71,12 +72,7 @@ make check-no-internal-hostnames
 
 (Markdown では `<!-- check-no-internal-hostnames: allow-file -->` 形式で OK)
 
-このリポジトリで現在マーカー指定されているのは:
-
-- `docs/security_hosts_policy.md` (本ドキュメント。漏洩例を掲載するため)
-- `tests/scripts/test_check_no_internal_hostnames.sh` (検出ロジックを試すため、テスト用ダミー FQDN を含む)
-
-新規ファイルにマーカーを足す場合は、その理由をコメントに併記してください。
+新規ファイルにマーカーを足す場合は、**なぜ例外なのかの理由を併記**してください (本人や将来の自分・他人が後で監査できるように)。
 
 ## pre-commit hook の推奨設定
 
