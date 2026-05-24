@@ -42,7 +42,18 @@ JSON Lines。1 行 = 1 `TraceEvent`。
 
 新しい kind を足したい場合は、まず使ってみて固まったらこの表に追記する。
 
-## 使い方 (記録側)
+## 使い方 (orchestrator 経由の自動記録 — 推奨)
+
+`LlmAgentOrchestrator` と `MemoToolExecutor` は `trace_recorder` kwarg を受け取り、以下を自動で記録します:
+
+| 自動記録される event | 発火タイミング |
+|---|---|
+| `action` | LLM がツール呼び出しを決めた直後 (実行前) |
+| `action_result` | ツール実行完了直後 (success / error_code / result_summary 付き) |
+| `memo_add` | `memo_add` ツール成功時 |
+| `memo_done` | `memo_done` ツール成功時 (失敗時は出さない) |
+
+`create_llm_agent_wiring(..., trace_recorder=...)` または `create_spot_graph_wiring(..., trace_recorder=...)` に渡せば、内部で orchestrator と memo executor に自動で配線されます。**呼び出し側は `run_start` / `run_end` / `observation` を自分で記録するだけ**。
 
 ```python
 from pathlib import Path
@@ -50,20 +61,28 @@ from ai_rpg_world.application.trace import JsonlTraceRecorder, TraceEventKind
 
 with JsonlTraceRecorder(Path("var/runs/exp-10.jsonl")) as rec:
     rec.record(TraceEventKind.RUN_START, run_id="exp-10", model="gemma-4-31b")
-    rec.record(
-        TraceEventKind.OBSERVATION,
-        tick=1,
-        player_id=1,
-        prose="制御室の signpost を読む",
-        player_name="カイト",
+    wiring = create_spot_graph_wiring(
+        ...,  # 既存引数
+        trace_recorder=rec,
     )
-    rec.record(
-        TraceEventKind.ACTION,
-        tick=1,
-        player_id=1,
-        tool="examine",
-        inner_thought="まず周囲を確認しよう",
-    )
+    while not game_ended:
+        runtime.advance_tick()
+        # action / action_result / memo_add / memo_done は orchestrator 側で自動記録
+    rec.record(TraceEventKind.RUN_END, outcome="WIN", total_ticks=tick)
+```
+
+## 使い方 (手動 record)
+
+特殊な kind を自分で書きたい場合や、wiring を使わない script からは直接呼べます。
+
+```python
+rec.record(
+    TraceEventKind.OBSERVATION,
+    tick=1,
+    player_id=1,
+    prose="扉が軋む",
+    player_name="カイト",
+)
 ```
 
 `with` 抜けで自動 close。trace 無効時は `NullTraceRecorder()` を渡せば no-op。
