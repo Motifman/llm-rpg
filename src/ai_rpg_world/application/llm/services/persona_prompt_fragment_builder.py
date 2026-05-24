@@ -20,6 +20,7 @@ class PersonaPromptFragmentBuilder:
 
         lines = [
             "【ペルソナ】",
+            f"- あなたは「{persona.display_name}」本人である。「{persona.display_name}」=あなた自身であり、他者ではない。",
             f"- 名前: {persona.display_name}",
             f"- 一人称: {persona.first_person}",
             f"- 話し方: {persona.speech_style}",

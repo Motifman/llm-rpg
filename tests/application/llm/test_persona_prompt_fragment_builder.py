@@ -50,6 +50,26 @@ def test_persona_prompt_policy_can_omit_memory_sections() -> None:
     assert "白い廊下" not in text
 
 
+def test_persona_prompt_fragment_includes_self_identification_line() -> None:
+    """ペルソナブロック冒頭に「あなた=ペルソナ本人」の自認行が含まれる。
+
+    LLM が自分の名前を「他者の呼称」として使ってしまう (例: リン自身がリン
+    に呼びかける) 振る舞いの抑止が目的。ルールではなく簡潔な自認文として
+    入れる。
+    """
+    persona = AgentPersonaDto(
+        character_id="rin",
+        display_name="リン",
+        first_person="わたし",
+        speech_style="落ち着いた口調",
+    )
+
+    text = PersonaPromptFragmentBuilder().build(persona)
+
+    assert "あなたは「リン」本人である" in text
+    assert "「リン」=あなた自身" in text
+
+
 def test_persona_prompt_builder_rejects_invalid_persona() -> None:
     with pytest.raises(TypeError, match="persona must be AgentPersonaDto"):
         PersonaPromptFragmentBuilder().build("not persona")  # type: ignore[arg-type]
