@@ -1,11 +1,20 @@
 .PHONY: test test-cov test-html clean install dev-install help \
 	web-demo-db web-demo-db-reset web-backend web-frontend-install \
 	web-frontend-test web-frontend-build web-frontend \
-	asset-pipeline-sync asset-pipeline-sync-rembg asset-pipeline
+	asset-pipeline-sync asset-pipeline-sync-rembg asset-pipeline \
+	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud
 
 WEB_GAME_DB ?= var/game/ai_rpg_world.db
 WEB_MANUAL_PLAYER_IDS ?= 1
 ASSET_PIPELINE_DIR := tools/asset_pipeline
+
+# relay_puzzle 実 LLM 実験（docs/running_scenarios.md）
+PYTHON ?= $(shell if [ -x venv/bin/python ]; then echo venv/bin/python; else echo python3; fi)
+ISSUE154_MAX_TICKS ?= 30
+EXPERIMENT_OUTPUT ?= var/experiment_relay_report.md
+VLLM_OPENAI_API_BASE ?= http://127.0.0.1:8001/v1
+VLLM_LLM_MODEL ?= openai/gemma-4-31b-it-nvfp4
+CLOUD_LLM_MODEL ?= openai/gpt-5-mini
 
 # デフォルトターゲット
 help:
@@ -26,6 +35,10 @@ help:
 	@echo "  make asset-pipeline-sync       - スプライト用 CLI (tools/asset_pipeline) の依存を同期"
 	@echo "  make asset-pipeline-sync-rembg - 同上 + rembg（要時間・容量）"
 	@echo "  make asset-pipeline CMD='…'   - 例: make asset-pipeline CMD='split -h'"
+	@echo "  make experiment-relay         - relay_puzzle R1+R2（vLLM 既定: :8001 Gemma）"
+	@echo "  make experiment-relay-r1      - R1 のみ"
+	@echo "  make experiment-relay-r2      - R2 のみ"
+	@echo "  make experiment-relay-cloud   - OpenAI クラウド（OPENAI_API_BASE 空）"
 
 # 依存関係のインストール
 install:
@@ -87,3 +100,28 @@ asset-pipeline-sync-rembg:
 # 使用例: make asset-pipeline CMD="split sheet.png -r 2 -c 2 -o ./out -W 32 -H 48"
 asset-pipeline:
 	cd $(ASSET_PIPELINE_DIR) && uv run asset-pipeline $(CMD)
+
+# relay_puzzle 実 LLM 実験 — 要 vLLM または OPENAI_API_KEY
+experiment-relay:
+	@mkdir -p var
+	OPENAI_API_BASE=$(VLLM_OPENAI_API_BASE) OPENAI_API_KEY= LLM_MODEL=$(VLLM_LLM_MODEL) \
+	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default,R2_pure \
+	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
+
+experiment-relay-r1:
+	@mkdir -p var
+	OPENAI_API_BASE=$(VLLM_OPENAI_API_BASE) OPENAI_API_KEY= LLM_MODEL=$(VLLM_LLM_MODEL) \
+	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default \
+	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
+
+experiment-relay-r2:
+	@mkdir -p var
+	OPENAI_API_BASE=$(VLLM_OPENAI_API_BASE) OPENAI_API_KEY= LLM_MODEL=$(VLLM_LLM_MODEL) \
+	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R2_pure \
+	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
+
+experiment-relay-cloud:
+	@mkdir -p var
+	OPENAI_API_BASE= LLM_MODEL=$(CLOUD_LLM_MODEL) \
+	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default,R2_pure \
+	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)

@@ -5,6 +5,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def isolate_litellm_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
+    """開発者の .env / OPENAI_API_BASE がテスト混入しないようにする"""
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    monkeypatch.setattr(
+        "ai_rpg_world.infrastructure.llm.litellm_client._load_dotenv_if_available",
+        lambda: None,
+    )
+
+
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
@@ -138,6 +149,7 @@ class TestLiteLLMClientInvoke:
             assert call_kw["tool_choice"] == "required"
             assert call_kw["model"] == "openai/gpt-5-mini"
             assert call_kw["api_key"] == "sk-dummy"
+            assert "api_base" not in call_kw
 
     def test_invoke_parses_invalid_json_arguments_as_empty_dict(self, client):
         """arguments が不正 JSON のときは arguments を {} として返す"""
@@ -189,6 +201,58 @@ class TestLiteLLMClientInvokeApiKey:
             client.invoke(messages=[], tools=[], tool_choice="required")
             call_kw = m_litellm.completion.call_args[1]
             assert call_kw["api_key"] == "sk-from-env"
+
+
+class TestLiteLLMClientOpenAiCompatibleApiBase:
+    """OPENAI_API_BASE を使うローカル vLLM / OpenAI 互換ルート"""
+
+    def test_invoke_reads_api_base_from_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """api_base が未指定だと環境変数 OPENAI_API_BASE を参照する"""
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+        monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:9999/v1")
+        monkeypatch.setattr(
+            "ai_rpg_world.infrastructure.llm.litellm_client._load_dotenv_if_available",
+            lambda: None,
+        )
+        client = LiteLLMClient(model="openai/from-env-base", api_key="k")
+        assert client._api_base == "http://127.0.0.1:9999/v1"
+
+    def test_invoke_sends_api_base_and_placeholder_key_when_key_empty(self):
+        """api_base が指定され OPENAI_API_KEY が空でも litellm に api_base と EMPTY を渡す"""
+        client = LiteLLMClient(
+            model="openai/test-model",
+            api_key="",
+            api_base="http://127.0.0.1:9876/v1",
+        )
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("x", {})
+            client.invoke(messages=[{"role": "user", "content": "h"}], tools=[], tool_choice="required")
+            kw = m_litellm.completion.call_args[1]
+            assert kw["api_base"] == "http://127.0.0.1:9876/v1"
+            assert kw["api_key"] == "EMPTY"
+
+    def test_invoke_prefers_explicit_api_key_when_api_base_set(self):
+        """api_base がある場合も明示的 api_key があればその値を優先する"""
+        client = LiteLLMClient(
+            model="openai/test-model",
+            api_key="sk-local-secret",
+            api_base="http://127.0.0.1:9876/v1",
+        )
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("x", {})
+            client.invoke(messages=[], tools=[], tool_choice="required")
+            assert m_litellm.completion.call_args[1]["api_key"] == "sk-local-secret"
+
+    def test_completion_base_kwargs_includes_api_base(self):
+        """completion_base_kwargs に api_base が含まれる"""
+        client = LiteLLMClient(
+            model="openai/z",
+            api_key="EMPTY",
+            api_base="http://localhost:11434/v1",
+        )
+        kw = client.completion_base_kwargs()
+        assert kw["api_base"] == "http://localhost:11434/v1"
+        assert kw["api_key"] == "EMPTY"
 
 
 class TestLiteLLMClientInvokeExceptions:
