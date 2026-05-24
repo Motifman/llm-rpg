@@ -37,7 +37,7 @@ from ai_rpg_world.application.trace.events import TraceEvent, TraceEventKind
 from ai_rpg_world.application.trace.recorder import load_trace_events
 
 
-MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"
+MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"
 
 
 def render_html(events: List[TraceEvent], *, title: str = "Trace") -> str:
@@ -54,7 +54,13 @@ def render_html(events: List[TraceEvent], *, title: str = "Trace") -> str:
         tick_range=meta["tick_range_label"],
         player_lines=meta["player_html"],
         mermaid_cdn=MERMAID_CDN,
-        mermaid_src=html.escape(mermaid_src),
+        # NOTE: mermaid_src は HTML エスケープしない。`->>` / `-->>` の `>` が
+        # `&gt;` になるとブラウザ環境によっては Mermaid パーサが decode
+        # しきれず syntax error を出すため。代わりに `_build_mermaid_sequence`
+        # 内でユーザーデータ ('<', '>', '&', '"') を事前にサニタイズしている。
+        mermaid_src=mermaid_src,
+        # raw_jsonl は html.escape のままで OK (<pre> 内に表示するだけなので)
+        mermaid_src_for_fallback=html.escape(mermaid_src),
         per_tick=per_tick_html,
         raw_jsonl=html.escape(raw_jsonl),
     )
@@ -102,7 +108,7 @@ def _build_mermaid_sequence(
     for pid, label in player_labels.items():
         alias = f"P{pid}"
         actor_alias[pid] = alias
-        lines.append(f'    actor {alias} as {label}')
+        lines.append(f'    actor {alias} as {_mermaid_actor_label(label)}')
     # 世界 (World) を共通の peer として用意
     lines.append("    participant W as 世界")
 
@@ -181,9 +187,29 @@ def _short(s: str, limit: int) -> str:
 def _mermaid_label(s: str) -> str:
     """mermaid のメッセージラベルとして安全な文字列に整形する。
 
-    mermaid は ``;`` や ``"`` を壊しやすいので最低限のエスケープだけ行う。
+    観点:
+        - mermaid 構文: ``;`` / ``"`` / 改行はメッセージ区切りに化けるので置換
+        - HTML 構文: ``<`` / ``>`` / ``&`` は raw 出力時にタグ解釈されないよう
+          全角に置換 (mermaid_src 自体は HTML エスケープしないため、
+          ユーザーデータ側で防御する)
     """
-    return s.replace(";", ",").replace('"', "'").replace("\n", " ")
+    return (
+        s.replace("<", "＜")
+        .replace(">", "＞")
+        .replace("&", "＆")
+        .replace(";", ",")
+        .replace('"', "'")
+        .replace("\n", " ")
+    )
+
+
+def _mermaid_actor_label(s: str) -> str:
+    """actor 名 (`as` 右辺) として安全に整形する。
+
+    HTML 特殊文字 + mermaid の特殊文字を最小限に置換。actor 名は短いので
+    積極的に全角化する (タグ解釈リスクの排除を優先)。
+    """
+    return _mermaid_label(s)
 
 
 _HTML_TEMPLATE = """<!DOCTYPE html>
@@ -201,7 +227,9 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   details {{ margin: 0.25rem 0; padding: 0.25rem 0.5rem; border-left: 3px solid #888; background: #fafafa; }}
   details summary {{ cursor: pointer; font-weight: bold; }}
   .meta li {{ margin: 0.1rem 0; }}
-  .mermaid {{ background: #fff; padding: 1rem; border: 1px solid #ddd; overflow-x: auto; }}
+  pre.mermaid {{ background: #fff; padding: 1rem; border: 1px solid #ddd; overflow-x: auto; font-family: inherit; white-space: pre; }}
+  pre.raw-mermaid {{ background: #f4f4f4; padding: 0.5rem; font-size: 0.8rem; overflow-x: auto; }}
+  p.hint {{ font-size: 0.85rem; color: #666; margin-top: 0.25rem; }}
 </style>
 </head>
 <body>
@@ -219,9 +247,15 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
 <section>
   <h2>シーケンス図 (observation / action / result)</h2>
-  <div class="mermaid">
+  <p class="hint">下のブロックが描画されない場合は外部 CDN (Mermaid) がブロックされています。
+    末尾の「mermaid raw source」をコピーして <a href="https://mermaid.live/" target="_blank" rel="noopener">mermaid.live</a> に貼れば見られます。</p>
+  <pre class="mermaid">
 {mermaid_src}
-  </div>
+  </pre>
+  <details>
+    <summary>mermaid raw source (CDN が使えないとき用)</summary>
+    <pre class="raw-mermaid">{mermaid_src_for_fallback}</pre>
+  </details>
 </section>
 
 <section>
@@ -236,9 +270,15 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   </details>
 </section>
 
-<script src="{mermaid_cdn}"></script>
+<script src="{mermaid_cdn}"
+  onerror="document.getElementById('mermaid-load-error').style.display='block';"></script>
+<div id="mermaid-load-error" style="display:none; color:#a00; padding:0.5rem; border:1px solid #a00; margin-top:1rem;">
+  Mermaid CDN の読み込みに失敗しました。raw source を mermaid.live に貼って描画してください。
+</div>
 <script>
-  mermaid.initialize({{ startOnLoad: true, securityLevel: 'loose' }});
+  if (typeof mermaid !== "undefined") {{
+    mermaid.initialize({{ startOnLoad: true, securityLevel: 'loose', theme: 'default' }});
+  }}
 </script>
 </body>
 </html>
