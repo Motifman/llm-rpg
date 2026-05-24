@@ -3,7 +3,7 @@
 	web-frontend-test web-frontend-build web-frontend \
 	asset-pipeline-sync asset-pipeline-sync-rembg asset-pipeline \
 	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud \
-	experiment vllm-tunnel vllm-check check-no-internal-hostnames
+	experiment experiment-publish vllm-tunnel vllm-check check-no-internal-hostnames
 
 WEB_GAME_DB ?= var/game/ai_rpg_world.db
 WEB_MANUAL_PLAYER_IDS ?= 1
@@ -153,7 +153,12 @@ experiment:
 	$(PYTHON) scripts/run_scenario_experiment.py \
 		--scenario $(SCENARIO) \
 		--max-ticks $(MAX_TICKS) \
-		$(if $(OUT),--out $(OUT),)
+		$(if $(OUT),--out $(OUT),) \
+		$(if $(PUBLISH),--publish-gist,)
+
+# experiment + secret gist 自動 publish (PUBLISH=1 と同等)
+experiment-publish:
+	$(MAKE) experiment SCENARIO=$(SCENARIO) MAX_TICKS=$(MAX_TICKS) OUT=$(OUT) PUBLISH=1
 
 # vLLM への SSH トンネル (~/.ssh/config の Host エイリアス、既定 v108-vllm)
 # 実 FQDN は本リポジトリには書かない。docs/security_hosts_policy.md 参照。
