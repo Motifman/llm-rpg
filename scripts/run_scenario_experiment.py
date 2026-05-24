@@ -101,18 +101,72 @@ def _drive_scenario(
         # Phase 1d: trace recorder を runtime に注入 (memo executor + LLM wiring 経路)
         runtime.set_trace_recorder(recorder)
 
+        # Phase 1d viewer: 各プレイヤーの初期位置を position_change として
+        # 記録 (from_spot_id=None で「ここから始まった」を表す)。これにより
+        # viewer 側は trace.jsonl だけで初期配置を再現できる。
+        for pid in runtime.get_player_ids():
+            spot_id = runtime.get_player_spot_id(pid)
+            if spot_id is None:
+                continue
+            try:
+                spot_name = runtime.get_player_spot_name(pid)
+            except Exception:
+                spot_name = spot_id
+            try:
+                player_name = runtime.get_player_name(pid)
+            except Exception:
+                player_name = None
+            recorder.record(
+                TraceEventKind.POSITION_CHANGE,
+                tick=runtime.current_tick(),
+                player_id=int(pid.value),
+                from_spot_id=None,
+                to_spot_id=spot_id,
+                spot_name=spot_name,
+                player_name=player_name,
+            )
+
         for pid in runtime.get_player_ids():
             state.llm_wiring.llm_turn_trigger.schedule_turn(pid)
 
         outcome = "TIMEOUT"
         last_tick = 0
         t0 = time.monotonic()
+        # 各 player の前 tick の spot を保持して差分検出に使う
+        prev_spots: Dict[int, Optional[str]] = {
+            int(pid.value): runtime.get_player_spot_id(pid)
+            for pid in runtime.get_player_ids()
+        }
         for i in range(max_ticks):
             w0 = runtime.current_tick()
             progress(f"駆動 {i + 1}/{max_ticks} world_tick={w0}")
             recorder.record(TraceEventKind.TICK_START, tick=w0)
             runtime.advance_tick()
             last_tick = runtime.current_tick()
+            # tick 終了直後に position 差分を emit (移動が起きた player のみ)
+            for pid in runtime.get_player_ids():
+                pid_int = int(pid.value)
+                new_spot = runtime.get_player_spot_id(pid)
+                old_spot = prev_spots.get(pid_int)
+                if new_spot is not None and new_spot != old_spot:
+                    try:
+                        spot_name = runtime.get_player_spot_name(pid)
+                    except Exception:
+                        spot_name = new_spot
+                    try:
+                        player_name = runtime.get_player_name(pid)
+                    except Exception:
+                        player_name = None
+                    recorder.record(
+                        TraceEventKind.POSITION_CHANGE,
+                        tick=last_tick,
+                        player_id=pid_int,
+                        from_spot_id=old_spot,
+                        to_spot_id=new_spot,
+                        spot_name=spot_name,
+                        player_name=player_name,
+                    )
+                    prev_spots[pid_int] = new_spot
             recorder.record(TraceEventKind.TICK_END, tick=last_tick)
             end_check = runtime.check_game_end()
             if end_check.is_ended:
@@ -145,6 +199,7 @@ def _build_report(
     memo_adds: List[Any] = []
     memo_dones: List[Any] = []
     memo_hints: List[Any] = []
+    position_changes: List[Any] = []
     by_player: Dict[int, Dict[str, int]] = {}
     for e in events:
         if e.kind == TraceEventKind.ACTION:
@@ -157,12 +212,21 @@ def _build_report(
             memo_dones.append(e)
         elif e.kind == TraceEventKind.MEMO_HINT:
             memo_hints.append(e)
+        elif e.kind == TraceEventKind.POSITION_CHANGE:
+            position_changes.append(e)
         pid = e.player_id
         if pid is None:
             continue
         bucket = by_player.setdefault(
             pid,
-            {"actions": 0, "successes": 0, "failures": 0, "memo_adds": 0, "memo_dones": 0},
+            {
+                "actions": 0,
+                "successes": 0,
+                "failures": 0,
+                "memo_adds": 0,
+                "memo_dones": 0,
+                "moves": 0,
+            },
         )
         if e.kind == TraceEventKind.ACTION:
             bucket["actions"] += 1
@@ -175,6 +239,11 @@ def _build_report(
             bucket["memo_adds"] += 1
         elif e.kind == TraceEventKind.MEMO_DONE:
             bucket["memo_dones"] += 1
+        elif e.kind == TraceEventKind.POSITION_CHANGE:
+            # 初期配置 (from_spot_id=None) は move カウントに含めない
+            from_spot = e.payload.get("from_spot_id") if isinstance(e.payload, dict) else None
+            if from_spot is not None:
+                bucket["moves"] += 1
 
     lines: List[str] = []
     lines.append(f"# Scenario experiment report — {scenario_path.stem}")
@@ -194,17 +263,18 @@ def _build_report(
     lines.append(f"- memo_add: {len(memo_adds)}")
     lines.append(f"- memo_done: {len(memo_dones)}")
     lines.append(f"- memo_hint: {len(memo_hints)}")
+    lines.append(f"- position_change: {len(position_changes)}")
     lines.append("")
     if by_player:
         lines.append("## プレイヤー別集計")
         lines.append("")
-        lines.append("| player_id | actions | successes | failures | memo_adds | memo_dones |")
-        lines.append("|-----------|---------|-----------|----------|-----------|------------|")
+        lines.append("| player_id | actions | successes | failures | memo_adds | memo_dones | moves |")
+        lines.append("|-----------|---------|-----------|----------|-----------|------------|-------|")
         for pid in sorted(by_player):
             b = by_player[pid]
             lines.append(
                 f"| {pid} | {b['actions']} | {b['successes']} | {b['failures']} | "
-                f"{b['memo_adds']} | {b['memo_dones']} |"
+                f"{b['memo_adds']} | {b['memo_dones']} | {b.get('moves', 0)} |"
             )
         lines.append("")
     lines.append("## 成果物")

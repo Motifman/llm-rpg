@@ -37,6 +37,10 @@ class TraceEventKind:
     MEMO_HINT = "memo_hint"
     SCENE = "scene"
     NOTE = "note"
+    # Phase 1d viewer: プレイヤーがスポット間を移動した瞬間。空間アニメーション
+    # 描画に使う。payload は ``from_spot_id`` / ``to_spot_id`` / ``spot_name`` /
+    # ``player_name`` を持つ (run の最初の初期配置は from_spot_id=None で emit)。
+    POSITION_CHANGE = "position_change"
 
 
 @dataclass(frozen=True)

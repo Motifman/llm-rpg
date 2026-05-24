@@ -38,6 +38,7 @@ JSON Lines。1 行 = 1 `TraceEvent`。
 | `memo_done` | memo 完了 | `memo_id`, `fulfillment_context_summary` |
 | `memo_hint` | fuzzy match による完了示唆 (Phase 1c) | `memo_id`, `similarity` |
 | `scene` | シーン (場所) 変化 | `spot_id`, `spot_name` |
+| `position_change` | プレイヤーがスポット間を移動した瞬間 (viewer のアニメーション用) | `from_spot_id` (初期配置は null), `to_spot_id`, `spot_name`, `player_name` |
 | `note` | 任意メモ / デバッグ | `message` |
 
 新しい kind を足したい場合は、まず使ってみて固まったらこの表に追記する。
