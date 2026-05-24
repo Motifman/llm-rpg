@@ -246,6 +246,9 @@ class EscapeGameRuntime:
     _escape_llm_system_prompt: str = field(default="", repr=False)
     _todo_store: InMemoryTodoStore = field(default_factory=InMemoryTodoStore, repr=False)
     _todo_tool_executor: Optional[TodoToolExecutor] = field(default=None, repr=False)
+    # シナリオ実行 trace の recorder。未設定なら NullTraceRecorder にフォールバック
+    # (Phase 1d 配線)。
+    _trace_recorder: Any = field(default=None, repr=False)
     # B-4: LLM に提示するツールセットの mode。``True`` (既定) なら TODO 系も
     # 含む従来構成、``False`` なら純スポットグラフ + speech のみ。
     # Issue #155 (TODO 設計の再評価) の判断材料を取るための比較実験用。
@@ -275,6 +278,23 @@ class EscapeGameRuntime:
         tick = self._simulation_service.tick()
         self._tick = tick.value
         return tick.value
+
+    def set_trace_recorder(self, recorder: Any) -> None:
+        """シナリオ実行 trace の recorder を後から差し込む (Phase 1d 配線)。
+
+        ``create_session`` などで escape_game_runtime を構築した後に
+        外側から trace を有効化する用途。memo executor は lazy 構築なので
+        既に作成済みでもこのフィールドが反映される。
+        """
+        self._trace_recorder = recorder
+        # 既に memo executor が wire 済みなら作り直してから recorder を行き渡らせる
+        if self._todo_tool_executor is not None:
+            self._todo_tool_executor = None
+            self._wire_auxiliary_tool_stack()
+
+    @property
+    def trace_recorder(self) -> Any:
+        return self._trace_recorder
 
     def set_simulation_llm_turn_trigger(
         self, trigger: Optional[ILlmTurnTrigger]
@@ -438,6 +458,7 @@ class EscapeGameRuntime:
             sliding_window=self._sliding_window,
             action_result_store=self._action_result_store,
             current_tick_provider=self.current_tick,
+            trace_recorder=self._trace_recorder,
         )
 
     def run_llm_auxiliary_tool(
