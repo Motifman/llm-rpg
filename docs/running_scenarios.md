@@ -49,6 +49,49 @@ python scripts/run_scenario_experiment.py \
 
 scenario 固有の集計が欲しくなったら、`scripts/issue154_full_tables_experiment.py` を真似て新規 aggregator を書く (relay_puzzle 専用集計はこれ)。
 
+### Gist 自動 publish (リモート実験を依頼者と共有)
+
+実行終了時に成果物 (trace.jsonl + report.md + trace.html + scenario.json) を **secret gist に一括アップロード**し、`htmlpreview.github.io` 経由の Mermaid プレビュー URL も同時表示します。
+
+```bash
+# make 経由 (推奨)
+make experiment-publish SCENARIO=data/scenarios/relay_puzzle_demo.json
+
+# 等価
+make experiment SCENARIO=... PUBLISH=1
+
+# スクリプト直接
+python scripts/run_scenario_experiment.py \
+    --scenario data/scenarios/relay_puzzle_demo.json \
+    --publish-gist
+```
+
+実行終了時に出力されるログ:
+
+```
+[gist] https://gist.github.com/<user>/<id>
+[html-preview] https://htmlpreview.github.io/?https://gist.githubusercontent.com/<user>/<id>/raw/03_trace.html
+```
+
+オプション:
+
+| flag | 説明 |
+|------|------|
+| `--publish-gist-public` | secret ではなく public gist にする (既定 secret) |
+| `--publish-gist-desc "..."` | gist の説明文を上書き |
+
+#### 後追い publish (実験はすでに済んでいるが、後から gist 化したい)
+
+```bash
+python scripts/publish_experiment_gist.py var/runs/relay_puzzle_demo-20260524-xxx
+```
+
+#### 前提
+
+- `gh` CLI がインストール済み (`gh --version`)
+- `gh auth status` で認証済み
+- gist 作成権限 (`gist` scope)
+
 ---
 
 ## クイックスタート（Gemma vLLM / このデバイス）
