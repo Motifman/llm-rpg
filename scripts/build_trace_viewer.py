@@ -278,6 +278,135 @@ def compute_event_heatmap(
     return series
 
 
+def compute_trace_moments(
+    events: List[TraceEvent],
+) -> List[Dict[str, Any]]:
+    """trace の中から「振り返って見てほしい瞬間」を自動検出してマーカー化する。
+
+    Returns:
+        ``[{tick, kind, label, detail, score, player_id}, ...]`` の list。
+        tick 昇順 (同 tick 内は seq 順)。Trace navigator の moment rail で
+        マーカーとして配置され、クリックで該当 tick にジャンプできる。
+
+    kind 区分 (CSS で枠色が異なる):
+        - ``start``: trace 開始 (常に t=0 で 1 件)
+        - ``end``: WIN/LOSE 確定 (RUN_END で 1 件)
+        - ``memo``: memo_add (戦略の決定)
+        - ``memo_done``: memo_done (達成 / 撤回)
+        - ``hint``: memo_hint (fuzzy match 発火)
+        - ``failed``: action_result.success=false (失敗、要分析)
+        - ``move``: position_change (spot 跨ぎ。初期配置は除外)
+        - ``result``: 重要な success result (現状は heuristic、key fields に
+          ``true``/``OPEN`` などが含まれる場合)
+
+    score: 優先度 (0-100)。長尺 trace で上位 N 件だけ拾うために将来使う。
+    """
+    moments: List[Dict[str, Any]] = []
+    max_tick = 0
+    for e in sorted(events, key=lambda x: x.seq):
+        if e.tick is not None and e.tick > max_tick:
+            max_tick = e.tick
+        payload = e.payload if isinstance(e.payload, dict) else {}
+        if e.kind == TraceEventKind.RUN_START:
+            moments.append(
+                {
+                    "tick": 0,
+                    "kind": "start",
+                    "label": "START",
+                    "detail": "trace begins",
+                    "score": 100,
+                    "player_id": None,
+                }
+            )
+        elif e.kind == TraceEventKind.RUN_END:
+            outcome = str(payload.get("outcome") or "END")
+            moments.append(
+                {
+                    "tick": max_tick if e.tick is None else int(e.tick),
+                    "kind": "end",
+                    "label": outcome.upper(),
+                    "detail": "trace finished",
+                    "score": 100,
+                    "player_id": None,
+                }
+            )
+        elif e.kind == TraceEventKind.MEMO_ADD:
+            moments.append(
+                {
+                    "tick": int(e.tick or 0),
+                    "kind": "memo",
+                    "label": "memo added",
+                    "detail": str(payload.get("content") or ""),
+                    "score": 65,
+                    "player_id": e.player_id,
+                }
+            )
+        elif e.kind == TraceEventKind.MEMO_DONE:
+            moments.append(
+                {
+                    "tick": int(e.tick or 0),
+                    "kind": "memo_done",
+                    "label": "memo done",
+                    "detail": str(payload.get("memo_id") or ""),
+                    "score": 78,
+                    "player_id": e.player_id,
+                }
+            )
+        elif e.kind == TraceEventKind.MEMO_HINT:
+            moments.append(
+                {
+                    "tick": int(e.tick or 0),
+                    "kind": "hint",
+                    "label": "memo hint",
+                    "detail": str(payload.get("memo_id") or ""),
+                    "score": 58,
+                    "player_id": e.player_id,
+                }
+            )
+        elif e.kind == TraceEventKind.ACTION_RESULT:
+            if payload.get("success") is False:
+                moments.append(
+                    {
+                        "tick": int(e.tick or 0),
+                        "kind": "failed",
+                        "label": "failed action",
+                        "detail": str(payload.get("result_summary") or ""),
+                        "score": 85,
+                        "player_id": e.player_id,
+                    }
+                )
+            else:
+                summary = str(payload.get("result_summary") or "")
+                # 状態変化らしき結果は弱めに拾う (true / OPEN / latch などの語)
+                if any(k in summary for k in ("=true", "OPEN", "latch", "engaged")):
+                    moments.append(
+                        {
+                            "tick": int(e.tick or 0),
+                            "kind": "result",
+                            "label": "state changed",
+                            "detail": summary,
+                            "score": 45,
+                            "player_id": e.player_id,
+                        }
+                    )
+        elif e.kind == TraceEventKind.POSITION_CHANGE:
+            if payload.get("from_spot_id") is None:
+                # 初期配置は moment にしない (start と冗長)
+                continue
+            spot_name = payload.get("spot_name") or payload.get("to_spot_id") or ""
+            moments.append(
+                {
+                    "tick": int(e.tick or 0),
+                    "kind": "move",
+                    "label": f"move: {spot_name}",
+                    "detail": str(spot_name),
+                    "score": 50,
+                    "player_id": e.player_id,
+                }
+            )
+    return moments
+
+
 # ---------------------------------------------------------------------------
 # HTML 組み立て
 # ---------------------------------------------------------------------------
@@ -296,10 +425,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <header>
   <h1>{title}</h1>
   <div class="meta">
-    <span>outcome: <strong>{outcome}</strong></span>
-    <span>total ticks: {max_tick}</span>
-    <span>events: {total_events}</span>
-    <span>players: {player_summary}</span>
+    <span class="badge outcome">{outcome}</span>
+    <span>tick <strong>0 / {max_tick}</strong></span>
+    <span>events <strong>{total_events}</strong></span>
+    <span>players <strong>{player_summary}</strong></span>
   </div>
   <div class="playback">
     <button id="btn-rewind" title="rewind to start">⏮</button>
@@ -309,7 +438,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     <button id="btn-end" title="jump to end">⏭</button>
     <input type="range" id="scrubber" min="0" max="0" value="0" step="1" />
     <span id="tick-display">tick 0 / 0</span>
-    <label class="speed-label">速度
+    <label class="speed-label">speed
       <select id="speed">
         <option value="1000">0.5x</option>
         <option value="500" selected>1x</option>
@@ -322,22 +451,13 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
 <main>
   <section id="map-section">
-    <h2>Map</h2>
+    <h2>Tactical map</h2>
     <div id="cy"></div>
-    <div id="heatmap-wrap">
-      <canvas id="heatmap" width="800" height="60"></canvas>
-      <div class="heatmap-legend">
-        <span><span class="hm-dot a"></span>action</span>
-        <span><span class="hm-dot o"></span>observation</span>
-        <span><span class="hm-dot m"></span>memo</span>
-        <span><span class="hm-dot p"></span>position</span>
-      </div>
-    </div>
   </section>
 
   <section id="right-section">
     <div id="memo-panel-section">
-      <h2>Active memo</h2>
+      <h2>Objectives / Active memo</h2>
       <div id="memo-panel"><div class="placeholder">(no memo)</div></div>
     </div>
     <div id="log-section">
@@ -346,6 +466,20 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
   </section>
 </main>
+
+<section id="trace-nav-section">
+  <h2>Trace navigator</h2>
+  <div id="moment-rail"></div>
+  <div id="heatmap-wrap">
+    <canvas id="heatmap" width="1200" height="92"></canvas>
+    <div class="heatmap-legend">
+      <span><span class="hm-dot a"></span>action</span>
+      <span><span class="hm-dot o"></span>observation</span>
+      <span><span class="hm-dot m"></span>memo</span>
+      <span><span class="hm-dot p"></span>position</span>
+    </div>
+  </div>
+</section>
 
 <!-- Cytoscape.js (inline-embedded, no external CDN) -->
 <script>
@@ -360,21 +494,77 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 _VIEWER_CSS = """
+
 * { box-sizing: border-box; }
+:root {
+  --bg: #071014;
+  --panel: #0d1a1f;
+  --panel-2: #12232a;
+  --panel-soft: #182b31;
+  --ink: #f4ead2;
+  --muted: #9daaa8;
+  --line: rgba(218, 170, 86, 0.38);
+  --line-soft: rgba(117, 210, 220, 0.22);
+  --gold: #d9aa56;
+  --cyan: #35d4e6;
+  --blue: #4a8cff;
+  --coral: #f06d55;
+  --green: #7bd66f;
+  --orange: #ee9b42;
+  --font-ui: "Hiragino Maru Gothic ProN", "Yu Gothic", "Trebuchet MS", "Avenir Next", system-ui, sans-serif;
+  --font-display: "Copperplate", "Papyrus", "Hiragino Maru Gothic ProN", "Yu Mincho", fantasy, serif;
+  --font-mono: "SFMono-Regular", "Menlo", "Consolas", monospace;
+}
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #222;
-  background: #fafafa;
+  min-width: 960px;
+  font-family: var(--font-ui);
+  color: var(--ink);
+  background:
+    linear-gradient(rgba(53, 212, 230, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(53, 212, 230, 0.035) 1px, transparent 1px),
+    radial-gradient(circle at 15% 0%, rgba(53, 212, 230, 0.12), transparent 36rem),
+    radial-gradient(circle at 95% 25%, rgba(217, 170, 86, 0.10), transparent 32rem),
+    var(--bg);
+  background-size: 28px 28px, 28px 28px, auto, auto, auto;
 }
 header {
-  padding: 0.75rem 1.5rem;
-  background: #fff;
-  border-bottom: 1px solid #ddd;
+  padding: 0.75rem 1rem 0.85rem;
+  background: linear-gradient(180deg, rgba(18, 35, 42, 0.96), rgba(8, 17, 22, 0.96));
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
 }
-header h1 { margin: 0 0 0.25rem 0; font-size: 1.15rem; }
-.meta { font-size: 0.82rem; color: #666; display: flex; gap: 1.2rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
-.meta strong { color: #222; }
+header h1 {
+  margin: 0 0 0.45rem 0;
+  font-size: 1.35rem;
+  font-family: var(--font-display);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(217, 170, 86, 0.22);
+}
+.meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.65rem;
+  align-items: center;
+}
+.meta span {
+  border: 1px solid rgba(217, 170, 86, 0.28);
+  background: rgba(5, 10, 13, 0.38);
+  border-radius: 5px;
+  padding: 0.28rem 0.55rem;
+}
+.meta strong { color: var(--ink); font-weight: 700; }
+.meta .badge.outcome {
+  color: #0b1712;
+  background: linear-gradient(180deg, #f4c86e, #9fd66f);
+  border-color: rgba(255, 236, 168, 0.7);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
 .playback {
   display: flex;
   align-items: center;
@@ -382,64 +572,159 @@ header h1 { margin: 0 0 0.25rem 0; font-size: 1.15rem; }
   flex-wrap: wrap;
 }
 .playback button {
-  border: 1px solid #bbb;
-  background: #fff;
-  border-radius: 4px;
-  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, #17262d, #0b1418);
+  color: var(--ink);
+  border-radius: 5px;
+  min-width: 2.35rem;
+  height: 2rem;
+  padding: 0.25rem 0.55rem;
   cursor: pointer;
   font-size: 0.9rem;
   line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
 }
-.playback button:hover { background: #f0f0f0; }
-.playback button.playing { background: #4a8; color: #fff; border-color: #387; }
+.playback button:hover { border-color: var(--cyan); color: var(--cyan); }
+.playback button.playing {
+  background: linear-gradient(180deg, rgba(53, 212, 230, 0.42), rgba(32, 117, 127, 0.42));
+  color: #f7fdff;
+  border-color: var(--cyan);
+  box-shadow: 0 0 16px rgba(53, 212, 230, 0.24);
+}
 .playback input[type=range] {
   flex: 1;
   min-width: 200px;
+  accent-color: var(--cyan);
 }
 #tick-display {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
-  min-width: 80px;
+  min-width: 90px;
   text-align: right;
+  color: var(--ink);
 }
-.speed-label { font-size: 0.8rem; color: #666; }
-.speed-label select { font-size: 0.8rem; }
+.speed-label { font-size: 0.8rem; color: var(--muted); }
+.speed-label select {
+  font-size: 0.8rem;
+  color: var(--ink);
+  background: #101d23;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
 
 main {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.85fr);
+  gap: 0.85rem;
   padding: 1rem;
-  height: calc(100vh - 140px);
+  height: calc(100vh - 312px);
+  min-height: 410px;
 }
 @media (max-width: 900px) {
   main { grid-template-columns: 1fr; height: auto; }
 }
 section, #right-section > div {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(18, 35, 42, 0.94), rgba(8, 17, 22, 0.94));
+  border: 1px solid var(--line);
+  border-radius: 6px;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  box-shadow: 0 14px 26px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.03);
+  overflow: hidden;
 }
 section h2, #right-section > div > h2 {
   margin: 0;
-  padding: 0.5rem 0.9rem;
-  font-size: 0.9rem;
-  border-bottom: 1px solid #eee;
-  background: #f5f5f5;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.84rem;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: #ffe0a0;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(90deg, rgba(30, 82, 89, 0.55), rgba(61, 36, 26, 0.25));
 }
 #map-section { display: flex; flex-direction: column; }
 #cy {
   flex: 1;
   min-height: 300px;
   width: 100%;
-  background: #fcfcfc;
+  background:
+    radial-gradient(circle at 22% 12%, rgba(53, 212, 230, 0.12), transparent 18rem),
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px),
+    #071318;
+  background-size: auto, 34px 34px, 34px 34px, auto;
 }
-#heatmap-wrap { padding: 0.4rem; border-top: 1px solid #eee; background: #fafafa; }
-#heatmap { width: 100%; height: 60px; display: block; }
-.heatmap-legend { display: flex; gap: 0.8rem; font-size: 0.72rem; color: #666; padding: 0.2rem 0 0 0; }
+#trace-nav-section {
+  margin: 0 1rem 1rem;
+  min-height: 178px;
+  max-height: 200px;
+}
+#trace-nav-section h2 { flex: 0 0 auto; }
+#moment-rail {
+  position: relative;
+  height: 74px;
+  margin: 0.75rem 1rem 0.2rem;
+  border-top: 1px solid rgba(217, 170, 86, 0.45);
+}
+.moment-marker {
+  position: absolute;
+  top: -10px;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  background: #101d23;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(217, 170, 86, 0.24);
+  padding: 0;
+}
+.moment-marker.current {
+  border-color: var(--cyan);
+  box-shadow: 0 0 20px rgba(53, 212, 230, 0.55);
+}
+.moment-marker.kind-failed { border-color: var(--coral); }
+.moment-marker.kind-memo, .moment-marker.kind-memo_done, .moment-marker.kind-hint { border-color: var(--green); }
+.moment-marker.kind-move { border-color: var(--orange); }
+.moment-marker.kind-end { border-color: #d8c16a; background: #3d2e15; }
+.moment-label {
+  position: absolute;
+  top: 19px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 104px;
+  text-align: center;
+  font-size: 0.66rem;
+  line-height: 1.15;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.moment-marker.lane-1 .moment-label { top: 34px; }
+.moment-marker.lane-2 .moment-label { top: 49px; }
+.moment-marker.lane-2 { top: -1px; }
+.moment-marker.edge-left .moment-label {
+  left: 0;
+  transform: none;
+  text-align: left;
+}
+.moment-marker.edge-right .moment-label {
+  left: auto;
+  right: 0;
+  transform: none;
+  text-align: right;
+}
+.moment-tick {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+#heatmap-wrap { padding: 0 1rem 0.55rem; background: rgba(0,0,0,0.10); }
+#heatmap { width: 100%; height: 76px; display: block; }
+.heatmap-legend { display: flex; gap: 0.85rem; font-size: 0.72rem; color: var(--muted); padding: 0.1rem 0 0 0; }
 .hm-dot {
   display: inline-block;
   width: 10px;
@@ -448,74 +733,105 @@ section h2, #right-section > div > h2 {
   vertical-align: middle;
   margin-right: 0.25rem;
 }
-.hm-dot.a { background: #d44; }
-.hm-dot.o { background: #46a; }
-.hm-dot.m { background: #4a8; }
-.hm-dot.p { background: #a73; }
+.hm-dot.a { background: var(--coral); }
+.hm-dot.o { background: var(--cyan); }
+.hm-dot.m { background: var(--green); }
+.hm-dot.p { background: var(--orange); }
 
 #right-section {
   display: grid;
-  grid-template-rows: minmax(120px, auto) 1fr;
-  gap: 1rem;
+  grid-template-rows: minmax(120px, 0.42fr) 1fr;
+  gap: 0.85rem;
   min-height: 0;
 }
 #memo-panel-section { min-height: 0; }
-#memo-panel { padding: 0.4rem 0.9rem; overflow-y: auto; line-height: 1.5; }
+#memo-panel { padding: 0.55rem 0.75rem; overflow-y: auto; line-height: 1.5; }
 #memo-panel .memo-item {
   font-size: 0.82rem;
-  padding: 0.4rem 0;
-  border-bottom: 1px dashed #eee;
-  display: flex;
-  gap: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line-soft);
+  border-left: 4px solid var(--blue);
+  border-radius: 5px;
+  background: rgba(11, 25, 32, 0.85);
+  display: grid;
+  grid-template-columns: minmax(56px, auto) 1fr auto;
+  gap: 0.65rem;
   align-items: center;
   line-height: 1.45;
+  margin-bottom: 0.45rem;
 }
-#memo-panel .memo-item:last-child { border-bottom: none; }
+#memo-panel .memo-item:last-child { margin-bottom: 0; }
 #memo-panel .memo-owner {
-  flex-shrink: 0;
   font-size: 0.8rem;
-  color: #444;
-  min-width: 60px;
+  color: var(--cyan);
+  min-width: 0;
   font-weight: 600;
 }
 #memo-panel .memo-content { flex: 1; word-break: break-word; line-height: 1.45; }
-#memo-panel .memo-content.done { color: #999; text-decoration: line-through; }
-#memo-panel .memo-meta { flex-shrink: 0; font-size: 0.75rem; color: #888; white-space: nowrap; }
-#memo-panel .memo-meta.stale { color: #b50; font-weight: bold; }
-#memo-panel .placeholder { color: #aaa; font-size: 0.85rem; padding: 0.5rem 0; }
+#memo-panel .memo-content.done { color: #80908e; text-decoration: line-through; }
+#memo-panel .memo-meta { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+#memo-panel .memo-meta.stale { color: #ffba67; font-weight: bold; }
+#memo-panel .placeholder { color: var(--muted); font-size: 0.85rem; padding: 0.5rem 0; }
 
-#event-log { flex: 1; overflow-y: auto; padding: 0.5rem 0.9rem; }
-.tick-block { margin-bottom: 0.6rem; padding: 0.3rem 0.4rem; border-radius: 3px; transition: background 0.2s; }
-.tick-block.current { background: #fff7d6; outline: 1px solid #e8c64a; }
-.tick-block.past { opacity: 0.55; }
-.tick-block.future { opacity: 0.35; }
-.tick-header { font-weight: bold; color: #555; font-size: 0.82rem; margin-bottom: 0.2rem; }
+#event-log { flex: 1; overflow-y: auto; padding: 0.55rem 0.75rem; }
+.tick-block {
+  margin-bottom: 0.55rem;
+  padding: 0.48rem 0.55rem;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 5px;
+  background: rgba(7, 16, 20, 0.55);
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.tick-block.current {
+  background: linear-gradient(90deg, rgba(240, 109, 85, 0.22), rgba(217, 170, 86, 0.12));
+  border-color: rgba(240, 109, 85, 0.8);
+  box-shadow: 0 0 16px rgba(240, 109, 85, 0.16);
+}
+.tick-block.past { opacity: 0.58; }
+.tick-block.future { opacity: 0.36; }
+.tick-header {
+  font-weight: bold;
+  color: #ffe0a0;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+  font-family: var(--font-mono);
+}
 .event-row {
   font-size: 0.8rem;
-  padding: 0.1rem 0;
+  padding: 0.12rem 0;
   display: flex;
   gap: 0.4rem;
   align-items: baseline;
 }
 .event-kind {
   flex-shrink: 0;
-  width: 110px;
-  font-family: monospace;
+  width: 118px;
+  font-family: var(--font-mono);
   font-size: 0.72rem;
-  color: #777;
+  color: var(--muted);
 }
 .event-player {
   flex-shrink: 0;
   width: 60px;
   font-size: 0.76rem;
-  color: #444;
+  color: var(--cyan);
+  font-weight: 700;
 }
 .event-body { flex: 1; word-break: break-word; }
-.event-row.kind-action_result.failed .event-body { color: #b00; }
-.event-row.kind-memo_add .event-body { color: #060; }
-.event-row.kind-memo_done .event-body { color: #060; }
-.event-row.kind-memo_hint .event-body { color: #a60; }
-.event-row.kind-position_change .event-body { color: #06a; }
+.event-body code {
+  color: #f5d07a;
+  background: rgba(217, 170, 86, 0.12);
+  border: 1px solid rgba(217, 170, 86, 0.20);
+  border-radius: 3px;
+  padding: 0 0.24rem;
+}
+.event-row.kind-action_result.failed .event-body { color: #ff8f7b; }
+.event-row.kind-memo_add .event-body { color: #9bea91; }
+.event-row.kind-memo_done .event-body { color: #9bea91; }
+.event-row.kind-memo_hint .event-body { color: #ffd07a; }
+.event-row.kind-position_change .event-body { color: #65dce8; }
+
+
 """
 
 
@@ -527,6 +843,7 @@ _VIEWER_JS_TEMPLATE = """
   const memoTimeline = {memo_timeline_json};          // {{tick: [memo records]}}
   const heatmap = {heatmap_json};                     // {{ticks, action, observation, memo, position_change}}
   const eventsByTick = {events_by_tick_json};         // {{tick: [{{kind, player_id, body}}]}}
+  const traceMoments = {moments_json};                // [{{tick, kind, label, detail, score, player_id}}]
   const maxTick = {max_tick};
   const STALE_AGE = 20;
 
@@ -723,6 +1040,40 @@ _VIEWER_JS_TEMPLATE = """
     if (target) target.scrollIntoView({{ block: 'nearest', behavior: 'smooth' }});
   }}
 
+  // ---------- trace navigator moments ----------
+  const momentRail = document.getElementById('moment-rail');
+  function renderMomentRail() {{
+    if (!momentRail) return;
+    if (!traceMoments || traceMoments.length === 0) {{
+      momentRail.innerHTML = '<div style="color:#9daaa8;font-size:0.78rem">No detected bookmarks</div>';
+      return;
+    }}
+    const denom = Math.max(1, maxTick);
+    const placed = [];
+    momentRail.innerHTML = traceMoments.map(m => {{
+      const left = Math.max(0, Math.min(100, (m.tick / denom) * 100));
+      const crowded = placed.some(prev => Math.abs(prev - left) < 7);
+      const veryCrowded = placed.some(prev => Math.abs(prev - left) < 3.5);
+      const lane = veryCrowded ? 2 : (crowded ? 1 : 0);
+      placed.push(left);
+      const edge = left < 5 ? ' edge-left' : (left > 95 ? ' edge-right' : '');
+      const title = 't=' + m.tick + ' ' + escapeHtml(m.label) + (m.detail ? ' - ' + escapeHtml(m.detail) : '');
+      return '<button class="moment-marker kind-' + escapeHtml(m.kind) + ' lane-' + lane + edge + '" data-tick="' + m.tick + '" style="left:' + left + '%" title="' + title + '">' +
+        '<span class="moment-label">' + escapeHtml(m.label) + '<span class="moment-tick">t=' + m.tick + '</span></span>' +
+      '</button>';
+    }}).join('');
+    momentRail.querySelectorAll('.moment-marker').forEach(btn => {{
+      btn.addEventListener('click', () => {{ pause(); setTick(parseInt(btn.dataset.tick, 10), true); }});
+    }});
+  }}
+  function updateMomentRail(tick) {{
+    if (!momentRail) return;
+    momentRail.querySelectorAll('.moment-marker').forEach(btn => {{
+      const t = parseInt(btn.dataset.tick, 10);
+      btn.classList.toggle('current', t === tick);
+    }});
+  }}
+
   // ---------- heatmap ----------
   const canvas = document.getElementById('heatmap');
   const ctx = canvas.getContext('2d');
@@ -732,16 +1083,26 @@ _VIEWER_JS_TEMPLATE = """
     ctx.clearRect(0, 0, w, h);
     const ticks = heatmap.ticks;
     if (!ticks || ticks.length === 0) return;
-    const colW = w / ticks.length;
+    const labelW = 92;
+    const plotW = Math.max(1, w - labelW);
+    const colW = plotW / ticks.length;
     const rowH = h / 4;
     const rows = [
-      {{ key: 'action', color: '#d44' }},
-      {{ key: 'observation', color: '#46a' }},
-      {{ key: 'memo', color: '#4a8' }},
-      {{ key: 'position_change', color: '#a73' }},
+      {{ key: 'action', label: 'ACTION', color: '#f06d55' }},
+      {{ key: 'observation', label: 'OBS', color: '#35d4e6' }},
+      {{ key: 'memo', label: 'MEMO', color: '#7bd66f' }},
+      {{ key: 'position_change', label: 'MOVE', color: '#ee9b42' }},
     ];
+    ctx.font = '11px Menlo, Consolas, monospace';
+    ctx.textBaseline = 'middle';
     for (let i = 0; i < rows.length; i++) {{
       const r = rows[i];
+      const y = i * rowH;
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = 'rgba(244,234,210,0.72)';
+      ctx.fillText(r.label, 8, y + rowH / 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.strokeRect(labelW, y + 2, plotW - 1, rowH - 4);
       const series = heatmap[r.key] || [];
       const maxv = Math.max(1, ...series);
       for (let t = 0; t < ticks.length; t++) {{
@@ -750,18 +1111,19 @@ _VIEWER_JS_TEMPLATE = """
         const alpha = 0.2 + 0.8 * (v / maxv);
         ctx.fillStyle = r.color;
         ctx.globalAlpha = alpha;
-        ctx.fillRect(t * colW, i * rowH + 2, Math.max(1, colW - 0.5), rowH - 4);
+        ctx.fillRect(labelW + t * colW, y + 4, Math.max(1, colW - 0.5), rowH - 8);
       }}
     }}
     ctx.globalAlpha = 1.0;
-    // current tick cursor
-    const cursorX = tick * colW + colW / 2;
-    ctx.strokeStyle = '#222';
-    ctx.lineWidth = 1.5;
+    const cursorX = labelW + tick * colW + colW / 2;
+    ctx.strokeStyle = '#ffe0a0';
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(cursorX, 0);
     ctx.lineTo(cursorX, h);
     ctx.stroke();
+    ctx.fillStyle = '#ffe0a0';
+    ctx.fillText('t=' + tick, Math.min(w - 38, cursorX + 6), 9);
   }}
 
   // ---------- main state setter ----------
@@ -773,6 +1135,7 @@ _VIEWER_JS_TEMPLATE = """
     animatePlayersToTick(tick, animate !== false);
     renderMemoPanel(tick);
     updateEventLogHighlight(tick);
+    updateMomentRail(tick);
     drawHeatmap(tick);
   }}
 
@@ -820,6 +1183,7 @@ _VIEWER_JS_TEMPLATE = """
   // ---------- bootstrap ----------
   cy.ready(function() {{
     cy.fit(undefined, 30);
+    renderMomentRail();
     setTick(0, false);
   }});
   window.addEventListener('resize', () => drawHeatmap(currentTick));
@@ -859,11 +1223,11 @@ def render_viewer_html(
     position_timeline = build_position_timeline(events, spot_name_to_id=spot_name_to_id)
     memo_timeline = build_memo_state_timeline(events)
     heatmap = compute_event_heatmap(events)
+    moments = compute_trace_moments(events)
 
     return _HTML_TEMPLATE.format(
         title=html.escape(title),
         outcome=html.escape(outcome),
-        last_tick=last_tick,
         max_tick=max_tick,
         total_events=len(events),
         player_summary=html.escape(player_summary),
@@ -877,6 +1241,7 @@ def render_viewer_html(
             memo_timeline_json=json.dumps(memo_timeline, ensure_ascii=False),
             heatmap_json=json.dumps(heatmap, ensure_ascii=False),
             events_by_tick_json=json.dumps({}, ensure_ascii=False),  # 現状未使用 (将来用)
+            moments_json=json.dumps(moments, ensure_ascii=False),
             max_tick=max_tick,
         ),
     )

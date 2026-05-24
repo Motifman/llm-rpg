@@ -23,6 +23,7 @@ from scripts.build_trace_viewer import (  # noqa: E402
     build_position_timeline,
     collect_players,
     compute_event_heatmap,
+    compute_trace_moments,
     group_events_by_tick,
     load_scenario_topology,
     render_viewer_html,
@@ -440,3 +441,128 @@ class TestEventHeatmap:
         # 全配列長は ticks と同じ
         n = len(hm["ticks"])
         assert all(len(hm[k]) == n for k in ("action", "observation", "memo", "position_change"))
+
+
+class TestComputeTraceMoments:
+    """compute_trace_moments (PR ε): trace navigator の自動ブックマーク抽出。"""
+
+    def test_run_start_と_run_end_を_start_end_kind_で_抽出する(self) -> None:
+        """RUN_START → kind="start", RUN_END → kind="end" (label=outcome)。"""
+        events = _sample_events()
+        moments = compute_trace_moments(events)
+        kinds = [m["kind"] for m in moments]
+        assert "start" in kinds
+        assert "end" in kinds
+        end_m = next(m for m in moments if m["kind"] == "end")
+        assert end_m["label"] == "WIN"
+
+    def test_memo_add_は_memo_kind_で_score_中(self) -> None:
+        """memo_add は kind="memo", score≈65, content が detail に入る。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.MEMO_ADD,
+                tick=3,
+                player_id=1,
+                payload={"memo_id": "m1", "content": "power_on を維持"},
+            ),
+        ]
+        moments = compute_trace_moments(events)
+        assert len(moments) == 1
+        assert moments[0]["kind"] == "memo"
+        assert moments[0]["detail"] == "power_on を維持"
+        assert moments[0]["score"] == 65
+
+    def test_failed_action_result_は_failed_kind_で_score_高(self) -> None:
+        """action_result.success=False は kind="failed" (score=85)。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.ACTION_RESULT,
+                tick=5,
+                player_id=2,
+                payload={"success": False, "result_summary": "電力不足"},
+            ),
+        ]
+        moments = compute_trace_moments(events)
+        assert len(moments) == 1
+        assert moments[0]["kind"] == "failed"
+        assert moments[0]["score"] == 85
+
+    def test_position_change_の初期配置は_moment_に含めない(self) -> None:
+        """from_spot_id=None は除外、実 move のみ kind="move" として拾う。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.POSITION_CHANGE,
+                tick=0,
+                player_id=1,
+                payload={"from_spot_id": None, "to_spot_id": "a", "spot_name": "制御室"},
+            ),
+            TraceEvent(
+                seq=2,
+                timestamp="t",
+                kind=TraceEventKind.POSITION_CHANGE,
+                tick=2,
+                player_id=1,
+                payload={"from_spot_id": "a", "to_spot_id": "b", "spot_name": "金庫室"},
+            ),
+        ]
+        moments = compute_trace_moments(events)
+        # 初期配置は moment に含めない
+        assert len(moments) == 1
+        assert moments[0]["kind"] == "move"
+        assert "金庫室" in moments[0]["label"]
+
+    def test_成功_action_result_で_キーワード含むなら_result_kind_で拾う(self) -> None:
+        """result_summary に "=true" / "OPEN" / "latch" 等の状態変化語が含まれれば kind="result"。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.ACTION_RESULT,
+                tick=4,
+                player_id=1,
+                payload={"success": True, "result_summary": "power_on=true / 金庫扉=OPEN"},
+            ),
+            TraceEvent(
+                seq=2,
+                timestamp="t",
+                kind=TraceEventKind.ACTION_RESULT,
+                tick=5,
+                player_id=1,
+                payload={"success": True, "result_summary": "見た目を確認した"},  # キーワード無し
+            ),
+        ]
+        moments = compute_trace_moments(events)
+        assert len(moments) == 1
+        assert moments[0]["kind"] == "result"
+
+
+class TestTacticalThemeMarkers:
+    """PR ε: viewer HTML が tactical 風テーマの要素を含む回帰防止。"""
+
+    def test_HTML_に_tactical_テーマ要素が含まれる(self) -> None:
+        out = render_viewer_html(
+            title="t",
+            events=_sample_events(),
+            scenario_topology={"spots": [], "connections": []},
+            cytoscape_js_src="/* fake */",
+        )
+        # 設計トークン
+        assert "--bg:" in out
+        assert "--gold:" in out
+        # 新セクション
+        assert 'id="trace-nav-section"' in out
+        assert 'id="moment-rail"' in out
+        # 新ラベル
+        assert "Tactical map" in out
+        assert "Trace navigator" in out
+        assert "Objectives / Active memo" in out
+        # badge outcome chip
+        assert "badge outcome" in out
+        # moment_rail へのデータ inline (合成 trace なので start + end は最低含まれる)
+        assert "traceMoments" in out
