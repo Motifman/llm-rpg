@@ -3,13 +3,13 @@
   "metadata": {
     "id": "forbidden_library_demo",
     "title": "沈黙の禁書庫 — ノイズ耐性デモ",
-    "description": "地下にある古い書庫。閉架の禁書を解読して扉を開けることが目的。3 つの書架には『封印印』が刻まれた真の本と、よく似たハーリング本が並んでいる。閲覧室の司書幽霊は聞き方によって真ヒント・雑談・偽情報のいずれかを返す。カード目録室の古い索引は廃止された規則を正解風に提示するので注意。月→水→星 の順序ルールと、印ありの本だけが意味を持つことを memo して、解読室で正しい順に断片を入力すれば扉が開く。",
+    "description": "地下にある古い書庫。閉架の禁書を解読し、その奥にある館長書斎にたどり着くことが目的。3 つの書架には『封印印』が刻まれた真の本と、よく似たハーリング本が並んでいる。閲覧室の司書幽霊は聞き方によって真ヒント・雑談・偽情報のいずれかを返す。カード目録室の古い索引は廃止された規則を正解風に提示するので注意。二人のプレイヤーは別々の場所に居て、別々の知識を持つ ── カイトは外部から侵入し書架を探索できるが印の意味を知らず、リンは元見習い司書として印の順序を知るが断片語を知らない。時間と共に書庫の灯が弱まり、最終的には闇に飲まれる。",
     "theme": "exploration",
     "difficulty": "medium",
-    "estimated_ticks": 60,
+    "estimated_ticks": 70,
     "author": "demo",
-    "tags": ["library", "cipher", "noise_resistance", "memo_value", "info_asymmetry"],
-    "llm_public_intro": "あなたたちは沈黙の禁書庫に侵入した。地下に封じられた禁書を解読し、解読室の扉を開けることが目的である。書庫には真の手がかりと、それを装ったノイズ (似て非なる本・古い索引・司書幽霊の雑談や偽情報) が混在している。examine と talk を駆使し、何が本物の手がかりかを memo に整理して進むこと。誤入力は時間を消費する。"
+    "tags": ["library", "cipher", "noise_resistance", "memo_value", "info_asymmetry", "time_pressure", "hidden_room"],
+    "llm_public_intro": "あなたたちは沈黙の禁書庫の二人組である。カイトは入口広間に、リンは閲覧室に居る。互いに別の知識を持っており、合流して情報を交換しなければ解けない。地下に封じられた禁書を解読し、奥の館長書斎に二人ともたどり着くことが目的である。書庫には真の手がかりと、それを装ったノイズ (似て非なる本・古い索引・司書幽霊の雑談や偽情報) が混在し、灯りも時間と共に弱まる。examine と talk を駆使し、何が本物の手がかりかを memo に整理して進むこと。誤入力は時間を消費する。"
   },
   "item_specs": [],
   "environment": {
@@ -44,7 +44,29 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "案内板: 『← 閲覧室  /  カード目録室 →  /  書架 A・B・C は奥へ続く  /  解読室は書架 B の隣にある。目的: 禁書を解読し、解読室の扉の奥へ。』"
+                      "message": "案内板: 『← 閲覧室  /  カード目録室 →  /  書架 A・B・C は奥へ続く  /  解読室は書架 B の隣にある。最奥に館長書斎、解読室の扉が開かなければ入れない。目的: 禁書を解読し、館長書斎に二人で到達せよ。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "intruder_note",
+            "name": "侵入者の手記 (カイトの手記)",
+            "description": "床に落ちている、カイトが懐から落とした手記。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "手記を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "カイトの手記:『私は外部からこの禁書庫に侵入した。古い文献によれば、禁書を開くには三つの『断片語』を正しい順で奉ずる必要がある。断片語は閉架書架の本のどれかに記されているはずだ ── しかし、どの本が本物か、どの順で読むかは私には分からない。リンならその順序を知っているはず。私は書架の本を一冊ずつ examine して断片語を集める担当だ。司書幽霊には注意 ── あれは真と偽を混ぜて話す。』"
                     }
                   }
                 ]
@@ -62,6 +84,28 @@
       "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
       "interior": {
         "objects": [
+          {
+            "id": "apprentice_memory",
+            "name": "見習い司書の覚書 (リンの覚書)",
+            "description": "机の上に置かれた、リンが持ち込んだ覚書。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "覚書を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "リンの覚書:『私はかつてこの書庫の見習い司書だった。封印断片の規則は今も覚えている ── 印は『月 → 水 → 星』の順で読むのが正しい。書架の物理的な並び (A→B→C) ではない。また、表紙の裏に印のない本は『空文』であり、いくら似た言葉が書かれていても無効である。だが私は閉架書架の本そのものを開いた経験は一度もない ── 実際の断片語が何であるかは、カイトが書架を巡って報告してくれる必要がある。司書幽霊は気まぐれで、聞き方を選ばないと無駄話か嘘を返してくる。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
           {
             "id": "librarian_ghost",
             "name": "司書幽霊",
@@ -636,6 +680,61 @@
           }
         ]
       }
+    },
+    {
+      "id": "master_study",
+      "name": "館長書斎",
+      "description": "禁書扉の奥にある、歴代館長の書斎。中央の机に古びた『禁書本体』が置かれており、隅にはこの書庫の最終目的物が安置されている。沈黙錠が解かれない限り入れない。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "forbidden_archive",
+            "name": "禁書本体",
+            "description": "厚い革表紙の本体。最終目的物。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "禁書本体を確認する",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "禁書本体を確認する。表紙に刻まれた銘:『言葉を封じる者、ここに眠る。汝らは正しき順を奉じ、この奥にたどり着いた。任務はここに完了する。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "master_seal_plaque",
+            "name": "館長銘板",
+            "description": "館長の机に置かれた銘板。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "銘板を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "銘板:『この書斎に二人がたどり着いたとき、本シナリオの真の任務が完了する。沈黙錠を解いただけでは不十分 ── 共にここまで来よ。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     }
   ],
   "connections": [
@@ -698,20 +797,89 @@
       "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {"kind": "OPEN"}
+    },
+    {
+      "id": "decoding_to_master_study",
+      "from": "decoding_room",
+      "to": "master_study",
+      "name": "禁書扉",
+      "description": "解読室の奥にある重厚な禁書扉。沈黙錠を正しい順で奉じた時のみ開く。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "DOOR", "state": "LOCKED", "sound_permeability": 0.2}
     }
   ],
   "players": [
     {"id": "player_a", "name": "カイト", "spawn_spot": "entrance_hall", "initial_items": []},
-    {"id": "player_b", "name": "リン", "spawn_spot": "entrance_hall", "initial_items": []}
+    {"id": "player_b", "name": "リン", "spawn_spot": "reading_room", "initial_items": []}
   ],
   "game_end_conditions": {
-    "win": [{"type": "FLAG_SET", "flag_name": "puzzle_solved"}],
+    "win": [{"type": "ALL_AT_SPOT", "target_spot": "master_study"}],
     "lose": [{"type": "TICK_LIMIT", "tick_limit": 80}]
   },
   "initial_flags": [],
-  "scenario_events": [],
+  "scenario_events": [
+    {
+      "id": "lighting_warning_first",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {"condition_type": "TICK_AT_LEAST", "tick": 30}
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "書庫全体の灯がわずかに弱まる気配がする。ランプが小さく揺らぎ、影が長くなった。まだ読書には支障ないが、長居は禁物だろう。残り時間に注意せよ。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "lighting_warning_second",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {"condition_type": "TICK_AT_LEAST", "tick": 50}
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "書庫の灯が目に見えて弱まってきた。書架の奥は既に半ば闇に沈んでいる。残り時間は約 30 tick。決断を急ぐべきだ。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "lighting_warning_final",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {"condition_type": "TICK_AT_LEAST", "tick": 65}
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "書庫の灯がほぼ消えかけている。残り時間 15 tick ほど。これ以上の試行錯誤の余地はほぼ無い。最終決断のとき。"
+          }
+        }
+      ]
+    }
+  ],
   "reactive_bindings": {
-    "passages": [],
+    "passages": [
+      {
+        "target": "decoding_to_master_study",
+        "predicate": {
+          "condition_type": "FLAG_SET",
+          "flag_name": "puzzle_solved"
+        },
+        "on_true_state": "OPEN",
+        "on_false_state": "LOCKED"
+      }
+    ],
     "objects": []
   }
 }
