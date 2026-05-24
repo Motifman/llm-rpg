@@ -73,9 +73,12 @@ def load_scenario_topology(scenario_path: Path) -> Dict[str, Any]:
         logger.warning("failed to parse scenario JSON: %s", e)
         return {"spots": [], "connections": []}
 
+    # シナリオ JSON は 2 つの構造を許容:
+    #  - top-level: {"spots": [...], "connections": [...]} (現行 data/scenarios/*.json)
+    #  - 旧/将来案: {"spot_graph": {"spots": [...], "connections": [...]}}
     spot_graph = data.get("spot_graph") or {}
-    spots_raw = spot_graph.get("spots") or []
-    connections_raw = spot_graph.get("connections") or []
+    spots_raw = data.get("spots") or spot_graph.get("spots") or []
+    connections_raw = data.get("connections") or spot_graph.get("connections") or []
 
     spots: List[Dict[str, Any]] = []
     for s in spots_raw:
@@ -105,10 +108,24 @@ def load_scenario_topology(scenario_path: Path) -> Dict[str, Any]:
     return {"spots": spots, "connections": connections}
 
 
-def collect_players(events: List[TraceEvent]) -> List[Dict[str, Any]]:
-    """trace から登場プレイヤー一覧 (id + 名前 + 最終位置) を抽出。"""
+def collect_players(
+    events: List[TraceEvent],
+    *,
+    spot_name_to_id: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, Any]]:
+    """trace から登場プレイヤー一覧 (id + 名前 + 最終位置) を抽出。
+
+    Args:
+        events: trace events
+        spot_name_to_id: scenario の {spot_name: spot_id} 逆引きマップ。
+            trace の ``to_spot_id`` が scenario の ``id`` と一致しない場合に
+            ``spot_name`` を介してマップする (例: 内部数値 id vs シナリオ
+            文字列 id の不一致)。
+    """
+    name_map = spot_name_to_id or {}
     names: Dict[int, str] = {}
     final_position: Dict[int, str] = {}
+    final_position_name: Dict[int, str] = {}
     for e in events:
         if e.player_id is None:
             continue
@@ -118,8 +135,18 @@ def collect_players(events: List[TraceEvent]) -> List[Dict[str, Any]]:
                 names.setdefault(e.player_id, str(pname))
             if e.kind == TraceEventKind.POSITION_CHANGE:
                 to_spot = e.payload.get("to_spot_id")
-                if to_spot is not None:
-                    final_position[e.player_id] = str(to_spot)
+                spot_name = e.payload.get("spot_name")
+                # scenario id と trace id が違う場合、spot_name 経由で
+                # scenario id を解決する。一致するものが無ければ raw 値を保持
+                resolved = None
+                if spot_name and spot_name in name_map:
+                    resolved = name_map[spot_name]
+                if resolved is None and to_spot is not None:
+                    resolved = str(to_spot)
+                if resolved is not None:
+                    final_position[e.player_id] = resolved
+                if spot_name is not None:
+                    final_position_name[e.player_id] = str(spot_name)
     players: List[Dict[str, Any]] = []
     for pid in sorted({e.player_id for e in events if e.player_id is not None}):
         players.append(
@@ -127,6 +154,7 @@ def collect_players(events: List[TraceEvent]) -> List[Dict[str, Any]]:
                 "id": int(pid),
                 "name": names.get(pid, f"player_{pid}"),
                 "final_spot_id": final_position.get(pid),
+                "final_spot_name": final_position_name.get(pid),
             }
         )
     return players
@@ -193,82 +221,82 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 _VIEWER_CSS = """
-* {{ box-sizing: border-box; }}
-body {{
+* { box-sizing: border-box; }
+body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #222;
   background: #fafafa;
-}}
-header {{
+}
+header {
   padding: 1rem 1.5rem;
   background: #fff;
   border-bottom: 1px solid #ddd;
-}}
-header h1 {{ margin: 0 0 0.3rem 0; font-size: 1.2rem; }}
-.meta {{ font-size: 0.85rem; color: #666; display: flex; gap: 1.5rem; flex-wrap: wrap; }}
-.meta strong {{ color: #222; }}
-main {{
+}
+header h1 { margin: 0 0 0.3rem 0; font-size: 1.2rem; }
+.meta { font-size: 0.85rem; color: #666; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.meta strong { color: #222; }
+main {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
   padding: 1rem;
   height: calc(100vh - 90px);
-}}
-@media (max-width: 900px) {{
-  main {{ grid-template-columns: 1fr; height: auto; }}
-}}
-section {{
+}
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; height: auto; }
+}
+section {
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 4px;
   display: flex;
   flex-direction: column;
   min-height: 0;
-}}
-section h2 {{
+}
+section h2 {
   margin: 0;
   padding: 0.75rem 1rem;
   font-size: 0.95rem;
   border-bottom: 1px solid #eee;
   background: #f5f5f5;
-}}
-#cy {{
+}
+#cy {
   flex: 1;
   min-height: 400px;
   width: 100%;
   background: #fcfcfc;
-}}
-.legend {{ font-size: 0.8rem; color: #888; padding: 0.5rem 1rem; margin: 0; }}
-#event-log {{ flex: 1; overflow-y: auto; padding: 0.5rem 1rem; }}
-.tick-block {{ margin-bottom: 0.8rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee; }}
-.tick-header {{ font-weight: bold; color: #555; font-size: 0.85rem; margin-bottom: 0.3rem; }}
-.event-row {{
+}
+.legend { font-size: 0.8rem; color: #888; padding: 0.5rem 1rem; margin: 0; }
+#event-log { flex: 1; overflow-y: auto; padding: 0.5rem 1rem; }
+.tick-block { margin-bottom: 0.8rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee; }
+.tick-header { font-weight: bold; color: #555; font-size: 0.85rem; margin-bottom: 0.3rem; }
+.event-row {
   font-size: 0.82rem;
   padding: 0.15rem 0;
   display: flex;
   gap: 0.5rem;
   align-items: baseline;
-}}
-.event-kind {{
+}
+.event-kind {
   flex-shrink: 0;
   width: 110px;
   font-family: monospace;
   font-size: 0.75rem;
   color: #777;
-}}
-.event-player {{
+}
+.event-player {
   flex-shrink: 0;
   width: 60px;
   font-size: 0.78rem;
   color: #444;
-}}
-.event-body {{ flex: 1; word-break: break-word; }}
-.event-row.kind-action_result.failed .event-body {{ color: #b00; }}
-.event-row.kind-memo_add .event-body {{ color: #060; }}
-.event-row.kind-memo_done .event-body {{ color: #060; }}
-.event-row.kind-memo_hint .event-body {{ color: #a60; }}
-.event-row.kind-position_change .event-body {{ color: #06a; }}
+}
+.event-body { flex: 1; word-break: break-word; }
+.event-row.kind-action_result.failed .event-body { color: #b00; }
+.event-row.kind-memo_add .event-body { color: #060; }
+.event-row.kind-memo_done .event-body { color: #060; }
+.event-row.kind-memo_hint .event-body { color: #a60; }
+.event-row.kind-position_change .event-body { color: #06a; }
 """
 
 
@@ -422,7 +450,14 @@ def render_viewer_html(
     cytoscape_js_src: str,
 ) -> str:
     """viewer.html の文字列を組み立てて返す。"""
-    players = collect_players(events)
+    # spot_name → scenario spot id の逆引きマップ (trace の to_spot_id が
+    # scenario id と違うケース用)
+    spot_name_to_id = {
+        str(s.get("name") or ""): str(s.get("id"))
+        for s in scenario_topology.get("spots", [])
+        if s.get("name") and s.get("id") is not None
+    }
+    players = collect_players(events, spot_name_to_id=spot_name_to_id)
     by_tick = group_events_by_tick(events)
     last_tick = max((t for t in by_tick if t is not None), default=0)
     max_tick = last_tick

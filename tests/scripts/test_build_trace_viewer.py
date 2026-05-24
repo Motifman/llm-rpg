@@ -177,6 +177,28 @@ class TestCollectPlayers:
         players = collect_players(_sample_events())
         assert [p["id"] for p in players] == [1, 2]
 
+    def test_spot_name_to_id_で_trace_と_scenario_の_id_差分を吸収する(self) -> None:
+        """trace の to_spot_id="1" と scenario の id="control_room" を spot_name "制御室" 経由で結びつける。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.POSITION_CHANGE,
+                tick=0,
+                player_id=1,
+                payload={
+                    "from_spot_id": None,
+                    "to_spot_id": "1",  # runtime の内部数値 id
+                    "spot_name": "制御室",
+                    "player_name": "カイト",
+                },
+            )
+        ]
+        name_to_id = {"制御室": "control_room"}
+        players = collect_players(events, spot_name_to_id=name_to_id)
+        assert players[0]["final_spot_id"] == "control_room"
+        assert players[0]["final_spot_name"] == "制御室"
+
 
 class TestGroupEventsByTick:
     """tick 別 grouping。"""
