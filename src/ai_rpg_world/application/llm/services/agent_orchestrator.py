@@ -46,6 +46,11 @@ from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion i
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
 )
+from ai_rpg_world.application.trace import (
+    ITraceRecorder,
+    NullTraceRecorder,
+    TraceEventKind,
+)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
     TOOL_NAME_TODO_ADD,
@@ -172,6 +177,8 @@ class LlmAgentOrchestrator:
         episodic_semantic_promotion: Optional[EpisodicSemanticClusterPromotionService] = None,
         game_time_label_provider: Optional[Callable[[], Optional[str]]] = None,
         memo_completion_hint_service: Optional[MemoCompletionHintService] = None,
+        trace_recorder: Optional[ITraceRecorder] = None,
+        tick_provider: Optional[Callable[[], Optional[int]]] = None,
     ) -> None:
         if not isinstance(prompt_builder, IPromptBuilder):
             raise TypeError("prompt_builder must be IPromptBuilder")
@@ -219,8 +226,14 @@ class LlmAgentOrchestrator:
             raise TypeError(
                 "memo_completion_hint_service must be MemoCompletionHintService or None"
             )
+        if trace_recorder is not None and not isinstance(trace_recorder, ITraceRecorder):
+            raise TypeError("trace_recorder must be ITraceRecorder or None")
+        if tick_provider is not None and not callable(tick_provider):
+            raise TypeError("tick_provider must be Callable[[], Optional[int]] or None")
         self._game_time_label_provider = game_time_label_provider
         self._memo_completion_hint_service = memo_completion_hint_service
+        self._trace_recorder: ITraceRecorder = trace_recorder or NullTraceRecorder()
+        self._tick_provider = tick_provider
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
         self._tool_command_mapper = tool_command_mapper
@@ -248,6 +261,15 @@ class LlmAgentOrchestrator:
         finally:
             if self._episodic_reinterpretation_coordinator is not None:
                 self._episodic_reinterpretation_coordinator.after_turn_completed(player_id)
+
+    def _current_tick(self) -> Optional[int]:
+        """trace event に載せる現在 tick を取得 (provider 未設定なら None)。"""
+        if self._tick_provider is None:
+            return None
+        try:
+            return self._tick_provider()
+        except Exception:
+            return None
 
     def _maybe_augment_with_memo_hint(
         self,
@@ -387,6 +409,14 @@ class LlmAgentOrchestrator:
             )
             return result_dto
 
+        current_tick = self._current_tick()
+        self._trace_recorder.record(
+            TraceEventKind.ACTION,
+            tick=current_tick,
+            player_id=player_id.value,
+            tool=name,
+            arguments=arguments,
+        )
         result_dto = self._tool_command_mapper.execute(
             player_id.value,
             name,
@@ -396,6 +426,15 @@ class LlmAgentOrchestrator:
         result_summary = build_result_summary(result_dto)
         result_summary = self._maybe_augment_with_memo_hint(
             player_id, name, action_summary, result_summary
+        )
+        self._trace_recorder.record(
+            TraceEventKind.ACTION_RESULT,
+            tick=current_tick,
+            player_id=player_id.value,
+            tool=name,
+            success=result_dto.success,
+            error_code=result_dto.error_code,
+            result_summary=result_summary,
         )
         _append_to_action_store(
             self._action_result_store,
