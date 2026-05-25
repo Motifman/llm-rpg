@@ -94,36 +94,103 @@ class TestTodoToolExecutorList:
 
 
 class TestTodoToolExecutorComplete:
-    """todo_complete の実行"""
+    """memo_done の実行 (常に memo_ids 配列を受ける、batch 対応)"""
 
     def test_complete_success_returns_dto(self, executor_with_store, todo_store):
+        """単一 ID を 1 要素配列で渡すと完了する。"""
         executor_with_store._execute_memo_add(1, {"content": "完了対象"})
         entries = todo_store.list_uncompleted(PlayerId(1))
         todo_id = entries[0].id
         result = executor_with_store._execute_memo_done(
-            1, {"memo_id": todo_id}
+            1, {"memo_ids": [todo_id]}
         )
         assert result.success is True
         assert "完了" in result.message
 
     def test_complete_invalid_id_returns_failure(self, executor_with_store):
+        """存在しない単一 ID は全件 not_found となり失敗を返す。"""
         result = executor_with_store._execute_memo_done(
-            1, {"memo_id": "nonexistent-id"}
+            1, {"memo_ids": ["nonexistent-id"]}
         )
         assert result.success is False
         assert "見つかりません" in result.message
 
-    def test_complete_empty_todo_id_returns_todo_error(self, executor_with_store):
-        result = executor_with_store._execute_memo_done(1, {"memo_id": "  "})
+    def test_complete_empty_array_returns_todo_error(self, executor_with_store):
+        """空配列は TODO_ERROR を返す。"""
+        result = executor_with_store._execute_memo_done(1, {"memo_ids": []})
+        assert result.success is False
+        assert result.error_code == "TODO_ERROR"
+
+    def test_complete_missing_memo_ids_returns_todo_error(self, executor_with_store):
+        """memo_ids キー欠如時も TODO_ERROR。"""
+        result = executor_with_store._execute_memo_done(1, {})
+        assert result.success is False
+        assert result.error_code == "TODO_ERROR"
+
+    def test_complete_memo_ids_with_non_string_returns_todo_error(
+        self, executor_with_store
+    ):
+        """配列要素が string でなければ TODO_ERROR。"""
+        result = executor_with_store._execute_memo_done(
+            1, {"memo_ids": [123]}  # type: ignore[list-item]
+        )
         assert result.success is False
         assert result.error_code == "TODO_ERROR"
 
     def test_complete_without_store_returns_unknown_tool(self, executor_without_store):
+        """memo_store 未注入時は UNKNOWN_TOOL を返す。"""
         result = executor_without_store._execute_memo_done(
-            1, {"memo_id": "todo-1"}
+            1, {"memo_ids": ["todo-1"]}
         )
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
+
+
+class TestMemoExecutorBatchComplete:
+    """memo_done の batch 完了挙動 (Issue #228)。"""
+
+    def test_複数_id_を一括で完了できる(self, executor_with_store, todo_store):
+        """配列に複数 ID を渡すと全て完了状態になる。"""
+        executor_with_store._execute_memo_add(1, {"content": "A"})
+        executor_with_store._execute_memo_add(1, {"content": "B"})
+        executor_with_store._execute_memo_add(1, {"content": "C"})
+        ids = [e.id for e in todo_store.list_uncompleted(PlayerId(1))]
+        result = executor_with_store._execute_memo_done(1, {"memo_ids": ids})
+        assert result.success is True
+        # 3 件全て完了したので remaining は 0
+        assert todo_store.list_uncompleted(PlayerId(1)) == []
+        # message に 3 件まとめて完了した旨が含まれる
+        assert "3" in result.message
+
+    def test_存在する_id_と存在しない_id_が混在しても_存在分は完了する(
+        self, executor_with_store, todo_store
+    ):
+        """部分成功: 存在する ID は done、存在しない ID は not_found として個別報告。"""
+        executor_with_store._execute_memo_add(1, {"content": "A"})
+        valid_id = todo_store.list_uncompleted(PlayerId(1))[0].id
+        result = executor_with_store._execute_memo_done(
+            1, {"memo_ids": [valid_id, "nonexistent-xxx"]}
+        )
+        # 1 件は完了したので overall success
+        assert result.success is True
+        assert "見つかりません" in result.message
+        assert "nonexistent-xxx" in result.message
+        assert valid_id in result.message
+        # 有効 ID 側は実際に completed 化されている
+        assert todo_store.list_uncompleted(PlayerId(1)) == []
+
+    def test_重複_id_を含めても二重完了でエラーにならない(
+        self, executor_with_store, todo_store
+    ):
+        """同じ ID を 2 回含めると、1 回目で done、2 回目は not_found 扱い。"""
+        executor_with_store._execute_memo_add(1, {"content": "A"})
+        memo_id = todo_store.list_uncompleted(PlayerId(1))[0].id
+        result = executor_with_store._execute_memo_done(
+            1, {"memo_ids": [memo_id, memo_id]}
+        )
+        # 1 件は完了し、2 回目は not_found なので overall success
+        assert result.success is True
+        assert memo_id in result.message
 
 
 class TestTodoToolExecutorIntegrationWithMapper:
