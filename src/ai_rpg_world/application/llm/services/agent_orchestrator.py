@@ -46,6 +46,9 @@ from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion i
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
 )
+from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
+    ToolCallLoopGuardService,
+)
 from ai_rpg_world.application.trace import (
     ITraceRecorder,
     NullTraceRecorder,
@@ -179,6 +182,7 @@ class LlmAgentOrchestrator:
         memo_completion_hint_service: Optional[MemoCompletionHintService] = None,
         trace_recorder: Optional[ITraceRecorder] = None,
         tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        tool_call_loop_guard: Optional[ToolCallLoopGuardService] = None,
     ) -> None:
         if not isinstance(prompt_builder, IPromptBuilder):
             raise TypeError("prompt_builder must be IPromptBuilder")
@@ -230,6 +234,12 @@ class LlmAgentOrchestrator:
             raise TypeError("trace_recorder must be ITraceRecorder or None")
         if tick_provider is not None and not callable(tick_provider):
             raise TypeError("tick_provider must be Callable[[], Optional[int]] or None")
+        if tool_call_loop_guard is not None and not isinstance(
+            tool_call_loop_guard, ToolCallLoopGuardService
+        ):
+            raise TypeError(
+                "tool_call_loop_guard must be ToolCallLoopGuardService or None"
+            )
         self._game_time_label_provider = game_time_label_provider
         self._memo_completion_hint_service = memo_completion_hint_service
         self._trace_recorder: ITraceRecorder = trace_recorder or NullTraceRecorder()
@@ -246,6 +256,7 @@ class LlmAgentOrchestrator:
         self._episodic_chunk_coordinator = episodic_chunk_coordinator
         self._episodic_reinterpretation_coordinator = episodic_reinterpretation_coordinator
         self._episodic_semantic_promotion = episodic_semantic_promotion
+        self._tool_call_loop_guard = tool_call_loop_guard
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         """
@@ -446,6 +457,15 @@ class LlmAgentOrchestrator:
             fingerprint_args=canonical_arguments,
             game_time_label=time_label,
         )
+        if self._tool_call_loop_guard is not None and name:
+            # action_result_store への記録成功後に loop guard を回す。
+            # 連打が検知された場合は次ターンの観測として警告が注入される。
+            self._tool_call_loop_guard.record_and_check(
+                player_id,
+                name,
+                canonical_arguments,
+                game_time_label=time_label,
+            )
         if self._episodic_chunk_coordinator is not None and name not in _TOOLS_SKIPPING_EPISODIC_CHUNK:
             # 既定は False。True に固定すると毎ツール成功のたびに即セグメント閉鎖となり、
             # chunk_boundary（観測ヒント等）による HOLD が実質使えなくなるため。
