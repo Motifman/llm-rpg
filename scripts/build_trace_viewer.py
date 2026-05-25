@@ -278,6 +278,109 @@ def compute_event_heatmap(
     return series
 
 
+def build_speech_timeline(
+    events: List[TraceEvent],
+    *,
+    bubble_persistence: int = 2,
+    max_chars: int = 100,
+) -> Dict[int, List[Dict[str, Any]]]:
+    """tick → 各 player が「いま喋っている / 考えている」bubble の list (PR η)。
+
+    speech 系ツール (``speech_say`` / ``speech_whisper`` / ``say``) と
+    action.arguments.inner_thought をそれぞれ拾い、発生 tick + 続く
+    ``bubble_persistence - 1`` tick の間、map に表示する。
+    同じ player が次の発言を出したら上書き (旧 bubble は消える)。
+
+    Args:
+        events: trace events
+        bubble_persistence: 表示継続 tick 数 (既定 2 = 発生 tick + 次 1 tick)
+        max_chars: bubble に表示する最大文字数 (超えたら truncate + "…")
+
+    Returns:
+        ``{tick: [{player_id, kind ("speech"|"thought"), text, source_tick}]}``
+        kind="speech" は実線吹き出し、"thought" は破線雲型として描画される想定。
+    """
+    # 各 player の「現在 active な bubble (kind 別)」を追跡
+    # active_bubbles[player_id][kind] = {text, source_tick, expires_at}
+    active: Dict[int, Dict[str, Dict[str, Any]]] = {}
+    sorted_events = sorted(events, key=lambda e: e.seq)
+
+    def _trim(s: str) -> str:
+        if len(s) <= max_chars:
+            return s
+        return s[: max(0, max_chars - 1)] + "…"
+
+    # 1 pass で「発生 tick で発火 → expires_at = tick + persistence - 1」を構築
+    # 同 player の同 kind に対し、新しい bubble は古いものを置き換える
+    raw_bubbles: List[Dict[str, Any]] = []  # 時系列の bubble 発生記録
+    for e in sorted_events:
+        if e.kind != TraceEventKind.ACTION:
+            continue
+        if e.player_id is None or not isinstance(e.payload, dict):
+            continue
+        tick = e.tick if e.tick is not None else 0
+        tool = str(e.payload.get("tool") or "")
+        arguments = e.payload.get("arguments") or {}
+        if not isinstance(arguments, dict):
+            arguments = {}
+
+        # speech 系ツール (公開発言)
+        is_speech = (
+            tool in ("say", "whisper")
+            or tool.startswith("speech_")
+        )
+        if is_speech:
+            message = (
+                arguments.get("message")
+                or arguments.get("content")
+                or arguments.get("text")
+                or ""
+            )
+            if message:
+                raw_bubbles.append(
+                    {
+                        "player_id": int(e.player_id),
+                        "kind": "speech",
+                        "text": _trim(str(message).strip()),
+                        "source_tick": tick,
+                        "tool": tool,
+                    }
+                )
+
+        # inner_thought (action.arguments.inner_thought)
+        inner = arguments.get("inner_thought")
+        if isinstance(inner, str) and inner.strip():
+            raw_bubbles.append(
+                {
+                    "player_id": int(e.player_id),
+                    "kind": "thought",
+                    "text": _trim(inner.strip()),
+                    "source_tick": tick,
+                    "tool": tool,
+                }
+            )
+
+    # 各 (player, kind) について、source_tick から persistence tick 表示
+    # 同 (player, kind) の次の bubble は前の bubble を上書き (overlap しない)
+    timeline: Dict[int, List[Dict[str, Any]]] = {}
+    # bubble ごとに表示終了 tick を計算: 次の同 (player, kind) の発生 tick - 1
+    # ただし persistence で打ち切られる
+    by_key: Dict[tuple, List[Dict[str, Any]]] = {}
+    for b in raw_bubbles:
+        by_key.setdefault((b["player_id"], b["kind"]), []).append(b)
+    for key, bubbles in by_key.items():
+        for i, b in enumerate(bubbles):
+            start = b["source_tick"]
+            natural_end = start + bubble_persistence - 1
+            next_start = (
+                bubbles[i + 1]["source_tick"] - 1 if i + 1 < len(bubbles) else natural_end
+            )
+            end_tick = min(natural_end, next_start)
+            for t in range(start, end_tick + 1):
+                timeline.setdefault(t, []).append(b)
+    return timeline
+
+
 def compute_trace_moments(
     events: List[TraceEvent],
 ) -> List[Dict[str, Any]]:
@@ -446,6 +549,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         <option value="125">4x</option>
       </select>
     </label>
+    <label class="toggle-label" title="player の inner_thought を吹き出し表示する">
+      <input type="checkbox" id="toggle-thoughts" />
+      inner thought
+    </label>
   </div>
 </header>
 
@@ -611,6 +718,62 @@ header h1 {
   border: 1px solid var(--line);
   border-radius: 4px;
 }
+.toggle-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+  user-select: none;
+}
+.toggle-label input { accent-color: var(--green); }
+
+/* Speech / thought bubbles on map (PR η).
+   Position is computed at JS runtime relative to the player marker.
+   z-index: kept above Cytoscape canvas. */
+.bubble-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 5;
+}
+.bubble {
+  position: absolute;
+  pointer-events: auto;
+  max-width: 220px;
+  padding: 0.42rem 0.6rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  background: rgba(11, 23, 28, 0.96);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04);
+  transform: translate(-50%, -100%);
+  opacity: 0;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.bubble.visible { opacity: 1; transform: translate(-50%, -110%); }
+.bubble.speech { border-color: var(--cyan); }
+.bubble.speech::after {
+  content: ""; position: absolute; left: 50%; bottom: -7px;
+  width: 12px; height: 12px; background: rgba(11, 23, 28, 0.96);
+  border-right: 1px solid var(--cyan); border-bottom: 1px solid var(--cyan);
+  transform: translateX(-50%) rotate(45deg);
+}
+.bubble.thought {
+  border-color: var(--green);
+  border-style: dashed;
+  border-radius: 18px;
+  background: rgba(11, 30, 22, 0.96);
+}
+.bubble .bubble-who {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--cyan); font-weight: 700; display: block; margin-bottom: 0.15rem;
+}
+.bubble.thought .bubble-who { color: var(--green); }
 
 main {
   display: grid;
@@ -844,6 +1007,7 @@ _VIEWER_JS_TEMPLATE = """
   const heatmap = {heatmap_json};                     // {{ticks, action, observation, memo, position_change}}
   const eventsByTick = {events_by_tick_json};         // {{tick: [{{kind, player_id, body}}]}}
   const traceMoments = {moments_json};                // [{{tick, kind, label, detail, score, player_id}}]
+  const speechTimeline = {speech_timeline_json};      // {{tick: [{{player_id, kind, text, source_tick}}]}}
   const maxTick = {max_tick};
   const STALE_AGE = 20;
 
@@ -987,6 +1151,73 @@ _VIEWER_JS_TEMPLATE = """
         playerEl.position(target);
       }}
     }}
+  }}
+
+  // ---------- speech / thought bubbles on map (PR η) ----------
+  let showThoughts = false;
+  // Cytoscape の container 内に bubble overlay layer を 1 つ作る
+  const cyContainer = document.getElementById('cy');
+  let bubbleLayer = document.getElementById('bubble-layer');
+  if (!bubbleLayer && cyContainer) {{
+    bubbleLayer = document.createElement('div');
+    bubbleLayer.id = 'bubble-layer';
+    bubbleLayer.className = 'bubble-layer';
+    cyContainer.style.position = 'relative';
+    cyContainer.appendChild(bubbleLayer);
+  }}
+  function renderSpeechBubbles(tick) {{
+    if (!bubbleLayer) return;
+    bubbleLayer.innerHTML = '';
+    const bubbles = (speechTimeline && speechTimeline[tick]) || [];
+    if (bubbles.length === 0) return;
+    // 同 player に複数 bubble (speech + thought) → speech を下 (player に近く)、
+    // thought をその上に積む。実 DOM 高さを測ってから再配置するため、まず
+    // 仮の top で append → 次フレームで offsetHeight ベースに stack し直す。
+    const byPlayer = {{}};
+    for (const b of bubbles) {{
+      if (b.kind === 'thought' && !showThoughts) continue;
+      (byPlayer[b.player_id] = byPlayer[b.player_id] || []).push(b);
+    }}
+    const groups = [];  // [{{pid, pos, elements: [{{el, kind}}, ...]}}, ...]
+    for (const pidStr of Object.keys(byPlayer)) {{
+      const pid = parseInt(pidStr, 10);
+      const playerNode = cy.getElementById('player:' + pid);
+      if (!playerNode.length) continue;
+      const pos = playerNode.renderedPosition();
+      // speech が先 (idx 0 = 下), thought がその上に積まれるよう並び替え
+      const items = byPlayer[pid].slice().sort((a, b) => {{
+        // speech を先頭に
+        if (a.kind === b.kind) return 0;
+        return a.kind === 'speech' ? -1 : 1;
+      }});
+      const elements = items.map(b => {{
+        const el = document.createElement('div');
+        el.className = 'bubble ' + (b.kind === 'thought' ? 'thought' : 'speech');
+        el.style.left = pos.x + 'px';
+        el.style.top = (pos.y - 14) + 'px';  // 仮 top
+        const name = playerNameById[pid] || ('#' + pid);
+        const whoLabel = b.kind === 'thought' ? name + ' (inner)' : name;
+        el.innerHTML = '<span class="bubble-who">' + escapeHtml(whoLabel) + '</span>' + escapeHtml(b.text);
+        bubbleLayer.appendChild(el);
+        return {{ el, kind: b.kind }};
+      }});
+      groups.push({{ pid, pos, elements }});
+    }}
+    // 次フレームで実 height を測って再配置 + visible 付与
+    requestAnimationFrame(() => {{
+      const GAP = 10;       // bubble 間の余白
+      const PLAYER_GAP = 18; // player marker と最下 bubble の隙間
+      for (const g of groups) {{
+        let yCursor = g.pos.y - PLAYER_GAP;
+        for (const item of g.elements) {{
+          // transform: translate(-50%, -100%) なので top は bubble の下端
+          item.el.style.top = yCursor + 'px';
+          // 次の bubble はこの bubble の上端 - GAP に下端を置く
+          yCursor = yCursor - item.el.offsetHeight - GAP;
+          item.el.classList.add('visible');
+        }}
+      }}
+    }});
   }}
 
   // ---------- memo panel ----------
@@ -1137,6 +1368,9 @@ _VIEWER_JS_TEMPLATE = """
     updateEventLogHighlight(tick);
     updateMomentRail(tick);
     drawHeatmap(tick);
+    // bubble は player marker のアニメーション後に位置を取りたいので
+    // 短い delay で配置 (animate duration ~ 240ms に追従)
+    setTimeout(() => renderSpeechBubbles(tick), animate !== false ? 240 : 0);
   }}
 
   // ---------- playback loop ----------
@@ -1173,6 +1407,17 @@ _VIEWER_JS_TEMPLATE = """
     if (isPlaying) {{ pause(); play(); }}
   }});
 
+  const toggleThoughts = document.getElementById('toggle-thoughts');
+  if (toggleThoughts) {{
+    toggleThoughts.addEventListener('change', e => {{
+      showThoughts = !!e.target.checked;
+      renderSpeechBubbles(currentTick);
+    }});
+  }}
+
+  // Cytoscape の pan/zoom で player marker 位置が変わるので bubble を追随
+  cy.on('pan zoom', () => renderSpeechBubbles(currentTick));
+
   document.addEventListener('keydown', e => {{
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     if (e.key === ' ' || e.key === 'Spacebar') {{ e.preventDefault(); togglePlay(); }}
@@ -1186,7 +1431,10 @@ _VIEWER_JS_TEMPLATE = """
     renderMomentRail();
     setTick(0, false);
   }});
-  window.addEventListener('resize', () => drawHeatmap(currentTick));
+  window.addEventListener('resize', () => {{
+    drawHeatmap(currentTick);
+    renderSpeechBubbles(currentTick);
+  }});
 }})();
 """
 
@@ -1224,6 +1472,7 @@ def render_viewer_html(
     memo_timeline = build_memo_state_timeline(events)
     heatmap = compute_event_heatmap(events)
     moments = compute_trace_moments(events)
+    speech_timeline = build_speech_timeline(events)
 
     return _HTML_TEMPLATE.format(
         title=html.escape(title),
@@ -1242,6 +1491,7 @@ def render_viewer_html(
             heatmap_json=json.dumps(heatmap, ensure_ascii=False),
             events_by_tick_json=json.dumps({}, ensure_ascii=False),  # 現状未使用 (将来用)
             moments_json=json.dumps(moments, ensure_ascii=False),
+            speech_timeline_json=json.dumps(speech_timeline, ensure_ascii=False),
             max_tick=max_tick,
         ),
     )

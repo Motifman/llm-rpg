@@ -35,7 +35,12 @@ TRAVEL_TO_DEFINITION = ToolDefinitionDto(
         "properties": {
             "destination_label": {
                 "type": "string",
-                "description": "接続先ラベル（現在の状況に表示された S1, S2 等）。",
+                "description": (
+                    "接続先ラベル（現在の状況に表示された S1, S2 等）または"
+                    "スポット名そのもの（例: \"入口広間\"）。"
+                    "スポット名は意味が不変なので、過去 turn の履歴を参照して"
+                    "再利用する場合はスポット名の方が安全。"
+                ),
             },
             "inner_thought": _IT,
         },
@@ -51,7 +56,10 @@ SET_SUB_LOCATION_DEFINITION = ToolDefinitionDto(
         "properties": {
             "sub_location_label": {
                 "type": "string",
-                "description": "サブロケーションラベル（現在の状況に表示された SL1, SL2 等）。未指定でクリア。",
+                "description": (
+                    "サブロケーションラベル（現在の状況に表示された SL1, SL2 等）"
+                    "またはサブロケーション名そのもの（例: \"祭壇前\"）。未指定でクリア。"
+                ),
             },
             "inner_thought": _IT,
         },

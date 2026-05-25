@@ -1,0 +1,885 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "forbidden_library_demo",
+    "title": "沈黙の禁書庫 — ノイズ耐性デモ",
+    "description": "地下にある古い書庫。閉架の禁書を解読し、その奥にある館長書斎にたどり着くことが目的。3 つの書架には『封印印』が刻まれた真の本と、よく似たハーリング本が並んでいる。閲覧室の司書幽霊は聞き方によって真ヒント・雑談・偽情報のいずれかを返す。カード目録室の古い索引は廃止された規則を正解風に提示するので注意。二人のプレイヤーは別々の場所に居て、別々の知識を持つ ── カイトは外部から侵入し書架を探索できるが印の意味を知らず、リンは元見習い司書として印の順序を知るが断片語を知らない。時間と共に書庫の灯が弱まり、最終的には闇に飲まれる。",
+    "theme": "exploration",
+    "difficulty": "medium",
+    "estimated_ticks": 70,
+    "author": "demo",
+    "tags": ["library", "cipher", "noise_resistance", "memo_value", "info_asymmetry", "time_pressure", "hidden_room"],
+    "llm_public_intro": "あなたたちは沈黙の禁書庫の二人組である。カイトは入口広間に、リンは閲覧室に居る。互いに別の知識を持っており、合流して情報を交換しなければ解けない。地下に封じられた禁書を解読し、奥の館長書斎に二人ともたどり着くことが目的である。書庫には真の手がかりと、それを装ったノイズ (似て非なる本・古い索引・司書幽霊の雑談や偽情報) が混在し、灯りも時間と共に弱まる。examine と talk を駆使し、何が本物の手がかりかを memo に整理して進むこと。誤入力は時間を消費する。"
+  },
+  "item_specs": [],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "entrance_hall",
+      "name": "入口広間",
+      "description": "禁書庫の入口にあたる薄暗い広間。床に古い絨毯が敷かれ、四方の扉が各部屋へ通じている。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "entrance_signboard",
+            "name": "案内板",
+            "description": "広間中央の柱に取り付けられた古い案内板。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "案内板を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "案内板: 『← 閲覧室  /  カード目録室 →  /  書架 A・B・C は奥へ続く  /  解読室は書架 B の隣にある。最奥に館長書斎、解読室の扉が開かなければ入れない。目的: 禁書を解読し、館長書斎に二人で到達せよ。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "intruder_note",
+            "name": "侵入者の手記",
+            "description": "床に落ちている、侵入者が懐から落とした手記。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "手記を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手記:『私は外部からこの禁書庫に侵入した。古い文献によれば、禁書を開くには三つの『断片語』を正しい順で奉ずる必要がある。断片語は閉架書架の本のどれかに記されているはずだ ── しかし、どの本が本物か、どの順で読むかは私には分からない。相方ならその順序を知っているはず。私は書架の本を一冊ずつ examine して断片語を集める担当だ。司書幽霊には注意 ── あれは真と偽を混ぜて話す。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "reading_room",
+      "name": "閲覧室",
+      "description": "古い読書机が並ぶ静かな部屋。中央に半透明の司書幽霊が浮かんでいる。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "apprentice_memory",
+            "name": "見習い司書の覚書",
+            "description": "机の上に置かれた、見習い司書が持ち込んだ覚書。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "覚書を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "覚書:『私はかつてこの書庫の見習い司書だった。封印断片の規則は今も覚えている ── 印は『月 → 水 → 星』の順で読むのが正しい。書架の物理的な並び (A→B→C) ではない。また、表紙の裏に印のない本は『空文』であり、いくら似た言葉が書かれていても無効である。だが私は閉架書架の本そのものを開いた経験は一度もない ── 実際の断片語が何であるかは、相方が書架を巡って報告してくれる必要がある。司書幽霊は気まぐれで、聞き方を選ばないと無駄話か嘘を返してくる。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "librarian_ghost",
+            "name": "司書幽霊",
+            "description": "薄く透けた女性の幽霊。穏やかな笑みを浮かべ、こちらを見ている。聞き方によって違うことを話す気配がある。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "ask_about_seal",
+                "display_label": "印について尋ねる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "司書幽霊は微笑む: 『……印のついた本だけが、声を持つのです。印のないものは、ただ似ているだけの空文に過ぎません。私の言葉、お忘れなきよう。』"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "ask_about_order",
+                "display_label": "読む順序について尋ねる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "司書幽霊は天井を見上げる: 『順序ですか。月から始め、水を辿り、星で結ぶのが正しき道です。書架の並びや古い索引の言うことは、忘れておしまいなさい。』"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "ask_about_history",
+                "display_label": "この書庫の歴史を尋ねる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "司書幽霊は遠い目をする: 『昔ここで誰かが紅茶をこぼしたのです。その染みがどこに残っていたか、思い出せなくて……あなた、見ましたか? 紅茶の染みを。』"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "ask_about_weather",
+                "display_label": "外の天気を尋ねる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "司書幽霊は首を傾げる: 『外、ですか? 外の様子はもう何百年も知らないのですが……今でも雨は降っているのでしょうか。雨の匂いだけは覚えているのです。』"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "ask_about_index",
+                "display_label": "索引カードについて尋ねる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "司書幽霊は誇らしげに頷く: 『索引カードは常に正しいのです。あれに書かれた順序こそが、この書庫の唯一の規則。疑ってはなりません。』 (内心の声: ……本当にそうだろうか?)"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "ask_about_shortcut",
+                "display_label": "近道はないか尋ねる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "司書幽霊はくすくす笑う: 『近道? ええ、書架 C は最近空になりましたから、あちらへは行かなくてよろしいですよ。手間が省けますわね。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "card_index_room",
+      "name": "カード目録室",
+      "description": "古い木製の目録棚が並ぶ部屋。中央の机に一枚の索引カードが広げて置かれている。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "old_index_card",
+            "name": "古い索引カード",
+            "description": "黄ばんだ索引カード。書架の規則と読む順序が記されている。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "索引カードを読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "索引カード:『閉架書架の規則。封印断片は、書架 A → 書架 B → 書架 C のラベル順に読み解くべし。これが当書庫の唯一の正典である。  ── 本規則は当代館長により制定されたものであり、絶対不変。』  (隅に小さく『廃止: 第三代館長の改正により無効』と消えかけたスタンプが押されているが、ほぼ判読不能。)"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "shelf_a",
+      "name": "書架 A",
+      "description": "高い天井まで届く書架。革表紙の本が並んでいる。どれも古びていて、見た目だけでは中身が分からない。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "tome_a_target",
+            "name": "『海鳴りの言葉』(書架 A)",
+            "description": "深い藍色の革表紙。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "本を開いて読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "『海鳴りの言葉』を開く。表紙の裏側に【封印印: 水】が小さく刻まれている。最終頁には一語のみ書かれている ── 『ヴェル・ノクト』。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "tome_a_harling",
+            "name": "『暗き海の頌歌』(書架 A)",
+            "description": "藍色によく似た紺の革表紙。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "本を開いて読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "『暗き海の頌歌』を開く。表紙の裏側には何の印も無い。最終頁には一語のみ書かれている ── 『ヴェル・ノクタ』。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "tome_a_filler",
+            "name": "『紅茶と司書の十二の禁忌』(書架 A)",
+            "description": "やや明るい色の革表紙。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "本を開いて読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "『紅茶と司書の十二の禁忌』を開く。延々と紅茶のこぼし方とその拭き方が綴られている。封印印は無く、最終頁には『紅茶を絨毯にこぼすべからず』とだけある。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "shelf_b",
+      "name": "書架 B",
+      "description": "中央に位置する書架。書架 A と書架 C を繋ぐ動線上にあり、奥には解読室への扉が見える。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "tome_b_target",
+            "name": "『塔のための祈祷』(書架 B)",
+            "description": "黒い革表紙、銀の縁飾り。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "本を開いて読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "『塔のための祈祷』を開く。表紙の裏側に【封印印: 月】が小さく刻まれている。最終頁には一語のみ書かれている ── 『サイラム・ドゥエ』。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "tome_b_harling",
+            "name": "『塔への階段』(書架 B)",
+            "description": "黒い革表紙、ただし縁飾りは銅。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "本を開いて読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "『塔への階段』を開く。表紙の裏側には何の印も無い。最終頁には一語のみ書かれている ── 『サイラム・ドゥエン』。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "tome_b_filler",
+            "name": "『書庫の通気孔について』(書架 B)",
+            "description": "薄い灰色の表紙。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "本を開いて読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "『書庫の通気孔について』を開く。建築年代別の通気孔配置図が延々と続く。封印印は無く、本文に手がかりらしき記述も無い。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "shelf_c",
+      "name": "書架 C",
+      "description": "最も奥の書架。司書幽霊は『書架 C は最近空になった』と言ったが、実際は本がきちんと並んでいる。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "tome_c_target",
+            "name": "『冬至の鐘』(書架 C)",
+            "description": "白茶けた羊皮紙の表紙。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "本を開いて読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "『冬至の鐘』を開く。表紙の裏側に【封印印: 星】が小さく刻まれている。最終頁には一語のみ書かれている ── 『クライス・フィン』。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "tome_c_harling",
+            "name": "『冬の終わり』(書架 C)",
+            "description": "羊皮紙の表紙だがやや黄ばんでいる。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "本を開いて読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "『冬の終わり』を開く。表紙の裏側には何の印も無い。最終頁には一語のみ書かれている ── 『クライス・フィント』。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "tome_c_filler",
+            "name": "『歴代館長の好物について』(書架 C)",
+            "description": "金箔押しの華やかな表紙。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "本を開いて読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "『歴代館長の好物について』を開く。第三代館長が紅茶よりも珈琲を好んだことが詳述されている。封印印は無く、手がかりらしき記述も無い。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "decoding_room",
+      "name": "解読室",
+      "description": "中央に石造りの祭壇のような装置 ── 沈黙錠 ── が据えられている。装置の奥に重厚な禁書扉があり、現在は固く閉ざされている。沈黙錠に正しい順序で三つの断片語を入力すると、扉が開く。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "silence_lock",
+            "name": "沈黙錠",
+            "description": "三つの断片語を一定の順で奉ずると開く錠。examine すると入力候補が表示される。誤入力は時間を消費する (+2 tick)。",
+            "object_type": "SWITCH",
+            "state": {"opened": false, "failed_attempts": 0},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "錠の使い方を確認する",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "沈黙錠の側面に刻文: 『三つの断片語を、正しき順で奉ずべし。順序を誤れば沈黙の代償を払うべし。』 入力候補は六つあり、それぞれ「順 X」として番号が振られている。順 1〜6 のいずれかを選んで奉ずる action を実行せよ。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "offer_order_1",
+                "display_label": "順 1 を奉ずる (ヴェル・ノクト → サイラム・ドゥエ → クライス・フィン)",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "silence_lock",
+                    "required_state": {"opened": false},
+                    "failure_message": "沈黙錠は既に開いている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "順 1 を奉じた。沈黙錠は冷たく沈黙したまま動かない。誤りである。 (+2 tick の代償)"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "silence_lock",
+                      "state_updates": {"failed_attempts": 1}
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "offer_order_2",
+                "display_label": "順 2 を奉ずる (サイラム・ドゥエ → ヴェル・ノクト → クライス・フィン)",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "silence_lock",
+                    "required_state": {"opened": false},
+                    "failure_message": "沈黙錠は既に開いている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "silence_lock",
+                      "state_updates": {"opened": true}
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "puzzle_solved", "value": true}
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "順 2 を奉じた。沈黙錠が低く響き、奥の禁書扉が音もなく開いた。月→水→星 の順、まさに正解である。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "offer_order_3",
+                "display_label": "順 3 を奉ずる (クライス・フィン → サイラム・ドゥエ → ヴェル・ノクト)",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "silence_lock",
+                    "required_state": {"opened": false},
+                    "failure_message": "沈黙錠は既に開いている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "順 3 を奉じた。沈黙錠は冷たく沈黙したまま動かない。誤りである。 (+2 tick の代償)"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "silence_lock",
+                      "state_updates": {"failed_attempts": 1}
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "offer_order_4",
+                "display_label": "順 4 を奉ずる (ヴェル・ノクタ → サイラム・ドゥエン → クライス・フィント)",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "silence_lock",
+                    "required_state": {"opened": false},
+                    "failure_message": "沈黙錠は既に開いている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "順 4 を奉じた。沈黙錠は嘲るように軋み、何も起こらない。印のない本の語は意味を持たないようだ。 (+2 tick の代償)"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "silence_lock",
+                      "state_updates": {"failed_attempts": 1}
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "offer_order_5",
+                "display_label": "順 5 を奉ずる (サイラム・ドゥエン → ヴェル・ノクト → クライス・フィン)",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "silence_lock",
+                    "required_state": {"opened": false},
+                    "failure_message": "沈黙錠は既に開いている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "順 5 を奉じた。先頭の語に印が伴わなかったためか、沈黙錠は反応しない。 (+2 tick の代償)"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "silence_lock",
+                      "state_updates": {"failed_attempts": 1}
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "offer_order_6",
+                "display_label": "順 6 を奉ずる (ヴェル・ノクト → サイラム・ドゥエ → クライス・フィント)",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "silence_lock",
+                    "required_state": {"opened": false},
+                    "failure_message": "沈黙錠は既に開いている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "順 6 を奉じた。末尾の語に印が伴わなかったためか、沈黙錠は反応しない。 (+2 tick の代償)"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "silence_lock",
+                      "state_updates": {"failed_attempts": 1}
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "decode_signpost",
+            "name": "祭壇の銘板",
+            "description": "沈黙錠の足元に置かれた銘板。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "銘板を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "銘板: 『閉架の三冊、その封印印に従いて読むべし。書架の名を信ずるなかれ、印を信ぜよ。本物の三つの順を奉ずれば、扉は自ずから開く。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "master_study",
+      "name": "館長書斎",
+      "description": "禁書扉の奥にある、歴代館長の書斎。中央の机に古びた『禁書本体』が置かれており、隅にはこの書庫の最終目的物が安置されている。沈黙錠が解かれない限り入れない。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "forbidden_archive",
+            "name": "禁書本体",
+            "description": "厚い革表紙の本体。最終目的物。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "禁書本体を確認する",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "禁書本体を確認する。表紙に刻まれた銘:『言葉を封じる者、ここに眠る。汝らは正しき順を奉じ、この奥にたどり着いた。任務はここに完了する。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "master_seal_plaque",
+            "name": "館長銘板",
+            "description": "館長の机に置かれた銘板。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "銘板を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "銘板:『この書斎に二人がたどり着いたとき、本シナリオの真の任務が完了する。沈黙錠を解いただけでは不十分 ── 共にここまで来よ。』"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "entrance_to_reading",
+      "from": "entrance_hall",
+      "to": "reading_room",
+      "name": "閲覧室の扉",
+      "description": "常時開放の木製扉。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "OPEN"}
+    },
+    {
+      "id": "entrance_to_card_index",
+      "from": "entrance_hall",
+      "to": "card_index_room",
+      "name": "カード目録室の扉",
+      "description": "常時開放の木製扉。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "OPEN"}
+    },
+    {
+      "id": "entrance_to_shelf_a",
+      "from": "entrance_hall",
+      "to": "shelf_a",
+      "name": "書架 A への扉",
+      "description": "閉架書架へ続く扉。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "OPEN"}
+    },
+    {
+      "id": "shelf_a_to_shelf_b",
+      "from": "shelf_a",
+      "to": "shelf_b",
+      "name": "書架間通路 A→B",
+      "description": "薄暗い書架間の通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "OPEN"}
+    },
+    {
+      "id": "shelf_b_to_shelf_c",
+      "from": "shelf_b",
+      "to": "shelf_c",
+      "name": "書架間通路 B→C",
+      "description": "薄暗い書架間の通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "OPEN"}
+    },
+    {
+      "id": "shelf_b_to_decoding",
+      "from": "shelf_b",
+      "to": "decoding_room",
+      "name": "解読室の扉",
+      "description": "石造りの重い扉。書架 B の奥にある。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "OPEN"}
+    },
+    {
+      "id": "decoding_to_master_study",
+      "from": "decoding_room",
+      "to": "master_study",
+      "name": "禁書扉",
+      "description": "解読室の奥にある重厚な禁書扉。沈黙錠を正しい順で奉じた時のみ開く。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "DOOR", "state": "LOCKED", "sound_permeability": 0.2}
+    }
+  ],
+  "players": [
+    {"id": "player_a", "name": "カイト", "spawn_spot": "entrance_hall", "initial_items": []},
+    {"id": "player_b", "name": "リン", "spawn_spot": "reading_room", "initial_items": []}
+  ],
+  "game_end_conditions": {
+    "win": [{"type": "ALL_AT_SPOT", "target_spot": "master_study"}],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 80}]
+  },
+  "initial_flags": [],
+  "scenario_events": [
+    {
+      "id": "lighting_warning_first",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {"condition_type": "TICK_AT_LEAST", "tick": 30}
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "書庫全体の灯がわずかに弱まる気配がする。ランプが小さく揺らぎ、影が長くなった。まだ読書には支障ないが、長居は禁物だろう。残り時間に注意せよ。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "lighting_warning_second",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {"condition_type": "TICK_AT_LEAST", "tick": 50}
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "書庫の灯が目に見えて弱まってきた。書架の奥は既に半ば闇に沈んでいる。残り時間は約 30 tick。決断を急ぐべきだ。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "lighting_warning_final",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {"condition_type": "TICK_AT_LEAST", "tick": 65}
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "書庫の灯がほぼ消えかけている。残り時間 15 tick ほど。これ以上の試行錯誤の余地はほぼ無い。最終決断のとき。"
+          }
+        }
+      ]
+    }
+  ],
+  "reactive_bindings": {
+    "passages": [
+      {
+        "target": "decoding_to_master_study",
+        "predicate": {
+          "condition_type": "FLAG_SET",
+          "flag_name": "puzzle_solved"
+        },
+        "on_true_state": "OPEN",
+        "on_false_state": "LOCKED"
+      }
+    ],
+    "objects": []
+  }
+}

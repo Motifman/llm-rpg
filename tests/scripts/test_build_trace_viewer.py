@@ -21,6 +21,7 @@ from scripts.build_trace_viewer import (  # noqa: E402
     _format_event_body,
     build_memo_state_timeline,
     build_position_timeline,
+    build_speech_timeline,
     collect_players,
     compute_event_heatmap,
     compute_trace_moments,
@@ -566,3 +567,97 @@ class TestTacticalThemeMarkers:
         assert "badge outcome" in out
         # moment_rail へのデータ inline (合成 trace なので start + end は最低含まれる)
         assert "traceMoments" in out
+
+
+class TestSpeechTimeline:
+    """build_speech_timeline (PR η): speech / inner_thought の tick 別 bubble。"""
+
+    def _evt(self, seq, tick, pid, tool, args):
+        return TraceEvent(
+            seq=seq,
+            timestamp="t",
+            kind=TraceEventKind.ACTION,
+            tick=tick,
+            player_id=pid,
+            payload={"tool": tool, "arguments": args},
+        )
+
+    def test_speech_say_は_kind_speech_で_拾う(self) -> None:
+        """``say`` / ``speech_*`` ツールの message を kind="speech" として拾う。"""
+        events = [self._evt(1, 3, 1, "say", {"message": "hello"})]
+        tl = build_speech_timeline(events)
+        assert tl[3][0]["kind"] == "speech"
+        assert tl[3][0]["text"] == "hello"
+        assert tl[3][0]["player_id"] == 1
+
+    def test_inner_thought_は_kind_thought_で_拾う(self) -> None:
+        """arguments.inner_thought は kind="thought" として別ものとして拾う。"""
+        events = [
+            self._evt(1, 5, 1, "examine", {"target": "x", "inner_thought": "考えごと"})
+        ]
+        tl = build_speech_timeline(events)
+        # speech は無く thought のみ
+        kinds = [b["kind"] for b in tl[5]]
+        assert "thought" in kinds
+        assert "speech" not in kinds
+
+    def test_say_と_inner_thought_両方ある_action_は_両方拾う(self) -> None:
+        """同一 action に message と inner_thought 両方あれば bubble 2 件。"""
+        events = [
+            self._evt(1, 3, 1, "speech_say", {"message": "公開", "inner_thought": "心声"})
+        ]
+        tl = build_speech_timeline(events)
+        kinds = sorted([b["kind"] for b in tl[3]])
+        assert kinds == ["speech", "thought"]
+
+    def test_bubble_は_既定_2_tick_持続する(self) -> None:
+        """発生 tick + 次 1 tick の合計 2 tick 同一 bubble が timeline に出る。"""
+        events = [self._evt(1, 3, 1, "say", {"message": "hi"})]
+        tl = build_speech_timeline(events)
+        assert 3 in tl and 4 in tl
+        assert 5 not in tl  # persistence=2 で打ち切り
+
+    def test_同_player_同_kind_の次の発言は_前を上書きする(self) -> None:
+        """同じ player の連続発言は前の bubble を即上書き (overlap しない)。"""
+        events = [
+            self._evt(1, 3, 1, "say", {"message": "first"}),
+            self._evt(2, 4, 1, "say", {"message": "second"}),
+        ]
+        tl = build_speech_timeline(events)
+        # tick 3 は first だけ
+        assert [b["text"] for b in tl[3]] == ["first"]
+        # tick 4 は second だけ (first は次発言で打ち切り)
+        assert [b["text"] for b in tl[4]] == ["second"]
+
+    def test_長い_inner_thought_は_truncate_される(self) -> None:
+        """100 字を超える inner_thought は "…" で切り詰める。"""
+        long_text = "あ" * 200
+        events = [self._evt(1, 1, 1, "examine", {"inner_thought": long_text})]
+        tl = build_speech_timeline(events, max_chars=100)
+        text = tl[1][0]["text"]
+        assert len(text) <= 100
+        assert text.endswith("…")
+
+    def test_非_speech_かつ_inner_thought_無しは_timeline_に_入らない(self) -> None:
+        """普通の action は bubble 化されない (map をうるさくしない)。"""
+        events = [self._evt(1, 3, 1, "examine", {"target": "panel"})]
+        tl = build_speech_timeline(events)
+        assert tl == {}
+
+
+class TestRenderViewerHtmlSpeech:
+    """render_viewer_html が speech bubble UI を埋め込むか確認。"""
+
+    def test_HTML_に_speechTimeline_と_toggle_thoughts_と_bubble_CSS_が含まれる(self) -> None:
+        """JS 側に speechTimeline 配列、UI に inner_thought トグル、CSS に .bubble.speech 等。"""
+        out = render_viewer_html(
+            title="t",
+            events=_sample_events(),
+            scenario_topology={"spots": [], "connections": []},
+            cytoscape_js_src="/* fake */",
+        )
+        assert "speechTimeline" in out
+        assert 'id="toggle-thoughts"' in out
+        assert "inner thought" in out  # チェックボックスラベル
+        assert ".bubble.speech" in out
+        assert ".bubble.thought" in out
