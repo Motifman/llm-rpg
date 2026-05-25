@@ -1,5 +1,6 @@
 """スポットグラフ系ツールの引数解決（ラベル → 内部 ID）。"""
 
+import logging
 from typing import Any, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -13,6 +14,40 @@ from ai_rpg_world.application.llm.services._resolver_helpers import (
     require_target,
     require_target_type,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _find_target_by_display_name(
+    runtime_context: ToolRuntimeContextDto,
+    *,
+    kind: str,
+    display_name: str,
+) -> Optional[ToolRuntimeTargetDto]:
+    """`runtime_context.targets` を全スキャンし、同 kind かつ display_name 一致の最初の target を返す。
+
+    LLM が会話履歴に残った `S1` などのスポット相対ラベルを次 turn でも再利用すると、
+    自スポット移動後にラベルの指す先が反転して bouncing が起きる。これを避けるため、
+    スポット名 (display_name) そのものを引数として受け付け、不変な意味で解決できるようにする。
+
+    同名スポットが複数ある場合は最初にマッチしたものを採用しつつ warning を残す。
+    シナリオ規約として同名禁止が望ましいが、ここでは防御的に最初の 1 件で先へ進める。
+    """
+    matches: list[ToolRuntimeTargetDto] = []
+    for target in runtime_context.targets.values():
+        if target.kind == kind and target.display_name == display_name:
+            matches.append(target)
+    if not matches:
+        return None
+    if len(matches) > 1:
+        logger.warning(
+            "Multiple runtime targets share the same display_name; "
+            "using the first match. kind=%s display_name=%s labels=%s",
+            kind,
+            display_name,
+            [t.label for t in matches],
+        )
+    return matches[0]
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -124,14 +159,36 @@ class SpotGraphArgumentResolver:
                 "接続先ラベルが指定されていません。",
                 "INVALID_DESTINATION_LABEL",
             )
-        target = require_target_type(
-            label,
-            runtime_context,
-            "接続先ラベル",
-            (DestinationToolRuntimeTargetDto,),
-            invalid_label_code="INVALID_DESTINATION_LABEL",
-            invalid_kind_code="INVALID_DESTINATION_KIND",
-        )
+        # まず既存のラベル経由 (S1 等) で解決を試み、失敗したらスポット名 (display_name)
+        # でフォールバックする。S1 系のラベルは「現在地から見た first neighbor」という
+        # スポット相対の意味しか持たないので、会話履歴に残った tool_call を再利用すると
+        # 移動後に意味が反転する。スポット名は不変なので意味が安定する。
+        target: Optional[ToolRuntimeTargetDto]
+        if label in runtime_context.targets:
+            target = require_target_type(
+                label,
+                runtime_context,
+                "接続先ラベル",
+                (DestinationToolRuntimeTargetDto,),
+                invalid_label_code="INVALID_DESTINATION_LABEL",
+                invalid_kind_code="INVALID_DESTINATION_KIND",
+            )
+        else:
+            target = _find_target_by_display_name(
+                runtime_context,
+                kind="spot_graph_destination",
+                display_name=label,
+            )
+            if target is None:
+                raise ToolArgumentResolutionException(
+                    f"指定された対象ラベルは現在の候補にありません: {label}",
+                    "INVALID_DESTINATION_LABEL",
+                )
+            if not isinstance(target, DestinationToolRuntimeTargetDto):
+                raise ToolArgumentResolutionException(
+                    f"接続先ラベルとして使えないラベルです: {label}",
+                    "INVALID_DESTINATION_KIND",
+                )
         if target.spot_id is None:
             raise ToolArgumentResolutionException(
                 f"移動先として解決できないラベルです: {label}",
@@ -147,12 +204,27 @@ class SpotGraphArgumentResolver:
         label = args.get("sub_location_label")
         if not label:
             return _with_inner_thought({"sub_location_id": None}, args)
-        target = require_target(
-            label,
-            runtime_context,
-            "サブロケーションラベル",
-            invalid_label_code="INVALID_TARGET_LABEL",
-        )
+        # destination と同じく、SL1 等のラベルだけでなくサブロケーション名 (文字列) も
+        # 受け付ける。理由は _resolve_travel_to と同じく label leak 対策。
+        if label in runtime_context.targets:
+            target = require_target(
+                label,
+                runtime_context,
+                "サブロケーションラベル",
+                invalid_label_code="INVALID_TARGET_LABEL",
+            )
+        else:
+            found = _find_target_by_display_name(
+                runtime_context,
+                kind="spot_graph_sub_location",
+                display_name=label,
+            )
+            if found is None:
+                raise ToolArgumentResolutionException(
+                    f"指定された対象ラベルは現在の候補にありません: {label}",
+                    "INVALID_TARGET_LABEL",
+                )
+            target = found
         if target.sub_location_id is None:
             raise ToolArgumentResolutionException(
                 f"サブロケーションとして解決できないラベルです: {label}",
