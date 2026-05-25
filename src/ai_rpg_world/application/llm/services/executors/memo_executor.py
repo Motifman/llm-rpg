@@ -148,37 +148,83 @@ class MemoToolExecutor:
     def _execute_memo_done(
         self, player_id: int, args: Dict[str, Any]
     ) -> LlmCommandResultDto:
+        """指定 ID 群の memo を一括完了する。常に配列を受け取り、1 件だけでも
+        ``["..."]`` の単一要素配列として渡す。部分失敗を許容し、存在しない ID
+        は ``not_found`` として individual に報告する。
+        """
         if self._memo_store is None:
             return unknown_tool("memo ツールはまだ利用できません。")
         try:
-            # 旧 todo_complete の引数名 todo_id も受け付ける (後方互換)
-            memo_id = (args.get("memo_id") or args.get("todo_id") or "").strip()
-            if not memo_id:
+            raw_ids = args.get("memo_ids")
+            if not isinstance(raw_ids, list):
                 return LlmCommandResultDto(
                     success=False,
-                    message="memo_id が指定されていません。",
+                    message="memo_ids は配列で指定してください。1 件のみ完了する場合も ['id'] のように単一要素配列にしてください。",
                     error_code="TODO_ERROR",
                     remediation=get_remediation("TODO_ERROR"),
                 )
+            memo_ids: list[str] = []
+            for x in raw_ids:
+                if not isinstance(x, str):
+                    return LlmCommandResultDto(
+                        success=False,
+                        message="memo_ids の各要素は string でなければなりません。",
+                        error_code="TODO_ERROR",
+                        remediation=get_remediation("TODO_ERROR"),
+                    )
+                trimmed = x.strip()
+                if trimmed:
+                    memo_ids.append(trimmed)
+            if not memo_ids:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="memo_ids が空です。少なくとも 1 件の memo_id を含めてください。",
+                    error_code="TODO_ERROR",
+                    remediation=get_remediation("TODO_ERROR"),
+                )
+
             pid = PlayerId(player_id)
-            fulfillment_context = self._build_fulfillment_context(pid)
-            ok = self._memo_store.complete(
-                pid, memo_id, fulfillment_context=fulfillment_context
-            )
-            if ok:
-                self._trace_recorder.record(
-                    TraceEventKind.MEMO_DONE,
-                    tick=self._current_tick(),
-                    player_id=player_id,
-                    memo_id=memo_id,
+            completed: list[str] = []
+            not_found: list[str] = []
+            for memo_id in memo_ids:
+                # fulfillment_context は memo ごとに snapshot する (完了タイミングごとに
+                # 周辺 context が違うことに意味がある)。
+                fulfillment_context = self._build_fulfillment_context(pid)
+                ok = self._memo_store.complete(
+                    pid, memo_id, fulfillment_context=fulfillment_context
+                )
+                if ok:
+                    completed.append(memo_id)
+                    self._trace_recorder.record(
+                        TraceEventKind.MEMO_DONE,
+                        tick=self._current_tick(),
+                        player_id=player_id,
+                        memo_id=memo_id,
+                    )
+                else:
+                    not_found.append(memo_id)
+
+            if completed and not not_found:
+                if len(completed) == 1:
+                    msg = f"メモ {completed[0]} を完了にしました。"
+                else:
+                    msg = (
+                        f"{len(completed)} 件のメモを完了にしました: "
+                        + ", ".join(completed)
+                    )
+                return LlmCommandResultDto(success=True, message=msg)
+            if completed and not_found:
+                msg = (
+                    f"{len(completed)} 件を完了にしました ({', '.join(completed)})。"
+                    f"次の memo は見つかりませんでした: {', '.join(not_found)}"
                 )
                 return LlmCommandResultDto(
                     success=True,
-                    message=f"メモ {memo_id} を完了にしました。",
+                    message=msg,
                 )
             return LlmCommandResultDto(
                 success=False,
-                message=f"メモ {memo_id} が見つかりません。",
+                message=f"指定されたメモが見つかりません: {', '.join(not_found)}",
                 error_code="TODO_ERROR",
                 remediation="正しい memo_id を指定してください。memo_list で一覧を確認できます。",
             )

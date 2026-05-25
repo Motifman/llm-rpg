@@ -77,19 +77,32 @@ MEMO_LIST_DEFINITION = ToolDefinitionDto(
 
 
 MEMO_DONE_DESCRIPTION = (
-    "指定 ID の memo を完了として記録します。"
+    "指定 ID 群の memo をまとめて完了として記録します。"
     "達成・撤回・無効化どれでも、もう参照する必要がない memo は速やかに完了させてください。"
+    "**同じ目的を構成する複数の memo を一気に閉じると context が軽くなります。** "
+    "1 件だけ完了する場合も memo_ids=['<id>'] のように単一要素配列で渡してください。"
     "\n\n"
-    "完了時点で直近の観測 / 行動結果が自動 snapshot され、"
+    "完了時点で直近の観測 / 行動結果が memo ごとに自動 snapshot され、"
     "後で類似状況に直面したときに過去経験として recall される可能性があります。"
     "**達成根拠が context に残っているうちに完了させると snapshot の質が上がります。**"
+    "\n\n"
+    "存在しない memo_id は個別に not_found として報告され、残りは正常に完了します (部分成功)。"
 )
 MEMO_DONE_PARAMETERS = {
     "type": "object",
     "properties": {
-        "memo_id": {"type": "string", "description": "完了する memo の ID"},
+        "memo_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "maxItems": 10,
+            "description": (
+                "完了する memo の ID 配列。1 件でも配列で渡す (例: ['abc'])。"
+                "同じ目的を構成する複数の memo を一括完了する場合は複数 ID を含める。"
+            ),
+        },
     },
-    "required": ["memo_id"],
+    "required": ["memo_ids"],
 }
 MEMO_DONE_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_MEMO_DONE,

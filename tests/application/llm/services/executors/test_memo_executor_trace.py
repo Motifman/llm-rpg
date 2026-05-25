@@ -74,7 +74,7 @@ class TestMemoExecutorTraceRecording:
             trace_recorder=rec,
         )
         handlers = exec_.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_id": memo_id})
+        result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_ids": [memo_id]})
         assert result.success
         assert any(
             e.kind == TraceEventKind.MEMO_DONE and e.payload.get("memo_id") == memo_id
@@ -87,7 +87,7 @@ class TestMemoExecutorTraceRecording:
         rec = _CapturingRecorder()
         exec_ = MemoToolExecutor(store, trace_recorder=rec)
         handlers = exec_.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_id": "non-existent"})
+        result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_ids": ["non-existent"]})
         assert not result.success
         assert not any(e.kind == TraceEventKind.MEMO_DONE for e in rec.events)
 
