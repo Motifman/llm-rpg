@@ -1382,13 +1382,17 @@ def create_escape_game_runtime(
             items = self._runtime._obs_pipeline.run(event)
             if not items:
                 return
+            # PR 7 (#227 review HIGH 1): production code に assert は不可
+            # (python -O で評価されなくなる)。observation_appender は通常
+            # create_escape_game_runtime の末尾で設定されるが、構築途中で
+            # publisher 経由のイベントが入った場合に備えて静かに skip する。
+            appender = self._runtime._observation_appender
+            if appender is None:
+                return
             now = datetime.now()
             time_label = self._runtime._time_label()
             for pid, output in items:
-                assert self._runtime._observation_appender is not None
-                self._runtime._observation_appender.append(
-                    pid, output, now, time_label
-                )
+                appender.append(pid, output, now, time_label)
                 scheduler = self._runtime._observation_turn_scheduler
                 if scheduler is not None:
                     scheduler.maybe_schedule(pid, output)
