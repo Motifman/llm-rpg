@@ -35,7 +35,9 @@ from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import PlayerSpotNavigationState
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import GameEndConditionEvaluator
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -135,8 +137,24 @@ from ai_rpg_world.application.observation.services.heartbeat_observation_emitter
 from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
 from ai_rpg_world.application.observation.services.observation_pipeline import ObservationPipeline
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
+from ai_rpg_world.application.observation.services.observation_appender import (
+    ObservationAppender,
+)
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
     create_observation_recipient_resolver,
+)
+from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
+    ObservationTurnScheduler,
+)
+from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
+from ai_rpg_world.application.speech.services.player_speech_service import (
+    PlayerSpeechApplicationService,
+)
+from ai_rpg_world.domain.common.event_handler import EventHandler
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
+from ai_rpg_world.infrastructure.events.event_publisher_impl import (
+    InMemoryEventPublisher,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
     InMemoryPhysicalMapRepository,
@@ -256,6 +274,21 @@ class EscapeGameRuntime:
     # 含む従来構成、``False`` なら純スポットグラフ + speech のみ。
     # Issue #155 (TODO 設計の再評価) の判断材料を取るための比較実験用。
     _include_todo_tools: bool = field(default=True, repr=False)
+    # PR 2 (#227): speech 配信経路統一。PlayerSpokeEvent をドメインイベント
+    # として fire し、ObservationPipeline → buffer 経路で配信する。直接
+    # broadcast (旧 _append_agent_speech) は廃止。
+    _speech_service: Optional[PlayerSpeechApplicationService] = field(
+        default=None, repr=False
+    )
+    _speech_event_publisher: Optional[InMemoryEventPublisher] = field(
+        default=None, repr=False
+    )
+    _observation_appender: Optional[ObservationAppender] = field(default=None, repr=False)
+    # turn_scheduler はセッション作成時に create_session で注入される
+    # (LlmTurnTrigger と llm_player_resolver は wiring で組み立てる必要があるため)
+    _observation_turn_scheduler: Optional[ObservationTurnScheduler] = field(
+        default=None, repr=False
+    )
 
     @property
     def id_mapper(self) -> ScenarioIdMapper:
@@ -317,6 +350,53 @@ class EscapeGameRuntime:
         ``SpotGraphSimulationApplicationService`` の post-tick フックに委譲する。
         """
         self._simulation_service.set_heartbeat_emitter(emitter)
+
+    def set_observation_turn_scheduler(
+        self, scheduler: Optional[ObservationTurnScheduler]
+    ) -> None:
+        """speech などの observation で recipient のターンを積むスケジューラを注入する。
+
+        ``create_session`` が ``ObservationTurnScheduler`` を組み立てた後に
+        runtime へ渡す前提。注入されていない単体デモでは speech 配信は行わ
+        れるがターン再スケジュールはされない。
+        """
+        self._observation_turn_scheduler = scheduler
+
+    def do_say(self, speaker_player_id: PlayerId, content: str) -> None:
+        """speech_say ツールの実行口。PlayerSpokeEvent を fire し、ObservationPipeline 経由で
+        配信する。距離 gating (SoundPropagationService) は recipient strategy 側で行われる。
+
+        旧 ``_append_agent_speech`` (全プレイヤー broadcast) を本メソッドが置き換える
+        (Issue #227 PR 2)。
+        """
+        if self._speech_service is None:
+            return
+        self._speech_service.speak(
+            SpeakCommand(
+                speaker_player_id=int(speaker_player_id.value),
+                content=content,
+                channel=SpeechChannel.SAY,
+                target_player_id=None,
+            )
+        )
+
+    def do_whisper(
+        self,
+        speaker_player_id: PlayerId,
+        content: str,
+        target_player_id: PlayerId,
+    ) -> None:
+        """whisper ツールの実行口。同一スポット内の宛先のみに届く。"""
+        if self._speech_service is None:
+            return
+        self._speech_service.speak(
+            SpeakCommand(
+                speaker_player_id=int(speaker_player_id.value),
+                content=content,
+                channel=SpeechChannel.WHISPER,
+                target_player_id=int(target_player_id.value),
+            )
+        )
 
     # ── 後方互換ヘルパー（テスト用） ──
 
@@ -968,6 +1048,11 @@ def create_escape_game_runtime(
     for spawn in scenario.player_spawns:
         pid = PlayerId(spawn.player_id)
         exp_table = ExpTable(base_exp=100.0, exponent=1.5)
+        # PR 2 (#227): PlayerSpeechApplicationService が status.current_coordinate
+        # を要求 (タイル系の SpeechRecipientStrategy 用) するため、spot_graph
+        # でも sentinel として Coordinate(0,0,0) を埋める。
+        # SpotGraphSpeechRecipientStrategy は coordinate を読まないので値は
+        # 影響しない。
         status = PlayerStatusAggregate(
             player_id=pid,
             base_stats=BaseStats(max_hp=100, max_mp=50, attack=10, defense=10, speed=10, critical_rate=0.05, evasion_rate=0.05),
@@ -978,6 +1063,10 @@ def create_escape_game_runtime(
             hp=Hp(value=100, max_hp=100),
             mp=Mp(value=50, max_mp=50),
             stamina=Stamina(value=100, max_stamina=100),
+            navigation_state=PlayerNavigationState.from_parts(
+                current_spot_id=spawn.spawn_spot_id,
+                current_coordinate=Coordinate(0, 0, 0),
+            ),
             spot_navigation_state=PlayerSpotNavigationState.at_rest(spawn.spawn_spot_id),
         )
         player_status_repo.save(status)
@@ -1253,4 +1342,45 @@ def create_escape_game_runtime(
     )
     if weather_config is None or weather_config.announce_changes:
         environment_stage.set_weather_changed_callback(runtime._append_weather_observation)
+
+    # ── PR 2 (#227): speech 配信を ObservationPipeline 経由に統一 ──
+    # InMemoryEventPublisher に PlayerSpokeEvent ハンドラを登録し、
+    # PlayerSpeechApplicationService から fire された event を pipeline で
+    # 配信先解決 → 各 recipient の observation buffer に append する。
+    speech_event_publisher = InMemoryEventPublisher()
+    speech_service = PlayerSpeechApplicationService(
+        player_status_repository=player_status_repo,
+        event_publisher=speech_event_publisher,
+    )
+    observation_appender = ObservationAppender(buffer=obs_buffer)
+
+    class _SpeechObservationHandler(EventHandler[PlayerSpokeEvent]):
+        """PlayerSpokeEvent を ObservationPipeline 経由で配信する handler。"""
+
+        def __init__(self, runtime_ref: "EscapeGameRuntime") -> None:
+            self._runtime = runtime_ref
+
+        def handle(self, event: PlayerSpokeEvent) -> None:
+            from datetime import datetime
+
+            items = self._runtime._obs_pipeline.run(event)
+            now = datetime.now()
+            time_label = self._runtime._time_label()
+            for pid, output in items:
+                assert self._runtime._observation_appender is not None
+                self._runtime._observation_appender.append(
+                    pid, output, now, time_label
+                )
+                scheduler = self._runtime._observation_turn_scheduler
+                if scheduler is not None:
+                    scheduler.maybe_schedule(pid, output)
+
+    speech_event_publisher.register_handler(
+        PlayerSpokeEvent,
+        _SpeechObservationHandler(runtime),
+    )
+    runtime._speech_service = speech_service
+    runtime._speech_event_publisher = speech_event_publisher
+    runtime._observation_appender = observation_appender
+
     return runtime
