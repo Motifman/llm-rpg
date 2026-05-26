@@ -150,12 +150,10 @@ from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
-from ai_rpg_world.domain.common.event_handler import EventHandler
+from ai_rpg_world.domain.common.domain_event import DomainEvent
+from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
-from ai_rpg_world.infrastructure.events.event_publisher_impl import (
-    InMemoryEventPublisher,
-)
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
     InMemoryPhysicalMapRepository,
 )
@@ -280,7 +278,7 @@ class EscapeGameRuntime:
     _speech_service: Optional[PlayerSpeechApplicationService] = field(
         default=None, repr=False
     )
-    _speech_event_publisher: Optional[InMemoryEventPublisher] = field(
+    _speech_event_publisher: Optional[EventPublisher] = field(
         default=None, repr=False
     )
     _observation_appender: Optional[ObservationAppender] = field(default=None, repr=False)
@@ -1343,27 +1341,47 @@ def create_escape_game_runtime(
     if weather_config is None or weather_config.announce_changes:
         environment_stage.set_weather_changed_callback(runtime._append_weather_observation)
 
-    # ── PR 2 (#227): speech 配信を ObservationPipeline 経由に統一 ──
-    # InMemoryEventPublisher に PlayerSpokeEvent ハンドラを登録し、
-    # PlayerSpeechApplicationService から fire された event を pipeline で
-    # 配信先解決 → 各 recipient の observation buffer に append する。
-    speech_event_publisher = InMemoryEventPublisher()
-    speech_service = PlayerSpeechApplicationService(
-        player_status_repository=player_status_repo,
-        event_publisher=speech_event_publisher,
-    )
+    # ── PR 2/6 (#227): 任意の DomainEvent を ObservationPipeline 経由で配信する ──
+    # PR 2 では PlayerSpokeEvent 用に InMemoryEventPublisher を使い handler を
+    # 個別登録していたが、PR 6 で interaction_service など他経路の event も
+    # pipeline に流す必要が出たため、event 型ごとの登録ではなく「全 event
+    # を pipeline へ流す」publisher に置き換える。
     observation_appender = ObservationAppender(buffer=obs_buffer)
 
-    class _SpeechObservationHandler(EventHandler[PlayerSpokeEvent]):
-        """PlayerSpokeEvent を ObservationPipeline 経由で配信する handler。"""
+    class _PipelineEventPublisher(EventPublisher[DomainEvent]):
+        """全 DomainEvent を ObservationPipeline 経由で配信する EventPublisher。
+
+        register_handler は no-op (per-event-type 登録は使わない)。publish /
+        publish_all / publish_async_events はいずれも _dispatch に集約し、
+        pipeline.run → appender.append → scheduler.maybe_schedule を実行する。
+        """
 
         def __init__(self, runtime_ref: "EscapeGameRuntime") -> None:
             self._runtime = runtime_ref
 
-        def handle(self, event: PlayerSpokeEvent) -> None:
-            from datetime import datetime
+        def register_handler(
+            self,
+            event_type,
+            handler,
+            is_synchronous: bool = False,
+        ) -> None:
+            del event_type, handler, is_synchronous
 
+        def publish(self, event: DomainEvent) -> None:
+            self._dispatch(event)
+
+        def publish_all(self, events) -> None:
+            for event in events:
+                self._dispatch(event)
+
+        def publish_async_events(self, events) -> None:
+            for event in events:
+                self._dispatch(event)
+
+        def _dispatch(self, event: DomainEvent) -> None:
             items = self._runtime._obs_pipeline.run(event)
+            if not items:
+                return
             now = datetime.now()
             time_label = self._runtime._time_label()
             for pid, output in items:
@@ -1375,12 +1393,22 @@ def create_escape_game_runtime(
                 if scheduler is not None:
                     scheduler.maybe_schedule(pid, output)
 
-    speech_event_publisher.register_handler(
-        PlayerSpokeEvent,
-        _SpeechObservationHandler(runtime),
+    pipeline_event_publisher = _PipelineEventPublisher(runtime)
+    speech_service = PlayerSpeechApplicationService(
+        player_status_repository=player_status_repo,
+        event_publisher=pipeline_event_publisher,
     )
+
+    # PR 6 (#227 / Agent C #2): SpotInteractionApplicationService に
+    # event_publisher を後付け注入する。これまで None で構築していたため、
+    # interaction が graph に積んだ ConnectionStateChangedEvent /
+    # SpotObjectStateChangedEvent / SpotObjectInteractedEvent /
+    # SpotPublicEffectObservedEvent が pipeline に届かず silent drop されて
+    # いた。同じ pipeline publisher を共有する。
+    interaction_service._event_publisher = pipeline_event_publisher
+
     runtime._speech_service = speech_service
-    runtime._speech_event_publisher = speech_event_publisher
+    runtime._speech_event_publisher = pipeline_event_publisher
     runtime._observation_appender = observation_appender
 
     return runtime

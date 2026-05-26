@@ -43,14 +43,13 @@ def _name_to_spot_id(runtime, name: str) -> int:
 class TestEscapeGameObservationResolverWiring:
     """create_escape_game_runtime が組み立てた resolver が全 strategy を持つ。"""
 
-    def test_PlayerSpokeEvent_の配信先解決で_同スポットのプレイヤーが含まれる(
+    def test_player_spoke_event_resolves_to_same_spot_listener(
         self,
     ) -> None:
-        """speech 経路の strategy が正しく登録されていれば、同スポットの相手
-        が PlayerSpokeEvent の resolve() 結果に含まれる。
+        """同スポットのリスナーが PlayerSpokeEvent の resolve に含まれる。
 
-        これが空リストになる場合は SpotGraphSpeechRecipientStrategy 未登録
-        (= 旧バグの再侵入) を意味するので fail する。
+        SpotGraphSpeechRecipientStrategy が正しく登録されていれば成功する。
+        旧バグ (strategy 未登録) では resolve が空になっていた。
         """
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         spot_id_value = _name_to_spot_id(runtime, "閲覧室")
@@ -86,11 +85,13 @@ class TestEscapeGameObservationResolverWiring:
             "SpotGraphSpeechRecipientStrategy が未登録の可能性。"
         )
 
-    def test_遠距離_5_hop_の_PlayerSpokeEvent_は_resolver_で_recipient_に含まれない(
+    def test_player_spoke_event_does_not_resolve_to_far_listener(
         self,
     ) -> None:
         """master_study (8) から閲覧室 (2) まで 5 hop。NORMAL speech は届かない。
-        resolver が hop-based 距離 gating を正しく動かしているかを確認。"""
+
+        resolver が hop-based 距離 gating を正しく動かしているかを確認。
+        """
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         master_study_id = _name_to_spot_id(runtime, "館長書斎")
 
@@ -121,7 +122,7 @@ class TestEscapeGameObservationResolverWiring:
             "SoundPropagationService の hop 制限が効いていない。"
         )
 
-    def test_resolver_に複数_strategy_が登録されている(self) -> None:
+    def test_resolver_registers_multiple_strategies(self) -> None:
         """旧バグでは strategies=[spot_graph_strategy] のみだった。
         修正後は create_observation_recipient_resolver の全 strategy が登録
         されているはず。"""

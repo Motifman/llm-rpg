@@ -59,7 +59,7 @@ def _wait_outputs_only(player_id: PlayerId, state) -> list:
 class TestEscapeGameLoopGuardWiring:
     """ToolCallLoopGuardService が escape_game 経路でも動作する。"""
 
-    def test_wait_を_3_回連続実行すると_loop_guard_警告が_observation_に注入される(
+    def test_three_consecutive_waits_inject_loop_guard_warning(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """spot_graph_wait は threshold=3。3 回目で警告が出る。"""
@@ -91,7 +91,7 @@ class TestEscapeGameLoopGuardWiring:
         # observation_category は self_only (該当プレイヤーだけに届く)
         assert warning.output.observation_category == "self_only"
 
-    def test_異なる引数の_travel_to_では_loop_guard_が発火しない(
+    def test_travel_to_with_varying_arguments_does_not_trip_loop_guard(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """travel_to の threshold は 2 だが、引数が違えば fingerprint が違うので発火しない。
@@ -117,7 +117,7 @@ class TestEscapeGameLoopGuardWiring:
             "引数が違えば loop_guard は発火しないはず"
         )
 
-    def test_同じ_travel_to_を_2_回連続で実行すると_loop_guard_が発火する(
+    def test_two_consecutive_travel_to_same_destination_trips_loop_guard(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """travel_to の threshold=2。第13回のリン bouncing (同 destination 連打) を
@@ -140,7 +140,7 @@ class TestEscapeGameLoopGuardWiring:
         assert warnings[0].output.structured["tool_name"] == "spot_graph_travel_to"
         assert warnings[0].output.structured["consecutive_count"] == 2
 
-    def test_loop_guard_の警告は_自プレイヤーのみに届き_他プレイヤーには漏れない(
+    def test_loop_guard_warning_is_self_only_and_does_not_leak_to_others(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """observation_category=self_only が守られている (forbidden_library_demo は

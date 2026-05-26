@@ -346,6 +346,14 @@ class _EscapeGameLlmWiring:
                 prompt["tool_runtime_context"],
             )
         except Exception as exc:
+            # PR 6 (#227 / Agent A #7): 旧コードは stack trace を握りつぶしていた
+            # ため、何が起きたか追跡不能だった。logger.exception で trace を残す。
+            logger.exception(
+                "_execute_tool failed for player_id=%s tool=%s arguments=%s",
+                player_id.value,
+                name,
+                arguments,
+            )
             result = LlmCommandResultDto(
                 success=False,
                 message=f"LLM ツール実行に失敗しました: {exc}",

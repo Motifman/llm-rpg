@@ -59,7 +59,7 @@ def _create_session(
 class TestEscapeGameMemoCompletionHint:
     """memo の内容が action/result と類似していたら hint が出る。"""
 
-    def test_未完了_memo_の内容が_action_に強く現れたら_result_に_hint_が_append_される(
+    def test_hint_appended_when_action_matches_pending_memo(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """memo に「閲覧室へ移動」と書いた後、travel_to 閲覧室 を実行すると、
@@ -91,7 +91,7 @@ class TestEscapeGameMemoCompletionHint:
         )
         assert "閲覧室" in result_travel.message
 
-    def test_memo_add_直後は_hint_が出ない_冗長抑止(
+    def test_hint_not_emitted_right_after_memo_add(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """memo_add の結果に対しては hint を出さない (memo_* ツール自身は除外)。
@@ -110,7 +110,7 @@ class TestEscapeGameMemoCompletionHint:
             f"BUG: memo_add の結果に hint が追加されている: {result.message!r}"
         )
 
-    def test_類似性が低い_memo_には_hint_が出ない_誤検知抑止(
+    def test_hint_not_emitted_when_similarity_is_low(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """memo の内容と全く無関係な action では hint が出ない。"""
