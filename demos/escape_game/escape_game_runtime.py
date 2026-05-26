@@ -135,9 +135,12 @@ from ai_rpg_world.application.observation.services.heartbeat_observation_emitter
 from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
 from ai_rpg_world.application.observation.services.observation_pipeline import ObservationPipeline
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
-from ai_rpg_world.application.observation.services.observation_recipient_resolver import ObservationRecipientResolver
-from ai_rpg_world.application.observation.services.observed_event_registry import ObservedEventRegistry
-from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_recipient_strategy import SpotGraphRecipientStrategy
+from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
+    create_observation_recipient_resolver,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
+    InMemoryPhysicalMapRepository,
+)
 
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
@@ -1079,13 +1082,23 @@ def create_escape_game_runtime(
     )
 
     # ── 観測パイプライン構築 ──
-    registry = ObservedEventRegistry()
-    spot_graph_strategy = SpotGraphRecipientStrategy(
-        observed_event_registry=registry,
-        spot_graph_repository=spot_graph_repo,
+    # Issue #227 修正: 以前は SpotGraphRecipientStrategy 1 つだけで構築していた
+    # ため、PlayerSpokeEvent / ConsumableUsedEvent / Conversation 系の event が
+    # 配信先解決されずに silent drop していた。本家経路と同じ全 strategy 構成
+    # を使うことで、event 種別ごとに正しい配信先 (距離 gating / 音透過 / target
+    # 限定など) が機能する。
+    #
+    # physical_map_repository は 2d tile map 専用 strategy (Pursuit/Combat/
+    # Monster/Default の世界座標フォールバック) の依存だが、escape_game は
+    # spot_graph 専用で tile-map event は発火しないため、空の in-memory repo
+    # で十分。SpotGraph 系 strategy が先に登録され、PlayerSpokeEvent は
+    # SpotGraphSpeechRecipientStrategy (hop-based) で処理される。
+    empty_physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
+    obs_resolver = create_observation_recipient_resolver(
         player_status_repository=player_status_repo,
+        physical_map_repository=empty_physical_map_repo,
+        spot_graph_repository=spot_graph_repo,
     )
-    obs_resolver = ObservationRecipientResolver(strategies=[spot_graph_strategy])
 
     obs_formatter = ObservationFormatter(spot_graph_repository=spot_graph_repo)
     obs_formatter._name_resolver.player_name = lambda pid: player_name_map.get(  # type: ignore[assignment]
