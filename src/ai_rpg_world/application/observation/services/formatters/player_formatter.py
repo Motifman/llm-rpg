@@ -297,7 +297,13 @@ class PlayerObservationFormatter:
                     # この経路に来ないので is_self ガードは不要。
                     structured["content"] = ""
                 return ObservationOutput(
-                    prose=prose, structured=structured, observation_category=category
+                    prose=prose,
+                    structured=structured,
+                    observation_category=category,
+                    # is_self は上で早期 return 済みなので、ここに来るのは他者
+                    # の speech を聞いたケースのみ。相手の発話を受けたら自分の
+                    # ターンを再スケジュールする (返答や反応のため)。
+                    schedules_turn=True,
                 )
 
         prose = f"{speaker_name}が{verb}: 「{event.content}」"
@@ -305,6 +311,8 @@ class PlayerObservationFormatter:
             prose=prose,
             structured=structured_base,
             observation_category=category,
+            # 同上: 他者発話を聞いた recipient のターンを積む
+            schedules_turn=True,
         )
 
     def _format_item_added_to_inventory(

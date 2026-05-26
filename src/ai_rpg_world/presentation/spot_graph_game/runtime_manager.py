@@ -572,7 +572,10 @@ class _EscapeGameLlmWiring:
                     message="発言内容が空です。",
                     error_code="INVALID_SPEECH_CONTENT",
                 )
-            self._append_agent_speech(player_id, content)
+            # PR 2 (#227): _append_agent_speech (全プレイヤー broadcast) を廃止し、
+            # PlayerSpeechApplicationService 経由で PlayerSpokeEvent を fire する。
+            # 距離 gating (SoundPropagationService) は recipient strategy 側で行われる。
+            self.runtime.do_say(player_id, content)
             return LlmCommandResultDto(success=True, message=f"発言した: {content}")
 
         if name == TOOL_NAME_WHISPER:
@@ -599,10 +602,12 @@ class _EscapeGameLlmWiring:
                         "ラベル (display name ではなく) を指定してください。"
                     ),
                 )
-            self._append_agent_speech(
+            # PR 2 (#227): _append_agent_speech を廃止し、PlayerSpeechApplicationService
+            # 経由で PlayerSpokeEvent (WHISPER channel) を fire する。
+            self.runtime.do_whisper(
                 player_id,
                 content,
-                target_player_id=PlayerId(target.player_id),
+                PlayerId(target.player_id),
             )
             return LlmCommandResultDto(success=True, message=f"囁いた: {content}")
 
@@ -628,44 +633,6 @@ class _EscapeGameLlmWiring:
             message=f"未対応のツールです: {name}",
             error_code="UNSUPPORTED_TOOL",
         )
-
-    def _append_agent_speech(
-        self,
-        speaker_player_id: PlayerId,
-        content: str,
-        target_player_id: Optional[PlayerId] = None,
-    ) -> None:
-        speaker_name = self.runtime.get_player_name(speaker_player_id)
-        recipients = [target_player_id] if target_player_id is not None else self.runtime.get_player_ids()
-        for recipient in recipients:
-            if recipient is None:
-                continue
-            is_self = recipient.value == speaker_player_id.value
-            prose = (
-                f"あなたは言った: 「{content}」"
-                if is_self
-                else f"{speaker_name}が言った: 「{content}」"
-            )
-            self.observation_appender.append(
-                recipient,
-                ObservationOutput(
-                    prose=prose,
-                    structured={
-                        "type": "player_spoke",
-                        "speaker": speaker_name,
-                        "speaker_player_id": speaker_player_id.value,
-                        "content": content,
-                        "channel": "say" if target_player_id is None else "whisper",
-                        "role": "self" if is_self else "other",
-                    },
-                    observation_category="self_only" if is_self else "social",
-                    schedules_turn=not is_self,
-                ),
-                datetime.now(timezone.utc),
-                self._time_label(),
-            )
-            if not is_self:
-                self.llm_turn_trigger.schedule_turn(recipient)
 
     def _time_label(self) -> str:
         tick = self.runtime.current_tick()
@@ -929,6 +896,10 @@ class GameRuntimeManager:
         )
         runtime.set_simulation_llm_turn_trigger(llm_wiring.llm_turn_trigger)
         runtime.set_simulation_heartbeat_emitter(heartbeat_emitter)
+        # PR 2 (#227): speech 配信は ObservationPipeline 経由になった。受信者が
+        # 他者発話を聞いた場合、ObservationTurnScheduler 経由でターンを積む
+        # 必要があるため、wiring 完成後の scheduler を runtime に注入する。
+        runtime.set_observation_turn_scheduler(turn_scheduler)
 
         sid = uuid.uuid4().hex[:12]
         title = runtime.metadata.title
