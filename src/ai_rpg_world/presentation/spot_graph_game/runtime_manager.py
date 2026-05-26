@@ -455,6 +455,22 @@ class _EscapeGameLlmWiring:
         if name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO:
             label = str(arguments.get("destination_label", ""))
             target = targets.get(label)
+            # PR 3 (#227): label miss なら display_name (スポット名) でフォール
+            # バック解決を試みる。LLM が "S1" の代わりに「閲覧室」のような不変
+            # なスポット名を直接渡しても動くようにする。本家経路の
+            # _argument_resolvers/spot_graph_resolver.py が同じロジックを
+            # 既に持つが、escape_game の _execute_tool はそちらを経由しない
+            # ため、ここで同等のフォールバックを行う。PR 7 で _execute_tool
+            # を本家 resolver 経由に統合した際に削除予定。
+            if target is None or target.spot_id is None:
+                for candidate in targets.values():
+                    if (
+                        candidate.kind == "spot_graph_destination"
+                        and candidate.display_name == label
+                        and candidate.spot_id is not None
+                    ):
+                        target = candidate
+                        break
             if target is None or target.spot_id is None:
                 # F1: 失敗時に有効ラベルを列挙して LLM が次の試行で正しい値を
                 # 選べるようにする (前回は message に valid 一覧が無く同じ
@@ -463,13 +479,13 @@ class _EscapeGameLlmWiring:
                 return LlmCommandResultDto(
                     success=False,
                     message=(
-                        f"移動先ラベルが見つかりません: {label}。"
+                        f"移動先が見つかりません: {label}。"
                         f"有効な destination_label: {valid_destinations or '(この場所からの移動先なし)'}"
                     ),
                     error_code="INVALID_DESTINATION_LABEL",
                     remediation=(
                         "destination_label には現在の状況に表示された S1, S2 等の "
-                        "ラベル (display name ではなく) を指定してください。"
+                        "ラベル、またはスポット名 (例: 閲覧室) を指定してください。"
                     ),
                 )
             destination_id = self.runtime.id_mapper.get_str("spot", target.spot_id)
