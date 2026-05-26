@@ -150,8 +150,7 @@ from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
-from ai_rpg_world.domain.common.domain_event import DomainEvent
-from ai_rpg_world.domain.common.event_publisher import EventPublisher
+from demos.escape_game.pipeline_event_publisher import PipelineEventPublisher
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
@@ -278,7 +277,7 @@ class EscapeGameRuntime:
     _speech_service: Optional[PlayerSpeechApplicationService] = field(
         default=None, repr=False
     )
-    _speech_event_publisher: Optional[EventPublisher] = field(
+    _speech_event_publisher: Optional[PipelineEventPublisher] = field(
         default=None, repr=False
     )
     _observation_appender: Optional[ObservationAppender] = field(default=None, repr=False)
@@ -1180,6 +1179,18 @@ def create_escape_game_runtime(
     # spot_graph 専用で tile-map event は発火しないため、空の in-memory repo
     # で十分。SpotGraph 系 strategy が先に登録され、PlayerSpokeEvent は
     # SpotGraphSpeechRecipientStrategy (hop-based) で処理される。
+    #
+    # WARN (chore #240 後続): 以下の strategy は tile map (Coordinate.distance_to)
+    # 前提。escape_game では関連 event が発火しないため inert だが、将来これら
+    # を escape_game に持ち込む場合は ``empty_physical_map_repo`` の扱いを
+    # 再検討すること:
+    #   - PursuitRecipientStrategy        (PursuitEvent)
+    #   - MonsterRecipientStrategy        (MonsterAppearedEvent 等)
+    #   - CombatRecipientStrategy         (CombatHitBoxEvent 等)
+    #   - HarvestRecipientStrategy        (HarvestEvent)
+    #   - DefaultRecipientStrategy        (一部 fallback で physical_map を見る)
+    # これらは現状 supports() が False を返し resolve() に到達しないが、
+    # event を追加するとサイレントに誤動作する可能性がある。
     empty_physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
     obs_resolver = create_observation_recipient_resolver(
         player_status_repository=player_status_repo,
@@ -1345,59 +1356,10 @@ def create_escape_game_runtime(
     # PR 2 では PlayerSpokeEvent 用に InMemoryEventPublisher を使い handler を
     # 個別登録していたが、PR 6 で interaction_service など他経路の event も
     # pipeline に流す必要が出たため、event 型ごとの登録ではなく「全 event
-    # を pipeline へ流す」publisher に置き換える。
+    # を pipeline へ流す」publisher に置き換える。chore (#240 後続) で
+    # module-level に切り出し。
     observation_appender = ObservationAppender(buffer=obs_buffer)
-
-    class _PipelineEventPublisher(EventPublisher[DomainEvent]):
-        """全 DomainEvent を ObservationPipeline 経由で配信する EventPublisher。
-
-        register_handler は no-op (per-event-type 登録は使わない)。publish /
-        publish_all / publish_async_events はいずれも _dispatch に集約し、
-        pipeline.run → appender.append → scheduler.maybe_schedule を実行する。
-        """
-
-        def __init__(self, runtime_ref: "EscapeGameRuntime") -> None:
-            self._runtime = runtime_ref
-
-        def register_handler(
-            self,
-            event_type,
-            handler,
-            is_synchronous: bool = False,
-        ) -> None:
-            del event_type, handler, is_synchronous
-
-        def publish(self, event: DomainEvent) -> None:
-            self._dispatch(event)
-
-        def publish_all(self, events) -> None:
-            for event in events:
-                self._dispatch(event)
-
-        def publish_async_events(self, events) -> None:
-            for event in events:
-                self._dispatch(event)
-
-        def _dispatch(self, event: DomainEvent) -> None:
-            items = self._runtime._obs_pipeline.run(event)
-            if not items:
-                return
-            # PR 7 (#227 review HIGH 1): production code に assert は不可
-            # (python -O で評価されなくなる)。observation_appender は通常
-            # create_escape_game_runtime の末尾で設定されるが、構築途中で
-            # publisher 経由のイベントが入った場合に備えて静かに skip する。
-            appender = self._runtime._observation_appender
-            if appender is None:
-                return
-            now = datetime.now()
-            time_label = self._runtime._time_label()
-            for pid, output in items:
-                appender.append(pid, output, now, time_label)
-                scheduler = self._runtime._observation_turn_scheduler
-                if scheduler is not None:
-                    scheduler.maybe_schedule(pid, output)
-
-    pipeline_event_publisher = _PipelineEventPublisher(runtime)
+    pipeline_event_publisher = PipelineEventPublisher(runtime)
     speech_service = PlayerSpeechApplicationService(
         player_status_repository=player_status_repo,
         event_publisher=pipeline_event_publisher,
@@ -1409,7 +1371,9 @@ def create_escape_game_runtime(
     # SpotObjectStateChangedEvent / SpotObjectInteractedEvent /
     # SpotPublicEffectObservedEvent が pipeline に届かず silent drop されて
     # いた。同じ pipeline publisher を共有する。
-    interaction_service._event_publisher = pipeline_event_publisher
+    # chore (#240 後続): 旧コードは private field への直接代入だったが、
+    # set_event_publisher 経由に正規化。
+    interaction_service.set_event_publisher(pipeline_event_publisher)
 
     runtime._speech_service = speech_service
     runtime._speech_event_publisher = pipeline_event_publisher

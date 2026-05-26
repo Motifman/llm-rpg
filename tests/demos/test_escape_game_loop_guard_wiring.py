@@ -12,42 +12,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
-    GameRuntimeManager,
+
+from tests.demos._escape_game_helpers import (
+    create_escape_game_session as _create_session,
 )
-from ai_rpg_world.presentation.spot_graph_game.schemas import (
-    CharacterCreateRequest,
-    SessionCreateRequest,
-)
-
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-
-
-def _create_session(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    stub: StubLlmClient,
-    world_id: str = "forbidden_library_demo",
-):
-    monkeypatch.setenv("SPOT_GRAPH_TICK_LOOP_ENABLED", "false")
-    mgr = GameRuntimeManager(
-        scenarios_dir=_REPO_ROOT / "data" / "scenarios",
-        characters_path=tmp_path / "characters.json",
-    )
-    char = mgr.create_character(CharacterCreateRequest(name="カイト"))
-    summary = mgr.create_session(
-        SessionCreateRequest(world_id=world_id, character_ids=[char.id])
-    )
-    state = mgr._sessions[summary.session_id]
-    state.llm_wiring.llm_client = stub
-    return state
 
 
 def _wait_outputs_only(player_id: PlayerId, state) -> list:

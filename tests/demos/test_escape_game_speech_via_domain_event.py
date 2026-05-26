@@ -15,41 +15,15 @@ E2E テストとして以下を検証する:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 from demos.escape_game.escape_game_runtime import create_escape_game_runtime
 
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_FORBIDDEN_LIBRARY = (
-    _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
+from tests.demos._escape_game_helpers import (
+    FORBIDDEN_LIBRARY_PATH as _FORBIDDEN_LIBRARY,
+    name_to_spot_id as _name_to_spot_id,
+    teleport as _teleport,
 )
-
-
-def _name_to_spot_id(runtime, name: str) -> int:
-    graph = runtime._spot_graph_repo.find_graph()
-    for node in graph.iter_spot_nodes():
-        if node.name == name:
-            return node.spot_id.value
-    raise KeyError(f"spot {name!r} not in scenario")
-
-
-def _teleport(runtime, player_id_value: int, spot_id_value: int) -> None:
-    """テスト用に entity をスポットへ強制配置する。"""
-    graph = runtime._spot_graph_repo.find_graph()
-    eid = EntityId.create(player_id_value)
-    if graph.presence_at(SpotId.create(spot_id_value)).is_present(eid):
-        return
-    try:
-        graph.unplace_entity(eid)
-    except Exception:
-        pass  # まだ未配置の場合は無視
-    graph.place_entity(eid, SpotId.create(spot_id_value))
-    runtime._spot_graph_repo.save(graph)
 
 
 class TestEscapeGameSpeechViaDomainEvent:
