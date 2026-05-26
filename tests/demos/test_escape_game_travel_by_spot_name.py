@@ -52,7 +52,7 @@ def _create_forbidden_library_session(monkeypatch, tmp_path: Path, stub: StubLlm
 class TestEscapeGameTravelBySpotName:
     """destination_label にスポット名を渡しても解決される (PR 3)。"""
 
-    def test_destination_label_にスポット名_閲覧室_を渡すと移動が成功する(
+    def test_destination_label_accepts_spot_display_name(
         self, monkeypatch, tmp_path: Path
     ) -> None:
         """旧 escape_game では label lookup のみで失敗していた。PR 3 で
@@ -74,7 +74,7 @@ class TestEscapeGameTravelBySpotName:
         )
         assert "閲覧室" in result.message
 
-    def test_S1_等の動的ラベルでも_引き続き移動できる(
+    def test_dynamic_label_s1_still_works_after_fallback_added(
         self, monkeypatch, tmp_path: Path
     ) -> None:
         """display_name fallback 追加後も既存のラベル指定パスは動く (回帰確認)。"""
@@ -93,7 +93,7 @@ class TestEscapeGameTravelBySpotName:
             f"BUG: 既存のラベル指定が動かなくなった: {result.message}"
         )
 
-    def test_存在しない名前は学習可能な失敗_DTO_を返す(
+    def test_unknown_destination_returns_learnable_failure_dto(
         self, monkeypatch, tmp_path: Path
     ) -> None:
         """ラベルにも display_name にもマッチしなければ INVALID_DESTINATION_LABEL

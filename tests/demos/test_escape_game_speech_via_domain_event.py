@@ -55,7 +55,7 @@ def _teleport(runtime, player_id_value: int, spot_id_value: int) -> None:
 class TestEscapeGameSpeechViaDomainEvent:
     """do_say が PlayerSpokeEvent 経由で距離 gating する。"""
 
-    def test_同スポットの_listener_には_observation_が届く(self) -> None:
+    def test_say_delivers_to_listener_at_same_spot(self) -> None:
         """同 spot の相手は speech_say を受け取る (旧 _append_agent_speech と同じ
         behavior、ただし配信経路は pipeline 経由になっている)。"""
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
@@ -76,7 +76,7 @@ class TestEscapeGameSpeechViaDomainEvent:
             f"buffer entries={rin_entries}"
         )
 
-    def test_2_hop_離れた_listener_には_observation_が届かない(self) -> None:
+    def test_say_does_not_reach_listener_two_hops_away(self) -> None:
         """SAY は max_hops=1。書架 A (4) → 閲覧室 (2) は 2 hop なので届かない。
 
         旧 _append_agent_speech では距離無視で届いていたバグの回帰防止。"""
@@ -99,7 +99,7 @@ class TestEscapeGameSpeechViaDomainEvent:
             f"leaked={leaked} (max_hops=1 のはず)"
         )
 
-    def test_5_hop_離れた_listener_には_observation_が届かない(self) -> None:
+    def test_say_does_not_reach_listener_five_hops_away(self) -> None:
         """館長書斎 (8) → 閲覧室 (2) は 5 hop。第13/14回実験で観測された
         遠距離 broadcast バグが復活していないことを確認。"""
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
@@ -119,7 +119,7 @@ class TestEscapeGameSpeechViaDomainEvent:
             f"leaked={leaked}"
         )
 
-    def test_話者自身の_buffer_には_observation_が積まれない(self) -> None:
+    def test_speaker_buffer_does_not_receive_self_observation(self) -> None:
         """formatter が is_self=True で None を返すため、話者本人には
         三人称 observation が積まれない (Issue #188 第5回の自己三人称ループ抑止)。
         話者は action_result_store 経由で一人称 summary を受け取る前提。"""
@@ -140,7 +140,7 @@ class TestEscapeGameSpeechViaDomainEvent:
             f"self_entries={self_entries}"
         )
 
-    def test_whisper_は_対象プレイヤーだけに届く(self) -> None:
+    def test_whisper_delivers_only_to_target_player(self) -> None:
         """whisper は target_player_id 指定で同スポットの宛先のみに届く。"""
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         reading_room_id = _name_to_spot_id(runtime, "閲覧室")
