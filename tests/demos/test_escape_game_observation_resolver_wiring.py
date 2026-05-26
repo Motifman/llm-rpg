@@ -15,8 +15,6 @@ PR 2 で speech 配信経路 (``_append_agent_speech``) も統一されるが、
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -24,20 +22,10 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 from demos.escape_game.escape_game_runtime import create_escape_game_runtime
 
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_FORBIDDEN_LIBRARY = (
-    _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
+from tests.demos._escape_game_helpers import (
+    FORBIDDEN_LIBRARY_PATH as _FORBIDDEN_LIBRARY,
+    name_to_spot_id as _name_to_spot_id,
 )
-
-
-def _name_to_spot_id(runtime, name: str) -> int:
-    """シナリオ上のスポット名から spot_id (int) を引く。"""
-    graph = runtime._spot_graph_repo.find_graph()
-    for node in graph.iter_spot_nodes():
-        if node.name == name:
-            return node.spot_id.value
-    raise KeyError(f"spot {name!r} not in scenario")
 
 
 class TestEscapeGameObservationResolverWiring:

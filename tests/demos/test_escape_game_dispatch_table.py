@@ -29,30 +29,15 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TODO_LIST,
     TOOL_NAME_WHISPER,
 )
-from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
-    GameRuntimeManager,
-)
-from ai_rpg_world.presentation.spot_graph_game.schemas import (
-    CharacterCreateRequest,
-    SessionCreateRequest,
-)
 
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests.demos._escape_game_helpers import (
+    create_escape_game_session as _create_session_full,
+)
 
 
 def _create_session(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    monkeypatch.setenv("SPOT_GRAPH_TICK_LOOP_ENABLED", "false")
-    mgr = GameRuntimeManager(
-        scenarios_dir=_REPO_ROOT / "data" / "scenarios",
-        characters_path=tmp_path / "characters.json",
-    )
-    char = mgr.create_character(CharacterCreateRequest(name="カイト"))
-    summary = mgr.create_session(
-        SessionCreateRequest(
-            world_id="forbidden_library_demo", character_ids=[char.id]
-        )
-    )
+    """互換: 既存テストの呼び出し形に合わせた wrapper (stub=None で session を作成)。"""
+    return _create_session_full(monkeypatch, tmp_path, stub=None)
     return mgr._sessions[summary.session_id]
 
 

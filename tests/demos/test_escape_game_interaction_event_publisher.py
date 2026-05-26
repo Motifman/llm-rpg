@@ -64,11 +64,21 @@ class TestEscapeGameInteractionEventPublisher:
         )
         assert result.messages
 
-        # リンの観測バッファに何らかの spot_graph 系 entry が積まれているはず
+        # リンの観測バッファに spot_object_interacted / spot_public_effect の
+        # いずれかが届いているはず。
+        # chore (#240 後続): 旧 assert は `len > 0` だけで偽陽性リスク (scenario_event
+        # 警告などが紛れていても通る) があったため、type を明示的に絞る。
         rin_entries = runtime._obs_buffer.get_observations(PlayerId(2))
-        assert len(rin_entries) > 0, (
+        interaction_related = [
+            e
+            for e in rin_entries
+            if e.output.structured.get("type")
+            in {"spot_object_interacted", "spot_public_effect"}
+        ]
+        assert len(interaction_related) > 0, (
             "BUG: 同スポットのリンに interaction の observation が届いていない. "
             "SpotInteractionApplicationService.event_publisher が未配線の可能性。"
+            f"buffer entries={rin_entries}"
         )
 
     def test_interaction_does_not_leak_to_player_at_different_spot(self) -> None:

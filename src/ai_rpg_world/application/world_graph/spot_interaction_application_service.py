@@ -88,6 +88,18 @@ class SpotInteractionApplicationService:
         self._player_status_repository = player_status_repository
         self._event_publisher = event_publisher
 
+    def set_event_publisher(self, event_publisher: Any) -> None:
+        """event_publisher を後付けで注入する (二段構築用)。
+
+        通常は constructor で渡すのが望ましいが、escape_game の
+        ``create_escape_game_runtime`` のように publisher が runtime
+        本体に依存して構築順序的に後になるケースで使う。
+
+        旧コードは ``interaction_service._event_publisher = ...`` と
+        private field に直接代入していたため、本メソッドで正規化する。
+        """
+        self._event_publisher = event_publisher
+
     def execute_interaction(
         self,
         player_id: PlayerId,
