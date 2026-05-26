@@ -11,7 +11,7 @@ import json
 import logging
 import uuid
 from collections.abc import Iterator, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as dataclass_replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -41,6 +41,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     with_inner_thought_empty_warning,
 )
+from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+    MemoCompletionHintService,
+)
 from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
     ToolCallLoopGuardService,
 )
@@ -51,6 +54,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_TODO_ADD,
+    TOOL_NAME_TODO_COMPLETE,
+    TOOL_NAME_TODO_LIST,
 )
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_llm_client_from_env,
@@ -250,6 +256,18 @@ class _EscapeGameLlmWiring:
         self.tool_call_loop_guard = ToolCallLoopGuardService(
             observation_buffer=self.observation_buffer,
         )
+        # PR 5 (#227): memo 完了 hint。LLM が memo_done を呼ばずに memo を
+        # 放置するケースを救済するため、action_summary / result_summary と
+        # 未完了 memo の content を SequenceMatcher で比較し、類似度が高ければ
+        # 「memo を完了したかも」hint を result.message に append する。
+        # PR #230 で本家経路に配線済みだが、escape_game の独自 turn 実行は
+        # 経由しないため、ここで wiring に直接組み込む。
+        memo_store = getattr(self.runtime, "_todo_store", None)
+        self.memo_completion_hint_service: Optional[MemoCompletionHintService] = (
+            MemoCompletionHintService(memo_store=memo_store)
+            if memo_store is not None
+            else None
+        )
 
     def attach_action_failed_wiring(
         self,
@@ -334,6 +352,26 @@ class _EscapeGameLlmWiring:
                 error_code="LLM_TOOL_EXECUTION_FAILED",
                 remediation="現在の状況に表示されたラベルと利用可能な action_name を確認してください。",
             )
+        # PR 5 (#227): memo 完了 hint で result.message を augment する。
+        # memo_* ツール自身の実行直後は hint を出さない (冗長 / 自己参照ループ
+        # 防止)。本家経路 (LlmAgentOrchestrator._maybe_augment_with_memo_hint)
+        # と同等。
+        if (
+            self.memo_completion_hint_service is not None
+            and name
+            and name not in (TOOL_NAME_TODO_ADD, TOOL_NAME_TODO_LIST, TOOL_NAME_TODO_COMPLETE)
+        ):
+            try:
+                action_summary = f"{name}({json.dumps(arguments, ensure_ascii=False)})"
+                augmented = self.memo_completion_hint_service.augment_result_summary(
+                    player_id,
+                    action_summary,
+                    result.message,
+                )
+                if augmented != result.message:
+                    result = dataclass_replace(result, message=augmented)
+            except Exception:
+                logger.exception("memo_completion_hint_service.augment failed")
         skip_duplicate_action_log = result.success and name in (
             TOOL_NAME_SPOT_GRAPH_EXPLORE,
             TOOL_NAME_SPOT_GRAPH_INTERACT,
