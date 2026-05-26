@@ -14,7 +14,7 @@ from collections.abc import Iterator, Iterable
 from dataclasses import dataclass, field, replace as dataclass_replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMPlayerResolver
 from ai_rpg_world.application.intent.action_failed_observation_emitter import (
@@ -51,12 +51,17 @@ from ai_rpg_world.application.llm.services.escape_llm_prompt import (
     EscapeCharacterPromptInput,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SAY,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_LISTEN,
+    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_SPOT_GRAPH_WAIT,
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
     TOOL_NAME_TODO_LIST,
+    TOOL_NAME_WHISPER,
 )
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_llm_client_from_env,
@@ -192,7 +197,14 @@ class _EscapeGameLlmTurnTrigger:
 
     def schedule_turn(self, player_id: PlayerId) -> None:
         self.pending_player_ids.add(player_id.value)
-        self._turn_counts[player_id.value] = 0
+        # PR 7 (#227 review HIGH 2): カウントを 0 リセットせずに保持する。
+        # 旧コードは schedule_turn のたびに `_turn_counts[pid] = 0` でリセット
+        # していたため、PR 2 で speech が ObservationTurnScheduler 経由で再
+        # スケジュールされるようになった後は、turn loop 中に他者発話が来ると
+        # max_turns 制限が事実上無効化される (2 プレイヤー間で交互に発話が
+        # 続くと無限ループの可能性)。setdefault で「未登録なら 0、既登録なら
+        # 維持」に変更。
+        self._turn_counts.setdefault(player_id.value, 0)
 
     def run_scheduled_turns(self) -> None:
         to_run = list(self.pending_player_ids)
@@ -268,6 +280,28 @@ class _EscapeGameLlmWiring:
             if memo_store is not None
             else None
         )
+        # PR 7 (#227): ツール名→ハンドラの dispatch table。本家
+        # ToolCommandMapper.execute と構造を揃え、巨大 if-elif を排除する。
+        # 各ハンドラは (player_id, arguments, runtime_context) を受けて
+        # LlmCommandResultDto を返す。
+        self._tool_handlers: Dict[
+            str,
+            Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto],
+        ] = {
+            TOOL_NAME_SPOT_GRAPH_EXPLORE: self._handle_explore,
+            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO: self._handle_travel_to,
+            TOOL_NAME_SPOT_GRAPH_INTERACT: self._handle_interact,
+            TOOL_NAME_SPOT_GRAPH_LISTEN: self._handle_listen,
+            TOOL_NAME_SPOT_GRAPH_WAIT: self._handle_wait,
+            TOOL_NAME_SAY: self._handle_say,
+            TOOL_NAME_WHISPER: self._handle_whisper,
+            TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION: self._handle_set_sub_location,
+            TOOL_NAME_TODO_ADD: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_ADD),
+            TOOL_NAME_TODO_LIST: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_LIST),
+            TOOL_NAME_TODO_COMPLETE: self._make_auxiliary_tool_handler(
+                TOOL_NAME_TODO_COMPLETE
+            ),
+        }
 
     def attach_action_failed_wiring(
         self,
@@ -485,240 +519,290 @@ class _EscapeGameLlmWiring:
         arguments: dict[str, Any],
         runtime_context: Any,
     ) -> LlmCommandResultDto:
-        from ai_rpg_world.application.llm.tool_constants import (
-            TOOL_NAME_SAY,
-            TOOL_NAME_SPOT_GRAPH_EXPLORE,
-            TOOL_NAME_SPOT_GRAPH_INTERACT,
-            TOOL_NAME_SPOT_GRAPH_LISTEN,
-            TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
-            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-            TOOL_NAME_SPOT_GRAPH_WAIT,
-            TOOL_NAME_TODO_ADD,
-            TOOL_NAME_TODO_COMPLETE,
-            TOOL_NAME_TODO_LIST,
-            TOOL_NAME_WHISPER,
-        )
+        """ツール名から対応するハンドラを選んで実行する。
 
-        targets = getattr(runtime_context, "targets", {})
-        if name == TOOL_NAME_SPOT_GRAPH_EXPLORE:
-            result = self.runtime.do_explore(player_id)
-            if result.discovery_descriptions:
-                message = "発見: " + " / ".join(result.discovery_descriptions)
-            else:
-                # F2: 「新しい発見はなかった」だけだと LLM が「部屋に何もない」
-                # と誤解し interact しなくなる癖がある。spot view に既に表示
-                # されている可視オブジェクトを併記して、LLM の "見えない"
-                # 誤認を防ぐ。
-                visible_objects = _list_object_labels(targets)
-                if visible_objects:
-                    message = (
-                        "新しい発見はなかった。"
-                        f"既に見えているオブジェクト: {visible_objects}"
-                        " (interact するにはこのラベルを object_label に指定する)"
-                    )
-                else:
-                    message = "新しい発見はなかった (この場所に interactable なオブジェクトは無い)"
-            return with_inner_thought_empty_warning(
-                name, arguments, LlmCommandResultDto(success=True, message=message)
-            )
+        PR 7 (#227): 旧コードは 240 行の if/elif ディスパッチだった。本家経路
+        ``ToolCommandMapper.execute`` と構造を合わせるため、ツール名→ハンドラ
+        メソッドの ``_tool_handlers`` テーブル経由のディスパッチに改めた。
+        各ハンドラは ``(player_id, arguments, runtime_context) -> LlmCommandResultDto``。
+        未登録のツールは UNSUPPORTED_TOOL を返す。
 
-        if name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO:
-            label = str(arguments.get("destination_label", ""))
-            target = targets.get(label)
-            # PR 3 (#227): label miss なら display_name (スポット名) でフォール
-            # バック解決を試みる。LLM が "S1" の代わりに「閲覧室」のような不変
-            # なスポット名を直接渡しても動くようにする。本家経路の
-            # _argument_resolvers/spot_graph_resolver.py が同じロジックを
-            # 既に持つが、escape_game の _execute_tool はそちらを経由しない
-            # ため、ここで同等のフォールバックを行う。PR 7 で _execute_tool
-            # を本家 resolver 経由に統合した際に削除予定。
-            if target is None or target.spot_id is None:
-                for candidate in targets.values():
-                    if (
-                        candidate.kind == "spot_graph_destination"
-                        and candidate.display_name == label
-                        and candidate.spot_id is not None
-                    ):
-                        target = candidate
-                        break
-            if target is None or target.spot_id is None:
-                # F1: 失敗時に有効ラベルを列挙して LLM が次の試行で正しい値を
-                # 選べるようにする (前回は message に valid 一覧が無く同じ
-                # 失敗を繰り返していた)。
-                valid_destinations = _list_destination_labels(targets)
-                return LlmCommandResultDto(
-                    success=False,
-                    message=(
-                        f"移動先が見つかりません: {label}。"
-                        f"有効な destination_label: {valid_destinations or '(この場所からの移動先なし)'}"
-                    ),
-                    error_code="INVALID_DESTINATION_LABEL",
-                    remediation=(
-                        "destination_label には現在の状況に表示された S1, S2 等の "
-                        "ラベル、またはスポット名 (例: 閲覧室) を指定してください。"
-                    ),
-                )
-            destination_id = self.runtime.id_mapper.get_str("spot", target.spot_id)
-            self.runtime.do_move(player_id, destination_id)
-            return with_inner_thought_empty_warning(
-                name,
-                arguments,
-                LlmCommandResultDto(
-                    success=True,
-                    message=f"{target.display_name}へ移動しました。",
-                ),
-            )
-
-        if name == TOOL_NAME_SPOT_GRAPH_INTERACT:
-            label = str(arguments.get("object_label", ""))
-            action_name = str(arguments.get("action_name", ""))
-            target = targets.get(label)
-            if target is None or target.world_object_id is None:
-                # F1: 失敗時に有効ラベルを列挙。Issue #154 デモで Gemma 4 /
-                # gpt-5-mini ともに ``object_label="操作盤"`` (display name)
-                # を使い続けて同じ失敗を繰り返した。実際には ``OBJ1`` が
-                # 正しい label。message で valid 一覧を見せて次の試行で
-                # 正しい値が選べるようにする。
-                valid_objects = _list_object_labels(targets)
-                return LlmCommandResultDto(
-                    success=False,
-                    message=(
-                        f"オブジェクトラベルが見つかりません: {label}。"
-                        f"有効な object_label: {valid_objects or '(この場所に interactable なオブジェクトなし)'}"
-                    ),
-                    error_code="INVALID_TARGET_LABEL",
-                    remediation=(
-                        "object_label には現在の状況に表示された OBJ1, OBJ2 等の "
-                        "ラベル (display name ではなく) を指定してください。"
-                    ),
-                )
-            object_id = self.runtime.id_mapper.get_str("object", target.world_object_id)
-            result = self.runtime.do_interact(player_id, object_id, action_name)
-            return with_inner_thought_empty_warning(
-                name,
-                arguments,
-                LlmCommandResultDto(
-                    success=True,
-                    message="; ".join(result.messages) if result.messages else "完了",
-                ),
-            )
-
-        if name == TOOL_NAME_SPOT_GRAPH_LISTEN:
-            # tool catalog に LISTEN_DEFINITION があるのに dispatch が無く
-            # UNSUPPORTED_TOOL に化けていた配線漏れ (Issue #154 デモで観測) を
-            # 修正。runtime.do_listen が SpotSoundHeardEvent を発火し、
-            # observation pipeline で本人にだけ観測が届く (formatter が prose
-            # を構築するので、ここでは件数ベースのサマリだけ返す)。
-            try:
-                event_count = self.runtime.do_listen(player_id)
-            except Exception as exc:
-                logger.exception(
-                    "do_listen failed for player=%s", player_id.value
-                )
-                return LlmCommandResultDto(
-                    success=False,
-                    message=(
-                        "耳を澄ますに失敗しました。"
-                    ),
-                    error_code="LLM_TOOL_EXECUTION_FAILED",
-                    remediation="やり直すか別のツールを使ってください。",
-                )
-            if event_count == 0:
-                base_message = "耳を澄ましたが、何も聞こえなかった。"
-            elif event_count == 1:
-                base_message = "耳を澄ました。周囲の音が観測として届いた。"
-            else:
-                base_message = (
-                    f"耳を澄ました。{event_count} 箇所からの音が観測として届いた。"
-                )
-            return with_inner_thought_empty_warning(
-                name,
-                arguments,
-                LlmCommandResultDto(success=True, message=base_message),
-            )
-
-        if name == TOOL_NAME_SPOT_GRAPH_WAIT:
-            reason = str(arguments.get("reason", "")).strip()
-            tick = self.runtime.do_wait(player_id, reason=reason)
-            suffix = f"（理由: {reason}）" if reason else ""
-            return with_inner_thought_empty_warning(
-                name,
-                arguments,
-                LlmCommandResultDto(
-                    success=True,
-                    message=f"待機して時間が進んだ: tick={tick}{suffix}",
-                ),
-            )
-
-        if name == TOOL_NAME_SAY:
-            content = str(arguments.get("content", "")).strip()
-            if not content:
-                return LlmCommandResultDto(
-                    success=False,
-                    message="発言内容が空です。",
-                    error_code="INVALID_SPEECH_CONTENT",
-                )
-            # PR 2 (#227): _append_agent_speech (全プレイヤー broadcast) を廃止し、
-            # PlayerSpeechApplicationService 経由で PlayerSpokeEvent を fire する。
-            # 距離 gating (SoundPropagationService) は recipient strategy 側で行われる。
-            self.runtime.do_say(player_id, content)
-            return LlmCommandResultDto(success=True, message=f"発言した: {content}")
-
-        if name == TOOL_NAME_WHISPER:
-            content = str(arguments.get("content", "")).strip()
-            target_label = str(arguments.get("target_label", ""))
-            target = targets.get(target_label)
-            if not content or target is None or target.player_id is None:
-                # F1: 失敗時の診断性向上。content 空 / 宛先未解決のどちらの
-                # 失敗かを明示し、宛先 (player) 候補を列挙する。
-                if not content:
-                    detail = "content が空です。"
-                else:
-                    valid_players = _list_player_labels(targets)
-                    detail = (
-                        f"target_label={target_label!r} が見つかりません。"
-                        f"有効な target_label: {valid_players or '(同 spot に他プレイヤーなし)'}"
-                    )
-                return LlmCommandResultDto(
-                    success=False,
-                    message=f"囁きを送れませんでした: {detail}",
-                    error_code="INVALID_WHISPER",
-                    remediation=(
-                        "target_label には現在の状況に表示された P1, P2 等の "
-                        "ラベル (display name ではなく) を指定してください。"
-                    ),
-                )
-            # PR 2 (#227): _append_agent_speech を廃止し、PlayerSpeechApplicationService
-            # 経由で PlayerSpokeEvent (WHISPER channel) を fire する。
-            self.runtime.do_whisper(
-                player_id,
-                content,
-                PlayerId(target.player_id),
-            )
-            return LlmCommandResultDto(success=True, message=f"囁いた: {content}")
-
-        if name == TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION:
+        将来の経路統一 (本家 ``LlmAgentOrchestrator`` への移行) では、
+        ``runtime.do_*`` ラッパー呼出しを本家の ``_argument_resolvers`` +
+        ``executors`` 経由に差し替える方向に進める。本テーブルがその移行先
+        になる。
+        """
+        handler = self._tool_handlers.get(name)
+        if handler is None:
             return LlmCommandResultDto(
                 success=False,
-                message="サブロケーション変更は脱出ランタイムでは未対応です。",
+                message=f"未対応のツールです: {name}",
                 error_code="UNSUPPORTED_TOOL",
             )
+        return handler(player_id, arguments, runtime_context)
 
-        # NOTE: pure_spot_graph mode (B-4 / Issue #155) では TODO ツールは LLM
-        # の tools リストに含まれないため、このディスパッチは通常到達しない。
-        # 安全側のフォールバックとして残してあるだけで、deletion 候補ではない。
-        if name in (
-            TOOL_NAME_TODO_ADD,
-            TOOL_NAME_TODO_LIST,
-            TOOL_NAME_TODO_COMPLETE,
-        ):
-            return self.runtime.run_llm_auxiliary_tool(player_id, name, arguments)
+    # ── per-tool handlers (PR 7) ──
 
+    def _handle_explore(
+        self,
+        player_id: PlayerId,
+        arguments: dict[str, Any],
+        runtime_context: Any,
+    ) -> LlmCommandResultDto:
+        targets = getattr(runtime_context, "targets", {})
+        result = self.runtime.do_explore(player_id)
+        if result.discovery_descriptions:
+            message = "発見: " + " / ".join(result.discovery_descriptions)
+        else:
+            # F2: 「新しい発見はなかった」だけだと LLM が「部屋に何もない」と
+            # 誤解し interact しなくなる癖がある。spot view に既に表示されて
+            # いる可視オブジェクトを併記して、LLM の "見えない" 誤認を防ぐ。
+            visible_objects = _list_object_labels(targets)
+            if visible_objects:
+                message = (
+                    "新しい発見はなかった。"
+                    f"既に見えているオブジェクト: {visible_objects}"
+                    " (interact するにはこのラベルを object_label に指定する)"
+                )
+            else:
+                message = "新しい発見はなかった (この場所に interactable なオブジェクトは無い)"
+        return with_inner_thought_empty_warning(
+            TOOL_NAME_SPOT_GRAPH_EXPLORE,
+            arguments,
+            LlmCommandResultDto(success=True, message=message),
+        )
+
+    def _handle_travel_to(
+        self,
+        player_id: PlayerId,
+        arguments: dict[str, Any],
+        runtime_context: Any,
+    ) -> LlmCommandResultDto:
+        targets = getattr(runtime_context, "targets", {})
+        label = str(arguments.get("destination_label", ""))
+        target = targets.get(label)
+        # PR 3 (#227): label miss なら display_name (スポット名) でフォール
+        # バック解決を試みる。本家経路の _argument_resolvers/spot_graph_resolver.py
+        # の _find_target_by_display_name と等価。PR 7 で本家 resolver 経由に
+        # 統合する際に削除予定。
+        if target is None or target.spot_id is None:
+            for candidate in targets.values():
+                if (
+                    candidate.kind == "spot_graph_destination"
+                    and candidate.display_name == label
+                    and candidate.spot_id is not None
+                ):
+                    target = candidate
+                    break
+        if target is None or target.spot_id is None:
+            # F1: 失敗時に有効ラベルを列挙して LLM が次の試行で正しい値を選べる
+            valid_destinations = _list_destination_labels(targets)
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"移動先が見つかりません: {label}。"
+                    f"有効な destination_label: {valid_destinations or '(この場所からの移動先なし)'}"
+                ),
+                error_code="INVALID_DESTINATION_LABEL",
+                remediation=(
+                    "destination_label には現在の状況に表示された S1, S2 等の "
+                    "ラベル、またはスポット名 (例: 閲覧室) を指定してください。"
+                ),
+            )
+        destination_id = self.runtime.id_mapper.get_str("spot", target.spot_id)
+        self.runtime.do_move(player_id, destination_id)
+        return with_inner_thought_empty_warning(
+            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            arguments,
+            LlmCommandResultDto(
+                success=True,
+                message=f"{target.display_name}へ移動しました。",
+            ),
+        )
+
+    def _handle_interact(
+        self,
+        player_id: PlayerId,
+        arguments: dict[str, Any],
+        runtime_context: Any,
+    ) -> LlmCommandResultDto:
+        targets = getattr(runtime_context, "targets", {})
+        label = str(arguments.get("object_label", ""))
+        action_name = str(arguments.get("action_name", ""))
+        target = targets.get(label)
+        if target is None or target.world_object_id is None:
+            # F1: 失敗時に有効ラベルを列挙。Issue #154 デモで LLM が
+            # ``object_label="操作盤"`` (display name) を使い続けて同じ失敗を
+            # 繰り返した。message で valid 一覧を見せて次の試行で正しい値が
+            # 選べるようにする。
+            valid_objects = _list_object_labels(targets)
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"オブジェクトラベルが見つかりません: {label}。"
+                    f"有効な object_label: {valid_objects or '(この場所に interactable なオブジェクトなし)'}"
+                ),
+                error_code="INVALID_TARGET_LABEL",
+                remediation=(
+                    "object_label には現在の状況に表示された OBJ1, OBJ2 等の "
+                    "ラベル (display name ではなく) を指定してください。"
+                ),
+            )
+        object_id = self.runtime.id_mapper.get_str("object", target.world_object_id)
+        result = self.runtime.do_interact(player_id, object_id, action_name)
+        return with_inner_thought_empty_warning(
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
+            arguments,
+            LlmCommandResultDto(
+                success=True,
+                message="; ".join(result.messages) if result.messages else "完了",
+            ),
+        )
+
+    def _handle_listen(
+        self,
+        player_id: PlayerId,
+        arguments: dict[str, Any],
+        runtime_context: Any,
+    ) -> LlmCommandResultDto:
+        # tool catalog に LISTEN_DEFINITION があるのに dispatch が無く
+        # UNSUPPORTED_TOOL に化けていた配線漏れ (Issue #154 デモ) を修正。
+        # runtime.do_listen が SpotSoundHeardEvent を発火し、observation
+        # pipeline で本人にだけ観測が届く (formatter が prose を構築するので、
+        # ここでは件数ベースのサマリだけ返す)。
+        try:
+            event_count = self.runtime.do_listen(player_id)
+        except Exception:
+            logger.exception(
+                "do_listen failed for player=%s", player_id.value
+            )
+            return LlmCommandResultDto(
+                success=False,
+                message="耳を澄ますに失敗しました。",
+                error_code="LLM_TOOL_EXECUTION_FAILED",
+                remediation="やり直すか別のツールを使ってください。",
+            )
+        if event_count == 0:
+            base_message = "耳を澄ましたが、何も聞こえなかった。"
+        elif event_count == 1:
+            base_message = "耳を澄ました。周囲の音が観測として届いた。"
+        else:
+            base_message = (
+                f"耳を澄ました。{event_count} 箇所からの音が観測として届いた。"
+            )
+        return with_inner_thought_empty_warning(
+            TOOL_NAME_SPOT_GRAPH_LISTEN,
+            arguments,
+            LlmCommandResultDto(success=True, message=base_message),
+        )
+
+    def _handle_wait(
+        self,
+        player_id: PlayerId,
+        arguments: dict[str, Any],
+        runtime_context: Any,
+    ) -> LlmCommandResultDto:
+        del runtime_context  # unused — wait は targets を見ない
+        reason = str(arguments.get("reason", "")).strip()
+        tick = self.runtime.do_wait(player_id, reason=reason)
+        suffix = f"（理由: {reason}）" if reason else ""
+        return with_inner_thought_empty_warning(
+            TOOL_NAME_SPOT_GRAPH_WAIT,
+            arguments,
+            LlmCommandResultDto(
+                success=True,
+                message=f"待機して時間が進んだ: tick={tick}{suffix}",
+            ),
+        )
+
+    def _handle_say(
+        self,
+        player_id: PlayerId,
+        arguments: dict[str, Any],
+        runtime_context: Any,
+    ) -> LlmCommandResultDto:
+        del runtime_context  # unused — say は targets を見ない
+        content = str(arguments.get("content", "")).strip()
+        if not content:
+            return LlmCommandResultDto(
+                success=False,
+                message="発言内容が空です。",
+                error_code="INVALID_SPEECH_CONTENT",
+            )
+        # PR 2 (#227): PlayerSpeechApplicationService 経由で PlayerSpokeEvent
+        # を fire し、SoundPropagationService で距離 gating する。
+        self.runtime.do_say(player_id, content)
+        return LlmCommandResultDto(success=True, message=f"発言した: {content}")
+
+    def _handle_whisper(
+        self,
+        player_id: PlayerId,
+        arguments: dict[str, Any],
+        runtime_context: Any,
+    ) -> LlmCommandResultDto:
+        targets = getattr(runtime_context, "targets", {})
+        content = str(arguments.get("content", "")).strip()
+        target_label = str(arguments.get("target_label", ""))
+        target = targets.get(target_label)
+        if not content or target is None or target.player_id is None:
+            if not content:
+                detail = "content が空です。"
+            else:
+                valid_players = _list_player_labels(targets)
+                detail = (
+                    f"target_label={target_label!r} が見つかりません。"
+                    f"有効な target_label: {valid_players or '(同 spot に他プレイヤーなし)'}"
+                )
+            return LlmCommandResultDto(
+                success=False,
+                message=f"囁きを送れませんでした: {detail}",
+                error_code="INVALID_WHISPER",
+                remediation=(
+                    "target_label には現在の状況に表示された P1, P2 等の "
+                    "ラベル (display name ではなく) を指定してください。"
+                ),
+            )
+        self.runtime.do_whisper(
+            player_id,
+            content,
+            PlayerId(target.player_id),
+        )
+        return LlmCommandResultDto(success=True, message=f"囁いた: {content}")
+
+    def _handle_set_sub_location(
+        self,
+        player_id: PlayerId,
+        arguments: dict[str, Any],
+        runtime_context: Any,
+    ) -> LlmCommandResultDto:
+        del player_id, arguments, runtime_context
         return LlmCommandResultDto(
             success=False,
-            message=f"未対応のツールです: {name}",
+            message="サブロケーション変更は脱出ランタイムでは未対応です。",
             error_code="UNSUPPORTED_TOOL",
         )
+
+    def _make_auxiliary_tool_handler(
+        self, tool_name: str
+    ) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
+        """TODO/memo ツール用のハンドラを tool_name 固定で返す。
+
+        NOTE: pure_spot_graph mode (B-4 / Issue #155) では TODO/memo ツールは
+        LLM の tools リストに含まれないため、通常到達しない。安全側のフォール
+        バックとして残し、デフォルト構成で memo を使う際の経路を維持する。
+        """
+
+        def handler(
+            player_id: PlayerId,
+            arguments: dict[str, Any],
+            runtime_context: Any,
+        ) -> LlmCommandResultDto:
+            del runtime_context
+            return self.runtime.run_llm_auxiliary_tool(
+                player_id, tool_name, arguments
+            )
+
+        return handler
 
     def _time_label(self) -> str:
         tick = self.runtime.current_tick()
