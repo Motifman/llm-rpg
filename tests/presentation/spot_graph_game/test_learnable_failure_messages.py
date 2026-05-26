@@ -147,16 +147,42 @@ class TestInvalidTargetLabelMessage:
 class TestInvalidDestinationLabelMessage:
     """INVALID_DESTINATION_LABEL (spot_graph_travel_to) の learnable message。"""
 
-    def test_failure_message_enumerates_valid_destinations(
+    def test_destination_にスポット名を渡すと解決されて移動が成功する(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """LLM が "中央廊下" を渡したときに、message が "有効な destination_label: S1 (中央廊下)" を含む。"""
+        """PR 3 (#227): label miss 時の display_name fallback。LLM が "中央廊下"
+        のような不変なスポット名を渡しても、display_name で解決して移動が成功する。
+
+        旧挙動 (label のみ受付) では INVALID_DESTINATION_LABEL で失敗していた
+        が、PR 3 で fallback が追加され、本テストは「成功する」ことを保証する
+        ように更新された。
+        """
         stub = StubLlmClient(
             tool_call_to_return={
                 "name": "spot_graph_travel_to",
                 "arguments": {"destination_label": "中央廊下"},
+            }
+        )
+        state = _create_relay_session(monkeypatch, tmp_path, stub)
+        target_pid = state.runtime.get_player_ids()[0]
+        result = state.llm_wiring.run_turn(target_pid)
+
+        assert result.success is True
+        assert "中央廊下" in result.message
+
+    def test_存在しないラベル_かつ_存在しないスポット名_は_有効候補を列挙して失敗(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """ラベルでも display_name でも解決できない場合は失敗 DTO で有効候補を
+        列挙する (F1: 学習可能な失敗メッセージ)。"""
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": "spot_graph_travel_to",
+                "arguments": {"destination_label": "未定義の謎のスポット"},
             }
         )
         state = _create_relay_session(monkeypatch, tmp_path, stub)
@@ -171,6 +197,8 @@ class TestInvalidDestinationLabelMessage:
         assert "中央廊下" in result.message
         assert result.remediation is not None
         assert "destination_label" in result.remediation
+        # 新 remediation はラベル or スポット名どちらでも OK と案内する
+        assert "スポット名" in result.remediation
 
 
 class TestInvalidWhisperMessage:
