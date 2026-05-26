@@ -41,6 +41,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     with_inner_thought_empty_warning,
 )
+from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
+    ToolCallLoopGuardService,
+)
 from ai_rpg_world.application.llm.services.escape_llm_prompt import (
     EscapeCharacterPromptInput,
 )
@@ -239,6 +242,14 @@ class _EscapeGameLlmWiring:
             wiring=self,
             max_turns=self.max_turns,
         )
+        # PR 4 (#227): 同一ツール連打を engine 側で検知し、警告を観測として
+        # 注入する loop guard。PR #230 で LlmAgentOrchestrator 経由で配線
+        # していたが、escape_game の独自 turn 実行はそれを経由しないため、
+        # ここで wiring に直接組み込む。閾値は ToolCallLoopGuardService の
+        # 既定値 (wait=3 / travel_to=2 / interact=4 / その他=5) を使う。
+        self.tool_call_loop_guard = ToolCallLoopGuardService(
+            observation_buffer=self.observation_buffer,
+        )
 
     def attach_action_failed_wiring(
         self,
@@ -347,6 +358,19 @@ class _EscapeGameLlmWiring:
                 )
             except Exception:
                 logger.exception("trace_recorder.record(action_result) failed")
+        # PR 4 (#227): 同一ツール連打を検知し警告観測を注入する。
+        # action_result の記録後に呼ぶことで、失敗を繰り返すケースも検知対象
+        # に入る。閾値超過時は次ターンの prompt 構築時に observation buffer
+        # から drain されて LLM に警告が届く。
+        if name:
+            try:
+                self.tool_call_loop_guard.record_and_check(
+                    player_id,
+                    name,
+                    arguments,
+                )
+            except Exception:
+                logger.exception("tool_call_loop_guard.record_and_check failed")
         # 失敗 DTO のとき ActionFailed 観測を該当プレイヤーへ投入する。
         # post-hoc に Intent VO を構築し observer に渡す (intent queue 経由は
         # しない — 即時 path で意味のある最小 wire-in)。LLM API レベルや
