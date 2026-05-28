@@ -12,14 +12,12 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import (
     ChestComponent,
     DoorComponent,
     PlaceableComponent,
     StaticPlaceableInnerComponent,
-    GroundItemComponent,
 )
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
 from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
@@ -28,7 +26,6 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException

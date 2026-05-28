@@ -17,7 +17,6 @@ from ai_rpg_world.domain.shop.event.shop_event import (
     ShopItemPurchasedEvent,
     ShopItemUnlistedEvent,
 )
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class ShopRecipientStrategy(IRecipientResolutionStrategy):

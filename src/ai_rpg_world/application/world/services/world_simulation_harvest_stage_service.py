@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, List, Optional
+from typing import Callable, List, Optional
 
 from ai_rpg_world.application.harvest.contracts.commands import FinishHarvestCommand
 from ai_rpg_world.domain.common.value_object import WorldTick

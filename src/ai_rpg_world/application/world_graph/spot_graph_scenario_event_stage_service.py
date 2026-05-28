@@ -6,7 +6,6 @@ from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_sto
     InMemorySpotGraphScenarioEventProgressStore,
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
-    collect_owned_item_spec_ids_from_inventory,
     grant_item_specs_to_inventory,
     remove_one_item_of_spec_from_inventory,
 )
@@ -19,14 +18,10 @@ from ai_rpg_world.application.world_graph.spot_object_lookup import (
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
-    SpotGraphAggregate,
-)
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
     PassageChangeCauseEnum,

@@ -17,7 +17,6 @@ from ai_rpg_world.domain.trade.event.trade_event import (
 )
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeType
 from ai_rpg_world.domain.trade.repository.trade_repository import TradeRepository
-from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 
 
 class TradeRecipientStrategy(IRecipientResolutionStrategy):

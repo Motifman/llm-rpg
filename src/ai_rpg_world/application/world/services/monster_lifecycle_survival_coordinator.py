@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import Any, Callable, List, Optional, Protocol, Set
+from typing import Callable, List, Optional, Protocol, Set
 
 from ai_rpg_world.application.world.services.hunger_migration_policy import (
     HungerMigrationCandidate,

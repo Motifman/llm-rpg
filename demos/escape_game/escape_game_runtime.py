@@ -9,7 +9,6 @@ LLM エージェントが**実際に**受け取る観測テキスト・ツール
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from dataclasses import dataclass, field
@@ -155,7 +154,6 @@ from ai_rpg_world.application.speech.services.player_speech_service import (
 )
 from demos.escape_game.pipeline_event_publisher import PipelineEventPublisher
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository

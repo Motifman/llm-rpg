@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import List, Optional
+from typing import Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import MemoEntry
 from ai_rpg_world.application.llm.contracts.interfaces import IMemoStore

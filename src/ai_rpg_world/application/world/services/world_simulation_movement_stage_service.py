@@ -3,9 +3,6 @@ from typing import Callable, Optional, TYPE_CHECKING
 from ai_rpg_world.domain.common.value_object import WorldTick
 
 if TYPE_CHECKING:
-    from ai_rpg_world.application.harvest.services.harvest_command_service import (
-        HarvestCommandService,
-    )
     from ai_rpg_world.application.world.services.movement_service import (
         MovementApplicationService,
     )

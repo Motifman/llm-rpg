@@ -10,12 +10,6 @@ from ai_rpg_world.application.observation.services.observed_event_registry impor
     ObservedEventRegistry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.pursuit.event.pursuit_events import (
-    PursuitCancelledEvent,
-    PursuitFailedEvent,
-    PursuitStartedEvent,
-    PursuitUpdatedEvent,
-)
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 

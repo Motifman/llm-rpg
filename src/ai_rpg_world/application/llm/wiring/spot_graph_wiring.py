@@ -12,7 +12,6 @@ from __future__ import annotations
 import os
 from typing import Any, Optional
 
-from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
@@ -60,7 +59,6 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
     IObservationFormatter,
 )
-from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_service import (
     SpotMonsterBehaviorTickService,
@@ -210,7 +208,6 @@ def create_spot_graph_wiring(
         SectionBasedContextFormatStrategy,
     )
     from ai_rpg_world.application.llm.services.game_tool_registry import DefaultGameToolRegistry
-    from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
     from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
     from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
     from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
@@ -219,7 +216,6 @@ def create_spot_graph_wiring(
     )
     from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
     from ai_rpg_world.application.llm.services.system_prompt_builder import DefaultSystemPromptBuilder
-    from ai_rpg_world.application.llm.services.ui_context_builder import DefaultLlmUiContextBuilder
     from ai_rpg_world.application.observation.services.observation_context_buffer import (
         DefaultObservationContextBuffer,
     )

@@ -1,7 +1,7 @@
 """ワールドクエリサービス（読み取り専用の位置情報等）"""
 
 import logging
-from typing import Optional, Callable, Any, List, TYPE_CHECKING
+from typing import Optional, Callable, Any, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
