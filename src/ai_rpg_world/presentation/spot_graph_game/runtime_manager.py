@@ -860,9 +860,11 @@ class _EscapeGameLlmWiring:
         """
         if self.speech_audience_resolver is None:
             return ""
-        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+        from ai_rpg_world.application.speech.services.audience_feedback import (
+            audience_summary_text,
+        )
         try:
-            recipients = self.speech_audience_resolver.resolve_audience(
+            members = self.speech_audience_resolver.resolve_audience_with_clarity(
                 speaker_player_id=int(player_id.value),
                 channel=channel,
                 target_player_id=(
@@ -872,30 +874,9 @@ class _EscapeGameLlmWiring:
                 ),
             )
         except Exception:
-            logger.exception("speech_audience_resolver.resolve_audience failed")
+            logger.exception("speech_audience_resolver.resolve_audience_with_clarity failed")
             return ""
-        count = len(recipients)
-        if count == 0:
-            if channel == SpeechChannel.WHISPER:
-                return (
-                    "（囁きは同じスポット内の特定 1 人にしか届かないが、対象が同じ"
-                    "スポットにいません。声は届きませんでした。channel=say や"
-                    " channel=shout に切り替えるか、対象の居るスポットへ移動してください）"
-                )
-            if channel == SpeechChannel.SAY:
-                return (
-                    "（say は同じスポットと隣接スポット (1 hop) のみに届きますが、"
-                    "その範囲に他のプレイヤーはいません。声は誰にも届きませんでした。"
-                    "channel=shout に切り替えると 2 hop 先まで届きます。それでも届かなければ、"
-                    "別の場所へ移動して相手の居るスポットに近づいてください）"
-                )
-            # SHOUT
-            return (
-                "（shout は 2 hop 範囲まで届きますが、その範囲にも他のプレイヤーは"
-                "いません。物理的に合流する以外に伝える手段がありません。別の場所へ"
-                "移動してください）"
-            )
-        return f"（あなたの声は {count} 名のプレイヤーに届く範囲です）"
+        return f"（{audience_summary_text(channel, members)}）"
 
     def _handle_set_sub_location(
         self,
