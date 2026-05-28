@@ -27,6 +27,7 @@ from ai_rpg_world.application.llm.llm_argument_fingerprint import (
     build_argument_fingerprint,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
@@ -46,6 +47,11 @@ DEFAULT_LOOP_THRESHOLDS: Dict[str, int] = {
     TOOL_NAME_SPOT_GRAPH_WAIT: 3,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO: 2,
     TOOL_NAME_SPOT_GRAPH_INTERACT: 4,
+    # Issue #269 第17回 R2: target_label='' の whisper を 3 ティック連続で
+    # 試行して失敗を繰り返した (remediation を読まない)。speech は引数が
+    # 変われば (channel / 内容 / 相手) fingerprint が変わるので、同一引数 2
+    # 連発は travel_to 同様に「同じ行動の繰り返し」と判定する。
+    TOOL_NAME_SPEECH: 2,
 }
 """tool ごとの連続回数しきい値 (この回数連続で同一なら警告)。"""
 
