@@ -265,8 +265,17 @@ class _EscapeGameLlmWiring:
         # していたが、escape_game の独自 turn 実行はそれを経由しないため、
         # ここで wiring に直接組み込む。閾値は ToolCallLoopGuardService の
         # 既定値 (wait=3 / travel_to=2 / interact=4 / その他=5) を使う。
+        # Issue #240 後続: trace_recorder + current_tick_provider を注入し、
+        # loop_guard 警告が trace.jsonl に LOOP_GUARD_WARNING として残るようにする。
+        # 第15回実験で「警告は出てるはずなのに trace に痕跡なし」状態だったため。
         self.tool_call_loop_guard = ToolCallLoopGuardService(
             observation_buffer=self.observation_buffer,
+            trace_recorder=getattr(self.runtime, "trace_recorder", None),
+            current_tick_provider=(
+                self.runtime.current_tick
+                if hasattr(self.runtime, "current_tick")
+                else None
+            ),
         )
         # PR 5 (#227): memo 完了 hint。LLM が memo_done を呼ばずに memo を
         # 放置するケースを救済するため、action_summary / result_summary と

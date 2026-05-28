@@ -38,6 +38,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
+from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -82,6 +83,8 @@ class ToolCallLoopGuardService:
         thresholds: Optional[Dict[str, int]] = None,
         default_threshold: int = DEFAULT_OTHER_THRESHOLD,
         window_size: int = DEFAULT_WINDOW_SIZE,
+        trace_recorder: Optional[ITraceRecorder] = None,
+        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError(
@@ -95,6 +98,10 @@ class ToolCallLoopGuardService:
             raise ValueError("default_threshold must be int >= 2")
         if not isinstance(window_size, int) or window_size < 2:
             raise ValueError("window_size must be int >= 2")
+        if trace_recorder is not None and not isinstance(trace_recorder, ITraceRecorder):
+            raise TypeError("trace_recorder must be ITraceRecorder or None")
+        if current_tick_provider is not None and not callable(current_tick_provider):
+            raise TypeError("current_tick_provider must be callable or None")
 
         self._observation_buffer = observation_buffer
         self._clock: Callable[[], datetime] = clock or datetime.utcnow
@@ -103,6 +110,8 @@ class ToolCallLoopGuardService:
         )
         self._default_threshold = default_threshold
         self._window_size = window_size
+        self._trace_recorder = trace_recorder
+        self._current_tick_provider = current_tick_provider
         self._history: Dict[int, List[_ToolCallRecord]] = {}
         self._last_warned: Dict[int, _ToolCallRecord] = {}
 
@@ -155,6 +164,28 @@ class ToolCallLoopGuardService:
                 game_time_label=game_time_label,
             ),
         )
+        # Issue #240 後続: 警告観測の注入を trace にも残し、実 LLM 試走の
+        # 振り返りで「loop_guard が実際に発火したか」を可視化する。
+        if self._trace_recorder is not None:
+            tick: Optional[int] = None
+            if self._current_tick_provider is not None:
+                try:
+                    tick = self._current_tick_provider()
+                except Exception:
+                    tick = None
+            try:
+                self._trace_recorder.record(
+                    TraceEventKind.LOOP_GUARD_WARNING,
+                    tick=tick,
+                    player_id=int(player_id.value),
+                    tool_name=tool_name,
+                    argument_fingerprint=fingerprint,
+                    consecutive_count=threshold,
+                    game_time_label=game_time_label,
+                )
+            except Exception:
+                # trace 失敗は loop guard 本来の責務を止めない
+                pass
 
     def _build_warning_entry(
         self,

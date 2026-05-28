@@ -35,6 +35,10 @@ class TraceEventKind:
     MEMO_ADD = "memo_add"
     MEMO_DONE = "memo_done"
     MEMO_HINT = "memo_hint"
+    # Issue #240 後続: 同一 (tool, fingerprint) の連打を loop guard が検知し
+    # 警告観測を注入したタイミング。trace で wait spam の抑制動作を可視化する。
+    # payload: tool_name / argument_fingerprint / consecutive_count
+    LOOP_GUARD_WARNING = "loop_guard_warning"
     SCENE = "scene"
     NOTE = "note"
     # Phase 1d viewer: プレイヤーがスポット間を移動した瞬間。空間アニメーション

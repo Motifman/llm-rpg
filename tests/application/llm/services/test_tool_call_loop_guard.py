@@ -224,3 +224,76 @@ class TestToolCallLoopGuardServiceConstants:
         assert DEFAULT_LOOP_THRESHOLDS[TOOL_NAME_SPOT_GRAPH_TRAVEL_TO] == 2
         assert DEFAULT_LOOP_THRESHOLDS[TOOL_NAME_SPOT_GRAPH_INTERACT] == 4
         assert DEFAULT_OTHER_THRESHOLD == 5
+
+
+class TestToolCallLoopGuardServiceTraceEmission:
+    """Issue #240 後続: loop_guard 警告が ITraceRecorder に LOOP_GUARD_WARNING として記録される。"""
+
+    def test_警告発火時に_trace_recorder_に_LOOP_GUARD_WARNING_が_記録される(self) -> None:
+        """3 回連続 wait で警告観測注入と同時に trace に 1 イベント。"""
+        from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
+
+        class _CapturingRecorder(NullTraceRecorder):
+            """record() の引数をキャプチャするテスト用 recorder。"""
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.calls: list[dict] = []
+
+            def record(self, kind, *, tick=None, player_id=None, **payload):
+                self.calls.append(
+                    {"kind": kind, "tick": tick, "player_id": player_id, "payload": payload}
+                )
+                return super().record(kind, tick=tick, player_id=player_id, **payload)
+
+        recorder = _CapturingRecorder()
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(
+            buf,
+            clock=_fixed_clock,
+            trace_recorder=recorder,
+            current_tick_provider=lambda: 42,
+        )
+        pid = _pid(1)
+        for _ in range(3):
+            svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
+        # 1 回だけ trace に記録される
+        assert len(recorder.calls) == 1
+        call = recorder.calls[0]
+        assert call["kind"] == TraceEventKind.LOOP_GUARD_WARNING
+        assert call["tick"] == 42
+        assert call["player_id"] == 1
+        assert call["payload"]["tool_name"] == TOOL_NAME_SPOT_GRAPH_WAIT
+        assert call["payload"]["consecutive_count"] == 3
+
+    def test_trace_recorder_が_None_なら_観測注入のみで_trace_は記録されない(self) -> None:
+        """recorder=None の場合は警告観測のみ。下位互換維持。"""
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        pid = _pid(1)
+        for _ in range(3):
+            svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
+        # observation は 1 件入る
+        assert len(buf.get_observations(pid)) == 1
+        # trace なし状態でクラッシュしない (本テストが通過すれば OK)
+
+    def test_trace_recorder_が_例外を投げても_loop_guard_本来の責務は止まらない(self) -> None:
+        """trace 失敗時も警告観測は注入される (silent except)。"""
+        from ai_rpg_world.application.trace import ITraceRecorder
+
+        class _BrokenRecorder(ITraceRecorder):
+            def record(self, kind, *, tick=None, player_id=None, **payload):
+                raise RuntimeError("trace failed")
+
+            def close(self) -> None:
+                pass
+
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(
+            buf, clock=_fixed_clock, trace_recorder=_BrokenRecorder()
+        )
+        pid = _pid(1)
+        for _ in range(3):
+            svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
+        # trace 失敗にもかかわらず観測注入は成功
+        assert len(buf.get_observations(pid)) == 1
