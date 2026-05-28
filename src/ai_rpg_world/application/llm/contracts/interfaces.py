@@ -164,12 +164,21 @@ class IContextFormatStrategy(ABC):
         recent_events_text: str,
         relevant_memories_text: str = "",
         active_memos_text: str = "",
+        objective_text: str = "",
+        inventory_text: str = "",
     ) -> str:
         """user prompt に入れる文脈テキストを返す。
 
         ``active_memos_text`` は LLM が ``memo_add`` で固定した「進行中のメモ」
         section に表示するテキスト (Issue #188 Phase 1a)。空文字なら section を
         出さない。
+
+        ``objective_text`` は実行ランタイムが固定の目的文を渡したい場合に使う
+        (例: escape_game の「【現在の目的】この廃墟から外へ脱出する」)。空なら
+        section を出さない (Issue #227 chore β: 経路統一)。
+
+        ``inventory_text`` は所持物証の整形済テキスト。callable provider が
+        生成して渡す。空なら section を出さない。
         """
         pass
 

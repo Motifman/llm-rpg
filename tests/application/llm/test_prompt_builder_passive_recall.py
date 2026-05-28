@@ -107,8 +107,8 @@ def _world_query_stub(state=None):
 class TestPromptBuilderPassiveRecall:
     """Optional 注入時のみ関連記憶セクションに recall_text が載ること"""
 
-    def test_without_service_relevant_memories_section_is_placeholder(self) -> None:
-        """受動想起未注入時は relevant_memories が空のまま（従来どおり ## 関連する記憶 は （なし））。"""
+    def test_without_service_relevant_memories_section_is_omitted(self) -> None:
+        """受動想起未注入時は【関連する記憶】section ごと省略される (chore β: escape_game format)。"""
         buffer = MagicMock(spec=IObservationContextBuffer)
         buffer.drain = MagicMock(return_value=[])
         sliding = MagicMock(spec=ISlidingWindowMemory)
@@ -150,14 +150,14 @@ class TestPromptBuilderPassiveRecall:
         )
         out = builder.build(PlayerId(1))
         user = out["messages"][1]["content"]
-        assert "## 関連する記憶" in user
-        assert "（なし）" in user.split("## 関連する記憶", 1)[1]
+        # chore β: 受動想起未注入時は section ごと出力されない (escape_game format)
+        assert "【関連する記憶】" not in user
         assert out["current_beliefs_snapshot"] == ""
 
     def test_with_service_joins_recall_texts_into_related_memories_section(self) -> None:
         """
         situation_cues（runtime + 最新観測 structured）で retrieve し、
-        候補 episode の recall_text が ## 関連する記憶 に載る。
+        候補 episode の recall_text が 【関連する記憶】 に載る。
         """
         player_num = 3
         place_c = EpisodicCue(axis="place_spot", value="77", source=EpisodicCueSource.RUNTIME_CONTEXT)
@@ -236,7 +236,7 @@ class TestPromptBuilderPassiveRecall:
         )
         out = builder.build(PlayerId(player_num))
         user = out["messages"][1]["content"]
-        section = user.split("## 関連する記憶", 1)[1]
+        section = user.split("【関連する記憶】", 1)[1]
         assert "最近の出来事" in section
         assert "古いが cue で拾える" in section
         expected_joined = "最近の出来事\n古いが cue で拾える"
