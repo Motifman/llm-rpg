@@ -7,9 +7,18 @@ class TestPlayerName:
     """PlayerName値オブジェクトのテスト"""
 
     def test_create_min_length_name(self):
-        """最小文字数（3文字）で作成できること"""
-        name = PlayerName("ABC")
-        assert name.value == "ABC"
+        """最小文字数（2文字）で作成できること。
+
+        Issue #264 で日本語 cast 名「リン」(2 文字) を許容するため、
+        最低長を 3 → 2 に緩和した。
+        """
+        name = PlayerName("AB")
+        assert name.value == "AB"
+
+    def test_create_japanese_two_char_name(self):
+        """日本語の 2 文字名「リン」で作成できること (Issue #264 で許容)。"""
+        name = PlayerName("リン")
+        assert name.value == "リン"
 
     def test_create_max_length_name(self):
         """最大文字数（16文字）で作成できること"""
@@ -37,21 +46,18 @@ class TestPlayerName:
             PlayerName("")
 
     def test_create_too_short_name_raises_error(self):
-        """2文字以下の名前は作成できないこと"""
-        with pytest.raises(PlayerNameValidationException, match="Name must be between 3 and 16 characters"):
-            PlayerName("AB")
-
-        with pytest.raises(PlayerNameValidationException, match="Name must be between 3 and 16 characters"):
+        """1 文字の名前は作成できないこと (Issue #264: 最低長 2 に緩和後)。"""
+        with pytest.raises(PlayerNameValidationException, match="Name must be between 2 and 16 characters"):
             PlayerName("A")
 
     def test_create_too_long_name_raises_error(self):
         """17文字以上の名前は作成できないこと"""
         long_name = "A" * 17
-        with pytest.raises(PlayerNameValidationException, match="Name must be between 3 and 16 characters"):
+        with pytest.raises(PlayerNameValidationException, match="Name must be between 2 and 16 characters"):
             PlayerName(long_name)
 
         longer_name = "A" * 100
-        with pytest.raises(PlayerNameValidationException, match="Name must be between 3 and 16 characters"):
+        with pytest.raises(PlayerNameValidationException, match="Name must be between 2 and 16 characters"):
             PlayerName(longer_name)
 
     def test_equality(self):
