@@ -614,52 +614,90 @@ class EscapeGameRuntime:
         SectionBasedContextFormatStrategy()
     )
 
+    def _get_or_build_default_prompt_builder(self) -> "DefaultPromptBuilder":
+        """本家 DefaultPromptBuilder のインスタンスを lazy 構築してキャッシュする。
+
+        Issue #227 後続 HIGH-3 Part 2: escape_game の prompt 組み立てを
+        DefaultPromptBuilder に統合するため、必要な adapter を集めて 1 回だけ
+        構築する。
+        """
+        cached = getattr(self, "_cached_default_prompt_builder", None)
+        if cached is not None:
+            return cached
+
+        from ai_rpg_world.application.llm.services.prompt_builder import (
+            DefaultPromptBuilder,
+        )
+        from ai_rpg_world.application.llm.services.prompt_builder_config import (
+            PromptBuilderCoreServices,
+            PromptLimits,
+            PromptSectionProviders,
+        )
+        from demos.escape_game.default_prompt_builder_adapters import (
+            EscapeGameAvailableToolsProvider,
+            EscapeGameProfileRepositoryAdapter,
+            EscapeGameSystemPromptBuilder,
+            EscapeGameWorldQueryAdapter,
+        )
+
+        core = PromptBuilderCoreServices(
+            observation_buffer=self._obs_buffer,
+            sliding_window_memory=self._sliding_window,
+            action_result_store=self._action_result_store,
+            world_query_service=EscapeGameWorldQueryAdapter(self),
+            player_profile_repository=EscapeGameProfileRepositoryAdapter(self),
+            current_state_formatter=self._formatter,
+            recent_events_formatter=self._recent_events_formatter,
+            context_format_strategy=self._context_strategy,
+            system_prompt_builder=EscapeGameSystemPromptBuilder(self),
+            available_tools_provider=EscapeGameAvailableToolsProvider(),
+        )
+        sections = PromptSectionProviders(
+            objective_text_provider=lambda _pid: self._ESCAPE_GAME_OBJECTIVE_TEXT,
+            inventory_text_provider=lambda pid: self._format_inventory_evidence(pid),
+            memo_store=self._todo_store,
+        )
+        limits = PromptLimits(
+            tile_map_enabled=False,
+            default_action_instruction=self._ESCAPE_GAME_ACTION_INSTRUCTION,
+        )
+        builder = DefaultPromptBuilder(
+            core,
+            sections=sections,
+            limits=limits,
+            ui_context_builder=self._ui_context_builder,
+            current_tick_provider=lambda: self.current_tick(),
+        )
+        self._cached_default_prompt_builder = builder
+        return builder
+
     def build_full_prompt(self, player_id: PlayerId) -> dict:
         """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。
 
-        Issue #227 chore β: section 組み立ては本家
-        ``SectionBasedContextFormatStrategy`` に委譲する。形式・順序の二重管理
-        による drift を防ぐ。format 仕様は ``context_format_strategy.py`` 側に
-        集約されているので、変更時はそちらを編集する。
+        Issue #227 後続 HIGH-3 Part 2: 本家 DefaultPromptBuilder.build() に統合した。
+        section 組み立て・recent_events・active_memos・tile-map field 制御は
+        DefaultPromptBuilder 内部で処理される。escape_game 固有の部分は adapter
+        (default_prompt_builder_adapters.py) 経由で注入する:
+        - WorldQuery 相当: build_llm_context + _build_minimal_player_state_dto
+        - system_prompt: precomputed _escape_llm_system_prompt
+        - objective/inventory section: provider 経由
 
-        NOTE (Issue #227 後続レビュー HIGH-3): escape_game runtime は本家
-        DefaultPromptBuilder ではなく独自経路で prompt を組み立てている。
-        共有可能な部分は順次抽出済み (SectionBasedContextFormatStrategy,
-        active_memos_formatter, DefaultRecentEventsFormatter, tile-map field
-        の None 固定)。残った差分:
-        - current_state は build_llm_context (spot_graph snapshot 経由) を使う
-        - system_prompt は build_escape_system_prompt (シナリオ固定文面)
-        - tools は get_tool_definitions (escape_game 固有 catalog)
-        - return shape は {"system", "user"} (DefaultPromptBuilder は messages[])
-        これらを DefaultPromptBuilder 経由にするには WorldQueryService と
-        PlayerProfileRepository を escape_game 用に構築する必要があり、
-        別 PR で対応する。本 PR では構造同等を保証する regression test を追加した。
+        return shape は backward-compat のため {"system", "user", "tools",
+        "tool_runtime_context"} を維持し、DefaultPromptBuilder の
+        {"messages": [...]} 形から変換する。
         """
         self._wire_auxiliary_tool_stack()
-        self._drain_buffer_to_sliding_window(player_id)
+        # observation buffer の drain は DefaultPromptBuilder.build() 内で行われる
 
+        builder = self._get_or_build_default_prompt_builder()
+        result = builder.build(player_id)
+        messages = result["messages"]
+        system_content = messages[0]["content"]
+        user_content = messages[1]["content"]
+
+        # tool_runtime_context は escape_game 独自の build_llm_context 経由で取得
         ctx = self.build_llm_context(player_id)
-        current_state_text = ctx.current_state_text
 
-        recent_obs = self._sliding_window.get_recent(player_id, 20)
-        recent_acts = self._action_result_store.get_recent(player_id, 20)
-        recent_events_text = self._recent_events_formatter.format(recent_obs, recent_acts)
-
-        inventory_block = self._format_inventory_evidence(player_id)
-        active_memos_block = self._format_active_memos(player_id)
-
-        # chore β: section 組み立てを本家 strategy に委譲
-        context_body = self._context_strategy.format(
-            current_state_text=current_state_text,
-            recent_events_text=recent_events_text,
-            relevant_memories_text="",  # episodic recall は未配線 (#240 で説明)
-            active_memos_text=active_memos_block,
-            objective_text=self._ESCAPE_GAME_OBJECTIVE_TEXT,
-            inventory_text=inventory_block,
-        )
-        user_content = context_body + "\n\n" + self._ESCAPE_GAME_ACTION_INSTRUCTION
-
-        system_content = self.build_system_prompt(player_id)
         return {
             "system": system_content,
             "user": user_content,
