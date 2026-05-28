@@ -117,18 +117,9 @@ def create_spot_graph_wiring(
     guild_command_service: Optional[Any] = None,
     shop_command_service: Optional[Any] = None,
     trade_command_service: Optional[Any] = None,
-    post_service: Optional[Any] = None,
-    reply_service: Optional[Any] = None,
-    user_command_service: Optional[Any] = None,
-    notification_command_service: Optional[Any] = None,
-    sns_mode_session: Optional[Any] = None,
-    sns_page_session: Optional[Any] = None,
-    post_query_service: Optional[Any] = None,
-    sns_page_query_service: Optional[Any] = None,
+    sns: Optional["SnsWiringConfig"] = None,
     trade_page_session: Optional[Any] = None,
     trade_page_query_service: Optional[Any] = None,
-    reply_query_service: Optional[Any] = None,
-    notification_query_service: Optional[Any] = None,
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     synchronized_action_groups: tuple = (),
@@ -157,6 +148,7 @@ def create_spot_graph_wiring(
     """
     from ai_rpg_world.application.llm.wiring.wiring_configs import (
         EpisodicWiringConfig,
+        SnsWiringConfig,
     )
 
     if episodic is None:
@@ -169,6 +161,19 @@ def create_spot_graph_wiring(
     chunk_episode_draft_builder = episodic.chunk_episode_draft_builder
     episodic_chunk_coordinator = episodic.chunk_coordinator
     episodic_chunk_subjective_completion = episodic.chunk_subjective_completion
+
+    if sns is None:
+        sns = SnsWiringConfig()
+    post_service = sns.post_service
+    reply_service = sns.reply_service
+    user_command_service = sns.user_command_service
+    notification_command_service = sns.notification_command_service
+    post_query_service = sns.post_query_service
+    sns_page_query_service = sns.sns_page_query_service
+    reply_query_service = sns.reply_query_service
+    notification_query_service = sns.notification_query_service
+    sns_mode_session = sns.mode_session
+    sns_page_session = sns.page_session
     # 遅延 import: wiring/__init__.py の循環を避ける
     from ai_rpg_world.application.llm.wiring import (
         LlmAgentWiringResult,

@@ -138,18 +138,23 @@ def _profile_repo_with_player_one() -> InMemoryPlayerProfileRepository:
 
 @pytest.fixture
 def sns_wiring_deps():
+    """SnsWiringConfig 経由で wiring に渡す (HIGH-4 Step 8b)。"""
+    from ai_rpg_world.application.llm.wiring.wiring_configs import SnsWiringConfig
+
     deps = _minimal_wiring_deps()
     post_query = MagicMock()
     post_query.get_home_timeline = MagicMock(return_value=[])
     post_query.get_user_timeline = MagicMock(return_value=[])
     session = SnsModeSessionService()
-    deps["post_service"] = MagicMock()
-    deps["reply_service"] = MagicMock()
-    deps["user_command_service"] = MagicMock()
-    deps["notification_command_service"] = MagicMock()
+    deps["sns"] = SnsWiringConfig(
+        post_service=MagicMock(),
+        reply_service=MagicMock(),
+        user_command_service=MagicMock(),
+        notification_command_service=MagicMock(),
+        mode_session=session,
+        post_query_service=post_query,
+    )
     deps["trade_command_service"] = MagicMock()
-    deps["sns_mode_session"] = session
-    deps["post_query_service"] = post_query
     deps["player_profile_repository"] = _profile_repo_with_player_one()
     return deps
 
@@ -210,9 +215,13 @@ class TestSnsModeWiringPromptTools:
     def test_prompt_tools_sns_mode_on_with_virtual_pages_shows_view_current_page(
         self, sns_wiring_deps
     ):
+        from dataclasses import replace
         deps = dict(sns_wiring_deps)
-        deps["sns_page_query_service"] = MagicMock()
-        deps["sns_page_session"] = SnsPageSessionService()
+        deps["sns"] = replace(
+            deps["sns"],
+            sns_page_query_service=MagicMock(),
+            page_session=SnsPageSessionService(),
+        )
         world_query: MagicMock = deps["world_query_service"]
         world_query.get_player_current_state.return_value = _player_current_state_for_sns_tools(
             is_sns_mode_active=True,
@@ -231,9 +240,13 @@ class TestSnsModeWiringPromptTools:
     def test_prompt_includes_current_virtual_page_snapshot_when_present(
         self, sns_wiring_deps
     ):
+        from dataclasses import replace
         deps = dict(sns_wiring_deps)
-        deps["sns_page_query_service"] = MagicMock()
-        deps["sns_page_session"] = SnsPageSessionService()
+        deps["sns"] = replace(
+            deps["sns"],
+            sns_page_query_service=MagicMock(),
+            page_session=SnsPageSessionService(),
+        )
         world_query: MagicMock = deps["world_query_service"]
         world_query.get_player_current_state.return_value = _player_current_state_for_sns_tools(
             is_sns_mode_active=True,
@@ -249,6 +262,6 @@ class TestSnsModeWiringPromptTools:
         assert '"post_ref":"r_post_01"' in user_content
 
     def test_wiring_result_exposes_same_sns_mode_session_instance(self, sns_wiring_deps):
-        session = sns_wiring_deps["sns_mode_session"]
+        session = sns_wiring_deps["sns"].mode_session
         result = create_llm_agent_wiring(**sns_wiring_deps)
         assert result.sns_mode_session is session
