@@ -156,9 +156,6 @@ from ai_rpg_world.application.speech.services.player_speech_service import (
 from demos.escape_game.pipeline_event_publisher import PipelineEventPublisher
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
-)
 
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
@@ -1172,33 +1169,17 @@ def create_escape_game_runtime(
     )
 
     # ── 観測パイプライン構築 ──
-    # Issue #227 修正: 以前は SpotGraphRecipientStrategy 1 つだけで構築していた
-    # ため、PlayerSpokeEvent / ConsumableUsedEvent / Conversation 系の event が
-    # 配信先解決されずに silent drop していた。本家経路と同じ全 strategy 構成
-    # を使うことで、event 種別ごとに正しい配信先 (距離 gating / 音透過 / target
-    # 限定など) が機能する。
+    # Issue #227 PR-5 (tile-map 除去): physical_map_repository=None で resolver を
+    # 組み立てる。tile-map 依存の strategy (Pursuit / Monster / Combat / Harvest /
+    # Default の世界座標フォールバック) は escape_game では関連 event が発火しないため
+    # inert で、resolver 内部の NullWorldObjectToPlayerResolver で安全に処理される。
+    # PlayerSpokeEvent は SpotGraphSpeechRecipientStrategy (hop-based) で処理される。
     #
-    # physical_map_repository は 2d tile map 専用 strategy (Pursuit/Combat/
-    # Monster/Default の世界座標フォールバック) の依存だが、escape_game は
-    # spot_graph 専用で tile-map event は発火しないため、空の in-memory repo
-    # で十分。SpotGraph 系 strategy が先に登録され、PlayerSpokeEvent は
-    # SpotGraphSpeechRecipientStrategy (hop-based) で処理される。
-    #
-    # WARN (chore #240 後続): 以下の strategy は tile map (Coordinate.distance_to)
-    # 前提。escape_game では関連 event が発火しないため inert だが、将来これら
-    # を escape_game に持ち込む場合は ``empty_physical_map_repo`` の扱いを
-    # 再検討すること:
-    #   - PursuitRecipientStrategy        (PursuitEvent)
-    #   - MonsterRecipientStrategy        (MonsterAppearedEvent 等)
-    #   - CombatRecipientStrategy         (CombatHitBoxEvent 等)
-    #   - HarvestRecipientStrategy        (HarvestEvent)
-    #   - DefaultRecipientStrategy        (一部 fallback で physical_map を見る)
-    # これらは現状 supports() が False を返し resolve() に到達しないが、
-    # event を追加するとサイレントに誤動作する可能性がある。
-    empty_physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
+    # WARN: 将来 tile-map ベースの event (Pursuit/Monster/Combat/Harvest 等) を
+    # escape_game に持ち込む場合は、physical_map_repository を実装した上で渡す必要がある。
     obs_resolver = create_observation_recipient_resolver(
         player_status_repository=player_status_repo,
-        physical_map_repository=empty_physical_map_repo,
+        physical_map_repository=None,
         spot_graph_repository=spot_graph_repo,
     )
 
