@@ -811,9 +811,14 @@ class _EscapeGameLlmWiring:
             return ""
         count = len(recipients)
         if count == 0:
+            # speech_say は同 spot + 隣接 (1 hop) 範囲。0 名なら相手は 2 hop 以上
+            # 先にいる。LLM ツールとして提供されているのは say / whisper のみで
+            # (whisper は同 spot 内の特定 1 人のみで say より狭い)、有効な打開策は
+            # 「移動して相手の spot に近づく」しかない。
             return (
-                "（聞こえる範囲に他のプレイヤーはいません。声は誰にも届きませんでした。"
-                "返事を期待せず、別の場所へ移動するか whisper を試してください）"
+                "（speech_say は同じスポットと隣接スポット (1 hop) のみに届きますが、"
+                "その範囲に他のプレイヤーはいません。声は誰にも届きませんでした。"
+                "返事を期待せず、別の場所へ移動して相手の居るスポットに近づいてください）"
             )
         return f"（あなたの声は {count} 名のプレイヤーに届く範囲です）"
 
