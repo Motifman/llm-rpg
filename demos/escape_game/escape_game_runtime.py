@@ -578,29 +578,21 @@ class EscapeGameRuntime:
         return "\n".join(lines) if lines else "（なし）"
 
     def _format_active_memos(self, player_id: PlayerId, *, stale_age_ticks: int = 20) -> str:
-        """LLM が memo_add で固定した未完了 memo を整形する。空なら ""。"""
+        """LLM が memo_add で固定した未完了 memo を整形する。空なら ""。
+
+        本家 PromptBuilder と同じロジックを共有するため、active_memos_formatter
+        に委譲する (Issue #227 後続レビュー HIGH-2: drift 防止)。
+        """
+        from ai_rpg_world.application.llm.services.active_memos_formatter import (
+            format_active_memos,
+        )
+
         entries = self._todo_store.list_uncompleted(player_id)
-        if not entries:
-            return ""
-        current_tick = self.current_tick()
-        lines: List[str] = []
-        for memo in entries:
-            stale_prefix = ""
-            age_part = ""
-            if memo.added_at_tick is not None:
-                elapsed = max(0, current_tick - memo.added_at_tick)
-                age_part = f", 経過 {elapsed} tick"
-                if elapsed >= stale_age_ticks:
-                    stale_prefix = "[STALE] "
-            tick_part = (
-                f"tick={memo.added_at_tick}"
-                if memo.added_at_tick is not None
-                else memo.added_at.strftime("%H:%M")
-            )
-            lines.append(
-                f"- {stale_prefix}[{tick_part}{age_part}] {memo.content} (id: {memo.id})"
-            )
-        return "\n".join(lines)
+        return format_active_memos(
+            entries,
+            current_tick=self.current_tick(),
+            stale_age_ticks=stale_age_ticks,
+        )
 
     # ── 完全プロンプト構築 ──
 
