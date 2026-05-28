@@ -320,7 +320,7 @@ def _build_tool_handler_map(
     notification_query_service: Optional[Any],
     item_repository: Optional[Any],
     monster_repository: Optional[Any],
-    physical_map_repository: PhysicalMapRepository,
+    physical_map_repository: Optional[PhysicalMapRepository],
     player_status_repository: PlayerStatusRepository,
     todo_store: Optional[InMemoryTodoStore],
     sliding_window: Optional[ISlidingWindowMemory] = None,
@@ -466,7 +466,7 @@ def _build_tool_stack(
     notification_query_service: Optional[Any],
     item_repository: Optional[Any],
     monster_repository: Optional[Any],
-    physical_map_repository: PhysicalMapRepository,
+    physical_map_repository: Optional[PhysicalMapRepository],
     player_status_repository: PlayerStatusRepository,
     monster_template_repository: Optional[Any],
     spot_repository: Optional[Any],
@@ -857,7 +857,7 @@ class LlmAgentWiringResult:
 def create_llm_agent_wiring(
     *,
     player_status_repository: PlayerStatusRepository,
-    physical_map_repository: PhysicalMapRepository,
+    physical_map_repository: Optional[PhysicalMapRepository] = None,
     world_query_service: Any,
     movement_service: Any,
     pursuit_command_service: Optional[Any] = None,
@@ -937,8 +937,9 @@ def create_llm_agent_wiring(
     """
     if player_status_repository is None:
         raise TypeError("player_status_repository must not be None")
-    if physical_map_repository is None:
-        raise TypeError("physical_map_repository must not be None")
+    # physical_map_repository は spot_graph 専用ランタイムでは None で良い。
+    # tile-map 依存のツール (inspect_target / drop_item の tile 配置等) は
+    # 配下の executor 側で None ガードされている。
     if world_query_service is None:
         raise TypeError("world_query_service must not be None")
     if movement_service is None:

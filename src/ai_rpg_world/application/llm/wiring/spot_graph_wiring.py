@@ -104,7 +104,7 @@ from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
 def create_spot_graph_wiring(
     *,
     player_status_repository: PlayerStatusRepository,
-    physical_map_repository: PhysicalMapRepository,
+    physical_map_repository: Optional[PhysicalMapRepository] = None,
     world_query_service: WorldQueryService,
     spot_graph_world_services: SpotGraphWorldServices,
     spot_graph_repository: ISpotGraphRepository,
@@ -237,8 +237,9 @@ def create_spot_graph_wiring(
 
     if player_status_repository is None:
         raise TypeError("player_status_repository must not be None")
-    if physical_map_repository is None:
-        raise TypeError("physical_map_repository must not be None")
+    # physical_map_repository は spot_graph 専用ランタイムでは省略可。
+    # 観測 resolver は None なら NullWorldObjectToPlayerResolver を使う。
+    # tile 依存ツールは executor 側で None ガード済み。
     if world_query_service is None:
         raise TypeError("world_query_service must not be None")
     if player_profile_repository is None:
