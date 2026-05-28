@@ -901,28 +901,12 @@ def create_llm_agent_wiring(
     unit_of_work_factory: UnitOfWorkFactory,
     observation_buffer: Optional[IObservationContextBuffer] = None,
     observation_formatter: Optional[IObservationFormatter] = None,
-    spot_repository: Optional[Any] = None,
-    item_spec_repository: Optional[Any] = None,
-    monster_template_repository: Optional[Any] = None,
-    item_repository: Optional[Any] = None,
-    quest_repository: Optional[Any] = None,
-    shop_repository: Optional[Any] = None,
-    trade_repository: Optional[Any] = None,
-    guild_repository: Optional[Any] = None,
-    monster_repository: Optional[Any] = None,
-    hit_box_repository: Optional[Any] = None,
-    skill_loadout_repository: Optional[Any] = None,
-    skill_deck_progress_repository: Optional[Any] = None,
-    skill_spec_repository: Optional[Any] = None,
-    sns_user_repository: Optional[Any] = None,
-    spot_graph_repository: Optional[Any] = None,
+    repositories: Optional["GameRepositoriesConfig"] = None,
     quest_command_service: Optional[Any] = None,
     guild_command_service: Optional[Any] = None,
     shop_command_service: Optional[Any] = None,
-    trade_command_service: Optional[Any] = None,
     sns: Optional["SnsWiringConfig"] = None,
-    trade_page_session: Optional[Any] = None,
-    trade_page_query_service: Optional[Any] = None,
+    trade: Optional["TradeWiringConfig"] = None,
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
@@ -949,7 +933,9 @@ def create_llm_agent_wiring(
     """
     from ai_rpg_world.application.llm.wiring.wiring_configs import (
         EpisodicWiringConfig,
+        GameRepositoriesConfig,
         SnsWiringConfig,
+        TradeWiringConfig,
     )
 
     if episodic is None:
@@ -975,6 +961,30 @@ def create_llm_agent_wiring(
     notification_query_service = sns.notification_query_service
     sns_mode_session = sns.mode_session
     sns_page_session = sns.page_session
+
+    if trade is None:
+        trade = TradeWiringConfig()
+    trade_command_service = trade.command_service
+    trade_page_session = trade.page_session
+    trade_page_query_service = trade.page_query_service
+
+    if repositories is None:
+        repositories = GameRepositoriesConfig()
+    item_repository = repositories.item_repository
+    item_spec_repository = repositories.item_spec_repository
+    monster_repository = repositories.monster_repository
+    monster_template_repository = repositories.monster_template_repository
+    quest_repository = repositories.quest_repository
+    shop_repository = repositories.shop_repository
+    trade_repository = repositories.trade_repository
+    guild_repository = repositories.guild_repository
+    hit_box_repository = repositories.hit_box_repository
+    skill_loadout_repository = repositories.skill_loadout_repository
+    skill_deck_progress_repository = repositories.skill_deck_progress_repository
+    skill_spec_repository = repositories.skill_spec_repository
+    sns_user_repository = repositories.sns_user_repository
+    spot_repository = repositories.spot_repository
+    spot_graph_repository = repositories.spot_graph_repository
 
     if player_status_repository is None:
         raise TypeError("player_status_repository must not be None")

@@ -79,6 +79,53 @@ class SnsWiringConfig:
 
 
 @dataclass(frozen=True)
+class TradeWiringConfig:
+    """取引 / 仮想取引画面関連の wiring 引数を 1 つに束ねる Config (HIGH-4 Step 8c)。
+
+    fields:
+    - command_service: 取引コマンド (trade_offer 等) の application service
+    - page_session: 仮想取引画面のセッション
+    - page_query_service: 仮想取引画面のスナップショット取得
+
+    page_session は SNS と同様「アプリスロット」を共有するため、SNS と同じ
+    sns_mode_session を持ち回るルールがある (詳細は __init__.py の docstring)。
+    """
+
+    command_service: Optional[Any] = None
+    page_session: Optional[Any] = None
+    page_query_service: Optional[Any] = None
+
+
+@dataclass(frozen=True)
+class GameRepositoriesConfig:
+    """ゲーム系リポジトリの Optional 集合 (HIGH-4 Step 8c)。
+
+    各リポジトリは個別のゲーム機能 (item / monster / quest / shop / trade /
+    guild / hit_box / skill 系 / spot / spot_graph) を担当する。全 Optional で、
+    未注入なら該当機能が disable される。
+
+    本 Config は「リポジトリ群を持ち運ぶ」コンテナで、それぞれは独立した
+    アグリゲートに紐付くため __post_init__ 制約は持たない。
+    """
+
+    item_repository: Optional[Any] = None
+    item_spec_repository: Optional[Any] = None
+    monster_repository: Optional[Any] = None
+    monster_template_repository: Optional[Any] = None
+    quest_repository: Optional[Any] = None
+    shop_repository: Optional[Any] = None
+    trade_repository: Optional[Any] = None
+    guild_repository: Optional[Any] = None
+    hit_box_repository: Optional[Any] = None
+    skill_loadout_repository: Optional[Any] = None
+    skill_deck_progress_repository: Optional[Any] = None
+    skill_spec_repository: Optional[Any] = None
+    sns_user_repository: Optional[Any] = None
+    spot_repository: Optional[Any] = None
+    spot_graph_repository: Optional[Any] = None
+
+
+@dataclass(frozen=True)
 class EpisodicWiringConfig:
     """episodic memory 関連の wiring 引数を 1 つに束ねる Config (HIGH-4 Step 8a)。
 
