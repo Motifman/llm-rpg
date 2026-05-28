@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any, Optional
 
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
@@ -36,21 +35,8 @@ from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
     EpisodicChunkCoordinator,
 )
-from ai_rpg_world.application.llm.services.prompt_builder import (
-    DEFAULT_RECENT_ACTIONS_LIMIT,
-    DEFAULT_RECENT_OBSERVATIONS_LIMIT,
-)
-from ai_rpg_world.application.llm.services.episodic_promotion_frontier import (
-    EpisodicPromotionFrontier,
-)
-from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
-    EpisodicSemanticClusterPromotionService,
-)
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
-)
-from ai_rpg_world.application.llm.wiring._default_episodic_episode_store import (
-    resolve_default_episodic_episode_store,
 )
 from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
     SpotGraphCurrentStateFormatter,
@@ -89,10 +75,6 @@ from ai_rpg_world.domain.player.repository.player_status_repository import Playe
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
-from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
-    build_episodic_memory_link_bundle,
-    default_link_and_semantic_stores_for_episode_store,
-)
 
 
 def create_spot_graph_wiring(
@@ -183,8 +165,6 @@ def create_spot_graph_wiring(
     # 遅延 import: wiring/__init__.py の循環を避ける
     from ai_rpg_world.application.llm.wiring import (
         LlmAgentWiringResult,
-        _DEFAULT_LLM_VIEW_DISTANCE,
-        _ENV_LLM_VIEW_DISTANCE,
         _build_observation_stack,
         _build_persona_block_provider,
         _build_prompt_stack,
@@ -194,8 +174,10 @@ def create_spot_graph_wiring(
         _optional_episodic_reinterpretation_completion,
         _resolve_default_episodic_reinterpretation_stores,
     )
-    from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
-        EpisodicReinterpretationCoordinator,
+    from ai_rpg_world.application.llm.wiring._shared_builders import (
+        build_episodic_coordinator_stack,
+        build_episodic_memory_stack,
+        resolve_effective_view_distance,
     )
     from ai_rpg_world.application.llm.wiring._llm_client_factory import (
         create_llm_client_from_env,
@@ -315,19 +297,7 @@ def create_spot_graph_wiring(
         persona_store, persona_prompt_policy
     )
 
-    if llm_view_distance is not None:
-        effective_view_distance = llm_view_distance
-    else:
-        raw = (os.environ.get(_ENV_LLM_VIEW_DISTANCE) or "").strip()
-        if raw:
-            try:
-                effective_view_distance = int(raw)
-                if effective_view_distance < 0:
-                    effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
-            except ValueError:
-                effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
-        else:
-            effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
+    effective_view_distance = resolve_effective_view_distance(llm_view_distance)
 
     runtime_tool_state = _build_runtime_tool_state()
     todo_store = runtime_tool_state.todo_store
@@ -347,22 +317,12 @@ def create_spot_graph_wiring(
     )
 
     client = llm_client if llm_client is not None else create_llm_client_from_env()
-    shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
-    link_store, semantic_memory_store = default_link_and_semantic_stores_for_episode_store(
-        shared_episode_store
-    )
-    promotion_frontier = EpisodicPromotionFrontier()
-    mem_bundle = build_episodic_memory_link_bundle(
-        shared_episode_store,
-        link_store=link_store,
-        promotion_frontier=promotion_frontier,
-    )
-    episodic_semantic_promotion = EpisodicSemanticClusterPromotionService(
-        episode_store=shared_episode_store,
-        link_store=mem_bundle.link_store,
-        semantic_store=semantic_memory_store,
-        promotion_frontier=promotion_frontier,
-    )
+    episodic_stack = build_episodic_memory_stack(episodic_episode_store)
+    shared_episode_store = episodic_stack.shared_episode_store
+    semantic_memory_store = episodic_stack.semantic_memory_store
+    promotion_frontier = episodic_stack.promotion_frontier
+    mem_bundle = episodic_stack.mem_bundle
+    episodic_semantic_promotion = episodic_stack.episodic_semantic_promotion
     # 攻撃ユースケースのオーケストレーター。tool executor (player→monster)
     # と将来の tick driver (monster→player) で同じ instance を共有する。
     # monster_repository が未設定の起動構成（プロト・テスト等）では None
@@ -471,11 +431,6 @@ def create_spot_graph_wiring(
         episodic_recall_buffer_store,
         episodic_reinterpretation_journal_store,
     )
-    chunk_builder = (
-        chunk_episode_draft_builder
-        if chunk_episode_draft_builder is not None
-        else ChunkEpisodeDraftBuilder()
-    )
     chunk_subjective_service = _optional_episodic_chunk_subjective_fields_service(
         client,
         episodic_chunk_subjective_completion,
@@ -484,31 +439,24 @@ def create_spot_graph_wiring(
         client,
         episodic_reinterpretation_completion,
     )
-    reinterpretation_coord = EpisodicReinterpretationCoordinator(
-        episode_store=shared_episode_store,
-        recall_buffer_store=recall_buffer,
-        journal_store=reinterpretation_journal,
-        completion=reinterpretation_completion,
-    )
-    prompt_recall_buffer = (
-        recall_buffer
-        if reinterpretation_completion is not None or episodic_recall_buffer_store is not None
-        else None
-    )
-    episodic_coord = episodic_chunk_coordinator or EpisodicChunkCoordinator(
-        observation_buffer=buffer,
-        sliding_window_memory=sliding_window,
+    coord_stack = build_episodic_coordinator_stack(
+        shared_episode_store=shared_episode_store,
+        mem_bundle=mem_bundle,
+        buffer=buffer,
+        sliding_window=sliding_window,
         action_result_store=action_result_store,
-        episodic_episode_store=shared_episode_store,
-        chunk_episode_draft_builder=chunk_builder,
-        recent_observations_limit=DEFAULT_RECENT_OBSERVATIONS_LIMIT,
-        recent_actions_limit=DEFAULT_RECENT_ACTIONS_LIMIT,
-        chunk_subjective_fields_service=chunk_subjective_service,
-        persona_block_provider=persona_block_provider
-        if chunk_subjective_service is not None
-        else None,
-        episodic_memory_link_service=mem_bundle.link_service,
+        persona_block_provider=persona_block_provider,
+        recall_buffer=recall_buffer,
+        reinterpretation_journal=reinterpretation_journal,
+        episodic_recall_buffer_store_override=episodic_recall_buffer_store,
+        chunk_episode_draft_builder=chunk_episode_draft_builder,
+        chunk_subjective_service=chunk_subjective_service,
+        reinterpretation_completion=reinterpretation_completion,
+        episodic_chunk_coordinator_override=episodic_chunk_coordinator,
     )
+    reinterpretation_coord = coord_stack.reinterpretation_coord
+    prompt_recall_buffer = coord_stack.prompt_recall_buffer
+    episodic_coord = coord_stack.episodic_coord
     episodic_passive_recall = mem_bundle.passive_recall
     prompt_builder = _build_prompt_stack(
         buffer=buffer,

@@ -141,6 +141,11 @@ from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
     build_episodic_memory_link_bundle,
     default_link_and_semantic_stores_for_episode_store,
 )
+from ai_rpg_world.application.llm.wiring._shared_builders import (
+    build_episodic_coordinator_stack,
+    build_episodic_memory_stack,
+    resolve_effective_view_distance,
+)
 from ai_rpg_world.application.llm.services.in_memory_todo_store import (
     InMemoryTodoStore,
 )
@@ -979,19 +984,7 @@ def create_llm_agent_wiring(
         persona_store, persona_prompt_policy
     )
 
-    if llm_view_distance is not None:
-        effective_view_distance = llm_view_distance
-    else:
-        raw = (os.environ.get(_ENV_LLM_VIEW_DISTANCE) or "").strip()
-        if raw:
-            try:
-                effective_view_distance = int(raw)
-                if effective_view_distance < 0:
-                    effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
-            except ValueError:
-                effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
-        else:
-            effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
+    effective_view_distance = resolve_effective_view_distance(llm_view_distance)
 
     runtime_tool_state = _build_runtime_tool_state()
     todo_store = runtime_tool_state.todo_store
@@ -1011,22 +1004,12 @@ def create_llm_agent_wiring(
     )
 
     client = llm_client if llm_client is not None else create_llm_client_from_env()
-    shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
-    link_store, semantic_memory_store = default_link_and_semantic_stores_for_episode_store(
-        shared_episode_store
-    )
-    promotion_frontier = EpisodicPromotionFrontier()
-    mem_bundle = build_episodic_memory_link_bundle(
-        shared_episode_store,
-        link_store=link_store,
-        promotion_frontier=promotion_frontier,
-    )
-    episodic_semantic_promotion = EpisodicSemanticClusterPromotionService(
-        episode_store=shared_episode_store,
-        link_store=mem_bundle.link_store,
-        semantic_store=semantic_memory_store,
-        promotion_frontier=promotion_frontier,
-    )
+    episodic_stack = build_episodic_memory_stack(episodic_episode_store)
+    shared_episode_store = episodic_stack.shared_episode_store
+    semantic_memory_store = episodic_stack.semantic_memory_store
+    promotion_frontier = episodic_stack.promotion_frontier
+    mem_bundle = episodic_stack.mem_bundle
+    episodic_semantic_promotion = episodic_stack.episodic_semantic_promotion
     tool_stack = _build_tool_stack(
         game_tool_registry=game_tool_registry,
         todo_store=todo_store,
@@ -1084,11 +1067,6 @@ def create_llm_agent_wiring(
         episodic_recall_buffer_store,
         episodic_reinterpretation_journal_store,
     )
-    chunk_builder = (
-        chunk_episode_draft_builder
-        if chunk_episode_draft_builder is not None
-        else ChunkEpisodeDraftBuilder()
-    )
     chunk_subjective_service = _optional_episodic_chunk_subjective_fields_service(
         client,
         episodic_chunk_subjective_completion,
@@ -1097,31 +1075,24 @@ def create_llm_agent_wiring(
         client,
         episodic_reinterpretation_completion,
     )
-    reinterpretation_coord = EpisodicReinterpretationCoordinator(
-        episode_store=shared_episode_store,
-        recall_buffer_store=recall_buffer,
-        journal_store=reinterpretation_journal,
-        completion=reinterpretation_completion,
-    )
-    prompt_recall_buffer = (
-        recall_buffer
-        if reinterpretation_completion is not None or episodic_recall_buffer_store is not None
-        else None
-    )
-    episodic_coord = episodic_chunk_coordinator or EpisodicChunkCoordinator(
-        observation_buffer=buffer,
-        sliding_window_memory=sliding_window,
+    coord_stack = build_episodic_coordinator_stack(
+        shared_episode_store=shared_episode_store,
+        mem_bundle=mem_bundle,
+        buffer=buffer,
+        sliding_window=sliding_window,
         action_result_store=action_result_store,
-        episodic_episode_store=shared_episode_store,
-        chunk_episode_draft_builder=chunk_builder,
-        recent_observations_limit=DEFAULT_RECENT_OBSERVATIONS_LIMIT,
-        recent_actions_limit=DEFAULT_RECENT_ACTIONS_LIMIT,
-        chunk_subjective_fields_service=chunk_subjective_service,
-        persona_block_provider=persona_block_provider
-        if chunk_subjective_service is not None
-        else None,
-        episodic_memory_link_service=mem_bundle.link_service,
+        persona_block_provider=persona_block_provider,
+        recall_buffer=recall_buffer,
+        reinterpretation_journal=reinterpretation_journal,
+        episodic_recall_buffer_store_override=episodic_recall_buffer_store,
+        chunk_episode_draft_builder=chunk_episode_draft_builder,
+        chunk_subjective_service=chunk_subjective_service,
+        reinterpretation_completion=reinterpretation_completion,
+        episodic_chunk_coordinator_override=episodic_chunk_coordinator,
     )
+    reinterpretation_coord = coord_stack.reinterpretation_coord
+    prompt_recall_buffer = coord_stack.prompt_recall_buffer
+    episodic_coord = coord_stack.episodic_coord
     episodic_passive_recall = mem_bundle.passive_recall
     prompt_builder = _build_prompt_stack(
         buffer=buffer,
