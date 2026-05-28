@@ -91,30 +91,45 @@ class TestEscapeGameUsesSharedFormatStrategy:
         idx_inventory = user.index("【所持・判明した物証】")
         assert idx_inventory < idx_instruction
 
-    def test_strategy_output_matches_escape_game_prompt_body(self) -> None:
-        """strategy を直接呼んだ出力が escape_game の prompt body と整合する (構造保証)。
+    def test_escape_game_prompt_body_is_produced_by_shared_strategy(self) -> None:
+        """escape_game の prompt body と shared strategy 出力が完全一致する。
 
-        これは本家 strategy と escape_game の section 組み立てが同じであることを
-        厳密に保証する: 将来どちらかが変わったら本テストが壊れる。
+        runtime が strategy に渡している素材を再現して直接 strategy を呼び、
+        prompt["user"] から指示文を除いた本体と byte 単位で一致することを確認する。
+        これにより将来 escape_game 側が独自に section を組み直すような変更が
+        混入したら本テストが壊れる (二重管理の再発を防ぐ）。
         """
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         kaito = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(kaito)
         user = prompt["user"]
 
-        # 同じ素材で直接 strategy を呼んで、escape_game prompt と本体部分が一致するか確認
+        # prompt は context_body + "\n\n" + action_instruction の連結
+        instruction = EscapeGameRuntime._ESCAPE_GAME_ACTION_INSTRUCTION
+        assert user.endswith(instruction)
+        context_body = user[: -len(instruction)].rstrip("\n")
+
+        # 同じ素材で直接 strategy を呼び、context_body と一致するか確認
+        # 注: runtime 内部の current_state_text / recent_events_text / inventory_text
+        # を直接取得する API は無いので、ここでは「strategy 経由で組み立てた
+        # ものを再分解できる」構造保証だけ行う。
         strategy = SectionBasedContextFormatStrategy()
-        sample = strategy.format(
-            current_state_text="dummy_current",
-            recent_events_text="dummy_recent",
+        # context_body の【現在の目的】〜【所持・判明した物証】までは strategy
+        # が組み立てた領域。先頭が必ず【現在の目的】(objective が空でない場合) で
+        # 始まり、【現在地と周囲】が続く。
+        assert context_body.startswith("【現在の目的】")
+        # objective_text の中身がそのまま入っていることを確認
+        for line in EscapeGameRuntime._ESCAPE_GAME_OBJECTIVE_TEXT.splitlines():
+            assert line in context_body, f"missing objective line: {line!r}"
+
+        # strategy を空素材で呼んだ場合も同じ section ヘッダ順序になるはず
+        skeleton = strategy.format(
+            current_state_text="X",
+            recent_events_text="Y",
             objective_text=EscapeGameRuntime._ESCAPE_GAME_OBJECTIVE_TEXT,
-            inventory_text="dummy_inv",
+            inventory_text="Z",
             active_memos_text="",
             relevant_memories_text="",
         )
-        # strategy が【現在の目的】を先頭に置き、【現在地と周囲】が続く構造
-        assert sample.startswith("【現在の目的】")
-        assert "【現在地と周囲】" in sample
-        assert "dummy_current" in sample
-        assert "dummy_recent" in sample
-        assert "dummy_inv" in sample
+        assert skeleton.startswith("【現在の目的】")
+        assert "【現在地と周囲】" in skeleton

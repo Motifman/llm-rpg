@@ -38,18 +38,16 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         objective_text: str = "",
         inventory_text: str = "",
     ) -> str:
-        if not isinstance(current_state_text, str):
-            raise TypeError("current_state_text must be str")
-        if not isinstance(recent_events_text, str):
-            raise TypeError("recent_events_text must be str")
-        if not isinstance(relevant_memories_text, str):
-            raise TypeError("relevant_memories_text must be str")
-        if not isinstance(active_memos_text, str):
-            raise TypeError("active_memos_text must be str")
-        if not isinstance(objective_text, str):
-            raise TypeError("objective_text must be str")
-        if not isinstance(inventory_text, str):
-            raise TypeError("inventory_text must be str")
+        for name, value in (
+            ("current_state_text", current_state_text),
+            ("recent_events_text", recent_events_text),
+            ("relevant_memories_text", relevant_memories_text),
+            ("active_memos_text", active_memos_text),
+            ("objective_text", objective_text),
+            ("inventory_text", inventory_text),
+        ):
+            if not isinstance(value, str):
+                raise TypeError(f"{name} must be str")
 
         sections: list[str] = []
 

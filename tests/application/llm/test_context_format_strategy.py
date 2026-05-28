@@ -108,6 +108,7 @@ class TestSectionBasedContextFormatStrategy:
         assert "（なし）" in text
 
     def test_current_state_text_not_str_raises_type_error(self, strategy):
+        """current_state_text が str でないとき TypeError を投げる。"""
         with pytest.raises(TypeError, match="current_state_text must be str"):
             strategy.format(
                 current_state_text=123,  # type: ignore[arg-type]
@@ -115,6 +116,7 @@ class TestSectionBasedContextFormatStrategy:
             )
 
     def test_recent_events_text_not_str_raises_type_error(self, strategy):
+        """recent_events_text が str でないとき TypeError を投げる。"""
         with pytest.raises(TypeError, match="recent_events_text must be str"):
             strategy.format(
                 current_state_text="",
@@ -122,6 +124,7 @@ class TestSectionBasedContextFormatStrategy:
             )
 
     def test_relevant_memories_text_not_str_raises_type_error(self, strategy):
+        """relevant_memories_text が str でないとき TypeError を投げる。"""
         with pytest.raises(TypeError, match="relevant_memories_text must be str"):
             strategy.format(
                 current_state_text="",
@@ -130,6 +133,7 @@ class TestSectionBasedContextFormatStrategy:
             )
 
     def test_objective_text_not_str_raises_type_error(self, strategy):
+        """objective_text が str でないとき TypeError を投げる。"""
         with pytest.raises(TypeError, match="objective_text must be str"):
             strategy.format(
                 current_state_text="",
@@ -138,6 +142,7 @@ class TestSectionBasedContextFormatStrategy:
             )
 
     def test_inventory_text_not_str_raises_type_error(self, strategy):
+        """inventory_text が str でないとき TypeError を投げる。"""
         with pytest.raises(TypeError, match="inventory_text must be str"):
             strategy.format(
                 current_state_text="",

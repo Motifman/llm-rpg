@@ -368,26 +368,16 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         # Issue #227 chore β: 実行ランタイム固有の固定目的文 + 所持物証テキスト
         # を provider 経由で取得 (escape_game format への統一)。
-        objective_text = ""
-        if self._objective_text_provider is not None:
-            try:
-                objective_text = self._objective_text_provider(player_id) or ""
-            except Exception:
-                self._logger.warning(
-                    "objective_text_provider raised; using empty objective.",
-                    exc_info=True,
-                )
-                objective_text = ""
-        inventory_text = ""
-        if self._inventory_text_provider is not None:
-            try:
-                inventory_text = self._inventory_text_provider(player_id) or ""
-            except Exception:
-                self._logger.warning(
-                    "inventory_text_provider raised; using empty inventory.",
-                    exc_info=True,
-                )
-                inventory_text = ""
+        # provider が落ちた場合は ERROR で記録した上で空文字に degrade する。
+        # WARNING ではなく ERROR にする理由: provider 実装バグはサイレントに
+        # 黙過すべきでなく、ログ集約側で必ず可視化したい (silent failure 防止)。
+        # 一方で prompt 構築全体を中断するのは過剰なので degrade で続行する。
+        objective_text = self._call_text_provider(
+            self._objective_text_provider, player_id, "objective_text_provider"
+        )
+        inventory_text = self._call_text_provider(
+            self._inventory_text_provider, player_id, "inventory_text_provider"
+        )
 
         context = self._context_format_strategy.format(
             current_state_text=current_state_text,
@@ -476,3 +466,28 @@ class DefaultPromptBuilder(IPromptBuilder):
                 f"(id: {memo.id})"
             )
         return "\n".join(lines)
+
+    def _call_text_provider(
+        self,
+        provider: Optional[Callable[[PlayerId], str]],
+        player_id: PlayerId,
+        provider_name: str,
+    ) -> str:
+        """provider を呼んで text を返す。落ちたら ERROR ログ + 空文字 degrade。
+
+        provider バグを silent に握り潰すと debug が極めて困難になるため、
+        ERROR レベル + exc_info=True でログ集約側に必ず可視化させる。
+        prompt 構築自体は止めず degrade で続行する (provider は補助的な
+        section なので、欠けても LLM ターン自体は成立する)。
+        """
+        if provider is None:
+            return ""
+        try:
+            return provider(player_id) or ""
+        except Exception:
+            self._logger.error(
+                "%s raised; degrading to empty text. Fix provider implementation.",
+                provider_name,
+                exc_info=True,
+            )
+            return ""
