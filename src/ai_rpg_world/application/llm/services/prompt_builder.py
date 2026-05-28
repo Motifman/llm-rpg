@@ -27,6 +27,9 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
+from ai_rpg_world.application.llm.services.active_memos_formatter import (
+    format_active_memos,
+)
 from ai_rpg_world.application.llm.services.episodic_cue_rules import build_situation_episodic_cues
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallCandidate,
@@ -431,10 +434,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         Issue #188 Phase 1a:
         - memo_store 未注入なら空文字 (section ごと出さない)
         - 未完了メモがゼロなら空文字
-        - 各 memo に age (経過 tick) と stale フラグを付与:
-          - ``added_at_tick`` と現在 tick の差が ``memo_stale_age_ticks``
-            (default 20) 以上なら ``[STALE]`` を付ける
-          - LLM が「達成根拠が sliding_window から外れた可能性」を察知できる
+        - 各 memo に age (経過 tick) と stale フラグを付与する
+          (詳細は active_memos_formatter.format_active_memos に委譲)
         """
         if self._memo_store is None:
             return ""
@@ -442,36 +443,16 @@ class DefaultPromptBuilder(IPromptBuilder):
             entries = self._memo_store.list_uncompleted(player_id)
         except Exception:
             return ""
-        if not entries:
-            return ""
         current_tick = (
             self._current_tick_provider()
             if self._current_tick_provider is not None
             else None
         )
-        lines = []
-        for memo in entries:
-            stale_prefix = ""
-            age_part = ""
-            if (
-                current_tick is not None
-                and memo.added_at_tick is not None
-            ):
-                elapsed = current_tick - memo.added_at_tick
-                if elapsed < 0:
-                    elapsed = 0
-                age_part = f", 経過 {elapsed} tick"
-                if elapsed >= self._memo_stale_age_ticks:
-                    stale_prefix = "[STALE] "
-            tick_part = (
-                f"tick={memo.added_at_tick}" if memo.added_at_tick is not None
-                else memo.added_at.strftime("%H:%M")
-            )
-            lines.append(
-                f"- {stale_prefix}[{tick_part}{age_part}] {memo.content} "
-                f"(id: {memo.id})"
-            )
-        return "\n".join(lines)
+        return format_active_memos(
+            entries,
+            current_tick=current_tick,
+            stale_age_ticks=self._memo_stale_age_ticks,
+        )
 
     def _call_text_provider(
         self,
