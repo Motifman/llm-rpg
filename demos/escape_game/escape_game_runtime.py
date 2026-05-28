@@ -14,7 +14,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Optional, Tuple
+from typing import Any, ClassVar, Dict, FrozenSet, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -604,6 +604,16 @@ class EscapeGameRuntime:
         "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。"
     )
 
+    # Issue #227 後続 HIGH-3 改善: stateless formatter / strategy を class-level
+    # に持ち、build_full_prompt の毎回 new を避ける + 本家 DefaultPromptBuilder と
+    # 同じインスタンスタイプを使うことを明示する。
+    _recent_events_formatter: ClassVar[DefaultRecentEventsFormatter] = (
+        DefaultRecentEventsFormatter()
+    )
+    _context_strategy: ClassVar[SectionBasedContextFormatStrategy] = (
+        SectionBasedContextFormatStrategy()
+    )
+
     def build_full_prompt(self, player_id: PlayerId) -> dict:
         """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。
 
@@ -611,6 +621,19 @@ class EscapeGameRuntime:
         ``SectionBasedContextFormatStrategy`` に委譲する。形式・順序の二重管理
         による drift を防ぐ。format 仕様は ``context_format_strategy.py`` 側に
         集約されているので、変更時はそちらを編集する。
+
+        NOTE (Issue #227 後続レビュー HIGH-3): escape_game runtime は本家
+        DefaultPromptBuilder ではなく独自経路で prompt を組み立てている。
+        共有可能な部分は順次抽出済み (SectionBasedContextFormatStrategy,
+        active_memos_formatter, DefaultRecentEventsFormatter, tile-map field
+        の None 固定)。残った差分:
+        - current_state は build_llm_context (spot_graph snapshot 経由) を使う
+        - system_prompt は build_escape_system_prompt (シナリオ固定文面)
+        - tools は get_tool_definitions (escape_game 固有 catalog)
+        - return shape は {"system", "user"} (DefaultPromptBuilder は messages[])
+        これらを DefaultPromptBuilder 経由にするには WorldQueryService と
+        PlayerProfileRepository を escape_game 用に構築する必要があり、
+        別 PR で対応する。本 PR では構造同等を保証する regression test を追加した。
         """
         self._wire_auxiliary_tool_stack()
         self._drain_buffer_to_sliding_window(player_id)
@@ -620,15 +643,13 @@ class EscapeGameRuntime:
 
         recent_obs = self._sliding_window.get_recent(player_id, 20)
         recent_acts = self._action_result_store.get_recent(player_id, 20)
-        recent_fmt = DefaultRecentEventsFormatter()
-        recent_events_text = recent_fmt.format(recent_obs, recent_acts)
+        recent_events_text = self._recent_events_formatter.format(recent_obs, recent_acts)
 
         inventory_block = self._format_inventory_evidence(player_id)
         active_memos_block = self._format_active_memos(player_id)
 
         # chore β: section 組み立てを本家 strategy に委譲
-        context_strategy = SectionBasedContextFormatStrategy()
-        context_body = context_strategy.format(
+        context_body = self._context_strategy.format(
             current_state_text=current_state_text,
             recent_events_text=recent_events_text,
             relevant_memories_text="",  # episodic recall は未配線 (#240 で説明)
