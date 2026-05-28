@@ -26,12 +26,19 @@ def _node(i: int) -> SpotNode:
     )
 
 
-def _conn(cid: int, a: int, b: int, *, perm: float = 1.0) -> SpotConnection:
+def _conn(
+    cid: int,
+    a: int,
+    b: int,
+    *,
+    perm: float = 1.0,
+    name: str = "c",
+) -> SpotConnection:
     return SpotConnection(
         connection_id=ConnectionId.create(cid),
         from_spot_id=SpotId.create(a),
         to_spot_id=SpotId.create(b),
-        name="c",
+        name=name,
         description="",
         travel_ticks=1,
         is_bidirectional=False,
@@ -92,6 +99,75 @@ class TestSoundPropagationService:
             g,
         )
         assert c == SoundClarityEnum.MUFFLED
+
+    def test_recipient_carries_first_hop_connection_name_for_neighbor(self) -> None:
+        """1 hop 先 listener には到来した接続の名前が乗る (Issue #269 方向情報)。"""
+        g = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        g.add_spot(_node(1))
+        g.add_spot(_node(2))
+        g.add_connection(_conn(1, 1, 2, perm=0.5, name="閲覧室の扉"))
+        g.place_entity(EntityId.create(1), SpotId.create(1))
+        g.place_entity(EntityId.create(2), SpotId.create(2))
+        svc = SoundPropagationService()
+        rec = svc.resolve_recipients(EntityId.create(1), SoundVolumeEnum.NORMAL, g)
+        listener = next(r for r in rec if r.entity_id == EntityId.create(2))
+        assert listener.source_connection_name == "閲覧室の扉"
+        assert listener.source_adjacent_spot_id == SpotId.create(1)
+
+    def test_speaker_self_has_no_source_direction(self) -> None:
+        """話者自身は方向情報を持たない (同 spot)。"""
+        g = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        g.add_spot(_node(1))
+        g.place_entity(EntityId.create(1), SpotId.create(1))
+        svc = SoundPropagationService()
+        rec = svc.resolve_recipients(EntityId.create(1), SoundVolumeEnum.NORMAL, g)
+        speaker = next(r for r in rec if r.entity_id == EntityId.create(1))
+        assert speaker.source_connection_name is None
+        assert speaker.source_adjacent_spot_id is None
+
+    def test_two_hop_listener_uses_last_hop_connection(self) -> None:
+        """2 hop 先の listener には「自分のスポットに音が入った最後の接続」が乗る。"""
+        g = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        for i in (1, 2, 3):
+            g.add_spot(_node(i))
+        g.add_connection(_conn(1, 1, 2, perm=1.0, name="図書室の扉"))
+        g.add_connection(_conn(2, 2, 3, perm=1.0, name="書架の入口"))
+        g.place_entity(EntityId.create(1), SpotId.create(1))
+        g.place_entity(EntityId.create(3), SpotId.create(3))
+        svc = SoundPropagationService()
+        # SHOUT = 2 hop
+        rec = svc.resolve_recipients(EntityId.create(1), SoundVolumeEnum.SHOUT, g)
+        listener = next(r for r in rec if r.entity_id == EntityId.create(3))
+        # 「書架の入口」が listener=spot3 への最後の接続
+        assert listener.source_connection_name == "書架の入口"
+        assert listener.source_adjacent_spot_id == SpotId.create(2)
+
+    def test_outcome_for_listener_returns_recipient_or_none(self) -> None:
+        """outcome_for_listener は SoundRecipient を返し、届かなければ None。"""
+        g = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        g.add_spot(_node(1))
+        g.add_spot(_node(2))
+        g.add_connection(_conn(1, 1, 2, perm=0.5, name="扉"))
+        g.place_entity(EntityId.create(1), SpotId.create(1))
+        g.place_entity(EntityId.create(2), SpotId.create(2))
+        svc = SoundPropagationService()
+        out = svc.outcome_for_listener(
+            EntityId.create(1),
+            EntityId.create(2),
+            SoundVolumeEnum.NORMAL,
+            g,
+        )
+        assert out is not None
+        assert out.clarity == SoundClarityEnum.MUFFLED
+        assert out.source_connection_name == "扉"
+        # 届かないケース: WHISPER は 0 hop なので隣接の listener には届かない
+        out2 = svc.outcome_for_listener(
+            EntityId.create(1),
+            EntityId.create(2),
+            SoundVolumeEnum.WHISPER,
+            g,
+        )
+        assert out2 is None
 
     def test_iter_outgoing_used_for_sound(self) -> None:
         """通行不可でも音は sound_permeability で届く想定"""
