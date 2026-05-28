@@ -268,9 +268,15 @@ class _EscapeGameLlmWiring:
         # Issue #240 後続: trace_recorder + current_tick_provider を注入し、
         # loop_guard 警告が trace.jsonl に LOOP_GUARD_WARNING として残るようにする。
         # 第15回実験で「警告は出てるはずなのに trace に痕跡なし」状態だったため。
+        #
+        # 注: runtime.trace_recorder は session 作成後に set_trace_recorder() で
+        # 後から差し込まれるケース (実験スクリプト経路) があるため、
+        # callable provider 経由で use 時に look-up する。
         self.tool_call_loop_guard = ToolCallLoopGuardService(
             observation_buffer=self.observation_buffer,
-            trace_recorder=getattr(self.runtime, "trace_recorder", None),
+            trace_recorder_provider=lambda: getattr(
+                self.runtime, "trace_recorder", None
+            ),
             current_tick_provider=(
                 self.runtime.current_tick
                 if hasattr(self.runtime, "current_tick")

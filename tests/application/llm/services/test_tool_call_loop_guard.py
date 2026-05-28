@@ -297,3 +297,94 @@ class TestToolCallLoopGuardServiceTraceEmission:
             svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
         # trace 失敗にもかかわらず観測注入は成功
         assert len(buf.get_observations(pid)) == 1
+
+
+class TestToolCallLoopGuardServiceTraceRecorderProvider:
+    """Issue #240 後続バグ修正: trace_recorder_provider で use 時 look-up が動作する。"""
+
+    def test_provider_経由なら_後から差し込まれた_recorder_に_追従する(self) -> None:
+        """構築後に provider が返す recorder を変えたら、警告発火時にその recorder が使われる。
+
+        実験スクリプト経路 (runtime.set_trace_recorder() で後から差し込み) を模倣する。
+        """
+        from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
+
+        class _CapturingRecorder(NullTraceRecorder):
+            def __init__(self) -> None:
+                super().__init__()
+                self.calls: list[dict] = []
+
+            def record(self, kind, *, tick=None, player_id=None, **payload):
+                self.calls.append(
+                    {"kind": kind, "tick": tick, "player_id": player_id, "payload": payload}
+                )
+                return super().record(kind, tick=tick, player_id=player_id, **payload)
+
+        # 最初は recorder が None で、後から差し込まれるシナリオ
+        late_recorder_holder: list = [None]
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(
+            buf,
+            clock=_fixed_clock,
+            trace_recorder_provider=lambda: late_recorder_holder[0],
+        )
+
+        # 後から recorder を差し込む
+        captured = _CapturingRecorder()
+        late_recorder_holder[0] = captured
+
+        pid = _pid(1)
+        for _ in range(3):
+            svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
+
+        # 後から差し込まれた recorder に到達している
+        assert len(captured.calls) == 1
+        assert captured.calls[0]["kind"] == TraceEventKind.LOOP_GUARD_WARNING
+
+    def test_provider_例外時は_None_扱いで_警告観測は注入される(self) -> None:
+        """provider が例外を投げても loop guard 本来の責務 (観測注入) は止まらない。"""
+        buf = DefaultObservationContextBuffer()
+
+        def broken_provider():
+            raise RuntimeError("provider failure")
+
+        svc = ToolCallLoopGuardService(
+            buf,
+            clock=_fixed_clock,
+            trace_recorder_provider=broken_provider,
+        )
+        pid = _pid(1)
+        for _ in range(3):
+            svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
+        # 観測注入は成功
+        assert len(buf.get_observations(pid)) == 1
+
+    def test_両方与えると_provider_が優先される(self) -> None:
+        """trace_recorder と trace_recorder_provider 両方与えると provider 側で look-up。"""
+        from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
+
+        class _CountingRecorder(NullTraceRecorder):
+            def __init__(self, name: str) -> None:
+                super().__init__()
+                self.name = name
+                self.count = 0
+
+            def record(self, kind, **kwargs):
+                self.count += 1
+                return super().record(kind, **kwargs)
+
+        fixed = _CountingRecorder("fixed")
+        provider_recorder = _CountingRecorder("provider")
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(
+            buf,
+            clock=_fixed_clock,
+            trace_recorder=fixed,
+            trace_recorder_provider=lambda: provider_recorder,
+        )
+        pid = _pid(1)
+        for _ in range(3):
+            svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
+        # provider 側が呼ばれる
+        assert provider_recorder.count == 1
+        assert fixed.count == 0

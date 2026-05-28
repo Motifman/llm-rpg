@@ -84,8 +84,18 @@ class ToolCallLoopGuardService:
         default_threshold: int = DEFAULT_OTHER_THRESHOLD,
         window_size: int = DEFAULT_WINDOW_SIZE,
         trace_recorder: Optional[ITraceRecorder] = None,
+        trace_recorder_provider: Optional[
+            Callable[[], Optional[ITraceRecorder]]
+        ] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
     ) -> None:
+        """
+        trace_recorder vs trace_recorder_provider:
+            ``trace_recorder`` は構築時に捕まえる固定 recorder (主にテスト用)。
+            ``trace_recorder_provider`` は use 時に look-up する callable で、
+            ``runtime.set_trace_recorder()`` のような後から差し込まれる構成で
+            使う (実験スクリプト経路はこちら)。両方与えると provider 優先。
+        """
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError(
                 "observation_buffer must be IObservationContextBuffer"
@@ -100,6 +110,12 @@ class ToolCallLoopGuardService:
             raise ValueError("window_size must be int >= 2")
         if trace_recorder is not None and not isinstance(trace_recorder, ITraceRecorder):
             raise TypeError("trace_recorder must be ITraceRecorder or None")
+        if trace_recorder_provider is not None and not callable(
+            trace_recorder_provider
+        ):
+            raise TypeError(
+                "trace_recorder_provider must be callable or None"
+            )
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
 
@@ -111,9 +127,23 @@ class ToolCallLoopGuardService:
         self._default_threshold = default_threshold
         self._window_size = window_size
         self._trace_recorder = trace_recorder
+        self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
         self._history: Dict[int, List[_ToolCallRecord]] = {}
         self._last_warned: Dict[int, _ToolCallRecord] = {}
+
+    def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
+        """use 時に最新の trace_recorder を取得する。
+
+        provider があれば毎回呼び出して look-up、なければ構築時の固定値を返す。
+        provider が例外を投げたら None フォールバック。
+        """
+        if self._trace_recorder_provider is not None:
+            try:
+                return self._trace_recorder_provider()
+            except Exception:
+                return None
+        return self._trace_recorder
 
     def record_and_check(
         self,
@@ -166,7 +196,10 @@ class ToolCallLoopGuardService:
         )
         # Issue #240 後続: 警告観測の注入を trace にも残し、実 LLM 試走の
         # 振り返りで「loop_guard が実際に発火したか」を可視化する。
-        if self._trace_recorder is not None:
+        # trace_recorder は use 時に look-up (provider 経由) して、
+        # runtime.set_trace_recorder() で後から差し込まれた recorder にも追従する。
+        recorder = self._resolve_trace_recorder()
+        if recorder is not None:
             tick: Optional[int] = None
             if self._current_tick_provider is not None:
                 try:
@@ -174,7 +207,7 @@ class ToolCallLoopGuardService:
                 except Exception:
                     tick = None
             try:
-                self._trace_recorder.record(
+                recorder.record(
                     TraceEventKind.LOOP_GUARD_WARNING,
                     tick=tick,
                     player_id=int(player_id.value),
