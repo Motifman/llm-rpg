@@ -86,18 +86,27 @@ class EscapeGameProfileRepositoryAdapter:
 
 
 class EscapeGameSystemPromptBuilder(ISystemPromptBuilder):
-    """escape_game の precomputed system prompt 文字列を返す。
+    """escape_game の per-player system prompt 文字列を返す。
 
-    runtime._escape_llm_system_prompt はシナリオ起動時に build_escape_system_prompt
-    で生成され、全プレイヤー共通。DefaultPromptBuilder から渡される
-    SystemPromptPlayerInfoDto は無視する。
+    Issue #264 第16回実験 (player 2 が自呼びする) で発見された persona 混入バグの
+    fix: runtime.build_system_prompt(player_id) 経由で player ごとの persona が
+    埋まった system prompt を取得する。player_id は player_info.player_name から
+    runtime.get_player_ids() / get_player_name() で逆引きする。
+
+    一致する player_id が無ければ runtime._escape_llm_system_prompt にフォールバック
+    (旧挙動: 単体プレイ用 shared prompt)。
     """
 
     def __init__(self, runtime: "EscapeGameRuntime") -> None:
         self._runtime = runtime
 
     def build(self, player_info: SystemPromptPlayerInfoDto) -> str:
-        del player_info  # escape_game では shared system prompt を使う
+        # player_info.player_name から player_id を逆引き。escape_game では
+        # player 名は scenario.player_spawns に対して unique。
+        for pid in self._runtime.get_player_ids():
+            if self._runtime.get_player_name(pid) == player_info.player_name:
+                return self._runtime.build_system_prompt(pid)
+        # 一致なし: shared prompt にフォールバック
         return self._runtime._escape_llm_system_prompt
 
 
