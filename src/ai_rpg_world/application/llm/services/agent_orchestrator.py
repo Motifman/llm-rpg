@@ -293,18 +293,41 @@ class LlmAgentOrchestrator:
 
         memo_* ツールの実行直後は hint を出さない (冗長 / 自己参照ループ防止)。
         service が未注入なら無加工で返す。
+
+        Issue #240 後続: hint が発火したら trace に MEMO_HINT イベントを emit
+        し、実 LLM 試走で「hint が出たか / それを見て LLM が memo_done したか」
+        が追えるようにする。
         """
         if self._memo_completion_hint_service is None:
             return result_summary
         if tool_name in _MEMO_TOOLS_SKIPPING_HINT:
             return result_summary
         try:
-            return self._memo_completion_hint_service.augment_result_summary(
+            hint = self._memo_completion_hint_service.detect(
                 player_id, action_summary, result_summary
             )
         except Exception:
-            # hint 失敗で本体パイプラインを壊さない: silent fallback
+            # detect 失敗で本体パイプラインを壊さない
             return result_summary
+
+        if hint is None:
+            return result_summary
+
+        # trace に MEMO_HINT イベントを emit (silent except: trace 失敗で本体を止めない)
+        try:
+            self._trace_recorder.record(
+                TraceEventKind.MEMO_HINT,
+                tick=self._current_tick(),
+                player_id=player_id.value,
+                memo_id=hint.memo.id,
+                memo_content=hint.memo.content,
+                similarity=round(hint.similarity, 4),
+                tool_name=tool_name,
+            )
+        except Exception:
+            pass
+
+        return result_summary + hint.to_hint_text()
 
     def _run_turn_core(self, player_id: PlayerId) -> LlmCommandResultDto:
         request = self._prompt_builder.build(player_id)

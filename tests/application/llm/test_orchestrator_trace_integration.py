@@ -156,3 +156,66 @@ class TestOrchestratorTraceRecording:
         orch.run_turn(PlayerId(1))
         action_event = next(e for e in rec.events if e.kind == TraceEventKind.ACTION)
         assert action_event.tick is None
+
+
+class TestOrchestratorMemoHintTrace:
+    """Issue #240 後続: memo 完了 hint が trace に MEMO_HINT として残る。"""
+
+    def test_memo_hint_発火時に_TraceEventKind_MEMO_HINT_が_record_される(self) -> None:
+        """memo store + hint service を注入し、action_summary に memo 内容が再出現する形で
+        run_turn を回すと、ACTION / ACTION_RESULT に加えて MEMO_HINT も記録される。"""
+        from datetime import datetime
+        from ai_rpg_world.application.llm.contracts.dtos import MemoEntry
+        from ai_rpg_world.application.llm.services.in_memory_memo_store import (
+            InMemoryMemoStore,
+        )
+        from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+            MemoCompletionHintService,
+        )
+
+        rec = _CapturingRecorder()
+
+        # memo を 1 件追加 (custom_tool の action_summary に「custom_tool」が含まれるよう設計)
+        store = InMemoryMemoStore()
+        store.add(PlayerId(1), content="custom_tool を実行する")
+
+        # _build_orch とほぼ同じだが、hint service を注入する
+        action_store = DefaultActionResultStore(max_entries_per_player=10)
+        handler_map = {
+            "custom_tool": lambda pid, args: LlmCommandResultDto(
+                success=True, message="custom_tool を実行した"
+            )
+        }
+        mapper = ToolCommandMapper(handler_map=handler_map)
+        args = {
+            "content": "x",
+            "inner_thought": "y",
+            "intention": "y",
+            "expected_result": "y",
+            "attention": "y",
+            "emotion_hint": "neutral",
+        }
+        orch = LlmAgentOrchestrator(
+            prompt_builder=_StubPromptBuilder(),
+            llm_client=_StubLlmClient("custom_tool", args),
+            tool_command_mapper=mapper,
+            action_result_store=action_store,
+            tool_argument_resolver=_StubArgumentResolver(),
+            trace_recorder=rec,
+            tick_provider=lambda: 13,
+            memo_completion_hint_service=MemoCompletionHintService(store),
+        )
+        orch.run_turn(PlayerId(1))
+
+        kinds = [e.kind for e in rec.events]
+        assert TraceEventKind.MEMO_HINT in kinds, (
+            f"MEMO_HINT が trace に記録されていない。実際の kinds={kinds}"
+        )
+        hint_event = next(e for e in rec.events if e.kind == TraceEventKind.MEMO_HINT)
+        assert hint_event.player_id == 1
+        assert hint_event.tick == 13
+        assert hint_event.payload["tool_name"] == "custom_tool"
+        assert "memo_id" in hint_event.payload
+        assert "memo_content" in hint_event.payload
+        assert "similarity" in hint_event.payload
+        assert hint_event.payload["similarity"] > 0.0
