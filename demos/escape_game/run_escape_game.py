@@ -41,13 +41,19 @@ def show_player_prompt(runtime: EscapeGameRuntime, player_id: PlayerId) -> None:
     print(f"├{'─' * 70}┤")
     print(f"│ [SYSTEM PROMPT]".ljust(71) + "│")
     print(f"└{'─' * 70}┘")
-    for line in prompt["system"].split("\n"):
+    # Issue #227 後続 Step B: build_full_prompt の return shape を本家
+    # DefaultPromptBuilder の {"messages": [...]} 形式に統一した。
+    messages = prompt["messages"]
+    system_content = messages[0]["content"]
+    user_content = messages[1]["content"]
+
+    for line in system_content.split("\n"):
         print(f"  {line}")
 
     print(f"\n  {'─' * 66}")
     print(f"  [USER MESSAGE]")
     print(f"  {'─' * 66}")
-    for line in prompt["user"].split("\n"):
+    for line in user_content.split("\n"):
         print(f"  {line}")
 
     print(f"\n  {'─' * 66}")

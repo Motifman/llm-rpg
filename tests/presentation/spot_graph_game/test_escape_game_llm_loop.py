@@ -22,8 +22,10 @@ class _FakeRuntime:
 
     def build_full_prompt(self, player_id: PlayerId) -> dict:
         return {
-            "system": "system",
-            "user": "user",
+            "messages": [
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "user"},
+            ],
             "tool_runtime_context": ToolRuntimeContextDto.empty(),
         }
 
