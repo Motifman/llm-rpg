@@ -148,6 +148,81 @@ class TestTravelToDisplayNameDuplicate:
         assert result["destination_spot_id"] == 10
 
 
+class TestTravelToLenientLabelCandidates:
+    """Issue #269 第17回 R2: LLM が prompt 行を貼って destination_label を
+    崩すパターンを候補抽出で吸収する。"""
+
+    def test_S2_括弧つきスポット名形式_を解決できる(self) -> None:
+        """'S2 (閲覧室)' のような括弧つきラベルでも S2 として解決される。"""
+        resolver = SpotGraphArgumentResolver()
+        result = resolver.resolve_args(
+            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            {"destination_label": "S2 (閲覧室)", "inner_thought": "進む"},
+            _make_context(),
+        )
+        assert result is not None
+        assert result["destination_spot_id"] == 20
+
+    def test_S2_コロン区切りで連結されたprompt行を解決できる(self) -> None:
+        """'S2: 禁書扉 → 閲覧室' を S2 + 末尾スポット名から解決する。"""
+        resolver = SpotGraphArgumentResolver()
+        result = resolver.resolve_args(
+            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            {"destination_label": "S2: 禁書扉 → 閲覧室", "inner_thought": "進む"},
+            _make_context(),
+        )
+        assert result is not None
+        assert result["destination_spot_id"] == 20
+
+    def test_末尾スポット名_と_先頭ラベル_の両方から候補解決できる(self) -> None:
+        """'S99 → 入口広間' は S99 (存在せず) を諦め、末尾の '入口広間' で解決する。"""
+        resolver = SpotGraphArgumentResolver()
+        result = resolver.resolve_args(
+            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            {"destination_label": "S99 → 入口広間", "inner_thought": "戻る"},
+            _make_context(),
+        )
+        assert result is not None
+        assert result["destination_spot_id"] == 10
+
+
+class TestNormalizeLabelCandidates:
+    """``_normalize_label_candidates`` の抽出パターン。"""
+
+    def test_S2_コロン_矢印_連結文字列の候補(self) -> None:
+        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+            _normalize_label_candidates,
+        )
+        c = _normalize_label_candidates("S2: 禁書扉 → 館長書斎")
+        assert "S2" in c
+        assert "禁書扉" in c
+        assert "館長書斎" in c
+        # 入力そのものも残る
+        assert c[0] == "S2: 禁書扉 → 館長書斎"
+
+    def test_括弧つき注釈はtrailingを剥がして取り出す(self) -> None:
+        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+            _normalize_label_candidates,
+        )
+        c = _normalize_label_candidates("S2: 扉 → 館長書斎（通行可）")
+        # 末尾の通行可注釈は剥がされた "館長書斎" が候補に出る
+        assert "館長書斎" in c
+
+    def test_空文字列は空リスト(self) -> None:
+        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+            _normalize_label_candidates,
+        )
+        assert _normalize_label_candidates("") == []
+        assert _normalize_label_candidates("   ") == []
+
+    def test_重複候補は除去される(self) -> None:
+        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+            _normalize_label_candidates,
+        )
+        c = _normalize_label_candidates("S1")
+        assert c == ["S1"]
+
+
 class TestSetSubLocationByDisplayName:
     """sub_location_label にもサブロケーション名を直接渡せること。"""
 

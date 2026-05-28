@@ -264,6 +264,8 @@ class PlayerObservationFormatter:
             else:
                 # is_self は上で早期 return 済みなので、ここに来るのは
                 # 「話者ではない recipient」のケースのみ。
+                source_connection_name: Optional[str] = None
+                source_adjacent_spot_name: Optional[str] = None
                 if event.channel == SpeechChannel.WHISPER:
                     # 囁き: 宛先 (target_player_id) と recipient が一致する
                     # ときだけ届ける。他は同 spot にいても観測しない。
@@ -275,23 +277,54 @@ class PlayerObservationFormatter:
                     clarity = SoundClarityEnum.CLEAR
                 else:
                     volume = speech_channel_to_sound_volume(event.channel)
-                    clarity = svc.clarity_for_listener(
+                    outcome = svc.outcome_for_listener(
                         speaker_eid, listener_eid, volume, graph
                     )
-                    if clarity is None:
+                    if outcome is None:
                         return None
+                    clarity = outcome.clarity
+                    source_connection_name = outcome.source_connection_name
+                    # 方向元のスポット名を spot_graph から直接解決する。
+                    # name_resolver は tile-map 用 spot_repository に依存しており、
+                    # spot_graph 世界では fallback ラベルになってしまうため、
+                    # graph の SpotNode.name を使う。
+                    if outcome.source_adjacent_spot_id is not None:
+                        try:
+                            source_adjacent_spot_name = graph.get_spot(
+                                outcome.source_adjacent_spot_id
+                            ).name
+                        except Exception:
+                            source_adjacent_spot_name = None
 
+                # Issue #269: MUFFLED/FAINT で「どの接続から聞こえたか」を prose
+                # に含める (CLEAR は同 spot なので方向情報は冗長)。
+                direction_clause = ""
+                if (
+                    clarity != SoundClarityEnum.CLEAR
+                    and source_connection_name
+                ):
+                    direction_clause = (
+                        f"〈{source_connection_name}〉の向こうから、"
+                    )
                 if clarity == SoundClarityEnum.CLEAR:
                     prose = f"{speaker_name}が{verb}: 「{event.content}」"
                 elif clarity == SoundClarityEnum.MUFFLED:
-                    prose = f"{speaker_name}の遠くの声が聞こえる: 「{event.content}」"
+                    prose = (
+                        f"{direction_clause}{speaker_name}の遠くの声が聞こえる: "
+                        f"「{event.content}」"
+                    )
                 else:
                     prose = (
-                        f"{speaker_name}の声がかすかに聞こえるが、内容ははっきりしない。"
+                        f"{direction_clause}{speaker_name}の声がかすかに聞こえるが、"
+                        f"内容ははっきりしない。"
                     )
 
                 structured = dict(structured_base)
                 structured["sound_clarity"] = clarity.value
+                if source_connection_name is not None:
+                    structured["source_connection_name"] = source_connection_name
+                if source_adjacent_spot_name is not None:
+                    structured["source_adjacent_spot_name"] = source_adjacent_spot_name
                 if clarity == SoundClarityEnum.FAINT:
                     # FAINT は内容を秘匿する (聞き取れていない)。話者本人は
                     # この経路に来ないので is_self ガードは不要。

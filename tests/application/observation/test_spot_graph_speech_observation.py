@@ -43,7 +43,7 @@ def _node(i: int) -> SpotNode:
     )
 
 
-def _build_two_spot_graph(*, perm: float = 0.5) -> SpotGraphAggregate:
+def _build_two_spot_graph(*, perm: float = 0.5, conn_name: str = "c") -> SpotGraphAggregate:
     g = SpotGraphAggregate.empty(SpotGraphId.create(1))
     g.add_spot(_node(1))
     g.add_spot(_node(2))
@@ -52,7 +52,7 @@ def _build_two_spot_graph(*, perm: float = 0.5) -> SpotGraphAggregate:
             connection_id=ConnectionId.create(1),
             from_spot_id=SpotId.create(1),
             to_spot_id=SpotId.create(2),
-            name="c",
+            name=conn_name,
             description="",
             travel_ticks=1,
             is_bidirectional=False,
@@ -130,3 +130,46 @@ class TestSpotGraphSpeechFormatter:
         assert out is not None
         assert "遠くの声" in out.prose
         assert out.structured.get("sound_clarity") == "MUFFLED"
+
+    def test_muffled_prose_includes_source_connection_direction(self) -> None:
+        """Issue #269: MUFFLED の listener prose に音の到来方向 (接続名) が含まれる。"""
+        graph = _build_two_spot_graph(perm=0.5, conn_name="閲覧室の扉")
+        spot_repo = InMemorySpotGraphRepository(graph)
+        formatter = ObservationFormatter(spot_graph_repository=spot_repo)
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content="やあ",
+            channel=SpeechChannel.SAY,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=None,
+        )
+        out = formatter.format(event, PlayerId(2))
+        assert out is not None
+        assert "閲覧室の扉" in out.prose
+        assert out.structured.get("source_connection_name") == "閲覧室の扉"
+        # S1 が listener 側から見た方向元スポット (name_resolver で解決される)
+        assert out.structured.get("source_adjacent_spot_name") == "S1"
+
+    def test_clear_prose_has_no_direction_clause(self) -> None:
+        """同 spot (CLEAR) の listener には方向情報は付与しない (冗長なため)。"""
+        graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        graph.add_spot(_node(1))
+        graph.place_entity(EntityId.create(1), SpotId.create(1))
+        graph.place_entity(EntityId.create(2), SpotId.create(1))
+        spot_repo = InMemorySpotGraphRepository(graph)
+        formatter = ObservationFormatter(spot_graph_repository=spot_repo)
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content="やあ",
+            channel=SpeechChannel.SAY,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=None,
+        )
+        out = formatter.format(event, PlayerId(2))
+        assert out is not None
+        assert "の向こうから" not in out.prose
+        assert "source_connection_name" not in out.structured

@@ -66,6 +66,23 @@ def test_get_spot_graph_specs_has_ten_tools() -> None:
     assert "speech_whisper" not in names
 
 
+def test_listen_description_excludes_other_player_speech() -> None:
+    """Issue #269 第17回所見: LLM が listen を「他人の声を聞き直すツール」と誤用
+    していたため、description に『他プレイヤーの発話は対象外』と『聞き直しは
+    できない』を明示する。"""
+    specs = get_spot_graph_specs()
+    listen_def = next(d for d, _ in specs if d.name == "spot_graph_listen")
+    desc = listen_def.description
+    # 環境音観測である旨を明示
+    assert "環境音" in desc
+    # 他プレイヤーの発話 (speech_speak) は対象外
+    assert "speech_speak" in desc
+    assert "他プレイヤー" in desc
+    assert "聞こえない" in desc
+    # 後追いで聞き直すことはできない
+    assert "聞き直す" in desc
+
+
 def test_spot_graph_specs_use_labels_not_ids() -> None:
     specs = get_spot_graph_specs()
     for defn, _ in specs:

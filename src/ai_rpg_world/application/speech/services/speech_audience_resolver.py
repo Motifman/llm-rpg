@@ -19,6 +19,7 @@ agent が「届かなかった」事実を学習できるようにする。
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import List, Optional, Set
 
 from ai_rpg_world.application.world_graph.speech_channel_mapping import (
@@ -29,6 +30,7 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.enum.sound_clarity import SoundClarityEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     EntityNotInGraphException,
 )
@@ -39,6 +41,19 @@ from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
     SoundPropagationService,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
+
+@dataclass(frozen=True)
+class SpeechAudienceMember:
+    """発話を受信した listener 1 名 + その明瞭さ。
+
+    Issue #269 第17回所見: 「届く範囲です」では「内容も伝わる」と speaker が
+    誤解する。FAINT (内容不明) を含む内訳を speaker にも返すために、ここで
+    clarity を一緒に保持する。
+    """
+
+    player_id: PlayerId
+    clarity: SoundClarityEnum
 
 
 class SpeechAudienceResolver:
@@ -63,11 +78,33 @@ class SpeechAudienceResolver:
     ) -> List[PlayerId]:
         """speaker からの speech が届く player_id 一覧を返す (speaker 自身は含めない)。
 
-        - WHISPER: target_player_id が同一スポットにいれば 1 名
-        - SAY/SHOUT: sound_propagation の hop 範囲内のプレイヤー
+        後方互換のため clarity を捨てた薄い wrapper。新規コードは
+        ``resolve_audience_with_clarity`` を使うこと。
+        """
+        return [
+            m.player_id
+            for m in self.resolve_audience_with_clarity(
+                speaker_player_id=speaker_player_id,
+                channel=channel,
+                target_player_id=target_player_id,
+            )
+        ]
 
-        speaker が graph に載っていない / target が無効ならば空 list を返す
-        (現在の speech 経路で audience 0 として扱える)。
+    def resolve_audience_with_clarity(
+        self,
+        *,
+        speaker_player_id: int,
+        channel: SpeechChannel,
+        target_player_id: Optional[int] = None,
+    ) -> List[SpeechAudienceMember]:
+        """発話が届く listener と各自の clarity を返す (speaker 自身は含めない)。
+
+        - WHISPER: target_player_id が同一スポットにいれば 1 名 (CLEAR)
+        - SAY/SHOUT: sound_propagation の hop 範囲内のプレイヤーと、それぞれの
+          明瞭さ (CLEAR / MUFFLED / FAINT)
+
+        Issue #269: FAINT (= 内容不明) を speaker 側でも区別できるようにする
+        ため clarity を返す。
         """
         try:
             speaker_eid = EntityId.create(speaker_player_id)
@@ -90,12 +127,17 @@ class SpeechAudienceResolver:
             except EntityNotInGraphException:
                 return []
             if target_player_id in player_id_values:
-                return [PlayerId.create(target_player_id)]
+                return [
+                    SpeechAudienceMember(
+                        player_id=PlayerId.create(target_player_id),
+                        clarity=SoundClarityEnum.CLEAR,
+                    )
+                ]
             return []
 
         # SAY / SHOUT
         volume = speech_channel_to_sound_volume(channel)
-        result: List[PlayerId] = []
+        result: List[SpeechAudienceMember] = []
         seen: Set[int] = set()
         for recipient in self._sound_propagation.resolve_recipients(
             speaker_eid, volume, graph
@@ -107,5 +149,10 @@ class SpeechAudienceResolver:
             if recipient.entity_id.value in seen:
                 continue
             seen.add(recipient.entity_id.value)
-            result.append(PlayerId.create(recipient.entity_id.value))
+            result.append(
+                SpeechAudienceMember(
+                    player_id=PlayerId.create(recipient.entity_id.value),
+                    clarity=recipient.clarity,
+                )
+            )
         return result

@@ -1,7 +1,8 @@
 """スポットグラフ系ツールの引数解決（ラベル → 内部 ID）。"""
 
 import logging
-from typing import Any, Dict, Optional
+import re
+from typing import Any, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
@@ -16,6 +17,74 @@ from ai_rpg_world.application.llm.services._resolver_helpers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# Issue #269 第17回 R2 で観測された LLM の destination_label 崩れパターン:
+# - "S2: 禁書扉 → 館長書斎" — prompt 行をそのまま貼る
+# - "S2 (館長書斎)" — 括弧つきラベル
+# - "解読室" — スポット名直書き (display_name 経路で吸収)
+# - "S1" — 既存ラベル経路
+# 共通解として、入力文字列から以下の候補を抽出して順に解決を試す:
+# 1. 入力そのまま
+# 2. 先頭の S\d+ / SL\d+ / P\d+ / OBJ\d+ / I\d+ / M\d+ ラベル
+# 3. 括弧内 (..) または （..） の中身
+# 4. " → " で区切られた右端 (末尾の括弧つき注釈を除いた行先名)
+# 5. ":" / "：" 区切りで右側 (label プレフィックス除去後の本体)
+_LEADING_LABEL_RE = re.compile(r"^(S\d+|SL\d+|OBJ\d+|P\d+|I\d+|M\d+)\b")
+_PAREN_RE = re.compile(r"[(（]([^()（）]+)[)）]")
+_TRAILING_PAREN_RE = re.compile(r"\s*[(（][^()（）]*[)）]\s*$")
+
+
+def _normalize_label_candidates(label: str) -> List[str]:
+    """LLM が destination_label / target_label に入れがちな崩れ表現から
+    解決可能な候補形を生成する。同じ候補は除去しつつ出現順を保つ。
+
+    例:
+    - "S2: 禁書扉 → 館長書斎" → ["S2: ...", "S2", "禁書扉", "館長書斎"]
+    - "S2 (館長書斎)" → ["S2 (館長書斎)", "S2", "館長書斎"]
+    - "解読室" → ["解読室"]
+    """
+    s = label.strip()
+    if not s:
+        return []
+    out: List[str] = [s]
+
+    m = _LEADING_LABEL_RE.match(s)
+    if m:
+        out.append(m.group(1))
+
+    m2 = _PAREN_RE.search(s)
+    if m2:
+        out.append(m2.group(1).strip())
+
+    if "→" in s:
+        right = s.split("→")[-1].strip()
+        right = _TRAILING_PAREN_RE.sub("", right).strip()
+        if right:
+            out.append(right)
+
+    if ":" in s or "：" in s:
+        parts = re.split(r"[:：]", s, maxsplit=1)
+        if len(parts) == 2:
+            after = parts[1].strip()
+            after = _TRAILING_PAREN_RE.sub("", after).strip()
+            if after and after != s:
+                out.append(after)
+                if "→" in after:
+                    left = after.split("→")[0].strip()
+                    if left:
+                        out.append(left)
+
+    # dedup keep order, drop empty
+    seen: set[str] = set()
+    deduped: List[str] = []
+    for c in out:
+        c = c.strip()
+        if not c or c in seen:
+            continue
+        seen.add(c)
+        deduped.append(c)
+    return deduped
 
 
 def _find_target_by_display_name(
@@ -159,36 +228,41 @@ class SpotGraphArgumentResolver:
                 "接続先ラベルが指定されていません。",
                 "INVALID_DESTINATION_LABEL",
             )
-        # まず既存のラベル経由 (S1 等) で解決を試み、失敗したらスポット名 (display_name)
-        # でフォールバックする。S1 系のラベルは「現在地から見た first neighbor」という
-        # スポット相対の意味しか持たないので、会話履歴に残った tool_call を再利用すると
-        # 移動後に意味が反転する。スポット名は不変なので意味が安定する。
-        target: Optional[ToolRuntimeTargetDto]
-        if label in runtime_context.targets:
-            target = require_target_type(
-                label,
-                runtime_context,
-                "接続先ラベル",
-                (DestinationToolRuntimeTargetDto,),
-                invalid_label_code="INVALID_DESTINATION_LABEL",
-                invalid_kind_code="INVALID_DESTINATION_KIND",
-            )
-        else:
-            target = _find_target_by_display_name(
+        # 解決戦略: 入力からいくつかの候補形 (ラベル単体 / スポット名 / 連結文字列の
+        # 部品) を取り出し、(1) targets 辞書ヒット → (2) display_name 一致 の順で
+        # 探す。Issue #269 第17回 R2 で「S2: 禁書扉 → 館長書斎」のような連結文字列
+        # を LLM が destination_label に貼って失敗する例が観測されたため、候補抽出
+        # で吸収する。
+        target: Optional[ToolRuntimeTargetDto] = None
+        kind_mismatch = False
+        candidates = _normalize_label_candidates(label)
+        for c in candidates:
+            if c in runtime_context.targets:
+                hit = runtime_context.targets[c]
+                if isinstance(hit, DestinationToolRuntimeTargetDto):
+                    target = hit
+                    break
+                kind_mismatch = True
+                continue
+            found = _find_target_by_display_name(
                 runtime_context,
                 kind="spot_graph_destination",
-                display_name=label,
+                display_name=c,
             )
-            if target is None:
-                raise ToolArgumentResolutionException(
-                    f"指定された対象ラベルは現在の候補にありません: {label}",
-                    "INVALID_DESTINATION_LABEL",
-                )
-            if not isinstance(target, DestinationToolRuntimeTargetDto):
+            if found is not None and isinstance(found, DestinationToolRuntimeTargetDto):
+                target = found
+                break
+
+        if target is None:
+            if kind_mismatch:
                 raise ToolArgumentResolutionException(
                     f"接続先ラベルとして使えないラベルです: {label}",
                     "INVALID_DESTINATION_KIND",
                 )
+            raise ToolArgumentResolutionException(
+                f"指定された対象ラベルは現在の候補にありません: {label}",
+                "INVALID_DESTINATION_LABEL",
+            )
         if target.spot_id is None:
             raise ToolArgumentResolutionException(
                 f"移動先として解決できないラベルです: {label}",
