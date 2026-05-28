@@ -943,17 +943,7 @@ def create_llm_agent_wiring(
     system_prompt_template: Optional[str] = None,
     persona_store: Optional[Any] = None,
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
-    episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
-    episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
-    episodic_reinterpretation_journal_store: Optional[
-        IEpisodicReinterpretationJournalStore
-    ] = None,
-    episodic_reinterpretation_completion: Optional[
-        IEpisodicReinterpretationCompletionPort
-    ] = None,
-    chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder] = None,
-    episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
-    episodic_chunk_subjective_completion: Optional[IEpisodicChunkSubjectiveCompletionPort] = None,
+    episodic: Optional["EpisodicWiringConfig"] = None,
     trace_recorder: Optional["ITraceRecorder"] = None,
 ) -> "LlmAgentWiringResult":
     """
@@ -961,7 +951,26 @@ def create_llm_agent_wiring(
 
     既定では共有 in-memory エピソードストアと EpisodicChunkCoordinator により、
     チャンク境界での episode 保存とプロンプト上の受動想起が有効になる。
+
+    Issue #227 後続 HIGH-4 Step 8a: episodic 関連 7 引数を ``EpisodicWiringConfig``
+    にまとめた。caller は ``episodic=EpisodicWiringConfig(...)`` を渡す。default の
+    None なら従来の自動配線が走る。
     """
+    from ai_rpg_world.application.llm.wiring.wiring_configs import (
+        EpisodicWiringConfig,
+    )
+
+    if episodic is None:
+        episodic = EpisodicWiringConfig()
+    # 個別変数に展開して以降のロジックを変えない (移行を最小差分にする)
+    episodic_episode_store = episodic.episode_store
+    episodic_recall_buffer_store = episodic.recall_buffer_store
+    episodic_reinterpretation_journal_store = episodic.reinterpretation_journal_store
+    episodic_reinterpretation_completion = episodic.reinterpretation_completion
+    chunk_episode_draft_builder = episodic.chunk_episode_draft_builder
+    episodic_chunk_coordinator = episodic.chunk_coordinator
+    episodic_chunk_subjective_completion = episodic.chunk_subjective_completion
+
     if player_status_repository is None:
         raise TypeError("player_status_repository must not be None")
     # physical_map_repository は spot_graph 専用ランタイムでは None で良い。

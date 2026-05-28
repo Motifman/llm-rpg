@@ -142,26 +142,33 @@ def create_spot_graph_wiring(
     system_prompt_template: Optional[str] = None,
     persona_store: Optional[Any] = None,
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
-    episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
-    episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
-    episodic_reinterpretation_journal_store: Optional[
-        IEpisodicReinterpretationJournalStore
-    ] = None,
-    episodic_reinterpretation_completion: Optional[
-        IEpisodicReinterpretationCompletionPort
-    ] = None,
-    chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder] = None,
-    episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
-    episodic_chunk_subjective_completion: Optional[IEpisodicChunkSubjectiveCompletionPort] = None,
+    episodic: Optional["EpisodicWiringConfig"] = None,
     event_publisher: Optional[Any] = None,
     trace_recorder: Optional[Any] = None,
 ) -> "LlmAgentWiringResult":
     """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。
 
     エピソード記憶は create_llm_agent_wiring と同様、既定で共有 in-memory ストアを
-    オーケストレータと受動想起に渡す。上書きは `episodic_episode_store` /
-    `chunk_episode_draft_builder` / `episodic_chunk_coordinator`。
+    オーケストレータと受動想起に渡す。上書きは ``episodic=EpisodicWiringConfig(...)``。
+
+    Issue #227 後続 HIGH-4 Step 8a: episodic 関連 7 引数を ``EpisodicWiringConfig``
+    にまとめた。caller は ``episodic=EpisodicWiringConfig(...)`` を渡す。default の
+    None なら従来の自動配線が走る。
     """
+    from ai_rpg_world.application.llm.wiring.wiring_configs import (
+        EpisodicWiringConfig,
+    )
+
+    if episodic is None:
+        episodic = EpisodicWiringConfig()
+    # 個別変数に展開して以降のロジックを変えない
+    episodic_episode_store = episodic.episode_store
+    episodic_recall_buffer_store = episodic.recall_buffer_store
+    episodic_reinterpretation_journal_store = episodic.reinterpretation_journal_store
+    episodic_reinterpretation_completion = episodic.reinterpretation_completion
+    chunk_episode_draft_builder = episodic.chunk_episode_draft_builder
+    episodic_chunk_coordinator = episodic.chunk_coordinator
+    episodic_chunk_subjective_completion = episodic.chunk_subjective_completion
     # 遅延 import: wiring/__init__.py の循環を避ける
     from ai_rpg_world.application.llm.wiring import (
         LlmAgentWiringResult,
