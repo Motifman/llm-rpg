@@ -81,3 +81,38 @@ class SpotInterior:
             ground_items=new_items,
             discoverable_items=self.discoverable_items,
         )
+
+    def with_ground_item(self, ground_item: GroundItem) -> SpotInterior:
+        """地面アイテムを 1 つ追加した新しい SpotInterior を返す。
+
+        プレイヤーが drop したとき、敵が落とした (ドロップ報酬) ときなどに
+        使う。同一 ItemInstanceId が既に存在する場合は重複追加せず元の
+        SpotInterior を新インスタンスとして返す（idempotent）。これは
+        retry や eventual consistency 経路で同じ drop が二重実行された
+        場合に geometry が壊れないようにするための保険。
+        """
+        if any(
+            g.item_instance_id == ground_item.item_instance_id for g in self.ground_items
+        ):
+            return SpotInterior(
+                sub_locations=self.sub_locations,
+                objects=self.objects,
+                ground_items=self.ground_items,
+                discoverable_items=self.discoverable_items,
+            )
+        new_items = self.ground_items + (ground_item,)
+        return SpotInterior(
+            sub_locations=self.sub_locations,
+            objects=self.objects,
+            ground_items=new_items,
+            discoverable_items=self.discoverable_items,
+        )
+
+    def find_ground_item(
+        self, item_instance_id: "ItemInstanceId"
+    ) -> Optional[GroundItem]:
+        """指定 instance の地面アイテムを返す。なければ None。"""
+        for g in self.ground_items:
+            if g.item_instance_id == item_instance_id:
+                return g
+        return None
