@@ -142,9 +142,15 @@ class TestEpisodicMemoryWiringIntegration:
             InMemorySubjectiveEpisodeStore,
         )
 
+        from ai_rpg_world.application.llm.wiring.wiring_configs import (
+            EpisodicWiringConfig,
+        )
+
         custom = InMemorySubjectiveEpisodeStore()
         base = _deps_with_profile()
-        result = create_llm_agent_wiring(**base, episodic_episode_store=custom)
+        result = create_llm_agent_wiring(
+            **base, episodic=EpisodicWiringConfig(episode_store=custom)
+        )
         assert result.episodic_episode_store is custom
         turn_runner = result.llm_turn_trigger._turn_runner  # noqa: SLF001
         orch = turn_runner._orchestrator  # noqa: SLF001
