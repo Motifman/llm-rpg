@@ -63,7 +63,7 @@ def create_world_query_service(
     *,
     player_status_repository: PlayerStatusRepository,
     player_profile_repository: PlayerProfileRepository,
-    physical_map_repository: PhysicalMapRepository,
+    physical_map_repository: Optional[PhysicalMapRepository] = None,
     spot_repository: SpotRepository,
     connected_spots_provider: IConnectedSpotsProvider,
     monster_repository: Optional["MonsterRepository"] = None,

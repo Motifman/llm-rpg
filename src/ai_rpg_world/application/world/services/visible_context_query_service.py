@@ -39,10 +39,13 @@ class VisibleContextQueryService:
         self,
         player_status_repository: PlayerStatusRepository,
         player_profile_repository: PlayerProfileRepository,
-        physical_map_repository: PhysicalMapRepository,
+        physical_map_repository: Optional[PhysicalMapRepository],
         spot_repository: SpotRepository,
         monster_repository: Optional["MonsterRepository"] = None,
     ):
+        # physical_map_repository=None は tile-map なしランタイム用。
+        # その場合 get_visible_context は None を返す (視界内オブジェクトの
+        # 概念が tile 座標前提のため、spot_graph 世界には存在しない)。
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
         self._physical_map_repository = physical_map_repository
@@ -76,6 +79,9 @@ class VisibleContextQueryService:
 
         spot_id = player_status.current_spot_id
         coord = player_status.current_coordinate
+        if self._physical_map_repository is None:
+            # tile-map なし: 視界内オブジェクトの概念が存在しない
+            return None
         physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
         if not physical_map:
             raise MapNotFoundException(int(spot_id))

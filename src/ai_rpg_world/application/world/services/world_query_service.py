@@ -99,7 +99,7 @@ class WorldQueryService:
         self,
         player_status_repository: PlayerStatusRepository,
         player_profile_repository: PlayerProfileRepository,
-        physical_map_repository: PhysicalMapRepository,
+        physical_map_repository: Optional[PhysicalMapRepository],
         spot_repository: SpotRepository,
         connected_spots_provider: IConnectedSpotsProvider,
         monster_repository: Optional["MonsterRepository"] = None,
@@ -321,6 +321,12 @@ class WorldQueryService:
         if not spot:
             raise MapNotFoundException(int(spot_id))
 
+        if self._physical_map_repository is None:
+            # tile-map なしランタイム (spot_graph 専用) では本メソッドは
+            # 直接呼ばれない (SpotGraphAugmentingWorldQueryService Decorator が
+            # オーバーライドする)。万一呼ばれた場合は None を返し、呼び出し元に
+            # tile-map なし状態を伝える。
+            return None
         physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
         if not physical_map:
             raise MapNotFoundException(int(spot_id))
