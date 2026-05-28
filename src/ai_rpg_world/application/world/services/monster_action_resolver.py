@@ -11,7 +11,6 @@ from typing import Optional, Callable
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
 from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent

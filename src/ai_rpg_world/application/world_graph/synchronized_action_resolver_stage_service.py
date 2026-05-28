@@ -22,7 +22,6 @@ from __future__ import annotations
 import logging
 from typing import Iterable, List, Literal, Set, Tuple
 
-from ai_rpg_world.application.world_graph.spot_object_lookup import find_object_in_graph
 from ai_rpg_world.application.world_graph.synchronized_action_registry import (
     SyncPrepareEntry,
     SynchronizedActionRegistry,

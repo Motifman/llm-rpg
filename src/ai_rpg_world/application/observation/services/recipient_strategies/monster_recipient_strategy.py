@@ -13,7 +13,6 @@ from ai_rpg_world.application.observation.services.observed_event_registry impor
 from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
     BehaviorStuckEvent,
-    MonsterCreatedEvent,
     MonsterDamagedEvent,
     MonsterDecidedToInteractEvent,
     MonsterDecidedToMoveEvent,

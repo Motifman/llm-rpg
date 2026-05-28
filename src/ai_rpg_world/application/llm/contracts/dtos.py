@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier

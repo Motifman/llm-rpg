@@ -17,7 +17,6 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )

@@ -14,7 +14,6 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 # 発言・シャウトの届く範囲（マンハッタン距離タイル数）

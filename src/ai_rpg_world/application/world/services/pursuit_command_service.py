@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from ai_rpg_world.application.world.contracts.commands import (
     CancelPursuitCommand,
@@ -25,7 +25,6 @@ from ai_rpg_world.application.world.exceptions.command.pursuit_command_exception
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId

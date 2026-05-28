@@ -46,7 +46,6 @@ from ai_rpg_world.domain.monster.service.spot_player_attack_service import (
     SpotPlayerAttackService,
 )
 from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
-from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )

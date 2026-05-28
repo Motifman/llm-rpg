@@ -35,7 +35,6 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemUnequippedEvent,
     InventorySlotOverflowEvent,
 )
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )

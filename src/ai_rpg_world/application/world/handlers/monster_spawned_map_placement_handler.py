@@ -18,7 +18,6 @@ from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterS
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _build_available_skills(monster) -> list:

@@ -4,7 +4,6 @@ import logging
 from typing import Callable, Any
 
 from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.application.world.contracts.commands import ChangeAttentionLevelCommand

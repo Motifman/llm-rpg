@@ -11,7 +11,6 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository

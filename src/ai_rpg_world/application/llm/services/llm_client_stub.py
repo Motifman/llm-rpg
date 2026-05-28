@@ -4,7 +4,7 @@ ILLMClient のスタブ実装（テスト・開発用）。
 実際の LLM API 呼び出しはインフラ層で ILLMClient を実装して差し替える。
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
 

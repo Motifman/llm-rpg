@@ -12,8 +12,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     MemoFulfillmentContext,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
-    ToolRuntimeContextDto,
-    TodoEntry,  # backward-compat alias for MemoEntry
+    ToolRuntimeContextDto,  # backward-compat alias for MemoEntry
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto

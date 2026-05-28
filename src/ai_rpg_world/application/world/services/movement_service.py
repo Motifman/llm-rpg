@@ -1,7 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import Optional, List, Dict, Tuple, Callable, Any, Literal
-from datetime import datetime
+from typing import Optional, Callable, Any, Literal
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
@@ -9,7 +8,6 @@ from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerS
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
 from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
@@ -23,13 +21,8 @@ from ai_rpg_world.application.world.services.move_result_assembler import MoveRe
 from ai_rpg_world.application.world.services.movement_step_executor import MovementStepExecutor
 from ai_rpg_world.application.world.services.set_destination_service import (
     SetDestinationService,
-    SetDestinationResult,
-    ReplanPathCalculationResult,
 )
-from ai_rpg_world.domain.world.exception.map_exception import InvalidPathRequestException
-from ai_rpg_world.domain.player.exception import PlayerDownedException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.application.world.contracts.commands import (
     CancelMovementCommand,
     MoveTileCommand,
@@ -41,12 +34,10 @@ from ai_rpg_world.application.world.exceptions.base_exception import WorldApplic
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
     MovementCommandException,
     PlayerNotFoundException,
-    MapNotFoundException,
     MovementInvalidException,
     PlayerStaminaExhaustedException,
     PathBlockedException,
-    ActorBusyException,
-    MapTransitionInvalidException
+    ActorBusyException
 )
 
 @dataclass(frozen=True)
