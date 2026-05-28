@@ -110,9 +110,9 @@
                 "display_label": "焚き火を起こす",
                 "preconditions": [
                   {"condition_type": "OBJECT_STATE", "target_object": "fire_pit", "required_state": {"lit": false}, "failure_message": "焚き火はもう燃えている。"},
-                  {"condition_type": "HAS_ITEM", "item_spec": "driftwood", "failure_message": "流木が足りない。"},
-                  {"condition_type": "HAS_ITEM", "item_spec": "dry_leaves", "failure_message": "枯れ葉が足りない。"},
-                  {"condition_type": "HAS_ITEM", "item_spec": "flint", "failure_message": "火打ち石が必要だ。"}
+                  {"condition_type": "HAS_ITEM", "required_item": "driftwood", "failure_message": "流木が足りない。"},
+                  {"condition_type": "HAS_ITEM", "required_item": "dry_leaves", "failure_message": "枯れ葉が足りない。"},
+                  {"condition_type": "HAS_ITEM", "required_item": "flint", "failure_message": "火打ち石が必要だ。"}
                 ],
                 "effects": [
                   {"effect_type": "REMOVE_ITEM", "parameters": {"item_spec": "driftwood"}},
@@ -127,7 +127,7 @@
                 "display_label": "魚を焼く",
                 "preconditions": [
                   {"condition_type": "OBJECT_STATE", "target_object": "fire_pit", "required_state": {"lit": true}, "failure_message": "焚き火が燃えていない。"},
-                  {"condition_type": "HAS_ITEM", "item_spec": "raw_fish", "failure_message": "焼ける魚を持っていない。"}
+                  {"condition_type": "HAS_ITEM", "required_item": "raw_fish", "failure_message": "焼ける魚を持っていない。"}
                 ],
                 "effects": [
                   {"effect_type": "REMOVE_ITEM", "parameters": {"item_spec": "raw_fish"}},
@@ -149,8 +149,8 @@
                 "display_label": "避難所を組み立てる",
                 "preconditions": [
                   {"condition_type": "OBJECT_STATE", "target_object": "shelter_base", "required_state": {"built": false}, "failure_message": "避難所はもう組み上がっている。"},
-                  {"condition_type": "HAS_ITEM", "item_spec": "driftwood", "failure_message": "骨組みの流木が足りない。"},
-                  {"condition_type": "HAS_ITEM", "item_spec": "vine_rope", "failure_message": "縛るための蔓のロープが必要だ。"}
+                  {"condition_type": "HAS_ITEM", "required_item": "driftwood", "failure_message": "骨組みの流木が足りない。"},
+                  {"condition_type": "HAS_ITEM", "required_item": "vine_rope", "failure_message": "縛るための蔓のロープが必要だ。"}
                 ],
                 "effects": [
                   {"effect_type": "REMOVE_ITEM", "parameters": {"item_spec": "driftwood"}},
@@ -218,7 +218,7 @@
                 "action_name": "fish_deep",
                 "display_label": "沖で釣りをする",
                 "preconditions": [
-                  {"condition_type": "HAS_ITEM", "item_spec": "fishing_rod", "failure_message": "釣竿がなければ届かない。"},
+                  {"condition_type": "HAS_ITEM", "required_item": "fishing_rod", "failure_message": "釣竿がなければ届かない。"},
                   {"condition_type": "OBJECT_STATE", "target_object": "deep_fishing_point", "required_state": {"available": true}, "failure_message": "魚はしばらく散ってしまった。少し待とう。"}
                 ],
                 "effects": [
@@ -426,7 +426,7 @@
                 "action_name": "fish_stream",
                 "display_label": "小川で釣りをする",
                 "preconditions": [
-                  {"condition_type": "HAS_ITEM", "item_spec": "fishing_rod", "failure_message": "釣竿が必要だ。"},
+                  {"condition_type": "HAS_ITEM", "required_item": "fishing_rod", "failure_message": "釣竿が必要だ。"},
                   {"condition_type": "OBJECT_STATE", "target_object": "stream_fishing_point", "required_state": {"available": true}, "failure_message": "ここの魚はしばらく散ってしまった。"}
                 ],
                 "effects": [
@@ -646,9 +646,9 @@
                 "display_label": "狼煙を上げる",
                 "preconditions": [
                   {"condition_type": "OBJECT_STATE", "target_object": "signal_fire_pit", "required_state": {"lit": false}, "failure_message": "狼煙はすでに燃え上がっている。"},
-                  {"condition_type": "HAS_ITEM", "item_spec": "driftwood", "failure_message": "燃料となる流木が必要だ。"},
-                  {"condition_type": "HAS_ITEM", "item_spec": "dry_leaves", "failure_message": "火種の枯れ葉が必要だ。"},
-                  {"condition_type": "HAS_ITEM", "item_spec": "flint", "failure_message": "火打ち石がなければ火を起こせない。"}
+                  {"condition_type": "HAS_ITEM", "required_item": "driftwood", "failure_message": "燃料となる流木が必要だ。"},
+                  {"condition_type": "HAS_ITEM", "required_item": "dry_leaves", "failure_message": "火種の枯れ葉が必要だ。"},
+                  {"condition_type": "HAS_ITEM", "required_item": "flint", "failure_message": "火打ち石がなければ火を起こせない。"}
                 ],
                 "effects": [
                   {"effect_type": "REMOVE_ITEM", "parameters": {"item_spec": "driftwood"}},
@@ -683,7 +683,7 @@
                 "action_name": "cut_vines",
                 "display_label": "蔓を切り取る",
                 "preconditions": [
-                  {"condition_type": "HAS_ITEM", "item_spec": "bone_knife", "failure_message": "蔓は太く、ナイフがなければ切れない。"},
+                  {"condition_type": "HAS_ITEM", "required_item": "bone_knife", "failure_message": "蔓は太く、ナイフがなければ切れない。"},
                   {"condition_type": "OBJECT_STATE", "target_object": "vine_thicket", "required_state": {"available": true}, "failure_message": "近くの蔓は採り尽くした。"}
                 ],
                 "effects": [

@@ -120,25 +120,55 @@ def main() -> None:
         show_player_brief(runtime, pid)
 
     # ── 焚き火を起こすには流木+枯れ葉+火打ち石が必要。
-    #    今は流木はミラ、枯れ葉と火打ち石はトマが持っているはず。
-    #    Phase 1 では「アイテムの受け渡し」を speak で代用するか、
-    #    全員同室で焚き火を起こせるかをまず確認する (build_fire は所持者単独でも動くはず)。
-    show_action("トマ", "焚き火を起こす (流木はミラの所持; このアクションは失敗するはず)")
+    #    流木はミラ、枯れ葉と火打ち石はトマが持っている。一人で着火できない。
+    show_action("トマ", "焚き火を起こす (流木が無いので失敗するはず)")
     try:
         r = runtime.do_interact(toma, "fire_pit", "build_fire")
         show_result(r.messages)
     except InteractionNotAllowedException as e:
         print(f"  ✗ 期待通り失敗: {e}")
 
-    show_action("ミラ", "焚き火を起こす (流木はミラ所持だが枯れ葉と火打ち石は無し → 失敗するはず)")
-    try:
-        r = runtime.do_interact(mira, "fire_pit", "build_fire")
-        show_result(r.messages)
-    except InteractionNotAllowedException as e:
-        print(f"  ✗ 期待通り失敗: {e}")
+    # ── Phase 2 (#PR-B) で導入した drop/pickup を使って素材を集約する ──
+    print("\n" + "━" * 72)
+    print("  3 人協力: ミラの流木 + トマの火打ち石/枯れ葉 を 1 人に集約する")
+    print("━" * 72)
 
-    # NOTE: アイテム受け渡し (give_item ツール) が無いと焚き火を起こせない。
-    # これは Phase 2 で扱う「協調」のレバレッジ問題として記録する。
+    # ミラのインベントリスロットを確認
+    mira_inv = runtime._player_inventory_repo.find_by_id(mira)
+    mira_driftwood_slot = None
+    for slot in range(mira_inv._max_slots):
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+        iid = mira_inv.get_item_instance_id_by_slot(SlotId(slot))
+        if iid is not None:
+            item = runtime._item_repo.find_by_id(iid)
+            if item and item.item_spec.name == "流木":
+                mira_driftwood_slot = slot
+                break
+    assert mira_driftwood_slot is not None, "ミラが流木を持っていない (テスト前提崩壊)"
+
+    show_action("ミラ", f"流木 (slot {mira_driftwood_slot}) を拠点の地面に置く")
+    r = runtime.do_drop_item(mira, mira_driftwood_slot)
+    show_result(r.messages)
+
+    # 地面アイテム一覧をトマ視点で確認
+    ground = runtime.list_ground_items_at_player_spot(toma)
+    print(f"  [拠点の地面] {len(ground)} 個のアイテム:")
+    for g in ground:
+        spec = runtime._item_spec_repo.find_by_id(g.item_spec_id)
+        spec_obj = spec.to_item_spec() if hasattr(spec, "to_item_spec") else spec
+        print(f"    - {spec_obj.name} (instance_id={g.item_instance_id.value})")
+
+    show_action("トマ", "地面の流木を拾う")
+    r = runtime.do_pickup_item(toma, ground[0].item_instance_id.value)
+    show_result(r.messages)
+
+    show_action("トマ", "焚き火を起こす (流木 + 火打ち石 + 枯れ葉 が揃ったので成功するはず)")
+    try:
+        r = runtime.do_interact(toma, "fire_pit", "build_fire")
+        show_result(r.messages)
+        print("  ✓ 3 人協力で焚き火着火に成功")
+    except InteractionNotAllowedException as e:
+        print(f"  ✗ 想定外: {e}")
 
     # ── 数ティック空回しして reactive_bindings の動作を観察 ──
     print("\n" + "━" * 72)
