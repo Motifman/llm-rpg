@@ -121,6 +121,9 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_sp
 from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
+from ai_rpg_world.application.llm.services.context_format_strategy import (
+    SectionBasedContextFormatStrategy,
+)
 from ai_rpg_world.application.llm.services.recent_events_formatter import DefaultRecentEventsFormatter
 from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
 from ai_rpg_world.application.llm.services.executors.todo_executor import TodoToolExecutor
@@ -606,8 +609,22 @@ class EscapeGameRuntime:
 
     # ── 完全プロンプト構築 ──
 
+    _ESCAPE_GAME_OBJECTIVE_TEXT = (
+        "- この廃墟から外へ脱出する。\n"
+        "- 必要なら手がかり（物証・記録）を集め、判断材料にする。"
+    )
+    _ESCAPE_GAME_ACTION_INSTRUCTION = (
+        "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。"
+    )
+
     def build_full_prompt(self, player_id: PlayerId) -> dict:
-        """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。"""
+        """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。
+
+        Issue #227 chore β: section 組み立ては本家
+        ``SectionBasedContextFormatStrategy`` に委譲する。形式・順序の二重管理
+        による drift を防ぐ。format 仕様は ``context_format_strategy.py`` 側に
+        集約されているので、変更時はそちらを編集する。
+        """
         self._wire_auxiliary_tool_stack()
         self._drain_buffer_to_sliding_window(player_id)
 
@@ -622,30 +639,17 @@ class EscapeGameRuntime:
         inventory_block = self._format_inventory_evidence(player_id)
         active_memos_block = self._format_active_memos(player_id)
 
-        sections: List[str] = [
-            "【現在の目的】",
-            "- この廃墟から外へ脱出する。",
-            "- 必要なら手がかり（物証・記録）を集め、判断材料にする。",
-            "",
-            "【現在地と周囲】",
-            current_state_text.strip() or "（情報なし）",
-        ]
-        if active_memos_block:
-            sections.extend(["", "【進行中のメモ】", active_memos_block])
-        sections.extend(
-            [
-                "",
-                "【直近の出来事】",
-                "観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。",
-                recent_events_text.strip() or "（なし）",
-                "",
-                "【所持・判明した物証】",
-                inventory_block,
-                "",
-                "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
-            ]
+        # chore β: section 組み立てを本家 strategy に委譲
+        context_strategy = SectionBasedContextFormatStrategy()
+        context_body = context_strategy.format(
+            current_state_text=current_state_text,
+            recent_events_text=recent_events_text,
+            relevant_memories_text="",  # episodic recall は未配線 (#240 で説明)
+            active_memos_text=active_memos_block,
+            objective_text=self._ESCAPE_GAME_OBJECTIVE_TEXT,
+            inventory_text=inventory_block,
         )
-        user_content = "\n".join(sections)
+        user_content = context_body + "\n\n" + self._ESCAPE_GAME_ACTION_INSTRUCTION
 
         system_content = self.build_system_prompt(player_id)
         return {

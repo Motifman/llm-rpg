@@ -129,8 +129,8 @@ class TestEpisodicMemoryWiringIntegration:
 
         out = prompt_builder.build(PlayerId(1))
         user_content = out["messages"][1]["content"]
-        assert "## 関連する記憶" in user_content
-        assert recall_phrase in user_content.split("## 関連する記憶", 1)[1]
+        assert "【関連する記憶】" in user_content
+        assert recall_phrase in user_content.split("【関連する記憶】", 1)[1]
         assert out["current_beliefs_snapshot"] == recall_phrase
 
     def test_injected_store_is_shared(self) -> None:
@@ -155,8 +155,8 @@ class TestEpisodicMemoryWiringIntegration:
         custom.put(_minimal_episode(player_id=1, recall_text=recall_phrase))
         out = orch._prompt_builder.build(PlayerId(1))  # noqa: SLF001
         user_content = out["messages"][1]["content"]
-        assert "## 関連する記憶" in user_content
-        assert recall_phrase in user_content.split("## 関連する記憶", 1)[1]
+        assert "【関連する記憶】" in user_content
+        assert recall_phrase in user_content.split("【関連する記憶】", 1)[1]
 
     def test_stub_default_does_not_record_reinterpretation_recall_buffer(self) -> None:
         """

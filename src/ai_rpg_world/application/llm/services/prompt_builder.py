@@ -35,9 +35,8 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
 )
-from ai_rpg_world.application.llm.services.failure_feedback_for_prompt import (
-    build_pre_turn_failure_section,
-)
+# build_pre_turn_failure_section: Issue #227 chore β で廃止 (#241 後続)
+# 詳細は build() 内コメント参照
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -113,6 +112,13 @@ class DefaultPromptBuilder(IPromptBuilder):
         memo_store: Optional["IMemoStore"] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
         memo_stale_age_ticks: int = 20,
+        # Issue #227 chore β (経路統一): 実行ランタイムが固定の目的文 / 所持物
+        # 整形済テキストを渡すための callable provider。未設定なら section ごと
+        # 省略される。escape_game runtime のような「目的セクション」「物証
+        # セクション」を持つ runtime はこれらを注入することで本家 PromptBuilder
+        # を直接使えるようになる。
+        objective_text_provider: Optional[Callable[[PlayerId], str]] = None,
+        inventory_text_provider: Optional[Callable[[PlayerId], str]] = None,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -188,8 +194,14 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("current_tick_provider must be callable or None")
         if memo_stale_age_ticks < 0:
             raise ValueError("memo_stale_age_ticks must be 0 or greater")
+        if objective_text_provider is not None and not callable(objective_text_provider):
+            raise TypeError("objective_text_provider must be callable or None")
+        if inventory_text_provider is not None and not callable(inventory_text_provider):
+            raise TypeError("inventory_text_provider must be callable or None")
 
         self._memo_store = memo_store
+        self._objective_text_provider = objective_text_provider
+        self._inventory_text_provider = inventory_text_provider
         self._current_tick_provider = current_tick_provider
         self._memo_stale_age_ticks = memo_stale_age_ticks
 
@@ -354,21 +366,38 @@ class DefaultPromptBuilder(IPromptBuilder):
         # メモは review してほしい」を視覚化。
         active_memos_text = self._build_active_memos_text(player_id)
 
-        context = self._context_format_strategy.format(
-            current_state_text,
-            recent_events_text,
-            relevant_memories_text,
-            active_memos_text,
+        # Issue #227 chore β: 実行ランタイム固有の固定目的文 + 所持物証テキスト
+        # を provider 経由で取得 (escape_game format への統一)。
+        # provider が落ちた場合は ERROR で記録した上で空文字に degrade する。
+        # WARNING ではなく ERROR にする理由: provider 実装バグはサイレントに
+        # 黙過すべきでなく、ログ集約側で必ず可視化したい (silent failure 防止)。
+        # 一方で prompt 構築全体を中断するのは過剰なので degrade で続行する。
+        objective_text = self._call_text_provider(
+            self._objective_text_provider, player_id, "objective_text_provider"
+        )
+        inventory_text = self._call_text_provider(
+            self._inventory_text_provider, player_id, "inventory_text_provider"
         )
 
-        # 6b. 直前ターン失敗時の補正（user 先頭に差し込み、次の 1 ツール向け）
-        failure_block = build_pre_turn_failure_section(action_results[:2])
+        context = self._context_format_strategy.format(
+            current_state_text=current_state_text,
+            recent_events_text=recent_events_text,
+            relevant_memories_text=relevant_memories_text,
+            active_memos_text=active_memos_text,
+            objective_text=objective_text,
+            inventory_text=inventory_text,
+        )
 
-        body_parts: list[str] = []
-        if failure_block:
-            body_parts.append(failure_block)
-        body_parts.append(context.rstrip())
-        user_context_body = "\n\n".join(body_parts)
+        # Issue #227 chore β: failure_block (直前ターン失敗時の補正セクション)
+        # を廃止した。理由:
+        #   1. 同じ失敗情報は ``recent_events_text`` (## 直近の出来事) に既に
+        #      含まれている。重複表示で LLM の attention が拡散する。
+        #   2. 「連続同一ツール失敗」の警告は PR #230 で導入した
+        #      ``tool_call_loop_guard`` がより一般化して扱う (success / fail
+        #      両方 / threshold 可変)。失敗専用のセクションは loop_guard で
+        #      代替可能。
+        # build_pre_turn_failure_section() を呼んでいた箇所はこの commit で削除。
+        user_context_body = context.rstrip()
 
         # 7. システムプロンプト・ユーザーメッセージ
         system_content = self._system_prompt_builder.build(player_info)
@@ -437,3 +466,28 @@ class DefaultPromptBuilder(IPromptBuilder):
                 f"(id: {memo.id})"
             )
         return "\n".join(lines)
+
+    def _call_text_provider(
+        self,
+        provider: Optional[Callable[[PlayerId], str]],
+        player_id: PlayerId,
+        provider_name: str,
+    ) -> str:
+        """provider を呼んで text を返す。落ちたら ERROR ログ + 空文字 degrade。
+
+        provider バグを silent に握り潰すと debug が極めて困難になるため、
+        ERROR レベル + exc_info=True でログ集約側に必ず可視化させる。
+        prompt 構築自体は止めず degrade で続行する (provider は補助的な
+        section なので、欠けても LLM ターン自体は成立する)。
+        """
+        if provider is None:
+            return ""
+        try:
+            return provider(player_id) or ""
+        except Exception:
+            self._logger.error(
+                "%s raised; degrading to empty text. Fix provider implementation.",
+                provider_name,
+                exc_info=True,
+            )
+            return ""
