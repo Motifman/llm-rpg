@@ -7,10 +7,9 @@ Issue #227 chore (tile-map 依存除去) PR-3:
 検証ポイント:
 - シグネチャ上 physical_map_repository が Optional になっている
 - 各サブサービスは None を受け取っても construct で例外を投げない
-- get_player_current_state(None PMR) は None を返す
-  (実際の spot_graph では SpotGraphAugmentingWorldQueryService の
-   Decorator がオーバーライドするためこの経路は本番では呼ばれないが、
-   万一呼ばれても安全に None を返すことを保証)
+
+PR-6 以降は PMR=None 経路で get_player_current_state が直接 spot_graph 用 DTO を
+組み立てるため、別途専用テストでカバーする。
 """
 
 import inspect

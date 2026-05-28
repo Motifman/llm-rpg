@@ -68,9 +68,6 @@ from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_servic
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
     SpotAttackOrchestrator,
 )
-from ai_rpg_world.application.world_graph.spot_graph_augmenting_world_query import (
-    SpotGraphAugmentingWorldQueryService,
-)
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
@@ -292,9 +289,11 @@ def create_spot_graph_wiring(
         owned_item_spec_ids_provider=_owned_item_spec_ids_provider,
         monster_view_provider=monster_view_provider,
     )
-    augmented_world_query = SpotGraphAugmentingWorldQueryService(
-        inner=world_query_service,
-        spot_graph_builder=sg_builder,
+    # Issue #227 PR-6 (tile-map 除去): 旧来の Decorator wrapper を廃止し、
+    # WorldQueryService に直接 snapshot provider を注入する設計に統合した。
+    # PMR=None 経路で内部から spot_graph 形 DTO を組み立てる (wrapper 1 段消滅)。
+    world_query_service.attach_spot_graph_snapshot_provider(
+        lambda player_id: sg_builder.build_snapshot(player_id)
     )
     current_state_formatter = SpotGraphCurrentStateFormatter()
 
@@ -519,7 +518,7 @@ def create_spot_graph_wiring(
         buffer=buffer,
         sliding_window=sliding_window,
         action_result_store=action_result_store,
-        world_query_service=augmented_world_query,
+        world_query_service=world_query_service,
         player_profile_repository=player_profile_repository,
         current_state_formatter=current_state_formatter,
         recent_events_formatter=recent_events_formatter,
@@ -588,7 +587,7 @@ def create_spot_graph_wiring(
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
-        world_query_service=augmented_world_query,
+        world_query_service=world_query_service,
         movement_service=no_op_movement,
         action_result_store=action_result_store,
         orchestrator=orchestrator,
