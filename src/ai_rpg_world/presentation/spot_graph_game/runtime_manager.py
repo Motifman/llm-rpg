@@ -295,6 +295,25 @@ class _EscapeGameLlmWiring:
             if memo_store is not None
             else None
         )
+        # Issue #264 後続 B1: speech_say の audience resolver。
+        # runtime の spot_graph_repo / player_status_repo / SoundPropagationService を
+        # 集めて事前 audience 問い合わせを可能にする。これにより speech 結果
+        # message に「届いた人数」を含められ、agent が空振りを学習できる。
+        from ai_rpg_world.application.speech.services.speech_audience_resolver import (
+            SpeechAudienceResolver,
+        )
+        from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
+            SoundPropagationService,
+        )
+        spot_graph_repo = getattr(self.runtime, "_spot_graph_repo", None)
+        player_status_repo = getattr(self.runtime, "_player_status_repo", None)
+        self.speech_audience_resolver: Optional[SpeechAudienceResolver] = None
+        if spot_graph_repo is not None and player_status_repo is not None:
+            self.speech_audience_resolver = SpeechAudienceResolver(
+                spot_graph_repository=spot_graph_repo,
+                player_status_repository=player_status_repo,
+                sound_propagation_service=SoundPropagationService(),
+            )
         # PR 7 (#227): ツール名→ハンドラの dispatch table。本家
         # ToolCommandMapper.execute と構造を揃え、巨大 if-elif を排除する。
         # 各ハンドラは (player_id, arguments, runtime_context) を受けて
@@ -762,7 +781,41 @@ class _EscapeGameLlmWiring:
         # PR 2 (#227): PlayerSpeechApplicationService 経由で PlayerSpokeEvent
         # を fire し、SoundPropagationService で距離 gating する。
         self.runtime.do_say(player_id, content)
-        return LlmCommandResultDto(success=True, message=f"発言した: {content}")
+        # Issue #264 後続 B1: speech_say の audience フィードバック。
+        # 「発言は届いただろう」という暗黙の仮定を agent から取り払うため、
+        # 範囲内のプレイヤー数を message に含める。0 なら明示的に「届かなかった」
+        # と書き、別の手段 (移動・whisper) を促す。
+        audience_summary = self._build_say_audience_summary(player_id)
+        return LlmCommandResultDto(
+            success=True,
+            message=f"発言した: {content}{audience_summary}",
+        )
+
+    def _build_say_audience_summary(self, player_id: PlayerId) -> str:
+        """speech_say の届いた人数情報を message に追記する suffix を返す。
+
+        Issue #264 B1: agent に「あなたの声が届いた範囲」を明示することで、
+        返事の有無を待たずに次手を考えられるようにする。resolver 未配線時や
+        例外時は空文字 (legacy 互換)。
+        """
+        if self.speech_audience_resolver is None:
+            return ""
+        try:
+            from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+            recipients = self.speech_audience_resolver.resolve_audience(
+                speaker_player_id=int(player_id.value),
+                channel=SpeechChannel.SAY,
+            )
+        except Exception:
+            logger.exception("speech_audience_resolver.resolve_audience failed")
+            return ""
+        count = len(recipients)
+        if count == 0:
+            return (
+                "（聞こえる範囲に他のプレイヤーはいません。声は誰にも届きませんでした。"
+                "返事を期待せず、別の場所へ移動するか whisper を試してください）"
+            )
+        return f"（あなたの声は {count} 名のプレイヤーに届く範囲です）"
 
     def _handle_whisper(
         self,
