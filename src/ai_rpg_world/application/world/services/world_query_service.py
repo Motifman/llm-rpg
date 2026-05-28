@@ -127,6 +127,7 @@ class WorldQueryService:
         sns_page_query_service: Optional["SnsPageQueryService"] = None,
         trade_page_session: Optional["TradePageSessionService"] = None,
         trade_page_query_service: Optional["TradePageQueryService"] = None,
+        spot_graph_snapshot_provider: Optional[Callable[[int], Any]] = None,
     ):
         self._player_location_query_service = (
             player_location_query_service
@@ -177,6 +178,14 @@ class WorldQueryService:
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
         self._physical_map_repository = physical_map_repository
+        # Issue #227 PR-6 (tile-map 除去): spot_graph 専用ランタイムでは PMR=None と
+        # 共に Callable[[player_id], Optional[SpotGraphPlayerSnapshotDto]] を注入する。
+        # 「snapshot を作る方法」は WorldQueryService の責務ではないため、コールバックで
+        # 外から差し込む。tile-map ベース経路では None で通常動作。
+        # 後から late-binding する場合は attach_spot_graph_snapshot_provider を使う。
+        self._spot_graph_snapshot_provider: Optional[Callable[[int], Any]] = (
+            spot_graph_snapshot_provider
+        )
         self._spot_repository = spot_repository
         self._connected_spots_provider = connected_spots_provider
         self._monster_repository = monster_repository
@@ -218,6 +227,18 @@ class WorldQueryService:
             )
         )
         self._logger = logging.getLogger(self.__class__.__name__)
+
+    def attach_spot_graph_snapshot_provider(
+        self, provider: Callable[[int], Any]
+    ) -> None:
+        """spot_graph 専用ランタイムから late-binding で snapshot provider を注入する。
+
+        Issue #227 PR-6 (tile-map 除去):
+            create_spot_graph_wiring は既に構築された WorldQueryService を受け取るため、
+            __init__ では provider を渡せない。配線処理で SpotGraphCurrentStateBuilder を
+            組み立てた後、本メソッドで Callable を注入する。
+        """
+        self._spot_graph_snapshot_provider = provider
 
     def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
         """共通の例外処理を実行"""
@@ -322,11 +343,16 @@ class WorldQueryService:
             raise MapNotFoundException(int(spot_id))
 
         if self._physical_map_repository is None:
-            # tile-map なしランタイム (spot_graph 専用) では本メソッドは
-            # 直接呼ばれない (SpotGraphAugmentingWorldQueryService Decorator が
-            # オーバーライドする)。万一呼ばれた場合は None を返し、呼び出し元に
-            # tile-map なし状態を伝える。
-            return None
+            # Issue #227 PR-6 (tile-map 除去): tile-map なしランタイム (spot_graph 専用)
+            # では、PhysicalMap に依存せず DTO を組み立てる。tile 由来の field は
+            # 安全な default (空集合・None・天候 CLEAR) で埋め、spot_graph_snapshot は
+            # 注入された provider から取得する。
+            return self._build_player_current_state_without_tile_map(
+                query=query,
+                player_status=player_status,
+                profile=profile,
+                spot=spot,
+            )
         physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
         if not physical_map:
             raise MapNotFoundException(int(spot_id))
@@ -345,4 +371,80 @@ class WorldQueryService:
             spot=spot,
             physical_map=physical_map,
             available_moves_result=available_moves,
+        )
+
+    def _build_player_current_state_without_tile_map(
+        self,
+        query: GetPlayerCurrentStateQuery,
+        player_status: Any,
+        profile: Any,
+        spot: Any,
+    ) -> PlayerCurrentStateDto:
+        """tile-map なしランタイム (spot_graph 専用) 用の DTO 組み立て。
+
+        Issue #227 PR-6 (tile-map 除去):
+            PhysicalMap に依存せず、最小限の情報 + spot_graph_snapshot で DTO を返す。
+            tile 由来 field は default に固定する:
+            - current_terrain_type / visible_tile_map / visible_objects: 空/None
+            - weather: CLEAR / 0.0 (天候は PhysicalMap.weather_state に紐付くため None)
+            - area_*: 空 (location_area は tile 概念)
+        """
+        from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+
+        coord = player_status.current_coordinate
+        spot_id = player_status.current_spot_id
+
+        # 接続スポットの解決 (これは PhysicalMap 非依存)
+        connected_ids: set = set()
+        connected_names: set = set()
+        for conn_id in self._connected_spots_provider.get_connected_spots(spot_id):
+            connected_ids.add(int(conn_id))
+            conn_spot = self._spot_repository.find_by_id(conn_id)
+            if conn_spot:
+                connected_names.add(conn_spot.name)
+
+        # 同スポット他プレイヤー (PhysicalMap 非依存)
+        player_ids_at_spot = self._player_audience_query.players_at_spot(spot_id)
+        current_player_ids = {int(p.value) for p in player_ids_at_spot}
+
+        # 利用可能な移動先 (sub-service が PMR=None 対応済み: PR-3)
+        available_moves = None
+        total_available_moves = None
+        if query.include_available_moves:
+            moves_query = GetAvailableMovesQuery(player_id=query.player_id)
+            moves_dto = self._available_moves_query_service.get_available_moves(
+                moves_query
+            )
+            if moves_dto is not None:
+                available_moves = moves_dto.available_moves
+                total_available_moves = moves_dto.total_available_moves
+
+        # spot_graph snapshot (provider 注入時のみ)
+        snapshot = None
+        if self._spot_graph_snapshot_provider is not None:
+            snapshot = self._spot_graph_snapshot_provider(query.player_id)
+
+        return PlayerCurrentStateDto(
+            player_id=query.player_id,
+            player_name=profile.name.value,
+            current_spot_id=int(spot_id),
+            current_spot_name=spot.name,
+            current_spot_description=spot.description,
+            x=coord.x,
+            y=coord.y,
+            z=coord.z,
+            current_player_count=len(current_player_ids),
+            current_player_ids=current_player_ids,
+            connected_spot_ids=connected_ids,
+            connected_spot_names=connected_names,
+            weather_type="CLEAR",
+            weather_intensity=0.0,
+            current_terrain_type=None,
+            visible_objects=[],
+            view_distance=query.view_distance,
+            available_moves=available_moves,
+            total_available_moves=total_available_moves,
+            attention_level=getattr(player_status, "attention_level", AttentionLevel.FULL),
+            visible_tile_map=None,
+            spot_graph_snapshot=snapshot,
         )
