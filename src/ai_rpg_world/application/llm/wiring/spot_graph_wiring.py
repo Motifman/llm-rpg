@@ -529,6 +529,11 @@ def create_spot_graph_wiring(
         available_tools_provider=available_tools_provider,
         ui_context_builder=ui_context_builder,
         tile_map_view_distance=effective_view_distance,
+        # Issue #227 PR-4 (tile-map 除去): spot_graph 専用ランタイムでは
+        # tile_map 概念が存在しないので、prompt 用クエリで include_tile_map=False
+        # を固定する。これにより visible_tile_map / current_terrain_type が
+        # 常に None になり、プロンプトに tile 由来のフィールドが混入しない。
+        tile_map_enabled=False,
         persona_block_provider=persona_block_provider,
         episodic_passive_recall=episodic_passive_recall,
         episodic_memory_link_service=mem_bundle.link_service,

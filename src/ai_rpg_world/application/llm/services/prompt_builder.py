@@ -102,6 +102,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         recent_actions_limit: int = DEFAULT_RECENT_ACTIONS_LIMIT,
         default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION,
         tile_map_view_distance: int = 5,
+        tile_map_enabled: bool = True,
         episodic_passive_recall: Optional[EpisodicPassiveRecallRetrievalService] = None,
         episodic_passive_recall_limit_per_axis: int = DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
         episodic_passive_recall_max_candidates: int = DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES,
@@ -227,6 +228,10 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._recent_actions_limit = recent_actions_limit
         self._default_action_instruction = default_action_instruction
         self._tile_map_view_distance = tile_map_view_distance
+        # Issue #227 PR-4 (tile-map 除去): spot_graph 専用ランタイムでは
+        # include_tile_map=False でクエリを発行し、visible_tile_map と
+        # current_terrain_type が常に None になるよう構造的に保証する。
+        self._tile_map_enabled = tile_map_enabled
         self._episodic_passive_recall = episodic_passive_recall
         self._episodic_passive_recall_limit_per_axis = episodic_passive_recall_limit_per_axis
         self._episodic_passive_recall_max_candidates = episodic_passive_recall_max_candidates
@@ -274,6 +279,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             GetPlayerCurrentStateQuery(
                 player_id=player_id.value,
                 view_distance=self._tile_map_view_distance,
+                include_tile_map=self._tile_map_enabled,
             )
         )
         if current_state_dto is not None:

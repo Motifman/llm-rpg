@@ -28,9 +28,18 @@ class SpotGraphAugmentingWorldQueryService:
         if dto is None:
             return None
         snap = self._builder.build_snapshot(query.player_id)
-        if snap is None:
-            return dto
-        return dataclasses.replace(dto, spot_graph_snapshot=snap)
+        # Issue #227 PR-4 (tile-map 除去): spot_graph 経路では tile 由来の
+        # current_terrain_type / visible_tile_map は意味を持たないので
+        # 常に None に上書きする。これによりプロンプトに tile 由来の
+        # ノイズが混入しないことを構造的に保証する (include_tile_map=False で
+        # 既に visible_tile_map=None になっているはずだが、defense in depth)。
+        replacements: dict = {
+            "current_terrain_type": None,
+            "visible_tile_map": None,
+        }
+        if snap is not None:
+            replacements["spot_graph_snapshot"] = snap
+        return dataclasses.replace(dto, **replacements)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
