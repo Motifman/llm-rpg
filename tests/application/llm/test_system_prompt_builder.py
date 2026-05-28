@@ -87,3 +87,43 @@ class TestDefaultSystemPromptBuilder:
         """template が str でないとき TypeError"""
         with pytest.raises(TypeError, match="template must be str"):
             DefaultSystemPromptBuilder(template=123)  # type: ignore[arg-type]
+
+    def test_init_unknown_template_variable_raises_value_error(self):
+        """typo の {{plyer_name}} が __init__ で ValueError として検出される (Issue #227 後続 MEDIUM-7)。"""
+        broken = "Hello {{plyer_name}}"
+        with pytest.raises(ValueError, match="plyer_name"):
+            DefaultSystemPromptBuilder(template=broken)
+
+    def test_init_multiple_unknown_template_variables_listed(self):
+        """複数の未知変数があれば全て ValueError に列挙される。"""
+        broken = "{{foo}} and {{bar}}"
+        with pytest.raises(ValueError, match="bar.*foo|foo.*bar"):
+            DefaultSystemPromptBuilder(template=broken)
+
+    def test_init_no_placeholders_ok(self):
+        """変数を 1 つも含まない template は許容 (literal text のみでも OK)。"""
+        builder = DefaultSystemPromptBuilder(template="just literal text")
+        info = SystemPromptPlayerInfoDto(
+            player_name="P", role="r", race="r", element="e", game_description=""
+        )
+        assert builder.build(info) == "just literal text"
+
+    def test_init_partial_subset_of_known_variables_ok(self):
+        """既知変数のサブセットだけを使う template は許容。"""
+        builder = DefaultSystemPromptBuilder(template="Hi {{player_name}}, role={{role}}")
+        info = SystemPromptPlayerInfoDto(
+            player_name="Alice", role="mage", race="r", element="e", game_description=""
+        )
+        assert builder.build(info) == "Hi Alice, role=mage"
+
+    def test_init_whitespace_inside_placeholders_ok(self):
+        """`{{ player_name }}` のように内部空白があっても OK (正規表現が許容)。"""
+        builder = DefaultSystemPromptBuilder(template="Hi {{ player_name }}")
+        info = SystemPromptPlayerInfoDto(
+            player_name="Alice", role="r", race="r", element="e", game_description=""
+        )
+        # 注: build() は厳密な `{{player_name}}` 形式のみ置換するため、
+        # `{{ player_name }}` (空白あり) は文字通り残る。strict 検証は
+        # 通過するが、置換挙動の現状仕様を確認する
+        result = builder.build(info)
+        assert "Alice" not in result  # 空白入りは置換されないため
