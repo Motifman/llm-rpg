@@ -45,10 +45,14 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
         self,
         observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
-        physical_map_repository: PhysicalMapRepository,
+        physical_map_repository: Optional[PhysicalMapRepository],
         world_object_to_player_resolver: IWorldObjectToPlayerResolver,
         monster_repository: Optional[MonsterRepository] = None,
     ) -> None:
+        # physical_map_repository は tile-map ベース世界でのみ意味を持つ。
+        # spot_graph 専用ランタイムでは None で渡され、
+        # _spot_id_from_world_object は常に None を返す (該当 monster が tile に
+        # 紐付かない世界では、攻撃者の spot 解決は別経路で行われる)。
         self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
         self._physical_map_repository = physical_map_repository
@@ -111,6 +115,8 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
         return []
 
     def _spot_id_from_world_object(self, object_id) -> Optional[SpotId]:
+        if self._physical_map_repository is None:
+            return None
         return self._physical_map_repository.find_spot_id_by_object_id(object_id)
 
     def _spot_id_from_monster(self, monster_id) -> Optional[SpotId]:

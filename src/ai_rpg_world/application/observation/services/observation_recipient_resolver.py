@@ -102,7 +102,7 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
 
 def create_observation_recipient_resolver(
     player_status_repository: PlayerStatusRepository,
-    physical_map_repository: PhysicalMapRepository,
+    physical_map_repository: Optional[PhysicalMapRepository] = None,
     quest_repository: Optional[QuestRepository] = None,
     guild_repository: Optional[GuildRepository] = None,
     shop_repository: Optional[ShopRepository] = None,  # 後方互換のみ（未使用）
@@ -121,7 +121,18 @@ def create_observation_recipient_resolver(
     _ = shop_repository
     _ = sns_user_repository
     observed_event_registry = ObservedEventRegistry()
-    world_object_resolver = WorldObjectToPlayerResolver(physical_map_repository)
+    # tile-map なし (spot_graph 専用) ランタイムでは physical_map_repository=None
+    # で呼ばれる。その場合は NullWorldObjectToPlayerResolver を使い、
+    # WorldObjectId→PlayerId の解決は常に None (= 該当なし) として処理する。
+    if physical_map_repository is not None:
+        world_object_resolver: IWorldObjectToPlayerResolver = (
+            WorldObjectToPlayerResolver(physical_map_repository)
+        )
+    else:
+        from ai_rpg_world.application.observation.services.null_world_object_to_player_resolver import (
+            NullWorldObjectToPlayerResolver,
+        )
+        world_object_resolver = NullWorldObjectToPlayerResolver()
     player_audience_query = PlayerAudienceQueryService(
         player_status_repository=player_status_repository,
     )

@@ -579,7 +579,7 @@ def _build_tool_stack(
 def _build_observation_stack(
     *,
     player_status_repository: PlayerStatusRepository,
-    physical_map_repository: PhysicalMapRepository,
+    physical_map_repository: Optional[PhysicalMapRepository],
     player_profile_repository: PlayerProfileRepository,
     quest_repository: Optional[Any],
     guild_repository: Optional[Any],
