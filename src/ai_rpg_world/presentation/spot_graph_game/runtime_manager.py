@@ -413,15 +413,31 @@ class _EscapeGameLlmWiring:
         ):
             try:
                 action_summary = f"{name}({json.dumps(arguments, ensure_ascii=False)})"
-                augmented = self.memo_completion_hint_service.augment_result_summary(
-                    player_id,
-                    action_summary,
-                    result.message,
+                # Issue #240 後続: detect() を直接呼び、hint 発火時に trace に
+                # MEMO_HINT を emit。これにより実 LLM 試走で「hint が出たか / その後
+                # LLM が memo_done を呼んだか」を trace 経由で追える。
+                hint = self.memo_completion_hint_service.detect(
+                    player_id, action_summary, result.message
                 )
-                if augmented != result.message:
-                    result = dataclass_replace(result, message=augmented)
+                if hint is not None:
+                    augmented_message = result.message + hint.to_hint_text()
+                    result = dataclass_replace(result, message=augmented_message)
+                    if trace_recorder is not None:
+                        try:
+                            from ai_rpg_world.application.trace import TraceEventKind
+                            trace_recorder.record(
+                                TraceEventKind.MEMO_HINT,
+                                tick=current_tick,
+                                player_id=int(player_id.value),
+                                memo_id=hint.memo.id,
+                                memo_content=hint.memo.content,
+                                similarity=round(hint.similarity, 4),
+                                tool_name=name,
+                            )
+                        except Exception:
+                            logger.exception("trace_recorder.record(memo_hint) failed")
             except Exception:
-                logger.exception("memo_completion_hint_service.augment failed")
+                logger.exception("memo_completion_hint_service.detect failed")
         skip_duplicate_action_log = result.success and name in (
             TOOL_NAME_SPOT_GRAPH_EXPLORE,
             TOOL_NAME_SPOT_GRAPH_INTERACT,
