@@ -812,7 +812,7 @@ class _EscapeGameLlmWiring:
         if channel_enum == SpeechChannel.WHISPER:
             targets = getattr(runtime_context, "targets", {})
             target_label = str(arguments.get("target_label", ""))
-            target = targets.get(target_label)
+            target = self._resolve_whisper_target(target_label, targets)
             if target is None or target.player_id is None:
                 valid_players = _list_player_labels(targets)
                 detail = (
@@ -825,7 +825,8 @@ class _EscapeGameLlmWiring:
                     error_code="INVALID_WHISPER",
                     remediation=(
                         "channel=whisper のときは target_label に同じスポット内の "
-                        "プレイヤーラベル (P1, P2 等) を指定してください。"
+                        "プレイヤーラベル (P1, P2 等) または相手の名前 (例: リン) "
+                        "を指定してください。"
                     ),
                 )
             target_player_id_obj = PlayerId(target.player_id)
@@ -845,6 +846,43 @@ class _EscapeGameLlmWiring:
             success=True,
             message=f"{action_verb}: {content}{audience_suffix}",
         )
+
+    def _resolve_whisper_target(
+        self,
+        target_label: str,
+        targets: dict[str, Any],
+    ) -> Optional[Any]:
+        """whisper の target_label をプレイヤー target に解決する。
+
+        Issue #269 第17回 R2 で空文字 / 名前直書きで失敗していたパターンを
+        吸収する:
+        1. ラベル直接 (例: "P1") で targets 辞書を引く
+        2. ``_normalize_label_candidates`` でラベル候補を抽出して再試行
+        3. ``kind="spot_graph_player"`` の target を全スキャンし、
+           display_name (= プレイヤー名 "リン" 等) が候補と一致するものを返す
+
+        いずれも match しなければ None。空文字も None 扱い。
+        """
+        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+            _normalize_label_candidates,
+        )
+        if not target_label:
+            return None
+        # 直接ラベル
+        direct = targets.get(target_label)
+        if direct is not None and direct.player_id is not None:
+            return direct
+        # 候補抽出 → label / display_name の順
+        for c in _normalize_label_candidates(target_label):
+            hit = targets.get(c)
+            if hit is not None and hit.player_id is not None:
+                return hit
+            for t in targets.values():
+                if getattr(t, "kind", None) != "spot_graph_player":
+                    continue
+                if t.display_name == c and t.player_id is not None:
+                    return t
+        return None
 
     def _build_audience_summary(
         self,
