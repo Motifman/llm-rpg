@@ -1,12 +1,12 @@
-"""Issue #168 PR-4: ``SpeechToolExecutor`` の失敗 DTO を learnable + 例外
-サニタイズに統一する。
+"""Issue #168 PR-4 + Issue #264: 統合された ``SpeechToolExecutor._execute_speech`` の
+失敗 DTO を learnable + 例外サニタイズに統一する。
 
-検証する不変条件:
-- 引数 (content / target_player_id) 検証失敗は ``build_invalid_arg_failure``
+旧 SAY/WHISPER は単一 speech_speak (channel 引数) に統合された (Issue #264 後続)。
+チェック内容は不変条件として維持:
+- 引数 (channel / content / target_label) 検証失敗は build_invalid_arg_failure
   経由で arg 名 + 期待値が message に出る
 - 内部例外メッセージ (path / 内部 ID 含みうる) は LLM 向け message に漏れない
-  (PR #170 の str(exc) サニタイズと同 pattern)
-- サーバログには warning レベルで全文脈を残す (観測性)
+- サーバログには warning レベルで全文脈を残す
 """
 
 from __future__ import annotations
@@ -23,31 +23,52 @@ def _build_executor(*, speech_service=None) -> SpeechToolExecutor:
     return SpeechToolExecutor(speech_service=speech_service or MagicMock())
 
 
-class TestWhisperInvalidArgs:
-    """``_execute_whisper`` の引数検証。"""
+class TestSpeechInvalidArgs:
+    """``_execute_speech`` の引数検証。"""
 
-    def test_missing_target_player_id_is_learnable(self) -> None:
+    def test_missing_channel_is_learnable(self) -> None:
+        """channel 未指定なら INVALID_ARGUMENT で arg 名 channel が message に出る。"""
         executor = _build_executor()
-        result = executor._execute_whisper(
+        result = executor._execute_speech(
             player_id=1, args={"content": "hi"}
         )
         assert result.success is False
         assert result.error_code == "INVALID_ARGUMENT"
-        assert "target_player_id" in result.message
-        assert result.remediation
+        assert "channel" in result.message
 
-    def test_non_numeric_target_player_id_is_learnable(self) -> None:
+    def test_invalid_channel_is_learnable(self) -> None:
+        """channel が enum 外なら INVALID_ARGUMENT で許容値が message に出る。"""
         executor = _build_executor()
-        result = executor._execute_whisper(
-            player_id=1, args={"target_player_id": "abc", "content": "hi"}
+        result = executor._execute_speech(
+            player_id=1, args={"channel": "yell", "content": "hi"}
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_ARGUMENT"
+        assert "channel" in result.message
+
+    def test_whisper_missing_target_player_id_is_learnable(self) -> None:
+        """channel=whisper で target_player_id 欠落なら INVALID_ARGUMENT。"""
+        executor = _build_executor()
+        result = executor._execute_speech(
+            player_id=1, args={"channel": "whisper", "content": "hi"}
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_ARGUMENT"
+        assert "target_player_id" in result.message
+
+    def test_whisper_non_numeric_target_player_id_is_learnable(self) -> None:
+        executor = _build_executor()
+        result = executor._execute_speech(
+            player_id=1,
+            args={"channel": "whisper", "target_player_id": "abc", "content": "hi"},
         )
         assert result.success is False
         assert result.error_code == "INVALID_ARGUMENT"
 
     def test_empty_content_is_learnable(self) -> None:
         executor = _build_executor()
-        result = executor._execute_whisper(
-            player_id=1, args={"target_player_id": 2, "content": ""}
+        result = executor._execute_speech(
+            player_id=1, args={"channel": "say", "content": ""}
         )
         assert result.success is False
         assert result.error_code == "INVALID_ARGUMENT"
@@ -55,20 +76,11 @@ class TestWhisperInvalidArgs:
 
     def test_whitespace_content_is_learnable(self) -> None:
         executor = _build_executor()
-        result = executor._execute_whisper(
-            player_id=1, args={"target_player_id": 2, "content": "   "}
+        result = executor._execute_speech(
+            player_id=1, args={"channel": "say", "content": "   "}
         )
         assert result.success is False
         assert result.error_code == "INVALID_ARGUMENT"
-
-
-class TestSayInvalidArgs:
-    def test_missing_content_is_learnable(self) -> None:
-        executor = _build_executor()
-        result = executor._execute_say(player_id=1, args={})
-        assert result.success is False
-        assert result.error_code == "INVALID_ARGUMENT"
-        assert "content" in result.message
 
 
 class TestExceptionSanitization:
@@ -83,14 +95,13 @@ class TestExceptionSanitization:
             logging.WARNING,
             logger="ai_rpg_world.application.llm.services.failure_helpers",
         ):
-            result = executor._execute_whisper(
+            result = executor._execute_speech(
                 player_id=1,
-                args={"target_player_id": 2, "content": "hi"},
+                args={"channel": "whisper", "target_player_id": 2, "content": "hi"},
             )
         assert result.success is False
         assert "/internal/whisper" not in result.message
         assert "secret_token" not in result.message
-        # error_code は exception の getattr 経由 (今回は SYSTEM_ERROR)
         assert result.error_code == "SYSTEM_ERROR"
         assert result.remediation
 
@@ -99,8 +110,8 @@ class TestExceptionSanitization:
         speech_service = MagicMock()
         speech_service.speak.side_effect = RuntimeError(sensitive)
         executor = _build_executor(speech_service=speech_service)
-        result = executor._execute_say(
-            player_id=1, args={"content": "hello world"}
+        result = executor._execute_speech(
+            player_id=1, args={"channel": "say", "content": "hello world"}
         )
         assert result.success is False
         assert "/var/lib/speech" not in result.message
@@ -115,33 +126,45 @@ class TestExceptionSanitization:
         speech_service = MagicMock()
         speech_service.speak.side_effect = _AppError("internal detail")
         executor = _build_executor(speech_service=speech_service)
-        result = executor._execute_whisper(
+        result = executor._execute_speech(
             player_id=1,
-            args={"target_player_id": 99, "content": "hi"},
+            args={"channel": "whisper", "target_player_id": 99, "content": "hi"},
         )
         assert result.success is False
         assert result.error_code == "PLAYER_NOT_FOUND"
-        # internal detail は message に漏れない
         assert "internal detail" not in result.message
 
 
 class TestSpeechOmitResultInPrompt:
-    """Issue #188: 成功時の speech_say / speech_whisper は ``omit_result_in_prompt=True``
-    を返し、prompt の「直近の出来事」で「発言しました。」結果を省略させる。"""
+    """audience_resolver が無い場合の旧挙動: 成功時は omit_result_in_prompt=True。
+
+    audience_resolver があると rich message を出すため omit=False になる
+    (これは別のテストで担保)。
+    """
 
     def test_say_success_sets_omit_result_flag(self) -> None:
+        """audience_resolver 未注入の SAY 成功は omit=True (旧挙動互換)。"""
         executor = _build_executor()
-        result = executor._execute_say(
-            player_id=1, args={"content": "Hello"}
+        result = executor._execute_speech(
+            player_id=1, args={"channel": "say", "content": "Hello"}
         )
         assert result.success is True
         assert result.omit_result_in_prompt is True
 
     def test_whisper_success_sets_omit_result_flag(self) -> None:
         executor = _build_executor()
-        result = executor._execute_whisper(
+        result = executor._execute_speech(
             player_id=1,
-            args={"target_player_id": 2, "content": "Hi"},
+            args={"channel": "whisper", "target_player_id": 2, "content": "Hi"},
+        )
+        assert result.success is True
+        assert result.omit_result_in_prompt is True
+
+    def test_shout_success_sets_omit_result_flag(self) -> None:
+        """SHOUT も同様 (Issue #264 後続で初公開)。"""
+        executor = _build_executor()
+        result = executor._execute_speech(
+            player_id=1, args={"channel": "shout", "content": "聞こえるか！"}
         )
         assert result.success is True
         assert result.omit_result_in_prompt is True
@@ -149,23 +172,18 @@ class TestSpeechOmitResultInPrompt:
     def test_failure_does_not_set_omit_result_flag(self) -> None:
         """失敗時は省略しない (LLM が remediation を見て修正できるように)。"""
         executor = _build_executor()
-        result = executor._execute_say(player_id=1, args={})  # content 欠落
+        result = executor._execute_speech(
+            player_id=1, args={"channel": "say"}
+        )  # content 欠落
         assert result.success is False
-        # default False のまま
         assert result.omit_result_in_prompt is False
 
 
 class TestUnwiredSpeechService:
     """speech_service が None のときは UNKNOWN_TOOL を返す (既存挙動)。"""
 
-    def test_whisper_unwired_returns_unknown_tool(self) -> None:
+    def test_speech_unwired_returns_unknown_tool(self) -> None:
         executor = SpeechToolExecutor(speech_service=None)
-        result = executor._execute_whisper(player_id=1, args={})
-        assert result.success is False
-        assert result.error_code == "UNKNOWN_TOOL"
-
-    def test_say_unwired_returns_unknown_tool(self) -> None:
-        executor = SpeechToolExecutor(speech_service=None)
-        result = executor._execute_say(player_id=1, args={"content": "hi"})
+        result = executor._execute_speech(player_id=1, args={"channel": "say"})
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"

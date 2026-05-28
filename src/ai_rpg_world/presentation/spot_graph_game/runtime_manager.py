@@ -51,7 +51,7 @@ from ai_rpg_world.application.llm.services.escape_llm_prompt import (
     EscapeCharacterPromptInput,
 )
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_SAY,
+    TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
@@ -61,7 +61,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
     TOOL_NAME_TODO_LIST,
-    TOOL_NAME_WHISPER,
 )
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_llm_client_from_env,
@@ -327,8 +326,7 @@ class _EscapeGameLlmWiring:
             TOOL_NAME_SPOT_GRAPH_INTERACT: self._handle_interact,
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._handle_listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._handle_wait,
-            TOOL_NAME_SAY: self._handle_say,
-            TOOL_NAME_WHISPER: self._handle_whisper,
+            TOOL_NAME_SPEECH: self._handle_speech,
             TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION: self._handle_set_sub_location,
             TOOL_NAME_TODO_ADD: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_ADD),
             TOOL_NAME_TODO_LIST: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_LIST),
@@ -764,98 +762,140 @@ class _EscapeGameLlmWiring:
             ),
         )
 
-    def _handle_say(
+    def _handle_speech(
         self,
         player_id: PlayerId,
         arguments: dict[str, Any],
         runtime_context: Any,
     ) -> LlmCommandResultDto:
-        del runtime_context  # unused — say は targets を見ない
+        """Issue #264 後続: 単一 speech_speak tool の dispatch。
+
+        ``channel`` 引数 (whisper/say/shout) で挙動を分岐する。
+        - whisper: ``target_label`` 必須 (同 spot 内の特定プレイヤー)
+        - say: 同 spot + 隣接 (1 hop)
+        - shout: 同 spot + 隣接 + 2 hop
+        """
+        from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+            SPEECH_CHANNEL_SAY,
+            SPEECH_CHANNEL_SHOUT,
+            SPEECH_CHANNEL_VALUES,
+            SPEECH_CHANNEL_WHISPER,
+        )
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+
+        channel_str = str(arguments.get("channel", "")).lower()
+        if channel_str not in SPEECH_CHANNEL_VALUES:
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"channel が不正です: {channel_str!r}。"
+                    f"{list(SPEECH_CHANNEL_VALUES)!r} のいずれかを指定してください。"
+                ),
+                error_code="INVALID_SPEECH_CHANNEL",
+            )
         content = str(arguments.get("content", "")).strip()
         if not content:
             return LlmCommandResultDto(
                 success=False,
-                message="発言内容が空です。",
+                message="発話内容 (content) が空です。",
                 error_code="INVALID_SPEECH_CONTENT",
             )
-        # PR 2 (#227): PlayerSpeechApplicationService 経由で PlayerSpokeEvent
-        # を fire し、SoundPropagationService で距離 gating する。
-        self.runtime.do_say(player_id, content)
-        # Issue #264 後続 B1: speech_say の audience フィードバック。
-        # 「発言は届いただろう」という暗黙の仮定を agent から取り払うため、
-        # 範囲内のプレイヤー数を message に含める。0 なら明示的に「届かなかった」
-        # と書き、別の手段 (移動・whisper) を促す。
-        audience_summary = self._build_say_audience_summary(player_id)
+
+        channel_map = {
+            SPEECH_CHANNEL_WHISPER: SpeechChannel.WHISPER,
+            SPEECH_CHANNEL_SAY: SpeechChannel.SAY,
+            SPEECH_CHANNEL_SHOUT: SpeechChannel.SHOUT,
+        }
+        channel_enum = channel_map[channel_str]
+
+        target_player_id_obj: Optional[PlayerId] = None
+        if channel_enum == SpeechChannel.WHISPER:
+            targets = getattr(runtime_context, "targets", {})
+            target_label = str(arguments.get("target_label", ""))
+            target = targets.get(target_label)
+            if target is None or target.player_id is None:
+                valid_players = _list_player_labels(targets)
+                detail = (
+                    f"target_label={target_label!r} が見つかりません。"
+                    f"有効な target_label: {valid_players or '(同 spot に他プレイヤーなし)'}"
+                )
+                return LlmCommandResultDto(
+                    success=False,
+                    message=f"囁きを送れませんでした: {detail}",
+                    error_code="INVALID_WHISPER",
+                    remediation=(
+                        "channel=whisper のときは target_label に同じスポット内の "
+                        "プレイヤーラベル (P1, P2 等) を指定してください。"
+                    ),
+                )
+            target_player_id_obj = PlayerId(target.player_id)
+
+        self.runtime.do_speech(player_id, content, channel_enum, target_player_id_obj)
+
+        # audience フィードバック付き message
+        action_verb = {
+            SpeechChannel.WHISPER: "囁いた",
+            SpeechChannel.SAY: "発言した",
+            SpeechChannel.SHOUT: "叫んだ",
+        }[channel_enum]
+        audience_suffix = self._build_audience_summary(
+            player_id, channel_enum, target_player_id_obj
+        )
         return LlmCommandResultDto(
             success=True,
-            message=f"発言した: {content}{audience_summary}",
+            message=f"{action_verb}: {content}{audience_suffix}",
         )
 
-    def _build_say_audience_summary(self, player_id: PlayerId) -> str:
-        """speech_say の届いた人数情報を message に追記する suffix を返す。
+    def _build_audience_summary(
+        self,
+        player_id: PlayerId,
+        channel: Any,
+        target_player_id: Optional[PlayerId],
+    ) -> str:
+        """speech 発火直後の audience 情報を message に追記する suffix を返す。
 
         Issue #264 B1: agent に「あなたの声が届いた範囲」を明示することで、
-        返事の有無を待たずに次手を考えられるようにする。resolver 未配線時や
-        例外時は空文字 (legacy 互換)。
+        返事の有無を待たずに次手を考えられるようにする。
+        channel ごとに 0 audience 時の次手提案も含める。
         """
         if self.speech_audience_resolver is None:
             return ""
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
         try:
-            from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
             recipients = self.speech_audience_resolver.resolve_audience(
                 speaker_player_id=int(player_id.value),
-                channel=SpeechChannel.SAY,
+                channel=channel,
+                target_player_id=(
+                    int(target_player_id.value)
+                    if target_player_id is not None
+                    else None
+                ),
             )
         except Exception:
             logger.exception("speech_audience_resolver.resolve_audience failed")
             return ""
         count = len(recipients)
         if count == 0:
-            # speech_say は同 spot + 隣接 (1 hop) 範囲。0 名なら相手は 2 hop 以上
-            # 先にいる。LLM ツールとして提供されているのは say / whisper のみで
-            # (whisper は同 spot 内の特定 1 人のみで say より狭い)、有効な打開策は
-            # 「移動して相手の spot に近づく」しかない。
+            if channel == SpeechChannel.WHISPER:
+                return (
+                    "（囁きは同じスポット内の特定 1 人にしか届かないが、対象が同じ"
+                    "スポットにいません。声は届きませんでした。channel=say や"
+                    " channel=shout に切り替えるか、対象の居るスポットへ移動してください）"
+                )
+            if channel == SpeechChannel.SAY:
+                return (
+                    "（say は同じスポットと隣接スポット (1 hop) のみに届きますが、"
+                    "その範囲に他のプレイヤーはいません。声は誰にも届きませんでした。"
+                    "channel=shout に切り替えると 2 hop 先まで届きます。それでも届かなければ、"
+                    "別の場所へ移動して相手の居るスポットに近づいてください）"
+                )
+            # SHOUT
             return (
-                "（speech_say は同じスポットと隣接スポット (1 hop) のみに届きますが、"
-                "その範囲に他のプレイヤーはいません。声は誰にも届きませんでした。"
-                "返事を期待せず、別の場所へ移動して相手の居るスポットに近づいてください）"
+                "（shout は 2 hop 範囲まで届きますが、その範囲にも他のプレイヤーは"
+                "いません。物理的に合流する以外に伝える手段がありません。別の場所へ"
+                "移動してください）"
             )
         return f"（あなたの声は {count} 名のプレイヤーに届く範囲です）"
-
-    def _handle_whisper(
-        self,
-        player_id: PlayerId,
-        arguments: dict[str, Any],
-        runtime_context: Any,
-    ) -> LlmCommandResultDto:
-        targets = getattr(runtime_context, "targets", {})
-        content = str(arguments.get("content", "")).strip()
-        target_label = str(arguments.get("target_label", ""))
-        target = targets.get(target_label)
-        if not content or target is None or target.player_id is None:
-            if not content:
-                detail = "content が空です。"
-            else:
-                valid_players = _list_player_labels(targets)
-                detail = (
-                    f"target_label={target_label!r} が見つかりません。"
-                    f"有効な target_label: {valid_players or '(同 spot に他プレイヤーなし)'}"
-                )
-            return LlmCommandResultDto(
-                success=False,
-                message=f"囁きを送れませんでした: {detail}",
-                error_code="INVALID_WHISPER",
-                remediation=(
-                    "target_label には現在の状況に表示された P1, P2 等の "
-                    "ラベル (display name ではなく) を指定してください。"
-                ),
-            )
-        self.runtime.do_whisper(
-            player_id,
-            content,
-            PlayerId(target.player_id),
-        )
-        return LlmCommandResultDto(success=True, message=f"囁いた: {content}")
 
     def _handle_set_sub_location(
         self,

@@ -46,9 +46,10 @@ def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     )
 
 
-def test_get_spot_graph_specs_has_eleven_tools() -> None:
+def test_get_spot_graph_specs_has_ten_tools() -> None:
+    """Issue #264 後続: SAY/WHISPER を統合し 1 つの speech_speak に減ったため 11 → 10。"""
     specs = get_spot_graph_specs()
-    assert len(specs) == 11
+    assert len(specs) == 10
     names = {s[0].name for s in specs}
     assert "spot_graph_travel_to" in names
     assert "spot_graph_set_sub_location" in names
@@ -59,8 +60,10 @@ def test_get_spot_graph_specs_has_eleven_tools() -> None:
     assert "spot_graph_wait" in names
     assert "spot_graph_attack" in names
     assert "spot_graph_listen" in names
-    assert "speech_say" in names
-    assert "speech_whisper" in names
+    assert "speech_speak" in names
+    # 旧 say / whisper は廃止
+    assert "speech_say" not in names
+    assert "speech_whisper" not in names
 
 
 def test_spot_graph_specs_use_labels_not_ids() -> None:

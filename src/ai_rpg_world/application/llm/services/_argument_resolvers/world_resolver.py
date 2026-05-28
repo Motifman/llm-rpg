@@ -30,8 +30,13 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_PLACE_OBJECT,
-    TOOL_NAME_SAY,
-    TOOL_NAME_WHISPER,
+    TOOL_NAME_SPEECH,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+    SPEECH_CHANNEL_SAY,
+    SPEECH_CHANNEL_SHOUT,
+    SPEECH_CHANNEL_VALUES,
+    SPEECH_CHANNEL_WHISPER,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
@@ -46,20 +51,8 @@ class WorldArgumentResolver:
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Optional[Dict[str, Any]]:
-        if tool_name == TOOL_NAME_WHISPER:
-            return self._resolve_whisper(args, runtime_context)
-        if tool_name == TOOL_NAME_SAY:
-            raw_it = args.get("inner_thought", "")
-            inner = (
-                raw_it.strip()
-                if isinstance(raw_it, str)
-                else (str(raw_it) if raw_it is not None else "")
-            )
-            return {
-                "content": args.get("content", ""),
-                "channel": SpeechChannel.SAY,
-                "inner_thought": inner,
-            }
+        if tool_name == TOOL_NAME_SPEECH:
+            return self._resolve_speech(args, runtime_context)
         if tool_name == TOOL_NAME_INSPECT_ITEM:
             return self._resolve_inspect_item(args, runtime_context)
         if tool_name == TOOL_NAME_INSPECT_TARGET:
@@ -86,42 +79,68 @@ class WorldArgumentResolver:
             return self._resolve_chest_take(args, runtime_context)
         return None
 
-    def _resolve_whisper(
+    def _resolve_speech(
         self,
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
+        """単一 speech tool の引数解決 (Issue #264 後続: SAY/WHISPER 統合)。
+
+        channel 引数 (whisper/say/shout) を必須にして、各 channel ごとに
+        異なる解決を行う:
+        - whisper: target_label → target_player_id 解決
+        - say/shout: target_label 不要
+        """
         from ai_rpg_world.application.llm.contracts.dtos import PlayerToolRuntimeTargetDto
 
-        label = args.get("target_label")
-        if not isinstance(label, str) or not label:
+        channel_str = args.get("channel")
+        if not isinstance(channel_str, str) or channel_str not in SPEECH_CHANNEL_VALUES:
             raise ToolArgumentResolutionException(
-                "囁き先ラベルが指定されていません。",
-                "INVALID_TARGET_LABEL",
+                f"channel は {list(SPEECH_CHANNEL_VALUES)!r} のいずれかを指定してください "
+                f"(現在: {channel_str!r})",
+                "INVALID_SPEECH_CHANNEL",
             )
-        target = require_target_type(
-            label,
-            runtime_context,
-            "囁き先ラベル",
-            (PlayerToolRuntimeTargetDto,),
-        )
-        if target.player_id is None:
-            raise ToolArgumentResolutionException(
-                f"囁きはプレイヤー宛てにのみ送れます: {label}",
-                "INVALID_TARGET_KIND",
-            )
+        channel_map = {
+            SPEECH_CHANNEL_WHISPER: SpeechChannel.WHISPER,
+            SPEECH_CHANNEL_SAY: SpeechChannel.SAY,
+            SPEECH_CHANNEL_SHOUT: SpeechChannel.SHOUT,
+        }
+        channel_enum = channel_map[channel_str]
+
         raw_it = args.get("inner_thought", "")
         inner = (
             raw_it.strip()
             if isinstance(raw_it, str)
             else (str(raw_it) if raw_it is not None else "")
         )
-        return {
+
+        result: Dict[str, Any] = {
             "content": args.get("content", ""),
-            "channel": SpeechChannel.WHISPER,
-            "target_player_id": target.player_id,
+            "channel": channel_enum,
             "inner_thought": inner,
         }
+
+        if channel_enum == SpeechChannel.WHISPER:
+            label = args.get("target_label")
+            if not isinstance(label, str) or not label:
+                raise ToolArgumentResolutionException(
+                    "channel=whisper のときは target_label が必須です。",
+                    "INVALID_TARGET_LABEL",
+                )
+            target = require_target_type(
+                label,
+                runtime_context,
+                "囁き先ラベル",
+                (PlayerToolRuntimeTargetDto,),
+            )
+            if target.player_id is None:
+                raise ToolArgumentResolutionException(
+                    f"囁きはプレイヤー宛てにのみ送れます: {label}",
+                    "INVALID_TARGET_KIND",
+                )
+            result["target_player_id"] = target.player_id
+
+        return result
 
     def _resolve_interact_world_object(
         self,

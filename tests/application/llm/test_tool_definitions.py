@@ -25,8 +25,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.pursuit import (
     PURSUIT_START_DEFINITION,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.speech import (
-    SAY_DEFINITION,
-    WHISPER_DEFINITION,
+    SPEECH_DEFINITION,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.world import (
     CHANGE_ATTENTION_DEFINITION,
@@ -59,12 +58,11 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_PLACE_OBJECT,
     TOOL_NAME_PURSUIT_CANCEL,
     TOOL_NAME_PURSUIT_START,
-    TOOL_NAME_SAY,
+    TOOL_NAME_SPEECH,
     TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
     TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
     TOOL_NAME_SKILL_EQUIP,
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
-    TOOL_NAME_WHISPER,
     TOOL_NAME_SNS_ENTER,
     TOOL_NAME_SNS_CREATE_REPLY,
     TOOL_NAME_SNS_LIKE_POST,
@@ -94,20 +92,25 @@ class TestToolDefinitions:
         assert "destination_label" in params.get("properties", {})
         assert "destination_label" in params.get("required", [])
 
-    def test_whisper_definition_has_expected_name_and_params(self):
-        """WHISPER_DEFINITION は target_label, content を持つ"""
-        assert WHISPER_DEFINITION.name == TOOL_NAME_WHISPER
-        params = WHISPER_DEFINITION.parameters
-        assert "target_label" in params.get("properties", {})
-        assert "content" in params.get("properties", {})
-        assert "target_label" in params.get("required", [])
-        assert "content" in params.get("required", [])
+    def test_speech_definition_has_expected_name_and_params(self):
+        """Issue #264 後続: 統合された SPEECH_DEFINITION は channel/content を持つ。
 
-    def test_say_definition_has_expected_name_and_params(self):
-        assert SAY_DEFINITION.name == TOOL_NAME_SAY
-        params = SAY_DEFINITION.parameters
+        channel の enum は whisper/say/shout の 3 値、target_label は properties に
+        あるが whisper のみで必要 (executor で validation)。
+        """
+        assert SPEECH_DEFINITION.name == TOOL_NAME_SPEECH
+        params = SPEECH_DEFINITION.parameters
+        # 必須
+        assert "channel" in params.get("properties", {})
         assert "content" in params.get("properties", {})
+        assert "channel" in params.get("required", [])
         assert "content" in params.get("required", [])
+        # target_label は properties にあるが required ではない (whisper のみ必要)
+        assert "target_label" in params.get("properties", {})
+        assert "target_label" not in params.get("required", [])
+        # channel の enum は whisper/say/shout
+        channel_enum = params["properties"]["channel"].get("enum")
+        assert set(channel_enum) == {"whisper", "say", "shout"}
 
     def test_interact_definition_has_expected_name_and_params(self):
         assert INTERACT_WORLD_OBJECT_DEFINITION.name == TOOL_NAME_INTERACT_WORLD_OBJECT
@@ -210,13 +213,13 @@ class TestRegisterDefaultTools:
         names = [e[0].name for e in registry.get_definitions_with_resolvers()]
         assert TOOL_NAME_CANCEL_MOVEMENT in names
 
-    def test_register_default_tools_with_speech_enabled_adds_whisper(self):
+    def test_register_default_tools_with_speech_enabled_adds_speech(self):
+        """Issue #264 後続: 単一 speech_speak tool が登録される (SAY/WHISPER 統合後)。"""
         registry = DefaultGameToolRegistry()
         register_default_tools(registry, speech_enabled=True)
         entries = registry.get_definitions_with_resolvers()
         names = [e[0].name for e in entries]
-        assert TOOL_NAME_WHISPER in names
-        assert TOOL_NAME_SAY in names
+        assert TOOL_NAME_SPEECH in names
 
     def test_register_default_tools_with_interaction_enabled_adds_interact(self):
         registry = DefaultGameToolRegistry()

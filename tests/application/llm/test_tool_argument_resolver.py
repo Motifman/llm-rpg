@@ -53,7 +53,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_PURSUIT_CANCEL,
     TOOL_NAME_PURSUIT_START,
     TOOL_NAME_QUEST_ISSUE,
-    TOOL_NAME_SAY,
+    TOOL_NAME_SPEECH,
     TOOL_NAME_SHOP_LIST_ITEM,
     TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
     TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
@@ -61,7 +61,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_OFFER,
-    TOOL_NAME_WHISPER,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
@@ -242,11 +241,12 @@ class TestDefaultToolArgumentResolver:
         assert result["target_world_object_id"] == 200
 
     def test_resolve_whisper_target_label(self):
+        """Issue #264 後続: 統合された speech tool で channel=whisper を解決する。"""
         resolver = DefaultToolArgumentResolver()
 
         result = resolver.resolve(
-            TOOL_NAME_WHISPER,
-            {"target_label": "P1", "content": "こんにちは"},
+            TOOL_NAME_SPEECH,
+            {"channel": "whisper", "target_label": "P1", "content": "こんにちは"},
             _make_context(),
         )
 
@@ -321,16 +321,30 @@ class TestDefaultToolArgumentResolver:
         assert exc_info.value.error_code == "INVALID_DESTINATION_LABEL"
 
     def test_resolve_say_sets_say_channel(self):
+        """Issue #264 後続: channel=say を解決すると SpeechChannel.SAY が入る。"""
         resolver = DefaultToolArgumentResolver()
 
         result = resolver.resolve(
-            TOOL_NAME_SAY,
-            {"content": "やあ"},
+            TOOL_NAME_SPEECH,
+            {"channel": "say", "content": "やあ"},
             _make_context(),
         )
 
         assert result["content"] == "やあ"
         assert result["channel"] == SpeechChannel.SAY
+
+    def test_resolve_shout_sets_shout_channel(self):
+        """Issue #264 後続: channel=shout を解決すると SpeechChannel.SHOUT が入る (新規)。"""
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_SPEECH,
+            {"channel": "shout", "content": "聞こえるか！"},
+            _make_context(),
+        )
+
+        assert result["content"] == "聞こえるか！"
+        assert result["channel"] == SpeechChannel.SHOUT
 
     def test_resolve_interact_target_label(self):
         resolver = DefaultToolArgumentResolver()
@@ -759,12 +773,13 @@ class TestDefaultToolArgumentResolver:
         assert result["auto_aim"] is False
 
     def test_resolve_whisper_non_player_label_raises(self):
+        """channel=whisper で target_label が non-player なら INVALID_TARGET_KIND。"""
         resolver = DefaultToolArgumentResolver()
 
         with pytest.raises(ToolArgumentResolutionException) as exc_info:
             resolver.resolve(
-                TOOL_NAME_WHISPER,
-                {"target_label": "N1", "content": "こんにちは"},
+                TOOL_NAME_SPEECH,
+                {"channel": "whisper", "target_label": "N1", "content": "こんにちは"},
                 _make_context(),
             )
 

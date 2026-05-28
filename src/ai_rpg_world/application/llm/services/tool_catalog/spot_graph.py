@@ -11,7 +11,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.inner_thought import (
     inner_thought_property,
 )
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_SAY,
+    TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
@@ -21,8 +21,13 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_WAIT,
-    TOOL_NAME_WHISPER,
 )
+
+# speech tool で受け付ける channel 値 (SpeechChannel と 1:1 対応)
+SPEECH_CHANNEL_WHISPER = "whisper"
+SPEECH_CHANNEL_SAY = "say"
+SPEECH_CHANNEL_SHOUT = "shout"
+SPEECH_CHANNEL_VALUES = (SPEECH_CHANNEL_WHISPER, SPEECH_CHANNEL_SAY, SPEECH_CHANNEL_SHOUT)
 
 _RESOLVER = SpotGraphToolsAvailabilityResolver()
 _IT = inner_thought_property()
@@ -120,39 +125,50 @@ WAIT_DEFINITION = ToolDefinitionDto(
 )
 
 
-SAY_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_SAY,
-    description="周囲に聞こえるように発言する。同じスポットにいる全員と、音が通る接続先にも届く。",
+# Issue #264 後続: 旧 SAY/WHISPER の 2 tool を廃止し、channel 引数を持つ
+# 単一 speech_speak tool に統合した (SHOUT も同時に LLM へ公開)。
+#
+# channel ごとの到達範囲:
+#   - whisper: 同じスポット内の特定 1 人だけ (target_label 必須)
+#   - say: 同じスポット + 隣接スポット (1 hop)
+#   - shout: 同じスポット + 隣接 + さらに 1 hop 先 (2 hop)
+#
+# target_label は whisper のときだけ必須。required からは外し、executor で
+# validation する (JSON Schema の conditional required は小型 LLM で扱いが
+# 不安定なため)。
+SPEECH_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPEECH,
+    description=(
+        "周囲に向けて発話する。channel で音量と到達範囲を選ぶ:\n"
+        "- whisper: 同じスポット内の特定 1 人にだけ届く (target_label 必須)\n"
+        "- say: 同じスポットと隣接スポット (1 hop) に届く (通常会話)\n"
+        "- shout: 同じスポット + 隣接 + さらに 1 hop 先 (2 hop) まで届く (大声で叫ぶ)"
+    ),
     parameters={
         "type": "object",
         "properties": {
+            "channel": {
+                "type": "string",
+                "enum": list(SPEECH_CHANNEL_VALUES),
+                "description": (
+                    "音量: whisper=同 spot 内 1 人 / say=隣接まで / shout=2 hop まで。"
+                    "範囲が広いほど多くの人に届くが、敵などにも聞かれるリスクが上がる。"
+                ),
+            },
             "content": {
                 "type": "string",
-                "description": "発言する内容。",
+                "description": "発話内容。",
             },
-            "inner_thought": _IT,
-        },
-        "required": ["content", "inner_thought"],
-    },
-)
-
-WHISPER_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_WHISPER,
-    description="同じスポットにいる特定のプレイヤーにだけ囁く。",
-    parameters={
-        "type": "object",
-        "properties": {
             "target_label": {
                 "type": "string",
-                "description": "同じ場所にいるプレイヤーラベル（P1, P2 等）。",
-            },
-            "content": {
-                "type": "string",
-                "description": "囁く内容。",
+                "description": (
+                    "channel=whisper のときのみ必須。同じ場所にいるプレイヤーラベル"
+                    " (P1, P2 等)。say / shout では指定しても無視される。"
+                ),
             },
             "inner_thought": _IT,
         },
-        "required": ["target_label", "content", "inner_thought"],
+        "required": ["channel", "content", "inner_thought"],
     },
 )
 
@@ -236,8 +252,7 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (ATTACK_DEFINITION, _RESOLVER),
         (LISTEN_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
-        (SAY_DEFINITION, _RESOLVER),
-        (WHISPER_DEFINITION, _RESOLVER),
+        (SPEECH_DEFINITION, _RESOLVER),
     ]
 
 
@@ -252,6 +267,9 @@ __all__ = [
     "ATTACK_DEFINITION",
     "LISTEN_DEFINITION",
     "WAIT_DEFINITION",
-    "SAY_DEFINITION",
-    "WHISPER_DEFINITION",
+    "SPEECH_DEFINITION",
+    "SPEECH_CHANNEL_WHISPER",
+    "SPEECH_CHANNEL_SAY",
+    "SPEECH_CHANNEL_SHOUT",
+    "SPEECH_CHANNEL_VALUES",
 ]
