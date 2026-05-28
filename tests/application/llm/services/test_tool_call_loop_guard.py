@@ -16,6 +16,7 @@ from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
     ToolCallLoopGuardService,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
@@ -127,6 +128,35 @@ class TestToolCallLoopGuardServiceArgumentSensitivity:
         assert len(entries) == 1
         assert entries[0].output.structured["consecutive_count"] == 2
 
+    def test_speech_speak_を_同一引数で_2_回_連打すると_警告(self) -> None:
+        """speech_speak は threshold=2 (Issue #269 第17回 R2 で 3 連続失敗が
+        拾われなかった対策)。同一 channel + content + target_label の 2 回目
+        で警告が出る。"""
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        pid = _pid(1)
+        args = {"channel": "whisper", "content": "リン、合流しよう。", "target_label": ""}
+        for _ in range(2):
+            svc.record_and_check(pid, TOOL_NAME_SPEECH, args)
+        entries = buf.get_observations(pid)
+        assert len(entries) == 1
+        assert entries[0].output.structured["tool_name"] == TOOL_NAME_SPEECH
+        assert entries[0].output.structured["consecutive_count"] == 2
+
+    def test_speech_speak_の_内容が_毎回違えば_発火しない(self) -> None:
+        """通常の会話は発話ごとに content が変わるため fingerprint が変わって
+        警告は出ない (legitimate な往復会話を誤検知しない)。"""
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        pid = _pid(1)
+        svc.record_and_check(
+            pid, TOOL_NAME_SPEECH, {"channel": "say", "content": "聞こえる？"}
+        )
+        svc.record_and_check(
+            pid, TOOL_NAME_SPEECH, {"channel": "say", "content": "今どこにいる？"}
+        )
+        assert buf.get_observations(pid) == []
+
     def test_間に_違う引数が挟まると_カウントがリセットされる(self) -> None:
         """連続性が崩れたら閾値カウンタがリセットされる。"""
         buf = DefaultObservationContextBuffer()
@@ -218,11 +248,14 @@ class TestToolCallLoopGuardServiceWarningResume:
 class TestToolCallLoopGuardServiceConstants:
     """既定の閾値マップが期待値どおり。"""
 
-    def test_既定の閾値が_第13回実験の所見に整合(self) -> None:
-        """DEFAULT_LOOP_THRESHOLDS は wait=3 / travel=2 / interact=4。"""
+    def test_既定の閾値が_実験所見に整合(self) -> None:
+        """DEFAULT_LOOP_THRESHOLDS は wait=3 / travel=2 / interact=4 / speech=2。"""
         assert DEFAULT_LOOP_THRESHOLDS[TOOL_NAME_SPOT_GRAPH_WAIT] == 3
         assert DEFAULT_LOOP_THRESHOLDS[TOOL_NAME_SPOT_GRAPH_TRAVEL_TO] == 2
         assert DEFAULT_LOOP_THRESHOLDS[TOOL_NAME_SPOT_GRAPH_INTERACT] == 4
+        # Issue #269 第17回 R2: speech_speak の同一引数連発も travel_to と
+        # 同じ threshold=2 で拾う。
+        assert DEFAULT_LOOP_THRESHOLDS[TOOL_NAME_SPEECH] == 2
         assert DEFAULT_OTHER_THRESHOLD == 5
 
 
