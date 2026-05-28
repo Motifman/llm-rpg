@@ -24,12 +24,11 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_PREFIX_WORLD,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
-    TOOL_NAME_SAY,
+    TOOL_NAME_SPEECH,
     TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
     TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
     TOOL_NAME_SKILL_EQUIP,
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
-    TOOL_NAME_WHISPER,
 )
 
 
@@ -69,14 +68,10 @@ class TestToolNames:
         assert TOOL_NAME_MOVE_TO_DESTINATION.startswith(TOOL_NAME_PREFIX_MOVE)
         assert TOOL_NAME_MOVE_TO_DESTINATION == "move_to_destination"
 
-    def test_whisper_has_speech_prefix(self):
-        """whisper は speech_ プレフィックスを持つ"""
-        assert TOOL_NAME_WHISPER.startswith(TOOL_NAME_PREFIX_SPEECH)
-        assert TOOL_NAME_WHISPER == "speech_whisper"
-
-    def test_say_has_speech_prefix(self):
-        assert TOOL_NAME_SAY.startswith(TOOL_NAME_PREFIX_SPEECH)
-        assert TOOL_NAME_SAY == "speech_say"
+    def test_speech_has_speech_prefix(self):
+        """Issue #264 後続: 統合された speech tool は speech_ プレフィックス付き。"""
+        assert TOOL_NAME_SPEECH.startswith(TOOL_NAME_PREFIX_SPEECH)
+        assert TOOL_NAME_SPEECH == "speech_speak"
 
     def test_interact_has_world_prefix(self):
         assert TOOL_NAME_INTERACT_WORLD_OBJECT.startswith(TOOL_NAME_PREFIX_WORLD)

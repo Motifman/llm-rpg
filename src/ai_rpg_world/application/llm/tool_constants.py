@@ -72,8 +72,11 @@ TOOL_NAME_PURSUIT_CANCEL = TOOL_NAME_PREFIX_WORLD + "cancel_pursuit"
 TOOL_NAME_MOVE_TO_DESTINATION = TOOL_NAME_PREFIX_MOVE + "to_destination"
 TOOL_NAME_MOVE_ONE_STEP = TOOL_NAME_PREFIX_MOVE + "one_step"
 TOOL_NAME_CANCEL_MOVEMENT = TOOL_NAME_PREFIX_MOVE + "cancel"
-TOOL_NAME_WHISPER = TOOL_NAME_PREFIX_SPEECH + "whisper"
-TOOL_NAME_SAY = TOOL_NAME_PREFIX_SPEECH + "say"
+# Issue #264 後続: 旧 SAY/WHISPER の 2 tool を廃止し、``channel`` 引数を持つ
+# 単一 ``speech_speak`` tool に統合した (SHOUT も同時に LLM へ公開)。
+# ``channel`` は arguments で "whisper" / "say" / "shout" のいずれかを指定する。
+# 詳細は tool_catalog/spot_graph.py の SPEECH_DEFINITION を参照。
+TOOL_NAME_SPEECH = TOOL_NAME_PREFIX_SPEECH + "speak"
 TOOL_NAME_HARVEST_START = TOOL_NAME_PREFIX_HARVEST + "start"
 TOOL_NAME_HARVEST_CANCEL = TOOL_NAME_PREFIX_HARVEST + "cancel"
 TOOL_NAME_CONVERSATION_ADVANCE = TOOL_NAME_PREFIX_CONVERSATION + "advance"

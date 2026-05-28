@@ -365,23 +365,41 @@ class EscapeGameRuntime:
         """
         self._observation_turn_scheduler = scheduler
 
-    def do_say(self, speaker_player_id: PlayerId, content: str) -> None:
-        """speech_say ツールの実行口。PlayerSpokeEvent を fire し、ObservationPipeline 経由で
-        配信する。距離 gating (SoundPropagationService) は recipient strategy 側で行われる。
+    def do_speech(
+        self,
+        speaker_player_id: PlayerId,
+        content: str,
+        channel: SpeechChannel,
+        target_player_id: Optional[PlayerId] = None,
+    ) -> None:
+        """speech_speak ツールの実行口。channel に応じて WHISPER/SAY/SHOUT で発話する。
 
-        旧 ``_append_agent_speech`` (全プレイヤー broadcast) を本メソッドが置き換える
-        (Issue #227 PR 2)。
+        PlayerSpokeEvent を fire し、ObservationPipeline 経由で配信する。距離 gating
+        (SoundPropagationService) は recipient strategy 側で行われる。
+
+        Issue #264 後続で旧 do_say / do_whisper を統合した。SHOUT も同様に扱える。
+        WHISPER のときだけ target_player_id が必須。
         """
         if self._speech_service is None:
             return
+        target_id = (
+            int(target_player_id.value)
+            if target_player_id is not None
+            else None
+        )
         self._speech_service.speak(
             SpeakCommand(
                 speaker_player_id=int(speaker_player_id.value),
                 content=content,
-                channel=SpeechChannel.SAY,
-                target_player_id=None,
+                channel=channel,
+                target_player_id=target_id,
             )
         )
+
+    def do_say(self, speaker_player_id: PlayerId, content: str) -> None:
+        """[deprecated] do_speech(channel=SAY) を呼び出す薄い shim。新規コードは
+        do_speech を直接使うこと。"""
+        self.do_speech(speaker_player_id, content, SpeechChannel.SAY)
 
     def do_whisper(
         self,
@@ -389,17 +407,8 @@ class EscapeGameRuntime:
         content: str,
         target_player_id: PlayerId,
     ) -> None:
-        """whisper ツールの実行口。同一スポット内の宛先のみに届く。"""
-        if self._speech_service is None:
-            return
-        self._speech_service.speak(
-            SpeakCommand(
-                speaker_player_id=int(speaker_player_id.value),
-                content=content,
-                channel=SpeechChannel.WHISPER,
-                target_player_id=int(target_player_id.value),
-            )
-        )
+        """[deprecated] do_speech(channel=WHISPER, target_player_id=...) を呼ぶ shim。"""
+        self.do_speech(speaker_player_id, content, SpeechChannel.WHISPER, target_player_id)
 
     # ── 後方互換ヘルパー（テスト用） ──
 

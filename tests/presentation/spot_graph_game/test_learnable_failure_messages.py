@@ -209,19 +209,23 @@ class TestInvalidWhisperMessage:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """content 空のときは「content が空です」と明示し、原因を診断可能にする。"""
+        """content 空のとき INVALID_SPEECH_CONTENT を返す (Issue #264 後続: SAY/WHISPER を統合)。"""
         stub_empty = StubLlmClient(
             tool_call_to_return={
-                "name": "speech_whisper",
-                "arguments": {"content": "", "target_label": "P1"},
+                "name": "speech_speak",
+                "arguments": {
+                    "channel": "whisper",
+                    "content": "",
+                    "target_label": "P1",
+                },
             }
         )
         state = _create_relay_session(monkeypatch, tmp_path, stub_empty)
         target_pid = state.runtime.get_player_ids()[0]
         result_empty = state.llm_wiring.run_turn(target_pid)
         assert result_empty.success is False
-        assert result_empty.error_code == "INVALID_WHISPER"
-        assert "content が空" in result_empty.message
+        # Issue #264 後続: 統合 dispatch で content 空は INVALID_SPEECH_CONTENT に統一
+        assert result_empty.error_code == "INVALID_SPEECH_CONTENT"
 
     def test_failure_message_with_unknown_target_enumerates_player_labels(
         self,
@@ -229,13 +233,11 @@ class TestInvalidWhisperMessage:
         tmp_path: Path,
     ) -> None:
         """target_label が解決できないとき、有効な player ラベル候補を提示する。"""
-        # relay_puzzle_demo は A(spawn=control_room) と B(spawn=corridor) で
-        # 別 spot にスポーンするので、A 視点の whisper 対象は同 spot に居ない。
-        # 「(同 spot に他プレイヤーなし)」が含まれることを期待。
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "speech_whisper",
+                "name": "speech_speak",
                 "arguments": {
+                    "channel": "whisper",
                     "content": "テストメッセージ",
                     "target_label": "存在しない宛先",
                 },

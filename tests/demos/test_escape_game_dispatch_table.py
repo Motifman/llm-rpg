@@ -17,7 +17,7 @@ import pytest
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_SAY,
+    TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
@@ -27,7 +27,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
     TOOL_NAME_TODO_LIST,
-    TOOL_NAME_WHISPER,
 )
 
 from tests.demos._escape_game_helpers import (
@@ -60,8 +59,7 @@ class TestEscapeGameDispatchTable:
             TOOL_NAME_SPOT_GRAPH_INTERACT,
             TOOL_NAME_SPOT_GRAPH_LISTEN,
             TOOL_NAME_SPOT_GRAPH_WAIT,
-            TOOL_NAME_SAY,
-            TOOL_NAME_WHISPER,
+            TOOL_NAME_SPEECH,
             TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
             TOOL_NAME_TODO_ADD,
             TOOL_NAME_TODO_LIST,

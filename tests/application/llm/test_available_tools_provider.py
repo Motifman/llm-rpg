@@ -27,7 +27,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
-    TOOL_NAME_SAY,
+    TOOL_NAME_SPEECH,
     TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
     TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
     TOOL_NAME_SKILL_EQUIP,
@@ -275,7 +275,7 @@ class TestDefaultAvailableToolsProvider:
         names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
         assert TOOL_NAME_NO_OP in names
         assert TOOL_NAME_MOVE_TO_DESTINATION in names
-        assert TOOL_NAME_SAY in names
+        assert TOOL_NAME_SPEECH in names
 
     def test_get_available_tools_when_busy_hides_move_tool(self, provider):
         ctx = _context_with_moves(1, is_busy=True)
