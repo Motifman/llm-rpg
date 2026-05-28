@@ -33,9 +33,12 @@ class PlayerLocationQueryService:
         self,
         player_status_repository: PlayerStatusRepository,
         player_profile_repository: PlayerProfileRepository,
-        physical_map_repository: PhysicalMapRepository,
+        physical_map_repository: Optional[PhysicalMapRepository],
         spot_repository: SpotRepository,
     ):
+        # physical_map_repository は tile-map (PhysicalMapAggregate) ベースの世界用。
+        # spot_graph 専用ランタイムでは None で良く、その場合 areas は常に空になる
+        # (tile 由来の location_area 概念が存在しないため)。
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
         self._physical_map_repository = physical_map_repository
@@ -70,9 +73,10 @@ class PlayerLocationQueryService:
         spot_desc = spot.description
 
         areas = []
-        physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
-        if physical_map:
-            areas = physical_map.get_location_areas_at(coord)
+        if self._physical_map_repository is not None:
+            physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
+            if physical_map:
+                areas = physical_map.get_location_areas_at(coord)
         area_ids = [int(la.location_id) for la in areas]
         area_names = [la.name for la in areas]
         area_id = area_ids[0] if area_ids else None

@@ -37,11 +37,13 @@ class SpotContextQueryService:
         self,
         player_status_repository: PlayerStatusRepository,
         player_profile_repository: PlayerProfileRepository,
-        physical_map_repository: PhysicalMapRepository,
+        physical_map_repository: Optional[PhysicalMapRepository],
         spot_repository: SpotRepository,
         connected_spots_provider: IConnectedSpotsProvider,
         player_audience_query: IPlayerAudienceQueryPort,
     ):
+        # physical_map_repository=None は tile-map なしランタイム用。
+        # 該当の場合 area_id / area_name は常に None になる。
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
         self._physical_map_repository = physical_map_repository
@@ -79,9 +81,10 @@ class SpotContextQueryService:
             raise MapNotFoundException(int(spot_id))
 
         areas = []
-        physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
-        if physical_map:
-            areas = physical_map.get_location_areas_at(coord)
+        if self._physical_map_repository is not None:
+            physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
+            if physical_map:
+                areas = physical_map.get_location_areas_at(coord)
         area_ids = [int(la.location_id) for la in areas]
         area_names = [la.name for la in areas]
         area_id = area_ids[0] if area_ids else None

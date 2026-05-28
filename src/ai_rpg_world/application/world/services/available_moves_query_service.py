@@ -50,12 +50,14 @@ class AvailableMovesQueryService:
         self,
         player_status_repository: PlayerStatusRepository,
         player_profile_repository: PlayerProfileRepository,
-        physical_map_repository: PhysicalMapRepository,
+        physical_map_repository: Optional[PhysicalMapRepository],
         spot_repository: SpotRepository,
         connected_spots_provider: IConnectedSpotsProvider,
         transition_policy_repository: Optional[ITransitionPolicyRepository] = None,
         transition_condition_evaluator: Optional[TransitionConditionEvaluator] = None,
     ):
+        # physical_map_repository=None は tile-map なしランタイム用。
+        # 遷移条件の天候判定で天候を引けない場合は CLEAR デフォルトを使う。
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
         self._physical_map_repository = physical_map_repository
@@ -115,8 +117,10 @@ class AvailableMovesQueryService:
                     current_spot_id, to_spot_id
                 )
                 if conditions:
-                    current_map = self._physical_map_repository.find_by_spot_id(
-                        current_spot_id
+                    current_map = (
+                        self._physical_map_repository.find_by_spot_id(current_spot_id)
+                        if self._physical_map_repository is not None
+                        else None
                     )
                     weather = (
                         current_map.weather_state
