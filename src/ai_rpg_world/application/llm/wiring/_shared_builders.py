@@ -1,10 +1,11 @@
 """create_llm_agent_wiring と create_spot_graph_wiring の共有ビルダー群。
 
-Issue #227 後続: 両 factory で完全重複していた 3 ブロックを抽出した:
+Issue #227 後続: 両 factory で完全重複していた 4 ブロックを抽出した:
 
 1. effective_view_distance の env / argument 解決
 2. EpisodicPromotionFrontier + memory_link_bundle + semantic_promotion の構築
 3. recall_buffer / reinterpretation_coord / episodic_coord の構築
+4. game_time_label_provider クロージャ生成 (action_result の時刻ラベル用)
 
 呼び出し側のロジックを薄くし、両 factory の挙動が drift しないことを保証する。
 """
@@ -13,7 +14,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
     IEpisodicEpisodeStore,
@@ -212,3 +213,42 @@ def build_episodic_coordinator_stack(
         reinterpretation_coord=reinterpretation_coord,
         episodic_coord=episodic_coord,
     )
+
+
+def build_game_time_label_provider(
+    game_time_provider: Any,
+    world_time_config_service: Any,
+) -> Optional[Callable[[], Optional[str]]]:
+    """action_result の時刻ラベル用 provider を組み立てる。
+
+    Issue #188 改善: action_result に観測と同じ時刻ラベルを乗せる。
+    game_time_provider と world_time_config_service が両方注入されていれば、
+    tick を game_date_time に変換して display 用ラベルを返す。
+
+    どちらかが None なら None を返す (= ラベルなしで orchestrator に渡される)。
+
+    NOTE: Issue #227 後続のレビュー (MEDIUM-6) で、tile-map 版 create_llm_agent_wiring
+    から本 provider が抜けていた潜在バグを発見したため、共通 helper にして両 factory で
+    一貫して使うようにした。
+    """
+    if game_time_provider is None or world_time_config_service is None:
+        return None
+
+    from ai_rpg_world.domain.world.value_object.game_date_time import (
+        game_date_time_from_tick,
+    )
+
+    def _build_game_time_label() -> Optional[str]:
+        try:
+            tick = game_time_provider.get_current_tick().value
+            game_dt = game_date_time_from_tick(
+                tick,
+                world_time_config_service.get_ticks_per_day(),
+                world_time_config_service.get_days_per_month(),
+                world_time_config_service.get_months_per_year(),
+            )
+            return game_dt.format_for_display()
+        except Exception:
+            return None
+
+    return _build_game_time_label
