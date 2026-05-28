@@ -3,14 +3,43 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, FrozenSet, Optional
 
 
-def build_argument_fingerprint(arguments: Optional[Dict[str, Any]]) -> str:
+# Issue #264 第16回実験で「loop_guard が wait spam を検知できない」原因を分析した結果、
+# tool 引数に LLM の主観 narrative (inner_thought / reason 等) が含まれ、毎ターン
+# 内容が変わるため fingerprint が常に異なってしまっていた。
+#
+# 「同じ tool を同じ outcome-affecting 引数で連打しているか」という判定には
+# narrative は無関係なので、fingerprint からは除外する。
+#
+# このセットに含まれる field は LLM が「自分の心情・推論を記述する」フィールドで、
+# 外界に対する効果 (どの object に / どの場所へ / どんな action を) には寄与しない。
+NARRATIVE_ARG_FIELDS: FrozenSet[str] = frozenset({
+    "inner_thought",      # 全 tool 共通の subjective narrative
+    "reason",             # spot_graph_wait など
+    "intention",          # legacy / 一部 tool で使用
+    "expected_result",    # legacy / 一部 tool で使用
+    "attention",          # legacy
+    "emotion_hint",       # legacy
+})
+
+
+def build_argument_fingerprint(
+    arguments: Optional[Dict[str, Any]],
+    *,
+    strip_narrative: bool = True,
+) -> str:
     """
     同一引数か判定するためのフィンガープリント。
 
-    None は空 dict 相当。キーはソートして JSON 化する。
+    Args:
+        arguments: ツール引数 dict。None は空 dict 相当。
+        strip_narrative: True (default) なら ``NARRATIVE_ARG_FIELDS`` に含まれる
+            キーを除外してから JSON 化する。False なら全 key を含める
+            (旧挙動、デバッグ・監査用)。
+
+    キーはソートして JSON 化するため、引数順序は無視される。
     """
     if arguments is None:
         args: Dict[str, Any] = {}
@@ -18,4 +47,6 @@ def build_argument_fingerprint(arguments: Optional[Dict[str, Any]]) -> str:
         args = arguments
     if not isinstance(args, dict):
         return json.dumps(str(args), ensure_ascii=False)
+    if strip_narrative:
+        args = {k: v for k, v in args.items() if k not in NARRATIVE_ARG_FIELDS}
     return json.dumps(args, ensure_ascii=False, sort_keys=True)
