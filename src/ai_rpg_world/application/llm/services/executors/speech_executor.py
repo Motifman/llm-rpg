@@ -20,6 +20,10 @@ from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
+from ai_rpg_world.application.speech.services.speech_audience_resolver import (
+    SpeechAudienceResolver,
+)
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 
 
 class SpeechToolExecutor:
@@ -28,13 +32,71 @@ class SpeechToolExecutor:
 
     get_handlers() でツール名→ハンドラの辞書を返し、
     ToolCommandMapper が _executor_map にマージする。
+
+    Issue #264 後続: speech_audience_resolver (Optional) が注入されると、
+    speech 実行直後に「届いた player 数」を計算し、result_summary に
+    フィードバックする。これにより agent が「speech が届かなかった」
+    事実を次ターンで学習できる (旧実装は『発言しました。』を omit_result_in_prompt=True
+    で隠していたため、空振りに気付かなかった)。
     """
 
     def __init__(
         self,
         speech_service: Optional[PlayerSpeechApplicationService] = None,
+        *,
+        audience_resolver: Optional[SpeechAudienceResolver] = None,
     ) -> None:
         self._speech_service = speech_service
+        self._audience_resolver = audience_resolver
+
+    def _format_say_result_message(
+        self,
+        speaker_player_id: int,
+        channel: SpeechChannel,
+        args: Dict[str, Any],
+    ) -> tuple[str, bool]:
+        """speech 結果 message と prompt 表示要否を返す。
+
+        audience_resolver があれば「届いた人数」を含む rich message を作る。
+        無ければ legacy の '発言しました。' に omit_result_in_prompt=True で
+        フォールバック (旧挙動互換)。
+
+        Returns:
+            (message, omit_result_in_prompt)
+        """
+        if self._audience_resolver is None:
+            return (
+                append_inner_thought_to_message("発言しました。", args),
+                True,
+            )
+        try:
+            recipients = self._audience_resolver.resolve_audience(
+                speaker_player_id=speaker_player_id,
+                channel=channel,
+            )
+        except Exception:
+            # resolver 失敗時は legacy fallback (speech 自体は止めない)
+            return (
+                append_inner_thought_to_message("発言しました。", args),
+                True,
+            )
+        count = len(recipients)
+        if count == 0:
+            # speech_say は同 spot + 隣接 (1 hop) 範囲。0 名なら相手は 2 hop 以上
+            # 先にいる。LLM ツールとして提供されているのは say / whisper のみで
+            # (whisper は同 spot 内の特定 1 人のみで say より狭い)、有効な打開策は
+            # 「移動して相手の spot に近づく」しかない。
+            base = (
+                "発言しました。ただし speech_say は同じスポットと隣接スポット (1 hop) のみに"
+                "届きますが、その範囲に他のプレイヤーはおらず、声は誰にも届きませんでした。"
+                "返事を期待せず、別の場所へ移動して相手の居るスポットに近づいてください。"
+            )
+        else:
+            base = f"発言しました。あなたの声は {count} 名のプレイヤーに届く範囲です。"
+        return (
+            append_inner_thought_to_message(base, args),
+            False,  # 重要情報なので prompt 表示する
+        )
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。speech_service が None の場合は空辞書。"""
@@ -119,22 +181,32 @@ class SpeechToolExecutor:
                 arg_name="content",
                 detail="非空の文字列で発話内容を指定してください",
             )
+        channel_arg = args.get("channel")
         try:
             self._speech_service.speak(
                 SpeakCommand(
                     speaker_player_id=player_id,
                     content=content,
-                    channel=args.get("channel"),
+                    channel=channel_arg,
                 )
+            )
+            # Issue #264 後続: audience_resolver があれば「届いた人数」を
+            # result_summary に含める。これにより「speech が空振りした」事実が
+            # agent に届き、別の手段 (移動 / whisper) に切り替える判断材料になる。
+            channel_enum = (
+                channel_arg
+                if isinstance(channel_arg, SpeechChannel)
+                else SpeechChannel.SAY
+            )
+            message, omit = self._format_say_result_message(
+                speaker_player_id=player_id,
+                channel=channel_enum,
+                args=args,
             )
             return LlmCommandResultDto(
                 success=True,
-                message=append_inner_thought_to_message("発言しました。", args),
-                # Issue #188: 発話内容は ``action_summary`` の引数部分に既に
-                # 含まれている。result_summary 「発言しました。」は情報量
-                # ゼロのノイズなので prompt 表示から省略する (失敗時は
-                # remediation を見せるため省略しない)。
-                omit_result_in_prompt=True,
+                message=message,
+                omit_result_in_prompt=omit,
             )
         except Exception as e:
             error_code = getattr(e, "error_code", "SYSTEM_ERROR")

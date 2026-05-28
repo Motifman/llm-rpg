@@ -123,6 +123,7 @@ def create_spot_graph_wiring(
     episodic: Optional["EpisodicWiringConfig"] = None,
     event_publisher: Optional[Any] = None,
     trace_recorder: Optional[Any] = None,
+    speech_audience_resolver: Optional[Any] = None,
 ) -> "LlmAgentWiringResult":
     """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。
 
@@ -445,6 +446,7 @@ def create_spot_graph_wiring(
         action_result_store=action_result_store,
         current_tick_provider=current_tick_provider,
         trace_recorder=trace_recorder,
+        speech_audience_resolver=speech_audience_resolver,
     )
     available_tools_provider = tool_stack.available_tools_provider
     tool_command_mapper = tool_stack.tool_command_mapper

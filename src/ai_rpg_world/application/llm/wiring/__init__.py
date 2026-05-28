@@ -335,6 +335,7 @@ def _build_tool_handler_map(
     spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
     episodic_memory_explore_executor: Optional[EpisodicMemoryExploreToolExecutor] = None,
     trace_recorder: Optional["ITraceRecorder"] = None,
+    speech_audience_resolver: Optional[Any] = None,
 ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
     """
     Executor 群を組み立て、tool_name → handler の辞書を返す。
@@ -377,7 +378,10 @@ def _build_tool_handler_map(
             ).get_handlers()
         )
     handler_map.update(
-        SpeechToolExecutor(speech_service=speech_service).get_handlers()
+        SpeechToolExecutor(
+            speech_service=speech_service,
+            audience_resolver=speech_audience_resolver,
+        ).get_handlers()
     )
     handler_map.update(
         TodoToolExecutor(
@@ -485,6 +489,7 @@ def _build_tool_stack(
     action_result_store: Optional[IActionResultStore] = None,
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
     trace_recorder: Optional["ITraceRecorder"] = None,
+    speech_audience_resolver: Optional[Any] = None,
 ) -> _ToolStackResult:
     """
     register_default_tools, available_tools_provider, tool_command_mapper, tool_argument_resolver を構築する。
@@ -567,6 +572,7 @@ def _build_tool_stack(
         spot_graph_tool_executor=spot_graph_tool_executor,
         episodic_memory_explore_executor=episodic_memory_explore_executor,
         trace_recorder=trace_recorder,
+        speech_audience_resolver=speech_audience_resolver,
     )
     tool_command_mapper = ToolCommandMapper(handler_map=handler_map)
     tool_argument_resolver = DefaultToolArgumentResolver(
@@ -920,6 +926,7 @@ def create_llm_agent_wiring(
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
     episodic: Optional["EpisodicWiringConfig"] = None,
     trace_recorder: Optional["ITraceRecorder"] = None,
+    speech_audience_resolver: Optional[Any] = None,
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
@@ -1098,6 +1105,7 @@ def create_llm_agent_wiring(
         action_result_store=action_result_store,
         current_tick_provider=current_tick_provider,
         trace_recorder=trace_recorder,
+        speech_audience_resolver=speech_audience_resolver,
     )
     available_tools_provider = tool_stack.available_tools_provider
     tool_command_mapper = tool_stack.tool_command_mapper

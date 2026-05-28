@@ -259,7 +259,15 @@ class EscapeGameRuntime:
     _current_weather: Any
     _tick: int = 0
     # LLM 脱出用（セッション単位で構築）
+    # _escape_llm_system_prompt: 全プレイヤー共通の system prompt (legacy / 単体プレイ用)
+    # _escape_llm_system_prompts_by_player_id: Issue #264 第16回実験で発見された
+    # 「player 2 (リン) が「リン、〜」と自分名で speech する自呼び回帰」を解消するため、
+    # シナリオに複数 player_spawns がある場合は player ごとに persona を埋めた system
+    # prompt を持つ。dict が空 / 該当 id 無しなら _escape_llm_system_prompt にフォールバック。
     _escape_llm_system_prompt: str = field(default="", repr=False)
+    _escape_llm_system_prompts_by_player_id: Dict[int, str] = field(
+        default_factory=dict, repr=False
+    )
     _todo_store: InMemoryTodoStore = field(default_factory=InMemoryTodoStore, repr=False)
     _todo_tool_executor: Optional[TodoToolExecutor] = field(default=None, repr=False)
     # シナリオ実行 trace の recorder。未設定なら NullTraceRecorder にフォールバック
@@ -405,8 +413,19 @@ class EscapeGameRuntime:
         return ", ".join(names)
 
     def build_system_prompt(self, player_id: PlayerId) -> str:
-        """LLM に渡すシステムプロンプト（キャラクター・ルール固定。player_id は互換のため残す）。"""
-        del player_id  # 現状は全プレイヤー同一システム文面
+        """LLM に渡すシステムプロンプト。
+
+        Issue #264 第16回実験で「player 2 が自呼びする」自呼び回帰が見つかったため、
+        player_id ごとに persona を埋めた system prompt を持つよう拡張した。
+        _escape_llm_system_prompts_by_player_id に該当 id があればそれを返す
+        (rich persona)、なければ legacy の _escape_llm_system_prompt にフォールバック
+        (単体プレイの旧挙動互換)。
+        """
+        per_player = self._escape_llm_system_prompts_by_player_id.get(
+            int(player_id.value) if hasattr(player_id, "value") else int(player_id)
+        )
+        if per_player is not None:
+            return per_player
         return self._escape_llm_system_prompt
 
     # ── 実 LLM パイプラインによる観測構築 ──
@@ -1072,6 +1091,52 @@ def create_escape_game_runtime(
         enable_string_seed_of_thought=_escape_llm_ssot_enabled_from_env(),
     )
 
+    # Issue #264 第16回実験 fix: シナリオに複数 player_spawns がある場合、
+    # 各 player に persona を埋めた system prompt を個別に構築する。
+    # これにより player 2 (例: リン) は「自分はリン」という persona block を
+    # 受け取り、自呼び回帰 (リンが「リン、」と speech する) が解消される。
+    #
+    # ロジック:
+    #   - escape_character が指定されていればその player_id は escape_character の
+    #     rich persona を使う (旧挙動と一致)
+    #   - その他の player_id は fallback persona (= スポーン名から生成された
+    #     最小ペルソナ) を使う
+    #   - participant_names は各 player から見た「自分以外の探索者」のリスト
+    system_prompts_by_player_id: Dict[int, str] = {}
+    if len(scenario.player_spawns) > 1:
+        # escape_character に一致する spawn を特定
+        escape_spawn: Optional[PlayerSpawnConfig] = None
+        if escape_character is not None:
+            ec_cid = (escape_character.character_id or "").strip()
+            ec_name = (escape_character.name or "").strip()
+            for s in scenario.player_spawns:
+                if (ec_cid and s.string_id == ec_cid) or (ec_name and s.name == ec_name):
+                    escape_spawn = s
+                    break
+
+        for spawn in scenario.player_spawns:
+            # この spawn から見た「他者」名リスト
+            other_names = tuple(s.name for s in scenario.player_spawns if s is not spawn)
+            # この spawn のペルソナ:
+            #   - escape_character がこの spawn を指している → rich persona
+            #   - そうでなければ fallback (スポーン名ベース)
+            if escape_character is not None and spawn is escape_spawn:
+                this_persona = persona_block  # rich (既に上で構築済み)
+            else:
+                this_persona = build_persona_block_from_escape_character(
+                    None,  # fallback path
+                    fallback_display_name=spawn.name,
+                )
+            system_prompts_by_player_id[int(spawn.player_id)] = (
+                build_escape_system_prompt(
+                    world_title=scenario.metadata.title,
+                    persona_block=this_persona,
+                    safe_intro=safe_intro,
+                    participant_names=other_names,
+                    enable_string_seed_of_thought=_escape_llm_ssot_enabled_from_env(),
+                )
+            )
+
     data_store = InMemoryDataStore()
 
     spot_graph_repo = InMemorySpotGraphRepository(scenario.graph)
@@ -1381,6 +1446,7 @@ def create_escape_game_runtime(
         _environment_stage=environment_stage,
         _current_weather=weather_holder,
         _escape_llm_system_prompt=system_prompt_text,
+        _escape_llm_system_prompts_by_player_id=system_prompts_by_player_id,
         _include_todo_tools=(
             include_todo_tools
             if include_todo_tools is not None
