@@ -44,7 +44,10 @@ TRAVEL_TO_DEFINITION = ToolDefinitionDto(
                     "接続先ラベル（現在の状況に表示された S1, S2 等）または"
                     "スポット名そのもの（例: \"入口広間\"）。"
                     "スポット名は意味が不変なので、過去 turn の履歴を参照して"
-                    "再利用する場合はスポット名の方が安全。"
+                    "再利用する場合はスポット名の方が安全。\n"
+                    "現在状況の \"S2: 扉 → 館長書斎\" のような行をそのまま"
+                    "貼っても解決を試みるが、可能なら S2 または \"館長書斎\" "
+                    "のみを渡す方が確実。"
                 ),
             },
             "inner_thought": _IT,
@@ -163,7 +166,8 @@ SPEECH_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": (
                     "channel=whisper のときのみ必須。同じ場所にいるプレイヤーラベル"
-                    " (P1, P2 等)。say / shout では指定しても無視される。"
+                    " (P1, P2 等) または相手の名前 (例: \"リン\")。"
+                    "say / shout では指定しても無視される。"
                 ),
             },
             "inner_thought": _IT,
