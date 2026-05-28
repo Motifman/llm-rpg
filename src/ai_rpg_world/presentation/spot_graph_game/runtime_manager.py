@@ -318,10 +318,9 @@ class _EscapeGameLlmWiring:
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         prompt = self.runtime.build_full_prompt(player_id)
-        messages = [
-            {"role": "system", "content": prompt["system"]},
-            {"role": "user", "content": prompt["user"]},
-        ]
+        # Issue #227 後続 Step B: build_full_prompt の return shape を
+        # {"messages": [...]} に統一済み。
+        messages = prompt["messages"]
         tools = [
             {
                 "type": "function",

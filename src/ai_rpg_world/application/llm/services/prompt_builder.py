@@ -360,65 +360,15 @@ class DefaultPromptBuilder(IPromptBuilder):
         tools = self._available_tools_provider.get_available_tools(current_state_dto)
 
         # 6. 受動想起（任意注入）: runtime + 直近観測 structured から situation_cues → recall_text を連結
-        relevant_memories_text = ""
-        if self._episodic_passive_recall is not None:
-            observation_structured = None
-            if observations:
-                observation_structured = observations[0].output.structured
-            latest_action = action_results[0] if action_results else None
-            situation_cues = build_situation_episodic_cues(
-                runtime_context=ui_context.tool_runtime_context,
-                observation_structured=observation_structured,
-                latest_action=latest_action,
-            )
-            recall_now = datetime.now(timezone.utc)
-            recall_result = self._episodic_passive_recall.retrieve(
-                player_id=player_id.value,
-                situation_cues=situation_cues,
-                limit_per_axis=self._episodic_passive_recall_limit_per_axis,
-                max_candidates=self._episodic_passive_recall_max_candidates,
-                now=recall_now,
-            )
-            relevant_memories_text = _join_passive_recall_texts(
-                player_id.value,
-                recall_result.candidates,
-                self._episodic_reinterpretation_journal_store,
-            )
-            if self._episodic_memory_link_service is not None and recall_result.candidates:
-                self._episodic_memory_link_service.on_passive_recall_candidates(
-                    player_id.value,
-                    recall_result.candidates,
-                    now=recall_now,
-                )
-            if self._episodic_recall_buffer_store is not None:
-                turn_index = (
-                    self._episodic_turn_index_provider(player_id)
-                    if self._episodic_turn_index_provider is not None
-                    else 0
-                )
-                situation_cue_keys = tuple(c.to_canonical() for c in situation_cues)
-                for cand in recall_result.candidates:
-                    try:
-                        self._episodic_recall_buffer_store.append(
-                            EpisodicRecallObservation(
-                                recall_id=f"recall-{uuid4().hex}",
-                                player_id=player_id.value,
-                                episode_id=cand.episode.episode_id,
-                                recalled_at=datetime.now(timezone.utc),
-                                source_axes=cand.source_axes,
-                                current_state_snapshot=current_state_text,
-                                recent_events_snapshot=recent_events_text,
-                                persona_snapshot=player_info.persona_block,
-                                situation_cues=situation_cue_keys,
-                                turn_index=turn_index,
-                            )
-                        )
-                    except Exception as e:
-                        self._logger.warning(
-                            "Failed to record episodic recall observation; prompt build continues: %s",
-                            e,
-                            exc_info=True,
-                        )
+        relevant_memories_text = self._run_passive_recall(
+            player_id=player_id,
+            observations=observations,
+            action_results=action_results,
+            ui_context=ui_context,
+            current_state_text=current_state_text,
+            recent_events_text=recent_events_text,
+            player_info=player_info,
+        )
 
         # 6c. 進行中のメモ (Issue #188 Phase 1a): LLM が memo_add で context に
         # 固定した未完了 memo を整形する。age + stale フラグで「古くなった
@@ -477,6 +427,94 @@ class DefaultPromptBuilder(IPromptBuilder):
         result["current_beliefs_snapshot"] = relevant_memories_text
         result["persona_snapshot"] = player_info.persona_block
         return result
+
+    def _run_passive_recall(
+        self,
+        *,
+        player_id: PlayerId,
+        observations: List[ObservationEntry],
+        action_results: List[Any],
+        ui_context: Any,
+        current_state_text: str,
+        recent_events_text: str,
+        player_info: SystemPromptPlayerInfoDto,
+    ) -> str:
+        """受動想起ブロックを実行し、関連する記憶テキストを返す。
+
+        Issue #227 後続レビュー (Prompt MEDIUM-5) で build() 本体から抽出。
+        responsibilities:
+        1. situation_cues を runtime_context + 直近観測 + 直近 action から組む
+        2. passive_recall.retrieve で候補 episode を取得
+        3. 候補を改行で連結して relevant_memories_text を作る
+        4. memory_link_service があれば passive recall 通知を流す
+        5. recall_buffer_store があれば EpisodicRecallObservation を append
+
+        passive_recall が未注入なら何もせず空文字を返す。
+        """
+        if self._episodic_passive_recall is None:
+            return ""
+
+        observation_structured = None
+        if observations:
+            observation_structured = observations[0].output.structured
+        latest_action = action_results[0] if action_results else None
+        situation_cues = build_situation_episodic_cues(
+            runtime_context=ui_context.tool_runtime_context,
+            observation_structured=observation_structured,
+            latest_action=latest_action,
+        )
+        recall_now = datetime.now(timezone.utc)
+        recall_result = self._episodic_passive_recall.retrieve(
+            player_id=player_id.value,
+            situation_cues=situation_cues,
+            limit_per_axis=self._episodic_passive_recall_limit_per_axis,
+            max_candidates=self._episodic_passive_recall_max_candidates,
+            now=recall_now,
+        )
+        relevant_memories_text = _join_passive_recall_texts(
+            player_id.value,
+            recall_result.candidates,
+            self._episodic_reinterpretation_journal_store,
+        )
+
+        if self._episodic_memory_link_service is not None and recall_result.candidates:
+            self._episodic_memory_link_service.on_passive_recall_candidates(
+                player_id.value,
+                recall_result.candidates,
+                now=recall_now,
+            )
+
+        if self._episodic_recall_buffer_store is not None:
+            turn_index = (
+                self._episodic_turn_index_provider(player_id)
+                if self._episodic_turn_index_provider is not None
+                else 0
+            )
+            situation_cue_keys = tuple(c.to_canonical() for c in situation_cues)
+            for cand in recall_result.candidates:
+                try:
+                    self._episodic_recall_buffer_store.append(
+                        EpisodicRecallObservation(
+                            recall_id=f"recall-{uuid4().hex}",
+                            player_id=player_id.value,
+                            episode_id=cand.episode.episode_id,
+                            recalled_at=datetime.now(timezone.utc),
+                            source_axes=cand.source_axes,
+                            current_state_snapshot=current_state_text,
+                            recent_events_snapshot=recent_events_text,
+                            persona_snapshot=player_info.persona_block,
+                            situation_cues=situation_cue_keys,
+                            turn_index=turn_index,
+                        )
+                    )
+                except Exception as e:
+                    self._logger.warning(
+                        "Failed to record episodic recall observation; prompt build continues: %s",
+                        e,
+                        exc_info=True,
+                    )
+
+        return relevant_memories_text
 
     def _build_active_memos_text(self, player_id: PlayerId) -> str:
         """LLM が固定した未完了 memo を「進行中のメモ」用テキストに整形する。

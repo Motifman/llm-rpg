@@ -34,7 +34,7 @@ class TestEscapeGameUsesSharedFormatStrategy:
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         kaito = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(kaito)
-        user = prompt["user"]
+        user = prompt["messages"][1]["content"]
 
         assert "## 現在の状況" not in user
         assert "## 直近の出来事" not in user
@@ -46,7 +46,7 @@ class TestEscapeGameUsesSharedFormatStrategy:
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         kaito = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(kaito)
-        user = prompt["user"]
+        user = prompt["messages"][1]["content"]
 
         assert "【現在の目的】" in user
         assert "この廃墟から外へ脱出する" in user
@@ -60,7 +60,7 @@ class TestEscapeGameUsesSharedFormatStrategy:
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         kaito = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(kaito)
-        user = prompt["user"]
+        user = prompt["messages"][1]["content"]
 
         assert "【所持・判明した物証】" in user
 
@@ -69,7 +69,7 @@ class TestEscapeGameUsesSharedFormatStrategy:
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         kaito = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(kaito)
-        user = prompt["user"]
+        user = prompt["messages"][1]["content"]
 
         idx_obj = user.index("【現在の目的】")
         idx_state = user.index("【現在地と周囲】")
@@ -83,7 +83,7 @@ class TestEscapeGameUsesSharedFormatStrategy:
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         kaito = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(kaito)
-        user = prompt["user"]
+        user = prompt["messages"][1]["content"]
 
         assert "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。" in user
         # 指示文が他のセクション見出しより後ろにある
@@ -102,7 +102,7 @@ class TestEscapeGameUsesSharedFormatStrategy:
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         kaito = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(kaito)
-        user = prompt["user"]
+        user = prompt["messages"][1]["content"]
 
         # prompt は context_body + "\n\n" + action_instruction の連結
         instruction = EscapeGameRuntime._ESCAPE_GAME_ACTION_INSTRUCTION

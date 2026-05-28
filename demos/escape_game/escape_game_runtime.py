@@ -682,25 +682,32 @@ class EscapeGameRuntime:
         - system_prompt: precomputed _escape_llm_system_prompt
         - objective/inventory section: provider 経由
 
-        return shape は backward-compat のため {"system", "user", "tools",
-        "tool_runtime_context"} を維持し、DefaultPromptBuilder の
-        {"messages": [...]} 形から変換する。
+        return shape:
+            {
+                "messages": [
+                    {"role": "system", "content": ...},
+                    {"role": "user", "content": ...},
+                ],
+                "tools": [<tool name str>, ...],     # escape_game は名前 list
+                "tool_runtime_context": ToolRuntimeContextDto,
+            }
+
+        Issue #227 後続 Step B: 旧 {"system", "user"} flat shape を廃止し
+        DefaultPromptBuilder と同じ messages 配列形式に統一 (経路統一の最終仕上げ)。
+        旧 shape を期待する caller は messages[0]["content"] / messages[1]["content"]
+        への参照に書き換える必要がある。
         """
         self._wire_auxiliary_tool_stack()
         # observation buffer の drain は DefaultPromptBuilder.build() 内で行われる
 
         builder = self._get_or_build_default_prompt_builder()
         result = builder.build(player_id)
-        messages = result["messages"]
-        system_content = messages[0]["content"]
-        user_content = messages[1]["content"]
 
         # tool_runtime_context は escape_game 独自の build_llm_context 経由で取得
         ctx = self.build_llm_context(player_id)
 
         return {
-            "system": system_content,
-            "user": user_content,
+            "messages": result["messages"],
             "tools": [d.name for d in self.get_tool_definitions()],
             "tool_runtime_context": ctx.tool_runtime_context,
         }
