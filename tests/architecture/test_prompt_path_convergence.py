@@ -70,13 +70,24 @@ def test_escape_game_holds_formatter_instances_as_class_vars() -> None:
     assert "_context_strategy: ClassVar" in escape_runtime
 
 
-def test_escape_game_build_full_prompt_has_migration_note() -> None:
-    """escape_game の build_full_prompt が将来の DefaultPromptBuilder 統合 TODO を持つ。
+def test_escape_game_build_full_prompt_uses_default_prompt_builder() -> None:
+    """escape_game の build_full_prompt が本家 DefaultPromptBuilder.build に統合済み。
 
-    現状の「DefaultPromptBuilder ではなく独自経路」状態を明文化し、
-    後続 PR で統合する意図を docstring に残す。
+    Issue #227 後続 HIGH-3 Part 2 で完了。runtime は adapter 経由で
+    DefaultPromptBuilder を構築し、build_full_prompt はそれを呼ぶだけになっている。
     """
     escape_runtime = _read(_REPO_ROOT / "demos/escape_game/escape_game_runtime.py")
+    # 統合の証跡: _get_or_build_default_prompt_builder 経由で builder を構築している
+    assert "_get_or_build_default_prompt_builder" in escape_runtime
     assert "DefaultPromptBuilder" in escape_runtime
-    # docstring の note が残っているか軽く確認
-    assert "別 PR で対応" in escape_runtime or "別 PR" in escape_runtime
+
+
+def test_escape_game_default_prompt_builder_adapters_module_exists() -> None:
+    """escape_game adapter モジュールが存在し、4 つの adapter を提供する (HIGH-3 Part 2)。"""
+    adapters = _read(
+        _REPO_ROOT / "demos/escape_game/default_prompt_builder_adapters.py"
+    )
+    assert "class EscapeGameWorldQueryAdapter" in adapters
+    assert "class EscapeGameProfileRepositoryAdapter" in adapters
+    assert "class EscapeGameSystemPromptBuilder" in adapters
+    assert "class EscapeGameAvailableToolsProvider" in adapters

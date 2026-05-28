@@ -133,6 +133,19 @@ class DefaultPromptBuilder(IPromptBuilder):
         if not isinstance(limits, PromptLimits):
             raise TypeError("limits must be PromptLimits")
 
+        # Issue #227 HIGH-3 Part 2: world_query_service / player_profile_repository は
+        # 「DefaultPromptBuilder が呼ぶ 1〜2 メソッドを満たせばよい」duck-type 契約に
+        # ゆるめる。escape_game runtime のような独自経路から adapter を差し込めるよう、
+        # isinstance ではなく hasattr で構造チェックする。
+        if not hasattr(core.world_query_service, "get_player_current_state"):
+            raise TypeError(
+                "core.world_query_service must have get_player_current_state method"
+            )
+        if not hasattr(core.player_profile_repository, "find_by_id"):
+            raise TypeError(
+                "core.player_profile_repository must have find_by_id method"
+            )
+
         observation_buffer = core.observation_buffer
         sliding_window_memory = core.sliding_window_memory
         action_result_store = core.action_result_store
@@ -169,10 +182,8 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("sliding_window_memory must be ISlidingWindowMemory")
         if not isinstance(action_result_store, IActionResultStore):
             raise TypeError("action_result_store must be IActionResultStore")
-        if not isinstance(world_query_service, WorldQueryService):
-            raise TypeError("world_query_service must be WorldQueryService")
-        if not isinstance(player_profile_repository, PlayerProfileRepository):
-            raise TypeError("player_profile_repository must be PlayerProfileRepository")
+        # world_query_service / player_profile_repository は __init__ 冒頭で
+        # hasattr 構造チェック済み (Issue #227 HIGH-3 Part 2: duck-type 契約)
         if not isinstance(current_state_formatter, ICurrentStateFormatter):
             raise TypeError("current_state_formatter must be ICurrentStateFormatter")
         if not isinstance(recent_events_formatter, IRecentEventsFormatter):
