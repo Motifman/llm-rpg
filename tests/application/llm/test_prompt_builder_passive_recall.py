@@ -38,6 +38,10 @@ from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_s
     InMemoryEpisodicReinterpretationJournalStore,
 )
 from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    EpisodicRecallConfig,
+    PromptBuilderCoreServices,
+)
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.observation.contracts.interfaces import IObservationContextBuffer
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
@@ -135,18 +139,19 @@ class TestPromptBuilderPassiveRecall:
         )
 
         builder = DefaultPromptBuilder(
-            observation_buffer=buffer,
-            sliding_window_memory=sliding,
-            action_result_store=actions,
-            world_query_service=world,
-            player_profile_repository=_profile_repo(),
-            current_state_formatter=current_fmt,
-            recent_events_formatter=recent_fmt,
-            context_format_strategy=SectionBasedContextFormatStrategy(),
-            system_prompt_builder=sys_builder,
-            available_tools_provider=tools_p,
+            PromptBuilderCoreServices(
+                observation_buffer=buffer,
+                sliding_window_memory=sliding,
+                action_result_store=actions,
+                world_query_service=world,
+                player_profile_repository=_profile_repo(),
+                current_state_formatter=current_fmt,
+                recent_events_formatter=recent_fmt,
+                context_format_strategy=SectionBasedContextFormatStrategy(),
+                system_prompt_builder=sys_builder,
+                available_tools_provider=tools_p,
+            ),
             ui_context_builder=ui_builder,
-            episodic_passive_recall=None,
         )
         out = builder.build(PlayerId(1))
         user = out["messages"][1]["content"]
@@ -219,20 +224,24 @@ class TestPromptBuilderPassiveRecall:
         )
 
         builder = DefaultPromptBuilder(
-            observation_buffer=buffer,
-            sliding_window_memory=sliding,
-            action_result_store=actions,
-            world_query_service=world,
-            player_profile_repository=_profile_repo(player_id=player_num),
-            current_state_formatter=current_fmt,
-            recent_events_formatter=recent_fmt,
-            context_format_strategy=SectionBasedContextFormatStrategy(),
-            system_prompt_builder=sys_builder,
-            available_tools_provider=tools_p,
+            PromptBuilderCoreServices(
+                observation_buffer=buffer,
+                sliding_window_memory=sliding,
+                action_result_store=actions,
+                world_query_service=world,
+                player_profile_repository=_profile_repo(player_id=player_num),
+                current_state_formatter=current_fmt,
+                recent_events_formatter=recent_fmt,
+                context_format_strategy=SectionBasedContextFormatStrategy(),
+                system_prompt_builder=sys_builder,
+                available_tools_provider=tools_p,
+            ),
             ui_context_builder=ui_builder,
-            episodic_passive_recall=recall_svc,
-            episodic_passive_recall_limit_per_axis=_TEST_PASSIVE_RECALL_LIMIT_PER_AXIS,
-            episodic_passive_recall_max_candidates=_TEST_PASSIVE_RECALL_MAX_CANDIDATES,
+            episodic=EpisodicRecallConfig(
+                passive_recall=recall_svc,
+                passive_recall_limit_per_axis=_TEST_PASSIVE_RECALL_LIMIT_PER_AXIS,
+                passive_recall_max_candidates=_TEST_PASSIVE_RECALL_MAX_CANDIDATES,
+            ),
         )
         out = builder.build(PlayerId(player_num))
         user = out["messages"][1]["content"]
@@ -301,23 +310,27 @@ class TestPromptBuilderPassiveRecall:
         )
 
         builder = DefaultPromptBuilder(
-            observation_buffer=buffer,
-            sliding_window_memory=sliding,
-            action_result_store=actions,
-            world_query_service=world,
-            player_profile_repository=_profile_repo(player_id=player_num),
-            current_state_formatter=current_fmt,
-            recent_events_formatter=recent_fmt,
-            context_format_strategy=SectionBasedContextFormatStrategy(),
-            system_prompt_builder=sys_builder,
-            available_tools_provider=tools_p,
+            PromptBuilderCoreServices(
+                observation_buffer=buffer,
+                sliding_window_memory=sliding,
+                action_result_store=actions,
+                world_query_service=world,
+                player_profile_repository=_profile_repo(player_id=player_num),
+                current_state_formatter=current_fmt,
+                recent_events_formatter=recent_fmt,
+                context_format_strategy=SectionBasedContextFormatStrategy(),
+                system_prompt_builder=sys_builder,
+                available_tools_provider=tools_p,
+            ),
             ui_context_builder=ui_builder,
-            episodic_passive_recall=recall_svc,
-            episodic_passive_recall_limit_per_axis=_TEST_PASSIVE_RECALL_LIMIT_PER_AXIS,
-            episodic_passive_recall_max_candidates=_TEST_PASSIVE_RECALL_MAX_CANDIDATES,
-            episodic_recall_buffer_store=recall_buffer,
-            episodic_reinterpretation_journal_store=journal,
-            episodic_turn_index_provider=lambda _pid: 12,
+            episodic=EpisodicRecallConfig(
+                passive_recall=recall_svc,
+                passive_recall_limit_per_axis=_TEST_PASSIVE_RECALL_LIMIT_PER_AXIS,
+                passive_recall_max_candidates=_TEST_PASSIVE_RECALL_MAX_CANDIDATES,
+                recall_buffer_store=recall_buffer,
+                reinterpretation_journal_store=journal,
+                turn_index_provider=lambda _pid: 12,
+            ),
         )
         out = builder.build(PlayerId(player_num))
         user = out["messages"][1]["content"]

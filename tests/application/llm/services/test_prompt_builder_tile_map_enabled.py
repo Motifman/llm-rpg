@@ -23,6 +23,10 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 from ai_rpg_world.application.llm.services.prompt_builder import (
     DefaultPromptBuilder,
 )
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    PromptBuilderCoreServices,
+    PromptLimits,
+)
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
@@ -38,39 +42,34 @@ from ai_rpg_world.domain.player.repository.player_profile_repository import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
+def _make_core() -> PromptBuilderCoreServices:
+    return PromptBuilderCoreServices(
+        observation_buffer=MagicMock(spec=IObservationContextBuffer),
+        sliding_window_memory=MagicMock(spec=ISlidingWindowMemory),
+        action_result_store=MagicMock(spec=IActionResultStore),
+        world_query_service=MagicMock(spec=WorldQueryService),
+        player_profile_repository=MagicMock(spec=PlayerProfileRepository),
+        current_state_formatter=MagicMock(spec=ICurrentStateFormatter),
+        recent_events_formatter=MagicMock(spec=IRecentEventsFormatter),
+        context_format_strategy=MagicMock(spec=IContextFormatStrategy),
+        system_prompt_builder=MagicMock(spec=ISystemPromptBuilder),
+        available_tools_provider=MagicMock(spec=IAvailableToolsProvider),
+    )
+
+
 class TestPromptBuilderTileMapEnabled:
     """tile_map_enabled が _tile_map_enabled として保存され、build() で query に伝搬する。"""
 
     def test_default_tile_map_enabled_is_true(self) -> None:
         """tile_map_enabled の default は True (後方互換)。"""
-        builder = DefaultPromptBuilder(
-            observation_buffer=MagicMock(spec=IObservationContextBuffer),
-            sliding_window_memory=MagicMock(spec=ISlidingWindowMemory),
-            action_result_store=MagicMock(spec=IActionResultStore),
-            world_query_service=MagicMock(spec=WorldQueryService),
-            player_profile_repository=MagicMock(spec=PlayerProfileRepository),
-            current_state_formatter=MagicMock(spec=ICurrentStateFormatter),
-            recent_events_formatter=MagicMock(spec=IRecentEventsFormatter),
-            context_format_strategy=MagicMock(spec=IContextFormatStrategy),
-            system_prompt_builder=MagicMock(spec=ISystemPromptBuilder),
-            available_tools_provider=MagicMock(spec=IAvailableToolsProvider),
-        )
+        builder = DefaultPromptBuilder(_make_core())
         assert builder._tile_map_enabled is True
 
     def test_tile_map_disabled_is_stored(self) -> None:
         """tile_map_enabled=False が builder の状態として保持される。"""
         builder = DefaultPromptBuilder(
-            observation_buffer=MagicMock(spec=IObservationContextBuffer),
-            sliding_window_memory=MagicMock(spec=ISlidingWindowMemory),
-            action_result_store=MagicMock(spec=IActionResultStore),
-            world_query_service=MagicMock(spec=WorldQueryService),
-            player_profile_repository=MagicMock(spec=PlayerProfileRepository),
-            current_state_formatter=MagicMock(spec=ICurrentStateFormatter),
-            recent_events_formatter=MagicMock(spec=IRecentEventsFormatter),
-            context_format_strategy=MagicMock(spec=IContextFormatStrategy),
-            system_prompt_builder=MagicMock(spec=ISystemPromptBuilder),
-            available_tools_provider=MagicMock(spec=IAvailableToolsProvider),
-            tile_map_enabled=False,
+            _make_core(),
+            limits=PromptLimits(tile_map_enabled=False),
         )
         assert builder._tile_map_enabled is False
 

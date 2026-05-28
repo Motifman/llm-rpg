@@ -94,13 +94,16 @@ def test_world_query_service_family_physical_map_repository_is_optional() -> Non
 # ── 3. PromptBuilder の tile_map_enabled (PR-4) ──────────────────────────
 
 def test_default_prompt_builder_has_tile_map_enabled_parameter() -> None:
-    """DefaultPromptBuilder に tile_map_enabled が default=True で存在する (PR-4)。"""
-    from ai_rpg_world.application.llm.services.prompt_builder import (
-        DefaultPromptBuilder,
+    """PromptLimits に tile_map_enabled が default=True で存在する (PR-4 + Config 化後)。
+
+    Issue #227 HIGH-1 で __init__ が Config dataclass ベースになり、
+    tile_map_enabled は PromptLimits の field に移動した。
+    """
+    from ai_rpg_world.application.llm.services.prompt_builder_config import (
+        PromptLimits,
     )
-    sig = inspect.signature(DefaultPromptBuilder.__init__)
-    param = sig.parameters["tile_map_enabled"]
-    assert param.default is True
+    instance = PromptLimits()
+    assert instance.tile_map_enabled is True
 
 
 def test_spot_graph_wiring_passes_tile_map_enabled_false() -> None:

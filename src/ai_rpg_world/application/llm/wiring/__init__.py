@@ -704,7 +704,14 @@ def _build_prompt_stack(
     """
     predictive_retriever と prompt_builder を構築する。
     """
-    return DefaultPromptBuilder(
+    from ai_rpg_world.application.llm.services.prompt_builder_config import (
+        EpisodicRecallConfig,
+        PromptBuilderCoreServices,
+        PromptLimits,
+        PromptSectionProviders,
+    )
+
+    core = PromptBuilderCoreServices(
         observation_buffer=buffer,
         sliding_window_memory=sliding_window,
         action_result_store=action_result_store,
@@ -715,16 +722,28 @@ def _build_prompt_stack(
         context_format_strategy=context_format_strategy,
         system_prompt_builder=system_prompt_builder,
         available_tools_provider=available_tools_provider,
-        ui_context_builder=ui_context_builder,
+    )
+    sections = PromptSectionProviders(
         persona_block_provider=persona_block_provider,
+        memo_store=memo_store,
+    )
+    episodic = EpisodicRecallConfig(
+        passive_recall=episodic_passive_recall,
+        memory_link_service=episodic_memory_link_service,
+        recall_buffer_store=episodic_recall_buffer_store,
+        reinterpretation_journal_store=episodic_reinterpretation_journal_store,
+        turn_index_provider=episodic_turn_index_provider,
+    )
+    limits = PromptLimits(
         tile_map_view_distance=tile_map_view_distance,
         tile_map_enabled=tile_map_enabled,
-        episodic_passive_recall=episodic_passive_recall,
-        episodic_memory_link_service=episodic_memory_link_service,
-        episodic_recall_buffer_store=episodic_recall_buffer_store,
-        episodic_reinterpretation_journal_store=episodic_reinterpretation_journal_store,
-        episodic_turn_index_provider=episodic_turn_index_provider,
-        memo_store=memo_store,
+    )
+    return DefaultPromptBuilder(
+        core,
+        sections=sections,
+        episodic=episodic,
+        limits=limits,
+        ui_context_builder=ui_context_builder,
         current_tick_provider=current_tick_provider,
     )
 

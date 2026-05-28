@@ -38,6 +38,17 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
 )
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    DEFAULT_ACTION_INSTRUCTION as _CFG_DEFAULT_ACTION_INSTRUCTION,
+    DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
+    DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES,
+    DEFAULT_RECENT_ACTIONS_LIMIT as _CFG_DEFAULT_RECENT_ACTIONS_LIMIT,
+    DEFAULT_RECENT_OBSERVATIONS_LIMIT as _CFG_DEFAULT_RECENT_OBSERVATIONS_LIMIT,
+    EpisodicRecallConfig,
+    PromptBuilderCoreServices,
+    PromptLimits,
+    PromptSectionProviders,
+)
 # build_pre_turn_failure_section: Issue #227 chore β で廃止 (#241 後続)
 # 詳細は build() 内コメント参照
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
@@ -89,41 +100,69 @@ class DefaultPromptBuilder(IPromptBuilder):
 
     def __init__(
         self,
-        observation_buffer: IObservationContextBuffer,
-        sliding_window_memory: ISlidingWindowMemory,
-        action_result_store: IActionResultStore,
-        world_query_service: WorldQueryService,
-        player_profile_repository: PlayerProfileRepository,
-        current_state_formatter: ICurrentStateFormatter,
-        recent_events_formatter: IRecentEventsFormatter,
-        context_format_strategy: IContextFormatStrategy,
-        system_prompt_builder: ISystemPromptBuilder,
-        available_tools_provider: IAvailableToolsProvider,
+        core: PromptBuilderCoreServices,
+        *,
+        sections: Optional[PromptSectionProviders] = None,
+        episodic: Optional[EpisodicRecallConfig] = None,
+        limits: Optional[PromptLimits] = None,
         ui_context_builder: Optional[ILlmUiContextBuilder] = None,
-        persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
-        recent_observations_limit: int = DEFAULT_RECENT_OBSERVATIONS_LIMIT,
-        recent_actions_limit: int = DEFAULT_RECENT_ACTIONS_LIMIT,
-        default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION,
-        tile_map_view_distance: int = 5,
-        tile_map_enabled: bool = True,
-        episodic_passive_recall: Optional[EpisodicPassiveRecallRetrievalService] = None,
-        episodic_passive_recall_limit_per_axis: int = DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
-        episodic_passive_recall_max_candidates: int = DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES,
-        episodic_memory_link_service: EpisodicMemoryLinkApplicationService | None = None,
-        episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
-        episodic_reinterpretation_journal_store: Optional[IEpisodicReinterpretationJournalStore] = None,
-        episodic_turn_index_provider: Optional[Callable[[PlayerId], int]] = None,
-        memo_store: Optional["IMemoStore"] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
-        memo_stale_age_ticks: int = 20,
-        # Issue #227 chore β (経路統一): 実行ランタイムが固定の目的文 / 所持物
-        # 整形済テキストを渡すための callable provider。未設定なら section ごと
-        # 省略される。escape_game runtime のような「目的セクション」「物証
-        # セクション」を持つ runtime はこれらを注入することで本家 PromptBuilder
-        # を直接使えるようになる。
-        objective_text_provider: Optional[Callable[[PlayerId], str]] = None,
-        inventory_text_provider: Optional[Callable[[PlayerId], str]] = None,
     ) -> None:
+        """Config dataclass ベースの API (Issue #227 後続 HIGH-1)。
+
+        - ``core``: 必須インフラ群 (observation_buffer / world_query_service 等)
+        - ``sections``: 任意 provider 群 (persona / objective / inventory / memo)
+        - ``episodic``: 受動想起・記憶リンク・再解釈
+        - ``limits``: 数値設定 + action_instruction + tile_map フラグ
+
+        sections / episodic / limits は省略可能で、それぞれ「全フィールドが
+        default」のインスタンスが使われる (= optional 機能はすべて無効)。
+        """
+        sections = sections or PromptSectionProviders()
+        episodic = episodic or EpisodicRecallConfig()
+        limits = limits or PromptLimits()
+
+        # core は dataclass 自体が型 + non-Optional で表現するため、
+        # 個別 isinstance 検証は最小限に絞る (Protocol 系のみ)
+        if not isinstance(core, PromptBuilderCoreServices):
+            raise TypeError("core must be PromptBuilderCoreServices")
+        if not isinstance(sections, PromptSectionProviders):
+            raise TypeError("sections must be PromptSectionProviders")
+        if not isinstance(episodic, EpisodicRecallConfig):
+            raise TypeError("episodic must be EpisodicRecallConfig")
+        if not isinstance(limits, PromptLimits):
+            raise TypeError("limits must be PromptLimits")
+
+        observation_buffer = core.observation_buffer
+        sliding_window_memory = core.sliding_window_memory
+        action_result_store = core.action_result_store
+        world_query_service = core.world_query_service
+        player_profile_repository = core.player_profile_repository
+        current_state_formatter = core.current_state_formatter
+        recent_events_formatter = core.recent_events_formatter
+        context_format_strategy = core.context_format_strategy
+        system_prompt_builder = core.system_prompt_builder
+        available_tools_provider = core.available_tools_provider
+
+        persona_block_provider = sections.persona_block_provider
+        objective_text_provider = sections.objective_text_provider
+        inventory_text_provider = sections.inventory_text_provider
+        memo_store = sections.memo_store
+
+        episodic_passive_recall = episodic.passive_recall
+        episodic_passive_recall_limit_per_axis = episodic.passive_recall_limit_per_axis
+        episodic_passive_recall_max_candidates = episodic.passive_recall_max_candidates
+        episodic_memory_link_service = episodic.memory_link_service
+        episodic_recall_buffer_store = episodic.recall_buffer_store
+        episodic_reinterpretation_journal_store = episodic.reinterpretation_journal_store
+        episodic_turn_index_provider = episodic.turn_index_provider
+
+        recent_observations_limit = limits.recent_observations_limit
+        recent_actions_limit = limits.recent_actions_limit
+        default_action_instruction = limits.default_action_instruction
+        tile_map_view_distance = limits.tile_map_view_distance
+        tile_map_enabled = limits.tile_map_enabled
+        memo_stale_age_ticks = limits.memo_stale_age_ticks
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
         if not isinstance(sliding_window_memory, ISlidingWindowMemory):
