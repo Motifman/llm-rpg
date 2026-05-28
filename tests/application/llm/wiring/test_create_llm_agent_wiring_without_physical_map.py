@@ -29,10 +29,9 @@ class TestPhysicalMapRepositoryIsOptional:
         param = sig.parameters["physical_map_repository"]
         assert param.default is None
 
-    def test_create_spot_graph_wiring_physical_map_repository_has_default_none(
+    def test_create_spot_graph_wiring_has_no_physical_map_repository_param(
         self,
     ) -> None:
-        """create_spot_graph_wiring の physical_map_repository が default=None。"""
+        """create_spot_graph_wiring からは physical_map_repository が完全削除されている (PR-5)。"""
         sig = inspect.signature(create_spot_graph_wiring)
-        param = sig.parameters["physical_map_repository"]
-        assert param.default is None
+        assert "physical_map_repository" not in sig.parameters

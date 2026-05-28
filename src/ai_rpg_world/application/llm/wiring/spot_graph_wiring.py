@@ -92,7 +92,6 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
@@ -104,7 +103,6 @@ from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
 def create_spot_graph_wiring(
     *,
     player_status_repository: PlayerStatusRepository,
-    physical_map_repository: Optional[PhysicalMapRepository] = None,
     world_query_service: WorldQueryService,
     spot_graph_world_services: SpotGraphWorldServices,
     spot_graph_repository: ISpotGraphRepository,
@@ -237,9 +235,6 @@ def create_spot_graph_wiring(
 
     if player_status_repository is None:
         raise TypeError("player_status_repository must not be None")
-    # physical_map_repository は spot_graph 専用ランタイムでは省略可。
-    # 観測 resolver は None なら NullWorldObjectToPlayerResolver を使う。
-    # tile 依存ツールは executor 側で None ガード済み。
     if world_query_service is None:
         raise TypeError("world_query_service must not be None")
     if player_profile_repository is None:
@@ -451,7 +446,11 @@ def create_spot_graph_wiring(
         notification_query_service=notification_query_service,
         item_repository=item_repository,
         monster_repository=monster_repository,
-        physical_map_repository=physical_map_repository,
+        # Issue #227 PR-5: spot_graph 専用ランタイムは tile-map 概念を持たないので
+        # physical_map_repository=None を固定で渡す (tile 依存ツールは executor
+        # 側で None ガード済み、観測 resolver は NullWorldObjectToPlayerResolver
+        # にフォールバック)。
+        physical_map_repository=None,
         player_status_repository=player_status_repository,
         monster_template_repository=monster_template_repository,
         spot_repository=spot_repository,
@@ -638,7 +637,10 @@ def create_spot_graph_wiring(
 
     observation_registry = _build_observation_stack(
         player_status_repository=player_status_repository,
-        physical_map_repository=physical_map_repository,
+        # Issue #227 PR-5: spot_graph 専用ランタイムは tile-map 概念なし。
+        # 観測 resolver は NullWorldObjectToPlayerResolver を使い、
+        # WorldObjectId→PlayerId 解決を常に None で扱う。
+        physical_map_repository=None,
         player_profile_repository=player_profile_repository,
         quest_repository=quest_repository,
         guild_repository=guild_repository,
