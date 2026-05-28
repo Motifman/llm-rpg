@@ -177,6 +177,7 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.wiring._shared_builders import (
         build_episodic_coordinator_stack,
         build_episodic_memory_stack,
+        build_game_time_label_provider,
         resolve_effective_view_distance,
     )
     from ai_rpg_world.application.llm.wiring._llm_client_factory import (
@@ -486,30 +487,9 @@ def create_spot_graph_wiring(
         current_tick_provider=current_tick_provider,
     )
 
-    # Issue #188 改善: action_result に観測と同じ時刻ラベルを乗せる。
-    # game_time_provider と world_time_config_service が両方注入されていれば、
-    # tick を game_date_time に変換して display 用ラベルを返す provider を組む。
-    if game_time_provider is not None and world_time_config_service is not None:
-        from ai_rpg_world.domain.world.value_object.game_date_time import (
-            game_date_time_from_tick,
-        )
-
-        def _build_game_time_label() -> Optional[str]:
-            try:
-                tick = game_time_provider.get_current_tick().value
-                game_dt = game_date_time_from_tick(
-                    tick,
-                    world_time_config_service.get_ticks_per_day(),
-                    world_time_config_service.get_days_per_month(),
-                    world_time_config_service.get_months_per_year(),
-                )
-                return game_dt.format_for_display()
-            except Exception:
-                return None
-
-        game_time_label_provider = _build_game_time_label
-    else:
-        game_time_label_provider = None
+    game_time_label_provider = build_game_time_label_provider(
+        game_time_provider, world_time_config_service
+    )
 
     from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
         MemoCompletionHintService,

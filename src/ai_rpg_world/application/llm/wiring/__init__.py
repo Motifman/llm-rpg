@@ -144,6 +144,7 @@ from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
 from ai_rpg_world.application.llm.wiring._shared_builders import (
     build_episodic_coordinator_stack,
     build_episodic_memory_stack,
+    build_game_time_label_provider,
     resolve_effective_view_distance,
 )
 from ai_rpg_world.application.llm.services.in_memory_todo_store import (
@@ -1117,6 +1118,12 @@ def create_llm_agent_wiring(
         current_tick_provider=current_tick_provider,
     )
     memo_completion_hint_service = MemoCompletionHintService(memo_store=todo_store)
+    # Issue #227 後続レビュー (MEDIUM-6) fix: tile-map 経路にも
+    # game_time_label_provider を渡す (これまで spot_graph 版だけが渡していて、
+    # tile-map 版は action_result の時刻ラベルが付かない潜在バグだった)
+    game_time_label_provider = build_game_time_label_provider(
+        game_time_provider, world_time_config_service
+    )
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
         llm_client=client,
@@ -1126,6 +1133,7 @@ def create_llm_agent_wiring(
         episodic_chunk_coordinator=episodic_coord,
         episodic_reinterpretation_coordinator=reinterpretation_coord,
         episodic_semantic_promotion=episodic_semantic_promotion,
+        game_time_label_provider=game_time_label_provider,
         memo_completion_hint_service=memo_completion_hint_service,
         trace_recorder=trace_recorder,
         tick_provider=current_tick_provider,
