@@ -122,3 +122,70 @@ class TestSpeechAudienceResolverWhisperMode:
             target_player_id=100,
         )
         assert result == []
+
+
+class TestSpeechAudienceResolverWithClarity:
+    """Issue #269: resolve_audience_with_clarity が clarity を伴って返す。"""
+
+    def test_say_returns_members_with_recipient_clarity(self):
+        """sound_propagation の clarity を SpeechAudienceMember に乗せて返す。"""
+        from ai_rpg_world.domain.world_graph.enum.sound_clarity import (
+            SoundClarityEnum,
+        )
+
+        resolver = _make_resolver(recipients_entity_ids=())
+        # 手動で recipients に clarity を付与
+        r1 = MagicMock()
+        r1.entity_id = EntityId.create(2)
+        r1.clarity = SoundClarityEnum.MUFFLED
+        r2 = MagicMock()
+        r2.entity_id = EntityId.create(3)
+        r2.clarity = SoundClarityEnum.FAINT
+        resolver._sound_propagation.resolve_recipients.return_value = [r1, r2]
+        # find_all に player 2 / 3 を含める
+        speaker = MagicMock()
+        speaker.player_id = PlayerId.create(100)
+        s2 = MagicMock()
+        s2.player_id = PlayerId.create(2)
+        s3 = MagicMock()
+        s3.player_id = PlayerId.create(3)
+        resolver._player_status_repository.find_all.return_value = [speaker, s2, s3]
+
+        members = resolver.resolve_audience_with_clarity(
+            speaker_player_id=100,
+            channel=SpeechChannel.SAY,
+        )
+        clarity_by_pid = {m.player_id.value: m.clarity for m in members}
+        assert clarity_by_pid == {
+            2: SoundClarityEnum.MUFFLED,
+            3: SoundClarityEnum.FAINT,
+        }
+
+    def test_whisper_returns_clear_for_same_spot_target(self):
+        """WHISPER は同 spot 1 名のみ。常に CLEAR。"""
+        from ai_rpg_world.domain.world_graph.enum.sound_clarity import (
+            SoundClarityEnum,
+        )
+
+        resolver = _make_resolver()
+        # graph.get_entity_spot は speaker / target ともに同じ "spot-1" を返す
+        members = resolver.resolve_audience_with_clarity(
+            speaker_player_id=100,
+            channel=SpeechChannel.WHISPER,
+            target_player_id=2,
+        )
+        # _make_resolver では player_id=2 を含めていないので、まず追加する
+        # → 上の resolve は空。手動で対象を追加した状態を作る:
+        speaker = MagicMock()
+        speaker.player_id = PlayerId.create(100)
+        target = MagicMock()
+        target.player_id = PlayerId.create(2)
+        resolver._player_status_repository.find_all.return_value = [speaker, target]
+        members = resolver.resolve_audience_with_clarity(
+            speaker_player_id=100,
+            channel=SpeechChannel.WHISPER,
+            target_player_id=2,
+        )
+        assert len(members) == 1
+        assert members[0].player_id.value == 2
+        assert members[0].clarity == SoundClarityEnum.CLEAR

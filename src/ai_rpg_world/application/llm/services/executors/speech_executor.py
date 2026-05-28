@@ -192,7 +192,7 @@ class SpeechToolExecutor:
             )
 
         try:
-            recipients = self._audience_resolver.resolve_audience(
+            members = self._audience_resolver.resolve_audience_with_clarity(
                 speaker_player_id=speaker_player_id,
                 channel=channel,
                 target_player_id=target_player_id,
@@ -203,47 +203,20 @@ class SpeechToolExecutor:
                 True,
             )
 
-        count = len(recipients)
-        if count == 0:
-            zero_audience_message = _zero_audience_message(channel)
-            return (
-                append_inner_thought_to_message(zero_audience_message, args),
-                False,  # 重要情報なので prompt 表示する
-            )
-
-        # 1 名以上
-        if channel == SpeechChannel.WHISPER:
-            base = "囁きが届きました。"
-        else:
-            base = f"{legacy_base[:-1]}。あなたの声は {count} 名のプレイヤーに届く範囲です。"
-        return (
-            append_inner_thought_to_message(base, args),
-            False,
+        from ai_rpg_world.application.speech.services.audience_feedback import (
+            audience_summary_text,
         )
 
-
-def _zero_audience_message(channel: SpeechChannel) -> str:
-    """audience 0 時の channel-aware フィードバック文。
-
-    agent に「現在の channel では届かなかった事実」と「次手の選択肢」を
-    具体的に伝えることで、空振りループを抜けやすくする。
-    """
-    if channel == SpeechChannel.WHISPER:
+        # action verb を前置きしつつ audience 詳細を続ける。0 audience でも
+        # 「発言した / 叫んだ」事実は伝えてから理由を述べる。
+        action_verb_past = {
+            SpeechChannel.WHISPER: "囁いた",
+            SpeechChannel.SAY: "発言した",
+            SpeechChannel.SHOUT: "叫んだ",
+        }[channel]
+        body = audience_summary_text(channel, members)
+        message = f"{action_verb_past}。{body}"
         return (
-            "囁きは同じスポット内の特定 1 人にしか届きませんが、対象が同じスポットに"
-            "いません。声は届きませんでした。channel=say や channel=shout に切り替えるか、"
-            "対象の居るスポットへ移動してください。"
+            append_inner_thought_to_message(message, args),
+            False,  # 重要情報なので prompt 表示する
         )
-    if channel == SpeechChannel.SAY:
-        return (
-            "発言しました。ただし say は同じスポットと隣接スポット (1 hop) のみに届きますが、"
-            "その範囲に他のプレイヤーはおらず、声は誰にも届きませんでした。"
-            "channel=shout に切り替えると 2 hop 先まで届きます。それでも届かなければ、"
-            "別の場所へ移動して相手の居るスポットに近づいてください。"
-        )
-    # SHOUT
-    return (
-        "叫びました。ただし shout は 2 hop 範囲まで届きますが、その範囲にも"
-        "他のプレイヤーはおらず、声は誰にも届きませんでした。物理的に合流する以外に"
-        "伝える手段がありません。別の場所へ移動してください。"
-    )
