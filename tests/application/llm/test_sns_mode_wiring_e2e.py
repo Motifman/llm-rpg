@@ -154,7 +154,8 @@ def sns_wiring_deps():
         mode_session=session,
         post_query_service=post_query,
     )
-    deps["trade_command_service"] = MagicMock()
+    from ai_rpg_world.application.llm.wiring.wiring_configs import TradeWiringConfig
+    deps["trade"] = TradeWiringConfig(command_service=MagicMock())
     deps["player_profile_repository"] = _profile_repo_with_player_one()
     return deps
 
