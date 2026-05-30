@@ -219,52 +219,93 @@ class TestRecallByObservationStructuredCue:
 
 
 class TestRecallByFreeTextMention:
-    """シナリオ 3: 自由文での他スポット mention は recall できない (現状の限界)。
+    """シナリオ 3: 自由文での他スポット mention。
 
-    speech の prose に「書架A」と書かれていても、observation_structured に
-    spot_id_value が乗っていなければ cue 抽出は走らない。
-    **「書架A で待ってるよ」と SNS で聞いた瞬間に route 記憶が思い出される**
-    という user の理想動作のためには、speech / SNS event の構造化タギングが
-    必要 = 設計議論ポイント。
+    PR #288 (WorldNounMatcher) + 本 PR (free-text cue extraction) で
+    「書架A で待ってる」と SNS で聞くだけで ``place_spot:3`` cue が
+    自動付与され、書架A 訪問 episode が recall されるようになった。
+
+    ハードコードな pathfinding は一切無く、「世界の固有名詞 → 想起 cue」
+    という単一原則のみで emergent に成立する動作。
     """
 
-    def test_観測_structured_に_spot_id_value_が無ければ書架A_episode_はrecall_されない(
+    def test_matcher_未注入なら自由文_書架A_は_cue_にならない(
         self, lin_visit_history: InMemorySubjectiveEpisodeStore
     ) -> None:
-        """structured には spot_id_value=2 (= 発話者カイトの居場所、閲覧室) しか
-        乗っていない。prose に「書架A」と書いてあっても cue にはならない。"""
+        """matcher を渡さなければ自由文経路は無効 = 旧挙動を維持する後方互換。
+        ``WorldNounMatcher`` を wire しない demo / scenario で動作が
+        変わらないことを担保。"""
         svc = EpisodicPassiveRecallRetrievalService(lin_visit_history)
         observation_structured = {
             "type": "speech_message",
             "speaker_player_id": PLAYER_KAITO,
-            # 発話者の現在地 (書架Aではない). 「書架A」は content の自由文だけ
-            "spot_id_value": SPOT_LIBRARY_HALL,
+            "spot_id_value": SPOT_LIBRARY_HALL,  # 発話者の居場所のみ
             "content": "リン、書架A で待ってるよ",
         }
         cues = build_situation_episodic_cues(
             runtime_context=_runtime_context_at(SPOT_LIBRARY_HALL),
             observation_structured=observation_structured,
             latest_action=None,
+            # observation_prose / noun_matcher 未指定 = 旧挙動
         )
         cue_keys = {(c.axis, c.value) for c in cues}
-        # place_spot:3 は cue として立たない (自由文を NLP 解析していないため)
         assert ("place_spot", "3") not in cue_keys
 
-        # cue 軸では recall されないが、temporal 軸では recent な episodes は
-        # 入る。**cue 軸単独で見れば書架A は出ない**ことを確認するために、
-        # episode が temporal で出るのとは別に source_axes でフィルタ。
+    def test_matcher_注入で自由文_書架A_が_cue_になり_書架A_episode_が_recall_される(
+        self, lin_visit_history: InMemorySubjectiveEpisodeStore
+    ) -> None:
+        """**Issue #283 後続の主目的動作**:
+
+        scenario load 時に登録した ``WorldNounMatcher`` が SNS / speech prose 中の
+        「書架A」を検出し、``OBSERVATION_FREETEXT`` source で ``place_spot:3``
+        cue を自動付与する。その結果、リンの過去の書架A 訪問 ep3 が cue 軸で
+        recall される (= 「あ、あのルートか」の emergent 動作)。"""
+        from ai_rpg_world.application.llm.services.world_noun_matcher import (
+            WorldNounMatcherBuilder,
+        )
+
+        matcher = (
+            WorldNounMatcherBuilder()
+            .add_spot("入口広間", spot_id=SPOT_ENTRY_HALL)
+            .add_spot("閲覧室", spot_id=SPOT_LIBRARY_HALL)
+            .add_spot("書架A", spot_id=SPOT_SHELF_A)
+            .add_spot("書架B", spot_id=SPOT_SHELF_B)
+            .build()
+        )
+        svc = EpisodicPassiveRecallRetrievalService(lin_visit_history)
+        observation_structured = {
+            "type": "speech_message",
+            "speaker_player_id": PLAYER_KAITO,
+            "spot_id_value": SPOT_LIBRARY_HALL,  # 発話者の居場所 (書架Aではない)
+            "content": "リン、書架A で待ってるよ",
+        }
+        observation_prose = (
+            "〈解読室の扉〉の向こうから、カイトの遠くの声が聞こえる: "
+            "「リン、書架A で待ってるよ」"
+        )
+        cues = build_situation_episodic_cues(
+            runtime_context=_runtime_context_at(SPOT_LIBRARY_HALL),
+            observation_structured=observation_structured,
+            latest_action=None,
+            observation_prose=observation_prose,
+            noun_matcher=matcher,
+        )
+        cue_keys = {(c.axis, c.value) for c in cues}
+        # 「書架A」が prose から拾われて place_spot:3 cue が立つ
+        assert ("place_spot", "3") in cue_keys
+
         result = svc.retrieve(
             player_id=PLAYER_LIN,
             situation_cues=cues,
             limit_per_axis=10,
             max_candidates=10,
         )
-        for cand in result.candidates:
-            if cand.episode.episode_id == "ep3-shelfA":
-                # 書架A episode が候補に出ているなら、それは temporal 軸由来の
-                # はずで、place_spot:3 由来ではない
-                assert "temporal" in cand.source_axes
-                assert "place_spot" not in str(cand.source_axes)
+        ids = {c.episode.episode_id for c in result.candidates}
+        # 書架A 訪問 episode が cue 軸経由で recall される
+        assert "ep3-shelfA" in ids
+        # place_spot 軸からのヒットだと確認 (= 自由文 cue 経由)
+        ep3 = next(c for c in result.candidates if c.episode.episode_id == "ep3-shelfA")
+        assert any("place_spot" in axis for axis in ep3.source_axes)
 
 
 class TestRecallScalesWithRepeatedVisits:
