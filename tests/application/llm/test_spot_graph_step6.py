@@ -46,10 +46,16 @@ def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     )
 
 
-def test_get_spot_graph_specs_has_ten_tools() -> None:
-    """Issue #264 後続: SAY/WHISPER を統合し 1 つの speech_speak に減ったため 11 → 10。"""
+def test_get_spot_graph_specs_has_twelve_tools() -> None:
+    """spot_graph 系ツールの数を検証する。
+
+    変遷:
+    - Issue #264 後続: SAY/WHISPER を統合し 1 つの speech_speak に減って 10
+    - drop/pickup 導入: spot_graph_drop_item / spot_graph_pickup_item の 2 つが
+      増えて 12 になる
+    """
     specs = get_spot_graph_specs()
-    assert len(specs) == 10
+    assert len(specs) == 12
     names = {s[0].name for s in specs}
     assert "spot_graph_travel_to" in names
     assert "spot_graph_set_sub_location" in names
@@ -57,6 +63,8 @@ def test_get_spot_graph_specs_has_ten_tools() -> None:
     assert "spot_graph_interact" in names
     assert "spot_graph_prepare_action" in names
     assert "spot_graph_use_item" in names
+    assert "spot_graph_drop_item" in names
+    assert "spot_graph_pickup_item" in names
     assert "spot_graph_wait" in names
     assert "spot_graph_attack" in names
     assert "spot_graph_listen" in names

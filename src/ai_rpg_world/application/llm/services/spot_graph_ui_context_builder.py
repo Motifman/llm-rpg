@@ -36,6 +36,9 @@ PREFIX_SUB_LOCATION = "SL"
 PREFIX_ENTITY = "P"
 PREFIX_INVENTORY = "I"
 PREFIX_MONSTER = "M"
+# 地面アイテム (drop された / 初期配置) のラベル prefix。
+# pickup tool が "G1" のような形で対象を指せるようにする。
+PREFIX_GROUND_ITEM = "G"
 
 
 def _current_sub_location_id_from_snapshot(
@@ -76,6 +79,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         self._build_entity_section(snap, allocator, collector, extra_lines)
         self._build_monster_section(snap, allocator, collector, extra_lines)
         self._build_inventory_section(snap, allocator, collector, extra_lines)
+        self._build_ground_items_section(snap, allocator, collector, extra_lines)
         self._build_needs_section(snap, extra_lines)
 
         augmented_text = current_state_text
@@ -270,6 +274,10 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             label = allocator.next(PREFIX_INVENTORY)
             qty = f" x{entry.quantity}" if entry.quantity > 1 else ""
             lines.append(f"  {label}: {entry.name}{qty}")
+            # 後方互換: 既存 use_item は target.item_instance_id に item_spec_id を
+            # 入れる慣習 (名前と内容が乖離しているが、リスクを取らないため触らない)。
+            # 新しい drop_item / pickup_item は専用フィールド (real_item_instance_id /
+            # inventory_slot_id) を見るので、ここで両方埋める。
             collector.add(
                 label,
                 InventoryToolRuntimeTargetDto(
@@ -277,5 +285,39 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     kind="inventory_item",
                     display_name=entry.name,
                     item_instance_id=entry.item_spec_id,
+                    real_item_instance_id=(
+                        entry.item_instance_id if entry.item_instance_id >= 0 else None
+                    ),
+                    inventory_slot_id=(
+                        entry.slot_id if entry.slot_id >= 0 else None
+                    ),
+                ),
+            )
+
+    def _build_ground_items_section(
+        self,
+        snap: SpotGraphPlayerSnapshotDto,
+        allocator: LabelAllocator,
+        collector: RuntimeTargetCollector,
+        lines: List[str],
+    ) -> None:
+        """現在地に落ちているアイテムを G1, G2, ... ラベル付きで列挙する。
+
+        pickup tool が target を一意に指せるよう、item_instance_id を
+        InventoryToolRuntimeTargetDto.real_item_instance_id に格納する。
+        """
+        if not snap.ground_items:
+            return
+        lines.append("地面に落ちているもの:")
+        for entry in snap.ground_items:
+            label = allocator.next(PREFIX_GROUND_ITEM)
+            lines.append(f"  {label}: {entry.name}")
+            collector.add(
+                label,
+                InventoryToolRuntimeTargetDto(
+                    label=label,
+                    kind="ground_item",
+                    display_name=entry.name,
+                    real_item_instance_id=entry.item_instance_id,
                 ),
             )

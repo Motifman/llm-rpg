@@ -12,8 +12,10 @@ from ai_rpg_world.application.llm.services.tool_catalog.inner_thought import (
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
+    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
@@ -236,6 +238,56 @@ LISTEN_DEFINITION = ToolDefinitionDto(
 )
 
 
+DROP_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+    description=(
+        "所持アイテムを現在地の地面に置く。同じスポットに居る他プレイヤーが"
+        "後で pickup_item で拾える。協力のために素材を渡したい時、または"
+        "持ち物を整理したい時に使う。地面アイテムはスポットを離れても消えず、"
+        "誰かが拾うまで残る (シナリオで明示的に消去されない限り)。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": (
+                    "落とすアイテムのラベル (所持アイテムに表示された I1, I2 等)。"
+                    "同じ spec のアイテムを複数所持している場合 (例: I1: 流木 x2) は、"
+                    "代表 instance が1つだけ落とされる。"
+                ),
+            },
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "inner_thought"],
+    },
+)
+
+
+PICKUP_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+    description=(
+        "現在地の地面に落ちているアイテムを拾い上げて自分のインベントリに加える。"
+        "他プレイヤーが drop した素材を受け取ったり、シナリオで初期配置された"
+        "アイテムを取得する。インベントリが満杯だと拾えない。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "ground_item_label": {
+                "type": "string",
+                "description": (
+                    "拾うアイテムのラベル (現在の状況の「地面に落ちているもの」に"
+                    "表示された G1, G2 等)。"
+                ),
+            },
+            "inner_thought": _IT,
+        },
+        "required": ["ground_item_label", "inner_thought"],
+    },
+)
+
+
 ATTACK_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_ATTACK,
     description="同じスポットに居るモンスターを攻撃する。",
@@ -261,6 +313,8 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (INTERACT_DEFINITION, _RESOLVER),
         (PREPARE_ACTION_DEFINITION, _RESOLVER),
         (USE_ITEM_DEFINITION, _RESOLVER),
+        (DROP_ITEM_DEFINITION, _RESOLVER),
+        (PICKUP_ITEM_DEFINITION, _RESOLVER),
         (ATTACK_DEFINITION, _RESOLVER),
         (LISTEN_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
@@ -276,6 +330,8 @@ __all__ = [
     "INTERACT_DEFINITION",
     "PREPARE_ACTION_DEFINITION",
     "USE_ITEM_DEFINITION",
+    "DROP_ITEM_DEFINITION",
+    "PICKUP_ITEM_DEFINITION",
     "ATTACK_DEFINITION",
     "LISTEN_DEFINITION",
     "WAIT_DEFINITION",

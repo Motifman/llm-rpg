@@ -16,9 +16,11 @@ from ai_rpg_world.application.llm.services.tool_executor_helpers import (
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
+    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
+    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
@@ -42,6 +44,10 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
 from ai_rpg_world.application.world_graph.spot_graph_world_services import SpotGraphWorldServices
+from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
+    ItemTransferException,
+    SpotGraphItemTransferService,
+)
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
 )
@@ -79,6 +85,7 @@ class SpotGraphToolExecutor:
         monster_repository: Optional[MonsterRepository] = None,
         player_status_repository: Optional[PlayerStatusRepository] = None,
         attack_orchestrator: Optional[SpotAttackOrchestrator] = None,
+        item_transfer_service: Optional["SpotGraphItemTransferService"] = None,
     ) -> None:
         if spot_graph_world_services.movement is None:
             raise TypeError("SpotGraphWorldServices.movement が必要です")
@@ -108,6 +115,9 @@ class SpotGraphToolExecutor:
         # 内部でリポジトリから組み立てる（後方互換: 旧 wiring が orchestrator
         # を渡さず monster/player リポジトリだけ渡してきても動く）。
         self._attack_orchestrator = attack_orchestrator
+        # 注入されない構成では drop/pickup ハンドラは「未対応」エラーを返す
+        # (後方互換 + minimal wiring 用)。
+        self._item_transfer_service = item_transfer_service
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         return {
@@ -117,6 +127,8 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_INTERACT: self._interact,
             TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION: self._prepare_action,
             TOOL_NAME_SPOT_GRAPH_USE_ITEM: self._use_item,
+            TOOL_NAME_SPOT_GRAPH_DROP_ITEM: self._drop_item,
+            TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM: self._pickup_item,
             TOOL_NAME_SPOT_GRAPH_ATTACK: self._attack,
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
@@ -398,6 +410,95 @@ class SpotGraphToolExecutor:
             )
         if events:
             self._event_publisher.publish_all(events)
+
+    def _drop_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        """`spot_graph_drop_item`: 所持アイテムを現在地の地面に置く。
+
+        resolver で slot_id / item_instance_id / target_display_name まで解決済み。
+        本ハンドラは SpotGraphItemTransferService に委譲してインベントリから地面
+        への転送だけ行う。同室者への観測注入は Phase 19 で event 経由で行う。
+        """
+        if self._item_transfer_service is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="drop_item は本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
+        slot_id_raw = args.get("slot_id")
+        if slot_id_raw is None:
+            return build_invalid_arg_failure(
+                arg_name="slot_id",
+                detail="resolver が slot_id を埋めませんでした (label 解決失敗の可能性)",
+            )
+        try:
+            slot_id_int = int(slot_id_raw)
+        except (TypeError, ValueError):
+            return build_invalid_arg_failure(
+                arg_name="slot_id", detail="slot_id は整数で指定してください"
+            )
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+        try:
+            result = self._item_transfer_service.drop_item(
+                PlayerId(player_id), SlotId(slot_id_int)
+            )
+            msg = "; ".join(result.messages) if result.messages else "地面に置いた。"
+            return LlmCommandResultDto(
+                success=True, message=append_inner_thought_to_message(msg, args)
+            )
+        except ItemTransferException as e:
+            return LlmCommandResultDto(
+                success=False,
+                message=f"アイテムを落とせません: {e}",
+                error_code="ITEM_TRANSFER_FAILED",
+                remediation=get_remediation("ITEM_TRANSFER_FAILED"),
+            )
+        except Exception as e:
+            return exception_result(e)
+
+    def _pickup_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        """`spot_graph_pickup_item`: 現在地の地面アイテムを拾う。
+
+        resolver で item_instance_id / target_display_name まで解決済み。
+        """
+        if self._item_transfer_service is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="pickup_item は本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
+        iid_raw = args.get("item_instance_id")
+        if iid_raw is None:
+            return build_invalid_arg_failure(
+                arg_name="item_instance_id",
+                detail="resolver が item_instance_id を埋めませんでした",
+            )
+        try:
+            iid_int = int(iid_raw)
+        except (TypeError, ValueError):
+            return build_invalid_arg_failure(
+                arg_name="item_instance_id",
+                detail="item_instance_id は整数で指定してください",
+            )
+        from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+        try:
+            result = self._item_transfer_service.pickup_item(
+                PlayerId(player_id), ItemInstanceId.create(iid_int)
+            )
+            msg = "; ".join(result.messages) if result.messages else "拾い上げた。"
+            return LlmCommandResultDto(
+                success=True, message=append_inner_thought_to_message(msg, args)
+            )
+        except ItemTransferException as e:
+            return LlmCommandResultDto(
+                success=False,
+                message=f"アイテムを拾えません: {e}",
+                error_code="ITEM_TRANSFER_FAILED",
+                remediation=get_remediation("ITEM_TRANSFER_FAILED"),
+            )
+        except Exception as e:
+            return exception_result(e)
 
     def _attack(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         """`spot_graph_attack`: 同スポットのモンスターを攻撃する。

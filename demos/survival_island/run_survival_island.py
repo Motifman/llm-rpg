@@ -150,9 +150,13 @@ def main() -> None:
     r = runtime.do_drop_item(mira, mira_driftwood_slot)
     show_result(r.messages)
 
+    # トマの新プロンプトで地面アイテムセクション (G1) が見えることを確認
+    print("\n  --- トマ視点 (drop 直後): 地面アイテムが G1 として LLM に提示されるか ---")
+    show_player_brief(runtime, toma)
+
     # 地面アイテム一覧をトマ視点で確認
     ground = runtime.list_ground_items_at_player_spot(toma)
-    print(f"  [拠点の地面] {len(ground)} 個のアイテム:")
+    print(f"\n  [拠点の地面] {len(ground)} 個のアイテム:")
     for g in ground:
         spec = runtime._item_spec_repo.find_by_id(g.item_spec_id)
         spec_obj = spec.to_item_spec() if hasattr(spec, "to_item_spec") else spec

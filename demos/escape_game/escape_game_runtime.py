@@ -1320,6 +1320,9 @@ def create_escape_game_runtime(
         inv = player_inventory_repo.find_by_id(pid)
         if inv is None:
             return ()
+        # spec_id 別に集約しつつ「代表 instance」のスロット番号と instance id を覚える。
+        # 代表 = 最初に発見したスロットの instance。drop_item ツールが
+        # 「I1 = 流木 (x2)」のうち1個を落とすときの target になる。
         seen_specs: dict[int, list] = {}
         for slot_id in range(inv._max_slots):
             from ai_rpg_world.domain.player.value_object.slot_id import SlotId
@@ -1332,10 +1335,16 @@ def create_escape_game_runtime(
             sid = item.item_spec.item_spec_id.value
             if sid not in seen_specs:
                 name = item.item_spec.name
-                seen_specs[sid] = [name, 0]
+                seen_specs[sid] = [name, 0, slot_id, iid.value]
             seen_specs[sid][1] += 1
         return tuple(
-            SpotGraphInventoryItemEntry(item_spec_id=sid, name=info[0], quantity=info[1])
+            SpotGraphInventoryItemEntry(
+                item_spec_id=sid,
+                name=info[0],
+                quantity=info[1],
+                slot_id=info[2],
+                item_instance_id=info[3],
+            )
             for sid, info in seen_specs.items()
         )
 
@@ -1364,6 +1373,15 @@ def create_escape_game_runtime(
             return frozenset()
         return collect_owned_item_spec_ids_from_inventory(inv, item_repo)
 
+    def _resolve_item_spec_name(spec_id_value: int) -> str:
+        """item_spec_id → 表示名解決。地面アイテムの prompt 表示などで使う。"""
+        from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId as _ISpecId
+        spec_union = item_spec_repo.find_by_id(_ISpecId.create(spec_id_value))
+        if spec_union is None:
+            return ""
+        spec = spec_union.to_item_spec() if hasattr(spec_union, "to_item_spec") else spec_union
+        return spec.name
+
     state_builder = SpotGraphCurrentStateBuilder(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -1374,6 +1392,7 @@ def create_escape_game_runtime(
         world_flags_provider=world_flag_state.as_frozen_set,
         light_source_item_spec_ids=light_source_item_spec_ids,
         owned_item_spec_ids_provider=_owned_item_spec_ids_provider,
+        item_spec_name_resolver=_resolve_item_spec_name,
     )
 
     # ── 観測パイプライン構築 ──
