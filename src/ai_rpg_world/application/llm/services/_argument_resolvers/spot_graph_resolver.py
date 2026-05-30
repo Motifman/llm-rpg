@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
+    InventoryToolRuntimeTargetDto,
     MonsterToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
@@ -273,9 +274,11 @@ def _find_target_by_display_name(
     return matches[0]
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
+    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
+    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
@@ -289,6 +292,8 @@ _SPOT_GRAPH_TOOLS = frozenset({
     TOOL_NAME_SPOT_GRAPH_WAIT,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
+    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
 })
 
 
@@ -332,7 +337,95 @@ class SpotGraphArgumentResolver:
             return self._resolve_interact(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_ATTACK:
             return self._resolve_attack(args, runtime_context)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_DROP_ITEM:
+            return self._resolve_drop_item(args, runtime_context)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM:
+            return self._resolve_pickup_item(args, runtime_context)
         return None
+
+    def _resolve_drop_item(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """所持アイテムラベル (I1 等) を slot_id / item_instance_id に解決する。
+
+        勘違いポイント: ラベルは「同 spec の集約表示」なので、解決後の
+        instance/slot は代表 instance を指す。LLM 視点で気になるのは
+        spec (= 種類) なので問題にならないが、コード側では一意 instance
+        を狙って drop することになる。
+        """
+        label = args.get("item_label")
+        if not isinstance(label, str) or not label.strip():
+            raise ToolArgumentResolutionException(
+                "落とすアイテムのラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = require_target_type(
+            label,
+            runtime_context,
+            "アイテムラベル",
+            (InventoryToolRuntimeTargetDto,),
+            invalid_label_code="INVALID_TARGET_LABEL",
+            invalid_kind_code="INVALID_TARGET_KIND",
+        )
+        # 地面アイテム (kind="ground_item") は drop の対象にならない
+        if target.kind != "inventory_item":
+            raise ToolArgumentResolutionException(
+                f"このラベルは所持アイテムではありません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        if target.inventory_slot_id is None or target.real_item_instance_id is None:
+            raise ToolArgumentResolutionException(
+                f"このラベルから slot/instance を解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return _with_inner_thought(
+            {
+                "slot_id": target.inventory_slot_id,
+                "item_instance_id": target.real_item_instance_id,
+                "target_display_name": target.display_name,
+            },
+            args,
+        )
+
+    def _resolve_pickup_item(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """地面アイテムラベル (G1 等) を item_instance_id に解決する。"""
+        label = args.get("ground_item_label")
+        if not isinstance(label, str) or not label.strip():
+            raise ToolArgumentResolutionException(
+                "拾うアイテムのラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = require_target_type(
+            label,
+            runtime_context,
+            "地面アイテムラベル",
+            (InventoryToolRuntimeTargetDto,),
+            invalid_label_code="INVALID_TARGET_LABEL",
+            invalid_kind_code="INVALID_TARGET_KIND",
+        )
+        if target.kind != "ground_item":
+            raise ToolArgumentResolutionException(
+                f"このラベルは地面アイテムではありません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        if target.real_item_instance_id is None:
+            raise ToolArgumentResolutionException(
+                f"このラベルから instance を解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return _with_inner_thought(
+            {
+                "item_instance_id": target.real_item_instance_id,
+                "target_display_name": target.display_name,
+            },
+            args,
+        )
 
     def _resolve_attack(
         self,

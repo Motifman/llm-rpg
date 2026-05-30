@@ -62,6 +62,8 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "PURSUIT_FAILED": "追跡対象が視界外か既に去っている可能性があります。対象を再確認してください。",
     "PURSUIT_START_FAILED": "追跡対象を確認してください (視界内か / 同じスポットか)。",
     "PURSUIT_CANCEL_FAILED": "追跡中の状態を確認してください。既に中断済みの可能性があります。",
+    "NOT_WIRED": "本ツールはこの構成では有効になっていません。別の方法を試してください。",
+    "ITEM_TRANSFER_FAILED": "アイテムの drop / pickup に失敗しました。インベントリ・現在地・対象 instance を確認してください。",
 }
 
 

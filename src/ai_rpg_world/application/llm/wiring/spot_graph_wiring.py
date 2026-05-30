@@ -363,6 +363,20 @@ def create_spot_graph_wiring(
             player_status_repository=player_status_repository,
         )
 
+    # spot-graph 専用の drop / pickup サービス。
+    # tile-map 版 PlayerDropItemApplicationService は physical_map 依存で
+    # spot-graph runtime では発火しないため、本サービスを LLM tool 経路にも
+    # 通す。観測注入は本 PR スコープでは event 経由で別途行う想定。
+    from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
+        SpotGraphItemTransferService,
+    )
+    item_transfer_service = SpotGraphItemTransferService(
+        spot_graph_repository=spot_graph_repository,
+        player_inventory_repository=player_inventory_repository,
+        spot_interior_repository=spot_interior_repository,
+        item_repository=item_repository,
+    )
+
     spot_graph_tool_executor = SpotGraphToolExecutor(
         spot_graph_world_services=spot_graph_world_services,
         player_inventory_repository=player_inventory_repository,
@@ -375,6 +389,7 @@ def create_spot_graph_wiring(
         monster_repository=monster_repository,
         player_status_repository=player_status_repository,
         attack_orchestrator=attack_orchestrator,
+        item_transfer_service=item_transfer_service,
     )
 
     # モンスター行動 tick サービス。世界 tick driver (presentation 層) が
