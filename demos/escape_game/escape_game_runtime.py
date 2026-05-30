@@ -56,6 +56,10 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
     SpotInteractionApplicationService,
     SpotInteractionResultDto,
 )
+from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
+    SpotGraphItemTransferService,
+    ItemTransferResult,
+)
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
 )
@@ -243,6 +247,7 @@ class EscapeGameRuntime:
     _movement_service: SpotGraphMovementApplicationService
     _interaction_service: SpotInteractionApplicationService
     _exploration_service: SpotExplorationApplicationService
+    _item_transfer_service: SpotGraphItemTransferService
     _state_builder: SpotGraphCurrentStateBuilder
     _game_end_evaluator: GameEndConditionEvaluator
     _formatter: SpotGraphCurrentStateFormatter
@@ -810,6 +815,50 @@ class EscapeGameRuntime:
         )
         return result
 
+    def do_drop_item(
+        self, player_id: PlayerId, slot_id_value: int,
+    ) -> ItemTransferResult:
+        """指定スロットのアイテムを現在地に落とす。
+
+        観測パイプライン統合と LLM tool 経路はフォローアップ PR で扱う。
+        現状はランナー/テストから直接呼ばれる前提で、結果メッセージを
+        action_result_store に追記して履歴に残すまでを行う。
+        """
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+        result = self._item_transfer_service.drop_item(player_id, SlotId(slot_id_value))
+        result_text = "; ".join(result.messages) if result.messages else "落とした"
+        self._record_action_result(
+            player_id,
+            f"スロット{slot_id_value}のアイテムを地面に置いた",
+            result_text,
+        )
+        return result
+
+    def do_pickup_item(
+        self, player_id: PlayerId, item_instance_id_value: int,
+    ) -> ItemTransferResult:
+        """現在地の地面アイテムを拾う。
+
+        item_instance_id_value はランナー/テストが
+        ``list_ground_items_at_player_spot`` で得た id を渡す前提。LLM
+        tool では将来ラベル (例: G1, G2) で参照させる予定だがそれは別 PR。
+        """
+        from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+        result = self._item_transfer_service.pickup_item(
+            player_id, ItemInstanceId.create(item_instance_id_value),
+        )
+        result_text = "; ".join(result.messages) if result.messages else "拾い上げた"
+        self._record_action_result(
+            player_id,
+            f"地面のアイテム#{item_instance_id_value}を拾った",
+            result_text,
+        )
+        return result
+
+    def list_ground_items_at_player_spot(self, player_id: PlayerId) -> tuple:
+        """ランナー / テストから現在地の地面アイテム一覧を取り出すヘルパ。"""
+        return self._item_transfer_service.list_ground_items_at_player_spot(player_id)
+
     def do_listen(self, player_id: PlayerId) -> int:
         """「耳を澄ます」: 自 spot + 隣接 spot の環境音観測を投入する。
 
@@ -1233,6 +1282,18 @@ def create_escape_game_runtime(
         world_flag_state=world_flag_state,
         exploration_progress_store=exploration_progress,
     )
+    # spot-graph 世界専用の drop/pickup サービス。
+    # tile-map 時代の ItemDroppedFromInventoryDropHandler は
+    # physical_map 依存で escape_game では発火しないため、本サービスが
+    # SpotInterior.ground_items に直接書き込んで spot-graph 経路で
+    # 拾えるようにする。LLM tool 配線とイベント/観測統合はフォロー
+    # アップ PR で扱う。
+    item_transfer_service = SpotGraphItemTransferService(
+        spot_graph_repository=spot_graph_repo,
+        player_inventory_repository=player_inventory_repo,
+        spot_interior_repository=spot_interior_repo,
+        item_repository=item_repo,
+    )
     player_name_map = {spawn.player_id: spawn.name for spawn in scenario.player_spawns}
 
     def _resolve_entity_name(entity_id: int) -> str:
@@ -1440,6 +1501,7 @@ def create_escape_game_runtime(
         _movement_service=movement_service,
         _interaction_service=interaction_service,
         _exploration_service=exploration_service,
+        _item_transfer_service=item_transfer_service,
         _state_builder=state_builder,
         _game_end_evaluator=GameEndConditionEvaluator(),
         _formatter=SpotGraphCurrentStateFormatter(),
