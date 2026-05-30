@@ -128,13 +128,14 @@ class TestMemoCompletionHintToHintText:
     """MemoCompletionHint.to_hint_text の整形。"""
 
     def test_hint_文に_memo_id_と_類似度が含まれる(self, player_id: PlayerId) -> None:
-        """LLM 向け hint 文に id と類似度が表示される。"""
+        """LLM 向け hint 文に id (短縮形) と類似度が表示される。"""
         store = InMemoryMemoStore()
         memo_id = store.add(player_id, "金庫室で扉固定スイッチを押す")
         memo = store.list_uncompleted(player_id)[0]
         hint = MemoCompletionHint(memo=memo, similarity=0.67)
         text = hint.to_hint_text()
-        assert memo_id in text
+        # Issue #276: id 表示は短縮形 (先頭 6 文字 + …)。元の full UUID は出ない。
+        assert memo_id[:6] in text
         assert "0.67" in text
         assert "memo_done" in text
 

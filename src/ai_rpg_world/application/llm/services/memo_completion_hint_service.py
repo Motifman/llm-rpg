@@ -63,8 +63,11 @@ class MemoCompletionHint:
 
     def to_hint_text(self) -> str:
         """LLM に見せる hint 文を返す。"""
+        from ai_rpg_world.application.llm.services.memo_id_display import (
+            short_memo_id,
+        )
         return (
-            f"\n\n[hint] memo「{self.memo.content}」(id: {self.memo.id}) "
+            f"\n\n[hint] memo「{self.memo.content}」(id: {short_memo_id(self.memo.id)}) "
             f"を達成した可能性があります (類似度 {self.similarity:.2f})。"
             "完了したなら memo_done で記録してください。"
         )
