@@ -131,6 +131,26 @@ class PlayerDroppedItemEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class PlayerGaveItemEvent(BaseDomainEvent[SpotGraphId, str]):
+    """プレイヤーが同室の別プレイヤーへアイテムを直接渡した。
+
+    SpotGraphItemTransferService.give_item() から発火される。観測パイプライン
+    では「行為者 (送り手) を除く、同じスポットに居る全プレイヤー」に配信される。
+    受取り側 (recipient_entity_id) もこの集合に含まれるため「Xが流木をYに渡した」
+    という観測を受け取る (本人視点でも prose は三人称的になる、これは仕様)。
+    送り手本人にはツール結果として messages が返るため観測ストリームには
+    流さない (二重配信回避)。
+    """
+
+    entity_id: EntityId
+    recipient_entity_id: EntityId
+    spot_id: SpotId
+    item_instance_id: ItemInstanceId
+    item_spec_id: ItemSpecId
+    item_name: str
+
+
+@dataclass(frozen=True)
 class PlayerPickedUpItemEvent(BaseDomainEvent[SpotGraphId, str]):
     """プレイヤーが現在地の地面アイテムを拾い上げてインベントリに加えた。
 

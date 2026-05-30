@@ -239,3 +239,67 @@ class TestSpotGraphItemTransferServiceIdempotency:
         # 直接 with_ground_item を二度呼んでも 1 個のまま (idempotency 仕様)
         interior2 = interior.with_ground_item(interior.ground_items[0])
         assert len(interior2.ground_items) == 1
+
+
+class TestSpotGraphItemTransferServiceGive:
+    """give_item: 同室の別プレイヤーへの直接受渡し。"""
+
+    def _add_other_player_to_spot(self, deps, player_id: PlayerId) -> None:
+        """B のインベントリと spot 配置を整える (テスト fixture が A のみ用なため)。"""
+        graph = deps["spot_graph_repo"].find_graph()
+        graph.place_entity(EntityId.create(int(player_id)), SPOT_ID)
+        graph.clear_events()
+        deps["spot_graph_repo"].save(graph)
+        b_inv = PlayerInventoryAggregate.create_new_inventory(player_id)
+        deps["inventory_repo"].save(b_inv)
+
+    def test_同室の別プレイヤーへ渡せる(self, transfer_service):
+        """A の slot 0 アイテムが B の任意の slot へ移る。"""
+        deps = transfer_service
+        self._add_other_player_to_spot(deps, OTHER_PLAYER_ID)
+
+        result = deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(0))
+
+        a_inv = deps["inventory_repo"].find_by_id(PLAYER_ID)
+        b_inv = deps["inventory_repo"].find_by_id(OTHER_PLAYER_ID)
+        assert a_inv.get_item_instance_id_by_slot(SlotId(0)) is None
+        assert b_inv.get_item_instance_id_by_slot(SlotId(0)) == deps["instance_id"]
+        assert result.item_instance_id == deps["instance_id"]
+        assert any("流木" in m for m in result.messages)
+
+    def test_自分自身に渡そうとすると_ItemTransferException(self, transfer_service):
+        """A → A は弾く。"""
+        deps = transfer_service
+        with pytest.raises(ItemTransferException):
+            deps["service"].give_item(PLAYER_ID, PLAYER_ID, SlotId(0))
+
+    def test_別スポットの相手には渡せない(self, transfer_service):
+        """B が別 spot に居る場合は弾く。"""
+        deps = transfer_service
+        # B を別の spot に配置する
+        other_spot = SpotId.create(99)
+        graph = deps["spot_graph_repo"].find_graph()
+        graph.add_spot(
+            SpotNode(
+                spot_id=other_spot,
+                name="別地点",
+                description="",
+                category=SpotCategoryEnum.FIELD,
+                parent_id=None,
+            )
+        )
+        graph.place_entity(EntityId.create(int(OTHER_PLAYER_ID)), other_spot)
+        graph.clear_events()
+        deps["spot_graph_repo"].save(graph)
+        b_inv = PlayerInventoryAggregate.create_new_inventory(OTHER_PLAYER_ID)
+        deps["inventory_repo"].save(b_inv)
+
+        with pytest.raises(ItemTransferException):
+            deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(0))
+
+    def test_空スロットを渡そうとすると_ItemNotInSlotException(self, transfer_service):
+        """A のスロット 5 は空。"""
+        deps = transfer_service
+        self._add_other_player_to_spot(deps, OTHER_PLAYER_ID)
+        with pytest.raises(ItemNotInSlotException):
+            deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(5))

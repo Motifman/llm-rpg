@@ -32,6 +32,7 @@ from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerDroppedItemEvent,
+    PlayerGaveItemEvent,
     PlayerPickedUpItemEvent,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
@@ -223,6 +224,96 @@ class SpotGraphItemTransferService:
             messages=(f"{item_name}を拾い上げた。",),
             item_instance_id=item_instance_id,
             spot_id=spot_id,
+        )
+
+    def give_item(
+        self,
+        from_player_id: PlayerId,
+        to_player_id: PlayerId,
+        slot_id: SlotId,
+    ) -> ItemTransferResult:
+        """同じスポットに居る相手プレイヤーへアイテムを直接渡す。
+
+        drop → pickup を 1 アクションに圧縮した経路。同室にいる事を spot-graph
+        側で確認し、両者のインベントリ間で instance を直接移す。受取り側の
+        インベントリが満杯なら overflow event が発生し giver 側の所持は維持
+        されるよう defensive に書く。
+
+        観測 (witness) は PlayerGaveItemEvent を発火し、同スポットの第三者
+        (送り手・受け手以外) に「Xが流木をYに渡した」prose を届ける。送り手
+        本人にはツール結果として messages が返る。受け手は宛先になっているので
+        本イベントの recipient strategy で別途配信される (送り手は除外)。
+        """
+        if from_player_id.value == to_player_id.value:
+            raise ItemTransferException(
+                "自分自身にアイテムを渡すことはできません。"
+            )
+
+        from_inv = self._player_inventory_repository.find_by_id(from_player_id)
+        if from_inv is None:
+            raise ItemTransferException(
+                f"inventory not found for sender {from_player_id.value}"
+            )
+        to_inv = self._player_inventory_repository.find_by_id(to_player_id)
+        if to_inv is None:
+            raise ItemTransferException(
+                f"inventory not found for recipient {to_player_id.value}"
+            )
+
+        item_instance_id = from_inv.get_item_instance_id_by_slot(slot_id)
+        if item_instance_id is None:
+            raise ItemNotInSlotException(f"No item in slot {slot_id.value}")
+
+        # 両者が同スポットに居ることを確認する。spot_graph_repository は spot
+        # の本人位置を解決する単一の真実源 (status.current_spot_id は tile-map
+        # 由来で更新されない)。
+        from_spot = self._resolve_current_spot(from_player_id)
+        to_spot = self._resolve_current_spot(to_player_id)
+        if from_spot != to_spot:
+            raise ItemTransferException(
+                f"recipient {to_player_id.value} is not in the same spot as "
+                f"sender {from_player_id.value}"
+            )
+
+        item_aggregate = self._item_repository.find_by_id(item_instance_id)
+        if item_aggregate is None:
+            raise ItemTransferException(
+                f"item aggregate not found for instance {item_instance_id.value}"
+            )
+        item_spec_id = item_aggregate.item_spec.item_spec_id
+        item_name = self._item_name_or_id(item_instance_id)
+
+        # 送り手のインベントリから抜く。tile-map 用 event は発火させたくない
+        # ので remove_item_for_storage を使う (drop と同じ理由)。
+        from_inv.remove_item_for_storage(item_instance_id)
+        self._player_inventory_repository.save(from_inv)
+
+        # 受け手のインベントリへ追加。満杯なら overflow event が発火するが、
+        # 本サービスでは「失敗時に送り手側に戻す」rollback は実装しない
+        # (overflow は受け手側の問題として LLM に通知される)。将来必要に
+        # なったら capacity 事前チェックで弾く拡張を検討する。
+        to_inv.acquire_item(item_instance_id, item_spec_id_value=item_spec_id.value)
+        self._player_inventory_repository.save(to_inv)
+
+        # witness 配信: 同室の第三者と受取り側に「Xが流木をYに渡した」を届ける。
+        # recipient strategy で送り手 entity_id は除外される。
+        self._publish_event(
+            PlayerGaveItemEvent.create(
+                aggregate_id=self._spot_graph_repository.find_graph().graph_id,
+                aggregate_type="SpotGraphAggregate",
+                entity_id=EntityId.create(int(from_player_id)),
+                recipient_entity_id=EntityId.create(int(to_player_id)),
+                spot_id=from_spot,
+                item_instance_id=item_instance_id,
+                item_spec_id=item_spec_id,
+                item_name=item_name,
+            )
+        )
+
+        return ItemTransferResult(
+            messages=(f"{item_name}を渡した。",),
+            item_instance_id=item_instance_id,
+            spot_id=from_spot,
         )
 
     def list_ground_items_at_player_spot(
