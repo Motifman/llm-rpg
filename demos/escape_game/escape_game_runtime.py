@@ -1536,7 +1536,14 @@ def create_escape_game_runtime(
     # pipeline に流す必要が出たため、event 型ごとの登録ではなく「全 event
     # を pipeline へ流す」publisher に置き換える。chore (#240 後続) で
     # module-level に切り出し。
-    observation_appender = ObservationAppender(buffer=obs_buffer)
+    # Issue #276: 観測 trace 可視化のため、buffer に積むタイミングで
+    # ``TraceEventKind.OBSERVATION`` を記録する。trace_recorder は
+    # ``set_trace_recorder`` で後から差し込まれるので provider 経由で参照。
+    observation_appender = ObservationAppender(
+        buffer=obs_buffer,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=runtime.current_tick,
+    )
     pipeline_event_publisher = PipelineEventPublisher(runtime)
     speech_service = PlayerSpeechApplicationService(
         player_status_repository=player_status_repo,

@@ -993,6 +993,10 @@ section h2, #right-section > div > h2 {
 .event-row.kind-memo_done .event-body { color: #9bea91; }
 .event-row.kind-memo_hint .event-body { color: #ffd07a; }
 .event-row.kind-position_change .event-body { color: #65dce8; }
+/* Issue #276: 観測 prose は LLM が読んでいる「世界からの情報」なので、
+   action / result とは色を分けて視認性を上げる。 */
+.event-row.kind-observation .event-kind { color: #b89dff; }
+.event-row.kind-observation .event-body { color: #d8c8ff; }
 
 
 """
