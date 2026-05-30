@@ -56,6 +56,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
     SpotInteractionApplicationService,
     SpotInteractionResultDto,
 )
+from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
+    SpotGraphNeedsDecayStageService,
+)
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     SpotGraphItemTransferService,
     ItemTransferResult,
@@ -1512,6 +1515,14 @@ def create_escape_game_runtime(
         if llm_turn_trigger is not None
         else EscapeGameStandaloneNoopLlmTurnTrigger()
     )
+    # tick 経過で空腹 / 疲労が緩やかに増加するステージ。survival_island のような
+    # 長期サバイバルでは生存圧の本体になる。escape_game v1 (廃病院) でも
+    # 120 tick の間に空腹 100% に到達するが現状の lose 条件は tick_limit のみ
+    # なので挙動に大きな影響はない。
+    needs_decay_stage = SpotGraphNeedsDecayStageService(
+        player_status_repository=player_status_repo,
+    )
+
     simulation_service = SpotGraphSimulationApplicationService(
         time_provider=time_provider,
         unit_of_work=InMemoryUnitOfWork(),
@@ -1521,6 +1532,7 @@ def create_escape_game_runtime(
         reactive_object_state_stage=reactive_object_state_stage,
         sync_action_resolver_stage=sync_resolver_stage,
         environment_stage=environment_stage,
+        needs_decay_stage=needs_decay_stage,
         llm_turn_trigger=sim_llm_trigger,
     )
 
