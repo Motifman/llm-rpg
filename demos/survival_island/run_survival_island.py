@@ -176,9 +176,50 @@ def main() -> None:
     try:
         r = runtime.do_interact(toma, "fire_pit", "build_fire")
         show_result(r.messages)
-        print("  ✓ 3 人協力で焚き火着火に成功")
+        print("  ✓ 3 人協力で焚き火着火に成功 (drop / pickup 経路)")
     except InteractionNotAllowedException as e:
         print(f"  ✗ 想定外: {e}")
+
+    # ── give ツールも使える事を確認 (Phase A 追加) ──
+    # トマが焼ける魚を持っていない状態で、ミラが手元の蔓ロープを直接トマに渡す。
+    # drop → pickup の 2 アクションが 1 つに圧縮される。
+    print("\n" + "━" * 72)
+    print("  give ツール: ミラがトマに直接アイテムを渡す (drop+pickup の圧縮)")
+    print("━" * 72)
+    mira_inv = runtime._player_inventory_repo.find_by_id(mira)
+    vine_slot = None
+    from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+    for slot in range(mira_inv._max_slots):
+        iid = mira_inv.get_item_instance_id_by_slot(SlotId(slot))
+        if iid is None:
+            continue
+        item = runtime._item_repo.find_by_id(iid)
+        if item and item.item_spec.name == "蔓のロープ":
+            vine_slot = slot
+            break
+    if vine_slot is not None:
+        show_action("ミラ", f"蔓ロープ (slot {vine_slot}) をトマに直接渡す")
+        try:
+            r = runtime._item_transfer_service.give_item(
+                mira, toma, SlotId(vine_slot)
+            )
+            show_result(r.messages)
+
+            toma_inv = runtime._player_inventory_repo.find_by_id(toma)
+            owned_names = []
+            for s in range(toma_inv._max_slots):
+                iid = toma_inv.get_item_instance_id_by_slot(SlotId(s))
+                if iid:
+                    item = runtime._item_repo.find_by_id(iid)
+                    if item:
+                        owned_names.append(item.item_spec.name)
+            print(f"  ✓ トマの所持: {owned_names}")
+            print("  (レンの直近の出来事に '蔓のロープをトマに渡した' が観測されるはず)")
+            show_player_brief(runtime, ren)
+        except Exception as e:
+            print(f"  ✗ 想定外: {e}")
+    else:
+        print("  (ミラが蔓ロープを持っていないので give のスキップ)")
 
     # ── 数ティック空回しして reactive_bindings の動作を観察 ──
     print("\n" + "━" * 72)

@@ -144,6 +144,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterStartedFleeingInSpotEvent,
     PlayerAttackedMonsterInSpotEvent,
     PlayerDroppedItemEvent,
+    PlayerGaveItemEvent,
     PlayerPickedUpItemEvent,
     SpotSoundHeardEvent,
     SpotExploredEvent,
@@ -338,6 +339,7 @@ def _build_event_to_strategy_mapping() -> Dict[Type[Any], str]:
         SpotSoundHeardEvent,
         PlayerDroppedItemEvent,
         PlayerPickedUpItemEvent,
+        PlayerGaveItemEvent,
     ):
         mapping[ev] = "spot_graph"
 
