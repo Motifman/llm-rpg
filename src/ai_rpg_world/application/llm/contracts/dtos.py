@@ -215,6 +215,12 @@ class ToolRuntimeTargetDto:
     interaction_type: Optional[str] = None
     available_interactions: Tuple[str, ...] = ()
     item_instance_id: Optional[int] = None
+    # NOTE: 既存 spot_graph_use_item は item_instance_id フィールドに item_spec_id を
+    # 入れる旧慣習を持っており (見た目と中身が乖離)、変更すると use_item の挙動が壊れ
+    # る。新しい drop_item / pickup_item ツールは「本物の」item_instance_id が要るの
+    # で、別フィールド real_item_instance_id を導入する。将来 use_item を直すときに
+    # 旧 item_instance_id フィールドを整理する想定 (TODO: rename or migrate)。
+    real_item_instance_id: Optional[int] = None
     inventory_slot_id: Optional[int] = None
     chest_world_object_id: Optional[int] = None
     conversation_choice_index: Optional[int] = None
@@ -278,6 +284,10 @@ class ToolRuntimeTargetDto:
             raise TypeError("interaction_type must be str or None")
         if self.item_instance_id is not None and not isinstance(self.item_instance_id, int):
             raise TypeError("item_instance_id must be int or None")
+        if self.real_item_instance_id is not None and not isinstance(
+            self.real_item_instance_id, int
+        ):
+            raise TypeError("real_item_instance_id must be int or None")
         if self.inventory_slot_id is not None and not isinstance(self.inventory_slot_id, int):
             raise TypeError("inventory_slot_id must be int or None")
         if self.chest_world_object_id is not None and not isinstance(self.chest_world_object_id, int):

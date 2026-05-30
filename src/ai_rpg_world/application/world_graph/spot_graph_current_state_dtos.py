@@ -71,10 +71,33 @@ class SpotGraphAtmosphereEntry:
 
 @dataclass(frozen=True)
 class SpotGraphInventoryItemEntry:
-    """所持アイテム1件の構造化データ。"""
+    """所持アイテム1件の構造化データ。
+
+    quantity > 1 のときは spec が同じ複数 instance を集約表示するが、
+    LLM tool (drop_item 等) が単体を指せるよう slot_id と item_instance_id
+    も保持する。集約時は代表 instance (最初に発見したスロットの instance)
+    の id を載せる。-1 は未設定を表す sentinel。
+    """
     item_spec_id: int
     name: str
     quantity: int
+    # 代表 instance のスロット番号 (drop_item でスロットを直接指す代替手段)
+    slot_id: int = -1
+    # 代表 instance の ItemInstanceId (drop_item で対象を一意に指せる)
+    item_instance_id: int = -1
+
+
+@dataclass(frozen=True)
+class SpotGraphGroundItemEntry:
+    """現在地の地面アイテム1件の構造化データ。
+
+    プレイヤーが drop した、またはモンスター死亡時に落とした、シナリオ
+    初期配置で置かれたアイテムを、pickup tool が指せるラベル付きで
+    プロンプトに載せるために使う。
+    """
+    item_instance_id: int
+    item_spec_id: int
+    name: str
 
 
 @dataclass(frozen=True)
@@ -125,6 +148,10 @@ class SpotGraphPlayerSnapshotDto:
     nearby_entities: Tuple[SpotGraphNearbyEntityEntry, ...] = ()
     monsters_at_spot: Tuple[SpotGraphMonsterEntry, ...] = ()
     inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
+    # 現在地の地面に落ちているアイテム (drop された / モンスター死亡時ドロップ /
+    # シナリオ初期配置)。pickup tool が G1, G2 ... ラベルで指せるよう
+    # 構造化して保持する。
+    ground_items: Tuple[SpotGraphGroundItemEntry, ...] = ()
     ground_item_lines: List[str] = field(default_factory=list)
 
     # エージェントの欲求状態テキスト

@@ -8,6 +8,7 @@ from typing import Callable, FrozenSet, Optional
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphAtmosphereEntry,
     SpotGraphConnectionEntry,
+    SpotGraphGroundItemEntry,
     SpotGraphInteractionEntry,
     SpotGraphInventoryItemEntry,
     SpotGraphMonsterEntry,
@@ -35,6 +36,9 @@ EntityNameResolver = Callable[[int], str]
 WeatherProvider = Callable[[], Optional[WeatherState]]
 WorldFlagsProvider = Callable[[], frozenset[str]]
 OwnedItemSpecIdsProvider = Callable[[int], FrozenSet[ItemSpecId]]
+# item_spec_id (int) → 表示名 (str) のラッパ。ground_items 表示で使う。
+# 未解決時は空文字列 or "アイテム#N" のような fallback を返してよい。
+ItemSpecNameResolver = Callable[[int], str]
 # モンスター個体 ID から「肉眼で観測できる範囲の view DTO」を返す resolver。
 # 名前解決と内部 state の可視化（HP バケット化・behavior の日本語化）を application 層で行う。
 # None を返した場合は builder 側で当該個体を snapshot から黙って除外する（既に死んで掃除されたケース等）。
@@ -63,6 +67,7 @@ class SpotGraphCurrentStateBuilder:
         light_source_item_spec_ids: FrozenSet[ItemSpecId] = frozenset(),
         owned_item_spec_ids_provider: Optional[OwnedItemSpecIdsProvider] = None,
         monster_view_provider: Optional[MonsterViewProvider] = None,
+        item_spec_name_resolver: Optional[ItemSpecNameResolver] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -74,6 +79,7 @@ class SpotGraphCurrentStateBuilder:
         self._light_source_item_spec_ids = light_source_item_spec_ids
         self._owned_item_spec_ids_provider = owned_item_spec_ids_provider
         self._monster_view_provider = monster_view_provider
+        self._item_spec_name_resolver = item_spec_name_resolver
         self._perception = SpotPerceptionService()
 
     def build_snapshot(self, player_id: int) -> SpotGraphPlayerSnapshotDto | None:
@@ -124,6 +130,7 @@ class SpotGraphCurrentStateBuilder:
         sub_lines: list[str] = []
         obj_lines: list[str] = []
         ground_lines: list[str] = []
+        ground_items: list[SpotGraphGroundItemEntry] = []
 
         # --- 知覚判定: 照明 + 光源 ---
         presence = graph.presence_at(spot_id)
@@ -199,7 +206,21 @@ class SpotGraphCurrentStateBuilder:
                     obj_lines.append(f"- {obj.name} [ {act} ]")
 
                 for gi in interior.ground_items:
-                    ground_lines.append(f"- 地面: item_instance={gi.item_instance_id}")
+                    name = ""
+                    if self._item_spec_name_resolver is not None:
+                        try:
+                            name = self._item_spec_name_resolver(gi.item_spec_id.value)
+                        except Exception:
+                            name = ""
+                    if not name:
+                        name = f"アイテム#{gi.item_instance_id.value}"
+                    ground_items.append(SpotGraphGroundItemEntry(
+                        item_instance_id=gi.item_instance_id.value,
+                        item_spec_id=gi.item_spec_id.value,
+                        name=name,
+                    ))
+                    # 後方互換: 旧 ground_item_lines に名前付き行を残す。
+                    ground_lines.append(f"- {name}")
 
         atmosphere: SpotGraphAtmosphereEntry | None = None
         if node.atmosphere is not None:
@@ -297,6 +318,7 @@ class SpotGraphCurrentStateBuilder:
             nearby_entities=tuple(nearby_entities),
             monsters_at_spot=tuple(monsters_at_spot),
             inventory_items=inventory_items,
+            ground_items=tuple(ground_items),
             need_lines=need_lines,
             ground_item_lines=ground_lines,
             connection_lines=connection_lines,
