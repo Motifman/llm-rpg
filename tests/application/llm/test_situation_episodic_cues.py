@@ -168,3 +168,90 @@ class TestSituationCueObservationUnknownKeys:
         )
         canon = {c.to_canonical() for c in cues}
         assert "place_spot:9" not in canon
+
+
+class TestSituationCueFreeTextProse:
+    """Issue #283 後続: observation_prose + noun_matcher で自由文 cue 抽出。"""
+
+    def test_matcher_注入で_prose_に含まれる固有名詞から_cue_が立つ(self) -> None:
+        """``WorldNounMatcher`` を渡せば prose 中の固有名詞が cue 化される。
+        ``OBSERVATION_FREETEXT`` source で来るので structured cue と区別可能。"""
+        from ai_rpg_world.application.llm.contracts.episodic_memory import (
+            EpisodicCueSource,
+        )
+        from ai_rpg_world.application.llm.services.world_noun_matcher import (
+            WorldNounMatcherBuilder,
+        )
+
+        matcher = WorldNounMatcherBuilder().add_spot("書架A", spot_id=3).build()
+        cues = build_situation_episodic_cues(
+            runtime_context=ToolRuntimeContextDto.empty(),
+            observation_structured=None,
+            observation_prose="リン、書架A で待ってるよ",
+            noun_matcher=matcher,
+        )
+        assert any(
+            c.to_canonical() == "place_spot:3"
+            and c.source == EpisodicCueSource.OBSERVATION_FREETEXT
+            for c in cues
+        )
+
+    def test_matcher_未指定なら自由文経路は無効_後方互換(self) -> None:
+        """noun_matcher を渡さなければ prose は走査されない (旧挙動)。"""
+        cues = build_situation_episodic_cues(
+            runtime_context=ToolRuntimeContextDto.empty(),
+            observation_structured=None,
+            observation_prose="リン、書架A で待ってるよ",
+            # noun_matcher 未指定
+        )
+        # place_spot:3 は立たない
+        assert all(c.to_canonical() != "place_spot:3" for c in cues)
+
+    def test_prose_未指定なら自由文経路は無効(self) -> None:
+        """``observation_prose=None`` なら matcher があってもスキップする。"""
+        from ai_rpg_world.application.llm.services.world_noun_matcher import (
+            WorldNounMatcherBuilder,
+        )
+
+        matcher = WorldNounMatcherBuilder().add_spot("書架A", spot_id=3).build()
+        cues = build_situation_episodic_cues(
+            runtime_context=ToolRuntimeContextDto.empty(),
+            observation_structured=None,
+            observation_prose=None,
+            noun_matcher=matcher,
+        )
+        assert all(c.to_canonical() != "place_spot:3" for c in cues)
+
+    def test_matcher_の例外は_cue_収集を止めない(self) -> None:
+        """matcher 実装が壊れて例外を投げても build は空 cue で続行する
+        (prompt build を止めない)。"""
+
+        class _BrokenMatcher:
+            def find_in_text(self, text: str):  # noqa: ARG002
+                raise RuntimeError("intentionally broken")
+
+        cues = build_situation_episodic_cues(
+            runtime_context=ToolRuntimeContextDto.empty(),
+            observation_structured=None,
+            observation_prose="any",
+            noun_matcher=_BrokenMatcher(),
+        )
+        # 失敗しても tuple が返り、prose 由来 cue は単に欠落するだけ
+        assert isinstance(cues, tuple)
+
+    def test_構造化_cue_と_自由文_cue_は重複除去される(self) -> None:
+        """structured.spot_id_value=3 と prose 中の「書架A」が両方 place_spot:3
+        を指せば、_validate_and_dedupe で 1 件に正規化される。"""
+        from ai_rpg_world.application.llm.services.world_noun_matcher import (
+            WorldNounMatcherBuilder,
+        )
+
+        matcher = WorldNounMatcherBuilder().add_spot("書架A", spot_id=3).build()
+        cues = build_situation_episodic_cues(
+            runtime_context=ToolRuntimeContextDto.empty(),
+            observation_structured={"spot_id_value": 3},
+            observation_prose="書架A で待ってる",
+            noun_matcher=matcher,
+        )
+        # place_spot:3 が 1 件だけ
+        assert sum(1 for c in cues if c.to_canonical() == "place_spot:3") == 1

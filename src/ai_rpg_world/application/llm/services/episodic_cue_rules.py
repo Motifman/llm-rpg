@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from typing import Any, Iterable, Sequence
+from typing import TYPE_CHECKING, Any, Iterable, Sequence
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     EMOTION_HINT_VALUES,
@@ -19,6 +19,13 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeTargetDto,
 )
 from ai_rpg_world.application.llm.contracts.episodic_memory import EpisodicCue, EpisodicCueSource
+
+if TYPE_CHECKING:
+    # Issue #283 後続: 観測 prose の自由文 cue 抽出に使う。Protocol なので
+    # 型チェック時のみ参照。runtime には依存しない (caller が None でも安全)。
+    from ai_rpg_world.application.llm.services.world_noun_matcher import (
+        IWorldNounMatcher,
+    )
 
 _EMOTION_HINT_SET = frozenset(EMOTION_HINT_VALUES)
 _SAFE_SEGMENT_RE = re.compile(r"[^a-z0-9_]+")
@@ -94,6 +101,8 @@ def build_situation_episodic_cues(
     runtime_context: ToolRuntimeContextDto | None,
     observation_structured: Mapping[str, Any] | None = None,
     latest_action: ActionResultEntry | None = None,
+    observation_prose: str | None = None,
+    noun_matcher: "IWorldNounMatcher | None" = None,
 ) -> tuple[EpisodicCue, ...]:
     """
     受動想起用の「現在局面」に相当する cue 列を、保存時 `build_episodic_cues_for_tool_turn` と
@@ -101,6 +110,11 @@ def build_situation_episodic_cues(
 
     `ToolRuntimeContextDto` と直近観測 structured に加え、`latest_action` があれば
     直近ツール名・成否（§0.2）を action / outcome 軸で足し、チャンク保存側の cue と揃えて想起しやすくする。
+
+    Issue #283 後続: ``observation_prose`` + ``noun_matcher`` が両方注入されていれば、
+    観測の自由文本を ``WorldNounMatcher`` (Aho-Corasick) で走査し、含まれる固有名詞
+    から ``OBSERVATION_FREETEXT`` source で cue を追加する。これにより SNS / speech
+    の prose に「書架A」とだけ書かれているケースでも place_spot:3 cue が立つ。
 
     None の入力や未知フィールドは黙って無視する。
     """
@@ -111,6 +125,8 @@ def build_situation_episodic_cues(
         _collect_situation_episodic_cues(
             runtime_context=runtime_context,
             observation_structured=observation_structured,
+            observation_prose=observation_prose,
+            noun_matcher=noun_matcher,
         )
     )
     validated = _validate_and_dedupe(collected)
@@ -121,8 +137,11 @@ def _collect_situation_episodic_cues(
     *,
     runtime_context: ToolRuntimeContextDto | None,
     observation_structured: Mapping[str, Any] | None,
+    observation_prose: str | None = None,
+    noun_matcher: "IWorldNounMatcher | None" = None,
 ) -> list[EpisodicCue]:
-    """runtime と観測 structured から局面 cue を組み立てる（重複除去・件数上限は呼び出し側）。"""
+    """runtime / 観測 structured / 観測 prose から局面 cue を組み立てる
+    (重複除去・件数上限は呼び出し側)。"""
     out: list[EpisodicCue] = []
     rt = runtime_context
     if rt is not None:
@@ -132,10 +151,43 @@ def _collect_situation_episodic_cues(
     if obs is not None:
         out.extend(_cues_from_observation_structured(obs))
 
+    if observation_prose and noun_matcher is not None:
+        out.extend(_cues_from_observation_prose(observation_prose, noun_matcher))
+
     if rt is not None:
         out.extend(_cues_from_runtime_targets(rt.targets))
         out.extend(_cues_from_runtime_tile_areas(rt))
 
+    return out
+
+
+def _cues_from_observation_prose(
+    prose: str,
+    noun_matcher: "IWorldNounMatcher",
+) -> list[EpisodicCue]:
+    """観測 prose に含まれる固有名詞から cue を立てる (Issue #283 後続)。
+
+    ``WorldNounMatcher.find_in_text`` が返す ``NounMatch`` の axis / value を
+    そのまま ``EpisodicCue`` に変換する。matcher 側で既に "kind_id" 形式の
+    value にしているので、構造化 cue と同じ index で recall に乗る。
+
+    同一 prose に同じ entity の言及が複数あっても (axis, value) が同じなので、
+    ``_validate_and_dedupe`` で 1 件に正規化される。
+    """
+    try:
+        matches = noun_matcher.find_in_text(prose)
+    except Exception:
+        # matcher 実装の予期しない失敗で prompt build を止めない
+        return []
+    out: list[EpisodicCue] = []
+    for m in matches:
+        out.append(
+            EpisodicCue(
+                axis=m.axis,
+                value=m.value,
+                source=EpisodicCueSource.OBSERVATION_FREETEXT,
+            )
+        )
     return out
 
 

@@ -169,6 +169,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         episodic_recall_buffer_store = episodic.recall_buffer_store
         episodic_reinterpretation_journal_store = episodic.reinterpretation_journal_store
         episodic_turn_index_provider = episodic.turn_index_provider
+        # Issue #283 後続: 観測 prose 経由の自由文 cue 抽出マッチャ (任意)。
+        noun_matcher = episodic.noun_matcher
 
         recent_observations_limit = limits.recent_observations_limit
         recent_actions_limit = limits.recent_actions_limit
@@ -292,6 +294,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._episodic_recall_buffer_store = episodic_recall_buffer_store
         self._episodic_reinterpretation_journal_store = episodic_reinterpretation_journal_store
         self._episodic_turn_index_provider = episodic_turn_index_provider
+        self._noun_matcher = noun_matcher
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def build(
@@ -455,13 +458,17 @@ class DefaultPromptBuilder(IPromptBuilder):
             return ""
 
         observation_structured = None
+        observation_prose: str | None = None
         if observations:
             observation_structured = observations[0].output.structured
+            observation_prose = observations[0].output.prose
         latest_action = action_results[0] if action_results else None
         situation_cues = build_situation_episodic_cues(
             runtime_context=ui_context.tool_runtime_context,
             observation_structured=observation_structured,
             latest_action=latest_action,
+            observation_prose=observation_prose,
+            noun_matcher=self._noun_matcher,
         )
         recall_now = datetime.now(timezone.utc)
         recall_result = self._episodic_passive_recall.retrieve(

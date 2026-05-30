@@ -55,6 +55,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
         EpisodicPassiveRecallRetrievalService,
     )
+    from ai_rpg_world.application.llm.services.world_noun_matcher import (
+        IWorldNounMatcher,
+    )
 
 
 DEFAULT_RECENT_OBSERVATIONS_LIMIT = 20
@@ -114,6 +117,10 @@ class EpisodicRecallConfig:
     recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None
     reinterpretation_journal_store: Optional[IEpisodicReinterpretationJournalStore] = None
     turn_index_provider: Optional[Callable[[PlayerId], int]] = None
+    # Issue #283 後続: 観測 prose に含まれる固有名詞から自動 cue を立てる
+    # マッチャ。None なら自由文経路は無効化 (= 構造化フィールドだけが cue 源)。
+    # 実装は ``IWorldNounMatcher`` 準拠の任意クラス (Aho-Corasick / Null / C 拡張等)。
+    noun_matcher: Optional["IWorldNounMatcher"] = None
 
 
 @dataclass(frozen=True)
