@@ -35,6 +35,8 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterStartedChasingInSpotEvent,
     MonsterStartedFleeingInSpotEvent,
     PlayerAttackedMonsterInSpotEvent,
+    PlayerDroppedItemEvent,
+    PlayerPickedUpItemEvent,
     SpotSoundHeardEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
@@ -95,6 +97,17 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         elif isinstance(event, SpotObjectInteractionFailedEvent):
             # 失敗観測は同じスポットの他プレイヤーにのみ届ける（actor 本人には
             # ツール結果として個別メッセージが返るので除外）。
+            self._resolve_at_spot_excluding_actor(
+                event.spot_id, event.entity_id, add
+            )
+        elif isinstance(event, PlayerDroppedItemEvent):
+            # witness 最小版: drop の事実を同スポットの他プレイヤーにのみ届ける。
+            # 行為者本人には ItemTransferResult.messages で個別返答する。
+            self._resolve_at_spot_excluding_actor(
+                event.spot_id, event.entity_id, add
+            )
+        elif isinstance(event, PlayerPickedUpItemEvent):
+            # pickup も同様に同スポットの他者にのみ届ける。
             self._resolve_at_spot_excluding_actor(
                 event.spot_id, event.entity_id, add
             )

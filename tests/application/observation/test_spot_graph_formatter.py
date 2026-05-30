@@ -21,10 +21,14 @@ from ai_rpg_world.application.observation.services.formatters.spot_graph_formatt
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
+    PlayerDroppedItemEvent,
+    PlayerPickedUpItemEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectStateChangedEvent,
@@ -212,6 +216,64 @@ class TestSpotObjectInteracted:
         assert "探索者A" in result.prose
         assert "古びたドア" in result.prose
         assert "ドアが開いた" not in result.prose
+
+
+class TestPlayerDroppedItem:
+    """drop イベントから「Xが流木を地面に置いた」prose を生成する formatter。"""
+
+    def _make_event(self, *, entity_id=ENTITY_1) -> PlayerDroppedItemEvent:
+        return PlayerDroppedItemEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=entity_id,
+            spot_id=SPOT_A,
+            item_instance_id=ItemInstanceId.create(7),
+            item_spec_id=ItemSpecId.create(100),
+            item_name="流木",
+        )
+
+    def test_actor_本人には_None_を返す(self, formatter):
+        """recipient strategy で除外済みのはずだが二重ガード。"""
+        event = self._make_event(entity_id=ENTITY_1)
+        assert formatter.format(event, PLAYER_1) is None
+
+    def test_他者には_social_で_prose_を返す(self, formatter):
+        """「探索者Aが流木を地面に置いた」が同室者に届く。"""
+        event = self._make_event(entity_id=ENTITY_1)
+        result = formatter.format(event, PLAYER_2)
+        assert result is not None
+        assert result.observation_category == "social"
+        assert result.prose == "探索者Aが流木を地面に置いた。"
+        assert result.structured["type"] == "player_dropped_item"
+        assert result.structured["item_name"] == "流木"
+
+
+class TestPlayerPickedUpItem:
+    """pickup イベントから「Xが流木を拾い上げた」prose を生成する formatter。"""
+
+    def _make_event(self, *, entity_id=ENTITY_2) -> PlayerPickedUpItemEvent:
+        return PlayerPickedUpItemEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=entity_id,
+            spot_id=SPOT_A,
+            item_instance_id=ItemInstanceId.create(7),
+            item_spec_id=ItemSpecId.create(100),
+            item_name="流木",
+        )
+
+    def test_actor_本人には_None_を返す(self, formatter):
+        event = self._make_event(entity_id=ENTITY_2)
+        assert formatter.format(event, PLAYER_2) is None
+
+    def test_他者には_social_で_prose_を返す(self, formatter):
+        """「探索者Bが流木を拾い上げた」が同室者に届く。"""
+        event = self._make_event(entity_id=ENTITY_2)
+        result = formatter.format(event, PLAYER_1)
+        assert result is not None
+        assert result.observation_category == "social"
+        assert result.prose == "探索者Bが流木を拾い上げた。"
+        assert result.structured["type"] == "player_picked_up_item"
 
 
 class TestSpotExplored:
