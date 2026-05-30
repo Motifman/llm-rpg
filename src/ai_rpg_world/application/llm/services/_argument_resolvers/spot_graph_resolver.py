@@ -276,6 +276,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
@@ -294,6 +295,7 @@ _SPOT_GRAPH_TOOLS = frozenset({
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
 })
 
 
@@ -341,7 +343,67 @@ class SpotGraphArgumentResolver:
             return self._resolve_drop_item(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM:
             return self._resolve_pickup_item(args, runtime_context)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM:
+            return self._resolve_give_item(args, runtime_context)
         return None
+
+    def _resolve_give_item(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """所持アイテムラベル + 相手プレイヤーラベルを解決して give 引数を返す。
+
+        - item_label (I1 等): drop と同じく InventoryToolRuntimeTargetDto (kind="inventory_item")
+        - target_player_label (P1 等 / 名前): resolve_player_target で player_id を取り出す
+        """
+        item_label = args.get("item_label")
+        if not isinstance(item_label, str) or not item_label.strip():
+            raise ToolArgumentResolutionException(
+                "渡すアイテムのラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        item_target = require_target_type(
+            item_label,
+            runtime_context,
+            "アイテムラベル",
+            (InventoryToolRuntimeTargetDto,),
+            invalid_label_code="INVALID_TARGET_LABEL",
+            invalid_kind_code="INVALID_TARGET_KIND",
+        )
+        if item_target.kind != "inventory_item":
+            raise ToolArgumentResolutionException(
+                f"このラベルは所持アイテムではありません: {item_label}",
+                "INVALID_TARGET_KIND",
+            )
+        if item_target.inventory_slot_id is None:
+            raise ToolArgumentResolutionException(
+                f"このラベルから slot を解決できません: {item_label}",
+                "INVALID_TARGET_KIND",
+            )
+
+        target_player_label = args.get("target_player_label")
+        if not isinstance(target_player_label, str) or not target_player_label.strip():
+            raise ToolArgumentResolutionException(
+                "渡す相手のラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        player_target = resolve_player_target(target_player_label, runtime_context)
+        if player_target is None or player_target.player_id is None:
+            raise ToolArgumentResolutionException(
+                f"指定された相手ラベルが現在の候補にありません: {target_player_label}",
+                "INVALID_TARGET_LABEL",
+            )
+
+        return _with_inner_thought(
+            {
+                "slot_id": item_target.inventory_slot_id,
+                "target_player_id": player_target.player_id,
+                "target_display_name": player_target.display_name,
+                "item_display_name": item_target.display_name,
+            },
+            args,
+        )
 
     def _resolve_drop_item(
         self,

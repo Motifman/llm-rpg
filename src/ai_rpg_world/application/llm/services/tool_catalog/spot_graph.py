@@ -14,6 +14,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
@@ -264,6 +265,37 @@ DROP_ITEM_DEFINITION = ToolDefinitionDto(
 )
 
 
+GIVE_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+    description=(
+        "同じスポットに居る別のプレイヤーへ所持アイテムを直接渡す。drop して "
+        "pickup させる手間を省くが、その場に居る第三者にも「Xが流木をYに渡した」"
+        "と観測される。受取り側のインベントリが満杯だと受け取れない。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": (
+                    "渡すアイテムのラベル (所持アイテムに表示された I1, I2 等)。"
+                    "同 spec で複数所持の場合は代表 instance が 1 つ渡される。"
+                ),
+            },
+            "target_player_label": {
+                "type": "string",
+                "description": (
+                    "渡す相手のラベル (同スポット内のプレイヤー一覧に表示された "
+                    "P1, P2 等) または相手の名前 (例: \"トマ\")。自分自身は指定不可。"
+                ),
+            },
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "target_player_label", "inner_thought"],
+    },
+)
+
+
 PICKUP_ITEM_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     description=(
@@ -315,6 +347,7 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (USE_ITEM_DEFINITION, _RESOLVER),
         (DROP_ITEM_DEFINITION, _RESOLVER),
         (PICKUP_ITEM_DEFINITION, _RESOLVER),
+        (GIVE_ITEM_DEFINITION, _RESOLVER),
         (ATTACK_DEFINITION, _RESOLVER),
         (LISTEN_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
@@ -332,6 +365,7 @@ __all__ = [
     "USE_ITEM_DEFINITION",
     "DROP_ITEM_DEFINITION",
     "PICKUP_ITEM_DEFINITION",
+    "GIVE_ITEM_DEFINITION",
     "ATTACK_DEFINITION",
     "LISTEN_DEFINITION",
     "WAIT_DEFINITION",
