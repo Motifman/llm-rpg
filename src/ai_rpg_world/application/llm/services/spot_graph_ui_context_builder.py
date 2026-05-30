@@ -192,7 +192,16 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         collector: RuntimeTargetCollector,
         lines: List[str],
     ) -> None:
+        """同じ場所にいる他プレイヤーを列挙する。
+
+        Issue #283 後続の五感対称化: 旧実装は「居れば列挙、居なければ section
+        ごと省略」だったため、LLM は「section 無し = 誰もいない」を暗黙推論
+        するしかなく、結果として speech を「相手がここに居るか分からない」
+        まま使う事故が起きていた (R1 カイトの SHOUT 誤用)。情報提示を
+        対称にし、「他者がいない」事実も明示する。
+        """
         if not snap.nearby_entities:
+            lines.append("同じ場所にいるプレイヤー: (他のプレイヤーはこのスポットにいない)")
             return
         lines.append("同じ場所にいるプレイヤー:")
         for entry in snap.nearby_entities:
@@ -225,8 +234,11 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         死体は生存個体と同じ section に並べるが、表記とラベル説明文を分ける。
         現状では戦闘ツールがまだ無いため `available_interactions` は空。次の
         戦闘 PR で attack 等が実装された時点で埋める。
+
+        Issue #283 後続: 空のときも明示する (五感の対称化)。
         """
         if not snap.monsters_at_spot:
+            lines.append("同じ場所に居るモンスター: (このスポットにモンスターはいない)")
             return
         lines.append("同じ場所に居るモンスター:")
         for entry in snap.monsters_at_spot:

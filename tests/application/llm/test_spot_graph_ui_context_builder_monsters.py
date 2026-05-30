@@ -122,13 +122,17 @@ class TestMonsterLabeling:
         assert isinstance(target, MonsterToolRuntimeTargetDto)
         assert target.monster_id == 101
 
-    def test_モンスター不在なら_section_も_target_も増えない(self) -> None:
-        """monsters_at_spot が空ならヘッダも target も無し。"""
+    def test_モンスター不在のときは_空の事実を明示する(self) -> None:
+        """Issue #283 後続の五感対称化: monsters_at_spot が空でも
+        「モンスターはいない」事実を明示する。M-prefix の target は当然増えない。
+        旧実装は section ごと省略していたため、LLM が「section 無し = いない」を
+        暗黙推論する必要があり情報の対称性が崩れていた。"""
         dto = _make_dto()
         result = SpotGraphUiContextBuilder().build("base", dto)
 
-        assert "同じ場所に居るモンスター" not in result.current_state_text
-        # 他の section が無ければ targets も空のはず
+        assert "同じ場所に居るモンスター" in result.current_state_text
+        assert "このスポットにモンスターはいない" in result.current_state_text
+        # 個体が居ないので M-prefix の target は付かない
         assert all(
             not k.startswith("M") for k in result.tool_runtime_context.targets
         )
