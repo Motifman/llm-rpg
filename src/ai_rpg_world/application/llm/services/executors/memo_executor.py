@@ -22,6 +22,10 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 )
 from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
+from ai_rpg_world.application.llm.services.memo_id_display import (
+    resolve_memo_id_prefix,
+    short_memo_id,
+)
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     exception_result,
     unknown_tool,
@@ -116,7 +120,11 @@ class MemoToolExecutor:
             )
             return LlmCommandResultDto(
                 success=True,
-                message=f"メモを追加しました（ID: {memo_id}）。完了したら memo_done で記録してください。",
+                message=(
+                    f"メモを追加しました（ID: {short_memo_id(memo_id)}）。"
+                    "完了したら memo_done でこの ID を指定してください "
+                    "(短縮形でも full ID でも受け付けます)。"
+                ),
             )
         except Exception as e:
             return exception_result(e)
@@ -135,7 +143,7 @@ class MemoToolExecutor:
                     message="未完了のメモはありません。",
                 )
             lines = [
-                f"- [{e.id}] {e.content} (追加: {e.added_at.strftime('%Y-%m-%d %H:%M')})"
+                f"- [{short_memo_id(e.id)}] {e.content} (追加: {e.added_at.strftime('%Y-%m-%d %H:%M')})"
                 for e in entries
             ]
             return LlmCommandResultDto(
@@ -184,49 +192,92 @@ class MemoToolExecutor:
                 )
 
             pid = PlayerId(player_id)
-            completed: list[str] = []
-            not_found: list[str] = []
-            for memo_id in memo_ids:
+            # Issue #276: memo_id は short prefix (例: "a3b9f1") でも full UUID
+            # でも受け付ける。uncompleted memo の ID 集合に対して prefix match で
+            # 解決し、ambiguous なら個別に失敗扱いにする。
+            uncompleted_ids = [
+                e.id for e in self._memo_store.list_uncompleted(pid)
+            ]
+            completed: list[str] = []  # full UUID
+            not_found: list[str] = []  # 入力のまま (短縮形 or 入力 ID)
+            ambiguous: list[tuple[str, list[str]]] = []  # (入力, candidates)
+            for raw_id in memo_ids:
+                resolved, ambiguous_matches = resolve_memo_id_prefix(
+                    raw_id, uncompleted_ids
+                )
+                if resolved is None:
+                    if ambiguous_matches:
+                        ambiguous.append((raw_id, ambiguous_matches))
+                    else:
+                        not_found.append(raw_id)
+                    continue
                 # fulfillment_context は memo ごとに snapshot する (完了タイミングごとに
                 # 周辺 context が違うことに意味がある)。
                 fulfillment_context = self._build_fulfillment_context(pid)
                 ok = self._memo_store.complete(
-                    pid, memo_id, fulfillment_context=fulfillment_context
+                    pid, resolved, fulfillment_context=fulfillment_context
                 )
                 if ok:
-                    completed.append(memo_id)
+                    completed.append(resolved)
+                    # resolved 後に同じ ID を別の raw_id が指してくる可能性は
+                    # ないが、念のため uncompleted_ids から取り除いて 2 度 match
+                    # しないようにする。
+                    if resolved in uncompleted_ids:
+                        uncompleted_ids.remove(resolved)
                     self._trace_recorder.record(
                         TraceEventKind.MEMO_DONE,
                         tick=self._current_tick(),
                         player_id=player_id,
-                        memo_id=memo_id,
+                        memo_id=resolved,  # trace には full UUID を残す (grep 性)
                     )
                 else:
-                    not_found.append(memo_id)
+                    not_found.append(raw_id)
 
-            if completed and not not_found:
+            # 表示は short_memo_id で短縮 (LLM へのノイズ低減)
+            completed_short = [short_memo_id(c) for c in completed]
+            ambiguous_msgs = [
+                f"{raw}={'/'.join(short_memo_id(c) for c in cands)}"
+                for raw, cands in ambiguous
+            ]
+
+            if completed and not not_found and not ambiguous:
                 if len(completed) == 1:
-                    msg = f"メモ {completed[0]} を完了にしました。"
+                    msg = f"メモ {completed_short[0]} を完了にしました。"
                 else:
                     msg = (
                         f"{len(completed)} 件のメモを完了にしました: "
-                        + ", ".join(completed)
+                        + ", ".join(completed_short)
                     )
                 return LlmCommandResultDto(success=True, message=msg)
-            if completed and not_found:
-                msg = (
-                    f"{len(completed)} 件を完了にしました ({', '.join(completed)})。"
-                    f"次の memo は見つかりませんでした: {', '.join(not_found)}"
-                )
+            if completed and (not_found or ambiguous):
+                parts = [
+                    f"{len(completed)} 件を完了にしました ({', '.join(completed_short)})。",
+                ]
+                if not_found:
+                    parts.append(
+                        f"次の memo は見つかりませんでした: {', '.join(not_found)}"
+                    )
+                if ambiguous_msgs:
+                    parts.append(
+                        "次の入力は曖昧で複数の memo に一致しました "
+                        f"(より長い prefix を指定してください): {', '.join(ambiguous_msgs)}"
+                    )
+                return LlmCommandResultDto(success=True, message="".join(parts))
+            if ambiguous and not completed and not not_found:
                 return LlmCommandResultDto(
-                    success=True,
-                    message=msg,
+                    success=False,
+                    message=(
+                        "指定された prefix が曖昧で複数の memo に一致しました "
+                        f"(より長い prefix を指定してください): {', '.join(ambiguous_msgs)}"
+                    ),
+                    error_code="TODO_ERROR",
+                    remediation="memo_list で一覧 + 短縮 ID を確認してください。",
                 )
             return LlmCommandResultDto(
                 success=False,
                 message=f"指定されたメモが見つかりません: {', '.join(not_found)}",
                 error_code="TODO_ERROR",
-                remediation="正しい memo_id を指定してください。memo_list で一覧を確認できます。",
+                remediation="正しい memo_id (短縮形可) を指定してください。memo_list で一覧を確認できます。",
             )
         except Exception as e:
             return exception_result(e)

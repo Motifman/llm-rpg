@@ -175,7 +175,8 @@ class TestMemoExecutorBatchComplete:
         assert result.success is True
         assert "見つかりません" in result.message
         assert "nonexistent-xxx" in result.message
-        assert valid_id in result.message
+        # Issue #276: 完了 ID は短縮形 (先頭 6 文字 + …) で表示される
+        assert valid_id[:6] in result.message
         # 有効 ID 側は実際に completed 化されている
         assert todo_store.list_uncompleted(PlayerId(1)) == []
 
@@ -190,7 +191,53 @@ class TestMemoExecutorBatchComplete:
         )
         # 1 件は完了し、2 回目は not_found なので overall success
         assert result.success is True
-        assert memo_id in result.message
+        # Issue #276: 完了 ID は短縮形で表示される
+        assert memo_id[:6] in result.message
+
+    def test_短縮形_prefix_で完了できる(self, executor_with_store, todo_store):
+        """Issue #276: memo_done は full UUID と先頭 6 文字短縮形のどちらも
+        受け付ける (git commit hash 風 prefix 一致)。"""
+        executor_with_store._execute_memo_add(1, {"content": "A"})
+        full_id = todo_store.list_uncompleted(PlayerId(1))[0].id
+        short = full_id[:6]
+        result = executor_with_store._execute_memo_done(
+            1, {"memo_ids": [short]}
+        )
+        assert result.success is True
+        # 完了済み
+        assert todo_store.list_uncompleted(PlayerId(1)) == []
+
+    def test_曖昧な_prefix_は_ambiguous_エラー(self, executor_with_store, todo_store):
+        """同じ先頭文字で始まる 2 つの memo に短縮形が一致すると、ambiguous
+        として個別報告される。"""
+        # uuid4 はランダムなので、無理やり同じ先頭にするためにモンキーパッチで対応
+        # ここでは store に直接 ID を仕込む簡易テスト
+        from ai_rpg_world.application.llm.contracts.dtos import MemoEntry
+        from datetime import datetime
+        pid = PlayerId(1)
+        key = todo_store._key(pid)
+        todo_store._store[key] = [
+            MemoEntry(
+                id="abc123-aaa",
+                content="A",
+                added_at=datetime.now(),
+                completed=False,
+            ),
+            MemoEntry(
+                id="abc123-bbb",
+                content="B",
+                added_at=datetime.now(),
+                completed=False,
+            ),
+        ]
+        todo_store._id_to_index[key] = {"abc123-aaa": 0, "abc123-bbb": 1}
+        result = executor_with_store._execute_memo_done(
+            1, {"memo_ids": ["abc123"]}
+        )
+        # どちらも未完了のまま
+        assert len(todo_store.list_uncompleted(pid)) == 2
+        assert result.success is False
+        assert "曖昧" in result.message
 
 
 class TestTodoToolExecutorIntegrationWithMapper:
