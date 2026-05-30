@@ -152,3 +152,120 @@ class TestObservationAppenderExceptions:
                 occurred_at=datetime.now(),
                 game_time_label=None,
             )
+
+
+class TestObservationAppenderTraceRecording:
+    """Issue #276: trace_recorder 注入時、buffer append と同じ場所で
+    ``TraceEventKind.OBSERVATION`` を記録する。"""
+
+    def _make_output(self, prose: str = "リンの声がかすかに聞こえる") -> ObservationOutput:
+        return ObservationOutput(
+            prose=prose,
+            structured={"sound_clarity": "FAINT", "speaker": "リン"},
+            observation_category="social",
+            schedules_turn=True,
+        )
+
+    def test_trace_recorder_注入時_observation_イベントが記録される(self):
+        """append 1 件で trace に kind=OBSERVATION が 1 件残る。"""
+        from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
+
+        buffer = DefaultObservationContextBuffer()
+        recorder = NullTraceRecorder()
+        recorded = []
+        original_record = recorder.record
+
+        def capture(kind, **kw):
+            ev = original_record(kind, **kw)
+            recorded.append(ev)
+            return ev
+
+        recorder.record = capture  # type: ignore[method-assign]
+        appender = ObservationAppender(
+            buffer=buffer,
+            trace_recorder=recorder,
+            current_tick_provider=lambda: 42,
+        )
+
+        appender.append(
+            player_id=PlayerId(7),
+            output=self._make_output(),
+            occurred_at=datetime.now(),
+            game_time_label="深夜 0:25",
+        )
+
+        assert len(recorded) == 1
+        ev = recorded[0]
+        assert ev.kind == TraceEventKind.OBSERVATION
+        assert ev.tick == 42
+        assert ev.player_id == 7
+        assert "かすかに聞こえる" in ev.payload["prose"]
+        assert ev.payload["structured"]["sound_clarity"] == "FAINT"
+        assert ev.payload["observation_category"] == "social"
+        assert ev.payload["schedules_turn"] is True
+        assert ev.payload["game_time_label"] == "深夜 0:25"
+
+    def test_trace_recorder_未注入なら_record_しない(self):
+        """trace_recorder=None なら buffer は更新するが trace 呼び出しなし。"""
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer=buffer)
+        appender.append(
+            player_id=PlayerId(1),
+            output=self._make_output(),
+            occurred_at=datetime.now(),
+            game_time_label=None,
+        )
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+
+    def test_provider_経由で_遅延注入された_recorder_に追従する(self):
+        """trace_recorder_provider 経路: 後から差し替えられた recorder を毎回 lookup する。"""
+        from ai_rpg_world.application.trace import NullTraceRecorder
+
+        buffer = DefaultObservationContextBuffer()
+        recorder_holder = {"r": None}
+        appender = ObservationAppender(
+            buffer=buffer,
+            trace_recorder_provider=lambda: recorder_holder["r"],
+        )
+
+        # 1 回目: provider が None を返すので trace されない
+        appender.append(
+            player_id=PlayerId(1),
+            output=self._make_output(),
+            occurred_at=datetime.now(),
+            game_time_label=None,
+        )
+
+        # provider に recorder を差し込み
+        recorder = NullTraceRecorder()
+        seen = []
+        original = recorder.record
+        recorder.record = lambda k, **kw: seen.append(original(k, **kw))  # type: ignore[method-assign]
+        recorder_holder["r"] = recorder
+
+        # 2 回目: 今度は trace される
+        appender.append(
+            player_id=PlayerId(1),
+            output=self._make_output(),
+            occurred_at=datetime.now(),
+            game_time_label=None,
+        )
+        assert len(seen) == 1
+
+    def test_trace_record_失敗は_buffer_append_を止めない(self):
+        """recorder.record が例外を投げても buffer への append は完了する。"""
+        from ai_rpg_world.application.trace import NullTraceRecorder
+
+        buffer = DefaultObservationContextBuffer()
+        recorder = NullTraceRecorder()
+        recorder.record = MagicMock(side_effect=RuntimeError("trace io fail"))  # type: ignore[method-assign]
+        appender = ObservationAppender(buffer=buffer, trace_recorder=recorder)
+        appender.append(
+            player_id=PlayerId(1),
+            output=self._make_output(),
+            occurred_at=datetime.now(),
+            game_time_label=None,
+        )
+        # buffer には残っている
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+
