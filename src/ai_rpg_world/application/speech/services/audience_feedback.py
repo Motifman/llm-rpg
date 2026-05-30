@@ -57,10 +57,13 @@ def audience_summary_text(
 ) -> str:
     """audience が 1 名以上のときの clarity 内訳付きフィードバック。
 
-    - 全員 FAINT (内容が伝わっていない): 「届いたが内容は伝わっていない」を
-      強調し、shout や接近を提案
-    - それ以外: 「N 名に届きました（内訳）」形式で clarity 別の人数を見せる
-    - 全員同じ clarity でもカテゴリは 1 つだけ表示 (情報量はちゃんと残る)
+    Issue #276 後続文面見直し:
+    - 「あなたの声は N 名に届きました。内訳: 明瞭=A / ぼんやり=M / かすか=F」
+      のラベル風固定フォーマットに統一。N=1 のときに「N 名に届きました
+      （X 名）」のような従属節になり日本語が不自然になる問題を解消する
+    - clarity ラベルは日常語寄り: 「ぼんやり」(=MUFFLED) / 「かすか」(=FAINT)
+    - かすか > 0 のときは「内容は伝わっていない」の補足を添える
+    - 全員 FAINT は内容が誰にも伝わっていない強警告を別文で出す
     """
     members_list = list(members)
     n = len(members_list)
@@ -83,14 +86,10 @@ def audience_summary_text(
             f"相手の居るスポットに近づいてください。"
         )
 
-    parts = []
-    if c_clear:
-        parts.append(f"明瞭に聞こえた {c_clear} 名")
-    if c_muffled:
-        parts.append(f"くぐもって遠くから聞こえた {c_muffled} 名")
-    if c_faint:
-        parts.append(
-            f"声があったとしか分からない (内容は伝わっていない) {c_faint} 名"
-        )
-    detail = " / ".join(parts)
-    return f"あなたの声は {n} 名に届きました（{detail}）。"
+    detail = f"明瞭={c_clear} / ぼんやり={c_muffled} / かすか={c_faint}"
+    note = (
+        " (かすか=声があったとしか分からず、内容は伝わっていない)"
+        if c_faint > 0
+        else ""
+    )
+    return f"あなたの声は {n} 名に届きました。内訳: {detail}{note}。"

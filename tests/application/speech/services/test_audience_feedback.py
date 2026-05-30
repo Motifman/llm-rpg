@@ -61,8 +61,13 @@ class TestAudienceSummaryText:
         assert "届く範囲です" not in text
         assert "届きました" in text
 
-    def test_clarity_breakdown_is_shown(self) -> None:
-        """CLEAR / MUFFLED / FAINT の各人数が内訳として並ぶ。"""
+    def test_clarity_breakdown_uses_label_form(self) -> None:
+        """Issue #276 後続: 「内訳: 明瞭=A / ぼんやり=M / かすか=F」のラベル形式。
+
+        旧 "くぐもって遠くから聞こえた N 名" のような従属節形式は N=1 で
+        日本語が破綻するため、固定のラベル風内訳に変えた。
+        "くぐもり" 表現は日常語の "ぼんやり" に置き換える。
+        """
         members = [
             _member(2, SoundClarityEnum.CLEAR),
             _member(3, SoundClarityEnum.MUFFLED),
@@ -70,11 +75,28 @@ class TestAudienceSummaryText:
             _member(5, SoundClarityEnum.FAINT),
         ]
         text = audience_summary_text(SpeechChannel.SHOUT, members)
-        assert "4 名" in text  # 合計
-        assert "明瞭に聞こえた 1 名" in text
-        assert "くぐもって遠くから聞こえた 2 名" in text
-        # FAINT は「内容は伝わっていない」を明示
-        assert "内容は伝わっていない" in text and "1 名" in text
+        # 「あなたの声は 4 名に届きました。」が骨子
+        assert "あなたの声は 4 名に届きました" in text
+        # ラベル形式
+        assert "明瞭=1" in text
+        assert "ぼんやり=2" in text
+        assert "かすか=1" in text
+        # 旧ラベル「くぐもり」は使わない (くぐも… が混じらない)
+        assert "くぐも" not in text
+        # かすか > 0 のときは内容が伝わっていないことを補足
+        assert "内容は伝わっていない" in text
+
+    def test_clarity_label_omits_note_when_no_faint(self) -> None:
+        """かすか=0 のときは「内容は伝わっていない」補足を付けない。"""
+        members = [
+            _member(2, SoundClarityEnum.CLEAR),
+            _member(3, SoundClarityEnum.MUFFLED),
+        ]
+        text = audience_summary_text(SpeechChannel.SHOUT, members)
+        assert "明瞭=1" in text
+        assert "ぼんやり=1" in text
+        assert "かすか=0" in text
+        assert "内容は伝わっていない" not in text
 
     def test_all_faint_warns_content_not_delivered(self) -> None:
         """全員 FAINT のときは「内容は伝わっていない」を強調し、shout / 接近を提案。"""
@@ -99,15 +121,16 @@ class TestAudienceSummaryText:
         text = audience_summary_text(SpeechChannel.WHISPER, members)
         assert "囁きが届きました" in text
 
-    def test_skips_zero_categories(self) -> None:
-        """0 名のカテゴリ (CLEAR / MUFFLED / FAINT のうち該当なし) は内訳に
-        含めない (情報量はそのまま、ノイズだけ減る)。"""
-        members = [
-            _member(2, SoundClarityEnum.CLEAR),
-            _member(3, SoundClarityEnum.CLEAR),
-        ]
+    def test_single_listener_grammar_is_natural(self) -> None:
+        """N=1 でも日本語が破綻しないことの回帰テスト
+        (旧 "1 名に届きました（くぐもって遠くから聞こえた 1 名）" の不自然さ対策)。
+        """
+        members = [_member(2, SoundClarityEnum.MUFFLED)]
         text = audience_summary_text(SpeechChannel.SAY, members)
-        assert "2 名" in text
-        assert "明瞭に聞こえた 2 名" in text
-        assert "くぐもって" not in text
-        assert "かすか" not in text
+        # 旧形式の従属節は出ない
+        assert "（くぐもって遠くから聞こえた 1 名）" not in text
+        # 新形式: 1 名に届きました。内訳: 明瞭=0 / ぼんやり=1 / かすか=0
+        assert "あなたの声は 1 名に届きました" in text
+        assert "明瞭=0" in text
+        assert "ぼんやり=1" in text
+        assert "かすか=0" in text
