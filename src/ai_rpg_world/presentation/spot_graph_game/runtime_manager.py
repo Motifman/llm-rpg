@@ -625,32 +625,30 @@ class _EscapeGameLlmWiring:
         arguments: dict[str, Any],
         runtime_context: Any,
     ) -> LlmCommandResultDto:
+        # Issue #276 経路二重化解消: 本家 resolver と同じ
+        # ``resolve_destination_target`` で label を解決する。崩れ表現
+        # (連結文字列 / 括弧 / 矢印) の吸収もここに集約される。
+        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+            resolve_destination_target,
+        )
+        from ai_rpg_world.application.llm.services._resolver_helpers import (
+            ToolArgumentResolutionException,
+        )
+
         targets = getattr(runtime_context, "targets", {})
         label = str(arguments.get("destination_label", ""))
-        target = targets.get(label)
-        # PR 3 (#227): label miss なら display_name (スポット名) でフォール
-        # バック解決を試みる。本家経路の _argument_resolvers/spot_graph_resolver.py
-        # の _find_target_by_display_name と等価。PR 7 で本家 resolver 経由に
-        # 統合する際に削除予定。
-        if target is None or target.spot_id is None:
-            for candidate in targets.values():
-                if (
-                    candidate.kind == "spot_graph_destination"
-                    and candidate.display_name == label
-                    and candidate.spot_id is not None
-                ):
-                    target = candidate
-                    break
-        if target is None or target.spot_id is None:
-            # F1: 失敗時に有効ラベルを列挙して LLM が次の試行で正しい値を選べる
+        try:
+            target = resolve_destination_target(label, runtime_context)
+        except ToolArgumentResolutionException as e:
             valid_destinations = _list_destination_labels(targets)
             return LlmCommandResultDto(
                 success=False,
                 message=(
                     f"移動先が見つかりません: {label}。"
-                    f"有効な destination_label: {valid_destinations or '(この場所からの移動先なし)'}"
+                    f"有効な destination_label: "
+                    f"{valid_destinations or '(この場所からの移動先なし)'}"
                 ),
-                error_code="INVALID_DESTINATION_LABEL",
+                error_code=e.error_code,
                 remediation=(
                     "destination_label には現在の状況に表示された S1, S2 等の "
                     "ラベル、またはスポット名 (例: 閲覧室) を指定してください。"
@@ -673,23 +671,30 @@ class _EscapeGameLlmWiring:
         arguments: dict[str, Any],
         runtime_context: Any,
     ) -> LlmCommandResultDto:
+        # Issue #276 経路二重化解消: 本家 resolver と同じ
+        # ``resolve_object_target`` で label を解決。
+        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+            resolve_object_target,
+        )
+        from ai_rpg_world.application.llm.services._resolver_helpers import (
+            ToolArgumentResolutionException,
+        )
+
         targets = getattr(runtime_context, "targets", {})
         label = str(arguments.get("object_label", ""))
         action_name = str(arguments.get("action_name", ""))
-        target = targets.get(label)
-        if target is None or target.world_object_id is None:
-            # F1: 失敗時に有効ラベルを列挙。Issue #154 デモで LLM が
-            # ``object_label="操作盤"`` (display name) を使い続けて同じ失敗を
-            # 繰り返した。message で valid 一覧を見せて次の試行で正しい値が
-            # 選べるようにする。
+        try:
+            target = resolve_object_target(label, runtime_context)
+        except ToolArgumentResolutionException as e:
             valid_objects = _list_object_labels(targets)
             return LlmCommandResultDto(
                 success=False,
                 message=(
                     f"オブジェクトラベルが見つかりません: {label}。"
-                    f"有効な object_label: {valid_objects or '(この場所に interactable なオブジェクトなし)'}"
+                    f"有効な object_label: "
+                    f"{valid_objects or '(この場所に interactable なオブジェクトなし)'}"
                 ),
-                error_code="INVALID_TARGET_LABEL",
+                error_code=e.error_code,
                 remediation=(
                     "object_label には現在の状況に表示された OBJ1, OBJ2 等の "
                     "ラベル (display name ではなく) を指定してください。"
@@ -852,37 +857,19 @@ class _EscapeGameLlmWiring:
         target_label: str,
         targets: dict[str, Any],
     ) -> Optional[Any]:
-        """whisper の target_label をプレイヤー target に解決する。
+        """[delegating] 本家 resolver の ``resolve_player_target`` への薄い
+        ラッパー。後方互換用に残す (callers + tests が直接呼んでいる)。
 
-        Issue #269 第17回 R2 で空文字 / 名前直書きで失敗していたパターンを
-        吸収する:
-        1. ラベル直接 (例: "P1") で targets 辞書を引く
-        2. ``_normalize_label_candidates`` でラベル候補を抽出して再試行
-        3. ``kind="spot_graph_player"`` の target を全スキャンし、
-           display_name (= プレイヤー名 "リン" 等) が候補と一致するものを返す
-
-        いずれも match しなければ None。空文字も None 扱い。
+        Issue #276: 旧実装で `_normalize_label_candidates` を使った独自経路
+        だったが、resolver 側に統合した。
         """
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
-            _normalize_label_candidates,
+            resolve_player_target,
         )
-        if not target_label:
-            return None
-        # 直接ラベル
-        direct = targets.get(target_label)
-        if direct is not None and direct.player_id is not None:
-            return direct
-        # 候補抽出 → label / display_name の順
-        for c in _normalize_label_candidates(target_label):
-            hit = targets.get(c)
-            if hit is not None and hit.player_id is not None:
-                return hit
-            for t in targets.values():
-                if getattr(t, "kind", None) != "spot_graph_player":
-                    continue
-                if t.display_name == c and t.player_id is not None:
-                    return t
-        return None
+        # 既存呼び出しは targets 単体を渡してくるので、runtime_context を
+        # 偽装する単純な namespace で fallback の resolver API に合わせる。
+        rtc = type("_RTCStub", (), {"targets": targets})()
+        return resolve_player_target(target_label, rtc)  # type: ignore[arg-type]
 
     def _build_audience_summary(
         self,

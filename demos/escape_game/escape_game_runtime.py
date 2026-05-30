@@ -479,9 +479,7 @@ class EscapeGameRuntime:
     def _build_minimal_player_state_dto(
         self, player_id: PlayerId, snap: Any,
     ) -> PlayerCurrentStateDto:
-        hours = (self._tick * 5) % (24 * 60)
-        h, m = divmod(hours, 60)
-        time_label = f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
+        time_label = self._time_label()
         return PlayerCurrentStateDto(
             player_id=int(player_id),
             player_name=self.get_player_name(player_id),
@@ -523,24 +521,51 @@ class EscapeGameRuntime:
     # ── 観測パイプライン: イベントを処理して各プレイヤーに配信 ──
 
     def _process_graph_events(self) -> None:
-        """グラフ集約からイベントを収集し、観測パイプラインを通して各プレイヤーに配信する。"""
-        from datetime import datetime
+        """グラフ集約からイベントを収集し、PipelineEventPublisher 経由で
+        各プレイヤーに配信する。
+
+        Issue #276 経路二重化解消: 旧実装は ``_obs_pipeline.run`` + 直接
+        ``_obs_buffer.append`` で配信していたが、これでは:
+        - ``_observation_appender`` を経由しないので observation の trace
+          記録 (Issue #276) が漏れる
+        - ``_observation_turn_scheduler.maybe_schedule`` を呼ばないので、
+          graph aggregate 由来の観測 (door state change / ambient sound 等)
+          で listener のターンが積まれず、`schedules_turn=True` が機能しない
+
+        speech / interaction で使う ``PipelineEventPublisher.publish_all`` に
+        統一することで pipeline → appender → scheduler の一本道に揃える。
+        """
         graph = self._spot_graph_repo.find_graph()
-        events = graph.get_events()
+        events = list(graph.get_events())
         graph.clear_events()
-        now = datetime.now()
-        hours = (self._tick * 5) % (24 * 60)
-        h, m = divmod(hours, 60)
-        time_label = f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
-        for event in events:
-            items = self._obs_pipeline.run(event)
-            for pid, output in items:
-                entry = ObservationEntry(
-                    occurred_at=now,
-                    output=output,
-                    game_time_label=time_label,
-                )
-                self._obs_buffer.append(pid, entry)
+        if not events:
+            return
+        if self._speech_event_publisher is None:
+            # 構築途中 (set_event_publisher 注入前) には起こり得る。
+            # silent skip + 後続を継続。
+            return
+        self._speech_event_publisher.publish_all(events)
+
+    def _emit_observation_directly(
+        self,
+        player_id: PlayerId,
+        output: ObservationOutput,
+    ) -> None:
+        """pipeline を介さず特定プレイヤーへ観測を 1 件届ける共通経路。
+
+        scenario_event / weather など「pipeline での recipient 解決が要らない
+        既に届け先が決まっている」観測の単一経路。``_observation_appender``
+        と ``_observation_turn_scheduler`` を両方経由するので trace 記録と
+        turn schedule の漏れを起こさない。
+        """
+        appender = self._observation_appender
+        if appender is None:
+            # 構築途中で呼ばれた場合の防御 (PipelineEventPublisher と同様)。
+            return
+        appender.append(player_id, output, datetime.now(), self._time_label())
+        scheduler = self._observation_turn_scheduler
+        if scheduler is not None:
+            scheduler.maybe_schedule(player_id, output)
 
     def _record_action_result(
         self, player_id: PlayerId, action_summary: str, result_summary: str,
@@ -961,27 +986,24 @@ class EscapeGameRuntime:
         return tick
 
     def _append_scenario_event_observation(self, event: ScenarioEventDef, message: str) -> None:
+        # Issue #276 経路二重化解消: 直接 ``_obs_buffer.append`` していた経路を
+        # ``_emit_observation_directly`` に統一。これで trace 記録と
+        # ``maybe_schedule`` (schedules_turn=True のときの turn 投入) を漏らさ
+        # ない。
         recipients = self._scenario_event_recipients(event)
-        time_label = self._time_label()
         for player_id in recipients:
-            self._obs_buffer.append(
-                player_id,
-                ObservationEntry(
-                    occurred_at=datetime.now(),
-                    output=ObservationOutput(
-                        prose=message,
-                        structured={
-                            "type": "scenario_event",
-                            "event_id": event.event_id,
-                            "message": message,
-                        },
-                        observation_category=event.observation_category,  # type: ignore[arg-type]
-                        schedules_turn=event.schedules_turn,
-                        breaks_movement=event.breaks_movement,
-                    ),
-                    game_time_label=time_label,
-                ),
+            output = ObservationOutput(
+                prose=message,
+                structured={
+                    "type": "scenario_event",
+                    "event_id": event.event_id,
+                    "message": message,
+                },
+                observation_category=event.observation_category,  # type: ignore[arg-type]
+                schedules_turn=event.schedules_turn,
+                breaks_movement=event.breaks_movement,
             )
+            self._emit_observation_directly(player_id, output)
 
     def _scenario_event_recipients(self, event: ScenarioEventDef) -> List[PlayerId]:
         if event.recipients == "players_at_spot" and event.target_spot_id is not None:
@@ -997,26 +1019,21 @@ class EscapeGameRuntime:
         return f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
 
     def _append_weather_observation(self, weather_state: Any) -> None:
+        # Issue #276 経路二重化解消: ``_emit_observation_directly`` 経由に統一。
         message = f"外の天候が変わった: {weather_state.weather_type.value}（強度 {weather_state.intensity:.1f}）"
+        output = ObservationOutput(
+            prose=message,
+            structured={
+                "type": "weather_changed",
+                "weather_type": weather_state.weather_type.value,
+                "intensity": weather_state.intensity,
+            },
+            observation_category="environment",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
         for player_id in self.get_player_ids():
-            self._obs_buffer.append(
-                player_id,
-                ObservationEntry(
-                    occurred_at=datetime.now(),
-                    output=ObservationOutput(
-                        prose=message,
-                        structured={
-                            "type": "weather_changed",
-                            "weather_type": weather_state.weather_type.value,
-                            "intensity": weather_state.intensity,
-                        },
-                        observation_category="environment",
-                        schedules_turn=True,
-                        breaks_movement=False,
-                    ),
-                    game_time_label=self._time_label(),
-                ),
-            )
+            self._emit_observation_directly(player_id, output)
 
     # ── ゲーム終了判定 ──
 

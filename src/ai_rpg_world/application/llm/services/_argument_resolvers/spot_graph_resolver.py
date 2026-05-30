@@ -87,6 +87,160 @@ def _normalize_label_candidates(label: str) -> List[str]:
     return deduped
 
 
+def resolve_destination_target(
+    label: str,
+    runtime_context: ToolRuntimeContextDto,
+) -> "DestinationToolRuntimeTargetDto":
+    """destination_label を ``DestinationToolRuntimeTargetDto`` に解決する。
+
+    Issue #276: escape_game の ``_handle_travel_to`` と本家
+    ``_resolve_travel_to`` で同じ解決ロジックを 2 ヶ所に書いていたのを
+    こちらに集約した。escape_game 経路は本関数で target を得てから
+    ``runtime.do_move`` を直接呼ぶ。本家経路は本関数の結果から
+    ``destination_spot_id`` を抽出して canonical 引数に変換する。
+
+    解決順:
+    1. ``_normalize_label_candidates(label)`` で崩れ表現 (連結文字列 / 括弧
+       つき / 矢印つき) から候補形を抽出
+    2. 各候補について ``runtime_context.targets`` 直接 lookup →
+       display_name 一致の順で ``DestinationToolRuntimeTargetDto`` を探す
+    3. どれにも該当しなければ ``INVALID_DESTINATION_LABEL``、kind 違いだけが
+       見つかれば ``INVALID_DESTINATION_KIND``、spot_id が None なら
+       ``INVALID_DESTINATION_KIND``
+    """
+    if not isinstance(label, str) or not label:
+        raise ToolArgumentResolutionException(
+            "接続先ラベルが指定されていません。",
+            "INVALID_DESTINATION_LABEL",
+        )
+    target: Optional[ToolRuntimeTargetDto] = None
+    kind_mismatch = False
+    for c in _normalize_label_candidates(label):
+        if c in runtime_context.targets:
+            hit = runtime_context.targets[c]
+            if isinstance(hit, DestinationToolRuntimeTargetDto):
+                target = hit
+                break
+            kind_mismatch = True
+            continue
+        found = _find_target_by_display_name(
+            runtime_context,
+            kind="spot_graph_destination",
+            display_name=c,
+        )
+        if found is not None and isinstance(found, DestinationToolRuntimeTargetDto):
+            target = found
+            break
+    if target is None:
+        if kind_mismatch:
+            raise ToolArgumentResolutionException(
+                f"接続先ラベルとして使えないラベルです: {label}",
+                "INVALID_DESTINATION_KIND",
+            )
+        raise ToolArgumentResolutionException(
+            f"指定された対象ラベルは現在の候補にありません: {label}",
+            "INVALID_DESTINATION_LABEL",
+        )
+    if target.spot_id is None:
+        raise ToolArgumentResolutionException(
+            f"移動先として解決できないラベルです: {label}",
+            "INVALID_DESTINATION_KIND",
+        )
+    return target  # type: ignore[return-value]
+
+
+def resolve_object_target(
+    label: str,
+    runtime_context: ToolRuntimeContextDto,
+) -> ToolRuntimeTargetDto:
+    """interact 用の object_label を target に解決する。
+
+    Issue #276 経路二重化解消: escape_game の ``_handle_interact`` と本家
+    ``_resolve_interact`` の object_label → world_object_id 解決を共通化。
+    """
+    if not isinstance(label, str) or not label:
+        raise ToolArgumentResolutionException(
+            "オブジェクトラベルが指定されていません。",
+            "INVALID_TARGET_LABEL",
+        )
+    target = require_target(
+        label,
+        runtime_context,
+        "オブジェクトラベル",
+        invalid_label_code="INVALID_TARGET_LABEL",
+    )
+    if target.world_object_id is None:
+        raise ToolArgumentResolutionException(
+            f"オブジェクトとして解決できないラベルです: {label}",
+            "INVALID_TARGET_KIND",
+        )
+    return target
+
+
+def resolve_sub_location_target(
+    label: Optional[str],
+    runtime_context: ToolRuntimeContextDto,
+) -> Optional[ToolRuntimeTargetDto]:
+    """set_sub_location 用のラベル解決。label が空なら None を返す
+    (sub_location クリア指示)。"""
+    if not label:
+        return None
+    if label in runtime_context.targets:
+        target = require_target(
+            label,
+            runtime_context,
+            "サブロケーションラベル",
+            invalid_label_code="INVALID_TARGET_LABEL",
+        )
+    else:
+        found = _find_target_by_display_name(
+            runtime_context,
+            kind="spot_graph_sub_location",
+            display_name=label,
+        )
+        if found is None:
+            raise ToolArgumentResolutionException(
+                f"指定された対象ラベルは現在の候補にありません: {label}",
+                "INVALID_TARGET_LABEL",
+            )
+        target = found
+    if target.sub_location_id is None:
+        raise ToolArgumentResolutionException(
+            f"サブロケーションとして解決できないラベルです: {label}",
+            "INVALID_TARGET_KIND",
+        )
+    return target
+
+
+def resolve_player_target(
+    label: str,
+    runtime_context: ToolRuntimeContextDto,
+) -> Optional[ToolRuntimeTargetDto]:
+    """whisper target_label を spot_graph_player target に解決する。
+
+    Issue #269 + #276: 「P1」のラベル / 「リン」の display_name / 「P1 (リン)」
+    の連結形のいずれでも引ける。見つからなければ None (空文字も None)。
+
+    escape_game の ``_handle_speech`` whisper 経路で使う。本家側からは現状
+    呼ばれていないが、後続で whisper resolver を統合する際の seed。
+    """
+    if not label:
+        return None
+    direct = runtime_context.targets.get(label)
+    if direct is not None and direct.player_id is not None:
+        return direct
+    for c in _normalize_label_candidates(label):
+        hit = runtime_context.targets.get(c)
+        if hit is not None and hit.player_id is not None:
+            return hit
+        for t in runtime_context.targets.values():
+            if getattr(t, "kind", None) != "spot_graph_player":
+                continue
+            if t.display_name == c and t.player_id is not None:
+                return t
+    return None
+
+
 def _find_target_by_display_name(
     runtime_context: ToolRuntimeContextDto,
     *,
@@ -222,52 +376,10 @@ class SpotGraphArgumentResolver:
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
-        label = args.get("destination_label")
-        if not isinstance(label, str) or not label:
-            raise ToolArgumentResolutionException(
-                "接続先ラベルが指定されていません。",
-                "INVALID_DESTINATION_LABEL",
-            )
-        # 解決戦略: 入力からいくつかの候補形 (ラベル単体 / スポット名 / 連結文字列の
-        # 部品) を取り出し、(1) targets 辞書ヒット → (2) display_name 一致 の順で
-        # 探す。Issue #269 第17回 R2 で「S2: 禁書扉 → 館長書斎」のような連結文字列
-        # を LLM が destination_label に貼って失敗する例が観測されたため、候補抽出
-        # で吸収する。
-        target: Optional[ToolRuntimeTargetDto] = None
-        kind_mismatch = False
-        candidates = _normalize_label_candidates(label)
-        for c in candidates:
-            if c in runtime_context.targets:
-                hit = runtime_context.targets[c]
-                if isinstance(hit, DestinationToolRuntimeTargetDto):
-                    target = hit
-                    break
-                kind_mismatch = True
-                continue
-            found = _find_target_by_display_name(
-                runtime_context,
-                kind="spot_graph_destination",
-                display_name=c,
-            )
-            if found is not None and isinstance(found, DestinationToolRuntimeTargetDto):
-                target = found
-                break
-
-        if target is None:
-            if kind_mismatch:
-                raise ToolArgumentResolutionException(
-                    f"接続先ラベルとして使えないラベルです: {label}",
-                    "INVALID_DESTINATION_KIND",
-                )
-            raise ToolArgumentResolutionException(
-                f"指定された対象ラベルは現在の候補にありません: {label}",
-                "INVALID_DESTINATION_LABEL",
-            )
-        if target.spot_id is None:
-            raise ToolArgumentResolutionException(
-                f"移動先として解決できないラベルです: {label}",
-                "INVALID_DESTINATION_KIND",
-            )
+        target = resolve_destination_target(
+            args.get("destination_label"),  # type: ignore[arg-type]
+            runtime_context,
+        )
         return _with_inner_thought({"destination_spot_id": target.spot_id}, args)
 
     def _resolve_set_sub_location(
@@ -275,61 +387,21 @@ class SpotGraphArgumentResolver:
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
-        label = args.get("sub_location_label")
-        if not label:
-            return _with_inner_thought({"sub_location_id": None}, args)
-        # destination と同じく、SL1 等のラベルだけでなくサブロケーション名 (文字列) も
-        # 受け付ける。理由は _resolve_travel_to と同じく label leak 対策。
-        if label in runtime_context.targets:
-            target = require_target(
-                label,
-                runtime_context,
-                "サブロケーションラベル",
-                invalid_label_code="INVALID_TARGET_LABEL",
-            )
-        else:
-            found = _find_target_by_display_name(
-                runtime_context,
-                kind="spot_graph_sub_location",
-                display_name=label,
-            )
-            if found is None:
-                raise ToolArgumentResolutionException(
-                    f"指定された対象ラベルは現在の候補にありません: {label}",
-                    "INVALID_TARGET_LABEL",
-                )
-            target = found
-        if target.sub_location_id is None:
-            raise ToolArgumentResolutionException(
-                f"サブロケーションとして解決できないラベルです: {label}",
-                "INVALID_TARGET_KIND",
-            )
-        return _with_inner_thought(
-            {"sub_location_id": target.sub_location_id}, args
+        target = resolve_sub_location_target(
+            args.get("sub_location_label"), runtime_context
         )
+        sub_location_id = target.sub_location_id if target is not None else None
+        return _with_inner_thought({"sub_location_id": sub_location_id}, args)
 
     def _resolve_interact(
         self,
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
-        label = args.get("object_label")
-        if not isinstance(label, str) or not label:
-            raise ToolArgumentResolutionException(
-                "オブジェクトラベルが指定されていません。",
-                "INVALID_TARGET_LABEL",
-            )
-        target = require_target(
-            label,
+        target = resolve_object_target(
+            args.get("object_label"),  # type: ignore[arg-type]
             runtime_context,
-            "オブジェクトラベル",
-            invalid_label_code="INVALID_TARGET_LABEL",
         )
-        if target.world_object_id is None:
-            raise ToolArgumentResolutionException(
-                f"オブジェクトとして解決できないラベルです: {label}",
-                "INVALID_TARGET_KIND",
-            )
         action = args.get("action_name", "")
         if not isinstance(action, str) or not action.strip():
             raise ToolArgumentResolutionException(
