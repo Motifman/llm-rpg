@@ -17,10 +17,14 @@ from ai_rpg_world.application.observation.services.recipient_strategies.spot_gra
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
+    PlayerDroppedItemEvent,
+    PlayerPickedUpItemEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectStateChangedEvent,
@@ -57,6 +61,8 @@ def _make_strategy(entity_spot_mapping: dict) -> SpotGraphRecipientStrategy:
         ConnectionStateChangedEvent,
         SpotObjectStateChangedEvent,
         SpotPlayerStateChangedInSpotEvent,
+        PlayerDroppedItemEvent,
+        PlayerPickedUpItemEvent,
     ):
         registry_map[evt] = "spot_graph"
     registry = ObservedEventRegistry(event_to_strategy=registry_map)
@@ -152,6 +158,62 @@ class TestSpotObjectInteracted:
         ids = {r.value for r in recipients}
         assert 1 not in ids
         assert 2 in ids
+
+
+class TestPlayerDroppedItem:
+    """drop event は同スポットの他プレイヤーに witness として配信され、行為者は除外される。"""
+
+    def test_actor_を除外して同室の他者に配信する(self):
+        """Player 1 が drop すると、Player 2 (同室) に届き、Player 1 自身には届かない。"""
+        strategy = _make_strategy({1: 1, 2: 1})
+        event = PlayerDroppedItemEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            item_instance_id=ItemInstanceId.create(7),
+            item_spec_id=ItemSpecId.create(100),
+            item_name="流木",
+        )
+        ids = {r.value for r in strategy.resolve(event)}
+        assert 1 not in ids
+        assert 2 in ids
+
+    def test_別スポットのプレイヤーには届かない(self):
+        """SPOT_A での drop は SPOT_B にいる Player 3 には届かない。"""
+        strategy = _make_strategy({1: 1, 2: 1, 3: 2})
+        event = PlayerDroppedItemEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            item_instance_id=ItemInstanceId.create(7),
+            item_spec_id=ItemSpecId.create(100),
+            item_name="流木",
+        )
+        ids = {r.value for r in strategy.resolve(event)}
+        assert 2 in ids
+        assert 3 not in ids
+
+
+class TestPlayerPickedUpItem:
+    """pickup event も drop と対称な配信仕様。"""
+
+    def test_actor_を除外して同室の他者に配信する(self):
+        strategy = _make_strategy({1: 1, 2: 1, 3: 1})
+        event = PlayerPickedUpItemEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_2,
+            spot_id=SPOT_A,
+            item_instance_id=ItemInstanceId.create(7),
+            item_spec_id=ItemSpecId.create(100),
+            item_name="流木",
+        )
+        ids = {r.value for r in strategy.resolve(event)}
+        assert 2 not in ids
+        assert 1 in ids
+        assert 3 in ids
 
 
 class TestSpotExplored:

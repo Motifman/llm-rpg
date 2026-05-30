@@ -366,7 +366,8 @@ def create_spot_graph_wiring(
     # spot-graph 専用の drop / pickup サービス。
     # tile-map 版 PlayerDropItemApplicationService は physical_map 依存で
     # spot-graph runtime では発火しないため、本サービスを LLM tool 経路にも
-    # 通す。観測注入は本 PR スコープでは event 経由で別途行う想定。
+    # 通す。event_publisher を渡しておくと PlayerDroppedItemEvent /
+    # PlayerPickedUpItemEvent が同室の他プレイヤーに観測として届く (witness)。
     from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
         SpotGraphItemTransferService,
     )
@@ -375,6 +376,7 @@ def create_spot_graph_wiring(
         player_inventory_repository=player_inventory_repository,
         spot_interior_repository=spot_interior_repository,
         item_repository=item_repository,
+        event_publisher=event_publisher,
     )
 
     spot_graph_tool_executor = SpotGraphToolExecutor(

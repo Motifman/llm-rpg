@@ -18,6 +18,8 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionCreatedEvent,
     ConnectionDestroyedEvent,
     ConnectionStateChangedEvent,
+    PlayerDroppedItemEvent,
+    PlayerPickedUpItemEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
     SpotObjectStateChangedEvent,
@@ -53,7 +55,49 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_player_state_changed_in_spot(
                 event, recipient_player_id,
             )
+        if isinstance(event, PlayerDroppedItemEvent):
+            return self._format_item_dropped(event, recipient_player_id)
+        if isinstance(event, PlayerPickedUpItemEvent):
+            return self._format_item_picked_up(event, recipient_player_id)
         return None
+
+    def _format_item_dropped(
+        self, event: PlayerDroppedItemEvent, recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """「ミラが流木を地面に置いた」を同室の他プレイヤーに観測として届ける。"""
+        if self._is_self(event.entity_id, recipient_id):
+            return None
+        actor = self._resolve_entity_name(event.entity_id)
+        prose = f"{actor}が{event.item_name}を地面に置いた。"
+        structured = {
+            "type": "player_dropped_item",
+            "actor": actor,
+            "item_name": event.item_name,
+            "item_instance_id": event.item_instance_id.value,
+            "item_spec_id": event.item_spec_id.value,
+        }
+        return ObservationOutput(
+            prose=prose, structured=structured, observation_category="social",
+        )
+
+    def _format_item_picked_up(
+        self, event: PlayerPickedUpItemEvent, recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """「トマが流木を拾い上げた」を同室の他プレイヤーに観測として届ける。"""
+        if self._is_self(event.entity_id, recipient_id):
+            return None
+        actor = self._resolve_entity_name(event.entity_id)
+        prose = f"{actor}が{event.item_name}を拾い上げた。"
+        structured = {
+            "type": "player_picked_up_item",
+            "actor": actor,
+            "item_name": event.item_name,
+            "item_instance_id": event.item_instance_id.value,
+            "item_spec_id": event.item_spec_id.value,
+        }
+        return ObservationOutput(
+            prose=prose, structured=structured, observation_category="social",
+        )
 
     def _format_object_interacted(
         self, event: SpotObjectInteractedEvent, recipient_id: PlayerId,

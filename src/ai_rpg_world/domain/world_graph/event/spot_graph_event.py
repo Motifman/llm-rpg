@@ -107,6 +107,45 @@ class SpotObjectInteractedEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class PlayerDroppedItemEvent(BaseDomainEvent[SpotGraphId, str]):
+    """プレイヤーがインベントリから現在地の地面にアイテムを置いた。
+
+    SpotGraphItemTransferService.drop_item() から発火される。観測パイプライン
+    では「行為者を除く、同じスポットに居る全プレイヤー」に
+    「Xが流木を地面に置いた」のような prose で配信される (witness 最小実装)。
+    別スポットには伝わらない。行為者本人にはツール結果として
+    ItemTransferResult.messages が返るので、観測ストリームには流さない (二重
+    配信回避)。
+
+    item_name は emission 時点で解決した表示名 (例: "流木")。観測 prose を
+    formatter に運ぶための baked-in 値で、SpotObjectInteractedEvent の
+    result_message と同じパターン。emission 後にアイテムスペックが renamed
+    された場合でも、観測としての記録は当時の名前で保たれる。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    item_instance_id: ItemInstanceId
+    item_spec_id: ItemSpecId
+    item_name: str
+
+
+@dataclass(frozen=True)
+class PlayerPickedUpItemEvent(BaseDomainEvent[SpotGraphId, str]):
+    """プレイヤーが現在地の地面アイテムを拾い上げてインベントリに加えた。
+
+    PlayerDroppedItemEvent と対称な配信仕様。「Xが流木を拾い上げた」のような
+    prose で同室の他プレイヤーに観測として配信される。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    item_instance_id: ItemInstanceId
+    item_spec_id: ItemSpecId
+    item_name: str
+
+
+@dataclass(frozen=True)
 class SpotObjectInteractionFailedEvent(BaseDomainEvent[SpotGraphId, str]):
     """エンティティがオブジェクト操作を試みたが前提条件で失敗した。
 

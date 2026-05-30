@@ -1595,6 +1595,10 @@ def create_escape_game_runtime(
     # chore (#240 後続): 旧コードは private field への直接代入だったが、
     # set_event_publisher 経由に正規化。
     interaction_service.set_event_publisher(pipeline_event_publisher)
+    # drop / pickup の witness 配信用。publisher は同じ pipeline を共有し、
+    # SpotGraphRecipientStrategy が PlayerDroppedItemEvent / PlayerPickedUpItemEvent
+    # を「同スポット・行為者除外」で他プレイヤーに観測として届ける。
+    item_transfer_service.set_event_publisher(pipeline_event_publisher)
 
     runtime._speech_service = speech_service
     runtime._speech_event_publisher = pipeline_event_publisher

@@ -150,9 +150,15 @@ def main() -> None:
     r = runtime.do_drop_item(mira, mira_driftwood_slot)
     show_result(r.messages)
 
-    # トマの新プロンプトで地面アイテムセクション (G1) が見えることを確認
-    print("\n  --- トマ視点 (drop 直後): 地面アイテムが G1 として LLM に提示されるか ---")
+    # トマの新プロンプトで以下 2 つを確認:
+    # (1) 地面アイテムセクション (G1) が見える
+    # (2) 直近の出来事に「ミラが流木を地面に置いた」が同室観測として届いている
+    print("\n  --- トマ視点 (drop 直後): G1 と同室観測の両方が出るか ---")
     show_player_brief(runtime, toma)
+
+    # レンは同室なので同じ観測が届くはず
+    print("\n  --- レン視点 (同室・離れていない): 同じ observation が届いているか ---")
+    show_player_brief(runtime, ren)
 
     # 地面アイテム一覧をトマ視点で確認
     ground = runtime.list_ground_items_at_player_spot(toma)

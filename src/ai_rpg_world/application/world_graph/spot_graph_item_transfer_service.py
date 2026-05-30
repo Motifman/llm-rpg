@@ -6,9 +6,11 @@
 SpotInterior.ground_items にアイテムを置き、SpotInterior 経路で
 プレイヤーが拾い直せる必要がある。
 
-本サービスはそのための機械的動作だけを実装する。観測パイプライン統合と
-LLM ツール配線はフォローアップ PR で扱う (Visibility/Witness の議論を
-ここに混ぜないため意図的に分離)。
+本サービスはそのための機械的動作 (インベントリ↔地面の状態遷移) と、
+witness 最小版 (drop / pickup の事実を同スポットの他プレイヤーに観測として
+配信する PlayerDroppedItemEvent / PlayerPickedUpItemEvent の発火) を担う。
+LLM ツール配線は別経路で行う (本サービスは tool 経路にも runtime 直接呼び
+出し経路にも共通で使われる)。
 """
 
 from __future__ import annotations
@@ -28,6 +30,10 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    PlayerDroppedItemEvent,
+    PlayerPickedUpItemEvent,
+)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
@@ -54,10 +60,13 @@ class ItemTransferResult:
 
 
 class SpotGraphItemTransferService:
-    """spot-graph 世界での drop / pickup を扱う最小アプリサービス。
+    """spot-graph 世界での drop / pickup を扱うアプリサービス。
 
-    意図的に「観測注入」「LLM ツール配線」「event 発行」は含めない。
-    これらは別 PR (Visibility/Witness の最小設計と一緒に扱う) に切り出す。
+    Phase 2 (witness 最小版): drop / pickup が成功したら同室の他プレイヤー向けに
+    PlayerDroppedItemEvent / PlayerPickedUpItemEvent を発火する。観測パイプライン
+    の recipient strategy が「同スポット・行為者除外」で配信する。
+    event_publisher が None の構成では event を発火せず、機械的な状態遷移だけ
+    行う (テスト・最小構成での後方互換)。
     """
 
     def __init__(
@@ -67,6 +76,7 @@ class SpotGraphItemTransferService:
         player_inventory_repository: PlayerInventoryRepository,
         spot_interior_repository: ISpotInteriorRepository,
         item_repository: ItemRepository,
+        event_publisher: Optional[object] = None,
     ) -> None:
         # spot-graph 世界では「プレイヤーがどこに居るか」は
         # PlayerStatusAggregate ではなく SpotGraphAggregate.get_entity_spot で
@@ -76,6 +86,17 @@ class SpotGraphItemTransferService:
         self._player_inventory_repository = player_inventory_repository
         self._spot_interior_repository = spot_interior_repository
         self._item_repository = item_repository
+        # event_publisher は publish_all([event]) を持つ duck-typed オブジェクト。
+        # 注入されない構成では event を発火せず、機械的な状態遷移だけ行う。
+        self._event_publisher = event_publisher
+
+    def set_event_publisher(self, event_publisher: Optional[object]) -> None:
+        """event_publisher を後付けで注入する (二段構築用)。
+
+        通常は constructor で渡すのが望ましいが、escape_game_runtime のように
+        publisher が runtime 本体に依存して構築順序的に後になるケースで使う。
+        """
+        self._event_publisher = event_publisher
 
     def drop_item(self, player_id: PlayerId, slot_id: SlotId) -> ItemTransferResult:
         """指定スロットのアイテムをプレイヤーの現在地に落とす。
@@ -123,7 +144,25 @@ class SpotGraphItemTransferService:
         new_interior = interior.with_ground_item(ground_item)
         self._spot_interior_repository.save(spot_id, new_interior)
 
+        # 表示名は inventory remove 前に確定させる必要があるが、ItemAggregate は
+        # まだ item_repository に残っているのでここで OK。
         item_name = self._item_name_or_id(item_instance_id)
+
+        # witness 最小版: 同室の他プレイヤーに観測として届ける。
+        # 行為者本人には messages を ItemTransferResult で返し、観測ストリームには
+        # 流さない (recipient strategy 側で actor exclusion される)。
+        self._publish_event(
+            PlayerDroppedItemEvent.create(
+                aggregate_id=self._spot_graph_repository.find_graph().graph_id,
+                aggregate_type="SpotGraphAggregate",
+                entity_id=EntityId.create(int(player_id)),
+                spot_id=spot_id,
+                item_instance_id=item_instance_id,
+                item_spec_id=item_spec_id,
+                item_name=item_name,
+            )
+        )
+
         return ItemTransferResult(
             messages=(f"{item_name}を地面に置いた。",),
             item_instance_id=item_instance_id,
@@ -166,6 +205,20 @@ class SpotGraphItemTransferService:
         self._spot_interior_repository.save(spot_id, new_interior)
 
         item_name = self._item_name_or_id(item_instance_id)
+
+        # witness 最小版: 同室の他プレイヤーに観測として届ける。
+        self._publish_event(
+            PlayerPickedUpItemEvent.create(
+                aggregate_id=self._spot_graph_repository.find_graph().graph_id,
+                aggregate_type="SpotGraphAggregate",
+                entity_id=EntityId.create(int(player_id)),
+                spot_id=spot_id,
+                item_instance_id=item_instance_id,
+                item_spec_id=ground_item.item_spec_id,
+                item_name=item_name,
+            )
+        )
+
         return ItemTransferResult(
             messages=(f"{item_name}を拾い上げた。",),
             item_instance_id=item_instance_id,
@@ -184,6 +237,20 @@ class SpotGraphItemTransferService:
         if interior is None:
             return ()
         return interior.ground_items
+
+    def _publish_event(self, event: object) -> None:
+        """event_publisher が注入されていれば publish_all で 1 件発火する。
+
+        publisher は publish_all(events) を持つ duck-typed object (本番では
+        PipelineEventPublisher) を想定。未注入 (None) なら no-op で、最小
+        構成・テスト用の経路を維持する。
+        """
+        if self._event_publisher is None:
+            return
+        try:
+            self._event_publisher.publish_all([event])
+        except Exception:  # noqa: BLE001 — publisher 側の失敗で本体を倒さない
+            _logger.exception("failed to publish item transfer event")
 
     def _resolve_current_spot(self, player_id: PlayerId) -> SpotId:
         graph = self._spot_graph_repository.find_graph()
