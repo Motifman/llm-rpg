@@ -424,3 +424,82 @@ class TestSmokeSubjectiveServiceMergesText:
         )
         interpreteds = [ep.interpreted for ep in eps]
         assert any(it == "STUB_INTERPRETED" for it in interpreteds)
+
+
+class TestSmokeAsyncSubjectiveSchedulerIntegration:
+    """``ThreadPoolEpisodicSubjectiveScheduler`` を chunk_coordinator に注入し、
+    chunk write 後にバックグラウンドで LLM が走り episode が上書きされる経路の
+    smoke (PR #309)。"""
+
+    def test_async_scheduler_経由で_chunk_書き込み後に_LLM_文で上書きされる(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from typing import Any
+        from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+            IEpisodicChunkSubjectiveCompletionPort,
+        )
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+            EpisodicChunkSubjectiveFieldsService,
+        )
+        from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import (
+            ThreadPoolEpisodicSubjectiveScheduler,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+            InMemorySubjectiveEpisodeStore,
+        )
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from demos.escape_game.escape_episodic_wiring import (
+            build_escape_episodic_stack,
+        )
+
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        runtime = create_escape_game_runtime(_SCENARIO_PATH)
+
+        class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
+            def complete_episode_subjective_json(
+                self, messages: list[dict[str, Any]]
+            ) -> dict[str, Any]:
+                return {
+                    "interpreted": "ASYNC_INTERPRETED",
+                    "recall_text": "ASYNC_RECALL_TEXT_FROM_WORKER",
+                }
+
+        shared_store = InMemorySubjectiveEpisodeStore()
+        service = EpisodicChunkSubjectiveFieldsService(_StubPort())
+        scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+            service, shared_store, max_workers=1
+        )
+        # scheduler 経由の stack で差し替える
+        runtime._episodic_stack = build_escape_episodic_stack(
+            scenario=runtime.scenario,
+            graph=runtime._spot_graph_repo.find_graph(),
+            observation_buffer=runtime._obs_buffer,
+            sliding_window_memory=runtime._sliding_window,
+            action_result_store=runtime._action_result_store,
+            subjective_completion_scheduler=scheduler,
+            persona_block_provider=lambda pid: "ペルソナ片",
+            episode_store=shared_store,
+        )
+
+        player_ids = runtime.get_player_ids()
+        kaito_id, rin_id = player_ids[0], player_ids[1]
+        runtime.do_move(rin_id, "entrance_hall")
+        runtime.do_wait(kaito_id)
+        runtime.do_speech(rin_id, "こんにちは", SpeechChannel.SAY)
+        runtime.do_wait(kaito_id)
+        # ここまでは chunk_coordinator が draft を put 済み (= テンプレ文)。
+        # scheduler の worker がまだ走っている可能性があるので shutdown で drain。
+        try:
+            runtime.shutdown(timeout=3.0)
+        finally:
+            # shutdown を 2 回呼んでも安全
+            runtime.shutdown(timeout=0.1)
+
+        eps = shared_store.list_recent(int(kaito_id.value), 20)
+        assert len(eps) > 0
+        recall_texts = [ep.recall_text for ep in eps]
+        assert any(rt == "ASYNC_RECALL_TEXT_FROM_WORKER" for rt in recall_texts), (
+            f"非同期 scheduler 経由で LLM の recall_text 上書きが完了していない: "
+            f"{recall_texts}"
+        )

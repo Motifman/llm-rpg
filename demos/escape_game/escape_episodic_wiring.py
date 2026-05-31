@@ -40,6 +40,9 @@ import os
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from ai_rpg_world.application.llm.contracts.episodic_subjective_scheduler_port import (
+    IEpisodicSubjectiveCompletionScheduler,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     ISlidingWindowMemory,
@@ -128,12 +131,16 @@ class EscapeEpisodicStack:
         passive_recall: prompt builder に渡す読み出し側 service
         noun_matcher: observation prose 中の固有名詞を cue 化するマッチャ
         episode_store: 共有 episode store (chunk が書き、passive_recall が読む)
+        subjective_completion_scheduler: 非同期 LLM 主観文付与のスケジューラ。
+            shutdown 時に in-flight ジョブを drain するために保持する。
+            未配線時は None。
     """
 
     chunk_coordinator: EpisodicChunkCoordinator
     passive_recall: EpisodicPassiveRecallRetrievalService
     noun_matcher: IWorldNounMatcher
     episode_store: InMemorySubjectiveEpisodeStore
+    subjective_completion_scheduler: Optional[IEpisodicSubjectiveCompletionScheduler] = None
 
 
 def build_scenario_noun_matcher(*, scenario: object, graph: object) -> IWorldNounMatcher:
@@ -177,6 +184,8 @@ def build_escape_episodic_stack(
     current_tick_provider: Optional[Callable[[], Any]] = None,
     chunk_subjective_fields_service: Optional[EpisodicChunkSubjectiveFieldsService] = None,
     persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
+    subjective_completion_scheduler: Optional[IEpisodicSubjectiveCompletionScheduler] = None,
+    episode_store: Optional[InMemorySubjectiveEpisodeStore] = None,
 ) -> EscapeEpisodicStack:
     """escape_game 用の最小限 episodic pipeline を組み立てる。
 
@@ -194,7 +203,12 @@ def build_escape_episodic_stack(
     する。LLM 失敗時はテンプレ既定値 (#305 で draft に既に入っている) のまま
     上書きされず流れる。
     """
-    episode_store = InMemorySubjectiveEpisodeStore()
+    # episode_store を呼び出し側から渡せるようにしているのは、scheduler 経路
+    # で「スケジューラと chunk_coordinator が同じ store を共有する必要がある」
+    # ため (両者が違う store だと、worker が書き込んだ merged episode を
+    # passive_recall が読めない)。
+    if episode_store is None:
+        episode_store = InMemorySubjectiveEpisodeStore()
     chunk_coordinator = EpisodicChunkCoordinator(
         observation_buffer=observation_buffer,
         sliding_window_memory=sliding_window_memory,
@@ -204,6 +218,7 @@ def build_escape_episodic_stack(
         trace_recorder_provider=trace_recorder_provider,
         current_tick_provider=current_tick_provider,
         chunk_subjective_fields_service=chunk_subjective_fields_service,
+        subjective_completion_scheduler=subjective_completion_scheduler,
         persona_block_provider=persona_block_provider,
         # memory link service は未注入のまま (= リンクなし)。MVP 構成として最小。
     )
@@ -214,6 +229,7 @@ def build_escape_episodic_stack(
         passive_recall=passive_recall,
         noun_matcher=noun_matcher,
         episode_store=episode_store,
+        subjective_completion_scheduler=subjective_completion_scheduler,
     )
 
 
