@@ -281,9 +281,14 @@ class EpisodicChunkCoordinator:
         for o in window_obs:
             if t0 <= _as_utc(o.occurred_at) <= t1:
                 obs_slice.append(o)
-        obs_slice_sorted = tuple(sorted(obs_slice, key=lambda e: e.occurred_at))
+        # sort key も _as_utc で正規化する: filter で aware に揃えても直後の
+        # sort で raw occurred_at を使うと naive/aware 混在で TypeError になる
+        # (Issue #311 後続: #309 の取りこぼし)。
+        obs_slice_sorted = tuple(sorted(obs_slice, key=lambda e: _as_utc(e.occurred_at)))
 
-        chunk_actions_sorted = tuple(sorted(bucket, key=lambda e: e.occurred_at))
+        chunk_actions_sorted = tuple(
+            sorted(bucket, key=lambda e: _as_utc(e.occurred_at))
+        )
 
         encoding_input = build_chunk_encoding_input(
             player_id,

@@ -1,6 +1,6 @@
 """行動結果ストアのデフォルト実装（in-memory）"""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
@@ -59,7 +59,9 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("game_time_label must be str or None")
         if not isinstance(omit_result_in_prompt, bool):
             raise TypeError("omit_result_in_prompt must be bool")
-        at = occurred_at if occurred_at is not None else datetime.now()
+        # Issue #311 後続: フォールバックを tz-aware UTC に統一。
+        # escape_game は明示的に渡すが、それ以外の caller の取りこぼし防止。
+        at = occurred_at if occurred_at is not None else datetime.now(timezone.utc)
         entry = ActionResultEntry(
             occurred_at=at,
             action_summary=action_summary,

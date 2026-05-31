@@ -1,6 +1,6 @@
 """イベントの occurred_at とゲーム内時刻ラベルを解決するサービス"""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -24,10 +24,14 @@ class ObservationTimestampResolver:
         self._world_time_config = world_time_config
 
     def resolve_occurred_at(self, event: Any) -> datetime:
-        """イベントの発生日時を返す。属性が無い場合は現在時刻。"""
+        """イベントの発生日時を返す。属性が無い場合は現在時刻。
+
+        Issue #311 後続: フォールバックも tz-aware UTC で返す。chunk_coordinator
+        の occurred_at 比較で aware と混ざる経路を塞ぐ。
+        """
         occurred_at = getattr(event, "occurred_at", None)
         if occurred_at is None:
-            return datetime.now()
+            return datetime.now(timezone.utc)
         return occurred_at
 
     def resolve_game_time_label(self, event: Any) -> Optional[str]:

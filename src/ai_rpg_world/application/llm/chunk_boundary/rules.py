@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Mapping, Sequence
 
@@ -17,6 +18,18 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     chunk_encoding_episode_generation_allowed,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
+
+
+def _as_utc(value: datetime) -> datetime:
+    """naive datetime を UTC aware として扱い、aware はそのまま返す。
+
+    Issue #311 後続: 観測列の sort で aware/naive 混在による TypeError を
+    防ぐ。``episodic_chunk_coordinator._as_utc`` と同じ意図のヘルパ
+    (循環 import を避けるためここで重複定義する; どちらも純関数)。
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 # 第1版の固定閾値（テストが同一定数を参照して期待値を固定する）
 OBSERVATION_COUNT_CLOSE_THRESHOLD = 3
@@ -65,7 +78,7 @@ def summarize_observation_boundary_hints(
         if not isinstance(o, ObservationEntry):
             raise TypeError(f"observations[{i}] must be ObservationEntry")
 
-    obs_list.sort(key=lambda e: e.occurred_at)
+    obs_list.sort(key=lambda e: _as_utc(e.occurred_at))
 
     n = len(obs_list)
     any_breaks = any(o.output.breaks_movement for o in obs_list)

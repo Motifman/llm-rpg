@@ -1,7 +1,7 @@
 """SNSイベントクラスの包括的なテスト"""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from ai_rpg_world.domain.sns.event import (
     # User events
     SnsUserCreatedEvent,
@@ -321,8 +321,9 @@ class TestEventBaseFunctionality:
         assert event1.event_id != event2.event_id
 
     def test_all_events_have_current_timestamp(self):
-        """全てのイベントが現在のタイムスタンプを持つことをテスト"""
-        before_time = datetime.now() - timedelta(seconds=1)
+        """全てのイベントが現在の tz-aware UTC タイムスタンプを持つことをテスト
+        (Issue #311 後続: BaseDomainEvent.create が aware に統一)。"""
+        before_time = datetime.now(timezone.utc) - timedelta(seconds=1)
 
         event = SnsUserFollowedEvent.create(
             aggregate_id=UserId(1),
@@ -331,8 +332,9 @@ class TestEventBaseFunctionality:
             followee_user_id=UserId(2)
         )
 
-        after_time = datetime.now() + timedelta(seconds=1)
+        after_time = datetime.now(timezone.utc) + timedelta(seconds=1)
 
+        assert event.occurred_at.tzinfo is not None
         assert before_time < event.occurred_at < after_time
 
     def test_event_immutability(self):

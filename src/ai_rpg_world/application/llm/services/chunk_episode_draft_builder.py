@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     ChunkEncodingInput,
@@ -42,18 +43,32 @@ from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 _EPISODE_ID_NAMESPACE = uuid.UUID("018fc4d2-a6b1-7c3f-8120-ac5ed1e942b0")
 
 
+def _as_utc(value: datetime) -> datetime:
+    """naive datetime を UTC aware として扱う sort 正規化ヘルパ。
+
+    Issue #311 後続: ドメインイベント / 観測の occurred_at に aware/naive が
+    混在しても sort が落ちないようにする。``episodic_chunk_coordinator._as_utc``
+    と同じ意図。
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
 def _all_observation_entries(inp: ChunkEncodingInput) -> tuple[ObservationEntry, ...]:
     """プロンプトウィンドウ外の溢れ観測も、cue / who / 場所ヒントの材料に含める。"""
     return tuple(inp.observations) + tuple(inp.observation_overflow_from_window)
 
 
 def _sorted_actions(action_results: tuple[ActionResultEntry, ...]) -> list[ActionResultEntry]:
-    return sorted(action_results, key=lambda e: e.occurred_at)
+    return sorted(action_results, key=lambda e: _as_utc(e.occurred_at))
 
 
 def _event_ids_for_chunk(inp: ChunkEncodingInput) -> tuple[str, ...]:
     actions = _sorted_actions(inp.action_results)
-    obs_all = sorted(_all_observation_entries(inp), key=lambda o: o.occurred_at)
+    obs_all = sorted(
+        _all_observation_entries(inp), key=lambda o: _as_utc(o.occurred_at)
+    )
     ids: list[str] = []
     for idx, e in enumerate(actions):
         tn = e.tool_name if isinstance(e.tool_name, str) and e.tool_name.strip() else "_"
@@ -74,7 +89,7 @@ def _event_ids_for_chunk(inp: ChunkEncodingInput) -> tuple[str, ...]:
 def _episode_location_from_observations(entries: tuple[ObservationEntry, ...]) -> EpisodeLocation:
     """観測 structured の spot_id_value を優先する（複数あるときは最も occurred_at が新しいもの）。"""
     best_sid: int | None = None
-    for o in sorted(entries, key=lambda x: x.occurred_at):
+    for o in sorted(entries, key=lambda x: _as_utc(x.occurred_at)):
         structured = o.output.structured if isinstance(o.output.structured, dict) else {}
         sid = _coerce_non_bool_int(structured.get("spot_id_value"))
         if sid is None:
@@ -87,7 +102,7 @@ def _episode_location_from_observations(entries: tuple[ObservationEntry, ...]) -
 
 def _who_from_observations(entries: tuple[ObservationEntry, ...]) -> tuple[str, ...]:
     markers: list[str] = []
-    for o in sorted(entries, key=lambda x: x.occurred_at):
+    for o in sorted(entries, key=lambda x: _as_utc(x.occurred_at)):
         structured = o.output.structured if isinstance(o.output.structured, dict) else {}
         aa = _actor_from_structured(structured.get("actor"))
         if aa is not None:
@@ -147,7 +162,7 @@ def _canonical_args_fingerprint_text(action_results: tuple[ActionResultEntry, ..
 
 def _build_chunk_cues(inp: ChunkEncodingInput) -> tuple[EpisodicCue, ...]:
     parts: list[tuple[EpisodicCue, ...]] = []
-    for o in sorted(_all_observation_entries(inp), key=lambda x: x.occurred_at):
+    for o in sorted(_all_observation_entries(inp), key=lambda x: _as_utc(x.occurred_at)):
         st = o.output.structured if isinstance(o.output.structured, dict) else None
         parts.append(build_situation_episodic_cues(runtime_context=None, observation_structured=st))
     for e in _sorted_actions(inp.action_results):
@@ -179,8 +194,9 @@ def _game_time_label_newest_in_window(inp: ChunkEncodingInput) -> str | None:
         gl = o.game_time_label.strip()
         if not gl:
             continue
-        if best_t is None or o.occurred_at >= best_t:
-            best_t = o.occurred_at
+        norm = _as_utc(o.occurred_at)
+        if best_t is None or norm >= best_t:
+            best_t = norm
             best = gl
     return best
 
@@ -203,7 +219,8 @@ class ChunkEpisodeDraftBuilder:
             raise ValueError("統一タイムラインから observed を組み立てられません")
 
         acts = inp.action_results
-        occurred_at = max(e.occurred_at for e in acts)
+        # Issue #311 後続: aware/naive 混在で max() が落ちないよう正規化キーで選ぶ
+        occurred_at = max(acts, key=lambda e: _as_utc(e.occurred_at)).occurred_at
         obs_for_place_who = _all_observation_entries(inp)
         what = _compose_what(acts)
         # draft 時点で `recall_text` / `interpreted` をテンプレで埋めておく。

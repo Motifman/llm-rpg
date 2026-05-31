@@ -1,7 +1,7 @@
 """ObservationTimestampResolver のテスト（正常・境界・例外）"""
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 from ai_rpg_world.application.observation.services.observation_timestamp_resolver import (
@@ -29,23 +29,26 @@ class TestObservationTimestampResolverResolveOccurredAt:
         assert result == occurred
 
     def test_returns_now_when_event_has_no_occurred_at(self):
-        """イベントに occurred_at がない場合、現在時刻を返す（境界）"""
+        """イベントに occurred_at がない場合、tz-aware UTC の現在時刻を返す
+        (Issue #311 後続: aware 統一)。"""
         resolver = ObservationTimestampResolver()
         event = MagicMock(spec=[])
         del event.occurred_at
-        before = datetime.now()
+        before = datetime.now(timezone.utc)
         result = resolver.resolve_occurred_at(event)
-        after = datetime.now()
+        after = datetime.now(timezone.utc)
+        assert result.tzinfo is not None
         assert before <= result <= after
 
     def test_returns_now_when_occurred_at_is_none(self):
-        """occurred_at が None の場合、現在時刻を返す（境界）"""
+        """occurred_at が None の場合、tz-aware UTC の現在時刻を返す（境界）"""
         resolver = ObservationTimestampResolver()
         event = MagicMock()
         event.occurred_at = None
-        before = datetime.now()
+        before = datetime.now(timezone.utc)
         result = resolver.resolve_occurred_at(event)
-        after = datetime.now()
+        after = datetime.now(timezone.utc)
+        assert result.tzinfo is not None
         assert before <= result <= after
 
 
