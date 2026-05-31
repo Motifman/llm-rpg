@@ -23,8 +23,11 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 class _StubSubjectivePort(IEpisodicChunkSubjectiveCompletionPort):
     def __init__(self, outcome: dict[str, Any] | BaseException) -> None:
         self._outcome = outcome
+        # 直近の呼び出しで受け取った messages を捕捉してテスト assert に使う
+        self.last_messages: list[dict[str, Any]] | None = None
 
     def complete_episode_subjective_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+        self.last_messages = list(messages)
         if isinstance(self._outcome, BaseException):
             raise self._outcome
         return self._outcome
@@ -105,6 +108,44 @@ class TestEpisodicChunkSubjectiveFieldsService:
             draft.what,
         )
         assert merged.recall_text == first_line
+
+
+class TestSystemPromptPastTense:
+    """system プロンプトに過去形を強制する規則が入っていることを検証。
+
+    第21回実験 (Issue #311) で recall_text に「〜しなきゃならない」のような
+    現在形・意志形が混入し、思い出として読みづらい例が観測された。これを
+    プロンプト側で抑制するための後退防止 (regression) テスト。
+    """
+
+    def test_system_prompt_に_recall_text_の_過去形_ルールが_明示されている(self) -> None:
+        enc = self._make_encoding()
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        port = _StubSubjectivePort({"interpreted": "x", "recall_text": "y"})
+        svc = EpisodicChunkSubjectiveFieldsService(port)
+        svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+        assert port.last_messages is not None
+        sys_content = next(
+            (m["content"] for m in port.last_messages if m.get("role") == "system"),
+            "",
+        )
+        # 過去形を強制する表現が含まれている
+        assert "過去形" in sys_content
+        # NG 例として現在形・意志形の代表が列挙されている
+        assert "しなきゃならない" in sys_content
+        assert "しよう" in sys_content
+        # OK 例として過去形パターンが提示されている
+        assert "〜だった" in sys_content
+
+    def _make_encoding(self):
+        t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t,
+            action_summary="待機した",
+            result_summary="ok",
+            tool_name="spot_graph_wait",
+        )
+        return build_chunk_encoding_input(PlayerId(1), (), (act,))
 
 
 class TestComputeTemplateHelpers:
