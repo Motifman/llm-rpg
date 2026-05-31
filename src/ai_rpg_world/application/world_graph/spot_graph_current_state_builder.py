@@ -90,12 +90,22 @@ class SpotGraphCurrentStateBuilder:
         self._perception = SpotPerceptionService()
 
     def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
-        """シナリオが昼夜サイクルを宣言していれば snapshot に現在時刻を載せる。"""
+        """シナリオが昼夜サイクルを宣言していれば snapshot に現在時刻を載せる。
+
+        provider が未設定 (= シナリオが day_night を宣言していない) なら None。
+        provider が例外を投げるのは想定外。silent に握りつぶさず warning ログ
+        を出した上で None を返し、プロンプトから時刻行を落とす safer fallback
+        にする。
+        """
         if self._time_of_day_provider is None:
             return None
         try:
             tod = self._time_of_day_provider()
         except Exception:
+            logger.warning(
+                "time_of_day_provider raised unexpectedly; skipping time_of_day in snapshot",
+                exc_info=True,
+            )
             return None
         if tod is None:
             return None
