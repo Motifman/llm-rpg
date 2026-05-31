@@ -97,6 +97,24 @@ def _make_context(
 
     graph.get_connection.side_effect = get_connection
 
+    # Issue #311 後続 (PR #315): 進入 / 退出 prose に方向情報を組み込むため、
+    # ``iter_outgoing_connections_from`` のモックも用意する。
+    # 既定では SPOT_A ↔ SPOT_B 間に 1 本ずつ双方向の接続を張る。
+    def iter_outgoing_connections_from(spot_id):
+        conn_ab = MagicMock()
+        conn_ab.to_spot_id = SPOT_B
+        conn_ab.name = (connection_names or {}).get("200", "長い廊下")
+        conn_ba = MagicMock()
+        conn_ba.to_spot_id = SPOT_A
+        conn_ba.name = (connection_names or {}).get("200", "長い廊下")
+        if spot_id == SPOT_A:
+            return [conn_ab]
+        if spot_id == SPOT_B:
+            return [conn_ba]
+        return []
+
+    graph.iter_outgoing_connections_from.side_effect = iter_outgoing_connections_from
+
     # Issue #184: 位置ベース prose 分岐用に get_entity_spot を default で
     # 「位置不明」(None) にしておく。位置を要する個別テストは side_effect
     # を上書きして特定 spot を返すこと。
@@ -135,7 +153,8 @@ class TestEntityEnteredSpot:
         )
         assert formatter.format(event, PLAYER_1) is None
 
-    def test_other_returns_social(self, formatter):
+    def test_other_returns_social_with_connection_and_origin(self, formatter):
+        """進入観測には接続名 + 進入元のスポット名が乗る (Issue #311 後続)。"""
         event = EntityEnteredSpotEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -148,7 +167,34 @@ class TestEntityEnteredSpot:
         assert result.observation_category == "social"
         assert "探索者A" in result.prose
         assert "エントランスホール" in result.prose
+        # 進入元 + 接続名が文中に現れる
+        assert "手術室" in result.prose
+        assert "長い廊下" in result.prose
         assert result.structured["type"] == "entity_entered_spot"
+        assert result.structured["from_spot_name"] == "手術室"
+        assert result.structured["from_spot_id_value"] == SPOT_B.value
+        assert result.structured["spot_id_value"] == SPOT_A.value
+        assert result.structured["connection_name"] == "長い廊下"
+
+    def test_initial_placement_other_omits_from_and_connection(self, formatter):
+        """``from_spot_id=None`` (初期配置) は従来通り「やってきた」のみ。"""
+        event = EntityEnteredSpotEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            from_spot_id=None,
+        )
+        result = formatter.format(event, PLAYER_2)
+        assert result is not None
+        assert "エントランスホール" in result.prose
+        assert "から" not in result.prose
+        assert "通って" not in result.prose
+        # structured には from_spot_name / connection_name が付かない
+        assert "from_spot_name" not in result.structured
+        assert "connection_name" not in result.structured
+        # 共通フィールド (spot_id_value) は乗る
+        assert result.structured["spot_id_value"] == SPOT_A.value
 
     def test_initial_placement_self_returns_none(self, formatter):
         event = EntityEnteredSpotEvent.create(
@@ -172,7 +218,12 @@ class TestEntityLeftSpot:
         )
         assert formatter.format(event, PLAYER_1) is None
 
-    def test_other_returns_social(self, formatter):
+    def test_other_returns_social_with_destination_and_connection(self, formatter):
+        """退出観測には行き先のスポット名 + 通った接続名が乗る (Issue #311 後続)。
+
+        目撃者は人間として「カイトが通路の方向へ歩いて行った」と方向を視認できる
+        べき。これで追跡行動 (= 「カイトについて行く」) の手がかりになる。
+        """
         event = EntityLeftSpotEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -184,7 +235,60 @@ class TestEntityLeftSpot:
         assert result is not None
         assert result.observation_category == "social"
         assert "探索者A" in result.prose
-        assert "去った" in result.prose
+        # 行き先 + 接続名 + 「去っていった」が文中に現れる
+        assert "長い廊下" in result.prose
+        assert "手術室" in result.prose
+        assert "去っていった" in result.prose
+        assert result.structured["type"] == "entity_left_spot"
+        assert result.structured["to_spot_name"] == "手術室"
+        assert result.structured["to_spot_id_value"] == SPOT_B.value
+        assert result.structured["connection_name"] == "長い廊下"
+
+    def test_left_falls_back_when_connection_name_unresolved(self):
+        """``iter_outgoing_connections_from`` が該当接続を返さないと、
+        接続名なしの prose にフォールバックする (= 行き先のみで方向を示す)。"""
+        ctx = _make_context(
+            player_names={1: "探索者A", 2: "探索者B"},
+            spot_names={1: "エントランスホール", 2: "手術室"},
+            connection_names={},
+        )
+        # 接続情報を空にする
+        ctx.spot_graph_repository.find_graph.return_value.iter_outgoing_connections_from.side_effect = (
+            lambda _sid: []
+        )
+        fmt = SpotGraphObservationFormatter(ctx)
+        event = EntityLeftSpotEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+        )
+        result = fmt.format(event, PLAYER_2)
+        assert result is not None
+        assert "手術室" in result.prose
+        assert "去っていった" in result.prose
+        # connection_name は構造化にも乗らない
+        assert "connection_name" not in result.structured
+
+    def test_left_falls_back_to_legacy_when_destination_unresolved(self):
+        """行き先名が「不明なスポット」のときは従来文言にフォールバック。"""
+        ctx = _make_context(
+            player_names={1: "探索者A", 2: "探索者B"},
+            spot_names={1: "エントランスホール"},  # SPOT_B は未登録
+        )
+        fmt = SpotGraphObservationFormatter(ctx)
+        event = EntityLeftSpotEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+        )
+        result = fmt.format(event, PLAYER_2)
+        assert result is not None
+        # 従来文言
+        assert result.prose == "探索者Aがこのスポットを去った。"
 
 
 class TestSpotObjectInteracted:
