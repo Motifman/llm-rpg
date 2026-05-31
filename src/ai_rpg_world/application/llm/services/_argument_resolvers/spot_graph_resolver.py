@@ -447,6 +447,10 @@ class SpotGraphArgumentResolver:
                 "slot_id": target.inventory_slot_id,
                 "item_instance_id": target.real_item_instance_id,
                 "target_display_name": target.display_name,
+                # Phase C: stealth フラグを bool として executor に渡す
+                # (executor 側で WitnessPolicy に変換する)。LLM が省略したら
+                # bool() で False に丸める (= デフォルト SAME_SPOT)。
+                "stealth": bool(args.get("stealth", False)),
             },
             args,
         )
@@ -485,6 +489,7 @@ class SpotGraphArgumentResolver:
             {
                 "item_instance_id": target.real_item_instance_id,
                 "target_display_name": target.display_name,
+                "stealth": bool(args.get("stealth", False)),
             },
             args,
         )

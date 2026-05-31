@@ -440,9 +440,16 @@ class SpotGraphToolExecutor:
                 arg_name="slot_id", detail="slot_id は整数で指定してください"
             )
         from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+        from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+        # Phase C: stealth=true なら ACTOR_ONLY、それ以外は従来通り SAME_SPOT
+        policy = (
+            WitnessPolicy.ACTOR_ONLY if bool(args.get("stealth", False))
+            else WitnessPolicy.SAME_SPOT
+        )
         try:
             result = self._item_transfer_service.drop_item(
-                PlayerId(player_id), SlotId(slot_id_int)
+                PlayerId(player_id), SlotId(slot_id_int),
+                witness_policy=policy,
             )
             msg = "; ".join(result.messages) if result.messages else "地面に置いた。"
             return LlmCommandResultDto(
@@ -484,9 +491,15 @@ class SpotGraphToolExecutor:
                 detail="item_instance_id は整数で指定してください",
             )
         from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+        from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+        policy = (
+            WitnessPolicy.ACTOR_ONLY if bool(args.get("stealth", False))
+            else WitnessPolicy.SAME_SPOT
+        )
         try:
             result = self._item_transfer_service.pickup_item(
-                PlayerId(player_id), ItemInstanceId.create(iid_int)
+                PlayerId(player_id), ItemInstanceId.create(iid_int),
+                witness_policy=policy,
             )
             msg = "; ".join(result.messages) if result.messages else "拾い上げた。"
             return LlmCommandResultDto(
