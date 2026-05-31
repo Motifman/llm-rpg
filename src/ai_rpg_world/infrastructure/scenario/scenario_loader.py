@@ -943,16 +943,32 @@ class ScenarioLoader:
             raise ScenarioLoadError(
                 "environment.day_night.phases must be a non-empty list"
             )
-        phases = tuple(
-            DayNightPhaseDef(
-                name=str(p["name"]),
-                start_ratio=float(p["start_ratio"]),
-                display_text=str(p["display_text"]),
-                ambient_light=float(p["ambient_light"]),
-                is_dark=bool(p["is_dark"]),
+        required_keys = ("name", "start_ratio", "display_text", "ambient_light", "is_dark")
+        phases_list: list[DayNightPhaseDef] = []
+        for i, p in enumerate(phases_raw):
+            # boundary 検証: 各要素が dict で必須キーを持っているかを scenario_loader
+            # 層で弾く。これを怠ると未定義キーで KeyError が ScenarioLoadError を
+            # 経由せず素通りし、作家へのエラーメッセージが分かりにくくなる。
+            if not isinstance(p, dict):
+                raise ScenarioLoadError(
+                    f"environment.day_night.phases[{i}] must be an object, "
+                    f"got {type(p).__name__}"
+                )
+            missing = [k for k in required_keys if k not in p]
+            if missing:
+                raise ScenarioLoadError(
+                    f"environment.day_night.phases[{i}] is missing required keys: {missing}"
+                )
+            phases_list.append(
+                DayNightPhaseDef(
+                    name=str(p["name"]),
+                    start_ratio=float(p["start_ratio"]),
+                    display_text=str(p["display_text"]),
+                    ambient_light=float(p["ambient_light"]),
+                    is_dark=bool(p["is_dark"]),
+                )
             )
-            for p in phases_raw
-        )
+        phases = tuple(phases_list)
         cycle = DayNightCycleDef(
             ticks_per_day=ticks_per_day,
             starting_tick_in_day=starting_tick,

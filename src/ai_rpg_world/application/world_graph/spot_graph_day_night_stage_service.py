@@ -45,7 +45,10 @@ class SpotGraphDayNightStageService:
         # 初期 TimeOfDay は starting_tick (省略時は tick=0) で計算しておく。
         # runtime が tick driver 経由で呼ぶ前に build_full_prompt されても
         # current_time_of_day が None を返さないようにする。
-        initial_tick = starting_tick or WorldTick(0)
+        # NOTE: `starting_tick or WorldTick(0)` の falsy 依存を避けて `is None`
+        # で明示する。WorldTick が将来 falsy になる可能性 (例: value=0 を
+        # __bool__ で False 扱い) に対する保険。
+        initial_tick = WorldTick(0) if starting_tick is None else starting_tick
         self._current = cycle.time_of_day_at(initial_tick)
 
     def run(self, current_tick: WorldTick) -> None:

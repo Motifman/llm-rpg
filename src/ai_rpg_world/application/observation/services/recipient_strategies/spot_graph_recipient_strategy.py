@@ -6,7 +6,7 @@
 - 環境変化（Connection/ObjectState）は影響スポットの全プレイヤーに配信する
 """
 
-from typing import Any, List, Set
+from typing import Any, Callable, List, Set
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
@@ -240,7 +240,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         if self._player_status_repository.find_by_id(player_id) is not None:
             add(player_id)
 
-    def _resolve_all_players(self, add) -> None:
+    def _resolve_all_players(self, add: Callable[[PlayerId], None]) -> None:
         """全プレイヤーを recipient として追加する。
 
         昼夜サイクルなど世界全体のイベントで使う。除外対象は無い (行為者
