@@ -378,6 +378,9 @@ class _EscapeGameLlmWiring:
                 player_id,
                 "LLM API 呼び出し",
                 result.message,
+                tool_name="no_tool_call",
+                success=False,
+                error_code="NO_TOOL_CALL",
             )
             return result
 
@@ -471,6 +474,9 @@ class _EscapeGameLlmWiring:
                 player_id,
                 f"{name}({json.dumps(arguments, ensure_ascii=False)})",
                 result.message,
+                tool_name=name,
+                success=result.success,
+                error_code=result.error_code,
             )
         if trace_recorder is not None:
             try:
