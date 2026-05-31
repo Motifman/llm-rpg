@@ -175,6 +175,25 @@
             ]
           },
           {
+            "id": "tide_debris",
+            "name": "波が運んだ漂着物",
+            "description": "波打ち際の砂に半分埋もれた小さな漂着物。海藻と砂利の中から何か硬い物が顔を覗かせている。",
+            "object_type": "CHEST",
+            "state": {"opened": false},
+            "interactions": [
+              {
+                "action_name": "search_debris",
+                "display_label": "漂着物を漁る",
+                "preconditions": [{"condition_type": "OBJECT_STATE", "target_object": "tide_debris", "required_state": {"opened": false}, "failure_message": "ここの漂着物は調べ尽くした。"}],
+                "effects": [
+                  {"effect_type": "GIVE_ITEM", "parameters": {"item_spec": "flint"}},
+                  {"effect_type": "CHANGE_OBJECT_STATE", "parameters": {"target_object": "tide_debris", "state_updates": {"opened": true}}},
+                  {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "海藻を払うと、火打ち石が一つ顔を出した。波が運んだものらしい。"}}
+                ]
+              }
+            ]
+          },
+          {
             "id": "wreck_hold",
             "name": "難破船の船倉",
             "description": "斜めに横たわった船倉。中には濡れた工具箱の残骸がある。",
@@ -334,6 +353,24 @@
                   {"effect_type": "CHANGE_OBJECT_STATE", "parameters": {"target_object": "deep_fishing_point", "state_updates": {"available": false}}},
                   {"effect_type": "RECORD_OBJECT_STATE_TICK", "parameters": {"target_object": "deep_fishing_point", "state_key": "last_harvest_tick"}},
                   {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "竿が大きくしなり、二匹の魚を釣り上げた。"}}
+                ]
+              }
+            ]
+          },
+          {
+            "id": "slippery_cliff_edge",
+            "name": "濡れた岩の縁",
+            "description": "波しぶきで濡れた岩の縁。覗き込めば沖の様子が見えるが、足場は不安定だ。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "peer_over",
+                "display_label": "縁から沖を覗き込む",
+                "preconditions": [],
+                "effects": [
+                  {"effect_type": "APPLY_DAMAGE", "parameters": {"damage": 5, "message": "足を滑らせ岩で擦り傷を作った (HP -5)。"}},
+                  {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "沖を一望できたが、足を滑らせて尻もちをついた。"}}
                 ]
               }
             ]
@@ -909,6 +946,26 @@
                 "effects": [
                   {"effect_type": "CHANGE_OBJECT_STATE", "parameters": {"target_object": "wall_photo", "state_updates": {"examined": true}}},
                   {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "若い男たちと、もうひとり年配の人物が並ぶ。撮影日は30年以上前のように見える。"}}
+                ]
+              }
+            ]
+          },
+          {
+            "id": "crumbling_beam",
+            "name": "崩れた梁",
+            "description": "天井から半分崩れ落ちた太い梁。下に潜れば棚の奥を覗き込めそうだが、梁全体が軋んで揺れている。",
+            "object_type": "OTHER",
+            "state": {"shelf_searched": false},
+            "interactions": [
+              {
+                "action_name": "duck_under",
+                "display_label": "梁の下に潜る",
+                "preconditions": [{"condition_type": "OBJECT_STATE", "target_object": "crumbling_beam", "required_state": {"shelf_searched": false}, "failure_message": "梁の下はもう調べた。これ以上潜るのは無謀だ。"}],
+                "effects": [
+                  {"effect_type": "APPLY_DAMAGE", "parameters": {"damage": 15, "message": "梁が肩に落ちて鋭い痛みが走る (HP -15)。"}},
+                  {"effect_type": "GIVE_ITEM", "parameters": {"item_spec": "chart_fragment"}},
+                  {"effect_type": "CHANGE_OBJECT_STATE", "parameters": {"target_object": "crumbling_beam", "state_updates": {"shelf_searched": true}}},
+                  {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "梁の下、棚の奥から海図の切れ端を引きずり出した。"}}
                 ]
               }
             ]
