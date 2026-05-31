@@ -1166,7 +1166,33 @@ class EscapeGameRuntime:
         return self.get_player_ids()
 
     def _time_label(self) -> str:
+        """ゲーム内時刻ラベルを生成する。
+
+        Phase: 時刻の二重系統を解消するため day_night サイクルから計算する。
+        旧実装は `tick * 5 分` で固定 24h cycle だったが、シナリオの
+        ticks_per_day と整合せず「現在時刻: 1:00 / 時刻帯: 朝」のような
+        矛盾表示を生んでいた。
+
+        新実装:
+        - day_night_stage が宣言されていれば、その ticks_per_day を 24h
+          として換算する (1 tick = 24h / ticks_per_day)。
+        - 宣言が無いシナリオ (脱出ゲーム等) は旧フォールバック (5 分/tick)
+          を維持して後方互換。
+        """
         tick = self.current_tick()
+        # day_night があれば ticks_per_day ベースで 24h 換算
+        if self._day_night_stage is not None:
+            cycle = self._day_night_stage._cycle
+            ticks_per_day = cycle.ticks_per_day
+            day_index = tick // ticks_per_day
+            tick_in_day = tick % ticks_per_day
+            # 1 日 24 時間を ticks_per_day で分割
+            minutes_per_tick = (24 * 60) // ticks_per_day
+            total_minutes = tick_in_day * minutes_per_tick
+            h, m = divmod(total_minutes, 60)
+            prefix = "深夜 " if h < 6 else ""
+            return f"Day {day_index + 1} {prefix}{h}:{m:02d}"
+        # フォールバック: 旧挙動 (5 分/tick の 24h cycle)
         hours = (tick * 5) % (24 * 60)
         h, m = divmod(hours, 60)
         return f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
@@ -1904,8 +1930,16 @@ def create_escape_game_runtime(
     # 長期サバイバルでは生存圧の本体になる。escape_game v1 (廃病院) でも
     # 120 tick の間に空腹 100% に到達するが現状の lose 条件は tick_limit のみ
     # なので挙動に大きな影響はない。
+    #
+    # Phase v2-hunger: outcome_resolution_config 宣言があるシナリオ (= v2 survival)
+    # では HUNGER=max のプレイヤーに毎 tick 飢餓ダメージを与える (Minecraft 風)。
+    # 既存シナリオ (v1 / 脱出ゲーム) は config を持たないので無影響 (後方互換)。
+    starvation_dmg = 1 if scenario.outcome_resolution_config is not None else 0
     needs_decay_stage = SpotGraphNeedsDecayStageService(
         player_status_repository=player_status_repo,
+        starvation_damage_per_tick=starvation_dmg,
+        # event_publisher は runtime 構築後に pipeline_event_publisher が用意
+        # されてから setter 経由で注入する (順序依存を解消するため後付け)。
     )
 
     # Phase B-2a: モンスター攻撃のオーケストレーターと behavior tick service。
@@ -2239,6 +2273,11 @@ def create_escape_game_runtime(
     # SpotGraphRecipientStrategy が PlayerDroppedItemEvent / PlayerPickedUpItemEvent
     # を「同スポット・行為者除外」で他プレイヤーに観測として届ける。
     item_transfer_service.set_event_publisher(pipeline_event_publisher)
+    # Phase v2-hunger: needs_decay_stage が starvation damage で
+    # PlayerDownedEvent を積みうるので publisher を後付け注入する。
+    # starvation_damage_per_tick=0 のシナリオでは publisher が居ても
+    # events は積まれないので no-op。
+    needs_decay_stage.set_event_publisher(pipeline_event_publisher)
     # 昼夜サイクル: フェーズが変わったら TimeOfDayChangedEvent を流す。
     # シナリオが announce_changes=false にしている場合は callback を登録せず
     # silent な phase transition にする。
