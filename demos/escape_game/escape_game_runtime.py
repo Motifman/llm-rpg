@@ -1686,6 +1686,16 @@ def create_escape_game_runtime(
     scenario_event_progress = InMemorySpotGraphScenarioEventProgressStore()
     # 評価器は scenario_event_stage と reactive_binding_stage で共有する。
     # weather_state_provider を渡すことで WEATHER_IS 条件が解ける。
+    # Phase D-1: PROBABILITY 条件評価用の random.Random を注入する。
+    # SCENARIO_RANDOM_SEED 環境変数があれば seed 注入で再現性を確保、
+    # 無ければ非決定的 (デフォルト random.Random()) で運用する。
+    # CI / 実験スクリプトでは seed を固定して同じ rng_sequence を再現できる。
+    import os as _os
+    import random as _random
+    _seed_str = _os.environ.get("SCENARIO_RANDOM_SEED")
+    _scenario_random = (
+        _random.Random(int(_seed_str)) if _seed_str else _random.Random()
+    )
     condition_evaluator = ScenarioConditionEvaluator(
         world_flag_state=world_flag_state,
         spot_interior_repository=spot_interior_repo,
@@ -1693,6 +1703,7 @@ def create_escape_game_runtime(
         player_inventory_repository=player_inventory_repo,
         item_repository=item_repo,
         weather_state_provider=lambda: weather_holder["state"],
+        random_source=_scenario_random,
     )
     scenario_event_stage = SpotGraphScenarioEventStageService(
         scenario_events=scenario.scenario_events,
