@@ -15,6 +15,12 @@ from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world_graph.value_object.day_night_cycle_def import (
+    DayNightCycleDef,
+)
+from ai_rpg_world.domain.world_graph.value_object.day_night_phase_def import (
+    DayNightPhaseDef,
+)
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
@@ -137,6 +143,21 @@ class ScenarioWeatherConfig:
 
 
 @dataclass(frozen=True)
+class ScenarioDayNightConfig:
+    """昼夜サイクル設定 (Phase B-1)。
+
+    シナリオが昼夜の流れを必要としない (常に昼など) 場合は本 config を
+    持たない (= ScenarioLoadResult.day_night_config が None)。
+    """
+
+    cycle: DayNightCycleDef
+    # フェーズ変化時に同スポット内 player へ観測を流すか。サバイバル系
+    # シナリオでは true (「夕暮れになった」「夜が明けた」)、パズル単発の
+    # 短時間シナリオでは false でもよい。
+    announce_changes: bool = True
+
+
+@dataclass(frozen=True)
 class ScenarioLoadResult:
     graph: SpotGraphAggregate
     interiors: Dict[SpotId, SpotInterior]
@@ -149,6 +170,7 @@ class ScenarioLoadResult:
     initial_flags: Tuple[str, ...]
     scenario_events: Tuple[ScenarioEventDef, ...] = ()
     weather_config: Optional[ScenarioWeatherConfig] = None
+    day_night_config: Optional[ScenarioDayNightConfig] = None
     reactive_passage_bindings: Tuple[ReactivePassageBinding, ...] = ()
     reactive_object_state_bindings: Tuple[ReactiveObjectStateBinding, ...] = ()
     synchronized_action_groups: Tuple[SynchronizedActionGroup, ...] = ()
@@ -183,6 +205,7 @@ class ScenarioLoader:
         initial_flags = tuple(raw.get("initial_flags", []))
         scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
         weather_config = self._parse_weather_config(raw.get("environment", {}))
+        day_night_config = self._parse_day_night_config(raw.get("environment", {}))
         reactive_bindings = self._parse_reactive_passage_bindings(
             raw.get("reactive_bindings", {}), mapper,
         )
@@ -205,6 +228,7 @@ class ScenarioLoader:
             initial_flags=initial_flags,
             scenario_events=scenario_events,
             weather_config=weather_config,
+            day_night_config=day_night_config,
             reactive_passage_bindings=reactive_bindings,
             reactive_object_state_bindings=reactive_object_bindings,
             synchronized_action_groups=sync_groups,
@@ -876,6 +900,65 @@ class ScenarioLoader:
                 )
             )
         return tuple(out)
+
+    def _parse_day_night_config(
+        self, raw: Dict[str, Any],
+    ) -> Optional[ScenarioDayNightConfig]:
+        """`environment.day_night` を読んで DayNightCycleDef を組み立てる。
+
+        JSON 形式 (シナリオ作家向け契約):
+        ```
+        "environment": {
+            "day_night": {
+                "enabled": true,
+                "ticks_per_day": 12,
+                "starting_tick_in_day": 0,
+                "announce_changes": true,
+                "phases": [
+                    {"name": "morning", "start_ratio": 0.0,  "display_text": "朝",   "ambient_light": 0.9, "is_dark": false},
+                    {"name": "noon",    "start_ratio": 0.25, "display_text": "昼",   "ambient_light": 1.0, "is_dark": false},
+                    {"name": "evening", "start_ratio": 0.5,  "display_text": "夕暮れ","ambient_light": 0.5, "is_dark": false},
+                    {"name": "night",   "start_ratio": 0.66, "display_text": "夜",   "ambient_light": 0.1, "is_dark": true}
+                ]
+            }
+        }
+        ```
+
+        - `enabled: false` または `day_night` セクション自体が無い場合は None を返し、
+          runtime は昼夜サイクルを動かさない (常に時刻表示なし)
+        - フェーズ列の昇順性などのバリデーションは DayNightCycleDef.__post_init__
+          に任せる (作家ミスは boundary で弾く)
+        """
+        day_night = raw.get("day_night") if isinstance(raw, dict) else None
+        if not isinstance(day_night, dict):
+            return None
+        if not bool(day_night.get("enabled", False)):
+            return None
+
+        ticks_per_day = int(day_night.get("ticks_per_day", 12))
+        starting_tick = int(day_night.get("starting_tick_in_day", 0))
+        announce = bool(day_night.get("announce_changes", True))
+        phases_raw = day_night.get("phases", [])
+        if not isinstance(phases_raw, list) or not phases_raw:
+            raise ScenarioLoadError(
+                "environment.day_night.phases must be a non-empty list"
+            )
+        phases = tuple(
+            DayNightPhaseDef(
+                name=str(p["name"]),
+                start_ratio=float(p["start_ratio"]),
+                display_text=str(p["display_text"]),
+                ambient_light=float(p["ambient_light"]),
+                is_dark=bool(p["is_dark"]),
+            )
+            for p in phases_raw
+        )
+        cycle = DayNightCycleDef(
+            ticks_per_day=ticks_per_day,
+            starting_tick_in_day=starting_tick,
+            phases=phases,
+        )
+        return ScenarioDayNightConfig(cycle=cycle, announce_changes=announce)
 
     def _parse_weather_config(self, raw: Dict[str, Any]) -> Optional[ScenarioWeatherConfig]:
         weather = raw.get("weather") if isinstance(raw, dict) else None
