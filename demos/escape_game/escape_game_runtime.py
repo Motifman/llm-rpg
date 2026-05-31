@@ -297,6 +297,11 @@ class EscapeGameRuntime:
     _observation_turn_scheduler: Optional[ObservationTurnScheduler] = field(
         default=None, repr=False
     )
+    # Issue #283 後続: episodic memory pipeline (on/off)。
+    # - ``_episodic_stack`` が None なら従来動作 (memory なし)
+    # - 注入されていれば ``_record_action_result`` で chunk が積まれ、
+    #   prompt builder の recall section に過去エピソードが現れる
+    _episodic_stack: Optional[Any] = field(default=None, repr=False)
 
     @property
     def id_mapper(self) -> ScenarioIdMapper:
@@ -577,6 +582,20 @@ class EscapeGameRuntime:
             result_summary=result_summary,
             occurred_at=datetime.now(),
         )
+        # Issue #283 後続: episodic memory が有効なら、action_result が
+        # store に積まれた直後に chunk_coordinator を起動する。chunk
+        # coordinator が observation buffer を drain → sliding window に流し、
+        # 必要なら episode を 1 件以上 store に書く。失敗は memory pipeline
+        # の責務に留め、本来の action 完了は止めない。
+        if self._episodic_stack is not None:
+            try:
+                self._episodic_stack.chunk_coordinator.after_action_recorded(player_id)
+            except Exception:
+                logger.exception(
+                    "episodic chunk_coordinator.after_action_recorded failed "
+                    "for player=%s",
+                    player_id.value,
+                )
 
     def _drain_buffer_to_sliding_window(self, player_id: PlayerId) -> List[ObservationEntry]:
         """観測バッファをスライディングウィンドウに移す。溢れた観測を返す。"""
@@ -687,6 +706,7 @@ class EscapeGameRuntime:
             DefaultPromptBuilder,
         )
         from ai_rpg_world.application.llm.services.prompt_builder_config import (
+            EpisodicRecallConfig,
             PromptBuilderCoreServices,
             PromptLimits,
             PromptSectionProviders,
@@ -719,10 +739,20 @@ class EscapeGameRuntime:
             tile_map_enabled=False,
             default_action_instruction=self._ESCAPE_GAME_ACTION_INSTRUCTION,
         )
+        # Issue #283 後続: episodic stack が注入されていれば、prompt builder の
+        # passive_recall + noun_matcher を有効化する。未注入なら従来挙動
+        # (recall section が出ない)。
+        episodic_config = EpisodicRecallConfig()
+        if self._episodic_stack is not None:
+            episodic_config = EpisodicRecallConfig(
+                passive_recall=self._episodic_stack.passive_recall,
+                noun_matcher=self._episodic_stack.noun_matcher,
+            )
         builder = DefaultPromptBuilder(
             core,
             sections=sections,
             limits=limits,
+            episodic=episodic_config,
             ui_context_builder=self._ui_context_builder,
             current_tick_provider=lambda: self.current_tick(),
         )
@@ -1603,5 +1633,21 @@ def create_escape_game_runtime(
     runtime._speech_service = speech_service
     runtime._speech_event_publisher = pipeline_event_publisher
     runtime._observation_appender = observation_appender
+
+    # Issue #283 後続: episodic memory pipeline の on/off。
+    # 環境変数 LLM_EPISODIC_ENABLED=1 のときだけ scenario load 時に matcher
+    # + chunk coordinator + passive recall を組み立てる。未設定なら従来動作。
+    from demos.escape_game.escape_episodic_wiring import (
+        build_escape_episodic_stack,
+        is_episodic_enabled,
+    )
+    if is_episodic_enabled():
+        runtime._episodic_stack = build_escape_episodic_stack(
+            scenario=scenario,
+            graph=spot_graph_repo.find_graph(),
+            observation_buffer=obs_buffer,
+            sliding_window_memory=sliding_window,
+            action_result_store=action_result_store,
+        )
 
     return runtime
