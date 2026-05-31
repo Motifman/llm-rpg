@@ -287,6 +287,9 @@ class EscapeGameRuntime:
     _current_weather: Any
     # 昼夜サイクル stage (Phase B-1)。シナリオに day_night_config が無ければ None。
     _day_night_stage: Optional[SpotGraphDayNightStageService] = field(default=None, repr=False)
+    # Phase E-3: プレイヤー個別 outcome の registry (PlayerId → PlayerOutcomeEnum)。
+    # 構築時は None、runtime 構築後に escape_game_runtime が代入する。
+    _player_outcome_registry: Optional[Any] = field(default=None, repr=False)
     _tick: int = 0
     # LLM 脱出用（セッション単位で構築）
     # _escape_llm_system_prompt: 全プレイヤー共通の system prompt (legacy / 単体プレイ用)
@@ -2075,6 +2078,70 @@ def create_escape_game_runtime(
         current_tick_provider=runtime.current_tick,
     )
     pipeline_event_publisher = PipelineEventPublisher(runtime)
+
+    # Phase E-3: プレイヤー個別 outcome registry。全プレイヤーを UNRESOLVED で
+    # 初期化し、PlayerDownedEvent → DEAD のハンドラを subscribe する。observation
+    # callback で「○○は倒れた」を全プレイヤーに通知する設計 (weather や食料
+    # 腐敗と同じ broadcast pattern)。
+    from ai_rpg_world.application.player.handlers.player_downed_outcome_handler import (
+        PlayerDownedOutcomeHandler,
+    )
+    from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+    from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+    from ai_rpg_world.domain.player.service.player_outcome_registry import (
+        PlayerOutcomeRegistry,
+    )
+
+    outcome_registry = PlayerOutcomeRegistry.new_for_players(
+        [PlayerId(spawn.player_id) for spawn in scenario.player_spawns]
+    )
+
+    def _broadcast_outcome_change(
+        player_id: PlayerId,
+        old_outcome: PlayerOutcomeEnum,
+        new_outcome: PlayerOutcomeEnum,
+    ) -> None:
+        """outcome 変化時に全プレイヤーへ観測を流す。
+
+        誰が DEAD / RESCUED / STRANDED になったかは他者の意思決定 (見捨てる
+        / 看取る / 弔う) を変えるので、weather と同じ broadcast 扱い。
+        所持品観測などより persistent な情報なので schedules_turn=True で
+        次の判断機会を強制する。
+        """
+        actor_name = player_name_map.get(int(player_id), f"プレイヤー({int(player_id)})")
+        label = new_outcome.display_label
+        if new_outcome is PlayerOutcomeEnum.DEAD:
+            message = f"{actor_name}は倒れて動かなくなった。"
+        elif new_outcome is PlayerOutcomeEnum.RESCUED:
+            message = f"{actor_name}は救助された。"
+        elif new_outcome is PlayerOutcomeEnum.STRANDED:
+            message = f"{actor_name}は島に取り残されたままだ。"
+        else:
+            return  # UNRESOLVED への遷移は通常起きないが防御的に skip
+        output = ObservationOutput(
+            prose=message,
+            structured={
+                "type": "player_outcome_resolved",
+                "player_id": int(player_id),
+                "old_outcome": old_outcome.value,
+                "new_outcome": new_outcome.value,
+                "label": label,
+            },
+            observation_category="environment",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
+        for pid in runtime.get_player_ids():
+            runtime._emit_observation_directly(pid, output)
+
+    outcome_registry.register_callback(_broadcast_outcome_change)
+    pipeline_event_publisher.register_handler(
+        PlayerDownedEvent,
+        PlayerDownedOutcomeHandler(outcome_registry),
+    )
+    # runtime からも access できるように field に保持。
+    runtime._player_outcome_registry = outcome_registry
+
     speech_service = PlayerSpeechApplicationService(
         player_status_repository=player_status_repo,
         event_publisher=pipeline_event_publisher,

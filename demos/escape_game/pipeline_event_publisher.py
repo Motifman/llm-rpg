@@ -46,14 +46,28 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
 
     def __init__(self, runtime_ref: "EscapeGameRuntime") -> None:
         self._runtime = runtime_ref
+        # Phase E-3: side handler list。observation pipeline とは別軸で、
+        # event ごとに副作用ハンドラを走らせるための登録経路。
+        # (event_type, handler) のタプルで、event は handler.handle(event) で
+        # 渡される。同期実行のみサポート (PlayerOutcomeRegistry 等の即時反映用)。
+        self._side_handlers: list[tuple[type, Any]] = []
 
     def register_handler(
         self,
         event_type: Any,
         handler: Any,
         is_synchronous: bool = False,
-    ) -> None:  # noqa: D401 — no-op by design
-        del event_type, handler, is_synchronous
+    ) -> None:
+        """Phase E-3: side handler を登録する。
+
+        従来は no-op だったが、PlayerOutcomeRegistry の更新ハンドラを
+        event-driven に組み込むため、type-filtered な dispatch list を持つよう
+        拡張した。`is_synchronous` は無視 (常に同期実行)。
+        """
+        del is_synchronous
+        if event_type is None or handler is None:
+            return
+        self._side_handlers.append((event_type, handler))
 
     def publish(self, event: DomainEvent) -> None:
         self._dispatch(event)
@@ -67,6 +81,13 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
             self._dispatch(event)
 
     def _dispatch(self, event: DomainEvent) -> None:
+        # Phase E-3: side handler を先に走らせる。observation pipeline より先に
+        # registry mutation を済ませることで「player downed → DEAD outcome が
+        # 立った状態で観測が emit される」順序になる。各 handler の例外は
+        # 隠蔽せず raise させる (silent failure 防止)。
+        for event_type, handler in self._side_handlers:
+            if isinstance(event, event_type):
+                handler.handle(event)
         items = self._runtime._obs_pipeline.run(event)
         if not items:
             return
