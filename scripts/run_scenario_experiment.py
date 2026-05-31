@@ -178,6 +178,22 @@ def _drive_scenario(
                 )
                 break
         elapsed = time.monotonic() - t0
+        # Issue #311/#325 後続: 非同期 LLM 主観文付与 scheduler (#310) の in-flight
+        # ジョブを drain してから return する。これをしないと、scenario 終了
+        # 直後に `with JsonlTraceRecorder` が close され、後追いで完了した worker
+        # が "recorder is already closed" RuntimeError に当たる (第21回/第22回
+        # 実験で各 2 件観測)。30s timeout は max latency (~14s) の余裕分。
+        shutdown = getattr(runtime, "shutdown", None)
+        if callable(shutdown):
+            try:
+                shutdown(timeout=30.0)
+            except Exception:
+                # shutdown 自体の失敗で trace 書き出しを止めない
+                logger.warning(
+                    "runtime.shutdown(timeout=30) raised; "
+                    "async LLM completions may not be fully drained",
+                    exc_info=True,
+                )
         return {
             "outcome": outcome,
             "last_tick": last_tick,
