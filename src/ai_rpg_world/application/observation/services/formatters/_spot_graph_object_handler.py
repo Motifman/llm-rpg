@@ -19,6 +19,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionDestroyedEvent,
     ConnectionStateChangedEvent,
     PlayerDroppedItemEvent,
+    PlayerGaveItemEvent,
     PlayerPickedUpItemEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
@@ -59,7 +60,36 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_item_dropped(event, recipient_player_id)
         if isinstance(event, PlayerPickedUpItemEvent):
             return self._format_item_picked_up(event, recipient_player_id)
+        if isinstance(event, PlayerGaveItemEvent):
+            return self._format_item_given(event, recipient_player_id)
         return None
+
+    def _format_item_given(
+        self, event: PlayerGaveItemEvent, recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """「ミラが流木をトマに渡した」を同室の他プレイヤー (受け手含む) に届ける。
+
+        recipient strategy で送り手 entity_id は除外されているので、本 formatter
+        が呼ばれる時点で recipient_id は送り手ではない。受け手本人 (recipient_id
+        == event.recipient_entity_id) には自分宛の動作だが、prose は三人称的に
+        統一する (LLM 視点で観測ログは一貫した語り口を取りたいため)。
+        """
+        if self._is_self(event.entity_id, recipient_id):
+            return None
+        actor = self._resolve_entity_name(event.entity_id)
+        receiver = self._resolve_entity_name(event.recipient_entity_id)
+        prose = f"{actor}が{event.item_name}を{receiver}に渡した。"
+        structured = {
+            "type": "player_gave_item",
+            "actor": actor,
+            "receiver": receiver,
+            "item_name": event.item_name,
+            "item_instance_id": event.item_instance_id.value,
+            "item_spec_id": event.item_spec_id.value,
+        }
+        return ObservationOutput(
+            prose=prose, structured=structured, observation_category="social",
+        )
 
     def _format_item_dropped(
         self, event: PlayerDroppedItemEvent, recipient_id: PlayerId,

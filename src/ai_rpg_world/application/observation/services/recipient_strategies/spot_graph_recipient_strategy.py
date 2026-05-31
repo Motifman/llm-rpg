@@ -36,6 +36,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterStartedFleeingInSpotEvent,
     PlayerAttackedMonsterInSpotEvent,
     PlayerDroppedItemEvent,
+    PlayerGaveItemEvent,
     PlayerPickedUpItemEvent,
     SpotSoundHeardEvent,
     SpotExploredEvent,
@@ -108,6 +109,13 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             )
         elif isinstance(event, PlayerPickedUpItemEvent):
             # pickup も同様に同スポットの他者にのみ届ける。
+            self._resolve_at_spot_excluding_actor(
+                event.spot_id, event.entity_id, add
+            )
+        elif isinstance(event, PlayerGaveItemEvent):
+            # give: 同スポットの他プレイヤー (送り手除く) に届ける。
+            # 受け手 recipient_entity_id もこの集合に含まれるため自分宛の
+            # 受け渡しを観測できる。送り手本人にはツール結果で個別返答する。
             self._resolve_at_spot_excluding_actor(
                 event.spot_id, event.entity_id, add
             )
