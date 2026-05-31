@@ -27,6 +27,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
+from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.services.active_memos_formatter import (
     format_active_memos,
 )
@@ -107,6 +108,10 @@ class DefaultPromptBuilder(IPromptBuilder):
         limits: Optional[PromptLimits] = None,
         ui_context_builder: Optional[ILlmUiContextBuilder] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        trace_recorder: Optional["ITraceRecorder"] = None,
+        trace_recorder_provider: Optional[
+            Callable[[], Optional["ITraceRecorder"]]
+        ] = None,
     ) -> None:
         """Config dataclass ベースの API (Issue #227 後続 HIGH-1)。
 
@@ -254,6 +259,10 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("objective_text_provider must be callable or None")
         if inventory_text_provider is not None and not callable(inventory_text_provider):
             raise TypeError("inventory_text_provider must be callable or None")
+        if trace_recorder is not None and not isinstance(trace_recorder, ITraceRecorder):
+            raise TypeError("trace_recorder must be ITraceRecorder or None")
+        if trace_recorder_provider is not None and not callable(trace_recorder_provider):
+            raise TypeError("trace_recorder_provider must be callable or None")
 
         self._memo_store = memo_store
         self._objective_text_provider = objective_text_provider
@@ -295,7 +304,67 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._episodic_reinterpretation_journal_store = episodic_reinterpretation_journal_store
         self._episodic_turn_index_provider = episodic_turn_index_provider
         self._noun_matcher = noun_matcher
+        self._trace_recorder = trace_recorder
+        self._trace_recorder_provider = trace_recorder_provider
         self._logger = logging.getLogger(self.__class__.__name__)
+
+    def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
+        """recall trace 用の recorder を runtime 時点で取得する。
+
+        ``trace_recorder_provider`` があれば毎回 lookup (= 後付け差し込み
+        対応)、なければ構築時固定値。provider 例外は None フォールバック。
+        """
+        if self._trace_recorder_provider is not None:
+            try:
+                return self._trace_recorder_provider()
+            except Exception:
+                return None
+        return self._trace_recorder
+
+    def _emit_episodic_recall_trace(
+        self,
+        player_id: PlayerId,
+        situation_cues: tuple,
+        candidates: list,
+    ) -> None:
+        """``EPISODIC_RECALL`` を trace に記録する (失敗は握りつぶす)。"""
+        recorder = self._resolve_trace_recorder()
+        if recorder is None:
+            return
+        tick: Optional[int] = None
+        if self._current_tick_provider is not None:
+            try:
+                tick = self._current_tick_provider()
+            except Exception:
+                tick = None
+        try:
+            cue_keys = [c.to_canonical() for c in situation_cues]
+        except Exception:
+            cue_keys = []
+        cand_payload: list[dict] = []
+        for cand in candidates:
+            try:
+                ep = cand.episode
+                cand_payload.append(
+                    {
+                        "episode_id": getattr(ep, "episode_id", ""),
+                        "source_axes": list(cand.source_axes),
+                        "recall_text_snippet": (getattr(ep, "recall_text", "") or "")[:120],
+                    }
+                )
+            except Exception:
+                continue
+        try:
+            recorder.record(
+                TraceEventKind.EPISODIC_RECALL,
+                tick=tick,
+                player_id=int(player_id.value),
+                situation_cues=cue_keys,
+                candidate_count=len(cand_payload),
+                candidates=cand_payload,
+            )
+        except Exception:
+            pass
 
     def build(
         self,
@@ -482,6 +551,15 @@ class DefaultPromptBuilder(IPromptBuilder):
             player_id.value,
             recall_result.candidates,
             self._episodic_reinterpretation_journal_store,
+        )
+
+        # Issue #283 後続: recall 結果を trace に残す (Viewer / jq から
+        # 「どのエピソードが想起されたか」を後追いできる)。candidates が 0
+        # でも「recall を試行したが結果は 0」事実は残しておく価値があるので emit。
+        self._emit_episodic_recall_trace(
+            player_id=player_id,
+            situation_cues=situation_cues,
+            candidates=list(recall_result.candidates),
         )
 
         if self._episodic_memory_link_service is not None and recall_result.candidates:

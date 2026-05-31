@@ -132,6 +132,22 @@ def _build_mermaid_sequence(
             text = _short(_payload_str(e.payload, "result_summary"), 60)
             label = _mermaid_label(f"t{e.tick}: [{mark}] {text}")
             lines.append(f"    W-->>{actor}: {label}")
+        elif e.kind == TraceEventKind.EPISODIC_CHUNK_WRITTEN:
+            ep_short = (_payload_str(e.payload, "episode_id"))[:6]
+            reason = _payload_str(e.payload, "boundary_reason") or "?"
+            label = _mermaid_label(
+                f"t{e.tick}: ✎ chunk written ({ep_short}…, {reason})"
+            )
+            # self-note (actor が自分の記憶に書き込んだ)
+            lines.append(f"    {actor}-->{actor}: {label}")
+        elif e.kind == TraceEventKind.EPISODIC_RECALL:
+            cand_count = 0
+            if isinstance(e.payload, dict):
+                cand_count = int(e.payload.get("candidate_count") or 0)
+            label = _mermaid_label(
+                f"t{e.tick}: ⟲ recall {cand_count} candidates"
+            )
+            lines.append(f"    {actor}-->{actor}: {label}")
     return "\n".join(lines)
 
 
