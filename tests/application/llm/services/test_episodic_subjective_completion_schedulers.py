@@ -291,19 +291,31 @@ class TestThreadPoolScheduler:
         assert dropped[0].payload["episode_id"] == draft3.episode_id
         assert dropped[0].payload["max_queue_size"] == 2
 
-    def test_shutdown_後の_submit_は_silently_drop(self) -> None:
+    def test_shutdown_後の_submit_は_DROPPED_trace_付きで_drop_される(self) -> None:
+        """無音 drop ではなく観測可能にする (silent-failure-hunter #1 への対応)。"""
         enc, draft = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put(draft)
         port = _StubPort()
+        recorder = NullTraceRecorder()
+        events = _capture(recorder)
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
-            EpisodicChunkSubjectiveFieldsService(port), store
+            EpisodicChunkSubjectiveFieldsService(port), store,
+            trace_recorder_provider=lambda: recorder,
         )
         scheduler.shutdown()
         # shutdown 後の submit は例外を上げない
         scheduler.submit(draft, persona_text="", encoding_input=enc)
-        # LLM も呼ばれない (port の call_count はゼロ)
+        # LLM も呼ばれない
         assert port.call_count == 0
+        # DROPPED trace が「shutdown 由来」と分かる形で記録されている
+        dropped = [
+            e for e in events
+            if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_DROPPED
+        ]
+        assert len(dropped) == 1
+        assert dropped[0].payload["episode_id"] == draft.episode_id
+        assert dropped[0].payload["reason"] == "shutdown"
 
     def test_shutdown_timeout_で_未完了は_諦める(self) -> None:
         enc, draft = _build_encoding_and_draft()
@@ -320,6 +332,33 @@ class TestThreadPoolScheduler:
         elapsed = time.monotonic() - t0
         # timeout を大きく超えて待たない (= ジョブを諦めて返る)
         assert elapsed < 1.5, f"shutdown が長すぎる: {elapsed:.2f}s"
+
+    def test_shutdown_timeout_未完了は_WARN_log_で_観測可能(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """timeout 超過ジョブは episode_id 付きで WARN ログに出る
+        (silent-failure-hunter #2 への対応)。"""
+        import logging
+        enc, draft = _build_encoding_and_draft(player_id=11)
+        store = InMemorySubjectiveEpisodeStore()
+        store.put(draft)
+        port = _StubPort(delay=5.0)
+        scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port), store
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        with caplog.at_level(
+            logging.WARNING,
+            logger="ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers",
+        ):
+            scheduler.shutdown(timeout=0.1)
+        # WARN ログに未完了件数と episode_id が出る
+        warns = [r for r in caplog.records if r.levelno == logging.WARNING]
+        msg_blob = " ".join(r.message for r in warns)
+        assert "not completed" in msg_blob, f"未完了 WARN が出ていない: {warns}"
+        assert draft.episode_id in msg_blob, (
+            f"未完了の episode_id が WARN ログに含まれていない: {msg_blob}"
+        )
 
     def test_thread_safety_store_concurrent_read_during_worker_put(self) -> None:
         """ワーカーが put する裏で main thread が list_recent しても壊れない。"""

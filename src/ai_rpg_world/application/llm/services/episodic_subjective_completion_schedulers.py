@@ -63,13 +63,20 @@ def _emit_trace(
     player_id: int,
     payload: dict,
 ) -> None:
-    """trace event を最善努力で記録する (例外は握りつぶす)。"""
+    """trace event を最善努力で記録する (例外は握りつぶす、ただし監視可能な
+    粒度でログには残す)。"""
     recorder: Optional[ITraceRecorder] = None
     if recorder_provider is not None:
         try:
             recorder = recorder_provider()
         except Exception:
-            _logger.debug("trace recorder provider raised", exc_info=True)
+            # provider 自体の故障は珍しいが、運用上の二重盲点を避けるため
+            # WARN に残す (内部の DEBUG では本番ログから消えてしまう)。
+            _logger.warning(
+                "trace recorder provider raised; skipping %s trace",
+                kind,
+                exc_info=True,
+            )
             recorder = None
     if recorder is None:
         return
@@ -82,8 +89,14 @@ def _emit_trace(
     try:
         recorder.record(kind, tick=tick, player_id=player_id, **payload)
     except Exception:
-        # trace 失敗で本筋を止めない
-        _logger.debug("trace recorder.record(%s) failed", kind, exc_info=True)
+        # trace 失敗で本筋を止めない。ただし「LLM 補完が失敗した」など重要な
+        # イベントの欠落を本番ログから検知できるよう WARN に昇格する
+        # (silent-failure-hunter #3 指摘)。
+        _logger.warning(
+            "trace recorder.record(%s) failed (continuing)",
+            kind,
+            exc_info=True,
+        )
 
 
 class InlineEpisodicSubjectiveScheduler:
@@ -241,20 +254,42 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         if not isinstance(encoding_input, ChunkEncodingInput):
             raise TypeError("encoding_input must be ChunkEncodingInput")
         eid = draft.episode_id
-        # 重複 / overflow / shutdown チェックはロック内で原子的に
+        # 重複 / overflow / shutdown チェックはロック内で原子的に。
+        # ただし ``_executor.submit`` 自体はロック外で呼ぶ:
+        # - executor 内部のキュー lock と本クラスの lock の取得順序を分離
+        # - 仮に future の done_callback が同期的に発火しても、_on_done が
+        #   再度本クラスの lock を取りに行ってデッドロックする経路を作らない
+        place_holder_required = False
         with self._inflight_lock:
             if self._is_shutdown:
-                # shutdown 後の submit は静かに drop する
+                # shutdown 後の submit は無音 drop ではなく観測可能にする
+                # (silent-failure-hunter #1 指摘)。
+                _logger.warning(
+                    "ThreadPoolEpisodicSubjectiveScheduler.submit called after "
+                    "shutdown; dropping job: episode_id=%s",
+                    eid,
+                )
+                _emit_trace(
+                    self._trace_recorder_provider,
+                    self._current_tick_provider,
+                    kind=TraceEventKind.EPISODIC_SUBJECTIVE_DROPPED,
+                    player_id=int(draft.player_id),
+                    payload={
+                        "episode_id": eid,
+                        "reason": "shutdown",
+                    },
+                )
                 return
             if eid in self._inflight:
                 # 同一 episode の重複投入は無視 (chunk_coordinator がリトライした
-                # ケース等)
+                # ケース等)。LLM 重複呼び出しを防ぐ dedupe。
                 return
-            if len(self._inflight) >= self._max_queue_size:
+            current_queue_size = len(self._inflight)
+            if current_queue_size >= self._max_queue_size:
                 _logger.warning(
                     "ThreadPoolEpisodicSubjectiveScheduler: キュー満杯 "
                     "(%d/%d)、新規 submit を drop: episode_id=%s",
-                    len(self._inflight),
+                    current_queue_size,
                     self._max_queue_size,
                     eid,
                 )
@@ -265,24 +300,38 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                     player_id=int(draft.player_id),
                     payload={
                         "episode_id": eid,
-                        "queue_size": len(self._inflight),
+                        "queue_size": current_queue_size,
                         "max_queue_size": self._max_queue_size,
+                        "reason": "queue_full",
                     },
                 )
                 return
-            # ロック内で Future を確保するが、実行は submit() の外でも問題ない
-            # (ThreadPoolExecutor.submit はそれ自体 thread-safe)
-            try:
-                future = self._executor.submit(
-                    self._worker, draft, persona_text, encoding_input
-                )
-            except RuntimeError:
-                # Executor が shutdown 済み (競合) → drop
-                _logger.debug("Executor shutdown during submit", exc_info=True)
-                return
+            # 予約だけ入れる (= 同 episode_id の重複 submit を、submit がロック外で
+            # 実行される瞬間にも防ぐ)。実 Future は後で差し替える。
+            self._inflight[eid] = None  # type: ignore[assignment]
+            place_holder_required = True
+        # ── ロック外で executor.submit ──
+        try:
+            future = self._executor.submit(
+                self._worker, draft, persona_text, encoding_input
+            )
+        except RuntimeError:
+            # Executor が shutdown 済み (競合) → 予約を取り消して drop
+            _logger.warning(
+                "ThreadPoolEpisodicSubjectiveScheduler: executor already shutdown; "
+                "dropping job: episode_id=%s",
+                eid,
+                exc_info=True,
+            )
+            if place_holder_required:
+                with self._inflight_lock:
+                    self._inflight.pop(eid, None)
+            return
+        # 予約を実 Future で上書き
+        with self._inflight_lock:
             self._inflight[eid] = future
         # done callback は inflight からの除去のみ。trace は worker 内で吐く
-        # (失敗時とで分けるため)。
+        # (成功 / 失敗で分けるため)。
         future.add_done_callback(lambda _fut, _eid=eid: self._on_done(_eid))
 
     def _on_done(self, episode_id: str) -> None:
@@ -341,23 +390,52 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         """進行中ジョブを drain しつつ executor を閉じる。
 
         ``timeout=None`` は完了まで無期限待機。``timeout`` 秒経っても残って
-        いるジョブは諦めて (cancel) executor を強制終了する。
+        いるジョブは諦めて executor を閉じる。完了しなかったジョブ数は
+        ``WARNING`` ログに残し、その episode_id 一覧も付ける (silent-failure-hunter
+        #2 指摘: 観測可能性の確保)。
 
-        shutdown 後の ``submit`` は静かに drop される。
+        shutdown 後の ``submit`` は ``EPISODIC_SUBJECTIVE_DROPPED`` trace + WARN
+        ログ付きで drop される (shutdown-race の観測可能性)。
         """
         with self._inflight_lock:
             self._is_shutdown = True
-            pending = list(self._inflight.values())
+            # episode_id → Future の copy。 _inflight に None (predaybook) が
+            # 入っている瞬間も考慮して filter する。
+            pending_map: dict[str, Future] = {
+                eid: fut for eid, fut in self._inflight.items() if fut is not None
+            }
         if timeout is None:
             # 全部待つ
             self._executor.shutdown(wait=True)
             return
-        if pending:
+        if pending_map:
             try:
-                wait(pending, timeout=timeout)
+                done, not_done = wait(list(pending_map.values()), timeout=timeout)
             except Exception:
-                _logger.debug("wait() raised during shutdown", exc_info=True)
-        # 残ったジョブはキャンセル可能なものだけキャンセル、走り始めたものは諦める
+                done, not_done = set(), set(pending_map.values())
+                _logger.warning(
+                    "wait() raised during shutdown; "
+                    "treating all pending as not_done",
+                    exc_info=True,
+                )
+            if not_done:
+                # 未完了 Future から episode_id を逆引きして可視化
+                fut_to_eid = {fut: eid for eid, fut in pending_map.items()}
+                unfinished_ids = [
+                    fut_to_eid.get(fut, "<unknown>") for fut in not_done
+                ]
+                _logger.warning(
+                    "shutdown timeout (%.3fs): %d job(s) not completed; "
+                    "their episodes remain as template draft. episode_ids=%s",
+                    timeout,
+                    len(not_done),
+                    unfinished_ids,
+                )
+        # 残ったジョブはキャンセル可能なものだけキャンセル、走り始めたものは
+        # 諦める (Python の ThreadPoolExecutor は実行中 thread を kill できない
+        # ため、走り始めた worker は完了まで動くが store.put された結果は
+        # shutdown 後でも episode_store に乗る = テンプレが上書きされる
+        # 「整合性は保たれる」)。
         self._executor.shutdown(wait=False, cancel_futures=True)
 
     # テスト用ヘルパ (private 扱い)
