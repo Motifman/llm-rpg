@@ -131,6 +131,25 @@ class PlayerDroppedItemEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class TimeOfDayChangedEvent(BaseDomainEvent[SpotGraphId, str]):
+    """昼夜サイクルのフェーズが変化した (例: 昼 → 夕暮れ)。
+
+    SpotGraphDayNightStageService から発火される全プレイヤー向け observation
+    event。屋外 / 屋内の区別は本イベントには持たせず (実情、屋内でも空の色や
+    肌寒さで時間経過は感じられる)、recipient strategy で全プレイヤーへ届ける
+    シンプルな仕様にする。
+
+    シナリオが `day_night.announce_changes: false` を設定している場合は、
+    本イベント自体を発火させない (callback を登録しない経路で抑止する)。
+    """
+
+    old_phase_name: str
+    new_phase_name: str
+    new_display_text: str
+    new_is_dark: bool
+
+
+@dataclass(frozen=True)
 class PlayerGaveItemEvent(BaseDomainEvent[SpotGraphId, str]):
     """プレイヤーが同室の別プレイヤーへアイテムを直接渡した。
 
