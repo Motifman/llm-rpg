@@ -127,6 +127,14 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_SPOT_GRAPH_WAIT,
+)
 from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
@@ -587,14 +595,32 @@ class EscapeGameRuntime:
             scheduler.maybe_schedule(player_id, output)
 
     def _record_action_result(
-        self, player_id: PlayerId, action_summary: str, result_summary: str,
+        self,
+        player_id: PlayerId,
+        action_summary: str,
+        result_summary: str,
+        *,
+        tool_name: str,
+        success: bool = True,
+        error_code: Optional[str] = None,
     ) -> None:
+        """action_result_store に 1 件積み、episodic chunk_coordinator を起動する。
+
+        ``tool_name`` は必須引数: 第20回実験で「episode_cues に常に
+        ``action:unknown_tool`` が立つ」問題が観測されたため、呼び出し側で
+        必ず LLM tool 名 (例: ``TOOL_NAME_SPOT_GRAPH_TRAVEL_TO``) を明示する。
+        ``success`` / ``error_code`` も同様に「常に ``outcome:success`` が立つ」
+        ノイズの原因なので、失敗を検知できる経路は明示的に渡す。
+        """
         # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)
         self._action_result_store.append(
             player_id,
             action_summary=action_summary,
             result_summary=result_summary,
             occurred_at=datetime.now(timezone.utc),
+            tool_name=tool_name,
+            success=success,
+            error_code=error_code,
         )
         # Issue #283 後続: episodic memory が有効なら、action_result が
         # store に積まれた直後に chunk_coordinator を起動する。chunk
@@ -880,10 +906,13 @@ class EscapeGameRuntime:
             result_message=result_text,
         ))
         self._process_graph_events()
+        # SpotInteractionResultDto は現状 success フラグを持たない (messages から
+        # しか判定できない)。fail 検出経路がドメイン側に出来るまで暫定で True 固定。
         self._record_action_result(
             player_id,
             f"「{obj_label}」に対して{action_ja}を行った",
             result_text,
+            tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
         )
         return result
 
@@ -899,10 +928,13 @@ class EscapeGameRuntime:
         from ai_rpg_world.domain.player.value_object.slot_id import SlotId
         result = self._item_transfer_service.drop_item(player_id, SlotId(slot_id_value))
         result_text = "; ".join(result.messages) if result.messages else "落とした"
+        # ItemTransferResult は現状 success フラグなし (例外は service 側で投げる)。
+        # ここまで到達していれば transfer 自体は完了している前提。
         self._record_action_result(
             player_id,
             f"スロット{slot_id_value}のアイテムを地面に置いた",
             result_text,
+            tool_name=TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
         )
         return result
 
@@ -924,6 +956,7 @@ class EscapeGameRuntime:
             player_id,
             f"地面のアイテム#{item_instance_id_value}を拾った",
             result_text,
+            tool_name=TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
         )
         return result
 
@@ -987,6 +1020,7 @@ class EscapeGameRuntime:
             player_id,
             f"「{spot_name}」の周辺を探索した",
             result_text,
+            tool_name=TOOL_NAME_SPOT_GRAPH_EXPLORE,
         )
         return result
 
@@ -1008,12 +1042,35 @@ class EscapeGameRuntime:
             if not status.spot_navigation_state.is_traveling:
                 break
         self._process_graph_events()
-        dest_name = self._spot_graph_repo.find_graph().get_spot(dest_sid).name
-        self._record_action_result(
-            player_id,
-            f"「{from_name}」から「{dest_name}」へ移動した",
-            f"「{dest_name}」に到着した",
-        )
+        graph_after = self._spot_graph_repo.find_graph()
+        dest_name = graph_after.get_spot(dest_sid).name
+        # 到達判定: 200 tick 上限で抜けたが travel 状態が残っているケースは失敗扱い。
+        # 暗い・通行止め等で start_travel_to_spot 自体が拒否されたケースは
+        # current_spot が dest と一致しないため same 判定で弾く。
+        eid = EntityId.create(int(player_id))
+        try:
+            current_spot = graph_after.get_entity_spot(eid)
+        except Exception:
+            current_spot = None
+        reached = current_spot == dest_sid
+        if reached:
+            action_summary = f"「{from_name}」から「{dest_name}」へ移動した"
+            result_summary = f"「{dest_name}」に到着した"
+            self._record_action_result(
+                player_id,
+                action_summary,
+                result_summary,
+                tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            )
+        else:
+            self._record_action_result(
+                player_id,
+                f"「{from_name}」から「{dest_name}」へ移動しようとした",
+                f"「{dest_name}」へは到達できなかった",
+                tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+                success=False,
+                error_code="DEST_NOT_REACHED",
+            )
 
     def do_wait(self, player_id: PlayerId, reason: str = "") -> int:
         tick = self.advance_tick()
@@ -1023,12 +1080,14 @@ class EscapeGameRuntime:
                 player_id,
                 f"待機した（理由: {r}）",
                 f"時間が進んだ（tick={tick}）",
+                tool_name=TOOL_NAME_SPOT_GRAPH_WAIT,
             )
         else:
             self._record_action_result(
                 player_id,
                 "短く待機した",
                 f"時間が進んだ（tick={tick}）",
+                tool_name=TOOL_NAME_SPOT_GRAPH_WAIT,
             )
         return tick
 

@@ -54,6 +54,10 @@ class _FakeRuntime:
         player_id: PlayerId,
         action_summary: str,
         result_summary: str,
+        *,
+        tool_name: str = "",
+        success: bool = True,
+        error_code: str | None = None,
     ) -> None:
         self.action_results.append((player_id.value, action_summary, result_summary))
 

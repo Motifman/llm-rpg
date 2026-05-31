@@ -124,6 +124,48 @@ class TestSmokeWriteSide:
         runtime.do_move(runtime.get_player_ids()[0], "reading_room")
         assert runtime._episodic_stack is None
 
+    def test_書かれた_episode_の_cue_に_unknown_tool_が出ない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``action`` 軸の cue は LLM tool 名 (``spot_graph_wait`` 等) で記録される。
+
+        第20回実験で「episode_cues に常に ``action:unknown_tool`` が立つ」
+        ノイズを観測した regression: ``_record_action_result`` が tool_name を
+        受け取らず、``chunk_episode_draft_builder._tool_name_segment`` が
+        ``None → "unknown_tool"`` に fallback していた。
+        全 do_* 呼び出し側で tool_name を明示的に渡すよう修正したので、
+        書かれた episode の cue に ``unknown_tool`` が現れないことを保証する。
+        """
+        runtime = _build_runtime(monkeypatch, enabled=True)
+        stack = runtime._episodic_stack
+        assert stack is not None
+
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+
+        player_ids = runtime.get_player_ids()
+        kaito_id = player_ids[0]
+        rin_id = player_ids[1]
+
+        runtime.do_move(rin_id, "entrance_hall")
+        runtime.do_wait(kaito_id)
+        runtime.do_speech(rin_id, "カイト、こんにちは", SpeechChannel.SAY)
+        runtime.do_wait(kaito_id)
+
+        episodes = stack.episode_store.list_recent(
+            player_id=int(kaito_id.value), limit=20
+        )
+        assert len(episodes) > 0
+        all_cues_canonical = [
+            c.to_canonical() for ep in episodes for c in ep.cues
+        ]
+        assert "action:unknown_tool" not in all_cues_canonical, (
+            f"episode cue に unknown_tool が混入: {all_cues_canonical}"
+        )
+        # 期待: spot_graph_wait などの実 tool 名が action 軸に乗っている
+        assert any(
+            c.startswith("action:spot_graph_") for c in all_cues_canonical
+        ), f"action: 軸の tool name cue が立っていない: {all_cues_canonical}"
+
 
 class TestSmokePromptBuilds:
     """env=1 で prompt 構築が完走する。"""
