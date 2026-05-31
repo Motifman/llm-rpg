@@ -302,6 +302,23 @@ class SpotInteractionApplicationService:
             rev_id = ConnectionId.create(new_cid.value + 1) if spec.is_bidirectional else None
             graph.add_connection_dynamic(new_conn, reverse_connection_id=rev_id)
 
+        # Phase G (#3): APPLY_DAMAGE 接触ダメージの実体化。
+        # effect_service が damage_specs を組み立てるところまでは出来ていたが、
+        # interaction application service が消費していなかったため、JSON で
+        # APPLY_DAMAGE を書いても何も起きない無効化状態だった (廃屋の崩れた梁・
+        # 岩礁の崖・沼地のぬかるみ等が flavor 止まり)。
+        # ここで PlayerStatusAggregate.apply_damage を呼んで HP を減らす。HP 0 に
+        # なれば aggregate が PlayerDownedEvent を積み、event publisher 経由で
+        # PlayerDownedOutcomeHandler が DEAD outcome を確定させる (E-3a 経路)。
+        if result.damage_specs and self._player_status_repository is not None:
+            status = self._player_status_repository.find_by_id(player_id)
+            if status is not None:
+                for spec in result.damage_specs:
+                    if spec.damage <= 0:
+                        continue  # 0 ダメージは no-op
+                    status.apply_damage(spec.damage)
+                self._player_status_repository.save(status)
+
         # 欲求回復
         if result.satisfy_need_specs and self._player_status_repository is not None:
             status = self._player_status_repository.find_by_id(player_id)

@@ -1596,6 +1596,10 @@ def create_escape_game_runtime(
         item_repository=item_repo,
         item_spec_repository=item_spec_repo,
         world_flag_state=world_flag_state,
+        # Phase G (#3): APPLY_DAMAGE / SATISFY_NEED 等で player_status を mutate
+        # するために repo を渡す。これまで None だったため damage_specs が
+        # 黙って捨てられていた (廃屋の崩れた梁 / 岩礁の縁 等が flavor 止まり)。
+        player_status_repository=player_status_repo,
     )
     exploration_service = SpotExplorationApplicationService(
         spot_graph_repository=spot_graph_repo,
