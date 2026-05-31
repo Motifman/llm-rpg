@@ -178,12 +178,53 @@ class ScenarioMonsterTemplate:
 
 
 @dataclass(frozen=True)
-class ScenarioMonsterPlacement:
-    """シナリオ起動時に物理的に置くモンスター個体 (Phase B-2a)。
+class ScenarioMonsterSpawnCondition:
+    """モンスター出現を環境条件で制御する宣言 (Phase B-2b)。
 
-    Phase B-2a では「シナリオ開始時に即配置」「以後は respawn / 動的 spawn
-    無し」の単純化された static placement のみサポート。動的 spawn は B-2b で
-    扱う (本 dataclass はその時点で `spawn_condition` を加算する余地を残す)。
+    すべての軸が AND で合成される。指定が無い軸は常に成立扱い (= 「気にしない」)。
+    値が一つでも指定されたら、その軸はマッチしないと spawn しない。
+
+    Attributes:
+        day_night_phase_names: 出現を許可する day_night フェーズの name 集合。
+            空 tuple なら時間帯は問わない。シナリオ作家は自由命名できるので
+            事前検証はせず、実行時に day_night cycle が宣言した phase との
+            突合で一致 / 不一致だけ判定する。
+        required_flags: ON 状態にあるべき WorldFlag。例: `["high_tide"]` で
+            「満潮中のみ出現」を表現。空なら制約なし。
+        forbidden_flags: OFF 状態にあるべき WorldFlag。例: `["high_tide"]` で
+            「干潮中のみ出現」を表現。空なら制約なし。
+        weather_type_names: 許容する WeatherTypeEnum 名 (例: ["STORM"])。
+            空なら天候は問わない。
+    """
+
+    day_night_phase_names: Tuple[str, ...] = ()
+    required_flags: Tuple[str, ...] = ()
+    forbidden_flags: Tuple[str, ...] = ()
+    weather_type_names: Tuple[str, ...] = ()
+
+    @property
+    def is_always(self) -> bool:
+        """全軸が空なら「常に成立」(条件付きでない)。"""
+        return (
+            not self.day_night_phase_names
+            and not self.required_flags
+            and not self.forbidden_flags
+            and not self.weather_type_names
+        )
+
+
+@dataclass(frozen=True)
+class ScenarioMonsterPlacement:
+    """モンスター個体の配置 (Phase B-2a で導入、B-2b で spawn_condition 拡張)。
+
+    spawn_condition が None (省略) または `is_always == True` のとき:
+      → シナリオ起動時に static 配置 (B-2a の挙動)
+    spawn_condition がいずれかの軸で条件付きのとき:
+      → SpotGraphMonsterSpawnService が tick 毎に条件評価し、満たすときだけ
+        spawn (満たさなくなったら despawn) する動的 spawn (B-2b の挙動)
+
+    同 spot に同 template を複数体並べる場合、各 placement が独立スロットになる
+    (slot_key は `template@spot#index` を順序保存で生成する想定)。
     """
 
     template_string_id: str
@@ -194,6 +235,8 @@ class ScenarioMonsterPlacement:
     coordinate_x: int = 0
     coordinate_y: int = 0
     coordinate_z: int = 0
+    # spawn_condition が None / is_always なら static 配置。それ以外は動的。
+    spawn_condition: Optional[ScenarioMonsterSpawnCondition] = None
 
 
 @dataclass(frozen=True)
@@ -1174,12 +1217,78 @@ class ScenarioLoader:
         coord = raw.get("coordinate", {})
         if not isinstance(coord, dict):
             coord = {}
+        spawn_condition = self._parse_monster_spawn_condition(
+            raw.get("spawn_condition"), index,
+        )
         return ScenarioMonsterPlacement(
             template_string_id=template_id,
             spot_string_id=spot_id,
             coordinate_x=int(coord.get("x", 0)),
             coordinate_y=int(coord.get("y", 0)),
             coordinate_z=int(coord.get("z", 0)),
+            spawn_condition=spawn_condition,
+        )
+
+    def _parse_monster_spawn_condition(
+        self, raw: Any, placement_index: int,
+    ) -> Optional[ScenarioMonsterSpawnCondition]:
+        """placement の spawn_condition ブロックを ScenarioMonsterSpawnCondition に変換。
+
+        JSON 形式:
+        ```
+        "spawn_condition": {
+          "day_night_phases": ["night"],
+          "required_flags": ["high_tide"],
+          "forbidden_flags": [],
+          "weather_types": ["STORM"]
+        }
+        ```
+        いずれか 1 つでも軸が指定されれば条件付き。すべて空 / セクション欠落
+        なら null を返し、placement は常時 spawn (static) 扱い。
+
+        WeatherTypeEnum 名は boundary で検証する (作家ミスを早期に弾く)。
+        day_night_phases は scenario 内で自由命名できるので事前検証しない。
+        """
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise ScenarioLoadError(
+                f"monsters.initial_placements[{placement_index}].spawn_condition "
+                f"must be an object, got {type(raw).__name__}"
+            )
+
+        def _as_str_tuple(value: Any, key: str) -> Tuple[str, ...]:
+            if value is None:
+                return ()
+            if not isinstance(value, list):
+                raise ScenarioLoadError(
+                    f"monsters.initial_placements[{placement_index}]."
+                    f"spawn_condition.{key} must be a list of strings"
+                )
+            return tuple(str(v) for v in value)
+
+        phases = _as_str_tuple(raw.get("day_night_phases"), "day_night_phases")
+        required_flags = _as_str_tuple(raw.get("required_flags"), "required_flags")
+        forbidden_flags = _as_str_tuple(raw.get("forbidden_flags"), "forbidden_flags")
+        weathers = _as_str_tuple(raw.get("weather_types"), "weather_types")
+
+        # WeatherTypeEnum 名は事前検証する。作家ミスは boundary で弾く。
+        for w in weathers:
+            try:
+                WeatherTypeEnum[w]
+            except KeyError as e:
+                valid = [x.name for x in WeatherTypeEnum]
+                raise ScenarioLoadError(
+                    f"monsters.initial_placements[{placement_index}]."
+                    f"spawn_condition.weather_types contains invalid value {w!r}. "
+                    f"Valid values: {valid}"
+                ) from e
+
+        return ScenarioMonsterSpawnCondition(
+            day_night_phase_names=phases,
+            required_flags=required_flags,
+            forbidden_flags=forbidden_flags,
+            weather_type_names=weathers,
         )
 
     def _parse_weather_config(self, raw: Dict[str, Any]) -> Optional[ScenarioWeatherConfig]:

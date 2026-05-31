@@ -38,6 +38,7 @@ class SpotGraphSimulationApplicationService:
         environment_stage: Optional["_SpotGraphTickStage"] = None,
         day_night_stage: Optional["_SpotGraphTickStage"] = None,
         needs_decay_stage: Optional["_SpotGraphTickStage"] = None,
+        monster_spawn_stage: Optional["_SpotGraphTickStage"] = None,
         monster_behavior_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
         heartbeat_emitter: Optional["HeartbeatObservationEmitter"] = None,
@@ -52,6 +53,7 @@ class SpotGraphSimulationApplicationService:
         self._environment_stage = environment_stage
         self._day_night_stage = day_night_stage
         self._needs_decay_stage = needs_decay_stage
+        self._monster_spawn_stage = monster_spawn_stage
         self._monster_behavior_stage = monster_behavior_stage
         self._llm_turn_trigger = llm_turn_trigger
         self._heartbeat_emitter = heartbeat_emitter
@@ -115,6 +117,12 @@ class SpotGraphSimulationApplicationService:
                 self._day_night_stage.run(current_tick)
             if self._needs_decay_stage is not None:
                 self._needs_decay_stage.run(current_tick)
+            if self._monster_spawn_stage is not None:
+                # 動的 spawn / despawn 判定。day_night / weather / flag を
+                # 評価し、条件付きスロットを必要に応じてスポーン or デスポーン。
+                # behavior の前に走らせることで「その tick で spawn したモンスター
+                # が同 tick の behavior に乗る」。
+                self._monster_spawn_stage.run(current_tick)
             if self._monster_behavior_stage is not None:
                 # モンスター行動 tick: attack / wander / pack 行動。
                 # needs_decay 後に置くことで「同 tick でモンスターが空腹を

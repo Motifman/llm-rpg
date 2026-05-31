@@ -1421,7 +1421,12 @@ def create_escape_game_runtime(
         # in-memory counter で十分。
         monster_counter = 1
         loadout_counter = 1
+        # Phase B-2b: spawn_condition が無い (= None / is_always) placement のみ
+        # シナリオ起動時に即配置する static 経路。条件付き placement は
+        # SpotGraphMonsterSpawnStageService が tick 毎に判定して spawn/despawn する。
         for placement in scenario.monster_placements:
+            if placement.spawn_condition is not None and not placement.spawn_condition.is_always:
+                continue
             template = next(
                 (
                     st.template
@@ -1749,6 +1754,7 @@ def create_escape_game_runtime(
     # (廃病院 等) の挙動を一切変えない。
     monster_attack_orchestrator = None
     monster_behavior_stage = None
+    monster_spawn_stage = None  # Phase B-2b: 条件付き placement の動的 spawn
     if scenario.monster_placements:
         from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
             SpotAttackOrchestrator,
@@ -1782,6 +1788,85 @@ def create_escape_game_runtime(
 
         monster_behavior_stage = _MonsterBehaviorTickStageAdapter(monster_behavior_service)
 
+        # Phase B-2b: 条件付き placement (spawn_condition が is_always でない)
+        # に対する動的 spawn / despawn stage。static placement (B-2a 経路) で
+        # 既に置いたインスタンスは触らず、条件付き placement だけを動かす。
+        conditional_placements = [
+            p for p in scenario.monster_placements
+            if p.spawn_condition is not None and not p.spawn_condition.is_always
+        ]
+        if conditional_placements:
+            from ai_rpg_world.application.world_graph.spot_graph_monster_spawn_stage_service import (
+                MonsterSpawnSlot,
+                SpotGraphMonsterSpawnStageService,
+            )
+
+            slots = []
+            for i, placement in enumerate(conditional_placements):
+                template = next(
+                    (
+                        st.template
+                        for st in scenario.monster_templates
+                        if st.string_id == placement.template_string_id
+                    ),
+                    None,
+                )
+                if template is None:
+                    raise ValueError(
+                        f"monster placement references unknown template: "
+                        f"{placement.template_string_id}"
+                    )
+                spot_int = scenario.id_mapper.get_int("spot", placement.spot_string_id)
+                slot_key = (
+                    f"{placement.template_string_id}@{placement.spot_string_id}#{i}"
+                )
+                slots.append(MonsterSpawnSlot(
+                    slot_key=slot_key,
+                    template=template,
+                    spot_id=SpotId.create(spot_int),
+                    coordinate=Coordinate(
+                        x=placement.coordinate_x,
+                        y=placement.coordinate_y,
+                        z=placement.coordinate_z,
+                    ),
+                    day_night_phase_names=placement.spawn_condition.day_night_phase_names,
+                    required_flags=placement.spawn_condition.required_flags,
+                    forbidden_flags=placement.spawn_condition.forbidden_flags,
+                    weather_type_names=placement.spawn_condition.weather_type_names,
+                ))
+
+            # 採番は static 配置で使った範囲とぶつからないよう開始値を 10_000 から。
+            # 動的 spawn が同一 runtime 内で多数のスロットを 1000 回以上繰り返し
+            # spawn/despawn しても安全な余裕を取る。
+            def _make_counter(start: int):
+                state = {"n": start}
+                def _next() -> int:
+                    state["n"] += 1
+                    return state["n"]
+                return _next
+
+            monster_spawn_service = SpotGraphMonsterSpawnStageService(
+                slots=tuple(slots),
+                monster_repository=monster_repo,
+                skill_loadout_repository=skill_loadout_repo,
+                spot_graph_repository=spot_graph_repo,
+                time_of_day_provider=(
+                    day_night_stage.current_time_of_day
+                    if day_night_stage is not None
+                    else None
+                ),
+                flags_provider=world_flag_state.as_frozen_set,
+                weather_type_provider=lambda: (
+                    weather_holder["state"].weather_type.name
+                    if weather_holder.get("state") is not None
+                    else None
+                ),
+                monster_id_factory=_make_counter(10_000),
+                loadout_id_factory=_make_counter(20_000),
+                world_object_id_factory=_make_counter(2_000_000),
+            )
+            monster_spawn_stage = monster_spawn_service
+
     simulation_service = SpotGraphSimulationApplicationService(
         time_provider=time_provider,
         unit_of_work=InMemoryUnitOfWork(),
@@ -1793,6 +1878,7 @@ def create_escape_game_runtime(
         environment_stage=environment_stage,
         day_night_stage=day_night_stage,
         needs_decay_stage=needs_decay_stage,
+        monster_spawn_stage=monster_spawn_stage,
         monster_behavior_stage=monster_behavior_stage,
         llm_turn_trigger=sim_llm_trigger,
     )
