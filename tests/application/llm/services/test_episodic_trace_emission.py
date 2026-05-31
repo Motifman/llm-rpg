@@ -135,10 +135,11 @@ class TestChunkCoordinatorTraceEmission:
     def _trigger_chunk_close(
         self, coord, buffer, action_store, player_id: PlayerId
     ) -> None:
-        """boundary を踏むのに必要な最小限を仕込む:
-        - 古い action (t0)
-        - schedules_turn=True 観測 (t1)
-        - 新しい action (t2) で after_action_recorded を呼ぶ
+        """boundary を踏むのに必要な最小限を仕込む (PR #322 後続: MIN=3):
+
+        - 2 件の wait (MIN ゲート積み上げ)
+        - その間に salient 観測 (breaks_movement=True; PR #322 で schedules_turn 単独は salient ではない)
+        - 3 件目の action を ``scene_boundary=True`` で投入 → SCENE_BOUNDARY_ACTION で確実にクローズ
         """
         t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
         action_store.append(
@@ -146,9 +147,10 @@ class TestChunkCoordinatorTraceEmission:
             action_summary="wait1",
             result_summary="ok",
             occurred_at=t0,
+            occurred_tick=0,
         )
         coord.after_action_recorded(player_id)
-        # salient 観測
+        # salient 観測 (PR #322 後続: breaks_movement=True を使う)
         buffer.append(
             player_id,
             ObservationEntry(
@@ -157,7 +159,7 @@ class TestChunkCoordinatorTraceEmission:
                     prose="salient event",
                     structured={"type": "x"},
                     observation_category="social",
-                    schedules_turn=True,
+                    breaks_movement=True,
                 ),
                 game_time_label=None,
             ),
@@ -167,6 +169,17 @@ class TestChunkCoordinatorTraceEmission:
             action_summary="wait2",
             result_summary="ok",
             occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
+            occurred_tick=1,
+        )
+        coord.after_action_recorded(player_id)
+        # 3 件目: scene_boundary=True で確実に SCENE_BOUNDARY_ACTION 経路でクローズ
+        action_store.append(
+            player_id,
+            action_summary="move",
+            result_summary="ok",
+            occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc),
+            occurred_tick=2,
+            scene_boundary=True,
         )
         coord.after_action_recorded(player_id)
 
@@ -239,7 +252,17 @@ class TestChunkCoordinatorTraceEmission:
             result_summary="ok",
             occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
         )
-        # 修正前はここで TypeError
+        coord.after_action_recorded(pid)
+        # PR #322 後続: MIN=3 を満たすため scene_boundary action を追加。
+        # ここで chunk が SCENE_BOUNDARY_ACTION 経由でクローズ。修正前は
+        # sort/filter のどこかで TypeError になっていた。
+        action_store.append(
+            pid,
+            action_summary="move",
+            result_summary="ok",
+            occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc),
+            scene_boundary=True,
+        )
         coord.after_action_recorded(pid)
         # chunk write が完走したことを episode_store の有無で確認
         assert len(episode_store.list_recent(pid.value, 10)) > 0
@@ -295,7 +318,16 @@ class TestChunkCoordinatorTraceEmission:
             result_summary="ok",
             occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
         )
-        # 修正前はここで TypeError (sort key で naive と aware を比較)
+        coord.after_action_recorded(pid)
+        # PR #322 後続: MIN=3 を満たす scene_boundary action を追加。
+        # 修正前はここで TypeError (sort key で naive と aware を比較)。
+        action_store.append(
+            pid,
+            action_summary="move",
+            result_summary="ok",
+            occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc),
+            scene_boundary=True,
+        )
         coord.after_action_recorded(pid)
         assert len(episode_store.list_recent(pid.value, 10)) > 0
 
@@ -460,10 +492,12 @@ class TestEscapeGameEpisodicTraceE2E:
 
         # 既存の smoke と同じ最小シーケンスで chunk と recall を発火させる
         kaito_id, rin_id = runtime.get_player_ids()[0], runtime.get_player_ids()[1]
+        # PR #322 後続: MIN_ACTIONS_FOR_CLOSE=3 + scene_boundary 経路に合わせて拡張
         runtime.do_move(rin_id, "entrance_hall")  # リン → カイト同 spot
-        runtime.do_wait(kaito_id)                  # action_t0
+        runtime.do_wait(kaito_id)                  # action 1
         runtime.do_speech(rin_id, "カイト、こんにちは", SpeechChannel.SAY)
-        runtime.do_wait(kaito_id)                  # boundary 踏み → chunk write
+        runtime.do_wait(kaito_id)                  # action 2
+        runtime.do_move(kaito_id, "reading_room")  # action 3 (scene_boundary) → close
         # recall を発動するため prompt を 1 度組む
         runtime.build_full_prompt(kaito_id)
 

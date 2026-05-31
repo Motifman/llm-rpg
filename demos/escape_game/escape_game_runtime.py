@@ -637,6 +637,7 @@ class EscapeGameRuntime:
         tool_name: str,
         success: bool = True,
         error_code: Optional[str] = None,
+        scene_boundary: bool = False,
     ) -> None:
         """action_result_store に 1 件積み、episodic chunk_coordinator を起動する。
 
@@ -645,6 +646,10 @@ class EscapeGameRuntime:
         必ず LLM tool 名 (例: ``TOOL_NAME_SPOT_GRAPH_TRAVEL_TO``) を明示する。
         ``success`` / ``error_code`` も同様に「常に ``outcome:success`` が立つ」
         ノイズの原因なので、失敗を検知できる経路は明示的に渡す。
+
+        ``scene_boundary``: その行動がエピソード記憶の「シーン切り替え」を
+        意味するかどうか。cognitive science の "doorway effect" を反映して、
+        spot 遷移成功時は True を渡すと chunk が閉じやすくなる (Issue #311 後続)。
         """
         # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)
         self._action_result_store.append(
@@ -655,6 +660,9 @@ class EscapeGameRuntime:
             tool_name=tool_name,
             success=success,
             error_code=error_code,
+            scene_boundary=scene_boundary,
+            # Issue #311 後続: bucket 内 actions の tick 差で TEMPORAL_GAP 判定するため
+            occurred_tick=self.current_tick(),
         )
         # Issue #283 後続: episodic memory が有効なら、action_result が
         # store に積まれた直後に chunk_coordinator を起動する。chunk
@@ -1090,11 +1098,14 @@ class EscapeGameRuntime:
         if reached:
             action_summary = f"「{from_name}」から「{dest_name}」へ移動した"
             result_summary = f"「{dest_name}」に到着した"
+            # spot 遷移成功は cognitive science の "doorway effect" に相当する
+            # 強い scene 境界 → chunk_coordinator にヒントとして伝える (Issue #311 後続)
             self._record_action_result(
                 player_id,
                 action_summary,
                 result_summary,
                 tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+                scene_boundary=True,
             )
         else:
             self._record_action_result(

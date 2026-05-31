@@ -117,6 +117,16 @@ class ActionResultEntry:
     should_reschedule: bool = False
     game_time_label: Optional[str] = None
     omit_result_in_prompt: bool = False
+    # Issue #311 後続: エピソード記憶のチャンク境界判定で「シーン切り替え」を
+    # 明示的に伝えるためのヒント。``True`` の action が bucket に入ったら
+    # chunk を閉じる候補とする (cognitive science の "doorway effect" 等を
+    # 反映)。spot 遷移成功や重要な interaction 等の caller が True にする。
+    # 未指定 (False) の action はチャンク化に対して中立 = 従来の境界条件で判定。
+    scene_boundary: bool = False
+    # action が起きた時点のゲーム内 tick (記録時点で取れない caller は None)。
+    # ``decide_chunk_boundary`` の TEMPORAL_GAP 判定で bucket 内 actions の
+    # tick 差を見るのに使う (wall-clock では LLM レイテンシで歪むため)。
+    occurred_tick: Optional[int] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.occurred_at, datetime):
@@ -143,6 +153,13 @@ class ActionResultEntry:
             raise TypeError("game_time_label must be str or None")
         if not isinstance(self.omit_result_in_prompt, bool):
             raise TypeError("omit_result_in_prompt must be bool")
+        if not isinstance(self.scene_boundary, bool):
+            raise TypeError("scene_boundary must be bool")
+        if self.occurred_tick is not None and not isinstance(self.occurred_tick, int):
+            raise TypeError("occurred_tick must be int or None")
+        if isinstance(self.occurred_tick, bool):
+            # bool は int の subclass。tick として誤注入されないよう弾く
+            raise TypeError("occurred_tick must not be bool")
 
 
 EMOTION_HINT_VALUES: Tuple[str, ...] = (

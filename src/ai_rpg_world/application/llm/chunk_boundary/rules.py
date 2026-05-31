@@ -31,8 +31,22 @@ def _as_utc(value: datetime) -> datetime:
         return value.replace(tzinfo=timezone.utc)
     return value
 
-# 第1版の固定閾値（テストが同一定数を参照して期待値を固定する）
-OBSERVATION_COUNT_CLOSE_THRESHOLD = 3
+# Issue #311 後続: cognitive science (Event Segmentation Theory + working memory)
+# に合わせた閾値群。
+#
+# - OBSERVATION_COUNT_CLOSE_THRESHOLD: 3 → 5 に引き上げ。3 件は micro-event 級、
+#   5-8 件が scene-level の自然な区切りに近い (Zacks の naturalistic 研究)。
+# - MIN_ACTIONS_FOR_CLOSE: working memory 容量 (4±1) の下限。これ以下の action
+#   数では 1 つの episode として括る価値が薄い (= 単発 action は HOLD)。
+# - MAX_ACTIONS_FOR_CLOSE: working memory 容量 (7±2) の上限。これを超えて
+#   bucket が膨らんだら scene 境界が来ていなくても強制クローズして 1 chunk に
+#   閉じ込める (recall 効率の確保)。
+# - TEMPORAL_GAP_TICKS_FOR_CLOSE: bucket 内 actions の最古/最新の tick 差が
+#   これ以上開いたら時間的に分断された scene とみなす。
+OBSERVATION_COUNT_CLOSE_THRESHOLD = 5
+MIN_ACTIONS_FOR_CLOSE = 3
+MAX_ACTIONS_FOR_CLOSE = 7
+TEMPORAL_GAP_TICKS_FOR_CLOSE = 8
 
 
 @dataclass(frozen=True)
@@ -115,6 +129,11 @@ class ChunkBoundaryReason(str, Enum):
     OBSERVATION_SALIENT = "observation_salient"
     CATEGORY_SHIFT = "category_shift"
     STRUCTURED_KEYS_CHANGED = "structured_keys_changed"
+    # Issue #311 後続: cognitive science 由来の境界条件
+    SCENE_BOUNDARY_ACTION = "scene_boundary_action"  # ActionResultEntry.scene_boundary=True (e.g. spot 遷移)
+    TEMPORAL_GAP = "temporal_gap"                     # bucket 内 actions の tick 差が閾値超
+    MAX_ACTIONS_REACHED = "max_actions_reached"       # working memory 上限 (= 強制クローズ)
+    MIN_ACTIONS_NOT_MET = "min_actions_not_met"       # 単発 action は HOLD (HOLD 理由内訳)
     HOLD_ACCUMULATING = "hold_accumulating"
 
 
@@ -142,10 +161,22 @@ def decide_chunk_boundary(
     """
     チャンクを閉じてエピソード生成へ進むべきかを返す。
 
-    - `chunk_encoding_episode_generation_allowed` が偽なら（第 1 版: 行動ゼロ等）生成不可かつ閉じない。
-    - 生成可能なとき、`explicit_segment_close` が最優先で閉じる（協調層からの区切り信号）。
-    - それ以外は観測ヒントが閾値・顕在性・カテゴリ遷移・structured キー変化のいずれかで閉じる。
-    - ヒントが発火せず明示もない場合は HOLD（材料は蓄積継続）。
+    判定順 (Issue #311 後続で cognitive science に合わせた構成):
+
+    1. **エンコーディング不可** (action 0 件) → HOLD
+    2. **明示シグナル** (``explicit_segment_close``) → 即クローズ
+    3. **強制クローズ系** (cognitive limit / 時間断絶):
+       - bucket actions が ``MAX_ACTIONS_FOR_CLOSE`` 件以上 (working memory 上限)
+       - bucket actions の tick 差が ``TEMPORAL_GAP_TICKS_FOR_CLOSE`` 以上 (時間断絶)
+    4. **MIN_ACTIONS_FOR_CLOSE 未満** → 強制 HOLD
+       (単発 action は episode に値しない — micro-event を防ぐ)
+    5. **scene 境界系** (event segmentation theory):
+       - bucket 内 ``ActionResultEntry.scene_boundary=True`` (spot 遷移等)
+       - observation の category_shift / structured_keys_change
+       - ``breaks_movement`` 観測 (顕著な「進行を遮る」イベント — schedules_turn は
+         過剰発火するため除外)
+    6. **観測件数閾値** → クローズ (件数で scene 級到達と見なす)
+    7. 何も該当なし → HOLD (材料は蓄積継続)
     """
     if not isinstance(inp, ChunkEncodingInput):
         raise TypeError("inp must be ChunkEncodingInput")
@@ -171,20 +202,44 @@ def decide_chunk_boundary(
             reason=ChunkBoundaryReason.SEGMENT_EXPLICIT,
         )
 
-    if hints_eff.observation_count >= OBSERVATION_COUNT_CLOSE_THRESHOLD:
+    actions = inp.action_results
+    n_actions = len(actions)
+
+    # 3a. MAX 強制クローズ (working memory 上限の保護)
+    if n_actions >= MAX_ACTIONS_FOR_CLOSE:
         return ChunkBoundaryDecision(
             should_close_chunk=True,
             episode_generation_allowed_if_closed=True,
-            reason=ChunkBoundaryReason.OBSERVATION_COUNT_THRESHOLD,
+            reason=ChunkBoundaryReason.MAX_ACTIONS_REACHED,
         )
 
-    if hints_eff.any_breaks_movement or hints_eff.any_schedules_turn:
+    # 3b. 時間断絶 (long temporal gap)
+    if n_actions >= 2:
+        tick_span = _action_tick_span(actions)
+        if tick_span >= TEMPORAL_GAP_TICKS_FOR_CLOSE:
+            return ChunkBoundaryDecision(
+                should_close_chunk=True,
+                episode_generation_allowed_if_closed=True,
+                reason=ChunkBoundaryReason.TEMPORAL_GAP,
+            )
+
+    # 4. MIN 未満は強制 HOLD (= 単発 action では閉じない)
+    if n_actions < MIN_ACTIONS_FOR_CLOSE:
+        return ChunkBoundaryDecision(
+            should_close_chunk=False,
+            episode_generation_allowed_if_closed=True,
+            reason=ChunkBoundaryReason.MIN_ACTIONS_NOT_MET,
+        )
+
+    # 5a. scene 境界 action (spot 遷移成功 等の caller-flagged 境界)
+    if any(a.scene_boundary for a in actions):
         return ChunkBoundaryDecision(
             should_close_chunk=True,
             episode_generation_allowed_if_closed=True,
-            reason=ChunkBoundaryReason.OBSERVATION_SALIENT,
+            reason=ChunkBoundaryReason.SCENE_BOUNDARY_ACTION,
         )
 
+    # 5b. 観測ベースの scene 境界
     if hints_eff.has_category_transition:
         return ChunkBoundaryDecision(
             should_close_chunk=True,
@@ -199,8 +254,41 @@ def decide_chunk_boundary(
             reason=ChunkBoundaryReason.STRUCTURED_KEYS_CHANGED,
         )
 
+    # 5c. breaks_movement のみ "salient" として尊重。schedules_turn は LLM ターン
+    # 投入トリガであり scene 境界とは別概念なので除外 (第21回実験 #311 で過剰発火を観測)
+    if hints_eff.any_breaks_movement:
+        return ChunkBoundaryDecision(
+            should_close_chunk=True,
+            episode_generation_allowed_if_closed=True,
+            reason=ChunkBoundaryReason.OBSERVATION_SALIENT,
+        )
+
+    # 6. 観測件数閾値
+    if hints_eff.observation_count >= OBSERVATION_COUNT_CLOSE_THRESHOLD:
+        return ChunkBoundaryDecision(
+            should_close_chunk=True,
+            episode_generation_allowed_if_closed=True,
+            reason=ChunkBoundaryReason.OBSERVATION_COUNT_THRESHOLD,
+        )
+
     return ChunkBoundaryDecision(
         should_close_chunk=False,
         episode_generation_allowed_if_closed=True,
         reason=ChunkBoundaryReason.HOLD_ACCUMULATING,
     )
+
+
+def _action_tick_span(actions: Sequence[Any]) -> int:
+    """bucket actions の ``occurred_tick`` の最大-最小差を返す。
+
+    tick が記録されていない (= None) action は除外し、残った tick が 2 件
+    未満なら span = 0 (= 判定できない) とする。
+    """
+    ticks: list[int] = []
+    for a in actions:
+        t = getattr(a, "occurred_tick", None)
+        if isinstance(t, int) and not isinstance(t, bool):
+            ticks.append(t)
+    if len(ticks) < 2:
+        return 0
+    return max(ticks) - min(ticks)
