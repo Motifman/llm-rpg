@@ -21,6 +21,13 @@ from ai_rpg_world.domain.world_graph.value_object.day_night_cycle_def import (
 from ai_rpg_world.domain.world_graph.value_object.day_night_phase_def import (
     DayNightPhaseDef,
 )
+from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
+from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
+from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
+from ai_rpg_world.domain.player.enum.player_enum import Race
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
@@ -158,6 +165,38 @@ class ScenarioDayNightConfig:
 
 
 @dataclass(frozen=True)
+class ScenarioMonsterTemplate:
+    """シナリオ JSON で宣言されたモンスター種別定義 (Phase B-2a)。
+
+    domain `MonsterTemplate` をそのまま保持する薄いラッパ + string_id (作家が
+    JSON で参照するための識別子)。runtime で repository に詰める際に
+    template_id (int) と string_id の対応も id_mapper に登録する。
+    """
+
+    string_id: str
+    template: MonsterTemplate
+
+
+@dataclass(frozen=True)
+class ScenarioMonsterPlacement:
+    """シナリオ起動時に物理的に置くモンスター個体 (Phase B-2a)。
+
+    Phase B-2a では「シナリオ開始時に即配置」「以後は respawn / 動的 spawn
+    無し」の単純化された static placement のみサポート。動的 spawn は B-2b で
+    扱う (本 dataclass はその時点で `spawn_condition` を加算する余地を残す)。
+    """
+
+    template_string_id: str
+    spot_string_id: str
+    # 同じ spot に複数体置きたい時用に座標を分けられるよう保持。シナリオが省略
+    # していれば (0, 0, 0)。spot-graph では座標は behavior の参照点として
+    # 使われる程度。
+    coordinate_x: int = 0
+    coordinate_y: int = 0
+    coordinate_z: int = 0
+
+
+@dataclass(frozen=True)
 class ScenarioLoadResult:
     graph: SpotGraphAggregate
     interiors: Dict[SpotId, SpotInterior]
@@ -174,6 +213,8 @@ class ScenarioLoadResult:
     reactive_passage_bindings: Tuple[ReactivePassageBinding, ...] = ()
     reactive_object_state_bindings: Tuple[ReactiveObjectStateBinding, ...] = ()
     synchronized_action_groups: Tuple[SynchronizedActionGroup, ...] = ()
+    monster_templates: Tuple[ScenarioMonsterTemplate, ...] = ()
+    monster_placements: Tuple[ScenarioMonsterPlacement, ...] = ()
 
 
 class ScenarioLoader:
@@ -206,6 +247,9 @@ class ScenarioLoader:
         scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
         weather_config = self._parse_weather_config(raw.get("environment", {}))
         day_night_config = self._parse_day_night_config(raw.get("environment", {}))
+        monster_templates, monster_placements = self._parse_monsters_block(
+            raw.get("monsters"), mapper,
+        )
         reactive_bindings = self._parse_reactive_passage_bindings(
             raw.get("reactive_bindings", {}), mapper,
         )
@@ -232,6 +276,8 @@ class ScenarioLoader:
             reactive_passage_bindings=reactive_bindings,
             reactive_object_state_bindings=reactive_object_bindings,
             synchronized_action_groups=sync_groups,
+            monster_templates=monster_templates,
+            monster_placements=monster_placements,
         )
 
     def _parse_metadata(self, raw: Dict[str, Any]) -> ScenarioMetadata:
@@ -975,6 +1021,166 @@ class ScenarioLoader:
             phases=phases,
         )
         return ScenarioDayNightConfig(cycle=cycle, announce_changes=announce)
+
+    def _parse_monsters_block(
+        self, raw: Optional[Dict[str, Any]], mapper: ScenarioIdMapper,
+    ) -> Tuple[Tuple[ScenarioMonsterTemplate, ...], Tuple[ScenarioMonsterPlacement, ...]]:
+        """`monsters.templates` と `monsters.initial_placements` を読み込む (Phase B-2a)。
+
+        JSON 形式:
+        ```
+        "monsters": {
+          "templates": [
+            {
+              "id": "wild_dog",
+              "name": "野犬",
+              "description": "...",
+              "race": "WOLF",                  // Race enum 名
+              "faction": "ENEMY",              // MonsterFactionEnum 名
+              "base_stats": {                  // 必須キー全部
+                "max_hp": 30, "max_mp": 0, "attack": 8, "defense": 4,
+                "speed": 6, "critical_rate": 0.05, "evasion_rate": 0.1
+              },
+              "reward": {"exp": 10, "gold": 0},
+              "respawn": {"interval_ticks": 50, "auto": true},
+              "vision_range": 4,
+              "flee_threshold": 0.2
+            }
+          ],
+          "initial_placements": [
+            {"template": "wild_dog", "spot": "deep_forest", "coordinate": {"x": 0, "y": 0}}
+          ]
+        }
+        ```
+
+        Phase B-2a では initial_placements は static (シナリオ起動時のみ配置)。
+        spawn_condition による動的 spawn は Phase B-2b で扱う。
+        """
+        if not isinstance(raw, dict):
+            return ((), ())
+        templates_raw = raw.get("templates", [])
+        placements_raw = raw.get("initial_placements", [])
+        if not isinstance(templates_raw, list):
+            raise ScenarioLoadError("monsters.templates must be a list")
+        if not isinstance(placements_raw, list):
+            raise ScenarioLoadError("monsters.initial_placements must be a list")
+
+        templates = tuple(
+            self._parse_monster_template(t, mapper, i)
+            for i, t in enumerate(templates_raw)
+        )
+        placements = tuple(
+            self._parse_monster_placement(p, i)
+            for i, p in enumerate(placements_raw)
+        )
+        return templates, placements
+
+    def _parse_monster_template(
+        self, raw: Any, mapper: ScenarioIdMapper, index: int,
+    ) -> ScenarioMonsterTemplate:
+        """1 monster template を MonsterTemplate に変換する。"""
+        if not isinstance(raw, dict):
+            raise ScenarioLoadError(
+                f"monsters.templates[{index}] must be an object, got {type(raw).__name__}"
+            )
+        string_id = raw.get("id")
+        if not isinstance(string_id, str) or not string_id:
+            raise ScenarioLoadError(
+                f"monsters.templates[{index}].id must be a non-empty string"
+            )
+        # 文字列 ID → 連番 int を id_mapper に登録 (将来 cross-reference する場面用)
+        template_int_id = mapper.register("monster_template", string_id)
+
+        base = raw.get("base_stats", {})
+        if not isinstance(base, dict):
+            raise ScenarioLoadError(
+                f"monsters.templates[{index}].base_stats must be an object"
+            )
+        try:
+            base_stats = BaseStats(
+                max_hp=int(base.get("max_hp", 30)),
+                max_mp=int(base.get("max_mp", 0)),
+                attack=int(base.get("attack", 5)),
+                defense=int(base.get("defense", 3)),
+                speed=int(base.get("speed", 5)),
+                critical_rate=float(base.get("critical_rate", 0.05)),
+                evasion_rate=float(base.get("evasion_rate", 0.05)),
+            )
+        except (TypeError, ValueError) as e:
+            raise ScenarioLoadError(
+                f"monsters.templates[{index}].base_stats parse error: {e}"
+            ) from e
+
+        reward_raw = raw.get("reward", {})
+        reward = RewardInfo(
+            exp=int(reward_raw.get("exp", 0)),
+            gold=int(reward_raw.get("gold", 0)),
+        )
+        respawn_raw = raw.get("respawn", {})
+        respawn = RespawnInfo(
+            respawn_interval_ticks=int(respawn_raw.get("interval_ticks", 50)),
+            is_auto_respawn=bool(respawn_raw.get("auto", True)),
+        )
+
+        race_name = str(raw.get("race", "WOLF"))
+        try:
+            race = Race[race_name]
+        except KeyError as e:
+            valid = [r.name for r in Race]
+            raise ScenarioLoadError(
+                f"monsters.templates[{index}].race must be one of {valid}, got {race_name}"
+            ) from e
+        faction_name = str(raw.get("faction", "ENEMY"))
+        try:
+            faction = MonsterFactionEnum[faction_name]
+        except KeyError as e:
+            valid = [f.name for f in MonsterFactionEnum]
+            raise ScenarioLoadError(
+                f"monsters.templates[{index}].faction must be one of {valid}, got {faction_name}"
+            ) from e
+
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId(template_int_id),
+            name=str(raw.get("name", string_id)),
+            base_stats=base_stats,
+            reward_info=reward,
+            respawn_info=respawn,
+            race=race,
+            faction=faction,
+            description=str(raw.get("description", "")),
+            skill_ids=[],  # Phase B-2a ではスキル無し
+            vision_range=int(raw.get("vision_range", 5)),
+            flee_threshold=float(raw.get("flee_threshold", 0.2)),
+        )
+        return ScenarioMonsterTemplate(string_id=string_id, template=template)
+
+    def _parse_monster_placement(
+        self, raw: Any, index: int,
+    ) -> ScenarioMonsterPlacement:
+        if not isinstance(raw, dict):
+            raise ScenarioLoadError(
+                f"monsters.initial_placements[{index}] must be an object"
+            )
+        template_id = raw.get("template")
+        spot_id = raw.get("spot")
+        if not isinstance(template_id, str) or not template_id:
+            raise ScenarioLoadError(
+                f"monsters.initial_placements[{index}].template must be a non-empty string"
+            )
+        if not isinstance(spot_id, str) or not spot_id:
+            raise ScenarioLoadError(
+                f"monsters.initial_placements[{index}].spot must be a non-empty string"
+            )
+        coord = raw.get("coordinate", {})
+        if not isinstance(coord, dict):
+            coord = {}
+        return ScenarioMonsterPlacement(
+            template_string_id=template_id,
+            spot_string_id=spot_id,
+            coordinate_x=int(coord.get("x", 0)),
+            coordinate_y=int(coord.get("y", 0)),
+            coordinate_z=int(coord.get("z", 0)),
+        )
 
     def _parse_weather_config(self, raw: Dict[str, Any]) -> Optional[ScenarioWeatherConfig]:
         weather = raw.get("weather") if isinstance(raw, dict) else None

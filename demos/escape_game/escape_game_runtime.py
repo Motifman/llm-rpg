@@ -167,6 +167,15 @@ from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
+from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
+    InMemoryMonsterAggregateRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_monster_template_repository import (
+    InMemoryMonsterTemplateRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_skill_loadout_repository import (
+    InMemorySkillLoadoutRepository,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import InMemoryPlayerInventoryRepository
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
@@ -1317,6 +1326,85 @@ def create_escape_game_runtime(
         if not graph.presence_at(spawn.spawn_spot_id).is_present(eid):
             graph.place_entity(eid, spawn.spawn_spot_id)
 
+    # ── Phase B-2a: モンスターの初期配置 ──
+    # シナリオで宣言された MonsterTemplate を template repo に登録し、
+    # initial_placements を MonsterAggregate.reconstitute で実体化して
+    # monster_repo + graph (place_monster) に登録する。動的 spawn (時間帯
+    # 条件) は Phase B-2b の SpotGraphMonsterSpawnService が担う。
+    monster_repo = InMemoryMonsterAggregateRepository(data_store)
+    monster_template_repo = InMemoryMonsterTemplateRepository()
+    skill_loadout_repo = InMemorySkillLoadoutRepository()
+    if scenario.monster_templates or scenario.monster_placements:
+        # NOTE: Coordinate / WorldTick はモジュールトップで import 済 (player
+        # setup でも使われている)。ここでローカル import すると Python の
+        # 関数スコープ規則で「local variable referenced before assignment」
+        # になり、上の player 初期化を壊す。
+        from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
+            MonsterAggregate,
+        )
+        from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+        from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
+            SkillLoadoutAggregate,
+        )
+        from ai_rpg_world.domain.skill.value_object.skill_loadout_id import (
+            SkillLoadoutId,
+        )
+        from ai_rpg_world.domain.world.value_object.world_object_id import (
+            WorldObjectId,
+        )
+        from ai_rpg_world.domain.common.value_object import WorldTick
+
+        for st in scenario.monster_templates:
+            monster_template_repo.save(st.template)
+
+        # MonsterId / WorldObjectId / SkillLoadoutId の単純な incrementing
+        # 採番。本サービスはシナリオ起動時の 1 回だけしか呼ばれないので
+        # in-memory counter で十分。
+        monster_counter = 1
+        loadout_counter = 1
+        for placement in scenario.monster_placements:
+            template = next(
+                (
+                    st.template
+                    for st in scenario.monster_templates
+                    if st.string_id == placement.template_string_id
+                ),
+                None,
+            )
+            if template is None:
+                raise ValueError(
+                    f"monster placement references unknown template: "
+                    f"{placement.template_string_id}"
+                )
+            spot_int = scenario.id_mapper.get_int("spot", placement.spot_string_id)
+            spot_id = SpotId.create(spot_int)
+            monster_id = MonsterId(monster_counter)
+            world_object_id = WorldObjectId(1_000_000 + monster_counter)
+            loadout = SkillLoadoutAggregate.create(
+                loadout_id=SkillLoadoutId(loadout_counter),
+                owner_id=monster_counter,
+                normal_capacity=0,
+                awakened_capacity=0,
+            )
+            skill_loadout_repo.save(loadout)
+            monster = MonsterAggregate.reconstitute(
+                monster_id=monster_id,
+                template=template,
+                world_object_id=world_object_id,
+                skill_loadout=loadout,
+                coordinate=Coordinate(
+                    x=placement.coordinate_x,
+                    y=placement.coordinate_y,
+                    z=placement.coordinate_z,
+                ),
+                spot_id=spot_id,
+                current_tick=WorldTick(0),
+            )
+            monster_repo.save(monster)
+            graph.place_monster(monster_id, spot_id)
+            monster_counter += 1
+            loadout_counter += 1
+
     graph.clear_events()
     spot_graph_repo.save(graph)
 
@@ -1429,6 +1517,17 @@ def create_escape_game_runtime(
             return frozenset()
         return collect_owned_item_spec_ids_from_inventory(inv, item_repo)
 
+    def _build_monster_view_provider_for_runtime(_monster_repo):
+        """state_builder に渡す monster_view_provider を遅延構築する小ヘルパ。
+
+        spot_graph_monster_view.build_monster_view_provider を呼ぶだけだが、
+        circular import を避けるために関数内 import に寄せた。
+        """
+        from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
+            build_monster_view_provider,
+        )
+        return build_monster_view_provider(_monster_repo)
+
     def _resolve_item_spec_name(spec_id_value: int) -> str:
         """item_spec_id → 表示名解決。地面アイテムの prompt 表示などで使う。"""
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId as _ISpecId
@@ -1452,6 +1551,11 @@ def create_escape_game_runtime(
         time_of_day_provider=(
             day_night_stage.current_time_of_day
             if day_night_stage is not None
+            else None
+        ),
+        monster_view_provider=(
+            _build_monster_view_provider_for_runtime(monster_repo)
+            if scenario.monster_placements
             else None
         ),
     )
@@ -1581,6 +1685,44 @@ def create_escape_game_runtime(
         player_status_repository=player_status_repo,
     )
 
+    # Phase B-2a: モンスター攻撃のオーケストレーターと behavior tick service。
+    # placements が空ならどちらも構築しないことで、既存シナリオ
+    # (廃病院 等) の挙動を一切変えない。
+    monster_attack_orchestrator = None
+    monster_behavior_stage = None
+    if scenario.monster_placements:
+        from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
+            SpotAttackOrchestrator,
+        )
+        from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_service import (
+            SpotMonsterBehaviorTickService,
+        )
+
+        monster_attack_orchestrator = SpotAttackOrchestrator(
+            spot_graph_repository=spot_graph_repo,
+            monster_repository=monster_repo,
+            player_status_repository=player_status_repo,
+        )
+        monster_behavior_service = SpotMonsterBehaviorTickService(
+            spot_graph_repository=spot_graph_repo,
+            monster_repository=monster_repo,
+            player_status_repository=player_status_repo,
+            attack_orchestrator=monster_attack_orchestrator,
+            world_flags_provider=world_flag_state.as_frozen_set,
+            spot_interior_repository=spot_interior_repo,
+        )
+
+        # SpotGraphSimulationApplicationService の tick stage は run(tick) を
+        # 要求するが behavior service は tick(tick) を持つ。薄いアダプタで橋渡し。
+        class _MonsterBehaviorTickStageAdapter:
+            def __init__(self, service):
+                self._service = service
+
+            def run(self, tick) -> None:
+                self._service.tick(tick)
+
+        monster_behavior_stage = _MonsterBehaviorTickStageAdapter(monster_behavior_service)
+
     simulation_service = SpotGraphSimulationApplicationService(
         time_provider=time_provider,
         unit_of_work=InMemoryUnitOfWork(),
@@ -1592,6 +1734,7 @@ def create_escape_game_runtime(
         environment_stage=environment_stage,
         day_night_stage=day_night_stage,
         needs_decay_stage=needs_decay_stage,
+        monster_behavior_stage=monster_behavior_stage,
         llm_turn_trigger=sim_llm_trigger,
     )
 
