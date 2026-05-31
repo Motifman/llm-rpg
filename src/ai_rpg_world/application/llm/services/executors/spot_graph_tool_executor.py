@@ -69,6 +69,13 @@ from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group impo
 )
 
 
+# Phase F: 腐敗食を食べた時のダメージ量 (HP)。
+# 当面ハードコードで、per-item config 化は将来の PR で行う。
+# 10 は base_stats.max_hp=100 (現状の survival demo) に対して 10% 程度で、
+# 1 度の事故では致命的にならないが、繰り返せば確実に死ぬバランス。
+SPOILED_FOOD_DAMAGE_HP = 10
+
+
 class SpotGraphToolExecutor:
     """spot_graph_* ツールのハンドラを提供する。"""
 
@@ -292,6 +299,11 @@ class SpotGraphToolExecutor:
                     error_code="ITEM_NOT_CONSUMABLE",
                     remediation=get_remediation("ITEM_NOT_CONSUMABLE"),
                 )
+            # Phase F: 腐敗食を食べたか判定する。use() で quantity が減って
+            # state がリセットされる前に読む必要があるのでここで取る。
+            # 集約は (spec, spoiled) ベースで slot に分かれて入っているはずなので、
+            # 同 slot の instance が「腐敗 / 新鮮」のどちらかに確定している前提。
+            is_spoiled = bool(item_instance.state.get("spoiled"))
             item_instance.use()
             if item_instance.quantity == 0:
                 self._item_repository.delete(item_instance.item_instance_id)
@@ -299,7 +311,26 @@ class SpotGraphToolExecutor:
                 self._player_inventory_repository.save(inv)
             else:
                 self._item_repository.save(item_instance)
-            # EventPublisher 経由で ConsumableUsedEvent を発行
+            name = item_instance.item_spec.name
+            if is_spoiled:
+                # Phase F: 腐敗食 → ConsumableUsedEvent を出さず、直接ダメージを
+                # PlayerStatusAggregate に適用する。回復効果は捨てる (handler 経路
+                # を通さない)。damage 量は当面ハードコード (10)。per-item config
+                # は別 PR で。
+                damage = SPOILED_FOOD_DAMAGE_HP
+                status = self._player_status_repository.find_by_id(PlayerId(player_id))
+                if status is not None:
+                    status.apply_damage(damage)
+                    self._player_status_repository.save(status)
+                base = (
+                    f"{name}を食べてしまった。腐っていた——胃の奥が灼ける。"
+                    f"（{damage} ダメージ）"
+                )
+                return LlmCommandResultDto(
+                    success=True,
+                    message=append_inner_thought_to_message(base, args),
+                )
+            # 通常 (新鮮) パス: ConsumableUsedEvent を発行
             # → ConsumableEffectHandler が HP/MP 回復等を適用
             if (
                 self._event_publisher is not None
@@ -313,7 +344,6 @@ class SpotGraphToolExecutor:
                         item_spec_id=item_instance.item_spec.item_spec_id,
                     )
                 )
-            name = item_instance.item_spec.name
             base = f"{name}を使用した。"
             if item_instance.item_spec.consume_effect is not None:
                 base += f"（効果が適用された）"
