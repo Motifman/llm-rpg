@@ -55,6 +55,10 @@ class ScenarioEventCondition:
     # True にすると「起きていない = 過去無限 → predicate True」として扱う
     # （「初期は ripe / clean」を sentinel マジックナンバー無しで表現できる）。
     treat_missing_as_passed: bool = False
+    # Phase D-1: 確率トリガ用。PROBABILITY condition_type のときに使う [0.0, 1.0]。
+    # 評価のたびに random.random() < probability で発火判定する。
+    # condition_type が PROBABILITY 以外でこの値が設定されていても無視される。
+    probability: Optional[float] = None
     # 合成条件用の子条件ツリー
     children: Tuple["ScenarioEventCondition", ...] = field(default_factory=tuple)
 
@@ -73,6 +77,16 @@ class ScenarioEventCondition:
             raise ScenarioEventConditionValidationException(
                 f"leaf condition '{self.condition_type}' must not have children"
             )
+        # PROBABILITY のとき probability は必須かつ [0.0, 1.0]
+        if self.condition_type == "PROBABILITY":
+            if self.probability is None:
+                raise ScenarioEventConditionValidationException(
+                    "PROBABILITY condition requires `probability` field"
+                )
+            if not (0.0 <= self.probability <= 1.0):
+                raise ScenarioEventConditionValidationException(
+                    f"probability must be in [0.0, 1.0], got {self.probability}"
+                )
 
     @property
     def is_composite(self) -> bool:
