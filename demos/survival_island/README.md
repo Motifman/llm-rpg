@@ -13,6 +13,33 @@ python3 -m demos.survival_island.run_survival_island
 LLM は呼ばずに、シナリオロードと happy path をスクリプトで動かしてプロンプト構築と
 状態遷移を可視化するスモークテスト。本番運用には別途 LLM ランナーを書く。
 
+### エピソード記憶を有効化して動かす (PR #330 / #331)
+
+`沈黙の禁書庫` シナリオで叩き上げたエピソード記憶パイプライン (chunk_coordinator
++ passive_recall + noun_matcher + 非同期 LLM 主観文付与) は、`build_episodic_stack`
+が application 層にあり**シナリオ非依存**なので、漂流島でもそのまま使える。
+
+`scripts/run_scenario_experiment.py` 経由で実走するときは以下の env を設定:
+
+```bash
+LLM_EPISODIC_ENABLED=1 \
+LLM_EPISODIC_SUBJECTIVE_ENABLED=1 \
+LLM_CLIENT=litellm \
+LLM_MODEL=<vLLM/openai モデル名> \
+python scripts/run_scenario_experiment.py \
+    --scenario data/scenarios/survival_island_v2.json \
+    --max-ticks 140 \
+    --out var/runs/survival-v2-episodic-r1
+```
+
+`runtime._episodic_stack` が自動的に組まれ、移動成功 (`do_move`) で
+`scene_boundary=True` がチャンク境界に伝わる。`noun_matcher` も漂流島の
+25 spots + 4 ペルソナを認識する (`tests/integration/test_survival_island_episodic_smoke.py`
+で配線検証済み)。
+
+詳細な設計と挙動は [`docs/episodic_memory_overview.md`](../../docs/episodic_memory_overview.md)
+を参照。
+
 ## シナリオ概要
 
 - **島の構造**: 浜辺ゾーン(5) / 森ゾーン(6) / 淡水・丘陵ゾーン(4) / 山岳ゾーン(5) / 特殊(2)
