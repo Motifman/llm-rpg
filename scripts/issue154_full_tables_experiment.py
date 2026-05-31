@@ -20,7 +20,10 @@ tick=20 の A プロンプト 1 件サンプル。
   ISSUE154_MAX_TICKS  各試行の「外側」advance_tick 呼び出しの最大回数（既定 18）。
                       移動(do_move)や待機(do_wait)ツール内でさらに時刻が進むため、
                       表の tick 列はワールド時刻でありこの回数と一致しない。
-  ISSUE154_RUNS      実行する試行キーをカンマ区切り（例: R1_default,R2_pure）。省略時は全試行。
+  ISSUE154_RUNS      実行する試行キーをカンマ区切り（例: R1_default,R2_pure）。省略時は
+                      「既定セット」(R1_default, R3_contention) のみ走る。R2_pure (memo OFF
+                      アブレーション) は memo が既定路線になったので routine から外した。
+                      使いたいときは明示的に `ISSUE154_RUNS=R2_pure` または含めて opt-in。
   LLM_TOOL_MODE      R1/R2 はスクリプトが上書き。手で固定したい場合は未指定でよい。
   LLM_MODEL          省略時はコード既定モデル。「openai/&lt;served-model-name&gt;」形式が vLLM で扱いやすいことが多い
   OPENAI_API_BASE    省略時は直 OpenAI API。`/v1` まで含めたベース URL（ローカルトンネル先 vLLM）
@@ -55,6 +58,47 @@ _B_PLAYER_MARKERS = ("リン", "B（侵入者）", "player_b", "B(")
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
+
+
+# ──────────────────────────────────────────────────────────────────
+# 試行セット定義 (memo 既定路線化に伴う再編、Issue #295 後続)
+#
+# ALL_RUNS は「実装上選べる試行」の宣言集。``ISSUE154_RUNS`` 環境変数で
+# 明示すればここから選ばれる。
+# DEFAULT_RUN_KEYS は「環境変数未指定で routine 実行されるセット」。memo を
+# 役に立つ既定路線として扱うため、memo OFF アブレーションの R2_pure は
+# routine から外し、必要なときだけ ``ISSUE154_RUNS=R2_pure`` で opt-in する。
+# ──────────────────────────────────────────────────────────────────
+ALL_RUNS: dict = {
+    "R1_default": ("relay_puzzle_demo", None),
+    "R2_pure": ("relay_puzzle_demo", "pure_spot_graph"),
+    "R3_contention": ("single_relic_contention_demo", None),
+}
+DEFAULT_RUN_KEYS: tuple = ("R1_default", "R3_contention")
+
+
+def _select_runs(
+    all_runs: dict,
+    default_keys: tuple,
+    filter_value: str,
+) -> tuple[dict, str]:
+    """``ISSUE154_RUNS`` 環境変数の値から実行する試行 dict と warning を返す。
+
+    - filter_value が空: ``default_keys`` だけ走らせる
+    - 含む: ``all_runs`` から該当キーだけ走らせる (opt-in)
+    - 含むが全て不一致: default_keys にフォールバックし warning 返す
+    """
+    filter_value = filter_value.strip()
+    if not filter_value:
+        return {k: all_runs[k] for k in default_keys}, ""
+    wanted = {k.strip() for k in filter_value.split(",") if k.strip()}
+    selected = {k: v for k, v in all_runs.items() if k in wanted}
+    if selected:
+        return selected, ""
+    return (
+        {k: all_runs[k] for k in default_keys},
+        f"ISSUE154_RUNS={filter_value!r} に一致する試行がありません。既定セットを実行します。",
+    )
 
 
 def _load_dotenv_safe() -> None:
@@ -646,20 +690,9 @@ def main() -> int:
         f"OPENAI_API_BASE={'set' if llm_base else 'unset'} ==="
     )
 
-    all_runs: dict[str, tuple[str, Optional[str]]] = {
-        "R1_default": ("relay_puzzle_demo", None),
-        "R2_pure": ("relay_puzzle_demo", "pure_spot_graph"),
-        "R3_contention": ("single_relic_contention_demo", None),
-    }
-    runs_filter = (os.environ.get("ISSUE154_RUNS") or "").strip()
-    if runs_filter:
-        wanted = {k.strip() for k in runs_filter.split(",") if k.strip()}
-        runs = {k: v for k, v in all_runs.items() if k in wanted}
-        if not runs:
-            progress(f"ISSUE154_RUNS={runs_filter!r} に一致する試行がありません。全試行を実行します。")
-            runs = all_runs
-    else:
-        runs = all_runs
+    runs, warning = _select_runs(ALL_RUNS, DEFAULT_RUN_KEYS, os.environ.get("ISSUE154_RUNS") or "")
+    if warning:
+        progress(warning)
 
     transcripts: dict[str, Transcript] = {}
     all_stats: List[RunStats] = []
