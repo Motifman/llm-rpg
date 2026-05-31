@@ -72,6 +72,9 @@ DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES = 10
 MESSAGE_WHEN_PLAYER_NOT_PLACED = "現在地: 未配置。ゲームに参加するまで待機しています。"
 
 
+_module_logger = logging.getLogger(__name__)
+
+
 def _join_passive_recall_texts(
     player_id: int,
     candidates: tuple[EpisodicPassiveRecallCandidate, ...],
@@ -85,6 +88,16 @@ def _join_passive_recall_texts(
             try:
                 active = journal_store.get_active(player_id, cand.episode.episode_id)
             except Exception:
+                # 再解釈 store の障害で recall を止めず生の recall_text に縮退する。
+                # 「sail と active が drift している」状況を後追いできるよう WARN
+                # で traceback ごと残す (silent failure 防止)。
+                _module_logger.warning(
+                    "journal_store.get_active failed for player=%s episode=%s; "
+                    "falling back to raw recall_text",
+                    player_id,
+                    cand.episode.episode_id,
+                    exc_info=True,
+                )
                 active = None
         raw = active.current_recall_text if active is not None else cand.episode.recall_text
         text = raw.strip() if isinstance(raw, str) else ""
@@ -312,12 +325,20 @@ class DefaultPromptBuilder(IPromptBuilder):
         """recall trace 用の recorder を runtime 時点で取得する。
 
         ``trace_recorder_provider`` があれば毎回 lookup (= 後付け差し込み
-        対応)、なければ構築時固定値。provider 例外は None フォールバック。
+        対応)、なければ構築時固定値。provider 例外は None フォールバック
+        (= recall は普段通り走り、trace 行だけ落ちる)。
         """
         if self._trace_recorder_provider is not None:
             try:
                 return self._trace_recorder_provider()
             except Exception:
+                # 通常 provider は単純な lambda なので例外は希。DI 化や
+                # 動的解決を加えたときに silent に消えるのを防ぐため DEBUG
+                # 級で痕跡を残す。
+                self._logger.debug(
+                    "trace_recorder_provider raised; skipping recall trace",
+                    exc_info=True,
+                )
                 return None
         return self._trace_recorder
 
@@ -364,7 +385,13 @@ class DefaultPromptBuilder(IPromptBuilder):
                 candidates=cand_payload,
             )
         except Exception:
-            pass
+            # 例: recorder が新しい kind を未知扱いで例外を投げる等。
+            # prompt build を止めない方針を維持しつつ、recorder 側のバグを
+            # 後追いできるよう DEBUG 級で痕跡を残す (logger は親クラスから)。
+            self._logger.debug(
+                "trace recorder.record raised for EPISODIC_RECALL; skipping",
+                exc_info=True,
+            )
 
     def build(
         self,
