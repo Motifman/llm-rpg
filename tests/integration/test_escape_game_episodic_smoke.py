@@ -97,21 +97,23 @@ class TestSmokeWriteSide:
         kaito_id = player_ids[0]
         rin_id = player_ids[1]
 
-        # まずリンをカイトのスポットへ動かして同居させる (以降の speech が届く準備)
+        # PR #322 後続: MIN_ACTIONS_FOR_CLOSE=3 に引き上げ + schedules_turn を
+        # salient から除外したため、smoke の最小シナリオを「カイトの 3 件 action +
+        # 最終が spot 遷移 (scene_boundary=True)」に拡張する。これで:
+        #   - bucket 3 action 達成で MIN ゲートを通過
+        #   - 最終 move が SCENE_BOUNDARY_ACTION でクローズ → episode 書き込み
         runtime.do_move(rin_id, "entrance_hall")
-        # カイト 1 回目の wait (action_t0)
-        runtime.do_wait(kaito_id)
-        # リン speech → カイトの buffer に schedules_turn=True 観測が入る
+        runtime.do_wait(kaito_id)                              # kaito act 1
         runtime.do_speech(rin_id, "カイト、こんにちは", SpeechChannel.SAY)
-        # カイト 2 回目の wait (action_t2) で buffer drain → boundary 判定
-        runtime.do_wait(kaito_id)
+        runtime.do_wait(kaito_id)                              # kaito act 2
+        runtime.do_move(kaito_id, "reading_room")              # kaito act 3 (scene_boundary)
 
         # カイトの store にエピソードが書き込まれている (= write 側が alive)
         episodes = stack.episode_store.list_recent(
             player_id=int(kaito_id.value), limit=20
         )
         assert len(episodes) > 0, (
-            "env=1 で action 間に speech 観測を挟んだのに episode が 1 件も "
+            "env=1 で 3 action + scene_boundary を踏ませても episode が 1 件も "
             "書かれていない。chunk_coordinator フックが alive か確認すべき。"
         )
 
@@ -146,10 +148,12 @@ class TestSmokeWriteSide:
         kaito_id = player_ids[0]
         rin_id = player_ids[1]
 
+        # PR #322 後続: MIN=3 + scene_boundary が必要 (詳細は上のテスト参照)
         runtime.do_move(rin_id, "entrance_hall")
         runtime.do_wait(kaito_id)
         runtime.do_speech(rin_id, "カイト、こんにちは", SpeechChannel.SAY)
         runtime.do_wait(kaito_id)
+        runtime.do_move(kaito_id, "reading_room")  # scene_boundary
 
         episodes = stack.episode_store.list_recent(
             player_id=int(kaito_id.value), limit=20
@@ -407,11 +411,12 @@ class TestSmokeSubjectiveServiceMergesText:
 
         player_ids = runtime.get_player_ids()
         kaito_id, rin_id = player_ids[0], player_ids[1]
-        # boundary を踏むのに最低限のシナリオ (#283 後続 smoke と同じ形)
+        # PR #322 後続: MIN=3 + scene_boundary を踏ませる最小シナリオ
         runtime.do_move(rin_id, "entrance_hall")
         runtime.do_wait(kaito_id)
         runtime.do_speech(rin_id, "こんにちは", SpeechChannel.SAY)
         runtime.do_wait(kaito_id)
+        runtime.do_move(kaito_id, "reading_room")  # scene_boundary
 
         eps = runtime._episodic_stack.episode_store.list_recent(
             player_id=int(kaito_id.value), limit=20
@@ -484,10 +489,12 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
 
         player_ids = runtime.get_player_ids()
         kaito_id, rin_id = player_ids[0], player_ids[1]
+        # PR #322 後続: MIN=3 + scene_boundary を踏ませる最小シナリオ
         runtime.do_move(rin_id, "entrance_hall")
         runtime.do_wait(kaito_id)
         runtime.do_speech(rin_id, "こんにちは", SpeechChannel.SAY)
         runtime.do_wait(kaito_id)
+        runtime.do_move(kaito_id, "reading_room")  # scene_boundary
         # ここまでは chunk_coordinator が draft を put 済み (= テンプレ文)。
         # scheduler の worker がまだ走っている可能性があるので shutdown で drain。
         try:

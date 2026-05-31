@@ -34,6 +34,8 @@ class DefaultActionResultStore(IActionResultStore):
         should_reschedule: bool = False,
         game_time_label: Optional[str] = None,
         omit_result_in_prompt: bool = False,
+        scene_boundary: bool = False,
+        occurred_tick: Optional[int] = None,
     ) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -59,6 +61,12 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("game_time_label must be str or None")
         if not isinstance(omit_result_in_prompt, bool):
             raise TypeError("omit_result_in_prompt must be bool")
+        if not isinstance(scene_boundary, bool):
+            raise TypeError("scene_boundary must be bool")
+        if occurred_tick is not None and (
+            not isinstance(occurred_tick, int) or isinstance(occurred_tick, bool)
+        ):
+            raise TypeError("occurred_tick must be int or None")
         # Issue #311 後続: フォールバックを tz-aware UTC に統一。
         # escape_game は明示的に渡すが、それ以外の caller の取りこぼし防止。
         at = occurred_at if occurred_at is not None else datetime.now(timezone.utc)
@@ -73,6 +81,8 @@ class DefaultActionResultStore(IActionResultStore):
             should_reschedule=should_reschedule,
             game_time_label=game_time_label,
             omit_result_in_prompt=omit_result_in_prompt,
+            scene_boundary=scene_boundary,
+            occurred_tick=occurred_tick,
         )
         key = self._key(player_id)
         if key not in self._store:
