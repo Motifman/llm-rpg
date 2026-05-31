@@ -93,6 +93,27 @@ class TestItems:
         assert not missing, f"フレーバーアイテム未定義: {missing}"
 
 
+class TestOutcomeResolutionConfig:
+    """v2 は個別 outcome 解決設定を持つ (Phase E-3b)。"""
+
+    def test_outcome_resolution_config_が_宣言されている(self, loaded) -> None:
+        config = loaded.outcome_resolution_config
+        assert config is not None
+
+    def test_rescue_ticks_は_設計通り(self, loaded) -> None:
+        config = loaded.outcome_resolution_config
+        # 設計 §3: 救助船 60-80 / 130-140 の window の latest を採用
+        assert config.rescue_at_ticks == (80, 130)
+
+    def test_stranded_は_tick_140(self, loaded) -> None:
+        config = loaded.outcome_resolution_config
+        assert config.stranded_at_tick == 140
+
+    def test_signal_flag_は_signal_fire_lit(self, loaded) -> None:
+        config = loaded.outcome_resolution_config
+        assert config.signal_fire_flag == "signal_fire_lit"
+
+
 class TestNoLegacyPlayerIds:
     """旧 v1 の player ID 残骸が無いこと。"""
 

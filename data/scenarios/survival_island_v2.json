@@ -1009,6 +1009,12 @@
     ]
   },
   "initial_flags": [],
+  "outcome_resolution": {
+    "rescue_at_ticks": [80, 130],
+    "stranded_at_tick": 140,
+    "summit_spot": "summit",
+    "signal_fire_flag": "signal_fire_lit"
+  },
   "scenario_events": [
     {
       "id": "storm_arrives",

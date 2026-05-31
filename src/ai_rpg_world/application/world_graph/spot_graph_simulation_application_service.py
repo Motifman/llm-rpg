@@ -41,6 +41,7 @@ class SpotGraphSimulationApplicationService:
         monster_spawn_stage: Optional["_SpotGraphTickStage"] = None,
         monster_behavior_stage: Optional["_SpotGraphTickStage"] = None,
         food_spoilage_stage: Optional["_SpotGraphTickStage"] = None,
+        outcome_resolution_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
         heartbeat_emitter: Optional["HeartbeatObservationEmitter"] = None,
     ) -> None:
@@ -57,6 +58,7 @@ class SpotGraphSimulationApplicationService:
         self._monster_spawn_stage = monster_spawn_stage
         self._monster_behavior_stage = monster_behavior_stage
         self._food_spoilage_stage = food_spoilage_stage
+        self._outcome_resolution_stage = outcome_resolution_stage
         self._llm_turn_trigger = llm_turn_trigger
         self._heartbeat_emitter = heartbeat_emitter
         self._logger = logging.getLogger(self.__class__.__name__)
@@ -138,6 +140,13 @@ class SpotGraphSimulationApplicationService:
                 # acquired_at_tick が今回 tick で初期化されるだけで、閾値到達は
                 # 次回以降。
                 self._food_spoilage_stage.run(current_tick)
+            if self._outcome_resolution_stage is not None:
+                # Phase E-3b: プレイヤー個別 outcome の RESCUED/STRANDED 判定。
+                # 当 tick の travel / interaction が反映された後に走らせる
+                # ことで、「同 tick で summit に着いた → そのまま救助される」
+                # の自然な流れを実現する。DEAD は別経路 (PlayerDownedEvent
+                # ハンドラ) で確定するので、こちらは時間ベースの判定のみ。
+                self._outcome_resolution_stage.run(current_tick)
         self._run_post_tick_hooks(current_tick)
         return current_tick
 
