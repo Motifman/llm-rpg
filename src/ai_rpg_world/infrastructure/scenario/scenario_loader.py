@@ -105,6 +105,8 @@ class ItemSpecDefinition:
     description: str
     category: str
     is_light_source: bool = False
+    # Phase D-2: 食料腐敗。None なら腐らない。値は正の整数 tick (loader でチェック)。
+    spoils_after_ticks: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -363,6 +365,17 @@ class ScenarioLoader:
         for item in items_raw:
             sid = item["id"]
             numeric = mapper.register("item_spec", sid)
+            spoils_raw = item.get("spoils_after_ticks")
+            spoils_after_ticks: Optional[int] = None
+            if spoils_raw is not None:
+                # 不正値はシナリオ作家ミスとして boundary で弾く。ItemSpec の
+                # __post_init__ でも弾かれるが、ここで明示しておくと loader 段で
+                # 早期 fail し、エラー位置が JSON 単位で分かりやすい。
+                spoils_after_ticks = int(spoils_raw)
+                if spoils_after_ticks <= 0:
+                    raise ValueError(
+                        f"item '{sid}': spoils_after_ticks must be positive, got {spoils_after_ticks}"
+                    )
             defs.append(ItemSpecDefinition(
                 string_id=sid,
                 spec_id=ItemSpecId.create(numeric),
@@ -370,6 +383,7 @@ class ScenarioLoader:
                 description=item.get("description", ""),
                 category=item.get("category", "GENERAL"),
                 is_light_source=item.get("is_light_source", False),
+                spoils_after_ticks=spoils_after_ticks,
             ))
         return defs
 
