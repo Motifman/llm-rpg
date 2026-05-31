@@ -10,6 +10,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from ai_rpg_world.domain.item.value_object.item_effect import (
+    CompositeItemEffect,
+    ExpEffect,
+    GoldEffect,
+    HealEffect,
+    ItemEffect,
+    RecoverMpEffect,
+    SatisfyNeedEffect,
+)
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
@@ -107,6 +116,10 @@ class ItemSpecDefinition:
     is_light_source: bool = False
     # Phase D-2: 食料腐敗。None なら腐らない。値は正の整数 tick (loader でチェック)。
     spoils_after_ticks: Optional[int] = None
+    # Phase F: 消費効果。None なら使えない (装備・素材など)。値があれば
+    # runtime で ItemType.CONSUMABLE として登録される。複合効果は
+    # CompositeItemEffect で表現。
+    consume_effect: Optional["ItemEffect"] = None
 
 
 @dataclass(frozen=True)
@@ -358,6 +371,61 @@ class ScenarioLoader:
         for player in raw.get("players", []):
             mapper.register("player", player["id"])
 
+    def _parse_consume_effect(
+        self, raw: Any, sid: str,
+    ) -> Optional[ItemEffect]:
+        """JSON の consume_effect (単一 dict or list) を ItemEffect に変換する。
+
+        対応形式:
+        - None / 未指定 → None (使えないアイテム)
+        - 単一 dict: `{"type": "heal_hp", "amount": 5}`
+        - list: `[{"type": "heal_hp", "amount": 5}, {"type": "satisfy_need", ...}]`
+          → CompositeItemEffect でまとめる (1 要素なら単一として返す)
+        """
+        if raw is None:
+            return None
+        # 統一して list に正規化
+        entries = raw if isinstance(raw, list) else [raw]
+        if not entries:
+            return None
+        parsed = [self._parse_single_consume_effect(e, sid) for e in entries]
+        if len(parsed) == 1:
+            return parsed[0]
+        return CompositeItemEffect(effects=tuple(parsed))
+
+    def _parse_single_consume_effect(
+        self, entry: Dict[str, Any], sid: str,
+    ) -> ItemEffect:
+        """1 つの effect dict を ItemEffect サブクラスに変換する。"""
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"item '{sid}': consume_effect entry must be a dict, got {type(entry).__name__}"
+            )
+        etype = entry.get("type")
+        if not etype:
+            raise ValueError(f"item '{sid}': consume_effect entry missing 'type'")
+        if etype == "heal_hp":
+            return HealEffect(amount=int(entry["amount"]))
+        if etype == "recover_mp":
+            return RecoverMpEffect(amount=int(entry["amount"]))
+        if etype == "gold":
+            return GoldEffect(amount=int(entry["amount"]))
+        if etype == "exp":
+            return ExpEffect(amount=int(entry["amount"]))
+        if etype == "satisfy_need":
+            need = entry.get("need_type") or entry.get("need_type_name")
+            if not need:
+                raise ValueError(
+                    f"item '{sid}': satisfy_need requires 'need_type' (e.g. 'HUNGER')"
+                )
+            return SatisfyNeedEffect(
+                need_type_name=str(need), amount=int(entry["amount"]),
+            )
+        raise ValueError(
+            f"item '{sid}': unknown consume_effect type '{etype}' "
+            "(expected: heal_hp / recover_mp / gold / exp / satisfy_need)"
+        )
+
     def _parse_item_specs(
         self, items_raw: List[Dict[str, Any]], mapper: ScenarioIdMapper,
     ) -> List[ItemSpecDefinition]:
@@ -376,6 +444,9 @@ class ScenarioLoader:
                     raise ValueError(
                         f"item '{sid}': spoils_after_ticks must be positive, got {spoils_after_ticks}"
                     )
+            consume_effect = self._parse_consume_effect(
+                item.get("consume_effect"), sid,
+            )
             defs.append(ItemSpecDefinition(
                 string_id=sid,
                 spec_id=ItemSpecId.create(numeric),
@@ -384,6 +455,7 @@ class ScenarioLoader:
                 category=item.get("category", "GENERAL"),
                 is_light_source=item.get("is_light_source", False),
                 spoils_after_ticks=spoils_after_ticks,
+                consume_effect=consume_effect,
             ))
         return defs
 
