@@ -375,20 +375,52 @@ runtime.shutdown(timeout=30.0)  # subjective_filled p95 = 13.4s の 2x 余裕
 5. **persona_block_provider の組み立て**
    - 各 player_id → persona text の dict を作る
 
-### 9.2 共通化候補
+### 9.2 共通化済み (PR #330)
 
-`demos/escape_game/escape_episodic_wiring.py` は escape_game 専用に書かれて
-いる。これを `src/ai_rpg_world/application/llm/wiring/episodic_stack.py` の
-ような場所に持ち上げて scenario 非依存にすると、survival_island_v2 や
-将来のシナリオでも同じ builder が使える。
+`src/ai_rpg_world/application/llm/wiring/episodic_stack.py` に汎用 builder を
+配置済み:
 
-具体的には:
+```python
+from ai_rpg_world.application.llm.wiring.episodic_stack import (
+    EpisodicStack,
+    build_episodic_stack,           # 推奨 (シナリオ非依存)
+    build_scenario_noun_matcher,
+    is_episodic_enabled,
+    is_episodic_subjective_enabled,
+)
+```
 
-- `build_episodic_stack(scenario, graph, ...)` を application 層に
-- escape_game / survival_island の wiring 側は scenario-specific な
-  persona_provider を渡すだけにする
+`demos/escape_game/escape_episodic_wiring.py` は後方互換のための薄い shim
+(旧 `EscapeEpisodicStack` / `build_escape_episodic_stack` 名で alias) のみ
+残しているので、新規シナリオは application 層を直接 import する。
 
-これは別 PR で扱う。
+別シナリオに繋ぐときの典型コード:
+
+```python
+from ai_rpg_world.application.llm.wiring.episodic_stack import (
+    build_episodic_stack, is_episodic_enabled,
+)
+
+if is_episodic_enabled():
+    runtime._episodic_stack = build_episodic_stack(
+        scenario=scenario,            # player_spawns を持つ任意の object
+        graph=spot_graph,             # _spots を持つ任意の object
+        observation_buffer=...,
+        sliding_window_memory=...,
+        action_result_store=...,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=runtime.current_tick,
+        subjective_completion_scheduler=...,  # 任意 (非同期 LLM 補完)
+        persona_block_provider=lambda pid: ...,
+        episode_store=shared_store,           # scheduler と共有する場合
+    )
+```
+
+`runtime` 側は:
+
+- `_record_action_result(scene_boundary=True)` を移動成功時に呼ぶ
+- `shutdown(timeout=30.0)` を runtime に生やして scheduler drain 経路を作る
+- `set_trace_recorder` で trace を後から差し込む経路にする
 
 ---
 
@@ -416,11 +448,21 @@ src/ai_rpg_world/application/llm/
     └── world_noun_matcher.py                  # Aho-Corasick による cue 抽出
 ```
 
+### シナリオ非依存 wiring (PR #330)
+
+```
+src/ai_rpg_world/application/llm/wiring/
+└── episodic_stack.py                          # build_episodic_stack (シナリオ非依存)
+                                               #  + EpisodicStack dataclass
+                                               #  + build_scenario_noun_matcher
+                                               #  + is_episodic_enabled / _subjective_enabled
+```
+
 ### escape_game 固有 wiring
 
 ```
 demos/escape_game/
-├── escape_episodic_wiring.py                 # build_escape_episodic_stack
+├── escape_episodic_wiring.py                 # 後方互換 shim (旧 alias のみ)
 ├── escape_game_runtime.py                    # _record_action_result, shutdown
 └── ...
 ```
@@ -460,3 +502,4 @@ tests/
 ## 11. 改訂履歴
 
 - 2026-06-01: 初版 (第23回実験での卒業判定を踏まえ、現状設計を総括)
+- 2026-06-01: PR #330 共通化リファクタを反映 (§9.2 / §10 のファイル位置更新)

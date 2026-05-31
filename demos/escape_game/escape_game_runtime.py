@@ -2284,8 +2284,10 @@ def create_escape_game_runtime(
     # Issue #283 後続: episodic memory pipeline の on/off。
     # 環境変数 LLM_EPISODIC_ENABLED=1 のときだけ scenario load 時に matcher
     # + chunk coordinator + passive recall を組み立てる。未設定なら従来動作。
-    from demos.escape_game.escape_episodic_wiring import (
-        build_escape_episodic_stack,
+    # PR #330: シナリオ非依存の builder に統一。escape_episodic_wiring 経由の
+    # 旧 alias も後方互換で生きているが、application 層から直接 import する。
+    from ai_rpg_world.application.llm.wiring.episodic_stack import (
+        build_episodic_stack,
         is_episodic_enabled,
         is_episodic_subjective_enabled,
     )
@@ -2321,7 +2323,7 @@ def create_escape_game_runtime(
                 _client = None
             if isinstance(_client, LiteLLMClient):
                 # subjective service は scheduler 内部に閉じ込める。
-                # episode_store は build_escape_episodic_stack 内で作るが、
+                # episode_store は build_episodic_stack 内で作るが、
                 # scheduler に渡す必要があるので先に作ってから stack 構築側に
                 # 渡したい — が wiring の都合で一旦同じ store を共有する経路
                 # にしておく (= scheduler は episode_store への参照を持ち、
@@ -2373,7 +2375,7 @@ def create_escape_game_runtime(
                     "LLM_EPISODIC_SUBJECTIVE_ENABLED=1 だが LiteLLMClient 未使用 "
                     "(LLM_CLIENT=litellm が必要)。subjective scheduler を無効化。"
                 )
-        runtime._episodic_stack = build_escape_episodic_stack(
+        runtime._episodic_stack = build_episodic_stack(
             scenario=scenario,
             graph=spot_graph_repo.find_graph(),
             observation_buffer=obs_buffer,
