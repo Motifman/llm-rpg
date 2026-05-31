@@ -1208,6 +1208,41 @@ class EscapeGameRuntime:
     # ── ゲーム終了判定 ──
 
     def check_game_end(self) -> GameEndResult:
+        # Phase E-3c: scenario が outcome_resolution_config を宣言している
+        # シナリオでは「all_resolved」(全員 outcome 確定) を game end の唯一の
+        # 終了条件にする。集団 WIN/LOSE の概念は廃止 (per-player outcome の
+        # snapshot だけが結果)。
+        # outcome_resolution が無いシナリオ (v1 等) は従来の集団判定経路を維持。
+        if (
+            self.scenario.outcome_resolution_config is not None
+            and self._player_outcome_registry is not None
+        ):
+            return self._check_game_end_outcome_mode()
+        return self._check_game_end_collective_mode()
+
+    def _check_game_end_outcome_mode(self) -> GameEndResult:
+        """Phase E-3c: per-player outcome モードでの終了判定。
+
+        全プレイヤーが RESCUED/DEAD/STRANDED のいずれかに確定したら end。
+        `result` は集団 WIN/LOSE を意図的に None にし、`player_outcomes` で
+        個別結果を返す。集団勝敗の概念は v2 シナリオで廃止。
+        """
+        registry = self._player_outcome_registry
+        if not registry.all_resolved():
+            return GameEndResult(
+                is_ended=False, result=None,
+                reason="未確定プレイヤーあり (per-player outcome モード)",
+            )
+        snapshot = registry.snapshot()
+        return GameEndResult(
+            is_ended=True,
+            result=None,
+            reason=f"全 {len(snapshot)} プレイヤーの outcome が確定",
+            player_outcomes=snapshot,
+        )
+
+    def _check_game_end_collective_mode(self) -> GameEndResult:
+        """v1 / 既存シナリオ用の集団 win/lose 判定。挙動は従来通り。"""
         graph = self._spot_graph_repo.find_graph()
         flags = self._world_flag_state.as_frozen_set()
         player_ids = self.get_player_ids()
