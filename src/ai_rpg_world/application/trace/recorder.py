@@ -7,18 +7,24 @@
 呼び出し側責務:
 - recorder は context manager として使えるが、明示的に close も可能
 - 同一 recorder を複数スレッドで共有する想定はしない (シナリオは単一プロセス
-  単一スレッドで回す前提)
+  単一スレッドで回す前提)。
+- 例外: 非同期 LLM 主観文付与スケジューラ (#310) は worker thread から
+  ``record`` を呼ぶ。``close`` 後の write は close-race として静かに dropped
+  され、``record_dropped_after_close`` がカウンタで観測可能 (#311 後続)。
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional, TextIO
 
 from ai_rpg_world.application.trace.events import TraceEvent
+
+_logger = logging.getLogger(__name__)
 
 
 class ITraceRecorder(ABC):
@@ -87,10 +93,23 @@ class JsonlTraceRecorder(ITraceRecorder):
         self._path = path
         self._fh: Optional[TextIO] = open(path, "w", encoding="utf-8")
         self._seq = 0
+        # Issue #311 後続 (#325 結果): 非同期 LLM 主観文付与 scheduler のワーカー
+        # thread が close 後に record を呼ぶ "close race" を観測可能にするカウンタ。
+        # 値が大きいときは scheduler shutdown drain がタイムアウトしている可能性。
+        self._record_dropped_after_close: int = 0
 
     @property
     def path(self) -> Path:
         return self._path
+
+    @property
+    def record_dropped_after_close(self) -> int:
+        """``close()`` 後に到着した ``record()`` の件数 (close-race 観測用)。
+
+        # 0 が理想。非同期スケジューラの drain がタイムアウトしていなければ 0 に
+        近づく。Viewer / 集計には乗らないが、本番 run 後のログから観測可能。
+        """
+        return self._record_dropped_after_close
 
     def record(
         self,
@@ -101,7 +120,35 @@ class JsonlTraceRecorder(ITraceRecorder):
         **payload: Any,
     ) -> TraceEvent:
         if self._fh is None:
-            raise RuntimeError("recorder is already closed")
+            # Issue #311 後続: 非同期 LLM 主観文付与 (#310) のワーカー thread が
+            # ``runtime.shutdown(timeout)`` のタイムアウト後に完了した場合、
+            # 既に閉じた recorder に書き込みを試みる "close race" が起きる。
+            # これは非同期パイプラインで構造的に避けがたいので、例外を投げる
+            # 代わりに **silently drop + カウンタ加算** で処理する。
+            #
+            # 例外を投げると scheduler の ``_emit_trace`` が WARN ログを吐き、
+            # 期待される race を「障害」として誤って報告してしまう (第21回
+            # 第22回実験で観測された "recorder is already closed ×2" の原因)。
+            #
+            # 統計は ``record_dropped_after_close`` で公開し、運用上 drain
+            # タイムアウト調整の根拠にできる。
+            self._record_dropped_after_close += 1
+            _logger.debug(
+                "JsonlTraceRecorder.record(%s) dropped: recorder already closed "
+                "(total dropped=%d)",
+                kind,
+                self._record_dropped_after_close,
+            )
+            # Sentinel event (seq=-1 で「未確定」を示す)。caller がチェーンで
+            # 使う場合に AttributeError を起こさないように TraceEvent を返す。
+            return TraceEvent(
+                seq=-1,
+                timestamp=_utc_now_iso(),
+                kind=str(kind),
+                tick=tick,
+                player_id=player_id,
+                payload=dict(payload),
+            )
         self._seq += 1
         event = TraceEvent(
             seq=self._seq,
@@ -120,6 +167,14 @@ class JsonlTraceRecorder(ITraceRecorder):
         if self._fh is not None:
             self._fh.close()
             self._fh = None
+        if self._record_dropped_after_close > 0:
+            # 大量に dropped していたら shutdown drain の調整が必要なので
+            # INFO で残す。0 件 (= 完璧な drain) では何も出さない。
+            _logger.info(
+                "JsonlTraceRecorder closed with %d post-close record drops "
+                "(async scheduler may need longer shutdown timeout)",
+                self._record_dropped_after_close,
+            )
 
 
 def load_trace_events(path: Path) -> Iterable[TraceEvent]:
