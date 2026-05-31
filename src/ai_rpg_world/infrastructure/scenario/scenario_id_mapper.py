@@ -52,7 +52,12 @@ class _Namespace:
 class ScenarioIdMapper:
     """名前空間ごとに独立した文字列⇔数値 ID マッピングを管理する。"""
 
-    _NAMESPACES = ("spot", "connection", "object", "sub_location", "item_spec", "player")
+    _NAMESPACES = (
+        "spot", "connection", "object", "sub_location", "item_spec", "player",
+        # Phase B-2a: モンスター種別 ID。シナリオ JSON 内の文字列 ("wild_dog" 等)
+        # を MonsterTemplateId(int) に対応付ける。
+        "monster_template",
+    )
 
     def __init__(self) -> None:
         self._ns: Dict[str, _Namespace] = {n: _Namespace() for n in self._NAMESPACES}
