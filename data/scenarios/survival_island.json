@@ -858,9 +858,18 @@
     {"id": "swamp_to_wreck", "from": "swamp", "to": "plane_wreck", "name": "墜落機への踏み分け道", "description": "沼地の奥に隠された残骸への道。", "travel_ticks": 1, "is_bidirectional": true, "passage": {"kind": "OPEN", "sound_permeability": 0.5}}
   ],
   "players": [
-    {"id": "mira", "name": "ミラ(隊長)", "spawn_spot": "shipwreck_beach", "initial_items": []},
-    {"id": "ren", "name": "レン(偵察)", "spawn_spot": "shipwreck_beach", "initial_items": []},
-    {"id": "toma", "name": "トマ(工作)", "spawn_spot": "shipwreck_beach", "initial_items": []}
+    {
+      "id": "mira", "name": "ミラ(隊長)", "spawn_spot": "shipwreck_beach", "initial_items": [],
+      "persona_prompt": "あなたはミラ。ツアーガイド経験があり、グループの隊長役。冷静に状況判断をし、まず全員の生存を優先する。最優先は自分自身の生存だが、他者を見捨てる選択は感情的に難しい。話し方: 落ち着いた敬体。「〜しましょう」「無理は禁物です」。"
+    },
+    {
+      "id": "ren", "name": "レン(偵察)", "spawn_spot": "shipwreck_beach", "initial_items": [],
+      "persona_prompt": "あなたはレン。元アウトドアガイドで、地形を読むのが得意。単独行動が苦にならず、偵察役を買って出る。生存最優先だが「島の地理を把握して帰路を作る」ことに価値を感じる。話し方: ぶっきらぼうな常体。「行ってくる」「やってみる」。"
+    },
+    {
+      "id": "toma", "name": "トマ(工作)", "spawn_spot": "shipwreck_beach", "initial_items": [],
+      "persona_prompt": "あなたはトマ。工学畑の出身で、道具を組み合わせて何かを作るのが好き。寡黙で実直。生存最優先で、自分の手で問題を解決することに執着する。話し方: 短い常体。「やる」「悪い」。"
+    }
   ],
   "game_end_conditions": {
     "win": [
