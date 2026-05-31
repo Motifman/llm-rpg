@@ -7,9 +7,12 @@ canonical_arguments / LlmCommandResultDto / ActionResultEntry / 観測 structure
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Iterable, Sequence
+
+_logger = logging.getLogger(__name__)
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     EMOTION_HINT_VALUES,
@@ -177,7 +180,13 @@ def _cues_from_observation_prose(
     try:
         matches = noun_matcher.find_in_text(prose)
     except Exception:
-        # matcher 実装の予期しない失敗で prompt build を止めない
+        # matcher 実装の予期しない失敗で prompt build を止めない。ただし
+        # 「matcher が壊れて 0 件にフォールバック中」を後から見つけられる
+        # よう WARN 級で traceback ごと残す (silent failure 防止)。
+        _logger.warning(
+            "noun_matcher.find_in_text failed; recall fallback to empty cue list",
+            exc_info=True,
+        )
         return []
     out: list[EpisodicCue] = []
     for m in matches:

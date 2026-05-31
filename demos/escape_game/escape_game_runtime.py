@@ -1674,25 +1674,38 @@ def create_escape_game_runtime(
     # 昼夜サイクル: フェーズが変わったら TimeOfDayChangedEvent を流す。
     # シナリオが announce_changes=false にしている場合は callback を登録せず
     # silent な phase transition にする。
-    if day_night_stage is not None and (
-        day_night_config is None or day_night_config.announce_changes
-    ):
+    # NOTE: day_night_stage が non-None なら day_night_config も必ず non-None
+    # (両者を同じブロックで構築している経路) なので、条件式は
+    # announce_changes 側だけで足りる。
+    if day_night_stage is not None and day_night_config.announce_changes:
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
             TimeOfDayChangedEvent,
         )
 
         def _on_phase_changed(old_time, new_time) -> None:
-            graph = spot_graph_repo.find_graph()
-            pipeline_event_publisher.publish_all([
-                TimeOfDayChangedEvent.create(
-                    aggregate_id=graph.graph_id,
-                    aggregate_type="SpotGraphAggregate",
-                    old_phase_name=old_time.phase_name,
-                    new_phase_name=new_time.phase_name,
-                    new_display_text=new_time.display_text,
-                    new_is_dark=new_time.is_dark,
+            # event publish はゲーム本体の状態遷移とは独立。publisher 側で例外が
+            # 起きてもフェーズ遷移自体は完了している (stage._current は更新済)
+            # ため、ここで握りつぶしてゲームループを倒さない。ただし error
+            # ログを残して埋もれないようにする。
+            try:
+                graph = spot_graph_repo.find_graph()
+                pipeline_event_publisher.publish_all([
+                    TimeOfDayChangedEvent.create(
+                        aggregate_id=graph.graph_id,
+                        aggregate_type="SpotGraphAggregate",
+                        old_phase_name=old_time.phase_name,
+                        new_phase_name=new_time.phase_name,
+                        new_display_text=new_time.display_text,
+                        new_is_dark=new_time.is_dark,
+                    )
+                ])
+            except Exception:
+                _logger = logging.getLogger(__name__)
+                _logger.error(
+                    "failed to publish TimeOfDayChangedEvent (phase %s -> %s)",
+                    old_time.phase_name, new_time.phase_name,
+                    exc_info=True,
                 )
-            ])
 
         day_night_stage.set_phase_changed_callback(_on_phase_changed)
 

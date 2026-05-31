@@ -7,8 +7,11 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
+
+_logger = logging.getLogger(__name__)
 
 from ai_rpg_world.application.llm.chunk_boundary.rules import (
     decide_chunk_boundary,
@@ -140,6 +143,12 @@ class EpisodicChunkCoordinator:
             try:
                 return self._trace_recorder_provider()
             except Exception:
+                # provider は通常単純な lambda なので例外は希。DI 化や動的
+                # 解決を加えたときに silent に消えるのを防ぐため DEBUG で痕跡を残す。
+                _logger.debug(
+                    "trace_recorder_provider raised; skipping chunk_written trace",
+                    exc_info=True,
+                )
                 return None
         return self._trace_recorder
 
@@ -186,8 +195,12 @@ class EpisodicChunkCoordinator:
                 observation_count=observation_count,
             )
         except Exception:
-            # trace 失敗で chunk 書き込みパスを止めない
-            pass
+            # trace 失敗で chunk 書き込みパスを止めない方針を維持しつつ、
+            # recorder 側のバグを後追いできるよう DEBUG で痕跡を残す。
+            _logger.debug(
+                "trace recorder.record raised for EPISODIC_CHUNK_WRITTEN; skipping",
+                exc_info=True,
+            )
 
     def after_action_recorded(
         self,
@@ -199,6 +212,15 @@ class EpisodicChunkCoordinator:
         IActionResultStore へ 1 件 append 済みの直後に呼ぶ。
 
         先に drain→スライディングウィンドウへ反映し、チャンクに最新行動を取り込んで境界判定する。
+
+        **不変条件 (drain 順序)**: 本メソッドは ``DefaultPromptBuilder.build`` よりも
+        前に呼ばれる前提。両者とも同じ ``observation_buffer.drain(player_id)`` を
+        呼ぶが drain は idempotent ではなく「最初に呼んだ側が観測を取り去る」。
+        本メソッドが先に呼ばれた場合、prompt_builder.build の drain は空を返すが、
+        観測自体は既に sliding_window に入っているので ``get_recent`` 経由で正しく
+        prompt に届く。逆順 (prompt_builder 先) になると chunk が観測を見れず
+        boundary 判定が常に HOLD になるので注意。escape_game では
+        ``_record_action_result`` 末尾 → ``build_full_prompt`` の順で確実に呼ばれている。
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
