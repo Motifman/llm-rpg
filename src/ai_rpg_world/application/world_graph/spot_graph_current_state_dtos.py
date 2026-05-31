@@ -97,6 +97,10 @@ class SpotGraphInventoryItemEntry:
     slot_id: int = -1
     # 代表 instance の ItemInstanceId (drop_item で対象を一意に指せる)
     item_instance_id: int = -1
+    # Phase D-3a: 食料腐敗の表示用フラグ。同 spec でも spoiled 状態が異なる
+    # instance は別エントリに集約する想定 (「生の魚 x2」と「生の魚 x1 (腐敗)」
+    # を並べて表示するため)。default False で既存呼び出し側に無影響。
+    is_spoiled: bool = False
 
 
 @dataclass(frozen=True)
@@ -110,6 +114,8 @@ class SpotGraphGroundItemEntry:
     item_instance_id: int
     item_spec_id: int
     name: str
+    # Phase D-3a: 地面に落ちている食料も腐敗する。表示用フラグ。default False。
+    is_spoiled: bool = False
 
 
 @dataclass(frozen=True)
