@@ -84,18 +84,38 @@ def is_episodic_enabled(env: Optional[dict[str, str]] = None) -> bool:
     return raw.strip().lower() in _TRUE_TOKENS
 
 
+_FALSE_TOKENS = frozenset({"0", "false", "no", "off"})
+
+
 def is_episodic_subjective_enabled(env: Optional[dict[str, str]] = None) -> bool:
     """``LLM_EPISODIC_SUBJECTIVE_ENABLED`` を読んで LLM 主観文付与の有効化を判定。
 
-    ``is_episodic_enabled`` が True のときに更にこのフラグが立っているときだけ、
+    ``is_episodic_enabled`` が True のときに更にこの判定が True なら、
     ``EpisodicChunkSubjectiveFieldsService`` を chunk_coordinator に配線する。
-    LLM トークンが余分にかかるため別フラグで opt-in (第21回実験 follow-up)。
+
+    **既定値は True (= LLM 補完を有効化)**。第21回実験以降「エピソード記憶を
+    使うときは LLM 補完も既定で走らせたい」という方針になったため、明示的に
+    OFF にしたいときだけ ``LLM_EPISODIC_SUBJECTIVE_ENABLED=0`` (もしくは
+    ``false`` / ``no`` / ``off``) を指定する。
 
     env を渡せばその dict を見る (テスト用)、None なら ``os.environ``。
+
+    判定ルール:
+    - 未設定 (key 自体が無い): True (既定 on)
+    - True 表現 (1/true/yes/on): True
+    - False 表現 (0/false/no/off): False
+    - 不明な値: True (壊さず on 側に倒す)。``info`` レベルでは特に warn しない。
     """
     source = env if env is not None else os.environ
-    raw = source.get("LLM_EPISODIC_SUBJECTIVE_ENABLED", "")
-    return raw.strip().lower() in _TRUE_TOKENS
+    raw = source.get("LLM_EPISODIC_SUBJECTIVE_ENABLED")
+    if raw is None:
+        return True
+    normalized = raw.strip().lower()
+    if not normalized:
+        return True
+    if normalized in _FALSE_TOKENS:
+        return False
+    return True
 
 
 @dataclass(frozen=True)
