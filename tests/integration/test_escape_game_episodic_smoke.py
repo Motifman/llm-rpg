@@ -294,3 +294,111 @@ class TestSmokeRecallSide:
             "recall_text が prompt に現れていない。自由文 cue 抽出 → passive recall "
             "→ prompt 注入のどこかが切れている。"
         )
+
+
+class TestSmokeSubjectiveServiceWiring:
+    """``LLM_EPISODIC_SUBJECTIVE_ENABLED`` の opt-in 配線挙動 (Issue #295 後続)。
+
+    本クラスは「配線が正しく差分動作する」ことだけ確認する smoke。実 LLM 呼び出しは
+    しない (LLM_CLIENT=stub なので LiteLLMClient にならず service 自体が無効化される
+    のが本来の挙動。それを assert する)。
+    """
+
+    def test_env_未設定なら_subjective_service_は_未配線(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """LLM_EPISODIC_ENABLED=1 だけなら subjective service は wire されない。"""
+        runtime = _build_runtime(monkeypatch, enabled=True)
+        stack = runtime._episodic_stack
+        assert stack is not None
+        # chunk_coordinator の subjective_fields_service は None のまま
+        assert stack.chunk_coordinator._chunk_subjective_fields_service is None
+        assert stack.chunk_coordinator._persona_block_provider is None
+
+    def test_subjective_enabled_かつ_litellm_未指定なら_service_は_無効化(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """LLM_CLIENT=stub (default) のままだと LiteLLMClient にならないので、
+        SUBJECTIVE_ENABLED=1 でも service は wire されない (silent skip + info log)。"""
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "1")
+        monkeypatch.delenv("LLM_CLIENT", raising=False)  # = stub default
+        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+
+        runtime = create_escape_game_runtime(_SCENARIO_PATH)
+        stack = runtime._episodic_stack
+        assert stack is not None
+        # stub のときは service が wire されないこと (= 安全な縮退)
+        assert stack.chunk_coordinator._chunk_subjective_fields_service is None
+
+
+class TestSmokeSubjectiveServiceMergesText:
+    """``build_escape_episodic_stack`` に明示的に subjective service を渡したとき、
+    chunk write 時に LLM のテキストで recall_text が上書きされる経路の smoke。
+
+    実 LiteLLM は使わず、``IEpisodicChunkSubjectiveCompletionPort`` の stub を
+    直接渡して挙動だけ確認する。
+    """
+
+    def test_subjective_service_注入時に_chunk_書き込みで_recall_text_が_LLM_文に_差し替わる(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """draft の `compute_template_recall` 結果が、注入した stub の文字列で上書きされる。"""
+        from typing import Any
+        from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+            IEpisodicChunkSubjectiveCompletionPort,
+        )
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+            EpisodicChunkSubjectiveFieldsService,
+        )
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from demos.escape_game.escape_episodic_wiring import (
+            build_escape_episodic_stack,
+        )
+
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        runtime = create_escape_game_runtime(_SCENARIO_PATH)
+        assert runtime._episodic_stack is not None
+
+        class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
+            def complete_episode_subjective_json(
+                self, messages: list[dict[str, Any]]
+            ) -> dict[str, Any]:
+                return {
+                    "interpreted": "STUB_INTERPRETED",
+                    "recall_text": "STUB_RECALL_TEXT_FROM_LLM",
+                }
+
+        subjective_service = EpisodicChunkSubjectiveFieldsService(_StubPort())
+        # subjective_service 注入版で stack を組み直す (escape_game runtime の private
+        # を差し替えるのは smoke なので OK)。
+        runtime._episodic_stack = build_escape_episodic_stack(
+            scenario=runtime.scenario,
+            graph=runtime._spot_graph_repo.find_graph(),
+            observation_buffer=runtime._obs_buffer,
+            sliding_window_memory=runtime._sliding_window,
+            action_result_store=runtime._action_result_store,
+            chunk_subjective_fields_service=subjective_service,
+            persona_block_provider=lambda pid: "ペルソナ片",
+        )
+
+        player_ids = runtime.get_player_ids()
+        kaito_id, rin_id = player_ids[0], player_ids[1]
+        # boundary を踏むのに最低限のシナリオ (#283 後続 smoke と同じ形)
+        runtime.do_move(rin_id, "entrance_hall")
+        runtime.do_wait(kaito_id)
+        runtime.do_speech(rin_id, "こんにちは", SpeechChannel.SAY)
+        runtime.do_wait(kaito_id)
+
+        eps = runtime._episodic_stack.episode_store.list_recent(
+            player_id=int(kaito_id.value), limit=20
+        )
+        assert len(eps) > 0
+        recall_texts = [ep.recall_text for ep in eps]
+        assert any(rt == "STUB_RECALL_TEXT_FROM_LLM" for rt in recall_texts), (
+            f"subjective service 注入時に LLM の recall_text で上書きされていない: "
+            f"{recall_texts}"
+        )
+        interpreteds = [ep.interpreted for ep in eps]
+        assert any(it == "STUB_INTERPRETED" for it in interpreteds)
