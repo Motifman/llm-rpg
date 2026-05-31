@@ -1998,6 +1998,41 @@ def create_escape_game_runtime(
             # 観測 callback は runtime construction 後にバインド (runtime 参照が必要)
         )
 
+    # ── Phase E-3: 個別 outcome registry を simulation 前に作る ──
+    # runtime に依存しない pure object なので、配線順は publisher より早くて
+    # 構わない。registry 自体を outcome_resolution_stage が必要とする。
+    # 後段で PipelineEventPublisher + handler を bind し、broadcast callback も追加する。
+    from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+    from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+    from ai_rpg_world.domain.player.service.player_outcome_registry import (
+        PlayerOutcomeRegistry,
+    )
+
+    outcome_registry = PlayerOutcomeRegistry.new_for_players(
+        [PlayerId(spawn.player_id) for spawn in scenario.player_spawns]
+    )
+
+    # ── Phase E-3b: outcome_resolution_stage ──
+    # scenario.outcome_resolution_config が宣言されている場合のみ stage を作る。
+    # 宣言が無い (例: 既存 v1 / abandoned_hospital) シナリオでは個別 outcome を
+    # 使わず、stage は走らないので無影響。
+    outcome_resolution_stage = None
+    outcome_resolution_config = scenario.outcome_resolution_config
+    if outcome_resolution_config is not None:
+        from ai_rpg_world.application.world_graph.player_outcome_resolution_stage_service import (
+            PlayerOutcomeResolutionStageService,
+        )
+        outcome_resolution_stage = PlayerOutcomeResolutionStageService(
+            outcome_registry=outcome_registry,
+            rescue_at_ticks=outcome_resolution_config.rescue_at_ticks,
+            stranded_at_tick=outcome_resolution_config.stranded_at_tick,
+            summit_spot_id=outcome_resolution_config.summit_spot_id,
+            signal_fire_flag=outcome_resolution_config.signal_fire_flag,
+            graph_provider=lambda: spot_graph_repo.find_graph(),
+            flags_provider=world_flag_state.as_frozen_set,
+            player_ids=[PlayerId(spawn.player_id) for spawn in scenario.player_spawns],
+        )
+
     simulation_service = SpotGraphSimulationApplicationService(
         time_provider=time_provider,
         unit_of_work=InMemoryUnitOfWork(),
@@ -2012,6 +2047,7 @@ def create_escape_game_runtime(
         monster_spawn_stage=monster_spawn_stage,
         monster_behavior_stage=monster_behavior_stage,
         food_spoilage_stage=food_spoilage_stage,
+        outcome_resolution_stage=outcome_resolution_stage,
         llm_turn_trigger=sim_llm_trigger,
     )
 
@@ -2079,21 +2115,12 @@ def create_escape_game_runtime(
     )
     pipeline_event_publisher = PipelineEventPublisher(runtime)
 
-    # Phase E-3: プレイヤー個別 outcome registry。全プレイヤーを UNRESOLVED で
-    # 初期化し、PlayerDownedEvent → DEAD のハンドラを subscribe する。observation
-    # callback で「○○は倒れた」を全プレイヤーに通知する設計 (weather や食料
-    # 腐敗と同じ broadcast pattern)。
+    # Phase E-3: プレイヤー個別 outcome の event-driven 配線。
+    # registry は既に simulation_service 構築前に作成済み。ここでは broadcast
+    # observation 用 callback の bind と PlayerDownedEvent → DEAD ハンドラの
+    # subscribe を行う。
     from ai_rpg_world.application.player.handlers.player_downed_outcome_handler import (
         PlayerDownedOutcomeHandler,
-    )
-    from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
-    from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
-    from ai_rpg_world.domain.player.service.player_outcome_registry import (
-        PlayerOutcomeRegistry,
-    )
-
-    outcome_registry = PlayerOutcomeRegistry.new_for_players(
-        [PlayerId(spawn.player_id) for spawn in scenario.player_spawns]
     )
 
     def _broadcast_outcome_change(
