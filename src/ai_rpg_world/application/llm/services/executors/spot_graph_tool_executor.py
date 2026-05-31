@@ -318,10 +318,35 @@ class SpotGraphToolExecutor:
                 # を通さない)。damage 量は当面ハードコード (10)。per-item config
                 # は別 PR で。
                 damage = SPOILED_FOOD_DAMAGE_HP
+                # 防御: 最小 wiring (テスト等) で _player_status_repository=None
+                # でインスタンス化された場合に AttributeError を投げないよう
+                # ガード。本ガードに当たるのは構成ミス相当で、damage は適用
+                # できないが silent crash よりは LLM に「効果が適用されなかっ
+                # た」を返す方が学習可能。
+                if self._player_status_repository is None:
+                    return LlmCommandResultDto(
+                        success=True,
+                        message=append_inner_thought_to_message(
+                            f"{name}を食べてしまった。腐っていたが体への効果は記録されなかった。",
+                            args,
+                        ),
+                    )
                 status = self._player_status_repository.find_by_id(PlayerId(player_id))
                 if status is not None:
                     status.apply_damage(damage)
                     self._player_status_repository.save(status)
+                    # Phase G silent-failure fix: apply_damage が HP 0 にした
+                    # 場合 aggregate は PlayerDownedEvent を積む。event_publisher
+                    # に流さないと PlayerDownedOutcomeHandler が走らず、
+                    # 腐敗食で死んでも DEAD outcome が立たない silent 破綻に
+                    # なる。new 鮮 path が ConsumableUsedEvent を publish する
+                    # のと同様に、spoiled path でも aggregate events を
+                    # publish_all で流す。
+                    if self._event_publisher is not None:
+                        status_events = list(status.get_events())
+                        status.clear_events()
+                        if status_events:
+                            self._event_publisher.publish_all(status_events)
                 base = (
                     f"{name}を食べてしまった。腐っていた——胃の奥が灼ける。"
                     f"（{damage} ダメージ）"

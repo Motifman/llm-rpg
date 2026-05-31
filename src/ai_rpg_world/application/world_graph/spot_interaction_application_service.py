@@ -310,6 +310,15 @@ class SpotInteractionApplicationService:
         # ここで PlayerStatusAggregate.apply_damage を呼んで HP を減らす。HP 0 に
         # なれば aggregate が PlayerDownedEvent を積み、event publisher 経由で
         # PlayerDownedOutcomeHandler が DEAD outcome を確定させる (E-3a 経路)。
+        # Phase G #3 (silent failure fix): apply_damage で HP 0 になると
+        # PlayerStatusAggregate は PlayerDownedEvent を内部に積む。これを
+        # event_publisher.publish_all へ流さないと PlayerDownedOutcomeHandler
+        # が走らず、接触ダメージで死んでも DEAD outcome が確定しない silent
+        # 破綻になっていた。aggregate の events を回収して後段の publish_all
+        # で他 event と合わせて流す。
+        # event_publisher が None のときは aggregate に events を残したまま
+        # にする (将来別経路で publish される可能性を保つ)。
+        status_events_from_damage: list = []
         if result.damage_specs and self._player_status_repository is not None:
             status = self._player_status_repository.find_by_id(player_id)
             if status is not None:
@@ -318,6 +327,9 @@ class SpotInteractionApplicationService:
                         continue  # 0 ダメージは no-op
                     status.apply_damage(spec.damage)
                 self._player_status_repository.save(status)
+                if self._event_publisher is not None:
+                    status_events_from_damage = list(status.get_events())
+                    status.clear_events()
 
         # 欲求回復
         if result.satisfy_need_specs and self._player_status_repository is not None:
@@ -328,7 +340,15 @@ class SpotInteractionApplicationService:
                         need_type = NeedType(spec.need_type_name)
                         status.satisfy_need(need_type, spec.amount)
                     except ValueError:
-                        pass  # 未知の NeedType は無視
+                        # silent failure fix: 未知 NeedType は作家ミスを示す。
+                        # 黙って捨てるとシナリオ作者が「回復が効かない」と
+                        # 気づくまで分からないので warning log で surface する。
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            "Unknown NeedType %r in satisfy_need_spec, "
+                            "skipping (player_id=%s, amount=%d)",
+                            spec.need_type_name, int(player_id), spec.amount,
+                        )
                 self._player_status_repository.save(status)
 
         # aggregate が貯めたイベント (ConnectionStateChanged 等) を抽出
@@ -375,8 +395,11 @@ class SpotInteractionApplicationService:
                 actor_entity_id=entity_id,
                 object_id=object_id,
             )
+            # Phase G #3 (silent failure fix): damage 経由で aggregate が積んだ
+            # PlayerDownedEvent も同 publish_all に乗せて、E-3a の
+            # PlayerDownedOutcomeHandler へ届ける。空 list の場合は no-op。
             self._event_publisher.publish_all(
-                [*graph_events, interacted_event, *public_events]
+                [*graph_events, interacted_event, *public_events, *status_events_from_damage]
             )
 
         return SpotInteractionResultDto(

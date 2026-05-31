@@ -105,8 +105,34 @@ class TestSpoiledFoodDamage:
 
         executor._use_item(player_id=1, args={"item_spec_id": 101})
 
-        # 通常パスでは publish が呼ばれるが、腐敗パスでは呼ばれない
+        # 通常パスでは publish が呼ばれるが、腐敗パスでは ConsumableUsedEvent
+        # は出さない (回復効果を捨てるため)
         event_publisher.publish.assert_not_called()
+
+    def test_腐敗食で_HP_0_になったら_status_events_が_publish_all_に乗る(self) -> None:
+        """silent failure fix: spoiled パスで apply_damage が PlayerDownedEvent
+        を積んだとき、それが publish_all に流れて DEAD outcome 連鎖が起きる
+        ことを保証する。修正前は status events が捨てられていた。
+        """
+        from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+        executor, status, event_publisher = _build_executor_with_item({"spoiled": True})
+        # status mock が PlayerDownedEvent を積んだフリをする
+        downed = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=None,
+        )
+        status.get_events.return_value = [downed]
+
+        executor._use_item(player_id=1, args={"item_spec_id": 101})
+
+        # publish_all で status events が流れる (実 callable 引数は list で来る)
+        status.clear_events.assert_called_once()
+        publish_all_calls = event_publisher.publish_all.call_args_list
+        assert publish_all_calls, "publish_all が呼ばれていない"
+        published = publish_all_calls[0].args[0]
+        assert downed in published
 
     def test_腐敗食の_messageにダメージ表記が含まれる(self) -> None:
         executor, _, _ = _build_executor_with_item({"spoiled": True})
