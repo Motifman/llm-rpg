@@ -98,13 +98,21 @@ class SpotObjectStateChangedEvent(BaseDomainEvent[SpotGraphId, str]):
 
 @dataclass(frozen=True)
 class SpotObjectInteractedEvent(BaseDomainEvent[SpotGraphId, str]):
-    """エンティティがオブジェクトと相互作用した"""
+    """エンティティがオブジェクトと相互作用した。
+
+    Phase G #1: `witness_policy` フィールドで配信範囲を制御する。
+    - SAME_SPOT (デフォルト): 同 spot の他プレイヤーが観測 (既存挙動)
+    - ACTOR_ONLY: 行為者本人だけ (PlayerDroppedItemEvent と同じ pattern)
+    """
 
     entity_id: EntityId
     spot_id: SpotId
     object_id: SpotObjectId
     action_name: str
     result_message: str
+    # Phase G #1: 観測配信範囲。InteractionDef.witness_policy から伝搬する。
+    # default SAME_SPOT で後方互換 (既存 caller は kw 引数を省略できる)。
+    witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT
 
 
 @dataclass(frozen=True)
