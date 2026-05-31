@@ -33,6 +33,7 @@ from __future__ import annotations
 from typing import Callable, Mapping, Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -104,7 +105,7 @@ class FoodSpoilageStageService:
 
     def _process_instance(
         self,
-        item_aggregate,
+        item_aggregate: ItemAggregate,
         spec_id: ItemSpecId,
         threshold: int,
         current_tick_value: int,
@@ -119,9 +120,19 @@ class FoodSpoilageStageService:
             item_aggregate.merge_state({STATE_KEY_ACQUIRED_AT_TICK: current_tick_value})
             self._item_repository.save(item_aggregate)
             return
-        # 不正値 (シナリオ初期 state で文字列等を入れたケース) は warning 相当だが、
-        # ここでは silent に「閾値未到達扱い」として保守的に何もしない
+        # 不正値 (シナリオ初期 state で文字列等を入れたケース) は warning log で
+        # surface してから silent に「閾値未到達扱い」として保守的に何もしない。
+        # silent skip だけだとシナリオ作家ミスを誰も気づけない (腐敗が永久に
+        # 効かないアイテムが生まれる)。
         if not isinstance(acquired, int):
+            import logging
+            logging.getLogger(__name__).warning(
+                "Item instance %s has non-int acquired_at_tick=%r (type=%s), "
+                "spoilage check skipped — シナリオ初期 state を見直すこと",
+                item_aggregate.item_instance_id.value,
+                acquired,
+                type(acquired).__name__,
+            )
             return
         if current_tick_value - acquired < threshold:
             return

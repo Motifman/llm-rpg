@@ -71,8 +71,20 @@ class PlayerOutcomeRegistry:
         if outcome is PlayerOutcomeEnum.UNRESOLVED:
             return False
         self._outcomes[pid_key] = outcome
+        # silent failure fix: 1 件の callback 失敗が後続 callback (例: 観測 emit
+        # と trace 記録の両方を bind しているケース) を巻き添えにしないよう、
+        # 各 callback の例外は log に残してから他 callback を継続する。
+        # 既に _outcomes は更新済みなので、後続 callback は新 outcome を見れる。
+        import logging
+        _logger = logging.getLogger(__name__)
         for callback in self._callbacks:
-            callback(player_id, current, outcome)
+            try:
+                callback(player_id, current, outcome)
+            except Exception:
+                _logger.exception(
+                    "outcome callback failed for player_id=%s (%s → %s)",
+                    int(player_id), current.value, outcome.value,
+                )
         return True
 
     def all_resolved(self) -> bool:
