@@ -40,6 +40,7 @@ class SpotGraphSimulationApplicationService:
         needs_decay_stage: Optional["_SpotGraphTickStage"] = None,
         monster_spawn_stage: Optional["_SpotGraphTickStage"] = None,
         monster_behavior_stage: Optional["_SpotGraphTickStage"] = None,
+        food_spoilage_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
         heartbeat_emitter: Optional["HeartbeatObservationEmitter"] = None,
     ) -> None:
@@ -55,6 +56,7 @@ class SpotGraphSimulationApplicationService:
         self._needs_decay_stage = needs_decay_stage
         self._monster_spawn_stage = monster_spawn_stage
         self._monster_behavior_stage = monster_behavior_stage
+        self._food_spoilage_stage = food_spoilage_stage
         self._llm_turn_trigger = llm_turn_trigger
         self._heartbeat_emitter = heartbeat_emitter
         self._logger = logging.getLogger(self.__class__.__name__)
@@ -128,6 +130,14 @@ class SpotGraphSimulationApplicationService:
                 # needs_decay 後に置くことで「同 tick でモンスターが空腹を
                 # 感じてから行動を決める」順序になる (将来の forage 連動)。
                 self._monster_behavior_stage.run(current_tick)
+            if self._food_spoilage_stage is not None:
+                # Phase D-2: 食料腐敗判定。pure な item state mutation で
+                # tick 内の他 stage と依存しないが、観測 callback を持つ可能性
+                # を考えて post_tick_hooks の前に commit に乗せる。
+                # 順序は他 stage 後で OK: 同 tick で gather → spoilage 判定 されても
+                # acquired_at_tick が今回 tick で初期化されるだけで、閾値到達は
+                # 次回以降。
+                self._food_spoilage_stage.run(current_tick)
         self._run_post_tick_hooks(current_tick)
         return current_tick
 

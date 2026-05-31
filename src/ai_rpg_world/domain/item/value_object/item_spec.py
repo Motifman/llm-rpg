@@ -34,6 +34,12 @@ class ItemSpec:
     placeable_object_type: Optional[str] = None
     consume_effect: Optional["ItemEffect"] = None
     is_light_source: bool = False
+    # Phase D-2: 食料腐敗。値が設定されたアイテムは、所持/設置されてからこの tick 数
+    # 経過すると instance state['spoiled'] = True が立つ。None なら腐らない (道具・
+    # 装備・水のように腐敗概念が存在しないアイテムが該当)。item_type に依らず付け
+    # られる (現状の survival demo は食料も item_type=QUEST で登録されており、
+    # CONSUMABLE 制約を入れると plumb 不可能なため意図的に緩める)。
+    spoils_after_ticks: Optional[int] = None
 
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
@@ -43,6 +49,10 @@ class ItemSpec:
             raise ItemSpecValidationException(f"Item spec: description must not be empty, got '{self.description}'")
         if self.durability_max is not None and self.durability_max <= 0:
             raise ItemSpecValidationException(f"Item spec: durability_max must be positive, got {self.durability_max}")
+        if self.spoils_after_ticks is not None and self.spoils_after_ticks <= 0:
+            raise ItemSpecValidationException(
+                f"Item spec: spoils_after_ticks must be positive, got {self.spoils_after_ticks}"
+            )
         # 耐久度が存在する場合、max_stack_sizeは1でなければならない
         if self.durability_max is not None and self.max_stack_size.value != 1:
             raise ItemSpecValidationException(f"Item spec: items with durability must have max_stack_size of 1, got {self.max_stack_size.value}")

@@ -1347,6 +1347,9 @@ def create_escape_game_runtime(
             description=item_def.description,
             max_stack_size=MaxStackSize(1),
             is_light_source=item_def.is_light_source,
+            # Phase D-2: 食料腐敗。loader が JSON から取得した値をそのまま渡す。
+            # None なら腐らないアイテム (道具・装備・水)。
+            spoils_after_ticks=item_def.spoils_after_ticks,
         )
         item_spec_repo.save(spec)
 
@@ -1878,6 +1881,30 @@ def create_escape_game_runtime(
             )
             monster_spawn_stage = monster_spawn_service
 
+    # ── Phase D-2: 食料腐敗ステージ ──
+    # spoils_after_ticks が指定された ItemSpec を集約して FoodSpoilageStage を組み立てる。
+    # 1 つも無ければ None のままで stage は走らない (= 既存シナリオに無影響)。
+    food_spoilage_stage = None
+    spoilable_specs: Dict[ItemSpecId, int] = {}
+    for item_def in scenario.item_spec_definitions:
+        if item_def.spoils_after_ticks is not None:
+            spoilable_specs[item_def.spec_id] = item_def.spoils_after_ticks
+    if spoilable_specs:
+        from ai_rpg_world.application.world_graph.food_spoilage_stage_service import (
+            FoodSpoilageStageService,
+        )
+
+        def _spec_name_lookup(spec_id: ItemSpecId) -> str:
+            spec = item_spec_repo.find_by_id(spec_id)
+            return spec.name if spec is not None else ""
+
+        food_spoilage_stage = FoodSpoilageStageService(
+            item_repository=item_repo,
+            spoilable_specs=spoilable_specs,
+            spec_name_lookup=_spec_name_lookup,
+            # 観測 callback は runtime construction 後にバインド (runtime 参照が必要)
+        )
+
     simulation_service = SpotGraphSimulationApplicationService(
         time_provider=time_provider,
         unit_of_work=InMemoryUnitOfWork(),
@@ -1891,6 +1918,7 @@ def create_escape_game_runtime(
         needs_decay_stage=needs_decay_stage,
         monster_spawn_stage=monster_spawn_stage,
         monster_behavior_stage=monster_behavior_stage,
+        food_spoilage_stage=food_spoilage_stage,
         llm_turn_trigger=sim_llm_trigger,
     )
 
