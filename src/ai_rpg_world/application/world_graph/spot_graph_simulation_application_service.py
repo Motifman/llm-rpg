@@ -36,6 +36,7 @@ class SpotGraphSimulationApplicationService:
         reactive_object_state_stage: Optional["_SpotGraphTickStage"] = None,
         sync_action_resolver_stage: Optional["_SpotGraphTickStage"] = None,
         environment_stage: Optional["_SpotGraphTickStage"] = None,
+        day_night_stage: Optional["_SpotGraphTickStage"] = None,
         needs_decay_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
         heartbeat_emitter: Optional["HeartbeatObservationEmitter"] = None,
@@ -48,6 +49,7 @@ class SpotGraphSimulationApplicationService:
         self._reactive_object_state_stage = reactive_object_state_stage
         self._sync_action_resolver_stage = sync_action_resolver_stage
         self._environment_stage = environment_stage
+        self._day_night_stage = day_night_stage
         self._needs_decay_stage = needs_decay_stage
         self._llm_turn_trigger = llm_turn_trigger
         self._heartbeat_emitter = heartbeat_emitter
@@ -104,6 +106,11 @@ class SpotGraphSimulationApplicationService:
                 self._sync_action_resolver_stage.run(current_tick)
             if self._environment_stage is not None:
                 self._environment_stage.run(current_tick)
+            if self._day_night_stage is not None:
+                # environment_stage 後に走らせる: 仮に将来「天候が夜だけ強くなる」
+                # のような相互作用が必要になっても、weather → time_of_day の
+                # 順序で組み立てれば一貫した state が得られる。今は両者独立。
+                self._day_night_stage.run(current_tick)
             if self._needs_decay_stage is not None:
                 self._needs_decay_stage.run(current_tick)
         self._run_post_tick_hooks(current_tick)

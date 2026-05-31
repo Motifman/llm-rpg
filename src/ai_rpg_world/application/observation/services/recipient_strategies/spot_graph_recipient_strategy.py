@@ -39,6 +39,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerGaveItemEvent,
     PlayerPickedUpItemEvent,
     SpotSoundHeardEvent,
+    TimeOfDayChangedEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
@@ -119,6 +120,11 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             self._resolve_at_spot_excluding_actor(
                 event.spot_id, event.entity_id, add
             )
+        elif isinstance(event, TimeOfDayChangedEvent):
+            # 昼夜サイクルのフェーズ変化は世界全体のイベント。屋内 / 屋外を
+            # 区別せず、全プレイヤーに観測として届ける (屋内でも空の色や
+            # 肌寒さで時間経過は感じられる、というモデル)。
+            self._resolve_all_players(add)
         elif isinstance(event, SpotPlayerPreparedActionEvent):
             # 「相方が prepare した」観測は同スポットの他プレイヤーにのみ。
             # actor 本人は prepare ツール結果で個別フィードバックを得る。
@@ -233,6 +239,15 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         player_id = PlayerId(entity_id.value)
         if self._player_status_repository.find_by_id(player_id) is not None:
             add(player_id)
+
+    def _resolve_all_players(self, add) -> None:
+        """全プレイヤーを recipient として追加する。
+
+        昼夜サイクルなど世界全体のイベントで使う。除外対象は無い (行為者
+        概念が無いイベント)。
+        """
+        for status in self._player_status_repository.find_all():
+            add(status.player_id)
 
     def _players_at_spot_on_graph(self, spot_id: SpotId) -> List[PlayerId]:
         """グラフ上の指定スポットにいるプレイヤーの一覧を返す。"""

@@ -56,6 +56,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
     SpotInteractionApplicationService,
     SpotInteractionResultDto,
 )
+from ai_rpg_world.application.world_graph.spot_graph_day_night_stage_service import (
+    SpotGraphDayNightStageService,
+)
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
@@ -265,6 +268,8 @@ class EscapeGameRuntime:
     _scenario_event_progress: InMemorySpotGraphScenarioEventProgressStore
     _environment_stage: SpotGraphEnvironmentStageService
     _current_weather: Any
+    # 昼夜サイクル stage (Phase B-1)。シナリオに day_night_config が無ければ None。
+    _day_night_stage: Optional[SpotGraphDayNightStageService] = field(default=None, repr=False)
     _tick: int = 0
     # LLM 脱出用（セッション単位で構築）
     # _escape_llm_system_prompt: 全プレイヤー共通の system prompt (legacy / 単体プレイ用)
@@ -1396,6 +1401,15 @@ def create_escape_game_runtime(
         )
     }
 
+    # 昼夜サイクル (Phase B-1)。シナリオが宣言していなければ None で
+    # 「昼夜の概念なし」状態にする (既存 escape_game / 廃病院は影響なし)。
+    day_night_stage: Optional[SpotGraphDayNightStageService] = None
+    day_night_config = scenario.day_night_config
+    if day_night_config is not None:
+        day_night_stage = SpotGraphDayNightStageService(
+            cycle=day_night_config.cycle,
+        )
+
     # 光源アイテムを自動検出
     light_source_item_spec_ids = frozenset(
         rm.item_spec_id
@@ -1429,6 +1443,11 @@ def create_escape_game_runtime(
         light_source_item_spec_ids=light_source_item_spec_ids,
         owned_item_spec_ids_provider=_owned_item_spec_ids_provider,
         item_spec_name_resolver=_resolve_item_spec_name,
+        time_of_day_provider=(
+            day_night_stage.current_time_of_day
+            if day_night_stage is not None
+            else None
+        ),
     )
 
     # ── 観測パイプライン構築 ──
@@ -1565,6 +1584,7 @@ def create_escape_game_runtime(
         reactive_object_state_stage=reactive_object_state_stage,
         sync_action_resolver_stage=sync_resolver_stage,
         environment_stage=environment_stage,
+        day_night_stage=day_night_stage,
         needs_decay_stage=needs_decay_stage,
         llm_turn_trigger=sim_llm_trigger,
     )
@@ -1597,6 +1617,7 @@ def create_escape_game_runtime(
         _scenario_event_progress=scenario_event_progress,
         _environment_stage=environment_stage,
         _current_weather=weather_holder,
+        _day_night_stage=day_night_stage,
         _escape_llm_system_prompt=system_prompt_text,
         _escape_llm_system_prompts_by_player_id=system_prompts_by_player_id,
         _include_todo_tools=(
@@ -1644,6 +1665,30 @@ def create_escape_game_runtime(
     # SpotGraphRecipientStrategy が PlayerDroppedItemEvent / PlayerPickedUpItemEvent
     # を「同スポット・行為者除外」で他プレイヤーに観測として届ける。
     item_transfer_service.set_event_publisher(pipeline_event_publisher)
+    # 昼夜サイクル: フェーズが変わったら TimeOfDayChangedEvent を流す。
+    # シナリオが announce_changes=false にしている場合は callback を登録せず
+    # silent な phase transition にする。
+    if day_night_stage is not None and (
+        day_night_config is None or day_night_config.announce_changes
+    ):
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            TimeOfDayChangedEvent,
+        )
+
+        def _on_phase_changed(old_time, new_time) -> None:
+            graph = spot_graph_repo.find_graph()
+            pipeline_event_publisher.publish_all([
+                TimeOfDayChangedEvent.create(
+                    aggregate_id=graph.graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    old_phase_name=old_time.phase_name,
+                    new_phase_name=new_time.phase_name,
+                    new_display_text=new_time.display_text,
+                    new_is_dark=new_time.is_dark,
+                )
+            ])
+
+        day_night_stage.set_phase_changed_callback(_on_phase_changed)
 
     runtime._speech_service = speech_service
     runtime._speech_event_publisher = pipeline_event_publisher

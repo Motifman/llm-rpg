@@ -16,8 +16,10 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphObjectEntry,
     SpotGraphPlayerSnapshotDto,
     SpotGraphSubLocationEntry,
+    SpotGraphTimeOfDayEntry,
     SpotGraphWeatherEntry,
 )
+from ai_rpg_world.domain.world_graph.value_object.time_of_day import TimeOfDay
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
@@ -39,6 +41,9 @@ OwnedItemSpecIdsProvider = Callable[[int], FrozenSet[ItemSpecId]]
 # item_spec_id (int) → 表示名 (str) のラッパ。ground_items 表示で使う。
 # 未解決時は空文字列 or "アイテム#N" のような fallback を返してよい。
 ItemSpecNameResolver = Callable[[int], str]
+# 現在 tick の TimeOfDay を返す provider。シナリオが昼夜サイクルを宣言して
+# いなければ None を返す (= プロンプトに時刻行が出ない)。
+TimeOfDayProvider = Callable[[], Optional[TimeOfDay]]
 # モンスター個体 ID から「肉眼で観測できる範囲の view DTO」を返す resolver。
 # 名前解決と内部 state の可視化（HP バケット化・behavior の日本語化）を application 層で行う。
 # None を返した場合は builder 側で当該個体を snapshot から黙って除外する（既に死んで掃除されたケース等）。
@@ -68,6 +73,7 @@ class SpotGraphCurrentStateBuilder:
         owned_item_spec_ids_provider: Optional[OwnedItemSpecIdsProvider] = None,
         monster_view_provider: Optional[MonsterViewProvider] = None,
         item_spec_name_resolver: Optional[ItemSpecNameResolver] = None,
+        time_of_day_provider: Optional[TimeOfDayProvider] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -80,7 +86,24 @@ class SpotGraphCurrentStateBuilder:
         self._owned_item_spec_ids_provider = owned_item_spec_ids_provider
         self._monster_view_provider = monster_view_provider
         self._item_spec_name_resolver = item_spec_name_resolver
+        self._time_of_day_provider = time_of_day_provider
         self._perception = SpotPerceptionService()
+
+    def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
+        """シナリオが昼夜サイクルを宣言していれば snapshot に現在時刻を載せる。"""
+        if self._time_of_day_provider is None:
+            return None
+        try:
+            tod = self._time_of_day_provider()
+        except Exception:
+            return None
+        if tod is None:
+            return None
+        return SpotGraphTimeOfDayEntry(
+            phase_name=tod.phase_name,
+            display_text=tod.display_text,
+            is_dark=tod.is_dark,
+        )
 
     def build_snapshot(self, player_id: int) -> SpotGraphPlayerSnapshotDto | None:
         """プレイヤーがグラフに載っていない場合は None。"""
@@ -319,6 +342,7 @@ class SpotGraphCurrentStateBuilder:
             monsters_at_spot=tuple(monsters_at_spot),
             inventory_items=inventory_items,
             ground_items=tuple(ground_items),
+            time_of_day=self._build_time_of_day_entry(),
             need_lines=need_lines,
             ground_item_lines=ground_lines,
             connection_lines=connection_lines,

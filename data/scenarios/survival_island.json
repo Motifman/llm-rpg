@@ -36,6 +36,18 @@
       "initial": {"weather_type": "CLEAR", "intensity": 0.0},
       "update_interval_ticks": 25,
       "announce_changes": true
+    },
+    "day_night": {
+      "enabled": true,
+      "ticks_per_day": 12,
+      "starting_tick_in_day": 0,
+      "announce_changes": true,
+      "phases": [
+        {"name": "morning", "start_ratio": 0.0,  "display_text": "朝",     "ambient_light": 0.9, "is_dark": false},
+        {"name": "noon",    "start_ratio": 0.25, "display_text": "昼",     "ambient_light": 1.0, "is_dark": false},
+        {"name": "evening", "start_ratio": 0.5,  "display_text": "夕暮れ", "ambient_light": 0.5, "is_dark": false},
+        {"name": "night",   "start_ratio": 0.66, "display_text": "夜",     "ambient_light": 0.1, "is_dark": true}
+      ]
     }
   },
   "spots": [
