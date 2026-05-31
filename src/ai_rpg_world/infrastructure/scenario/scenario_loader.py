@@ -798,6 +798,11 @@ class ScenarioLoader:
             # JSON の `true` / `false` 以外（数値の 1 / 文字列 "true" など）は
             # 暗黙の coercion を避けて作家ミスとして弾く。
             treat_missing_as_passed=raw.get("treat_missing_as_passed", False) is True,
+            # Phase D-1: PROBABILITY 用。None 許容で他 condition_type では無視
+            # される。範囲チェックは ScenarioEventCondition.__post_init__ に任せる。
+            probability=(
+                float(raw["probability"]) if raw.get("probability") is not None else None
+            ),
         )
 
     def _parse_reactive_passage_bindings(

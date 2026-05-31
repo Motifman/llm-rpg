@@ -876,6 +876,18 @@
       ]
     },
     {
+      "id": "random_bird_call",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {"condition_type": "TICK_AT_LEAST", "tick": 5},
+        {"condition_type": "PROBABILITY", "probability": 0.08}
+      ],
+      "effects": [
+        {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "森の奥から鋭い鳥の鳴き声が聞こえた。"}}
+      ]
+    },
+    {
       "id": "tide_rises",
       "trigger": "ON_TICK",
       "once": true,
