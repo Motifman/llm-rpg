@@ -152,6 +152,12 @@ class PlayerSpawnConfig:
     spawn_spot_id: SpotId
     initial_items: Tuple[InitialItemSpec, ...]
     initial_state: Mapping[str, Any] = field(default_factory=dict)
+    # Phase E: プレイヤー個別のペルソナ文 (system prompt に注入される)。
+    # None なら runtime fallback (spawn 名から組み立てる generic persona)。
+    # 各プレイヤーの「公開プロフィール + 秘密の動機 + 話し方」を 1 つの
+    # text block にまとめて入れる想定。秘密はそのプレイヤーの prompt にしか
+    # 入らないので natural な info asymmetry になる。
+    persona_prompt: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -1489,6 +1495,17 @@ class ScenarioLoader:
             initial_state = self._parse_player_initial_state(
                 p.get("initial_state", {}), owner_id=p["id"],
             )
+            persona_raw = p.get("persona_prompt")
+            persona_prompt: Optional[str] = None
+            if persona_raw is not None:
+                if not isinstance(persona_raw, str):
+                    raise ValueError(
+                        f"player '{p['id']}': persona_prompt must be a string, "
+                        f"got {type(persona_raw).__name__}"
+                    )
+                # 前後 whitespace を削るが内側の改行は保持する (多行プロンプトを許容)
+                stripped = persona_raw.strip()
+                persona_prompt = stripped if stripped else None
             spawns.append(PlayerSpawnConfig(
                 string_id=p["id"],
                 player_id=pid,
@@ -1496,6 +1513,7 @@ class ScenarioLoader:
                 spawn_spot_id=spot_id,
                 initial_items=items,
                 initial_state=initial_state,
+                persona_prompt=persona_prompt,
             ))
         return spawns
 

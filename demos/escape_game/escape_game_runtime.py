@@ -1359,10 +1359,15 @@ def create_escape_game_runtime(
         for spawn in scenario.player_spawns:
             # この spawn から見た「他者」名リスト
             other_names = tuple(s.name for s in scenario.player_spawns if s is not spawn)
-            # この spawn のペルソナ:
-            #   - escape_character がこの spawn を指している → rich persona
-            #   - そうでなければ fallback (スポーン名ベース)
-            if escape_character is not None and spawn is escape_spawn:
+            # この spawn のペルソナ (優先度):
+            #   1. spawn.persona_prompt (Phase E): シナリオ JSON で個別宣言された
+            #      ペルソナ。多 player シナリオの第一選択肢
+            #   2. escape_character がこの spawn を指している → rich persona
+            #      (脱出ゲーム単 player モード用の旧経路)
+            #   3. fallback (スポーン名ベース generic persona)
+            if spawn.persona_prompt is not None:
+                this_persona = spawn.persona_prompt
+            elif escape_character is not None and spawn is escape_spawn:
                 this_persona = persona_block  # rich (既に上で構築済み)
             else:
                 this_persona = build_persona_block_from_escape_character(
