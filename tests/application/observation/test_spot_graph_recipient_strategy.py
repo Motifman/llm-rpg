@@ -159,6 +159,23 @@ class TestSpotObjectInteracted:
         assert 1 not in ids
         assert 2 in ids
 
+    def test_ACTOR_ONLY_では誰も観測しない(self):
+        """Phase G #1: witness_policy=ACTOR_ONLY なら同室他者にも届かない。"""
+        from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+        strategy = _make_strategy({1: 1, 2: 1})
+        event = SpotObjectInteractedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            object_id=OBJECT_1,
+            action_name="examine_photo",
+            result_message="壁の写真を見つめた",
+            witness_policy=WitnessPolicy.ACTOR_ONLY,
+        )
+        recipients = strategy.resolve(event)
+        assert list(recipients) == []
+
 
 class TestPlayerDroppedItem:
     """drop event は同スポットの他プレイヤーに witness として配信され、行為者は除外される。"""

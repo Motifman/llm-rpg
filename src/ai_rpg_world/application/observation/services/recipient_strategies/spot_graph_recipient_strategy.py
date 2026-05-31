@@ -94,9 +94,14 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         elif isinstance(event, EntityLeftSpotEvent):
             self._resolve_entity_left(event, add)
         elif isinstance(event, SpotObjectInteractedEvent):
-            self._resolve_at_spot_excluding_actor(
-                event.spot_id, event.entity_id, add
-            )
+            # Phase G #1: witness_policy=ACTOR_ONLY なら誰にも届けない (空集合)。
+            # 行為者本人は別経路 (ツール結果 result_message) で結果を受け取る
+            # ので observation を出さなくて構わない。「壁の写真を見つめる」
+            # のような私的な閲覧行為で他者に気付かれずに済む。
+            if event.witness_policy == WitnessPolicy.SAME_SPOT:
+                self._resolve_at_spot_excluding_actor(
+                    event.spot_id, event.entity_id, add
+                )
         elif isinstance(event, SpotObjectInteractionFailedEvent):
             # 失敗観測は同じスポットの他プレイヤーにのみ届ける（actor 本人には
             # ツール結果として個別メッセージが返るので除外）。

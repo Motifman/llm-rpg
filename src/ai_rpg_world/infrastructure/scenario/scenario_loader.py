@@ -604,6 +604,8 @@ class ScenarioLoader:
         )
 
     def _parse_interaction_def(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionDef:
+        from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+
         preconds = tuple(
             self._parse_interaction_condition(c, mapper)
             for c in raw.get("preconditions", [])
@@ -612,12 +614,33 @@ class ScenarioLoader:
             self._parse_interaction_effect(e, mapper) for e in raw.get("effects", [])
         )
         on_failure_observation = raw.get("on_failure_observation")
+        # Phase G #1: witness_policy はオプション、デフォルト SAME_SPOT。
+        # JSON で "ACTOR_ONLY" 等を文字列指定 → WitnessPolicy enum に変換。
+        # 未知値は ScenarioLoadError で boundary fail (typo を早期検知)。
+        witness_policy_raw = raw.get("witness_policy")
+        if witness_policy_raw is None:
+            witness_policy = WitnessPolicy.SAME_SPOT
+        else:
+            if not isinstance(witness_policy_raw, str):
+                raise ScenarioLoadError(
+                    f"interaction[{raw.get('action_name')!r}].witness_policy must be a string, "
+                    f"got {type(witness_policy_raw).__name__}"
+                )
+            try:
+                witness_policy = WitnessPolicy(witness_policy_raw)
+            except ValueError as exc:
+                valid = ", ".join(p.value for p in WitnessPolicy)
+                raise ScenarioLoadError(
+                    f"interaction[{raw.get('action_name')!r}].witness_policy "
+                    f"must be one of {{{valid}}}, got {witness_policy_raw!r}"
+                ) from exc
         return InteractionDef(
             action_name=raw["action_name"],
             display_label=raw["display_label"],
             preconditions=preconds,
             effects=effects,
             on_failure_observation=on_failure_observation,
+            witness_policy=witness_policy,
         )
 
     def _parse_interaction_condition(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionCondition:
