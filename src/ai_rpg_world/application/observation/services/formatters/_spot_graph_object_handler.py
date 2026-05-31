@@ -26,6 +26,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectStateChangedEvent,
     SpotPlayerStateChangedInSpotEvent,
     SpotPublicEffectObservedEvent,
+    TimeOfDayChangedEvent,
 )
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
@@ -62,7 +63,31 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_item_picked_up(event, recipient_player_id)
         if isinstance(event, PlayerGaveItemEvent):
             return self._format_item_given(event, recipient_player_id)
+        if isinstance(event, TimeOfDayChangedEvent):
+            return self._format_time_of_day_changed(event, recipient_player_id)
         return None
+
+    def _format_time_of_day_changed(
+        self, event: TimeOfDayChangedEvent, recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """昼夜のフェーズが変化したとき、全プレイヤーに「夕暮れになった」等を届ける。
+
+        recipient strategy で全 player に配信される (本人除外なし、世界全体
+        の出来事のため)。
+        """
+        prose = f"{event.new_display_text}になった。"
+        structured = {
+            "type": "time_of_day_changed",
+            "old_phase_name": event.old_phase_name,
+            "new_phase_name": event.new_phase_name,
+            "new_display_text": event.new_display_text,
+            "new_is_dark": event.new_is_dark,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+        )
 
     def _format_item_given(
         self, event: PlayerGaveItemEvent, recipient_id: PlayerId,
