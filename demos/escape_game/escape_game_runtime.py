@@ -1391,10 +1391,18 @@ def create_escape_game_runtime(
     item_spec_repo = InMemoryItemSpecRepository()
 
     for item_def in scenario.item_spec_definitions:
+        # Phase F: consume_effect が non-None なら CONSUMABLE として登録する。
+        # consume_effect が無いアイテムは従来通り QUEST (素材・装備・道具)。
+        # ItemSpec.__post_init__ の invariant: consume_effect は CONSUMABLE 時
+        # のみ非 None で居られる。
+        item_type = (
+            ItemType.CONSUMABLE if item_def.consume_effect is not None
+            else ItemType.QUEST
+        )
         spec = ItemSpecReadModel(
             item_spec_id=item_def.spec_id,
             name=item_def.name,
-            item_type=ItemType.QUEST,
+            item_type=item_type,
             rarity=Rarity.COMMON,
             description=item_def.description,
             max_stack_size=MaxStackSize(1),
@@ -1402,6 +1410,8 @@ def create_escape_game_runtime(
             # Phase D-2: 食料腐敗。loader が JSON から取得した値をそのまま渡す。
             # None なら腐らないアイテム (道具・装備・水)。
             spoils_after_ticks=item_def.spoils_after_ticks,
+            # Phase F: 消費効果。None なら use_item が reject する。
+            consume_effect=item_def.consume_effect,
         )
         item_spec_repo.save(spec)
 
