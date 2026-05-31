@@ -58,6 +58,14 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         else:
             lines.append("現在時刻: 不明")
 
+        # 昼夜サイクル (Phase B-1): 朝 / 昼 / 夕暮れ / 夜 のような時刻帯を載せる。
+        # シナリオが day_night を宣言していない場合は snap.time_of_day=None で
+        # 行ごと省略される。
+        if snap.time_of_day is not None:
+            tod = snap.time_of_day
+            dark_hint = " (暗い)" if tod.is_dark else ""
+            lines.append(f"時刻帯: {tod.display_text}{dark_hint}")
+
         # シナリオに TICK_LIMIT lose_condition があれば「残り猶予」だけ伝える。
         # 勝利条件には触れない (171a: meta-info のみ。導線はシナリオ責務で別途整備)。
         if dto.tick_budget_remaining is not None:

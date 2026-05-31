@@ -70,6 +70,18 @@ class SpotGraphAtmosphereEntry:
 
 
 @dataclass(frozen=True)
+class SpotGraphTimeOfDayEntry:
+    """現在時刻 (昼夜サイクルの今のフェーズ) の prompt 用構造化データ。
+
+    シナリオが day_night サイクルを宣言していなければ snapshot.time_of_day は
+    None。「現在時刻: 朝」のような行をプロンプトに 1 行足すために使う。
+    """
+    phase_name: str
+    display_text: str
+    is_dark: bool
+
+
+@dataclass(frozen=True)
 class SpotGraphInventoryItemEntry:
     """所持アイテム1件の構造化データ。
 
@@ -145,6 +157,8 @@ class SpotGraphPlayerSnapshotDto:
     sub_locations: Tuple[SpotGraphSubLocationEntry, ...] = ()
     atmosphere: Optional[SpotGraphAtmosphereEntry] = None
     weather: Optional[SpotGraphWeatherEntry] = None
+    # 現在時刻 (昼夜フェーズ) — シナリオが day_night を宣言していなければ None
+    time_of_day: Optional[SpotGraphTimeOfDayEntry] = None
     nearby_entities: Tuple[SpotGraphNearbyEntityEntry, ...] = ()
     monsters_at_spot: Tuple[SpotGraphMonsterEntry, ...] = ()
     inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
