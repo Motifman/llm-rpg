@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 _logger = logging.getLogger(__name__)
@@ -40,6 +41,20 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+
+def _as_utc(value: datetime) -> datetime:
+    """naive datetime を UTC aware として扱い、aware はそのまま返す。
+
+    occurred_at の供給源 (HeartbeatObservationEmitter, escape_game runtime,
+    PipelineEventPublisher 等) は本来 tz-aware UTC で統一されているべきだが、
+    一つでも naive が混ざると比較演算で TypeError になり chunk write が
+    全滅する (第20回実験で 48/50 件失敗を観測)。境界で正規化することで
+    将来の regression にも耐える。
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 
 def _action_entry_identity(entry: ActionResultEntry) -> tuple:
@@ -228,15 +243,15 @@ class EpisodicChunkCoordinator:
         if not bucket:
             return
 
-        t0 = min(e.occurred_at for e in bucket)
-        t1 = max(e.occurred_at for e in bucket)
+        t0 = min(_as_utc(e.occurred_at) for e in bucket)
+        t1 = max(_as_utc(e.occurred_at) for e in bucket)
 
         window_obs = self._sliding_window_memory.get_recent(
             player_id, self._recent_observations_limit
         )
         obs_slice: List[ObservationEntry] = []
         for o in window_obs:
-            if t0 <= o.occurred_at <= t1:
+            if t0 <= _as_utc(o.occurred_at) <= t1:
                 obs_slice.append(o)
         obs_slice_sorted = tuple(sorted(obs_slice, key=lambda e: e.occurred_at))
 

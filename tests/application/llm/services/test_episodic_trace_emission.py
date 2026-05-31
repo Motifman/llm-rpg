@@ -199,6 +199,51 @@ class TestChunkCoordinatorTraceEmission:
         # ただ実行できることだけ確認 (recorder lookup が None なので no-op)
         self._trigger_chunk_close(coord, buffer, action_store, pid)
 
+    def test_naive_と_aware_の_datetime_が混在しても_TypeError_を投げない(self) -> None:
+        """tz-naive と tz-aware の occurred_at が混在しても chunk 書き込みが成功する。
+
+        第20回実験で 48/50 件の chunk write が
+        ``TypeError: can't compare offset-naive and offset-aware datetimes`` で
+        失敗していた。供給源 (HeartbeatObservationEmitter は aware、
+        escape_game runtime は当時 naive) の不一致が原因。境界で正規化されて
+        いることを担保する regression test。
+        """
+        coord, buffer, action_store, episode_store = self._build_coord(recorder=None)
+        pid = PlayerId(1)
+        # action store は (修正後の escape_game runtime と同じく) aware で統一
+        action_store.append(
+            pid,
+            action_summary="wait1",
+            result_summary="ok",
+            occurred_at=datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc),
+        )
+        coord.after_action_recorded(pid)
+        # observation buffer に naive 観測が一つでも紛れ込むと
+        # 修正前は obs_slice の比較で TypeError になっていた。
+        buffer.append(
+            pid,
+            ObservationEntry(
+                occurred_at=datetime(2026, 5, 1, 12, 0, 30),  # naive (regression source)
+                output=ObservationOutput(
+                    prose="naive obs",
+                    structured={"type": "x"},
+                    observation_category="social",
+                    schedules_turn=True,
+                ),
+                game_time_label=None,
+            ),
+        )
+        action_store.append(
+            pid,
+            action_summary="wait2",
+            result_summary="ok",
+            occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
+        )
+        # 修正前はここで TypeError
+        coord.after_action_recorded(pid)
+        # chunk write が完走したことを episode_store の有無で確認
+        assert len(episode_store.list_recent(pid.value, 10)) > 0
+
     def test_recorder_例外は_chunk_書き込みを止めない(self) -> None:
         """recorder.record が例外を投げても episode は store に書かれる。"""
 

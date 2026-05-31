@@ -18,7 +18,7 @@ chore で module-level に昇格させたもの (元は ``create_escape_game_run
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
@@ -81,7 +81,8 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
                 type(event).__name__,
             )
             return
-        now = datetime.now()
+        # tz-aware UTC で統一 (escape_game_runtime._emit_observation_directly 参照)
+        now = datetime.now(timezone.utc)
         time_label = self._runtime._time_label()
         for pid, output in items:
             appender.append(pid, output, now, time_label)

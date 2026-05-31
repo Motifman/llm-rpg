@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, ClassVar, Dict, FrozenSet, List, Optional, Tuple
 
@@ -575,7 +575,13 @@ class EscapeGameRuntime:
         if appender is None:
             # 構築途中で呼ばれた場合の防御 (PipelineEventPublisher と同様)。
             return
-        appender.append(player_id, output, datetime.now(), self._time_label())
+        # tz-aware UTC で統一: HeartbeatObservationEmitter /
+        # ActionFailedObservationEmitter が aware を発行するため、escape_game
+        # 経路の naive と混ざると EpisodicChunkCoordinator の obs_slice
+        # フィルタで TypeError になる。詳細: docs/episodic_memory フォローアップ。
+        appender.append(
+            player_id, output, datetime.now(timezone.utc), self._time_label()
+        )
         scheduler = self._observation_turn_scheduler
         if scheduler is not None:
             scheduler.maybe_schedule(player_id, output)
@@ -583,12 +589,12 @@ class EscapeGameRuntime:
     def _record_action_result(
         self, player_id: PlayerId, action_summary: str, result_summary: str,
     ) -> None:
-        from datetime import datetime
+        # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)
         self._action_result_store.append(
             player_id,
             action_summary=action_summary,
             result_summary=result_summary,
-            occurred_at=datetime.now(),
+            occurred_at=datetime.now(timezone.utc),
         )
         # Issue #283 後続: episodic memory が有効なら、action_result が
         # store に積まれた直後に chunk_coordinator を起動する。chunk
