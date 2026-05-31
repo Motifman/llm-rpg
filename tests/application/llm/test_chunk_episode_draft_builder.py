@@ -51,8 +51,16 @@ class TestChunkEpisodeDraftBuilder:
         assert "[昼]" in ep.observed
         assert "move" in ep.what
 
-    def test_interpreted_and_recall_none_for_llm_followup(self) -> None:
-        """interpreted / recall_text は未生成（後続 E が埋める）。"""
+    def test_interpreted_and_recall_filled_with_template_fallback(self) -> None:
+        """interpreted / recall_text はテンプレで draft 時点から埋まる。
+
+        LLM 補完サービス未配線でも recall 時に「何か」が prompt に載るようにする
+        ため、``compute_template_interpreted`` / ``compute_template_recall`` の結果を
+        ``ChunkEpisodeDraftBuilder`` が draft に埋める (#295 r2 trace で
+        ``recall_text_snippet`` 0/21 件問題が発覚)。LLM 補完が走るときは
+        ``EpisodicChunkSubjectiveFieldsService.merge_llm_subjective_fields`` が
+        上書きするので副作用なし。
+        """
         act = ActionResultEntry(
             occurred_at=datetime(2026, 5, 4, 11, 0, 0, tzinfo=timezone.utc),
             action_summary="x",
@@ -61,8 +69,13 @@ class TestChunkEpisodeDraftBuilder:
         )
         inp = build_chunk_encoding_input(PlayerId(1), (), (act,))
         ep = ChunkEpisodeDraftBuilder().build(inp)
-        assert ep.interpreted is None
-        assert ep.recall_text is None
+        # None ではなく非空文字 (テンプレが埋まっている)
+        assert isinstance(ep.interpreted, str) and ep.interpreted
+        assert isinstance(ep.recall_text, str) and ep.recall_text
+        # interpreted は what (= action_summary 連結) ベース
+        assert "x" in ep.interpreted
+        # recall_text は observed の最初の非空行 or what ベース
+        assert ep.recall_text  # 内容ベースの詳細 assert は別 unit test に分離
 
     def test_occurred_at_is_latest_action_time(self) -> None:
         """occurred_at はチャンク内行動の最大 occurred_at（境界の「いつ」）。"""

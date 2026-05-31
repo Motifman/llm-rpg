@@ -85,16 +85,36 @@ def _format_source_facts(encoding_input: ChunkEncodingInput) -> str:
     ) + "\n\n行動結果（ソース事実）:\n" + ("\n".join(act_lines) if act_lines else "(なし)")
 
 
-def _template_interpreted(ep: SubjectiveEpisode) -> str:
-    return _truncate("interpreted_fallback", ep.what, max_chars=_MAX_SUBJECTIVE_FIELD_CHARS)
+def compute_template_interpreted(what: str) -> str:
+    """``interpreted`` のテンプレ既定値。``what`` をそのまま (長すぎれば省略)。
+
+    LLM 補完が走らない / 走ったが失敗したケースで使う。``ChunkEpisodeDraftBuilder``
+    が draft 構築時に埋める用途にも使えるよう、`SubjectiveEpisode` ではなく
+    生文字列で受ける形にしている。
+    """
+    return _truncate("interpreted_fallback", what, max_chars=_MAX_SUBJECTIVE_FIELD_CHARS)
 
 
-def _template_recall(ep: SubjectiveEpisode) -> str:
-    for raw_line in ep.observed.splitlines():
+def compute_template_recall(observed: str, what: str) -> str:
+    """``recall_text`` のテンプレ既定値。
+
+    ``observed`` (統一タイムラインの bullet 連結) の最初の非空行を 1 件抜き出し、
+    なければ ``what`` で代替する。LLM 補完が無いとき / 失敗したときのフォールバック
+    として、また draft 時点で「最低限なにか文がある」状態にするために使う。
+    """
+    for raw_line in observed.splitlines():
         line = raw_line.strip().lstrip("-").strip()
         if line:
             return _truncate("recall_fallback", line, max_chars=_MAX_SUBJECTIVE_FIELD_CHARS)
-    return _truncate("recall_fallback", ep.what, max_chars=_MAX_SUBJECTIVE_FIELD_CHARS)
+    return _truncate("recall_fallback", what, max_chars=_MAX_SUBJECTIVE_FIELD_CHARS)
+
+
+def _template_interpreted(ep: SubjectiveEpisode) -> str:
+    return compute_template_interpreted(ep.what)
+
+
+def _template_recall(ep: SubjectiveEpisode) -> str:
+    return compute_template_recall(ep.observed, ep.what)
 
 
 def _normalize_llm_str(raw: Any) -> str | None:
