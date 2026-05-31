@@ -591,13 +591,15 @@ class EscapeGameRuntime:
         統一することで pipeline → appender → scheduler の一本道に揃える。
         """
         graph = self._spot_graph_repo.find_graph()
+        # silent failure fix: publisher が None のときは events を取り出す前に
+        # 早期 return する。先に list(graph.get_events()) + clear_events() を
+        # 呼ぶと、publisher が無い段階でイベントが clear されて永久に失われる
+        # (旧コードでは「構築途中だから silent skip」だった)。
+        if self._speech_event_publisher is None:
+            return
         events = list(graph.get_events())
         graph.clear_events()
         if not events:
-            return
-        if self._speech_event_publisher is None:
-            # 構築途中 (set_event_publisher 注入前) には起こり得る。
-            # silent skip + 後続を継続。
             return
         self._speech_event_publisher.publish_all(events)
 

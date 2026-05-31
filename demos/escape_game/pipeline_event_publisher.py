@@ -83,11 +83,23 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
     def _dispatch(self, event: DomainEvent) -> None:
         # Phase E-3: side handler を先に走らせる。observation pipeline より先に
         # registry mutation を済ませることで「player downed → DEAD outcome が
-        # 立った状態で観測が emit される」順序になる。各 handler の例外は
-        # 隠蔽せず raise させる (silent failure 防止)。
+        # 立った状態で観測が emit される」順序になる。
+        # silent failure fix: 個別 handler の例外で observation pipeline 全体を
+        # 道連れに止めないよう、handler の例外は log に残してから継続する。
+        # こうしないと「最初に登録された side handler が壊れた瞬間、以降の全
+        # observation が止まる」というカスケード障害になる (1 つの outcome
+        # mutation bug が tick 全体の prompt 配信を止める)。
+        # logger.exception で stack trace を残すので silent failure にもならない。
         for event_type, handler in self._side_handlers:
-            if isinstance(event, event_type):
+            if not isinstance(event, event_type):
+                continue
+            try:
                 handler.handle(event)
+            except Exception:
+                logger.exception(
+                    "side handler %s failed on event %s — continuing pipeline",
+                    type(handler).__name__, type(event).__name__,
+                )
         items = self._runtime._obs_pipeline.run(event)
         if not items:
             return
