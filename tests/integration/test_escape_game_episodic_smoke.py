@@ -297,31 +297,53 @@ class TestSmokeRecallSide:
 
 
 class TestSmokeSubjectiveServiceWiring:
-    """``LLM_EPISODIC_SUBJECTIVE_ENABLED`` の opt-in 配線挙動 (Issue #295 後続)。
+    """``LLM_EPISODIC_SUBJECTIVE_ENABLED`` の配線挙動 (Issue #295 後続)。
 
     本クラスは「配線が正しく差分動作する」ことだけ確認する smoke。実 LLM 呼び出しは
     しない (LLM_CLIENT=stub なので LiteLLMClient にならず service 自体が無効化される
     のが本来の挙動。それを assert する)。
+
+    第22回実験以降の方針変更: SUBJECTIVE_ENABLED は **既定 ON**。明示的に
+    OFF にしたいときだけ ``LLM_EPISODIC_SUBJECTIVE_ENABLED=0`` を渡す。
     """
 
-    def test_env_未設定なら_subjective_service_は_未配線(
+    def test_env_未設定でも_subjective_は_既定で_有効_だが_stub_LLM_では_silent_skip(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """LLM_EPISODIC_ENABLED=1 だけなら subjective service は wire されない。"""
+        """SUBJECTIVE フラグ未設定でも既定 ON なので有効化を試みるが、stub LLM_CLIENT
+        だと LiteLLMClient にならず service は wire されない (silent skip)。"""
         runtime = _build_runtime(monkeypatch, enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
-        # chunk_coordinator の subjective_fields_service は None のまま
+        # 既定 ON でも stub のときは service が wire されない (= 安全な縮退)
         assert stack.chunk_coordinator._chunk_subjective_fields_service is None
         assert stack.chunk_coordinator._persona_block_provider is None
 
-    def test_subjective_enabled_かつ_litellm_未指定なら_service_は_無効化(
+    def test_subjective_明示的に_0_なら_litellm_でも_配線されない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``LLM_EPISODIC_SUBJECTIVE_ENABLED=0`` で明示的に OFF にできる。
+
+        LiteLLMClient が居ても subjective service は wire されない (テスト環境では
+        実 LLM を叩かないので LiteLLMClient は通常使わないが、env 解決のみ検証)。
+        """
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
+        monkeypatch.delenv("LLM_CLIENT", raising=False)
+        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+
+        runtime = create_escape_game_runtime(_SCENARIO_PATH)
+        stack = runtime._episodic_stack
+        assert stack is not None
+        assert stack.chunk_coordinator._chunk_subjective_fields_service is None
+
+    def test_subjective_既定_かつ_litellm_未指定なら_service_は_無効化(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """LLM_CLIENT=stub (default) のままだと LiteLLMClient にならないので、
-        SUBJECTIVE_ENABLED=1 でも service は wire されない (silent skip + info log)。"""
+        SUBJECTIVE_ENABLED 既定 ON でも service は wire されない (silent skip + info log)。"""
         monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "1")
+        monkeypatch.delenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", raising=False)
         monkeypatch.delenv("LLM_CLIENT", raising=False)  # = stub default
         from demos.escape_game.escape_game_runtime import create_escape_game_runtime
 
