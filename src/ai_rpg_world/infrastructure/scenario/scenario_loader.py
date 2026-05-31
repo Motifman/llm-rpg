@@ -186,6 +186,28 @@ class ScenarioDayNightConfig:
 
 
 @dataclass(frozen=True)
+class ScenarioOutcomeResolutionConfig:
+    """プレイヤー個別 outcome の解決設定 (Phase E-3b)。
+
+    シナリオが個別 outcome (RESCUED/DEAD/STRANDED) を使わない場合は本 config
+    を持たない (= ScenarioLoadResult.outcome_resolution_config が None)。
+    存在する場合は PlayerOutcomeResolutionStageService が tick 駆動で
+    判定を回す。
+
+    意味論:
+    - 各 rescue_at_ticks (= 救助船通過 tick) で、`signal_fire_flag` が立ち、
+      かつ summit_spot_id に居る UNRESOLVED プレイヤーは RESCUED に確定
+    - `stranded_at_tick` 到達時、まだ UNRESOLVED のプレイヤーは STRANDED に確定
+    - DEAD は別経路 (PlayerDownedOutcomeHandler) で確定する
+    """
+
+    rescue_at_ticks: Tuple[int, ...]
+    stranded_at_tick: int
+    summit_spot_id: SpotId
+    signal_fire_flag: str
+
+
+@dataclass(frozen=True)
 class ScenarioMonsterTemplate:
     """シナリオ JSON で宣言されたモンスター種別定義 (Phase B-2a)。
 
@@ -279,6 +301,9 @@ class ScenarioLoadResult:
     synchronized_action_groups: Tuple[SynchronizedActionGroup, ...] = ()
     monster_templates: Tuple[ScenarioMonsterTemplate, ...] = ()
     monster_placements: Tuple[ScenarioMonsterPlacement, ...] = ()
+    # Phase E-3b: プレイヤー個別 outcome 解決設定 (RESCUED / STRANDED 自動判定)。
+    # None なら個別 outcome を使わない (= 既存の集団 win/lose 経路のみ)。
+    outcome_resolution_config: Optional[ScenarioOutcomeResolutionConfig] = None
 
 
 class ScenarioLoader:
@@ -323,6 +348,9 @@ class ScenarioLoader:
         sync_groups = self._parse_synchronized_action_groups(
             raw.get("synchronized_action_groups", []), mapper,
         )
+        outcome_resolution_config = self._parse_outcome_resolution_config(
+            raw.get("outcome_resolution"), mapper,
+        )
 
         return ScenarioLoadResult(
             graph=graph,
@@ -342,6 +370,7 @@ class ScenarioLoader:
             synchronized_action_groups=sync_groups,
             monster_templates=monster_templates,
             monster_placements=monster_placements,
+            outcome_resolution_config=outcome_resolution_config,
         )
 
     def _parse_metadata(self, raw: Dict[str, Any]) -> ScenarioMetadata:
@@ -1086,6 +1115,67 @@ class ScenarioLoader:
                 )
             )
         return tuple(out)
+
+    def _parse_outcome_resolution_config(
+        self,
+        raw: Any,
+        mapper: ScenarioIdMapper,
+    ) -> Optional[ScenarioOutcomeResolutionConfig]:
+        """`outcome_resolution` block を解析する (Phase E-3b)。
+
+        block 未指定なら None を返す (= 個別 outcome を使わない既存挙動を維持)。
+
+        期待形式:
+            "outcome_resolution": {
+              "rescue_at_ticks": [80, 130],
+              "stranded_at_tick": 140,
+              "summit_spot": "summit",
+              "signal_fire_flag": "signal_fire_lit"
+            }
+        """
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise ScenarioLoadError(
+                f"outcome_resolution must be an object, got {type(raw).__name__}"
+            )
+        rescue_ticks_raw = raw.get("rescue_at_ticks", [])
+        if not isinstance(rescue_ticks_raw, list):
+            raise ScenarioLoadError(
+                "outcome_resolution.rescue_at_ticks must be a list of integers"
+            )
+        # 重複と順序の正規化: int 化して sorted unique。同 tick 2 回宣言は無意味。
+        rescue_ticks = tuple(sorted({int(t) for t in rescue_ticks_raw}))
+        stranded_raw = raw.get("stranded_at_tick")
+        if not isinstance(stranded_raw, int):
+            raise ScenarioLoadError(
+                "outcome_resolution.stranded_at_tick must be an integer"
+            )
+        summit_sid = raw.get("summit_spot")
+        if not isinstance(summit_sid, str) or not summit_sid:
+            raise ScenarioLoadError(
+                "outcome_resolution.summit_spot must be a non-empty string spot id"
+            )
+        summit_spot_id = SpotId.create(mapper.get_int("spot", summit_sid))
+        signal_flag = raw.get("signal_fire_flag")
+        if not isinstance(signal_flag, str) or not signal_flag:
+            raise ScenarioLoadError(
+                "outcome_resolution.signal_fire_flag must be a non-empty string"
+            )
+        # 救助 tick はすべて stranded_at_tick より厳密に小さい必要がある
+        # (timeout 後に救助が走るのは矛盾)
+        for t in rescue_ticks:
+            if t >= stranded_raw:
+                raise ScenarioLoadError(
+                    f"outcome_resolution.rescue_at_ticks[{t}] must be strictly "
+                    f"less than stranded_at_tick ({stranded_raw})"
+                )
+        return ScenarioOutcomeResolutionConfig(
+            rescue_at_ticks=rescue_ticks,
+            stranded_at_tick=stranded_raw,
+            summit_spot_id=summit_spot_id,
+            signal_fire_flag=signal_flag,
+        )
 
     def _parse_day_night_config(
         self, raw: Dict[str, Any],
