@@ -30,6 +30,8 @@ class ItemSpecReadModel:
     placeable_object_type: Optional[str] = None
     consume_effect: Optional["ItemEffect"] = None
     is_light_source: bool = False
+    # Phase D-2: 食料腐敗。詳細は ItemSpec.spoils_after_ticks を参照。
+    spoils_after_ticks: Optional[int] = None
 
     @classmethod
     def create_from_item_spec(
@@ -46,6 +48,7 @@ class ItemSpecReadModel:
         placeable_object_type: Optional[str] = None,
         consume_effect: Optional["ItemEffect"] = None,
         is_light_source: bool = False,
+        spoils_after_ticks: Optional[int] = None,
     ) -> "ItemSpecReadModel":
         """ItemSpecからReadModelを作成"""
         return cls(
@@ -61,6 +64,7 @@ class ItemSpecReadModel:
             placeable_object_type=placeable_object_type,
             consume_effect=consume_effect,
             is_light_source=is_light_source,
+            spoils_after_ticks=spoils_after_ticks,
         )
 
     @property
@@ -94,4 +98,5 @@ class ItemSpecReadModel:
             placeable_object_type=self.placeable_object_type,
             consume_effect=self.consume_effect,
             is_light_source=self.is_light_source,
+            spoils_after_ticks=self.spoils_after_ticks,
         )
