@@ -18,6 +18,7 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
@@ -103,16 +104,17 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
                 event.spot_id, event.entity_id, add
             )
         elif isinstance(event, PlayerDroppedItemEvent):
-            # witness 最小版: drop の事実を同スポットの他プレイヤーにのみ届ける。
-            # 行為者本人には ItemTransferResult.messages で個別返答する。
-            self._resolve_at_spot_excluding_actor(
-                event.spot_id, event.entity_id, add
-            )
+            # Phase C: witness_policy=ACTOR_ONLY なら誰も観測しない (空集合)。
+            # SAME_SPOT (デフォルト) は B-2a までと同じ「同室・行為者除外」。
+            if event.witness_policy == WitnessPolicy.SAME_SPOT:
+                self._resolve_at_spot_excluding_actor(
+                    event.spot_id, event.entity_id, add
+                )
         elif isinstance(event, PlayerPickedUpItemEvent):
-            # pickup も同様に同スポットの他者にのみ届ける。
-            self._resolve_at_spot_excluding_actor(
-                event.spot_id, event.entity_id, add
-            )
+            if event.witness_policy == WitnessPolicy.SAME_SPOT:
+                self._resolve_at_spot_excluding_actor(
+                    event.spot_id, event.entity_id, add
+                )
         elif isinstance(event, PlayerGaveItemEvent):
             # give: 同スポットの他プレイヤー (送り手除く) に届ける。
             # 受け手 recipient_entity_id もこの集合に含まれるため自分宛の
