@@ -74,6 +74,7 @@ class SpotGraphCurrentStateBuilder:
         monster_view_provider: Optional[MonsterViewProvider] = None,
         item_spec_name_resolver: Optional[ItemSpecNameResolver] = None,
         time_of_day_provider: Optional[TimeOfDayProvider] = None,
+        item_state_resolver: Optional[Callable[[int], Optional[dict]]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -87,6 +88,10 @@ class SpotGraphCurrentStateBuilder:
         self._monster_view_provider = monster_view_provider
         self._item_spec_name_resolver = item_spec_name_resolver
         self._time_of_day_provider = time_of_day_provider
+        # Phase D-3a: 地面アイテムの spoiled 表示用。instance_id → state dict
+        # (None なら spoiled 不明)。None なら spoiled は常に False 扱いになり、
+        # この拡張を使わないシナリオ (脱出ゲーム本編など) に無影響。
+        self._item_state_resolver = item_state_resolver
         self._perception = SpotPerceptionService()
 
     def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
@@ -247,10 +252,22 @@ class SpotGraphCurrentStateBuilder:
                             name = ""
                     if not name:
                         name = f"アイテム#{gi.item_instance_id.value}"
+                    is_spoiled = False
+                    if self._item_state_resolver is not None:
+                        try:
+                            state = self._item_state_resolver(gi.item_instance_id.value)
+                            if state is not None:
+                                is_spoiled = bool(state.get("spoiled"))
+                        except Exception:
+                            # resolver の例外は表示用なので silent fallback (False)。
+                            # 永続的バグは観測 callback 経由でログに出るので、
+                            # 表示パスで握り潰しても二重隠蔽にはならない。
+                            is_spoiled = False
                     ground_items.append(SpotGraphGroundItemEntry(
                         item_instance_id=gi.item_instance_id.value,
                         item_spec_id=gi.item_spec_id.value,
                         name=name,
+                        is_spoiled=is_spoiled,
                     ))
                     # 後方互換: 旧 ground_item_lines に名前付き行を残す。
                     ground_lines.append(f"- {name}")
