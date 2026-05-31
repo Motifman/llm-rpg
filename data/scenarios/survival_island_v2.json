@@ -1001,12 +1001,8 @@
     }
   ],
   "game_end_conditions": {
-    "win": [
-      {"type": "FLAG_SET", "flag_name": "rescue_completed", "description": "山頂に狼煙が上がり、全員揃って救助船を待つ。"}
-    ],
-    "lose": [
-      {"type": "TICK_LIMIT", "tick_limit": 140, "description": "14日(140 tick)以内に救助されなければ脱出失敗。"}
-    ]
+    "win": [],
+    "lose": []
   },
   "initial_flags": [],
   "outcome_resolution": {
@@ -1073,37 +1069,27 @@
       ]
     },
     {
-      "id": "rescue_check_first",
+      "id": "rescue_ship_first_arrive",
       "trigger": "ON_TICK",
       "once": true,
       "conditions": [
         {"condition_type": "TICK_AT_LEAST", "tick": 80},
-        {"condition_type": "FLAG_SET", "flag_name": "signal_fire_lit"},
-        {"condition_type": "PLAYER_AT_SPOT", "player_id": "ada", "spot_id": "summit"},
-        {"condition_type": "PLAYER_AT_SPOT", "player_id": "noah", "spot_id": "summit"},
-        {"condition_type": "PLAYER_AT_SPOT", "player_id": "rio", "spot_id": "summit"},
-        {"condition_type": "PLAYER_AT_SPOT", "player_id": "kai", "spot_id": "summit"}
+        {"condition_type": "FLAG_SET", "flag_name": "signal_fire_lit"}
       ],
       "effects": [
-        {"effect_type": "SET_FLAG", "parameters": {"flag_name": "rescue_completed", "value": true}},
-        {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "水平線の彼方に船影が現れ、こちらに向かってくる。狼煙に気づいたのだ。4人は手を振り、抱き合った。"}}
+        {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "水平線の彼方に船影が現れ、こちらに向かってくる。狼煙に気付いたのだ。山頂に居る者だけが救助される。"}}
       ]
     },
     {
-      "id": "rescue_check_late",
+      "id": "rescue_ship_late_arrive",
       "trigger": "ON_TICK",
       "once": true,
       "conditions": [
         {"condition_type": "TICK_AT_LEAST", "tick": 130},
-        {"condition_type": "FLAG_SET", "flag_name": "signal_fire_lit"},
-        {"condition_type": "PLAYER_AT_SPOT", "player_id": "ada", "spot_id": "summit"},
-        {"condition_type": "PLAYER_AT_SPOT", "player_id": "noah", "spot_id": "summit"},
-        {"condition_type": "PLAYER_AT_SPOT", "player_id": "rio", "spot_id": "summit"},
-        {"condition_type": "PLAYER_AT_SPOT", "player_id": "kai", "spot_id": "summit"}
+        {"condition_type": "FLAG_SET", "flag_name": "signal_fire_lit"}
       ],
       "effects": [
-        {"effect_type": "SET_FLAG", "parameters": {"flag_name": "rescue_completed", "value": true}},
-        {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "二度目の救助船の通過。今度は気づいてもらえた。4人は無事に島から連れ出される。"}}
+        {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "二度目の救助船が水平線に現れる。これが最後の機会だ。山頂に居る者だけが救助される。"}}
       ]
     },
     {
