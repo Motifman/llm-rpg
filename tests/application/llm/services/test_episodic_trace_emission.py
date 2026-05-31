@@ -244,6 +244,61 @@ class TestChunkCoordinatorTraceEmission:
         # chunk write が完走したことを episode_store の有無で確認
         assert len(episode_store.list_recent(pid.value, 10)) > 0
 
+    def test_obs_slice_に_naive_と_aware_が_複数件混在しても_sort_で_落ちない(self) -> None:
+        """``obs_slice`` の sort key も _as_utc で正規化されている (Issue #311 後続)。
+
+        Issue #295 r2 fix (#309) は filter 比較を _as_utc で守ったが、その直後の
+        sort key が raw occurred_at を使っていたため、obs_slice に 2 件以上の
+        混在 entry が含まれると TypeError で chunk write が失敗していた。
+        第21回 r1 で 21/30 chunk write 失敗の真因。
+        """
+        coord, buffer, action_store, episode_store = self._build_coord(recorder=None)
+        pid = PlayerId(1)
+        action_store.append(
+            pid,
+            action_summary="wait1",
+            result_summary="ok",
+            occurred_at=datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc),
+        )
+        coord.after_action_recorded(pid)
+        # 同一 chunk 範囲に **複数件** 観測を入れる。1 件目は naive、2 件目は aware。
+        # 修正前は obs_slice = [naive_obs, aware_obs] の sort で落ちる。
+        buffer.append(
+            pid,
+            ObservationEntry(
+                occurred_at=datetime(2026, 5, 1, 12, 0, 20),  # naive
+                output=ObservationOutput(
+                    prose="naive obs 1",
+                    structured={"type": "x"},
+                    observation_category="social",
+                    schedules_turn=True,
+                ),
+                game_time_label=None,
+            ),
+        )
+        buffer.append(
+            pid,
+            ObservationEntry(
+                # aware (= heartbeat / action_failed が発行するパターン)
+                occurred_at=datetime(2026, 5, 1, 12, 0, 40, tzinfo=timezone.utc),
+                output=ObservationOutput(
+                    prose="aware obs 2",
+                    structured={"type": "y"},
+                    observation_category="social",
+                ),
+                game_time_label=None,
+            ),
+        )
+        action_store.append(
+            pid,
+            action_summary="wait2",
+            result_summary="ok",
+            occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
+        )
+        # 修正前はここで TypeError (sort key で naive と aware を比較)
+        coord.after_action_recorded(pid)
+        assert len(episode_store.list_recent(pid.value, 10)) > 0
+
     def test_recorder_例外は_chunk_書き込みを止めない(self) -> None:
         """recorder.record が例外を投げても episode は store に書かれる。"""
 

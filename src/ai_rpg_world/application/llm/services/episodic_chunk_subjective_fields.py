@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
+from datetime import datetime, timezone
 from typing import Any
+
+
+def _as_utc(value: datetime) -> datetime:
+    """naive datetime を UTC aware として扱う sort 正規化ヘルパ (Issue #311 後続)。"""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
@@ -74,21 +82,22 @@ def _format_draft_facts(ep: SubjectiveEpisode) -> str:
 
 def _format_source_facts(encoding_input: ChunkEncodingInput) -> str:
     obs_lines: list[str] = []
-    for o in sorted(encoding_input.observations, key=lambda e: e.occurred_at):
+    for o in sorted(encoding_input.observations, key=lambda e: _as_utc(e.occurred_at)):
         cat = o.output.observation_category
         gt = o.game_time_label or ""
         obs_lines.append(
             f"- occurred_at={o.occurred_at.isoformat()}; category={cat}; game_time={gt!s}"
         )
     for o in sorted(
-        encoding_input.observation_overflow_from_window, key=lambda e: e.occurred_at
+        encoding_input.observation_overflow_from_window,
+        key=lambda e: _as_utc(e.occurred_at),
     ):
         cat = o.output.observation_category
         obs_lines.append(
             f"- [window_overflow] occurred_at={o.occurred_at.isoformat()}; category={cat}"
         )
     act_lines: list[str] = []
-    for a in sorted(encoding_input.action_results, key=lambda e: e.occurred_at):
+    for a in sorted(encoding_input.action_results, key=lambda e: _as_utc(e.occurred_at)):
         tn = a.tool_name or ""
         act_lines.append(
             f"- occurred_at={a.occurred_at.isoformat()}; tool={tn!s}; "

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Protocol, TypeVar, Generic, Any, Optional
 import uuid
@@ -32,8 +32,11 @@ class BaseDomainEvent(Generic[AggregateId, AggregateType]):
 
     @classmethod
     def create(cls, aggregate_id: AggregateId, aggregate_type: AggregateType, **kwargs: Any) -> 'BaseDomainEvent[AggregateId, AggregateType]':
+        # tz-aware UTC で発行 (Issue #311 後続: #300 の取りこぼし回帰修正)。
+        # ドメインイベントは observation pipeline / chunk_coordinator の
+        # occurred_at 比較で aware と混ざるため、発生源を統一する。
         event_id = uuid.uuid4().int
-        occurred_at = datetime.now()
+        occurred_at = datetime.now(timezone.utc)
         return cls(event_id, occurred_at, aggregate_id, aggregate_type, **kwargs)
 
 
