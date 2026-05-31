@@ -245,7 +245,9 @@ DROP_ITEM_DEFINITION = ToolDefinitionDto(
         "所持アイテムを現在地の地面に置く。同じスポットに居る他プレイヤーが"
         "後で pickup_item で拾える。協力のために素材を渡したい時、または"
         "持ち物を整理したい時に使う。地面アイテムはスポットを離れても消えず、"
-        "誰かが拾うまで残る (シナリオで明示的に消去されない限り)。"
+        "誰かが拾うまで残る (シナリオで明示的に消去されない限り)。\n"
+        "stealth=true にすると同じスポットに居る他者にも観測されず、こっそり"
+        "アイテムを置ける (隠匿行為)。誰かに見られたくない時に使う。"
     ),
     parameters={
         "type": "object",
@@ -257,6 +259,15 @@ DROP_ITEM_DEFINITION = ToolDefinitionDto(
                     "同じ spec のアイテムを複数所持している場合 (例: I1: 流木 x2) は、"
                     "代表 instance が1つだけ落とされる。"
                 ),
+            },
+            "stealth": {
+                "type": "boolean",
+                "description": (
+                    "true にすると同室他プレイヤーに観測されない (witness_policy="
+                    "ACTOR_ONLY)。false (default) なら従来通り「Xが流木を地面に"
+                    "置いた」が同室者に観測される。"
+                ),
+                "default": False,
             },
             "inner_thought": _IT,
         },
@@ -301,7 +312,9 @@ PICKUP_ITEM_DEFINITION = ToolDefinitionDto(
     description=(
         "現在地の地面に落ちているアイテムを拾い上げて自分のインベントリに加える。"
         "他プレイヤーが drop した素材を受け取ったり、シナリオで初期配置された"
-        "アイテムを取得する。インベントリが満杯だと拾えない。"
+        "アイテムを取得する。インベントリが満杯だと拾えない。\n"
+        "stealth=true にすると同じスポットに居る他者にも観測されず、こっそり"
+        "アイテムを拾える (盗み)。"
     ),
     parameters={
         "type": "object",
@@ -312,6 +325,15 @@ PICKUP_ITEM_DEFINITION = ToolDefinitionDto(
                     "拾うアイテムのラベル (現在の状況の「地面に落ちているもの」に"
                     "表示された G1, G2 等)。"
                 ),
+            },
+            "stealth": {
+                "type": "boolean",
+                "description": (
+                    "true にすると同室他プレイヤーに観測されない (witness_policy="
+                    "ACTOR_ONLY)。false (default) なら従来通り「Xが流木を拾い上げた」"
+                    "が同室者に観測される。"
+                ),
+                "default": False,
             },
             "inner_thought": _IT,
         },

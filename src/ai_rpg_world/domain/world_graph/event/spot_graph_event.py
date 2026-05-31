@@ -13,6 +13,7 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
     PassageChangeCauseEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
     StateDeltaEntry,
@@ -128,6 +129,10 @@ class PlayerDroppedItemEvent(BaseDomainEvent[SpotGraphId, str]):
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
     item_name: str
+    # Phase C: 観測範囲。SAME_SPOT (default) なら同スポット他プレイヤーに配信、
+    # ACTOR_ONLY なら recipient strategy が空集合を返し誰も観測しない。
+    # default は SAME_SPOT で B-2a までの挙動と一致 (後方互換)。
+    witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT
 
 
 @dataclass(frozen=True)
@@ -175,6 +180,9 @@ class PlayerPickedUpItemEvent(BaseDomainEvent[SpotGraphId, str]):
 
     PlayerDroppedItemEvent と対称な配信仕様。「Xが流木を拾い上げた」のような
     prose で同室の他プレイヤーに観測として配信される。
+
+    witness_policy=ACTOR_ONLY のときは「こっそり拾う」を表現し、recipient
+    strategy が空集合を返すため誰にも観測されない。
     """
 
     entity_id: EntityId
@@ -182,6 +190,7 @@ class PlayerPickedUpItemEvent(BaseDomainEvent[SpotGraphId, str]):
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
     item_name: str
+    witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT
 
 
 @dataclass(frozen=True)

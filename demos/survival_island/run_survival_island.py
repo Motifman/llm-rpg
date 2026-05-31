@@ -221,6 +221,72 @@ def main() -> None:
     else:
         print("  (ミラが蔓ロープを持っていないので give のスキップ)")
 
+    # ── ステルス drop の実演 (Phase C: witness_policy=ACTOR_ONLY) ──
+    # ミラが拠点で「こっそり」流木を地面に置く。同室にトマとレンが居ても、
+    # 観測ログには現れない (recipient strategy が空集合を返すため)。
+    print("\n" + "━" * 72)
+    print("  ステルス drop (Phase C): こっそり置けば誰も気づかない")
+    print("━" * 72)
+    # ミラに新しい流木を取らせる
+    runtime.do_move(mira, "shipwreck_beach")
+    runtime.advance_tick()
+    runtime.advance_tick()
+    runtime.advance_tick()
+    runtime.advance_tick()
+    runtime.do_interact(mira, "driftwood_pile", "gather")
+    runtime.do_move(mira, "campsite")
+
+    mira_inv = runtime._player_inventory_repo.find_by_id(mira)
+    stealth_slot = None
+    for slot in range(mira_inv._max_slots):
+        iid = mira_inv.get_item_instance_id_by_slot(SlotId(slot))
+        if iid is None:
+            continue
+        item = runtime._item_repo.find_by_id(iid)
+        if item and item.item_spec.name == "流木":
+            stealth_slot = slot
+            break
+
+    if stealth_slot is not None:
+        from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+
+        # 事前にレンが観測している「ミラの drop」イベント数を数える
+        def _count_mira_drops(player_id) -> int:
+            content = runtime.build_full_prompt(player_id)["messages"][1]["content"]
+            return sum(
+                1 for line in content.split("\n")
+                if "ミラ(隊長)が流木を地面に置いた" in line
+            )
+
+        before_ren = _count_mira_drops(ren)
+        before_toma = _count_mira_drops(toma)
+
+        show_action(
+            "ミラ",
+            f"流木 (slot {stealth_slot}) を **こっそり** 地面に置く (stealth=True)",
+        )
+        r = runtime._item_transfer_service.drop_item(
+            mira, SlotId(stealth_slot),
+            witness_policy=WitnessPolicy.ACTOR_ONLY,
+        )
+        show_result(r.messages)
+
+        after_ren = _count_mira_drops(ren)
+        after_toma = _count_mira_drops(toma)
+
+        print(
+            f"  レンの観測件数 (ミラの drop): {before_ren} → {after_ren}"
+        )
+        print(
+            f"  トマの観測件数 (ミラの drop): {before_toma} → {after_toma}"
+        )
+        if after_ren == before_ren and after_toma == before_toma:
+            print("  ✓ ステルス drop 成功: 同室者の観測件数は増えなかった")
+        else:
+            print("  ✗ 想定外: 観測が漏れた")
+    else:
+        print("  (ミラの流木が見つからずスキップ)")
+
     # ── 数ティック空回しして reactive_bindings の動作を観察 ──
     print("\n" + "━" * 72)
     print("  数ティック経過 (待機) — リソース再生の挙動を観察")

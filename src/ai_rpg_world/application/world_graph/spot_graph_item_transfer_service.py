@@ -30,6 +30,7 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
@@ -99,12 +100,22 @@ class SpotGraphItemTransferService:
         """
         self._event_publisher = event_publisher
 
-    def drop_item(self, player_id: PlayerId, slot_id: SlotId) -> ItemTransferResult:
+    def drop_item(
+        self,
+        player_id: PlayerId,
+        slot_id: SlotId,
+        *,
+        witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT,
+    ) -> ItemTransferResult:
         """指定スロットのアイテムをプレイヤーの現在地に落とす。
 
         ItemDroppedFromInventoryEvent は発火させない (tile-map handler が
         食ってしまうため)。代わりに本サービスが直接 SpotInterior に
         書き込む。
+
+        witness_policy=ACTOR_ONLY を渡すと PlayerDroppedItemEvent に同 policy
+        が乗り、recipient strategy が空集合を返す (誰も観測しない)。「こっそり
+        落とす」を実現するための経路。default は SAME_SPOT で B-2a 互換。
         """
         inventory = self._player_inventory_repository.find_by_id(player_id)
         if inventory is None:
@@ -161,6 +172,7 @@ class SpotGraphItemTransferService:
                 item_instance_id=item_instance_id,
                 item_spec_id=item_spec_id,
                 item_name=item_name,
+                witness_policy=witness_policy,
             )
         )
 
@@ -171,9 +183,17 @@ class SpotGraphItemTransferService:
         )
 
     def pickup_item(
-        self, player_id: PlayerId, item_instance_id: ItemInstanceId
+        self,
+        player_id: PlayerId,
+        item_instance_id: ItemInstanceId,
+        *,
+        witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT,
     ) -> ItemTransferResult:
-        """プレイヤーの現在地から指定アイテムを拾う。"""
+        """プレイヤーの現在地から指定アイテムを拾う。
+
+        witness_policy=ACTOR_ONLY で「こっそり拾う」を表現できる (drop と
+        対称)。
+        """
         spot_id = self._resolve_current_spot(player_id)
         interior = self._spot_interior_repository.find_by_spot_id(spot_id)
         if interior is None:
@@ -217,6 +237,7 @@ class SpotGraphItemTransferService:
                 item_instance_id=item_instance_id,
                 item_spec_id=ground_item.item_spec_id,
                 item_name=item_name,
+                witness_policy=witness_policy,
             )
         )
 
