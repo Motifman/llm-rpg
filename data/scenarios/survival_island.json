@@ -53,7 +53,7 @@
   "monsters": {
     "templates": [
       {
-        "id": "wild_dog",
+        "id": "island_wolf",
         "name": "野犬",
         "description": "島を彷徨う飢えた野犬。獣のような目で人を見つけては唸る。",
         "race": "WOLF",
@@ -66,10 +66,69 @@
         "respawn": {"interval_ticks": 80, "auto": false},
         "vision_range": 4,
         "flee_threshold": 0.15
+      },
+      {
+        "id": "swamp_snake",
+        "name": "大蛇",
+        "description": "湿地に潜む大蛇。鎌首をもたげて獲物を狙う。噛まれると毒が回る。",
+        "race": "TROLL",
+        "faction": "ENEMY",
+        "base_stats": {
+          "max_hp": 20, "max_mp": 0, "attack": 12, "defense": 3,
+          "speed": 5, "critical_rate": 0.15, "evasion_rate": 0.2
+        },
+        "reward": {"exp": 12, "gold": 0},
+        "respawn": {"interval_ticks": 60, "auto": false},
+        "vision_range": 3,
+        "flee_threshold": 0.3
+      },
+      {
+        "id": "feral_dog",
+        "name": "廃拠点の野犬",
+        "description": "観測拠点の廃屋を縄張りにする獰猛な野犬。逃げない。",
+        "race": "WOLF",
+        "faction": "ENEMY",
+        "base_stats": {
+          "max_hp": 25, "max_mp": 0, "attack": 6, "defense": 4,
+          "speed": 5, "critical_rate": 0.05, "evasion_rate": 0.1
+        },
+        "reward": {"exp": 8, "gold": 0},
+        "respawn": {"interval_ticks": 100, "auto": false},
+        "vision_range": 3,
+        "flee_threshold": 0.05
+      },
+      {
+        "id": "giant_crab",
+        "name": "大型カニ",
+        "description": "干潮時に岩礁帯から現れる大型のカニ。鈍重だが甲殻が硬く、近づくと挟まれる。",
+        "race": "BEAST",
+        "faction": "ENEMY",
+        "base_stats": {
+          "max_hp": 40, "max_mp": 0, "attack": 5, "defense": 8,
+          "speed": 3, "critical_rate": 0.05, "evasion_rate": 0.05
+        },
+        "reward": {"exp": 15, "gold": 0},
+        "respawn": {"interval_ticks": 90, "auto": false},
+        "vision_range": 2,
+        "flee_threshold": 0.1
       }
     ],
     "initial_placements": [
-      {"template": "wild_dog", "spot": "deep_forest", "coordinate": {"x": 0, "y": 0}}
+      {
+        "template": "island_wolf", "spot": "deep_forest",
+        "spawn_condition": {"day_night_phases": ["night"]}
+      },
+      {
+        "template": "swamp_snake", "spot": "swamp",
+        "spawn_condition": {"day_night_phases": ["night"]}
+      },
+      {
+        "template": "feral_dog", "spot": "plane_wreck"
+      },
+      {
+        "template": "giant_crab", "spot": "tidal_pools",
+        "spawn_condition": {"forbidden_flags": ["high_tide"]}
+      }
     ]
   },
   "spots": [
