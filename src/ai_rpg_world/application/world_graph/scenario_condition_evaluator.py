@@ -8,6 +8,7 @@ scenario_event の発火条件と reactive binding の predicate の両方で
 from __future__ import annotations
 
 import logging
+import random
 from typing import Callable, Optional
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
@@ -56,6 +57,7 @@ class ScenarioConditionEvaluator:
         player_inventory_repository: PlayerInventoryRepository,
         item_repository: ItemRepository,
         weather_state_provider: Optional[Callable[[], WeatherState]] = None,
+        random_source: Optional[random.Random] = None,
     ) -> None:
         self._world_flag_state = world_flag_state
         self._spot_interior_repository = spot_interior_repository
@@ -66,6 +68,9 @@ class ScenarioConditionEvaluator:
         # provider が返すのは WeatherState 互換オブジェクト
         # (.weather_type.value で天候名が取れる構造)。
         self._weather_state_provider = weather_state_provider
+        # Phase D-1: PROBABILITY 評価用 RNG。未注入なら新しい random.Random()
+        # で初期化するので非決定的。テストや再現実験では seed 注入で固定化する。
+        self._random = random_source or random.Random()
 
     def evaluate(
         self,
@@ -102,6 +107,13 @@ class ScenarioConditionEvaluator:
                 return False
             return any(self._evaluate(c, current_tick, graph) for c in cond.children)
         # leaf 条件
+        # Phase D-1: PROBABILITY は他の leaf より先に処理する。理由は (a) 他の
+        # 軸とは独立に毎評価で random を消費するので順序を明確にする (b) 評価
+        # コストが高い state lookup を不要に走らせない。
+        if ctype == "PROBABILITY":
+            # __post_init__ で probability が None / 範囲外なら弾かれているので
+            # ここでは float() しても安全。
+            return self._random.random() < float(cond.probability)
         world_flags = self._world_flag_state.as_frozen_set()
         if ctype == "TICK_AT_LEAST":
             return cond.tick is not None and current_tick.value >= int(cond.tick)
