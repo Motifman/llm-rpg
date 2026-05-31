@@ -14,6 +14,8 @@ from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
+    compute_template_interpreted,
+    compute_template_recall,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -103,3 +105,45 @@ class TestEpisodicChunkSubjectiveFieldsService:
             draft.what,
         )
         assert merged.recall_text == first_line
+
+
+class TestComputeTemplateHelpers:
+    """``compute_template_interpreted`` / ``compute_template_recall`` の純関数挙動。
+
+    ``ChunkEpisodeDraftBuilder`` が draft 構築時に呼び出すため、``SubjectiveEpisode``
+    を介さず生文字列で動くことが契約。
+    """
+
+    def test_interpreted_は_what_をそのまま返す(self) -> None:
+        assert compute_template_interpreted("カイトが入口広間で待機した") == (
+            "カイトが入口広間で待機した"
+        )
+
+    def test_interpreted_は_前後空白_を_trim(self) -> None:
+        assert compute_template_interpreted("  hello  ") == "hello"
+
+    def test_interpreted_は_長すぎる_what_を_省略記号_で切り詰める(self) -> None:
+        long_what = "あ" * 800
+        out = compute_template_interpreted(long_what)
+        assert len(out) <= 700
+        assert out.endswith("…")
+
+    def test_recall_は_observed_の_最初の非空行_を_bullet_除去して返す(self) -> None:
+        observed = "\n".join([
+            "",
+            "- [12:00] カイトが入口広間に立った",
+            "- [12:01] 風の音が遠くから聞こえた",
+        ])
+        assert compute_template_recall(observed, what="x") == (
+            "[12:00] カイトが入口広間に立った"
+        )
+
+    def test_recall_は_observed_が_空_なら_what_に_フォールバック(self) -> None:
+        assert compute_template_recall("", what="待機した") == "待機した"
+        assert compute_template_recall("   \n   ", what="待機した") == "待機した"
+
+    def test_recall_は_長すぎる_行_を_省略記号_で切り詰める(self) -> None:
+        long_line = "あ" * 800
+        out = compute_template_recall(long_line, what="x")
+        assert len(out) <= 700
+        assert out.endswith("…")

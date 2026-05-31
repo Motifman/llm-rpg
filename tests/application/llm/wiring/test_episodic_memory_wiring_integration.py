@@ -210,8 +210,9 @@ class TestEpisodicChunkWiringIntegration:
         assert len(recent) == 1
         ep = recent[0]
         assert ep.player_id == 1
-        assert ep.interpreted is None
-        assert ep.recall_text is None
+        # draft 時点でテンプレが埋まる (LLM 補完未配線でも非空文字、#295 r2 fix)
+        assert isinstance(ep.interpreted, str) and ep.interpreted
+        assert isinstance(ep.recall_text, str) and ep.recall_text
         assert ep.action is not None
         assert TOOL_NAME_NO_OP in (ep.action.tool_name or "")
         assert "- " in ep.observed

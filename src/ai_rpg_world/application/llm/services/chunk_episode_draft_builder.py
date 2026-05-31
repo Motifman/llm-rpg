@@ -27,6 +27,10 @@ from ai_rpg_world.application.llm.contracts.episodic_memory import (
 from ai_rpg_world.application.llm.services.action_episode_draft_builder import (
     _actor_from_structured,
 )
+from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+    compute_template_interpreted,
+    compute_template_recall,
+)
 from ai_rpg_world.application.llm.services.episodic_cue_rules import (
     _coerce_non_bool_int,
     build_episodic_cues_for_tool_turn,
@@ -201,6 +205,15 @@ class ChunkEpisodeDraftBuilder:
         acts = inp.action_results
         occurred_at = max(e.occurred_at for e in acts)
         obs_for_place_who = _all_observation_entries(inp)
+        what = _compose_what(acts)
+        # draft 時点で `recall_text` / `interpreted` をテンプレで埋めておく。
+        #
+        # 理由: LLM 補完サービス (EpisodicChunkSubjectiveFieldsService) を未配線の
+        # 経路 (escape_game 等の MVP wiring) でも、recall 時の prompt に「何か」が
+        # 載るようにする。第20回実験で `recall_text_snippet` が 0/21 件と全件空に
+        # なり、せっかく recall が発火しても LLM に思い出を届けられていない問題が
+        # 観測された (Issue #295 r2 trace)。LLM 補完が走るときは `merge_llm_subjective_fields`
+        # が同じテンプレを fallback として持っており、上書きする。
 
         fingerprint = "|".join(
             (
@@ -225,16 +238,16 @@ class ChunkEpisodeDraftBuilder:
                 canonical_arguments_text=_canonical_args_fingerprint_text(acts),
             ),
             who=_who_from_observations(obs_for_place_who),
-            what=_compose_what(acts),
+            what=what,
             why=None,
             observed=observed,
             expected=None,
             outcome=_compose_outcome(acts),
             prediction_error=None,
             felt=None,
-            interpreted=None,
+            interpreted=compute_template_interpreted(what),
             cues=_build_chunk_cues(inp),
-            recall_text=None,
+            recall_text=compute_template_recall(observed, what),
             recall_count=0,
             last_recalled_at=None,
         )
