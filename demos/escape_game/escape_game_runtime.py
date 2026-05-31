@@ -1133,6 +1133,36 @@ class EscapeGameRuntime:
         h, m = divmod(hours, 60)
         return f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
 
+    def _append_food_spoiled_observation(
+        self,
+        item_instance_id: Any,
+        item_spec_id: Any,
+        spec_name: str,
+    ) -> None:
+        """Phase D-3a: 食料が腐ったタイミングで全プレイヤーに観測を流す。
+
+        weather と同じく world event 扱い (誰の所持品でも気付ける匂い等を
+        想定)。所持者だけに絞る精緻化は将来 (誰の物か追跡できるようになった
+        段階で) 行う。spec_name が空文字列なら spec 名解決に失敗しているので
+        sentinel 表示にフォールバック。
+        """
+        display_name = spec_name or f"アイテム#{item_instance_id.value}"
+        message = f"{display_name}が腐った。"
+        output = ObservationOutput(
+            prose=message,
+            structured={
+                "type": "food_spoiled",
+                "item_spec_id": item_spec_id.value,
+                "item_instance_id": item_instance_id.value,
+                "spec_name": spec_name,
+            },
+            observation_category="environment",
+            schedules_turn=False,
+            breaks_movement=False,
+        )
+        for player_id in self.get_player_ids():
+            self._emit_observation_directly(player_id, output)
+
     def _append_weather_observation(self, weather_state: Any) -> None:
         # Issue #276 経路二重化解消: ``_emit_observation_directly`` 経由に統一。
         message = f"外の天候が変わった: {weather_state.weather_type.value}（強度 {weather_state.intensity:.1f}）"
@@ -1518,6 +1548,18 @@ def create_escape_game_runtime(
     def _resolve_entity_name(entity_id: int) -> str:
         return player_name_map.get(entity_id, f"プレイヤー({entity_id})")
 
+    def _resolve_item_state(item_instance_id_value: int) -> Optional[dict]:
+        """Phase D-3a: instance_id から state dict を引く軽量 resolver。
+
+        地面アイテムの spoiled 表示用。InMemoryItemRepository.find_by_id は
+        dict lookup なので毎 prompt 構築で叩いても問題なし。
+        """
+        from ai_rpg_world.domain.item.value_object.item_instance_id import (
+            ItemInstanceId as _IID,
+        )
+        item = item_repo.find_by_id(_IID(item_instance_id_value))
+        return dict(item.state) if item is not None else None
+
     def _build_inventory(pid: PlayerId) -> tuple:
         inv = player_inventory_repo.find_by_id(pid)
         if inv is None:
@@ -1525,7 +1567,11 @@ def create_escape_game_runtime(
         # spec_id 別に集約しつつ「代表 instance」のスロット番号と instance id を覚える。
         # 代表 = 最初に発見したスロットの instance。drop_item ツールが
         # 「I1 = 流木 (x2)」のうち1個を落とすときの target になる。
-        seen_specs: dict[int, list] = {}
+        # Phase D-3a: spoiled 状態が異なる instance は別エントリにする。
+        # 同 spec でも (spec_id, is_spoiled) を集約キーにすることで「生の魚 x2」と
+        # 「生の魚 x1 (腐敗)」が並列に出る。腐敗食を腐敗していない食料と混ぜて
+        # 表示すると、エージェントが「合計 x3 ある」と誤認するのを防ぐ。
+        seen_groups: dict[tuple[int, bool], list] = {}
         for slot_id in range(inv._max_slots):
             from ai_rpg_world.domain.player.value_object.slot_id import SlotId
             iid = inv.get_item_instance_id_by_slot(SlotId(slot_id))
@@ -1535,10 +1581,12 @@ def create_escape_game_runtime(
             if item is None:
                 continue
             sid = item.item_spec.item_spec_id.value
-            if sid not in seen_specs:
+            is_spoiled = bool(item.state.get("spoiled"))
+            key = (sid, is_spoiled)
+            if key not in seen_groups:
                 name = item.item_spec.name
-                seen_specs[sid] = [name, 0, slot_id, iid.value]
-            seen_specs[sid][1] += 1
+                seen_groups[key] = [name, 0, slot_id, iid.value]
+            seen_groups[key][1] += 1
         return tuple(
             SpotGraphInventoryItemEntry(
                 item_spec_id=sid,
@@ -1546,8 +1594,9 @@ def create_escape_game_runtime(
                 quantity=info[1],
                 slot_id=info[2],
                 item_instance_id=info[3],
+                is_spoiled=is_spoiled,
             )
-            for sid, info in seen_specs.items()
+            for (sid, is_spoiled), info in seen_groups.items()
         )
 
     from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
@@ -1625,6 +1674,10 @@ def create_escape_game_runtime(
             if scenario.monster_placements
             else None
         ),
+        # Phase D-3a: 地面アイテムの spoiled 表示。instance_id から state dict を
+        # 引く軽量 resolver。InMemoryItemRepository.find_by_id は dict lookup なので
+        # 毎 prompt 構築で叩いても問題なし。
+        item_state_resolver=_resolve_item_state,
     )
 
     # ── 観測パイプライン構築 ──
@@ -1964,6 +2017,11 @@ def create_escape_game_runtime(
     )
     if weather_config is None or weather_config.announce_changes:
         environment_stage.set_weather_changed_callback(runtime._append_weather_observation)
+    # Phase D-3a: 食料腐敗の観測 bind (stage が存在するときのみ)。
+    if food_spoilage_stage is not None:
+        food_spoilage_stage.set_spoiled_callback(
+            runtime._append_food_spoiled_observation
+        )
 
     # ── PR 2/6 (#227): 任意の DomainEvent を ObservationPipeline 経由で配信する ──
     # PR 2 では PlayerSpokeEvent 用に InMemoryEventPublisher を使い handler を
