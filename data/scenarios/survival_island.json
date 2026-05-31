@@ -50,6 +50,28 @@
       ]
     }
   },
+  "monsters": {
+    "templates": [
+      {
+        "id": "wild_dog",
+        "name": "野犬",
+        "description": "島を彷徨う飢えた野犬。獣のような目で人を見つけては唸る。",
+        "race": "WOLF",
+        "faction": "ENEMY",
+        "base_stats": {
+          "max_hp": 30, "max_mp": 0, "attack": 8, "defense": 4,
+          "speed": 6, "critical_rate": 0.05, "evasion_rate": 0.1
+        },
+        "reward": {"exp": 10, "gold": 0},
+        "respawn": {"interval_ticks": 80, "auto": false},
+        "vision_range": 4,
+        "flee_threshold": 0.15
+      }
+    ],
+    "initial_placements": [
+      {"template": "wild_dog", "spot": "deep_forest", "coordinate": {"x": 0, "y": 0}}
+    ]
+  },
   "spots": [
     {
       "id": "shipwreck_beach",
