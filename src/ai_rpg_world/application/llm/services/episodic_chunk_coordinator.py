@@ -9,7 +9,12 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.contracts.episodic_subjective_scheduler_port import (
+        IEpisodicSubjectiveCompletionScheduler,
+    )
 
 _logger = logging.getLogger(__name__)
 
@@ -87,6 +92,9 @@ class EpisodicChunkCoordinator:
             Callable[[], Optional[ITraceRecorder]]
         ] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        subjective_completion_scheduler: Optional[
+            "IEpisodicSubjectiveCompletionScheduler"
+        ] = None,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -122,6 +130,25 @@ class EpisodicChunkCoordinator:
             raise TypeError("trace_recorder_provider must be callable or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
+        # Port は Protocol なので isinstance チェックは runtime_checkable に依存。
+        # ここではゆるく「callable な submit を持つ」を確認するに留め、誤注入の
+        # 早期発見だけする。
+        if subjective_completion_scheduler is not None and not (
+            hasattr(subjective_completion_scheduler, "submit")
+            and callable(getattr(subjective_completion_scheduler, "submit"))
+        ):
+            raise TypeError(
+                "subjective_completion_scheduler must implement submit(...) or be None"
+            )
+        if (
+            subjective_completion_scheduler is not None
+            and chunk_subjective_fields_service is not None
+        ):
+            raise ValueError(
+                "chunk_subjective_fields_service と subjective_completion_scheduler "
+                "を同時に渡せません。同期実行が必要なら InlineEpisodicSubjectiveScheduler "
+                "を scheduler 引数に渡してください。"
+            )
 
         self._observation_buffer = observation_buffer
         self._sliding_window_memory = sliding_window_memory
@@ -129,6 +156,7 @@ class EpisodicChunkCoordinator:
         self._episodic_episode_store = episodic_episode_store
         self._chunk_episode_draft_builder = chunk_episode_draft_builder
         self._chunk_subjective_fields_service = chunk_subjective_fields_service
+        self._subjective_completion_scheduler = subjective_completion_scheduler
         self._persona_block_provider = persona_block_provider
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
@@ -273,6 +301,8 @@ class EpisodicChunkCoordinator:
             return
 
         episode = self._chunk_episode_draft_builder.build(encoding_input)
+        # 同期 service 経路 (旧来): merge を inline で実行してから store に書く。
+        # subjective_completion_scheduler と排他 (__init__ で検証済み)。
         if self._chunk_subjective_fields_service is not None:
             persona_block = (
                 self._persona_block_provider(player_id)
@@ -284,7 +314,33 @@ class EpisodicChunkCoordinator:
                 persona_text=persona_block,
                 encoding_input=encoding_input,
             )
+        # draft (もしくは inline merge 済み) を必ず先に store に書く。
+        # scheduler 経路 (新規): draft = PR #305 でテンプレ既定値が埋まった状態
+        # なので「LLM 完了前でも recall_text が空にならない」が保証される。
+        # ワーカーが merge_llm_subjective_fields を実行して同じ episode_id で
+        # store を上書きする (Pattern A: Fire-and-forget + eventual consistency)。
         self._episodic_episode_store.put(episode)
+        if self._subjective_completion_scheduler is not None:
+            persona_block = (
+                self._persona_block_provider(player_id)
+                if self._persona_block_provider is not None
+                else ""
+            )
+            try:
+                self._subjective_completion_scheduler.submit(
+                    episode,
+                    persona_text=persona_block,
+                    encoding_input=encoding_input,
+                )
+            except Exception:
+                # scheduler の submit は本来例外を投げないが、誤実装に備えて。
+                # 失敗しても draft (テンプレ埋め済み) は既に store にあるため
+                # 致命傷にはならない。
+                _logger.warning(
+                    "subjective_completion_scheduler.submit raised; "
+                    "episode draft is kept as-is",
+                    exc_info=True,
+                )
         if self._episodic_memory_link_service is not None:
             self._episodic_memory_link_service.on_episode_committed(episode)
         # Issue #283 後続: chunk 書き込みを trace に残す

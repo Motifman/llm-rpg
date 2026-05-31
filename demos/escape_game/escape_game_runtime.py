@@ -370,6 +370,28 @@ class EscapeGameRuntime:
     def trace_recorder(self) -> Any:
         return self._trace_recorder
 
+    def shutdown(self, timeout: Optional[float] = None) -> None:
+        """非同期スケジューラ等の in-flight ジョブを drain して資源を解放する。
+
+        PR #309: ``ThreadPoolEpisodicSubjectiveScheduler`` が裏で走っている
+        LLM 補完を、ゲーム終了時に終わらせるための hook。``timeout`` 秒経っても
+        終わらないジョブは諦めて cancel する (= テンプレ既定値が store に
+        残るだけで損失は限定的)。
+
+        本メソッドは複数回呼ばれても安全 (scheduler 側でも is_shutdown flag を
+        持つ)。``timeout=None`` (既定) は完了まで無期限待機。
+        """
+        stack = self._episodic_stack
+        if stack is None:
+            return
+        scheduler = stack.subjective_completion_scheduler
+        if scheduler is None:
+            return
+        try:
+            scheduler.shutdown(timeout=timeout)
+        except Exception:
+            logger.exception("episodic subjective scheduler shutdown failed")
+
     def set_simulation_llm_turn_trigger(
         self, trigger: Optional[ILlmTurnTrigger]
     ) -> None:
@@ -2022,14 +2044,23 @@ def create_escape_game_runtime(
     )
     if is_episodic_enabled():
         # Issue #295 後続: LLM 主観文付与の opt-in 配線。
-        # LLM_EPISODIC_SUBJECTIVE_ENABLED=1 かつ LiteLLMClient が取れるときだけ
-        # chunk write 時に LLM で interpreted / recall_text を上書きする。
-        # 失敗時は #305 でテンプレ既定値が draft に入っているのでそのまま流れる。
-        subjective_service = None
+        # LLM_EPISODIC_SUBJECTIVE_ENABLED (default on, #308) かつ LiteLLMClient
+        # が取れるときだけ chunk write 後に裏で LLM が走り、interpreted /
+        # recall_text を上書きする。失敗時は #305 でテンプレ既定値が draft に
+        # 入っているのでそのまま流れる。
+        # PR #309: 同期で LLM を待つとゲーム tick が止まる (1〜3 秒)。
+        # ThreadPoolEpisodicSubjectiveScheduler で裏に逃がし、完了時に
+        # episode_store を同じ episode_id で上書きする (Pattern A:
+        # Fire-and-forget + eventual consistency)。
+        subjective_scheduler = None
         persona_provider: Optional[Callable[[PlayerId], str]] = None
+        shared_episode_store = None  # scheduler が wire されたときだけ事前生成
         if is_episodic_subjective_enabled():
             from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
                 EpisodicChunkSubjectiveFieldsService,
+            )
+            from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import (
+                ThreadPoolEpisodicSubjectiveScheduler,
             )
             from ai_rpg_world.application.llm.wiring._llm_client_factory import (
                 create_llm_client_from_env,
@@ -2042,7 +2073,31 @@ def create_escape_game_runtime(
                 logger.exception("LLM client factory failed; subjective service disabled")
                 _client = None
             if isinstance(_client, LiteLLMClient):
-                subjective_service = EpisodicChunkSubjectiveFieldsService(_client)
+                # subjective service は scheduler 内部に閉じ込める。
+                # episode_store は build_escape_episodic_stack 内で作るが、
+                # scheduler に渡す必要があるので先に作ってから stack 構築側に
+                # 渡したい — が wiring の都合で一旦同じ store を共有する経路
+                # にしておく (= scheduler は episode_store への参照を持ち、
+                # stack 側も同じ store を使う)。
+                # 簡潔さ優先で「stack を組んでから scheduler を作って差し戻す」
+                # 二段階構築は避け、ここで store を先に作って両方に渡す。
+                from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+                    InMemorySubjectiveEpisodeStore,
+                )
+
+                shared_episode_store = InMemorySubjectiveEpisodeStore()
+                _subjective_service = EpisodicChunkSubjectiveFieldsService(_client)
+                # scheduler と chunk_coordinator (= stack) が同じ store を
+                # 共有することで、worker が書き込んだ merged episode を
+                # passive_recall が読める ( = Pattern A の整合性条件)。
+                subjective_scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+                    _subjective_service,
+                    shared_episode_store,
+                    max_workers=1,
+                    max_queue_size=100,
+                    trace_recorder_provider=lambda: runtime._trace_recorder,
+                    current_tick_provider=runtime.current_tick,
+                )
                 # 各 player の persona_block を player_id 引きで返す provider。
                 # escape_character (= 操作対象) は rich persona、その他は spawn 名
                 # 由来の fallback persona になっている system_prompts_by_player_id
@@ -2069,7 +2124,7 @@ def create_escape_game_runtime(
             else:
                 logger.info(
                     "LLM_EPISODIC_SUBJECTIVE_ENABLED=1 だが LiteLLMClient 未使用 "
-                    "(LLM_CLIENT=litellm が必要)。subjective service を無効化。"
+                    "(LLM_CLIENT=litellm が必要)。subjective scheduler を無効化。"
                 )
         runtime._episodic_stack = build_escape_episodic_stack(
             scenario=scenario,
@@ -2082,8 +2137,9 @@ def create_escape_game_runtime(
             # TraceEventKind.EPISODIC_CHUNK_WRITTEN が記録される。
             trace_recorder_provider=lambda: runtime._trace_recorder,
             current_tick_provider=runtime.current_tick,
-            chunk_subjective_fields_service=subjective_service,
+            subjective_completion_scheduler=subjective_scheduler,
             persona_block_provider=persona_provider,
+            episode_store=shared_episode_store,
         )
 
     return runtime
