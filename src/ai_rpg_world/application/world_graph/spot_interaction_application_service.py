@@ -339,6 +339,21 @@ class SpotInteractionApplicationService:
 
         # SpotObjectInteractedEvent を明示的に作成して publish
         if self._event_publisher is not None:
+            # Phase G #1: 元の interior (mutate 前) を引き直して InteractionDef
+            # の witness_policy を回収する。result.new_interior は CHANGE_OBJECT_STATE
+            # 等で書き換わっている可能性があるが、interactions array 自体は
+            # 同 def を参照しているので default SAME_SPOT は安全。万一見つから
+            # なければ default フォールバック。
+            from ai_rpg_world.domain.world_graph.enum.witness_policy import (
+                WitnessPolicy as _WP,
+            )
+            witness_policy = _WP.SAME_SPOT
+            new_obj = result.new_interior.get_object(object_id)
+            if new_obj is not None:
+                for idef in new_obj.interactions:
+                    if idef.action_name == action_name:
+                        witness_policy = idef.witness_policy
+                        break
             interacted_event = SpotObjectInteractedEvent.create(
                 aggregate_id=graph.graph_id,
                 aggregate_type="SpotGraphAggregate",
@@ -347,6 +362,7 @@ class SpotInteractionApplicationService:
                 object_id=object_id,
                 action_name=action_name,
                 result_message="；".join(result.messages) if result.messages else "",
+                witness_policy=witness_policy,
             )
             # Phase 4-E: PUBLIC_OBSERVABLE な効果サマリを同スポットの他プレイヤーに
             # 観測として届ける。actor は recipient strategy 側で除外される。

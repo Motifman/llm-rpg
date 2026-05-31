@@ -894,6 +894,7 @@
               {
                 "action_name": "examine",
                 "display_label": "標識を調べる",
+                "witness_policy": "ACTOR_ONLY",
                 "preconditions": [],
                 "effects": [
                   {"effect_type": "CHANGE_OBJECT_STATE", "parameters": {"target_object": "rusted_signpost", "state_updates": {"examined": true}}},
@@ -942,6 +943,7 @@
               {
                 "action_name": "examine_photo",
                 "display_label": "写真を見つめる",
+                "witness_policy": "ACTOR_ONLY",
                 "preconditions": [],
                 "effects": [
                   {"effect_type": "CHANGE_OBJECT_STATE", "parameters": {"target_object": "wall_photo", "state_updates": {"examined": true}}},
