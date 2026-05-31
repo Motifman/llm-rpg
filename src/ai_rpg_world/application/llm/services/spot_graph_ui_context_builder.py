@@ -285,7 +285,10 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         for entry in snap.inventory_items:
             label = allocator.next(PREFIX_INVENTORY)
             qty = f" x{entry.quantity}" if entry.quantity > 1 else ""
-            lines.append(f"  {label}: {entry.name}{qty}")
+            # Phase D-3a: 腐敗食は (腐敗) を付ける。runtime 側で (spec, is_spoiled)
+            # 単位で集約しているので、quantity と (腐敗) の関係は一意に決まる。
+            spoiled_mark = " (腐敗)" if entry.is_spoiled else ""
+            lines.append(f"  {label}: {entry.name}{qty}{spoiled_mark}")
             # 後方互換: 既存 use_item は target.item_instance_id に item_spec_id を
             # 入れる慣習 (名前と内容が乖離しているが、リスクを取らないため触らない)。
             # 新しい drop_item / pickup_item は専用フィールド (real_item_instance_id /
@@ -323,7 +326,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         lines.append("地面に落ちているもの:")
         for entry in snap.ground_items:
             label = allocator.next(PREFIX_GROUND_ITEM)
-            lines.append(f"  {label}: {entry.name}")
+            spoiled_mark = " (腐敗)" if entry.is_spoiled else ""
+            lines.append(f"  {label}: {entry.name}{spoiled_mark}")
             collector.add(
                 label,
                 InventoryToolRuntimeTargetDto(

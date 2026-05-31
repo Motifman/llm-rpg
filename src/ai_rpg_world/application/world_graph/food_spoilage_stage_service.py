@@ -84,6 +84,14 @@ class FoodSpoilageStageService:
         self._spec_name_lookup = spec_name_lookup
         self._spoiled_callback = spoiled_callback
 
+    def set_spoiled_callback(self, callback: Optional[SpoiledCallback]) -> None:
+        """callback を後から差し替える (runtime 構築後の bind 用)。
+
+        weather / scenario_event の callback と同じ pattern。stage の構築は
+        runtime インスタンスより先に必要なため、callback だけ遅延 bind する。
+        """
+        self._spoiled_callback = callback
+
     def run(self, current_tick: WorldTick) -> None:
         """全 spoilable spec を走査して acquired_at_tick / spoiled を更新する。"""
         if not self._spoilable:
