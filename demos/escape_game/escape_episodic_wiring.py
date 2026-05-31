@@ -50,9 +50,13 @@ from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
     EpisodicChunkCoordinator,
 )
+from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+    EpisodicChunkSubjectiveFieldsService,
+)
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
@@ -77,6 +81,20 @@ def is_episodic_enabled(env: Optional[dict[str, str]] = None) -> bool:
     """
     source = env if env is not None else os.environ
     raw = source.get("LLM_EPISODIC_ENABLED", "")
+    return raw.strip().lower() in _TRUE_TOKENS
+
+
+def is_episodic_subjective_enabled(env: Optional[dict[str, str]] = None) -> bool:
+    """``LLM_EPISODIC_SUBJECTIVE_ENABLED`` を読んで LLM 主観文付与の有効化を判定。
+
+    ``is_episodic_enabled`` が True のときに更にこのフラグが立っているときだけ、
+    ``EpisodicChunkSubjectiveFieldsService`` を chunk_coordinator に配線する。
+    LLM トークンが余分にかかるため別フラグで opt-in (第21回実験 follow-up)。
+
+    env を渡せばその dict を見る (テスト用)、None なら ``os.environ``。
+    """
+    source = env if env is not None else os.environ
+    raw = source.get("LLM_EPISODIC_SUBJECTIVE_ENABLED", "")
     return raw.strip().lower() in _TRUE_TOKENS
 
 
@@ -137,6 +155,8 @@ def build_escape_episodic_stack(
     action_result_store: IActionResultStore,
     trace_recorder_provider: Optional[Callable[[], Any]] = None,
     current_tick_provider: Optional[Callable[[], Any]] = None,
+    chunk_subjective_fields_service: Optional[EpisodicChunkSubjectiveFieldsService] = None,
+    persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
 ) -> EscapeEpisodicStack:
     """escape_game 用の最小限 episodic pipeline を組み立てる。
 
@@ -147,6 +167,12 @@ def build_escape_episodic_stack(
     Issue #283 後続: chunk write / passive recall を ``TraceEventKind`` で
     可視化するため、recorder の provider を chunk_coordinator に渡す。
     recall 側の trace は prompt_builder に直接 wire するので別経路。
+
+    Issue #295 後続: ``chunk_subjective_fields_service`` (+ ``persona_block_provider``)
+    が両方与えられたときだけ LLM 主観文付与経路を有効化する。draft が完成して
+    store に書き込む直前に LLM で ``interpreted`` / ``recall_text`` を上書き
+    する。LLM 失敗時はテンプレ既定値 (#305 で draft に既に入っている) のまま
+    上書きされず流れる。
     """
     episode_store = InMemorySubjectiveEpisodeStore()
     chunk_coordinator = EpisodicChunkCoordinator(
@@ -157,8 +183,9 @@ def build_escape_episodic_stack(
         chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),
         trace_recorder_provider=trace_recorder_provider,
         current_tick_provider=current_tick_provider,
-        # subjective fields / memory link / persona block provider は未注入
-        # (= LLM 補完なし、リンクなし)。MVP 構成として最小。
+        chunk_subjective_fields_service=chunk_subjective_fields_service,
+        persona_block_provider=persona_block_provider,
+        # memory link service は未注入のまま (= リンクなし)。MVP 構成として最小。
     )
     passive_recall = EpisodicPassiveRecallRetrievalService(episode_store)
     noun_matcher = build_scenario_noun_matcher(scenario=scenario, graph=graph)
@@ -175,4 +202,5 @@ __all__ = [
     "build_escape_episodic_stack",
     "build_scenario_noun_matcher",
     "is_episodic_enabled",
+    "is_episodic_subjective_enabled",
 ]

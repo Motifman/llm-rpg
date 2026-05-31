@@ -14,7 +14,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, ClassVar, Dict, FrozenSet, List, Optional, Tuple
+from typing import Any, Callable, ClassVar, Dict, FrozenSet, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -2018,8 +2018,59 @@ def create_escape_game_runtime(
     from demos.escape_game.escape_episodic_wiring import (
         build_escape_episodic_stack,
         is_episodic_enabled,
+        is_episodic_subjective_enabled,
     )
     if is_episodic_enabled():
+        # Issue #295 後続: LLM 主観文付与の opt-in 配線。
+        # LLM_EPISODIC_SUBJECTIVE_ENABLED=1 かつ LiteLLMClient が取れるときだけ
+        # chunk write 時に LLM で interpreted / recall_text を上書きする。
+        # 失敗時は #305 でテンプレ既定値が draft に入っているのでそのまま流れる。
+        subjective_service = None
+        persona_provider: Optional[Callable[[PlayerId], str]] = None
+        if is_episodic_subjective_enabled():
+            from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+                EpisodicChunkSubjectiveFieldsService,
+            )
+            from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+                create_llm_client_from_env,
+            )
+            from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
+
+            try:
+                _client = create_llm_client_from_env()
+            except Exception:
+                logger.exception("LLM client factory failed; subjective service disabled")
+                _client = None
+            if isinstance(_client, LiteLLMClient):
+                subjective_service = EpisodicChunkSubjectiveFieldsService(_client)
+                # 各 player の persona_block を player_id 引きで返す provider。
+                # escape_character (= 操作対象) は rich persona、その他は spawn 名
+                # 由来の fallback persona になっている system_prompts_by_player_id
+                # と同じ規則で組み立てる。
+                _persona_by_pid: Dict[int, str] = {}
+                if len(scenario.player_spawns) > 1 and escape_character is not None:
+                    ec_cid = (escape_character.character_id or "").strip()
+                    ec_name = (escape_character.name or "").strip()
+                    for s in scenario.player_spawns:
+                        if (ec_cid and s.string_id == ec_cid) or (ec_name and s.name == ec_name):
+                            _persona_by_pid[int(s.player_id)] = persona_block
+                        else:
+                            _persona_by_pid[int(s.player_id)] = (
+                                build_persona_block_from_escape_character(
+                                    None, fallback_display_name=s.name
+                                )
+                            )
+                elif scenario.player_spawns:
+                    # 単独 spawn (旧来構成) や escape_character 未指定: 全 player に
+                    # 既存の persona_block を流用 (fallback 含む)
+                    for s in scenario.player_spawns:
+                        _persona_by_pid[int(s.player_id)] = persona_block
+                persona_provider = lambda pid, _d=_persona_by_pid: _d.get(int(pid.value), "")
+            else:
+                logger.info(
+                    "LLM_EPISODIC_SUBJECTIVE_ENABLED=1 だが LiteLLMClient 未使用 "
+                    "(LLM_CLIENT=litellm が必要)。subjective service を無効化。"
+                )
         runtime._episodic_stack = build_escape_episodic_stack(
             scenario=scenario,
             graph=spot_graph_repo.find_graph(),
@@ -2031,6 +2082,8 @@ def create_escape_game_runtime(
             # TraceEventKind.EPISODIC_CHUNK_WRITTEN が記録される。
             trace_recorder_provider=lambda: runtime._trace_recorder,
             current_tick_provider=runtime.current_tick,
+            chunk_subjective_fields_service=subjective_service,
+            persona_block_provider=persona_provider,
         )
 
     return runtime
