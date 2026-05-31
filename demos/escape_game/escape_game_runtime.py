@@ -758,6 +758,9 @@ class EscapeGameRuntime:
             episodic=episodic_config,
             ui_context_builder=self._ui_context_builder,
             current_tick_provider=lambda: self.current_tick(),
+            # Issue #283 後続: recall trace を可視化するため、trace_recorder を
+            # provider 経由で渡す (set_trace_recorder で後から差し込まれる)。
+            trace_recorder_provider=lambda: self._trace_recorder,
         )
         self._cached_default_prompt_builder = builder
         return builder
@@ -1660,6 +1663,11 @@ def create_escape_game_runtime(
             observation_buffer=obs_buffer,
             sliding_window_memory=sliding_window,
             action_result_store=action_result_store,
+            # trace_recorder は set_trace_recorder で後から差し込まれるので
+            # provider 経由で参照。chunk 書き込みごとに
+            # TraceEventKind.EPISODIC_CHUNK_WRITTEN が記録される。
+            trace_recorder_provider=lambda: runtime._trace_recorder,
+            current_tick_provider=runtime.current_tick,
         )
 
     return runtime

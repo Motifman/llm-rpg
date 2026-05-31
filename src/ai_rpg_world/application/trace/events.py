@@ -45,6 +45,17 @@ class TraceEventKind:
     # 描画に使う。payload は ``from_spot_id`` / ``to_spot_id`` / ``spot_name`` /
     # ``player_name`` を持つ (run の最初の初期配置は from_spot_id=None で emit)。
     POSITION_CHANGE = "position_change"
+    # Issue #283 後続: episodic memory pipeline の可視化。
+    # EPISODIC_CHUNK_WRITTEN: ``EpisodicChunkCoordinator`` が境界を閉じて
+    # SubjectiveEpisode を 1 件 store に書いた瞬間。
+    # payload: episode_id / boundary_reason / cues (canonical list) /
+    # recall_text_snippet / action_count / observation_count
+    EPISODIC_CHUNK_WRITTEN = "episodic_chunk_written"
+    # EPISODIC_RECALL: ``DefaultPromptBuilder._run_passive_recall`` が
+    # passive recall を実行した瞬間。
+    # payload: situation_cues (canonical list) / candidate_count /
+    # candidates (episode_id / source_axes / recall_text_snippet)
+    EPISODIC_RECALL = "episodic_recall"
 
 
 @dataclass(frozen=True)

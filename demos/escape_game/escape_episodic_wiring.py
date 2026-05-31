@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -135,12 +135,18 @@ def build_escape_episodic_stack(
     observation_buffer: IObservationContextBuffer,
     sliding_window_memory: ISlidingWindowMemory,
     action_result_store: IActionResultStore,
+    trace_recorder_provider: Optional[Callable[[], Any]] = None,
+    current_tick_provider: Optional[Callable[[], Any]] = None,
 ) -> EscapeEpisodicStack:
     """escape_game 用の最小限 episodic pipeline を組み立てる。
 
     write 側 (chunk_coordinator) と read 側 (passive_recall + noun_matcher) を
     1 つの episode_store で共有する。LLM 駆動の reinterpretation や semantic
     promotion は組み込まない (将来必要になったら本家 builders を呼ぶ)。
+
+    Issue #283 後続: chunk write / passive recall を ``TraceEventKind`` で
+    可視化するため、recorder の provider を chunk_coordinator に渡す。
+    recall 側の trace は prompt_builder に直接 wire するので別経路。
     """
     episode_store = InMemorySubjectiveEpisodeStore()
     chunk_coordinator = EpisodicChunkCoordinator(
@@ -149,6 +155,8 @@ def build_escape_episodic_stack(
         action_result_store=action_result_store,
         episodic_episode_store=episode_store,
         chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),
+        trace_recorder_provider=trace_recorder_provider,
+        current_tick_provider=current_tick_provider,
         # subjective fields / memory link / persona block provider は未注入
         # (= LLM 補完なし、リンクなし)。MVP 構成として最小。
     )

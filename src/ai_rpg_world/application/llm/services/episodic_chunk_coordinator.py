@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from ai_rpg_world.application.llm.chunk_boundary.rules import (
     decide_chunk_boundary,
@@ -35,6 +35,7 @@ from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
+from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -63,6 +64,11 @@ class EpisodicChunkCoordinator:
         chunk_subjective_fields_service: EpisodicChunkSubjectiveFieldsService | None = None,
         persona_block_provider: Callable[[PlayerId], str] | None = None,
         episodic_memory_link_service: EpisodicMemoryLinkApplicationService | None = None,
+        trace_recorder: Optional[ITraceRecorder] = None,
+        trace_recorder_provider: Optional[
+            Callable[[], Optional[ITraceRecorder]]
+        ] = None,
+        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -92,6 +98,12 @@ class EpisodicChunkCoordinator:
             raise ValueError("recent_observations_limit must be 0 or greater")
         if recent_actions_limit < 0:
             raise ValueError("recent_actions_limit must be 0 or greater")
+        if trace_recorder is not None and not isinstance(trace_recorder, ITraceRecorder):
+            raise TypeError("trace_recorder must be ITraceRecorder or None")
+        if trace_recorder_provider is not None and not callable(trace_recorder_provider):
+            raise TypeError("trace_recorder_provider must be callable or None")
+        if current_tick_provider is not None and not callable(current_tick_provider):
+            raise TypeError("current_tick_provider must be callable or None")
 
         self._observation_buffer = observation_buffer
         self._sliding_window_memory = sliding_window_memory
@@ -104,6 +116,63 @@ class EpisodicChunkCoordinator:
         self._recent_actions_limit = recent_actions_limit
         self._chunk_actions: Dict[int, List[ActionResultEntry]] = {}
         self._episodic_memory_link_service = episodic_memory_link_service
+        self._trace_recorder = trace_recorder
+        self._trace_recorder_provider = trace_recorder_provider
+        self._current_tick_provider = current_tick_provider
+
+    def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
+        if self._trace_recorder_provider is not None:
+            try:
+                return self._trace_recorder_provider()
+            except Exception:
+                return None
+        return self._trace_recorder
+
+    def _emit_chunk_written_trace(
+        self,
+        player_id: PlayerId,
+        episode: Any,
+        boundary_reason: str,
+        action_count: int,
+        observation_count: int,
+    ) -> None:
+        """``EPISODIC_CHUNK_WRITTEN`` を trace に記録する (失敗は握りつぶす)。"""
+        recorder = self._resolve_trace_recorder()
+        if recorder is None:
+            return
+        tick: Optional[int] = None
+        if self._current_tick_provider is not None:
+            try:
+                tick = self._current_tick_provider()
+            except Exception:
+                tick = None
+        # cue 一覧は canonical (axis:value) 文字列に。
+        cues_canonical: list[str] = []
+        try:
+            cues_attr = getattr(episode, "cues", ())
+            for c in cues_attr:
+                try:
+                    cues_canonical.append(c.to_canonical())
+                except Exception:
+                    continue
+        except Exception:
+            cues_canonical = []
+        recall_text = getattr(episode, "recall_text", "") or ""
+        try:
+            recorder.record(
+                TraceEventKind.EPISODIC_CHUNK_WRITTEN,
+                tick=tick,
+                player_id=int(player_id.value),
+                episode_id=getattr(episode, "episode_id", ""),
+                boundary_reason=boundary_reason,
+                cues=cues_canonical,
+                recall_text_snippet=recall_text[:120],
+                action_count=action_count,
+                observation_count=observation_count,
+            )
+        except Exception:
+            # trace 失敗で chunk 書き込みパスを止めない
+            pass
 
     def after_action_recorded(
         self,
@@ -181,4 +250,12 @@ class EpisodicChunkCoordinator:
         self._episodic_episode_store.put(episode)
         if self._episodic_memory_link_service is not None:
             self._episodic_memory_link_service.on_episode_committed(episode)
+        # Issue #283 後続: chunk 書き込みを trace に残す
+        self._emit_chunk_written_trace(
+            player_id=player_id,
+            episode=episode,
+            boundary_reason=decision.reason.value,
+            action_count=len(chunk_actions_sorted),
+            observation_count=len(obs_slice_sorted),
+        )
         self._chunk_actions[key] = []

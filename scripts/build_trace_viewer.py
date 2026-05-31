@@ -997,6 +997,13 @@ section h2, #right-section > div > h2 {
    action / result とは色を分けて視認性を上げる。 */
 .event-row.kind-observation .event-kind { color: #b89dff; }
 .event-row.kind-observation .event-body { color: #d8c8ff; }
+/* Issue #283 後続: episodic memory pipeline の trace。記憶系は黄緑寄りで
+   action / observation と区別する。 */
+.event-row.kind-episodic_chunk_written .event-kind { color: #a3e063; }
+.event-row.kind-episodic_chunk_written .event-body { color: #c5edaa; }
+.event-row.kind-episodic_recall .event-kind { color: #ffce63; }
+.event-row.kind-episodic_recall .event-body { color: #ffe3a3; }
+.event-row .dim { color: #8fa0a3; font-style: italic; }
 
 
 """
@@ -1579,6 +1586,39 @@ def _format_event_body(e: TraceEvent) -> str:
         if from_id is None:
             return f"spawn at {esc(to_name)}"
         return f"{esc(from_id)} → {esc(to_name)}"
+    if e.kind == TraceEventKind.EPISODIC_CHUNK_WRITTEN:
+        # write 経路: どの境界理由で何が保存されたかの 1 行サマリ
+        ep_short = (payload.get("episode_id") or "")[:6]
+        reason = payload.get("boundary_reason") or "?"
+        cues = payload.get("cues") or []
+        cues_short = ", ".join(esc(c) for c in cues[:3])
+        if len(cues) > 3:
+            cues_short += f", … (+{len(cues) - 3})"
+        snippet = (payload.get("recall_text_snippet") or "")[:60]
+        return (
+            f"✎ chunk written id={esc(ep_short)}… "
+            f"reason={esc(reason)} cues=[{cues_short}] "
+            f"<span class='dim'>{esc(snippet)}</span>"
+        )
+    if e.kind == TraceEventKind.EPISODIC_RECALL:
+        # read 経路: 想起 candidate と発火 cue の 1 行サマリ
+        cand_count = int(payload.get("candidate_count") or 0)
+        cues = payload.get("situation_cues") or []
+        cues_short = ", ".join(esc(c) for c in cues[:3])
+        if len(cues) > 3:
+            cues_short += f", … (+{len(cues) - 3})"
+        candidates = payload.get("candidates") or []
+        first_ep = ""
+        if candidates:
+            first_ep_id = (candidates[0].get("episode_id") or "")[:6]
+            first_snippet = (candidates[0].get("recall_text_snippet") or "")[:60]
+            first_ep = (
+                f" first={esc(first_ep_id)}…: "
+                f"<span class='dim'>{esc(first_snippet)}</span>"
+            )
+        return (
+            f"⟲ recall {cand_count} candidates cues=[{cues_short}]{first_ep}"
+        )
     # fallback: 全 payload を 1 行 JSON
     return f"<code>{esc(json.dumps(payload, ensure_ascii=False))}</code>"
 
