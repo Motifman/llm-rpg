@@ -987,6 +987,7 @@
                 "preconditions": [{"condition_type": "OBJECT_STATE", "target_object": "crumbling_beam", "required_state": {"shelf_searched": false}, "failure_message": "梁の下はもう調べた。これ以上潜るのは無謀だ。"}],
                 "effects": [
                   {"effect_type": "APPLY_DAMAGE", "parameters": {"damage": 15, "message": "梁が肩に落ちて鋭い痛みが走る (HP -15)。"}},
+                  {"effect_type": "APPLY_STATUS_EFFECT", "parameters": {"effect_type": "bleeding", "duration_ticks": 12, "value": 1.0, "message": "肩から血が滲み始めた。手当てしないと出血が続く。"}},
                   {"effect_type": "GIVE_ITEM", "parameters": {"item_spec": "chart_fragment"}},
                   {"effect_type": "CHANGE_OBJECT_STATE", "parameters": {"target_object": "crumbling_beam", "state_updates": {"shelf_searched": true}}},
                   {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "梁の下、棚の奥から海図の切れ端を引きずり出した。"}}

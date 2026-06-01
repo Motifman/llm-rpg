@@ -908,8 +908,15 @@ class PlayerStatusAggregate(AggregateRoot):
         ))
 
     def add_status_effect(self, effect: StatusEffect) -> None:
-        """ステータス効果を追加する"""
-        self._active_effects.append(effect)
+        """ステータス効果を追加する。
+
+        PR #2: 毎 tick で `StatusEffectsTickStageService` から呼ばれる
+        load-bearing API になった。`list.append` で in-place mutate すると、
+        同 tick 内で `active_effects` を snapshot した呼び出し側 (例: ループ内で
+        `list(status.active_effects)` をコピーしている stage) と内部 list が
+        分岐して state drift を起こす。新 list を割り当てて immutable に保つ。
+        """
+        self._active_effects = [*self._active_effects, effect]
 
     def cleanup_expired_effects(self, current_tick: WorldTick) -> None:
         """期限切れのステータス効果を削除する"""

@@ -1979,6 +1979,15 @@ def create_escape_game_runtime(
         # されてから setter 経由で注入する (順序依存を解消するため後付け)。
     )
 
+    # PR #2: 状態異常 tick 進行 stage。active_effects の継続効果適用 + 期限
+    # 切れ掃除を担う。event_publisher は後付け bind。
+    from ai_rpg_world.application.world_graph.status_effects_tick_stage_service import (
+        StatusEffectsTickStageService,
+    )
+    status_effects_stage = StatusEffectsTickStageService(
+        player_status_repository=player_status_repo,
+    )
+
     # Phase B-2a: モンスター攻撃のオーケストレーターと behavior tick service。
     # placements が空ならどちらも構築しないことで、既存シナリオ
     # (廃病院 等) の挙動を一切変えない。
@@ -2170,6 +2179,7 @@ def create_escape_game_runtime(
         monster_spawn_stage=monster_spawn_stage,
         monster_behavior_stage=monster_behavior_stage,
         food_spoilage_stage=food_spoilage_stage,
+        status_effects_stage=status_effects_stage,
         outcome_resolution_stage=outcome_resolution_stage,
         llm_turn_trigger=sim_llm_trigger,
     )
@@ -2331,6 +2341,8 @@ def create_escape_game_runtime(
     # starvation_damage_per_tick=0 のシナリオでは publisher が居ても
     # events は積まれないので no-op。
     needs_decay_stage.set_event_publisher(pipeline_event_publisher)
+    # PR #2: 状態異常 tick stage も同様に HP 0 → PlayerDownedEvent を流す。
+    status_effects_stage.set_event_publisher(pipeline_event_publisher)
     # 昼夜サイクル: フェーズが変わったら TimeOfDayChangedEvent を流す。
     # シナリオが announce_changes=false にしている場合は callback を登録せず
     # silent な phase transition にする。
