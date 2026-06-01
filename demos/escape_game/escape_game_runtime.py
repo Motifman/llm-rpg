@@ -2269,6 +2269,22 @@ def create_escape_game_runtime(
     # chore (#240 後続): 旧コードは private field への直接代入だったが、
     # set_event_publisher 経由に正規化。
     interaction_service.set_event_publisher(pipeline_event_publisher)
+    # PR4: TIME_OF_DAY_IS / WEATHER_IS condition の評価用 provider 注入。
+    # 「夜は釣りできない」「嵐の日は沖の釣り場へ行けない」のような
+    # 行動制限条件を interaction precondition から評価できるようにする。
+    # day_night_stage / weather_holder が無いシナリオでは provider は None の
+    # ままで、該当 condition は「不在として fail」になる (silent skip 回避)。
+    if day_night_stage is not None:
+        interaction_service.set_time_of_day_phase_provider(
+            lambda: day_night_stage.current_time_of_day().phase_name
+        )
+    interaction_service.set_weather_type_provider(
+        lambda: (
+            weather_holder["state"].weather_type.value
+            if weather_holder.get("state") is not None
+            else None
+        )
+    )
     # drop / pickup の witness 配信用。publisher は同じ pipeline を共有し、
     # SpotGraphRecipientStrategy が PlayerDroppedItemEvent / PlayerPickedUpItemEvent
     # を「同スポット・行為者除外」で他プレイヤーに観測として届ける。

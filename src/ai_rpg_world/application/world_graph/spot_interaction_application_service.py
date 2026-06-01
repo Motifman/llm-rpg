@@ -77,6 +77,12 @@ class SpotInteractionApplicationService:
         spot_interaction_service: SpotInteractionService | None = None,
         player_status_repository: PlayerStatusRepository | None = None,
         event_publisher: Any | None = None,
+        # PR4: TIME_OF_DAY_IS / WEATHER_IS condition の評価に使う provider。
+        # provider が None なら該当 condition は「不在として fail」する
+        # (silent skip を避ける)。シナリオが時間帯 / 天候条件を使うなら
+        # 必ず注入が必要。
+        time_of_day_phase_provider: Optional[Any] = None,
+        weather_type_provider: Optional[Any] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -87,6 +93,24 @@ class SpotInteractionApplicationService:
         self._interaction = spot_interaction_service or SpotInteractionService()
         self._player_status_repository = player_status_repository
         self._event_publisher = event_publisher
+        self._time_of_day_phase_provider = time_of_day_phase_provider
+        self._weather_type_provider = weather_type_provider
+
+    def set_time_of_day_phase_provider(self, provider: Optional[Any]) -> None:
+        """PR4: 時間帯 provider を後付け bind する (runtime 順序依存解消用)。
+
+        provider は `Callable[[], Optional[str]]` 想定。現在の phase 名
+        ("morning"/"noon"/"evening"/"night" 等) を返す。
+        """
+        self._time_of_day_phase_provider = provider
+
+    def set_weather_type_provider(self, provider: Optional[Any]) -> None:
+        """PR4: 天候 provider を後付け bind する。
+
+        provider は `Callable[[], Optional[str]]` 想定。現在の weather_type 名
+        ("CLEAR"/"RAIN"/"STORM"/"FOG" 等) を返す。
+        """
+        self._weather_type_provider = provider
 
     def set_event_publisher(self, event_publisher: Any) -> None:
         """event_publisher を後付けで注入する (二段構築用)。
@@ -183,6 +207,21 @@ class SpotInteractionApplicationService:
         if self._player_status_repository is not None:
             acting_player_status = self._player_status_repository.find_by_id(player_id)
 
+        # PR4: 時間帯 / 天候 condition 用 provider 呼び出し。
+        # 例外は silent fallback で None にする (provider 不在扱いで条件が
+        # 拒否される。シナリオ作家が provider を忘れた場合に surface する)。
+        current_time_of_day_phase: Optional[str] = None
+        if self._time_of_day_phase_provider is not None:
+            try:
+                current_time_of_day_phase = self._time_of_day_phase_provider()
+            except Exception:
+                current_time_of_day_phase = None
+        current_weather_type: Optional[str] = None
+        if self._weather_type_provider is not None:
+            try:
+                current_weather_type = self._weather_type_provider()
+            except Exception:
+                current_weather_type = None
         try:
             result = self._interaction.execute_interaction(
                 interior,
@@ -196,6 +235,8 @@ class SpotInteractionApplicationService:
                 acting_item_aggregate=acting_item_aggregate,
                 target_item_aggregate=target_item_aggregate,
                 acting_player_status=acting_player_status,
+                current_time_of_day_phase=current_time_of_day_phase,
+                current_weather_type=current_weather_type,
             )
         except InteractionNotAllowedException:
             # 前提条件で拒否された。InteractionDef.on_failure_observation が

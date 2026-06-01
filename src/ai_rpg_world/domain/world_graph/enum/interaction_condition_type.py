@@ -26,3 +26,12 @@ class InteractionConditionTypeEnum(Enum):
     # 「変装中のプレイヤーだけ NPC が反応を変える」「呪いを受けてる時だけ祭壇が
     # 光る」など、Phase 4-D-1 (HP/needs) では拾えない自由フィールドの判定用。
     PLAYER_STATE_IS = "PLAYER_STATE_IS"
+    # PR4 (v2 行動制限): 時間帯 / 天候による interaction 制限。
+    # シナリオで「夜は釣りできない」「嵐の日は沖の釣り場へ行けない」のような
+    # 物理的・時間的制約を宣言できる。
+    # _IS は「該当 phase / weather のときだけ実行可能」、
+    # _IS_NOT は「該当しないときだけ実行可能」(否定形)。
+    TIME_OF_DAY_IS = "TIME_OF_DAY_IS"
+    TIME_OF_DAY_IS_NOT = "TIME_OF_DAY_IS_NOT"
+    WEATHER_IS = "WEATHER_IS"
+    WEATHER_IS_NOT = "WEATHER_IS_NOT"
