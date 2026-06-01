@@ -349,7 +349,9 @@
                 "display_label": "沖で釣りをする",
                 "preconditions": [
                   {"condition_type": "HAS_ITEM", "required_item": "fishing_rod", "failure_message": "釣竿がなければ届かない。"},
-                  {"condition_type": "OBJECT_STATE", "target_object": "deep_fishing_point", "required_state": {"available": true}, "failure_message": "魚はしばらく散ってしまった。少し待とう。"}
+                  {"condition_type": "OBJECT_STATE", "target_object": "deep_fishing_point", "required_state": {"available": true}, "failure_message": "魚はしばらく散ってしまった。少し待とう。"},
+                  {"condition_type": "TIME_OF_DAY_IS_NOT", "required_time_of_day_phase": "night", "failure_message": "夜の沖は暗くて魚が見えず、波も読めない。釣りができない。"},
+                  {"condition_type": "WEATHER_IS_NOT", "required_weather_type": "STORM", "failure_message": "嵐で波が高すぎる。沖で釣るのは危険だ。"}
                 ],
                 "effects": [
                   {"effect_type": "GIVE_ITEM", "parameters": {"item_spec": "raw_fish"}},
@@ -580,7 +582,8 @@
                 "display_label": "小川で釣りをする",
                 "preconditions": [
                   {"condition_type": "HAS_ITEM", "required_item": "fishing_rod", "failure_message": "釣竿が必要だ。"},
-                  {"condition_type": "OBJECT_STATE", "target_object": "stream_fishing_point", "required_state": {"available": true}, "failure_message": "ここの魚はしばらく散ってしまった。"}
+                  {"condition_type": "OBJECT_STATE", "target_object": "stream_fishing_point", "required_state": {"available": true}, "failure_message": "ここの魚はしばらく散ってしまった。"},
+                  {"condition_type": "TIME_OF_DAY_IS_NOT", "required_time_of_day_phase": "night", "failure_message": "夜は川面が見えず釣りにならない。"}
                 ],
                 "effects": [
                   {"effect_type": "GIVE_ITEM", "parameters": {"item_spec": "raw_fish"}},

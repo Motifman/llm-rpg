@@ -52,6 +52,10 @@ class SpotInteractionService:
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
         acting_player_status: Optional["PlayerStatusAggregate"] = None,
+        # PR4: 時間帯 / 天候 condition の評価用。None なら該当 condition は
+        # 「provider 不在」として fail する (silent skip を避けるため明示的に拒否)。
+        current_time_of_day_phase: Optional[str] = None,
+        current_weather_type: Optional[str] = None,
     ) -> Tuple[bool, Optional[str]]:
         # Phase 4-B: 同一 instance を acting / target 両方として渡すのは
         # wiring バグ。precondition 段階で弾く（apply_effects と同じガード）。
@@ -89,6 +93,8 @@ class SpotInteractionService:
                 acting_item_aggregate=acting_item_aggregate,
                 target_item_aggregate=target_item_aggregate,
                 acting_player_status=acting_player_status,
+                current_time_of_day_phase=current_time_of_day_phase,
+                current_weather_type=current_weather_type,
             )
             if not ok:
                 return False, msg
@@ -106,6 +112,8 @@ class SpotInteractionService:
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
         acting_player_status: Optional["PlayerStatusAggregate"] = None,
+        current_time_of_day_phase: Optional[str] = None,
+        current_weather_type: Optional[str] = None,
     ) -> Tuple[bool, Optional[str]]:
         t = cond.condition_type
         if t == InteractionConditionTypeEnum.ALWAYS:
@@ -288,6 +296,61 @@ class SpotInteractionService:
                     return False, cond.failure_message or "プレイヤーの状態が条件を満たしません"
             return True, None
 
+        if t in (
+            InteractionConditionTypeEnum.TIME_OF_DAY_IS,
+            InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT,
+        ):
+            # PR4: 時間帯による行動制限。required_time_of_day_phase が
+            # 現在 phase と一致するか (_IS) / 一致しないか (_IS_NOT) を判定。
+            # provider 不在 (current_time_of_day_phase is None) は silent pass
+            # を避けて拒否する。シナリオが TIME_OF_DAY 条件を書いたのに
+            # day_night 宣言が無いケースを早期に surface するため。
+            if not cond.required_time_of_day_phase:
+                return False, cond.failure_message or (
+                    f"{t.value} に required_time_of_day_phase がありません"
+                )
+            if current_time_of_day_phase is None:
+                return False, cond.failure_message or (
+                    f"{t.value} は day_night provider を必要とします"
+                )
+            matches = current_time_of_day_phase == cond.required_time_of_day_phase
+            ok = (
+                matches
+                if t == InteractionConditionTypeEnum.TIME_OF_DAY_IS
+                else not matches
+            )
+            if not ok:
+                return False, cond.failure_message or (
+                    f"現在の時刻帯ではこの行動はできない (要求: {cond.required_time_of_day_phase})"
+                )
+            return True, None
+
+        if t in (
+            InteractionConditionTypeEnum.WEATHER_IS,
+            InteractionConditionTypeEnum.WEATHER_IS_NOT,
+        ):
+            # PR4: 天候による行動制限。required_weather_type が現在 weather と
+            # 一致するか (_IS) / 一致しないか (_IS_NOT) を判定。
+            if not cond.required_weather_type:
+                return False, cond.failure_message or (
+                    f"{t.value} に required_weather_type がありません"
+                )
+            if current_weather_type is None:
+                return False, cond.failure_message or (
+                    f"{t.value} は weather provider を必要とします"
+                )
+            matches = current_weather_type == cond.required_weather_type
+            ok = (
+                matches
+                if t == InteractionConditionTypeEnum.WEATHER_IS
+                else not matches
+            )
+            if not ok:
+                return False, cond.failure_message or (
+                    f"現在の天候ではこの行動はできない (要求: {cond.required_weather_type})"
+                )
+            return True, None
+
         return False, cond.failure_message or "未対応の前提条件です"
 
     def execute_interaction(
@@ -305,6 +368,8 @@ class SpotInteractionService:
         acting_item_aggregate: Optional[ItemAggregate] = None,
         target_item_aggregate: Optional[ItemAggregate] = None,
         acting_player_status: Optional[PlayerStatusAggregate] = None,
+        current_time_of_day_phase: Optional[str] = None,
+        current_weather_type: Optional[str] = None,
     ) -> InteractionExecutionResult:
         obj = interior.get_object(object_id)
         if obj is None:
@@ -320,6 +385,8 @@ class SpotInteractionService:
             acting_item_aggregate=acting_item_aggregate,
             target_item_aggregate=target_item_aggregate,
             acting_player_status=acting_player_status,
+            current_time_of_day_phase=current_time_of_day_phase,
+            current_weather_type=current_weather_type,
         )
         if not ok:
             raise InteractionNotAllowedException(reason or "Interaction not allowed")

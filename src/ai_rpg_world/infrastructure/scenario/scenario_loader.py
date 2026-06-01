@@ -670,6 +670,12 @@ class ScenarioLoader:
             need_type=self._parse_need_type(raw),
             need_threshold=raw.get("need_threshold"),
             hp_ratio=self._parse_hp_ratio(raw),
+            # PR4: TIME_OF_DAY_IS{_NOT} / WEATHER_IS{_NOT} 用フィールド。
+            # phase / weather_type は単純な文字列で受け取り、ランタイムで
+            # 現在値と比較する。boundary 検証は別 PR で (現状 day_night の
+            # phase 名はシナリオ宣言依存のため固定値リストを持たない)。
+            required_time_of_day_phase=raw.get("required_time_of_day_phase"),
+            required_weather_type=raw.get("required_weather_type"),
         )
 
     @staticmethod

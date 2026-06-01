@@ -31,3 +31,11 @@ class InteractionCondition:
     need_type: Optional[str] = None  # PLAYER_NEED_AT_LEAST: "HUNGER" | "FATIGUE" 等
     need_threshold: Optional[int] = None  # PLAYER_NEED_AT_LEAST: この値以上で成立
     hp_ratio: Optional[float] = None  # PLAYER_HP_RATIO_BELOW / _AT_LEAST: 0.0..1.0
+    # PR4 (v2 行動制限): 時間帯 / 天候 condition 用フィールド。
+    # 対応する condition_type のときだけ意味を持つ:
+    #   TIME_OF_DAY_IS{_NOT} → required_time_of_day_phase
+    #     ("morning" / "noon" / "evening" / "night" 等、day_night cycle の phase)
+    #   WEATHER_IS{_NOT} → required_weather_type
+    #     ("CLEAR" / "RAIN" / "STORM" / "FOG")
+    required_time_of_day_phase: Optional[str] = None
+    required_weather_type: Optional[str] = None
