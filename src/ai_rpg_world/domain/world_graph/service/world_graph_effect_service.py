@@ -161,7 +161,7 @@ class WorldGraphEffectService:
 
     def __init__(
         self,
-        loot_table_repository: "Optional[LootTableRepository]" = None,
+        loot_table_repository: Optional[LootTableRepository] = None,
     ) -> None:
         # PR #1 動的 loot: GIVE_FROM_LOOT_TABLE effect の抽選で使う repository。
         # None なら GIVE_FROM_LOOT_TABLE は no-op (silent skip ではなく log)。
@@ -392,8 +392,7 @@ class WorldGraphEffectService:
             # (warning log は出すが effect 全体は continue)。caller がレポートで
             # 把握できるようにする。
             if self._loot_table_repository is None:
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
+                _logger.warning(
                     "GIVE_FROM_LOOT_TABLE: loot_table_repository is not injected, skipping"
                 )
                 return _all
@@ -401,19 +400,18 @@ class WorldGraphEffectService:
             try:
                 lt_id_int = int(lt_id_raw)
             except (TypeError, ValueError):
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
+                _logger.warning(
                     "GIVE_FROM_LOOT_TABLE: loot_table_id is invalid (got %r)", lt_id_raw
                 )
                 return _all
             lt = self._loot_table_repository.find_by_id(LootTableId.create(lt_id_int))
             if lt is None:
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
+                _logger.warning(
                     "GIVE_FROM_LOOT_TABLE: loot_table_id=%s not found", lt_id_int
                 )
                 return _all
-            times = max(1, int(p.get("times", 1)))
+            # times は 1..100 にクランプ (シナリオ作家ミスで大量付与を防ぐ)
+            times = max(1, min(100, int(p.get("times", 1))))
             for _ in range(times):
                 rolled = lt.roll()
                 if rolled is None:
