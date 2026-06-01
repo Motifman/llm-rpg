@@ -186,6 +186,30 @@ class ScenarioDayNightConfig:
 
 
 @dataclass(frozen=True)
+class ScenarioLootTableDefinition:
+    """シナリオ JSON で宣言された LootTable 定義 (PR #1 動的 loot)。
+
+    runtime で InMemoryLootTableRepository に詰め直すための薄いラッパ。
+    string_id: シナリオ作家が JSON で参照する識別子 (例: "deep_fishing_loot")
+    table_id: LootTableId として割り振った内部 id (mapper 経由)
+    entries: (item_spec_id, weight, min_quantity, max_quantity) のタプル
+    """
+    string_id: str
+    table_id: int
+    name: str
+    entries: Tuple["ScenarioLootEntry", ...]
+
+
+@dataclass(frozen=True)
+class ScenarioLootEntry:
+    """LootTable の 1 エントリ。"""
+    item_spec_id: int
+    weight: int
+    min_quantity: int = 1
+    max_quantity: int = 1
+
+
+@dataclass(frozen=True)
 class ScenarioOutcomeResolutionConfig:
     """プレイヤー個別 outcome の解決設定 (Phase E-3b)。
 
@@ -304,6 +328,9 @@ class ScenarioLoadResult:
     # Phase E-3b: プレイヤー個別 outcome 解決設定 (RESCUED / STRANDED 自動判定)。
     # None なら個別 outcome を使わない (= 既存の集団 win/lose 経路のみ)。
     outcome_resolution_config: Optional[ScenarioOutcomeResolutionConfig] = None
+    # PR #1 動的 loot: scenario JSON で宣言された LootTable 定義群。
+    # runtime で InMemoryLootTableRepository に詰めて effect_service に注入する。
+    loot_tables: Tuple[ScenarioLootTableDefinition, ...] = ()
 
 
 class ScenarioLoader:
@@ -326,6 +353,10 @@ class ScenarioLoader:
 
         metadata = self._parse_metadata(raw["metadata"])
         item_defs = self._parse_item_specs(raw.get("item_specs", []), mapper)
+        # PR #1: 動的 loot table を先にパース (effect parameter で
+        # "loot_table" → id 解決するため、spots/effects のパース時点で
+        # mapper に loot_table ns が登録済みである必要)。
+        loot_tables = self._parse_loot_tables(raw.get("loot_tables", []), mapper)
         self._pre_register_ids(raw, mapper)
         graph, interiors = self._parse_spots_and_graph(raw, mapper)
         self._parse_connections(raw.get("connections", []), graph, mapper)
@@ -371,7 +402,64 @@ class ScenarioLoader:
             monster_templates=monster_templates,
             monster_placements=monster_placements,
             outcome_resolution_config=outcome_resolution_config,
+            loot_tables=loot_tables,
         )
+
+    def _parse_loot_tables(
+        self,
+        raw_list: List[Dict[str, Any]],
+        mapper: ScenarioIdMapper,
+    ) -> Tuple[ScenarioLootTableDefinition, ...]:
+        """`loot_tables` block を解析する (PR #1 動的 loot)。
+
+        スキーマ:
+          "loot_tables": [
+            {
+              "id": "deep_fishing_loot",
+              "name": "沖の釣り" (optional),
+              "entries": [
+                {"item_spec": "raw_fish", "weight": 70, "min_quantity": 1, "max_quantity": 2},
+                {"item_spec": "shellfish", "weight": 20},
+                {"item_spec": "treasure_compass", "weight": 1}
+              ]
+            }
+          ]
+
+        IDs は mapper に "loot_table" 名前空間で登録する。
+        """
+        out: List[ScenarioLootTableDefinition] = []
+        for raw in raw_list:
+            string_id = raw.get("id")
+            if not isinstance(string_id, str) or not string_id:
+                raise ScenarioLoadError(
+                    f"loot_tables[*].id is required (got {string_id!r})"
+                )
+            table_id = mapper.register("loot_table", string_id)
+            entries_raw = raw.get("entries", [])
+            if not entries_raw:
+                raise ScenarioLoadError(
+                    f"loot_tables[{string_id!r}].entries must be non-empty"
+                )
+            entries: List[ScenarioLootEntry] = []
+            for e in entries_raw:
+                item_sid = e.get("item_spec")
+                if not isinstance(item_sid, str):
+                    raise ScenarioLoadError(
+                        f"loot_tables[{string_id!r}].entries[*].item_spec required"
+                    )
+                entries.append(ScenarioLootEntry(
+                    item_spec_id=mapper.get_int("item_spec", item_sid),
+                    weight=int(e.get("weight", 1)),
+                    min_quantity=int(e.get("min_quantity", 1)),
+                    max_quantity=int(e.get("max_quantity", 1)),
+                ))
+            out.append(ScenarioLootTableDefinition(
+                string_id=string_id,
+                table_id=table_id,
+                name=raw.get("name", ""),
+                entries=tuple(entries),
+            ))
+        return tuple(out)
 
     def _parse_metadata(self, raw: Dict[str, Any]) -> ScenarioMetadata:
         return ScenarioMetadata(
@@ -785,6 +873,11 @@ class ScenarioLoader:
             params["connection_id"] = mapper.get_int("connection", params.pop("target_connection"))
         if "target_spot" in params:
             params["spot_id"] = mapper.get_int("spot", params.pop("target_spot"))
+        if "loot_table" in params:
+            # PR #1: "loot_table" 文字列 id → numeric loot_table_id へ正規化
+            params["loot_table_id"] = mapper.get_int(
+                "loot_table", params.pop("loot_table"),
+            )
         return InteractionEffect(
             effect_type=InteractionEffectTypeEnum[raw["effect_type"]],
             parameters=params,

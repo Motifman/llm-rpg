@@ -45,3 +45,8 @@ class InteractionEffectTypeEnum(Enum):
     # CHANGE_OBJECT_STATE は「上書き」しか出来ないため、現在値を読んで
     # +1 する accumulator semantics を担えない。本 effect が必要。
     INCREMENT_OBJECT_STATE = "INCREMENT_OBJECT_STATE"
+    # 動的 loot table 抽選。LootTableAggregate.roll() で確率に基づくアイテム
+    # 選択を行う。parameters: loot_table_id (string id) + times (default 1)。
+    # 結果は GIVE_ITEM と同じ経路で grant される。「沖の釣りで raw_fish が
+    # 大体 / たまに何か別のもの」のような不確実性を表現できる。
+    GIVE_FROM_LOOT_TABLE = "GIVE_FROM_LOOT_TABLE"

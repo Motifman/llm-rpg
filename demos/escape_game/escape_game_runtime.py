@@ -1628,6 +1628,42 @@ def create_escape_game_runtime(
         spot_graph_repository=spot_graph_repo,
         player_status_repository=player_status_repo,
     )
+    # PR #1: 動的 loot table を effect_service に注入。
+    # シナリオが loot_tables を宣言していなくても LootTableRepository は空で
+    # 構築する (GIVE_FROM_LOOT_TABLE を使わなければ無影響)。
+    from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import (
+        InMemoryLootTableRepository,
+    )
+    from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import (
+        LootEntry,
+        LootTableAggregate,
+    )
+    from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+    loot_table_repo = InMemoryLootTableRepository()
+    for lt_def in scenario.loot_tables:
+        entries = [
+            LootEntry(
+                item_spec_id=ItemSpecId.create(e.item_spec_id),
+                weight=e.weight,
+                min_quantity=e.min_quantity,
+                max_quantity=e.max_quantity,
+            )
+            for e in lt_def.entries
+        ]
+        loot_table_repo.save(LootTableAggregate.create(
+            loot_table_id=LootTableId.create(lt_def.table_id),
+            entries=entries,
+            name=lt_def.name,
+        ))
+    # effect_service に loot_table_repo を注入。
+    from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
+        WorldGraphEffectService,
+    )
+    from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
+        SpotInteractionService,
+    )
+    _effect_service = WorldGraphEffectService(loot_table_repository=loot_table_repo)
+    _interaction_domain_service = SpotInteractionService(effect_service=_effect_service)
     interaction_service = SpotInteractionApplicationService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -1635,6 +1671,7 @@ def create_escape_game_runtime(
         item_repository=item_repo,
         item_spec_repository=item_spec_repo,
         world_flag_state=world_flag_state,
+        spot_interaction_service=_interaction_domain_service,
         # Phase G (#3): APPLY_DAMAGE / SATISFY_NEED 等で player_status を mutate
         # するために repo を渡す。これまで None だったため damage_specs が
         # 黙って捨てられていた (廃屋の崩れた梁 / 岩礁の縁 等が flavor 止まり)。
