@@ -31,7 +31,13 @@ class TestMetadata:
         assert loaded.metadata.id == "survival_island_v2"
 
     def test_推定_tick_数は_14_日相当(self, loaded) -> None:
-        assert loaded.metadata.estimated_ticks == 140
+        # 1 day = 24 tick (時間スケール統一以降)
+        assert loaded.metadata.estimated_ticks == 336
+
+    def test_ticks_per_day_は_24(self, loaded) -> None:
+        """時間スケール統一: 1 tick = 1 時間。"""
+        assert loaded.day_night_config is not None
+        assert loaded.day_night_config.cycle.ticks_per_day == 24
 
 
 class TestPlayers:
@@ -102,12 +108,13 @@ class TestOutcomeResolutionConfig:
 
     def test_rescue_ticks_は_設計通り(self, loaded) -> None:
         config = loaded.outcome_resolution_config
-        # 設計 §3: 救助船 60-80 / 130-140 の window の latest を採用
-        assert config.rescue_at_ticks == (80, 130)
+        # 1 tick = 1 hour, 24 tick/day: 救助船 day 7 / day 11 (= tick 168 / 264)
+        assert config.rescue_at_ticks == (168, 264)
 
-    def test_stranded_は_tick_140(self, loaded) -> None:
+    def test_stranded_は_14日_tick_336(self, loaded) -> None:
         config = loaded.outcome_resolution_config
-        assert config.stranded_at_tick == 140
+        # 14 日 × 24 tick = 336
+        assert config.stranded_at_tick == 336
 
     def test_signal_flag_は_signal_fire_lit(self, loaded) -> None:
         config = loaded.outcome_resolution_config
