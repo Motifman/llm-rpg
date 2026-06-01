@@ -178,8 +178,33 @@ class SpotGraphCurrentStateBuilder:
             for other_eid in presence.present_entity_ids
             if other_eid != eid
         )
+        # Phase: 夜 / 悪天候で屋外の視界を 1 段下げる。
+        # provider が居なければ「明るい / 良天候」とみなす (= 既存挙動)。
+        time_of_day_is_dark = False
+        if self._time_of_day_provider is not None:
+            try:
+                tod = self._time_of_day_provider()
+                if tod is not None:
+                    time_of_day_is_dark = bool(tod.is_dark)
+            except Exception:
+                time_of_day_is_dark = False
+        weather_obscures_vision = False
+        if self._weather_provider is not None:
+            try:
+                ws = self._weather_provider()
+                if ws is not None:
+                    # STORM / FOG は視界減衰扱い。weather_type.value の文字列で
+                    # 判定して enum 直接依存を避ける。RAIN は微減なので含めない。
+                    wt = getattr(ws.weather_type, "value", None) or str(ws.weather_type)
+                    weather_obscures_vision = wt in ("STORM", "FOG")
+            except Exception:
+                weather_obscures_vision = False
         effective_lighting = self._perception.compute_effective_lighting(
-            node.atmosphere, spot_has_any_light_bearer
+            node.atmosphere,
+            spot_has_any_light_bearer,
+            is_outdoor=node.is_outdoor,
+            time_of_day_is_dark=time_of_day_is_dark,
+            weather_obscures_vision=weather_obscures_vision,
         )
         can_see = self._perception.can_see_objects(effective_lighting)
 
