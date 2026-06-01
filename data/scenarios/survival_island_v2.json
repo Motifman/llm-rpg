@@ -152,6 +152,7 @@
       "description": "嵐で打ち上げられた木造船の残骸が転がる、白い砂の浜辺。波音と海鳥の声。流木が至るところに散らばっている。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "穏やかな波の音と海鳥の鳴き声", "temperature": "WARM"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -222,6 +223,7 @@
       "description": "浜辺と森の境にある平らな砂地。石を組んだ焚き火跡があり、3人で身を寄せて眠れる広さ。ここがおそらく拠点になる。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "遠い波音と森のざわめき", "temperature": "WARM"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -297,6 +299,7 @@
       "description": "潮が引くと現れる、岩と海水溜まりの広がり。岩の間に貝がへばりついている。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "波の引く音と水たまりのチャプチャプ", "temperature": "WARM"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -331,6 +334,7 @@
       "description": "黒い岩が海に突き出した荒い海岸。沖は深く、大型の魚が泳いでいる。嵐の日は波が高く危険だ。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "岩を砕く波音", "temperature": "WARM"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -415,6 +419,7 @@
       "description": "浜辺と森の境目。背の高い椰子の木が並び、下生えに見覚えのない植物が茂る。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "葉ずれの音と鳥の声", "temperature": "WARM"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -446,6 +451,7 @@
       "description": "木々が円形に開けた広場。木漏れ日が射し込んで明るい。獣道がいくつかの方向に伸びている。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "風に揺れる葉のざわめき", "temperature": "NORMAL"},
+      "is_outdoor": true,
       "interior": {"objects": []}
     },
     {
@@ -454,6 +460,7 @@
       "description": "野いちごの茂みが斜面一面に広がっている。熟した赤い実があちこちに見える。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "蜂の羽音", "temperature": "WARM"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -506,6 +513,7 @@
       "description": "木々が密集して薄暗い森の奥。倒木の根元に白いキノコが生えている。よく似た形だが、注意深く見ないと食用と毒の区別がつかない。",
       "category": "DUNGEON",
       "atmosphere": {"lighting": "DIM", "sound_ambient": "湿った落ち葉を踏む音、遠くで何かの鳴き声", "temperature": "NORMAL"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -557,6 +565,7 @@
       "description": "苔むした岩の間を流れる細い小川。岸辺に座って釣りができる。水も飲めそうだが、上流の方がより澄んでいるだろう。",
       "category": "FIELD",
       "atmosphere": {"lighting": "DIM", "sound_ambient": "せせらぎと小鳥の声", "temperature": "NORMAL"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -591,6 +600,7 @@
       "description": "森の中で最も高くそびえる大樫。枝に手をかければよじ登れそうだ。樹上からなら島の地形がよく見えるはず。",
       "category": "FIELD",
       "atmosphere": {"lighting": "DIM", "sound_ambient": "風に揺れる大樹のきしみ", "temperature": "NORMAL"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -621,6 +631,7 @@
       "description": "森から流れ出た川が海に注ぐ河口。水は淡いがやや塩気が混ざる。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "川と海が交わる水音", "temperature": "WARM"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -652,6 +663,7 @@
       "description": "森の奥から流れ落ちる清流の上流。水は澄み切っている。",
       "category": "FIELD",
       "atmosphere": {"lighting": "DIM", "sound_ambient": "勢いよく流れる清流の音", "temperature": "NORMAL"},
+      "is_outdoor": true,
       "interior": {"objects": []}
     },
     {
@@ -660,6 +672,7 @@
       "description": "山の中腹に湧く泉。冷たく澄み切った水が絶え間なく湧き出ている。島で最も安全な水源だ。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "湧水の音と山風", "temperature": "NORMAL"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -692,6 +705,7 @@
       "description": "森を抜けた先の岩がちな斜面。山道が二手に分かれており、一方は崖沿いに、もう一方は洞窟へと続いている。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "山風と落石の音", "temperature": "NORMAL"},
+      "is_outdoor": true,
       "interior": {"objects": []}
     },
     {
@@ -700,6 +714,7 @@
       "description": "切り立った崖の上から海を見渡せる場所。船の影を捜すならここが一番だ。嵐の日は近づくのも危険。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "強い海風", "temperature": "NORMAL"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -729,6 +744,7 @@
       "description": "崩れかけた石段が山頂へと続いている。足元の悪い箇所では蔓のロープがあれば心強い。",
       "category": "FIELD",
       "atmosphere": {"lighting": "DIM", "sound_ambient": "風がうなる音", "temperature": "NORMAL"},
+      "is_outdoor": true,
       "interior": {"objects": []}
     },
     {
@@ -776,6 +792,7 @@
       "description": "島の最も高い場所。風が強く、雲が手の届くほど近い。古い石組みの狼煙台がある。ここに火を灯せば遠くの船からも見えるはずだ。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "強い山風", "temperature": "COLD"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -814,6 +831,7 @@
       "description": "深い森の南、湿った泥と倒木が広がる沼。蔓が垂れ下がり、虫の羽音がやかましい。足元が悪いので長居は避けたい。",
       "category": "DUNGEON",
       "atmosphere": {"lighting": "DIM", "sound_ambient": "蚊と蝿の羽音、ぬかるみを踏む音", "temperature": "WARM"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {
@@ -882,6 +900,7 @@
       "description": "沼地の奥、人の手が入った形跡のある古い小道。30年分の蔓と倒木で塞がれているが、足元には石組みの痕跡が残る。",
       "category": "DUNGEON",
       "atmosphere": {"lighting": "DIM", "sound_ambient": "風が朽ちた木の間を抜ける音", "temperature": "COLD"},
+      "is_outdoor": true,
       "interior": {
         "objects": [
           {

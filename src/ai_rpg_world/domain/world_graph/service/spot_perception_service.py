@@ -22,20 +22,55 @@ class SpotPerceptionService:
         self,
         atmosphere: SpotAtmosphere | None,
         spot_has_any_light_bearer: bool,
+        *,
+        is_outdoor: bool = False,
+        time_of_day_is_dark: bool = False,
+        weather_obscures_vision: bool = False,
     ) -> LightingEnum:
         """実効照明レベルを返す。
 
-        光源を持つエージェントがスポットに1人でもいれば、
-        暗闇でも DIM（薄暗い）まで引き上げる。
-        光は空間を照らすので、自分/他人の区別はしない。
+        計算順序:
+        1. base = atmosphere.lighting (atmosphere が None なら BRIGHT)
+        2. **屋外で夜 or 悪天候**: base を 1 段階暗くする (BRIGHT→DIM, DIM→DARK)。
+           屋内/洞窟は空の影響を受けないので skip。
+           夜と悪天候が両立しても 2 段は下げない (上限 1 段)。
+        3. **光源持ち**: DARK/PITCH_BLACK → DIM に引き上げ。
+           光は空間を照らすので、自分/他人の区別はしない。
+
+        Args:
+            atmosphere: spot の静的照明 (None なら屋外想定で BRIGHT)
+            spot_has_any_light_bearer: 同 spot に光源持ちが居るか
+            is_outdoor: spot が屋外 (空が見える) か。
+                夜 / 悪天候の影響を受けるのは屋外のみ
+            time_of_day_is_dark: 現在 dark な時間帯 (= night) か
+            weather_obscures_vision: 嵐や濃霧で視界が悪い天候か
         """
         if atmosphere is None:
             return LightingEnum.BRIGHT
         base = atmosphere.lighting
+        # 屋外限定: 夜 or 悪天候で 1 段階暗くする
+        if is_outdoor and (time_of_day_is_dark or weather_obscures_vision):
+            base = self._step_down_lighting(base)
+        # 光源持ちは依然として DARK/PITCH_BLACK を DIM に引き上げる
         if base in (LightingEnum.DARK, LightingEnum.PITCH_BLACK):
             if spot_has_any_light_bearer:
                 return LightingEnum.DIM
         return base
+
+    @staticmethod
+    def _step_down_lighting(level: LightingEnum) -> LightingEnum:
+        """照明レベルを 1 段階暗くする (BRIGHT→DIM, DIM→DARK, DARK→PITCH_BLACK)。
+
+        PITCH_BLACK はこれ以上下がらない。屋外で夜 + 嵐が重なっても 1 段だけ
+        下げる (重複適用しない)。
+        """
+        mapping = {
+            LightingEnum.BRIGHT: LightingEnum.DIM,
+            LightingEnum.DIM: LightingEnum.DARK,
+            LightingEnum.DARK: LightingEnum.PITCH_BLACK,
+            LightingEnum.PITCH_BLACK: LightingEnum.PITCH_BLACK,
+        }
+        return mapping[level]
 
     def can_see_objects(self, effective_lighting: LightingEnum) -> bool:
         """オブジェクトが視認可能か。DARK/PITCH_BLACK では見えない。"""
