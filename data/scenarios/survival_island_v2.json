@@ -523,7 +523,7 @@
             "name": "白いキノコの群落",
             "description": "倒木の北側に生えた白い傘のキノコ。よく見れば軸は真っ白。これは食用だ。",
             "object_type": "OTHER",
-            "state": {"available": true, "last_harvest_tick": -100},
+            "state": {"available": true, "last_harvest_tick": -100, "harvest_count": 0},
             "interactions": [
               {
                 "action_name": "gather_mushroom",
@@ -533,6 +533,7 @@
                   {"effect_type": "GIVE_ITEM", "parameters": {"item_spec": "safe_mushroom"}},
                   {"effect_type": "CHANGE_OBJECT_STATE", "parameters": {"target_object": "safe_mushroom_patch", "state_updates": {"available": false}}},
                   {"effect_type": "RECORD_OBJECT_STATE_TICK", "parameters": {"target_object": "safe_mushroom_patch", "state_key": "last_harvest_tick"}},
+                  {"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"target_object": "safe_mushroom_patch", "state_key": "harvest_count"}},
                   {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "白い軸のキノコを摘み取った。これは食べられるはずだ。"}}
                 ]
               }
@@ -1242,7 +1243,12 @@
       },
       {
         "target": "safe_mushroom_patch",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "safe_mushroom_patch", "state_key": "last_harvest_tick", "ticks_offset": 30},
+        "predicate": {"condition_type": "AND", "children": [
+          {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "safe_mushroom_patch", "state_key": "last_harvest_tick", "ticks_offset": 30},
+          {"condition_type": "NOT", "children": [
+            {"condition_type": "OBJECT_STATE_INT_AT_LEAST", "target_object": "safe_mushroom_patch", "state_key": "harvest_count", "ticks_offset": 6}
+          ]}
+        ]},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false}
       },

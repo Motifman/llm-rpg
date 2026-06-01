@@ -50,6 +50,7 @@ _logger = logging.getLogger(__name__)
 # - 内部 bookkeeping (tick 記録、フラグ) → HIDDEN
 _DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
     InteractionEffectTypeEnum.CHANGE_OBJECT_STATE: EffectVisibility.PUBLIC_OBSERVABLE,
+    InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.REVEAL_OBJECT: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.REVEAL_SUB_LOCATION: EffectVisibility.PUBLIC_OBSERVABLE,
@@ -377,6 +378,47 @@ class WorldGraphEffectService:
             quantity = self._read_quantity(p)
             for _ in range(quantity):
                 remove.append(sid)
+            return _all
+
+        if et == InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE:
+            # state[state_key] += delta (default delta=1)。
+            # CHANGE_OBJECT_STATE は「上書き」しかできないため、
+            # 「採取回数を 1 つ増やす」のような accumulator semantics は
+            # 本 effect が必要。整数以外の現在値は 0 とみなして初期化する。
+            state_key = p.get("state_key")
+            delta = int(p.get("delta", 1))
+            if not isinstance(state_key, str) or not state_key:
+                return _all
+            target = self._resolve_target_object(interior, acting_object, p)
+            if target is None:
+                return _all
+            current = target.state.get(state_key, 0)
+            if not isinstance(current, int):
+                current = 0  # 文字列等は 0 扱いで再初期化 (silent fallback)
+            new_value = current + delta
+            new_state = dict(target.state)
+            new_state[state_key] = new_value
+            updated_target = target.with_state(new_state)
+            before_state = dict(target.state)
+            interior = interior.replace_object(updated_target)
+            if (
+                acting_object is not None
+                and updated_target.object_id == acting_object.object_id
+            ):
+                acting_object = updated_target
+            summaries.append(
+                AppliedEffectSummary(
+                    kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
+                    visibility=visibility,
+                    description=f"{updated_target.name} の {state_key} が {new_value} に。",
+                    target_ref=updated_target.name,
+                    state_delta=_state_delta_entries(before_state, new_state),
+                )
+            )
+            _all = (
+                interior, acting_object, flags, grant, remove, messages,
+                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
+            )
             return _all
 
         if et == InteractionEffectTypeEnum.CHANGE_OBJECT_STATE:
