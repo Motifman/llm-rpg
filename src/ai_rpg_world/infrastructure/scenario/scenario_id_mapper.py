@@ -57,6 +57,9 @@ class ScenarioIdMapper:
         # Phase B-2a: モンスター種別 ID。シナリオ JSON 内の文字列 ("wild_dog" 等)
         # を MonsterTemplateId(int) に対応付ける。
         "monster_template",
+        # PR #1 動的 loot: LootTable の文字列 ID ("deep_fishing_loot" 等) を
+        # LootTableId(int) に対応付ける。
+        "loot_table",
     )
 
     def __init__(self) -> None:

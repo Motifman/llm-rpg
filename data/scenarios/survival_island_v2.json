@@ -354,11 +354,10 @@
                   {"condition_type": "WEATHER_IS_NOT", "required_weather_type": "STORM", "failure_message": "嵐で波が高すぎる。沖で釣るのは危険だ。"}
                 ],
                 "effects": [
-                  {"effect_type": "GIVE_ITEM", "parameters": {"item_spec": "raw_fish"}},
-                  {"effect_type": "GIVE_ITEM", "parameters": {"item_spec": "raw_fish"}},
+                  {"effect_type": "GIVE_FROM_LOOT_TABLE", "parameters": {"loot_table": "deep_fishing_loot", "times": 2}},
                   {"effect_type": "CHANGE_OBJECT_STATE", "parameters": {"target_object": "deep_fishing_point", "state_updates": {"available": false}}},
                   {"effect_type": "RECORD_OBJECT_STATE_TICK", "parameters": {"target_object": "deep_fishing_point", "state_key": "last_harvest_tick"}},
-                  {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "竿が大きくしなり、二匹の魚を釣り上げた。"}}
+                  {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "竿が大きくしなり、何かが掛かった。"}}
                 ]
               }
             ]
@@ -1087,6 +1086,27 @@
     "lose": []
   },
   "initial_flags": [],
+  "loot_tables": [
+    {
+      "id": "deep_fishing_loot",
+      "name": "沖の釣り (天候・時刻に依らない基本テーブル)",
+      "entries": [
+        {"item_spec": "raw_fish", "weight": 60, "min_quantity": 1, "max_quantity": 2},
+        {"item_spec": "shellfish", "weight": 25, "min_quantity": 1, "max_quantity": 2},
+        {"item_spec": "driftwood", "weight": 10},
+        {"item_spec": "chart_fragment", "weight": 1}
+      ]
+    },
+    {
+      "id": "stream_fishing_loot",
+      "name": "川釣り (小物中心)",
+      "entries": [
+        {"item_spec": "raw_fish", "weight": 80, "min_quantity": 1, "max_quantity": 1},
+        {"item_spec": "shellfish", "weight": 15},
+        {"item_spec": "vine_rope", "weight": 5}
+      ]
+    }
+  ],
   "outcome_resolution": {
     "rescue_at_ticks": [168, 264],
     "stranded_at_tick": 336,

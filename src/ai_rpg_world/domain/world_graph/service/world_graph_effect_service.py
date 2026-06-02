@@ -5,7 +5,9 @@ from typing import Any, Iterable, List, Optional, Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
+from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
@@ -51,6 +53,7 @@ _logger = logging.getLogger(__name__)
 _DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
     InteractionEffectTypeEnum.CHANGE_OBJECT_STATE: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE: EffectVisibility.HIDDEN,
+    InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE: EffectVisibility.ACTOR_DIRECT,
     InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.REVEAL_OBJECT: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.REVEAL_SUB_LOCATION: EffectVisibility.PUBLIC_OBSERVABLE,
@@ -155,6 +158,15 @@ def _state_delta_entries(
 
 class WorldGraphEffectService:
     """Interaction / Scenario Event 共通の effect 適用サービス。"""
+
+    def __init__(
+        self,
+        loot_table_repository: Optional[LootTableRepository] = None,
+    ) -> None:
+        # PR #1 動的 loot: GIVE_FROM_LOOT_TABLE effect の抽選で使う repository。
+        # None なら GIVE_FROM_LOOT_TABLE は no-op (silent skip ではなく log)。
+        # 既存 caller は kwarg 省略で従来挙動を維持する。
+        self._loot_table_repository = loot_table_repository
 
     def apply_effects(
         self,
@@ -371,6 +383,41 @@ class WorldGraphEffectService:
             quantity = self._read_quantity(p)
             for _ in range(quantity):
                 grant.append(sid)
+            return _all
+
+        if et == InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE:
+            # PR #1 動的 loot: LootTable.roll() で確率に基づいて item を grant。
+            # parameters: loot_table_id (int) + times (default 1)。
+            # repository が未注入 / loot_table が見つからない → silent skip
+            # (warning log は出すが effect 全体は continue)。caller がレポートで
+            # 把握できるようにする。
+            if self._loot_table_repository is None:
+                _logger.warning(
+                    "GIVE_FROM_LOOT_TABLE: loot_table_repository is not injected, skipping"
+                )
+                return _all
+            lt_id_raw = p.get("loot_table_id")
+            try:
+                lt_id_int = int(lt_id_raw)
+            except (TypeError, ValueError):
+                _logger.warning(
+                    "GIVE_FROM_LOOT_TABLE: loot_table_id is invalid (got %r)", lt_id_raw
+                )
+                return _all
+            lt = self._loot_table_repository.find_by_id(LootTableId.create(lt_id_int))
+            if lt is None:
+                _logger.warning(
+                    "GIVE_FROM_LOOT_TABLE: loot_table_id=%s not found", lt_id_int
+                )
+                return _all
+            # times は 1..100 にクランプ (シナリオ作家ミスで大量付与を防ぐ)
+            times = max(1, min(100, int(p.get("times", 1))))
+            for _ in range(times):
+                rolled = lt.roll()
+                if rolled is None:
+                    continue
+                for _q in range(rolled.quantity):
+                    grant.append(rolled.item_spec_id)
             return _all
 
         if et == InteractionEffectTypeEnum.REMOVE_ITEM:
