@@ -204,6 +204,21 @@ class ScenarioConditionEvaluator:
                 )
                 return False
             return current_tick.value >= recorded_tick + int(cond.ticks_offset)
+        if ctype == "OBJECT_STATE_INT_AT_LEAST":
+            # state[state_key] の整数値が threshold (= ticks_offset を流用) 以上か。
+            # 採取の枯渇 (count >= N で永久に available=false) の判定に使う。
+            # state_key 不在 / 値が int 以外 → 0 扱いで判定 (= 「まだ採取してない」状態)。
+            if cond.object_id is None or not cond.state_key or cond.ticks_offset is None:
+                return False
+            obj = find_object_in_graph(
+                SpotObjectId.create(cond.object_id), graph, self._spot_interior_repository,
+            )
+            if obj is None:
+                return False
+            current_value = obj.state.get(cond.state_key, 0)
+            if not isinstance(current_value, int):
+                current_value = 0
+            return current_value >= int(cond.ticks_offset)
         # 未知の condition_type は False（既存挙動を維持）
         return False
 

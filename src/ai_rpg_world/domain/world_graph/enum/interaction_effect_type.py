@@ -37,3 +37,11 @@ class InteractionEffectTypeEnum(Enum):
     # のような複合作用に使う。
     CHANGE_PLAYER_STATE = "CHANGE_PLAYER_STATE"
     RECORD_PLAYER_STATE_TICK = "RECORD_PLAYER_STATE_TICK"
+    # 採取の累積・枯渇用。state[key] を整数 delta だけインクリメントする
+    # (default delta=1)。
+    # 例: gather のたびに state["harvest_count"] += 1 を記録 →
+    # reactive_binding (OBJECT_STATE_INT_AT_LEAST predicate) で
+    # 「N 回採取で永久枯渇」を表現できる。
+    # CHANGE_OBJECT_STATE は「上書き」しか出来ないため、現在値を読んで
+    # +1 する accumulator semantics を担えない。本 effect が必要。
+    INCREMENT_OBJECT_STATE = "INCREMENT_OBJECT_STATE"
