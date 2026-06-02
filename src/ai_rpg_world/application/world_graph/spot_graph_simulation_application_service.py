@@ -42,6 +42,7 @@ class SpotGraphSimulationApplicationService:
         monster_behavior_stage: Optional["_SpotGraphTickStage"] = None,
         food_spoilage_stage: Optional["_SpotGraphTickStage"] = None,
         outcome_resolution_stage: Optional["_SpotGraphTickStage"] = None,
+        status_effects_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
         heartbeat_emitter: Optional["HeartbeatObservationEmitter"] = None,
     ) -> None:
@@ -59,6 +60,7 @@ class SpotGraphSimulationApplicationService:
         self._monster_behavior_stage = monster_behavior_stage
         self._food_spoilage_stage = food_spoilage_stage
         self._outcome_resolution_stage = outcome_resolution_stage
+        self._status_effects_stage = status_effects_stage
         self._llm_turn_trigger = llm_turn_trigger
         self._heartbeat_emitter = heartbeat_emitter
         self._logger = logging.getLogger(self.__class__.__name__)
@@ -121,6 +123,12 @@ class SpotGraphSimulationApplicationService:
                 self._day_night_stage.run(current_tick)
             if self._needs_decay_stage is not None:
                 self._needs_decay_stage.run(current_tick)
+            if self._status_effects_stage is not None:
+                # PR #2: active status effect の継続適用 + 期限切れ掃除。
+                # needs_decay の後に置いて、空腹からの BLEEDING 発症などの
+                # 連鎖を同 tick 内で処理しやすくする。HP 0 で DEAD outcome
+                # 連鎖は E-3a の handler に任せる (publisher 経由)。
+                self._status_effects_stage.run(current_tick)
             if self._monster_spawn_stage is not None:
                 # 動的 spawn / despawn 判定。day_night / weather / flag を
                 # 評価し、条件付きスロットを必要に応じてスポーン or デスポーン。

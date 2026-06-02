@@ -372,6 +372,38 @@ class SpotInteractionApplicationService:
                     status_events_from_damage = list(status.get_events())
                     status.clear_events()
 
+        # PR #2 状態異常: APPLY_STATUS_EFFECT で発生した StatusEffectSpec を
+        # PlayerStatusAggregate.add_status_effect に渡す。expiry_tick は
+        # current_tick + duration_ticks で計算する。effect は tick 毎に
+        # StatusEffectsTickStageService が継続適用 / 期限切れ掃除する。
+        if result.status_effect_specs and self._player_status_repository is not None:
+            from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+            from ai_rpg_world.domain.combat.value_object.status_effect import (
+                StatusEffect,
+            )
+            from ai_rpg_world.domain.common.value_object import WorldTick as _WT
+            status = self._player_status_repository.find_by_id(player_id)
+            if status is not None:
+                effective_tick = current_tick or _WT(0)
+                for spec in result.status_effect_specs:
+                    try:
+                        effect_type = StatusEffectType(spec.effect_type_name)
+                    except ValueError:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            "Unknown StatusEffectType %r in status_effect_spec, "
+                            "skipping (player_id=%s)",
+                            spec.effect_type_name, int(player_id),
+                        )
+                        continue
+                    expiry_tick = _WT(effective_tick.value + max(0, spec.duration_ticks))
+                    status.add_status_effect(StatusEffect(
+                        effect_type=effect_type,
+                        value=spec.value,
+                        expiry_tick=expiry_tick,
+                    ))
+                self._player_status_repository.save(status)
+
         # 欲求回復
         if result.satisfy_need_specs and self._player_status_repository is not None:
             status = self._player_status_repository.find_by_id(player_id)
