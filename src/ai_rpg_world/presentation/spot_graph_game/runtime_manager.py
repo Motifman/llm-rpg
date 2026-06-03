@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import uuid
 from collections.abc import Iterator, Iterable
 from dataclasses import dataclass, field, replace as dataclass_replace
@@ -997,6 +998,16 @@ class GameRuntimeManager:
     _chat_histories: Dict[str, list[ChatMessageResponse]] = field(
         default_factory=dict, repr=False
     )
+    # 長走時の保険:
+    # - tick thread と chat 送信 thread が同時に dict を触る (compound op race)
+    # - 履歴に上限なしで永遠に append されてメモリが膨らむ
+    # の 2 つを 1 つの lock + cap で潰す。200 件はキャラとの最近の会話を
+    # 復元するのに十分で、それ以上は viewer 側で必要なら別 store に永続化
+    # する設計を想定。
+    _chat_history_lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False
+    )
+    _CHAT_HISTORY_MAX_PER_KEY: int = 200
 
     # ── Worlds ──
 
@@ -1555,16 +1566,25 @@ class GameRuntimeManager:
             is_player=True,
         )
         key = f"{request.session_id}:{request.target_character_id}"
-        self._chat_histories.setdefault(key, []).append(message)
-        self._chat_histories.setdefault(request.target_character_id, []).append(message)
+        # setdefault + append は GIL-atomic でないので、tick thread 側からの
+        # 読み出しと competing しないよう lock 内で実行する。
+        # ついでに上限超過分を捨てる。
+        with self._chat_history_lock:
+            for k in (key, request.target_character_id):
+                bucket = self._chat_histories.setdefault(k, [])
+                bucket.append(message)
+                if len(bucket) > self._CHAT_HISTORY_MAX_PER_KEY:
+                    # 古い方から削る
+                    del bucket[: len(bucket) - self._CHAT_HISTORY_MAX_PER_KEY]
         return message
 
     def get_chat_history(
         self, character_id: str
     ) -> Optional[ChatHistoryResponse]:
-        return ChatHistoryResponse(
-            messages=list(self._chat_histories.get(character_id, []))
-        )
+        with self._chat_history_lock:
+            return ChatHistoryResponse(
+                messages=list(self._chat_histories.get(character_id, []))
+            )
 
     # ── Results (stub) ──
 

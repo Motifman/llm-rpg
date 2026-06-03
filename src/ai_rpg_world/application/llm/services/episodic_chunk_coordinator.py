@@ -161,6 +161,12 @@ class EpisodicChunkCoordinator:
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._chunk_actions: Dict[int, List[ActionResultEntry]] = {}
+        # 長走時の保険: decide_chunk_boundary が「もう少し溜めよう」を返し続
+        # けた場合、bucket が際限なく肥える silent failure を防ぐためのハード
+        # キャップ。境界判定の閾値を上回る規模になったら強制的に chunk を
+        # close することで、bucket は必ず最大このサイズで止まる。
+        # 50 は recent_actions_limit (=20) の 2.5 倍を目安に余裕を見た値。
+        self._chunk_actions_hard_cap = 50
         self._episodic_memory_link_service = episodic_memory_link_service
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
@@ -302,7 +308,20 @@ class EpisodicChunkCoordinator:
             hints=hints,
             explicit_segment_close=explicit_segment_close,
         )
-        if not decision.should_close_chunk:
+        # ハードキャップ: 長走で境界判定が常時 False を返し続けると bucket が
+        # 無制限に肥える silent failure になる。bucket が hard_cap を超えたら、
+        # boundary 判定の結論を上書きして強制的に close する。
+        # bucket は decision の入力に既に反映されているので、ここで close を
+        # 強制しても encoding_input の中身は最新の状態。
+        if not decision.should_close_chunk and len(bucket) >= self._chunk_actions_hard_cap:
+            import logging
+            logging.getLogger(__name__).warning(
+                "EpisodicChunkCoordinator: forcing chunk close (player_id=%s, "
+                "bucket_size=%d >= hard_cap=%d). decide_chunk_boundary returned "
+                "should_close_chunk=False for too long.",
+                player_id, len(bucket), self._chunk_actions_hard_cap,
+            )
+        elif not decision.should_close_chunk:
             return
 
         episode = self._chunk_episode_draft_builder.build(encoding_input)
