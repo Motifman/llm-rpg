@@ -1205,9 +1205,12 @@ class EscapeGameRuntime:
     ) -> None:
         """Phase D-3a: 食料が腐ったタイミングで全プレイヤーに観測を流す。
 
+        ⚠ 直接呼び出しは旧 per-instance 経路 (trace の詳細用に残してある)。
+        観測は `_append_food_spoiled_batch_observation` 経由の集約版を使う。
+        この per-instance 経路は test や外部からの直接呼び出しで使う想定。
+
         weather と同じく world event 扱い (誰の所持品でも気付ける匂い等を
-        想定)。所持者だけに絞る精緻化は将来 (誰の物か追跡できるようになった
-        段階で) 行う。spec_name が空文字列なら spec 名解決に失敗しているので
+        想定)。spec_name が空文字列なら spec 名解決に失敗しているので
         sentinel 表示にフォールバック。
         """
         display_name = spec_name or f"アイテム#{item_instance_id.value}"
@@ -1226,6 +1229,57 @@ class EscapeGameRuntime:
         )
         for player_id in self.get_player_ids():
             self._emit_observation_directly(player_id, output)
+
+    def _append_food_spoiled_batch_observation(
+        self,
+        spoiled: Any,
+    ) -> None:
+        """第24回実験 (#343) 対策: 同 tick で複数 instance が腐ったときに、
+        spec_id 単位で集約して 1 件の観測にまとめる。
+
+        旧: 「野いちごが腐った。」「野いちごが腐った。」「野いちごが腐った。」
+            (3 件 separate)
+        新: 「野いちごが 3 つ腐った。」(1 件 aggregated)
+
+        spoiled は Sequence[(ItemInstanceId, ItemSpecId, str)]。
+        """
+        if not spoiled:
+            return
+        # spec_id ごとに件数と sample instance_id をまとめる。
+        groups: dict[int, dict[str, Any]] = {}
+        for instance_id, spec_id, spec_name in spoiled:
+            sid = int(spec_id.value)
+            entry = groups.setdefault(
+                sid,
+                {
+                    "spec_id": sid,
+                    "spec_name": spec_name,
+                    "instance_ids": [],
+                },
+            )
+            entry["instance_ids"].append(int(instance_id.value))
+        for sid, entry in groups.items():
+            count = len(entry["instance_ids"])
+            display_name = entry["spec_name"] or f"アイテム#{sid}"
+            if count == 1:
+                message = f"{display_name}が腐った。"
+            else:
+                message = f"{display_name}が{count}つ腐った。"
+            output = ObservationOutput(
+                prose=message,
+                structured={
+                    "type": "food_spoiled",
+                    "item_spec_id": sid,
+                    "spec_name": entry["spec_name"],
+                    "count": count,
+                    "item_instance_ids": entry["instance_ids"],
+                },
+                observation_category="environment",
+                schedules_turn=False,
+                breaks_movement=False,
+            )
+            for player_id in self.get_player_ids():
+                self._emit_observation_directly(player_id, output)
 
     def _append_weather_observation(self, weather_state: Any) -> None:
         # Issue #276 経路二重化解消: ``_emit_observation_directly`` 経由に統一。
@@ -2242,9 +2296,12 @@ def create_escape_game_runtime(
     if weather_config is None or weather_config.announce_changes:
         environment_stage.set_weather_changed_callback(runtime._append_weather_observation)
     # Phase D-3a: 食料腐敗の観測 bind (stage が存在するときのみ)。
+    # #343 対策: per-instance ではなく per-tick 集約 batch callback を bind して、
+    # 「野いちご×3 が腐った」のように 1 件にまとめて観測ノイズを抑える。
+    # per-instance callback は trace 詳細用にあえて bind しない (集約だけで十分)。
     if food_spoilage_stage is not None:
-        food_spoilage_stage.set_spoiled_callback(
-            runtime._append_food_spoiled_observation
+        food_spoilage_stage.set_spoiled_batch_callback(
+            runtime._append_food_spoiled_batch_observation
         )
 
     # ── PR 2/6 (#227): 任意の DomainEvent を ObservationPipeline 経由で配信する ──

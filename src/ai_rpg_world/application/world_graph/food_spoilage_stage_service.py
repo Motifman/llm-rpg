@@ -30,7 +30,7 @@ state[spoiled] を `True` にする以外の副作用は持たない。
 
 from __future__ import annotations
 
-from typing import Callable, Mapping, Optional
+from typing import Callable, List, Mapping, Optional, Sequence, Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -42,6 +42,15 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 # (item_instance_id, item_spec_id, spec_name) を受けて observation を流す callback。
 # spec_name は LLM 観測テキスト化に使う想定。
 SpoiledCallback = Callable[[ItemInstanceId, ItemSpecId, str], None]
+
+# 1 tick で複数 instance が腐ったときに「野いちご×3 が腐った」のように
+# まとめて通知するための batch callback。stage は run() の終わりに 1 回だけ
+# 呼び出す。spec_id が同じ instance を runtime 側で aggregate して観測テキスト
+# を圧縮する目的。
+# Args: ((instance_id, spec_id, spec_name), ...) のタプル列。
+SpoiledBatchCallback = Callable[
+    [Sequence[Tuple[ItemInstanceId, ItemSpecId, str]]], None
+]
 
 
 # state key 名。同名のリテラルを各所で書くと typo 事故が起きるので集約する。
@@ -64,6 +73,7 @@ class FoodSpoilageStageService:
         *,
         spec_name_lookup: Optional[Callable[[ItemSpecId], str]] = None,
         spoiled_callback: Optional[SpoiledCallback] = None,
+        spoiled_batch_callback: Optional[SpoiledBatchCallback] = None,
     ) -> None:
         """
         Args:
@@ -84,6 +94,7 @@ class FoodSpoilageStageService:
         )
         self._spec_name_lookup = spec_name_lookup
         self._spoiled_callback = spoiled_callback
+        self._spoiled_batch_callback = spoiled_batch_callback
 
     def set_spoiled_callback(self, callback: Optional[SpoiledCallback]) -> None:
         """callback を後から差し替える (runtime 構築後の bind 用)。
@@ -93,15 +104,36 @@ class FoodSpoilageStageService:
         """
         self._spoiled_callback = callback
 
+    def set_spoiled_batch_callback(
+        self, callback: Optional[SpoiledBatchCallback]
+    ) -> None:
+        """batch callback を後から差し替える (runtime 構築後の bind 用)。
+
+        per-instance callback と独立に bind できる。両方 bind された場合は
+        per-instance も batch も両方呼ばれる (trace 用詳細 + 観測用集約 の
+        併用シナリオを許容)。
+        """
+        self._spoiled_batch_callback = callback
+
     def run(self, current_tick: WorldTick) -> None:
-        """全 spoilable spec を走査して acquired_at_tick / spoiled を更新する。"""
+        """全 spoilable spec を走査して acquired_at_tick / spoiled を更新する。
+
+        run() 内で新たに腐った instance を batch_buffer に貯め、最後に
+        batch_callback に一括で渡す。観測 ("野いちご×3 が腐った") を 1 件に
+        まとめて、第24回実験 OFF run (#343) で 460 件の food_spoiled 観測が
+        プロンプトを支配した noise 問題を解消するため。
+        """
         if not self._spoilable:
             return
         tick_value = current_tick.value
+        # この tick で「新たに spoiled になった」instance を蓄積する。
+        batch: List[Tuple[ItemInstanceId, ItemSpecId, str]] = []
         for spec_id, threshold in self._spoilable:
             instances = self._item_repository.find_by_spec_id(spec_id)
             for inst in instances:
-                self._process_instance(inst, spec_id, threshold, tick_value)
+                self._process_instance(inst, spec_id, threshold, tick_value, batch)
+        if batch and self._spoiled_batch_callback is not None:
+            self._spoiled_batch_callback(tuple(batch))
 
     def _process_instance(
         self,
@@ -109,6 +141,7 @@ class FoodSpoilageStageService:
         spec_id: ItemSpecId,
         threshold: int,
         current_tick_value: int,
+        batch: Optional[List[Tuple[ItemInstanceId, ItemSpecId, str]]] = None,
     ) -> None:
         state = item_aggregate.state
         # 既に腐っているなら何もしない (callback の二重発火防止)
@@ -139,8 +172,11 @@ class FoodSpoilageStageService:
         # 閾値到達: spoiled フラグを立てる
         item_aggregate.merge_state({STATE_KEY_SPOILED: True})
         self._item_repository.save(item_aggregate)
+        spec_name = (
+            self._spec_name_lookup(spec_id) if self._spec_name_lookup else ""
+        )
         if self._spoiled_callback is not None:
-            spec_name = (
-                self._spec_name_lookup(spec_id) if self._spec_name_lookup else ""
-            )
             self._spoiled_callback(item_aggregate.item_instance_id, spec_id, spec_name)
+        # batch にも積んで run() の最後で集約 callback に渡す。
+        if batch is not None:
+            batch.append((item_aggregate.item_instance_id, spec_id, spec_name))

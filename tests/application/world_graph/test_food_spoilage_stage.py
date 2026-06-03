@@ -170,6 +170,62 @@ class TestCallback:
         assert len(calls) == 1
 
 
+class TestSpoiledBatchCallback:
+    """#343 対策: 同 tick の複数 instance を 1 件に集約する batch callback。"""
+
+    def test_同_tick_の_複数_instance_は_1_batch_で_呼ばれる(self) -> None:
+        data_store = InMemoryDataStore()
+        repo = InMemoryItemRepository(data_store)
+        spec = _spec(RAW_FISH_SPEC_ID, "生の魚", spoils_after_ticks=4)
+        for iid in (7001, 7002, 7003):
+            inst = ItemAggregate.create(
+                item_instance_id=ItemInstanceId(iid),
+                item_spec=spec,
+                quantity=1,
+            )
+            inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
+            repo.save(inst)
+
+        batches: list = []
+        stage = FoodSpoilageStageService(
+            item_repository=repo,
+            spoilable_specs={RAW_FISH_SPEC_ID: 4},
+            spec_name_lookup=lambda sid: "生の魚",
+            spoiled_batch_callback=lambda items: batches.append(items),
+        )
+
+        stage.run(WorldTick(4))
+
+        # 1 回の callback で 3 instance を受け取る
+        assert len(batches) == 1
+        assert len(batches[0]) == 3
+        assert {iid.value for iid, _, _ in batches[0]} == {7001, 7002, 7003}
+
+    def test_この_tick_で_何も腐っていなければ_batch_callback_は_呼ばれない(
+        self,
+    ) -> None:
+        data_store = InMemoryDataStore()
+        repo = InMemoryItemRepository(data_store)
+        spec = _spec(RAW_FISH_SPEC_ID, "生の魚", spoils_after_ticks=10)
+        inst = ItemAggregate.create(
+            item_instance_id=ItemInstanceId(7001),
+            item_spec=spec,
+            quantity=1,
+        )
+        inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
+        repo.save(inst)
+        batches: list = []
+        stage = FoodSpoilageStageService(
+            item_repository=repo,
+            spoilable_specs={RAW_FISH_SPEC_ID: 10},
+            spoiled_batch_callback=lambda items: batches.append(items),
+        )
+
+        stage.run(WorldTick(3))  # 閾値未到達
+
+        assert batches == []
+
+
 class TestEmptySpoilableSpecs:
     """空 dict のときは no-op になる (シナリオに腐る食料が無いとき)。"""
 
