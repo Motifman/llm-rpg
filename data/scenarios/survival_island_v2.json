@@ -149,7 +149,7 @@
     {
       "id": "shipwreck_beach",
       "name": "難破船の浜",
-      "description": "嵐で打ち上げられた木造船の残骸が転がる、白い砂の浜辺。波音と海鳥の声。流木が至るところに散らばっている。",
+      "description": "嵐で打ち上げられた木造船の残骸が転がる、白い砂の浜辺。波音と海鳥の声。流木が至るところに散らばっている。波打ち際に小魚が跳ねるのが見えるが、素手では到底捕まえられそうにない。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "穏やかな波の音と海鳥の鳴き声", "temperature": "WARM"},
       "is_outdoor": true,
