@@ -1,7 +1,7 @@
 """観測・ワールド共通で利用するクエリポート"""
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -18,4 +18,14 @@ class IPlayerAudienceQueryPort(ABC):
     @abstractmethod
     def all_known_players(self) -> List[PlayerId]:
         """ワールドに存在する全プレイヤーIDを返す（公開配信用）。"""
+        pass
+
+    @abstractmethod
+    def current_spot_of(self, player_id: PlayerId) -> Optional[SpotId]:
+        """指定プレイヤーの現在スポットを返す。
+
+        spot 不明 (未配置 / nav_state 未同期) のときは None。
+        PlayerDownedEvent のような「event 単体に spot_id が乗っていない」配信先
+        解決で使う。
+        """
         pass

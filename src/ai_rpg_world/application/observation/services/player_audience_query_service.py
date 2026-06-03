@@ -1,6 +1,6 @@
 """観測配信先としてのプレイヤー群を取得するサービス"""
 
-from typing import List
+from typing import List, Optional
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
@@ -35,3 +35,14 @@ class PlayerAudienceQueryService(IPlayerAudienceQueryPort):
         """ワールドに存在する全プレイヤーIDを返す（公開配信用）。"""
         all_statuses = self._player_status_repository.find_all()
         return [s.player_id for s in all_statuses]
+
+    def current_spot_of(self, player_id: PlayerId) -> Optional[SpotId]:
+        """指定プレイヤーの現在スポットを返す。
+
+        PlayerStatusRepository に居なければ None、nav_state が空でも None。
+        spot_graph mode では nav_state が同期されている前提。
+        """
+        status = self._player_status_repository.find_by_id(player_id)
+        if status is None:
+            return None
+        return status.current_spot_id
