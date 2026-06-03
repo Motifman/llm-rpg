@@ -1336,7 +1336,7 @@ class ScenarioLoader:
         "environment": {
             "day_night": {
                 "enabled": true,
-                "ticks_per_day": 12,
+                "ticks_per_day": 24,
                 "starting_tick_in_day": 0,
                 "announce_changes": true,
                 "phases": [
@@ -1360,7 +1360,11 @@ class ScenarioLoader:
         if not bool(day_night.get("enabled", False)):
             return None
 
-        ticks_per_day = int(day_night.get("ticks_per_day", 12))
+        # 漂流島 v2 で導入された「1 tick = 1 時間」スケールに合わせ default=24
+        # (旧 default=12 は monster_behavior_world_port:196 の hardcode=24 と
+        # 不整合で、ticks_per_day を省略したシナリオの day_night phase 判定が
+        # 2 倍速で進む silent failure を生んでいた)
+        ticks_per_day = int(day_night.get("ticks_per_day", 24))
         starting_tick = int(day_night.get("starting_tick_in_day", 0))
         announce = bool(day_night.get("announce_changes", True))
         phases_raw = day_night.get("phases", [])
