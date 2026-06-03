@@ -87,14 +87,46 @@ class TestToolCallLoopGuardServiceWaitDetection:
             svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
         assert buf.get_observations(pid) == []
 
-    def test_連打が_4_回_5_回と続いても_警告は_1_件のまま(self) -> None:
-        """同じ (tool, fingerprint) が連続する間は警告を抑制する。"""
+    def test_連打が_4_回_5_回続くと_警告は_1_件だが_6_回で再発火(self) -> None:
+        """threshold (wait=3) の倍数で警告を再発火する。
+
+        旧実装は once-only で 105 回 wait しても警告 1 件しか出ず、第24回
+        実験 (#343) で「最初の警告のあと LLM が wait を止められなかった」
+        症状を引き起こした。新実装は threshold の倍数 (3, 6, 9, ...) で
+        繰り返し気付かせる。
+        """
         buf = DefaultObservationContextBuffer()
         svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
         pid = _pid(1)
-        for _ in range(6):
+        # 4 回連続 → 警告 1 件 (3 回目発火、4 回目は次の 6 回目までお預け)
+        for _ in range(4):
             svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
         assert len(buf.get_observations(pid)) == 1
+        # 5 回目 → まだ 1 件
+        svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
+        assert len(buf.get_observations(pid)) == 1
+        # 6 回目 → 再発火 2 件目
+        svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
+        assert len(buf.get_observations(pid)) == 2
+
+    def test_連続警告は_文面が変わる(self) -> None:
+        """繰り返し警告の prose が同じだと LLM が学習でフィルタする可能性がある。
+
+        テンプレートを deterministic に rotate して、同じ条件でも文面が変
+        わることを保証する。
+        """
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        pid = _pid(1)
+        # 9 連打 → threshold=3 の倍数で 3 回警告 (3, 6, 9)
+        for _ in range(9):
+            svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
+        obs = buf.get_observations(pid)
+        assert len(obs) == 3
+        proses = [o.output.prose for o in obs]
+        # 連続する 2 件は文面が異なる (rotation の証拠)
+        assert proses[0] != proses[1]
+        assert proses[1] != proses[2]
 
 
 class TestToolCallLoopGuardServiceArgumentSensitivity:

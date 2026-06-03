@@ -62,6 +62,32 @@ DEFAULT_WINDOW_SIZE: int = 10
 """player ごとに保持する直近 tool call の最大件数。"""
 
 
+# 警告文のバリエーション。同じ文面が繰り返し届くと LLM が「3 回 wait → 同じ
+# 警告」のパターンを学習して文面ごと無視するようになる可能性があるので、
+# 警告を再発火するたびに文面を変える。warn_index % len(templates) で
+# deterministic に選ぶ (テスト容易性 + 実走での「予測しづらさ」の両立)。
+# templates は { consecutive } { tool_name } を含む format 文字列。
+_WARNING_TEMPLATES: tuple[str, ...] = (
+    "⚠ 直近 {consecutive} ターン連続で `{tool_name}` を同じ引数で実行しています。"
+    "状況に変化が無いまま同じ行動を繰り返している可能性があります。"
+    "観測内容を再確認し、別の行動 (speech で相手に状況を伝える、別の場所に移動する、"
+    "別の対象を examine する、等) を検討してください。",
+    "気が付けば `{tool_name}` を {consecutive} 回連続で同じやり方で試みています。"
+    "現状を変えるには別の角度のアプローチが必要かもしれません。"
+    "周囲の状況や手持ちアイテムを見直してください。",
+    "{consecutive} 回続けて同じ `{tool_name}` を選択していますが、結果が変わって"
+    "いる兆候はありますか？ いったん立ち止まり、目的を達成する別の手段を考えて"
+    "みてください (会話で情報を求める / 場所を移す / 対象を変える等)。",
+    "あなたは {consecutive} 連続で `{tool_name}` に固執しています。同じ行為を"
+    "重ねても望む結果が出ないなら、それは戦略の見直しの合図です。"
+    "別の選択肢を試してみてください。",
+    "立て続けに {consecutive} 回 `{tool_name}` を実行している点が気になります。"
+    "同じ刺激を繰り返しているうちは、世界の側も同じ反応しか返さないものです。"
+    "今までと違う行動を試す好機ではないでしょうか。",
+)
+"""警告 prose のテンプレート。{tool_name} と {consecutive} を含む format 文字列。"""
+
+
 @dataclass(frozen=True)
 class _ToolCallRecord:
     """1 回の tool 呼出記録 (loop 判定用)。"""
@@ -136,7 +162,13 @@ class ToolCallLoopGuardService:
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
         self._history: Dict[int, List[_ToolCallRecord]] = {}
-        self._last_warned: Dict[int, _ToolCallRecord] = {}
+        # 直近の record と連続回数 (player_id -> (record, count))。
+        # 同じ record が続いている間 count を増やし、threshold の倍数で警告を
+        # 再発火する (旧 once-only から repeat-every-threshold へ)。
+        self._streak: Dict[int, tuple[_ToolCallRecord, int]] = {}
+        # player ごとに「これまで何回警告を発火したか」を保持して、警告文面の
+        # バリエーション選択 (warn_count % len(templates)) に使う。
+        self._warn_count: Dict[int, int] = {}
 
     def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
         """use 時に最新の trace_recorder を取得する。
@@ -178,25 +210,31 @@ class ToolCallLoopGuardService:
             del history[: len(history) - self._window_size]
 
         threshold = self._thresholds.get(tool_name, self._default_threshold)
-        if len(history) < threshold:
-            return
-        latest = history[-threshold:]
-        if any(r != record for r in latest):
+        # streak (player ごとの「現在連続で同じ (tool, fingerprint) を実行している
+        # 回数」) を維持する。前回の record と異なれば 1 にリセット、同じなら +1。
+        prev = self._streak.get(key)
+        if prev is None or prev[0] != record:
+            streak_count = 1
+        else:
+            streak_count = prev[1] + 1
+        self._streak[key] = (record, streak_count)
+
+        # threshold の倍数で警告を再発火する。
+        # 例: threshold=3 のとき streak 3, 6, 9... で発火 (旧 once-only ではなく、
+        # LLM が警告を無視し続けても何度でも気付かせる)。
+        if streak_count < threshold or streak_count % threshold != 0:
             return
 
-        # 同じ (tool, fingerprint) で連続警告するのは冗長なので、最後に警告
-        # を出した record を覚えておき、連打が続く限り 1 回しか出さない。
-        # tool/fingerprint が変われば抑制状態はリセットされる。
-        if self._last_warned.get(key) == record:
-            return
-        self._last_warned[key] = record
-
+        # warn_count を進めて文面選択に使う (deterministic だが variety あり)。
+        warn_index = self._warn_count.get(key, 0)
+        self._warn_count[key] = warn_index + 1
         self._observation_buffer.append(
             player_id,
             self._build_warning_entry(
                 tool_name=tool_name,
                 fingerprint=fingerprint,
-                consecutive=threshold,
+                consecutive=streak_count,
+                warn_index=warn_index,
                 game_time_label=game_time_label,
             ),
         )
@@ -219,7 +257,7 @@ class ToolCallLoopGuardService:
                     player_id=int(player_id.value),
                     tool_name=tool_name,
                     argument_fingerprint=fingerprint,
-                    consecutive_count=threshold,
+                    consecutive_count=streak_count,
                     game_time_label=game_time_label,
                 )
             except Exception:
@@ -232,14 +270,14 @@ class ToolCallLoopGuardService:
         tool_name: str,
         fingerprint: str,
         consecutive: int,
+        warn_index: int,
         game_time_label: Optional[str],
     ) -> ObservationEntry:
-        prose = (
-            f"⚠ 直近 {consecutive} ターン連続で `{tool_name}` を同じ引数で実行しています。"
-            f"状況に変化が無いまま同じ行動を繰り返している可能性があります。"
-            f"観測内容を再確認し、別の行動 (speech で相手に状況を伝える、別の場所に移動する、"
-            f"別の対象を examine する、等) を検討してください。"
-        )
+        # warn_index で deterministic にテンプレートを選び、繰り返し警告でも
+        # 文面が固定にならないようにする (LLM が同じ警告をパターン学習で
+        # 無視するのを防ぐ)。
+        template = _WARNING_TEMPLATES[warn_index % len(_WARNING_TEMPLATES)]
+        prose = template.format(tool_name=tool_name, consecutive=consecutive)
         output = ObservationOutput(
             prose=prose,
             structured={
