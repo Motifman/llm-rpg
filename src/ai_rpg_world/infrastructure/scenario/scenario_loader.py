@@ -441,17 +441,44 @@ class ScenarioLoader:
                     f"loot_tables[{string_id!r}].entries must be non-empty"
                 )
             entries: List[ScenarioLootEntry] = []
-            for e in entries_raw:
+            for index, e in enumerate(entries_raw):
                 item_sid = e.get("item_spec")
                 if not isinstance(item_sid, str):
                     raise ScenarioLoadError(
-                        f"loot_tables[{string_id!r}].entries[*].item_spec required"
+                        f"loot_tables[{string_id!r}].entries[{index}].item_spec required"
+                    )
+                # PR #1 follow-up: 数値変換失敗 (例: weight="abc") は Python の
+                # ValueError として落ちると場所が分からない。シナリオ作家が
+                # 直すべき項目を ScenarioLoadError に包んで surface する。
+                try:
+                    weight = int(e.get("weight", 1))
+                    min_q = int(e.get("min_quantity", 1))
+                    max_q = int(e.get("max_quantity", 1))
+                except (TypeError, ValueError) as exc:
+                    raise ScenarioLoadError(
+                        f"loot_tables[{string_id!r}].entries[{index}] has "
+                        f"non-integer weight/quantity: {e!r}"
+                    ) from exc
+                if weight < 0:
+                    raise ScenarioLoadError(
+                        f"loot_tables[{string_id!r}].entries[{index}].weight "
+                        f"must be >= 0 (got {weight})"
+                    )
+                if min_q < 1:
+                    raise ScenarioLoadError(
+                        f"loot_tables[{string_id!r}].entries[{index}].min_quantity "
+                        f"must be >= 1 (got {min_q})"
+                    )
+                if max_q < min_q:
+                    raise ScenarioLoadError(
+                        f"loot_tables[{string_id!r}].entries[{index}].max_quantity "
+                        f"({max_q}) must be >= min_quantity ({min_q})"
                     )
                 entries.append(ScenarioLootEntry(
                     item_spec_id=mapper.get_int("item_spec", item_sid),
-                    weight=int(e.get("weight", 1)),
-                    min_quantity=int(e.get("min_quantity", 1)),
-                    max_quantity=int(e.get("max_quantity", 1)),
+                    weight=weight,
+                    min_quantity=min_q,
+                    max_quantity=max_q,
                 ))
             out.append(ScenarioLootTableDefinition(
                 string_id=string_id,

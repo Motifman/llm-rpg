@@ -86,3 +86,25 @@ class TestIncrementBasic:
         new_interior = _apply_effect(interior, {"state_key": "harvest_count"})
         new_obj = new_interior.get_object(OBJ_ID)
         assert new_obj.state["harvest_count"] == 1
+
+
+class TestIncrementSilentFallbackWarning:
+    """PR #1 follow-up: 黙って skip / 黙って再初期化 する経路は warning log で surface する。"""
+
+    def test_state_key_欠落で_warning_log_が出る(self, caplog) -> None:
+        interior = _make_interior_with_state({})
+        with caplog.at_level("WARNING"):
+            _apply_effect(interior, {})  # state_key 未指定 → silent skip だが log は出す
+        assert any(
+            "INCREMENT_OBJECT_STATE: state_key is required" in r.message
+            for r in caplog.records
+        )
+
+    def test_非整数値の再初期化で_warning_log_が出る(self, caplog) -> None:
+        interior = _make_interior_with_state({"harvest_count": "invalid"})
+        with caplog.at_level("WARNING"):
+            _apply_effect(interior, {"state_key": "harvest_count"})
+        assert any(
+            "non-int" in r.message and "resetting to 0" in r.message
+            for r in caplog.records
+        )

@@ -435,13 +435,32 @@ class WorldGraphEffectService:
             state_key = p.get("state_key")
             delta = int(p.get("delta", 1))
             if not isinstance(state_key, str) or not state_key:
+                # PR #1 follow-up: silent skip だとシナリオ作家ミスが気づかれない。
+                # warning log で surface する (再現条件: state_key 未指定 / 空文字)。
+                _logger.warning(
+                    "INCREMENT_OBJECT_STATE: state_key is required (got %r), "
+                    "skipping effect",
+                    state_key,
+                )
                 return _all
             target = self._resolve_target_object(interior, acting_object, p)
             if target is None:
+                _logger.warning(
+                    "INCREMENT_OBJECT_STATE: target object not resolvable "
+                    "(state_key=%r, target_object=%r), skipping effect",
+                    state_key, p.get("target_object"),
+                )
                 return _all
             current = target.state.get(state_key, 0)
             if not isinstance(current, int):
-                current = 0  # 文字列等は 0 扱いで再初期化 (silent fallback)
+                # 文字列等は 0 扱いで再初期化。整数以外で書き換えた人がいれば
+                # 集計が消えるので warning log で気づけるようにする。
+                _logger.warning(
+                    "INCREMENT_OBJECT_STATE: target %r state[%r] is %r "
+                    "(non-int), resetting to 0 before increment",
+                    target.name, state_key, current,
+                )
+                current = 0
             new_value = current + delta
             new_state = dict(target.state)
             new_state[state_key] = new_value
