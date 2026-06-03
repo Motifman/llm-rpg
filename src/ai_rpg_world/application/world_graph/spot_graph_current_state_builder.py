@@ -415,9 +415,22 @@ class SpotGraphCurrentStateBuilder:
                         name = self._entity_name_resolver(int(other_eid))
                     except Exception:
                         name = f"不明({int(other_eid)})"
+                # PR #347 後続: 同 spot にいる相手が倒れているなら snapshot に
+                # is_down=True を立てる。entity が player でない (NPC 等) ときや
+                # status_repo で見つからないときは False のままにする。
+                other_is_down = False
+                try:
+                    other_status = self._player_status_repository.find_by_id(
+                        PlayerId(int(other_eid))
+                    )
+                    if other_status is not None:
+                        other_is_down = bool(other_status.is_down)
+                except Exception:
+                    other_is_down = False
                 nearby_entities.append(SpotGraphNearbyEntityEntry(
                     entity_id=int(other_eid),
                     display_name=name,
+                    is_down=other_is_down,
                 ))
 
         inventory_items: tuple[SpotGraphInventoryItemEntry, ...] = ()

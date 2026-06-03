@@ -123,6 +123,11 @@ class SpotGraphNearbyEntityEntry:
     """同スポットにいるエンティティ1件の構造化データ。"""
     entity_id: int
     display_name: str = ""
+    # PR #347 後続: PlayerDownedEvent が一度通知された後でも、snapshot からは
+    # 「あの人が床に倒れている」が見えないと OFF mode で会話 / 看取り / 通り抜け
+    # 判断が破綻する。entity の現在 is_down 状態を snapshot に lift する。
+    # status 未解決 (entity が player でない / repo に居ない) なら False。
+    is_down: bool = False
 
 
 @dataclass(frozen=True)

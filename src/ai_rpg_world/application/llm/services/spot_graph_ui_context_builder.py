@@ -208,7 +208,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         for entry in snap.nearby_entities:
             label = allocator.next(PREFIX_ENTITY)
             name = entry.display_name or f"プレイヤー({entry.entity_id})"
-            lines.append(f"  {label}: {name}")
+            # PR #347 後続: 倒れている相手は (倒れて動かない) を後置して、
+            # speech / 受け渡しの対象として動かないことを LLM が認識できるよう
+            # にする。OFF mode で過去の PlayerDownedEvent が観測 buffer から
+            # 流れた後でも、snapshot から「あの人が床に転がっている」が読める。
+            suffix = " (倒れて動かない)" if entry.is_down else ""
+            lines.append(f"  {label}: {name}{suffix}")
             collector.add(
                 label,
                 PlayerToolRuntimeTargetDto(
