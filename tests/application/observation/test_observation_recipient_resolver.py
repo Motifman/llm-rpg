@@ -560,6 +560,51 @@ class TestDefaultRecipientStrategy:
         assert len(ids) == 1
         assert ids[0].value == 7
 
+    def test_PlayerDownedEvent_は_本人と同_spot_の他プレイヤーに_broadcast(
+        self, strategy, status_repo
+    ):
+        """ダウンしたプレイヤー本人だけでなく、同 spot に居る目撃者にも観測が届く。
+
+        旧実装は `add(aggregate_id)` のみで、4 人協力シナリオで「エイダが
+        倒れた」が他 3 人に届かないバグになっていた (#343 第24回実験 OFF run)。
+        """
+        from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+        status_repo.save(_make_status(1, spot_id=10))  # downed
+        status_repo.save(_make_status(2, spot_id=10))  # same spot
+        status_repo.save(_make_status(3, spot_id=10))  # same spot
+        status_repo.save(_make_status(4, spot_id=20))  # different spot
+
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=None,
+        )
+        ids = strategy.resolve(event)
+        id_values = {pid.value for pid in ids}
+        assert 1 in id_values  # 本人
+        assert 2 in id_values  # 目撃者
+        assert 3 in id_values  # 目撃者
+        assert 4 not in id_values  # 別 spot なので届かない
+
+    def test_PlayerDownedEvent_は_spot_不明なら_本人のみ(
+        self, strategy, status_repo
+    ):
+        """downed 本人が status_repo に居ない場合は spot 解決できないため本人だけが audience。
+
+        spot 不明時に audience を全員にバラまくと、別 spot の人にまで「ダウン
+        した」が届く安全側でない fallback になるので、ここは fail-closed にする。
+        """
+        from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+        # status_repo には誰も居ない
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(99),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=None,
+        )
+        ids = strategy.resolve(event)
+        id_values = {pid.value for pid in ids}
+        assert id_values == {99}  # 本人のみ
+
 
 class TestWorldObjectToPlayerResolver:
     """WorldObjectToPlayerResolver の単体テスト（正常・対象不在・例外）"""

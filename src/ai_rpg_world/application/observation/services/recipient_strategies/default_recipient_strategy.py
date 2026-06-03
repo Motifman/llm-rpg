@@ -145,10 +145,26 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
             add(pid)
 
     def _resolve_player_downed(self, event: PlayerDownedEvent, add) -> None:
+        # 本人は当然観測する。
         add(event.aggregate_id)
+        # 同 spot の他プレイヤーにも「<name> が倒れた」を届ける。
+        # 同 spot に他プレイヤーが居れば「目撃した」観測になる。別 spot の
+        # 人にはそもそも届かない (= 自然な情報非対称性、後から「いない」で気
+        # づく)。spot_id は event に乗っていないので、PlayerStatusRepository
+        # 経由で downed 本人の現在 spot を引き、そこに居る全員に展開する。
+        downed_spot = self._player_audience_query.current_spot_of(event.aggregate_id)
+        if downed_spot is not None:
+            for pid in self._player_audience_query.players_at_spot(downed_spot):
+                add(pid)
 
     def _resolve_player_revived(self, event: PlayerRevivedEvent, add) -> None:
+        # 蘇生は現状 application 層から呼ばれていない (#125 調査時点) が、将来
+        # 救助 tool が入った場合に同 spot の人にも見えるよう先に対称化しておく。
         add(event.aggregate_id)
+        revived_spot = self._player_audience_query.current_spot_of(event.aggregate_id)
+        if revived_spot is not None:
+            for pid in self._player_audience_query.players_at_spot(revived_spot):
+                add(pid)
 
     def _resolve_item_stored_in_chest(
         self, event: ItemStoredInChestEvent, add
