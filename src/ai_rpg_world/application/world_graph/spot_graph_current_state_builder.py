@@ -24,6 +24,9 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
+    InteractionConditionTypeEnum,
+)
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import EntityNotInGraphException
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
@@ -33,6 +36,32 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 
 logger = logging.getLogger(__name__)
+
+
+def _has_failing_object_state_precondition(interaction, interior) -> bool:
+    """interaction の OBJECT_STATE precondition が現在 失敗しているか判定する。
+
+    第24回実験 (#343) で cockpit を 19 回 retry した silent failure の対策。
+    OBJECT_STATE は「取り尽くした」「もう空だ」のような永続失敗を持つ唯一の
+    precondition 種別。HAS_ITEM / TIME_OF_DAY / WEATHER 等のプレイヤー / 環境
+    依存は対象外 (将来満たされ得るので隠さない)。
+
+    True を返したら interaction は snapshot から落とす想定。reactive_binding
+    で state が戻ったら次 tick で再表示されるので、respawn / cooldown 系の
+    interaction は影響を受けない。
+    """
+    for cond in interaction.preconditions:
+        if cond.condition_type != InteractionConditionTypeEnum.OBJECT_STATE:
+            continue
+        if cond.target_object_id is None or not cond.required_state:
+            continue
+        target = interior.get_object(cond.target_object_id)
+        if target is None:
+            continue
+        for key, required_value in cond.required_state.items():
+            if target.state.get(key) != required_value:
+                return True
+    return False
 
 
 # PR #2 状態異常 surface: StatusEffectType.value → 日本語ラベル。
@@ -268,12 +297,21 @@ class SpotGraphCurrentStateBuilder:
                 for obj in interior.objects:
                     if not obj.is_visible:
                         continue
+                    # 第24回実験 #343 対策: cockpit の OBJECT_STATE 永続失敗 (= 取り尽くした)
+                    # interaction が snapshot に出続けて search_cockpit を 19 回 retry した。
+                    # interaction の OBJECT_STATE precondition が「現在 失敗」しているなら、
+                    # 可能行動から落とす。reactive_binding で state が戻れば自動で再表示される
+                    # (= 採取の respawn 等は影響を受けない、tick が進むと再び見える)。
+                    # HAS_ITEM / TIME_OF_DAY / WEATHER 等の「プレイヤー側 / 環境側」失敗は
+                    # 残す: 「flint を持っていれば狼煙を上げられる」の探索の手掛かりが
+                    # 消えるのを防ぐため。
                     interactions = tuple(
                         SpotGraphInteractionEntry(
                             action_name=i.action_name,
                             display_label=i.display_label,
                         )
                         for i in obj.interactions
+                        if not _has_failing_object_state_precondition(i, interior)
                     )
                     # Phase 4-E: スポットに居る全員から見える state を載せる。
                     # `obj.visible_state()` が hidden_state_keys を除外して返す。
@@ -287,7 +325,13 @@ class SpotGraphCurrentStateBuilder:
                         interactions=interactions,
                         state=visible_state,
                     ))
-                    actions = [i.action_name for i in obj.interactions]
+                    # フォールバック行 (interactions DTO と整合): 同じく
+                    # OBJECT_STATE 永続失敗の interaction は文面からも落とす。
+                    actions = [
+                        i.action_name
+                        for i in obj.interactions
+                        if not _has_failing_object_state_precondition(i, interior)
+                    ]
                     act = " / ".join(actions) if actions else "—"
                     obj_lines.append(f"- {obj.name} [ {act} ]")
 
