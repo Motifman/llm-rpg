@@ -36,7 +36,18 @@ class InMemorySubjectiveEpisodeStore(IEpisodicEpisodeStore):
     cue 照合は canonical（axis:value）のみ。EpisodicCue.source は索引に含めない。
     """
 
-    def __init__(self) -> None:
+    # 長走 (140+ tick × 複数 agent) で _episodes が膨らみ、list_recent の
+    # O(n log n) ソートが後半 tick で二次関数的に遅くなる地雷を防ぐ。
+    # plyaer 1 人あたりの保有 episode 上限。超過時は最古から FIFO eviction
+    # する (occurred_at で並べて古い方を削る)。recent recall は最新数件を
+    # 見るだけなので、過去の episode を捨ててもプロンプト品質への影響は限定的。
+    # 長期 (14 日 = 140 tick) を想定し、tick 1 回 1 episode でも余裕がある
+    # 数として 500 件に設定する。実験で「もっと持ちたい」となった場合は
+    # 引き上げる。
+    _MAX_EPISODES_PER_PLAYER = 500
+
+    def __init__(self, max_episodes_per_player: int = _MAX_EPISODES_PER_PLAYER) -> None:
+        self._max_episodes_per_player = max(1, int(max_episodes_per_player))
         self._episodes: dict[int, dict[str, SubjectiveEpisode]] = {}
         self._cue_index: dict[int, dict[str, set[str]]] = {}
         self._episode_canonicals: dict[int, dict[str, frozenset[str]]] = {}
@@ -60,6 +71,15 @@ class InMemorySubjectiveEpisodeStore(IEpisodicEpisodeStore):
             self._cue_index.setdefault(pid, {})
             for ck in keys:
                 self._cue_index[pid].setdefault(ck, set()).add(eid)
+            # 上限超過分を最古から evict する (long-run でのメモリ / sort 遅延対策)
+            bucket = self._episodes[pid]
+            if len(bucket) > self._max_episodes_per_player:
+                # occurred_at 昇順 = 古い順。超過 N 件を捨てる。
+                ordered = sorted(bucket.values(), key=_occurrence_sort_key)
+                excess = len(bucket) - self._max_episodes_per_player
+                for old in ordered[:excess]:
+                    self._remove_from_cue_index(pid, old.episode_id)
+                    bucket.pop(old.episode_id, None)
 
     def get(self, player_id: int, episode_id: str) -> SubjectiveEpisode | None:
         with self._lock:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import uuid
 from collections.abc import Iterator, Iterable
 from dataclasses import dataclass, field, replace as dataclass_replace
@@ -945,10 +946,19 @@ class _EscapeGameLlmWiring:
         return handler
 
     def _time_label(self) -> str:
+        # 旧実装は `(tick * 5) % (24*60)` で「1 tick = 5 分」を仮定していたが、
+        # 漂流島 v2 で 1 tick = 1 時間スケールに統一されて以降、tick 140 で
+        # 11:40 表示 (実際は day 5 20:00) のように LLM プロンプトに渡る時刻が
+        # 嘘になっていた。runtime 側に day_night ベースの正規実装
+        # (escape_game_runtime._time_label) があるのでそれに委譲する。
+        runtime_label = getattr(self.runtime, "_time_label", None)
+        if callable(runtime_label):
+            return runtime_label()
+        # フォールバック: runtime が _time_label を持たない場合 (将来の別 runtime)、
+        # 1 tick = 1 時間 / 24 ticks_per_day を仮定して計算する。
         tick = self.runtime.current_tick()
-        hours = (tick * 5) % (24 * 60)
-        h, m = divmod(hours, 60)
-        return f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
+        hours = tick % 24
+        return f"深夜 {hours}:00" if hours < 6 else f"{hours}:00"
 
 
 @dataclass
@@ -988,6 +998,16 @@ class GameRuntimeManager:
     _chat_histories: Dict[str, list[ChatMessageResponse]] = field(
         default_factory=dict, repr=False
     )
+    # 長走時の保険:
+    # - tick thread と chat 送信 thread が同時に dict を触る (compound op race)
+    # - 履歴に上限なしで永遠に append されてメモリが膨らむ
+    # の 2 つを 1 つの lock + cap で潰す。200 件はキャラとの最近の会話を
+    # 復元するのに十分で、それ以上は viewer 側で必要なら別 store に永続化
+    # する設計を想定。
+    _chat_history_lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False
+    )
+    _CHAT_HISTORY_MAX_PER_KEY: int = 200
 
     # ── Worlds ──
 
@@ -1242,10 +1262,15 @@ class GameRuntimeManager:
         if state is None:
             return None
         runtime = state.runtime
+        # 1 tick = 5 分 の旧仮定を廃止。runtime の正規 _time_label に委譲する
+        # (day_night サイクルから派生した正しい時刻を返す)。
         tick = runtime.current_tick() if runtime else 0
-        hours = (tick * 5) % (24 * 60)
-        h, m = divmod(hours, 60)
-        time_label = f"{h}:{m:02d}"
+        runtime_label_fn = getattr(runtime, "_time_label", None) if runtime else None
+        if callable(runtime_label_fn):
+            time_label = runtime_label_fn()
+        else:
+            hours = tick % 24
+            time_label = f"{hours}:00"
 
         is_ended = False
         end_result = None
@@ -1496,10 +1521,15 @@ class GameRuntimeManager:
 
         target_player_id = PlayerId(target_player_int)
         now = datetime.now(timezone.utc)
+        # 1 tick = 5 分 の旧仮定を廃止。runtime の正規 _time_label に委譲する
+        # (day_night サイクルから派生した正しい時刻を返す)。
         tick = runtime.current_tick() if callable(getattr(runtime, "current_tick", None)) else 0
-        hours = (tick * 5) % (24 * 60)
-        h, m = divmod(hours, 60)
-        time_label = f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
+        runtime_label_fn = getattr(runtime, "_time_label", None)
+        if callable(runtime_label_fn):
+            time_label = runtime_label_fn()
+        else:
+            hours = tick % 24
+            time_label = f"深夜 {hours}:00" if hours < 6 else f"{hours}:00"
 
         output = ObservationOutput(
             prose=f"どこからか、あなたに向けた声が届いた: 「{request.message}」",
@@ -1536,16 +1566,25 @@ class GameRuntimeManager:
             is_player=True,
         )
         key = f"{request.session_id}:{request.target_character_id}"
-        self._chat_histories.setdefault(key, []).append(message)
-        self._chat_histories.setdefault(request.target_character_id, []).append(message)
+        # setdefault + append は GIL-atomic でないので、tick thread 側からの
+        # 読み出しと competing しないよう lock 内で実行する。
+        # ついでに上限超過分を捨てる。
+        with self._chat_history_lock:
+            for k in (key, request.target_character_id):
+                bucket = self._chat_histories.setdefault(k, [])
+                bucket.append(message)
+                if len(bucket) > self._CHAT_HISTORY_MAX_PER_KEY:
+                    # 古い方から削る
+                    del bucket[: len(bucket) - self._CHAT_HISTORY_MAX_PER_KEY]
         return message
 
     def get_chat_history(
         self, character_id: str
     ) -> Optional[ChatHistoryResponse]:
-        return ChatHistoryResponse(
-            messages=list(self._chat_histories.get(character_id, []))
-        )
+        with self._chat_history_lock:
+            return ChatHistoryResponse(
+                messages=list(self._chat_histories.get(character_id, []))
+            )
 
     # ── Results (stub) ──
 

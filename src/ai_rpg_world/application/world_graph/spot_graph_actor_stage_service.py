@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+import logging
 from typing import Dict, Iterable
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    EntityNotInGraphException,
+)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_actor_rule import (
     SpotGraphActorRule,
 )
+
+
+_logger = logging.getLogger(__name__)
 
 
 class SpotGraphActorStageService:
@@ -44,7 +51,21 @@ class SpotGraphActorStageService:
         entity_id = EntityId.create(rule.entity_id)
         try:
             current_spot = graph.get_entity_spot(entity_id)
+        except EntityNotInGraphException:
+            # actor が graph から消えた (despawn / 死亡)。route_cursor を残すと、
+            # 同じ entity_id が再 spawn したときに「途中から行動再開」する地味
+            # バグになるので、ここで掃除する。
+            self._route_cursor.pop(rule.entity_id, None)
+            return False
         except Exception:
+            # その他予期しない graph エラー (corrupt state / repository error) は
+            # silent に握りつぶさず warning を残してから skip する。
+            _logger.warning(
+                "SpotGraphActorStageService: unexpected error reading entity_spot "
+                "for entity_id=%s; skipping this tick",
+                rule.entity_id,
+                exc_info=True,
+            )
             return False
 
         route = [SpotId.create(s) for s in rule.patrol_route_spot_ids]
