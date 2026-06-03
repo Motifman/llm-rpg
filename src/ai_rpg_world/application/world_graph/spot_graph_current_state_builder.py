@@ -34,6 +34,26 @@ from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 
 logger = logging.getLogger(__name__)
 
+
+# PR #2 状態異常 surface: StatusEffectType.value → 日本語ラベル。
+# enum.value (英語) のままだと LLM が「これは何の状態異常?」と混乱するので
+# プロンプト表示用に日本語化する。未知の effect_type は value をそのまま出す。
+_STATUS_EFFECT_LABELS: dict[str, str] = {
+    "bleeding": "出血",
+    "poison": "毒",
+    "hypothermia": "低体温",
+    "infected": "感染症",
+    "regeneration": "回復",
+    "exhausted": "疲労困憊",
+    "stun": "気絶",
+    "silence": "沈黙",
+    "blind": "暗闇",
+    "burn": "火傷",
+    "freeze": "凍結",
+    "sleep": "睡眠",
+    "paralysis": "麻痺",
+}
+
 EntityNameResolver = Callable[[int], str]
 WeatherProvider = Callable[[], Optional[WeatherState]]
 WorldFlagsProvider = Callable[[], frozenset[str]]
@@ -75,6 +95,7 @@ class SpotGraphCurrentStateBuilder:
         item_spec_name_resolver: Optional[ItemSpecNameResolver] = None,
         time_of_day_provider: Optional[TimeOfDayProvider] = None,
         item_state_resolver: Optional[Callable[[int], Optional[dict]]] = None,
+        current_tick_provider: Optional[Callable[[], int]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -92,6 +113,8 @@ class SpotGraphCurrentStateBuilder:
         # (None なら spoiled 不明)。None なら spoiled は常に False 扱いになり、
         # この拡張を使わないシナリオ (脱出ゲーム本編など) に無影響。
         self._item_state_resolver = item_state_resolver
+        # PR #2 状態異常 surface: 残り tick 表示用 (None なら effect 名のみ表示)
+        self._current_tick_provider = current_tick_provider
         self._perception = SpotPerceptionService()
 
     def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
@@ -372,6 +395,15 @@ class SpotGraphCurrentStateBuilder:
         if player is not None:
             need_lines = player.needs.describe_all()
 
+        # PR #2 状態異常 surface: active_effects を「出血 (残り 9 tick)」のような
+        # 表記に変換して snapshot に載せる。current_tick_provider が未注入なら
+        # 残り tick を省略する fallback (effect 名のみ)。
+        active_effect_lines: tuple[str, ...] = ()
+        if player is not None and player.active_effects:
+            active_effect_lines = self._build_active_effect_lines(
+                player.active_effects
+            )
+
         # Phase 4-E: 行動者本人の自由 state を snapshot に載せる。HIDDEN を
         # 含む全項目を本人プロンプトに渡し、自己認識させる。第三者用の
         # snapshot は別経路 (recipient strategy + 専用 event) なのでここでは
@@ -401,7 +433,42 @@ class SpotGraphCurrentStateBuilder:
             sub_location_lines=sub_lines,
             object_lines=obj_lines,
             player_state=player_state_snapshot,
+            active_effect_lines=active_effect_lines,
         )
+
+    def _build_active_effect_lines(self, active_effects) -> tuple[str, ...]:
+        """active_effects を「<日本語名> (残り N tick)」形式の行に変換する。
+
+        current_tick_provider が未注入なら残り tick を省略する。
+        provider が例外を投げた場合は warning log を出して残り tick を省略
+        (snapshot 生成全体を落とさない安全側 fallback)。
+        """
+        current_tick: Optional[int] = None
+        if self._current_tick_provider is not None:
+            try:
+                current_tick = int(self._current_tick_provider())
+            except Exception:
+                logger.warning(
+                    "current_tick_provider raised unexpectedly; "
+                    "omitting remaining-tick in active_effect_lines",
+                    exc_info=True,
+                )
+                current_tick = None
+        lines: list[str] = []
+        for effect in active_effects:
+            label = _STATUS_EFFECT_LABELS.get(
+                effect.effect_type.value, effect.effect_type.value
+            )
+            if current_tick is not None:
+                remaining = effect.expiry_tick.value - current_tick
+                if remaining <= 0:
+                    # まもなく cleanup される effect。最後の tick も surface する。
+                    lines.append(f"{label} (まもなく治る)")
+                else:
+                    lines.append(f"{label} (残り {remaining} tick)")
+            else:
+                lines.append(label)
+        return tuple(lines)
 
     def _entity_has_light_source(self, entity_id: int) -> bool:
         """エンティティが光源アイテムを持っているかを判定する。"""

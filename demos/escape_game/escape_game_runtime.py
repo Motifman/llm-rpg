@@ -1808,6 +1808,17 @@ def create_escape_game_runtime(
         spec = spec_union.to_item_spec() if hasattr(spec_union, "to_item_spec") else spec_union
         return spec.name
 
+    # PR #2 状態異常 surface: 残り tick 表示のため current_tick_provider を
+    # state_builder に渡す。time_provider 自体の構築は下方なので、ここでは
+    # ホルダー経由で遅延参照する (構築順を入れ替えると他依存が崩れるため)。
+    _time_provider_holder: dict[str, Any] = {}
+
+    def _current_tick_provider() -> int:
+        tp = _time_provider_holder.get("provider")
+        if tp is None:
+            return 0
+        return tp.get_current_tick().value
+
     state_builder = SpotGraphCurrentStateBuilder(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -1833,6 +1844,7 @@ def create_escape_game_runtime(
         # 引く軽量 resolver。InMemoryItemRepository.find_by_id は dict lookup なので
         # 毎 prompt 構築で叩いても問題なし。
         item_state_resolver=_resolve_item_state,
+        current_tick_provider=_current_tick_provider,
     )
 
     # ── 観測パイプライン構築 ──
@@ -1958,6 +1970,9 @@ def create_escape_game_runtime(
         on_weather_changed=None,
     )
     time_provider = InMemoryGameTimeProvider(initial_tick=0)
+    # PR #2 状態異常 surface: state_builder の current_tick_provider が
+    # 参照する holder を埋める。
+    _time_provider_holder["provider"] = time_provider
     sim_llm_trigger: ILlmTurnTrigger = (
         llm_turn_trigger
         if llm_turn_trigger is not None

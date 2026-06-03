@@ -177,6 +177,11 @@ class SpotGraphPlayerSnapshotDto:
     # エージェントの欲求状態テキスト
     need_lines: Tuple[str, ...] = ()
 
+    # PR #2 状態異常: 適用中の StatusEffect を読みやすい文字列行に変換したもの。
+    # 「出血 (残り 9 tick)」のような表記で LLM に渡し、bandage を探す行動連鎖を
+    # 取れるようにする。effects が空のときは () を返す。
+    active_effect_lines: Tuple[str, ...] = ()
+
     # Phase 4-E: 行動者本人の自由 state (HIDDEN を含む全項目)。
     # 自分自身の内面なので毒・呪い・隠しフラグも本人プロンプトには載せる。
     # 第三者観測には流れない (formatter は他プレイヤー snapshot を作らない設計)。
