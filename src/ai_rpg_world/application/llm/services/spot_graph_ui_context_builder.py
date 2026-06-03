@@ -81,6 +81,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         self._build_inventory_section(snap, allocator, collector, extra_lines)
         self._build_ground_items_section(snap, allocator, collector, extra_lines)
         self._build_needs_section(snap, extra_lines)
+        self._build_active_effects_section(snap, extra_lines)
 
         augmented_text = current_state_text
         if extra_lines:
@@ -270,6 +271,23 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             return
         lines.append("身体の状態:")
         for line in snap.need_lines:
+            lines.append(f"  {line}")
+
+    @staticmethod
+    def _build_active_effects_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        """PR #2 状態異常: 適用中の effect を「現在の状態異常:」section として surface。
+
+        LLM が「出血している → bandage を探す」のような行動連鎖を取れるよう、
+        身体の状態 (needs) とは分けたセクションで提示する。effects が空のとき
+        は section ごと出さない (LLM の注意を空 list で散らさない)。
+        """
+        if not snap.active_effect_lines:
+            return
+        lines.append("現在の状態異常:")
+        for line in snap.active_effect_lines:
             lines.append(f"  {line}")
 
     def _build_inventory_section(
