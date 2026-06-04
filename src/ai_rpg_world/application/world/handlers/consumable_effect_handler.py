@@ -6,6 +6,7 @@ ItemEffect は値オブジェクトとしてデータのみを保持し、ドメ
 """
 
 import logging
+from typing import Any, Optional
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.world.exceptions.consumable_effect_exception import (
@@ -37,9 +38,16 @@ class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
         self,
         item_spec_repository: ItemSpecRepository,
         player_status_repository: PlayerStatusRepository,
+        event_publisher: Optional[Any] = None,
     ):
         self._item_spec_repository = item_spec_repository
         self._player_status_repository = player_status_repository
+        # #344 後続: heal_hp / heal_mp / earn_gold / gain_exp 等が
+        # PlayerStatusAggregate に積む event (PlayerHpHealedEvent ほか) を
+        # publisher 経由で観測 pipeline に流す。未注入なら aggregate 側に
+        # events が残ったままになるので、観測 (例: "HP が 20 回復した") が
+        # LLM プロンプトに届かない silent failure になる。
+        self._event_publisher = event_publisher
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def handle(self, event: ConsumableUsedEvent) -> None:
@@ -70,6 +78,14 @@ class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
 
         self._apply_effect_to_status(item_spec.consume_effect, player_status)
         self._player_status_repository.save(player_status)
+        # #344 後続: aggregate が積んだ event (PlayerHpHealedEvent 等) を
+        # publisher 経由で流す。これがないと「HP が 20 回復」観測が LLM に
+        # 届かず、効果があったのに LLM 視点では何も起きてないように見える。
+        if self._event_publisher is not None and hasattr(player_status, "get_events"):
+            events = player_status.get_events()
+            if events:
+                self._event_publisher.publish_all(list(events))
+                player_status.clear_events()
         self._logger.debug(
             "Applied consume effect for player_id=%s item_spec_id=%s",
             player_id,

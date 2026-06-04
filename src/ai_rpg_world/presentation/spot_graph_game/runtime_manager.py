@@ -335,6 +335,124 @@ class _EscapeGameLlmWiring:
                 TOOL_NAME_TODO_COMPLETE
             ),
         }
+        # #344 配線漏れ修正: spot_graph_use_item / attack / give_item /
+        # pickup_item / drop_item / prepare_action は application 層 (executor)
+        # に実装があるが、experiment runtime の _tool_handlers に dispatch が
+        # 無く UNSUPPORTED_TOOL に化けていた。executor を遅延構築し、これら
+        # の handler を _tool_handlers に追加する。
+        self._spot_graph_executor: Optional[Any] = None
+        self._wire_missing_spot_graph_tools()
+
+    def _wire_missing_spot_graph_tools(self) -> None:
+        """#344: spot_graph_use_item / attack / give_item / pickup_item /
+        drop_item / prepare_action を experiment runtime から呼べるよう、
+        SpotGraphToolExecutor を runtime のリポジトリ群で組み立てて handler を
+        merge する。
+
+        runtime に必要なリポジトリ / orchestrator が揃っていない (= テストや
+        minimal wiring) 場合は silent に skip する (該当ツールは旧来通り
+        UNSUPPORTED_TOOL のままになるが、本来の experiment 経路では届く前提)。
+        """
+        runtime = self.runtime
+        # 必須リポジトリ群。どれかが欠けたら executor の構築は諦める。
+        needed = (
+            "_player_inventory_repo",
+            "_item_repo",
+            "_player_status_repo",
+            "_item_transfer_service",
+            "_interaction_service",
+            "_movement_service",
+            "_exploration_service",
+            "_world_flag_state",
+            "_exploration_progress",
+        )
+        for attr in needed:
+            if not hasattr(runtime, attr) or getattr(runtime, attr) is None:
+                logger.warning(
+                    "_wire_missing_spot_graph_tools: runtime is missing %s; "
+                    "use_item / attack / give_item / pickup_item / drop_item / "
+                    "prepare_action will remain UNSUPPORTED_TOOL.",
+                    attr,
+                )
+                return
+
+        from ai_rpg_world.application.world_graph.spot_graph_world_services import (
+            SpotGraphWorldServices,
+        )
+        from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
+            SpotGraphToolExecutor,
+        )
+        from ai_rpg_world.application.llm.tool_constants import (
+            TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_ATTACK,
+            TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+            TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+            TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
+        )
+        from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
+            GameEndConditionEvaluator,
+        )
+
+        services = SpotGraphWorldServices(
+            interaction=runtime._interaction_service,
+            exploration=runtime._exploration_service,
+            world_flags=runtime._world_flag_state,
+            game_end_evaluator=GameEndConditionEvaluator(),
+            exploration_progress=runtime._exploration_progress,
+            movement=runtime._movement_service,
+        )
+        # monster_repository / attack_orchestrator は monster placements を
+        # 持つシナリオのみ runtime に存在する。spot_graph_attack は両方無いと
+        # 「未対応」を返すよう executor 側で実装済み。
+        # ConsumableUsedEvent を ConsumableEffectHandler に届けるため
+        # pipeline_event_publisher を渡す。これがないと use_item が
+        # 「使用した」success を返しつつ HP / hunger が変化しない silent
+        # failure になる (#344 の隠れた半分)。
+        event_publisher = getattr(runtime, "_speech_event_publisher", None)
+        executor = SpotGraphToolExecutor(
+            spot_graph_world_services=services,
+            player_inventory_repository=runtime._player_inventory_repo,
+            item_repository=runtime._item_repo,
+            event_publisher=event_publisher,
+            spot_graph_repository=runtime._spot_graph_repo,
+            monster_repository=getattr(runtime, "_monster_repo", None),
+            player_status_repository=runtime._player_status_repo,
+            attack_orchestrator=getattr(runtime, "_attack_orchestrator", None),
+            item_transfer_service=runtime._item_transfer_service,
+            time_provider=getattr(runtime, "_time_provider", None),
+        )
+        self._spot_graph_executor = executor
+        raw_handlers = executor.get_handlers()
+        # executor は (player_id_int, args) -> result の signature。
+        # _tool_handlers は (PlayerId, args, runtime_context) -> result なので
+        # ラップして adapt する。runtime_context は executor 側で使わない。
+        targets = (
+            TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_ATTACK,
+            TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+            TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+            TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
+        )
+        for tool_name in targets:
+            raw = raw_handlers.get(tool_name)
+            if raw is None:
+                continue
+            self._tool_handlers[tool_name] = self._adapt_executor_handler(raw)
+
+    @staticmethod
+    def _adapt_executor_handler(
+        raw_handler: Callable[[int, Dict[str, Any]], LlmCommandResultDto],
+    ) -> Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto]:
+        """executor signature (int, args) → wiring signature (PlayerId, args, ctx)。"""
+        def _handler(
+            player_id: PlayerId,
+            arguments: Dict[str, Any],
+            runtime_context: Any,
+        ) -> LlmCommandResultDto:
+            return raw_handler(int(player_id.value), arguments)
+        return _handler
 
     def attach_action_failed_wiring(
         self,
