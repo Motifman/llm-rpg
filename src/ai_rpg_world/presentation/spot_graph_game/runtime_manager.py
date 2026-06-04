@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Iterator, Iterable
 from dataclasses import dataclass, field, replace as dataclass_replace
 from datetime import datetime, timezone
@@ -186,6 +188,42 @@ class _QueuedTurnTrigger:
         self.pending_player_ids.clear()
 
 
+# Step 1 並列化 (#346 ロードマップ): 1 tick 内の Phase A (= 各プレイヤーが
+# 自分の snapshot を読んで LLM を叩く部分) を ThreadPoolExecutor で N 並列で
+# 走らせ、Phase B (= tool 適用 / 世界 mutation) は to_run 順に serial で適用
+# する。LLM 呼び出しがブロッキング HTTP な間に他プレイヤーの呼び出しが進む
+# ので、4 人 × 2s ≈ 2s/tick に圧縮できる (シリアル時は 8s/tick)。
+#
+# env で workers を制御できる。0 / 未指定なら従来通り完全 serial。
+_LLM_PARALLEL_WORKERS_ENV = "LLM_TURN_PARALLEL_WORKERS"
+
+
+def _resolve_llm_parallel_workers(default: int = 0) -> int:
+    """env から並列度を読む。0 以下 / 不正値ならシリアル動作 (= 0)。"""
+    raw = os.environ.get(_LLM_PARALLEL_WORKERS_ENV)
+    if raw is None:
+        return default
+    try:
+        n = int(raw)
+    except ValueError:
+        return default
+    return max(0, n)
+
+
+@dataclass
+class _LlmPhaseAResult:
+    """1 ターンの Phase A (snapshot + LLM 呼び出し) の出力。
+
+    Phase B (tool 実行) の入力として保持する。LLM 呼び出し例外を捕まえた場合は
+    ``exception`` に詰め、Phase B 側で LlmCommandResultDto を組み立てる。
+    """
+    player_id: PlayerId
+    prompt: dict
+    tools_payload: list
+    tool_call: Optional[dict]
+    exception: Optional[BaseException]
+
+
 @dataclass
 class _EscapeGameLlmTurnTrigger:
     """Queues escape-game LLM turns and runs them against the session runtime."""
@@ -209,16 +247,72 @@ class _EscapeGameLlmTurnTrigger:
     def run_scheduled_turns(self) -> None:
         to_run = list(self.pending_player_ids)
         self.pending_player_ids.clear()
-        for player_id_value in to_run:
-            result = self.wiring.run_turn(PlayerId(player_id_value))
-            current_count = self._turn_counts.get(player_id_value, 0) + 1
-            if result.was_no_op:
-                self._turn_counts.pop(player_id_value, None)
-            elif result.should_reschedule or current_count < self.max_turns:
-                self.pending_player_ids.add(player_id_value)
-                self._turn_counts[player_id_value] = current_count
-            else:
-                self._turn_counts.pop(player_id_value, None)
+        if not to_run:
+            return
+
+        workers = _resolve_llm_parallel_workers()
+        if workers <= 1 or len(to_run) <= 1:
+            # 旧シリアル経路: 並列化を OFF にした / プレイヤーが 1 人だけ。
+            # 完全に従来挙動。
+            for player_id_value in to_run:
+                result = self.wiring.run_turn(PlayerId(player_id_value))
+                self._account_result(player_id_value, result)
+            return
+
+        # 並列 Phase A: 各プレイヤーの prompt 構築 + LLM 呼び出しを ThreadPool
+        # で同時実行する。litellm.completion はブロッキング HTTP なので、
+        # CPython の GIL を解放して並列に走る。
+        # 制約: build_full_prompt は observation buffer を drain するが、
+        # buffer は player_id keyed の dict なので別プレイヤー間で衝突しない。
+        max_workers = min(workers, len(to_run))
+        phase_a_results: dict[int, _LlmPhaseAResult] = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    self.wiring.run_phase_a, PlayerId(pid_value)
+                ): pid_value
+                for pid_value in to_run
+            }
+            for future in futures:
+                pid_value = futures[future]
+                # 例外は Phase A 内で捕まえて _LlmPhaseAResult.exception に
+                # 詰めてあるので、future.result() がさらに raise することは
+                # 基本ない (Defense-in-depth で try/except)。
+                try:
+                    phase_a_results[pid_value] = future.result()
+                except Exception as exc:
+                    logger.exception(
+                        "Phase A failed for player_id=%s", pid_value
+                    )
+                    phase_a_results[pid_value] = _LlmPhaseAResult(
+                        player_id=PlayerId(pid_value),
+                        prompt={},
+                        tools_payload=[],
+                        tool_call=None,
+                        exception=exc,
+                    )
+
+        # Phase B は serial: to_run 順に世界 mutation を適用する。
+        # 観測 broadcast / trace recording の順序も to_run 順で確定する。
+        for pid_value in to_run:
+            phase_a = phase_a_results.get(pid_value)
+            if phase_a is None:
+                continue
+            result = self.wiring.run_phase_b(phase_a)
+            self._account_result(pid_value, result)
+
+    def _account_result(
+        self, player_id_value: int, result: LlmCommandResultDto
+    ) -> None:
+        """ターン後の reschedule / turn count 管理を 1 か所に集約する。"""
+        current_count = self._turn_counts.get(player_id_value, 0) + 1
+        if result.was_no_op:
+            self._turn_counts.pop(player_id_value, None)
+        elif result.should_reschedule or current_count < self.max_turns:
+            self.pending_player_ids.add(player_id_value)
+            self._turn_counts[player_id_value] = current_count
+        else:
+            self._turn_counts.pop(player_id_value, None)
 
 
 @dataclass
@@ -468,11 +562,26 @@ class _EscapeGameLlmWiring:
         self.intent_id_generator = generator
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
+        """1 turn を Phase A (snapshot + LLM) + Phase B (世界 mutation) で実行。
+
+        Step 1 並列化 (#346) 以降、両 phase は分離されているが、本メソッドは
+        旧来の同期挙動 (1 player 完結) を維持するための wrapper。並列化は
+        `_EscapeGameLlmTurnTrigger.run_scheduled_turns` 側で行う。
+        """
+        phase_a = self.run_phase_a(player_id)
+        return self.run_phase_b(phase_a)
+
+    def run_phase_a(self, player_id: PlayerId) -> _LlmPhaseAResult:
+        """Phase A: snapshot 構築 + LLM 呼び出し。並列化可能。
+
+        - build_full_prompt は observation buffer を drain するが、buffer は
+          player_id keyed で別プレイヤー間で衝突しないので並列実行できる
+        - LLM 呼び出しはブロッキング HTTP。GIL を解放するので thread 並列で
+          実時間を稼げる
+        - 例外は捕まえて結果に詰める (Phase B 側で LlmCommandResultDto 化)
+        """
         prompt = self.runtime.build_full_prompt(player_id)
-        # Issue #227 後続 Step B: build_full_prompt の return shape を
-        # {"messages": [...]} に統一済み。
-        messages = prompt["messages"]
-        tools = [
+        tools_payload = [
             {
                 "type": "function",
                 "function": {
@@ -483,7 +592,59 @@ class _EscapeGameLlmWiring:
             }
             for definition in self.runtime.get_tool_definitions()
         ]
-        tool_call = self.llm_client.invoke(messages, tools, "required")
+        try:
+            tool_call = self.llm_client.invoke(
+                prompt["messages"], tools_payload, "required"
+            )
+            return _LlmPhaseAResult(
+                player_id=player_id,
+                prompt=prompt,
+                tools_payload=tools_payload,
+                tool_call=tool_call,
+                exception=None,
+            )
+        except BaseException as exc:  # noqa: BLE001 — phase B で LlmCommandResultDto 化
+            logger.exception(
+                "Phase A llm invoke failed for player_id=%s",
+                player_id.value,
+            )
+            return _LlmPhaseAResult(
+                player_id=player_id,
+                prompt=prompt,
+                tools_payload=tools_payload,
+                tool_call=None,
+                exception=exc,
+            )
+
+    def run_phase_b(self, phase_a: _LlmPhaseAResult) -> LlmCommandResultDto:
+        """Phase B: Phase A の結果を受けて世界 mutation を適用する。
+
+        serial 実行が前提 (世界 mutation / 観測 broadcast / trace 順序が決定論
+        的に並ぶように、Phase A の to_run 順で呼ぶ)。
+        """
+        player_id = phase_a.player_id
+        if phase_a.exception is not None:
+            # Phase A で LLM 呼び出しが落ちた場合の救済 path。
+            result = LlmCommandResultDto(
+                success=False,
+                message=f"LLM 呼び出しに失敗しました: {phase_a.exception}",
+                error_code="LLM_API_FAILED",
+                remediation="リトライするか、API キー / network を確認してください。",
+                should_reschedule=False,
+                was_no_op=True,
+            )
+            self.runtime._record_action_result(
+                player_id,
+                "LLM API 呼び出し",
+                result.message,
+                tool_name="llm_api_failed",
+                success=False,
+                error_code="LLM_API_FAILED",
+            )
+            return result
+        prompt = phase_a.prompt
+        messages = prompt["messages"]
+        tool_call = phase_a.tool_call
         if tool_call is None:
             result = LlmCommandResultDto(
                 success=False,
