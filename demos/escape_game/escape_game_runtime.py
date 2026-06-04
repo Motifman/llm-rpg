@@ -2382,6 +2382,24 @@ def create_escape_game_runtime(
         PlayerDownedEvent,
         PlayerDownedOutcomeHandler(outcome_registry),
     )
+    # #344 後続: spot_graph_use_item で発火する ConsumableUsedEvent を捌くため、
+    # ConsumableEffectHandler を pipeline 経由で subscribe する。これがないと
+    # 食料を「使用した」だけで HP / hunger が一切変化しない silent failure
+    # になる (第24回実験 OFF で 183 件の use_item が失敗 → 配線後も effect が
+    # 発火しないまま、という二重の罠)。
+    from ai_rpg_world.application.world.handlers.consumable_effect_handler import (
+        ConsumableEffectHandler,
+    )
+    from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
+    consumable_effect_handler = ConsumableEffectHandler(
+        item_spec_repository=item_spec_repo,
+        player_status_repository=player_status_repo,
+        event_publisher=pipeline_event_publisher,
+    )
+    pipeline_event_publisher.register_handler(
+        ConsumableUsedEvent,
+        consumable_effect_handler,
+    )
     # runtime からも access できるように field に保持。
     runtime._player_outcome_registry = outcome_registry
 

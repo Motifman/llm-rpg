@@ -76,6 +76,38 @@ class TestEscapeGameDispatchTable:
             f"dispatch table から必須 tool が欠落: {missing}"
         )
 
+    def test_ConsumableEffectHandler_が_pipeline_に_subscribe_されている(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """#344 subagent review 後続: ConsumableUsedEvent → ConsumableEffectHandler
+        の handler 登録が runtime 構築時に行われていることを確認する。
+
+        登録が漏れると spot_graph_use_item が「使用した」だけ返して HP / hunger
+        が一切変化しない silent failure になる (use_item の配線とは別の二重の罠)。
+        """
+        from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
+        from ai_rpg_world.application.world.handlers.consumable_effect_handler import (
+            ConsumableEffectHandler,
+        )
+
+        state = _create_session(monkeypatch, tmp_path)
+        publisher = state.runtime._speech_event_publisher
+        assert publisher is not None, "pipeline_event_publisher が runtime に保存されていない"
+        # PipelineEventPublisher は InMemoryEventPublisher を委譲経由で保持しており、
+        # register_handler で登録された handler を _handlers に持つ。
+        # 直接 attribute は internal だが、テスト目的でアクセス。
+        from demos.escape_game.pipeline_event_publisher import PipelineEventPublisher
+        assert isinstance(publisher, PipelineEventPublisher)
+        # PipelineEventPublisher は _side_handlers に (event_type, handler) を持つ。
+        registered = [
+            handler
+            for event_type, handler in publisher._side_handlers
+            if event_type is ConsumableUsedEvent
+        ]
+        assert any(
+            isinstance(h, ConsumableEffectHandler) for h in registered
+        ), "ConsumableEffectHandler が pipeline publisher に登録されていない"
+
     def test_dispatch_table_registers_344_wired_tools(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:

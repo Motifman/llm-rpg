@@ -405,11 +405,16 @@ class _EscapeGameLlmWiring:
         # monster_repository / attack_orchestrator は monster placements を
         # 持つシナリオのみ runtime に存在する。spot_graph_attack は両方無いと
         # 「未対応」を返すよう executor 側で実装済み。
+        # ConsumableUsedEvent を ConsumableEffectHandler に届けるため
+        # pipeline_event_publisher を渡す。これがないと use_item が
+        # 「使用した」success を返しつつ HP / hunger が変化しない silent
+        # failure になる (#344 の隠れた半分)。
+        event_publisher = getattr(runtime, "_speech_event_publisher", None)
         executor = SpotGraphToolExecutor(
             spot_graph_world_services=services,
             player_inventory_repository=runtime._player_inventory_repo,
             item_repository=runtime._item_repo,
-            event_publisher=None,  # 実 event は別経路で publish するので None
+            event_publisher=event_publisher,
             spot_graph_repository=runtime._spot_graph_repo,
             monster_repository=getattr(runtime, "_monster_repo", None),
             player_status_repository=runtime._player_status_repo,
