@@ -287,6 +287,12 @@ class EscapeGameRuntime:
     _current_weather: Any
     # 昼夜サイクル stage (Phase B-1)。シナリオに day_night_config が無ければ None。
     _day_night_stage: Optional[SpotGraphDayNightStageService] = field(default=None, repr=False)
+    # #344 配線漏れ修正: spot_graph_use_item / attack / give_item / pickup_item /
+    # drop_item / prepare_action を experiment runtime 経路で動かすため、
+    # ToolExecutor が必要とする monster_repo と attack_orchestrator も runtime に
+    # 保持する (factory function が代入する)。monster が居ないシナリオでは None。
+    _monster_repo: Any = field(default=None, repr=False)
+    _attack_orchestrator: Any = field(default=None, repr=False)
     # Phase E-3: プレイヤー個別 outcome の registry (PlayerId → PlayerOutcomeEnum)。
     # 構築時は None、runtime 構築後に escape_game_runtime が代入する。
     _player_outcome_registry: Optional[Any] = field(default=None, repr=False)
@@ -2282,6 +2288,11 @@ def create_escape_game_runtime(
         _environment_stage=environment_stage,
         _current_weather=weather_holder,
         _day_night_stage=day_night_stage,
+        # #344 配線漏れ修正: ToolExecutor を experiment runtime 経路で組み立て
+        # られるよう、monster_repo と attack_orchestrator を runtime に保持。
+        # monster placements の無いシナリオでは両方とも None のまま。
+        _monster_repo=monster_repo if scenario.monster_placements else None,
+        _attack_orchestrator=monster_attack_orchestrator,
         _escape_llm_system_prompt=system_prompt_text,
         _escape_llm_system_prompts_by_player_id=system_prompts_by_player_id,
         _include_todo_tools=(

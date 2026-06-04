@@ -18,11 +18,17 @@ import pytest
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
+    TOOL_NAME_SPOT_GRAPH_ATTACK,
+    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
+    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
@@ -68,6 +74,31 @@ class TestEscapeGameDispatchTable:
         missing = required - set(handlers.keys())
         assert not missing, (
             f"dispatch table から必須 tool が欠落: {missing}"
+        )
+
+    def test_dispatch_table_registers_344_wired_tools(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """#344 で配線した spot_graph_use_item / attack / give / pickup / drop /
+        prepare_action が dispatch table に登録されていることを直接検証する。
+
+        OFF run 第24回実験 (#343) で 196 件の UNSUPPORTED_TOOL の元になった
+        regression を、#154 の listen 配線漏れと同型のテストで防ぐ。
+        """
+        state = _create_session(monkeypatch, tmp_path)
+        handlers = state.llm_wiring._tool_handlers
+        required_344 = {
+            TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_ATTACK,
+            TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+            TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+            TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
+        }
+        missing = required_344 - set(handlers.keys())
+        assert not missing, (
+            f"#344 配線漏れ regression: {missing}。"
+            f"_EscapeGameLlmWiring._wire_missing_spot_graph_tools が動いていない可能性。"
         )
 
     def test_unknown_tool_returns_unsupported(
