@@ -534,6 +534,22 @@ class _EscapeGameLlmWiring:
             if raw is None:
                 continue
             self._tool_handlers[tool_name] = self._adapt_executor_handler(raw)
+        # Step 1 並列化 review HIGH 1: build_full_prompt が内部で lazy-init する
+        # _todo_tool_executor / _cached_default_prompt_builder は check-then-act
+        # で 2 スレッドが同時に初回呼び出しすると double-init になる。並列実行
+        # の前に単一スレッドで pre-warm して race を構造的に消す。
+        try:
+            if hasattr(runtime, "_wire_auxiliary_tool_stack"):
+                runtime._wire_auxiliary_tool_stack()
+            if hasattr(runtime, "_get_or_build_default_prompt_builder"):
+                runtime._get_or_build_default_prompt_builder()
+        except Exception:
+            # pre-warm に失敗しても通常パスはあくまで lazy で動く。安全側 fallback。
+            logger.exception(
+                "Pre-warming auxiliary tool stack / default prompt builder failed; "
+                "lazy initialization will fall back, but Phase A 並列化時に race の "
+                "可能性が残る"
+            )
 
     @staticmethod
     def _adapt_executor_handler(
@@ -603,7 +619,7 @@ class _EscapeGameLlmWiring:
                 tool_call=tool_call,
                 exception=None,
             )
-        except BaseException as exc:  # noqa: BLE001 — phase B で LlmCommandResultDto 化
+        except Exception as exc:  # review HIGH 2: KeyboardInterrupt / SystemExit / GeneratorExit は伝播させる
             logger.exception(
                 "Phase A llm invoke failed for player_id=%s",
                 player_id.value,

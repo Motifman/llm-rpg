@@ -87,10 +87,12 @@ class TestPhaseAParallelExecution:
             PlayerId(int(sp.player_id))
             for sp in state.runtime.scenario.player_spawns
         ]
-        # 必要なら同じ player_id を複数回 sample して並列性を測る (scenario が
-        # 単一プレイヤーでも GIL 解放が効くなら ThreadPool で並列化される)。
-        sample = player_ids if len(player_ids) >= 4 else player_ids * 4
-        sample = sample[:4]
+        # review MEDIUM 2 対策: 同 player_id 複数回 sample すると 2 回目以降は
+        # buffer が空 / lazy init もキャッシュ済みで serial 時間が不公平に短く
+        # 出る。両 path とも warm 状態で比較するよう、計測前に 1 回 prime する。
+        sample = (player_ids * 4)[:4]
+        for pid in set(sample):
+            wiring.run_phase_a(pid)  # warm-up: drain buffer + lazy init
 
         # serial: 4 連続呼び出し → ~400ms
         t0 = time.monotonic()
@@ -98,18 +100,20 @@ class TestPhaseAParallelExecution:
             wiring.run_phase_a(pid)
         serial_elapsed = time.monotonic() - t0
 
-        # parallel: ThreadPool で 4 並列 → ~100ms (3 倍以上の高速化を期待)
+        # parallel: ThreadPool で 4 並列 → ~100ms
         t0 = time.monotonic()
         with ThreadPoolExecutor(max_workers=4) as ex:
             list(ex.map(wiring.run_phase_a, sample))
         parallel_elapsed = time.monotonic() - t0
 
         speedup = serial_elapsed / parallel_elapsed if parallel_elapsed > 0 else 0
-        # 3x 以上の speedup を要求 (理論値は 4x、CPython overhead + GIL で 3x が現実値)
-        assert speedup >= 3.0, (
+        # review MEDIUM 2: CI runner が 1 vCPU の場合 thread scheduling overhead で
+        # 2x 程度まで落ちることがある。理論値 4x の半分で十分 "parallel が
+        # 効いている" を示せる閾値にする (regression detection が目的)。
+        assert speedup >= 2.0, (
             f"Phase A parallelization speedup too low: "
             f"serial={serial_elapsed:.3f}s parallel={parallel_elapsed:.3f}s "
-            f"speedup={speedup:.2f}x (expected >= 3x)"
+            f"speedup={speedup:.2f}x (expected >= 2x)"
         )
 
 
