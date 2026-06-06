@@ -247,6 +247,10 @@
 - 本ロードマップ: 全体俯瞰
 - `demos/survival_island/README.md`: シナリオ単位の Phase 1 ギャップ報告
 - `docs/memory_system/`: 記憶系の別線
+  - `episodic_memory_system_spec.md`: エピソード記憶仕様
+  - `../episodic_memory_overview.md`: 現行パイプライン総括 (#20–#23 実験)
+  - `short_term_memory_design.md`: 短期記憶 (rolling summary) 設計 + prefix cache 順序
+  - `semantic_memory_activation_plan.md`: semantic LLM 化 + passive top-K + active 検索の配線計画
 - `docs/game/DESIGN.md`: 元設計
 
 新しい未着手 TODO が発見されたら本ファイルに追記。完了したら「完了済み」に
