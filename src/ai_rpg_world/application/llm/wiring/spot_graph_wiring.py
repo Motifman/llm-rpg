@@ -218,6 +218,10 @@ def create_spot_graph_wiring(
         SectionBasedContextFormatStrategy,
         build_section_format_strategy_from_env,
     )
+    from ai_rpg_world.application.llm.wiring.feature_flags import (
+        log_episodic_explore_related_state,
+        resolve_episodic_explore_related_enabled,
+    )
     from ai_rpg_world.application.llm.services.game_tool_registry import DefaultGameToolRegistry
     from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
     from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
@@ -316,6 +320,8 @@ def create_spot_graph_wiring(
     ui_context_builder = SpotGraphUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
     context_format_strategy = build_section_format_strategy_from_env()
+    _resolved_episodic_explore_related_enabled = resolve_episodic_explore_related_enabled()
+    log_episodic_explore_related_state(_resolved_episodic_explore_related_enabled)
     system_prompt_builder = (
         DefaultSystemPromptBuilder(template=system_prompt_template)
         if system_prompt_template is not None
@@ -459,7 +465,7 @@ def create_spot_graph_wiring(
         player_profile_repository=player_profile_repository,
         spot_graph_tool_executor=spot_graph_tool_executor,
         episodic_memory_explore_executor=mem_bundle.memory_explore_executor(),
-        episodic_explore_related_enabled=True,
+        episodic_explore_related_enabled=_resolved_episodic_explore_related_enabled,
         sliding_window=sliding_window,
         action_result_store=action_result_store,
         current_tick_provider=current_tick_provider,

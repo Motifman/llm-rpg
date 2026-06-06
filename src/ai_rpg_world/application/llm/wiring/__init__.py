@@ -117,6 +117,10 @@ from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
     build_section_format_strategy_from_env,
 )
+from ai_rpg_world.application.llm.wiring.feature_flags import (
+    log_episodic_explore_related_state,
+    resolve_episodic_explore_related_enabled,
+)
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
 )
@@ -1026,6 +1030,8 @@ def create_llm_agent_wiring(
     ui_context_builder = DefaultLlmUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
     context_format_strategy = build_section_format_strategy_from_env()
+    _resolved_episodic_explore_related_enabled = resolve_episodic_explore_related_enabled()
+    log_episodic_explore_related_state(_resolved_episodic_explore_related_enabled)
     system_prompt_builder = (
         DefaultSystemPromptBuilder(template=system_prompt_template)
         if system_prompt_template is not None
@@ -1101,7 +1107,7 @@ def create_llm_agent_wiring(
         item_spec_repository=item_spec_repository,
         player_profile_repository=player_profile_repository,
         episodic_memory_explore_executor=mem_bundle.memory_explore_executor(),
-        episodic_explore_related_enabled=True,
+        episodic_explore_related_enabled=_resolved_episodic_explore_related_enabled,
         sliding_window=sliding_window,
         action_result_store=action_result_store,
         current_tick_provider=current_tick_provider,
