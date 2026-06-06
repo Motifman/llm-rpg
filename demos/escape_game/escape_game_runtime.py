@@ -2071,16 +2071,50 @@ def create_escape_game_runtime(
     monster_spawn_stage = None  # Phase B-2b: 条件付き placement の動的 spawn
     if scenario.monster_placements:
         from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
+            AttackStatusEffectChance,
             SpotAttackOrchestrator,
         )
         from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_service import (
             SpotMonsterBehaviorTickService,
         )
 
+        # G1 finding (#343 trace 分析): モンスター攻撃成功時に確率で状態異常を
+        # 付与する provider。survival_island_v2 では:
+        # - island_wolf / feral_dog (野犬系) → 噛みつきで BLEEDING 50%, 12 tick
+        # - swamp_snake (大蛇) → 毒の噛みつきで POISON 60%, 10 tick
+        # - giant_crab (大カニ) → 挟む傷で BLEEDING 35%, 8 tick
+        # 他テンプレ (現状は scenario 側に無いが将来追加された場合) は空。
+        # 第一段階は scenario 駆動ではなく runtime 側で hardcode (v0)。将来は
+        # MonsterTemplate に組み込んで scenario JSON 駆動にする (v1)。
+        _ATTACK_EFFECTS_BY_TEMPLATE_NAME: dict[str, list[AttackStatusEffectChance]] = {
+            "island_wolf": [AttackStatusEffectChance("bleeding", 0.5, 12)],
+            "feral_dog": [AttackStatusEffectChance("bleeding", 0.5, 12)],
+            "swamp_snake": [AttackStatusEffectChance("poison", 0.6, 10)],
+            "giant_crab": [AttackStatusEffectChance("bleeding", 0.35, 8)],
+        }
+
+        def _monster_attack_status_provider(monster):
+            """attacker monster の template_id を文字列に逆引きして effect を返す。
+
+            scenario.monster_templates から (string_id -> template_id int) の
+            マッピングを引いて、template_id から string_id を逆引きする。
+            未登録なら空リスト (= 状態異常付与なし)。
+            """
+            try:
+                tid_int = int(monster.template_id.value)
+            except Exception:
+                return []
+            # scenario.monster_templates は string_id を持っているのでそこから逆引き
+            for st in scenario.monster_templates:
+                if int(st.template.template_id.value) == tid_int:
+                    return _ATTACK_EFFECTS_BY_TEMPLATE_NAME.get(st.string_id, [])
+            return []
+
         monster_attack_orchestrator = SpotAttackOrchestrator(
             spot_graph_repository=spot_graph_repo,
             monster_repository=monster_repo,
             player_status_repository=player_status_repo,
+            attack_status_effect_provider=_monster_attack_status_provider,
         )
         monster_behavior_service = SpotMonsterBehaviorTickService(
             spot_graph_repository=spot_graph_repo,
