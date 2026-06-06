@@ -37,7 +37,12 @@ class ItemUseObservationFormatter:
         item_spec_id = event.item_spec_id
 
         actor_name = self._context.name_resolver.player_name(actor_id)
-        item_name = self._context.name_resolver.item_name(item_spec_id.value)
+        # 実験 #27 で発覚: `name_resolver.item_name` は存在せず、正しくは
+        # `item_spec_name(int)`。ConsumableUsedEvent → ObservationPipeline →
+        # この formatter で AttributeError が出て executor の try/except に
+        # 化けて SYSTEM_ERROR 40 件で死んでいた (#385 修正後の use_item 経路の
+        # 2 段目バグ)。
+        item_name = self._context.name_resolver.item_spec_name(item_spec_id.value)
 
         prose = f"{actor_name}が{item_name}を使用した。"
         structured = {
