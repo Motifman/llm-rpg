@@ -303,3 +303,38 @@ class TestSpotGraphItemTransferServiceGive:
         self._add_other_player_to_spot(deps, OTHER_PLAYER_ID)
         with pytest.raises(ItemNotInSlotException):
             deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(5))
+
+    def test_受け手のインベントリ満杯時は弾かれ送り手側にアイテムが残る(self, transfer_service):
+        """orphan item silent failure 回帰: 受け手満杯なら ItemTransferException を投げ、
+        送り手から抜かない & item_repository 上の instance は残る。
+
+        以前は send 側を先に抜いてから to_inv.acquire_item を呼んでいたため、
+        満杯時は overflow event だけが発火し、instance が両者のスロットから
+        消えて item_repository だけに残る orphan 状態が出る silent failure だった。
+        """
+        deps = transfer_service
+        self._add_other_player_to_spot(deps, OTHER_PLAYER_ID)
+
+        # 受け手 B のインベントリを満杯にする
+        b_inv = deps["inventory_repo"].find_by_id(OTHER_PLAYER_ID)
+        for i in range(b_inv._max_slots):
+            filler_id = deps["item_repo"].generate_item_instance_id()
+            deps["item_repo"].save(
+                ItemAggregate.create(
+                    item_instance_id=filler_id,
+                    item_spec=_make_item_spec(),
+                    quantity=1,
+                )
+            )
+            b_inv.acquire_item(filler_id, item_spec_id_value=ITEM_SPEC_ID.value)
+        deps["inventory_repo"].save(b_inv)
+        assert b_inv.is_inventory_full()
+
+        with pytest.raises(ItemTransferException):
+            deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(0))
+
+        # 送り手 A はアイテムを失っていない
+        a_inv = deps["inventory_repo"].find_by_id(PLAYER_ID)
+        assert a_inv.get_item_instance_id_by_slot(SlotId(0)) == deps["instance_id"]
+        # instance も item_repository に残っている (orphan ではない)
+        assert deps["item_repo"].find_by_id(deps["instance_id"]) is not None

@@ -304,15 +304,24 @@ class SpotGraphItemTransferService:
         item_spec_id = item_aggregate.item_spec.item_spec_id
         item_name = self._item_name_or_id(item_instance_id)
 
+        # 事前に受け手の空きを確認する。受け手が満杯の状態で送り手から先に
+        # 抜くと、acquire_item は overflow event を発行するだけで instance を
+        # 受け手に入れず、結果として item が両者のスロットから消えた
+        # orphan 状態 (item_repository には残るが、誰も所持しない) になる。
+        # この silent failure を防ぐためのガード。
+        if to_inv.is_inventory_full():
+            raise ItemTransferException(
+                f"recipient {to_player_id.value} のインベントリが満杯のため "
+                f"{item_name} を渡せません。"
+            )
+
         # 送り手のインベントリから抜く。tile-map 用 event は発火させたくない
         # ので remove_item_for_storage を使う (drop と同じ理由)。
         from_inv.remove_item_for_storage(item_instance_id)
         self._player_inventory_repository.save(from_inv)
 
-        # 受け手のインベントリへ追加。満杯なら overflow event が発火するが、
-        # 本サービスでは「失敗時に送り手側に戻す」rollback は実装しない
-        # (overflow は受け手側の問題として LLM に通知される)。将来必要に
-        # なったら capacity 事前チェックで弾く拡張を検討する。
+        # 受け手のインベントリへ追加。上の事前ガードにより満杯ではないため、
+        # overflow event は発火せず必ず空きスロットに入る。
         to_inv.acquire_item(item_instance_id, item_spec_id_value=item_spec_id.value)
         self._player_inventory_repository.save(to_inv)
 
