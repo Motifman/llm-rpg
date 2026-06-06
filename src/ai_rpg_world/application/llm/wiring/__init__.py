@@ -120,8 +120,10 @@ from ai_rpg_world.application.llm.services.context_format_strategy import (
 from ai_rpg_world.application.llm.wiring.feature_flags import (
     log_episodic_explore_related_state,
     log_semantic_llm_gist_state,
+    log_semantic_passive_top_k_state,
     resolve_episodic_explore_related_enabled,
     resolve_semantic_llm_gist_enabled,
+    resolve_semantic_passive_top_k,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
@@ -711,6 +713,8 @@ def _build_prompt_stack(
     episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
     episodic_reinterpretation_journal_store: Optional[IEpisodicReinterpretationJournalStore] = None,
     episodic_turn_index_provider: Optional[Callable[[PlayerId], int]] = None,
+    semantic_passive_recall: Optional[Any] = None,
+    semantic_passive_top_k: int = 0,
     memo_store: Optional["IMemoStore"] = None,
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
 ) -> DefaultPromptBuilder:
@@ -746,6 +750,8 @@ def _build_prompt_stack(
         recall_buffer_store=episodic_recall_buffer_store,
         reinterpretation_journal_store=episodic_reinterpretation_journal_store,
         turn_index_provider=episodic_turn_index_provider,
+        semantic_passive_recall=semantic_passive_recall,
+        semantic_passive_top_k=semantic_passive_top_k,
     )
     limits = PromptLimits(
         tile_map_view_distance=tile_map_view_distance,
@@ -1141,6 +1147,15 @@ def create_llm_agent_wiring(
     )
     shared_episode_store = episodic_stack.shared_episode_store
     semantic_memory_store = episodic_stack.semantic_memory_store
+    # Phase 1c: semantic passive top-K の構築 (default OFF / top_k=0)。
+    _semantic_passive_top_k = resolve_semantic_passive_top_k()
+    log_semantic_passive_top_k_state(_semantic_passive_top_k)
+    _semantic_passive_recall_service = None
+    if _semantic_passive_top_k > 0:
+        from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+            SemanticPassiveRecallService,
+        )
+        _semantic_passive_recall_service = SemanticPassiveRecallService(semantic_memory_store)
     promotion_frontier = episodic_stack.promotion_frontier
     mem_bundle = episodic_stack.mem_bundle
     episodic_semantic_promotion = episodic_stack.episodic_semantic_promotion
@@ -1248,6 +1263,8 @@ def create_llm_agent_wiring(
         episodic_recall_buffer_store=prompt_recall_buffer,
         episodic_reinterpretation_journal_store=reinterpretation_journal,
         episodic_turn_index_provider=reinterpretation_coord.current_turn_index,
+        semantic_passive_recall=_semantic_passive_recall_service,
+        semantic_passive_top_k=_semantic_passive_top_k,
         memo_store=todo_store,
         current_tick_provider=current_tick_provider,
     )

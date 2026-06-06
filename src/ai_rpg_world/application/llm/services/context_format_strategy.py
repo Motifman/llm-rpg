@@ -84,6 +84,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         active_memos_text: str = "",
         objective_text: str = "",
         inventory_text: str = "",
+        learned_text: str = "",
     ) -> str:
         for name, value in (
             ("current_state_text", current_state_text),
@@ -92,6 +93,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             ("active_memos_text", active_memos_text),
             ("objective_text", objective_text),
             ("inventory_text", inventory_text),
+            ("learned_text", learned_text),
         ):
             if not isinstance(value, str):
                 raise TypeError(f"{name} must be str")
@@ -104,6 +106,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
                 active_memos_text=active_memos_text,
                 objective_text=objective_text,
                 inventory_text=inventory_text,
+                learned_text=learned_text,
             )
         return _format_stable_to_volatile(
             current_state_text=current_state_text,
@@ -112,6 +115,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             active_memos_text=active_memos_text,
             objective_text=objective_text,
             inventory_text=inventory_text,
+            learned_text=learned_text,
         )
 
 
@@ -222,6 +226,20 @@ def _emit_inventory(sections: list, inventory_text: str) -> None:
         ])
 
 
+def _emit_learned(sections: list, learned_text: str) -> None:
+    """Phase 1c: ``【関連する学び】`` (semantic top-K) を legacy 順序で挿入。
+
+    objective の直後 (current_state より前) に来るよう、legacy formatter
+    から呼ぶときの位置で使う。空なら section ごと省略。
+    """
+    if learned_text.strip():
+        sections.extend([
+            "",
+            "【関連する学び】",
+            learned_text.strip(),
+        ])
+
+
 def _format_stable_to_volatile(
     *,
     current_state_text: str,
@@ -230,18 +248,31 @@ def _format_stable_to_volatile(
     active_memos_text: str,
     objective_text: str,
     inventory_text: str,
+    learned_text: str,
 ) -> str:
     """Phase 0 default: 更新頻度の低い section から並べる。
 
-    順序: objective → memos → inventory → memories → recent_events → current_state。
-    current_state を末尾にして prefix cache 安定領域を最大化する。
+    順序: objective → learned (Phase 1c) → memos → inventory → memories →
+    recent_events → current_state。current_state を末尾にして prefix cache
+    安定領域を最大化する。
+
+    Phase 1c で §learned を objective 直後に挿入。semantic は cluster 昇格時
+    のみ更新 = 最も安定なので objective に並べて prefix cache 寿命を伸ばす。
     """
     sections: list[str] = []
 
     # 1. 現在の目的 (静的、空なら省略)
     _emit_objective(sections, objective_text)
 
-    # 2. 進行中のメモ (semi-static、空なら省略)
+    # 2. 関連する学び (semantic top-K、空なら省略) ★ Phase 1c
+    if learned_text.strip():
+        sections.extend([
+            "【関連する学び】",
+            learned_text.strip(),
+            "",
+        ])
+
+    # 3. 進行中のメモ (semi-static、空なら省略)
     if active_memos_text.strip():
         # objective が出た直後だと改行が二重になるので、ここでは先頭の空行を
         # 入れない。_emit_active_memos は先頭に "" を入れる前提なので使えない。
@@ -251,7 +282,7 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 3. 所持・判明した物証 (mid-volatile、空なら省略)
+    # 4. 所持・判明した物証 (mid-volatile、空なら省略)
     if inventory_text.strip():
         sections.extend([
             "【所持・判明した物証】",
@@ -259,7 +290,7 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 4. 関連する記憶 (mid-volatile、空なら省略)
+    # 5. 関連する記憶 (mid-volatile、空なら省略)
     if relevant_memories_text.strip():
         sections.extend([
             "【関連する記憶】",
@@ -267,7 +298,7 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 5. 直近の出来事 (常に出す。空なら「（なし）」)
+    # 6. 直近の出来事 (常に出す。空なら「（なし）」)
     sections.extend([
         "【直近の出来事】",
         _RECENT_EVENTS_PREAMBLE,
@@ -275,7 +306,7 @@ def _format_stable_to_volatile(
         "",
     ])
 
-    # 6. 現在地と周囲 (必須、最 volatile なので末尾)
+    # 7. 現在地と周囲 (必須、最 volatile なので末尾)
     sections.extend([
         "【現在地と周囲】",
         current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
@@ -292,14 +323,17 @@ def _format_legacy(
     active_memos_text: str,
     objective_text: str,
     inventory_text: str,
+    learned_text: str,
 ) -> str:
     """Issue #227 chore β 時代の旧順序。A/B 検証用に保持。
 
-    順序: objective → current_state → memos → recent_events → memories → inventory。
+    順序: objective → learned → current_state → memos → recent_events →
+    memories → inventory。learned (Phase 1c) は objective 直後に挿入。
     """
     sections: list[str] = []
 
     _emit_objective(sections, objective_text)
+    _emit_learned(sections, learned_text)
     _emit_current_state(sections, current_state_text)
     _emit_active_memos(sections, active_memos_text)
     _emit_recent_events(sections, recent_events_text)

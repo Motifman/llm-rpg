@@ -14,9 +14,13 @@ import logging
 import pytest
 
 from ai_rpg_world.application.llm.wiring.feature_flags import (
+    DEFAULT_SEMANTIC_PASSIVE_TOP_K,
     ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
+    ENV_SEMANTIC_PASSIVE_TOP_K,
     log_episodic_explore_related_state,
+    log_semantic_passive_top_k_state,
     resolve_episodic_explore_related_enabled,
+    resolve_semantic_passive_top_k,
 )
 
 
@@ -65,3 +69,71 @@ class TestLogEpisodicExploreRelatedState:
         messages = [rec.message for rec in caplog.records]
         assert any("ENABLED" in m for m in messages)
         assert any("DISABLED" in m for m in messages)
+
+
+class TestResolveSemanticPassiveTopK:
+    """``SEMANTIC_PASSIVE_TOP_K`` env パース (Phase 1c)。"""
+
+    def test_default_は_0(self) -> None:
+        """default は 0 (= prompt §learned 非表示)。検証中の安定設定。"""
+        assert DEFAULT_SEMANTIC_PASSIVE_TOP_K == 0
+        assert resolve_semantic_passive_top_k(env={}) == 0
+
+    def test_env_未設定なら_default_0(self) -> None:
+        assert resolve_semantic_passive_top_k(
+            env={ENV_SEMANTIC_PASSIVE_TOP_K: ""}
+        ) == 0
+
+    def test_有効な正整数なら_その値(self) -> None:
+        assert resolve_semantic_passive_top_k(
+            env={ENV_SEMANTIC_PASSIVE_TOP_K: "3"}
+        ) == 3
+        assert resolve_semantic_passive_top_k(
+            env={ENV_SEMANTIC_PASSIVE_TOP_K: "  5  "}
+        ) == 5
+
+    def test_0_なら_0_を返す(self) -> None:
+        """明示的に 0 を渡しても受理。"""
+        assert resolve_semantic_passive_top_k(
+            env={ENV_SEMANTIC_PASSIVE_TOP_K: "0"}
+        ) == 0
+
+    def test_非数値なら_warning_log_を出して_default(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(
+            logging.WARNING,
+            logger="ai_rpg_world.application.llm.wiring.feature_flags",
+        ):
+            v = resolve_semantic_passive_top_k(
+                env={ENV_SEMANTIC_PASSIVE_TOP_K: "abc"}
+            )
+        assert v == 0
+        assert any("non-integer" in rec.message for rec in caplog.records)
+
+    def test_負数なら_warning_log_を出して_default(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(
+            logging.WARNING,
+            logger="ai_rpg_world.application.llm.wiring.feature_flags",
+        ):
+            v = resolve_semantic_passive_top_k(
+                env={ENV_SEMANTIC_PASSIVE_TOP_K: "-3"}
+            )
+        assert v == 0
+        assert any("negative" in rec.message for rec in caplog.records)
+
+
+class TestLogSemanticPassiveTopKState:
+    """解決結果を INFO ログ 1 件で残す。"""
+
+    def test_top_k_の値が_log_に_出る(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(
+            logging.INFO,
+            logger="ai_rpg_world.application.llm.wiring.feature_flags",
+        ):
+            log_semantic_passive_top_k_state(3)
+            log_semantic_passive_top_k_state(0)
+        assert any("3" in rec.message for rec in caplog.records)
+        assert any("0" in rec.message for rec in caplog.records)

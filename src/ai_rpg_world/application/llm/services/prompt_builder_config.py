@@ -121,6 +121,11 @@ class EpisodicRecallConfig:
     # マッチャ。None なら自由文経路は無効化 (= 構造化フィールドだけが cue 源)。
     # 実装は ``IWorldNounMatcher`` 準拠の任意クラス (Aho-Corasick / Null / C 拡張等)。
     noun_matcher: Optional["IWorldNounMatcher"] = None
+    # Phase 1c: semantic memory の passive top-K recall。
+    # service=None または top_k=0 なら prompt §「【関連する学び】」は出ない。
+    # 詳細は docs/memory_system/semantic_memory_activation_plan.md §4。
+    semantic_passive_recall: Optional["SemanticPassiveRecallService"] = None
+    semantic_passive_top_k: int = 0
 
 
 @dataclass(frozen=True)

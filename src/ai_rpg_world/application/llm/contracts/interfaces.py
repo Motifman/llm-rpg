@@ -165,6 +165,7 @@ class IContextFormatStrategy(ABC):
         active_memos_text: str = "",
         objective_text: str = "",
         inventory_text: str = "",
+        learned_text: str = "",
     ) -> str:
         """user prompt に入れる文脈テキストを返す。
 
@@ -178,6 +179,11 @@ class IContextFormatStrategy(ABC):
 
         ``inventory_text`` は所持物証の整形済テキスト。callable provider が
         生成して渡す。空なら section を出さない。
+
+        ``learned_text`` は semantic memory の passive top-K を一覧化した
+        「【関連する学び】」section の本体 (Phase 1c)。`SemanticPassiveRecallService`
+        が状況連想で抽出した上位 K 件を箇条書きにする。空なら section を
+        出さない。
         """
         pass
 
