@@ -753,6 +753,11 @@ class _EscapeGameLlmWiring:
                 )
             except Exception:
                 logger.exception("trace_recorder.record(action) failed")
+        # multi-tick action 中の中断ロジック: busy 中に "heavy" tool が来たら、
+        # まず travel をキャンセルして agent を現在地に着地させてから tool を
+        # 実行する (free tool: speech / memo / examine / wait は中断せず通す)。
+        # LLM への surface は snapshot の agent_status section で既に通知済み。
+        was_interrupted = self._maybe_interrupt_busy(player_id, name)
         try:
             result = self._execute_tool(
                 player_id,
@@ -774,6 +779,13 @@ class _EscapeGameLlmWiring:
                 message=f"LLM ツール実行に失敗しました: {exc}",
                 error_code="LLM_TOOL_EXECUTION_FAILED",
                 remediation="現在の状況に表示されたラベルと利用可能な action_name を確認してください。",
+            )
+        # 中断が起きていれば result.message に「移動を中断した」prefix を付与。
+        # 観測としても次 tick で agent_status の busy=False が読めるので二重保険。
+        if was_interrupted:
+            result = dataclass_replace(
+                result,
+                message="進行中の移動を中断して新しい行動を選択した。 " + result.message,
             )
         # PR 5 (#227): memo 完了 hint で result.message を augment する。
         # memo_* ツール自身の実行直後は hint を出さない (冗長 / 自己参照ループ
@@ -923,6 +935,56 @@ class _EscapeGameLlmWiring:
             runtime=self.runtime,
             player_id=player_id,
         )
+
+    # busy 中に "free" 扱いして中断を発火しない tool 群。
+    # 軽い行動 (発話 / メモ / 観察 / 待機) は travel と並行できる。
+    # 重い tool (travel_to / interact / use_item / attack / drop / pickup /
+    # give / prepare_action / set_sub_location) は busy を中断する。
+    _BUSY_FREE_TOOLS: frozenset = frozenset({
+        TOOL_NAME_SPEECH,
+        TOOL_NAME_SPOT_GRAPH_LISTEN,
+        TOOL_NAME_SPOT_GRAPH_WAIT,
+        TOOL_NAME_SPOT_GRAPH_EXPLORE,  # 周囲を見る (移動はしない)
+        TOOL_NAME_TODO_ADD,
+        TOOL_NAME_TODO_LIST,
+        TOOL_NAME_TODO_COMPLETE,
+    })
+
+    def _maybe_interrupt_busy(
+        self, player_id: PlayerId, tool_name: str
+    ) -> bool:
+        """重い tool が来たら travel をキャンセルして agent を現在地に着地させる。
+
+        Returns:
+            True なら中断が起きた (Phase B 側で result.message を augment 用)。
+        """
+        if not tool_name or tool_name in self._BUSY_FREE_TOOLS:
+            return False
+        repo = getattr(self.runtime, "_player_status_repo", None)
+        if repo is None:
+            return False
+        status = repo.find_by_id(player_id)
+        if status is None or status.spot_navigation_state is None:
+            return False
+        nav = status.spot_navigation_state
+        if not nav.is_traveling:
+            return False
+        # current_spot で at_rest 状態に上書き (= 中断 / 残り leg 破棄)。
+        from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
+            PlayerSpotNavigationState,
+        )
+        status.set_spot_navigation_state(
+            PlayerSpotNavigationState.at_rest(nav.current_spot_id)
+        )
+        repo.save(status)
+        logger.info(
+            "Travel interrupted for player_id=%s by tool=%s (was at leg %d of %d)",
+            int(player_id.value),
+            tool_name,
+            nav.leg_index,
+            len(nav.leg_connection_ids),
+        )
+        return True
 
     def _coerce_arguments(self, raw_arguments: Any) -> dict[str, Any]:
         if isinstance(raw_arguments, dict):
