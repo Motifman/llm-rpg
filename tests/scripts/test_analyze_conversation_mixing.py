@@ -110,6 +110,22 @@ class TestReplyLags:
         acts = [_action(6, 2)]
         assert reply_lags(obs, acts) == []
 
+    def test_observation_より_後_の_action_が_全くなければ_lag_は_出ない(
+        self,
+    ) -> None:
+        """二分探索の境界: observation tick が全 action tick より後 (= lo が
+        len に到達) の場合に lag を記録しない (code-review HIGH 対応)。"""
+        obs = [_observation(10, 1)]
+        acts = [_action(3, 1), _action(7, 1)]
+        assert reply_lags(obs, acts) == []
+
+    def test_observation_tick_と_action_tick_が_同一なら_lag_0(self) -> None:
+        """同 tick で発言した場合の境界 (=== tick が二分探索の左端に来る)。"""
+        obs = [_observation(5, 1)]
+        acts = [_action(5, 1), _action(10, 1)]
+        # 5 と 10 のうち 5 以上の最小は 5 → lag 0
+        assert reply_lags(obs, acts) == [0]
+
 
 class TestCrosstalk:
     """同 tick に 2 人以上が speak した tick を検出。"""

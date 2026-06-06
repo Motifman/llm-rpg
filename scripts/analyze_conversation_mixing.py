@@ -267,9 +267,18 @@ def write_markdown(summary: Dict[str, Any], out: TextIO) -> None:
 
     rl = summary["reply_lag_ticks"]
     out.write("## 反応 lag (speech observation → 同 player 次 speech_speak まで)\n\n")
+    # count=0 (= 該当 observation 無し / 該当 recipient の action 無し) では
+    # mean / p50 / p95 / p99 / max が全部 None になる。markdown 上は "—" で
+    # 表現し「データなし」を明示する (code-review MEDIUM 対応)。
+    def _fmt(v: Any) -> str:
+        return "—" if v is None else str(v)
     out.write(f"- 観測数: {rl['count']}\n")
-    out.write(f"- mean: {rl['mean']}\n")
-    out.write(f"- p50 / p95 / p99 / max: {rl.get('p50')} / {rl.get('p95')} / {rl.get('p99')} / {rl['max']}\n\n")
+    out.write(f"- mean: {_fmt(rl['mean'])}\n")
+    out.write(
+        f"- p50 / p95 / p99 / max: "
+        f"{_fmt(rl.get('p50'))} / {_fmt(rl.get('p95'))} / "
+        f"{_fmt(rl.get('p99'))} / {_fmt(rl['max'])}\n\n"
+    )
 
     ct = summary["crosstalk_ticks"]
     out.write("## クロストーク (同 tick に 2 人以上が発言)\n\n")
