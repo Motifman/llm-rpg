@@ -358,3 +358,75 @@ class TestLiteLLMClientInit:
         """デフォルトモデルは openai/gpt-5-mini"""
         client = LiteLLMClient(api_key="sk-x")
         assert client._model == "openai/gpt-5-mini"
+
+
+class TestExtractTokenUsage:
+    """_extract_token_usage が provider 別の cached_tokens 経路を全部拾える。"""
+
+    def test_usage_欠落_なら_全部_0(self) -> None:
+        """usage 属性が無い response は (0, 0, 0)。"""
+        response = MagicMock(spec=[])  # usage 属性なし
+        assert LiteLLMClient._extract_token_usage(response) == (0, 0, 0)
+
+    def test_openai_vllm_の_prompt_tokens_details_cached_tokens_を_読む(self) -> None:
+        """OpenAI / vLLM 互換: usage.prompt_tokens_details.cached_tokens。"""
+        details = MagicMock()
+        details.cached_tokens = 320
+        usage = MagicMock()
+        usage.prompt_tokens = 500
+        usage.completion_tokens = 40
+        usage.prompt_tokens_details = details
+        response = MagicMock()
+        response.usage = usage
+        assert LiteLLMClient._extract_token_usage(response) == (500, 40, 320)
+
+    def test_prompt_tokens_details_が_dict_でも_読める(self) -> None:
+        """litellm は dict / object どちらでも返してくることがあるので両対応。"""
+        usage = MagicMock()
+        usage.prompt_tokens = 100
+        usage.completion_tokens = 10
+        usage.prompt_tokens_details = {"cached_tokens": 50}
+        response = MagicMock()
+        response.usage = usage
+        assert LiteLLMClient._extract_token_usage(response) == (100, 10, 50)
+
+    def test_anthropic_の_cache_read_input_tokens_を_読む(self) -> None:
+        """Anthropic: usage.cache_read_input_tokens (prompt_tokens_details は無い)。"""
+        usage = MagicMock(spec=["prompt_tokens", "completion_tokens", "cache_read_input_tokens"])
+        usage.prompt_tokens = 800
+        usage.completion_tokens = 50
+        usage.cache_read_input_tokens = 600
+        response = MagicMock()
+        response.usage = usage
+        assert LiteLLMClient._extract_token_usage(response) == (800, 50, 600)
+
+    def test_旧_vllm_の_直下_cached_tokens_を_読む(self) -> None:
+        """legacy fallback: usage.cached_tokens 直下 (prompt_tokens_details / cache_read_input_tokens 共に無い)。"""
+        usage = MagicMock(spec=["prompt_tokens", "completion_tokens", "cached_tokens"])
+        usage.prompt_tokens = 200
+        usage.completion_tokens = 20
+        usage.cached_tokens = 150
+        response = MagicMock()
+        response.usage = usage
+        assert LiteLLMClient._extract_token_usage(response) == (200, 20, 150)
+
+    def test_cached_tokens_が_どこにも_無い_なら_0(self) -> None:
+        """cache 系 field がどこにも無い response は cached_tokens=0。"""
+        usage = MagicMock(spec=["prompt_tokens", "completion_tokens"])
+        usage.prompt_tokens = 100
+        usage.completion_tokens = 10
+        response = MagicMock()
+        response.usage = usage
+        assert LiteLLMClient._extract_token_usage(response) == (100, 10, 0)
+
+    def test_cached_tokens_が_None_なら_他経路にフォールバック(self) -> None:
+        """prompt_tokens_details.cached_tokens=None でも他経路で 0 まで降りる。"""
+        details = MagicMock(spec=["cached_tokens"])
+        details.cached_tokens = None
+        usage = MagicMock(spec=["prompt_tokens", "completion_tokens", "prompt_tokens_details"])
+        usage.prompt_tokens = 100
+        usage.completion_tokens = 10
+        usage.prompt_tokens_details = details
+        response = MagicMock()
+        response.usage = usage
+        assert LiteLLMClient._extract_token_usage(response) == (100, 10, 0)

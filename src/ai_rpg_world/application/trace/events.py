@@ -74,6 +74,14 @@ class TraceEventKind:
     # tps / success / error_code
     # τ_sim の設定根拠データ + scenario ごとの cost 評価に使う。
     LLM_CALL = "llm_call"
+    # prompt section の文字数内訳 (実験 #356 後続: prefix cache 分析用)。
+    # prompt_builder.build() が messages / tools を組み上げた直後に 1 件記録する。
+    # payload: system_chars / objective_chars / current_state_chars / memos_chars /
+    # recent_events_chars / recall_chars / inventory_chars / instruction_chars /
+    # tools_chars / messages_total_chars
+    # token 数ではなく char 数で出す: 軽量 / モデル非依存 / deterministic。
+    # 分析側で同 turn の prompt_tokens 比に換算する (≒ token 内訳)。
+    PROMPT_SECTION_BREAKDOWN = "prompt_section_breakdown"
 
 
 @dataclass(frozen=True)
