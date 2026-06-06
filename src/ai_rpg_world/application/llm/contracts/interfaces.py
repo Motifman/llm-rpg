@@ -291,9 +291,15 @@ class ILLMClient(ABC):
         messages: List[Dict[str, str]],
         tools: List[Dict[str, Any]],
         tool_choice: str = "required",
+        *,
+        metrics_sink: Optional[Any] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         LLM を呼び出し、選択された tool_call を返す。
         返り値例: {"name": "move_to_destination", "arguments": "{...}"}
+
+        ``metrics_sink`` (``LlmCallMetricsSink``) が渡されたら、呼び出し完了時に
+        ``LlmCallMetrics`` で記録する (実装側の任意)。実 LLM クライアントは
+        wall_latency + token usage を埋め、stub 系は best-effort で実装する。
         """
         pass

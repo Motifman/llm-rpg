@@ -76,7 +76,7 @@ class TestPhaseAParallelExecution:
         class _SlowStubLlmClient:
             """各 invoke で 100ms スリープしてから wait を返す stub。"""
 
-            def invoke(self, messages, tools, choice) -> dict:
+            def invoke(self, messages, tools, choice, *, metrics_sink=None) -> dict:
                 time.sleep(0.1)
                 return {"name": "spot_graph_wait", "arguments": {"reason": "test"}}
 
@@ -126,7 +126,7 @@ class TestPhaseAExceptionHandling:
         from tests.demos._escape_game_helpers import create_escape_game_session
 
         class _BoomLlmClient:
-            def invoke(self, messages, tools, choice) -> dict:
+            def invoke(self, messages, tools, choice, *, metrics_sink=None) -> dict:
                 raise RuntimeError("network down")
 
         state = create_escape_game_session(monkeypatch, tmp_path, stub=None)

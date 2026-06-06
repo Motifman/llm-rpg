@@ -608,9 +608,15 @@ class _EscapeGameLlmWiring:
             }
             for definition in self.runtime.get_tool_definitions()
         ]
+        # 実験 #356 対応: LLM 1 呼び出しごとに metrics (wall_latency / tokens / TPS)
+        # を trace に流す。Phase A の中で player_id / tick の context を sink に閉
+        # じ込めて、後で集計スクリプトが per-agent / per-model 分布を出せるよう
+        # にする。
+        metrics_sink = self._build_llm_metrics_sink(player_id)
         try:
             tool_call = self.llm_client.invoke(
-                prompt["messages"], tools_payload, "required"
+                prompt["messages"], tools_payload, "required",
+                metrics_sink=metrics_sink,
             )
             return _LlmPhaseAResult(
                 player_id=player_id,
@@ -849,6 +855,48 @@ class _EscapeGameLlmWiring:
                 player_id.value,
                 tool_name,
             )
+
+    def _build_llm_metrics_sink(
+        self, player_id: PlayerId
+    ) -> Optional[Any]:
+        """Phase A の LLM 呼び出し metrics を trace に流す sink を構築する。
+
+        trace_recorder が無い (= テスト等) なら None を返して、litellm 側で
+        no-op になる。trace の payload には wall_latency_ms / prompt_tokens /
+        completion_tokens / tps / success / error_code を載せる。
+        """
+        from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
+            LlmCallMetrics,
+        )
+        trace_recorder = getattr(self.runtime, "trace_recorder", None)
+        if trace_recorder is None:
+            return None
+        current_tick: Optional[int] = None
+        try:
+            current_tick = int(self.runtime.current_tick())
+        except Exception:
+            current_tick = None
+
+        class _Sink:
+            def record(self, metrics: LlmCallMetrics) -> None:
+                try:
+                    from ai_rpg_world.application.trace import TraceEventKind
+                    trace_recorder.record(
+                        TraceEventKind.LLM_CALL,
+                        tick=current_tick,
+                        player_id=int(player_id.value),
+                        model=metrics.model,
+                        wall_latency_ms=metrics.wall_latency_ms,
+                        prompt_tokens=metrics.prompt_tokens,
+                        completion_tokens=metrics.completion_tokens,
+                        tps=metrics.tps,
+                        success=metrics.success,
+                        error_code=metrics.error_code,
+                    )
+                except Exception:
+                    logger.exception("trace_recorder.record(llm_call) failed")
+
+        return _Sink()
 
     def _coerce_arguments(self, raw_arguments: Any) -> dict[str, Any]:
         if isinstance(raw_arguments, dict):

@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import re
+import time
 from typing import Any, Dict, List, Optional
 
 import litellm
@@ -27,6 +28,10 @@ from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
     IEpisodicReinterpretationCompletionPort,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
+from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
+    LlmCallMetrics,
+    LlmCallMetricsSink,
+)
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 
 _DEFAULT_MODEL = "openai/gpt-5-mini"
@@ -154,13 +159,19 @@ class LiteLLMClient(
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
         tool_choice: str = "required",
+        *,
+        metrics_sink: Optional[LlmCallMetricsSink] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         1 回の LLM 呼び出しを行い、tool_call があれば {"name": str, "arguments": dict} を返す。
         tool_call が無い場合やパースに失敗した場合は None を返す。
         API エラー時は LlmApiCallException を投げる。
+
+        ``metrics_sink`` が渡された場合、呼び出し成否によらず ``LlmCallMetrics`` を 1 件
+        sink に流す (実験 #356: τ_sim 設定根拠 + scenario cost 評価用)。
         """
         self._assert_can_call_litellm()
+        start_monotonic = time.monotonic()
         try:
             completion_kw: Dict[str, Any] = {
                 "model": self._model,
@@ -173,19 +184,82 @@ class LiteLLMClient(
                 completion_kw["api_base"] = self._api_base
             response = litellm.completion(**completion_kw)
         except Exception as e:
-            self._logger.exception("LiteLLM completion failed: %s", e)
+            wall_latency_ms = int((time.monotonic() - start_monotonic) * 1000)
             error_code = "LLM_API_CALL_FAILED"
             if isinstance(e, LitellmAuthenticationError):
                 error_code = "LLM_AUTHENTICATION_ERROR"
             elif isinstance(e, LitellmRateLimitError):
                 error_code = "LLM_RATE_LIMIT"
+            self._emit_metrics(
+                metrics_sink,
+                wall_latency_ms=wall_latency_ms,
+                prompt_tokens=0,
+                completion_tokens=0,
+                success=False,
+                error_code=error_code,
+            )
+            self._logger.exception("LiteLLM completion failed: %s", e)
             raise LlmApiCallException(
                 f"LLM API call failed: {e}",
                 error_code=error_code,
                 cause=e,
             ) from e
+        wall_latency_ms = int((time.monotonic() - start_monotonic) * 1000)
+        prompt_tokens, completion_tokens = self._extract_token_usage(response)
+        tool_call = self._parse_tool_call(response, messages, tools)
+        self._emit_metrics(
+            metrics_sink,
+            wall_latency_ms=wall_latency_ms,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            success=tool_call is not None,
+            error_code=None if tool_call is not None else "NO_TOOL_CALL",
+        )
+        return tool_call
 
-        return self._parse_tool_call(response, messages, tools)
+    @staticmethod
+    def _extract_token_usage(response: Any) -> tuple[int, int]:
+        """litellm レスポンスから (prompt_tokens, completion_tokens) を best-effort で取得する。
+
+        litellm は OpenAI 互換の usage を返すことが多いが、provider 差で None /
+        欠落することもある。欠落時は 0 を返す (TPS は 0 になる)。
+        """
+        try:
+            usage = getattr(response, "usage", None)
+            if usage is None:
+                return 0, 0
+            prompt = int(getattr(usage, "prompt_tokens", 0) or 0)
+            completion = int(getattr(usage, "completion_tokens", 0) or 0)
+            return prompt, completion
+        except Exception:
+            return 0, 0
+
+    def _emit_metrics(
+        self,
+        sink: Optional[LlmCallMetricsSink],
+        *,
+        wall_latency_ms: int,
+        prompt_tokens: int,
+        completion_tokens: int,
+        success: bool,
+        error_code: Optional[str],
+    ) -> None:
+        if sink is None:
+            return
+        try:
+            metrics = LlmCallMetrics(
+                model=self._model,
+                wall_latency_ms=wall_latency_ms,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                tps=LlmCallMetrics.compute_tps(completion_tokens, wall_latency_ms),
+                success=success,
+                error_code=error_code,
+            )
+            sink.record(metrics)
+        except Exception:
+            # メトリクス記録の失敗が LLM 呼び出し本体の挙動を倒さないよう吸収。
+            self._logger.exception("metrics_sink.record failed")
 
     def complete_episode_subjective_json(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
