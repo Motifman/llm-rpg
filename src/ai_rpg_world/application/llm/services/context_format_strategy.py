@@ -1,5 +1,9 @@
 """コンテキストフォーマット戦略 (escape_game format に統一)。"""
 
+import logging
+import os
+from typing import Mapping, Optional
+
 from ai_rpg_world.application.llm.contracts.interfaces import IContextFormatStrategy
 
 
@@ -12,6 +16,14 @@ _VALID_SECTION_ORDERS = frozenset({
     SECTION_ORDER_STABLE_TO_VOLATILE,
     SECTION_ORDER_LEGACY,
 })
+
+# 実験スクリプトから A/B 切替するための env var 名。
+# 既存の他の knob (EPISODIC_PROMOTION_FORCE_FULL_SCAN, SUBJECTIVE_EPISODE_DB_PATH
+# 等) と同じ env-var パターンに揃える。
+ENV_PROMPT_SECTION_ORDER = "PROMPT_SECTION_ORDER"
+
+
+_logger = logging.getLogger(__name__)
 
 
 class SectionBasedContextFormatStrategy(IContextFormatStrategy):
@@ -59,6 +71,11 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             )
         self._section_order = section_order
 
+    @property
+    def section_order(self) -> str:
+        """現在の section 順序ポリシー識別子。"""
+        return self._section_order
+
     def format(
         self,
         current_state_text: str,
@@ -96,6 +113,50 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             objective_text=objective_text,
             inventory_text=inventory_text,
         )
+
+
+# ──────────────────────────────────────────────────────────────────
+# env var 由来の factory。実験スクリプトから A/B 切替する用途。
+# ──────────────────────────────────────────────────────────────────
+
+
+def resolve_section_order_from_env(
+    env: Optional[Mapping[str, str]] = None,
+) -> str:
+    """``PROMPT_SECTION_ORDER`` env var から section 順序を解決する。
+
+    実験スクリプト経由で A/B 検証する用途。``env`` を渡せばその dict を見る
+    (テスト用)、None なら ``os.environ``。
+
+    値が未設定・空文字なら default の ``stable_to_volatile`` を返す。
+    値が未知の文字列なら警告を出して default に縮退する (典型的には typo)。
+    """
+    source = env if env is not None else os.environ
+    raw = (source.get(ENV_PROMPT_SECTION_ORDER) or "").strip()
+    if not raw:
+        return SECTION_ORDER_STABLE_TO_VOLATILE
+    if raw not in _VALID_SECTION_ORDERS:
+        _logger.warning(
+            "Unknown %s=%r; falling back to %s. valid: %s",
+            ENV_PROMPT_SECTION_ORDER,
+            raw,
+            SECTION_ORDER_STABLE_TO_VOLATILE,
+            sorted(_VALID_SECTION_ORDERS),
+        )
+        return SECTION_ORDER_STABLE_TO_VOLATILE
+    return raw
+
+
+def build_section_format_strategy_from_env(
+    env: Optional[Mapping[str, str]] = None,
+) -> SectionBasedContextFormatStrategy:
+    """``PROMPT_SECTION_ORDER`` env var を見て strategy を構築するファクトリ。
+
+    wiring から呼ぶ。env 未設定なら default の stable_to_volatile で動く。
+    """
+    order = resolve_section_order_from_env(env=env)
+    _logger.info("SectionBasedContextFormatStrategy section_order=%s", order)
+    return SectionBasedContextFormatStrategy(section_order=order)
 
 
 # ──────────────────────────────────────────────────────────────────

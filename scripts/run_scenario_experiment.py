@@ -514,7 +514,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     report_path = out_dir / "report.md"
     html_path = out_dir / "trace.html"
 
+    # Phase 0 後続: prompt section 順序 (A/B 用) を実験ごとに env で固定する
+    # ため、起動時の解決結果を stdout と RUN_START に乗せて再現性を確保する。
+    from ai_rpg_world.application.llm.services.context_format_strategy import (
+        ENV_PROMPT_SECTION_ORDER,
+        resolve_section_order_from_env,
+    )
+    resolved_section_order = resolve_section_order_from_env()
+
     print(f"[run] scenario={args.scenario.name} max_ticks={args.max_ticks}", flush=True)
+    print(
+        f"[run] section_order={resolved_section_order} "
+        f"(override via {ENV_PROMPT_SECTION_ORDER}=stable_to_volatile|legacy)",
+        flush=True,
+    )
     print(f"[out] {out_dir}", flush=True)
 
     with JsonlTraceRecorder(trace_path) as rec:
@@ -524,6 +537,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             max_ticks=args.max_ticks,
             model=os.environ.get("LLM_MODEL"),
             api_base=os.environ.get("OPENAI_API_BASE"),
+            prompt_section_order=resolved_section_order,
         )
 
         def progress(msg: str) -> None:
