@@ -1091,6 +1091,15 @@ class EscapeGameRuntime:
                 break
             if not status.spot_navigation_state.is_traveling:
                 break
+            # #363 Fix 2: ネスト advance_tick の最中にゲーム終了したら即抜ける。
+            # 全員 DEAD で outcome 確定後も移動ループが回り続けて駆動 tick が
+            # 異常膨張する silent failure を防ぐ。
+            try:
+                if self.check_game_end().is_ended:
+                    break
+            except Exception:
+                # check_game_end の失敗は do_move を止める理由にはしない
+                pass
         self._process_graph_events()
         graph_after = self._spot_graph_repo.find_graph()
         dest_name = graph_after.get_spot(dest_sid).name
