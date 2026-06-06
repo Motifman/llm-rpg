@@ -9,12 +9,17 @@ Issue #356 後続 Phase 0: section 並び順を ``stable_to_volatile`` (default)
 - ``legacy``: Issue #227 chore β 時代の旧順序。A/B 検証用に保持
 """
 
+import logging
+
 import pytest
 
 from ai_rpg_world.application.llm.services.context_format_strategy import (
+    ENV_PROMPT_SECTION_ORDER,
     SECTION_ORDER_LEGACY,
     SECTION_ORDER_STABLE_TO_VOLATILE,
     SectionBasedContextFormatStrategy,
+    build_section_format_strategy_from_env,
+    resolve_section_order_from_env,
 )
 
 
@@ -220,3 +225,50 @@ class TestSectionBasedContextFormatStrategyValidation:
                 recent_events_text="",
                 inventory_text=None,  # type: ignore[arg-type]
             )
+
+
+class TestResolveSectionOrderFromEnv:
+    """``PROMPT_SECTION_ORDER`` env var 解決。実験スクリプトの A/B 用。"""
+
+    def test_env_未設定なら_default(self):
+        """env を渡さなければ default (stable_to_volatile)。"""
+        assert resolve_section_order_from_env(env={}) == SECTION_ORDER_STABLE_TO_VOLATILE
+
+    def test_env_空文字なら_default(self):
+        """値があっても空文字なら default 扱い。"""
+        assert resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: ""}) == SECTION_ORDER_STABLE_TO_VOLATILE
+
+    def test_env_前後空白も_default(self):
+        """空白のみも default 扱い (strip)。"""
+        assert resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: "   "}) == SECTION_ORDER_STABLE_TO_VOLATILE
+
+    def test_env_stable_to_volatile(self):
+        """有効値 ``stable_to_volatile`` がそのまま返る。"""
+        v = resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: "stable_to_volatile"})
+        assert v == SECTION_ORDER_STABLE_TO_VOLATILE
+
+    def test_env_legacy(self):
+        """有効値 ``legacy`` がそのまま返る。"""
+        assert resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: "legacy"}) == SECTION_ORDER_LEGACY
+
+    def test_未知の値は_default_にフォールバックして_警告ログ(self, caplog: pytest.LogCaptureFixture):
+        """typo 等の未知文字列なら default に縮退し、警告を出す。"""
+        with caplog.at_level(logging.WARNING, logger="ai_rpg_world.application.llm.services.context_format_strategy"):
+            v = resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: "stable_to_volatil"})
+        assert v == SECTION_ORDER_STABLE_TO_VOLATILE
+        assert any("Unknown PROMPT_SECTION_ORDER" in rec.message for rec in caplog.records)
+
+
+class TestBuildSectionFormatStrategyFromEnv:
+    """env 由来で strategy を構築するファクトリ。wiring から呼ばれる。"""
+
+    def test_env_未設定なら_default_の_strategy_が出る(self):
+        strategy = build_section_format_strategy_from_env(env={})
+        assert isinstance(strategy, SectionBasedContextFormatStrategy)
+        assert strategy.section_order == SECTION_ORDER_STABLE_TO_VOLATILE
+
+    def test_env_legacy_を_設定すると_legacy_strategy_が出る(self):
+        strategy = build_section_format_strategy_from_env(
+            env={ENV_PROMPT_SECTION_ORDER: "legacy"}
+        )
+        assert strategy.section_order == SECTION_ORDER_LEGACY

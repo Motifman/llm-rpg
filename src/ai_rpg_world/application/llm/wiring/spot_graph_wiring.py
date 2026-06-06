@@ -216,6 +216,7 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
     from ai_rpg_world.application.llm.services.context_format_strategy import (
         SectionBasedContextFormatStrategy,
+        build_section_format_strategy_from_env,
     )
     from ai_rpg_world.application.llm.services.game_tool_registry import DefaultGameToolRegistry
     from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
@@ -314,7 +315,7 @@ def create_spot_graph_wiring(
     )
     ui_context_builder = SpotGraphUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
-    context_format_strategy = SectionBasedContextFormatStrategy()
+    context_format_strategy = build_section_format_strategy_from_env()
     system_prompt_builder = (
         DefaultSystemPromptBuilder(template=system_prompt_template)
         if system_prompt_template is not None

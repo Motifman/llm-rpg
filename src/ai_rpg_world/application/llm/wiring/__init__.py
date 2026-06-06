@@ -115,6 +115,7 @@ from ai_rpg_world.application.llm.services.available_tools_provider import (
 )
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
+    build_section_format_strategy_from_env,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
@@ -1024,7 +1025,7 @@ def create_llm_agent_wiring(
     )
     ui_context_builder = DefaultLlmUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
-    context_format_strategy = SectionBasedContextFormatStrategy()
+    context_format_strategy = build_section_format_strategy_from_env()
     system_prompt_builder = (
         DefaultSystemPromptBuilder(template=system_prompt_template)
         if system_prompt_template is not None
