@@ -67,16 +67,32 @@ class _SpotGraphFormatterBase:
             return "不明なスポット"
 
     def _resolve_object_name(self, spot_id: Any, object_id: Any) -> str:
-        repo = self._context.spot_graph_repository
-        if repo is None:
-            return "何か"
+        # 実験 #26 で発覚: scenario loader は SpotNode.interior=None で構築し、
+        # 実体は別 repo (SpotInteriorRepository) に住んでいる。graph 経由だけ
+        # では object name が引けず "何か" fallback に落ちて prose に漏れて
+        # いた (#373 失敗観測で 92/92 が "リオが何かのsearchを試みた" 状態)。
+        # 1. graph.get_spot(spot_id).interior が有るならそれを優先 (旧経路、
+        #    将来 interior が graph に再統合される可能性に備える)
+        # 2. 無ければ spot_interior_repository.find_by_spot_id でリアル interior を引く
+        # 3. それでも見つからなければ fallback "何か"
         try:
-            graph = repo.find_graph()
-            spot = graph.get_spot(spot_id)
-            if spot.interior is not None:
-                obj = spot.interior.get_object(object_id)
-                if obj is not None:
-                    return obj.name
+            repo = self._context.spot_graph_repository
+            if repo is not None:
+                graph = repo.find_graph()
+                spot = graph.get_spot(spot_id)
+                if spot.interior is not None:
+                    obj = spot.interior.get_object(object_id)
+                    if obj is not None:
+                        return obj.name
+            interior_repo = getattr(
+                self._context, "spot_interior_repository", None
+            )
+            if interior_repo is not None:
+                interior = interior_repo.find_by_spot_id(spot_id)
+                if interior is not None:
+                    obj = interior.get_object(object_id)
+                    if obj is not None:
+                        return obj.name
         except Exception:
             pass
         return "何か"

@@ -278,9 +278,9 @@ class SpotGraphToolExecutor:
             # インベントリからアイテムインスタンスを探す。
             # 実験 #26 で発覚: 旧コードは `inv.slots` (存在しない属性) を iter して
             # 全 use_item が AttributeError → SYSTEM_ERROR (72 件) で死んでいた。
-            # 恒久対策として aggregate 側の公開 API
-            # `find_slot_by_item_spec_id` を使い、private 属性への直接
-            # アクセスを廃止する。
+            # PR #385 で `_inventory_slots.items()` 直接 iter に hot fix した後、
+            # 本 PR で aggregate 側の公開 API `find_slot_by_item_spec_id` に
+            # 切り替え、private 属性への直接アクセスを完全廃止 (恒久対策)。
             found = inv.find_slot_by_item_spec_id(target_spec, self._item_repository)
             item_instance = None
             matched_slot_id = None

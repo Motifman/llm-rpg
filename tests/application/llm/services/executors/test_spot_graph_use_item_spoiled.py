@@ -66,9 +66,8 @@ def _build_executor_with_item(state: dict) -> tuple[SpotGraphToolExecutor, Magic
     item_repo = MagicMock()
     item_repo.find_by_id.return_value = item
 
-    # インベントリにスロット 1 つ。新しい aggregate 公開 API
-    # `find_slot_by_item_spec_id` を mock する (実コードは executor で
-    # この API を呼んで item_instance を探す)。
+    # インベントリにスロット 1 つ。aggregate 公開 API `find_slot_by_item_spec_id`
+    # を mock する (実コードは executor でこの API を呼んで item_instance を探す)。
     from ai_rpg_world.domain.player.value_object.slot_id import SlotId
     inv = MagicMock()
     inv.find_slot_by_item_spec_id = MagicMock(

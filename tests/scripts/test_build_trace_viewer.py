@@ -215,6 +215,52 @@ class TestGroupEventsByTick:
         assert 0 in grouped
         assert 1 in grouped
 
+    def test_llm_call_と_prompt_section_breakdown_は_除外される(self) -> None:
+        """実験 #26 user feedback: 性能計測系 kind は timeline から非表示。"""
+        events = [
+            TraceEvent(seq=1, timestamp="t", kind="action", tick=0, player_id=1, payload={"tool": "x"}),
+            TraceEvent(seq=2, timestamp="t", kind="llm_call", tick=0, player_id=1, payload={"model": "m"}),
+            TraceEvent(seq=3, timestamp="t", kind="prompt_section_breakdown", tick=0, player_id=1, payload={}),
+            TraceEvent(seq=4, timestamp="t", kind="observation", tick=0, player_id=2, payload={"prose": "hi"}),
+        ]
+        grouped = group_events_by_tick(events)
+        kinds_at_0 = [e.kind for e in grouped[0]]
+        assert "action" in kinds_at_0
+        assert "observation" in kinds_at_0
+        assert "llm_call" not in kinds_at_0
+        assert "prompt_section_breakdown" not in kinds_at_0
+
+    def test_hide_metrics_kinds_False_で_表示できる(self) -> None:
+        events = [
+            TraceEvent(seq=1, timestamp="t", kind="llm_call", tick=0, player_id=1, payload={}),
+        ]
+        grouped = group_events_by_tick(events, hide_metrics_kinds=False)
+        assert any(e.kind == "llm_call" for e in grouped[0])
+
+    def test_重複_observation_は_除外される(self) -> None:
+        """同 tick / 同 prose / 同 structured.type の observation は 1 件に。
+        (4 player broadcast で同じ prose が 4 連続並ぶのを抑制)"""
+        events = [
+            TraceEvent(seq=i, timestamp="t", kind="observation", tick=0, player_id=i,
+                       payload={"prose": "雨が降ってきた", "structured": {"type": "weather_changed"}})
+            for i in range(1, 5)
+        ]
+        grouped = group_events_by_tick(events)
+        obs = [e for e in grouped[0] if e.kind == "observation"]
+        assert len(obs) == 1, f"重複除外後は 1 件のはずが {len(obs)} 件"
+
+    def test_別_prose_の_observation_は_両方残る(self) -> None:
+        """prose が違えば別 event として両方残す。"""
+        events = [
+            TraceEvent(seq=1, timestamp="t", kind="observation", tick=0, player_id=1,
+                       payload={"prose": "A が起きた", "structured": {"type": "x"}}),
+            TraceEvent(seq=2, timestamp="t", kind="observation", tick=0, player_id=2,
+                       payload={"prose": "B が起きた", "structured": {"type": "x"}}),
+        ]
+        grouped = group_events_by_tick(events)
+        obs = [e for e in grouped[0] if e.kind == "observation"]
+        assert len(obs) == 2
+
 
 class TestFormatEventBody:
     """個別 event の 1 行サマリ HTML。"""
@@ -610,12 +656,21 @@ class TestSpeechTimeline:
         kinds = sorted([b["kind"] for b in tl[3]])
         assert kinds == ["speech", "thought"]
 
-    def test_bubble_は_既定_2_tick_持続する(self) -> None:
-        """発生 tick + 次 1 tick の合計 2 tick 同一 bubble が timeline に出る。"""
+    def test_bubble_は_既定_1_tick_だけ_表示される(self) -> None:
+        """実験 #26 user feedback: 当該 tick だけに留めて次 tick には残さない。
+        OFF / ON_FULL の trace で「次 tick まで残る」のが視認上の重なりの
+        原因だったため persistence default を 2 → 1 に変更。"""
         events = [self._evt(1, 3, 1, "say", {"message": "hi"})]
         tl = build_speech_timeline(events)
-        assert 3 in tl and 4 in tl
-        assert 5 not in tl  # persistence=2 で打ち切り
+        assert 3 in tl
+        assert 4 not in tl  # persistence=1 で発生 tick のみ
+
+    def test_明示的に_persistence_を_長くもできる(self) -> None:
+        """テスト目的や旧挙動互換が必要なら kwarg で長くも設定可能。"""
+        events = [self._evt(1, 3, 1, "say", {"message": "hi"})]
+        tl = build_speech_timeline(events, bubble_persistence=3)
+        assert 3 in tl and 4 in tl and 5 in tl
+        assert 6 not in tl
 
     def test_同_player_同_kind_の次の発言は_前を上書きする(self) -> None:
         """同じ player の連続発言は前の bubble を即上書き (overlap しない)。"""
