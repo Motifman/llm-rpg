@@ -223,8 +223,10 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.wiring.feature_flags import (
         log_episodic_explore_related_state,
         log_semantic_llm_gist_state,
+        log_semantic_passive_top_k_state,
         resolve_episodic_explore_related_enabled,
         resolve_semantic_llm_gist_enabled,
+        resolve_semantic_passive_top_k,
     )
     from ai_rpg_world.application.llm.services.game_tool_registry import DefaultGameToolRegistry
     from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
@@ -375,6 +377,15 @@ def create_spot_graph_wiring(
     promotion_frontier = episodic_stack.promotion_frontier
     mem_bundle = episodic_stack.mem_bundle
     episodic_semantic_promotion = episodic_stack.episodic_semantic_promotion
+    # Phase 1c: semantic passive top-K の構築 (default OFF / top_k=0)。
+    _semantic_passive_top_k = resolve_semantic_passive_top_k()
+    log_semantic_passive_top_k_state(_semantic_passive_top_k)
+    _semantic_passive_recall_service = None
+    if _semantic_passive_top_k > 0:
+        from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+            SemanticPassiveRecallService,
+        )
+        _semantic_passive_recall_service = SemanticPassiveRecallService(semantic_memory_store)
     # 攻撃ユースケースのオーケストレーター。tool executor (player→monster)
     # と将来の tick driver (monster→player) で同じ instance を共有する。
     # monster_repository が未設定の起動構成（プロト・テスト等）では None
@@ -552,6 +563,8 @@ def create_spot_graph_wiring(
         episodic_recall_buffer_store=prompt_recall_buffer,
         episodic_reinterpretation_journal_store=reinterpretation_journal,
         episodic_turn_index_provider=reinterpretation_coord.current_turn_index,
+        semantic_passive_recall=_semantic_passive_recall_service,
+        semantic_passive_top_k=_semantic_passive_top_k,
         memo_store=todo_store,
         current_tick_provider=current_tick_provider,
     )

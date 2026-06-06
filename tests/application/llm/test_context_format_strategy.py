@@ -130,6 +130,31 @@ class TestSectionBasedContextFormatStrategyDefault:
         text = strategy.format(current_state_text="a", recent_events_text="")
         assert "（なし）" in text
 
+    def test_learned_text_が_objective_直後に_出る(self, strategy):
+        """Phase 1c: 【関連する学び】section が objective より後、memos より前。"""
+        text = strategy.format(
+            current_state_text="x",
+            recent_events_text="y",
+            objective_text="目的",
+            learned_text="- タカシは信頼できる",
+            active_memos_text="メモ",
+        )
+        assert "【関連する学び】" in text
+        assert "- タカシは信頼できる" in text
+        idx_obj = text.index("【現在の目的】")
+        idx_learned = text.index("【関連する学び】")
+        idx_memos = text.index("【進行中のメモ】")
+        assert idx_obj < idx_learned < idx_memos
+
+    def test_learned_text_が_空なら_section_ごと_省略(self, strategy):
+        """空文字なら section ヘッダも出ない。"""
+        text = strategy.format(
+            current_state_text="x",
+            recent_events_text="y",
+            learned_text="",
+        )
+        assert "【関連する学び】" not in text
+
 
 class TestSectionBasedContextFormatStrategyLegacyMode:
     """legacy order (Issue #227 chore β 時代の旧順序) の挙動。A/B 検証用。"""
@@ -168,6 +193,20 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
         assert "【進行中のメモ】" not in text
         assert "【関連する記憶】" not in text
         assert "【所持・判明した物証】" not in text
+        assert "【関連する学び】" not in text
+
+    def test_legacy_でも_learned_text_が_objective_直後に_出る(self, strategy):
+        """legacy 順序でも§【関連する学び】は objective 直後、current_state より前。"""
+        text = strategy.format(
+            current_state_text="x",
+            recent_events_text="y",
+            objective_text="目的",
+            learned_text="- タカシは信頼できる",
+        )
+        idx_obj = text.index("【現在の目的】")
+        idx_learned = text.index("【関連する学び】")
+        idx_state = text.index("【現在地と周囲】")
+        assert idx_obj < idx_learned < idx_state
 
 
 class TestSectionBasedContextFormatStrategyValidation:
@@ -224,6 +263,16 @@ class TestSectionBasedContextFormatStrategyValidation:
                 current_state_text="",
                 recent_events_text="",
                 inventory_text=None,  # type: ignore[arg-type]
+            )
+
+    def test_learned_text_が_str_でなければ_type_error(self):
+        """learned_text が str でないとき TypeError を投げる (Phase 1c)。"""
+        strategy = SectionBasedContextFormatStrategy()
+        with pytest.raises(TypeError, match="learned_text must be str"):
+            strategy.format(
+                current_state_text="",
+                recent_events_text="",
+                learned_text=[],  # type: ignore[arg-type]
             )
 
 

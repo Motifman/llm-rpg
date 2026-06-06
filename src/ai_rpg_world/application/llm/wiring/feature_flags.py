@@ -110,3 +110,57 @@ def log_semantic_llm_gist_state(enabled: bool) -> None:
         ENV_SEMANTIC_LLM_GIST_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Semantic memory: passive top-K recall into prompt
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_SEMANTIC_PASSIVE_TOP_K = "SEMANTIC_PASSIVE_TOP_K"
+# default 0 = §learned section ごと非表示。検証で意図的に有効化するときは
+# 3 程度から始める想定。実験 #25 後続で実測して調整。
+DEFAULT_SEMANTIC_PASSIVE_TOP_K = 0
+
+
+def resolve_semantic_passive_top_k(
+    env: Optional[Mapping[str, str]] = None,
+) -> int:
+    """``SEMANTIC_PASSIVE_TOP_K`` env var を非負整数に解釈する。
+
+    - 未設定 / 空文字 → default (0)
+    - 負数 / 非数値 → warning ログ + default
+    - 値が `>0` なら prompt に §learned section が出る (Phase 1c)
+    """
+    source = env if env is not None else os.environ
+    raw = (source.get(ENV_SEMANTIC_PASSIVE_TOP_K) or "").strip()
+    if not raw:
+        return DEFAULT_SEMANTIC_PASSIVE_TOP_K
+    try:
+        v = int(raw)
+    except ValueError:
+        _logger.warning(
+            "Unknown %s=%r (non-integer); falling back to %s",
+            ENV_SEMANTIC_PASSIVE_TOP_K,
+            raw,
+            DEFAULT_SEMANTIC_PASSIVE_TOP_K,
+        )
+        return DEFAULT_SEMANTIC_PASSIVE_TOP_K
+    if v < 0:
+        _logger.warning(
+            "%s=%d is negative; falling back to %d",
+            ENV_SEMANTIC_PASSIVE_TOP_K,
+            v,
+            DEFAULT_SEMANTIC_PASSIVE_TOP_K,
+        )
+        return DEFAULT_SEMANTIC_PASSIVE_TOP_K
+    return v
+
+
+def log_semantic_passive_top_k_state(top_k: int) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %d (0 = §learned section disabled)",
+        ENV_SEMANTIC_PASSIVE_TOP_K,
+        top_k,
+    )

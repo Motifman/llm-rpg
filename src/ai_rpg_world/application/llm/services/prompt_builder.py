@@ -189,6 +189,10 @@ class DefaultPromptBuilder(IPromptBuilder):
         episodic_turn_index_provider = episodic.turn_index_provider
         # Issue #283 後続: 観測 prose 経由の自由文 cue 抽出マッチャ (任意)。
         noun_matcher = episodic.noun_matcher
+        # Phase 1c: semantic memory の passive top-K (任意)。
+        # service=None または top_k=0 なら prompt §「【関連する学び】」は出ない。
+        semantic_passive_recall = episodic.semantic_passive_recall
+        semantic_passive_top_k = episodic.semantic_passive_top_k
 
         recent_observations_limit = limits.recent_observations_limit
         recent_actions_limit = limits.recent_actions_limit
@@ -262,6 +266,18 @@ class DefaultPromptBuilder(IPromptBuilder):
             episodic_turn_index_provider
         ):
             raise TypeError("episodic_turn_index_provider must be callable or None")
+        # Phase 1c: semantic passive top-K の型検証 (import は service 構築時のみ
+        # 必要なので遅延 import)。service=None または top_k=0 のときは validate 不要。
+        if semantic_passive_recall is not None:
+            from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+                SemanticPassiveRecallService,
+            )
+            if not isinstance(semantic_passive_recall, SemanticPassiveRecallService):
+                raise TypeError(
+                    "semantic_passive_recall must be SemanticPassiveRecallService or None"
+                )
+        if semantic_passive_top_k < 0:
+            raise ValueError("semantic_passive_top_k must be 0 or greater")
         if memo_store is not None and not isinstance(memo_store, IMemoStore):
             raise TypeError("memo_store must be IMemoStore or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
@@ -317,6 +333,9 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._episodic_reinterpretation_journal_store = episodic_reinterpretation_journal_store
         self._episodic_turn_index_provider = episodic_turn_index_provider
         self._noun_matcher = noun_matcher
+        # Phase 1c
+        self._semantic_passive_recall = semantic_passive_recall
+        self._semantic_passive_top_k = semantic_passive_top_k
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
         self._logger = logging.getLogger(self.__class__.__name__)
@@ -539,6 +558,17 @@ class DefaultPromptBuilder(IPromptBuilder):
             player_info=player_info,
         )
 
+        # 6b. Phase 1c: semantic memory の passive top-K (任意)。
+        # service=None または top_k=0 なら空文字を返し prompt §「【関連する学び】」
+        # は出ない。状況連想キューは episodic 受動想起と同じ situation_cues を
+        # 使う (関連 episodes と関連 semantic facts を同じ「いま」基準で集める)。
+        learned_text = self._run_semantic_passive_recall(
+            player_id=player_id,
+            observations=observations,
+            action_results=action_results,
+            ui_context=ui_context,
+        )
+
         # 6c. 進行中のメモ (Issue #188 Phase 1a): LLM が memo_add で context に
         # 固定した未完了 memo を整形する。age + stale フラグで「古くなった
         # メモは review してほしい」を視覚化。
@@ -564,6 +594,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             active_memos_text=active_memos_text,
             objective_text=objective_text,
             inventory_text=inventory_text,
+            learned_text=learned_text,
         )
 
         # Issue #227 chore β: failure_block (直前ターン失敗時の補正セクション)
@@ -714,6 +745,112 @@ class DefaultPromptBuilder(IPromptBuilder):
                     )
 
         return relevant_memories_text
+
+    def _run_semantic_passive_recall(
+        self,
+        *,
+        player_id: PlayerId,
+        observations: List[ObservationEntry],
+        action_results: List[Any],
+        ui_context: Any,
+    ) -> str:
+        """Phase 1c: semantic memory の状況連想 top-K を §「【関連する学び】」用に整形する。
+
+        service 未注入 または top_k=0 なら空文字 (= section ごと省略)。
+        situation_cues は episodic 受動想起と同じ build_situation_episodic_cues
+        を使う (関連 episodes と関連 semantic facts を同じ「いま」基準で集める)。
+        """
+        if self._semantic_passive_recall is None or self._semantic_passive_top_k <= 0:
+            return ""
+
+        observation_structured = None
+        observation_prose: Optional[str] = None
+        if observations:
+            observation_structured = observations[0].output.structured
+            observation_prose = observations[0].output.prose
+        latest_action = action_results[0] if action_results else None
+        situation_cues = build_situation_episodic_cues(
+            runtime_context=ui_context.tool_runtime_context,
+            observation_structured=observation_structured,
+            latest_action=latest_action,
+            observation_prose=observation_prose,
+            noun_matcher=self._noun_matcher,
+        )
+        now = datetime.now(timezone.utc)
+        try:
+            candidates = self._semantic_passive_recall.retrieve(
+                player_id=player_id.value,
+                situation_cues=situation_cues,
+                top_k=self._semantic_passive_top_k,
+                now=now,
+            )
+        except Exception as e:
+            # semantic ランキング失敗で prompt build を止めない
+            self._logger.warning(
+                "Semantic passive recall failed for player_id=%s: %s",
+                player_id.value,
+                e,
+                exc_info=True,
+            )
+            candidates = []
+
+        self._emit_semantic_passive_recall_trace(
+            player_id=player_id,
+            situation_cues=situation_cues,
+            candidates=candidates,
+        )
+
+        from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+            format_semantic_recall_section,
+        )
+        return format_semantic_recall_section(candidates)
+
+    def _emit_semantic_passive_recall_trace(
+        self,
+        *,
+        player_id: PlayerId,
+        situation_cues: tuple,
+        candidates: list,
+    ) -> None:
+        """``SEMANTIC_PASSIVE_RECALL`` を 1 件 emit する (失敗は握りつぶす)。
+
+        Phase 1c 計測点: どの semantic entry が top-K に入り、それぞれの
+        score 内訳 (recency / importance / relevance) を後追いできるようにする。
+        """
+        recorder = self._resolve_trace_recorder()
+        if recorder is None:
+            return
+        tick: Optional[int] = None
+        if self._current_tick_provider is not None:
+            try:
+                tick = self._current_tick_provider()
+            except Exception:
+                tick = None
+        try:
+            cue_keys = [c.to_canonical() for c in situation_cues]
+        except Exception:
+            cue_keys = []
+        cand_payload: list[dict] = []
+        for cand in candidates:
+            try:
+                cand_payload.append(cand.to_trace_payload())
+            except Exception:
+                continue
+        try:
+            recorder.record(
+                TraceEventKind.SEMANTIC_PASSIVE_RECALL,
+                tick=tick,
+                player_id=int(player_id.value),
+                situation_cues=cue_keys,
+                top_k=int(self._semantic_passive_top_k),
+                candidate_count=len(cand_payload),
+                candidates=cand_payload,
+            )
+        except Exception:
+            self._logger.debug(
+                "trace recorder.record raised for SEMANTIC_PASSIVE_RECALL; skipping",
+                exc_info=True,
+            )
 
     def _build_active_memos_text(self, player_id: PlayerId) -> str:
         """LLM が固定した未完了 memo を「進行中のメモ」用テキストに整形する。

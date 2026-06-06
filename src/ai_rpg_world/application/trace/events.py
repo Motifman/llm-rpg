@@ -82,6 +82,14 @@ class TraceEventKind:
     # token 数ではなく char 数で出す: 軽量 / モデル非依存 / deterministic。
     # 分析側で同 turn の prompt_tokens 比に換算する (≒ token 内訳)。
     PROMPT_SECTION_BREAKDOWN = "prompt_section_breakdown"
+    # Phase 1c: semantic memory passive top-K の発火結果。prompt build 時に
+    # ``SemanticPassiveRecallService.retrieve`` が走ったタイミングで 1 件記録。
+    # payload: situation_cues / top_k / candidate_count / candidates[].entry_id /
+    # candidates[].score / .recency / .importance / .relevance / .text_snippet /
+    # .tags / .importance_score
+    # 検証中は top_k=0 (default) で発火しない。SEMANTIC_PASSIVE_TOP_K env で
+    # 明示的に有効化したときだけ trace に出る。
+    SEMANTIC_PASSIVE_RECALL = "semantic_passive_recall"
 
 
 @dataclass(frozen=True)
