@@ -308,11 +308,25 @@ class SpotGraphToolExecutor:
             # 同 slot の instance が「腐敗 / 新鮮」のどちらかに確定している前提。
             is_spoiled = bool(item_instance.state.get("spoiled"))
             item_instance.use()
+            # ItemUsedEvent / ItemBrokenEvent は ItemAggregate.use() で aggregate
+            # に積まれる。これらは publish しないと durability ベースの
+            # observation / metrics が silent に落ちるため、ここで drain して
+            # event_publisher に流す。新鮮パスでは下流で ConsumableUsedEvent も
+            # 別途 publish される。
+            instance_events = list(item_instance.get_events())
+            item_instance.clear_events()
+            if instance_events and self._event_publisher is not None:
+                self._event_publisher.publish_all(instance_events)
             if item_instance.quantity == 0:
-                self._item_repository.delete(item_instance.item_instance_id)
+                # 順序が重要: inventory から slot を空ける処理を先に save し、
+                # その後に item_repository から物理削除する。これを逆順に
+                # すると delete 成功・inventory save 失敗のときに、誰も持って
+                # いない slot に存在しない item_instance_id が残り続け、
+                # 以降の lookup が全部 None になる silent failure を生む。
                 if matched_slot_id is not None:
                     inv.remove_item_for_placement(matched_slot_id)
                 self._player_inventory_repository.save(inv)
+                self._item_repository.delete(item_instance.item_instance_id)
             else:
                 self._item_repository.save(item_instance)
             name = item_instance.item_spec.name
