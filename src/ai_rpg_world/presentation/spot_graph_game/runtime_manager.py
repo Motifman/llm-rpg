@@ -434,8 +434,14 @@ class _EscapeGameLlmTurnTrigger:
                 if outcome.is_resolved:
                     return False
             except Exception:
-                # registry エラーは fail-safe で turn 継続
-                pass
+                # registry エラーは fail-safe で turn 継続。ただし silent failure
+                # にすると registry 自体の異常 (永続化先の dead lock 等) を
+                # 永遠に検知できないため、warning でログを残す。
+                logger.warning(
+                    "outcome_registry.get_outcome failed for player_id=%s; "
+                    "falling back to turn-continue", player_id_value,
+                    exc_info=True,
+                )
         # 2. status.can_act() を見る (is_down 等の遷移を含む)
         status_repo = getattr(runtime, "_player_status_repo", None)
         if status_repo is None:
@@ -446,6 +452,11 @@ class _EscapeGameLlmTurnTrigger:
                 return True
             return bool(status.can_act())
         except Exception:
+            logger.warning(
+                "player_status_repo.find_by_id failed for player_id=%s; "
+                "falling back to turn-continue", player_id_value,
+                exc_info=True,
+            )
             return True
 
 
@@ -759,8 +770,27 @@ class _EscapeGameLlmWiring:
                     ),
                 )
             if resolved is None:
-                # resolver dispatch から外れている (= 設計違反)。raw 渡しで fail にさせる。
-                return raw_handler(int(player_id.value), arguments)
+                # resolver dispatch table に tool_name が登録されていない =
+                # 設計違反。raw 渡しで executor に押し付けるとエラー発生源が
+                # 分かりにくくなる (executor 内 KeyError or INVALID_ARGUMENT
+                # に化ける)。明示的な error_code で即 surface する。
+                logger.error(
+                    "argument resolver returned None for tool_name=%s; "
+                    "dispatch table is missing this tool (design violation)",
+                    tool_name,
+                )
+                return LlmCommandResultDto(
+                    success=False,
+                    message=(
+                        f"ツール '{tool_name}' の引数解決が実装されていません "
+                        "(設計バグ)。"
+                    ),
+                    error_code="RESOLVER_DISPATCH_MISSING",
+                    remediation=(
+                        "別のツールを試してください。同じツールを連打しても "
+                        "解決しません (フレームワーク側の修正が必要)。"
+                    ),
+                )
             return raw_handler(int(player_id.value), resolved)
 
         return _handler

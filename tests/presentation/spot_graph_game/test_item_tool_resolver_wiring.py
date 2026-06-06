@@ -153,12 +153,17 @@ class TestAdapterWithResolver:
         assert result.remediation
         assert "I1" in result.remediation or "ラベル" in result.remediation
 
-    def test_resolver_が_None_を返したら_raw_args_で_executor_を_呼ぶ(self) -> None:
-        """resolver dispatch から外れている (設計違反) ケースの fail-safe。"""
-        seen_args: Dict[str, Any] = {}
+    def test_resolver_が_None_を返したら_RESOLVER_DISPATCH_MISSING_を_返す(
+        self,
+    ) -> None:
+        """resolver dispatch から外れている (設計違反) ケースは、raw args で
+        executor に押し付けるのではなく、明示的な error_code で即 surface する
+        (code-review HIGH 対応)。raw 渡しだと executor 内で KeyError 等に
+        化けて発生源が分かりにくくなる。"""
+        called = {"n": 0}
 
         def fake_executor(pid_int: int, args: Dict[str, Any]) -> LlmCommandResultDto:
-            seen_args.update(args)
+            called["n"] += 1
             return LlmCommandResultDto(success=False, message="raw")
 
         resolver = MagicMock()
@@ -167,8 +172,11 @@ class TestAdapterWithResolver:
             fake_executor, "unknown_tool", resolver,
         )
         result = handler(PlayerId(1), {"item_label": "I1"}, _runtime_context({}))
-        # raw args がそのまま渡る
-        assert seen_args == {"item_label": "I1"}
+        # executor は呼ばれない
+        assert called["n"] == 0
+        assert result.success is False
+        assert result.error_code == "RESOLVER_DISPATCH_MISSING"
+        assert "unknown_tool" in result.message
 
 
 class TestDispatchTableUsesResolver:

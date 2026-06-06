@@ -658,6 +658,16 @@ class SpotInteractionApplicationService:
             if last is not None and (tick_int - last) < self._failure_observation_dedup_window:
                 return
             self._failure_observation_last_tick[key] = tick_int
+            # TTL eviction: window を 2x 超えた古いエントリを掃除して dict
+            # の無限増加を防ぐ (long-run セッション対策、code-review HIGH)。
+            # 毎回全走査するが key 数は通常 O(actors × objects) で小さい。
+            ttl_cutoff = tick_int - 2 * self._failure_observation_dedup_window
+            if ttl_cutoff > 0:
+                self._failure_observation_last_tick = {
+                    k: v
+                    for k, v in self._failure_observation_last_tick.items()
+                    if v > ttl_cutoff
+                }
         failed_event = SpotObjectInteractionFailedEvent.create(
             aggregate_id=graph.graph_id,
             aggregate_type="SpotGraphAggregate",

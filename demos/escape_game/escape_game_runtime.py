@@ -297,6 +297,14 @@ class EscapeGameRuntime:
     # 構築時は None、runtime 構築後に escape_game_runtime が代入する。
     _player_outcome_registry: Optional[Any] = field(default=None, repr=False)
     _tick: int = 0
+    # #375 後続: 食料腐敗の日次集約バッファ (code-review HIGH 指摘)。
+    # hasattr ベースの遅延初期化だと IDE/mypy / pickle で扱いにくいので
+    # dataclass field として明示宣言する。
+    # key: spec_id → {"spec_id", "spec_name", "instance_ids": [...]}
+    _pending_spoiled: Dict[int, Dict[str, Any]] = field(default_factory=dict, repr=False)
+    # 現在 buffer に積まれている食料が属する day (= tick // ticks_per_day)。
+    # None は「buffer 空 + 1 件もまだ来ていない」。
+    _pending_spoiled_day: Optional[int] = field(default=None, repr=False)
     # LLM 脱出用（セッション単位で構築）
     # _escape_llm_system_prompt: 全プレイヤー共通の system prompt (legacy / 単体プレイ用)
     # _escape_llm_system_prompts_by_player_id: Issue #264 第16回実験で発見された
@@ -1273,9 +1281,7 @@ class EscapeGameRuntime:
         if not spoiled:
             return
         # 当日分の buffer に積む。flush は day boundary で行う (下記参照)。
-        if not hasattr(self, "_pending_spoiled"):
-            self._pending_spoiled: dict[int, dict[str, Any]] = {}
-            self._pending_spoiled_day: Optional[int] = None
+        # field 化済 (#375 後続レビュー対応): 遅延 hasattr 初期化を廃止。
         # 当日 day index を計算 (cycle が無いシナリオは tick そのまま使う)
         ticks_per_day = self._ticks_per_day_or_default()
         current_day = self.current_tick() // max(1, ticks_per_day)
@@ -1300,13 +1306,16 @@ class EscapeGameRuntime:
 
     def _ticks_per_day_or_default(self) -> int:
         """day_night_config があればそこから ticks_per_day を取り、無ければ 24。"""
+        cfg = getattr(self.scenario, "day_night_config", None)
+        if cfg is None:
+            return 24
         try:
-            cfg = getattr(self.scenario, "day_night_config", None)
-            if cfg is not None and cfg.cycle is not None:
-                return int(cfg.cycle.ticks_per_day)
-        except Exception:
-            pass
-        return 24
+            cycle = cfg.cycle
+            if cycle is None:
+                return 24
+            return int(cycle.ticks_per_day)
+        except AttributeError:
+            return 24
 
     def _flush_pending_food_spoiled(self) -> None:
         """day boundary 等で pending 腐敗バッファを 1 件の集約観測として配信する。
