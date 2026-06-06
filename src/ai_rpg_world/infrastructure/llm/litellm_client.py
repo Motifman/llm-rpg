@@ -265,6 +265,10 @@ class LiteLLMClient(
         """
         tools 無しで JSON object を強制する chat completion を行いパース済み dict を返す。
         失敗や不正 JSON ではここでは補完せず LlmApiCallException を送出し、呼び出し元が草案テンプレへフォールバックする。
+
+        注意 (PR #358): 本 API は episodic subjective rewrite 専用のため metrics は
+        収集しない。τ_sim 分析対象は Phase A の意思決定 LLM のみ。subjective 系の
+        metrics が必要になったら専用の sink 引数を足すこと (現状の実験 #356 では不要)。
         """
         kwargs = self.completion_base_kwargs()
         try:

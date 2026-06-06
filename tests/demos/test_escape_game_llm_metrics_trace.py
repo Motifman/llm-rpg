@@ -84,6 +84,57 @@ class TestPhaseAMetricsSink:
         assert payload["success"] is True
         assert payload["player_id"] == pid.value
 
+    def test_tick_は_sink_record_時点で_取得される(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        """Review HIGH 2 対応: sink 構築時の固定 tick ではなく record 時の tick を使う。
+
+        遅い LLM 呼び出しが tick 境界を跨いだ場合に stale tick で記録されない
+        ことを保証する。
+        """
+        from tests.demos._escape_game_helpers import create_escape_game_session
+
+        class _TickAdvancingClient:
+            """invoke のたびに runtime の tick を 1 進める stub。
+            sink construction が record より前なら、旧コードでは tick がずれる。
+            """
+            def __init__(self, runtime):
+                self.runtime = runtime
+
+            def invoke(self, messages, tools, choice, *, metrics_sink=None) -> dict:
+                # 呼び出し中に tick を 1 進める (= LLM call が tick boundary を跨ぐ)
+                self.runtime.advance_tick()
+                if metrics_sink is not None:
+                    metrics_sink.record(LlmCallMetrics(
+                        model="fake/model",
+                        wall_latency_ms=100,
+                        prompt_tokens=10, completion_tokens=5,
+                        tps=50.0, success=True, error_code=None,
+                    ))
+                return {"name": "spot_graph_wait", "arguments": {"reason": "test"}}
+
+        state = create_escape_game_session(monkeypatch, tmp_path, stub=None)
+        state.llm_wiring.llm_client = _TickAdvancingClient(state.runtime)
+        rec = _CapturingTraceRecorder()
+        state.runtime.set_trace_recorder(rec)
+        tick_before = int(state.runtime.current_tick())
+
+        pid = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
+        state.llm_wiring.run_phase_a(pid)
+
+        llm_call_records = [
+            (kind, payload) for kind, payload in rec.records
+            if kind == TraceEventKind.LLM_CALL
+        ]
+        assert len(llm_call_records) == 1
+        _, payload = llm_call_records[0]
+        # tick は invoke 後の値 (= tick_before + 1) になっているはず。
+        # 旧コード (sink 構築時に capture) だと tick_before のままで失敗する。
+        assert payload["tick"] == tick_before + 1, (
+            f"sink.record() 時点の tick ({tick_before + 1}) ではなく "
+            f"sink 構築時の tick ({tick_before}) が記録された (= stale)"
+        )
+
     def test_trace_recorder_が_None_なら_sink_は_None(
         self, monkeypatch, tmp_path: Path
     ) -> None:

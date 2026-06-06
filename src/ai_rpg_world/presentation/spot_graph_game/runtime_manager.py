@@ -210,6 +210,51 @@ def _resolve_llm_parallel_workers(default: int = 0) -> int:
     return max(0, n)
 
 
+class _LlmMetricsTraceSink:
+    """Phase A の LLM 呼び出し metrics を trace に流す sink (PR #358)。
+
+    Review HIGH 2 対応: current_tick は ``record()`` 呼び出し時点で取得する
+    (sink 構築時に固定すると、遅い LLM 呼び出しが tick 境界を跨いだ場合に
+    stale tick で記録される。後の τ_sim 分析の信頼性に関わる)。
+
+    Review MEDIUM 対応: 旧実装は inner class を毎呼び出し定義していたが、
+    parallel hot path で無駄なので module-level に切り出した。
+    """
+
+    def __init__(
+        self,
+        trace_recorder: Any,
+        runtime: Any,
+        player_id: PlayerId,
+    ) -> None:
+        self._trace_recorder = trace_recorder
+        self._runtime = runtime
+        self._player_id_value = int(player_id.value)
+
+    def record(self, metrics: Any) -> None:
+        try:
+            tick: Optional[int] = None
+            try:
+                tick = int(self._runtime.current_tick())
+            except Exception:
+                tick = None
+            from ai_rpg_world.application.trace import TraceEventKind
+            self._trace_recorder.record(
+                TraceEventKind.LLM_CALL,
+                tick=tick,
+                player_id=self._player_id_value,
+                model=metrics.model,
+                wall_latency_ms=metrics.wall_latency_ms,
+                prompt_tokens=metrics.prompt_tokens,
+                completion_tokens=metrics.completion_tokens,
+                tps=metrics.tps,
+                success=metrics.success,
+                error_code=metrics.error_code,
+            )
+        except Exception:
+            logger.exception("trace_recorder.record(llm_call) failed")
+
+
 @dataclass
 class _LlmPhaseAResult:
     """1 ターンの Phase A (snapshot + LLM 呼び出し) の出力。
@@ -862,41 +907,22 @@ class _EscapeGameLlmWiring:
         """Phase A の LLM 呼び出し metrics を trace に流す sink を構築する。
 
         trace_recorder が無い (= テスト等) なら None を返して、litellm 側で
-        no-op になる。trace の payload には wall_latency_ms / prompt_tokens /
-        completion_tokens / tps / success / error_code を載せる。
+        no-op になる。
+
+        Review HIGH 2 対応: current_tick は **record 時点** で取得する
+        (sink 構築時の固定値だと、遅い LLM 呼び出しが tick 境界を跨いだとき
+        stale な tick が記録される)。
+        Review MEDIUM 後続: inner class の動的定義を避け、module-level の
+        `_LlmMetricsTraceSink` クラスを再利用する (parallel 経路の hot path)。
         """
-        from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
-            LlmCallMetrics,
-        )
         trace_recorder = getattr(self.runtime, "trace_recorder", None)
         if trace_recorder is None:
             return None
-        current_tick: Optional[int] = None
-        try:
-            current_tick = int(self.runtime.current_tick())
-        except Exception:
-            current_tick = None
-
-        class _Sink:
-            def record(self, metrics: LlmCallMetrics) -> None:
-                try:
-                    from ai_rpg_world.application.trace import TraceEventKind
-                    trace_recorder.record(
-                        TraceEventKind.LLM_CALL,
-                        tick=current_tick,
-                        player_id=int(player_id.value),
-                        model=metrics.model,
-                        wall_latency_ms=metrics.wall_latency_ms,
-                        prompt_tokens=metrics.prompt_tokens,
-                        completion_tokens=metrics.completion_tokens,
-                        tps=metrics.tps,
-                        success=metrics.success,
-                        error_code=metrics.error_code,
-                    )
-                except Exception:
-                    logger.exception("trace_recorder.record(llm_call) failed")
-
-        return _Sink()
+        return _LlmMetricsTraceSink(
+            trace_recorder=trace_recorder,
+            runtime=self.runtime,
+            player_id=player_id,
+        )
 
     def _coerce_arguments(self, raw_arguments: Any) -> dict[str, Any]:
         if isinstance(raw_arguments, dict):
