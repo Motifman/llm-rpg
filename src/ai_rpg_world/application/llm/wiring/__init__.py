@@ -119,7 +119,9 @@ from ai_rpg_world.application.llm.services.context_format_strategy import (
 )
 from ai_rpg_world.application.llm.wiring.feature_flags import (
     log_episodic_explore_related_state,
+    log_semantic_llm_gist_state,
     resolve_episodic_explore_related_enabled,
+    resolve_semantic_llm_gist_enabled,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
@@ -777,6 +779,32 @@ def _optional_episodic_chunk_subjective_fields_service(
     return EpisodicChunkSubjectiveFieldsService(port)
 
 
+def _optional_semantic_gist_service(
+    llm_client: ILLMClient,
+    enabled: bool,
+) -> Optional["SemanticGistService"]:
+    """``SEMANTIC_LLM_GIST_ENABLED=1`` かつ LiteLLM クライアントあるときだけ
+    ``SemanticGistService`` を返す。
+
+    Phase 1b: gist 生成の LLM 化。OFF または非 LiteLLM の場合は None を返し、
+    promotion service は既存の決定論 gist を使う。
+    """
+    if not enabled:
+        return None
+    from ai_rpg_world.application.llm.contracts.semantic_gist_completion_port import (
+        ISemanticGistCompletionPort,
+    )
+    from ai_rpg_world.application.llm.services.semantic_gist_service import (
+        SemanticGistService,
+    )
+    from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
+
+    if not isinstance(llm_client, LiteLLMClient):
+        return None
+    port: ISemanticGistCompletionPort = llm_client
+    return SemanticGistService(port)
+
+
 def _optional_episodic_reinterpretation_completion(
     llm_client: ILLMClient,
     explicit: Optional[IEpisodicReinterpretationCompletionPort],
@@ -842,6 +870,41 @@ def _build_persona_block_provider(
 
 def _build_runtime_tool_state() -> _RuntimeToolState:
     return _RuntimeToolState(todo_store=InMemoryTodoStore())
+
+
+def _build_semantic_persona_resolver(
+    *,
+    player_profile_repository: Any,
+    persona_block_provider: Optional[Callable[[PlayerId], str]],
+) -> Callable[[int], tuple[str, str]]:
+    """Phase 1b: semantic gist 用の persona_resolver。
+
+    `player_id (int) -> (player_name, persona_block)` を返す callable を作る。
+    player_profile_repository から player_name、persona_block_provider から
+    persona_block を best-effort で取得。どちらも欠落しても fail せず空文字
+    を返す (gist 生成は止めない)。
+    """
+
+    def _resolve(player_id_int: int) -> tuple[str, str]:
+        pid = PlayerId(player_id_int)
+        name = f"Player {player_id_int}"
+        if player_profile_repository is not None:
+            try:
+                profile = player_profile_repository.find_by_id(pid)
+                if profile is not None and getattr(profile, "name", None):
+                    name = str(profile.name)
+            except Exception:
+                # repository が落ちても gist 生成を止めない
+                pass
+        persona_block = ""
+        if persona_block_provider is not None:
+            try:
+                persona_block = persona_block_provider(pid) or ""
+            except Exception:
+                persona_block = ""
+        return name, persona_block
+
+    return _resolve
 
 
 class LlmAgentWiringResult:
@@ -1062,7 +1125,20 @@ def create_llm_agent_wiring(
     )
 
     client = llm_client if llm_client is not None else create_llm_client_from_env()
-    episodic_stack = build_episodic_memory_stack(episodic_episode_store)
+    _semantic_llm_gist_enabled = resolve_semantic_llm_gist_enabled()
+    log_semantic_llm_gist_state(_semantic_llm_gist_enabled)
+    _semantic_gist_service = _optional_semantic_gist_service(
+        client, _semantic_llm_gist_enabled
+    )
+    _semantic_persona_resolver = _build_semantic_persona_resolver(
+        player_profile_repository=player_profile_repository,
+        persona_block_provider=persona_block_provider,
+    )
+    episodic_stack = build_episodic_memory_stack(
+        episodic_episode_store,
+        semantic_gist_service=_semantic_gist_service,
+        semantic_persona_resolver=_semantic_persona_resolver,
+    )
     shared_episode_store = episodic_stack.shared_episode_store
     semantic_memory_store = episodic_stack.semantic_memory_store
     promotion_frontier = episodic_stack.promotion_frontier

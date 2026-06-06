@@ -76,3 +76,37 @@ def log_episodic_explore_related_state(enabled: bool) -> None:
         ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Semantic memory: LLM gist generation
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_SEMANTIC_LLM_GIST_ENABLED = "SEMANTIC_LLM_GIST_ENABLED"
+
+
+def resolve_semantic_llm_gist_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """``SemanticGistService`` を ``EpisodicSemanticClusterPromotionService`` に
+    注入するか。
+
+    `SEMANTIC_LLM_GIST_ENABLED=1` で ON、未設定 / その他は OFF。
+
+    OFF だと cluster 昇格時の gist は決定論的な concat のまま (検証中の
+    挙動保持)。ON にすると LLM 抽象化を試み、失敗時は決定論 gist にフォール
+    バックする (silent failure 防止のため warning ログを出す)。
+
+    詳細は docs/memory_system/semantic_memory_activation_plan.md §9。
+    """
+    return _parse_bool_env(ENV_SEMANTIC_LLM_GIST_ENABLED, env=env, default=False)
+
+
+def log_semantic_llm_gist_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_SEMANTIC_LLM_GIST_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )

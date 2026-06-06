@@ -28,6 +28,9 @@ from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
     IEpisodicReinterpretationCompletionPort,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
+from ai_rpg_world.application.llm.contracts.semantic_gist_completion_port import (
+    ISemanticGistCompletionPort,
+)
 from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
     LlmCallMetrics,
     LlmCallMetricsSink,
@@ -91,6 +94,7 @@ class LiteLLMClient(
     ILLMClient,
     IEpisodicChunkSubjectiveCompletionPort,
     IEpisodicReinterpretationCompletionPort,
+    ISemanticGistCompletionPort,
 ):
     """
     LiteLLM の completion API で messages + tools を送り、1 つの tool_call を返す実装。
@@ -366,6 +370,17 @@ class LiteLLMClient(
         messages: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """tools 無しで想起後再解釈 JSON object を返す。"""
+        return self.complete_episode_subjective_json(messages)
+
+    def complete_semantic_gist_json(
+        self,
+        messages: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """tools 無しで semantic gist JSON object を返す (Phase 1b)。
+
+        ``complete_episode_subjective_json`` と同じ json_object 強制完了を
+        使う (LLM 側から見れば同じ呼び出し)。失敗ハンドリングも共通。
+        """
         return self.complete_episode_subjective_json(messages)
 
     def _parse_tool_call(

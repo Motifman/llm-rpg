@@ -9,7 +9,12 @@ from typing import Tuple
 
 @dataclass(frozen=True)
 class SemanticMemoryEntry:
-    """クラスタ根拠付きの一般化テキスト。"""
+    """クラスタ根拠付きの一般化テキスト。
+
+    Phase 1b で ``importance_score`` / ``tags`` を追加 (default で後方互換)。
+    現状 (Phase 1b) は LLM 生成の場合だけ意味のある値が入り、決定論 gist の
+    場合は default のまま。Phase 1c の passive top-K スコアリングで使う。
+    """
 
     entry_id: str
     player_id: int
@@ -17,6 +22,11 @@ class SemanticMemoryEntry:
     evidence_episode_ids: Tuple[str, ...]
     confidence: float
     created_at: datetime
+    # Phase 1b 拡張: LLM gist の場合に値が入る。決定論 gist の場合は default
+    # (importance_score=5, tags=()) のまま。Phase 1c で top-K スコアの
+    # importance 項として使う予定。
+    importance_score: int = 5
+    tags: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.entry_id, str) or not self.entry_id.strip():
@@ -34,3 +44,12 @@ class SemanticMemoryEntry:
             raise ValueError("confidence must be float in [0,1]")
         if not isinstance(self.created_at, datetime):
             raise TypeError("created_at must be datetime")
+        if not isinstance(self.importance_score, int):
+            raise TypeError("importance_score must be int")
+        if not (1 <= self.importance_score <= 10):
+            raise ValueError("importance_score must be in [1, 10]")
+        if not isinstance(self.tags, tuple):
+            raise TypeError("tags must be tuple[str, ...]")
+        for i, tag in enumerate(self.tags):
+            if not isinstance(tag, str) or not tag.strip():
+                raise ValueError(f"tags[{i}] must be non-empty str")
