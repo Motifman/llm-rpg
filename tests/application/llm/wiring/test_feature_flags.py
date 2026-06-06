@@ -17,10 +17,13 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     DEFAULT_SEMANTIC_PASSIVE_TOP_K,
     ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
     ENV_SEMANTIC_PASSIVE_TOP_K,
+    ENV_SEMANTIC_SEARCH_ENABLED,
     log_episodic_explore_related_state,
     log_semantic_passive_top_k_state,
+    log_semantic_search_state,
     resolve_episodic_explore_related_enabled,
     resolve_semantic_passive_top_k,
+    resolve_semantic_search_enabled,
 )
 
 
@@ -137,3 +140,39 @@ class TestLogSemanticPassiveTopKState:
             log_semantic_passive_top_k_state(0)
         assert any("3" in rec.message for rec in caplog.records)
         assert any("0" in rec.message for rec in caplog.records)
+
+
+class TestResolveSemanticSearchEnabled:
+    """``SEMANTIC_SEARCH_ENABLED`` env パース (Phase 1d)。"""
+
+    def test_default_は_OFF(self) -> None:
+        assert resolve_semantic_search_enabled(env={}) is False
+
+    @pytest.mark.parametrize("raw", ["1", "true", "yes", "on", "ON", "True"])
+    def test_truthy_は_ON(self, raw: str) -> None:
+        assert resolve_semantic_search_enabled(
+            env={ENV_SEMANTIC_SEARCH_ENABLED: raw}
+        ) is True
+
+    @pytest.mark.parametrize("raw", ["0", "false", "no", "off", "random", ""])
+    def test_falsy_または_未知の値は_OFF(self, raw: str) -> None:
+        assert resolve_semantic_search_enabled(
+            env={ENV_SEMANTIC_SEARCH_ENABLED: raw}
+        ) is False
+
+
+class TestLogSemanticSearchState:
+    """解決結果を INFO ログ 1 件で残す (Phase 1d)。"""
+
+    def test_ENABLED_でも_DISABLED_でも_log_に_出る(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(
+            logging.INFO,
+            logger="ai_rpg_world.application.llm.wiring.feature_flags",
+        ):
+            log_semantic_search_state(True)
+            log_semantic_search_state(False)
+        messages = [rec.message for rec in caplog.records]
+        assert any("ENABLED" in m for m in messages)
+        assert any("DISABLED" in m for m in messages)

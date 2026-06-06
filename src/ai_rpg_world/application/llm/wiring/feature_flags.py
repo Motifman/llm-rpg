@@ -164,3 +164,35 @@ def log_semantic_passive_top_k_state(top_k: int) -> None:
         ENV_SEMANTIC_PASSIVE_TOP_K,
         top_k,
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Semantic memory: active search tool (Phase 1d)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_SEMANTIC_SEARCH_ENABLED = "SEMANTIC_SEARCH_ENABLED"
+
+
+def resolve_semantic_search_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """``memory_search_semantic`` tool を LLM に expose するか。
+
+    `SEMANTIC_SEARCH_ENABLED=1` で ON、未設定 / その他は OFF。
+
+    実装 (``SemanticMemorySearchToolExecutor``) は常に動くが、tool 自体を
+    LLM に見せるかは env で制御する。検証フェーズで明示的に有効化する。
+
+    詳細は docs/memory_system/semantic_memory_activation_plan.md §5.2, §9。
+    """
+    return _parse_bool_env(ENV_SEMANTIC_SEARCH_ENABLED, env=env, default=False)
+
+
+def log_semantic_search_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_SEMANTIC_SEARCH_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )

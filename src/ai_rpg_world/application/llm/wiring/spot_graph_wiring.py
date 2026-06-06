@@ -224,9 +224,11 @@ def create_spot_graph_wiring(
         log_episodic_explore_related_state,
         log_semantic_llm_gist_state,
         log_semantic_passive_top_k_state,
+        log_semantic_search_state,
         resolve_episodic_explore_related_enabled,
         resolve_semantic_llm_gist_enabled,
         resolve_semantic_passive_top_k,
+        resolve_semantic_search_enabled,
     )
     from ai_rpg_world.application.llm.services.game_tool_registry import DefaultGameToolRegistry
     from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
@@ -386,6 +388,17 @@ def create_spot_graph_wiring(
             SemanticPassiveRecallService,
         )
         _semantic_passive_recall_service = SemanticPassiveRecallService(semantic_memory_store)
+    # Phase 1d: memory_search_semantic tool (LLM 能動検索)。default OFF。
+    _semantic_search_enabled = resolve_semantic_search_enabled()
+    log_semantic_search_state(_semantic_search_enabled)
+    _semantic_memory_search_executor = None
+    if _semantic_search_enabled:
+        from ai_rpg_world.application.llm.services.executors.semantic_memory_search_tool_executor import (
+            SemanticMemorySearchToolExecutor,
+        )
+        _semantic_memory_search_executor = SemanticMemorySearchToolExecutor(
+            semantic_store=semantic_memory_store
+        )
     # 攻撃ユースケースのオーケストレーター。tool executor (player→monster)
     # と将来の tick driver (monster→player) で同じ instance を共有する。
     # monster_repository が未設定の起動構成（プロト・テスト等）では None
@@ -494,6 +507,8 @@ def create_spot_graph_wiring(
         spot_graph_tool_executor=spot_graph_tool_executor,
         episodic_memory_explore_executor=mem_bundle.memory_explore_executor(),
         episodic_explore_related_enabled=_resolved_episodic_explore_related_enabled,
+        semantic_memory_search_executor=_semantic_memory_search_executor,
+        semantic_search_enabled=_semantic_search_enabled,
         sliding_window=sliding_window,
         action_result_store=action_result_store,
         current_tick_provider=current_tick_provider,

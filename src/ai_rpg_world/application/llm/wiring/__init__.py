@@ -121,9 +121,11 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     log_episodic_explore_related_state,
     log_semantic_llm_gist_state,
     log_semantic_passive_top_k_state,
+    log_semantic_search_state,
     resolve_episodic_explore_related_enabled,
     resolve_semantic_llm_gist_enabled,
     resolve_semantic_passive_top_k,
+    resolve_semantic_search_enabled,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
@@ -343,6 +345,7 @@ def _build_tool_handler_map(
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
     spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
     episodic_memory_explore_executor: Optional[EpisodicMemoryExploreToolExecutor] = None,
+    semantic_memory_search_executor: Optional[Any] = None,
     trace_recorder: Optional["ITraceRecorder"] = None,
     speech_audience_resolver: Optional[Any] = None,
 ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
@@ -448,6 +451,8 @@ def _build_tool_handler_map(
         handler_map.update(spot_graph_tool_executor.get_handlers())
     if episodic_memory_explore_executor is not None:
         handler_map.update(episodic_memory_explore_executor.get_handlers())
+    if semantic_memory_search_executor is not None:
+        handler_map.update(semantic_memory_search_executor.get_handlers())
     return handler_map
 
 
@@ -494,6 +499,8 @@ def _build_tool_stack(
     spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
     episodic_memory_explore_executor: Optional[EpisodicMemoryExploreToolExecutor] = None,
     episodic_explore_related_enabled: bool = False,
+    semantic_memory_search_executor: Optional[Any] = None,
+    semantic_search_enabled: bool = False,
     sliding_window: Optional[ISlidingWindowMemory] = None,
     action_result_store: Optional[IActionResultStore] = None,
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
@@ -537,6 +544,7 @@ def _build_tool_stack(
         ),
         todo_enabled=True,
         episodic_explore_related_enabled=episodic_explore_related_enabled,
+        semantic_search_enabled=semantic_search_enabled,
         include_movement_tools=include_tile_movement,
     )
     if spot_graph_tool_executor is not None:
@@ -580,6 +588,7 @@ def _build_tool_stack(
         current_tick_provider=current_tick_provider,
         spot_graph_tool_executor=spot_graph_tool_executor,
         episodic_memory_explore_executor=episodic_memory_explore_executor,
+        semantic_memory_search_executor=semantic_memory_search_executor,
         trace_recorder=trace_recorder,
         speech_audience_resolver=speech_audience_resolver,
     )
@@ -1156,6 +1165,17 @@ def create_llm_agent_wiring(
             SemanticPassiveRecallService,
         )
         _semantic_passive_recall_service = SemanticPassiveRecallService(semantic_memory_store)
+    # Phase 1d: memory_search_semantic tool (LLM 能動検索)。default OFF。
+    _semantic_search_enabled = resolve_semantic_search_enabled()
+    log_semantic_search_state(_semantic_search_enabled)
+    _semantic_memory_search_executor = None
+    if _semantic_search_enabled:
+        from ai_rpg_world.application.llm.services.executors.semantic_memory_search_tool_executor import (
+            SemanticMemorySearchToolExecutor,
+        )
+        _semantic_memory_search_executor = SemanticMemorySearchToolExecutor(
+            semantic_store=semantic_memory_store
+        )
     promotion_frontier = episodic_stack.promotion_frontier
     mem_bundle = episodic_stack.mem_bundle
     episodic_semantic_promotion = episodic_stack.episodic_semantic_promotion
@@ -1199,6 +1219,8 @@ def create_llm_agent_wiring(
         player_profile_repository=player_profile_repository,
         episodic_memory_explore_executor=mem_bundle.memory_explore_executor(),
         episodic_explore_related_enabled=_resolved_episodic_explore_related_enabled,
+        semantic_memory_search_executor=_semantic_memory_search_executor,
+        semantic_search_enabled=_semantic_search_enabled,
         sliding_window=sliding_window,
         action_result_store=action_result_store,
         current_tick_provider=current_tick_provider,
