@@ -1,12 +1,19 @@
-"""強リンククラスタ検出とセマンティック記憶への昇格（MVP: 決定論要約）。"""
+"""強リンククラスタ検出とセマンティック記憶への昇格。
+
+Phase 1b (#356 後続): LLM gist 生成 (``SemanticGistService``) を optional に
+注入できるようにした。注入されていれば LLM 抽象化を試み、失敗時は
+``_deterministic_gist`` (cluster 内 episode 本文の concat) にフォールバック
+する。デフォルトは未注入 = 決定論 gist のみ (検証中の挙動保持)。
+"""
 
 from __future__ import annotations
 
+import logging
 import os
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, Set
+from typing import Callable, Dict, Optional, Sequence, Set
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import IEpisodicEpisodeStore
@@ -15,7 +22,15 @@ from ai_rpg_world.application.llm.contracts.episodic_memory_link import effectiv
 from ai_rpg_world.application.llm.contracts.episodic_memory_link_store_port import IMemoryLinkStore
 from ai_rpg_world.application.llm.contracts.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.application.llm.contracts.semantic_memory_store_port import ISemanticMemoryStore
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.episodic_promotion_frontier import EpisodicPromotionFrontier
+from ai_rpg_world.application.llm.services.semantic_gist_service import (
+    SemanticGistResult,
+    SemanticGistService,
+)
+
+
+_logger = logging.getLogger(__name__)
 
 MIN_CLUSTER_SIZE = 3
 MIN_RECALL_COUNT = 3
@@ -145,7 +160,15 @@ def _deterministic_gist(episodes: list[SubjectiveEpisode]) -> str:
 class EpisodicSemanticClusterPromotionService:
     """
     プレイヤーのリンクグラフから閾値以上のクラスタを探し、セマンティックストアへ書き込む。
-    LLM 脱文脈化は未接続時はスキップし、決定論要約のみ行う。
+
+    Phase 1b: ``gist_service`` を optional に注入すると LLM 抽象化を行う。
+    未注入なら従来の決定論 gist (cluster body concat) を使う。
+
+    LLM 利用時の失敗 (API 例外 / JSON パース失敗 / 空応答) は warning ログを
+    出した上で決定論 gist にフォールバックする (silent failure 防止)。
+
+    ``persona_resolver`` は player_id → (player_name, persona_block) を返す
+    callable。LLM gist の prompt 構築に必要。未指定なら ("Player {id}", "")。
     """
 
     episode_store: IEpisodicEpisodeStore
@@ -153,6 +176,9 @@ class EpisodicSemanticClusterPromotionService:
     semantic_store: ISemanticMemoryStore
     promotion_frontier: EpisodicPromotionFrontier | None = None
     expansion_hops: int = field(default_factory=_default_expansion_hops)
+    # Phase 1b: LLM gist (optional)。注入時のみ LLM 抽象化を試みる。
+    gist_service: Optional[SemanticGistService] = None
+    persona_resolver: Optional[Callable[[int], tuple[str, str]]] = None
 
     def on_after_tool_turn(self, player_id: int, *, now: datetime | None = None) -> None:
         """LLM ツール実行 1 回成功後に呼び、昇格候補があればストアへ追加する。"""
@@ -197,13 +223,80 @@ class EpisodicSemanticClusterPromotionService:
             if not self.semantic_store.register_cluster_signature_if_new(player_id, sig):
                 continue
             confidence = min(1.0, 0.4 + 0.1 * len(eps))
-            text = _deterministic_gist(sorted(eps, key=lambda e: e.occurred_at))
+            gist_result = self._build_gist(player_id, eps)
             entry = SemanticMemoryEntry(
                 entry_id=f"sem-{uuid4().hex}",
                 player_id=player_id,
-                text=text,
+                text=gist_result.gist_text,
                 evidence_episode_ids=tuple(sorted(comp)),
                 confidence=confidence,
                 created_at=now,
+                importance_score=gist_result.importance_score,
+                tags=gist_result.tags,
             )
             self.semantic_store.add(entry)
+
+    def _build_gist(
+        self,
+        player_id: int,
+        cluster_episodes: Sequence[SubjectiveEpisode],
+    ) -> SemanticGistResult:
+        """LLM gist を試みる。注入無し / 失敗時は決定論 gist にフォールバック。
+
+        どのパスを通っても呼び出し元は同じ ``SemanticGistResult`` を受け取る
+        (importance_score / tags は決定論パスでは default)。
+        """
+        ordered = sorted(cluster_episodes, key=lambda e: e.occurred_at)
+        if self.gist_service is None:
+            return _deterministic_gist_result(ordered)
+
+        player_name, persona_block = self._resolve_persona(player_id)
+        try:
+            return self.gist_service.generate(
+                player_name=player_name,
+                persona_block=persona_block,
+                cluster_episodes=list(ordered),
+                existing_related_semantic=None,
+            )
+        except (LlmApiCallException, ValueError) as e:
+            _logger.warning(
+                "Semantic gist LLM failed for player_id=%s; falling back to deterministic gist: %s",
+                player_id,
+                e,
+            )
+            return _deterministic_gist_result(ordered)
+        except Exception as e:  # pragma: no cover - 想定外を一応握って fallback
+            _logger.exception(
+                "Unexpected error in semantic gist LLM (player_id=%s); falling back: %s",
+                player_id,
+                e,
+            )
+            return _deterministic_gist_result(ordered)
+
+    def _resolve_persona(self, player_id: int) -> tuple[str, str]:
+        if self.persona_resolver is None:
+            return (f"Player {player_id}", "")
+        try:
+            name, persona = self.persona_resolver(player_id)
+            return (name or f"Player {player_id}", persona or "")
+        except Exception as e:
+            _logger.warning(
+                "persona_resolver failed for player_id=%s: %s",
+                player_id,
+                e,
+            )
+            return (f"Player {player_id}", "")
+
+
+def _deterministic_gist_result(
+    cluster_episodes: Sequence[SubjectiveEpisode],
+) -> SemanticGistResult:
+    """LLM 経路の戻り値形状に合わせて決定論 gist を SemanticGistResult に包む。
+
+    importance_score / tags は default (5 / 空) のまま。
+    """
+    return SemanticGistResult(
+        gist_text=_deterministic_gist(list(cluster_episodes)),
+        importance_score=5,
+        tags=(),
+    )

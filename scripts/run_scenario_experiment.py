@@ -522,10 +522,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     from ai_rpg_world.application.llm.wiring.feature_flags import (
         ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
+        ENV_SEMANTIC_LLM_GIST_ENABLED,
         resolve_episodic_explore_related_enabled,
+        resolve_semantic_llm_gist_enabled,
     )
     resolved_section_order = resolve_section_order_from_env()
     resolved_explore_related = resolve_episodic_explore_related_enabled()
+    resolved_semantic_llm_gist = resolve_semantic_llm_gist_enabled()
 
     print(f"[run] scenario={args.scenario.name} max_ticks={args.max_ticks}", flush=True)
     print(
@@ -536,6 +539,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(
         f"[run] episodic_explore_related={'on' if resolved_explore_related else 'off'} "
         f"(override via {ENV_EPISODIC_EXPLORE_RELATED_ENABLED}=1)",
+        flush=True,
+    )
+    print(
+        f"[run] semantic_llm_gist={'on' if resolved_semantic_llm_gist else 'off'} "
+        f"(override via {ENV_SEMANTIC_LLM_GIST_ENABLED}=1)",
         flush=True,
     )
     print(f"[out] {out_dir}", flush=True)
@@ -549,6 +557,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             api_base=os.environ.get("OPENAI_API_BASE"),
             prompt_section_order=resolved_section_order,
             episodic_explore_related_enabled=resolved_explore_related,
+            semantic_llm_gist_enabled=resolved_semantic_llm_gist,
         )
 
         def progress(msg: str) -> None:

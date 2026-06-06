@@ -102,11 +102,22 @@ class EpisodicMemoryStack:
 
 def build_episodic_memory_stack(
     episodic_episode_store: Optional[IEpisodicEpisodeStore],
+    *,
+    semantic_gist_service: Optional[Any] = None,
+    semantic_persona_resolver: Optional[Any] = None,
 ) -> EpisodicMemoryStack:
     """共有 episode store と link / semantic / promotion を組み立てる。
 
     create_llm_agent_wiring と create_spot_graph_wiring で完全に同じロジック
     だった 5 連鎖を 1 か所に集約する。
+
+    Phase 1b (semantic LLM gist):
+    - ``semantic_gist_service`` を渡すと cluster 昇格時に LLM gist を試みる
+      (失敗時は決定論 gist にフォールバック)。default の None なら従来の
+      決定論 gist のみ
+    - ``semantic_persona_resolver`` は ``Callable[[int], tuple[str, str]]``。
+      LLM gist の prompt に persona を載せるために必要。gist service を
+      渡したら基本的に併せて渡す
     """
     shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
     link_store, semantic_memory_store = default_link_and_semantic_stores_for_episode_store(
@@ -123,6 +134,8 @@ def build_episodic_memory_stack(
         link_store=mem_bundle.link_store,
         semantic_store=semantic_memory_store,
         promotion_frontier=promotion_frontier,
+        gist_service=semantic_gist_service,
+        persona_resolver=semantic_persona_resolver,
     )
     return EpisodicMemoryStack(
         shared_episode_store=shared_episode_store,

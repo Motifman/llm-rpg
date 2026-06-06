@@ -196,9 +196,11 @@ def create_spot_graph_wiring(
         _build_persona_block_provider,
         _build_prompt_stack,
         _build_runtime_tool_state,
+        _build_semantic_persona_resolver,
         _build_tool_stack,
         _optional_episodic_chunk_subjective_fields_service,
         _optional_episodic_reinterpretation_completion,
+        _optional_semantic_gist_service,
         _resolve_default_episodic_reinterpretation_stores,
     )
     from ai_rpg_world.application.llm.wiring._shared_builders import (
@@ -220,7 +222,9 @@ def create_spot_graph_wiring(
     )
     from ai_rpg_world.application.llm.wiring.feature_flags import (
         log_episodic_explore_related_state,
+        log_semantic_llm_gist_state,
         resolve_episodic_explore_related_enabled,
+        resolve_semantic_llm_gist_enabled,
     )
     from ai_rpg_world.application.llm.services.game_tool_registry import DefaultGameToolRegistry
     from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
@@ -352,7 +356,20 @@ def create_spot_graph_wiring(
     )
 
     client = llm_client if llm_client is not None else create_llm_client_from_env()
-    episodic_stack = build_episodic_memory_stack(episodic_episode_store)
+    _semantic_llm_gist_enabled = resolve_semantic_llm_gist_enabled()
+    log_semantic_llm_gist_state(_semantic_llm_gist_enabled)
+    _semantic_gist_service = _optional_semantic_gist_service(
+        client, _semantic_llm_gist_enabled
+    )
+    _semantic_persona_resolver = _build_semantic_persona_resolver(
+        player_profile_repository=player_profile_repository,
+        persona_block_provider=persona_block_provider,
+    )
+    episodic_stack = build_episodic_memory_stack(
+        episodic_episode_store,
+        semantic_gist_service=_semantic_gist_service,
+        semantic_persona_resolver=_semantic_persona_resolver,
+    )
     shared_episode_store = episodic_stack.shared_episode_store
     semantic_memory_store = episodic_stack.semantic_memory_store
     promotion_frontier = episodic_stack.promotion_frontier
