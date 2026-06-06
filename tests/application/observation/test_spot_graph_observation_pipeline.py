@@ -278,6 +278,9 @@ class TestPipelineObjectStateChanged:
         """オブジェクト状態変化 → そのスポットの全プレイヤーが受信。"""
         graph = _build_graph()
         pipeline = _build_pipeline(graph)
+        # #356 後続: narrative を提供しないと formatter は silent (内部用語の
+        # 漏洩を防ぐため)。本テストは「同 spot の player に配信される」配線を
+        # 検証したいので、narrative を渡して formatter が emit する経路を通す。
         event = SpotObjectStateChangedEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -285,6 +288,7 @@ class TestPipelineObjectStateChanged:
             object_id=OBJ_1,
             old_state={},
             new_state={"open": True},
+            narrative="ドアが開いた音がした",
         )
         results = pipeline.run(event)
         recipient_ids = {pid.value for pid, _ in results}

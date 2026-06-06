@@ -262,17 +262,20 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             and self._is_self(event.actor_entity_id, recipient_id)
         ):
             return None
+        # 著者が narrative を提供したときだけ observation を出す。無ければ
+        # silent (= 内部用語 "available", "lit" 等が LLM に漏れない)。
+        # interaction 由来の state 変化は SHOW_MESSAGE effect で別途
+        # narrative を出している前提、reactive_binding は narrative_on_true /
+        # narrative_on_false で宣言する前提 (#356 後続 finding)。
+        narrative = getattr(event, "narrative", None)
+        if not narrative:
+            return None
         obj_name = self._resolve_object_name(event.spot_id, event.object_id)
         delta = (
             event.state_delta
             if event.state_delta
             else _derive_delta(event.old_state, event.new_state)
         )
-        delta_text = _format_delta_text(delta)
-        if delta_text:
-            prose = f"{obj_name}の{delta_text}。"
-        else:
-            prose = f"{obj_name}の状態が変化した。"
         structured = {
             "type": "spot_object_state_changed",
             "object_name": obj_name,
@@ -282,7 +285,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             ],
         }
         return ObservationOutput(
-            prose=prose,
+            prose=narrative,
             structured=structured,
             observation_category="environment",
             schedules_turn=True,
