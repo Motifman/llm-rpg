@@ -360,6 +360,15 @@ class EscapeGameRuntime:
     def advance_tick(self) -> int:
         tick = self._simulation_service.tick()
         self._tick = tick.value
+        # #356 後続: 日が変わったら腐敗バッファを flush して 1 件にまとめる。
+        # buffer は _append_food_spoiled_batch_observation で積まれる。
+        # tick が 0 base なので day = tick // ticks_per_day。
+        pending_day = getattr(self, "_pending_spoiled_day", None)
+        if pending_day is not None:
+            ticks_per_day = self._ticks_per_day_or_default()
+            current_day = tick.value // max(1, ticks_per_day)
+            if pending_day != current_day:
+                self._flush_pending_food_spoiled()
         return tick.value
 
     def set_trace_recorder(self, recorder: Any) -> None:
@@ -1249,22 +1258,37 @@ class EscapeGameRuntime:
         self,
         spoiled: Any,
     ) -> None:
-        """第24回実験 (#343) 対策: 同 tick で複数 instance が腐ったときに、
-        spec_id 単位で集約して 1 件の観測にまとめる。
+        """第24回実験 (#343) + #356 後続: 食料腐敗 観測を **日単位で集約**。
 
-        旧: 「野いちごが腐った。」「野いちごが腐った。」「野いちごが腐った。」
-            (3 件 separate)
-        新: 「野いちごが 3 つ腐った。」(1 件 aggregated)
+        旧 (#350 同 tick 集約):
+            「野いちごが3つ腐った。」 (同 tick 内のみ aggregate)
+            → 1 日に渡って 8 個が別 tick で腐ると 8 件の観測が走る
+
+        新 (本 PR): 日 (24 tick) を跨いで pending buffer に貯め、日境界
+        または game-end の直前に **1 日分まとめて** flush する:
+            「今日は野いちごが5個、椰子の実が2個腐った。」
 
         spoiled は Sequence[(ItemInstanceId, ItemSpecId, str)]。
         """
         if not spoiled:
             return
-        # spec_id ごとに件数と sample instance_id をまとめる。
-        groups: dict[int, dict[str, Any]] = {}
+        # 当日分の buffer に積む。flush は day boundary で行う (下記参照)。
+        if not hasattr(self, "_pending_spoiled"):
+            self._pending_spoiled: dict[int, dict[str, Any]] = {}
+            self._pending_spoiled_day: Optional[int] = None
+        # 当日 day index を計算 (cycle が無いシナリオは tick そのまま使う)
+        ticks_per_day = self._ticks_per_day_or_default()
+        current_day = self.current_tick() // max(1, ticks_per_day)
+        # 日が変わっていたら前日分を flush してから新日のバッファに積む
+        if (
+            self._pending_spoiled_day is not None
+            and self._pending_spoiled_day != current_day
+        ):
+            self._flush_pending_food_spoiled()
+        self._pending_spoiled_day = current_day
         for instance_id, spec_id, spec_name in spoiled:
             sid = int(spec_id.value)
-            entry = groups.setdefault(
+            entry = self._pending_spoiled.setdefault(
                 sid,
                 {
                     "spec_id": sid,
@@ -1273,28 +1297,66 @@ class EscapeGameRuntime:
                 },
             )
             entry["instance_ids"].append(int(instance_id.value))
-        for sid, entry in groups.items():
+
+    def _ticks_per_day_or_default(self) -> int:
+        """day_night_config があればそこから ticks_per_day を取り、無ければ 24。"""
+        try:
+            cfg = getattr(self.scenario, "day_night_config", None)
+            if cfg is not None and cfg.cycle is not None:
+                return int(cfg.cycle.ticks_per_day)
+        except Exception:
+            pass
+        return 24
+
+    def _flush_pending_food_spoiled(self) -> None:
+        """day boundary 等で pending 腐敗バッファを 1 件の集約観測として配信する。
+
+        flush 後は buffer を空に戻し、`_pending_spoiled_day` も None にする。
+        spec 数が複数なら「今日は野いちごが5個、椰子の実が2個腐った。」と
+        まとめる。spec 1 種なら「今日は野いちごが5個腐った。」とシンプルに。
+        """
+        pending = getattr(self, "_pending_spoiled", None) or {}
+        if not pending:
+            self._pending_spoiled = {}
+            self._pending_spoiled_day = None
+            return
+        # 「{spec_name}が{n}個」形のフラグメントを spec 順で並べる
+        fragments: list[str] = []
+        all_instance_ids: list[int] = []
+        for entry in pending.values():
             count = len(entry["instance_ids"])
-            display_name = entry["spec_name"] or f"アイテム#{sid}"
-            if count == 1:
-                message = f"{display_name}が腐った。"
-            else:
-                message = f"{display_name}が{count}つ腐った。"
-            output = ObservationOutput(
-                prose=message,
-                structured={
-                    "type": "food_spoiled",
-                    "item_spec_id": sid,
-                    "spec_name": entry["spec_name"],
-                    "count": count,
-                    "item_instance_ids": entry["instance_ids"],
-                },
-                observation_category="environment",
-                schedules_turn=False,
-                breaks_movement=False,
-            )
-            for player_id in self.get_player_ids():
-                self._emit_observation_directly(player_id, output)
+            display_name = entry["spec_name"] or f"アイテム#{entry['spec_id']}"
+            unit = "個"
+            fragments.append(f"{display_name}が{count}{unit}")
+            all_instance_ids.extend(entry["instance_ids"])
+        if len(fragments) == 1:
+            message = f"今日は{fragments[0]}腐った。"
+        else:
+            message = "今日は" + "、".join(fragments) + "腐った。"
+        output = ObservationOutput(
+            prose=message,
+            structured={
+                "type": "food_spoiled",
+                "aggregation": "daily",
+                "day": self._pending_spoiled_day,
+                "spec_summary": [
+                    {
+                        "item_spec_id": e["spec_id"],
+                        "spec_name": e["spec_name"],
+                        "count": len(e["instance_ids"]),
+                    }
+                    for e in pending.values()
+                ],
+                "item_instance_ids": all_instance_ids,
+            },
+            observation_category="environment",
+            schedules_turn=False,
+            breaks_movement=False,
+        )
+        for player_id in self.get_player_ids():
+            self._emit_observation_directly(player_id, output)
+        self._pending_spoiled = {}
+        self._pending_spoiled_day = None
 
     def _append_weather_observation(self, weather_state: Any) -> None:
         # Issue #276 経路二重化解消: ``_emit_observation_directly`` 経由に統一。
