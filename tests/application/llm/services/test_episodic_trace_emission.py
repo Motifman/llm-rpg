@@ -489,6 +489,86 @@ class TestPromptBuilderRecallTraceEmission:
         assert len(captured) == 1
 
 
+class TestPromptBuilderSectionBreakdownTraceEmission:
+    """``_emit_prompt_section_breakdown_trace`` が section 別 char 数を払い出す
+    (実験 #356 後続: prefix cache 分析用)。"""
+
+    def test_section_別_char_数が_event_に乗る(self) -> None:
+        """各 section のテキスト長が独立に payload に乗る。token ではなく char。"""
+        from ai_rpg_world.application.llm.services.prompt_builder import (
+            DefaultPromptBuilder,
+        )
+
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+
+        builder = object.__new__(DefaultPromptBuilder)
+        builder._trace_recorder = recorder
+        builder._trace_recorder_provider = None
+        builder._current_tick_provider = lambda: 7
+
+        tools = [
+            {"type": "function", "function": {"name": "wait", "description": "待つ", "parameters": {}}},
+            {"type": "function", "function": {"name": "move", "description": "移動する", "parameters": {}}},
+        ]
+        builder._emit_prompt_section_breakdown_trace(
+            player_id=PlayerId(3),
+            system_content="SYSTEM" * 10,           # 60
+            objective_text="目的目的目的",          # 6
+            current_state_text="現在地表示",         # 5
+            active_memos_text="メモ",                # 2
+            recent_events_text="出来事" * 20,       # 60
+            relevant_memories_text="記憶" * 5,      # 10
+            inventory_text="持ち物",                # 3
+            instruction="指示文",                   # 3
+            tools=tools,
+            user_content="USER_BODY" * 5,           # 45
+        )
+
+        events = [e for e in captured if e.kind == TraceEventKind.PROMPT_SECTION_BREAKDOWN]
+        assert len(events) == 1
+        p = events[0].payload
+        assert events[0].tick == 7
+        assert events[0].player_id == 3
+        assert p["system_chars"] == 60
+        assert p["objective_chars"] == 6
+        assert p["current_state_chars"] == 5
+        assert p["memos_chars"] == 2
+        assert p["recent_events_chars"] == 60
+        assert p["recall_chars"] == 10
+        assert p["inventory_chars"] == 3
+        assert p["instruction_chars"] == 3
+        assert p["user_content_chars"] == 45
+        assert p["messages_total_chars"] == 60 + 45
+        assert p["tools_count"] == 2
+        # tools は json.dumps の長さで近似される (>0 で十分)
+        assert p["tools_chars"] > 0
+
+    def test_recorder_未注入なら_section_breakdown_emit_は_no_op(self) -> None:
+        """trace_recorder=None でも例外なく完走 (prompt 構築を止めない)。"""
+        from ai_rpg_world.application.llm.services.prompt_builder import (
+            DefaultPromptBuilder,
+        )
+
+        builder = object.__new__(DefaultPromptBuilder)
+        builder._trace_recorder = None
+        builder._trace_recorder_provider = None
+        builder._current_tick_provider = lambda: 0
+        builder._emit_prompt_section_breakdown_trace(
+            player_id=PlayerId(1),
+            system_content="",
+            objective_text="",
+            current_state_text="",
+            active_memos_text="",
+            recent_events_text="",
+            relevant_memories_text="",
+            inventory_text="",
+            instruction="",
+            tools=[],
+            user_content="",
+        )
+
+
 # ──────────────────────────────────────────────────────────────────
 # End-to-end: escape_game runtime で trace が出る
 # ──────────────────────────────────────────────────────────────────
