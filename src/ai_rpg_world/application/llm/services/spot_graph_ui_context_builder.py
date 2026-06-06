@@ -82,6 +82,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         self._build_ground_items_section(snap, allocator, collector, extra_lines)
         self._build_needs_section(snap, extra_lines)
         self._build_active_effects_section(snap, extra_lines)
+        self._build_agent_status_section(snap, extra_lines)
 
         augmented_text = current_state_text
         if extra_lines:
@@ -294,6 +295,30 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         lines.append("現在の状態異常:")
         for line in snap.active_effect_lines:
             lines.append(f"  {line}")
+
+    @staticmethod
+    def _build_agent_status_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        """multi-tick busy 状態を「現在の行動状態:」section として surface。
+
+        LLM が「自分は今移動中だから interact しても無意味」を理解できるように、
+        busy の理由・残り tick・中断可能性を明示する。busy=False (= rest 状態)
+        の場合は section を出さない (= 通常の "何でも行動できる" 状態)。
+        """
+        st = snap.agent_status
+        if not st.busy:
+            return
+        lines.append("現在の行動状態:")
+        reason = st.busy_reason or "進行中"
+        lines.append(f"  {reason} (残り {st.remaining_ticks} tick)")
+        if st.interruptible:
+            lines.append(
+                "  ※ 軽い行動 (発話 / memo / 観察) は並行して取れる。"
+                "重い行動 (別の移動 / interact / use_item / attack) を選ぶと "
+                "現在の行動は中断され、その場で停止する。"
+            )
 
     def _build_inventory_section(
         self,

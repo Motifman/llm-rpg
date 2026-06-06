@@ -6,6 +6,7 @@ import logging
 from typing import Callable, FrozenSet, Optional
 
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
+    SpotGraphAgentStatusEntry,
     SpotGraphAtmosphereEntry,
     SpotGraphConnectionEntry,
     SpotGraphGroundItemEntry,
@@ -184,13 +185,25 @@ class SpotGraphCurrentStateBuilder:
         node = graph.get_spot(spot_id)
         player = self._player_status_repository.find_by_id(PlayerId(player_id))
         travel_line: str | None = None
+        agent_status = SpotGraphAgentStatusEntry()
         if player is not None and player.spot_navigation_state is not None:
             nav = player.spot_navigation_state
             if nav.is_traveling:
                 dest = nav.route[-1] if nav.route else spot_id
+                dest_name = graph.get_spot(dest).name
+                # 残り tick の概算: 現区間 + 未消化区間の合計
+                remaining = nav.ticks_remaining_on_current_leg
+                for idx in range(nav.leg_index + 1, len(nav.leg_travel_ticks)):
+                    remaining += nav.leg_travel_ticks[idx]
                 travel_line = (
-                    f"スポット間移動中（残りティック概算: 各区間 {nav.ticks_remaining_on_current_leg} など）"
-                    f" → 目的地: {graph.get_spot(dest).name}"
+                    f"スポット間移動中（残り合計 {remaining} tick）"
+                    f" → 目的地: {dest_name}"
+                )
+                agent_status = SpotGraphAgentStatusEntry(
+                    busy=True,
+                    busy_reason=f"{dest_name} への移動中",
+                    remaining_ticks=remaining,
+                    interruptible=True,
                 )
 
         connections: list[SpotGraphConnectionEntry] = []
@@ -491,6 +504,7 @@ class SpotGraphCurrentStateBuilder:
             object_lines=obj_lines,
             player_state=player_state_snapshot,
             active_effect_lines=active_effect_lines,
+            agent_status=agent_status,
         )
 
     def _build_active_effect_lines(self, active_effects) -> tuple[str, ...]:
