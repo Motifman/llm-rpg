@@ -253,9 +253,26 @@ class TestSurvivalIslandV2RescueE2E:
         })
 
         # tick 168 まで進める。途中で game_end したら break。
+        # #377 後: v2 シナリオは飢餓ダメ 2/tick なので、170 tick の間に
+        # ada が餓死してしまう。本テストの目的は rescue 経路の貫通検証で
+        # 飢餓は直交関心なので、毎 tick HUNGER を 0 に戻して decoupling する。
+        # 同様に他 3 player も餓死で early-exit するのを防ぐ。
+        from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+
+        def _keep_alive_all_players() -> None:
+            for pid in runtime.get_player_ids():
+                status = runtime._player_status_repo.find_by_id(pid)
+                if status is None:
+                    continue
+                hunger = status.needs.get(NeedType.HUNGER)
+                if hunger is not None and hunger.value > 0:
+                    status.satisfy_need(NeedType.HUNGER, hunger.value)
+                runtime._player_status_repo.save(status)
+
         for _ in range(170):
             if runtime.check_game_end().is_ended:
                 break
+            _keep_alive_all_players()
             runtime.advance_tick()
             # advance_tick の副作用で他 player のターンが scheduled された場合
             # も流す (= scenario_event が tick 内に発火する経路を貫通させる)。
