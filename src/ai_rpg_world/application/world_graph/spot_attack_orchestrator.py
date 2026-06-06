@@ -26,7 +26,8 @@ event 発火 + save パスが無料で付いてくる。
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Optional, Sequence
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
@@ -79,6 +80,28 @@ from ai_rpg_world.domain.world_graph.value_object.spot_attack_outcome import (
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class AttackStatusEffectChance:
+    """G1 (#343 trace 分析): モンスター攻撃成功時に確率で付与する状態異常 1 件。
+
+    Attributes:
+        effect_type_name: ``StatusEffectType.value`` 文字列 (例: "bleeding")。
+        chance: 発症確率 [0.0, 1.0]。0.0 で実質無効。
+        duration_ticks: 効果の持続 tick 数 (= expiry_tick - current_tick)。
+        value: 効果の強度 (BLEEDING なら出血の重さ、現状 1.0 固定が無難)。
+
+    provider シグネチャ:
+        ``(monster: MonsterAggregate) -> Sequence[AttackStatusEffectChance]``
+
+    survival_island_v2 で 野犬 → BLEEDING (50%, 12 tick) を表現するための型。
+    将来は MonsterTemplate に組み込んで scenario JSON 駆動にする (v1)。
+    """
+    effect_type_name: str
+    chance: float
+    duration_ticks: int
+    value: float = 1.0
+
+
 class SpotAttackOrchestrator:
     """攻撃ユースケースのオーケストレーション。
 
@@ -98,6 +121,8 @@ class SpotAttackOrchestrator:
         player_attack_service: Optional[SpotPlayerAttackService] = None,
         perception_service: Optional[SpotPerceptionService] = None,
         visibility_service: Optional[MonsterVisibilityService] = None,
+        attack_status_effect_provider: Optional[Any] = None,
+        random_source: Optional[Any] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._monster_repository = monster_repository
@@ -114,6 +139,16 @@ class SpotAttackOrchestrator:
             player_attack_service or SpotPlayerAttackService()
         )
         self._perception = perception_service or SpotPerceptionService()
+        # G1 finding (#343 trace 分析): モンスター攻撃成功時に確率的に状態異常を
+        # 付与するための provider。MonsterAggregate を受け取り、その種類別に
+        # 「効果タイプ / 発症確率 / 持続 tick / value」を返す callable。
+        # 未注入なら attack 完了で何も付与しない (= 既存挙動完全互換)。
+        # provider signature: (monster: MonsterAggregate) -> Sequence[AttackStatusEffectChance]
+        self._attack_status_effect_provider = attack_status_effect_provider
+        # テスト容易性: random.Random instance を注入できる。seed 固定の確率
+        # 評価を流せる。default は module-level random (実走用)。
+        import random as _random
+        self._random = random_source or _random.random
 
     # ------------------------------------------------------------------
     # モンスター → プレイヤー攻撃
@@ -167,10 +202,76 @@ class SpotAttackOrchestrator:
                 target_visible=target_visible,
             )
         )
+        # G1 finding (#343 trace 分析): 攻撃成功時に確率的に状態異常を付与する。
+        # 既に target_incapacitated (HP=0) なら status effect は無意味なので skip
+        # (蘇生後に蓄積しない設計に合わせる)。
+        if not outcome.target_incapacitated:
+            self._apply_attack_status_effects(
+                attacker_monster=attacker_monster,
+                target_player=target_player,
+                current_tick=current_tick,
+            )
         self._monster_repository.save(attacker_monster)
         self._player_status_repository.save(target_player)
         self._spot_graph_repository.save(graph)
         return outcome
+
+    def _apply_attack_status_effects(
+        self,
+        *,
+        attacker_monster: MonsterAggregate,
+        target_player: PlayerStatusAggregate,
+        current_tick: WorldTick,
+    ) -> None:
+        """provider が返す候補リストを確率 roll して target にステータス効果を付与する。
+
+        provider 未注入時は no-op。各 chance を独立に roll するので「BLEEDING 50% +
+        POISON 20%」のような重複も同時付与可能。
+        """
+        if self._attack_status_effect_provider is None:
+            return
+        try:
+            chances = self._attack_status_effect_provider(attacker_monster)
+        except Exception:
+            logger.exception(
+                "attack_status_effect_provider raised for monster_id=%s; "
+                "skipping status effect application",
+                attacker_monster.monster_id.value,
+            )
+            return
+        if not chances:
+            return
+        # local import: domain 層への依存を application 層トップで触らないため
+        from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+        from ai_rpg_world.domain.combat.value_object.status_effect import (
+            StatusEffect,
+        )
+        for c in chances:
+            if not isinstance(c, AttackStatusEffectChance):
+                continue
+            chance = max(0.0, min(1.0, float(c.chance)))
+            if chance <= 0.0:
+                continue
+            if self._random() >= chance:
+                continue
+            try:
+                effect_type = StatusEffectType(c.effect_type_name)
+            except ValueError:
+                logger.warning(
+                    "attack_status_effect_provider returned unknown effect_type_name=%r "
+                    "for monster_id=%s; skipping",
+                    c.effect_type_name,
+                    attacker_monster.monster_id.value,
+                )
+                continue
+            expiry_tick = WorldTick(
+                current_tick.value + max(0, int(c.duration_ticks))
+            )
+            target_player.add_status_effect(StatusEffect(
+                effect_type=effect_type,
+                value=float(c.value),
+                expiry_tick=expiry_tick,
+            ))
 
     # ------------------------------------------------------------------
     # プレイヤー → モンスター攻撃
