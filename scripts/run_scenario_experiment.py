@@ -26,13 +26,14 @@ scenario 固有の集計 (relay_puzzle の latch tick / kaito-rin marker など)
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TextIO
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 for p in (_REPO_ROOT, _REPO_ROOT / "src"):
@@ -47,6 +48,118 @@ from ai_rpg_world.application.trace import (  # noqa: E402
 from ai_rpg_world.application.trace.recorder import load_trace_events  # noqa: E402
 
 logger = logging.getLogger("run_scenario_experiment")
+
+
+def _format_duration(seconds: float) -> str:
+    """秒を MM:SS / HH:MM:SS 表記に整形する。"""
+    seconds = max(0, int(seconds))
+    if seconds < 3600:
+        return f"{seconds // 60:02d}:{seconds % 60:02d}"
+    return f"{seconds // 3600}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d}"
+
+
+class _ExperimentProgressReporter:
+    """実験スクリプト実行中の進捗を可視化する reporter。
+
+    - **stdout** には旧来通り 1 行ずつ tick メッセージを print (パイプログ用)
+    - **stderr** には `\\r` で同じ行を上書きしながら inline 進捗を出す
+      (パイプで stdout を捨てても terminal で見える)
+    - **progress.jsonl** には 1 tick 1 行で JSON を append (`tail -f` 用)
+
+    実装メモ:
+        - stderr が tty でない (= 別ファイルへリダイレクト) 場合は `\\r` を使わず
+          通常の改行で出す (CI ログでも読める)
+        - LLM call の wall time が大きい (5-10s) と 1 tick 5-10s 程度なので、
+          毎 tick 更新で十分な滑らかさ
+    """
+
+    def __init__(
+        self,
+        *,
+        max_ticks: int,
+        stdout: TextIO,
+        stderr: Optional[TextIO],
+        progress_jsonl: Optional[Path],
+    ) -> None:
+        self._max_ticks = max(1, int(max_ticks))
+        self._stdout = stdout
+        self._stderr = stderr
+        self._stderr_is_tty = bool(stderr is not None and getattr(stderr, "isatty", lambda: False)())
+        self._t0 = time.monotonic()
+        self._t_last_tick = self._t0
+        self._tick_durations: list[float] = []
+        self._progress_fh: Optional[TextIO] = None
+        if progress_jsonl is not None:
+            progress_jsonl.parent.mkdir(parents=True, exist_ok=True)
+            self._progress_fh = open(progress_jsonl, "w", encoding="utf-8")
+
+    def tick_end(self, i: int, world_tick: int) -> None:
+        """1 tick 完了時に呼ぶ。stdout / stderr / jsonl 全部更新する。"""
+        now = time.monotonic()
+        last_tick_duration = now - self._t_last_tick
+        self._t_last_tick = now
+        self._tick_durations.append(last_tick_duration)
+        elapsed = now - self._t0
+        avg = sum(self._tick_durations) / max(1, len(self._tick_durations))
+        remaining_ticks = max(0, self._max_ticks - (i + 1))
+        eta = avg * remaining_ticks
+        pct = (i + 1) / self._max_ticks * 100.0
+
+        # stdout: 1 行 print (旧来互換)。
+        self._stdout.write(
+            f"  駆動 {i + 1}/{self._max_ticks} world_tick={world_tick} "
+            f"last_tick={last_tick_duration:.1f}s elapsed={_format_duration(elapsed)} "
+            f"eta={_format_duration(eta)}\n"
+        )
+        self._stdout.flush()
+
+        # stderr: inline 進捗 (tty なら \r で上書き、それ以外は改行)。
+        if self._stderr is not None:
+            terminator = "\r" if self._stderr_is_tty else "\n"
+            line = (
+                f"[{i + 1:>3}/{self._max_ticks}] ({pct:5.1f}%) "
+                f"tick={world_tick} last={last_tick_duration:5.1f}s "
+                f"avg={avg:4.1f}s elapsed={_format_duration(elapsed)} "
+                f"eta={_format_duration(eta)}"
+            )
+            # tty なら行末をクリアするため空白で padding (前行の残り)。
+            if self._stderr_is_tty:
+                line = line.ljust(110)
+            self._stderr.write(line + terminator)
+            self._stderr.flush()
+
+        # progress.jsonl: 1 tick 1 行 (tail -f / 集計用)。
+        if self._progress_fh is not None:
+            entry = {
+                "tick_index": i + 1,
+                "max_ticks": self._max_ticks,
+                "world_tick": int(world_tick),
+                "last_tick_seconds": round(last_tick_duration, 3),
+                "elapsed_seconds": round(elapsed, 1),
+                "avg_tick_seconds": round(avg, 2),
+                "eta_seconds": round(eta, 1),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            self._progress_fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            self._progress_fh.flush()
+
+    def message(self, msg: str) -> None:
+        """ad-hoc メッセージ (ゲーム終了検出など)。stdout のみに出す。"""
+        # stderr の \r 進捗行を一度 改行で確定してからメッセージを出す
+        if self._stderr is not None and self._stderr_is_tty:
+            self._stderr.write("\n")
+            self._stderr.flush()
+        self._stdout.write(f"  {msg}\n")
+        self._stdout.flush()
+
+    def finalize(self) -> None:
+        """完了時の改行・progress.jsonl のクローズ。"""
+        if self._stderr is not None and self._stderr_is_tty:
+            self._stderr.write("\n")
+            self._stderr.flush()
+        if self._progress_fh is not None:
+            self._progress_fh.close()
+            self._progress_fh = None
 
 
 def _load_dotenv_safe() -> None:
@@ -65,6 +178,7 @@ def _drive_scenario(
     max_ticks: int,
     recorder: JsonlTraceRecorder,
     progress: Any,
+    reporter: Optional[_ExperimentProgressReporter] = None,
 ) -> Dict[str, Any]:
     """シナリオを 1 セッション分回し、最終ステートを dict で返す。
 
@@ -139,6 +253,8 @@ def _drive_scenario(
         }
         for i in range(max_ticks):
             w0 = runtime.current_tick()
+            # 旧 progress callable は legacy (start 通知)。新 reporter は
+            # tick 完了時に ETA / per-tick wall time を出す。
             progress(f"駆動 {i + 1}/{max_ticks} world_tick={w0}")
             recorder.record(TraceEventKind.TICK_START, tick=w0)
             runtime.advance_tick()
@@ -168,14 +284,22 @@ def _drive_scenario(
                     )
                     prev_spots[pid_int] = new_spot
             recorder.record(TraceEventKind.TICK_END, tick=last_tick)
+            # 進捗 reporter: tick 完了時の wall time / ETA を stderr + progress.jsonl に出す
+            if reporter is not None:
+                reporter.tick_end(i, last_tick)
             end_check = runtime.check_game_end()
             if end_check.is_ended:
                 outcome = (
                     str(getattr(end_check, "result", None) or "ENDED").upper()
                 )
-                progress(
-                    f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
-                )
+                if reporter is not None:
+                    reporter.message(
+                        f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
+                    )
+                else:
+                    progress(
+                        f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
+                    )
                 break
         elapsed = time.monotonic() - t0
         # Issue #311/#325 後続: 非同期 LLM 主観文付与 scheduler (#310) の in-flight
@@ -359,6 +483,23 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=None,
         help="Optional description override for the published gist",
     )
+    parser.add_argument(
+        "--no-stderr-progress",
+        action="store_true",
+        help=(
+            "Disable inline progress on stderr "
+            "(default: print ETA/elapsed/per-tick wall time on stderr in addition to stdout). "
+            "Useful in CI / non-tty environments where the inline updater becomes noisy."
+        ),
+    )
+    parser.add_argument(
+        "--no-progress-jsonl",
+        action="store_true",
+        help=(
+            "Disable writing progress.jsonl alongside trace.jsonl "
+            "(default: emit progress.jsonl for `tail -f` consumers and post-hoc analysis)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if not args.scenario.exists():
@@ -388,12 +529,27 @@ def main(argv: Optional[List[str]] = None) -> int:
         def progress(msg: str) -> None:
             print(f"  {msg}", flush=True)
 
-        summary = _drive_scenario(
-            scenario_path=args.scenario,
+        # 進捗 reporter: stdout (旧来互換) + stderr inline ETA + progress.jsonl
+        reporter = _ExperimentProgressReporter(
             max_ticks=args.max_ticks,
-            recorder=rec,
-            progress=progress,
+            stdout=sys.stdout,
+            stderr=None if args.no_stderr_progress else sys.stderr,
+            progress_jsonl=(
+                None if args.no_progress_jsonl else (out_dir / "progress.jsonl")
+            ),
         )
+
+        try:
+            summary = _drive_scenario(
+                scenario_path=args.scenario,
+                max_ticks=args.max_ticks,
+                recorder=rec,
+                progress=progress,
+                reporter=reporter,
+            )
+        finally:
+            # 例外で抜けても progress.jsonl は閉じる + stderr の改行を出す
+            reporter.finalize()
         rec.record(TraceEventKind.RUN_END, **summary)
 
     report = _build_report(
