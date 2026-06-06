@@ -1176,8 +1176,35 @@ _VIEWER_JS_TEMPLATE = """
     ],
     layout: {{
       name: 'cose', animate: false,
-      idealEdgeLength: 120, nodeRepulsion: 8000, padding: 30,
+      // Phase 2 (実験 #26 user feedback): 初期グラフが縦長になり横スペースが
+      // 余っていた問題への対応。aspect ratio を container に合わせるため
+      // boundingBox を container 比 (横長) で与え、cose にレイアウト範囲の
+      // 縦横比を伝える。
+      boundingBox: (() => {{
+        const c = document.getElementById('cy');
+        const w = c ? c.clientWidth : 1200;
+        const h = c ? c.clientHeight : 600;
+        // ノード周辺に少し余白を残す (各辺 5%)
+        const padX = w * 0.05;
+        const padY = h * 0.05;
+        return {{ x1: padX, y1: padY, x2: w - padX, y2: h - padY }};
+      }})(),
+      idealEdgeLength: 140,
+      nodeRepulsion: 12000,
+      padding: 30,
+      // 横方向の広がりを優先するため重力を弱める
+      gravity: 0.15,
     }},
+  }});
+  // layout 完了後に fit し直して container いっぱいに広げる
+  cy.ready(() => {{
+    cy.fit(undefined, 50);
+  }});
+  // resize 時に再 fit (sidebar 開閉 / window リサイズで縦長になりがち)
+  window.addEventListener('resize', () => {{
+    if (cy && typeof cy.fit === 'function') {{
+      cy.fit(undefined, 50);
+    }}
   }});
 
   // playback state
@@ -1278,14 +1305,34 @@ _VIEWER_JS_TEMPLATE = """
     requestAnimationFrame(() => {{
       const GAP = 10;       // bubble 間の余白
       const PLAYER_GAP = 18; // player marker と最下 bubble の隙間
+      // Phase 2 (実験 #26 user feedback): 複数 player が同 spot に居ると
+      // bubble が水平方向に重なる。各 player の bubble stack を「同 spot
+      // 内の他 player の bubble と縦に積み重ねる」ことで重なりを回避する。
+      // まず spot id ごとに group を分類。
+      const groupsBySpot = new Map();
       for (const g of groups) {{
-        let yCursor = g.pos.y - PLAYER_GAP;
-        for (const item of g.elements) {{
-          // transform: translate(-50%, -100%) なので top は bubble の下端
-          item.el.style.top = yCursor + 'px';
-          // 次の bubble はこの bubble の上端 - GAP に下端を置く
-          yCursor = yCursor - item.el.offsetHeight - GAP;
-          item.el.classList.add('visible');
+        const spotId = playerSpotAtTick(g.pid, currentTick);
+        if (!spotId) {{
+          (groupsBySpot.get('orphan') || groupsBySpot.set('orphan', []).get('orphan')).push(g);
+          continue;
+        }}
+        if (!groupsBySpot.has(spotId)) groupsBySpot.set(spotId, []);
+        groupsBySpot.get(spotId).push(g);
+      }}
+      // spot ごとに stack を作る (= 同 spot の player の bubble を全部
+      // 1 つの縦列にまとめる。x は spot 中心、y は下から上へ積む)。
+      for (const [spotId, gs] of groupsBySpot.entries()) {{
+        if (gs.length === 0) continue;
+        // 同 spot の中心 x = player marker 位置の平均
+        const meanX = gs.reduce((s, g) => s + g.pos.x, 0) / gs.length;
+        let yCursor = Math.min(...gs.map(g => g.pos.y)) - PLAYER_GAP;
+        for (const g of gs) {{
+          for (const item of g.elements) {{
+            item.el.style.left = meanX + 'px';
+            item.el.style.top = yCursor + 'px';
+            yCursor = yCursor - item.el.offsetHeight - GAP;
+            item.el.classList.add('visible');
+          }}
         }}
       }}
     }});
