@@ -178,18 +178,27 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         # アクター本人にはツール結果として失敗が返るため、観測は他者にのみ。
         if self._is_self(event.entity_id, recipient_id):
             return None
-        # actor / obj_name は構造化データのコンテキスト情報として保存。
-        # prose 自体はシナリオ作家が書いた observation_message をそのまま
-        # 使う (テンプレ置換はせず、命名済み主語をシナリオに任せる方針)。
         actor = self._resolve_entity_name(event.entity_id)
         obj_name = self._resolve_object_name(event.spot_id, event.object_id)
-        prose = event.observation_message
+        # #356 後続: prose の優先順位
+        # 1. シナリオ宣言 override (`observation_message`) があればそのまま
+        # 2. 例外 reason (`failure_reason`) があれば自動構築
+        # 3. どちらも無ければ silent (他者の学習材料にならない)
+        override = event.observation_message or ""
+        reason = getattr(event, "failure_reason", None) or ""
+        if override:
+            prose = override
+        elif reason:
+            prose = f"{actor}が{obj_name}の{event.action_name}を試みたが、{reason}"
+        else:
+            return None
         structured = {
             "type": "spot_object_interaction_failed",
             "actor": actor,
             "object_name": obj_name,
             "action_name": event.action_name,
-            "message": event.observation_message,
+            "message": prose,
+            "failure_reason": reason,
         }
         return ObservationOutput(
             prose=prose, structured=structured, observation_category="social",
