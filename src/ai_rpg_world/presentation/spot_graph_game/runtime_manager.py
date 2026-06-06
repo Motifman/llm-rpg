@@ -74,6 +74,9 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
     PlayerSpotNavigationState,
 )
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
+)
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 from ai_rpg_world.presentation.spot_graph_game.schemas import (
@@ -157,6 +160,34 @@ from ai_rpg_world.application.llm.services.failure_helpers import (  # noqa: E40
     list_player_labels as _list_player_labels,
     list_targets_of_kind as _list_targets_of_kind,
 )
+
+
+# N2: 「枯渇 / 同じ tick 内に再採取できない」系の失敗 reason を検知する
+# キーワード集。マッチしたら「同じ object に同 action_name を retry しない」
+# 旨の remediation に切り替える (= LLM が同じ枯渇 resource を回し続ける
+# 無限 retry の抑制)。
+_INTERACTION_EXHAUST_HINTS = (
+    "採り尽く",
+    "枯渇",
+    "もう空",
+    "もう開い",
+    "すでに",
+    "今は",
+    "燃え上が",
+)
+
+
+def _interact_remediation_for_reason(reason: str) -> str:
+    if any(k in reason for k in _INTERACTION_EXHAUST_HINTS):
+        return (
+            "同じ object に同 action_name を再試行しても結果は変わらない。"
+            "別の場所・別 object・別 action を選ぶか、必要な前提アイテムを"
+            "先に揃えてから戻ること。"
+        )
+    return (
+        "前提条件 (必要アイテム / 体力 / 天候 / フラグ) を満たしてから再試行する。"
+        "失敗 reason に名指しされたアイテムや状態を確認すること。"
+    )
 
 
 def _safe_get_str(mapper: Any, namespace: str, numeric_id: int) -> str:
@@ -1249,7 +1280,20 @@ class _EscapeGameLlmWiring:
                 ),
             )
         object_id = self.runtime.id_mapper.get_str("object", target.world_object_id)
-        result = self.runtime.do_interact(player_id, object_id, action_name)
+        # N2: precondition 失敗 (= scenario JSON の failure_message) を generic
+        # "LLM ツール実行に失敗しました" に潰さず、failure_message そのものを
+        # surface する。さらに「枯渇」っぽい文言なら retry を抑える remediation
+        # を添える (= 同じ object に再度同 action_name を投げない指示)。
+        try:
+            result = self.runtime.do_interact(player_id, object_id, action_name)
+        except InteractionNotAllowedException as exc:
+            reason = str(exc) or "前提条件を満たさない"
+            return LlmCommandResultDto(
+                success=False,
+                message=f"行動が拒否された: {reason}",
+                error_code="INTERACTION_PRECONDITION_FAILED",
+                remediation=_interact_remediation_for_reason(reason),
+            )
         return with_inner_thought_empty_warning(
             TOOL_NAME_SPOT_GRAPH_INTERACT,
             arguments,
