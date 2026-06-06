@@ -101,3 +101,4 @@ local_experiments/*
 
 # ローカル git worktree 用（誤コミット防止・memory_feature_workflow.md §4.3）
 worktrees/
+.claude/
