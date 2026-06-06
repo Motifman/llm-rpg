@@ -211,10 +211,39 @@ def _maybe_build_viewer(run_dir: Path) -> Optional[Path]:
             cytoscape_js_src=asset.content,
         )
         viewer_path.write_text(html_str, encoding="utf-8")
-        return viewer_path
     except Exception as e:
         logger.warning("failed to build viewer.html: %s", e)
         return None
+
+    # Phase 3 (実験 #26 user feedback): 追加 viewer 2 種を併せて生成する。
+    # 失敗しても publish は続行 (main viewer はある)。
+    try:
+        from scripts.build_episodic_viewer import (  # noqa: WPS433
+            aggregate_episodes,
+            load_events as _load_episodic_events,
+        )
+        from scripts.build_episodic_viewer import render_html as _render_episodic
+        episodic_events = _load_episodic_events(trace_path)
+        episodes = aggregate_episodes(episodic_events)
+        if episodes:
+            (run_dir / "episodic.html").write_text(
+                _render_episodic(episodes, run_dir.name), encoding="utf-8",
+            )
+    except Exception as e:
+        logger.warning("failed to build episodic.html: %s", e)
+    try:
+        from scripts.build_timeline_viewer import (  # noqa: WPS433
+            load_events as _load_timeline_events,
+        )
+        from scripts.build_timeline_viewer import render_html as _render_timeline
+        timeline_events = _load_timeline_events(trace_path)
+        (run_dir / "timeline.html").write_text(
+            _render_timeline(timeline_events, run_dir.name), encoding="utf-8",
+        )
+    except Exception as e:
+        logger.warning("failed to build timeline.html: %s", e)
+
+    return viewer_path
 
 
 def publish(
