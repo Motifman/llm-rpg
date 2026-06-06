@@ -1,6 +1,10 @@
-from typing import Optional, Dict, Any, Set
+from typing import Optional, Dict, Any, Set, Tuple, TYPE_CHECKING
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+    from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.enum.inventory_sort_type import InventorySortType
@@ -200,6 +204,51 @@ class PlayerInventoryAggregate(AggregateRoot):
         if slot_id.value >= self._max_slots:
             raise InvalidSlotException(f"Invalid slot id: {slot_id.value}")
         return self._inventory_slots.get(slot_id)
+
+    def iter_slots(self):
+        """(slot_id, item_instance_id_or_None) を全スロットについて yield する。
+
+        application 層からスロット一覧を走査するための公開 API
+        (実験 #26 で executor が `_inventory_slots` private dict を直接 iter
+        していて型シフトで容易に壊れたため、aggregate の責務として公開する)。
+
+        順序: 内部 dict の挿入順 (= slot_id.value 昇順)。空スロット
+        (item_instance_id=None) も含む — caller が if iid is None で skip する
+        前提。
+        """
+        return iter(self._inventory_slots.items())
+
+    def iter_occupied_slots(self):
+        """item が入っているスロットだけ (slot_id, item_instance_id) を yield。
+
+        executor が「持っているアイテムを順に見る」のに使う典型用途。
+        """
+        for slot_id, iid in self._inventory_slots.items():
+            if iid is not None:
+                yield slot_id, iid
+
+    def find_slot_by_item_spec_id(
+        self,
+        item_spec_id: "ItemSpecId",
+        item_repository: "ItemRepository",
+    ) -> Optional[tuple["SlotId", ItemInstanceId]]:
+        """指定 spec_id のアイテムを持っているスロットを 1 件返す (slot_id, iid)。
+
+        実験 #26 で executor が `inv.slots` 存在しない属性を iter していた
+        バグの恒久対策: 「spec_id でアイテムを探す」ロジックを aggregate
+        の責務として集約。caller が private 属性に触れずに済む。
+
+        Returns:
+            最初に見つかった (slot_id, item_instance_id) の組。見つからない
+            なら None。順序は内部 dict の挿入順。
+        """
+        for slot_id, iid in self._inventory_slots.items():
+            if iid is None:
+                continue
+            agg = item_repository.find_by_id(iid)
+            if agg is not None and agg.item_spec.item_spec_id == item_spec_id:
+                return slot_id, iid
+        return None
 
     def get_item_instance_id_by_equipment_slot(self, equipment_slot: EquipmentSlotType) -> Optional[ItemInstanceId]:
         """装備スロットタイプからItemInstanceIdを取得"""

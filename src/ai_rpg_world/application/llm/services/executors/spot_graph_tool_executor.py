@@ -276,20 +276,17 @@ class SpotGraphToolExecutor:
                 )
             target_spec = ISpecId.create(item_spec_id_int)
             # インベントリからアイテムインスタンスを探す。
-            # 実験 #26 で発覚: 旧コードは `inv.slots` を iter していたが、
-            # `PlayerInventoryAggregate` に `slots` 属性は存在せず
-            # `_inventory_slots: Dict[SlotId, Optional[ItemInstanceId]]` のみ
-            # → 全 use_item が AttributeError → SYSTEM_ERROR (72 件) で死んでいた。
+            # 実験 #26 で発覚: 旧コードは `inv.slots` (存在しない属性) を iter して
+            # 全 use_item が AttributeError → SYSTEM_ERROR (72 件) で死んでいた。
+            # PR #385 で `_inventory_slots.items()` 直接 iter に hot fix した後、
+            # 本 PR で aggregate 側の公開 API `find_slot_by_item_spec_id` に
+            # 切り替え、private 属性への直接アクセスを完全廃止 (恒久対策)。
+            found = inv.find_slot_by_item_spec_id(target_spec, self._item_repository)
             item_instance = None
             matched_slot_id = None
-            for slot_id, iid in inv._inventory_slots.items():
-                if iid is None:
-                    continue
-                item = self._item_repository.find_by_id(iid)
-                if item is not None and item.item_spec.item_spec_id == target_spec:
-                    item_instance = item
-                    matched_slot_id = slot_id
-                    break
+            if found is not None:
+                matched_slot_id, iid = found
+                item_instance = self._item_repository.find_by_id(iid)
             if item_instance is None:
                 return LlmCommandResultDto(
                     success=False,
