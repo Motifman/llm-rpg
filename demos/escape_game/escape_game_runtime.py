@@ -1931,7 +1931,14 @@ def create_escape_game_runtime(
         spot_graph_repository=spot_graph_repo,
     )
 
-    obs_formatter = ObservationFormatter(spot_graph_repository=spot_graph_repo)
+    # #356 後続: monster_repository を渡さないと name_resolver が
+    # FALLBACK_MONSTER_LABEL ("何かのモンスター") を返してしまい、攻撃観測
+    # 全件が「何かのモンスターに襲われ…」になっていた (内部 fallback の漏出)。
+    # シナリオで monster_placements が宣言されているなら必ず注入する。
+    obs_formatter = ObservationFormatter(
+        spot_graph_repository=spot_graph_repo,
+        monster_repository=monster_repo if scenario.monster_placements else None,
+    )
     obs_formatter._name_resolver.player_name = lambda pid: player_name_map.get(  # type: ignore[assignment]
         pid.value, f"プレイヤー({pid.value})"
     )
