@@ -2055,7 +2055,13 @@ def create_escape_game_runtime(
     # Phase v2-hunger: outcome_resolution_config 宣言があるシナリオ (= v2 survival)
     # では HUNGER=max のプレイヤーに毎 tick 飢餓ダメージを与える (Minecraft 風)。
     # 既存シナリオ (v1 / 脱出ゲーム) は config を持たないので無影響 (後方互換)。
-    starvation_dmg = 1 if scenario.outcome_resolution_config is not None else 0
+    # #356 後続: 飢餓ダメージ量を scenario JSON で調整可能にする
+    # (`outcome_resolution.starvation_damage_per_tick`)。default 1 で後方互換。
+    starvation_dmg = (
+        scenario.outcome_resolution_config.starvation_damage_per_tick
+        if scenario.outcome_resolution_config is not None
+        else 0
+    )
     needs_decay_stage = SpotGraphNeedsDecayStageService(
         player_status_repository=player_status_repo,
         starvation_damage_per_tick=starvation_dmg,
