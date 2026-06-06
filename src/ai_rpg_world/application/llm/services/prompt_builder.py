@@ -347,8 +347,14 @@ class DefaultPromptBuilder(IPromptBuilder):
         player_id: PlayerId,
         situation_cues: tuple,
         candidates: list,
+        relevant_memories_text: str = "",
     ) -> None:
-        """``EPISODIC_RECALL`` を trace に記録する (失敗は握りつぶす)。"""
+        """``EPISODIC_RECALL`` を trace に記録する (失敗は握りつぶす)。
+
+        ``relevant_memories_text`` は実 prompt に注入された連結後テキスト。
+        recall 1 件あたりの注入サイズ ÷ prompt_tokens を post-hoc に出すための
+        計測点 (実験 #356 後続: cached_tokens / TTFT 分析と組合せる)。
+        """
         recorder = self._resolve_trace_recorder()
         if recorder is None:
             return
@@ -383,6 +389,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 situation_cues=cue_keys,
                 candidate_count=len(cand_payload),
                 candidates=cand_payload,
+                recall_text_chars_total=len(relevant_memories_text or ""),
             )
         except Exception:
             # 例: recorder が新しい kind を未知扱いで例外を投げる等。
@@ -587,6 +594,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             player_id=player_id,
             situation_cues=situation_cues,
             candidates=list(recall_result.candidates),
+            relevant_memories_text=relevant_memories_text,
         )
 
         if self._episodic_memory_link_service is not None and recall_result.candidates:

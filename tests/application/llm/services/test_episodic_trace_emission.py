@@ -405,6 +405,35 @@ class TestPromptBuilderRecallTraceEmission:
         # recall_text snippet は 120 文字に切り詰められている
         assert len(cand0["recall_text_snippet"]) <= 120
         assert cand0["recall_text_snippet"].startswith("長いリコール本文")
+        # relevant_memories_text を渡さない既定では chars_total=0
+        assert ev.payload["recall_text_chars_total"] == 0
+
+    def test_recall_text_chars_total_に_実注入テキスト長が乗る(self) -> None:
+        """relevant_memories_text を渡すと、その文字数が payload に出る
+        (post-hoc に prompt_tokens 比へ換算するための計測点)。"""
+        from ai_rpg_world.application.llm.services.prompt_builder import (
+            DefaultPromptBuilder,
+        )
+
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+
+        builder = object.__new__(DefaultPromptBuilder)
+        builder._trace_recorder = recorder
+        builder._trace_recorder_provider = None
+        builder._current_tick_provider = lambda: 1
+
+        joined = "おれは昨日この場所で罠を仕掛けた。\n仲間が崖から落ちるのを見た。"
+        builder._emit_episodic_recall_trace(
+            player_id=PlayerId(1),
+            situation_cues=(),
+            candidates=[],
+            relevant_memories_text=joined,
+        )
+
+        events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_RECALL]
+        assert len(events) == 1
+        assert events[0].payload["recall_text_chars_total"] == len(joined)
 
     def test_recorder_未注入なら_emit_は_no_op(self) -> None:
         """trace_recorder=None なら例外なく no-op。"""
