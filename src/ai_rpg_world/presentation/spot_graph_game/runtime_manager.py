@@ -281,6 +281,7 @@ class _LlmMetricsTraceSink:
                 wall_latency_ms=metrics.wall_latency_ms,
                 prompt_tokens=metrics.prompt_tokens,
                 completion_tokens=metrics.completion_tokens,
+                cached_tokens=metrics.cached_tokens,
                 tps=metrics.tps,
                 success=metrics.success,
                 error_code=metrics.error_code,

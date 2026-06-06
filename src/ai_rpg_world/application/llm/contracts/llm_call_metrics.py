@@ -26,6 +26,9 @@ class LlmCallMetrics:
         wall_latency_ms: 呼び出し開始 → 終了の壁時計 (HTTP RTT 含む全部)
         prompt_tokens: 入力トークン数 (litellm 経由で取れる場合)
         completion_tokens: 出力トークン数 (litellm 経由で取れる場合)
+        cached_tokens: prefix cache 経由で再利用された入力トークン数。
+            provider が返さない場合は 0。vLLM / OpenAI は ``usage.prompt_tokens_details.cached_tokens``、
+            Anthropic は ``usage.cache_read_input_tokens`` で返す
         tps: tokens per second (= completion_tokens / wall_seconds)。
             wall_latency_ms <= 0 の場合は 0.0
         success: tool_call が parse できたか / 例外なく終わったか
@@ -39,6 +42,7 @@ class LlmCallMetrics:
     tps: float
     success: bool
     error_code: Optional[str] = None
+    cached_tokens: int = 0
 
     @staticmethod
     def compute_tps(completion_tokens: int, wall_latency_ms: int) -> float:
