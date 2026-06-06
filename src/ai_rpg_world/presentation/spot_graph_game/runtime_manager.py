@@ -71,6 +71,9 @@ from ai_rpg_world.application.llm.wiring._llm_client_factory import (
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.intent.value_object.intent import Intent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
+    PlayerSpotNavigationState,
+)
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 from ai_rpg_world.presentation.spot_graph_game.schemas import (
@@ -757,7 +760,11 @@ class _EscapeGameLlmWiring:
         # まず travel をキャンセルして agent を現在地に着地させてから tool を
         # 実行する (free tool: speech / memo / examine / wait は中断せず通す)。
         # LLM への surface は snapshot の agent_status section で既に通知済み。
-        was_interrupted = self._maybe_interrupt_busy(player_id, name)
+        # Review HIGH 1 対応: 中断前の nav_state を snapshot して、tool 実行が
+        # 失敗したら travel を復元する (= 「失敗したのに移動が消える」を防ぐ)。
+        was_interrupted, nav_snapshot = self._maybe_interrupt_busy(
+            player_id, name
+        )
         try:
             result = self._execute_tool(
                 player_id,
@@ -780,12 +787,25 @@ class _EscapeGameLlmWiring:
                 error_code="LLM_TOOL_EXECUTION_FAILED",
                 remediation="現在の状況に表示されたラベルと利用可能な action_name を確認してください。",
             )
+        # Review HIGH 1 対応: tool が失敗したら travel を復元する。
+        # 成功時のみ中断確定。失敗時は「travel 継続中だが今 tick は別行動を
+        # 試みて失敗した」状態に戻す (LLM が次 tick で travel を再開できる)。
+        rolled_back = False
+        if not result.success and nav_snapshot is not None:
+            self._restore_nav_state(player_id, nav_snapshot)
+            rolled_back = True
         # 中断が起きていれば result.message に「移動を中断した」prefix を付与。
         # 観測としても次 tick で agent_status の busy=False が読めるので二重保険。
-        if was_interrupted:
+        # ロールバックされた場合は別文面: travel は維持されたまま。
+        if was_interrupted and not rolled_back:
             result = dataclass_replace(
                 result,
                 message="進行中の移動を中断して新しい行動を選択した。 " + result.message,
+            )
+        elif rolled_back:
+            result = dataclass_replace(
+                result,
+                message="行動は失敗したため、進行中の移動はそのまま継続している。 " + result.message,
             )
         # PR 5 (#227): memo 完了 hint で result.message を augment する。
         # memo_* ツール自身の実行直後は hint を出さない (冗長 / 自己参照ループ
@@ -940,7 +960,17 @@ class _EscapeGameLlmWiring:
     # 軽い行動 (発話 / メモ / 観察 / 待機) は travel と並行できる。
     # 重い tool (travel_to / interact / use_item / attack / drop / pickup /
     # give / prepare_action / set_sub_location) は busy を中断する。
-    _BUSY_FREE_TOOLS: frozenset = frozenset({
+    #
+    # 注: `set_sub_location` を heavy 側に含めるのは、travel 中に
+    # `PlayerSpotNavigationState.with_sub_location` が domain 例外を投げる
+    # (= sub_location 変更は travel 完了後でないと意味がない) ため。中断して
+    # から sub_location 変更を試みる semantics が一貫している。
+    # 注: leg 途中で中断したときの `current_spot_id` は出発地のままになる
+    # (`PlayerSpotNavigationState.advance_one_world_tick` が leg 完了時のみ
+    # 更新するため)。物理的に「edge の途中で立ち止まる」状態は表現せず、
+    # 「最後に通過した spot で停止」semantics を取る (graph 上の entity 位置
+    # も同じ spot に居続けるので整合する)。
+    _BUSY_FREE_TOOLS: frozenset[str] = frozenset({
         TOOL_NAME_SPEECH,
         TOOL_NAME_SPOT_GRAPH_LISTEN,
         TOOL_NAME_SPOT_GRAPH_WAIT,
@@ -952,27 +982,31 @@ class _EscapeGameLlmWiring:
 
     def _maybe_interrupt_busy(
         self, player_id: PlayerId, tool_name: str
-    ) -> bool:
+    ) -> tuple[bool, Optional[PlayerSpotNavigationState]]:
         """重い tool が来たら travel をキャンセルして agent を現在地に着地させる。
 
+        Review HIGH 1 対応: 中断前の nav_state を snapshot として返す。
+        tool が失敗した場合に呼び出し側が `_restore_nav_state` で元に戻せる。
+
         Returns:
-            True なら中断が起きた (Phase B 側で result.message を augment 用)。
+            (was_interrupted, nav_state_snapshot)。
+            was_interrupted=False のとき snapshot は None。
         """
         if not tool_name or tool_name in self._BUSY_FREE_TOOLS:
-            return False
+            return False, None
         repo = getattr(self.runtime, "_player_status_repo", None)
         if repo is None:
-            return False
+            return False, None
         status = repo.find_by_id(player_id)
         if status is None or status.spot_navigation_state is None:
-            return False
+            return False, None
         nav = status.spot_navigation_state
         if not nav.is_traveling:
-            return False
-        # current_spot で at_rest 状態に上書き (= 中断 / 残り leg 破棄)。
-        from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
-            PlayerSpotNavigationState,
-        )
+            return False, None
+        # snapshot を取ってから current_spot で at_rest 状態に上書きする
+        # (= 中断 / 残り leg 破棄)。snapshot は immutable な dataclass なので
+        # コピー不要。
+        nav_snapshot = nav
         status.set_spot_navigation_state(
             PlayerSpotNavigationState.at_rest(nav.current_spot_id)
         )
@@ -984,7 +1018,29 @@ class _EscapeGameLlmWiring:
             nav.leg_index,
             len(nav.leg_connection_ids),
         )
-        return True
+        return True, nav_snapshot
+
+    def _restore_nav_state(
+        self,
+        player_id: PlayerId,
+        nav_snapshot: PlayerSpotNavigationState,
+    ) -> None:
+        """Review HIGH 1 対応: tool が失敗したら nav_state を snapshot に戻す。
+
+        「中断 → tool 失敗 → 移動が消える」を避けるためのロールバック。
+        """
+        repo = getattr(self.runtime, "_player_status_repo", None)
+        if repo is None:
+            return
+        status = repo.find_by_id(player_id)
+        if status is None:
+            return
+        status.set_spot_navigation_state(nav_snapshot)
+        repo.save(status)
+        logger.info(
+            "Travel restored for player_id=%s (tool failed, nav_state rolled back)",
+            int(player_id.value),
+        )
 
     def _coerce_arguments(self, raw_arguments: Any) -> dict[str, Any]:
         if isinstance(raw_arguments, dict):

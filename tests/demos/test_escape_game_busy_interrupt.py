@@ -85,10 +85,12 @@ class TestMaybeInterruptBusy:
         _put_player_traveling(runtime, player_id_value)
 
         # 中断発火 (interact = heavy)
-        result = wiring._maybe_interrupt_busy(
+        was_interrupted, snapshot = wiring._maybe_interrupt_busy(
             PlayerId(player_id_value), TOOL_NAME_SPOT_GRAPH_INTERACT
         )
-        assert result is True
+        assert was_interrupted is True
+        assert snapshot is not None
+        assert snapshot.is_traveling is True
         status = runtime._player_status_repo.find_by_id(PlayerId(player_id_value))
         assert status.spot_navigation_state.is_traveling is False
 
@@ -104,10 +106,11 @@ class TestMaybeInterruptBusy:
         _put_player_traveling(runtime, player_id_value)
 
         # 発話で中断しない (free tool)
-        result = wiring._maybe_interrupt_busy(
+        was_interrupted, snapshot = wiring._maybe_interrupt_busy(
             PlayerId(player_id_value), TOOL_NAME_SPEECH
         )
-        assert result is False
+        assert was_interrupted is False
+        assert snapshot is None
         status = runtime._player_status_repo.find_by_id(PlayerId(player_id_value))
         assert status.spot_navigation_state.is_traveling is True
 
@@ -122,7 +125,55 @@ class TestMaybeInterruptBusy:
         player_id_value = int(runtime.scenario.player_spawns[0].player_id)
         # traveling 設定なし
 
-        result = wiring._maybe_interrupt_busy(
+        was_interrupted, snapshot = wiring._maybe_interrupt_busy(
             PlayerId(player_id_value), TOOL_NAME_SPOT_GRAPH_INTERACT
         )
-        assert result is False
+        assert was_interrupted is False
+        assert snapshot is None
+
+
+class TestRestoreNavStateOnFailure:
+    """Review HIGH 1 対応: tool が失敗したら travel を復元する。"""
+
+    def test_traveling_中に_travel_to_でも_中断される(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        """別の travel_to が来たら現在の travel を中断する。"""
+        from tests.demos._escape_game_helpers import create_escape_game_session
+
+        state = create_escape_game_session(monkeypatch, tmp_path, stub=None)
+        runtime = state.runtime
+        wiring = state.llm_wiring
+        player_id_value = int(runtime.scenario.player_spawns[0].player_id)
+        _put_player_traveling(runtime, player_id_value)
+
+        was_interrupted, snapshot = wiring._maybe_interrupt_busy(
+            PlayerId(player_id_value), TOOL_NAME_SPOT_GRAPH_TRAVEL_TO
+        )
+        assert was_interrupted is True
+        assert snapshot is not None and snapshot.is_traveling is True
+
+    def test_restore_nav_state_で_travel_状態が_復元される(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        from tests.demos._escape_game_helpers import create_escape_game_session
+
+        state = create_escape_game_session(monkeypatch, tmp_path, stub=None)
+        runtime = state.runtime
+        wiring = state.llm_wiring
+        player_id_value = int(runtime.scenario.player_spawns[0].player_id)
+        _put_player_traveling(runtime, player_id_value)
+
+        # 中断 → ロールバック
+        _, snapshot = wiring._maybe_interrupt_busy(
+            PlayerId(player_id_value), TOOL_NAME_SPOT_GRAPH_INTERACT
+        )
+        assert snapshot is not None
+        # 中断直後は at_rest
+        status = runtime._player_status_repo.find_by_id(PlayerId(player_id_value))
+        assert status.spot_navigation_state.is_traveling is False
+        # 復元
+        wiring._restore_nav_state(PlayerId(player_id_value), snapshot)
+        status = runtime._player_status_repo.find_by_id(PlayerId(player_id_value))
+        assert status.spot_navigation_state.is_traveling is True
+        assert status.spot_navigation_state.route == snapshot.route
