@@ -293,8 +293,28 @@ class _EscapeGameLlmTurnTrigger:
         self._turn_counts.setdefault(player_id.value, 0)
 
     def run_scheduled_turns(self) -> None:
+        # #363 Fix 1a: ゲーム既終了なら一切 LLM を回さない。実験 #25 ON_FULL で
+        # 全員 DEAD 後も LLM ターン継続 → 駆動 tick 107 が 49 分ハングした
+        # silent failure を防ぐ。check_game_end() は all_resolved() で O(N)、
+        # 毎 tick 叩いても問題ない軽さ。
+        runtime = self.wiring.runtime
+        check_game_end = getattr(runtime, "check_game_end", None)
+        if callable(check_game_end):
+            try:
+                if check_game_end().is_ended:
+                    self.pending_player_ids.clear()
+                    self._turn_counts.clear()
+                    return
+            except Exception:
+                # check_game_end 自体が落ちても turn 実行を続ける fail-safe
+                logger.exception("check_game_end raised; continuing turn execution")
+
         to_run = list(self.pending_player_ids)
         self.pending_player_ids.clear()
+        # #363 Fix 1b: 行動不可 (is_down / outcome 確定) のプレイヤーを除外。
+        # 死亡したプレイヤーが speech 観測などで起こされるケースがあるため、
+        # to_run の filter は確実に必要。
+        to_run = [pid for pid in to_run if self._can_player_act(pid)]
         if not to_run:
             return
 
@@ -361,6 +381,40 @@ class _EscapeGameLlmTurnTrigger:
             self._turn_counts[player_id_value] = current_count
         else:
             self._turn_counts.pop(player_id_value, None)
+
+    def _can_player_act(self, player_id_value: int) -> bool:
+        """#363 Fix 1b: 行動不可なプレイヤーを LLM 経路から除外する。
+
+        判定:
+        - outcome 確定 (DEAD / STRANDED / RESCUED) → 行動不可
+        - is_down (= can_act() False) → 行動不可
+        - 上記いずれも当たらない / 情報不足 → 行動可 (fail-safe で turn を回す)
+
+        実験 #25 ON_FULL では死亡後も speech 観測等で起こされて LLM ターン
+        が継続し、駆動 tick が膨張した。filter を入れて死亡 player を skip。
+        """
+        runtime = self.wiring.runtime
+        # 1. outcome registry を見る (最も明確なシグナル)
+        outcome_registry = getattr(runtime, "_player_outcome_registry", None)
+        if outcome_registry is not None:
+            try:
+                outcome = outcome_registry.get_outcome(PlayerId(player_id_value))
+                if outcome.is_resolved:
+                    return False
+            except Exception:
+                # registry エラーは fail-safe で turn 継続
+                pass
+        # 2. status.can_act() を見る (is_down 等の遷移を含む)
+        status_repo = getattr(runtime, "_player_status_repo", None)
+        if status_repo is None:
+            return True
+        try:
+            status = status_repo.find_by_id(PlayerId(player_id_value))
+            if status is None:
+                return True
+            return bool(status.can_act())
+        except Exception:
+            return True
 
 
 @dataclass
