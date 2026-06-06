@@ -152,6 +152,28 @@ class SpotGraphMonsterEntry:
     is_dead: bool = False
 
 
+# --- agent busy 状態 ---
+
+@dataclass(frozen=True)
+class SpotGraphAgentStatusEntry:
+    """プレイヤーの現在の行動状態 (busy / 中断可能性) を LLM に伝えるための構造化情報。
+
+    travel_to のような multi-tick 行動の途中、agent が「物理的にロックされている」
+    ことを snapshot から読み取れるようにする。中断可能 (= 別の重い行動を取ると
+    travel をキャンセルして新行動に切り替わる) ことも明示する。
+    """
+    # 現在 busy 状態にあるか (= multi-tick action の途中)。
+    busy: bool = False
+    # busy の理由 (人間可読、例: "山頂への移動中")。None なら busy=False のときだけ。
+    busy_reason: Optional[str] = None
+    # 残り何 tick で busy が終わるか。is_traveling 経由でわかる値。
+    remaining_ticks: int = 0
+    # busy 中でも「軽い行動」(speech, memo, examine 等) は可能。
+    # 「重い行動」(別 travel, interact, use_item, attack) を選ぶと busy が中断され
+    # 現在地で停止する。LLM にこの選択肢の存在を伝える。
+    interruptible: bool = True
+
+
 # --- スナップショット ---
 
 @dataclass(frozen=True)
@@ -186,6 +208,11 @@ class SpotGraphPlayerSnapshotDto:
     # 「出血 (残り 9 tick)」のような表記で LLM に渡し、bandage を探す行動連鎖を
     # 取れるようにする。effects が空のときは () を返す。
     active_effect_lines: Tuple[str, ...] = ()
+
+    # 現在の行動状態 (travel 等の multi-tick action 中か)。busy=False が default。
+    agent_status: SpotGraphAgentStatusEntry = field(
+        default_factory=SpotGraphAgentStatusEntry
+    )
 
     # Phase 4-E: 行動者本人の自由 state (HIDDEN を含む全項目)。
     # 自分自身の内面なので毒・呪い・隠しフラグも本人プロンプトには載せる。
