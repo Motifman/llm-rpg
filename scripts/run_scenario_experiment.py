@@ -520,12 +520,22 @@ def main(argv: Optional[List[str]] = None) -> int:
         ENV_PROMPT_SECTION_ORDER,
         resolve_section_order_from_env,
     )
+    from ai_rpg_world.application.llm.wiring.feature_flags import (
+        ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
+        resolve_episodic_explore_related_enabled,
+    )
     resolved_section_order = resolve_section_order_from_env()
+    resolved_explore_related = resolve_episodic_explore_related_enabled()
 
     print(f"[run] scenario={args.scenario.name} max_ticks={args.max_ticks}", flush=True)
     print(
         f"[run] section_order={resolved_section_order} "
         f"(override via {ENV_PROMPT_SECTION_ORDER}=stable_to_volatile|legacy)",
+        flush=True,
+    )
+    print(
+        f"[run] episodic_explore_related={'on' if resolved_explore_related else 'off'} "
+        f"(override via {ENV_EPISODIC_EXPLORE_RELATED_ENABLED}=1)",
         flush=True,
     )
     print(f"[out] {out_dir}", flush=True)
@@ -538,6 +548,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             model=os.environ.get("LLM_MODEL"),
             api_base=os.environ.get("OPENAI_API_BASE"),
             prompt_section_order=resolved_section_order,
+            episodic_explore_related_enabled=resolved_explore_related,
         )
 
         def progress(msg: str) -> None:
