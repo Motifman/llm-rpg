@@ -94,6 +94,11 @@ class SpotObjectStateChangedEvent(BaseDomainEvent[SpotGraphId, str]):
     new_state: Dict[str, Any]
     actor_entity_id: Optional[EntityId] = None
     state_delta: Tuple[StateDeltaEntry, ...] = ()
+    # 著者が書いた日本語の観測テキスト。formatter は narrative がある時だけ
+    # observation を emit する (None なら silent = 内部用語の漏洩を防ぐ)。
+    # 旧コードは state_delta から "available が False から True に変わった"
+    # を機械生成してプロンプトに垂れ流していた (#356 後続 finding)。
+    narrative: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -206,8 +211,16 @@ class SpotObjectInteractionFailedEvent(BaseDomainEvent[SpotGraphId, str]):
     """エンティティがオブジェクト操作を試みたが前提条件で失敗した。
 
     観測としては「アクター本人ではない、同じスポットの他プレイヤー」に
-    `observation_message` として配信される。アクター本人には別途ツール
-    結果として `failure_message` が返る（重複しないようにここでは除外）。
+    配信される。アクター本人には別途ツール結果として `failure_message` が
+    返る（重複しないようにここでは除外）。
+
+    prose の決まり方 (formatter で評価):
+    1. `observation_message` が空でない → そのまま prose に使う (シナリオ
+       作家が `on_failure_observation` で宣言した override)
+    2. それも空で `failure_reason` がある → 「{actor}が{object}の{action}を
+       試みたが、{reason}」を formatter が自動構築する (#356 後続:
+       他者の失敗から学べるようにする)
+    3. 両方空 → 観測非発火 (legacy fallback、レガシー emit 経路用)
     """
 
     entity_id: EntityId
@@ -215,6 +228,9 @@ class SpotObjectInteractionFailedEvent(BaseDomainEvent[SpotGraphId, str]):
     object_id: SpotObjectId
     action_name: str
     observation_message: str
+    # #356 後続: domain 例外の reason をそのまま運ぶ。formatter が他者向け
+    # prose の自動構築に使う。None / 空文字なら自動構築しない。
+    failure_reason: Optional[str] = None
 
 
 @dataclass(frozen=True)

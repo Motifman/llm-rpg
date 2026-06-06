@@ -83,6 +83,11 @@ class SpotInteractionApplicationService:
         # 必ず注入が必要。
         time_of_day_phase_provider: Optional[Any] = None,
         weather_type_provider: Optional[Any] = None,
+        # #356 後続: 失敗観測の dedup window (tick 単位)。同 (actor, object,
+        # action, reason) の失敗が連続したとき、この期間内の 2 回目以降は
+        # 観測を emit しない (= LLM の retry loop で同じ失敗観測が 100 回
+        # 流れる事態を防ぐ)。デフォルト 24 = survival_island_v2 の 1 day。
+        failure_observation_dedup_window: int = 24,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -95,6 +100,12 @@ class SpotInteractionApplicationService:
         self._event_publisher = event_publisher
         self._time_of_day_phase_provider = time_of_day_phase_provider
         self._weather_type_provider = weather_type_provider
+        # 失敗観測 dedup: (entity_id_int, object_id_int, action_name, reason)
+        # → last_emit_tick。tick 不明の呼び出しは dedup を skip する。
+        self._failure_observation_dedup_window = failure_observation_dedup_window
+        self._failure_observation_last_tick: Dict[
+            Tuple[int, int, str, str], int
+        ] = {}
 
     def set_time_of_day_phase_provider(self, provider: Optional[Any]) -> None:
         """PR4: 時間帯 provider を後付け bind する (runtime 順序依存解消用)。
@@ -238,12 +249,17 @@ class SpotInteractionApplicationService:
                 current_time_of_day_phase=current_time_of_day_phase,
                 current_weather_type=current_weather_type,
             )
-        except InteractionNotAllowedException:
-            # 前提条件で拒否された。InteractionDef.on_failure_observation が
-            # 設定されていれば、同じスポットの他プレイヤー向け観測を出してから
-            # 例外を re-raise する（アクターには tool result としてエラーが返る）。
+        except InteractionNotAllowedException as exc:
+            # 前提条件で拒否された。#356 後続: 旧コードは scenario JSON で
+            # `on_failure_observation` を declared した interaction だけ他者
+            # 観測が出ていたが、これだと「他人の失敗から学ぶ」シーンが
+            # 著者の宣言漏れに依存して silent になる。失敗 reason を event
+            # に乗せて常に emit し、formatter で prose を組む方針に変更。
+            # 同 (actor, object, action, reason) の連発は dedup で抑える。
             self._maybe_emit_failure_observation(
                 interior, object_id, action_name, entity_id, spot_id, graph,
+                failure_reason=str(exc) if exc.args else "",
+                current_tick=current_tick,
             )
             raise
 
@@ -591,9 +607,27 @@ class SpotInteractionApplicationService:
         entity_id: EntityId,
         spot_id: SpotId,
         graph: SpotGraphAggregate,
+        *,
+        failure_reason: str = "",
+        current_tick: Optional[WorldTick] = None,
     ) -> None:
-        """InteractionDef.on_failure_observation が設定されていれば
-        SpotObjectInteractionFailedEvent を publish する。"""
+        """失敗観測 event を publish する (他者の失敗から学ぶ用)。
+
+        旧仕様は `InteractionDef.on_failure_observation` が宣言されている時
+        だけ event を出していた。新仕様は **常に emit を試みる**:
+
+        - 宣言された `on_failure_observation` があればそれを override として渡す
+          (= シナリオ著者の自由文を尊重)
+        - 無ければ `failure_reason` (= 例外メッセージ) を event に乗せ、
+          formatter が「{actor}が{object}の{action}を試みたが、{reason}」を
+          組む
+        - 両方無いケース (本来は起きない) は何もしない
+
+        dedup: 同 (actor, object, action, reason) が
+        `_failure_observation_dedup_window` (デフォルト 24 tick) 以内に
+        2 度目に来たら emit を skip。LLM の retry loop で同じ失敗が連発
+        するスパムを抑える (`current_tick` が None なら dedup 無し)。
+        """
         if self._event_publisher is None:
             return
         obj = interior.get_object(object_id)
@@ -602,8 +636,28 @@ class SpotInteractionApplicationService:
         idef = next(
             (i for i in obj.interactions if i.action_name == action_name), None,
         )
-        if idef is None or not idef.on_failure_observation:
+        # シナリオ著者が override を宣言している場合は失敗 reason より優先する
+        override = idef.on_failure_observation if idef is not None else None
+        # 両方とも空ならそもそも観測 prose を組めないので silent (legacy fallback)
+        if not override and not failure_reason:
             return
+        # dedup throttle: 同じ失敗の連発を 1 window あたり 1 件に絞る
+        if current_tick is not None:
+            key = (
+                int(entity_id),
+                int(object_id),
+                action_name,
+                failure_reason or (override or ""),
+            )
+            tick_int = (
+                current_tick.value
+                if hasattr(current_tick, "value")
+                else int(current_tick)
+            )
+            last = self._failure_observation_last_tick.get(key)
+            if last is not None and (tick_int - last) < self._failure_observation_dedup_window:
+                return
+            self._failure_observation_last_tick[key] = tick_int
         failed_event = SpotObjectInteractionFailedEvent.create(
             aggregate_id=graph.graph_id,
             aggregate_type="SpotGraphAggregate",
@@ -611,7 +665,8 @@ class SpotInteractionApplicationService:
             spot_id=spot_id,
             object_id=object_id,
             action_name=action_name,
-            observation_message=idef.on_failure_observation,
+            observation_message=override or "",
+            failure_reason=failure_reason if not override else "",
         )
         self._event_publisher.publish_all([failed_event])
 

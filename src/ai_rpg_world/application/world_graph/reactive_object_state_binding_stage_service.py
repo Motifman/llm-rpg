@@ -113,6 +113,15 @@ class ReactiveObjectStateBindingStageService:
             if old_state.get(k) != v
         )
         if delta:
+            # 著者が宣言した narrative があれば formatter に渡す。
+            # 無ければ None → formatter は observation を emit しない (silent)。
+            # これにより「available が False から True に変わった」のような
+            # 内部用語の漏洩を防ぐ。
+            narrative = (
+                binding.narrative_on_true
+                if predicate_value
+                else binding.narrative_on_false
+            )
             graph.add_event(
                 SpotObjectStateChangedEvent.create(
                     aggregate_id=graph.graph_id,
@@ -123,6 +132,7 @@ class ReactiveObjectStateBindingStageService:
                     new_state=new_state,
                     actor_entity_id=None,
                     state_delta=delta,
+                    narrative=narrative,
                 )
             )
 

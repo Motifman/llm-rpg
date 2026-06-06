@@ -589,7 +589,14 @@ class TestConnectionStateChangedPositionAware:
 
 
 class TestSpotObjectStateChanged:
-    def test_returns_environment(self, formatter):
+    """#356 後続: 内部 state vocab の漏洩を防ぐため narrative の有無で分岐。"""
+
+    def test_narrative_無しなら_silent_になる(self, formatter):
+        """narrative=None なら formatter は None を返す (observation 非発火)。
+
+        旧挙動は state_delta から "locked が True から False に変わった" を
+        機械生成して prompt に流していたが、これは内部用語の漏洩。
+        """
         event = SpotObjectStateChangedEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -598,14 +605,27 @@ class TestSpotObjectStateChanged:
             old_state={"locked": True},
             new_state={"locked": False},
         )
+        assert formatter.format(event, PLAYER_1) is None
+
+    def test_narrative_有りなら_その_narrative_が_prose_になる(self, formatter):
+        """著者が narrative を提供したら、そのまま prose に流れる。"""
+        event = SpotObjectStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            spot_id=SPOT_A,
+            object_id=OBJECT_1,
+            old_state={"locked": True},
+            new_state={"locked": False},
+            narrative="鍵がガチャリと外れた音がした",
+        )
         result = formatter.format(event, PLAYER_1)
         assert result is not None
         assert result.observation_category == "environment"
-        assert "古びたドア" in result.prose
-        # Phase 4-E: 状態差分が具体的なテキストとして含まれる
-        assert "locked" in result.prose
+        assert result.prose == "鍵がガチャリと外れた音がした"
         assert result.schedules_turn is True
-        # 構造化 state_delta も載る
+        # 内部 vocab "locked" は prose に出ない
+        assert "locked" not in result.prose
+        # 構造化 state_delta は残す (機械処理向け、LLM には届かない)
         assert result.structured["state_delta"] == [
             {"key": "locked", "before": True, "after": False}
         ]

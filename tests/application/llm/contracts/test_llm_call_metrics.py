@@ -54,3 +54,28 @@ class TestMetricsDataclass:
         )
         assert m.success is False
         assert m.error_code == "LLM_RATE_LIMIT"
+
+    def test_cached_tokens_の_デフォルトは_0(self) -> None:
+        """cached_tokens 未指定なら 0 (provider が返さない場合の挙動)。"""
+        m = LlmCallMetrics(
+            model="test/model",
+            wall_latency_ms=1000,
+            prompt_tokens=500,
+            completion_tokens=20,
+            tps=20.0,
+            success=True,
+        )
+        assert m.cached_tokens == 0
+
+    def test_cached_tokens_を_明示_設定できる(self) -> None:
+        """prefix cache 効率の指標として cached_tokens を保持する。"""
+        m = LlmCallMetrics(
+            model="test/model",
+            wall_latency_ms=1000,
+            prompt_tokens=500,
+            completion_tokens=20,
+            tps=20.0,
+            success=True,
+            cached_tokens=350,
+        )
+        assert m.cached_tokens == 350

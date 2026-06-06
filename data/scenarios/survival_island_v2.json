@@ -1261,31 +1261,36 @@
         "target": "driftwood_pile",
         "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "driftwood_pile", "state_key": "last_harvest_tick", "ticks_offset": 8},
         "on_true_state_updates": {"available": true},
-        "on_false_state_updates": {"available": false}
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "波が新たに流木を浜辺に打ち上げているのが見える。"
       },
       {
         "target": "coconut_palm",
         "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "coconut_palm", "state_key": "last_harvest_tick", "ticks_offset": 16},
         "on_true_state_updates": {"available": true},
-        "on_false_state_updates": {"available": false}
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "椰子の木に新しい実が熟しているのが目に入る。"
       },
       {
         "target": "berry_bush_a",
         "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "berry_bush_a", "state_key": "last_harvest_tick", "ticks_offset": 20},
         "on_true_state_updates": {"available": true},
-        "on_false_state_updates": {"available": false}
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "ベリーの茂みに新しい実が生っているのが見える。"
       },
       {
         "target": "berry_bush_b",
         "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "berry_bush_b", "state_key": "last_harvest_tick", "ticks_offset": 20},
         "on_true_state_updates": {"available": true},
-        "on_false_state_updates": {"available": false}
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "もう一つのベリーの茂みにも新しい実が膨らんできた。"
       },
       {
         "target": "shellfish_rocks",
         "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "shellfish_rocks", "state_key": "last_harvest_tick", "ticks_offset": 24},
         "on_true_state_updates": {"available": true},
-        "on_false_state_updates": {"available": false}
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "潮が引いた岩場に新しい貝がへばりついているのが見える。"
       },
       {
         "target": "safe_mushroom_patch",
@@ -1296,43 +1301,50 @@
           ]}
         ]},
         "on_true_state_updates": {"available": true},
-        "on_false_state_updates": {"available": false}
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "湿った苔の上に新しい食用キノコが顔を出しているのが見える。"
       },
       {
         "target": "toxic_mushroom_patch",
         "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "toxic_mushroom_patch", "state_key": "last_harvest_tick", "ticks_offset": 30},
         "on_true_state_updates": {"available": true},
-        "on_false_state_updates": {"available": false}
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "色鮮やかな毒キノコが群生し直しているのが見える。"
       },
       {
         "target": "stream_fishing_point",
         "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "stream_fishing_point", "state_key": "last_harvest_tick", "ticks_offset": 16},
         "on_true_state_updates": {"available": true},
-        "on_false_state_updates": {"available": false}
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "小川の淀みに魚影がまた集まってきた。"
       },
       {
         "target": "deep_fishing_point",
         "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "deep_fishing_point", "state_key": "last_harvest_tick", "ticks_offset": 20},
         "on_true_state_updates": {"available": true},
-        "on_false_state_updates": {"available": false}
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "沖の深場に大きな魚影が戻ってきたのが波越しに見える。"
       },
       {
         "target": "river_drink",
         "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "river_drink", "state_key": "last_harvest_tick", "ticks_offset": 6},
         "on_true_state_updates": {"available": true},
-        "on_false_state_updates": {"available": false}
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "河の濁りが収まり、水が再び澄んで見える。"
       },
       {
         "target": "spring_source",
         "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "spring_source", "state_key": "last_harvest_tick", "ticks_offset": 6},
         "on_true_state_updates": {"available": true},
-        "on_false_state_updates": {"available": false}
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "泉が再び満ちて、澄んだ水を湛えている。"
       },
       {
         "target": "vine_thicket",
         "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "vine_thicket", "state_key": "last_harvest_tick", "ticks_offset": 24},
         "on_true_state_updates": {"available": true},
-        "on_false_state_updates": {"available": false}
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "蔦が新しく伸びて、また切り取れそうに見える。"
       }
     ],
     "passages": [

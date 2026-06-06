@@ -205,34 +205,76 @@ class LiteLLMClient(
                 cause=e,
             ) from e
         wall_latency_ms = int((time.monotonic() - start_monotonic) * 1000)
-        prompt_tokens, completion_tokens = self._extract_token_usage(response)
+        prompt_tokens, completion_tokens, cached_tokens = self._extract_token_usage(response)
         tool_call = self._parse_tool_call(response, messages, tools)
         self._emit_metrics(
             metrics_sink,
             wall_latency_ms=wall_latency_ms,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
+            cached_tokens=cached_tokens,
             success=tool_call is not None,
             error_code=None if tool_call is not None else "NO_TOOL_CALL",
         )
         return tool_call
 
     @staticmethod
-    def _extract_token_usage(response: Any) -> tuple[int, int]:
-        """litellm レスポンスから (prompt_tokens, completion_tokens) を best-effort で取得する。
+    def _extract_token_usage(response: Any) -> tuple[int, int, int]:
+        """litellm レスポンスから (prompt_tokens, completion_tokens, cached_tokens) を取得する。
 
-        litellm は OpenAI 互換の usage を返すことが多いが、provider 差で None /
-        欠落することもある。欠落時は 0 を返す (TPS は 0 になる)。
+        provider 差で usage の形が違うので best-effort で各経路を試す。欠落時は 0。
+
+        - vLLM / OpenAI: ``usage.prompt_tokens_details.cached_tokens``
+        - Anthropic: ``usage.cache_read_input_tokens``
+        - vLLM 旧版や一部 OpenAI 互換サーバ: ``usage.cached_tokens`` 直下
+
+        cached_tokens は prompt_tokens に内包される (合計ではなく内訳)。
+        prefix cache 効率の指標として実験 #356 後続で利用する。
         """
         try:
             usage = getattr(response, "usage", None)
             if usage is None:
-                return 0, 0
+                return 0, 0, 0
             prompt = int(getattr(usage, "prompt_tokens", 0) or 0)
             completion = int(getattr(usage, "completion_tokens", 0) or 0)
-            return prompt, completion
+            cached = LiteLLMClient._extract_cached_tokens(usage)
+            return prompt, completion, cached
         except Exception:
-            return 0, 0
+            return 0, 0, 0
+
+    @staticmethod
+    def _extract_cached_tokens(usage: Any) -> int:
+        """usage オブジェクトから cached_tokens を best-effort で取り出す。
+
+        OpenAI / vLLM 系の ``prompt_tokens_details.cached_tokens`` を最優先し、
+        次に Anthropic の ``cache_read_input_tokens``、最後に旧 vLLM の直下
+        ``cached_tokens`` を見る。どれも取れなければ 0。
+        """
+        details = getattr(usage, "prompt_tokens_details", None)
+        if details is not None:
+            # litellm は dict / object どちらでも返してくることがあるので両対応
+            if isinstance(details, dict):
+                v = details.get("cached_tokens")
+            else:
+                v = getattr(details, "cached_tokens", None)
+            if v is not None:
+                try:
+                    return int(v)
+                except (TypeError, ValueError):
+                    pass
+        anthropic_cached = getattr(usage, "cache_read_input_tokens", None)
+        if anthropic_cached is not None:
+            try:
+                return int(anthropic_cached)
+            except (TypeError, ValueError):
+                pass
+        legacy = getattr(usage, "cached_tokens", None)
+        if legacy is not None:
+            try:
+                return int(legacy)
+            except (TypeError, ValueError):
+                pass
+        return 0
 
     def _emit_metrics(
         self,
@@ -243,6 +285,7 @@ class LiteLLMClient(
         completion_tokens: int,
         success: bool,
         error_code: Optional[str],
+        cached_tokens: int = 0,
     ) -> None:
         if sink is None:
             return
@@ -252,6 +295,7 @@ class LiteLLMClient(
                 wall_latency_ms=wall_latency_ms,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
+                cached_tokens=cached_tokens,
                 tps=LlmCallMetrics.compute_tps(completion_tokens, wall_latency_ms),
                 success=success,
                 error_code=error_code,

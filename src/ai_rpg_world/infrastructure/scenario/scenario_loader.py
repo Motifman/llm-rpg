@@ -1214,12 +1214,27 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     f"reactive_bindings.objects[{i}].on_true/false_state_updates must be objects"
                 )
+            # 著者が宣言した観測 narrative (オプショナル)。flip 方向ごとに別文。
+            # 例: 採取資源 cooldown reset (false→true) には narrative_on_true=
+            # "ベリーの茂みに新しい実が生っている" を渡す。
+            narrative_on_true = b.get("narrative_on_true")
+            narrative_on_false = b.get("narrative_on_false")
+            if narrative_on_true is not None and not isinstance(narrative_on_true, str):
+                raise ScenarioLoadError(
+                    f"reactive_bindings.objects[{i}].narrative_on_true must be a string"
+                )
+            if narrative_on_false is not None and not isinstance(narrative_on_false, str):
+                raise ScenarioLoadError(
+                    f"reactive_bindings.objects[{i}].narrative_on_false must be a string"
+                )
             out.append(
                 ReactiveObjectStateBinding(
                     target_object_id=SpotObjectId.create(oid),
                     predicate=predicate,
                     on_true_state_updates=tuple((k, v) for k, v in on_true.items()),
                     on_false_state_updates=tuple((k, v) for k, v in on_false.items()),
+                    narrative_on_true=narrative_on_true,
+                    narrative_on_false=narrative_on_false,
                 )
             )
         return tuple(out)

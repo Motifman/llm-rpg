@@ -342,13 +342,82 @@ class DefaultPromptBuilder(IPromptBuilder):
                 return None
         return self._trace_recorder
 
+    def _emit_prompt_section_breakdown_trace(
+        self,
+        *,
+        player_id: PlayerId,
+        system_content: str,
+        objective_text: str,
+        current_state_text: str,
+        active_memos_text: str,
+        recent_events_text: str,
+        relevant_memories_text: str,
+        inventory_text: str,
+        instruction: str,
+        tools: List[Dict[str, Any]],
+        user_content: str,
+    ) -> None:
+        """``PROMPT_SECTION_BREAKDOWN`` を 1 件記録する (失敗は握りつぶす)。
+
+        prompt_builder.build() の末尾で 1 ターン 1 件呼ぶ。各 section の文字数を
+        独立に計測することで、後続の prefix cache / token 分析で「どの section
+        が prompt_tokens を支配しているか」が post-hoc に分かる。
+
+        tools 配列は ``json.dumps`` でシリアライズした長さを使う。これは LLM
+        API に送られる payload サイズの近似で、tool が動的に増減する効果を
+        測れる。
+        """
+        recorder = self._resolve_trace_recorder()
+        if recorder is None:
+            return
+        tick: Optional[int] = None
+        if self._current_tick_provider is not None:
+            try:
+                tick = self._current_tick_provider()
+            except Exception:
+                tick = None
+        try:
+            import json as _json
+            tools_chars = len(_json.dumps(tools, ensure_ascii=False))
+        except Exception:
+            tools_chars = 0
+        try:
+            recorder.record(
+                TraceEventKind.PROMPT_SECTION_BREAKDOWN,
+                tick=tick,
+                player_id=int(player_id.value),
+                system_chars=len(system_content),
+                objective_chars=len(objective_text),
+                current_state_chars=len(current_state_text),
+                memos_chars=len(active_memos_text),
+                recent_events_chars=len(recent_events_text),
+                recall_chars=len(relevant_memories_text),
+                inventory_chars=len(inventory_text),
+                instruction_chars=len(instruction),
+                tools_chars=tools_chars,
+                user_content_chars=len(user_content),
+                messages_total_chars=len(system_content) + len(user_content),
+                tools_count=len(tools),
+            )
+        except Exception:
+            self._logger.debug(
+                "trace recorder.record raised for PROMPT_SECTION_BREAKDOWN; skipping",
+                exc_info=True,
+            )
+
     def _emit_episodic_recall_trace(
         self,
         player_id: PlayerId,
         situation_cues: tuple,
         candidates: list,
+        relevant_memories_text: str = "",
     ) -> None:
-        """``EPISODIC_RECALL`` を trace に記録する (失敗は握りつぶす)。"""
+        """``EPISODIC_RECALL`` を trace に記録する (失敗は握りつぶす)。
+
+        ``relevant_memories_text`` は実 prompt に注入された連結後テキスト。
+        recall 1 件あたりの注入サイズ ÷ prompt_tokens を post-hoc に出すための
+        計測点 (実験 #356 後続: cached_tokens / TTFT 分析と組合せる)。
+        """
         recorder = self._resolve_trace_recorder()
         if recorder is None:
             return
@@ -383,6 +452,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 situation_cues=cue_keys,
                 candidate_count=len(cand_payload),
                 candidates=cand_payload,
+                recall_text_chars_total=len(relevant_memories_text or ""),
             )
         except Exception:
             # 例: recorder が新しい kind を未知扱いで例外を投げる等。
@@ -525,6 +595,22 @@ class DefaultPromptBuilder(IPromptBuilder):
         result["current_state_snapshot"] = current_state_text
         result["current_beliefs_snapshot"] = relevant_memories_text
         result["persona_snapshot"] = player_info.persona_block
+
+        # 実験 #356 後続: prefix cache 分析用の section 別 char 内訳を trace に
+        # 1 件記録する。token ではなく char で吐く理由はモジュール docstring 参照。
+        self._emit_prompt_section_breakdown_trace(
+            player_id=player_id,
+            system_content=system_content,
+            objective_text=objective_text,
+            current_state_text=current_state_text,
+            active_memos_text=active_memos_text,
+            recent_events_text=recent_events_text,
+            relevant_memories_text=relevant_memories_text,
+            inventory_text=inventory_text,
+            instruction=instruction,
+            tools=tools,
+            user_content=user_content,
+        )
         return result
 
     def _run_passive_recall(
@@ -587,6 +673,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             player_id=player_id,
             situation_cues=situation_cues,
             candidates=list(recall_result.candidates),
+            relevant_memories_text=relevant_memories_text,
         )
 
         if self._episodic_memory_link_service is not None and recall_result.candidates:
