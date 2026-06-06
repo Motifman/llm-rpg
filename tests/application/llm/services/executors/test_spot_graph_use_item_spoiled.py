@@ -66,10 +66,11 @@ def _build_executor_with_item(state: dict) -> tuple[SpotGraphToolExecutor, Magic
     item_repo = MagicMock()
     item_repo.find_by_id.return_value = item
 
-    # インベントリにスロット 1 つ。slot.item_instance_id が一致する mock
+    # インベントリにスロット 1 つ。_inventory_slots は dict (#26 で修正、
+    # 旧 mock の .slots = [slot] では executor の正しい iter に当たらない)。
+    from ai_rpg_world.domain.player.value_object.slot_id import SlotId
     inv = MagicMock()
-    slot = MagicMock(item_instance_id=ItemInstanceId(7001), slot_id=0)
-    inv.slots = [slot]
+    inv._inventory_slots = {SlotId(0): ItemInstanceId(7001)}
     inv_repo = MagicMock()
     inv_repo.find_by_id.return_value = inv
 
