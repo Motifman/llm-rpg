@@ -160,12 +160,45 @@ def collect_players(
     return players
 
 
+# Event timeline で表示しないノイズ系 kind (実験 #26 user フィードバック)。
+# prompt_section_breakdown と llm_call は性能計測用で人間視点では本筋を埋もれ
+# させるため、UI のイベントログからは除外する (trace.jsonl 自体には残る)。
+_EVENT_TIMELINE_HIDDEN_KINDS = frozenset({
+    "prompt_section_breakdown",
+    "llm_call",
+})
+
+
 def group_events_by_tick(
     events: List[TraceEvent],
+    *,
+    hide_metrics_kinds: bool = True,
+    dedupe_observations: bool = True,
 ) -> "OrderedDict[Optional[int], List[TraceEvent]]":
-    """event を tick 順にグルーピング。"""
+    """event を tick 順にグルーピング。
+
+    Args:
+        hide_metrics_kinds: True で性能計測系 (llm_call / prompt_section_breakdown)
+            を timeline から除外。
+        dedupe_observations: True で同 tick / 同 prose / 同 structured type の
+            observation を最初の 1 件だけ残す (= 4 player にブロードキャストされた
+            同一 prose が 4 連続並ぶのを抑える)。
+    """
     by_tick: "OrderedDict[Optional[int], List[TraceEvent]]" = OrderedDict()
+    # dedup key: (tick, prose, observation_type)
+    seen_obs: set = set()
     for e in events:
+        if hide_metrics_kinds and e.kind in _EVENT_TIMELINE_HIDDEN_KINDS:
+            continue
+        if dedupe_observations and e.kind == "observation":
+            payload = e.payload if isinstance(e.payload, dict) else {}
+            structured = payload.get("structured") or {}
+            obs_type = structured.get("type") if isinstance(structured, dict) else None
+            prose = payload.get("prose") or ""
+            key = (e.tick, prose, obs_type)
+            if key in seen_obs:
+                continue
+            seen_obs.add(key)
         by_tick.setdefault(e.tick, []).append(e)
     return by_tick
 
@@ -281,7 +314,7 @@ def compute_event_heatmap(
 def build_speech_timeline(
     events: List[TraceEvent],
     *,
-    bubble_persistence: int = 2,
+    bubble_persistence: int = 1,
     max_chars: int = 100,
 ) -> Dict[int, List[Dict[str, Any]]]:
     """tick → 各 player が「いま喋っている / 考えている」bubble の list (PR η)。
@@ -564,7 +597,13 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
   <section id="right-section">
     <div id="memo-panel-section">
-      <h2>Objectives / Active memo</h2>
+      <h2>Objectives / Active memo
+        <label class="toggle-label" title="memo パネルの表示・非表示を切り替え"
+               style="font-size: 0.65rem; font-weight: normal; margin-left: 0.5rem;">
+          <input type="checkbox" id="toggle-memo-panel" checked>
+          show
+        </label>
+      </h2>
       <div id="memo-panel"><div class="placeholder">(no memo)</div></div>
     </div>
     <div id="log-section">
@@ -819,12 +858,33 @@ section h2, #right-section > div > h2 {
     #071318;
   background-size: auto, 34px 34px, 34px 34px, auto;
 }
+/* 実験 #26 user feedback: TRACE NAVIGATOR は普段あまり見ないため
+   折りたたみ可能にし、デフォルト collapsed。h2 クリックで展開。 */
 #trace-nav-section {
   margin: 0 1rem 1rem;
+  min-height: 28px;
+  max-height: 36px;
+  overflow: hidden;
+  transition: max-height 0.2s ease-out;
+}
+#trace-nav-section.expanded {
   min-height: 178px;
   max-height: 200px;
 }
-#trace-nav-section h2 { flex: 0 0 auto; }
+#trace-nav-section h2 {
+  flex: 0 0 auto;
+  cursor: pointer;
+  user-select: none;
+}
+#trace-nav-section h2::before {
+  content: "▸ ";
+  font-size: 0.8rem;
+  color: var(--muted);
+  transition: transform 0.2s;
+}
+#trace-nav-section.expanded h2::before {
+  content: "▾ ";
+}
 #moment-rail {
   position: relative;
   height: 74px;
@@ -1229,6 +1289,30 @@ _VIEWER_JS_TEMPLATE = """
         }}
       }}
     }});
+  }}
+
+  // ---------- memo panel toggle (実験 #26 user feedback) ----------
+  const memoPanelSection = document.getElementById('memo-panel-section');
+  const memoToggle = document.getElementById('toggle-memo-panel');
+  if (memoToggle && memoPanelSection) {{
+    memoToggle.addEventListener('change', () => {{
+      const panel = document.getElementById('memo-panel');
+      if (panel) {{
+        panel.style.display = memoToggle.checked ? '' : 'none';
+      }}
+    }});
+  }}
+
+  // ---------- trace nav collapse/expand (実験 #26 user feedback) ----------
+  // デフォルトは collapsed。h2 をクリックで expand/collapse トグル。
+  const traceNavSection = document.getElementById('trace-nav-section');
+  if (traceNavSection) {{
+    const navHeader = traceNavSection.querySelector('h2');
+    if (navHeader) {{
+      navHeader.addEventListener('click', () => {{
+        traceNavSection.classList.toggle('expanded');
+      }});
+    }}
   }}
 
   // ---------- memo panel ----------
