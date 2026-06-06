@@ -65,31 +65,36 @@ class TestEscapeGameUsesSharedFormatStrategy:
         assert "【所持・判明した物証】" in user
 
     def test_section_ordering_matches_shared_strategy(self) -> None:
-        """section 順序が strategy の規約と一致する: 目的→現在地→メモ→出来事→記憶→物証。"""
+        """section 順序が strategy default (stable_to_volatile) と一致する。
+
+        Issue #356 Phase 0 で並び順を変更: 目的 → 物証 → 出来事 → 現在地。
+        詳細は ``docs/memory_system/short_term_memory_design.md`` §5。
+        """
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         kaito = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(kaito)
         user = prompt["messages"][1]["content"]
 
         idx_obj = user.index("【現在の目的】")
-        idx_state = user.index("【現在地と周囲】")
-        idx_events = user.index("【直近の出来事】")
         idx_inventory = user.index("【所持・判明した物証】")
+        idx_events = user.index("【直近の出来事】")
+        idx_state = user.index("【現在地と周囲】")
 
-        assert idx_obj < idx_state < idx_events < idx_inventory
+        # stable_to_volatile: 目的 → 物証 (mid) → 出来事 (volatile) → 現在地 (最 volatile)
+        assert idx_obj < idx_inventory < idx_events < idx_state
 
     def test_action_instruction_appears_at_tail(self) -> None:
-        """指示文が末尾に来る。"""
+        """指示文が末尾に来る (現在地より後ろ)。"""
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         kaito = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(kaito)
         user = prompt["messages"][1]["content"]
 
         assert "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。" in user
-        # 指示文が他のセクション見出しより後ろにある
         idx_instruction = user.index("利用可能なツールから")
-        idx_inventory = user.index("【所持・判明した物証】")
-        assert idx_inventory < idx_instruction
+        idx_state = user.index("【現在地と周囲】")
+        # 現在地が最末尾の section、指示文はその後ろ
+        assert idx_state < idx_instruction
 
     def test_escape_game_prompt_body_is_produced_by_shared_strategy(self) -> None:
         """escape_game の prompt body と shared strategy 出力が完全一致する。
