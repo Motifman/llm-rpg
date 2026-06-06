@@ -662,11 +662,35 @@ class _EscapeGameLlmWiring:
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
             TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
         )
+        # #356 実験 #25 OFF で発覚: use_item / drop_item / give_item /
+        # pickup_item は tool catalog 上 ``item_label`` (= I1, I2 など) を
+        # 受け取るが、executor は post-resolver の ``item_spec_id`` /
+        # ``slot_id`` / ``item_instance_id`` を読む。それらの間を埋める
+        # ``SpotGraphArgumentResolver`` の呼び出しが experiment 用 wiring
+        # に無く、164 件すべて INVALID_ARGUMENT で落ちていた。
+        # 解決後 args を executor に渡すように adapter で resolver を噛ませる。
+        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+            SpotGraphArgumentResolver,
+        )
+        resolver_targets = frozenset({
+            TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+            TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+        })
+        argument_resolver = SpotGraphArgumentResolver()
         for tool_name in targets:
             raw = raw_handlers.get(tool_name)
             if raw is None:
                 continue
-            self._tool_handlers[tool_name] = self._adapt_executor_handler(raw)
+            if tool_name in resolver_targets:
+                self._tool_handlers[tool_name] = (
+                    self._adapt_executor_handler_with_resolver(
+                        raw, tool_name, argument_resolver,
+                    )
+                )
+            else:
+                self._tool_handlers[tool_name] = self._adapt_executor_handler(raw)
         # Step 1 並列化 review HIGH 1: build_full_prompt が内部で lazy-init する
         # _todo_tool_executor / _cached_default_prompt_builder は check-then-act
         # で 2 スレッドが同時に初回呼び出しすると double-init になる。並列実行
@@ -695,6 +719,49 @@ class _EscapeGameLlmWiring:
             runtime_context: Any,
         ) -> LlmCommandResultDto:
             return raw_handler(int(player_id.value), arguments)
+        return _handler
+
+    @staticmethod
+    def _adapt_executor_handler_with_resolver(
+        raw_handler: Callable[[int, Dict[str, Any]], LlmCommandResultDto],
+        tool_name: str,
+        argument_resolver: Any,
+    ) -> Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto]:
+        """resolver を噛ませた adapter (#356 fix)。
+
+        LLM が送ってくる ``item_label`` (I1/I2) を、executor が読む
+        ``item_spec_id`` / ``slot_id`` / ``item_instance_id`` に変換する。
+        resolver が例外 (label 見つからない 等) を投げたら ``LlmCommandResultDto``
+        に変換して返す (= LLM に「このラベルは存在しない」と surface する)。
+        """
+        from ai_rpg_world.application.llm.services._resolver_helpers import (
+            ToolArgumentResolutionException,
+        )
+
+        def _handler(
+            player_id: PlayerId,
+            arguments: Dict[str, Any],
+            runtime_context: Any,
+        ) -> LlmCommandResultDto:
+            try:
+                resolved = argument_resolver.resolve_args(
+                    tool_name, arguments, runtime_context,
+                )
+            except ToolArgumentResolutionException as e:
+                return LlmCommandResultDto(
+                    success=False,
+                    message=str(e),
+                    error_code=getattr(e, "error_code", "INVALID_TARGET_LABEL"),
+                    remediation=(
+                        "所持アイテム表示にある I1/I2 等のラベルを指定してください。"
+                        "ラベルが見つからない場合、そのアイテムは現在所持していない可能性があります。"
+                    ),
+                )
+            if resolved is None:
+                # resolver dispatch から外れている (= 設計違反)。raw 渡しで fail にさせる。
+                return raw_handler(int(player_id.value), arguments)
+            return raw_handler(int(player_id.value), resolved)
+
         return _handler
 
     def attach_action_failed_wiring(

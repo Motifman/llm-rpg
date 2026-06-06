@@ -282,6 +282,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 
@@ -295,6 +296,7 @@ _SPOT_GRAPH_TOOLS = frozenset({
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
 })
 
@@ -345,7 +347,56 @@ class SpotGraphArgumentResolver:
             return self._resolve_pickup_item(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM:
             return self._resolve_give_item(args, runtime_context)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
+            return self._resolve_use_item(args, runtime_context)
         return None
+
+    def _resolve_use_item(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """所持アイテムラベル (I1 等) を item_spec_id に解決する。
+
+        実験 #25 で発覚 (#356 trace): tool catalog は ``item_label`` を要求し、
+        executor は ``item_spec_id`` を読むのに、resolver 側に dispatch が無く
+        全 106 件の use_item が ``INVALID_ARGUMENT`` で落ちていた。
+
+        Note: ``ToolRuntimeTargetDto.item_instance_id`` は legacy 慣習で
+        item_spec_id を入れている (DTO 定義のコメント参照)。本 resolver は
+        その慣習に合わせて item_spec_id として exec 側に渡す。
+        """
+        label = args.get("item_label")
+        if not isinstance(label, str) or not label.strip():
+            raise ToolArgumentResolutionException(
+                "使用するアイテムのラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = require_target_type(
+            label,
+            runtime_context,
+            "アイテムラベル",
+            (InventoryToolRuntimeTargetDto,),
+            invalid_label_code="INVALID_TARGET_LABEL",
+            invalid_kind_code="INVALID_TARGET_KIND",
+        )
+        if target.kind != "inventory_item":
+            raise ToolArgumentResolutionException(
+                f"このラベルは所持アイテムではありません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        if target.item_instance_id is None:
+            raise ToolArgumentResolutionException(
+                f"このラベルから item_spec_id を解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return _with_inner_thought(
+            {
+                "item_spec_id": target.item_instance_id,
+                "item_display_name": target.display_name,
+            },
+            args,
+        )
 
     def _resolve_give_item(
         self,
