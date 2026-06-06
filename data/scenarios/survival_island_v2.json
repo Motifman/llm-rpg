@@ -220,7 +220,7 @@
     {
       "id": "campsite",
       "name": "拠点",
-      "description": "浜辺と森の境にある平らな砂地。石を組んだ焚き火跡があり、3人で身を寄せて眠れる広さ。ここがおそらく拠点になる。",
+      "description": "浜辺と森の境にある平らな砂地。石を組んだ焚き火跡があり、3人で身を寄せて眠れる広さ。ここがおそらく拠点になる。脇には加工用の丸太もあり、骨のナイフがあれば簡単な道具を削り出せる。",
       "category": "FIELD",
       "atmosphere": {"lighting": "BRIGHT", "sound_ambient": "遠い波音と森のざわめき", "temperature": "WARM"},
       "is_outdoor": true,
@@ -261,6 +261,30 @@
                   {"effect_type": "REMOVE_ITEM", "parameters": {"item_spec": "raw_fish"}},
                   {"effect_type": "GIVE_ITEM", "parameters": {"item_spec": "cooked_fish"}},
                   {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "魚を焚き火で香ばしく焼き上げた。"}}
+                ]
+              }
+            ]
+          },
+          {
+            "id": "crafting_log",
+            "name": "加工用の丸太",
+            "description": "拠点の脇に置かれた平らな丸太。骨のナイフがあれば、ここで簡単な道具を削り出せる。流木と蔓のロープから釣竿を作れそうだ。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "craft_fishing_rod",
+                "display_label": "釣竿を削り出す",
+                "preconditions": [
+                  {"condition_type": "HAS_ITEM", "required_item": "bone_knife", "failure_message": "削るための骨のナイフが必要だ。"},
+                  {"condition_type": "HAS_ITEM", "required_item": "driftwood", "failure_message": "竿になる流木が必要だ。"},
+                  {"condition_type": "HAS_ITEM", "required_item": "vine_rope", "failure_message": "釣り糸代わりの蔓のロープが必要だ。"}
+                ],
+                "effects": [
+                  {"effect_type": "REMOVE_ITEM", "parameters": {"item_spec": "driftwood"}},
+                  {"effect_type": "REMOVE_ITEM", "parameters": {"item_spec": "vine_rope"}},
+                  {"effect_type": "GIVE_ITEM", "parameters": {"item_spec": "fishing_rod"}},
+                  {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "流木を骨のナイフで削り、蔓のロープを糸代わりに結びつけて釣竿を作り上げた。"}}
                 ]
               }
             ]
