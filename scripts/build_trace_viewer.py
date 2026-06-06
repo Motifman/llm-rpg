@@ -565,6 +565,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     <span>tick <strong>0 / {max_tick}</strong></span>
     <span>events <strong>{total_events}</strong></span>
     <span>players <strong>{player_summary}</strong></span>
+    <span class="viewer-links">
+      <a href="episodic.html" title="episodic memory viewer" class="vlink">📖 episodic</a>
+      <a href="timeline.html" title="player × tick timeline" class="vlink">📊 timeline</a>
+    </span>
   </div>
   <div class="playback">
     <button id="btn-rewind" title="rewind to start">⏮</button>
@@ -710,6 +714,22 @@ header h1 {
   border-color: rgba(255, 236, 168, 0.7);
   font-weight: 900;
   letter-spacing: 0.08em;
+}
+.viewer-links { display: inline-flex; gap: 0.5rem; margin-left: auto; }
+.viewer-links .vlink {
+  text-decoration: none;
+  background: rgba(53, 212, 230, 0.18);
+  color: #aaecf5;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  font-family: var(--font-display);
+}
+.viewer-links .vlink:hover {
+  background: rgba(53, 212, 230, 0.35);
+  color: #fff;
 }
 .playback {
   display: flex;
