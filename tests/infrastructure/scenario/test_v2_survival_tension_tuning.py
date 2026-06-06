@@ -67,6 +67,23 @@ class TestStarvationDamageConfigurable:
         )
         assert cfg.starvation_damage_per_tick == 1
 
+    def test_負値は_post_init_で_拒否(self) -> None:
+        """直接 ScenarioOutcomeResolutionConfig を構築する経路でも値検証が
+        効くこと (code-review HIGH 対応)。loader だけの validation だと
+        テストや別 callsite から不正値が通る恐れがある。"""
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+            ScenarioOutcomeResolutionConfig,
+        )
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        with pytest.raises(ValueError):
+            ScenarioOutcomeResolutionConfig(
+                rescue_at_ticks=(10,),
+                stranded_at_tick=20,
+                summit_spot_id=SpotId.create(1),
+                signal_fire_flag="x",
+                starvation_damage_per_tick=-1,
+            )
+
     def test_負値は_loader_で_拒否(self) -> None:
         """starvation_damage_per_tick=-1 等は scenario load 時に弾く。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (

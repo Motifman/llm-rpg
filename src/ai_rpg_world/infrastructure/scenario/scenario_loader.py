@@ -234,6 +234,17 @@ class ScenarioOutcomeResolutionConfig:
     # 1 = 元の挙動 (#306 hardcoded)、2 = 約 50 tick (= ~2 day) で 100→0。
     starvation_damage_per_tick: int = 1
 
+    def __post_init__(self) -> None:
+        # 値オブジェクトの不変条件は constructor 層でも保証する
+        # (code-review HIGH 対応)。loader だけの validation だと
+        # `ScenarioOutcomeResolutionConfig(... starvation_damage_per_tick=-999)`
+        # のような直接構築で不正値が通ってしまう。
+        if self.starvation_damage_per_tick < 0:
+            raise ValueError(
+                "starvation_damage_per_tick must be non-negative, "
+                f"got {self.starvation_damage_per_tick}"
+            )
+
 
 @dataclass(frozen=True)
 class ScenarioMonsterTemplate:
