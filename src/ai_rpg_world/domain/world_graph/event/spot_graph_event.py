@@ -94,6 +94,11 @@ class SpotObjectStateChangedEvent(BaseDomainEvent[SpotGraphId, str]):
     new_state: Dict[str, Any]
     actor_entity_id: Optional[EntityId] = None
     state_delta: Tuple[StateDeltaEntry, ...] = ()
+    # 著者が書いた日本語の観測テキスト。formatter は narrative がある時だけ
+    # observation を emit する (None なら silent = 内部用語の漏洩を防ぐ)。
+    # 旧コードは state_delta から "available が False から True に変わった"
+    # を機械生成してプロンプトに垂れ流していた (#356 後続 finding)。
+    narrative: Optional[str] = None
 
 
 @dataclass(frozen=True)
