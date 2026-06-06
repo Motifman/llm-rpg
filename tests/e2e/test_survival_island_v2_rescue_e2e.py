@@ -253,6 +253,18 @@ class TestSurvivalIslandV2RescueE2E:
         })
 
         # tick 168 まで進める。途中で game_end したら break。
+        # #377 後:
+        # - v2 は飢餓ダメ 2/tick + HUNGER decay 1/tick で約 100 tick で 餓死
+        # - さらに post_tick_hooks → run_scheduled_turns → do_wait →
+        #   advance_tick の再帰カスケードで、1 回の test loop 反復内に
+        #   数百 tick が進行する。
+        # 本テストの目的は rescue 経路の貫通検証 (= flag + summit presence で
+        # outcome=RESCUED になるか) で、飢餓と HUNGER decay は直交関心。
+        # NeedsDecayStage の 飢餓ダメと need 増加を test 期間中だけ無効化する。
+        decay_stage = runtime._simulation_service._needs_decay_stage
+        decay_stage._starvation_damage_per_tick = 0
+        decay_stage._rates = {}
+
         for _ in range(170):
             if runtime.check_game_end().is_ended:
                 break

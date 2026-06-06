@@ -229,6 +229,21 @@ class ScenarioOutcomeResolutionConfig:
     stranded_at_tick: int
     summit_spot_id: SpotId
     signal_fire_flag: str
+    # 飢餓ダメージ: HUNGER=max のプレイヤーに毎 tick 与える HP ダメージ。
+    # 0 で無効。サバイバル系シナリオの緊張感を JSON で調整可能にする。
+    # 1 = 元の挙動 (#306 hardcoded)、2 = 約 50 tick (= ~2 day) で 100→0。
+    starvation_damage_per_tick: int = 1
+
+    def __post_init__(self) -> None:
+        # 値オブジェクトの不変条件は constructor 層でも保証する
+        # (code-review HIGH 対応)。loader だけの validation だと
+        # `ScenarioOutcomeResolutionConfig(... starvation_damage_per_tick=-999)`
+        # のような直接構築で不正値が通ってしまう。
+        if self.starvation_damage_per_tick < 0:
+            raise ValueError(
+                "starvation_damage_per_tick must be non-negative, "
+                f"got {self.starvation_damage_per_tick}"
+            )
 
 
 @dataclass(frozen=True)
@@ -1334,11 +1349,18 @@ class ScenarioLoader:
                     f"outcome_resolution.rescue_at_ticks[{t}] must be strictly "
                     f"less than stranded_at_tick ({stranded_raw})"
                 )
+        # 飢餓ダメージ (オプショナル、既定 1)。負値は不正。
+        starv_raw = raw.get("starvation_damage_per_tick", 1)
+        if not isinstance(starv_raw, int) or starv_raw < 0:
+            raise ScenarioLoadError(
+                "outcome_resolution.starvation_damage_per_tick must be a non-negative integer"
+            )
         return ScenarioOutcomeResolutionConfig(
             rescue_at_ticks=rescue_ticks,
             stranded_at_tick=stranded_raw,
             summit_spot_id=summit_spot_id,
             signal_fire_flag=signal_flag,
+            starvation_damage_per_tick=starv_raw,
         )
 
     def _parse_day_night_config(
