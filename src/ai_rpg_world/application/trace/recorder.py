@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
@@ -57,6 +58,10 @@ class NullTraceRecorder(ITraceRecorder):
 
     def __init__(self) -> None:
         self._seq = 0
+        # PR #358 review HIGH 1 後続: Phase A 並列化 (#354) + 非同期 LLM 主観文
+        # scheduler (#309) で複数 thread が同時に record を叩く。_seq の
+        # increment は GIL があっても複合代入なので保護する必要がある。
+        self._lock = threading.Lock()
 
     def record(
         self,
@@ -66,9 +71,11 @@ class NullTraceRecorder(ITraceRecorder):
         player_id: Optional[int] = None,
         **payload: Any,
     ) -> TraceEvent:
-        self._seq += 1
+        with self._lock:
+            self._seq += 1
+            seq = self._seq
         return TraceEvent(
-            seq=self._seq,
+            seq=seq,
             timestamp=_utc_now_iso(),
             kind=str(kind),
             tick=tick,
@@ -97,6 +104,10 @@ class JsonlTraceRecorder(ITraceRecorder):
         # thread が close 後に record を呼ぶ "close race" を観測可能にするカウンタ。
         # 値が大きいときは scheduler shutdown drain がタイムアウトしている可能性。
         self._record_dropped_after_close: int = 0
+        # PR #358 review HIGH 1 後続: Phase A 並列化 + 非同期 scheduler で複数
+        # thread が同時に record を叩くと _seq / _fh.write が interleave して
+        # JSONL が破損する。lock で record 全体を直列化する。
+        self._lock = threading.Lock()
 
     @property
     def path(self) -> Path:
@@ -119,54 +130,50 @@ class JsonlTraceRecorder(ITraceRecorder):
         player_id: Optional[int] = None,
         **payload: Any,
     ) -> TraceEvent:
-        if self._fh is None:
-            # Issue #311 後続: 非同期 LLM 主観文付与 (#310) のワーカー thread が
-            # ``runtime.shutdown(timeout)`` のタイムアウト後に完了した場合、
-            # 既に閉じた recorder に書き込みを試みる "close race" が起きる。
-            # これは非同期パイプラインで構造的に避けがたいので、例外を投げる
-            # 代わりに **silently drop + カウンタ加算** で処理する。
-            #
-            # 例外を投げると scheduler の ``_emit_trace`` が WARN ログを吐き、
-            # 期待される race を「障害」として誤って報告してしまう (第21回
-            # 第22回実験で観測された "recorder is already closed ×2" の原因)。
-            #
-            # 統計は ``record_dropped_after_close`` で公開し、運用上 drain
-            # タイムアウト調整の根拠にできる。
-            self._record_dropped_after_close += 1
-            _logger.debug(
-                "JsonlTraceRecorder.record(%s) dropped: recorder already closed "
-                "(total dropped=%d)",
-                kind,
-                self._record_dropped_after_close,
-            )
-            # Sentinel event (seq=-1 で「未確定」を示す)。caller がチェーンで
-            # 使う場合に AttributeError を起こさないように TraceEvent を返す。
-            return TraceEvent(
-                seq=-1,
+        with self._lock:
+            if self._fh is None:
+                # Issue #311 後続: 非同期 LLM 主観文付与 (#310) のワーカー thread が
+                # ``runtime.shutdown(timeout)`` のタイムアウト後に完了した場合、
+                # 既に閉じた recorder に書き込みを試みる "close race" が起きる。
+                # これは非同期パイプラインで構造的に避けがたいので、例外を投げる
+                # 代わりに **silently drop + カウンタ加算** で処理する。
+                self._record_dropped_after_close += 1
+                _logger.debug(
+                    "JsonlTraceRecorder.record(%s) dropped: recorder already closed "
+                    "(total dropped=%d)",
+                    kind,
+                    self._record_dropped_after_close,
+                )
+                return TraceEvent(
+                    seq=-1,
+                    timestamp=_utc_now_iso(),
+                    kind=str(kind),
+                    tick=tick,
+                    player_id=player_id,
+                    payload=dict(payload),
+                )
+            self._seq += 1
+            event = TraceEvent(
+                seq=self._seq,
                 timestamp=_utc_now_iso(),
                 kind=str(kind),
                 tick=tick,
                 player_id=player_id,
                 payload=dict(payload),
             )
-        self._seq += 1
-        event = TraceEvent(
-            seq=self._seq,
-            timestamp=_utc_now_iso(),
-            kind=str(kind),
-            tick=tick,
-            player_id=player_id,
-            payload=dict(payload),
-        )
-        self._fh.write(json.dumps(event.to_jsonable(), ensure_ascii=False))
-        self._fh.write("\n")
-        self._fh.flush()
-        return event
+            self._fh.write(json.dumps(event.to_jsonable(), ensure_ascii=False))
+            self._fh.write("\n")
+            self._fh.flush()
+            return event
 
     def close(self) -> None:
-        if self._fh is not None:
-            self._fh.close()
-            self._fh = None
+        # close は lock 内で fh を None にすることで record との競合を防ぐ
+        # (race: A thread が record の lock を取った直後に close が走り、
+        # A 側で _fh is None チェック後の write が NPE になるパスを潰す)。
+        with self._lock:
+            if self._fh is not None:
+                self._fh.close()
+                self._fh = None
         if self._record_dropped_after_close > 0:
             # 大量に dropped していたら shutdown drain の調整が必要なので
             # INFO で残す。0 件 (= 完璧な drain) では何も出さない。

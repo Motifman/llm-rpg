@@ -68,6 +68,12 @@ class TraceEventKind:
     # キュー満杯で enqueue を諦めた瞬間 (back-pressure)。
     # payload: episode_id / queue_size / max_queue_size
     EPISODIC_SUBJECTIVE_DROPPED = "episodic_subjective_dropped"
+    # LLM 性能メトリクス (実験 #356 後続): Phase A の LLM 呼び出し 1 件分の
+    # 壁時計 latency / token usage / TPS を記録する。
+    # payload: model / wall_latency_ms / prompt_tokens / completion_tokens /
+    # tps / success / error_code
+    # τ_sim の設定根拠データ + scenario ごとの cost 評価に使う。
+    LLM_CALL = "llm_call"
 
 
 @dataclass(frozen=True)

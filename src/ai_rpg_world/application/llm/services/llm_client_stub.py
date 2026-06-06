@@ -41,7 +41,11 @@ class StubLlmClient(ILLMClient):
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
         tool_choice: str = "required",
+        *,
+        metrics_sink: Optional[Any] = None,
     ) -> Optional[Dict[str, Any]]:
+        # stub は metrics_sink を受け取るが何もしない (テスト互換、実 client が出す
+        # 計測値を fake する必要がない場合の default)。
         if self._exception_to_raise is not None:
             raise self._exception_to_raise
         return self._tool_call_to_return

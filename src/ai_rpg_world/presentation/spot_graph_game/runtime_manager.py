@@ -210,6 +210,51 @@ def _resolve_llm_parallel_workers(default: int = 0) -> int:
     return max(0, n)
 
 
+class _LlmMetricsTraceSink:
+    """Phase A の LLM 呼び出し metrics を trace に流す sink (PR #358)。
+
+    Review HIGH 2 対応: current_tick は ``record()`` 呼び出し時点で取得する
+    (sink 構築時に固定すると、遅い LLM 呼び出しが tick 境界を跨いだ場合に
+    stale tick で記録される。後の τ_sim 分析の信頼性に関わる)。
+
+    Review MEDIUM 対応: 旧実装は inner class を毎呼び出し定義していたが、
+    parallel hot path で無駄なので module-level に切り出した。
+    """
+
+    def __init__(
+        self,
+        trace_recorder: Any,
+        runtime: Any,
+        player_id: PlayerId,
+    ) -> None:
+        self._trace_recorder = trace_recorder
+        self._runtime = runtime
+        self._player_id_value = int(player_id.value)
+
+    def record(self, metrics: Any) -> None:
+        try:
+            tick: Optional[int] = None
+            try:
+                tick = int(self._runtime.current_tick())
+            except Exception:
+                tick = None
+            from ai_rpg_world.application.trace import TraceEventKind
+            self._trace_recorder.record(
+                TraceEventKind.LLM_CALL,
+                tick=tick,
+                player_id=self._player_id_value,
+                model=metrics.model,
+                wall_latency_ms=metrics.wall_latency_ms,
+                prompt_tokens=metrics.prompt_tokens,
+                completion_tokens=metrics.completion_tokens,
+                tps=metrics.tps,
+                success=metrics.success,
+                error_code=metrics.error_code,
+            )
+        except Exception:
+            logger.exception("trace_recorder.record(llm_call) failed")
+
+
 @dataclass
 class _LlmPhaseAResult:
     """1 ターンの Phase A (snapshot + LLM 呼び出し) の出力。
@@ -608,9 +653,15 @@ class _EscapeGameLlmWiring:
             }
             for definition in self.runtime.get_tool_definitions()
         ]
+        # 実験 #356 対応: LLM 1 呼び出しごとに metrics (wall_latency / tokens / TPS)
+        # を trace に流す。Phase A の中で player_id / tick の context を sink に閉
+        # じ込めて、後で集計スクリプトが per-agent / per-model 分布を出せるよう
+        # にする。
+        metrics_sink = self._build_llm_metrics_sink(player_id)
         try:
             tool_call = self.llm_client.invoke(
-                prompt["messages"], tools_payload, "required"
+                prompt["messages"], tools_payload, "required",
+                metrics_sink=metrics_sink,
             )
             return _LlmPhaseAResult(
                 player_id=player_id,
@@ -861,6 +912,29 @@ class _EscapeGameLlmWiring:
                 player_id.value,
                 tool_name,
             )
+
+    def _build_llm_metrics_sink(
+        self, player_id: PlayerId
+    ) -> Optional[Any]:
+        """Phase A の LLM 呼び出し metrics を trace に流す sink を構築する。
+
+        trace_recorder が無い (= テスト等) なら None を返して、litellm 側で
+        no-op になる。
+
+        Review HIGH 2 対応: current_tick は **record 時点** で取得する
+        (sink 構築時の固定値だと、遅い LLM 呼び出しが tick 境界を跨いだとき
+        stale な tick が記録される)。
+        Review MEDIUM 後続: inner class の動的定義を避け、module-level の
+        `_LlmMetricsTraceSink` クラスを再利用する (parallel 経路の hot path)。
+        """
+        trace_recorder = getattr(self.runtime, "trace_recorder", None)
+        if trace_recorder is None:
+            return None
+        return _LlmMetricsTraceSink(
+            trace_recorder=trace_recorder,
+            runtime=self.runtime,
+            player_id=player_id,
+        )
 
     # busy 中に "free" 扱いして中断を発火しない tool 群。
     # 軽い行動 (発話 / メモ / 観察 / 待機) は travel と並行できる。
