@@ -76,6 +76,7 @@ from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
+    InteractionNotFoundException,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
@@ -188,6 +189,30 @@ def _interact_remediation_for_reason(reason: str) -> str:
         "前提条件 (必要アイテム / 体力 / 天候 / フラグ) を満たしてから再試行する。"
         "失敗 reason に名指しされたアイテムや状態を確認すること。"
     )
+
+
+def _list_object_interactions(runtime: Any, object_id: Any) -> list[str]:
+    """`object_id` が所属する spot の interior から available action 名を列挙。
+
+    実験 #26 で LLM が "search" / "examine" 等の ad-hoc action_name を発明して
+    InteractionNotFoundException が generic error に化けていた問題を直すため、
+    handler が remediation で正規の action 一覧を返せるようにするヘルパ。
+    解決経路で例外が出たら空 list を返す (= remediation 文面が "(なし)" になる)。
+    """
+    try:
+        graph = runtime._spot_graph_repo.find_graph()
+        spot_id = None
+        # object_id (SpotObjectId) から所属 spot を探す
+        for node in graph.iter_spot_nodes():
+            interior = runtime._spot_interior_repo.find_by_spot_id(node.spot_id)
+            if interior is None:
+                continue
+            obj = interior.get_object(object_id)
+            if obj is not None:
+                return [i.action_name for i in obj.interactions]
+        return []
+    except Exception:
+        return []
 
 
 def _safe_get_str(mapper: Any, namespace: str, numeric_id: int) -> str:
@@ -1391,6 +1416,30 @@ class _EscapeGameLlmWiring:
                 message=f"行動が拒否された: {reason}",
                 error_code="INTERACTION_PRECONDITION_FAILED",
                 remediation=_interact_remediation_for_reason(reason),
+            )
+        except InteractionNotFoundException:
+            # 実験 #26 で発覚: LLM が ad-hoc に "search" / "examine" / "interact"
+            # 等の action_name を発明して呼び、generic LLM_TOOL_EXECUTION_FAILED
+            # に化けていた (reason が "search on 2" のような ID 表示で意味不明)。
+            # 当該 object で実際に使える action 一覧を提示して LLM を正規の
+            # action_name に誘導する。
+            available = _list_object_interactions(
+                self.runtime, object_id,
+            )
+            avail_str = ", ".join(available) if available else "(なし)"
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"このオブジェクトには '{action_name}' という操作がありません。"
+                    f"利用可能な操作: {avail_str}"
+                ),
+                error_code="INTERACTION_ACTION_NOT_FOUND",
+                remediation=(
+                    "action_name には現在の状況に表示されたオブジェクトの "
+                    "「使える操作」(例: gather / examine 等の定義済 action) を"
+                    "そのまま指定してください。汎用名 (search / interact) は"
+                    "通常 scenario に存在しません。"
+                ),
             )
         return with_inner_thought_empty_warning(
             TOOL_NAME_SPOT_GRAPH_INTERACT,

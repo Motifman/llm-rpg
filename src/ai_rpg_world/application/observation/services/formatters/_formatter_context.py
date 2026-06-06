@@ -87,6 +87,12 @@ class ObservationFormatterContext:
     item_repository: Optional["ItemRepository"]
     spot_graph_repository: Optional["ISpotGraphRepository"] = None
     sound_propagation_service: Optional["SoundPropagationService"] = None
+    # 実験 #26 で発覚した「リオが何かのsearchを試みた」型の placeholder 漏出
+    # への対応: scenario loader が SpotNode.interior=None で構築するため、
+    # graph 経由では object name が引けない。interior は別 repo に居る。
+    # formatter が object_name を解決する経路として spot_interior_repository
+    # を必要とする。注入されない場合は fallback "何か" になる (既存挙動)。
+    spot_interior_repository: Optional[Any] = None
 
     def lookup_recipient_spot(
         self, recipient_player_id: PlayerId

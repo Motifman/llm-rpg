@@ -275,14 +275,20 @@ class SpotGraphToolExecutor:
                     remediation=get_remediation("PLAYER_NOT_FOUND"),
                 )
             target_spec = ISpecId.create(item_spec_id_int)
-            # インベントリからアイテムインスタンスを探す
+            # インベントリからアイテムインスタンスを探す。
+            # 実験 #26 で発覚: 旧コードは `inv.slots` を iter していたが、
+            # `PlayerInventoryAggregate` に `slots` 属性は存在せず
+            # `_inventory_slots: Dict[SlotId, Optional[ItemInstanceId]]` のみ
+            # → 全 use_item が AttributeError → SYSTEM_ERROR (72 件) で死んでいた。
             item_instance = None
-            for slot in inv.slots:
-                if slot.item_instance_id is None:
+            matched_slot_id = None
+            for slot_id, iid in inv._inventory_slots.items():
+                if iid is None:
                     continue
-                item = self._item_repository.find_by_id(slot.item_instance_id)
+                item = self._item_repository.find_by_id(iid)
                 if item is not None and item.item_spec.item_spec_id == target_spec:
                     item_instance = item
+                    matched_slot_id = slot_id
                     break
             if item_instance is None:
                 return LlmCommandResultDto(
@@ -307,7 +313,8 @@ class SpotGraphToolExecutor:
             item_instance.use()
             if item_instance.quantity == 0:
                 self._item_repository.delete(item_instance.item_instance_id)
-                inv.remove_item_for_placement(slot.slot_id)
+                if matched_slot_id is not None:
+                    inv.remove_item_for_placement(matched_slot_id)
                 self._player_inventory_repository.save(inv)
             else:
                 self._item_repository.save(item_instance)
