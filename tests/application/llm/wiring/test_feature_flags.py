@@ -57,12 +57,23 @@ class TestResolveEpisodicExploreRelatedEnabled:
             env={ENV_EPISODIC_EXPLORE_RELATED_ENABLED: raw}
         ) is True
 
-    @pytest.mark.parametrize("raw", ["0", "false", "no", "off", "FALSE", "random", "2"])
-    def test_falsy_または_未知の値は_OFF(self, raw: str) -> None:
-        """truthy 以外は安全側 (OFF) に倒す。"""
+    @pytest.mark.parametrize("raw", ["0", "false", "no", "off", "FALSE", "Off"])
+    def test_falsy_リテラルは_OFF(self, raw: str) -> None:
+        """明示的に falsy ("0" / "false" / "no" / "off") を渡したら OFF。"""
         assert resolve_episodic_explore_related_enabled(
             env={ENV_EPISODIC_EXPLORE_RELATED_ENABLED: raw}
         ) is False
+
+    @pytest.mark.parametrize("raw", ["random", "2", "yeah", "tru", "enable"])
+    def test_未知の値は_ValueError(self, raw: str) -> None:
+        """truthy / falsy のどちらでもない値で silent fallback せず fail-fast (PR #434)。"""
+        with pytest.raises(ValueError) as exc_info:
+            resolve_episodic_explore_related_enabled(
+                env={ENV_EPISODIC_EXPLORE_RELATED_ENABLED: raw}
+            )
+        msg = str(exc_info.value)
+        assert ENV_EPISODIC_EXPLORE_RELATED_ENABLED in msg
+        assert raw in msg
 
     def test_前後空白は_strip(self) -> None:
         """env var の値に空白混入があっても解釈できる。"""
@@ -111,31 +122,23 @@ class TestResolveSemanticPassiveTopK:
             env={ENV_SEMANTIC_PASSIVE_TOP_K: "0"}
         ) == 0
 
-    def test_非数値なら_warning_log_を出して_default(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        with caplog.at_level(
-            logging.WARNING,
-            logger="ai_rpg_world.application.llm.wiring.feature_flags",
-        ):
-            v = resolve_semantic_passive_top_k(
+    def test_非数値なら_ValueError(self) -> None:
+        """typo / 非整数で silent fallback すると実験前提を壊すので fail-fast (PR #434)。"""
+        with pytest.raises(ValueError) as exc_info:
+            resolve_semantic_passive_top_k(
                 env={ENV_SEMANTIC_PASSIVE_TOP_K: "abc"}
             )
-        assert v == 0
-        assert any("non-integer" in rec.message for rec in caplog.records)
+        assert "SEMANTIC_PASSIVE_TOP_K" in str(exc_info.value)
+        assert "non-integer" in str(exc_info.value)
 
-    def test_負数なら_warning_log_を出して_default(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        with caplog.at_level(
-            logging.WARNING,
-            logger="ai_rpg_world.application.llm.wiring.feature_flags",
-        ):
-            v = resolve_semantic_passive_top_k(
+    def test_負数なら_ValueError(self) -> None:
+        """負の値を渡すのは意図がないと考え、fail-fast (PR #434)。"""
+        with pytest.raises(ValueError) as exc_info:
+            resolve_semantic_passive_top_k(
                 env={ENV_SEMANTIC_PASSIVE_TOP_K: "-3"}
             )
-        assert v == 0
-        assert any("negative" in rec.message for rec in caplog.records)
+        assert "SEMANTIC_PASSIVE_TOP_K" in str(exc_info.value)
+        assert ">= 0" in str(exc_info.value)
 
 
 class TestLogSemanticPassiveTopKState:
@@ -164,11 +167,20 @@ class TestResolveSemanticSearchEnabled:
             env={ENV_SEMANTIC_SEARCH_ENABLED: raw}
         ) is True
 
-    @pytest.mark.parametrize("raw", ["0", "false", "no", "off", "random", ""])
-    def test_falsy_または_未知の値は_OFF(self, raw: str) -> None:
+    @pytest.mark.parametrize("raw", ["0", "false", "no", "off", ""])
+    def test_falsy_リテラルまたは空文字は_OFF(self, raw: str) -> None:
+        """明示的 falsy / 空文字は OFF。空文字は「未設定」扱いで default を返す。"""
         assert resolve_semantic_search_enabled(
             env={ENV_SEMANTIC_SEARCH_ENABLED: raw}
         ) is False
+
+    @pytest.mark.parametrize("raw", ["random", "yeah", "tru", "2"])
+    def test_未知の値は_ValueError(self, raw: str) -> None:
+        """typo / 未知の値で silent fallback せず fail-fast (PR #434)。"""
+        with pytest.raises(ValueError):
+            resolve_semantic_search_enabled(
+                env={ENV_SEMANTIC_SEARCH_ENABLED: raw}
+            )
 
 
 class TestLogSemanticSearchState:
@@ -214,18 +226,22 @@ class TestResolveShortTermMemoryKind:
             env={ENV_SHORT_TERM_MEMORY_KIND: "ROLLING_SUMMARY"}
         ) == SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
 
-    def test_未知の値は_warning_log_を出して_default(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        with caplog.at_level(
-            logging.WARNING,
-            logger="ai_rpg_world.application.llm.wiring.feature_flags",
-        ):
-            v = resolve_short_term_memory_kind(
-                env={ENV_SHORT_TERM_MEMORY_KIND: "huge_rolling_summary"}
+    def test_未知の値は_ValueError(self) -> None:
+        """短縮形 (``rolling``) や typo を渡したら silent fallback せず即落とす。
+
+        PR #433 経緯: ``rolling`` を渡したのに sliding_window で実験が走り、
+        実験 24h 分が無駄になりかけた事例。
+        """
+        with pytest.raises(ValueError) as exc_info:
+            resolve_short_term_memory_kind(
+                env={ENV_SHORT_TERM_MEMORY_KIND: "rolling"}
             )
-        assert v == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
-        assert any("Unknown" in rec.message for rec in caplog.records)
+        msg = str(exc_info.value)
+        assert "SHORT_TERM_MEMORY_KIND" in msg
+        assert "rolling" in msg  # bad value
+        # 有効値リストがメッセージに含まれる (ユーザーが正しい綴りを発見しやすい)
+        assert "rolling_summary" in msg
+        assert "sliding_window" in msg
 
 
 class TestLogShortTermMemoryKindState:
@@ -271,18 +287,17 @@ class TestResolveShortTermMemorySchedulerMode:
             env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: "Thread_Pool"}
         ) == SCHEDULER_MODE_THREAD_POOL
 
-    def test_未知の値は_warning_を出して_default(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        with caplog.at_level(
-            logging.WARNING,
-            logger="ai_rpg_world.application.llm.wiring.feature_flags",
-        ):
-            v = resolve_short_term_memory_scheduler_mode(
+    def test_未知の値は_ValueError(self) -> None:
+        """typo / 未知のモードで silent fallback せず即落とす (PR #434)。"""
+        with pytest.raises(ValueError) as exc_info:
+            resolve_short_term_memory_scheduler_mode(
                 env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: "async_io"}
             )
-        assert v == SCHEDULER_MODE_INLINE
-        assert any("Unknown" in rec.message for rec in caplog.records)
+        msg = str(exc_info.value)
+        assert "SHORT_TERM_MEMORY_SCHEDULER_MODE" in msg
+        assert "async_io" in msg
+        assert "inline" in msg
+        assert "thread_pool" in msg
 
 
 class TestLogShortTermMemorySchedulerModeState:

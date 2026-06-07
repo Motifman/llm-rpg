@@ -140,22 +140,21 @@ def resolve_section_order_from_env(
     実験スクリプト経由で A/B 検証する用途。``env`` を渡せばその dict を見る
     (テスト用)、None なら ``os.environ``。
 
-    値が未設定・空文字なら default の ``stable_to_volatile`` を返す。
-    値が未知の文字列なら警告を出して default に縮退する (典型的には typo)。
+    - 値が未設定・空文字なら default の ``stable_to_volatile`` を返す
+    - 値が未知の文字列なら ``ValueError`` (silent fallback 防止 / PR #433 経緯)
+
+    Raises:
+        ValueError: 未知の文字列のとき
     """
     source = env if env is not None else os.environ
     raw = (source.get(ENV_PROMPT_SECTION_ORDER) or "").strip()
     if not raw:
         return SECTION_ORDER_STABLE_TO_VOLATILE
     if raw not in _VALID_SECTION_ORDERS:
-        _logger.warning(
-            "Unknown %s=%r; falling back to %s. valid: %s",
-            ENV_PROMPT_SECTION_ORDER,
-            raw,
-            SECTION_ORDER_STABLE_TO_VOLATILE,
-            sorted(_VALID_SECTION_ORDERS),
+        raise ValueError(
+            f"{ENV_PROMPT_SECTION_ORDER}={raw!r} is not recognized. "
+            f"valid: {sorted(_VALID_SECTION_ORDERS)}"
         )
-        return SECTION_ORDER_STABLE_TO_VOLATILE
     return raw
 
 
