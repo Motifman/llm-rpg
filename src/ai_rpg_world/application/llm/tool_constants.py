@@ -158,3 +158,6 @@ TOOL_NAME_SPOT_GRAPH_LISTEN = TOOL_NAME_PREFIX_SPOT_GRAPH + "listen"
 TOOL_NAME_SPOT_GRAPH_DROP_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "drop_item"
 TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "pickup_item"
 TOOL_NAME_SPOT_GRAPH_GIVE_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "give_item"
+# PR 5b: 同 tick 内で複数 give を 1 tool call にまとめるための batch 版。
+# 単発 give_item は受け渡しが 1 対 1 のとき / 引数を最小化したいとき向けに残す。
+TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS = TOOL_NAME_PREFIX_SPOT_GRAPH + "give_items"

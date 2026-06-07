@@ -282,6 +282,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
@@ -352,6 +353,8 @@ class SpotGraphArgumentResolver:
             return self._resolve_pickup_item(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM:
             return self._resolve_give_item(args, runtime_context)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS:
+            return self._resolve_give_items(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
             return self._resolve_use_item(args, runtime_context)
         return None
@@ -457,6 +460,78 @@ class SpotGraphArgumentResolver:
                 "target_player_id": player_target.player_id,
                 "target_display_name": player_target.display_name,
                 "item_display_name": item_target.display_name,
+            },
+            args,
+        )
+
+    def _resolve_give_items(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """``spot_graph_give_items`` の batch 引数を解決する (PR 5b)。
+
+        単発 give_item と同じ解決ロジックを ``gives`` 配列の各 entry に適用し、
+        ``gives_resolved: [{slot_id, target_player_id, ...}, ...]`` に変換する。
+
+        Partial success 方針: resolve 段階で 1 件失敗しても他は通す。失敗 entry
+        は ``{"error_code": "...", "message": "..."}`` で埋めて executor 側に
+        渡し、executor で「OK / NG」を集約 message に変換する。これにより
+        LLM は「リン宛は失敗、トマ宛は OK」のような **部分的成功** を 1 turn で
+        観測できる。
+
+        ``inner_thought`` / ``say_inline`` 等の外側引数はそのまま保持する。
+        """
+        gives = args.get("gives")
+        if not isinstance(gives, list) or not gives:
+            raise ToolArgumentResolutionException(
+                "gives は非空の配列で指定してください。",
+                "INVALID_ARGUMENT",
+            )
+
+        resolved: list[Dict[str, Any]] = []
+        for i, entry in enumerate(gives):
+            if not isinstance(entry, dict):
+                resolved.append({
+                    "index": i,
+                    "error_code": "INVALID_ARGUMENT",
+                    "message": f"gives[{i}] は object でなければなりません。",
+                })
+                continue
+            try:
+                # 単発 give_item と同じロジックを使い回すが、entry の値で
+                # 走らせるため一時 args を組み立てる
+                resolved_entry = self._resolve_give_item(
+                    {
+                        "item_label": entry.get("item_label"),
+                        "target_player_label": entry.get("target_player_label"),
+                        # inner_thought は give_items 全体で 1 つ持つので空でも問題ない
+                        "inner_thought": "",
+                    },
+                    runtime_context,
+                )
+                resolved.append({
+                    "index": i,
+                    "slot_id": resolved_entry["slot_id"],
+                    "target_player_id": resolved_entry["target_player_id"],
+                    "target_display_name": resolved_entry["target_display_name"],
+                    "item_display_name": resolved_entry["item_display_name"],
+                    "item_label": entry.get("item_label"),
+                    "target_player_label": entry.get("target_player_label"),
+                })
+            except ToolArgumentResolutionException as e:
+                resolved.append({
+                    "index": i,
+                    "error_code": e.error_code,
+                    "message": str(e),
+                    "item_label": entry.get("item_label"),
+                    "target_player_label": entry.get("target_player_label"),
+                })
+
+        return _with_inner_thought(
+            {
+                "gives_resolved": resolved,
+                "say_inline": args.get("say_inline", ""),
             },
             args,
         )

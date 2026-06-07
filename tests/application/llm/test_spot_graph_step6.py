@@ -46,7 +46,7 @@ def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     )
 
 
-def test_get_spot_graph_specs_has_thirteen_tools() -> None:
+def test_get_spot_graph_specs_has_fourteen_tools() -> None:
     """spot_graph 系ツールの数を検証する。
 
     変遷:
@@ -54,9 +54,10 @@ def test_get_spot_graph_specs_has_thirteen_tools() -> None:
     - drop/pickup 導入: spot_graph_drop_item / spot_graph_pickup_item の 2 つが
       増えて 12
     - give 導入: spot_graph_give_item が 1 つ増えて 13
+    - PR 5b: spot_graph_give_items (batch) が 1 つ増えて 14
     """
     specs = get_spot_graph_specs()
-    assert len(specs) == 13
+    assert len(specs) == 14
     names = {s[0].name for s in specs}
     assert "spot_graph_travel_to" in names
     assert "spot_graph_set_sub_location" in names
@@ -66,6 +67,8 @@ def test_get_spot_graph_specs_has_thirteen_tools() -> None:
     assert "spot_graph_use_item" in names
     assert "spot_graph_drop_item" in names
     assert "spot_graph_pickup_item" in names
+    assert "spot_graph_give_item" in names
+    assert "spot_graph_give_items" in names
     assert "spot_graph_give_item" in names
     assert "spot_graph_wait" in names
     assert "spot_graph_attack" in names
