@@ -744,3 +744,131 @@ class TestRollingSummaryL5Trigger:
             RollingSummaryShortTermMemory(
                 long_summary_service="not-a-service",  # type: ignore[arg-type]
             )
+
+
+class _RecordingRecorder:
+    """trace recorder の test 用 fake。`record(kind, **payload)` を全部保持する。"""
+
+    def __init__(self) -> None:
+        self.events: list[dict] = []
+
+    def record(self, kind: str, **payload) -> None:  # type: ignore[no-untyped-def]
+        self.events.append({"kind": kind, **payload})
+
+
+class TestShortTermSummaryGeneratedTrace:
+    """PR #435: L4 / L5 が install された瞬間の trace 出力 (成功 / fallback 両方)。
+
+    成功時の生成内容は従来 trace に出ず、'rolling が何を圧縮したか' が事後追え
+    なかった。実験 #30 前準備でギャップとして発覚し、本トレースで埋める。
+    """
+
+    def test_L4_install_時に_SHORT_TERM_SUMMARY_GENERATED_が_emit_される(self) -> None:
+        """LLM 成功経路で L4 が install されたら 1 件 trace に出る。"""
+        rec = _RecordingRecorder()
+        parsed = _ParsedSummary(
+            compressed_activity="森でキノコを採集した",
+            emotional_summary="やや疲れた",
+            unresolved=("キノコの種類不明",),
+        )
+        mem = RollingSummaryShortTermMemory(
+            summary_service=_StubSummaryService.make(result=parsed),
+            trace_recorder_provider=lambda: rec,
+            current_tick_provider=lambda: 42,
+        )
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"o{i}", seq=i))
+        # L4 trace が 1 件出る
+        l4_events = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
+        assert len(l4_events) == 1
+        ev = l4_events[0]
+        assert ev["player_id"] == _PID.value
+        assert ev["tick"] == 42
+        assert ev["raw_count"] == DEFAULT_L1_SOFT_CAP
+        assert ev["compressed_activity"] == "森でキノコを採集した"
+        assert ev["emotional_summary"] == "やや疲れた"
+        assert ev["unresolved"] == ["キノコの種類不明"]
+        assert ev["is_fallback"] is False
+        assert ev["summary_id"].startswith("l4-")
+
+    def test_template_fallback_でも_trace_は_出て_is_fallback_True(self) -> None:
+        """summary_service=None でも (LLM なしモード) template fallback で trace。"""
+        rec = _RecordingRecorder()
+        mem = RollingSummaryShortTermMemory(
+            summary_service=None,
+            trace_recorder_provider=lambda: rec,
+        )
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"o{i}", seq=i))
+        l4_events = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
+        assert len(l4_events) == 1
+        assert l4_events[0]["is_fallback"] is True
+
+    def test_recorder_provider_が_None_なら_例外なく_no_op(self) -> None:
+        """既存挙動の後方互換: provider 未指定なら trace は出ず、本体は動く。"""
+        mem = RollingSummaryShortTermMemory(summary_service=None)
+        # 例外を投げずに L4 install まで通る
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"o{i}", seq=i))
+        # mid summary は生成されている
+        assert len(mem._mid_generations(_PID.value)) == 1
+
+    def test_recorder_provider_が_例外を投げても_本体は止まらない(self) -> None:
+        """trace recorder の I/O 失敗が L4 install を倒さないこと (best-effort)。"""
+        def boom() -> object:
+            raise RuntimeError("recorder broken")
+
+        mem = RollingSummaryShortTermMemory(
+            summary_service=None,
+            trace_recorder_provider=boom,
+        )
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"o{i}", seq=i))
+        assert len(mem._mid_generations(_PID.value)) == 1
+
+    def test_current_tick_provider_が_None_なら_tick_は_None(self) -> None:
+        """tick provider 未指定なら trace の tick は None になる (recorder には届く)。"""
+        rec = _RecordingRecorder()
+        mem = RollingSummaryShortTermMemory(
+            summary_service=None,
+            trace_recorder_provider=lambda: rec,
+            # current_tick_provider 未指定
+        )
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"o{i}", seq=i))
+        l4_events = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
+        assert l4_events[0]["tick"] is None
+
+    def test_L5_install_時に_SHORT_TERM_LONG_SUMMARY_GENERATED_が_emit_される(self) -> None:
+        """L4 が keep_gen=3 を超えて evict されると L5 が install され、trace に 1 件出る。"""
+        rec = _RecordingRecorder()
+        # 4 generation 分 L4 を生成して L5 を発火させる (DEFAULT_L4_KEEP_GENERATIONS=3)
+        long_stub = _StubLongService.make(
+            result=_ParsedLongSummary(
+                self_image="私は寡黙な観察者",
+                world_view="この島は不気味",
+            )
+        )
+        mid_stub = _StubSummaryService.make(
+            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
+        )
+        mem = RollingSummaryShortTermMemory(
+            summary_service=mid_stub,
+            long_summary_service=long_stub,
+            trace_recorder_provider=lambda: rec,
+            current_tick_provider=lambda: 99,
+        )
+        for batch in range(4):
+            for i in range(DEFAULT_L1_SOFT_CAP):
+                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+
+        l5_events = [e for e in rec.events if e["kind"] == "short_term_long_summary_generated"]
+        assert len(l5_events) == 1
+        ev = l5_events[0]
+        assert ev["player_id"] == _PID.value
+        assert ev["tick"] == 99
+        assert ev["generation_index"] == 1
+        assert ev["self_image"] == "私は寡黙な観察者"
+        assert ev["world_view"] == "この島は不気味"
+        assert ev["is_fallback"] is False
+        assert ev["summary_id"].startswith("l5-")
