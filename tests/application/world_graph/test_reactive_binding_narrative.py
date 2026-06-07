@@ -135,10 +135,10 @@ class TestScenarioLoaderParsesNarrative:
             b for b in loaded.reactive_object_state_bindings
             if b.narrative_on_true is not None
         ]
-        assert len(with_narrative) == 13, (
+        assert len(with_narrative) == 14, (
             f"narrative_on_true 付きの binding 数が想定と異なる: {len(with_narrative)}"
-            " (survival_island_v2.json の harvest cooldown は 13 件: PR で"
-            " 枯れ葉採取 binding を追加した分を含む)"
+            " (survival_island_v2.json の harvest cooldown は 14 件: PR で"
+            " 枯れ葉採取 binding に加え sharp_stone 採取 binding を追加した分を含む)"
         )
 
 

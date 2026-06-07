@@ -9,7 +9,7 @@
     "estimated_ticks": 384,
     "author": "demo",
     "tags": ["survival", "long_term", "cooperation", "betrayal", "info_asymmetry", "phase2_v2"],
-    "llm_public_intro": "嵐で難破した観光ツアー船から、4人だけが救命ボートで近くの無人島に流れ着いた。救命ボートは沖に流された。山頂に登って狼煙を上げれば、通りかかる船が気付くかもしれない。だが島の天候は荒れやすく、食料は腐り、水は限られている。隣の3人は今朝までの他人だ。"
+    "llm_public_intro": "嵐で難破した観光ツアー船から、4人だけが救命ボートで近くの無人島に流れ着いた。救命ボートは沖に流された。\n\n生存ルール (船員から聞いた言い伝え + 状況からの推測):\n- 通りかかる船は ごく稀 にしか現れない。手元の情報では、ここから 8日 ほどの間に 計3回 程度しかチャンスがない見込みだ。それを過ぎると食料も体力も尽き、誰も来なくなる。\n- 救助されるには 山頂の狼煙台 で火を上げ、その瞬間に 山頂 (summit) に居る必要がある。狼煙が見えても、麓に居れば船は気付かず通り過ぎる。\n- 狼煙には 流木 + 枯れ葉 + 火打ち石 が要る。誰が何を持っているかを早めに確認すること。\n\n島の天候は荒れやすく、食料は腐り、水は限られている。隣の3人は今朝までの他人だ。"
   },
   "item_specs": [
     {"id": "wild_berry", "name": "野いちご", "description": "酸味のある赤い実。生のまま食べられるが日持ちはしない。", "category": "FOOD", "spoils_after_ticks": 48,
@@ -24,7 +24,8 @@
       "consume_effect": [{"type": "heal_hp", "amount": 10}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 70}]},
     {"id": "safe_mushroom", "name": "食べられるキノコ", "description": "白い傘の見覚えあるキノコ。食用。", "category": "FOOD", "spoils_after_ticks": 72,
       "consume_effect": [{"type": "heal_hp", "amount": 5}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 40}]},
-    {"id": "toxic_mushroom", "name": "毒キノコ", "description": "食用キノコによく似た見た目だが、よく見れば軸の色がやや赤い。食べると激しい嘔吐に襲われる。", "category": "FOOD", "spoils_after_ticks": 72},
+    {"id": "toxic_mushroom", "name": "毒キノコ", "description": "食用キノコによく似た見た目だが、よく見れば軸の色がやや赤い。食べると激しい嘔吐に襲われ、体力を奪われる。", "category": "FOOD", "spoils_after_ticks": 72,
+      "consume_effect": [{"type": "damage_hp", "amount": 15}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 5}]},
     {"id": "fresh_water", "name": "真水", "description": "竹筒に汲んだ飲み水。", "category": "FOOD",
       "consume_effect": {"type": "heal_hp", "amount": 3}},
     {"id": "driftwood", "name": "流木", "description": "浜辺に流れ着いた乾いた木材。焚き火と狼煙の燃料になる。", "category": "MATERIAL"},
@@ -400,6 +401,28 @@
                 "effects": [
                   {"effect_type": "APPLY_DAMAGE", "parameters": {"damage": 5, "message": "足を滑らせ岩で擦り傷を作った (HP -5)。"}},
                   {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "沖を一望できたが、足を滑らせて尻もちをついた。"}}
+                ]
+              }
+            ]
+          },
+          {
+            "id": "stone_outcrop",
+            "name": "鋭い石が露出した岩",
+            "description": "波に削られて刃のような断面を見せる石が幾つも転がっている。手で掴めば刃物のように使えそうだ。",
+            "object_type": "OTHER",
+            "state": {"available": true, "last_harvest_tick": -100},
+            "interactions": [
+              {
+                "action_name": "pick_sharp_stone",
+                "display_label": "鋭い石を拾う",
+                "preconditions": [
+                  {"condition_type": "OBJECT_STATE", "target_object": "stone_outcrop", "required_state": {"available": true}, "failure_message": "あらかた拾ってしまった。波がまた削るまで待たないと、新しい刃片は見つからない。"}
+                ],
+                "effects": [
+                  {"effect_type": "GIVE_ITEM", "parameters": {"item_spec": "sharp_stone", "quantity": 1}},
+                  {"effect_type": "CHANGE_OBJECT_STATE", "parameters": {"target_object": "stone_outcrop", "state_updates": {"available": false}}},
+                  {"effect_type": "RECORD_OBJECT_STATE_TICK", "parameters": {"target_object": "stone_outcrop", "state_key": "last_harvest_tick"}},
+                  {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "刃のように使えそうな石片を拾い上げた。"}}
                 ]
               }
             ]
@@ -1385,6 +1408,13 @@
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "蔦が新しく伸びて、また切り取れそうに見える。"
+      },
+      {
+        "target": "stone_outcrop",
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "stone_outcrop", "state_key": "last_harvest_tick", "ticks_offset": 36},
+        "on_true_state_updates": {"available": true},
+        "on_false_state_updates": {"available": false},
+        "narrative_on_true": "波がまた岩を削り、新しい刃片が露出している。"
       }
     ],
     "passages": [

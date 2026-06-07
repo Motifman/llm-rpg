@@ -14,6 +14,7 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     CompositeItemEffect,
     ExpEffect,
     GoldEffect,
+    DamageHpEffect,
     HealEffect,
     ItemEffect,
     RecoverMpEffect,
@@ -574,6 +575,8 @@ class ScenarioLoader:
             raise ValueError(f"item '{sid}': consume_effect entry missing 'type'")
         if etype == "heal_hp":
             return HealEffect(amount=int(entry["amount"]))
+        if etype == "damage_hp":
+            return DamageHpEffect(amount=int(entry["amount"]))
         if etype == "recover_mp":
             return RecoverMpEffect(amount=int(entry["amount"]))
         if etype == "gold":
@@ -591,7 +594,7 @@ class ScenarioLoader:
             )
         raise ValueError(
             f"item '{sid}': unknown consume_effect type '{etype}' "
-            "(expected: heal_hp / recover_mp / gold / exp / satisfy_need)"
+            "(expected: heal_hp / damage_hp / recover_mp / gold / exp / satisfy_need)"
         )
 
     def _parse_item_specs(

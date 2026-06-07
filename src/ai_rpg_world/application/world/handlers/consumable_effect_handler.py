@@ -19,6 +19,7 @@ from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 from ai_rpg_world.domain.item.value_object.item_effect import (
+    DamageHpEffect,
     HealEffect,
     RecoverMpEffect,
     GoldEffect,
@@ -96,6 +97,10 @@ class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
         """効果データを PlayerStatusAggregate に反映する。効果の種類ごとに適切なメソッドを呼ぶ。"""
         if isinstance(effect, HealEffect):
             player_status.heal_hp(effect.amount)
+        elif isinstance(effect, DamageHpEffect):
+            # 毒キノコ等、食べると害になるアイテム。0 amount は no-op。
+            if effect.amount > 0:
+                player_status.apply_damage(effect.amount)
         elif isinstance(effect, RecoverMpEffect):
             player_status.heal_mp(effect.amount)
         elif isinstance(effect, GoldEffect):

@@ -35,6 +35,21 @@ class HealEffect(ItemEffect):
 
 
 @dataclass(frozen=True)
+class DamageHpEffect(ItemEffect):
+    """HP 減少効果のデータ。毒キノコ・腐った食料など、食べると害になるアイテム用。
+
+    HealEffect の対称。``amount`` は正の整数で「減らす量」を表す。
+    実際の適用は ConsumableEffectHandler が ``player_status.apply_damage(amount)``
+    を呼んで行う。
+    """
+
+    amount: int
+
+    def __post_init__(self) -> None:
+        _validate_non_negative(self.amount, "Damage HP effect")
+
+
+@dataclass(frozen=True)
 class RecoverMpEffect(ItemEffect):
     """MP回復効果のデータ"""
 
