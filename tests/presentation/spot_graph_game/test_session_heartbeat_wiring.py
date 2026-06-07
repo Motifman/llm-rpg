@@ -58,7 +58,8 @@ class TestSessionHeartbeatWiring:
         )
 
         # HeartbeatObservationEmitter は初めの tick で基準だけ記録するため interval+1 進める。
-        for _ in range(6):
+        # #346 Step 3 で既定 interval が 5 → 6 に変わったので 7 tick 進める。
+        for _ in range(7):
             runtime.advance_tick()
 
         buf = runtime._obs_buffer

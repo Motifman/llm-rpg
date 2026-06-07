@@ -269,6 +269,32 @@ def _resolve_llm_parallel_workers(default: int = 0) -> int:
     return max(0, n)
 
 
+# #346 Step 3 / #404: per-agent idle timer の沈黙上限。`note_player_activity`
+# 以降 N tick 何も起きなければ heartbeat 1 件で起こす。デフォルト 6 tick
+# (旧固定値 5 から +1 で安全寄り)。env で実験ごとに上げて沈黙許容を強める / 下げて
+# 古い挙動に戻すなど調整できる。
+_LLM_IDLE_TIMEOUT_TICKS_ENV = "LLM_IDLE_TIMEOUT_TICKS"
+_LLM_IDLE_TIMEOUT_TICKS_DEFAULT = 6
+
+
+def _resolve_llm_idle_timeout_ticks(
+    default: int = _LLM_IDLE_TIMEOUT_TICKS_DEFAULT,
+) -> int:
+    """env から idle timeout (= heartbeat interval) を読む。
+
+    不正値 / 1 未満は default に戻す。**設定上限は設けない** (運用で「丸 1 日
+    沈黙を許す」のような長期 idle も自由に試せるように)。
+    """
+    raw = os.environ.get(_LLM_IDLE_TIMEOUT_TICKS_ENV)
+    if raw is None:
+        return default
+    try:
+        n = int(raw)
+    except ValueError:
+        return default
+    return max(1, n)
+
+
 class _LlmMetricsTraceSink:
     """Phase A の LLM 呼び出し metrics を trace に流す sink (PR #358)。
 
@@ -438,6 +464,37 @@ class _EscapeGameLlmTurnTrigger:
             self._turn_counts[player_id_value] = current_count
         else:
             self._turn_counts.pop(player_id_value, None)
+        # #346 Step 3 / #404: per-agent idle timer の last 更新。turn が走った
+        # = 「いま活動した」なので heartbeat の沈黙タイマーをリセットする。
+        # event 駆動で頻繁に動く player には heartbeat が出なくなり、
+        # 完全 idle な player だけ idle_timeout 経過後に 1 回起こされる。
+        self._note_activity_after_turn(player_id_value)
+
+    def _note_activity_after_turn(self, player_id_value: int) -> None:
+        """heartbeat emitter に「player が今ターン走った」を通知する fail-safe ヘルパ。
+
+        emitter 未配線 / 異常系では何もしない (turn 実行自体は壊さない)。
+        """
+        runtime = self.wiring.runtime
+        emitter = None
+        sim = getattr(runtime, "_simulation_service", None)
+        if sim is not None:
+            emitter = getattr(sim, "_heartbeat_emitter", None)
+        if emitter is None or not hasattr(emitter, "note_player_activity"):
+            return
+        try:
+            from ai_rpg_world.domain.common.value_object import WorldTick
+            current = int(runtime.current_tick())
+            emitter.note_player_activity(
+                PlayerId(player_id_value), WorldTick(current)
+            )
+        except Exception:
+            # idle timer の精度低下は致命ではない (worst case 旧来挙動)
+            logger.warning(
+                "note_player_activity failed for player_id=%s",
+                player_id_value,
+                exc_info=True,
+            )
 
     def _can_player_act(self, player_id_value: int) -> bool:
         """#363 Fix 1b: 行動不可なプレイヤーを LLM 経路から除外する。
@@ -1970,6 +2027,7 @@ class GameRuntimeManager:
             appender,
             turn_scheduler,
             _heartbeat_llm_player_ids,
+            interval_ticks=_resolve_llm_idle_timeout_ticks(),
             is_traveling_provider=_is_traveling,
         )
         # ActionFailed 観測の wire: 失敗 DTO を当該プレイヤーへの観測に変換する。
