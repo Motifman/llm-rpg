@@ -566,3 +566,132 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         assert client.openrouter_routing == {
             "provider": {"order": ["DeepInfra"], "allow_fallbacks": False}
         }
+
+
+def _make_tool_call_response_with_cost(name: str, arguments: dict, cost: float):
+    """tool_call + usage.cost を持つ response (OpenRouter 想定)。"""
+    func = MagicMock()
+    func.name = name
+    func.arguments = json.dumps(arguments) if arguments else "{}"
+    tc = MagicMock()
+    tc.function = func
+    msg = MagicMock()
+    msg.tool_calls = [tc]
+    choice = MagicMock()
+    choice.message = msg
+    usage = MagicMock(spec=["prompt_tokens", "completion_tokens", "cost"])
+    usage.prompt_tokens = 100
+    usage.completion_tokens = 10
+    usage.cost = cost
+    response = MagicMock()
+    response.choices = [choice]
+    response.usage = usage
+    return response
+
+
+class _RecordingSink:
+    def __init__(self) -> None:
+        self.records = []
+
+    def record(self, metrics) -> None:  # type: ignore[no-untyped-def]
+        self.records.append(metrics)
+
+
+class TestLiteLLMClientOpenRouterCostTracking:
+    """OpenRouter 経由のとき usage.cost を LlmCallMetrics.cost_usd に拾う。
+
+    OpenRouter は ``extra_body.usage.include=True`` を付けると provider 宣告の
+    USD コストを返す。直結 / vLLM では返ってこないので 0.0 維持。
+    """
+
+    def test_api_base_が_openrouter_なら_usage_include_が_extra_body_に_乗る(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """api_base に 'openrouter.ai' を含む場合に限り usage.include を注入する。"""
+        client = LiteLLMClient(
+            model="openrouter/google/gemma-4-31b-it",
+            api_key="sk-or-x",
+            api_base="https://openrouter.ai/api/v1",
+        )
+        kw = client.completion_base_kwargs()
+        assert kw["extra_body"] == {"usage": {"include": True}}
+
+    def test_api_base_が_openai_直結なら_extra_body_は_付かない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OpenAI / vLLM 直結では cost 取得対象外なので usage.include を付けない。"""
+        client = LiteLLMClient(
+            model="openai/gpt-4o-mini",
+            api_key="sk-x",
+            api_base="https://api.openai.com/v1",
+        )
+        kw = client.completion_base_kwargs()
+        assert "extra_body" not in kw
+
+    def test_provider_routing_と_usage_include_が_同じ_extra_body_に_共存する(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OPENROUTER_PROVIDER + api_base=openrouter の組み合わせで両方乗る。"""
+        monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
+        monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
+        client = LiteLLMClient(
+            model="openrouter/google/gemma-4-31b-it",
+            api_key="sk-or-x",
+            api_base="https://openrouter.ai/api/v1",
+        )
+        kw = client.completion_base_kwargs()
+        assert kw["extra_body"] == {
+            "provider": {
+                "order": ["DeepInfra"],
+                "allow_fallbacks": False,
+                "quantizations": ["fp8"],
+            },
+            "usage": {"include": True},
+        }
+
+    def test_response_の_usage_cost_が_metrics_の_cost_usd_に_流れる(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """invoke 経路で response.usage.cost が LlmCallMetrics.cost_usd に入る。"""
+        client = LiteLLMClient(
+            model="openrouter/google/gemma-4-31b-it",
+            api_key="sk-or-x",
+            api_base="https://openrouter.ai/api/v1",
+        )
+        sink = _RecordingSink()
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_tool_call_response_with_cost(
+                "noop", {}, cost=0.0000089
+            )
+            client.invoke(
+                messages=[{"role": "user", "content": "hi"}],
+                tools=[{"x": 1}],
+                metrics_sink=sink,
+            )
+        assert len(sink.records) == 1
+        assert sink.records[0].cost_usd == pytest.approx(0.0000089)
+
+    def test_usage_に_cost_が_無い_provider_では_cost_usd_は_0(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OpenAI 直結 / vLLM などで cost フィールドが無いとき 0.0 を維持。"""
+        usage = MagicMock(spec=["prompt_tokens", "completion_tokens"])
+        usage.prompt_tokens = 50
+        usage.completion_tokens = 5
+        response = MagicMock()
+        response.usage = usage
+        assert LiteLLMClient._extract_cost_usd(response) == 0.0
+
+    def test_usage_全体が_None_なら_cost_usd_は_0(self) -> None:
+        """usage がそもそも無い (失敗 response 等) でも例外を出さず 0.0。"""
+        response = MagicMock()
+        response.usage = None
+        assert LiteLLMClient._extract_cost_usd(response) == 0.0
+
+    def test_usage_が_dict_で_来る_provider_でも_cost_を_拾う(self) -> None:
+        """一部 provider 経路で usage が dict のまま返る場合の救済。"""
+        response = MagicMock()
+        response.usage = {"prompt_tokens": 10, "completion_tokens": 2, "cost": 0.0001}
+        assert LiteLLMClient._extract_cost_usd(response) == pytest.approx(0.0001)

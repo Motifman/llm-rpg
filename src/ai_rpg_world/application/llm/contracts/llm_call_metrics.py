@@ -34,6 +34,11 @@ class LlmCallMetrics:
         success: tool_call が parse できたか / 例外なく終わったか
         error_code: 失敗時のエラー識別子 (例: "LLM_API_CALL_FAILED",
             "LLM_RATE_LIMIT", "NO_TOOL_CALL")
+        cost_usd: 1 呼び出し分の USD コスト。provider 側が usage に乗せて返した値を
+            そのまま使う (= モデル価格表をコード側で持たない / 値段改定の追従不要)。
+            OpenRouter は ``extra_body.usage.include=true`` を付けると ``usage.cost``
+            を返す。OpenAI 直結 / vLLM 等は返さないので 0.0。
+            **provider の宣告値**なので、二重課金監査用ではなく実験コスト感の把握用。
     """
     model: str
     wall_latency_ms: int
@@ -43,6 +48,7 @@ class LlmCallMetrics:
     success: bool
     error_code: Optional[str] = None
     cached_tokens: int = 0
+    cost_usd: float = 0.0
 
     @staticmethod
     def compute_tps(completion_tokens: int, wall_latency_ms: int) -> float:

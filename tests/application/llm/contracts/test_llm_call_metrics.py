@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
     LlmCallMetrics,
 )
@@ -79,3 +81,28 @@ class TestMetricsDataclass:
             cached_tokens=350,
         )
         assert m.cached_tokens == 350
+
+    def test_cost_usd_の_デフォルトは_0(self) -> None:
+        """cost_usd 未指定なら 0.0 (OpenAI 直結 / vLLM 等で provider が返さない場合)。"""
+        m = LlmCallMetrics(
+            model="test/model",
+            wall_latency_ms=1000,
+            prompt_tokens=500,
+            completion_tokens=20,
+            tps=20.0,
+            success=True,
+        )
+        assert m.cost_usd == 0.0
+
+    def test_cost_usd_を_明示_設定できる(self) -> None:
+        """OpenRouter 経由なら provider 宣告の USD コストを保持する。"""
+        m = LlmCallMetrics(
+            model="openrouter/google/gemma-4-31b-it",
+            wall_latency_ms=610,
+            prompt_tokens=49,
+            completion_tokens=7,
+            tps=11.5,
+            success=True,
+            cost_usd=0.0000089,
+        )
+        assert m.cost_usd == pytest.approx(0.0000089)

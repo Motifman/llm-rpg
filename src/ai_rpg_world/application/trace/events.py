@@ -71,7 +71,8 @@ class TraceEventKind:
     # LLM 性能メトリクス (実験 #356 後続): Phase A の LLM 呼び出し 1 件分の
     # 壁時計 latency / token usage / TPS を記録する。
     # payload: model / wall_latency_ms / prompt_tokens / completion_tokens /
-    # tps / success / error_code
+    # cached_tokens / tps / success / error_code / cost_usd
+    # ``cost_usd`` は OpenRouter 経由時のみ provider 宣告値が乗る (直結 / vLLM では 0.0)。
     # τ_sim の設定根拠データ + scenario ごとの cost 評価に使う。
     LLM_CALL = "llm_call"
     # prompt section の文字数内訳 (実験 #356 後続: prefix cache 分析用)。
