@@ -118,17 +118,20 @@ from ai_rpg_world.application.llm.services.context_format_strategy import (
     build_section_format_strategy_from_env,
 )
 from ai_rpg_world.application.llm.wiring.feature_flags import (
+    SCHEDULER_MODE_THREAD_POOL,
     SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
     log_episodic_explore_related_state,
     log_semantic_llm_gist_state,
     log_semantic_passive_top_k_state,
     log_semantic_search_state,
     log_short_term_memory_kind_state,
+    log_short_term_memory_scheduler_mode_state,
     resolve_episodic_explore_related_enabled,
     resolve_semantic_llm_gist_enabled,
     resolve_semantic_passive_top_k,
     resolve_semantic_search_enabled,
     resolve_short_term_memory_kind,
+    resolve_short_term_memory_scheduler_mode,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
@@ -896,6 +899,9 @@ def _build_short_term_memory(
     llm_client: ILLMClient,
     persona_resolver: Callable[[int], tuple[str, str]],
     kind: Optional[str] = None,
+    scheduler_mode: Optional[str] = None,
+    trace_recorder_provider: Optional[Callable[[], Optional["ITraceRecorder"]]] = None,
+    current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
 ) -> ISlidingWindowMemory:
     """Phase 2: env で short term memory の実装を選択する。
 
@@ -922,6 +928,11 @@ def _build_short_term_memory(
     from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
         RollingSummaryShortTermMemory,
     )
+    from ai_rpg_world.application.llm.services.short_term_memory_schedulers import (
+        InlineShortTermMemoryScheduler,
+        IShortTermMemoryScheduler,
+        ThreadPoolShortTermMemoryScheduler,
+    )
     from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
         ShortTermMemorySummaryService,
     )
@@ -930,9 +941,26 @@ def _build_short_term_memory(
     summary_service: Optional[ShortTermMemorySummaryService] = None
     if isinstance(llm_client, LiteLLMClient):
         summary_service = ShortTermMemorySummaryService(llm_client)
+
+    # Phase 2.1: scheduler mode 選択。default は inline (Phase 2 互換)。
+    resolved_mode = (
+        scheduler_mode if scheduler_mode is not None
+        else resolve_short_term_memory_scheduler_mode()
+    )
+    log_short_term_memory_scheduler_mode_state(resolved_mode)
+    scheduler: IShortTermMemoryScheduler
+    if resolved_mode == SCHEDULER_MODE_THREAD_POOL:
+        scheduler = ThreadPoolShortTermMemoryScheduler(
+            trace_recorder_provider=trace_recorder_provider,
+            current_tick_provider=current_tick_provider,
+        )
+    else:
+        scheduler = InlineShortTermMemoryScheduler()
+
     return RollingSummaryShortTermMemory(
         summary_service=summary_service,
         persona_resolver=persona_resolver,
+        scheduler=scheduler,
     )
 
 
@@ -1197,10 +1225,15 @@ def create_llm_agent_wiring(
     )
     # Phase 2: short term memory の実装選択 (sliding_window | rolling_summary)。
     # persona_resolver / client が揃ったここで構築する。
+    # trace_recorder_provider は Phase 2.1 scheduler の drop 計測用。
+    def _trace_recorder_provider() -> Optional[ITraceRecorder]:
+        return trace_recorder
     sliding_window = _build_short_term_memory(
         explicit=sliding_window_memory,
         llm_client=client,
         persona_resolver=_semantic_persona_resolver,
+        trace_recorder_provider=_trace_recorder_provider,
+        current_tick_provider=current_tick_provider,
     )
     episodic_stack = build_episodic_memory_stack(
         episodic_episode_store,

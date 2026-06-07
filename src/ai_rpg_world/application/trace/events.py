@@ -90,6 +90,10 @@ class TraceEventKind:
     # 検証中は top_k=0 (default) で発火しない。SEMANTIC_PASSIVE_TOP_K env で
     # 明示的に有効化したときだけ trace に出る。
     SEMANTIC_PASSIVE_RECALL = "semantic_passive_recall"
+    # Phase 2.1: 短期記憶 L4 生成タスクが scheduler でキュー満杯 / shutdown 後に
+    # drop された瞬間。payload: reason / queue_size / max_queue_size。
+    # silent failure 防止のため、drop は trace + warning で必ず可観測化する。
+    SHORT_TERM_SUMMARY_DROPPED = "short_term_summary_dropped"
 
 
 @dataclass(frozen=True)

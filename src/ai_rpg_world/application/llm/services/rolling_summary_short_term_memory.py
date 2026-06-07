@@ -19,6 +19,7 @@ Phase 2 (#356 後続) で導入。``DefaultSlidingWindowMemory`` の代替とし
 from __future__ import annotations
 
 import logging
+import threading
 from collections import deque
 from datetime import datetime, timezone
 from typing import Callable, Deque, Dict, List, Optional, Sequence
@@ -27,6 +28,10 @@ from uuid import uuid4
 from ai_rpg_world.application.llm.contracts.interfaces import ISlidingWindowMemory
 from ai_rpg_world.application.llm.contracts.short_term_memory import L4MidSummary
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
+from ai_rpg_world.application.llm.services.short_term_memory_schedulers import (
+    InlineShortTermMemoryScheduler,
+    IShortTermMemoryScheduler,
+)
 from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
     ShortTermMemorySummaryService,
     _ParsedSummary,
@@ -52,9 +57,19 @@ PersonaResolverFn = Callable[[int], "tuple[str, str]"]
 class RollingSummaryShortTermMemory(ISlidingWindowMemory):
     """L1 raw + L4 mid summary 階層型の短期記憶 (Phase 2)。
 
-    現状の生成タイミングは **inline / sync** (``submit`` した thread でそのまま
-    LLM を呼ぶ)。LLM 呼び出しは 2-5s かかるため、async scheduler は Phase 2.1
-    の後続改善 (本 module では未実装)。
+    L4 生成タスクは ``scheduler`` 経由で実行される (Phase 2.1):
+
+    - 未指定 → ``InlineShortTermMemoryScheduler`` (生成は submit と同じ
+      thread で同期実行、tick が 2-5s ブロックする)
+    - ``ThreadPoolShortTermMemoryScheduler`` を渡せば非同期化 (生成中も
+      tick は進む)
+
+    非同期時に注意:
+    - L4 install (``_mid`` 書き込み) は worker thread から呼ばれる →
+      ``_mid_lock`` で保護
+    - ``get_mid_summary_text`` 読み出しも同 lock 内で snapshot を取る
+    - L1 (``_raw``) は main thread のみが触る (append / 消費 popleft 両方)
+      ので lock 不要
 
     `summary_service=None` を渡すと **LLM 経路は disable** され、L1 が
     閾値 (soft cap 15) を超えても LLM での要約は走らない。ただし L1 が
@@ -73,6 +88,7 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         l1_soft_cap: int = DEFAULT_L1_SOFT_CAP,
         l1_hard_cap: int = DEFAULT_L1_HARD_CAP,
         l4_keep_generations: int = DEFAULT_L4_KEEP_GENERATIONS,
+        scheduler: Optional[IShortTermMemoryScheduler] = None,
     ) -> None:
         if l1_soft_cap <= 0:
             raise ValueError("l1_soft_cap must be positive")
@@ -90,14 +106,23 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
             )
         if persona_resolver is not None and not callable(persona_resolver):
             raise TypeError("persona_resolver must be callable or None")
+        if scheduler is not None and not isinstance(scheduler, IShortTermMemoryScheduler):
+            raise TypeError(
+                "scheduler must be IShortTermMemoryScheduler or None"
+            )
         self._service = summary_service
         self._persona_resolver = persona_resolver
         self._soft_cap = l1_soft_cap
         self._hard_cap = l1_hard_cap
         self._keep_gen = l4_keep_generations
+        self._scheduler: IShortTermMemoryScheduler = (
+            scheduler if scheduler is not None else InlineShortTermMemoryScheduler()
+        )
         self._raw: Dict[int, Deque[ObservationEntry]] = {}
-        # L4 は新しい順に並べる (index 0 = 最新)
+        # L4 は新しい順に並べる (index 0 = 最新)。worker thread からも書く
+        # ので mid_lock で保護する。
         self._mid: Dict[int, Deque[L4MidSummary]] = {}
+        self._mid_lock = threading.Lock()
 
     # ──────────────────────────────────────────────────────────
     # ISlidingWindowMemory contract
@@ -136,12 +161,16 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
 
         新しい世代から順に、各世代の compressed_activity / emotional_summary /
         unresolved を箇条書きで並べる。L4 が空なら空文字 (= section 非表示)。
+
+        non-blocking: lock の中で snapshot を取って lock 外で整形する。
         """
         pid = int(player_id.value)
-        mid = self._mid.get(pid)
-        if not mid:
-            return ""
-        return format_mid_summary_block(list(mid))
+        with self._mid_lock:
+            mid = self._mid.get(pid)
+            if not mid:
+                return ""
+            snapshot = list(mid)
+        return format_mid_summary_block(snapshot)
 
     # ──────────────────────────────────────────────────────────
     # 内部ロジック
@@ -150,24 +179,29 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
     def _ensure_player(self, pid: int) -> None:
         if pid not in self._raw:
             self._raw[pid] = deque()
-            self._mid[pid] = deque()
+        with self._mid_lock:
+            if pid not in self._mid:
+                self._mid[pid] = deque()
 
     def _maybe_trigger_summary(self, pid: int) -> None:
-        """L1 が閾値を超えたら L4 生成 trigger を発火する。
+        """L1 が閾値を超えたら L4 生成タスクを scheduler に投げる。
 
         - soft_cap 到達 → LLM 生成を試みる (失敗時 template fallback)
         - hard_cap 到達 → 強制的に template fallback (LLM なしまたは LLM 連続失敗時の安全弁)
+
+        Phase 2.1: 生成は scheduler 経由。Inline なら同期、ThreadPool なら非同期。
+        consumed observations と previous_l4 snapshot を **submit 前に確定** させて
+        クロージャに渡すので、worker thread の race を避けられる。
         """
         raw = self._raw[pid]
         original_size = len(raw)
         if original_size < self._soft_cap:
             return
 
-        # hard_cap 判定は popleft 前の元サイズで行う (review HIGH #2 修正)。
-        # popleft 後だと「元サイズが hard_cap 以上か」を正しく判定できない。
+        # hard_cap 判定は popleft 前の元サイズで行う
         over_hard_cap = original_size >= self._hard_cap
 
-        # 古い側から soft_cap 件を取り出す
+        # 古い側から soft_cap 件を取り出す (main thread のみが触る → lock 不要)
         consumed: list[ObservationEntry] = []
         for _ in range(self._soft_cap):
             if not raw:
@@ -176,33 +210,57 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         if not consumed:
             return
 
-        # service 未注入 or hard_cap 到達時 or LLM 失敗時は template fallback
+        # previous_l4 snapshot を ロック内で取る (worker からの書き込みと race
+        # しないように)
+        with self._mid_lock:
+            previous_l4 = self._mid[pid][0] if self._mid[pid] else None
+
+        force_fallback = over_hard_cap or self._service is None
+        if over_hard_cap and self._service is not None:
+            _logger.warning(
+                "RollingSummaryShortTermMemory(player_id=%s): L1 が hard cap "
+                "%d に到達、template fallback で強制圧縮します",
+                pid,
+                self._hard_cap,
+            )
+        elif over_hard_cap and self._service is None:
+            _logger.info(
+                "RollingSummaryShortTermMemory(player_id=%s): L1 が hard cap "
+                "%d に到達したが summary_service=None。template fallback のみで動作中",
+                pid,
+                self._hard_cap,
+            )
+
+        # task: クロージャ。submit-time に確定した値だけをキャプチャ。
+        def _task() -> None:
+            self._run_generation(
+                pid=pid,
+                consumed=consumed,
+                previous_l4=previous_l4,
+                force_fallback=force_fallback,
+            )
+
+        self._scheduler.submit(pid, _task)
+
+    def _run_generation(
+        self,
+        *,
+        pid: int,
+        consumed: list[ObservationEntry],
+        previous_l4: Optional[L4MidSummary],
+        force_fallback: bool,
+    ) -> None:
+        """L4 生成本体。Inline なら main thread、ThreadPool なら worker thread。"""
         parsed: _ParsedSummary
         is_fallback = False
 
-        if self._service is None or over_hard_cap:
+        if force_fallback:
             parsed = build_template_fallback_summary(consumed)
             is_fallback = True
-            if over_hard_cap and self._service is not None:
-                _logger.warning(
-                    "RollingSummaryShortTermMemory(player_id=%s): L1 が hard cap "
-                    "%d に到達、template fallback で強制圧縮します",
-                    pid,
-                    self._hard_cap,
-                )
-            elif over_hard_cap and self._service is None:
-                # LLM 未配線 + hard_cap 到達: 本番設定で LLM 忘れの可能性が高い。
-                # silent failure 防止のため debug ではなく info で出す。
-                _logger.info(
-                    "RollingSummaryShortTermMemory(player_id=%s): L1 が hard cap "
-                    "%d に到達したが summary_service=None。template fallback のみで動作中",
-                    pid,
-                    self._hard_cap,
-                )
         else:
+            assert self._service is not None  # force_fallback=False の暗黙保証
             try:
                 player_name, persona_block = self._resolve_persona(pid)
-                previous_l4 = self._mid[pid][0] if self._mid[pid] else None
                 parsed = self._service.generate(
                     player_name=player_name,
                     persona_block=persona_block,
@@ -238,10 +296,20 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
             unresolved=parsed.unresolved,
             is_fallback=is_fallback,
         )
-        # 新しい世代を先頭に push、保持上限を超えたら最古を破棄
-        self._mid[pid].appendleft(summary)
-        while len(self._mid[pid]) > self._keep_gen:
-            self._mid[pid].pop()
+        self._install_l4(summary)
+
+    def _install_l4(self, summary: L4MidSummary) -> None:
+        """新世代 L4 を mid に push する (thread-safe)。
+
+        Inline scheduler では main thread が呼ぶ。ThreadPool では worker
+        thread から呼ばれるので必ず lock 内で書き込む。
+        """
+        with self._mid_lock:
+            if summary.player_id not in self._mid:
+                self._mid[summary.player_id] = deque()
+            self._mid[summary.player_id].appendleft(summary)
+            while len(self._mid[summary.player_id]) > self._keep_gen:
+                self._mid[summary.player_id].pop()
 
     def _resolve_persona(self, pid: int) -> tuple[str, str]:
         if self._persona_resolver is None:
@@ -257,6 +325,13 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
             )
             return (f"Player {pid}", "")
 
+    def shutdown(self, timeout: Optional[float] = None) -> None:
+        """非同期 scheduler の場合 in-flight L4 生成を完了待ちで終了する。
+
+        Inline scheduler の場合は no-op。
+        """
+        self._scheduler.shutdown(timeout=timeout)
+
     # ──────────────────────────────────────────────────────────
     # 検査用 (テスト + trace 用)
     # ──────────────────────────────────────────────────────────
@@ -265,7 +340,8 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         return len(self._raw.get(player_id, ()))
 
     def _mid_generations(self, player_id: int) -> list[L4MidSummary]:
-        return list(self._mid.get(player_id, ()))
+        with self._mid_lock:
+            return list(self._mid.get(player_id, ()))
 
 
 def format_mid_summary_block(generations: Sequence[L4MidSummary]) -> str:

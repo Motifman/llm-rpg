@@ -25,6 +25,10 @@ from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory imp
     RollingSummaryShortTermMemory,
     format_mid_summary_block,
 )
+from ai_rpg_world.application.llm.services.short_term_memory_schedulers import (
+    InlineShortTermMemoryScheduler,
+    ThreadPoolShortTermMemoryScheduler,
+)
 from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
     ShortTermMemorySummaryService,
     _ParsedSummary,
@@ -415,3 +419,85 @@ class TestFormatMidSummaryBlock:
         text = format_mid_summary_block([gen])
         assert "気分" not in text
         assert "未解決" not in text
+
+
+# ──────────────────────────────────────────────────────────────────
+# Phase 2.1: scheduler 統合
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestRollingSummarySchedulerIntegration:
+    """scheduler 経由の L4 生成 (Inline / ThreadPool)。"""
+
+    def test_default_scheduler_は_Inline(self) -> None:
+        mem = RollingSummaryShortTermMemory(summary_service=None)
+        # default は Inline (= 同期実行)
+        assert isinstance(mem._scheduler, InlineShortTermMemoryScheduler)
+
+    def test_明示_Inline_scheduler_でも_動く(self) -> None:
+        stub = _StubSummaryService.make(
+            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
+        )
+        mem = RollingSummaryShortTermMemory(
+            summary_service=stub,
+            scheduler=InlineShortTermMemoryScheduler(),
+        )
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"p{i}", seq=i))
+        # Inline は同期なので submit 後すぐに L4 が見える
+        gens = mem._mid_generations(_PID.value)
+        assert len(gens) == 1
+
+    def test_ThreadPool_scheduler_で_L4_は_非同期に_install(self) -> None:
+        """ThreadPool: submit は即時 return、L4 install は worker thread が完了させる。"""
+        import threading
+
+        gate = threading.Event()
+
+        class _SlowService(ShortTermMemorySummaryService):
+            def __init__(self):
+                pass
+
+            def generate(self, **kwargs):  # type: ignore[override]
+                gate.wait(timeout=2.0)
+                return _ParsedSummary(
+                    compressed_activity="slow result",
+                    emotional_summary="",
+                    unresolved=(),
+                )
+
+        scheduler = ThreadPoolShortTermMemoryScheduler(max_workers=1)
+        try:
+            mem = RollingSummaryShortTermMemory(
+                summary_service=_SlowService(),
+                scheduler=scheduler,
+            )
+            # 15 件 append (trigger 発火)。Inline と違い、L4 はまだ install されていない
+            for i in range(DEFAULT_L1_SOFT_CAP):
+                mem.append(_PID, _obs(f"p{i}", seq=i))
+            assert mem._mid_generations(_PID.value) == []
+            # worker 解放
+            gate.set()
+            # shutdown で完了待ち
+            scheduler.shutdown()
+            gens = mem._mid_generations(_PID.value)
+            assert len(gens) == 1
+            assert gens[0].compressed_activity == "slow result"
+        finally:
+            gate.set()
+            scheduler.shutdown()
+
+    def test_scheduler_が_非_IShortTermMemoryScheduler_なら_type_error(self) -> None:
+        with pytest.raises(TypeError, match="scheduler"):
+            RollingSummaryShortTermMemory(scheduler="not-a-scheduler")  # type: ignore[arg-type]
+
+    def test_shutdown_は_scheduler_に_委譲(self) -> None:
+        called = {"n": 0}
+
+        class _RecordingScheduler(InlineShortTermMemoryScheduler):
+            def shutdown(self, timeout=None):
+                called["n"] += 1
+
+        mem = RollingSummaryShortTermMemory(scheduler=_RecordingScheduler())
+        mem.shutdown()
+        assert called["n"] == 1
