@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
 """trace.jsonl からプレイヤー × 時間軸タイムライン HTML を生成する。
 
-実験 #26 (#384) user feedback として「プレイヤーと時間軸のグラフを作り、
-そこに行動や言動、観測などの箱を置いて時間軸方向にスクロールして
-時間軸上で出来事を確認できるページが欲しい」が出たため作成。
+設計改修 (PR #1 後続): hover に隠さず、1 セルに **行動内容 / 発話内容 /
+観測 prose** を直書きする。tick を縦軸、player を横カラムに置く tabular
+レイアウトで、上から下に時間順スクロールできる。発火 event がない tick は
+スキップして読みやすくする。
 
-レイアウト:
-- 縦軸: 各 player を行に
-- 横軸: tick (左 → 右)
-- 各 cell: action / observation / speech 等を色付き box で表示
-- hover で詳細 tooltip
-- 横スクロール可能
+旧実装 (横軸 = tick, ACT/OBS 記号のみ) は「一目で何が起きたか分からない」
+というユーザ feedback (実験 #29 OFF 分析) を受けた書き換え。
 
 使い方::
 
-    python scripts/build_timeline_viewer.py var/runs/exp26_on_full_r1 \\
-        --output var/runs/exp26_on_full_r1/timeline.html
+    python scripts/build_timeline_viewer.py var/runs/exp29_off_r1 \\
+        --output var/runs/exp29_off_r1/timeline.html
 """
 
 from __future__ import annotations
@@ -28,30 +25,28 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-# 1 tick 分の cell 幅 (px)
-TICK_WIDTH = 22
-# 1 player 行の高さ (px)
-ROW_HEIGHT = 80
 # 表示する event kind と色 + ラベル
 EVENT_STYLES: Dict[str, Dict[str, str]] = {
-    "action": {"color": "#35d4e6", "label": "ACT", "row": "action"},
-    "observation": {"color": "#b89dff", "label": "OBS", "row": "observation"},
-    "memo_add": {"color": "#a3e063", "label": "M+", "row": "memo"},
-    "memo_done": {"color": "#a3e063", "label": "M✓", "row": "memo"},
-    "position_change": {"color": "#65dce8", "label": "MV", "row": "move"},
-    "episodic_chunk_written": {"color": "#ffce63", "label": "EW", "row": "episodic"},
-    "episodic_recall": {"color": "#ff9f64", "label": "ER", "row": "episodic"},
+    "action": {"color": "#35d4e6", "label": "ACT"},
+    "observation": {"color": "#b89dff", "label": "OBS"},
+    "memo_add": {"color": "#a3e063", "label": "M+"},
+    "memo_done": {"color": "#7fc24a", "label": "M✓"},
+    "position_change": {"color": "#65dce8", "label": "MV"},
+    "episodic_chunk_written": {"color": "#ffce63", "label": "EW"},
+    "episodic_recall": {"color": "#ff9f64", "label": "ER"},
 }
-# row 名 → y 内 offset (player 内の 4 段)
-SUB_ROW_OFFSETS = {
+
+# event kind ごとの表示順 (同 tick 内で並べる順序)。
+# 行動 → 観測 → memo → 位置変化 → episodic の順が読みやすい。
+KIND_ORDER = {
     "action": 0,
     "observation": 1,
-    "memo": 2,
-    "move": 3,
-    "episodic": 3,  # 同じ段で OK (memo と排他的)
+    "memo_add": 2,
+    "memo_done": 2,
+    "position_change": 3,
+    "episodic_chunk_written": 4,
+    "episodic_recall": 4,
 }
-NUM_SUB_ROWS = 4
-SUB_ROW_HEIGHT = ROW_HEIGHT / NUM_SUB_ROWS
 
 
 def load_events(trace_path: Path) -> List[Dict[str, Any]]:
@@ -69,11 +64,8 @@ def load_events(trace_path: Path) -> List[Dict[str, Any]]:
 
 
 def extract_players(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """events から player_id を見つけて (id, name) を返す。
-
-    名前は position_change.payload.player_name 等から拾う。1 つでも名前が
-    見つかったらそれを優先 (= 後の event の name で上書き)、見つからなければ
-    fallback で "P{id}"。
+    """events から (id, name) を返す。位置変化 / action / observation 等で
+    payload.player_name が立っているものを優先採用する。
     """
     ids: Dict[int, str] = {}
     for e in events:
@@ -83,7 +75,6 @@ def extract_players(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         ids.setdefault(pid, "")
         payload = e.get("payload") or {}
         name = payload.get("player_name") or ""
-        # 名前が見つかったら採用 (空のまま上書きはしない)
         if name and not ids[pid]:
             ids[pid] = name
     return [
@@ -95,7 +86,7 @@ def extract_players(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def build_cells(
     events: List[Dict[str, Any]],
 ) -> Dict[int, List[Dict[str, Any]]]:
-    """player_id → cells (tick / kind / detail) の list を返す。"""
+    """player_id → cells (tick / kind / detail) の list を返す (旧 API 互換)。"""
     by_player: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
     for e in events:
         kind = e.get("kind")
@@ -116,25 +107,80 @@ def build_cells(
 
 
 def _summarize(kind: str, payload: Dict[str, Any]) -> str:
+    """1 行で内容が読める要約を返す。
+
+    旧実装は短い (~60 chars) tooltip 想定だったが、改修後は行に直書きするので
+    やや長め (~200 chars) でも問題ない。speech_say は content を最優先に含める。
+    """
     if kind == "action":
         tool = payload.get("tool") or "?"
         args = payload.get("arguments") or {}
-        inner = ""
-        if isinstance(args, dict):
-            inner = (args.get("inner_thought") or "")[:80]
-        return f"{tool}" + (f": {inner}…" if inner else "")
+        if not isinstance(args, dict):
+            return tool
+        # speech_say / speech_whisper / speech_shout は content を最優先で見せる
+        if isinstance(tool, str) and tool.startswith("speech_"):
+            content = (args.get("content") or "").strip()
+            target = args.get("target_label") or ""
+            verb = {"speech_say": "say", "speech_whisper": "whisper", "speech_shout": "shout"}.get(
+                tool, "speech"
+            )
+            head = f"{verb}"
+            if target:
+                head += f"→{target}"
+            return f"{head}: 「{content[:160]}」" if content else head
+        # memo 系
+        if tool in ("memo_add",):
+            text = (args.get("content") or args.get("text") or "").strip()
+            return f"memo_add: {text[:160]}"
+        # 汎用 action: tool 名 + 主要引数 + inner_thought 先頭
+        main_args = []
+        for key in (
+            "destination_label",
+            "destination_spot_id",
+            "object_label",
+            "item_label",
+            "target_label",
+            "target_player_label",
+            "ground_item_label",
+            "sub_location_label",
+            "action_name",
+        ):
+            v = args.get(key)
+            if v:
+                main_args.append(f"{key}={v}")
+        head = tool
+        if main_args:
+            head += f"({', '.join(main_args)})"
+        inner = (args.get("inner_thought") or "").strip()
+        if inner:
+            head += f" — 内心: {inner[:120]}"
+        return head
     if kind == "observation":
-        return (payload.get("prose") or "")[:120]
+        prose = (payload.get("prose") or "").strip()
+        cat = payload.get("observation_category") or ""
+        head = f"[{cat}] " if cat else ""
+        return f"{head}{prose[:200]}"
     if kind == "memo_add":
-        return f"+ {payload.get('content', '')[:60]}"
+        text = (payload.get("content") or "").strip()
+        return f"+ {text[:160]}"
     if kind == "memo_done":
-        return f"done id={payload.get('memo_id', '')[:8]}"
+        memo_id = str(payload.get("memo_id") or "")[:12]
+        return f"done id={memo_id}"
     if kind == "position_change":
-        return f"{payload.get('from_spot_id', 'spawn')} → {payload.get('spot_name', '?')}"
+        from_spot = payload.get("from_spot_id") or "spawn"
+        to_spot = payload.get("spot_name") or payload.get("to_spot_id") or "?"
+        return f"{from_spot} → {to_spot}"
     if kind == "episodic_chunk_written":
-        return f"{payload.get('boundary_reason', '?')}: {(payload.get('recall_text_snippet') or '')[:80]}…"
+        reason = payload.get("boundary_reason") or "?"
+        snippet = (payload.get("recall_text_snippet") or "").strip()
+        return f"{reason}: {snippet[:160]}"
     if kind == "episodic_recall":
-        return f"{payload.get('candidate_count', 0)} candidates"
+        n = payload.get("candidate_count", 0)
+        cands = payload.get("candidates") or []
+        first = ""
+        if cands and isinstance(cands, list) and isinstance(cands[0], dict):
+            first = (cands[0].get("recall_text_snippet") or "").strip()
+        return f"{n} candidates" + (f" — top: {first[:120]}" if first else "")
     return ""
 
 
@@ -144,60 +190,62 @@ def render_html(
 ) -> str:
     players = extract_players(events)
     cells_by_player = build_cells(events)
-    max_tick = max(
-        (int(e.get("tick") or 0) for e in events if e.get("tick") is not None),
-        default=0,
+
+    # tick → player_id → [cell] に再編する。
+    by_tick_player: Dict[int, Dict[int, List[Dict[str, Any]]]] = defaultdict(
+        lambda: defaultdict(list)
     )
+    for pid, cells in cells_by_player.items():
+        for c in cells:
+            by_tick_player[c["tick"]][pid].append(c)
+
+    # 各 tick 内の cell を kind 優先度順 → 元の順序 でソートする (安定)。
+    for tdict in by_tick_player.values():
+        for pid in list(tdict.keys()):
+            tdict[pid].sort(key=lambda c: KIND_ORDER.get(c["kind"], 99))
+
+    sorted_ticks = sorted(by_tick_player.keys())
 
     def esc(s: Any) -> str:
         return html.escape(str(s))
 
-    # 各 player row を描画
-    player_rows_html: List[str] = []
-    grid_width = max(TICK_WIDTH * (max_tick + 1), 1200)
-    for p in players:
-        cells = cells_by_player.get(p["id"], [])
-        cell_html = []
-        for c in cells:
-            style = EVENT_STYLES[c["kind"]]
-            sub_row = SUB_ROW_OFFSETS.get(style["row"], 0)
-            top = sub_row * SUB_ROW_HEIGHT
-            left = c["tick"] * TICK_WIDTH
-            cell_html.append(
-                f'<div class="cell kind-{esc(c["kind"])}" '
-                f'style="left:{left}px;top:{top}px;'
-                f'background:{style["color"]}" '
-                f'data-detail="{esc(c["detail"])}" '
-                f'data-tick="{c["tick"]}" '
-                f'data-kind="{esc(c["kind"])}">'
-                f'{esc(style["label"])}'
-                f'</div>'
+    # ────────── 各 tick block を組み立てる ──────────
+    tick_blocks: List[str] = []
+    for t in sorted_ticks:
+        per_player_cols: List[str] = []
+        for p in players:
+            cells = by_tick_player[t].get(p["id"], [])
+            cell_html: List[str] = []
+            for c in cells:
+                style = EVENT_STYLES[c["kind"]]
+                cell_html.append(
+                    f'<div class="cell kind-{esc(c["kind"])}" '
+                    f'data-kind="{esc(c["kind"])}">'
+                    f'<span class="badge" style="background:{style["color"]}">'
+                    f'{esc(style["label"])}</span>'
+                    f'<span class="text">{esc(c["detail"])}</span>'
+                    f'</div>'
+                )
+            if not cell_html:
+                cell_html = ['<div class="cell empty">—</div>']
+            per_player_cols.append(
+                f'<div class="player-col">{"".join(cell_html)}</div>'
             )
-        player_rows_html.append(
-            f'<div class="player-row" style="height:{ROW_HEIGHT}px">'
-            f'  <div class="player-cells" style="width:{grid_width}px">'
-            f'    {"".join(cell_html)}'
-            f'  </div>'
+        tick_blocks.append(
+            f'<div class="tick-row" id="t{t}">'
+            f'<div class="tick-label">t={t}</div>'
+            f'<div class="player-grid">{"".join(per_player_cols)}</div>'
             f'</div>'
         )
 
-    # player ラベル列 (sticky left)
-    player_labels_html = "".join(
-        f'<div class="player-label" style="height:{ROW_HEIGHT}px">'
-        f'  <span class="pl-name">{esc(p["name"])}</span>'
-        f'  <span class="pl-id">#{esc(p["id"])}</span>'
+    # player ヘッダー列 (sticky top で表示)
+    player_headers_html = "".join(
+        f'<div class="player-header">'
+        f'<span class="pl-name">{esc(p["name"])}</span>'
+        f'<span class="pl-id">#{esc(p["id"])}</span>'
         f'</div>'
         for p in players
     )
-
-    # tick ticks header (左端固定 + 横スクロール)
-    tick_marks = []
-    step = 5  # 5 tick ごとに目盛
-    for t in range(0, max_tick + 1, step):
-        tick_marks.append(
-            f'<div class="tick-mark" style="left:{t*TICK_WIDTH}px">t={t}</div>'
-        )
-    tick_header_html = "".join(tick_marks)
 
     legend_html = "".join(
         f'<div class="legend-item">'
@@ -207,6 +255,8 @@ def render_html(
         for k, s in EVENT_STYLES.items()
     )
 
+    player_count = max(1, len(players))
+
     css = f"""
 :root {{
   --bg: #061015;
@@ -214,14 +264,15 @@ def render_html(
   --text: #d6e8e9;
   --muted: #6d7f80;
   --cyan: #35d4e6;
+  --tick-label-w: 80px;
 }}
 * {{ box-sizing: border-box; }}
 body {{
   margin: 0;
   background:
-    radial-gradient(circle at 22% 12%, rgba(53, 212, 230, 0.12), transparent 18rem),
-    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px),
+    radial-gradient(circle at 22% 12%, rgba(53, 212, 230, 0.10), transparent 22rem),
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px),
     #061015;
   background-size: auto, 34px 34px, 34px 34px, auto;
   color: var(--text);
@@ -231,11 +282,14 @@ body {{
 header {{
   padding: 0.85rem 1.2rem;
   border-bottom: 1px solid var(--line);
-  background: rgba(8, 17, 22, 0.5);
+  background: rgba(8, 17, 22, 0.92);
   display: flex;
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }}
 header h1 {{
   margin: 0;
@@ -249,131 +303,101 @@ header h1 {{
 .legend-swatch {{ width: 12px; height: 12px; border-radius: 2px; display: inline-block; }}
 .legend-label {{ font-family: "JetBrains Mono", monospace; }}
 
-#timeline-container {{
+.player-header-row {{
   display: grid;
-  grid-template-columns: 130px 1fr;
-  position: relative;
-}}
-.player-labels {{
+  grid-template-columns: var(--tick-label-w) repeat({player_count}, minmax(0, 1fr));
   position: sticky;
-  left: 0;
-  z-index: 2;
+  top: 0;
+  z-index: 5;
   background: rgba(8, 17, 22, 0.95);
-  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 0.4rem 0;
 }}
-.player-label {{
-  padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid rgba(36, 83, 88, 0.4);
+.player-header-row .corner {{
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding: 0 0.6rem;
+  display: flex;
+  align-items: center;
+}}
+.player-header {{
+  padding: 0.2rem 0.8rem;
+  border-left: 1px solid rgba(36, 83, 88, 0.4);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  gap: 0.1rem;
 }}
-.pl-name {{ font-weight: 600; color: var(--text); }}
-.pl-id {{ font-size: 0.7rem; color: var(--muted); font-family: monospace; }}
+.player-header .pl-name {{ font-weight: 600; color: var(--text); }}
+.player-header .pl-id {{ font-size: 0.7rem; color: var(--muted); font-family: monospace; }}
 
-.scroll-area {{
-  overflow-x: auto;
-  overflow-y: hidden;
-  position: relative;
+.tick-row {{
+  display: grid;
+  grid-template-columns: var(--tick-label-w) 1fr;
+  border-bottom: 1px solid rgba(36, 83, 88, 0.3);
+  min-height: 36px;
 }}
-.tick-header {{
-  height: 22px;
-  position: relative;
-  border-bottom: 1px solid var(--line);
-  background: rgba(8, 17, 22, 0.8);
-  width: {grid_width}px;
+.tick-row:hover {{
+  background: rgba(53, 212, 230, 0.04);
 }}
-.tick-mark {{
-  position: absolute;
-  top: 4px;
-  font-size: 0.65rem;
-  color: var(--muted);
-  font-family: monospace;
-  transform: translateX(-50%);
-}}
-.player-rows {{
-  position: relative;
-}}
-.player-row {{
-  position: relative;
-  border-bottom: 1px solid rgba(36, 83, 88, 0.4);
-}}
-.player-cells {{
-  position: relative;
-  height: 100%;
-}}
-.cell {{
-  position: absolute;
-  width: {TICK_WIDTH - 2}px;
-  height: {SUB_ROW_HEIGHT - 1}px;
-  color: #061015;
+.tick-label {{
+  padding: 0.45rem 0.6rem;
   font-family: "JetBrains Mono", monospace;
-  font-size: 0.6rem;
-  font-weight: bold;
-  text-align: center;
-  line-height: {SUB_ROW_HEIGHT - 1}px;
-  border-radius: 2px;
-  cursor: pointer;
-  overflow: hidden;
-  white-space: nowrap;
-  text-shadow: 0 0 2px rgba(0,0,0,0.3);
-  opacity: 0.85;
-  transition: opacity 0.15s;
+  font-size: 0.8rem;
+  color: var(--cyan);
+  border-right: 1px solid rgba(36, 83, 88, 0.5);
+  background: rgba(8, 17, 22, 0.5);
+  display: flex;
+  align-items: flex-start;
 }}
-.cell:hover {{
-  opacity: 1;
-  z-index: 5;
-  outline: 1px solid #fff;
+.player-grid {{
+  display: grid;
+  grid-template-columns: repeat({player_count}, minmax(0, 1fr));
 }}
+.player-col {{
+  padding: 0.3rem 0.5rem;
+  border-left: 1px solid rgba(36, 83, 88, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}}
+.player-col:first-child {{ border-left: none; }}
 
-#tooltip {{
-  position: fixed;
-  z-index: 100;
-  background: rgba(8, 17, 22, 0.96);
-  border: 1px solid var(--cyan);
-  border-radius: 4px;
-  padding: 0.5rem 0.7rem;
+.cell {{
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-start;
   font-size: 0.78rem;
-  max-width: 360px;
-  pointer-events: none;
-  display: none;
-  box-shadow: 0 10px 26px rgba(0,0,0,0.4);
+  line-height: 1.35;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }}
-#tooltip .tt-tick {{ color: var(--cyan); font-family: monospace; margin-right: 0.5rem; }}
-#tooltip .tt-kind {{ color: #ffce63; font-family: monospace; }}
-#tooltip .tt-detail {{ margin-top: 0.3rem; color: #d8c8ff; word-break: break-word; }}
-"""
+.cell .badge {{
+  flex: 0 0 auto;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  color: #061015;
+  letter-spacing: 0.04em;
+}}
+.cell .text {{
+  flex: 1 1 auto;
+  color: var(--text);
+}}
+.cell.empty {{
+  font-size: 0.7rem;
+  color: rgba(109, 127, 128, 0.6);
+}}
 
-    js = """
-const tt = document.getElementById('tooltip');
-function showTooltip(e, cell) {
-  const tick = cell.dataset.tick;
-  const kind = cell.dataset.kind;
-  const detail = cell.dataset.detail;
-  tt.innerHTML =
-    '<span class="tt-tick">t=' + tick + '</span>' +
-    '<span class="tt-kind">' + kind + '</span>' +
-    '<div class="tt-detail">' + detail + '</div>';
-  tt.style.display = 'block';
-  positionTooltip(e);
-}
-function positionTooltip(e) {
-  const pad = 14;
-  let x = e.clientX + pad;
-  let y = e.clientY + pad;
-  const r = tt.getBoundingClientRect();
-  if (x + r.width > window.innerWidth) x = window.innerWidth - r.width - 8;
-  if (y + r.height > window.innerHeight) y = e.clientY - r.height - pad;
-  tt.style.left = x + 'px';
-  tt.style.top = y + 'px';
-}
-function hideTooltip() { tt.style.display = 'none'; }
-
-document.querySelectorAll('.cell').forEach(cell => {
-  cell.addEventListener('mouseenter', (e) => showTooltip(e, cell));
-  cell.addEventListener('mousemove', positionTooltip);
-  cell.addEventListener('mouseleave', hideTooltip);
-});
+/* kind 別の細かい強調 */
+.cell.kind-action .text {{ color: #d8f6ff; }}
+.cell.kind-observation .text {{ color: #d8c8ff; }}
+.cell.kind-memo_add .text, .cell.kind-memo_done .text {{ color: #cee8a8; }}
+.cell.kind-position_change .text {{ color: #c8effd; }}
+.cell.kind-episodic_chunk_written .text,
+.cell.kind-episodic_recall .text {{ color: #ffd9a3; }}
 """
 
     return f"""<!DOCTYPE html>
@@ -388,18 +412,13 @@ document.querySelectorAll('.cell').forEach(cell => {
   <h1>{esc(title)} - Player × Tick Timeline</h1>
   <div class="legend">{legend_html}</div>
 </header>
-<div id="timeline-container">
-  <div class="player-labels">
-    <div class="player-label" style="height:22px;font-size:0.7rem;color:var(--muted);">tick →</div>
-    {player_labels_html}
-  </div>
-  <div class="scroll-area">
-    <div class="tick-header">{tick_header_html}</div>
-    <div class="player-rows">{"".join(player_rows_html)}</div>
-  </div>
+<div class="player-header-row">
+  <div class="corner">tick ↓ / player →</div>
+  {player_headers_html}
 </div>
-<div id="tooltip"></div>
-<script>{js}</script>
+<div class="tick-header">
+  {''.join(tick_blocks)}
+</div>
 </body>
 </html>
 """
@@ -428,4 +447,4 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

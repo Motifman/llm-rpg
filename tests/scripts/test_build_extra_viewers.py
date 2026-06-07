@@ -112,16 +112,47 @@ class TestTimelineExtract:
 
 
 class TestTimelineRender:
-    """`render_timeline` が valid な HTML を生成する。"""
+    """`render_timeline` (改修版) が valid な HTML を生成する。
 
-    def test_html_に_player_row_と_tick_header_が_出る(self) -> None:
+    改修方針 (実験 #29 OFF 分析 feedback):
+    - hover に隠さず、内容を直書きする
+    - tick が縦軸、player が横カラム
+    - 発火 event がある tick だけ render する
+    """
+
+    def test_html_に_player_header_と_tick_行が出る(self) -> None:
         html_text = render_timeline(_make_events(), "test-run")
         assert "<!DOCTYPE html>" in html_text
         assert "test-run" in html_text
-        assert "player-label" in html_text
-        assert "tick-header" in html_text
-        # 色 swatch 凡例が出る
+        # 新レイアウトの主要要素
+        assert "player-header" in html_text
+        assert "tick-row" in html_text
+        assert "player-grid" in html_text
+        # 色 swatch 凡例
         assert "legend" in html_text
         # 各 event の cell が出る
         assert 'data-kind="action"' in html_text
         assert 'data-kind="observation"' in html_text
+
+    def test_action_の内容が_セルに直書きされる(self) -> None:
+        """spot_graph_explore action の tool 名が直接 HTML に出る (hover 不要)。"""
+        html_text = render_timeline(_make_events(), "test-run")
+        # _make_events() の action は tool=spot_graph_explore, inner=see around
+        assert "spot_graph_explore" in html_text
+
+    def test_observation_の_prose_が_セルに直書きされる(self) -> None:
+        """OBS の prose 文字列がセル内に表示される。"""
+        html_text = render_timeline(_make_events(), "test-run")
+        # _make_events() の observation prose は "hi"
+        assert "hi" in html_text
+
+    def test_event_が無い_tick_は_render_しない(self) -> None:
+        """tick=0 (position_change のみ) / 1 (action) / 2 (observation) / 3 / 6 / 9
+        以外の tick は HTML に現れない。tick=4,5,7,8 が無いことで empty skip を確認。"""
+        html_text = render_timeline(_make_events(), "test-run")
+        # 存在するはず
+        assert 'id="t1"' in html_text
+        assert 'id="t2"' in html_text
+        # 発火なしの tick は出ない
+        assert 'id="t4"' not in html_text
+        assert 'id="t5"' not in html_text
