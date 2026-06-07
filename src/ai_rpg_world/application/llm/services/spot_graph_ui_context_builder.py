@@ -6,6 +6,7 @@ LLM が読めるテキスト行と、ツール実行用の ToolRuntimeContextDto
 
 from __future__ import annotations
 
+import re
 from typing import Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -54,13 +55,24 @@ def _current_sub_location_id_from_snapshot(
     return None
 
 
-def _build_ordinal_disambiguator(names: List[str]) -> Dict[int, str]:
+_ORDINAL_SUFFIX_RE = re.compile(r"\s+#\d+$")
+
+
+def build_ordinal_disambiguator(names: List[str]) -> Dict[int, str]:
     """同名衝突する name に ``#1`` / ``#2`` ... を付与して返す (PR 6, #404 後続)。
 
     ラベル (S1 / I2 / P3 等) を prompt から外して **名前直接指定** に倒した
     あとに、「灰色のオオカミ」が同 spot に 2 匹いるような場面で LLM が
     どちらを指せばいいか分からなくなる。そのため、同名が複数あるときだけ
     末尾に ``#N`` を付ける (出現順)。1 つしかない名前は素のまま。
+
+    レビュー反映 (#421 LOW): 関数は public な ``build_ordinal_disambiguator``
+    として公開する。テスト / 他モジュールから直接利用できる。
+
+    レビュー反映 (#421 MEDIUM): 入力 name が既に ``... #N`` で終わる場合は
+    suffix を剥がしてから counts を取り、最終出力で改めて付け直す。
+    シナリオ JSON で ``"小屋 #1"`` のような名前が人為的に書かれた場合の
+    防御 (実害は低いが、``"小屋 #1 #1"`` のような二重 ordinal を生まない)。
 
     Args:
         names: 各エントリの display_name。並び順は section の表示順と同じ。
@@ -72,18 +84,25 @@ def _build_ordinal_disambiguator(names: List[str]) -> Dict[int, str]:
         ["流木", "オオカミ", "オオカミ", "トラ"]
           → {0: "流木", 1: "オオカミ #1", 2: "オオカミ #2", 3: "トラ"}
     """
+    # 既に末尾に "#N" が付いている場合は base name 単位で集計する。
+    stripped = [_ORDINAL_SUFFIX_RE.sub("", n) for n in names]
     counts: Dict[str, int] = {}
-    for n in names:
-        counts[n] = counts.get(n, 0) + 1
+    for base in stripped:
+        counts[base] = counts.get(base, 0) + 1
     out: Dict[int, str] = {}
     seen: Dict[str, int] = {}
-    for i, n in enumerate(names):
-        if counts[n] > 1:
-            seen[n] = seen.get(n, 0) + 1
-            out[i] = f"{n} #{seen[n]}"
+    for i, base in enumerate(stripped):
+        if counts[base] > 1:
+            seen[base] = seen.get(base, 0) + 1
+            out[i] = f"{base} #{seen[base]}"
         else:
-            out[i] = n
+            out[i] = base
     return out
+
+
+# 後方互換: 旧名 (PR 6 で導入時は private) を alias として残す。新規呼び出しは
+# public 名 ``build_ordinal_disambiguator`` を使うこと。
+_build_ordinal_disambiguator = build_ordinal_disambiguator
 
 
 # 実験 #29 後続: ItemType.value → LLM プロンプト向け日本語タグ。
@@ -165,6 +184,10 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         # 同名スポット (= 異なる接続だが行き先 spot が同名) は ``#N`` で
         # 区別する。LLM は destination_label に行き先 spot 名そのものを渡せば
         # resolver が解決する。
+        #
+        # note: ``label`` 変数は prompt には出さないが、collector の dict key
+        # として引き続き必要 (resolver の旧経路と互換)。allocator.next を呼ぶ
+        # 副作用 (連番採番) も他 section と整合させるため維持している。
         if not snap.connections:
             return
         lines.append("接続先:")

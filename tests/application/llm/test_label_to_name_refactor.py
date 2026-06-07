@@ -62,6 +62,32 @@ class TestOrdinalDisambiguator:
     def test_空入力なら_空辞書(self) -> None:
         assert _build_ordinal_disambiguator([]) == {}
 
+    def test_既に_含む_name_は_base_で集計され_二重ordinal_を生まない(self) -> None:
+        """PR #421 MEDIUM 反映: シナリオ JSON が "小屋 #1" のような名前を
+        既に持っているとき、衝突検出は base name (= "#N" を剥がしたもの) で
+        行い、"小屋 #1 #1" のような二重 ordinal を生まない。
+
+        2 つの "小屋 #1" 入力 → 出力は "小屋 #1" / "小屋 #2"。
+        """
+        result = _build_ordinal_disambiguator(["小屋 #1", "小屋 #2"])
+        # 入力 2 件はいずれも base="小屋"、counts["小屋"]=2 で disambiguate
+        assert result == {0: "小屋 #1", 1: "小屋 #2"}
+
+    def test_既存_ordinal_と_素の名前が混ざるケース(self) -> None:
+        result = _build_ordinal_disambiguator(["小屋", "小屋 #2"])
+        # 両方 base="小屋"、衝突するので index 順で renumber される
+        assert result == {0: "小屋 #1", 1: "小屋 #2"}
+
+    def test_public_な_別名でも_import_できる(self) -> None:
+        """PR #421 LOW 反映: ``build_ordinal_disambiguator`` (private prefix 無し)
+        を public 関数として export。private alias は後方互換のために残す。"""
+        from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
+            build_ordinal_disambiguator,
+        )
+        assert build_ordinal_disambiguator is _build_ordinal_disambiguator
+        # public 名で呼んでも動作する
+        assert build_ordinal_disambiguator(["A", "A"]) == {0: "A #1", 1: "A #2"}
+
 
 def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     return PlayerCurrentStateDto(
