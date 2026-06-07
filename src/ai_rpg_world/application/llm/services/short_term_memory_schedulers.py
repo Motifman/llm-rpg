@@ -61,21 +61,45 @@ class InlineShortTermMemoryScheduler(IShortTermMemoryScheduler):
     """submit と同じ thread で即時 task を実行する scheduler (同期)。
 
     Phase 2 の MVP 挙動と互換。テスト / オフライン / 同期保証が必要なときに使う。
+
+    Phase 2.2: task 例外を trace でも観測可能化する。``trace_recorder_provider``
+    + ``current_tick_provider`` は optional で、未設定なら従来通りログのみ。
     """
+
+    def __init__(
+        self,
+        *,
+        trace_recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]] = None,
+        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+    ) -> None:
+        if trace_recorder_provider is not None and not callable(trace_recorder_provider):
+            raise TypeError("trace_recorder_provider must be callable or None")
+        if current_tick_provider is not None and not callable(current_tick_provider):
+            raise TypeError("current_tick_provider must be callable or None")
+        self._trace_recorder_provider = trace_recorder_provider
+        self._current_tick_provider = current_tick_provider
 
     def submit(self, player_id: int, task: L4GenerationTask) -> bool:
         # 通常 task (= ``RollingSummaryShortTermMemory._run_generation``) は
         # 内部で全例外を握って template fallback を install するため、ここに
         # 到達するのは task 内のバグ時のみ。その場合でも scheduler 自体は
-        # 止めず、warning ログを残して True を返す (受理は成功、実行は失敗)。
-        # 呼出側は True を「L4 が install される」と期待しているため、本当に
-        # install を保証したい場合は task 側で fallback を確実にすること。
+        # 止めず、warning ログ + trace event を残して True を返す (受理は成功、
+        # 実行は失敗)。
+        start = time.monotonic()
         try:
             task()
-        except Exception:
+        except Exception as exc:
+            latency_ms = int((time.monotonic() - start) * 1000)
             _logger.exception(
                 "InlineShortTermMemoryScheduler: task raised for player_id=%s",
                 player_id,
+            )
+            _emit_generation_failed(
+                self._trace_recorder_provider,
+                self._current_tick_provider,
+                player_id=player_id,
+                exc=exc,
+                latency_ms=latency_ms,
             )
         return True
 
@@ -191,12 +215,20 @@ class ThreadPoolShortTermMemoryScheduler(IShortTermMemoryScheduler):
         start = time.monotonic()
         try:
             task()
-        except Exception:
+        except Exception as exc:
+            latency_ms = int((time.monotonic() - start) * 1000)
             _logger.exception(
                 "ThreadPoolShortTermMemoryScheduler worker task failed for "
                 "player_id=%s (latency_ms=%d)",
                 player_id,
-                int((time.monotonic() - start) * 1000),
+                latency_ms,
+            )
+            _emit_generation_failed(
+                self._trace_recorder_provider,
+                self._current_tick_provider,
+                player_id=player_id,
+                exc=exc,
+                latency_ms=latency_ms,
             )
 
     def _on_done(self, future: Future) -> None:
@@ -232,6 +264,58 @@ class ThreadPoolShortTermMemoryScheduler(IShortTermMemoryScheduler):
                 "trace recorder.record raised for SHORT_TERM_SUMMARY_DROPPED; skipping",
                 exc_info=True,
             )
+
+
+def _emit_generation_failed(
+    trace_recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]],
+    current_tick_provider: Optional[Callable[[], Optional[int]]],
+    *,
+    player_id: int,
+    exc: BaseException,
+    latency_ms: int,
+) -> None:
+    """``SHORT_TERM_SUMMARY_GENERATION_FAILED`` trace event を best-effort で emit。
+
+    Inline / ThreadPool 両 scheduler から共有して使うため module-level 関数。
+    ``_emit_drop`` は ``ThreadPool`` 固有のコンテキスト (max_queue_size 等) を
+    持つためインスタンスメソッドとして残し、本関数は player_id / exc /
+    latency_ms のような scheduler 非依存パラメータだけで完結する。
+
+    recorder が無ければ何もしない。emit 自体の失敗は無音で吸収する
+    (trace の失敗で本体を倒さない)。
+
+    ``error_message_snippet`` は **Python 文字数で 200 字 cap** (UTF-8 バイト
+    長ではない)。CJK / 絵文字を含む場合は最大 ~600 バイトになり得るが、PII /
+    シークレット漏れ防止という観点では文字数 cap で十分。
+    """
+    if trace_recorder_provider is None:
+        return
+    try:
+        recorder = trace_recorder_provider()
+    except Exception:
+        return
+    if recorder is None:
+        return
+    tick: Optional[int] = None
+    if current_tick_provider is not None:
+        try:
+            tick = current_tick_provider()
+        except Exception:
+            tick = None
+    try:
+        recorder.record(
+            TraceEventKind.SHORT_TERM_SUMMARY_GENERATION_FAILED,
+            tick=tick,
+            player_id=int(player_id),
+            error_type=type(exc).__name__,
+            error_message_snippet=str(exc)[:200],
+            latency_ms=int(latency_ms),
+        )
+    except Exception:
+        _logger.debug(
+            "trace recorder.record raised for SHORT_TERM_SUMMARY_GENERATION_FAILED; skipping",
+            exc_info=True,
+        )
 
 
 __all__ = [

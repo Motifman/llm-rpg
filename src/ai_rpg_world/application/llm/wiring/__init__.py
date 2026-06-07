@@ -955,7 +955,11 @@ def _build_short_term_memory(
             current_tick_provider=current_tick_provider,
         )
     else:
-        scheduler = InlineShortTermMemoryScheduler()
+        # Phase 2.2: Inline でも trace を渡し、task 例外を観測可能化する
+        scheduler = InlineShortTermMemoryScheduler(
+            trace_recorder_provider=trace_recorder_provider,
+            current_tick_provider=current_tick_provider,
+        )
 
     return RollingSummaryShortTermMemory(
         summary_service=summary_service,

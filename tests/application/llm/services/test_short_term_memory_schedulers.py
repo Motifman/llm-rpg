@@ -60,6 +60,42 @@ class TestInlineShortTermMemoryScheduler:
         assert called == [True]
         assert any("task raised" in rec.message for rec in caplog.records)
 
+    def test_task_例外時に_trace_event_を_emit_する(self) -> None:
+        """Phase 2.2: Inline でも task 例外で
+        ``SHORT_TERM_SUMMARY_GENERATION_FAILED`` event を emit する。"""
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+        sch = InlineShortTermMemoryScheduler(
+            trace_recorder_provider=lambda: recorder,
+            current_tick_provider=lambda: 42,
+        )
+
+        def _raise() -> None:
+            raise ValueError("simulated parse failure")
+
+        sch.submit(player_id=7, task=_raise)
+        fails = [
+            ev for ev in captured
+            if ev.kind == TraceEventKind.SHORT_TERM_SUMMARY_GENERATION_FAILED
+        ]
+        assert len(fails) == 1
+        assert fails[0].player_id == 7
+        assert fails[0].tick == 42
+        assert fails[0].payload["error_type"] == "ValueError"
+        assert "simulated parse failure" in fails[0].payload["error_message_snippet"]
+        assert "latency_ms" in fails[0].payload
+
+    def test_trace_recorder_provider_未指定なら_event_は_出ない(self) -> None:
+        """trace 未配線でも例外時の動作自体は変わらない。"""
+        sch = InlineShortTermMemoryScheduler()  # trace 無し
+
+        def _raise() -> None:
+            raise RuntimeError("x")
+
+        # raises なし
+        accepted = sch.submit(player_id=1, task=_raise)
+        assert accepted is True
+
     def test_shutdown_は_no_op(self) -> None:
         sch = InlineShortTermMemoryScheduler()
         sch.shutdown()  # raises なし
@@ -217,6 +253,39 @@ class TestThreadPoolShortTermMemoryScheduler:
         finally:
             sch.shutdown()
 
+    def test_worker_例外時に_trace_event_を_emit_する(self) -> None:
+        """Phase 2.2: ThreadPool でも worker 例外で
+        ``SHORT_TERM_SUMMARY_GENERATION_FAILED`` event を emit する。"""
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+        sch = ThreadPoolShortTermMemoryScheduler(
+            max_workers=1,
+            trace_recorder_provider=lambda: recorder,
+            current_tick_provider=lambda: 99,
+        )
+        try:
+            done = threading.Event()
+
+            def _raise() -> None:
+                try:
+                    raise ValueError("worker oops")
+                finally:
+                    done.set()
+
+            sch.submit(player_id=3, task=_raise)
+            assert done.wait(timeout=2.0)
+        finally:
+            sch.shutdown()  # in-flight 完了待ち
+        fails = [
+            ev for ev in captured
+            if ev.kind == TraceEventKind.SHORT_TERM_SUMMARY_GENERATION_FAILED
+        ]
+        assert len(fails) == 1
+        assert fails[0].player_id == 3
+        assert fails[0].tick == 99
+        assert fails[0].payload["error_type"] == "ValueError"
+        assert "worker oops" in fails[0].payload["error_message_snippet"]
+
 
 class TestThreadPoolValidation:
     """constructor の不変条件。"""
@@ -233,4 +302,27 @@ class TestThreadPoolValidation:
         with pytest.raises(TypeError, match="trace_recorder_provider"):
             ThreadPoolShortTermMemoryScheduler(
                 trace_recorder_provider="not-callable",  # type: ignore[arg-type]
+            )
+
+    def test_current_tick_provider_が_非callable_なら_type_error(self) -> None:
+        """current_tick_provider に非callable を渡すと TypeError (Inline と対称)。"""
+        with pytest.raises(TypeError, match="current_tick_provider"):
+            ThreadPoolShortTermMemoryScheduler(
+                current_tick_provider=42,  # type: ignore[arg-type]
+            )
+
+
+class TestInlineSchedulerValidation:
+    """Phase 2.2: Inline scheduler の constructor 引数検証。"""
+
+    def test_trace_recorder_provider_が_非callable_なら_type_error(self) -> None:
+        with pytest.raises(TypeError, match="trace_recorder_provider"):
+            InlineShortTermMemoryScheduler(
+                trace_recorder_provider="not-callable",  # type: ignore[arg-type]
+            )
+
+    def test_current_tick_provider_が_非callable_なら_type_error(self) -> None:
+        with pytest.raises(TypeError, match="current_tick_provider"):
+            InlineShortTermMemoryScheduler(
+                current_tick_provider=42,  # type: ignore[arg-type]
             )
