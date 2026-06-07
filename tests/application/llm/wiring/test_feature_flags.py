@@ -19,16 +19,21 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     ENV_SEMANTIC_PASSIVE_TOP_K,
     ENV_SEMANTIC_SEARCH_ENABLED,
     ENV_SHORT_TERM_MEMORY_KIND,
+    ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE,
+    SCHEDULER_MODE_INLINE,
+    SCHEDULER_MODE_THREAD_POOL,
     SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
     SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW,
     log_episodic_explore_related_state,
     log_semantic_passive_top_k_state,
     log_semantic_search_state,
     log_short_term_memory_kind_state,
+    log_short_term_memory_scheduler_mode_state,
     resolve_episodic_explore_related_enabled,
     resolve_semantic_passive_top_k,
     resolve_semantic_search_enabled,
     resolve_short_term_memory_kind,
+    resolve_short_term_memory_scheduler_mode,
 )
 
 
@@ -238,3 +243,60 @@ class TestLogShortTermMemoryKindState:
         messages = [rec.message for rec in caplog.records]
         assert any("sliding_window" in m for m in messages)
         assert any("rolling_summary" in m for m in messages)
+
+
+class TestResolveShortTermMemorySchedulerMode:
+    """``SHORT_TERM_MEMORY_SCHEDULER_MODE`` env 解決 (Phase 2.1)。"""
+
+    def test_default_は_inline(self) -> None:
+        assert resolve_short_term_memory_scheduler_mode(env={}) == SCHEDULER_MODE_INLINE
+
+    def test_env_空文字でも_default(self) -> None:
+        assert resolve_short_term_memory_scheduler_mode(
+            env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: ""}
+        ) == SCHEDULER_MODE_INLINE
+
+    def test_有効な_inline(self) -> None:
+        assert resolve_short_term_memory_scheduler_mode(
+            env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: "inline"}
+        ) == SCHEDULER_MODE_INLINE
+
+    def test_有効な_thread_pool(self) -> None:
+        assert resolve_short_term_memory_scheduler_mode(
+            env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: "thread_pool"}
+        ) == SCHEDULER_MODE_THREAD_POOL
+
+    def test_case_insensitive(self) -> None:
+        assert resolve_short_term_memory_scheduler_mode(
+            env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: "Thread_Pool"}
+        ) == SCHEDULER_MODE_THREAD_POOL
+
+    def test_未知の値は_warning_を出して_default(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(
+            logging.WARNING,
+            logger="ai_rpg_world.application.llm.wiring.feature_flags",
+        ):
+            v = resolve_short_term_memory_scheduler_mode(
+                env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: "async_io"}
+            )
+        assert v == SCHEDULER_MODE_INLINE
+        assert any("Unknown" in rec.message for rec in caplog.records)
+
+
+class TestLogShortTermMemorySchedulerModeState:
+    """解決結果を INFO ログ 1 件で残す。"""
+
+    def test_log_に_mode_の値が_出る(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(
+            logging.INFO,
+            logger="ai_rpg_world.application.llm.wiring.feature_flags",
+        ):
+            log_short_term_memory_scheduler_mode_state("inline")
+            log_short_term_memory_scheduler_mode_state("thread_pool")
+        messages = [rec.message for rec in caplog.records]
+        assert any("inline" in m for m in messages)
+        assert any("thread_pool" in m for m in messages)

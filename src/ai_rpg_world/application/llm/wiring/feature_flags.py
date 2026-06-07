@@ -241,3 +241,55 @@ def resolve_short_term_memory_kind(
 def log_short_term_memory_kind_state(kind: str) -> None:
     """wiring 構築時に解決結果を 1 度ログる。"""
     _logger.info("%s resolved to %s", ENV_SHORT_TERM_MEMORY_KIND, kind)
+
+
+# ──────────────────────────────────────────────────────────────────
+# Short-term memory: L4 generation scheduler mode (Phase 2.1)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE = "SHORT_TERM_MEMORY_SCHEDULER_MODE"
+SCHEDULER_MODE_INLINE = "inline"
+SCHEDULER_MODE_THREAD_POOL = "thread_pool"
+_VALID_SCHEDULER_MODES = frozenset({
+    SCHEDULER_MODE_INLINE,
+    SCHEDULER_MODE_THREAD_POOL,
+})
+
+
+def resolve_short_term_memory_scheduler_mode(
+    env: Optional[Mapping[str, str]] = None,
+) -> str:
+    """``SHORT_TERM_MEMORY_SCHEDULER_MODE`` env を解決する。
+
+    default は ``inline`` (Phase 2 互換、tick が L4 生成 LLM の 2-5s ブロック
+    する)。``thread_pool`` を選ぶと非同期化される (tick が止まらない)。
+
+    rolling_summary を選んでも scheduler は orthogonal な knob として独立。
+    未知文字列は warning + default に縮退。
+
+    詳細: docs/memory_system/short_term_memory_design.md §6 (Phase 2.1)。
+    """
+    source = env if env is not None else os.environ
+    raw = (source.get(ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE) or "").strip().lower()
+    if not raw:
+        return SCHEDULER_MODE_INLINE
+    if raw not in _VALID_SCHEDULER_MODES:
+        _logger.warning(
+            "Unknown %s=%r; falling back to %s. valid: %s",
+            ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE,
+            raw,
+            SCHEDULER_MODE_INLINE,
+            sorted(_VALID_SCHEDULER_MODES),
+        )
+        return SCHEDULER_MODE_INLINE
+    return raw
+
+
+def log_short_term_memory_scheduler_mode_state(mode: str) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE,
+        mode,
+    )

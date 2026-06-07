@@ -584,11 +584,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         ENV_SEMANTIC_PASSIVE_TOP_K,
         ENV_SEMANTIC_SEARCH_ENABLED,
         ENV_SHORT_TERM_MEMORY_KIND,
+        ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE,
         resolve_episodic_explore_related_enabled,
         resolve_semantic_llm_gist_enabled,
         resolve_semantic_passive_top_k,
         resolve_semantic_search_enabled,
         resolve_short_term_memory_kind,
+        resolve_short_term_memory_scheduler_mode,
     )
     resolved_section_order = resolve_section_order_from_env()
     resolved_explore_related = resolve_episodic_explore_related_enabled()
@@ -596,6 +598,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     resolved_semantic_passive_top_k = resolve_semantic_passive_top_k()
     resolved_semantic_search = resolve_semantic_search_enabled()
     resolved_short_term_memory_kind = resolve_short_term_memory_kind()
+    resolved_short_term_memory_scheduler_mode = resolve_short_term_memory_scheduler_mode()
 
     print(f"[run] scenario={args.scenario.name} max_ticks={args.max_ticks}", flush=True)
     print(
@@ -628,6 +631,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         f"(override via {ENV_SHORT_TERM_MEMORY_KIND}=sliding_window|rolling_summary)",
         flush=True,
     )
+    print(
+        f"[run] short_term_memory_scheduler_mode={resolved_short_term_memory_scheduler_mode} "
+        f"(override via {ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE}=inline|thread_pool)",
+        flush=True,
+    )
     print(f"[out] {out_dir}", flush=True)
 
     with JsonlTraceRecorder(trace_path) as rec:
@@ -643,6 +651,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             semantic_passive_top_k=resolved_semantic_passive_top_k,
             semantic_search_enabled=resolved_semantic_search,
             short_term_memory_kind=resolved_short_term_memory_kind,
+            short_term_memory_scheduler_mode=resolved_short_term_memory_scheduler_mode,
         )
 
         def progress(msg: str) -> None:
