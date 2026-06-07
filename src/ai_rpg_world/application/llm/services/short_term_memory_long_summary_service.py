@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.short_term_memory import (
     IShortTermMemoryLongSummaryCompletionPort,
@@ -106,7 +107,7 @@ class ShortTermMemoryLongSummaryService:
         persona_block: str,
         previous_l5: L5LongSummary | None,
         evicted_l4: L4MidSummary,
-    ) -> list[dict[str, str]]:
+    ) -> list[dict[str, Any]]:
         lines: list[str] = []
         lines.append(f"あなた = {player_name}")
         if persona_block.strip():
@@ -145,7 +146,7 @@ class _ParsedLongSummary:
     world_view: str
 
 
-def _parse_raw(raw: dict) -> _ParsedLongSummary:
+def _parse_raw(raw: dict[str, Any]) -> _ParsedLongSummary:
     self_image = raw.get("self_image")
     if not isinstance(self_image, str) or not self_image.strip():
         raise ValueError("LLM L5 response missing or empty self_image")
@@ -188,3 +189,7 @@ __all__ = [
     "WORLD_VIEW_MAX_CHARS",
     "build_template_fallback_long_summary",
 ]
+# Note: ``_ParsedLongSummary`` は module-private な中間表現で、
+# ``rolling_summary_short_term_memory`` モジュールが「友達」として直接 import
+# する (L4 側の ``_ParsedSummary`` と同じパターン)。公開 API ではないため
+# ``__all__`` には含めない。将来公開化する場合は ``ParsedLongSummary`` に改名。
