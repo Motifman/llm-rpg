@@ -44,6 +44,10 @@ help:
 	@echo "  make experiment-relay-r2      - R2 のみ"
 	@echo "  make experiment-relay-cloud   - OpenAI クラウド（OPENAI_API_BASE 空）"
 	@echo "  make experiment SCENARIO=... MAX_WORLD_TICKS=... [WORKERS=4 EPISODIC=1 IDLE_TICKS=6 OUT=...]"
+	@echo "                                  prefix cache 系: [SECTION_ORDER=stable_to_volatile|legacy]"
+	@echo "                                                   [MEMORY_KIND=sliding_window|rolling_summary]"
+	@echo "                                                   [SCHEDULER_MODE=inline|thread_pool]"
+	@echo "                                  OpenRouter: [PROVIDER=Parasail QUANTIZATION=fp8 REQUIRE_PARAMS=1]"
 	@echo "                                - 汎用シナリオ実験 (任意 scenario JSON)"
 	@echo "  make experiment-publish ...   - experiment + 自動 gist publish"
 	@echo "  make experiment-survival OUT=... [EPISODIC=1]"
@@ -145,6 +149,8 @@ experiment-relay-cloud:
 #   make experiment SCENARIO=data/scenarios/survival_island_v2.json
 #   make experiment SCENARIO=data/scenarios/foo.json MAX_WORLD_TICKS=140 OUT=var/runs/foo-001 WORKERS=4
 #   make experiment SCENARIO=... EPISODIC=1   # episodic memory pipeline 有効
+#   make experiment SCENARIO=... SECTION_ORDER=stable_to_volatile MEMORY_KIND=rolling_summary
+#   make experiment SCENARIO=... PROVIDER=Parasail QUANTIZATION=fp8  # OpenRouter routing
 #
 # 引数 (= make 変数):
 #   SCENARIO        実行するシナリオ JSON のパス (必須)
@@ -156,6 +162,26 @@ experiment-relay-cloud:
 #   EPISODIC        1 で episodic memory 有効 (= LLM_EPISODIC_ENABLED=1)
 #   IDLE_TICKS      per-agent idle timer の沈黙上限 tick (既定 6)
 #   PUBLISH         1 で gist 自動 publish (= --publish-gist)
+#
+# 記憶 / prefix cache 系 (実 LLM 実験で prefix cache 効果を見るための切替):
+#   SECTION_ORDER   stable_to_volatile | legacy (= PROMPT_SECTION_ORDER)。
+#                   未指定なら default (stable_to_volatile)。Phase 0 の
+#                   reorder OFF/ON 比較に使う。
+#   MEMORY_KIND     sliding_window | rolling_summary (= SHORT_TERM_MEMORY_KIND)。
+#                   未指定なら default (sliding_window)。rolling_summary は
+#                   Phase 2 の L4 mid summary 経路。
+#                   **注意**: 短縮形 ``rolling`` / ``sliding`` は無効値で
+#                   sliding_window に fallback するため必ず完全名を使うこと。
+#   SCHEDULER_MODE  inline | thread_pool (= SHORT_TERM_MEMORY_SCHEDULER_MODE)。
+#                   rolling 時の L4 生成タスクを非同期にするか。未指定なら inline。
+#
+# OpenRouter provider routing (実 LLM 実験で provider/quant を固定):
+#   PROVIDER        provider 名 (例: DeepInfra / Parasail / Venice)。指定時は
+#                   OPENROUTER_PROVIDER として渡り allow_fallbacks=False が付く。
+#   QUANTIZATION    fp8 / fp4 / bf16 等 (= OPENROUTER_QUANTIZATION)。同 provider
+#                   内で variant を絞るとき。例: DeepInfra fp8 (turbo=fp4 を回避)。
+#   REQUIRE_PARAMS  1 で OPENROUTER_REQUIRE_PARAMS=true。リクエスト param 全対応
+#                   provider のみに限定 (tools / response_format を要求するとき)。
 #
 # その他の env (litellm 接続):
 #   OPENAI_API_BASE / LLM_MODEL / OPENAI_API_KEY
@@ -175,6 +201,12 @@ experiment:
 	LLM_TURN_PARALLEL_WORKERS=$(WORKERS) \
 	$(if $(EPISODIC),LLM_EPISODIC_ENABLED=1,) \
 	$(if $(IDLE_TICKS),LLM_IDLE_TIMEOUT_TICKS=$(IDLE_TICKS),) \
+	$(if $(SECTION_ORDER),PROMPT_SECTION_ORDER=$(SECTION_ORDER),) \
+	$(if $(MEMORY_KIND),SHORT_TERM_MEMORY_KIND=$(MEMORY_KIND),) \
+	$(if $(SCHEDULER_MODE),SHORT_TERM_MEMORY_SCHEDULER_MODE=$(SCHEDULER_MODE),) \
+	$(if $(PROVIDER),OPENROUTER_PROVIDER=$(PROVIDER),) \
+	$(if $(QUANTIZATION),OPENROUTER_QUANTIZATION=$(QUANTIZATION),) \
+	$(if $(REQUIRE_PARAMS),OPENROUTER_REQUIRE_PARAMS=true,) \
 	$(PYTHON) scripts/run_scenario_experiment.py \
 		--scenario $(SCENARIO) \
 		--max-world-ticks $(MAX_WORLD_TICKS) \
@@ -185,7 +217,12 @@ experiment:
 experiment-publish:
 	$(MAKE) experiment \
 		SCENARIO=$(SCENARIO) MAX_WORLD_TICKS=$(MAX_WORLD_TICKS) OUT=$(OUT) \
-		WORKERS=$(WORKERS) EPISODIC=$(EPISODIC) IDLE_TICKS=$(IDLE_TICKS) PUBLISH=1
+		WORKERS=$(WORKERS) EPISODIC=$(EPISODIC) IDLE_TICKS=$(IDLE_TICKS) \
+		SECTION_ORDER=$(SECTION_ORDER) MEMORY_KIND=$(MEMORY_KIND) \
+		SCHEDULER_MODE=$(SCHEDULER_MODE) \
+		PROVIDER=$(PROVIDER) QUANTIZATION=$(QUANTIZATION) \
+		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
+		PUBLISH=1
 
 # survival_island_v2 専用のショートカット。
 # 4 player + 14 day (= 140 driver tick) + parallel workers=4 + 自動 publish を
@@ -195,10 +232,15 @@ experiment-publish:
 # 使い方:
 #   make experiment-survival OUT=var/runs/issue390_exp27_off_r1
 #   make experiment-survival OUT=var/runs/issue390_exp27_on_full_r1 EPISODIC=1
+#   # prefix cache A/B (vLLM / 第30回相当):
+#   make experiment-survival OUT=var/runs/exp30_A SECTION_ORDER=legacy MEMORY_KIND=sliding
+#   make experiment-survival OUT=var/runs/exp30_C SECTION_ORDER=stable_to_volatile MEMORY_KIND=rolling_summary
 #
 # 上書き可能な変数 (省略時の survival 既定値):
 #   MAX_WORLD_TICKS=140  WORKERS=4  PUBLISH=1
 #   EPISODIC は未指定 (= OFF)。1 で ON_FULL。
+#   SECTION_ORDER / MEMORY_KIND / SCHEDULER_MODE / PROVIDER /
+#   QUANTIZATION / REQUIRE_PARAMS も同様に上位 experiment target へ素通し。
 SURVIVAL_MAX_WORLD_TICKS ?= 140
 SURVIVAL_WORKERS ?= 4
 SURVIVAL_PUBLISH ?= 1
@@ -210,6 +252,12 @@ experiment-survival:
 		OUT=$(OUT) \
 		EPISODIC=$(EPISODIC) \
 		IDLE_TICKS=$(IDLE_TICKS) \
+		SECTION_ORDER=$(SECTION_ORDER) \
+		MEMORY_KIND=$(MEMORY_KIND) \
+		SCHEDULER_MODE=$(SCHEDULER_MODE) \
+		PROVIDER=$(PROVIDER) \
+		QUANTIZATION=$(QUANTIZATION) \
+		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
 		PUBLISH=$(SURVIVAL_PUBLISH)
 
 # vLLM への SSH トンネル (~/.ssh/config の Host エイリアス、既定 v108-vllm)
