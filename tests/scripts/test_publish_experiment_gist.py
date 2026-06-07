@@ -299,6 +299,80 @@ class TestViewerIntegration:
         assert result["legacy_preview_url"] is None
         assert result["html_preview_url"] is None
 
+
+class TestEpisodicTimelinePreviewUrls:
+    """``#404`` 後続: episodic.html / timeline.html の htmlpreview wrap URL。
+
+    旧実装ではこれらが publish 結果に含まれず、ユーザは gist 上の raw URL を
+    直接踏んで text/plain 表示でソースコードが見えてしまっていた
+    (実験 #29 OFF feedback)。
+    """
+
+    def _fake_run(self, gist_url: str):
+        def fake_run(cmd, **kwargs):
+            stub = subprocess.CompletedProcess(args=cmd, returncode=0)
+            stub.stderr = ""
+            if cmd[:3] == ["gh", "gist", "create"]:
+                stub.stdout = f"{gist_url}\n"
+            else:
+                stub.stdout = "Motifman\n"
+            return stub
+        return fake_run
+
+    def test_episodic_html_があれば_episodic_preview_url_が_返る(
+        self, tmp_path: Path
+    ) -> None:
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        (run_dir / "report.md").write_text("# r")
+        (run_dir / "viewer.html").write_text("<html>v</html>")
+        (run_dir / "episodic.html").write_text("<html>ep</html>")
+
+        with patch.object(
+            subprocess, "run",
+            side_effect=self._fake_run("https://gist.github.com/Motifman/aaa"),
+        ):
+            result = publish(run_dir, secret=True, build_viewer=False)
+
+        assert result["episodic_preview_url"] is not None
+        assert "htmlpreview.github.io" in result["episodic_preview_url"]
+        assert "episodic.html" in result["episodic_preview_url"]
+
+    def test_timeline_html_があれば_timeline_preview_url_が_返る(
+        self, tmp_path: Path
+    ) -> None:
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        (run_dir / "report.md").write_text("# r")
+        (run_dir / "viewer.html").write_text("<html>v</html>")
+        (run_dir / "timeline.html").write_text("<html>tl</html>")
+
+        with patch.object(
+            subprocess, "run",
+            side_effect=self._fake_run("https://gist.github.com/Motifman/bbb"),
+        ):
+            result = publish(run_dir, secret=True, build_viewer=False)
+
+        assert result["timeline_preview_url"] is not None
+        assert "htmlpreview.github.io" in result["timeline_preview_url"]
+        assert "timeline.html" in result["timeline_preview_url"]
+
+    def test_episodic_timeline_両方なしなら_None(self, tmp_path: Path) -> None:
+        """gist 内に該当 HTML が無ければ None (壊れない後方互換)。"""
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        (run_dir / "report.md").write_text("# r")
+        (run_dir / "viewer.html").write_text("<html>v</html>")
+
+        with patch.object(
+            subprocess, "run",
+            side_effect=self._fake_run("https://gist.github.com/Motifman/ccc"),
+        ):
+            result = publish(run_dir, secret=True, build_viewer=False)
+
+        assert result["episodic_preview_url"] is None
+        assert result["timeline_preview_url"] is None
+
     def test_build_viewer_True_で_trace_jsonl_から_viewer_を_自動生成(
         self, tmp_path: Path
     ) -> None:
