@@ -367,12 +367,20 @@ class TestResolveSectionOrderFromEnv:
         """有効値 ``legacy`` がそのまま返る。"""
         assert resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: "legacy"}) == SECTION_ORDER_LEGACY
 
-    def test_未知の値は_default_にフォールバックして_警告ログ(self, caplog: pytest.LogCaptureFixture):
-        """typo 等の未知文字列なら default に縮退し、警告を出す。"""
-        with caplog.at_level(logging.WARNING, logger="ai_rpg_world.application.llm.services.context_format_strategy"):
-            v = resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: "stable_to_volatil"})
-        assert v == SECTION_ORDER_STABLE_TO_VOLATILE
-        assert any("Unknown PROMPT_SECTION_ORDER" in rec.message for rec in caplog.records)
+    def test_未知の値は_ValueError(self):
+        """typo (``stable_to_volatil`` 等) で silent fallback せず即落とす (PR #434)。
+
+        PR #433 経緯: ``rolling`` のような短縮形が silent fallback で sliding_window
+        になり、実験前提を壊した事例があった。同じ silent failure を未然に防ぐ。
+        """
+        with pytest.raises(ValueError) as exc_info:
+            resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: "stable_to_volatil"})
+        msg = str(exc_info.value)
+        assert "PROMPT_SECTION_ORDER" in msg
+        assert "stable_to_volatil" in msg  # bad value
+        # 正しい値リストがメッセージに含まれる
+        assert "stable_to_volatile" in msg
+        assert "legacy" in msg
 
 
 class TestBuildSectionFormatStrategyFromEnv:

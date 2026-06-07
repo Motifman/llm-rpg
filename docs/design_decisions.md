@@ -160,6 +160,30 @@
 
 ---
 
+## 10. 実験 env の不正値は silent fallback せず fail-fast
+
+**何を**: `PROMPT_SECTION_ORDER` / `SHORT_TERM_MEMORY_KIND` / `SHORT_TERM_MEMORY_SCHEDULER_MODE` / `SEMANTIC_PASSIVE_TOP_K` / 各種 bool 系 env 等の **解決層**で、未知の値が来たら warning + default に縮退 (silent fallback) ではなく **`ValueError` を投げて即停止**する。
+
+**なぜ**:
+- 短縮形や typo (例: `SHORT_TERM_MEMORY_KIND=rolling` ← 正しくは `rolling_summary`) が silent fallback されると、**実験が間違った設定で走る**
+- 長 tick の実験では「数時間走らせて trace を見るまで気づけない」状態になる (PR #433 で実際に発生: Parasail A/B 実験 Run B が rolling のつもりで sliding_window だった)
+- 不正値は **shell の export ミス / 別の env を混同 / Makefile 引数の typo** など。実験者が意図して入れる事はほぼ無い → 黙って受理する価値より、即時 fail させて打ち直す方が安全
+
+**どう実装するか**:
+- enum 系 (`section_order`, `memory_kind`, `scheduler_mode`): 未知文字列で `ValueError(env_name + bad_value + valid_list)`
+- 数値系 (`semantic_passive_top_k`): 非整数 / 負数で `ValueError`
+- bool 系 (`_parse_bool_env`): TRUTHY と FALSY 両方の明示集合を持ち、どちらにも該当しない値で `ValueError`
+- **未設定 / 空文字** は意図的な「default 採用」と解釈し、引き続き default を返す (この決定は維持)
+
+**どうしないと壊れるか**:
+- 同じ実験を何度もやり直すコストが膨らむ + 結果の信用も落ちる
+- typo の発見が trace を grep するまで遅れる → 設計判断のフィードバックループが鈍る
+
+**どこでこの判断が出てきたか**:
+- PR #433 で「Parasail A/B 実験 Run B は sliding_window だった」事実が `run_start` payload から判明 → PR #434 で対策
+
+---
+
 ## 9. 速度より「LLM の判断ミス」を優先して直す
 
 **何を**: 並列化 / 非同期化 / cache 最適化のような **wall time 改善** より、LLM が誤判断する原因を 1 つずつ潰す方を優先する。
@@ -191,3 +215,4 @@
 | 7. heartbeat → idle timer | 2026-06-07 | #346 / #407 / #412 |
 | 8. 状態情報は state section へ | 2026-06-07 | (新規) PR β |
 | 9. LLM 判断ミス > wall time | 2026-06-07 | 実験 #29 feedback 群 |
+| 10. 実験 env は fail-fast | 2026-06-07 | PR #433 / #434 |

@@ -26,6 +26,7 @@ _logger = logging.getLogger(__name__)
 
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
+_FALSY = frozenset({"0", "false", "no", "off"})
 
 
 def _parse_bool_env(
@@ -36,14 +37,32 @@ def _parse_bool_env(
 ) -> bool:
     """env var を bool として解釈する。値が未設定なら ``default``。
 
-    truthy: ``"1" / "true" / "yes" / "on"`` (case-insensitive)
-    それ以外 (``"0" / "false" / "" / 任意の文字列``) は False。
+    - truthy: ``"1" / "true" / "yes" / "on"`` (case-insensitive) → True
+    - falsy:  ``"0" / "false" / "no" / "off"`` (case-insensitive) → False
+    - 上記以外の文字列 → ``ValueError`` (silent fallback 防止: 過去に
+      ``MEMORY_KIND=rolling`` のような typo が黙って default に縮退して
+      実験前提を壊した事例があった / PR #433 で発覚)
+
+    Args:
+        var_name: 環境変数名 (エラーメッセージに含める)
+        env: 上書き用 mapping (テストで使う)。None なら ``os.environ``
+        default: 未設定時の戻り値
+
+    Raises:
+        ValueError: 値が truthy / falsy のいずれにも該当しないとき
     """
     source = env if env is not None else os.environ
     raw = (source.get(var_name) or "").strip().lower()
     if not raw:
         return default
-    return raw in _TRUTHY
+    if raw in _TRUTHY:
+        return True
+    if raw in _FALSY:
+        return False
+    raise ValueError(
+        f"{var_name}={raw!r} is not a recognized boolean. "
+        f"truthy: {sorted(_TRUTHY)}, falsy: {sorted(_FALSY)}"
+    )
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -129,8 +148,11 @@ def resolve_semantic_passive_top_k(
     """``SEMANTIC_PASSIVE_TOP_K`` env var を非負整数に解釈する。
 
     - 未設定 / 空文字 → default (0)
-    - 負数 / 非数値 → warning ログ + default
-    - 値が `>0` なら prompt に §learned section が出る (Phase 1c)
+    - 非整数 / 負数 → ``ValueError`` (silent fallback 防止 / PR #433 経緯)
+    - 値が ``>0`` なら prompt に §learned section が出る (Phase 1c)
+
+    Raises:
+        ValueError: 非整数または負数のとき
     """
     source = env if env is not None else os.environ
     raw = (source.get(ENV_SEMANTIC_PASSIVE_TOP_K) or "").strip()
@@ -139,21 +161,15 @@ def resolve_semantic_passive_top_k(
     try:
         v = int(raw)
     except ValueError:
-        _logger.warning(
-            "Unknown %s=%r (non-integer); falling back to %s",
-            ENV_SEMANTIC_PASSIVE_TOP_K,
-            raw,
-            DEFAULT_SEMANTIC_PASSIVE_TOP_K,
+        raise ValueError(
+            f"{ENV_SEMANTIC_PASSIVE_TOP_K}={raw!r} must be a non-negative integer "
+            f"(got non-integer value)"
         )
-        return DEFAULT_SEMANTIC_PASSIVE_TOP_K
     if v < 0:
-        _logger.warning(
-            "%s=%d is negative; falling back to %d",
-            ENV_SEMANTIC_PASSIVE_TOP_K,
-            v,
-            DEFAULT_SEMANTIC_PASSIVE_TOP_K,
+        raise ValueError(
+            f"{ENV_SEMANTIC_PASSIVE_TOP_K}={v} must be >= 0 "
+            f"(0 = §learned section disabled)"
         )
-        return DEFAULT_SEMANTIC_PASSIVE_TOP_K
     return v
 
 
@@ -217,24 +233,25 @@ def resolve_short_term_memory_kind(
 ) -> str:
     """``SHORT_TERM_MEMORY_KIND`` env を解決する。
 
-    default は ``sliding_window`` (検証中の安定設定)。
-    未知文字列は warning + default に縮退。
+    - default は ``sliding_window`` (検証中の安定設定)
+    - 未知文字列は ``ValueError`` (silent fallback 防止 / PR #433 経緯:
+      短縮形 ``rolling`` を渡したのに silent fallback で sliding_window が
+      使われ、実験 24h 分が無駄になりかけた)
 
     詳細は docs/memory_system/short_term_memory_design.md §6.1。
+
+    Raises:
+        ValueError: 未知の文字列 (短縮形 typo 等) のとき
     """
     source = env if env is not None else os.environ
     raw = (source.get(ENV_SHORT_TERM_MEMORY_KIND) or "").strip().lower()
     if not raw:
         return SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
     if raw not in _VALID_SHORT_TERM_MEMORY_KINDS:
-        _logger.warning(
-            "Unknown %s=%r; falling back to %s. valid: %s",
-            ENV_SHORT_TERM_MEMORY_KIND,
-            raw,
-            SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW,
-            sorted(_VALID_SHORT_TERM_MEMORY_KINDS),
+        raise ValueError(
+            f"{ENV_SHORT_TERM_MEMORY_KIND}={raw!r} is not recognized. "
+            f"valid: {sorted(_VALID_SHORT_TERM_MEMORY_KINDS)}"
         )
-        return SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
     return raw
 
 
@@ -262,27 +279,26 @@ def resolve_short_term_memory_scheduler_mode(
 ) -> str:
     """``SHORT_TERM_MEMORY_SCHEDULER_MODE`` env を解決する。
 
-    default は ``inline`` (Phase 2 互換、tick が L4 生成 LLM の 2-5s ブロック
-    する)。``thread_pool`` を選ぶと非同期化される (tick が止まらない)。
-
-    rolling_summary を選んでも scheduler は orthogonal な knob として独立。
-    未知文字列は warning + default に縮退。
+    - default は ``inline`` (Phase 2 互換、tick が L4 生成 LLM の 2-5s ブロック
+      する)
+    - ``thread_pool`` を選ぶと非同期化される (tick が止まらない)
+    - rolling_summary を選んでも scheduler は orthogonal な knob として独立
+    - 未知文字列は ``ValueError`` (silent fallback 防止 / PR #433 経緯)
 
     詳細: docs/memory_system/short_term_memory_design.md §6 (Phase 2.1)。
+
+    Raises:
+        ValueError: 未知の文字列のとき
     """
     source = env if env is not None else os.environ
     raw = (source.get(ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE) or "").strip().lower()
     if not raw:
         return SCHEDULER_MODE_INLINE
     if raw not in _VALID_SCHEDULER_MODES:
-        _logger.warning(
-            "Unknown %s=%r; falling back to %s. valid: %s",
-            ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE,
-            raw,
-            SCHEDULER_MODE_INLINE,
-            sorted(_VALID_SCHEDULER_MODES),
+        raise ValueError(
+            f"{ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE}={raw!r} is not recognized. "
+            f"valid: {sorted(_VALID_SCHEDULER_MODES)}"
         )
-        return SCHEDULER_MODE_INLINE
     return raw
 
 
