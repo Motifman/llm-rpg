@@ -475,7 +475,17 @@ class _EscapeGameLlmTurnTrigger:
             status = status_repo.find_by_id(PlayerId(player_id_value))
             if status is None:
                 return True
-            return bool(status.can_act())
+            if not status.can_act():
+                return False
+            # #404 fix: 移動中 (is_traveling=True) の player は LLM ターンを
+            # 回さない。意味論として「移動中は次の意思決定をしない」が自然で、
+            # かつ heartbeat / observation で起こされても turn 実行を空回り
+            # させない。到着時に SpotGraphTravelStageService.on_arrival
+            # 経由で schedule_turn が打たれて再開する。
+            nav = status.spot_navigation_state
+            if nav is not None and nav.is_traveling:
+                return False
+            return True
         except Exception:
             logger.warning(
                 "player_status_repo.find_by_id failed for player_id=%s; "
@@ -1939,10 +1949,28 @@ class GameRuntimeManager:
         def _heartbeat_llm_player_ids() -> Iterable[PlayerId]:
             return tuple(PlayerId(int(sp.player_id)) for sp in runtime.scenario.player_spawns)
 
+        def _is_traveling(pid: PlayerId) -> bool:
+            """#404 fix: 移動中の player に heartbeat を打たない判定。
+
+            heartbeat 観測は ``schedules_turn=True`` なので、移動中に届くと
+            「移動中なのに何かしようとして失敗」する空回りターンを誘発する。
+            travel_stage が arrival 時に schedule_turn を打つので、移動中は
+            完全に silent にしてよい。
+            """
+            try:
+                status = runtime._player_status_repo.find_by_id(pid)
+            except Exception:
+                return False
+            if status is None:
+                return False
+            nav = status.spot_navigation_state
+            return nav is not None and nav.is_traveling
+
         heartbeat_emitter = HeartbeatObservationEmitter(
             appender,
             turn_scheduler,
             _heartbeat_llm_player_ids,
+            is_traveling_provider=_is_traveling,
         )
         # ActionFailed 観測の wire: 失敗 DTO を当該プレイヤーへの観測に変換する。
         # ``intent_id_generator`` は wiring と emitter で共有しないが、wiring 側
@@ -1962,6 +1990,12 @@ class GameRuntimeManager:
         # 他者発話を聞いた場合、ObservationTurnScheduler 経由でターンを積む
         # 必要があるため、wiring 完成後の scheduler を runtime に注入する。
         runtime.set_observation_turn_scheduler(turn_scheduler)
+        # #404 fix: travel 到着時に LLM ターンを再開させるためのコールバックを
+        # travel_stage に注入する。is_traveling フィルタで sleep していた player
+        # は、ここで schedule_turn → 次の post-tick hook で run_turn される。
+        travel_stage = getattr(runtime, "_travel_stage", None)
+        if travel_stage is not None and hasattr(travel_stage, "set_on_arrival"):
+            travel_stage.set_on_arrival(llm_wiring.llm_turn_trigger.schedule_turn)
 
         sid = uuid.uuid4().hex[:12]
         title = runtime.metadata.title
