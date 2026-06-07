@@ -8,8 +8,12 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def isolate_litellm_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
-    """開発者の .env / OPENAI_API_BASE がテスト混入しないようにする"""
+    """開発者の .env / OPENAI_API_BASE / OPENROUTER_* がテスト混入しないようにする"""
     monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    # OpenRouter routing 系: 開発者のシェルで設定されていてもテスト挙動を汚さない
+    monkeypatch.delenv("OPENROUTER_PROVIDER", raising=False)
+    monkeypatch.delenv("OPENROUTER_QUANTIZATION", raising=False)
+    monkeypatch.delenv("OPENROUTER_REQUIRE_PARAMS", raising=False)
     monkeypatch.setattr(
         "ai_rpg_world.infrastructure.llm.litellm_client._load_dotenv_if_available",
         lambda: None,
@@ -430,3 +434,135 @@ class TestExtractTokenUsage:
         response = MagicMock()
         response.usage = usage
         assert LiteLLMClient._extract_token_usage(response) == (100, 10, 0)
+
+
+class TestLiteLLMClientOpenRouterProviderRouting:
+    """OpenRouter provider routing env (OPENROUTER_PROVIDER 等) の注入挙動。
+
+    Gemma 4 31B のような複数 quantization (turbo=fp4 / fp8) を出す provider で、
+    意図しない variant に routing されて tools / response_format が壊れるのを
+    防ぐ。env 未設定なら何も注入しない後方互換を厳守する。
+    """
+
+    def test_env_未設定なら_extra_body_は付かない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """既存挙動の後方互換: OPENROUTER_* が無ければ litellm に extra_body を渡さない。"""
+        client = LiteLLMClient(model="openai/gpt-4o-mini", api_key="sk-x")
+        assert client.openrouter_routing is None
+        kwargs = client.completion_base_kwargs()
+        assert "extra_body" not in kwargs
+
+    def test_provider_だけ_設定で_order_と_allow_fallbacks_が入る(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OPENROUTER_PROVIDER=DeepInfra → order=[DeepInfra], allow_fallbacks=False。"""
+        monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
+        client = LiteLLMClient(model="openrouter/google/gemma-4-31b-it", api_key="sk-x")
+        routing = client.openrouter_routing
+        assert routing == {
+            "provider": {"order": ["DeepInfra"], "allow_fallbacks": False}
+        }
+
+    def test_quantization_と_require_params_を_組み合わせると_全部入る(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """provider + quantization + require_params を同時に env で指定。"""
+        monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
+        monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
+        monkeypatch.setenv("OPENROUTER_REQUIRE_PARAMS", "true")
+        client = LiteLLMClient(model="openrouter/google/gemma-4-31b-it", api_key="sk-x")
+        assert client.openrouter_routing == {
+            "provider": {
+                "order": ["DeepInfra"],
+                "allow_fallbacks": False,
+                "quantizations": ["fp8"],
+                "require_parameters": True,
+            }
+        }
+
+    def test_quantization_だけ_設定だと_provider_は_含まれない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """provider 指定無しなら order / allow_fallbacks は付けない (=他 provider への
+        fallback を残す)。quantization フィルタだけ効かせる用途。"""
+        monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
+        client = LiteLLMClient(model="openrouter/google/gemma-4-31b-it", api_key="sk-x")
+        assert client.openrouter_routing == {"provider": {"quantizations": ["fp8"]}}
+
+    def test_require_params_の_truthy_値を_受け付ける(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OPENROUTER_REQUIRE_PARAMS は '1' / 'true' / 'yes' / 'on' を truthy として扱う。"""
+        for truthy in ("1", "true", "TRUE", "yes", "on"):
+            monkeypatch.setenv("OPENROUTER_REQUIRE_PARAMS", truthy)
+            client = LiteLLMClient(model="m", api_key="sk-x")
+            assert client.openrouter_routing == {
+                "provider": {"require_parameters": True}
+            }, f"truthy='{truthy}' should be parsed as True"
+
+    def test_require_params_の_falsy_値は_無視される(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """'false' / '0' / 空文字 / 'no' などは無視される (= env 未設定と同じ)。"""
+        for falsy in ("false", "0", "", "no", "off"):
+            monkeypatch.setenv("OPENROUTER_REQUIRE_PARAMS", falsy)
+            client = LiteLLMClient(model="m", api_key="sk-x")
+            # 他に何も設定していないので routing 全体が None になる
+            assert client.openrouter_routing is None, f"falsy='{falsy}'"
+
+    def test_completion_base_kwargs_に_extra_body_が_注入される(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """JSON 系経路は completion_base_kwargs() を踏むので、ここに入れば
+        complete_*_json 全部に効く。"""
+        monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
+        monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
+        client = LiteLLMClient(model="openrouter/google/gemma-4-31b-it", api_key="sk-x")
+        kwargs = client.completion_base_kwargs()
+        assert kwargs.get("extra_body") == {
+            "provider": {
+                "order": ["DeepInfra"],
+                "allow_fallbacks": False,
+                "quantizations": ["fp8"],
+            }
+        }
+
+    def test_invoke_が_litellm_completion_に_extra_body_を_渡す(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """tool_choice='required' 経路でも extra_body が litellm に流れる。"""
+        monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
+        monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
+        client = LiteLLMClient(
+            model="openrouter/google/gemma-4-31b-it",
+            api_key="sk-x",
+        )
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("noop", {})
+            client.invoke(messages=[{"role": "user", "content": "hi"}], tools=[{"x": 1}])
+            assert mock_completion.called
+            _, call_kw = mock_completion.call_args
+            assert call_kw["extra_body"] == {
+                "provider": {
+                    "order": ["DeepInfra"],
+                    "allow_fallbacks": False,
+                    "quantizations": ["fp8"],
+                }
+            }
+
+    def test_openrouter_routing_property_は_コピーを返す(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """外部から property 経由で取った dict を mutate しても内部状態は壊れない。"""
+        monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
+        client = LiteLLMClient(model="m", api_key="sk-x")
+        snapshot = client.openrouter_routing
+        assert snapshot is not None
+        snapshot["provider"]["order"] = ["Hacked"]
+        # 再取得しても汚染されていない
+        assert client.openrouter_routing == {
+            "provider": {"order": ["DeepInfra"], "allow_fallbacks": False}
+        }
