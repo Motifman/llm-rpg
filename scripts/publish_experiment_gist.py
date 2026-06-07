@@ -310,6 +310,22 @@ def publish(
         if gist_id and user and legacy_html
         else None
     )
+    # 実験 #29 後続: episodic.html / timeline.html も htmlpreview wrap 付き
+    # で出すようにする。旧実装ではこれらが gist raw URL のままだと
+    # text/plain 配信になり、ブラウザでソースコードとして表示されてしまった
+    # (ユーザ feedback: 「タイムライン表示できない」)。
+    episodic_files = [n for n in html_files if "episodic" in n]
+    timeline_files = [n for n in html_files if "timeline" in n]
+    episodic_preview_url = (
+        _html_preview_url(gist_id, user, episodic_files[0])
+        if gist_id and user and episodic_files
+        else None
+    )
+    timeline_preview_url = (
+        _html_preview_url(gist_id, user, timeline_files[0])
+        if gist_id and user and timeline_files
+        else None
+    )
     return {
         "gist_url": gist_url,
         "gist_id": gist_id,
@@ -319,6 +335,10 @@ def publish(
         "viewer_preview_url": viewer_preview_url,
         # 旧 Mermaid trace.html の URL。両方ある場合に役立つ
         "legacy_preview_url": legacy_preview_url,
+        # #29 後続: episodic.html / timeline.html の htmlpreview wrap URL。
+        # gist 内に該当 HTML が無ければ None。
+        "episodic_preview_url": episodic_preview_url,
+        "timeline_preview_url": timeline_preview_url,
     }
 
 
@@ -369,6 +389,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"[legacy-html] {result['legacy_preview_url']}")
     elif result.get("html_preview_url"):
         print(f"[html] {result['html_preview_url']}")
+    # 実験 #29 後続: episodic / timeline も htmlpreview wrap URL があれば出す。
+    # 旧実装ではこれが表示されず、ユーザが raw URL を踏んでソースコード扱い
+    # で表示されるのに気づきにくかった。
+    if result.get("episodic_preview_url"):
+        print(f"[episodic] {result['episodic_preview_url']}")
+    if result.get("timeline_preview_url"):
+        print(f"[timeline] {result['timeline_preview_url']}")
     return 0
 
 
