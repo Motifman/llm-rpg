@@ -56,9 +56,13 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
     LLM を呼ぶ)。LLM 呼び出しは 2-5s かかるため、async scheduler は Phase 2.1
     の後続改善 (本 module では未実装)。
 
-    `summary_service=None` を渡すと **LLM 経路は完全 disable** され、L1 が
-    閾値を超えても L4 は生成されない (= sliding window 等価)。テスト / オフ
-    ライン経路 / fallback only モードで使う。
+    `summary_service=None` を渡すと **LLM 経路は disable** され、L1 が
+    閾値 (soft cap 15) を超えても LLM での要約は走らない。ただし L1 が
+    無限に増えないよう、**template fallback で L4 を生成する** (raw 連結)。
+    完全に sliding window 等価ではない: L1 は固定容量で循環するが、L4 は
+    fallback 内容で埋まる。
+
+    テスト / オフライン経路 / LLM 未配線運用で使う。
     """
 
     def __init__(
@@ -155,8 +159,13 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         - hard_cap 到達 → 強制的に template fallback (LLM なしまたは LLM 連続失敗時の安全弁)
         """
         raw = self._raw[pid]
-        if len(raw) < self._soft_cap:
+        original_size = len(raw)
+        if original_size < self._soft_cap:
             return
+
+        # hard_cap 判定は popleft 前の元サイズで行う (review HIGH #2 修正)。
+        # popleft 後だと「元サイズが hard_cap 以上か」を正しく判定できない。
+        over_hard_cap = original_size >= self._hard_cap
 
         # 古い側から soft_cap 件を取り出す
         consumed: list[ObservationEntry] = []
@@ -167,10 +176,9 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         if not consumed:
             return
 
-        # service 未注入 or LLM 失敗時は template fallback
+        # service 未注入 or hard_cap 到達時 or LLM 失敗時は template fallback
         parsed: _ParsedSummary
         is_fallback = False
-        over_hard_cap = (len(raw) + len(consumed)) >= self._hard_cap
 
         if self._service is None or over_hard_cap:
             parsed = build_template_fallback_summary(consumed)
@@ -179,6 +187,15 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
                 _logger.warning(
                     "RollingSummaryShortTermMemory(player_id=%s): L1 が hard cap "
                     "%d に到達、template fallback で強制圧縮します",
+                    pid,
+                    self._hard_cap,
+                )
+            elif over_hard_cap and self._service is None:
+                # LLM 未配線 + hard_cap 到達: 本番設定で LLM 忘れの可能性が高い。
+                # silent failure 防止のため debug ではなく info で出す。
+                _logger.info(
+                    "RollingSummaryShortTermMemory(player_id=%s): L1 が hard cap "
+                    "%d に到達したが summary_service=None。template fallback のみで動作中",
                     pid,
                     self._hard_cap,
                 )

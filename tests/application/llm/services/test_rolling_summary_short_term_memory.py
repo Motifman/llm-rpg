@@ -179,17 +179,18 @@ class TestRollingSummaryTrigger:
 
 
 class TestRollingSummaryServiceNone:
-    """summary_service=None は L4 を生成しない (= sliding window 等価)。"""
+    """summary_service=None でも soft cap 到達で template fallback L4 を生成する。
 
-    def test_15件超えても_L4_生成されない_get_mid_summary_text_も_空(self) -> None:
+    sliding window 等価ではなく、「LLM なしモード」。L1 を無限に増やさない
+    ため、soft cap 到達時に必ず L4 を生やす方針。
+    """
+
+    def test_15件超えると_template_fallback_で_L4_を_生やす(self) -> None:
         mem = RollingSummaryShortTermMemory(summary_service=None)
         for i in range(DEFAULT_L1_SOFT_CAP + 5):
             mem.append(_PID, _obs(f"p{i}", seq=i))
-        # service=None だが hard_cap (25) には届かないので template fallback も走らない…
-        # と思いきや L1 が 15 を超えたら strategy として「fallback で畳む」のが正なので、
-        # 実際は template fallback が呼ばれる (LLM なしで L4 を生やす)
         gens = mem._mid_generations(_PID.value)
-        # 実装方針: service=None でも 15 件超は template fallback で L4 を作る
+        # service=None でも 15 件超は template fallback で L4 を作る
         assert len(gens) >= 1
         assert all(g.is_fallback for g in gens)
 
@@ -222,6 +223,50 @@ class TestRollingSummaryLLMFailure:
             mem.append(_PID, _obs(f"p{i}", seq=i))
         gens = mem._mid_generations(_PID.value)
         assert gens[0].is_fallback is True
+
+    def test_hard_cap_到達時は_LLM_を_skip_して_強制_fallback(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """L1 が hard_cap を超えた状態で trigger された場合、LLM を呼ばず
+        即 template fallback に降りる (review HIGH #2 修正の確認)。
+
+        通常の sequential append では L1 は soft_cap+1 で必ず trigger するため
+        hard_cap には到達しない。これは「外部状態崩壊」(直接 _raw を改竄するなど)
+        への safety belt。テストでは ``_raw`` に直接データを積むことで再現する。
+        """
+        attempt_count = {"n": 0}
+
+        class _AlwaysFailService(ShortTermMemorySummaryService):
+            def __init__(self):
+                pass
+
+            def generate(self, **kwargs):  # type: ignore[override]
+                attempt_count["n"] += 1
+                raise LlmApiCallException("simulated", error_code="LLM_API_CALL_FAILED")
+
+        mem = RollingSummaryShortTermMemory(
+            summary_service=_AlwaysFailService(),
+            l1_soft_cap=5,
+            l1_hard_cap=10,
+        )
+        mem._ensure_player(_PID.value)
+        # 直接 _raw に hard_cap 件以上積む (soft_cap trigger を bypass した状況を模擬)
+        for i in range(12):
+            mem._raw[_PID.value].append(_obs(f"p{i}", seq=i))
+        # この状態で append (= 1 件追加 + trigger) を呼ぶ
+        with caplog.at_level(
+            logging.WARNING,
+            logger="ai_rpg_world.application.llm.services.rolling_summary_short_term_memory",
+        ):
+            mem.append(_PID, _obs("trigger", seq=999))
+        # hard_cap 到達経路では LLM を呼ばないので attempt_count = 0
+        assert attempt_count["n"] == 0
+        # 必ず L4 は生まれている (template fallback)
+        gens = mem._mid_generations(_PID.value)
+        assert len(gens) == 1
+        assert gens[0].is_fallback is True
+        # warning ログ
+        assert any("hard cap" in rec.message for rec in caplog.records)
 
 
 class TestRollingSummaryMidSummaryText:

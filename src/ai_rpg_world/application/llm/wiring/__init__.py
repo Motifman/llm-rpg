@@ -895,23 +895,28 @@ def _build_short_term_memory(
     explicit: Optional[ISlidingWindowMemory],
     llm_client: ILLMClient,
     persona_resolver: Callable[[int], tuple[str, str]],
+    kind: Optional[str] = None,
 ) -> ISlidingWindowMemory:
     """Phase 2: env で short term memory の実装を選択する。
 
     - 明示注入 (``sliding_window_memory=`` を渡された) → そのまま
-    - env ``SHORT_TERM_MEMORY_KIND=rolling_summary`` + LiteLLM client →
+    - ``kind`` (None なら env) が ``rolling_summary`` + LiteLLM client →
       ``RollingSummaryShortTermMemory`` (LLM 経路あり)
     - rolling_summary だが LLM 非対応 → ``RollingSummaryShortTermMemory``
       (LLM なし、template fallback only)
     - default (sliding_window) → ``DefaultSlidingWindowMemory``
 
+    ``kind=None`` のとき env から ``SHORT_TERM_MEMORY_KIND`` を解決する。
+    呼出側で事前解決済みの値を渡せるようにすることで、wiring 経路全体での
+    env 読みを一箇所に集約しやすくする (テストでも env 差し込みが楽になる)。
+
     persona_resolver は LLM gist (Phase 1b) と共通の resolver を渡す前提。
     """
     if explicit is not None:
         return explicit
-    kind = resolve_short_term_memory_kind()
-    log_short_term_memory_kind_state(kind)
-    if kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
+    resolved_kind = kind if kind is not None else resolve_short_term_memory_kind()
+    log_short_term_memory_kind_state(resolved_kind)
+    if resolved_kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
         return DefaultSlidingWindowMemory()
     # rolling_summary kind
     from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (

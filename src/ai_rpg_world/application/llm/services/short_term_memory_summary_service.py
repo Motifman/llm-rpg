@@ -33,6 +33,10 @@ COMPRESSED_ACTIVITY_MAX_CHARS = 300
 EMOTIONAL_SUMMARY_MAX_CHARS = 120
 UNRESOLVED_MAX_ITEMS = 3
 UNRESOLVED_ITEM_MAX_CHARS = 120
+# template fallback で raw 観測を連結するときの最大行数。
+# ``RollingSummaryShortTermMemory.DEFAULT_L1_SOFT_CAP`` (15) と同期させる。
+# 循環 import を避けるため、ここに独立した定数として持つ。
+FALLBACK_RAW_LINES_LIMIT = 15
 
 
 _SYSTEM_PROMPT = """\
@@ -115,7 +119,7 @@ class ShortTermMemorySummaryService:
         persona_block: str,
         observations: List[ObservationEntry],
         previous_l4: L4MidSummary | None,
-    ) -> list[dict]:
+    ) -> list[dict[str, str]]:
         user_lines: list[str] = []
         user_lines.append(f"あなた = {player_name}")
         if persona_block.strip():
@@ -200,7 +204,7 @@ def build_template_fallback_summary(
         prose = (getattr(obs.output, "prose", None) or "").strip()
         if prose:
             lines.append(f"- {prose}")
-        if len(lines) >= 15:
+        if len(lines) >= FALLBACK_RAW_LINES_LIMIT:
             break
     body = "\n".join(lines) if lines else "(no prose available)"
     if len(body) > COMPRESSED_ACTIVITY_MAX_CHARS:
@@ -213,11 +217,14 @@ def build_template_fallback_summary(
 
 
 __all__ = [
+    "FALLBACK_RAW_LINES_LIMIT",
     "ShortTermMemorySummaryService",
     "build_template_fallback_summary",
-    "_ParsedSummary",
     "COMPRESSED_ACTIVITY_MAX_CHARS",
     "EMOTIONAL_SUMMARY_MAX_CHARS",
     "UNRESOLVED_MAX_ITEMS",
     "UNRESOLVED_ITEM_MAX_CHARS",
 ]
+# Note: ``_ParsedSummary`` は module-private な中間表現で、
+# ``rolling_summary_short_term_memory`` モジュールが「友達」として直接 import
+# する。公開 API ではないため `__all__` には含めない。
