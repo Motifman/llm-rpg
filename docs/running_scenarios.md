@@ -29,7 +29,7 @@ make experiment SCENARIO=data/scenarios/relay_puzzle_demo.json \
 | 変数 | 例 | 説明 |
 |------|----|------|
 | `SCENARIO` | `data/scenarios/foo.json` | 必須。シナリオ JSON のパス |
-| `MAX_TICKS` | `50` | 外側ループ回数 (既定 30) |
+| `MAX_WORLD_TICKS` | `50` | `world_tick` がこの値に達したら停止 (既定 30、旧名 `MAX_TICKS`) |
 | `OUT` | `var/runs/foo-001` | 出力ディレクトリ (省略時 timestamp 付き自動) |
 
 スクリプト直接実行も可能:
@@ -37,7 +37,7 @@ make experiment SCENARIO=data/scenarios/relay_puzzle_demo.json \
 ```bash
 python scripts/run_scenario_experiment.py \
     --scenario data/scenarios/relay_puzzle_demo.json \
-    --max-ticks 30 \
+    --max-world-ticks 30 \
     --out var/runs/relay-foo
 ```
 
