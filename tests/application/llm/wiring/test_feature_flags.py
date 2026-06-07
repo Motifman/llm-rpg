@@ -18,12 +18,17 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
     ENV_SEMANTIC_PASSIVE_TOP_K,
     ENV_SEMANTIC_SEARCH_ENABLED,
+    ENV_SHORT_TERM_MEMORY_KIND,
+    SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
+    SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW,
     log_episodic_explore_related_state,
     log_semantic_passive_top_k_state,
     log_semantic_search_state,
+    log_short_term_memory_kind_state,
     resolve_episodic_explore_related_enabled,
     resolve_semantic_passive_top_k,
     resolve_semantic_search_enabled,
+    resolve_short_term_memory_kind,
 )
 
 
@@ -176,3 +181,60 @@ class TestLogSemanticSearchState:
         messages = [rec.message for rec in caplog.records]
         assert any("ENABLED" in m for m in messages)
         assert any("DISABLED" in m for m in messages)
+
+
+class TestResolveShortTermMemoryKind:
+    """``SHORT_TERM_MEMORY_KIND`` env 解決 (Phase 2)。"""
+
+    def test_default_は_sliding_window(self) -> None:
+        assert resolve_short_term_memory_kind(env={}) == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
+
+    def test_env_空文字でも_default(self) -> None:
+        assert resolve_short_term_memory_kind(
+            env={ENV_SHORT_TERM_MEMORY_KIND: ""}
+        ) == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
+
+    def test_有効な_sliding_window(self) -> None:
+        assert resolve_short_term_memory_kind(
+            env={ENV_SHORT_TERM_MEMORY_KIND: "sliding_window"}
+        ) == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
+
+    def test_有効な_rolling_summary(self) -> None:
+        assert resolve_short_term_memory_kind(
+            env={ENV_SHORT_TERM_MEMORY_KIND: "rolling_summary"}
+        ) == SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
+
+    def test_case_insensitive(self) -> None:
+        assert resolve_short_term_memory_kind(
+            env={ENV_SHORT_TERM_MEMORY_KIND: "ROLLING_SUMMARY"}
+        ) == SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
+
+    def test_未知の値は_warning_log_を出して_default(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(
+            logging.WARNING,
+            logger="ai_rpg_world.application.llm.wiring.feature_flags",
+        ):
+            v = resolve_short_term_memory_kind(
+                env={ENV_SHORT_TERM_MEMORY_KIND: "huge_rolling_summary"}
+            )
+        assert v == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
+        assert any("Unknown" in rec.message for rec in caplog.records)
+
+
+class TestLogShortTermMemoryKindState:
+    """解決結果を INFO ログ 1 件で残す (Phase 2)。"""
+
+    def test_log_に_kind_の値が_出る(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(
+            logging.INFO,
+            logger="ai_rpg_world.application.llm.wiring.feature_flags",
+        ):
+            log_short_term_memory_kind_state("sliding_window")
+            log_short_term_memory_kind_state("rolling_summary")
+        messages = [rec.message for rec in caplog.records]
+        assert any("sliding_window" in m for m in messages)
+        assert any("rolling_summary" in m for m in messages)

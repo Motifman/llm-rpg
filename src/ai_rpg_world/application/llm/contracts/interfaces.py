@@ -20,7 +20,16 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class ISlidingWindowMemory(ABC):
-    """観測のスライディングウィンドウ記憶。直近 N 件を返す。"""
+    """短期記憶: 直近観測を保持する抽象。
+
+    Phase 2 (#356 後続) で 2 実装が並列に存在する:
+
+    - ``DefaultSlidingWindowMemory``: 固定容量の sliding window (既定)
+    - ``RollingSummaryShortTermMemory``: L1 raw + L4 mid summary 階層化
+
+    本 interface 名は歴史的経緯 (旧名 ``ISlidingWindowMemory``) で残っており、
+    将来 ``IShortTermMemory`` への改名候補がある (別 PR)。
+    """
 
     @abstractmethod
     def append(self, player_id: PlayerId, entry: ObservationEntry) -> None:
@@ -41,6 +50,17 @@ class ISlidingWindowMemory(ABC):
     def get_recent(self, player_id: PlayerId, limit: int) -> List[ObservationEntry]:
         """指定プレイヤーの直近 limit 件の観測を新しい順で返す。"""
         pass
+
+    def get_mid_summary_text(self, player_id: PlayerId) -> str:
+        """Phase 2: 中期記憶 (L4 mid summary) を prompt 用テキストに整形する。
+
+        ``RollingSummaryShortTermMemory`` のみ実体を返す。``DefaultSlidingWindowMemory``
+        は default 実装の空文字を返し、prompt §「【最近の流れ】」section ごと出ない。
+
+        prompt_builder はこのメソッドを直接呼んで context_format_strategy に
+        渡す。実装差し替えは scenario / env で選ぶ。
+        """
+        return ""
 
 
 class IActionResultStore(ABC):
@@ -166,6 +186,7 @@ class IContextFormatStrategy(ABC):
         objective_text: str = "",
         inventory_text: str = "",
         learned_text: str = "",
+        mid_summary_text: str = "",
     ) -> str:
         """user prompt に入れる文脈テキストを返す。
 
@@ -184,6 +205,11 @@ class IContextFormatStrategy(ABC):
         「【関連する学び】」section の本体 (Phase 1c)。`SemanticPassiveRecallService`
         が状況連想で抽出した上位 K 件を箇条書きにする。空なら section を
         出さない。
+
+        ``mid_summary_text`` は短期記憶 (L4 mid summary) を一覧化した
+        「【最近の流れ】」section の本体 (Phase 2)。``RollingSummaryShortTermMemory``
+        が直近 N 件 raw 観測から圧縮した 3 世代分を箇条書きにする。
+        ``DefaultSlidingWindowMemory`` 利用時は空のままで section ごと省略。
         """
         pass
 

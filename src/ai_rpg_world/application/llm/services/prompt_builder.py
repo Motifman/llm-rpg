@@ -587,6 +587,20 @@ class DefaultPromptBuilder(IPromptBuilder):
             self._inventory_text_provider, player_id, "inventory_text_provider"
         )
 
+        # Phase 2: 短期記憶の L4 mid summary (rolling 実装のみが値を返す)。
+        # 失敗しても prompt 構築を止めない。
+        try:
+            raw_mid = self._sliding_window.get_mid_summary_text(player_id)
+            mid_summary_text = raw_mid if isinstance(raw_mid, str) else ""
+        except Exception as e:
+            self._logger.warning(
+                "get_mid_summary_text failed for player_id=%s: %s",
+                player_id.value,
+                e,
+                exc_info=True,
+            )
+            mid_summary_text = ""
+
         context = self._context_format_strategy.format(
             current_state_text=current_state_text,
             recent_events_text=recent_events_text,
@@ -595,6 +609,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             objective_text=objective_text,
             inventory_text=inventory_text,
             learned_text=learned_text,
+            mid_summary_text=mid_summary_text,
         )
 
         # Issue #227 chore β: failure_block (直前ターン失敗時の補正セクション)

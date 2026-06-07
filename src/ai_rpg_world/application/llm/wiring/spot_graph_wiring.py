@@ -197,6 +197,7 @@ def create_spot_graph_wiring(
         _build_prompt_stack,
         _build_runtime_tool_state,
         _build_semantic_persona_resolver,
+        _build_short_term_memory,
         _build_tool_stack,
         _optional_episodic_chunk_subjective_fields_service,
         _optional_episodic_reinterpretation_completion,
@@ -316,9 +317,9 @@ def create_spot_graph_wiring(
     )
     current_state_formatter = SpotGraphCurrentStateFormatter()
 
-    sliding_window = (
-        sliding_window_memory if sliding_window_memory is not None else DefaultSlidingWindowMemory()
-    )
+    # Phase 2: short term memory の実装選択。rolling_summary kind を選んだとき
+    # LLM port + persona_resolver が必要なので、構築は client / persona_resolver
+    # が揃った下のブロックで行う (ここでは action_result_store だけ初期化)。
     action_result_store = (
         action_result_store if action_result_store is not None else DefaultActionResultStore()
     )
@@ -368,6 +369,13 @@ def create_spot_graph_wiring(
     _semantic_persona_resolver = _build_semantic_persona_resolver(
         player_profile_repository=player_profile_repository,
         persona_block_provider=persona_block_provider,
+    )
+    # Phase 2: short term memory の実装選択。persona_resolver / client が揃った
+    # ここで構築する。
+    sliding_window = _build_short_term_memory(
+        explicit=sliding_window_memory,
+        llm_client=client,
+        persona_resolver=_semantic_persona_resolver,
     )
     episodic_stack = build_episodic_memory_stack(
         episodic_episode_store,
