@@ -682,6 +682,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         f"(override via {ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE}=inline|thread_pool)",
         flush=True,
     )
+    # OpenRouter provider routing: 設定されているときだけ表示 (vLLM / OpenAI 直結時の
+    # 余計なノイズを避ける)。
+    _or_provider = (os.environ.get("OPENROUTER_PROVIDER") or "").strip()
+    _or_quant = (os.environ.get("OPENROUTER_QUANTIZATION") or "").strip()
+    _or_req = (os.environ.get("OPENROUTER_REQUIRE_PARAMS") or "").strip()
+    if _or_provider or _or_quant or _or_req:
+        print(
+            f"[run] openrouter routing: provider={_or_provider or '-'} "
+            f"quantization={_or_quant or '-'} require_params={_or_req or '-'}",
+            flush=True,
+        )
     print(f"[out] {out_dir}", flush=True)
 
     with JsonlTraceRecorder(trace_path) as rec:
@@ -691,6 +702,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             max_world_ticks=args.max_world_ticks,
             model=os.environ.get("LLM_MODEL"),
             api_base=os.environ.get("OPENAI_API_BASE"),
+            # OpenRouter provider routing: 実験 trace から後から「どの provider /
+            # quantization / require_params で回したか」を厳密に追えるように、
+            # env をそのまま記録する (未設定なら None)。
+            openrouter_provider=os.environ.get("OPENROUTER_PROVIDER") or None,
+            openrouter_quantization=os.environ.get("OPENROUTER_QUANTIZATION") or None,
+            openrouter_require_params=os.environ.get("OPENROUTER_REQUIRE_PARAMS") or None,
             prompt_section_order=resolved_section_order,
             episodic_explore_related_enabled=resolved_explore_related,
             semantic_llm_gist_enabled=resolved_semantic_llm_gist,

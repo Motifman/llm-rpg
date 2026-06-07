@@ -12,6 +12,7 @@ OpenAI 互換エンドポイント（SSH 越しの vLLM 等）: ``OPENAI_API_BAS
 
 import json
 import logging
+import copy
 import os
 import re
 import time
@@ -46,6 +47,50 @@ DEFAULT_LLM_MODEL = _DEFAULT_MODEL
 _ENV_VAR_API_KEY = "OPENAI_API_KEY"
 _ENV_VAR_API_BASE = "OPENAI_API_BASE"
 _VLLM_DEFAULT_PLACEHOLDER_KEY = "EMPTY"
+
+# OpenRouter provider routing 用の env 群。
+# `OPENROUTER_PROVIDER=DeepInfra OPENROUTER_QUANTIZATION=fp8` のように指定すると
+# 全 litellm.completion 呼び出しに `extra_body.provider.{order, quantizations,
+# require_parameters, allow_fallbacks}` を注入する。
+# OpenRouter docs: https://openrouter.ai/docs/provider-routing
+#
+# なぜ必要か: api_base=https://openrouter.ai/api/v1 で叩くと OpenRouter が
+# provider を自由に選ぶ。例えば Gemma 4 31B では DeepInfra が turbo (fp4) /
+# fp8 の 2 variant を出しており、turbo は tools / response_format / structured_outputs
+# を非対応のため、tool_choice="required" や JSON mode 経路が即座に壊れる。
+# 実験 mid-run の事故を防ぐため、provider を明示的に固定する。
+_ENV_VAR_OPENROUTER_PROVIDER = "OPENROUTER_PROVIDER"
+_ENV_VAR_OPENROUTER_QUANTIZATION = "OPENROUTER_QUANTIZATION"
+_ENV_VAR_OPENROUTER_REQUIRE_PARAMS = "OPENROUTER_REQUIRE_PARAMS"
+_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def _resolve_openrouter_routing_from_env() -> Optional[Dict[str, Any]]:
+    """OpenRouter provider routing 設定を env から resolve し ``extra_body`` 用 dict を返す。
+
+    いずれの env も未設定なら ``None`` を返す (= 何も注入しない / 既存挙動)。
+    1 つでも設定があれば ``{"provider": {...}}`` を返す。
+
+    ``OPENROUTER_PROVIDER`` が設定された場合は ``allow_fallbacks=False`` を必ず付ける
+    (provider 固定の意図を裏切らないため)。
+
+    返り値は **immutable 想定** で扱うこと (constructor で 1 度作って共有)。
+    """
+    provider = (os.environ.get(_ENV_VAR_OPENROUTER_PROVIDER) or "").strip()
+    quantization = (os.environ.get(_ENV_VAR_OPENROUTER_QUANTIZATION) or "").strip()
+    require_params_raw = (os.environ.get(_ENV_VAR_OPENROUTER_REQUIRE_PARAMS) or "").strip().lower()
+    require_params = require_params_raw in _TRUTHY_ENV_VALUES
+    if not provider and not quantization and not require_params:
+        return None
+    block: Dict[str, Any] = {}
+    if provider:
+        block["order"] = [provider]
+        block["allow_fallbacks"] = False
+    if quantization:
+        block["quantizations"] = [quantization]
+    if require_params:
+        block["require_parameters"] = True
+    return {"provider": block}
 
 
 def _extract_first_json_object(text: str) -> str:
@@ -139,6 +184,11 @@ class LiteLLMClient(
             resolved_base = (os.environ.get(_ENV_VAR_API_BASE) or "").strip()
         self._api_base = resolved_base or None
 
+        # OpenRouter provider routing: constructor 時点で env を 1 度だけ resolve
+        # して保持する。invoke() / complete_*_json() の度に env を読み直すと、実験
+        # 中の env 変動で挙動がブレるため。
+        self._openrouter_routing: Optional[Dict[str, Any]] = _resolve_openrouter_routing_from_env()
+
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _lite_api_key(self) -> str:
@@ -157,12 +207,25 @@ class LiteLLMClient(
         )
 
     def completion_base_kwargs(self) -> Dict[str, Any]:
-        """ツール無しの chat completion 用（Episode Encoder 等）。カスタム base 無しでは api_key が必須。"""
+        """ツール無しの chat completion 用（Episode Encoder 等）。カスタム base 無しでは api_key が必須。
+
+        OpenRouter provider routing env が設定されている場合、``extra_body`` を
+        自動付与する (provider / quantization の固定)。
+        """
         self._assert_can_call_litellm()
         base: Dict[str, Any] = {"model": self._model, "api_key": self._lite_api_key()}
         if self._api_base is not None:
             base["api_base"] = self._api_base
+        if self._openrouter_routing is not None:
+            base["extra_body"] = dict(self._openrouter_routing)
         return base
+
+    @property
+    def openrouter_routing(self) -> Optional[Dict[str, Any]]:
+        """現在 inject される OpenRouter routing を返す (実験 trace 等の観測用)。"""
+        if self._openrouter_routing is None:
+            return None
+        return copy.deepcopy(self._openrouter_routing)
 
     def invoke(
         self,
@@ -192,6 +255,8 @@ class LiteLLMClient(
             }
             if self._api_base is not None:
                 completion_kw["api_base"] = self._api_base
+            if self._openrouter_routing is not None:
+                completion_kw["extra_body"] = copy.deepcopy(self._openrouter_routing)
             response = litellm.completion(**completion_kw)
         except Exception as e:
             wall_latency_ms = int((time.monotonic() - start_monotonic) * 1000)
