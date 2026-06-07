@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -349,6 +350,14 @@ class EscapeGameRuntime:
     # 露出させる必要がある (simulation_service の中に隠れたままだと外から
     # 触れない)。
     _travel_stage: Optional[SpotGraphTravelStageService] = field(default=None, repr=False)
+    # #404 P2 (progress 可観測性): driver iteration 内で発火した LLM 呼び出し回数を
+    # 集計する単純カウンタ。``_LlmMetricsTraceSink.record`` が bump し、experiment
+    # progress reporter が iteration 終端で snapshot + reset する。Phase A の
+    # ThreadPoolExecutor で並行 increment され得るため Lock で保護する。
+    _llm_call_count: int = field(default=0, repr=False)
+    _llm_call_count_lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False
+    )
 
     @property
     def id_mapper(self) -> ScenarioIdMapper:
@@ -369,6 +378,45 @@ class EscapeGameRuntime:
 
     def current_tick(self) -> int:
         return self._time_provider.get_current_tick().value
+
+    def bump_llm_call_count(self) -> None:
+        """LLM 呼び出し 1 件分カウンタを進める (#404 P2)。
+
+        ``_LlmMetricsTraceSink.record`` から呼ばれる thread-safe な counter。
+        並列 Phase A の hot path に乗るので、失敗してログを濁さないために
+        Lock 取得失敗時は黙って諦める設計には **しない** (Lock 取得は確実に
+        成功する想定。bump 失敗 = メトリクス欠損 = silent failure)。
+        """
+        with self._llm_call_count_lock:
+            self._llm_call_count += 1
+
+    def pop_llm_call_count(self) -> int:
+        """累積カウンタを返してリセットする。
+
+        experiment progress reporter が 1 driver iteration の終端で呼ぶ想定。
+        increment との race を防ぐため Lock 内で read-and-reset を 1 操作にする。
+        """
+        with self._llm_call_count_lock:
+            n = self._llm_call_count
+            self._llm_call_count = 0
+            return n
+
+    def count_traveling_players(self) -> int:
+        """現在 ``is_traveling=True`` の player 数を返す (#404 P2)。
+
+        progress.jsonl の ``travel_active`` フィールド向け。失敗時は 0
+        (= 計測欠損) を返す: 進捗集計が status repo の障害で全体停止しない
+        ようにする fail-safe。
+        """
+        try:
+            count = 0
+            for status in self._player_status_repo.find_all():
+                nav = status.spot_navigation_state
+                if nav is not None and nav.is_traveling:
+                    count += 1
+            return count
+        except Exception:
+            return 0
 
     def advance_until_player_idle(
         self, player_id: PlayerId, max_ticks: int = 500
