@@ -304,6 +304,13 @@ class TestThreadPoolValidation:
                 trace_recorder_provider="not-callable",  # type: ignore[arg-type]
             )
 
+    def test_current_tick_provider_が_非callable_なら_type_error(self) -> None:
+        """current_tick_provider に非callable を渡すと TypeError (Inline と対称)。"""
+        with pytest.raises(TypeError, match="current_tick_provider"):
+            ThreadPoolShortTermMemoryScheduler(
+                current_tick_provider=42,  # type: ignore[arg-type]
+            )
+
 
 class TestInlineSchedulerValidation:
     """Phase 2.2: Inline scheduler の constructor 引数検証。"""

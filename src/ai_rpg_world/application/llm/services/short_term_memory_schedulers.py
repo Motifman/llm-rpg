@@ -276,8 +276,17 @@ def _emit_generation_failed(
 ) -> None:
     """``SHORT_TERM_SUMMARY_GENERATION_FAILED`` trace event を best-effort で emit。
 
-    Inline / ThreadPool 両 scheduler から共有して使う。recorder が無ければ何も
-    しない。emit 自体の失敗は無音で吸収する (trace の失敗で本体を倒さない)。
+    Inline / ThreadPool 両 scheduler から共有して使うため module-level 関数。
+    ``_emit_drop`` は ``ThreadPool`` 固有のコンテキスト (max_queue_size 等) を
+    持つためインスタンスメソッドとして残し、本関数は player_id / exc /
+    latency_ms のような scheduler 非依存パラメータだけで完結する。
+
+    recorder が無ければ何もしない。emit 自体の失敗は無音で吸収する
+    (trace の失敗で本体を倒さない)。
+
+    ``error_message_snippet`` は **Python 文字数で 200 字 cap** (UTF-8 バイト
+    長ではない)。CJK / 絵文字を含む場合は最大 ~600 バイトになり得るが、PII /
+    シークレット漏れ防止という観点では文字数 cap で十分。
     """
     if trace_recorder_provider is None:
         return
