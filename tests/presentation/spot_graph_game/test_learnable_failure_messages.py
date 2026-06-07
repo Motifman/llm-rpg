@@ -122,11 +122,17 @@ class TestInvalidTargetLabelMessage:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """LLM が "操作盤" を渡したときに、message が "有効な object_label: OBJ1 (操作盤)" を含む。"""
+        """LLM が存在しない object 名を渡したとき、有効候補ラベルがメッセージに含まれる。
+
+        PR #441 で display_name fallback が入ったため、relay シナリオで実在する
+        ``"操作盤"`` は label と一致して解決されるようになった。本テストは
+        「明らかに存在しない名前」を投げて INVALID_TARGET_LABEL ハッピーパスを
+        引き続き保証する。
+        """
         stub = StubLlmClient(
             tool_call_to_return={
                 "name": "spot_graph_interact",
-                "arguments": {"object_label": "操作盤", "action_name": "電源を入れる"},
+                "arguments": {"object_label": "存在しない架空のオブジェクト_X", "action_name": "電源を入れる"},
             }
         )
         state = _create_relay_session(monkeypatch, tmp_path, stub)
@@ -136,7 +142,7 @@ class TestInvalidTargetLabelMessage:
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
         # 失敗 label が message に含まれる (元の form)
-        assert "操作盤" in result.message
+        assert "存在しない架空のオブジェクト_X" in result.message
         # F1: 有効ラベル列挙が含まれる
         assert "OBJ1" in result.message
         # F1: remediation が "label を指定" を明示
