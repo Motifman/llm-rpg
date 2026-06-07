@@ -311,6 +311,16 @@ class _LlmMetricsTraceSink:
                 success=metrics.success,
                 error_code=metrics.error_code,
             )
+            # #404 P2: progress.jsonl 用 LLM 呼び出しカウンタを bump。
+            # runtime 側に counter が無いランタイム (presentation 単体テスト等)
+            # は getattr で安全に skip する。
+            bump = getattr(self._runtime, "bump_llm_call_count", None)
+            if callable(bump):
+                try:
+                    bump()
+                except Exception:
+                    # counter 失敗は trace 記録自体を壊さない
+                    pass
         except Exception:
             logger.exception("trace_recorder.record(llm_call) failed")
 
