@@ -762,6 +762,8 @@ class _EscapeGameLlmWiring:
             attack_orchestrator=getattr(runtime, "_attack_orchestrator", None),
             item_transfer_service=runtime._item_transfer_service,
             time_provider=getattr(runtime, "_time_provider", None),
+            # 実験 #29 後続: travel/give/drop/pickup の say_inline 短発話用。
+            speech_service=getattr(runtime, "_speech_service", None),
         )
         self._spot_graph_executor = executor
         raw_handlers = executor.get_handlers()
