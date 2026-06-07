@@ -138,3 +138,92 @@ class TestDtoDefaults:
     def test_GroundItemEntry_の_is_spoiled_default_は_False(self) -> None:
         entry = SpotGraphGroundItemEntry(item_instance_id=1, item_spec_id=1, name="x")
         assert entry.is_spoiled is False
+
+    def test_InventoryEntry_の_item_type_default_は_空文字(self) -> None:
+        """旧呼び出し側 (item_type を渡さない) には何のタグも付かないことを保証。"""
+        entry = SpotGraphInventoryItemEntry(item_spec_id=1, name="x", quantity=1)
+        assert entry.item_type == ""
+
+
+class TestInventoryItemTypeTag:
+    """``item_type`` を渡すと所持品行に「(食料)」「(道具)」等のタグが付与される (#404 後続)。
+
+    LLM が ITEM_NOT_CONSUMABLE で失敗 (=「使えない物を食べようとする」誤判断)
+    するのを防ぐため、所持品リストの段階で type が見えるようにする。
+    """
+
+    def _last_line(self, entry: SpotGraphInventoryItemEntry) -> str:
+        snap = _empty_snapshot(inventory_items=(entry,))
+        builder = SpotGraphUiContextBuilder()
+        allocator = LabelAllocator()
+        collector = RuntimeTargetCollector()
+        lines: list[str] = []
+        builder._build_inventory_section(snap, allocator, collector, lines)
+        return lines[-1]
+
+    def test_consumable_は_食料_タグ(self) -> None:
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=1, name="生の魚", quantity=1, item_type="consumable",
+            )
+        )
+        assert "(食料)" in line
+
+    def test_material_は_素材_タグ(self) -> None:
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=2, name="流木", quantity=3, item_type="material",
+            )
+        )
+        assert "(素材)" in line
+
+    def test_tool_は_道具_タグ(self) -> None:
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=3, name="火打ち石", quantity=1, item_type="tool",
+            )
+        )
+        assert "(道具)" in line
+
+    def test_key_item_は_重要_タグ(self) -> None:
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=4, name="骨のナイフ", quantity=1, item_type="key_item",
+            )
+        )
+        assert "(重要)" in line
+
+    def test_未知_type_はタグなし(self) -> None:
+        """fallback 動作: 未知文字列でもクラッシュせずタグ非表示。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=5, name="謎の物体", quantity=1, item_type="zzz_unknown",
+            )
+        )
+        # 「(食料)」「(素材)」等のいずれも出ない
+        for tag in ("(食料)", "(素材)", "(道具)", "(重要)", "(装備)"):
+            assert tag not in line
+
+    def test_other_type_はタグなし(self) -> None:
+        """item_type='other' は意図的にタグを出さない (分類不可なものをフラットに)。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=6, name="布切れ", quantity=1, item_type="other",
+            )
+        )
+        for tag in ("(食料)", "(素材)", "(道具)", "(重要)"):
+            assert tag not in line
+
+    def test_type_と_腐敗_の両方が表示される(self) -> None:
+        """腐敗食 = (食料)(腐敗) の両方が並ぶ。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=7,
+                name="生の魚",
+                quantity=1,
+                item_type="consumable",
+                is_spoiled=True,
+            )
+        )
+        assert "(食料)" in line
+        assert "(腐敗)" in line

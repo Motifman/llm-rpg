@@ -101,6 +101,13 @@ class SpotGraphInventoryItemEntry:
     # instance は別エントリに集約する想定 (「生の魚 x2」と「生の魚 x1 (腐敗)」
     # を並べて表示するため)。default False で既存呼び出し側に無影響。
     is_spoiled: bool = False
+    # 実験 #29 後続: LLM が「これは使えるか」を持ち物リストだけで判断できる
+    # よう、ItemType の文字列値 (例: "consumable" / "material" / "tool")
+    # を保持する。prompt 側で日本語タグ ((食料) / (素材) / (道具)) に整形して
+    # 表示し、ITEM_NOT_CONSUMABLE 失敗 (= 食料じゃないものを食べようとする
+    # 誤判断) を減らす。
+    # default "" で旧呼び出し側との後方互換を保つ (タグなし表示)。
+    item_type: str = ""
 
 
 @dataclass(frozen=True)
