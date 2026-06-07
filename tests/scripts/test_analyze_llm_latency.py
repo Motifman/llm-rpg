@@ -6,6 +6,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.analyze_llm_latency import (
@@ -36,6 +38,7 @@ def _llm_call(
     tick: int = 1,
     success: bool = True,
     error_code=None,
+    cost_usd: float = 0.0,
 ) -> dict:
     return {
         "seq": 1,
@@ -51,6 +54,7 @@ def _llm_call(
             "tps": tps,
             "success": success,
             "error_code": error_code,
+            "cost_usd": cost_usd,
         },
     }
 
@@ -226,3 +230,56 @@ class TestMainCli:
         assert ret == 0
         data = json.loads(json_out.read_text(encoding="utf-8"))
         assert data["total_calls"] == 1
+
+
+class TestCostAggregation:
+    """OpenRouter 経由の cost_usd を analyze が拾うか。"""
+
+    def test_cost_usd_の_合計と_per_model_集計が_出る(self, tmp_path: Path) -> None:
+        """複数 event を合算し、model 別 cost も per-model_cost_usd_total に出る。"""
+        trace = tmp_path / "trace.jsonl"
+        _write_trace(
+            trace,
+            [
+                _llm_call(wall=600, model="openrouter/google/gemma-4-31b-it", cost_usd=0.000005),
+                _llm_call(wall=620, model="openrouter/google/gemma-4-31b-it", cost_usd=0.000007),
+                _llm_call(wall=500, model="other/model", cost_usd=0.000002),
+            ],
+        )
+        stats = analyze([trace])
+        assert stats["overall"]["cost_usd_total"] == pytest.approx(0.000014)
+        assert stats["by_model_cost_usd_total"]["openrouter/google/gemma-4-31b-it"] == pytest.approx(
+            0.000012
+        )
+        assert stats["by_model_cost_usd_total"]["other/model"] == pytest.approx(0.000002)
+
+    def test_cost_が_全部_0_なら_合計も_0(self, tmp_path: Path) -> None:
+        """OpenAI 直結 / vLLM 想定 (cost フィールドが 0 / 未設定)。"""
+        trace = tmp_path / "trace.jsonl"
+        _write_trace(trace, [_llm_call(wall=400), _llm_call(wall=500)])
+        stats = analyze([trace])
+        assert stats["overall"]["cost_usd_total"] == 0.0
+
+    def test_cost_total_が_0_なら_render_に_cost_section_が_出ない(
+        self, tmp_path: Path
+    ) -> None:
+        """cost が無い実験では report に cost section を出さない (ノイズ削減)。"""
+        trace = tmp_path / "trace.jsonl"
+        _write_trace(trace, [_llm_call(wall=400)])
+        stats = analyze([trace])
+        report = render_report(stats)
+        assert "Cost (OpenRouter" not in report
+
+    def test_cost_total_が_正値_なら_render_に_cost_section_が_出る(
+        self, tmp_path: Path
+    ) -> None:
+        """OpenRouter 実験では cost section が markdown に出る。"""
+        trace = tmp_path / "trace.jsonl"
+        _write_trace(
+            trace,
+            [_llm_call(wall=600, model="openrouter/m", cost_usd=0.000050)],
+        )
+        stats = analyze([trace])
+        report = render_report(stats)
+        assert "Cost (OpenRouter" in report
+        assert "$0.000050" in report

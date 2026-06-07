@@ -143,8 +143,12 @@ def analyze(trace_paths: Sequence[Path]) -> Dict[str, Any]:
     tps_values: List[float] = []
     prompt_tokens: List[float] = []
     completion_tokens: List[float] = []
+    # OpenRouter 経由のとき provider 宣告 USD コストが乗る。直結 / vLLM は 0。
+    # 集計は per-call ではなく合計 / mean / per-model 内訳が知りたいので list で持つ。
+    cost_usd_values: List[float] = []
 
     by_model_wall: Dict[str, List[float]] = defaultdict(list)
+    by_model_cost: Dict[str, List[float]] = defaultdict(list)
     by_player_wall: Dict[int, List[float]] = defaultdict(list)
     by_error_code: Dict[str, int] = defaultdict(int)
 
@@ -184,6 +188,11 @@ def analyze(trace_paths: Sequence[Path]) -> Dict[str, Any]:
             prompt_tokens.append(float(prompt))
         if isinstance(completion, (int, float)) and completion >= 0:
             completion_tokens.append(float(completion))
+        cost = _get("cost_usd")
+        if isinstance(cost, (int, float)) and cost >= 0:
+            cost_f = float(cost)
+            cost_usd_values.append(cost_f)
+            by_model_cost[str(model)].append(cost_f)
 
     return {
         "total_calls": success_count + failure_count,
@@ -194,8 +203,11 @@ def analyze(trace_paths: Sequence[Path]) -> Dict[str, Any]:
             "tps": _summarize(tps_values),
             "prompt_tokens": _summarize(prompt_tokens),
             "completion_tokens": _summarize(completion_tokens),
+            "cost_usd": _summarize(cost_usd_values),
+            "cost_usd_total": sum(cost_usd_values),
         },
         "by_model": {m: _summarize(v) for m, v in by_model_wall.items()},
+        "by_model_cost_usd_total": {m: sum(v) for m, v in by_model_cost.items()},
         "by_player": {pid: _summarize(v) for pid, v in by_player_wall.items()},
         "by_error_code": dict(by_error_code),
     }
@@ -247,6 +259,29 @@ def render_report(stats: Dict[str, Any]) -> str:
         f"{_fmt_int(completion['p99'])} | {_fmt_int(completion['max'])} | {_fmt_float(completion['mean'], 1)} |"
     )
     lines.append("")
+
+    # OpenRouter 経由のときだけ cost が乗っている。値が全部 0 なら section ごと省略
+    # (OpenAI 直結 / vLLM の実験では cost 行を見せない方がノイズが少ない)。
+    cost_total = float(overall.get("cost_usd_total", 0.0))
+    cost = overall.get("cost_usd") or {}
+    if cost_total > 0.0:
+        lines.append("## Cost (OpenRouter 経由のとき provider 宣告 USD)")
+        lines.append("")
+        lines.append(f"- **合計**: ${cost_total:.6f}")
+        lines.append(
+            f"- **per-call**: p50=${_fmt_float(cost.get('p50') or 0.0, 6)} "
+            f"p95=${_fmt_float(cost.get('p95') or 0.0, 6)} "
+            f"max=${_fmt_float(cost.get('max') or 0.0, 6)} "
+            f"mean=${_fmt_float(cost.get('mean') or 0.0, 6)}"
+        )
+        by_model_cost = stats.get("by_model_cost_usd_total") or {}
+        if by_model_cost:
+            lines.append("")
+            lines.append("| model | cost_usd_total |")
+            lines.append("|---|---|")
+            for model, total_cost in sorted(by_model_cost.items()):
+                lines.append(f"| `{model}` | ${total_cost:.6f} |")
+        lines.append("")
 
     by_model = stats["by_model"]
     if by_model:

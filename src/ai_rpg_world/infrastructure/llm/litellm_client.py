@@ -65,6 +65,19 @@ _ENV_VAR_OPENROUTER_REQUIRE_PARAMS = "OPENROUTER_REQUIRE_PARAMS"
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
+def _detect_openrouter_base(api_base: Optional[str]) -> bool:
+    """``api_base`` が OpenRouter のものか判定する。
+
+    OpenRouter 経由のときだけ ``extra_body.usage.include=True`` を付けて cost を
+    返してもらう。判定は素朴に「openrouter.ai を含む」かどうかだけで十分 (誤判定の
+    最悪ケースでも extra_body に余計な field が付くだけで、OpenAI / vLLM は無視する
+    ことが多いが、念のため避ける)。
+    """
+    if not api_base:
+        return False
+    return "openrouter.ai" in api_base.lower()
+
+
 def _resolve_openrouter_routing_from_env() -> Optional[Dict[str, Any]]:
     """OpenRouter provider routing 設定を env から resolve し ``extra_body`` 用 dict を返す。
 
@@ -189,7 +202,28 @@ class LiteLLMClient(
         # 中の env 変動で挙動がブレるため。
         self._openrouter_routing: Optional[Dict[str, Any]] = _resolve_openrouter_routing_from_env()
 
+        # OpenRouter は api_base が openrouter ドメインかで判定する。
+        # ``extra_body.usage.include=True`` を付けると response.usage.cost に
+        # USD コストを乗せて返してくれる (per-call cost を計測したい)。
+        # OpenAI 直結 / vLLM には影響しない (api_base が違うので付かない)。
+        self._is_openrouter_base: bool = _detect_openrouter_base(self._api_base)
+
         self._logger = logging.getLogger(self.__class__.__name__)
+
+    def _build_extra_body(self) -> Optional[Dict[str, Any]]:
+        """litellm.completion に渡す ``extra_body`` を組み立てる。
+
+        - provider routing (OPENROUTER_PROVIDER 等の env が設定されているとき)
+        - usage.include (api_base が OpenRouter のとき、cost を返してもらう)
+
+        どちらも要らないときは None を返す (= extra_body を一切渡さない)。
+        """
+        block: Dict[str, Any] = {}
+        if self._openrouter_routing is not None:
+            block.update(copy.deepcopy(self._openrouter_routing))
+        if self._is_openrouter_base:
+            block["usage"] = {"include": True}
+        return block or None
 
     def _lite_api_key(self) -> str:
         """litellm.completion に渡す API キー（vLLM 向けカスタム base では空でもプレースホルダを使う）。"""
@@ -210,14 +244,17 @@ class LiteLLMClient(
         """ツール無しの chat completion 用（Episode Encoder 等）。カスタム base 無しでは api_key が必須。
 
         OpenRouter provider routing env が設定されている場合、``extra_body`` を
-        自動付与する (provider / quantization の固定)。
+        自動付与する (provider / quantization の固定)。さらに api_base が
+        OpenRouter なら ``usage.include=True`` も同 ``extra_body`` に乗せて cost
+        を返してもらう。
         """
         self._assert_can_call_litellm()
         base: Dict[str, Any] = {"model": self._model, "api_key": self._lite_api_key()}
         if self._api_base is not None:
             base["api_base"] = self._api_base
-        if self._openrouter_routing is not None:
-            base["extra_body"] = dict(self._openrouter_routing)
+        extra_body = self._build_extra_body()
+        if extra_body is not None:
+            base["extra_body"] = extra_body
         return base
 
     @property
@@ -255,8 +292,9 @@ class LiteLLMClient(
             }
             if self._api_base is not None:
                 completion_kw["api_base"] = self._api_base
-            if self._openrouter_routing is not None:
-                completion_kw["extra_body"] = copy.deepcopy(self._openrouter_routing)
+            extra_body = self._build_extra_body()
+            if extra_body is not None:
+                completion_kw["extra_body"] = extra_body
             response = litellm.completion(**completion_kw)
         except Exception as e:
             wall_latency_ms = int((time.monotonic() - start_monotonic) * 1000)
@@ -281,6 +319,7 @@ class LiteLLMClient(
             ) from e
         wall_latency_ms = int((time.monotonic() - start_monotonic) * 1000)
         prompt_tokens, completion_tokens, cached_tokens = self._extract_token_usage(response)
+        cost_usd = self._extract_cost_usd(response)
         tool_call = self._parse_tool_call(response, messages, tools)
         self._emit_metrics(
             metrics_sink,
@@ -288,6 +327,7 @@ class LiteLLMClient(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             cached_tokens=cached_tokens,
+            cost_usd=cost_usd,
             success=tool_call is not None,
             error_code=None if tool_call is not None else "NO_TOOL_CALL",
         )
@@ -361,6 +401,7 @@ class LiteLLMClient(
         success: bool,
         error_code: Optional[str],
         cached_tokens: int = 0,
+        cost_usd: float = 0.0,
     ) -> None:
         if sink is None:
             return
@@ -374,11 +415,36 @@ class LiteLLMClient(
                 tps=LlmCallMetrics.compute_tps(completion_tokens, wall_latency_ms),
                 success=success,
                 error_code=error_code,
+                cost_usd=cost_usd,
             )
             sink.record(metrics)
         except Exception:
             # メトリクス記録の失敗が LLM 呼び出し本体の挙動を倒さないよう吸収。
             self._logger.exception("metrics_sink.record failed")
+
+    @staticmethod
+    def _extract_cost_usd(response: Any) -> float:
+        """litellm レスポンスから 1 call 分の USD コストを抜く (provider 宣告値)。
+
+        OpenRouter は ``extra_body.usage.include=True`` を付けた場合、
+        ``response.usage.cost`` (USD) を返す。OpenAI 直結 / vLLM 等は返さないので
+        0.0。litellm が dict / pydantic model のどちらで持つかは provider 経路で
+        揺れるため両方拾う。
+        """
+        try:
+            usage = getattr(response, "usage", None)
+            if usage is None:
+                return 0.0
+            # pydantic-like (attribute) アクセス
+            cost = getattr(usage, "cost", None)
+            if cost is None and isinstance(usage, dict):
+                # 一部 provider で dict のまま戻る場合
+                cost = usage.get("cost")
+            if cost is None:
+                return 0.0
+            return float(cost)
+        except (TypeError, ValueError):
+            return 0.0
 
     def complete_episode_subjective_json(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         """

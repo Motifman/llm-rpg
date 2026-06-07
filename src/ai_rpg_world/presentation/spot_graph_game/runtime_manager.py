@@ -336,6 +336,9 @@ class _LlmMetricsTraceSink:
                 tps=metrics.tps,
                 success=metrics.success,
                 error_code=metrics.error_code,
+                # OpenRouter 経由のとき usage.cost (USD) が乗る。直結 / vLLM では 0.0。
+                # 実験 trace を見れば cost 合計が事後計算できる。
+                cost_usd=getattr(metrics, "cost_usd", 0.0),
             )
             # #404 P2: progress.jsonl 用 LLM 呼び出しカウンタを bump。
             # runtime 側に counter が無いランタイム (presentation 単体テスト等)
