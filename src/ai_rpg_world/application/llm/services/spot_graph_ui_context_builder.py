@@ -6,7 +6,7 @@ LLM が読めるテキスト行と、ツール実行用の ToolRuntimeContextDto
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
@@ -52,6 +52,38 @@ def _current_sub_location_id_from_snapshot(
         if entry.is_current:
             return entry.sub_location_id
     return None
+
+
+def _build_ordinal_disambiguator(names: List[str]) -> Dict[int, str]:
+    """同名衝突する name に ``#1`` / ``#2`` ... を付与して返す (PR 6, #404 後続)。
+
+    ラベル (S1 / I2 / P3 等) を prompt から外して **名前直接指定** に倒した
+    あとに、「灰色のオオカミ」が同 spot に 2 匹いるような場面で LLM が
+    どちらを指せばいいか分からなくなる。そのため、同名が複数あるときだけ
+    末尾に ``#N`` を付ける (出現順)。1 つしかない名前は素のまま。
+
+    Args:
+        names: 各エントリの display_name。並び順は section の表示順と同じ。
+
+    Returns:
+        index → disambiguated_name。``names[i]`` に対応する一意名。
+
+    例:
+        ["流木", "オオカミ", "オオカミ", "トラ"]
+          → {0: "流木", 1: "オオカミ #1", 2: "オオカミ #2", 3: "トラ"}
+    """
+    counts: Dict[str, int] = {}
+    for n in names:
+        counts[n] = counts.get(n, 0) + 1
+    out: Dict[int, str] = {}
+    seen: Dict[str, int] = {}
+    for i, n in enumerate(names):
+        if counts[n] > 1:
+            seen[n] = seen.get(n, 0) + 1
+            out[i] = f"{n} #{seen[n]}"
+        else:
+            out[i] = n
+    return out
 
 
 # 実験 #29 後続: ItemType.value → LLM プロンプト向け日本語タグ。
@@ -129,11 +161,18 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         collector: RuntimeTargetCollector,
         lines: List[str],
     ) -> None:
+        # PR 6 (#404 後続): 旧 "S1: 扉 → 館長書斎" → "扉 → 館長書斎" に簡略化。
+        # 同名スポット (= 異なる接続だが行き先 spot が同名) は ``#N`` で
+        # 区別する。LLM は destination_label に行き先 spot 名そのものを渡せば
+        # resolver が解決する。
         if not snap.connections:
             return
-        lines.append("接続先ラベル:")
-        for entry in snap.connections:
+        lines.append("接続先:")
+        dest_names = [e.destination_spot_name for e in snap.connections]
+        disamb = _build_ordinal_disambiguator(dest_names)
+        for i, entry in enumerate(snap.connections):
             label = allocator.next(PREFIX_CONNECTION)
+            disambiguated_name = disamb[i]
             if entry.is_passable:
                 status = "通行可"
             elif entry.passage_condition_text:
@@ -141,14 +180,14 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             else:
                 status = "通行不可"
             lines.append(
-                f"  {label}: {entry.connection_name} → {entry.destination_spot_name}（{status}）"
+                f"  - {entry.connection_name} → {disambiguated_name}（{status}）"
             )
             collector.add(
                 label,
                 DestinationToolRuntimeTargetDto(
                     label=label,
                     kind="spot_graph_destination",
-                    display_name=entry.destination_spot_name,
+                    display_name=disambiguated_name,
                     spot_id=entry.destination_spot_id,
                     destination_type="spot",
                 ),
@@ -161,11 +200,16 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         collector: RuntimeTargetCollector,
         lines: List[str],
     ) -> None:
+        # PR 6 (#404 後続): "OBJ1: 焚き火跡 ..." → "焚き火跡 ..."。
+        # 同 spot に同名 object が複数ある場合 (例: 茂み x2) は ``#N`` で区別。
         if not snap.objects:
             return
-        lines.append("オブジェクトラベル:")
-        for entry in snap.objects:
+        lines.append("オブジェクト:")
+        obj_names = [e.name for e in snap.objects]
+        disamb = _build_ordinal_disambiguator(obj_names)
+        for i, entry in enumerate(snap.objects):
             label = allocator.next(PREFIX_OBJECT)
+            disambiguated_name = disamb[i]
             interaction_parts: list[str] = []
             action_names: list[str] = []
             for inter in entry.interactions:
@@ -175,13 +219,13 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 action_names.append(inter.action_name)
             act_str = " / ".join(interaction_parts) if interaction_parts else "—"
             desc_part = f" — {entry.description}" if entry.description else ""
-            lines.append(f"  {label}: {entry.name}{desc_part} [{act_str}]")
+            lines.append(f"  - {disambiguated_name}{desc_part} [{act_str}]")
             collector.add(
                 label,
                 ToolRuntimeTargetDto(
                     label=label,
                     kind="spot_graph_object",
-                    display_name=entry.name,
+                    display_name=disambiguated_name,
                     world_object_id=entry.object_id,
                     available_interactions=tuple(action_names),
                 ),
@@ -194,20 +238,24 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         collector: RuntimeTargetCollector,
         lines: List[str],
     ) -> None:
+        # PR 6 (#404 後続): "SL1: 祭壇前" → "祭壇前"。同名衝突は ``#N`` で区別。
         visible_subs = [s for s in snap.sub_locations if not s.is_hidden]
         if not visible_subs:
             return
-        lines.append("サブロケーションラベル:")
-        for entry in visible_subs:
+        lines.append("サブロケーション:")
+        sub_names = [e.name for e in visible_subs]
+        disamb = _build_ordinal_disambiguator(sub_names)
+        for i, entry in enumerate(visible_subs):
             label = allocator.next(PREFIX_SUB_LOCATION)
+            disambiguated_name = disamb[i]
             here = "（現在ここ）" if entry.is_current else ""
-            lines.append(f"  {label}: {entry.name}{here}")
+            lines.append(f"  - {disambiguated_name}{here}")
             collector.add(
                 label,
                 ToolRuntimeTargetDto(
                     label=label,
                     kind="spot_graph_sub_location",
-                    display_name=entry.name,
+                    display_name=disambiguated_name,
                     sub_location_id=entry.sub_location_id,
                 ),
             )
@@ -230,22 +278,29 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         if not snap.nearby_entities:
             lines.append("同じ場所にいるプレイヤー: (他のプレイヤーはこのスポットにいない)")
             return
+        # PR 6 (#404 後続): "P1: リン" → "リン"。同名 player は scenario で
+        # 避ける運用だが、防御的に ``#N`` 区別を入れておく。
         lines.append("同じ場所にいるプレイヤー:")
-        for entry in snap.nearby_entities:
+        entity_names = [
+            (e.display_name or f"プレイヤー({e.entity_id})")
+            for e in snap.nearby_entities
+        ]
+        disamb = _build_ordinal_disambiguator(entity_names)
+        for i, entry in enumerate(snap.nearby_entities):
             label = allocator.next(PREFIX_ENTITY)
-            name = entry.display_name or f"プレイヤー({entry.entity_id})"
+            disambiguated_name = disamb[i]
             # PR #347 後続: 倒れている相手は (倒れて動かない) を後置して、
             # speech / 受け渡しの対象として動かないことを LLM が認識できるよう
             # にする。OFF mode で過去の PlayerDownedEvent が観測 buffer から
             # 流れた後でも、snapshot から「あの人が床に転がっている」が読める。
             suffix = " (倒れて動かない)" if entry.is_down else ""
-            lines.append(f"  {label}: {name}{suffix}")
+            lines.append(f"  - {disambiguated_name}{suffix}")
             collector.add(
                 label,
                 PlayerToolRuntimeTargetDto(
                     label=label,
                     kind="spot_graph_player",
-                    display_name=name,
+                    display_name=disambiguated_name,
                     player_id=entry.entity_id,
                 ),
             )
@@ -272,9 +327,16 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         if not snap.monsters_at_spot:
             lines.append("同じ場所に居るモンスター: (このスポットにモンスターはいない)")
             return
+        # PR 6 (#404 後続): "M1: 灰色のオオカミ" → "灰色のオオカミ"。
+        # 同種が複数いる定番ケース (オオカミ 2 匹 等) は ``#N`` で区別する。
+        # LLM が attack target_label に "灰色のオオカミ #2" を渡せば 2 番目に
+        # 解決される。
         lines.append("同じ場所に居るモンスター:")
-        for entry in snap.monsters_at_spot:
+        monster_names = [e.display_name for e in snap.monsters_at_spot]
+        disamb = _build_ordinal_disambiguator(monster_names)
+        for i, entry in enumerate(snap.monsters_at_spot):
             label = allocator.next(PREFIX_MONSTER)
+            disambiguated_name = disamb[i]
             if entry.is_dead:
                 desc = "死骸"
             else:
@@ -282,13 +344,13 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     entry.health_bucket, entry.health_bucket
                 )
                 desc = f"{entry.behavior_label}・{health_label}"
-            lines.append(f"  {label}: {entry.display_name}（{desc}）")
+            lines.append(f"  - {disambiguated_name}（{desc}）")
             collector.add(
                 label,
                 MonsterToolRuntimeTargetDto(
                     label=label,
                     kind="spot_graph_monster",
-                    display_name=entry.display_name,
+                    display_name=disambiguated_name,
                     monster_id=entry.monster_id,
                 ),
             )
@@ -352,11 +414,17 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         collector: RuntimeTargetCollector,
         lines: List[str],
     ) -> None:
+        # PR 6 (#404 後続): "I1: 流木" → "流木"。
+        # 同じ spec の腐敗 / 新鮮 は別 entry に分かれるが、運用上 name が衝突
+        # することはほぼ無い。防御的に ``#N`` を入れておく。
         if not snap.inventory_items:
             return
         lines.append("所持アイテム:")
-        for entry in snap.inventory_items:
+        inv_names = [e.name for e in snap.inventory_items]
+        disamb = _build_ordinal_disambiguator(inv_names)
+        for i, entry in enumerate(snap.inventory_items):
             label = allocator.next(PREFIX_INVENTORY)
+            disambiguated_name = disamb[i]
             qty = f" x{entry.quantity}" if entry.quantity > 1 else ""
             # Phase D-3a: 腐敗食は (腐敗) を付ける。runtime 側で (spec, is_spoiled)
             # 単位で集約しているので、quantity と (腐敗) の関係は一意に決まる。
@@ -366,7 +434,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # にする。ITEM_NOT_CONSUMABLE (= 食料じゃないものを食べようとする
             # ミス) を減らす目的。
             type_mark = _format_item_type_tag(entry.item_type)
-            lines.append(f"  {label}: {entry.name}{qty}{type_mark}{spoiled_mark}")
+            lines.append(f"  - {disambiguated_name}{qty}{type_mark}{spoiled_mark}")
             # 後方互換: 既存 use_item は target.item_instance_id に item_spec_id を
             # 入れる慣習 (名前と内容が乖離しているが、リスクを取らないため触らない)。
             # 新しい drop_item / pickup_item は専用フィールド (real_item_instance_id /
@@ -376,7 +444,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 InventoryToolRuntimeTargetDto(
                     label=label,
                     kind="inventory_item",
-                    display_name=entry.name,
+                    display_name=disambiguated_name,
                     item_instance_id=entry.item_spec_id,
                     real_item_instance_id=(
                         entry.item_instance_id if entry.item_instance_id >= 0 else None
@@ -394,24 +462,27 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         collector: RuntimeTargetCollector,
         lines: List[str],
     ) -> None:
-        """現在地に落ちているアイテムを G1, G2, ... ラベル付きで列挙する。
+        """現在地に落ちているアイテムを名前直書きで列挙する。
 
-        pickup tool が target を一意に指せるよう、item_instance_id を
-        InventoryToolRuntimeTargetDto.real_item_instance_id に格納する。
+        PR 6 (#404 後続): "G1: 流木" → "流木"。同名衝突は ``#N`` で区別。
+        pickup tool は item の display_name を渡せば resolver が解決する。
         """
         if not snap.ground_items:
             return
         lines.append("地面に落ちているもの:")
-        for entry in snap.ground_items:
+        ground_names = [e.name for e in snap.ground_items]
+        disamb = _build_ordinal_disambiguator(ground_names)
+        for i, entry in enumerate(snap.ground_items):
             label = allocator.next(PREFIX_GROUND_ITEM)
+            disambiguated_name = disamb[i]
             spoiled_mark = " (腐敗)" if entry.is_spoiled else ""
-            lines.append(f"  {label}: {entry.name}{spoiled_mark}")
+            lines.append(f"  - {disambiguated_name}{spoiled_mark}")
             collector.add(
                 label,
                 InventoryToolRuntimeTargetDto(
                     label=label,
                     kind="ground_item",
-                    display_name=entry.name,
+                    display_name=disambiguated_name,
                     real_item_instance_id=entry.item_instance_id,
                 ),
             )

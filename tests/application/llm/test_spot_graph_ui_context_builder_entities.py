@@ -55,18 +55,22 @@ def _make_dto(*entities: SpotGraphNearbyEntityEntry) -> PlayerCurrentStateDto:
 
 
 class TestNearbyEntityLabeling:
-    """P-prefix 採番 + PlayerToolRuntimeTargetDto 登録。"""
+    """PR 6 後 (#404 後続): 名前直書き + PlayerToolRuntimeTargetDto 登録。"""
 
-    def test_居れば_P1_P2_と採番されラベル付き行が出る(self) -> None:
+    def test_居れば_名前で_行が出る(self) -> None:
+        """PR 6: 旧 ``P1: リン`` → ``- リン`` に簡略化 (ラベル prefix を捨てる)。"""
         dto = _make_dto(
             SpotGraphNearbyEntityEntry(entity_id=2, display_name="リン"),
             SpotGraphNearbyEntityEntry(entity_id=3, display_name="カイト"),
         )
         result = SpotGraphUiContextBuilder().build("base", dto)
         assert "同じ場所にいるプレイヤー:" in result.current_state_text
-        assert "P1: リン" in result.current_state_text
-        assert "P2: カイト" in result.current_state_text
-        # target にも登録される
+        assert "- リン" in result.current_state_text
+        assert "- カイト" in result.current_state_text
+        # 旧ラベル prefix は出さない
+        assert "P1:" not in result.current_state_text
+        assert "P2:" not in result.current_state_text
+        # target には内部 label で登録される (resolver の互換のため)
         targets = result.tool_runtime_context.targets
         assert isinstance(targets["P1"], PlayerToolRuntimeTargetDto)
         assert targets["P1"].player_id == 2
@@ -77,7 +81,9 @@ class TestNearbyEntityLabeling:
             SpotGraphNearbyEntityEntry(entity_id=2, display_name=""),
         )
         result = SpotGraphUiContextBuilder().build("base", dto)
-        assert "P1: プレイヤー(2)" in result.current_state_text
+        # PR 6: ``- プレイヤー(2)`` 形式
+        assert "- プレイヤー(2)" in result.current_state_text
+        assert "P1:" not in result.current_state_text
 
 
 class TestNearbyEntityEmptySymmetric:
