@@ -86,6 +86,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         inventory_text: str = "",
         learned_text: str = "",
         mid_summary_text: str = "",
+        long_summary_text: str = "",
     ) -> str:
         for name, value in (
             ("current_state_text", current_state_text),
@@ -96,6 +97,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             ("inventory_text", inventory_text),
             ("learned_text", learned_text),
             ("mid_summary_text", mid_summary_text),
+            ("long_summary_text", long_summary_text),
         ):
             if not isinstance(value, str):
                 raise TypeError(f"{name} must be str")
@@ -110,6 +112,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
                 inventory_text=inventory_text,
                 learned_text=learned_text,
                 mid_summary_text=mid_summary_text,
+                long_summary_text=long_summary_text,
             )
         return _format_stable_to_volatile(
             current_state_text=current_state_text,
@@ -120,6 +123,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             inventory_text=inventory_text,
             learned_text=learned_text,
             mid_summary_text=mid_summary_text,
+            long_summary_text=long_summary_text,
         )
 
 
@@ -258,6 +262,20 @@ def _emit_mid_summary(sections: list, mid_summary_text: str) -> None:
         ])
 
 
+def _emit_long_summary(sections: list, long_summary_text: str) -> None:
+    """Phase 3: ``【自己像と世界観】`` (L5 long summary) を legacy 順序で挿入。
+
+    objective の直後 (learned より前) に来るよう、legacy formatter から
+    呼ぶときの位置で使う。空なら section ごと省略。
+    """
+    if long_summary_text.strip():
+        sections.extend([
+            "",
+            "【自己像と世界観】",
+            long_summary_text.strip(),
+        ])
+
+
 def _format_stable_to_volatile(
     *,
     current_state_text: str,
@@ -268,16 +286,17 @@ def _format_stable_to_volatile(
     inventory_text: str,
     learned_text: str,
     mid_summary_text: str,
+    long_summary_text: str,
 ) -> str:
     """Phase 0 default: 更新頻度の低い section から並べる。
 
-    順序: objective → learned (Phase 1c) → mid_summary (Phase 2) → memos →
-    inventory → memories → recent_events → current_state。current_state を
-    末尾にして prefix cache 安定領域を最大化する。
+    順序: objective → self_image (L5, Phase 3) → learned → mid_summary (L4) →
+    memos → inventory → memories → recent_events → current_state。
 
     section 寿命 (cache 寿命の根拠):
-    - learned: cluster 昇格時のみ更新 (最も安定、10+ ターン)
-    - mid_summary: 15 ターンに 1 世代追加・内容は確定後不変 (~15 ターン安定)
+    - L5 self_image: ~45 ターンに 1 回 (最も安定)
+    - learned: cluster 昇格時のみ更新 (10+ ターン安定)
+    - L4 mid_summary: 15 ターンに 1 世代追加・内容は確定後不変
     - memos: memo_add/done 時のみ
     - ... 末尾 current_state は毎ターン更新
     """
@@ -286,7 +305,16 @@ def _format_stable_to_volatile(
     # 1. 現在の目的 (静的、空なら省略)
     _emit_objective(sections, objective_text)
 
-    # 2. 関連する学び (semantic top-K、空なら省略) ★ Phase 1c
+    # 2. 自己像と世界観 (L5 long summary、空なら省略) ★ Phase 3
+    # 最も更新頻度が低い (= prefix cache 寿命最長) ので objective の直後
+    if long_summary_text.strip():
+        sections.extend([
+            "【自己像と世界観】",
+            long_summary_text.strip(),
+            "",
+        ])
+
+    # 3. 関連する学び (semantic top-K、空なら省略) ★ Phase 1c
     if learned_text.strip():
         sections.extend([
             "【関連する学び】",
@@ -294,7 +322,7 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 3. 最近の流れ (L4 mid summary、空なら省略) ★ Phase 2
+    # 4. 最近の流れ (L4 mid summary、空なら省略) ★ Phase 2
     if mid_summary_text.strip():
         sections.extend([
             "【最近の流れ】",
@@ -355,16 +383,18 @@ def _format_legacy(
     inventory_text: str,
     learned_text: str,
     mid_summary_text: str,
+    long_summary_text: str,
 ) -> str:
     """Issue #227 chore β 時代の旧順序。A/B 検証用に保持。
 
-    順序: objective → learned → mid_summary → current_state → memos →
-    recent_events → memories → inventory。learned / mid_summary (Phase 1c, 2)
-    は objective 直後に挿入。
+    順序: objective → long_summary (Phase 3) → learned (Phase 1c) →
+    mid_summary (Phase 2) → current_state → memos → recent_events →
+    memories → inventory。
     """
     sections: list[str] = []
 
     _emit_objective(sections, objective_text)
+    _emit_long_summary(sections, long_summary_text)
     _emit_learned(sections, learned_text)
     _emit_mid_summary(sections, mid_summary_text)
     _emit_current_state(sections, current_state_text)

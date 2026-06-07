@@ -26,8 +26,16 @@ from typing import Callable, Deque, Dict, List, Optional, Sequence
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.interfaces import ISlidingWindowMemory
-from ai_rpg_world.application.llm.contracts.short_term_memory import L4MidSummary
+from ai_rpg_world.application.llm.contracts.short_term_memory import (
+    L4MidSummary,
+    L5LongSummary,
+)
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
+from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
+    ShortTermMemoryLongSummaryService,
+    _ParsedLongSummary,
+    build_template_fallback_long_summary,
+)
 from ai_rpg_world.application.llm.services.short_term_memory_schedulers import (
     InlineShortTermMemoryScheduler,
     IShortTermMemoryScheduler,
@@ -84,6 +92,7 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         self,
         *,
         summary_service: Optional[ShortTermMemorySummaryService] = None,
+        long_summary_service: Optional[ShortTermMemoryLongSummaryService] = None,
         persona_resolver: Optional[PersonaResolverFn] = None,
         l1_soft_cap: int = DEFAULT_L1_SOFT_CAP,
         l1_hard_cap: int = DEFAULT_L1_HARD_CAP,
@@ -104,6 +113,12 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
             raise TypeError(
                 "summary_service must be ShortTermMemorySummaryService or None"
             )
+        if long_summary_service is not None and not isinstance(
+            long_summary_service, ShortTermMemoryLongSummaryService
+        ):
+            raise TypeError(
+                "long_summary_service must be ShortTermMemoryLongSummaryService or None"
+            )
         if persona_resolver is not None and not callable(persona_resolver):
             raise TypeError("persona_resolver must be callable or None")
         if scheduler is not None and not isinstance(scheduler, IShortTermMemoryScheduler):
@@ -111,6 +126,7 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
                 "scheduler must be IShortTermMemoryScheduler or None"
             )
         self._service = summary_service
+        self._long_service = long_summary_service
         self._persona_resolver = persona_resolver
         self._soft_cap = l1_soft_cap
         self._hard_cap = l1_hard_cap
@@ -123,6 +139,11 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         # ので mid_lock で保護する。
         self._mid: Dict[int, Deque[L4MidSummary]] = {}
         self._mid_lock = threading.Lock()
+        # Phase 3: L5 long summary (1 player 1 件)。worker thread からも書く
+        # ので long_lock で保護する。世代数のカウンタも保持。
+        self._long: Dict[int, L5LongSummary] = {}
+        self._long_gen_index: Dict[int, int] = {}
+        self._long_lock = threading.Lock()
 
     # ──────────────────────────────────────────────────────────
     # ISlidingWindowMemory contract
@@ -155,6 +176,18 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         raw = self._raw[pid]
         # 新しい順で返す (sliding window 互換)
         return list(reversed(list(raw)[-limit:]))
+
+    def get_long_summary_text(self, player_id: PlayerId) -> str:
+        """Phase 3: L5 long summary を prompt 用テキストに整形する。
+
+        L5 未生成なら空文字 (= section 非表示)。
+        """
+        pid = int(player_id.value)
+        with self._long_lock:
+            l5 = self._long.get(pid)
+        if l5 is None:
+            return ""
+        return format_long_summary_block(l5)
 
     def get_mid_summary_text(self, player_id: PlayerId) -> str:
         """L4 mid summary を prompt 用テキストに整形する。
@@ -326,13 +359,126 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         通常 ``_ensure_player`` が先に呼ばれている前提だが、テストから
         ``_install_l4`` を直接呼ぶ経路や、将来の coordinator 経路への防衛と
         して、ここでも player 初期化を行う (review HIGH #3)。
+
+        Phase 3: keep_gen を超えて evict された L4 は L5 統合タスクに回す。
+        evict は lock 内で検出して取り出し、L5 task の submit は lock 外で行う
+        (scheduler 内部の lock とのデッドロック回避)。
         """
+        evicted_l4: Optional[L4MidSummary] = None
+        pid = summary.player_id
         with self._mid_lock:
-            if summary.player_id not in self._mid:
-                self._mid[summary.player_id] = deque()
-            self._mid[summary.player_id].appendleft(summary)
-            while len(self._mid[summary.player_id]) > self._keep_gen:
-                self._mid[summary.player_id].pop()
+            if pid not in self._mid:
+                self._mid[pid] = deque()
+            self._mid[pid].appendleft(summary)
+            while len(self._mid[pid]) > self._keep_gen:
+                evicted_l4 = self._mid[pid].pop()
+
+        if evicted_l4 is not None:
+            self._maybe_trigger_long_summary(pid, evicted_l4)
+
+    def _maybe_trigger_long_summary(
+        self, pid: int, evicted_l4: L4MidSummary
+    ) -> None:
+        """Phase 3: L4 が evict されたタイミングで L5 統合 task を投げる。
+
+        - ``long_summary_service=None`` → template fallback で延命 (LLM なしモード)
+        - service あり + LLM 成功 → 新 L5
+        - service あり + LLM 失敗 → 同じく template fallback で previous_l5 延命
+
+        scheduler.submit の戻り値が False (drop) の場合は WARNING ログを残す
+        (L4 既に evict 済みで失われる)。
+
+        **並列性に関する重要な制約 (review HIGH #2)**:
+        ``ThreadPoolShortTermMemoryScheduler`` の ``max_workers=1`` (default) を
+        前提にしている。同一プレイヤーに対して 2 つの L5 task が並列実行されると
+        どちらも同じ ``previous_l5`` snapshot を保持したまま LLM を呼び、
+        後勝ちで新世代が古い ``evicted_l4`` に基づく内容で上書きされる risk が
+        ある。default 構成 (wiring 経由の ``_build_short_term_memory``) では
+        max_workers=1 を使うので影響なし。
+        """
+        with self._long_lock:
+            previous_l5 = self._long.get(pid)
+
+        def _task() -> None:
+            self._run_long_generation(
+                pid=pid,
+                evicted_l4=evicted_l4,
+                previous_l5=previous_l5,
+            )
+
+        accepted = self._scheduler.submit(pid, _task)
+        if not accepted:
+            _logger.warning(
+                "RollingSummaryShortTermMemory(player_id=%s): scheduler が L5 "
+                "統合 task を drop。evicted L4 (summary_id=%s) は失われます "
+                "(queue_full or shutdown 由来)。",
+                pid,
+                evicted_l4.summary_id,
+            )
+
+    def _run_long_generation(
+        self,
+        *,
+        pid: int,
+        evicted_l4: L4MidSummary,
+        previous_l5: Optional[L5LongSummary],
+    ) -> None:
+        """L5 生成本体。Inline なら main thread、ThreadPool なら worker thread。"""
+        parsed: _ParsedLongSummary
+        is_fallback = False
+
+        if self._long_service is None:
+            parsed = build_template_fallback_long_summary(
+                previous_l5=previous_l5,
+                evicted_l4=evicted_l4,
+            )
+            is_fallback = True
+        else:
+            try:
+                player_name, persona_block = self._resolve_persona(pid)
+                parsed = self._long_service.generate(
+                    player_name=player_name,
+                    persona_block=persona_block,
+                    previous_l5=previous_l5,
+                    evicted_l4=evicted_l4,
+                )
+            except (LlmApiCallException, ValueError) as e:
+                _logger.warning(
+                    "RollingSummaryShortTermMemory(player_id=%s): L5 LLM 生成失敗 "
+                    "(%s); template fallback (previous_l5 延命) に縮退します",
+                    pid,
+                    e,
+                )
+                parsed = build_template_fallback_long_summary(
+                    previous_l5=previous_l5,
+                    evicted_l4=evicted_l4,
+                )
+                is_fallback = True
+            except Exception as e:  # pragma: no cover - 想定外も握って続行
+                _logger.exception(
+                    "RollingSummaryShortTermMemory(player_id=%s): 想定外の例外 "
+                    "(%s); L5 template fallback に縮退します",
+                    pid,
+                    e,
+                )
+                parsed = build_template_fallback_long_summary(
+                    previous_l5=previous_l5,
+                    evicted_l4=evicted_l4,
+                )
+                is_fallback = True
+
+        with self._long_lock:
+            next_index = self._long_gen_index.get(pid, 0) + 1
+            self._long_gen_index[pid] = next_index
+            self._long[pid] = L5LongSummary(
+                summary_id=f"l5-{uuid4().hex}",
+                player_id=pid,
+                generation_index=next_index,
+                generated_at=datetime.now(timezone.utc),
+                self_image=parsed.self_image,
+                world_view=parsed.world_view,
+                is_fallback=is_fallback,
+            )
 
     def _resolve_persona(self, pid: int) -> tuple[str, str]:
         if self._persona_resolver is None:
@@ -366,6 +512,23 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         with self._mid_lock:
             return list(self._mid.get(player_id, ()))
 
+    def _long_summary(self, player_id: int) -> Optional[L5LongSummary]:
+        with self._long_lock:
+            return self._long.get(player_id)
+
+
+def format_long_summary_block(l5: L5LongSummary) -> str:
+    """L5 を prompt 表示用に整形する (Phase 3)。
+
+    self_image / world_view を 2 行で並べる。空ラインは出さない。
+    """
+    lines: list[str] = []
+    if l5.self_image.strip():
+        lines.append(f"私について: {l5.self_image.strip()}")
+    if l5.world_view.strip():
+        lines.append(f"この世界について: {l5.world_view.strip()}")
+    return "\n".join(lines)
+
 
 def format_mid_summary_block(generations: Sequence[L4MidSummary]) -> str:
     """L4 世代群を prompt 表示用に整形する (新しい順)。
@@ -395,5 +558,6 @@ __all__ = [
     "DEFAULT_L4_KEEP_GENERATIONS",
     "PersonaResolverFn",
     "RollingSummaryShortTermMemory",
+    "format_long_summary_block",
     "format_mid_summary_block",
 ]

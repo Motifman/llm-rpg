@@ -62,6 +62,15 @@ class ISlidingWindowMemory(ABC):
         """
         return ""
 
+    def get_long_summary_text(self, player_id: PlayerId) -> str:
+        """Phase 3: 長期記憶 (L5 long summary / self_image + world_view) を
+        prompt 用テキストに整形する。
+
+        ``RollingSummaryShortTermMemory`` のみ実体を返す (L5 統合済みの場合)。
+        ``DefaultSlidingWindowMemory`` は空文字 → §「【自己像と世界観】」非表示。
+        """
+        return ""
+
 
 class IActionResultStore(ABC):
     """直近の LLM 行動結果を保持する。"""
@@ -187,6 +196,7 @@ class IContextFormatStrategy(ABC):
         inventory_text: str = "",
         learned_text: str = "",
         mid_summary_text: str = "",
+        long_summary_text: str = "",
     ) -> str:
         """user prompt に入れる文脈テキストを返す。
 
