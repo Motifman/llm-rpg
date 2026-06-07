@@ -1731,6 +1731,8 @@ def create_escape_game_runtime(
             spoils_after_ticks=item_def.spoils_after_ticks,
             # Phase F: 消費効果。None なら use_item が reject する。
             consume_effect=item_def.consume_effect,
+            # PR β: 疲労回復量。loader 経由で JSON から。0 なら効果なし。
+            fatigue_recovery=item_def.fatigue_recovery,
         )
         item_spec_repo.save(spec)
 

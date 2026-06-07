@@ -120,6 +120,29 @@ _ITEM_TYPE_DISPLAY = {
 }
 
 
+# PR β (実験 #29 後続): fatigue tier → 仲間表示用の suffix。
+# 「ok」「tired」は静かに省略 (ノイズになる)、「fatigued」以上だけ表示。
+_FATIGUE_DISPLAY = {
+    "fatigued": " (疲れている)",
+    "severe": " (ぐったりしている)",
+    "exhausted": " (限界。動けず座り込んでいる)",
+}
+
+
+def _format_fatigue_suffix(fatigue_level: str) -> str:
+    """疲労 tier → prompt 用の日本語 suffix。fatigued 未満は空文字。"""
+    return _FATIGUE_DISPLAY.get(fatigue_level, "")
+
+
+# own player 向けの行動ヒント。describe() の数値表記に加えて、操作可能性に
+# 直結する情報 (重い tool が block されている / 動きが鈍る) を 1 行足す。
+_FATIGUE_OWN_HINT = {
+    "fatigued": "動きが鈍くなっている。重い行動は控えめに。",
+    "severe": "判断が鈍ってきた。発話も呂律が回らない。早めに休むこと。",
+    "exhausted": "疲労が限界。travel / attack / interact は実行できない。wait や食事で回復が必要。",
+}
+
+
 def _format_item_type_tag(item_type: str) -> str:
     """item_type 文字列値を日本語タグに整形する。
 
@@ -317,6 +340,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # にする。OFF mode で過去の PlayerDownedEvent が観測 buffer から
             # 流れた後でも、snapshot から「あの人が床に転がっている」が読める。
             suffix = " (倒れて動かない)" if entry.is_down else ""
+            # PR β (実験 #29 後続): 仲間の疲労状態を Observation でなく
+            # state として常時表示する。is_down 優先、それ以外で疲労を出す。
+            if not entry.is_down:
+                fatigue_suffix = _format_fatigue_suffix(entry.fatigue_level)
+                if fatigue_suffix:
+                    suffix = fatigue_suffix
             lines.append(f"  - {disambiguated_name}{suffix}")
             collector.add(
                 label,
@@ -388,6 +417,15 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         lines.append("身体の状態:")
         for line in snap.need_lines:
             lines.append(f"  {line}")
+        # PR β (実験 #29 後続): own player の疲労 tier に応じた行動ヒント。
+        # describe() は数値 + 5 段階のテキストだけなので、ここで「重い行動が
+        # block されている / 動きが鈍くなる」のような操作可能性に直結する
+        # 情報を 1 行足す。system prompt は変えず state section にだけ載せる
+        # 設計 (docs/design_decisions.md #1 / #8)。
+        fatigue_level = snap.player_state.get("fatigue_level") if snap.player_state else None
+        hint = _FATIGUE_OWN_HINT.get(fatigue_level or "ok")
+        if hint:
+            lines.append(f"  → {hint}")
 
     @staticmethod
     def _build_active_effects_section(

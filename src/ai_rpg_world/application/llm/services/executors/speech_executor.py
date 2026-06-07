@@ -11,6 +11,8 @@ audience_resolver (Optional) が注入されると、speech 実行直後に
 で隠していたため、空振りに気付かなかった)。
 """
 
+import random
+import re
 from typing import Any, Callable, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
@@ -37,6 +39,46 @@ from ai_rpg_world.application.speech.services.speech_audience_resolver import (
     SpeechAudienceResolver,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+
+# PR β (実験 #29 後続): 疲労 severe 以上で発話を朦朧化する設定。
+# 「呂律が回らない」を簡易表現するため、句読点・スペースで分割した上で
+# 一定確率の語を ``…`` で伏字にする。algorithm B (word-level mask)。
+_FATIGUE_BLUR_THRESHOLD = 85
+_FATIGUE_BLUR_MASK_RATE = 0.30
+_FATIGUE_BLUR_MASK_TOKEN = "…"
+# 区切り文字を保持したまま split するため、capturing group で区切る正規表現。
+_BLUR_SEP_PATTERN = re.compile(r"([、。!?！？\s 　,.])")
+
+
+def _apply_speech_blur(content: str, *, rng: random.Random) -> str:
+    """severe/exhausted 用に content の語を確率的に ``…`` へ置換する。
+
+    句読点・スペースで分割した「語」単位で 30% を伏字化する。元の区切り
+    文字は復元するので「枯葉…探しに…行ってくる」のように自然な朦朧文を
+    得られる。空文字や区切りのみの content には介入しない。
+    """
+    parts = _BLUR_SEP_PATTERN.split(content)
+    out: list[str] = []
+    for part in parts:
+        if not part:
+            continue
+        if _BLUR_SEP_PATTERN.fullmatch(part):
+            out.append(part)
+            continue
+        if rng.random() < _FATIGUE_BLUR_MASK_RATE:
+            out.append(_FATIGUE_BLUR_MASK_TOKEN)
+        else:
+            out.append(part)
+    blurred = "".join(out)
+    # 全部 mask されたら少なくとも 1 語残す (発話が完全に空白化しないよう)。
+    if blurred.replace(_FATIGUE_BLUR_MASK_TOKEN, "").strip() == "":
+        return content
+    return blurred
 
 
 _CHANNEL_STRING_TO_ENUM: Dict[str, SpeechChannel] = {
@@ -60,9 +102,15 @@ class SpeechToolExecutor:
         speech_service: Optional[PlayerSpeechApplicationService] = None,
         *,
         audience_resolver: Optional[SpeechAudienceResolver] = None,
+        player_status_repository: Optional[PlayerStatusRepository] = None,
+        rng: Optional[random.Random] = None,
     ) -> None:
         self._speech_service = speech_service
         self._audience_resolver = audience_resolver
+        # PR β: 発話の朦朧化に必要な status read。None なら blur は無効
+        # (旧呼び出し側との後方互換: 既存テストや wiring を壊さない)。
+        self._player_status_repository = player_status_repository
+        self._rng = rng or random.Random()
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。speech_service が None の場合は空辞書。"""
@@ -127,12 +175,27 @@ class SpeechToolExecutor:
                 )
             target_player_id = int(raw_target)
 
+        # PR β: severe/exhausted (fatigue >= 85) なら呂律が回らない演出として
+        # content を語単位で伏字化する。LLM が「正常な発話」を意図しても、
+        # 身体状態として朦朧としていることを他者観測に滲ませる。失敗は
+        # 静かに無視 (status read 失敗は発話自体を止めない)。
+        content_to_speak = content
+        if self._player_status_repository is not None:
+            try:
+                status = self._player_status_repository.find_by_id(
+                    PlayerId(player_id)
+                )
+                if status is not None and status.fatigue_value >= _FATIGUE_BLUR_THRESHOLD:
+                    content_to_speak = _apply_speech_blur(content, rng=self._rng)
+            except Exception:
+                content_to_speak = content
+
         # 実行
         try:
             self._speech_service.speak(
                 SpeakCommand(
                     speaker_player_id=player_id,
-                    content=content,
+                    content=content_to_speak,
                     channel=channel_enum,
                     target_player_id=target_player_id,
                 )

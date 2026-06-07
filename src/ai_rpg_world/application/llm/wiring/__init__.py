@@ -399,6 +399,7 @@ def _build_tool_handler_map(
         SpeechToolExecutor(
             speech_service=speech_service,
             audience_resolver=speech_audience_resolver,
+            player_status_repository=player_status_repository,
         ).get_handlers()
     )
     handler_map.update(

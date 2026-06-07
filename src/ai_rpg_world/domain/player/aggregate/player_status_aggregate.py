@@ -550,6 +550,74 @@ class PlayerStatusAggregate(AggregateRoot):
         """
         return not self._is_down
 
+    # ---------------------------------------------------------------------
+    # 疲労ライフサイクル (PR β / 実験 #29 後続)
+    # 0-100 の整数で、増加で疲労、減少で回復する。各 tier に応じて
+    # ``fatigue_level`` を返す。閾値は AgentNeed の percentage と同期する
+    # (max_value=100 を前提)。詳細は docs/design_decisions.md 参照。
+    # ---------------------------------------------------------------------
+
+    FATIGUE_TIRED_THRESHOLD = 30
+    FATIGUE_FATIGUED_THRESHOLD = 60
+    FATIGUE_SEVERE_THRESHOLD = 85
+    FATIGUE_EXHAUSTED_THRESHOLD = 100
+
+    def apply_fatigue(self, amount: int) -> None:
+        """疲労を蓄積する (PR β)。``amount`` は非負整数。
+
+        ``apply_fatigue`` という意味論的に明示的な名前を提供し、各 tool 実行
+        後の「重い行動 → 疲労 +N」を読み手に分かりやすくする。内部実装は
+        既存の ``increase_need(FATIGUE, amount)`` を呼ぶ薄いラッパ。
+        """
+        if amount <= 0:
+            return
+        self.increase_need(NeedType.FATIGUE, amount)
+
+    def recover_fatigue(self, amount: int) -> None:
+        """疲労を回復する (PR β)。``amount`` は非負整数。"""
+        if amount <= 0:
+            return
+        self.satisfy_need(NeedType.FATIGUE, amount)
+
+    @property
+    def fatigue_value(self) -> int:
+        """疲労の生値 (0-100)。FATIGUE need 未登録の場合は 0 (= 元気)。"""
+        need = self._needs.get(NeedType.FATIGUE)
+        return need.value if need is not None else 0
+
+    @property
+    def fatigue_level(self) -> str:
+        """疲労 tier を 4 段階で返す: ``ok`` / ``tired`` / ``fatigued`` / ``severe`` / ``exhausted``。
+
+        - ok: 0-29
+        - tired: 30-59
+        - fatigued: 60-84 (動きが鈍くなる目安)
+        - severe: 85-99 (発話が朦朧)
+        - exhausted: 100 (重い tool が block される)
+        """
+        v = self.fatigue_value
+        if v >= self.FATIGUE_EXHAUSTED_THRESHOLD:
+            return "exhausted"
+        if v >= self.FATIGUE_SEVERE_THRESHOLD:
+            return "severe"
+        if v >= self.FATIGUE_FATIGUED_THRESHOLD:
+            return "fatigued"
+        if v >= self.FATIGUE_TIRED_THRESHOLD:
+            return "tired"
+        return "ok"
+
+    def is_fatigued(self) -> bool:
+        """60+ で True (= 動きが鈍くなる目安)。"""
+        return self.fatigue_value >= self.FATIGUE_FATIGUED_THRESHOLD
+
+    def is_severely_fatigued(self) -> bool:
+        """85+ で True (= 発話が朦朧、HP 微減直前)。"""
+        return self.fatigue_value >= self.FATIGUE_SEVERE_THRESHOLD
+
+    def is_exhausted(self) -> bool:
+        """100 (max) で True (= 重い tool は実行 block される)。"""
+        return self.fatigue_value >= self.FATIGUE_EXHAUSTED_THRESHOLD
+
     def can_receive_healing(self) -> bool:
         """回復を受けられる状態かどうか
 

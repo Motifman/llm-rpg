@@ -40,6 +40,12 @@ class ItemSpec:
     # られる (現状の survival demo は食料も item_type=QUEST で登録されており、
     # CONSUMABLE 制約を入れると plumb 不可能なため意図的に緩める)。
     spoils_after_ticks: Optional[int] = None
+    # PR β (実験 #29 後続): 疲労回復量。0 (default) なら回復効果なし。
+    # 食料・茶・睡眠薬等のアイテムに正の値を設定すると、use_item 成功時に
+    # `PlayerStatusAggregate.recover_fatigue(value)` が呼ばれる。CONSUMABLE
+    # 種別以外でも設定可 (item_type 制約は緩める方針、survival demo の
+    # 食料が QUEST 登録される慣習と整合)。
+    fatigue_recovery: int = 0
 
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
@@ -52,6 +58,10 @@ class ItemSpec:
         if self.spoils_after_ticks is not None and self.spoils_after_ticks <= 0:
             raise ItemSpecValidationException(
                 f"Item spec: spoils_after_ticks must be positive, got {self.spoils_after_ticks}"
+            )
+        if self.fatigue_recovery < 0:
+            raise ItemSpecValidationException(
+                f"Item spec: fatigue_recovery must be non-negative, got {self.fatigue_recovery}"
             )
         # 耐久度が存在する場合、max_stack_sizeは1でなければならない
         if self.durability_max is not None and self.max_stack_size.value != 1:

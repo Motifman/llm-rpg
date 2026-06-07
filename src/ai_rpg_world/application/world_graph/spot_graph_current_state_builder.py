@@ -431,19 +431,30 @@ class SpotGraphCurrentStateBuilder:
                 # PR #347 後続: 同 spot にいる相手が倒れているなら snapshot に
                 # is_down=True を立てる。entity が player でない (NPC 等) ときや
                 # status_repo で見つからないときは False のままにする。
+                # PR β (実験 #29 後続): あわせて fatigue_level も lift し、
+                # 「(疲れている)」「(ぐったりしている)」を nearby_entities に
+                # 常時表示できるようにする。仲間の状態を Observation でなく
+                # state として見えるモデル (docs/design_decisions.md #8 参照)。
                 other_is_down = False
+                other_fatigue_level = "ok"
                 try:
                     other_status = self._player_status_repository.find_by_id(
                         PlayerId(int(other_eid))
                     )
                     if other_status is not None:
                         other_is_down = bool(other_status.is_down)
+                        # fatigue_level プロパティが無い古い aggregate も想定し getattr で防御
+                        other_fatigue_level = getattr(
+                            other_status, "fatigue_level", "ok"
+                        )
                 except Exception:
                     other_is_down = False
+                    other_fatigue_level = "ok"
                 nearby_entities.append(SpotGraphNearbyEntityEntry(
                     entity_id=int(other_eid),
                     display_name=name,
                     is_down=other_is_down,
+                    fatigue_level=other_fatigue_level,
                 ))
 
         inventory_items: tuple[SpotGraphInventoryItemEntry, ...] = ()

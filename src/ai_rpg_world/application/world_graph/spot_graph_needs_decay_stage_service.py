@@ -53,11 +53,18 @@ class SpotGraphNeedsDecayStageService:
         *,
         rates: Dict[NeedType, int] | None = None,
         starvation_damage_per_tick: int = 0,
+        fatigue_critical_damage_per_tick: int = 0,
+        fatigue_critical_threshold: int = 95,
         event_publisher: Optional[Any] = None,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._rates = rates or dict(DEFAULT_NEED_RATES)
         self._starvation_damage_per_tick = max(0, starvation_damage_per_tick)
+        # PR β: 疲労が threshold (default 95) を超えたプレイヤーに毎 tick
+        # 微小 HP ダメージを与える。「限界まで疲弊すると徐々に体が壊れる」を
+        # 表現するための飢餓と同型のメカニクス。default 0 (= 無効、後方互換)。
+        self._fatigue_critical_damage_per_tick = max(0, fatigue_critical_damage_per_tick)
+        self._fatigue_critical_threshold = fatigue_critical_threshold
         self._event_publisher = event_publisher
 
     def set_event_publisher(self, publisher: Optional[Any]) -> None:
@@ -96,6 +103,19 @@ class SpotGraphNeedsDecayStageService:
                     changed = True
                     # apply_damage が HP 0 → PlayerDownedEvent を積む。
                     # publisher が居れば回収して後で流す (空 list は no-op)。
+                    if self._event_publisher is not None:
+                        starvation_events.extend(status.get_events())
+                        status.clear_events()
+            # PR β: 疲労限界 (>= threshold, default 95) でも HP 微減。
+            # starvation と同じ event 回収パターンに乗せる。
+            if self._fatigue_critical_damage_per_tick > 0:
+                fatigue = status.needs.get(NeedType.FATIGUE)
+                if (
+                    fatigue is not None
+                    and fatigue.value >= self._fatigue_critical_threshold
+                ):
+                    status.apply_damage(self._fatigue_critical_damage_per_tick)
+                    changed = True
                     if self._event_publisher is not None:
                         starvation_events.extend(status.get_events())
                         status.clear_events()
