@@ -1977,7 +1977,11 @@ def create_escape_game_runtime(
             key = (sid, is_spoiled)
             if key not in seen_groups:
                 name = item.item_spec.name
-                seen_groups[key] = [name, 0, slot_id, iid.value]
+                # 実験 #29 後続: item_type を持ち回って prompt 側で type タグ
+                # 表示できるようにする。ItemType.value は "consumable" 等の
+                # 小文字列。enum 経由なので未設定リスクはない。
+                item_type_value = item.item_spec.item_type.value
+                seen_groups[key] = [name, 0, slot_id, iid.value, item_type_value]
             seen_groups[key][1] += 1
         return tuple(
             SpotGraphInventoryItemEntry(
@@ -1987,6 +1991,7 @@ def create_escape_game_runtime(
                 slot_id=info[2],
                 item_instance_id=info[3],
                 is_spoiled=is_spoiled,
+                item_type=info[4],
             )
             for (sid, is_spoiled), info in seen_groups.items()
         )

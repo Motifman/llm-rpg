@@ -54,6 +54,31 @@ def _current_sub_location_id_from_snapshot(
     return None
 
 
+# 実験 #29 後続: ItemType.value → LLM プロンプト向け日本語タグ。
+# 「食料/道具」程度の粒度で区別できれば use_item の誤判断 (ITEM_NOT_CONSUMABLE)
+# は減る想定。未知 type は空文字を返して何も表示しない (= silent fallback)。
+_ITEM_TYPE_DISPLAY = {
+    "consumable": " (食料)",
+    "equipment": " (装備)",
+    "material": " (素材)",
+    "tool": " (道具)",
+    "key_item": " (重要)",
+    "quest": " (任務品)",
+    "cosmetic": " (装飾)",
+    "other": "",
+}
+
+
+def _format_item_type_tag(item_type: str) -> str:
+    """item_type 文字列値を日本語タグに整形する。
+
+    未知 / 空 / "other" のときは空文字 (タグ非表示)。
+    """
+    if not item_type:
+        return ""
+    return _ITEM_TYPE_DISPLAY.get(item_type, "")
+
+
 class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     """スポットグラフのスナップショットにラベルを付与する UiContextBuilder。"""
 
@@ -336,7 +361,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # Phase D-3a: 腐敗食は (腐敗) を付ける。runtime 側で (spec, is_spoiled)
             # 単位で集約しているので、quantity と (腐敗) の関係は一意に決まる。
             spoiled_mark = " (腐敗)" if entry.is_spoiled else ""
-            lines.append(f"  {label}: {entry.name}{qty}{spoiled_mark}")
+            # 実験 #29 後続: item_type を日本語タグで表示し、LLM が
+            # 「食べられる / 道具 / 素材」の区別をリストだけで判断できるよう
+            # にする。ITEM_NOT_CONSUMABLE (= 食料じゃないものを食べようとする
+            # ミス) を減らす目的。
+            type_mark = _format_item_type_tag(entry.item_type)
+            lines.append(f"  {label}: {entry.name}{qty}{type_mark}{spoiled_mark}")
             # 後方互換: 既存 use_item は target.item_instance_id に item_spec_id を
             # 入れる慣習 (名前と内容が乖離しているが、リスクを取らないため触らない)。
             # 新しい drop_item / pickup_item は専用フィールド (real_item_instance_id /
