@@ -62,10 +62,10 @@ class TestInitialSpawn:
         assert _count_monsters(runtime) >= 2  # feral_dog + giant_crab
 
     def test_夜に進めると_全_4_体_配置される(self, runtime) -> None:
-        """24 tick / day, night phase は 0.66 から (= tick 16 以降)。
-        21 tick 進めれば wolf / snake も spawn して計 4 体になる。"""
+        """48 tick / day, night phase は 0.66 から (= tick 32 以降)。
+        33 tick 進めれば wolf / snake も spawn して計 4 体になる。"""
         sim = runtime._simulation_service
-        for _ in range(21):
+        for _ in range(33):
             sim.tick()
         assert _count_monsters(runtime) == 4
 

@@ -30,14 +30,15 @@ class TestMetadata:
     def test_id_が_v2(self, loaded) -> None:
         assert loaded.metadata.id == "survival_island_v2"
 
-    def test_推定_tick_数は_14_日相当(self, loaded) -> None:
-        # 1 day = 24 tick (時間スケール統一以降)
-        assert loaded.metadata.estimated_ticks == 336
+    def test_推定_tick_数は_8_日相当(self, loaded) -> None:
+        # 8 日 × 48 tick = 384 (体感を 1日 = 48 tick にした調整後)
+        assert loaded.metadata.estimated_ticks == 384
 
-    def test_ticks_per_day_は_24(self, loaded) -> None:
-        """時間スケール統一: 1 tick = 1 時間。"""
+    def test_ticks_per_day_は_48(self, loaded) -> None:
+        """1 tick = 0.5 時間 (1日 = 48 tick)。
+        実験 #29 後続で「1日が短すぎて移動だけで夜になる」体感を緩和した。"""
         assert loaded.day_night_config is not None
-        assert loaded.day_night_config.cycle.ticks_per_day == 24
+        assert loaded.day_night_config.cycle.ticks_per_day == 48
 
 
 class TestPlayers:
@@ -108,13 +109,14 @@ class TestOutcomeResolutionConfig:
 
     def test_rescue_ticks_は_設計通り(self, loaded) -> None:
         config = loaded.outcome_resolution_config
-        # 1 tick = 1 hour, 24 tick/day: 救助船 day 7 / day 11 (= tick 168 / 264)
-        assert config.rescue_at_ticks == (168, 264)
+        # 1 day = 48 tick: 救助船 day 4 / day 6 / day 7 (= tick 192 / 288 / 336)
+        # チャンスを 3 回に増やして難易度を下げた (実験 #29 後続調整)。
+        assert config.rescue_at_ticks == (192, 288, 336)
 
-    def test_stranded_は_14日_tick_336(self, loaded) -> None:
+    def test_stranded_は_8日_tick_384(self, loaded) -> None:
         config = loaded.outcome_resolution_config
-        # 14 日 × 24 tick = 336
-        assert config.stranded_at_tick == 336
+        # 8 日 × 48 tick = 384
+        assert config.stranded_at_tick == 384
 
     def test_signal_flag_は_signal_fire_lit(self, loaded) -> None:
         config = loaded.outcome_resolution_config

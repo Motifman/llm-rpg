@@ -1,4 +1,4 @@
-"""#356 後続: food_spoiled の **日単位 (24 tick) 集約**。
+"""#356 後続: food_spoiled の **日単位 (v2 では 48 tick) 集約**。
 
 #350 で同 tick 集約は実装済 (「野いちごが3つ腐った」)。実験 #25 trace
 では椰子の実が tick 83/84/85/86/87/88/93/111/113/115/126/128/133/152 と
@@ -89,10 +89,10 @@ class TestSameDayAggregation:
                 [_make_spoiled_event(101, iid, "野いちご")]
             )
         # advance_tick が day 0 → day 1 を跨ぐ tick まで進める
-        # ticks_per_day=24 なので tick 24 で day 1。simulation_service が tick を
+        # ticks_per_day=48 なので tick 48 で day 1。simulation_service が tick を
         # 進める前提なので、stub する。
         from ai_rpg_world.domain.common.value_object import WorldTick
-        runtime._simulation_service.tick = MagicMock(return_value=WorldTick(24))
+        runtime._simulation_service.tick = MagicMock(return_value=WorldTick(48))
         runtime.advance_tick()
         # flush 後、food_spoiled obs が player 数だけ届く (4 players)
         food_obs = [(pid, o) for pid, o in captured if (o.structured or {}).get("type") == "food_spoiled"]
@@ -119,7 +119,7 @@ class TestSameDayAggregation:
                 [_make_spoiled_event(102, iid, "椰子の実")]
             )
         from ai_rpg_world.domain.common.value_object import WorldTick
-        runtime._simulation_service.tick = MagicMock(return_value=WorldTick(24))
+        runtime._simulation_service.tick = MagicMock(return_value=WorldTick(48))
         runtime.advance_tick()
         food_obs = [(pid, o) for pid, o in captured if (o.structured or {}).get("type") == "food_spoiled"]
         assert food_obs, "flush 後の食料腐敗 obs が emit されていない"
@@ -135,7 +135,7 @@ class TestDayBoundaryFlush:
     """advance_tick で day が変わったら自動 flush。"""
 
     def test_次の_day_の_腐敗が_来たら_前日分を_flush(self, runtime) -> None:
-        """tick 5 (day 0) に野いちご 2 個 → tick 26 (day 1) に椰子の実 1 個
+        """tick 5 (day 0) に野いちご 2 個 → tick 50 (day 1) に椰子の実 1 個
         が来ると、day 1 の処理前に day 0 分が flush される。"""
         captured = _capture_observations(runtime)
         runtime.current_tick = lambda: 5  # type: ignore[method-assign]
@@ -144,7 +144,7 @@ class TestDayBoundaryFlush:
                 [_make_spoiled_event(101, iid, "野いちご")]
             )
         # day 1 に進めて新規 spoilage を投入 (=暗黙の day 切り替え)
-        runtime.current_tick = lambda: 26  # type: ignore[method-assign]
+        runtime.current_tick = lambda: 50  # type: ignore[method-assign]
         runtime._append_food_spoiled_batch_observation(
             [_make_spoiled_event(102, 10, "椰子の実")]
         )
