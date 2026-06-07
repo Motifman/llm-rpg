@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -344,6 +345,19 @@ class EscapeGameRuntime:
     # - 注入されていれば ``_record_action_result`` で chunk が積まれ、
     #   prompt builder の recall section に過去エピソードが現れる
     _episodic_stack: Optional[Any] = field(default=None, repr=False)
+    # #404 fix: travel_stage を runtime に保持する。create_session 経路から
+    # 「到着時の schedule_turn コールバック」を後付けで注入するため、参照を
+    # 露出させる必要がある (simulation_service の中に隠れたままだと外から
+    # 触れない)。
+    _travel_stage: Optional[SpotGraphTravelStageService] = field(default=None, repr=False)
+    # #404 P2 (progress 可観測性): driver iteration 内で発火した LLM 呼び出し回数を
+    # 集計する単純カウンタ。``_LlmMetricsTraceSink.record`` が bump し、experiment
+    # progress reporter が iteration 終端で snapshot + reset する。Phase A の
+    # ThreadPoolExecutor で並行 increment され得るため Lock で保護する。
+    _llm_call_count: int = field(default=0, repr=False)
+    _llm_call_count_lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False
+    )
 
     @property
     def id_mapper(self) -> ScenarioIdMapper:
@@ -364,6 +378,76 @@ class EscapeGameRuntime:
 
     def current_tick(self) -> int:
         return self._time_provider.get_current_tick().value
+
+    def bump_llm_call_count(self) -> None:
+        """LLM 呼び出し 1 件分カウンタを進める (#404 P2)。
+
+        ``_LlmMetricsTraceSink.record`` から呼ばれる thread-safe な counter。
+        並列 Phase A の hot path に乗るので、失敗してログを濁さないために
+        Lock 取得失敗時は黙って諦める設計には **しない** (Lock 取得は確実に
+        成功する想定。bump 失敗 = メトリクス欠損 = silent failure)。
+        """
+        with self._llm_call_count_lock:
+            self._llm_call_count += 1
+
+    def pop_llm_call_count(self) -> int:
+        """累積カウンタを返してリセットする。
+
+        experiment progress reporter が 1 driver iteration の終端で呼ぶ想定。
+        increment との race を防ぐため Lock 内で read-and-reset を 1 操作にする。
+        """
+        with self._llm_call_count_lock:
+            n = self._llm_call_count
+            self._llm_call_count = 0
+            return n
+
+    def count_traveling_players(self) -> int:
+        """現在 ``is_traveling=True`` の player 数を返す (#404 P2)。
+
+        progress.jsonl の ``travel_active`` フィールド向け。失敗時は 0
+        (= 計測欠損) を返す: 進捗集計が status repo の障害で全体停止しない
+        ようにする fail-safe。
+        """
+        try:
+            count = 0
+            for status in self._player_status_repo.find_all():
+                nav = status.spot_navigation_state
+                if nav is not None and nav.is_traveling:
+                    count += 1
+            return count
+        except Exception:
+            return 0
+
+    def advance_until_player_idle(
+        self, player_id: PlayerId, max_ticks: int = 500
+    ) -> int:
+        """テスト / デモ用ヘルパ: 指定 player の travel が終わるまで tick を進める。
+
+        #404 修正後の ``do_move`` は travel 開始だけして即 return する非同期
+        セマンティクスになった。テスト / デモのうち「move したら着いている」
+        前提のコードはこのヘルパで後段の tick advance を明示する。
+
+        Args:
+            player_id: 待機対象。
+            max_ticks: 無限ループ防止の上限 (到達不能や travel state が永遠に
+                       立ち続けるバグを test で検知できる安全弁)。
+        Returns:
+            進めた tick 数。最大に達した場合は max_ticks。
+        Raises:
+            RuntimeError: max_ticks 内に travel が終わらなかった場合。
+        """
+        advanced = 0
+        for _ in range(max_ticks):
+            status = self._player_status_repo.find_by_id(player_id)
+            nav = status.spot_navigation_state if status is not None else None
+            if nav is None or not nav.is_traveling:
+                return advanced
+            self.advance_tick()
+            advanced += 1
+        raise RuntimeError(
+            f"advance_until_player_idle: player {player_id.value} が "
+            f"{max_ticks} tick 経っても is_traveling のままです (travel state リーク?)"
+        )
 
     def advance_tick(self) -> int:
         tick = self._simulation_service.tick()
@@ -1092,6 +1176,28 @@ class EscapeGameRuntime:
         return result
 
     def do_move(self, player_id: PlayerId, dest_spot_str_id: str) -> None:
+        """目的地へ向けて移動を開始する (#404 fix: ネスト advance_tick を排除)。
+
+        旧実装: ``start_travel_to_spot`` 後に ``for _ in range(200): advance_tick()``
+        を回し、到着するまでツール内で同期的に待っていた。これが driver tick 1 回
+        の中で world tick を 70+ も連打 → 各 world tick で heartbeat / LLM
+        turn trigger が発火 → 1 driver tick = 656 秒という wall time スパイクと
+        「travel 1 回で 134 LLM call」の silent failure を生んでいた (#404)。
+
+        新実装: ``start_travel_to_spot`` で travel state を立てて即 return する。
+        以降の world tick は外側の experiment loop が回し、その中の
+        ``SpotGraphTravelStageService`` が naturally に 1 tick ずつ travel を
+        進める。本人の LLM ターンは ``runtime_manager._can_player_act`` の
+        ``is_traveling`` フィルタで sleep し、到着時に travel_stage の
+        ``on_arrival`` コールバックで再起床される (= turn_scheduler.schedule_turn)。
+
+        この設計変更により:
+        - 1 driver tick = 1 world tick が概ね成立する (heartbeat / other actions
+          は通常通り進む)
+        - 他プレイヤーは A の移動中も自分の next-turn 規律で動ける
+        - tool 結果は 「{X} へ向かって出発した / 移動中」 になる。到着の旨は
+          後続 turn で snapshot の current_spot 変化として LLM に届く
+        """
         from_name = self.get_player_spot_name(player_id)
         dest_int = self.id_mapper.get_int("spot", dest_spot_str_id)
         dest_sid = SpotId.create(dest_int)
@@ -1100,56 +1206,47 @@ class EscapeGameRuntime:
         if inv:
             owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repo)
         flags = self._world_flag_state.as_frozen_set()
+        # 失敗は同期的に例外で返る (SpotTravelUnreachable / ConnectionNotPassable
+        # 等)。tool 層がそれを LlmCommandResultDto に変換する想定なので、
+        # ここでは catch せず素通しする。
         self._movement_service.start_travel_to_spot(player_id, dest_sid, owned, flags)
-        for _ in range(200):
-            self.advance_tick()
-            status = self._player_status_repo.find_by_id(player_id)
-            if status is None or status.spot_navigation_state is None:
-                break
-            if not status.spot_navigation_state.is_traveling:
-                break
-            # #363 Fix 2: ネスト advance_tick の最中にゲーム終了したら即抜ける。
-            # 全員 DEAD で outcome 確定後も移動ループが回り続けて駆動 tick が
-            # 異常膨張する silent failure を防ぐ。
-            try:
-                if self.check_game_end().is_ended:
-                    break
-            except Exception:
-                # check_game_end の失敗は do_move を止める理由にはしない
-                pass
+
         self._process_graph_events()
         graph_after = self._spot_graph_repo.find_graph()
         dest_name = graph_after.get_spot(dest_sid).name
-        # 到達判定: 200 tick 上限で抜けたが travel 状態が残っているケースは失敗扱い。
-        # 暗い・通行止め等で start_travel_to_spot 自体が拒否されたケースは
-        # current_spot が dest と一致しないため same 判定で弾く。
+
+        # 同一スポット指定の場合 start_travel_to_spot は no-op で travel state を
+        # 立てない。その場合は「すでにそこに居る」結果を返す。
         eid = EntityId.create(int(player_id))
         try:
             current_spot = graph_after.get_entity_spot(eid)
         except Exception:
             current_spot = None
-        reached = current_spot == dest_sid
-        if reached:
-            action_summary = f"「{from_name}」から「{dest_name}」へ移動した"
-            result_summary = f"「{dest_name}」に到着した"
-            # spot 遷移成功は cognitive science の "doorway effect" に相当する
-            # 強い scene 境界 → chunk_coordinator にヒントとして伝える (Issue #311 後続)
+        status = self._player_status_repo.find_by_id(player_id)
+        nav = status.spot_navigation_state if status is not None else None
+        already_there = current_spot == dest_sid and (nav is None or not nav.is_traveling)
+        if already_there:
             self._record_action_result(
                 player_id,
-                action_summary,
-                result_summary,
+                f"「{dest_name}」へ移動しようとした",
+                f"「{dest_name}」には既に居る",
                 tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-                scene_boundary=True,
             )
-        else:
-            self._record_action_result(
-                player_id,
-                f"「{from_name}」から「{dest_name}」へ移動しようとした",
-                f"「{dest_name}」へは到達できなかった",
-                tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-                success=False,
-                error_code="DEST_NOT_REACHED",
-            )
+            return
+
+        # 移動開始の action result を記録する。scene_boundary は「scene を変える
+        # 意思決定」の時点で立てる (cognitive science の doorway effect は意図
+        # 形成の瞬間 + 物理的境界通過の両方が関係するが、本実装では tool call
+        # 時点を chunk 境界として扱う)。start_travel_to_spot が成功している以上
+        # 経路は確保されていて、advance_spot_travel_one_tick が異常終了しない
+        # 限り必ず arrival する。
+        self._record_action_result(
+            player_id,
+            f"「{from_name}」から「{dest_name}」へ向かって出発した",
+            f"「{dest_name}」へ移動中。到着までは他の行動はできない。",
+            tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            scene_boundary=True,
+        )
 
     def do_wait(self, player_id: PlayerId, reason: str = "") -> int:
         tick = self.advance_tick()
@@ -2415,6 +2512,7 @@ def create_escape_game_runtime(
         _action_result_store=action_result_store,
         _time_provider=time_provider,
         _simulation_service=simulation_service,
+        _travel_stage=travel_stage,
         _scenario_event_stage=scenario_event_stage,
         _scenario_event_progress=scenario_event_progress,
         _environment_stage=environment_stage,

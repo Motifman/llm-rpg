@@ -93,8 +93,26 @@ class _ExperimentProgressReporter:
             progress_jsonl.parent.mkdir(parents=True, exist_ok=True)
             self._progress_fh = open(progress_jsonl, "w", encoding="utf-8")
 
-    def tick_end(self, i: int, world_tick: int) -> None:
-        """1 tick 完了時に呼ぶ。stdout / stderr / jsonl 全部更新する。"""
+    def tick_end(
+        self,
+        i: int,
+        world_tick: int,
+        *,
+        world_tick_start: Optional[int] = None,
+        llm_calls: Optional[int] = None,
+        travel_active: Optional[int] = None,
+    ) -> None:
+        """1 driver iteration 完了時に呼ぶ。stdout / stderr / jsonl 全部更新する。
+
+        #404 P2 で追加した可観測性パラメータ (全部 optional、未指定なら従来挙動):
+
+        - ``world_tick_start``: iteration 開始時の world_tick。``world_tick - start``
+          で 1 iteration あたりに進んだ world tick 数 (= ``nested_world_ticks``)
+          が出る。1 を超えていれば「`do_move` 等が世界を多く進めた」サイン。
+        - ``llm_calls``: iteration 中に発火した LLM 呼び出し数。スパイク原因
+          特定の最重要指標。
+        - ``travel_active``: iteration 終了時点で is_traveling=True の player 数。
+        """
         now = time.monotonic()
         last_tick_duration = now - self._t_last_tick
         self._t_last_tick = now
@@ -104,6 +122,9 @@ class _ExperimentProgressReporter:
         remaining_ticks = max(0, self._max_ticks - (i + 1))
         eta = avg * remaining_ticks
         pct = (i + 1) / self._max_ticks * 100.0
+        nested_world_ticks: Optional[int] = None
+        if world_tick_start is not None:
+            nested_world_ticks = max(0, int(world_tick) - int(world_tick_start))
 
         # stdout: 1 行 print (旧来互換)。
         self._stdout.write(
@@ -130,7 +151,7 @@ class _ExperimentProgressReporter:
 
         # progress.jsonl: 1 tick 1 行 (tail -f / 集計用)。
         if self._progress_fh is not None:
-            entry = {
+            entry: Dict[str, Any] = {
                 "tick_index": i + 1,
                 "max_ticks": self._max_ticks,
                 "world_tick": int(world_tick),
@@ -140,6 +161,16 @@ class _ExperimentProgressReporter:
                 "eta_seconds": round(eta, 1),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
+            # #404 P2: スパイク原因特定のための内訳。値が None (= reporter
+            # 呼び出し側が指定しなかった) なら従来通り省略。
+            if world_tick_start is not None:
+                entry["world_tick_start"] = int(world_tick_start)
+            if nested_world_ticks is not None:
+                entry["nested_world_ticks"] = nested_world_ticks
+            if llm_calls is not None:
+                entry["llm_calls"] = int(llm_calls)
+            if travel_active is not None:
+                entry["travel_active"] = int(travel_active)
             self._progress_fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
             self._progress_fh.flush()
 
@@ -257,6 +288,12 @@ def _drive_scenario(
             # tick 完了時に ETA / per-tick wall time を出す。
             progress(f"駆動 {i + 1}/{max_ticks} world_tick={w0}")
             recorder.record(TraceEventKind.TICK_START, tick=w0)
+            # #404 P2: iteration 内 LLM 呼び出し数を計測するため、advance_tick
+            # の前に counter をリセットしておく (前 iteration の余り = 0 のはず
+            # だが防御的に)。
+            _pop = getattr(runtime, "pop_llm_call_count", None)
+            if callable(_pop):
+                _pop()
             runtime.advance_tick()
             last_tick = runtime.current_tick()
             # tick 終了直後に position 差分を emit (移動が起きた player のみ)
@@ -285,8 +322,29 @@ def _drive_scenario(
                     prev_spots[pid_int] = new_spot
             recorder.record(TraceEventKind.TICK_END, tick=last_tick)
             # 進捗 reporter: tick 完了時の wall time / ETA を stderr + progress.jsonl に出す
+            # #404 P2: スパイク原因の内訳 (nested world tick / LLM 呼出 / 移動中数) を渡す。
+            llm_calls: Optional[int] = None
+            travel_active: Optional[int] = None
+            pop_llm = getattr(runtime, "pop_llm_call_count", None)
+            if callable(pop_llm):
+                try:
+                    llm_calls = int(pop_llm())
+                except Exception:
+                    llm_calls = None
+            count_traveling = getattr(runtime, "count_traveling_players", None)
+            if callable(count_traveling):
+                try:
+                    travel_active = int(count_traveling())
+                except Exception:
+                    travel_active = None
             if reporter is not None:
-                reporter.tick_end(i, last_tick)
+                reporter.tick_end(
+                    i,
+                    last_tick,
+                    world_tick_start=int(w0),
+                    llm_calls=llm_calls,
+                    travel_active=travel_active,
+                )
             end_check = runtime.check_game_end()
             if end_check.is_ended:
                 outcome = (

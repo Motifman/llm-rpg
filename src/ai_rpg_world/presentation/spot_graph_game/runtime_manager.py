@@ -269,6 +269,32 @@ def _resolve_llm_parallel_workers(default: int = 0) -> int:
     return max(0, n)
 
 
+# #346 Step 3 / #404: per-agent idle timer の沈黙上限。`note_player_activity`
+# 以降 N tick 何も起きなければ heartbeat 1 件で起こす。デフォルト 6 tick
+# (旧固定値 5 から +1 で安全寄り)。env で実験ごとに上げて沈黙許容を強める / 下げて
+# 古い挙動に戻すなど調整できる。
+_LLM_IDLE_TIMEOUT_TICKS_ENV = "LLM_IDLE_TIMEOUT_TICKS"
+_LLM_IDLE_TIMEOUT_TICKS_DEFAULT = 6
+
+
+def _resolve_llm_idle_timeout_ticks(
+    default: int = _LLM_IDLE_TIMEOUT_TICKS_DEFAULT,
+) -> int:
+    """env から idle timeout (= heartbeat interval) を読む。
+
+    不正値 / 1 未満は default に戻す。**設定上限は設けない** (運用で「丸 1 日
+    沈黙を許す」のような長期 idle も自由に試せるように)。
+    """
+    raw = os.environ.get(_LLM_IDLE_TIMEOUT_TICKS_ENV)
+    if raw is None:
+        return default
+    try:
+        n = int(raw)
+    except ValueError:
+        return default
+    return max(1, n)
+
+
 class _LlmMetricsTraceSink:
     """Phase A の LLM 呼び出し metrics を trace に流す sink (PR #358)。
 
@@ -311,6 +337,16 @@ class _LlmMetricsTraceSink:
                 success=metrics.success,
                 error_code=metrics.error_code,
             )
+            # #404 P2: progress.jsonl 用 LLM 呼び出しカウンタを bump。
+            # runtime 側に counter が無いランタイム (presentation 単体テスト等)
+            # は getattr で安全に skip する。
+            bump = getattr(self._runtime, "bump_llm_call_count", None)
+            if callable(bump):
+                try:
+                    bump()
+                except Exception:
+                    # counter 失敗は trace 記録自体を壊さない
+                    pass
         except Exception:
             logger.exception("trace_recorder.record(llm_call) failed")
 
@@ -438,6 +474,37 @@ class _EscapeGameLlmTurnTrigger:
             self._turn_counts[player_id_value] = current_count
         else:
             self._turn_counts.pop(player_id_value, None)
+        # #346 Step 3 / #404: per-agent idle timer の last 更新。turn が走った
+        # = 「いま活動した」なので heartbeat の沈黙タイマーをリセットする。
+        # event 駆動で頻繁に動く player には heartbeat が出なくなり、
+        # 完全 idle な player だけ idle_timeout 経過後に 1 回起こされる。
+        self._note_activity_after_turn(player_id_value)
+
+    def _note_activity_after_turn(self, player_id_value: int) -> None:
+        """heartbeat emitter に「player が今ターン走った」を通知する fail-safe ヘルパ。
+
+        emitter 未配線 / 異常系では何もしない (turn 実行自体は壊さない)。
+        """
+        runtime = self.wiring.runtime
+        emitter = None
+        sim = getattr(runtime, "_simulation_service", None)
+        if sim is not None:
+            emitter = getattr(sim, "_heartbeat_emitter", None)
+        if emitter is None or not hasattr(emitter, "note_player_activity"):
+            return
+        try:
+            from ai_rpg_world.domain.common.value_object import WorldTick
+            current = int(runtime.current_tick())
+            emitter.note_player_activity(
+                PlayerId(player_id_value), WorldTick(current)
+            )
+        except Exception:
+            # idle timer の精度低下は致命ではない (worst case 旧来挙動)
+            logger.warning(
+                "note_player_activity failed for player_id=%s",
+                player_id_value,
+                exc_info=True,
+            )
 
     def _can_player_act(self, player_id_value: int) -> bool:
         """#363 Fix 1b: 行動不可なプレイヤーを LLM 経路から除外する。
@@ -475,7 +542,17 @@ class _EscapeGameLlmTurnTrigger:
             status = status_repo.find_by_id(PlayerId(player_id_value))
             if status is None:
                 return True
-            return bool(status.can_act())
+            if not status.can_act():
+                return False
+            # #404 fix: 移動中 (is_traveling=True) の player は LLM ターンを
+            # 回さない。意味論として「移動中は次の意思決定をしない」が自然で、
+            # かつ heartbeat / observation で起こされても turn 実行を空回り
+            # させない。到着時に SpotGraphTravelStageService.on_arrival
+            # 経由で schedule_turn が打たれて再開する。
+            nav = status.spot_navigation_state
+            if nav is not None and nav.is_traveling:
+                return False
+            return True
         except Exception:
             logger.warning(
                 "player_status_repo.find_by_id failed for player_id=%s; "
@@ -1939,10 +2016,29 @@ class GameRuntimeManager:
         def _heartbeat_llm_player_ids() -> Iterable[PlayerId]:
             return tuple(PlayerId(int(sp.player_id)) for sp in runtime.scenario.player_spawns)
 
+        def _is_traveling(pid: PlayerId) -> bool:
+            """#404 fix: 移動中の player に heartbeat を打たない判定。
+
+            heartbeat 観測は ``schedules_turn=True`` なので、移動中に届くと
+            「移動中なのに何かしようとして失敗」する空回りターンを誘発する。
+            travel_stage が arrival 時に schedule_turn を打つので、移動中は
+            完全に silent にしてよい。
+            """
+            try:
+                status = runtime._player_status_repo.find_by_id(pid)
+            except Exception:
+                return False
+            if status is None:
+                return False
+            nav = status.spot_navigation_state
+            return nav is not None and nav.is_traveling
+
         heartbeat_emitter = HeartbeatObservationEmitter(
             appender,
             turn_scheduler,
             _heartbeat_llm_player_ids,
+            interval_ticks=_resolve_llm_idle_timeout_ticks(),
+            is_traveling_provider=_is_traveling,
         )
         # ActionFailed 観測の wire: 失敗 DTO を当該プレイヤーへの観測に変換する。
         # ``intent_id_generator`` は wiring と emitter で共有しないが、wiring 側
@@ -1962,6 +2058,12 @@ class GameRuntimeManager:
         # 他者発話を聞いた場合、ObservationTurnScheduler 経由でターンを積む
         # 必要があるため、wiring 完成後の scheduler を runtime に注入する。
         runtime.set_observation_turn_scheduler(turn_scheduler)
+        # #404 fix: travel 到着時に LLM ターンを再開させるためのコールバックを
+        # travel_stage に注入する。is_traveling フィルタで sleep していた player
+        # は、ここで schedule_turn → 次の post-tick hook で run_turn される。
+        travel_stage = getattr(runtime, "_travel_stage", None)
+        if travel_stage is not None and hasattr(travel_stage, "set_on_arrival"):
+            travel_stage.set_on_arrival(llm_wiring.llm_turn_trigger.schedule_turn)
 
         sid = uuid.uuid4().hex[:12]
         title = runtime.metadata.title

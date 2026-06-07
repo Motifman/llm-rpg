@@ -246,3 +246,132 @@ class TestHeartbeatObservationEmitter:
             "tick": 104,
             "interval_ticks": 4,
         }
+
+
+class TestHeartbeatSkipsTravelingPlayers:
+    """``#404`` fix: 移動中の player には heartbeat を発行しない。
+
+    旧実装は heartbeat が ``schedules_turn=True`` で届いて移動中 player の LLM
+    ターンが空回りし、travel 73 tick × 4 player × 約 15s = ~656s の wall time
+    スパイクを生んでいた。is_traveling_provider で skip させる。
+    """
+
+    def _build_emitter_with_traveling(
+        self,
+        traveling_pids: set[int],
+    ) -> tuple[
+        HeartbeatObservationEmitter,
+        DefaultObservationContextBuffer,
+        _RecordingTurnTrigger,
+    ]:
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer)
+        turn_trigger = _RecordingTurnTrigger()
+        turn_scheduler = ObservationTurnScheduler(
+            turn_trigger=turn_trigger,
+            llm_player_resolver=_AllLlmPlayerResolver(),
+        )
+        emitter = HeartbeatObservationEmitter(
+            observation_appender=appender,
+            turn_scheduler=turn_scheduler,
+            llm_player_ids_provider=lambda: [PlayerId(1), PlayerId(2)],
+            interval_ticks=2,
+            now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
+            is_traveling_provider=lambda pid: pid.value in traveling_pids,
+        )
+        return emitter, buffer, turn_trigger
+
+    def test_移動中の_player_には_heartbeat_を発行しない(self) -> None:
+        """is_traveling=True の player は buffer に観測が積まれず schedule も走らない。"""
+        emitter, buffer, trigger = self._build_emitter_with_traveling({1})
+        emitter.run(WorldTick(10))  # anchor
+        emitter.run(WorldTick(12))  # gap=2 → 通常は emit
+        assert buffer.get_observations(PlayerId(1)) == []
+        # 同じ tick で別 player (移動中でない) には届く
+        assert len(buffer.get_observations(PlayerId(2))) == 1
+        assert trigger.scheduled == [2]
+
+    def test_provider_が例外を投げても_fail_safe_で従来通り発行する(self) -> None:
+        """provider 失敗は heartbeat を止めない。silent failure 防止のため fail-open。"""
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer)
+        turn_trigger = _RecordingTurnTrigger()
+        turn_scheduler = ObservationTurnScheduler(
+            turn_trigger=turn_trigger,
+            llm_player_resolver=_AllLlmPlayerResolver(),
+        )
+
+        def raising_provider(pid: PlayerId) -> bool:
+            raise RuntimeError("provider boom")
+
+        emitter = HeartbeatObservationEmitter(
+            observation_appender=appender,
+            turn_scheduler=turn_scheduler,
+            llm_player_ids_provider=lambda: [PlayerId(1)],
+            interval_ticks=2,
+            now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
+            is_traveling_provider=raising_provider,
+        )
+        emitter.run(WorldTick(10))  # anchor
+        emitter.run(WorldTick(12))  # emit
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        assert turn_trigger.scheduled == [1]
+
+    def test_provider_未指定なら従来通り全員発行(self) -> None:
+        """is_traveling_provider 省略時 (後方互換) は全員に発行される。"""
+        emitter, buffer, trigger = _build_emitter(interval_ticks=2)
+        emitter.run(WorldTick(10))
+        emitter.run(WorldTick(12))
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        assert trigger.scheduled == [1]
+
+
+class TestPerAgentIdleTimer:
+    """``#346 Step 3``: per-agent idle timer 意味論。
+
+    LLM turn trigger が turn 完了直後に ``note_player_activity`` を呼ぶことで、
+    event 駆動で頻繁に動く player には heartbeat が出なくなる。完全 idle な
+    player だけ ``interval_ticks`` 経過後に 1 回起こされる。
+    """
+
+    def test_note_player_activity_は_heartbeat_発火を_interval_遅延させる(self) -> None:
+        """活動を通知すると last_emitted がリセットされ、次の発火が後ろにずれる。"""
+        emitter, buffer, trigger = _build_emitter(interval_ticks=5)
+        # anchor
+        emitter.run(WorldTick(10))
+        # tick 12 で event 駆動で turn が回った想定
+        emitter.note_player_activity(PlayerId(1), WorldTick(12))
+        # tick 15: anchor から 5 経ったが、note は 12 なので gap=3 < 5 で未発火
+        emitter.run(WorldTick(15))
+        assert buffer.get_observations(PlayerId(1)) == []
+        assert trigger.scheduled == []
+        # tick 17: 12 から 5 経ったので発火
+        emitter.run(WorldTick(17))
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        assert trigger.scheduled == [1]
+
+    def test_event_駆動で動き続ける_player_には_heartbeat_が出ない(self) -> None:
+        """毎 tick の event 駆動 turn で last が更新され続けると heartbeat は永続 silent。"""
+        emitter, buffer, trigger = _build_emitter(interval_ticks=3)
+        emitter.run(WorldTick(0))  # anchor
+        for t in range(1, 20):
+            emitter.note_player_activity(PlayerId(1), WorldTick(t))
+            emitter.run(WorldTick(t))
+        assert buffer.get_observations(PlayerId(1)) == []
+        assert trigger.scheduled == []
+
+    def test_完全_idle_な_player_は_interval_経過で_1回起きる(self) -> None:
+        """活動通知が無いまま interval が経つと、想定通り heartbeat 1 回。"""
+        emitter, buffer, trigger = _build_emitter(interval_ticks=6)
+        emitter.run(WorldTick(0))  # anchor
+        for t in range(1, 7):
+            emitter.run(WorldTick(t))
+        # tick 6 で発火 (gap=6 >= 6)
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        assert trigger.scheduled == [1]
+
+    def test_PlayerId_以外を渡しても落ちない(self) -> None:
+        """note_player_activity の入口は防御的に PlayerId 型をチェックする。"""
+        emitter, _, _ = _build_emitter(interval_ticks=5)
+        # 例外を投げないこと (型違いは黙って no-op)
+        emitter.note_player_activity("not-a-player", WorldTick(10))  # type: ignore[arg-type]

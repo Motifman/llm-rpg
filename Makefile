@@ -3,8 +3,8 @@
 	web-frontend-test web-frontend-build web-frontend \
 	asset-pipeline-sync asset-pipeline-sync-rembg asset-pipeline \
 	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud \
-	experiment experiment-publish vllm-tunnel vllm-check check-no-internal-hostnames \
-	build-trace-viewer
+	experiment experiment-publish experiment-survival vllm-tunnel vllm-check \
+	check-no-internal-hostnames build-trace-viewer
 
 WEB_GAME_DB ?= var/game/ai_rpg_world.db
 WEB_MANUAL_PLAYER_IDS ?= 1
@@ -43,6 +43,12 @@ help:
 	@echo "  make experiment-relay-r1      - R1 のみ"
 	@echo "  make experiment-relay-r2      - R2 のみ"
 	@echo "  make experiment-relay-cloud   - OpenAI クラウド（OPENAI_API_BASE 空）"
+	@echo "  make experiment SCENARIO=... MAX_TICKS=... [WORKERS=4 EPISODIC=1 IDLE_TICKS=6 OUT=...]"
+	@echo "                                - 汎用シナリオ実験 (任意 scenario JSON)"
+	@echo "  make experiment-publish ...   - experiment + 自動 gist publish"
+	@echo "  make experiment-survival OUT=... [EPISODIC=1]"
+	@echo "                                - survival_island_v2 専用 (140 tick / workers 4 / publish 既定)"
+	@echo "  make build-trace-viewer RUN_DIR=...  - viewer 3 種 (main + episodic + timeline) を build"
 	@echo "  make vllm-tunnel              - v108 vLLM 用 SSH トンネル起動 (port $(VLLM_LOCAL_PORT))"
 	@echo "  make vllm-check               - トンネル + vLLM 応答確認"
 
@@ -136,21 +142,36 @@ experiment-relay-cloud:
 # trace.jsonl + report.md + trace.html を出力する。
 #
 # 使い方:
-#   make experiment SCENARIO=data/scenarios/relay_puzzle_demo.json
-#   make experiment SCENARIO=data/scenarios/foo.json MAX_TICKS=50 OUT=var/runs/foo-001
+#   make experiment SCENARIO=data/scenarios/survival_island_v2.json
+#   make experiment SCENARIO=data/scenarios/foo.json MAX_TICKS=140 OUT=var/runs/foo-001 WORKERS=4
+#   make experiment SCENARIO=... EPISODIC=1   # episodic memory pipeline 有効
 #
-# 環境変数:
+# 引数 (= make 変数):
 #   SCENARIO       実行するシナリオ JSON のパス (必須)
 #   MAX_TICKS      外側ループ回数 (既定 30)
 #   OUT            出力ディレクトリ (省略時 var/runs/<scenario>-<timestamp>)
-#   OPENAI_API_BASE / LLM_MODEL / OPENAI_API_KEY  litellm の接続先
+#   WORKERS        LLM Phase A 並列ワーカー数 (既定 1。実験は 4 推奨)
+#   EPISODIC       1 で episodic memory 有効 (= LLM_EPISODIC_ENABLED=1)
+#   PUBLISH        1 で gist 自動 publish (= --publish-gist)
+#
+# その他の env (litellm 接続):
+#   OPENAI_API_BASE / LLM_MODEL / OPENAI_API_KEY
 MAX_TICKS ?= 30
+WORKERS ?= 1
+# #346 Step 3 / #404: per-agent idle timer (heartbeat 沈黙上限) tick 数。
+# 既定 6 = 「event 駆動で active なら heartbeat は出ず、丸 6 tick 何もなければ
+# 1 回起こす」。0 / 未指定 = 既定 (6) を使う。沈黙を強めたい実験では 12 / 24
+# に上げる。
+IDLE_TICKS ?=
 experiment:
 	@if [ -z "$(SCENARIO)" ]; then \
-		echo "SCENARIO is required. e.g. make experiment SCENARIO=data/scenarios/relay_puzzle_demo.json"; \
+		echo "SCENARIO is required. e.g. make experiment SCENARIO=data/scenarios/survival_island_v2.json"; \
 		exit 2; \
 	fi
 	@mkdir -p var/runs
+	LLM_TURN_PARALLEL_WORKERS=$(WORKERS) \
+	$(if $(EPISODIC),LLM_EPISODIC_ENABLED=1,) \
+	$(if $(IDLE_TICKS),LLM_IDLE_TIMEOUT_TICKS=$(IDLE_TICKS),) \
 	$(PYTHON) scripts/run_scenario_experiment.py \
 		--scenario $(SCENARIO) \
 		--max-ticks $(MAX_TICKS) \
@@ -159,7 +180,34 @@ experiment:
 
 # experiment + secret gist 自動 publish (PUBLISH=1 と同等)
 experiment-publish:
-	$(MAKE) experiment SCENARIO=$(SCENARIO) MAX_TICKS=$(MAX_TICKS) OUT=$(OUT) PUBLISH=1
+	$(MAKE) experiment \
+		SCENARIO=$(SCENARIO) MAX_TICKS=$(MAX_TICKS) OUT=$(OUT) \
+		WORKERS=$(WORKERS) EPISODIC=$(EPISODIC) IDLE_TICKS=$(IDLE_TICKS) PUBLISH=1
+
+# survival_island_v2 専用のショートカット。
+# 4 player + 14 day (= 140 driver tick) + parallel workers=4 + 自動 publish を
+# デフォルトに固定して、何度も同じパラメータを打ち直す煩雑さを解消する。
+# EPISODIC のみ切り替えて OFF / ON_FULL の 2 run を回すのが定例。
+#
+# 使い方:
+#   make experiment-survival OUT=var/runs/issue390_exp27_off_r1
+#   make experiment-survival OUT=var/runs/issue390_exp27_on_full_r1 EPISODIC=1
+#
+# 上書き可能な変数 (省略時の survival 既定値):
+#   MAX_TICKS=140  WORKERS=4  PUBLISH=1
+#   EPISODIC は未指定 (= OFF)。1 で ON_FULL。
+SURVIVAL_MAX_TICKS ?= 140
+SURVIVAL_WORKERS ?= 4
+SURVIVAL_PUBLISH ?= 1
+experiment-survival:
+	$(MAKE) experiment \
+		SCENARIO=data/scenarios/survival_island_v2.json \
+		MAX_TICKS=$(SURVIVAL_MAX_TICKS) \
+		WORKERS=$(SURVIVAL_WORKERS) \
+		OUT=$(OUT) \
+		EPISODIC=$(EPISODIC) \
+		IDLE_TICKS=$(IDLE_TICKS) \
+		PUBLISH=$(SURVIVAL_PUBLISH)
 
 # vLLM への SSH トンネル (~/.ssh/config の Host エイリアス、既定 v108-vllm)
 # 実 FQDN は本リポジトリには書かない。docs/security_hosts_policy.md 参照。
@@ -173,7 +221,9 @@ vllm-check:
 check-no-internal-hostnames:
 	@./scripts/check_no_internal_hostnames.sh
 
-# Trace viewer の生成 (Issue #188 Phase 1d β)
+# Trace viewer の生成 (Issue #188 Phase 1d β + #389 で Phase 3 追加)
+# main viewer (viewer.html) に加えて、エピソード記憶 (episodic.html) と
+# プレイヤー × tick (timeline.html) の追加 viewer も併せて build する。
 # 使い方: make build-trace-viewer RUN_DIR=var/runs/foo
 build-trace-viewer:
 	@if [ -z "$(RUN_DIR)" ]; then \
@@ -181,3 +231,5 @@ build-trace-viewer:
 		exit 2; \
 	fi
 	$(PYTHON) scripts/build_trace_viewer.py $(RUN_DIR)
+	@$(PYTHON) scripts/build_episodic_viewer.py $(RUN_DIR) || true
+	@$(PYTHON) scripts/build_timeline_viewer.py $(RUN_DIR) || true

@@ -1,4 +1,4 @@
-"""Idle tick でも LLM エージェントが行動できるようにする合成観測の emitter。
+"""Per-agent idle timer による heartbeat 観測の emitter。
 
 なぜ必要か
 -----------
@@ -7,26 +7,29 @@
 エージェントが共存する世界では、片方が active な間にもう片方が「ぼーっと」
 動けないと不自然な硬直が生まれる。
 
-設計
------
+設計 (#346 Step 3 / #404 後続)
+------------------------------
 - ``SpotGraphSimulationApplicationService`` の post-tick hook として動作。
   UoW の外なので ``ObservationAppender`` 経由で buffer に直接 append できる。
-- LLM プレイヤーごとに「最後に heartbeat を発行した tick」を内部記録し、
-  ``interval_ticks`` 経過したら ``schedules_turn=True`` の観測を投入する。
+- **per-agent idle timer**: プレイヤーごとに「最後に活動した tick」を記録し、
+  ``interval_ticks`` 経過したときだけ ``schedules_turn=True`` の観測を投入する。
+  「活動」は event 駆動でも heartbeat 駆動でも構わない (どちらも
+  ``note_player_activity`` で last 更新)。
 - 既存 ``ObservationTurnScheduler`` が ``schedules_turn`` を見て LLM ターンを
   enqueue し、同じ post-tick hook chain で動く ``ILlmTurnTrigger`` がそれを
   実行する。chain 上、heartbeat emitter は LLM turn trigger より *前* に
   走らせる必要がある。
 
-なぜ最後の実観測 tick を見ない最小実装か
----------------------------------------
-「N tick 観測なしなら投入」よりシンプルに「N tick おきに必ず投入」に倒した。
-理由:
-- 実観測時刻の追跡には ObservationAppender / buffer の側に hook 追加が必要で
-  PR スコープを膨らませる
-- heartbeat は低刺激な合成観測なので、たとえ実観測と同時に届いても LLM 側
-  の判断材料が増えるだけで害は小さい
-- 後続 PR で必要になればその時点で「直近観測 tick」を taking する形に拡張可能
+旧設計との違い (#346 Step 3 で改修した点)
+----------------------------------------
+旧: 「N tick おきに必ず投入」(= 最低発火頻度のフロア)。event 駆動でターンを
+    回した直後の player にも N tick 後に冗長な heartbeat が届いていた。
+新: 「N tick 何も無ければ投入」(= 最大沈黙時間の天井)。LLM turn trigger が
+    ``note_player_activity`` を呼んで last を更新するため、active な player は
+    event 駆動だけで動き続け heartbeat が出ない。
+
+#404 で発見された wall time スパイク (1 driver iteration で N 倍の
+LLM 呼び出し) の構造的原因の 1 つを除去する。
 """
 
 from __future__ import annotations
@@ -51,7 +54,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 logger = logging.getLogger(__name__)
 
 
-_DEFAULT_INTERVAL_TICKS = 5
+_DEFAULT_INTERVAL_TICKS = 6
 _HEARTBEAT_PROSE = "周囲に大きな変化はない。少し時間が経った。"
 _HEARTBEAT_TYPE = "heartbeat"
 
@@ -67,6 +70,7 @@ class HeartbeatObservationEmitter:
         interval_ticks: int = _DEFAULT_INTERVAL_TICKS,
         time_label_provider: Optional[Callable[[WorldTick], Optional[str]]] = None,
         now_provider: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        is_traveling_provider: Optional[Callable[[PlayerId], bool]] = None,
     ) -> None:
         if interval_ticks < 1:
             raise ValueError("interval_ticks must be >= 1")
@@ -77,6 +81,12 @@ class HeartbeatObservationEmitter:
         self._time_label_provider = time_label_provider
         self._now_provider = now_provider
         self._last_emitted_tick: dict[int, int] = {}
+        # #404 fix: 移動中の player には heartbeat を発行しない。
+        # 旧実装は heartbeat 観測 → schedules_turn=True → 移動中でも
+        # LLM ターンが走る → 「移動中なのに何かしようとして失敗」が連発する
+        # silent failure 経路だった。is_traveling_provider が None なら
+        # 従来通りの全員一斉発火 (後方互換)。
+        self._is_traveling_provider = is_traveling_provider
 
     def run(self, current_tick: WorldTick) -> None:
         """post-tick hook 本体。各 LLM プレイヤーを巡回し必要なら観測を投入する。"""
@@ -102,6 +112,19 @@ class HeartbeatObservationEmitter:
                 continue
             if not self._should_emit(player_id, current_tick):
                 continue
+            # #404 fix: 移動中なら heartbeat 自体を投入しない。schedules_turn
+                # で起こさない上に、観測 buffer にも残さない (LLM プロンプトに
+                # 「いま heartbeat が来た」と読まれて行動誘発するのを防ぐ)。
+            if self._is_traveling_provider is not None:
+                try:
+                    if self._is_traveling_provider(player_id):
+                        continue
+                except Exception:
+                    # provider 失敗は fail-safe で従来通り emit する
+                    logger.exception(
+                        "is_traveling_provider failed for player %s; emitting heartbeat anyway",
+                        player_id.value,
+                    )
             if now is None:
                 now = self._now_provider()
             if not time_label_resolved:
@@ -153,6 +176,28 @@ class HeartbeatObservationEmitter:
             self._last_emitted_tick[player_id.value] = current_tick.value
             return False
         return (current_tick.value - last) >= self._interval_ticks
+
+    def note_player_activity(
+        self, player_id: PlayerId, current_tick: WorldTick
+    ) -> None:
+        """player が tick T で行動した、と emitter に伝える (#346 Step 3 本体)。
+
+        per-agent idle timer の意味論を成立させるためのフック。LLM turn trigger
+        が turn 完了直後に呼ぶと、event 駆動で動いている active な player に
+        対しては heartbeat が ``interval_ticks`` 後まで再発火しなくなる。
+
+        旧 emitter ("N tick おきに必ず発火する floor") を本メソッドで
+        "N tick 沈黙が続いたときだけ発火する ceiling" に変える。turn trigger と
+        emitter を別 PR で分離しておくため、wiring 上は emitter を持つ runtime
+        側から trigger に渡す形を取る。
+        """
+        if not isinstance(player_id, PlayerId):
+            return
+        # _should_emit と同じキー (player_id.value) で last を上書きする。
+        # heartbeat の次回判定は (current - last) >= interval_ticks なので、
+        # ここで last = current にしておけば次の heartbeat は最短で
+        # current + interval_ticks 後。
+        self._last_emitted_tick[player_id.value] = current_tick.value
 
     def forget_player(self, player_id: PlayerId) -> None:
         """指定プレイヤーの内部状態を破棄する (session 終了時呼ばれる想定)。"""

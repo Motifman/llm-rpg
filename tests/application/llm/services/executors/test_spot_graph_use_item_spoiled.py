@@ -130,12 +130,14 @@ class TestSpoiledFoodDamage:
 
         executor._use_item(player_id=1, args={"item_spec_id": 101})
 
-        # publish_all で status events が流れる (実 callable 引数は list で来る)
+        # publish_all で status events が流れる (実 callable 引数は list で来る)。
+        # 別途 ItemUsedEvent も publish_all で流れるため、複数回呼ばれる可能性が
+        # あるので「いずれかの呼び出しに downed が含まれる」を確認する。
         status.clear_events.assert_called_once()
         publish_all_calls = event_publisher.publish_all.call_args_list
         assert publish_all_calls, "publish_all が呼ばれていない"
-        published = publish_all_calls[0].args[0]
-        assert downed in published
+        all_published = [evt for call in publish_all_calls for evt in call.args[0]]
+        assert downed in all_published
 
     def test_腐敗食の_messageにダメージ表記が含まれる(self) -> None:
         executor, _, _ = _build_executor_with_item({"spoiled": True})
@@ -163,3 +165,51 @@ class TestFreshFoodPath:
 
         # 通常パスでは publish が呼ばれて handler 側で heal が走る
         event_publisher.publish.assert_called_once()
+
+
+class TestUseItemSilentFailures:
+    """use_item の silent failure 回帰テスト。"""
+
+    def test_ItemUsedEvent_は_publish_all_経由で_event_publisher_に流れる(self) -> None:
+        """ItemAggregate.use() で積まれた ItemUsedEvent が publish されないと、
+        durability ベースの観測やメトリクスが silent に落ちる。get_events を
+        drain して publish_all に流すことを保証する。"""
+        from ai_rpg_world.domain.item.event.item_event import ItemUsedEvent
+        executor, _, event_publisher = _build_executor_with_item({})
+
+        executor._use_item(player_id=1, args={"item_spec_id": 101})
+
+        all_published = [
+            evt
+            for call in event_publisher.publish_all.call_args_list
+            for evt in call.args[0]
+        ]
+        assert any(isinstance(e, ItemUsedEvent) for e in all_published), (
+            f"ItemUsedEvent が publish_all に流れていない: {all_published!r}"
+        )
+
+    def test_quantity_0_で消費したとき_inventory_save_が_item_delete_より先に呼ばれる(self) -> None:
+        """非アトミック削除の順序回帰: item_repository.delete を先にすると、
+        delete 成功・inv save 失敗時に「slot に存在しない instance_id が残り続け
+        以降の lookup が全部 None」となる silent failure を生む。順序を逆転
+        させるとこのテストが落ちて気付ける。
+        """
+        executor, _, _ = _build_executor_with_item({})
+        # item_repo / inv_repo は MagicMock なので各操作の順序を call_order で追える
+        item_repo = executor._item_repository
+        inv_repo = executor._player_inventory_repository
+
+        # 親 Mock に各子を attach して call_order を統一する
+        parent = MagicMock()
+        parent.attach_mock(item_repo.delete, "item_delete")
+        parent.attach_mock(inv_repo.save, "inv_save")
+
+        executor._use_item(player_id=1, args={"item_spec_id": 101})
+
+        call_names = [c[0] for c in parent.mock_calls]
+        assert "inv_save" in call_names and "item_delete" in call_names, (
+            f"両方呼ばれていない: {call_names}"
+        )
+        assert call_names.index("inv_save") < call_names.index("item_delete"), (
+            f"inv_save は item_delete より先でなければならない: {call_names}"
+        )

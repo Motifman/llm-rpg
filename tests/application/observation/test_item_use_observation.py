@@ -155,7 +155,10 @@ class TestItemUseFormatter:
         """アイテム使用イベントが観測テキストに変換される"""
         name_resolver = ObservationNameResolver()
         name_resolver.player_name = lambda pid: "太郎" if pid.value == 1 else "花子"
-        name_resolver.item_name = lambda spec_id: "回復ポーション"
+        # 実 method 名 (`item_spec_name`) を mock すること。`item_name` は
+        # ObservationNameResolver に存在しないため、ここで動的に生やすと
+        # 実験 #27 と同型の本番 AttributeError をテストが隠蔽してしまう。
+        name_resolver.item_spec_name = lambda spec_id: "回復ポーション"
         context = ObservationFormatterContext(
             name_resolver=name_resolver,
             item_repository=None,
@@ -187,7 +190,10 @@ class TestItemUseFormatter:
         """使用者本人が受信者の場合は None を返す（ツール結果で完結するため観測対象外）"""
         name_resolver = ObservationNameResolver()
         name_resolver.player_name = lambda pid: "太郎"
-        name_resolver.item_name = lambda spec_id: "回復ポーション"
+        # 実 method 名 (`item_spec_name`) を mock すること。`item_name` は
+        # ObservationNameResolver に存在しないため、ここで動的に生やすと
+        # 実験 #27 と同型の本番 AttributeError をテストが隠蔽してしまう。
+        name_resolver.item_spec_name = lambda spec_id: "回復ポーション"
         context = ObservationFormatterContext(
             name_resolver=name_resolver,
             item_repository=None,
