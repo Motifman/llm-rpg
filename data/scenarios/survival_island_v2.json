@@ -2,29 +2,29 @@
   "scenario_format_version": "1.0",
   "metadata": {
     "id": "survival_island_v2",
-    "title": "漂流島 v2 ―― 4人と廃屋の14日",
-    "description": "観光ツアー船が嵐で難破。初対面の4人が無人島に漂着し、14日(140 tick)以内に救助を待つ。エイダ(医師)/ノア(元自衛官)/リオ(建築技師)/カイ(留学生) 各自に固有の動機と秘密。観測拠点跡の廃屋には30年前の手記が残されている。協力強制ポイントと個別動機が時々刻々と組み合わせを変える。",
+    "title": "漂流島 v2 ―― 4人と廃屋。救助のチャンスは3回",
+    "description": "観光ツアー船が嵐で難破。初対面の4人が無人島に漂着。8日が経つと漂流確定 (食料・体力が尽きる)。救助船は4日目・6日目・7日目の3回だけ通る。狼煙を上げて山頂に居る者だけが救助される。エイダ(医師)/ノア(元自衛官)/リオ(建築技師)/カイ(留学生) 各自に固有の動機と秘密。観測拠点跡の廃屋には30年前の手記が残されている。協力強制ポイントと個別動機が時々刻々と組み合わせを変える。",
     "theme": "survival",
     "difficulty": "medium",
-    "estimated_ticks": 336,
+    "estimated_ticks": 384,
     "author": "demo",
     "tags": ["survival", "long_term", "cooperation", "betrayal", "info_asymmetry", "phase2_v2"],
     "llm_public_intro": "嵐で難破した観光ツアー船から、4人だけが救命ボートで近くの無人島に流れ着いた。救命ボートは沖に流された。山頂に登って狼煙を上げれば、通りかかる船が気付くかもしれない。だが島の天候は荒れやすく、食料は腐り、水は限られている。隣の3人は今朝までの他人だ。"
   },
   "item_specs": [
-    {"id": "wild_berry", "name": "野いちご", "description": "酸味のある赤い実。生のまま食べられるが日持ちはしない。", "category": "FOOD", "spoils_after_ticks": 24,
-      "consume_effect": [{"type": "heal_hp", "amount": 3}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 15}]},
-    {"id": "coconut", "name": "椰子の実", "description": "栄養価が高く水分も摂れる。落ちているものを拾える。", "category": "FOOD", "spoils_after_ticks": 60,
-      "consume_effect": [{"type": "heal_hp", "amount": 5}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 25}]},
-    {"id": "shellfish", "name": "貝", "description": "干潟で採れる貝。生でも食べられるが火を通すと安全。", "category": "FOOD", "spoils_after_ticks": 12,
-      "consume_effect": [{"type": "heal_hp", "amount": 4}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 20}]},
-    {"id": "raw_fish", "name": "生の魚", "description": "釣り上げたばかりの魚。生では食あたりの危険がある。", "category": "FOOD", "spoils_after_ticks": 16,
-      "consume_effect": [{"type": "heal_hp", "amount": 5}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 30}]},
-    {"id": "cooked_fish", "name": "焼き魚", "description": "焚き火で焼いた魚。安全に食べられる。", "category": "FOOD", "spoils_after_ticks": 40,
-      "consume_effect": [{"type": "heal_hp", "amount": 10}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 40}]},
-    {"id": "safe_mushroom", "name": "食べられるキノコ", "description": "白い傘の見覚えあるキノコ。食用。", "category": "FOOD", "spoils_after_ticks": 36,
-      "consume_effect": [{"type": "heal_hp", "amount": 5}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 25}]},
-    {"id": "toxic_mushroom", "name": "毒キノコ", "description": "食用キノコによく似た見た目だが、よく見れば軸の色がやや赤い。食べると激しい嘔吐に襲われる。", "category": "FOOD", "spoils_after_ticks": 36},
+    {"id": "wild_berry", "name": "野いちご", "description": "酸味のある赤い実。生のまま食べられるが日持ちはしない。", "category": "FOOD", "spoils_after_ticks": 48,
+      "consume_effect": [{"type": "heal_hp", "amount": 3}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 25}]},
+    {"id": "coconut", "name": "椰子の実", "description": "栄養価が高く水分も摂れる。落ちているものを拾える。", "category": "FOOD", "spoils_after_ticks": 120,
+      "consume_effect": [{"type": "heal_hp", "amount": 5}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 45}]},
+    {"id": "shellfish", "name": "貝", "description": "干潟で採れる貝。生でも食べられるが火を通すと安全。", "category": "FOOD", "spoils_after_ticks": 24,
+      "consume_effect": [{"type": "heal_hp", "amount": 4}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 35}]},
+    {"id": "raw_fish", "name": "生の魚", "description": "釣り上げたばかりの魚。生では食あたりの危険がある。", "category": "FOOD", "spoils_after_ticks": 32,
+      "consume_effect": [{"type": "heal_hp", "amount": 5}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 50}]},
+    {"id": "cooked_fish", "name": "焼き魚", "description": "焚き火で焼いた魚。安全に食べられる。", "category": "FOOD", "spoils_after_ticks": 80,
+      "consume_effect": [{"type": "heal_hp", "amount": 10}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 70}]},
+    {"id": "safe_mushroom", "name": "食べられるキノコ", "description": "白い傘の見覚えあるキノコ。食用。", "category": "FOOD", "spoils_after_ticks": 72,
+      "consume_effect": [{"type": "heal_hp", "amount": 5}, {"type": "satisfy_need", "need_type": "HUNGER", "amount": 40}]},
+    {"id": "toxic_mushroom", "name": "毒キノコ", "description": "食用キノコによく似た見た目だが、よく見れば軸の色がやや赤い。食べると激しい嘔吐に襲われる。", "category": "FOOD", "spoils_after_ticks": 72},
     {"id": "fresh_water", "name": "真水", "description": "竹筒に汲んだ飲み水。", "category": "FOOD",
       "consume_effect": {"type": "heal_hp", "amount": 3}},
     {"id": "driftwood", "name": "流木", "description": "浜辺に流れ着いた乾いた木材。焚き火と狼煙の燃料になる。", "category": "MATERIAL"},
@@ -53,7 +53,7 @@
     },
     "day_night": {
       "enabled": true,
-      "ticks_per_day": 24,
+      "ticks_per_day": 48,
       "starting_tick_in_day": 0,
       "announce_changes": true,
       "phases": [
@@ -1154,8 +1154,8 @@
     }
   ],
   "outcome_resolution": {
-    "rescue_at_ticks": [168, 264],
-    "stranded_at_tick": 336,
+    "rescue_at_ticks": [192, 288, 336],
+    "stranded_at_tick": 384,
     "summit_spot": "summit",
     "signal_fire_flag": "signal_fire_lit",
     "starvation_damage_per_tick": 2
@@ -1165,7 +1165,7 @@
       "id": "storm_arrives",
       "trigger": "ON_TICK",
       "once": true,
-      "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 72}],
+      "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 96}],
       "effects": [
         {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "西の空に黒い雲が広がり、強い風が吹き始めた。嵐が来る。"}},
         {"effect_type": "SET_FLAG", "parameters": {"flag_name": "storm_warned", "value": true}}
@@ -1187,7 +1187,7 @@
       "id": "tide_rises",
       "trigger": "ON_TICK",
       "once": true,
-      "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 108}],
+      "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 144}],
       "effects": [
         {"effect_type": "SET_FLAG", "parameters": {"flag_name": "high_tide", "value": true}},
         {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "潮が満ち、干潟の岩は水没した。洞窟の入口にも海水が押し寄せている。"}}
@@ -1197,7 +1197,7 @@
       "id": "tide_falls",
       "trigger": "ON_TICK",
       "once": true,
-      "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 168}],
+      "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 240}],
       "effects": [
         {"effect_type": "SET_FLAG", "parameters": {"flag_name": "high_tide", "value": false}},
         {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "潮が引き、干潟と洞窟の入口が再び露わになった。"}}
@@ -1214,7 +1214,7 @@
         ]}
       ],
       "effects": [
-        {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "遠く水平線を、一隻の船影が通り過ぎていく。気付かれなかった。"}}
+        {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "遠く水平線を、一隻の船影が通り過ぎていく。気付かれなかった。次の機会は明日以降だ。"}}
       ]
     },
     {
@@ -1222,7 +1222,7 @@
       "trigger": "ON_TICK",
       "once": true,
       "conditions": [
-        {"condition_type": "TICK_AT_LEAST", "tick": 168},
+        {"condition_type": "TICK_AT_LEAST", "tick": 192},
         {"condition_type": "FLAG_SET", "flag_name": "signal_fire_lit"}
       ],
       "effects": [
@@ -1234,11 +1234,23 @@
       "trigger": "ON_TICK",
       "once": true,
       "conditions": [
-        {"condition_type": "TICK_AT_LEAST", "tick": 264},
+        {"condition_type": "TICK_AT_LEAST", "tick": 288},
         {"condition_type": "FLAG_SET", "flag_name": "signal_fire_lit"}
       ],
       "effects": [
-        {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "二度目の救助船が水平線に現れる。これが最後の機会だ。山頂に居る者だけが救助される。"}}
+        {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "二度目の救助船が水平線に現れる。狼煙が見える間に山頂に居る者は救助される。"}}
+      ]
+    },
+    {
+      "id": "rescue_ship_final_arrive",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {"condition_type": "TICK_AT_LEAST", "tick": 336},
+        {"condition_type": "FLAG_SET", "flag_name": "signal_fire_lit"}
+      ],
+      "effects": [
+        {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "三度目、そして最後の救助船が水平線に姿を見せた。これを逃せばもう救助はない。山頂に居る者だけが救助される。"}}
       ]
     },
     {
@@ -1280,42 +1292,42 @@
     "objects": [
       {
         "target": "driftwood_pile",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "driftwood_pile", "state_key": "last_harvest_tick", "ticks_offset": 8},
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "driftwood_pile", "state_key": "last_harvest_tick", "ticks_offset": 16},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "波が新たに流木を浜辺に打ち上げているのが見える。"
       },
       {
         "target": "coconut_palm",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "coconut_palm", "state_key": "last_harvest_tick", "ticks_offset": 16},
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "coconut_palm", "state_key": "last_harvest_tick", "ticks_offset": 32},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "椰子の木に新しい実が熟しているのが目に入る。"
       },
       {
         "target": "fallen_leaves",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "fallen_leaves", "state_key": "last_harvest_tick", "ticks_offset": 12},
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "fallen_leaves", "state_key": "last_harvest_tick", "ticks_offset": 24},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "風が新しい枯れ葉を広場の縁に運んできた。"
       },
       {
         "target": "berry_bush_a",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "berry_bush_a", "state_key": "last_harvest_tick", "ticks_offset": 20},
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "berry_bush_a", "state_key": "last_harvest_tick", "ticks_offset": 40},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "ベリーの茂みに新しい実が生っているのが見える。"
       },
       {
         "target": "berry_bush_b",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "berry_bush_b", "state_key": "last_harvest_tick", "ticks_offset": 20},
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "berry_bush_b", "state_key": "last_harvest_tick", "ticks_offset": 40},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "もう一つのベリーの茂みにも新しい実が膨らんできた。"
       },
       {
         "target": "shellfish_rocks",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "shellfish_rocks", "state_key": "last_harvest_tick", "ticks_offset": 24},
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "shellfish_rocks", "state_key": "last_harvest_tick", "ticks_offset": 48},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "潮が引いた岩場に新しい貝がへばりついているのが見える。"
@@ -1323,7 +1335,7 @@
       {
         "target": "safe_mushroom_patch",
         "predicate": {"condition_type": "AND", "children": [
-          {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "safe_mushroom_patch", "state_key": "last_harvest_tick", "ticks_offset": 30},
+          {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "safe_mushroom_patch", "state_key": "last_harvest_tick", "ticks_offset": 60},
           {"condition_type": "NOT", "children": [
             {"condition_type": "OBJECT_STATE_INT_AT_LEAST", "target_object": "safe_mushroom_patch", "state_key": "harvest_count", "ticks_offset": 6}
           ]}
@@ -1334,42 +1346,42 @@
       },
       {
         "target": "toxic_mushroom_patch",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "toxic_mushroom_patch", "state_key": "last_harvest_tick", "ticks_offset": 30},
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "toxic_mushroom_patch", "state_key": "last_harvest_tick", "ticks_offset": 60},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "色鮮やかな毒キノコが群生し直しているのが見える。"
       },
       {
         "target": "stream_fishing_point",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "stream_fishing_point", "state_key": "last_harvest_tick", "ticks_offset": 16},
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "stream_fishing_point", "state_key": "last_harvest_tick", "ticks_offset": 32},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "小川の淀みに魚影がまた集まってきた。"
       },
       {
         "target": "deep_fishing_point",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "deep_fishing_point", "state_key": "last_harvest_tick", "ticks_offset": 20},
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "deep_fishing_point", "state_key": "last_harvest_tick", "ticks_offset": 40},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "沖の深場に大きな魚影が戻ってきたのが波越しに見える。"
       },
       {
         "target": "river_drink",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "river_drink", "state_key": "last_harvest_tick", "ticks_offset": 6},
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "river_drink", "state_key": "last_harvest_tick", "ticks_offset": 12},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "河の濁りが収まり、水が再び澄んで見える。"
       },
       {
         "target": "spring_source",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "spring_source", "state_key": "last_harvest_tick", "ticks_offset": 6},
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "spring_source", "state_key": "last_harvest_tick", "ticks_offset": 12},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "泉が再び満ちて、澄んだ水を湛えている。"
       },
       {
         "target": "vine_thicket",
-        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "vine_thicket", "state_key": "last_harvest_tick", "ticks_offset": 24},
+        "predicate": {"condition_type": "OBJECT_STATE_TICK_AT_LEAST", "target_object": "vine_thicket", "state_key": "last_harvest_tick", "ticks_offset": 48},
         "on_true_state_updates": {"available": true},
         "on_false_state_updates": {"available": false},
         "narrative_on_true": "蔦が新しく伸びて、また切り取れそうに見える。"
