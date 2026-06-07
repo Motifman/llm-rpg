@@ -159,8 +159,14 @@ class PlayerObservationFormatter:
         if is_self:
             prose = "復帰しました。"
             structured = {"type": "player_revived", "role": "self"}
+            # schedules_turn 網羅性 audit (#404): 復帰直後は「行動可能」に状態
+            # 遷移したばかりなので即時にターンを積む。per-agent idle timer 下で
+            # 復帰観測だけ届いて idle_timeout 経過まで眠るのは silent failure。
             return ObservationOutput(
-                prose=prose, structured=structured, observation_category="self_only"
+                prose=prose,
+                structured=structured,
+                observation_category="self_only",
+                schedules_turn=True,
             )
         actor_name = self._context.name_resolver.player_name(event.aggregate_id)
         prose = f"{actor_name}が復帰しました。"
@@ -428,6 +434,12 @@ class PlayerObservationFormatter:
         )
         if spec_val is not None:
             structured["item_spec_id_value"] = spec_val
+        # schedules_turn 網羅性 audit (#404): overflow は「アイテムが入らずに
+        # 消失した」相当の致命イベント。捨てる/装備し直すなどの即時対応が要る
+        # ので idle timer に待たせない。
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="self_only"
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
         )

@@ -100,8 +100,16 @@ class WorldObservationFormatter:
                 "spot_id_value": event.spot_id.value,
                 "role": "self",
             }
+            # schedules_turn 網羅性 audit (#404): 特殊 location 到着 (summit /
+            # shore 等) は新しい行動機会の発生イベントなので即時にターン。
+            # 通常 spot 間移動の到着は travel_stage.on_arrival で別経路に
+            # schedule_turn が掛かるが、LocationEnteredEvent は scenario 定義の
+            # 「名前付き location」専用なので二重発火にはならない。
             return ObservationOutput(
-                prose=prose, structured=structured, observation_category="self_only"
+                prose=prose,
+                structured=structured,
+                observation_category="self_only",
+                schedules_turn=True,
             )
         actor_label = (
             FALLBACK_PLAYER_LABEL
