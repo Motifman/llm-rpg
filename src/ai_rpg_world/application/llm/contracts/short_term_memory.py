@@ -78,7 +78,66 @@ class IShortTermMemorySummaryCompletionPort(ABC):
         raise NotImplementedError
 
 
+@dataclass(frozen=True)
+class L5LongSummary:
+    """長期帯 (L5) 1 件分の自己像と世界観 (Phase 3)。
+
+    L4 が ``keep_gen + 1`` 世代目に達したとき、最古 L4 + 現在の L5 を LLM で
+    統合して新世代 L5 が生成される。L5 は **1 player につき 1 件のみ** 保持。
+
+    schema 設計指針 (docs §4.2):
+    - **narrative voice のみ**: 学び / 関係性 / 世界ルールは semantic 経路の責務
+    - **時系列の細部は捨てる**: L5 は時を超えた「いまの自分」「いまの世界観」
+    - **persona drift 防止**: 性格 (persona) は previous_l5 のものを保ち、
+      事実認識のみ更新される。プロンプト側で強制
+    """
+
+    summary_id: str
+    player_id: int
+    generation_index: int  # 何回目の L5 か (drift 検出用)
+    generated_at: datetime
+    self_image: str
+    world_view: str
+    is_fallback: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.summary_id, str) or not self.summary_id.strip():
+            raise ValueError("summary_id must be non-empty str")
+        if not isinstance(self.player_id, int):
+            raise TypeError("player_id must be int")
+        if not isinstance(self.generation_index, int) or self.generation_index < 0:
+            raise ValueError("generation_index must be non-negative int")
+        if not isinstance(self.generated_at, datetime):
+            raise TypeError("generated_at must be datetime")
+        if not isinstance(self.self_image, str):
+            raise TypeError("self_image must be str")
+        if not isinstance(self.world_view, str):
+            raise TypeError("world_view must be str")
+        if not isinstance(self.is_fallback, bool):
+            raise TypeError("is_fallback must be bool")
+
+
+class IShortTermMemoryLongSummaryCompletionPort(ABC):
+    """L5 long summary 生成用の無ツール JSON 完了 port (Phase 3)。"""
+
+    @abstractmethod
+    def complete_short_term_long_summary_json(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """messages を LLM へ送り、応答文字列を JSON にパースして dict で返す。
+
+        Raises:
+            LlmApiCallException: API 失敗 / 空応答 / JSON パース不能時。
+                呼び出し元 (``ShortTermMemoryLongSummaryService``) は template
+                fallback に縮退する。
+        """
+        raise NotImplementedError
+
+
 __all__ = [
+    "IShortTermMemoryLongSummaryCompletionPort",
     "IShortTermMemorySummaryCompletionPort",
     "L4MidSummary",
+    "L5LongSummary",
 ]

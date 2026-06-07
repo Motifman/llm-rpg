@@ -939,8 +939,13 @@ def _build_short_term_memory(
     from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
     summary_service: Optional[ShortTermMemorySummaryService] = None
+    long_summary_service = None
     if isinstance(llm_client, LiteLLMClient):
         summary_service = ShortTermMemorySummaryService(llm_client)
+        from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
+            ShortTermMemoryLongSummaryService,
+        )
+        long_summary_service = ShortTermMemoryLongSummaryService(llm_client)
 
     # Phase 2.1: scheduler mode 選択。default は inline (Phase 2 互換)。
     resolved_mode = (
@@ -963,6 +968,7 @@ def _build_short_term_memory(
 
     return RollingSummaryShortTermMemory(
         summary_service=summary_service,
+        long_summary_service=long_summary_service,
         persona_resolver=persona_resolver,
         scheduler=scheduler,
     )

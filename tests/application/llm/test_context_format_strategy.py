@@ -180,6 +180,40 @@ class TestSectionBasedContextFormatStrategyDefault:
         )
         assert "【最近の流れ】" not in text
 
+    def test_long_summary_text_が_objective_直後で_learned_より前に_出る(self, strategy):
+        """Phase 3: 【自己像と世界観】section が objective 直後 / learned より前。"""
+        text = strategy.format(
+            current_state_text="x",
+            recent_events_text="y",
+            objective_text="目的",
+            long_summary_text="私について: 寡黙な漁師",
+            learned_text="- タカシは信頼できる",
+            mid_summary_text="[最新] 動き",
+        )
+        assert "【自己像と世界観】" in text
+        assert "私について: 寡黙な漁師" in text
+        idx_obj = text.index("【現在の目的】")
+        idx_long = text.index("【自己像と世界観】")
+        idx_learned = text.index("【関連する学び】")
+        idx_mid = text.index("【最近の流れ】")
+        assert idx_obj < idx_long < idx_learned < idx_mid
+
+    def test_long_summary_text_が_空なら_section_ごと_省略(self, strategy):
+        text = strategy.format(
+            current_state_text="x",
+            recent_events_text="y",
+            long_summary_text="",
+        )
+        assert "【自己像と世界観】" not in text
+
+    def test_long_summary_text_が_str_でなければ_type_error(self, strategy):
+        with pytest.raises(TypeError, match="long_summary_text must be str"):
+            strategy.format(
+                current_state_text="",
+                recent_events_text="",
+                long_summary_text=[],  # type: ignore[arg-type]
+            )
+
     def test_mid_summary_text_が_str_でなければ_type_error(self, strategy):
         with pytest.raises(TypeError, match="mid_summary_text must be str"):
             strategy.format(

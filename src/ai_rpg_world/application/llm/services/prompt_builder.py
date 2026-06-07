@@ -601,6 +601,19 @@ class DefaultPromptBuilder(IPromptBuilder):
             )
             mid_summary_text = ""
 
+        # Phase 3: 短期記憶の L5 long summary (self_image / world_view)。
+        try:
+            raw_long = self._sliding_window.get_long_summary_text(player_id)
+            long_summary_text = raw_long if isinstance(raw_long, str) else ""
+        except Exception as e:
+            self._logger.warning(
+                "get_long_summary_text failed for player_id=%s: %s",
+                player_id.value,
+                e,
+                exc_info=True,
+            )
+            long_summary_text = ""
+
         context = self._context_format_strategy.format(
             current_state_text=current_state_text,
             recent_events_text=recent_events_text,
@@ -610,6 +623,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             inventory_text=inventory_text,
             learned_text=learned_text,
             mid_summary_text=mid_summary_text,
+            long_summary_text=long_summary_text,
         )
 
         # Issue #227 chore β: failure_block (直前ターン失敗時の補正セクション)

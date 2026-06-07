@@ -18,7 +18,14 @@ from typing import List
 
 import pytest
 
-from ai_rpg_world.application.llm.contracts.short_term_memory import L4MidSummary
+from ai_rpg_world.application.llm.contracts.short_term_memory import (
+    L4MidSummary,
+    L5LongSummary,
+)
+from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
+    ShortTermMemoryLongSummaryService,
+    _ParsedLongSummary,
+)
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
     DEFAULT_L1_SOFT_CAP,
@@ -534,3 +541,206 @@ class TestRollingSummarySchedulerIntegration:
         mem = RollingSummaryShortTermMemory(scheduler=_RecordingScheduler())
         mem.shutdown()
         assert called["n"] == 1
+
+
+# ──────────────────────────────────────────────────────────────────
+# Phase 3: L5 long summary 統合
+# ──────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class _StubLongService(ShortTermMemoryLongSummaryService):
+    """ShortTermMemoryLongSummaryService の generate を stub する。"""
+
+    result: _ParsedLongSummary | None = None
+    exc: Exception | None = None
+    call_count: int = 0
+    captured_previous_l5: L5LongSummary | None = None
+    captured_evicted_l4: L4MidSummary | None = None
+
+    @classmethod
+    def make(cls, *, result=None, exc=None):
+        inst = object.__new__(cls)
+        inst.result = result
+        inst.exc = exc
+        inst.call_count = 0
+        inst.captured_previous_l5 = None
+        inst.captured_evicted_l4 = None
+        return inst
+
+    def generate(self, *, player_name, persona_block, previous_l5, evicted_l4):  # type: ignore[override]
+        self.call_count += 1
+        self.captured_previous_l5 = previous_l5
+        self.captured_evicted_l4 = evicted_l4
+        if self.exc is not None:
+            raise self.exc
+        assert self.result is not None
+        return self.result
+
+
+class TestRollingSummaryL5Trigger:
+    """L4 が keep_gen+1 世代目に達したら L5 統合 task が発火する (Phase 3)。"""
+
+    def test_L4_が_3世代以下なら_L5_は_生成されない(self) -> None:
+        mid_stub = _StubSummaryService.make(
+            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
+        )
+        long_stub = _StubLongService.make(
+            result=_ParsedLongSummary(self_image="self", world_view="world")
+        )
+        mem = RollingSummaryShortTermMemory(
+            summary_service=mid_stub,
+            long_summary_service=long_stub,
+        )
+        # 3 世代分積む (= 15 * 3 = 45 件)
+        for batch in range(3):
+            for i in range(DEFAULT_L1_SOFT_CAP):
+                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+        # L4 は 3 世代まで、L5 はまだ生成されない (= eviction なし)
+        assert len(mem._mid_generations(_PID.value)) == 3
+        assert long_stub.call_count == 0
+        assert mem._long_summary(_PID.value) is None
+
+    def test_L4_が_4世代目で_L5_統合_が_発火_最古_L4_が_evict(self) -> None:
+        mid_stub = _StubSummaryService.make(
+            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
+        )
+        long_stub = _StubLongService.make(
+            result=_ParsedLongSummary(
+                self_image="統合された自己像",
+                world_view="統合された世界観",
+            )
+        )
+        mem = RollingSummaryShortTermMemory(
+            summary_service=mid_stub,
+            long_summary_service=long_stub,
+        )
+        # 4 世代分積む (= 15 * 4 = 60 件)
+        for batch in range(4):
+            for i in range(DEFAULT_L1_SOFT_CAP):
+                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+        # L4 は 3 世代まで保持、最古は evict されて L5 になる
+        assert len(mem._mid_generations(_PID.value)) == 3
+        assert long_stub.call_count == 1
+        l5 = mem._long_summary(_PID.value)
+        assert l5 is not None
+        assert l5.self_image == "統合された自己像"
+        assert l5.world_view == "統合された世界観"
+        assert l5.generation_index == 1
+        assert l5.is_fallback is False
+
+    def test_L4_evict_を_繰り返すと_L5_の_generation_index_が_増える(self) -> None:
+        mid_stub = _StubSummaryService.make(
+            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
+        )
+        long_stub = _StubLongService.make(
+            result=_ParsedLongSummary(self_image="self", world_view="world")
+        )
+        mem = RollingSummaryShortTermMemory(
+            summary_service=mid_stub,
+            long_summary_service=long_stub,
+        )
+        # 5 世代分積む (= 75 件)。L4 evict が 2 回発火
+        for batch in range(5):
+            for i in range(DEFAULT_L1_SOFT_CAP):
+                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+        assert long_stub.call_count == 2
+        l5 = mem._long_summary(_PID.value)
+        assert l5 is not None
+        assert l5.generation_index == 2
+
+    def test_long_service_が_None_なら_template_fallback_で_延命(self) -> None:
+        """previous_l5 が None で long_service も None なら placeholder L5。"""
+        mid_stub = _StubSummaryService.make(
+            result=_ParsedSummary(compressed_activity="北を歩いた", emotional_summary="", unresolved=())
+        )
+        mem = RollingSummaryShortTermMemory(
+            summary_service=mid_stub,
+            long_summary_service=None,
+        )
+        for batch in range(4):
+            for i in range(DEFAULT_L1_SOFT_CAP):
+                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+        l5 = mem._long_summary(_PID.value)
+        assert l5 is not None
+        assert l5.is_fallback is True
+        # 初回 L5 で previous_l5 が無いので placeholder
+        assert "未生成" in l5.self_image
+
+    def test_LLM_失敗時は_previous_l5_を_延命(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """L5 LLM が落ちても previous_l5 で延命される (persona drift 防止)。"""
+        mid_stub = _StubSummaryService.make(
+            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
+        )
+        # 最初の L5 は成功
+        long_stub_first = _StubLongService.make(
+            result=_ParsedLongSummary(
+                self_image="安定した自己像",
+                world_view="安定した世界観",
+            )
+        )
+        mem = RollingSummaryShortTermMemory(
+            summary_service=mid_stub,
+            long_summary_service=long_stub_first,
+        )
+        # 4 世代分積んで L5 を 1 つ作る
+        for batch in range(4):
+            for i in range(DEFAULT_L1_SOFT_CAP):
+                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+        first_l5 = mem._long_summary(_PID.value)
+        assert first_l5 is not None
+
+        # service を例外を返すものに差し替えて 5 世代目を追加
+        mem._long_service = _StubLongService.make(
+            exc=LlmApiCallException("sim", error_code="LLM_API_CALL_FAILED")
+        )
+        with caplog.at_level(
+            logging.WARNING,
+            logger="ai_rpg_world.application.llm.services.rolling_summary_short_term_memory",
+        ):
+            for i in range(DEFAULT_L1_SOFT_CAP):
+                mem.append(_PID, _obs(f"b5-{i}", seq=500 + i))
+
+        l5 = mem._long_summary(_PID.value)
+        assert l5 is not None
+        # previous_l5 が延命される
+        assert l5.self_image == "安定した自己像"
+        assert l5.world_view == "安定した世界観"
+        assert l5.is_fallback is True
+        assert l5.generation_index == 2
+        assert any("L5 LLM 生成失敗" in rec.message for rec in caplog.records)
+
+    def test_get_long_summary_text_が_self_image_と_world_view_を_整形(self) -> None:
+        long_stub = _StubLongService.make(
+            result=_ParsedLongSummary(
+                self_image="寡黙な漁師",
+                world_view="島は穏やか",
+            )
+        )
+        mid_stub = _StubSummaryService.make(
+            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
+        )
+        mem = RollingSummaryShortTermMemory(
+            summary_service=mid_stub,
+            long_summary_service=long_stub,
+        )
+        for batch in range(4):
+            for i in range(DEFAULT_L1_SOFT_CAP):
+                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+        text = mem.get_long_summary_text(_PID)
+        assert "私について" in text
+        assert "寡黙な漁師" in text
+        assert "この世界について" in text
+        assert "島は穏やか" in text
+
+    def test_get_long_summary_text_は_L5_未生成なら_空文字(self) -> None:
+        mem = RollingSummaryShortTermMemory(summary_service=None)
+        assert mem.get_long_summary_text(_PID) == ""
+
+    def test_long_summary_service_が_非_service_なら_type_error(self) -> None:
+        with pytest.raises(TypeError, match="long_summary_service"):
+            RollingSummaryShortTermMemory(
+                long_summary_service="not-a-service",  # type: ignore[arg-type]
+            )
