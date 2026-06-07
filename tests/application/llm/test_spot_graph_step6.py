@@ -134,7 +134,11 @@ def test_spot_graph_formatter_outputs_base_info() -> None:
 
 
 def test_spot_graph_ui_context_builder_adds_labels() -> None:
-    """UiContextBuilder が接続先・オブジェクト・サブロケーションにラベルを付与する。"""
+    """UiContextBuilder が接続先・オブジェクト・サブロケーションを **名前直書き** で
+    出力し、内部 collector には旧 label 形式で保存する (PR 6 後の仕様)。
+
+    PR 6 (#404 後続): prompt 上の ``S1:`` / ``OBJ1:`` / ``SL1:`` prefix は廃止。
+    """
     snap = SpotGraphPlayerSnapshotDto(
         current_spot_id=1,
         current_spot_name="地下室",
@@ -171,14 +175,16 @@ def test_spot_graph_ui_context_builder_adds_labels() -> None:
     base_text = "現在地: 地下室"
     result = SpotGraphUiContextBuilder().build(base_text, dto)
 
-    assert "S1" in result.current_state_text
+    # PR 6: prompt 上は name 直書き (旧 S1:/OBJ1:/SL1: prefix なし)
     assert "玄関" in result.current_state_text
-    assert "OBJ1" in result.current_state_text
     assert "箱" in result.current_state_text
     assert "開ける" in result.current_state_text
-    assert "SL1" in result.current_state_text
     assert "北" in result.current_state_text
+    # 旧 label prefix は出さない
+    for prefix in ("S1:", "OBJ1:", "SL1:"):
+        assert prefix not in result.current_state_text
 
+    # 内部 collector では label をキーに保存される (resolver の互換のため)
     targets = result.tool_runtime_context.targets
     assert "S1" in targets
     assert targets["S1"].spot_id == 2

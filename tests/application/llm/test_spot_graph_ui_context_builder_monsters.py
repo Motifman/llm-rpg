@@ -79,11 +79,21 @@ class TestMonsterLabeling:
         )
         result = SpotGraphUiContextBuilder().build("base", dto)
 
-        assert "M1: 灰色のオオカミ" in result.current_state_text
-        assert "M2: 灰色のオオカミ" in result.current_state_text
+        # PR 6 (#404 後続): 同名衝突は ``#N`` で区別。
+        # 旧 ``M1: 灰色のオオカミ`` → ``- 灰色のオオカミ #1`` に変更。
+        assert "- 灰色のオオカミ #1" in result.current_state_text
+        assert "- 灰色のオオカミ #2" in result.current_state_text
+        # 旧 M-prefix は prompt 上は出さない
+        assert "M1:" not in result.current_state_text
+        assert "M2:" not in result.current_state_text
+        # ただし内部 collector では label key で保持 (resolver 互換)
         targets = result.tool_runtime_context.targets
         assert "M1" in targets
         assert "M2" in targets
+        # display_name は disambiguated 形 (LLM が attack target_label に
+        # ``灰色のオオカミ #2`` を渡すと resolver が 2 番目に解決する)
+        assert targets["M1"].display_name == "灰色のオオカミ #1"
+        assert targets["M2"].display_name == "灰色のオオカミ #2"
 
     def test_target_に_monster_id_が乗る(self) -> None:
         """ToolRuntimeTargetDto.monster_id にドメイン側 ID が入る。"""
@@ -104,8 +114,11 @@ class TestMonsterLabeling:
         assert target.display_name == "灰色のオオカミ"
 
     def test_死体も同じ_m_prefix_で_target_に登録される(self) -> None:
-        """死体も attack 対象にはならないが、M-prefix でラベル付与されて
-        将来 examine 等のツールから参照可能にしておく。"""
+        """死体も attack 対象にはならないが、M-prefix で内部 target に登録され
+        将来 examine 等のツールから参照可能にしておく。
+
+        PR 6 (#404 後続): prompt は ``- 灰色のオオカミ（死骸）`` の名前直書き形式。
+        """
         dto = _make_dto(
             SpotGraphMonsterEntry(
                 monster_id=101,
@@ -117,7 +130,8 @@ class TestMonsterLabeling:
         )
         result = SpotGraphUiContextBuilder().build("base", dto)
 
-        assert "M1: 灰色のオオカミ（死骸）" in result.current_state_text
+        assert "- 灰色のオオカミ（死骸）" in result.current_state_text
+        assert "M1:" not in result.current_state_text
         target = result.tool_runtime_context.targets["M1"]
         assert isinstance(target, MonsterToolRuntimeTargetDto)
         assert target.monster_id == 101
