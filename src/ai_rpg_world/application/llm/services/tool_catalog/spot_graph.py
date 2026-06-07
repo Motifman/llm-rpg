@@ -34,10 +34,19 @@ SPEECH_CHANNEL_VALUES = (SPEECH_CHANNEL_WHISPER, SPEECH_CHANNEL_SAY, SPEECH_CHAN
 
 _RESOLVER = SpotGraphToolsAvailabilityResolver()
 _IT = inner_thought_property()
+# 実験 #29 後続: 移動 / アイテム系ツールで「立ち去り際 / 受け渡し際の一言」を
+# 任意で発話できるようにする。同 spot の他プレイヤーにだけ届く SAY 相当。
+from ai_rpg_world.application.llm.services.tool_catalog.say_inline import (
+    say_inline_property,
+)
+_SAY = say_inline_property()
 
 TRAVEL_TO_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-    description="スポットグラフ上で、指定した接続先へ移動を開始する（経路は最短・通行条件を満たす必要がある）。",
+    description=(
+        "スポットグラフ上で、指定した接続先へ移動を開始する（経路は最短・通行条件を満たす必要がある）。"
+        "立ち去り際に同 spot の他者へ短く声をかけたい場合は say_inline に一言を書ける。"
+    ),
     parameters={
         "type": "object",
         "properties": {
@@ -51,6 +60,7 @@ TRAVEL_TO_DEFINITION = ToolDefinitionDto(
                     "ordinal を含めて指定する (例: \"小部屋 #2\")。"
                 ),
             },
+            "say_inline": _SAY,
             "inner_thought": _IT,
         },
         "required": ["destination_label", "inner_thought"],
@@ -275,6 +285,7 @@ DROP_ITEM_DEFINITION = ToolDefinitionDto(
                 ),
                 "default": False,
             },
+            "say_inline": _SAY,
             "inner_thought": _IT,
         },
         "required": ["item_label", "inner_thought"],
@@ -288,6 +299,7 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
         "同じスポットに居る別のプレイヤーへ所持アイテムを直接渡す。drop して "
         "pickup させる手間を省くが、その場に居る第三者にも「Xが流木をYに渡した」"
         "と観測される。受取り側のインベントリが満杯だと受け取れない。"
+        "受け渡し際に一言かけたい場合は say_inline を書ける。"
     ),
     parameters={
         "type": "object",
@@ -307,6 +319,7 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
                     "ordinal を含めて指定。自分自身は指定不可。"
                 ),
             },
+            "say_inline": _SAY,
             "inner_thought": _IT,
         },
         "required": ["item_label", "target_player_label", "inner_thought"],
@@ -343,6 +356,7 @@ PICKUP_ITEM_DEFINITION = ToolDefinitionDto(
                 ),
                 "default": False,
             },
+            "say_inline": _SAY,
             "inner_thought": _IT,
         },
         "required": ["ground_item_label", "inner_thought"],
