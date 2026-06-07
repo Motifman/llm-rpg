@@ -67,6 +67,7 @@ class HeartbeatObservationEmitter:
         interval_ticks: int = _DEFAULT_INTERVAL_TICKS,
         time_label_provider: Optional[Callable[[WorldTick], Optional[str]]] = None,
         now_provider: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        is_traveling_provider: Optional[Callable[[PlayerId], bool]] = None,
     ) -> None:
         if interval_ticks < 1:
             raise ValueError("interval_ticks must be >= 1")
@@ -77,6 +78,12 @@ class HeartbeatObservationEmitter:
         self._time_label_provider = time_label_provider
         self._now_provider = now_provider
         self._last_emitted_tick: dict[int, int] = {}
+        # #404 fix: 移動中の player には heartbeat を発行しない。
+        # 旧実装は heartbeat 観測 → schedules_turn=True → 移動中でも
+        # LLM ターンが走る → 「移動中なのに何かしようとして失敗」が連発する
+        # silent failure 経路だった。is_traveling_provider が None なら
+        # 従来通りの全員一斉発火 (後方互換)。
+        self._is_traveling_provider = is_traveling_provider
 
     def run(self, current_tick: WorldTick) -> None:
         """post-tick hook 本体。各 LLM プレイヤーを巡回し必要なら観測を投入する。"""
@@ -102,6 +109,19 @@ class HeartbeatObservationEmitter:
                 continue
             if not self._should_emit(player_id, current_tick):
                 continue
+            # #404 fix: 移動中なら heartbeat 自体を投入しない。schedules_turn
+                # で起こさない上に、観測 buffer にも残さない (LLM プロンプトに
+                # 「いま heartbeat が来た」と読まれて行動誘発するのを防ぐ)。
+            if self._is_traveling_provider is not None:
+                try:
+                    if self._is_traveling_provider(player_id):
+                        continue
+                except Exception:
+                    # provider 失敗は fail-safe で従来通り emit する
+                    logger.exception(
+                        "is_traveling_provider failed for player %s; emitting heartbeat anyway",
+                        player_id.value,
+                    )
             if now is None:
                 now = self._now_provider()
             if not time_label_resolved:

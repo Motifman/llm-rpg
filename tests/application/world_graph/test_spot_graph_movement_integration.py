@@ -162,3 +162,96 @@ def test_same_destination_no_op() -> None:
     assert p is not None
     assert p.spot_navigation_state is not None
     assert not p.spot_navigation_state.is_traveling
+
+
+class TestTravelStageOnArrival:
+    """``#404`` fix: travel 完了時に on_arrival コールバックが発火する。
+
+    移動中 player の LLM ターンは ``_can_player_act`` で sleep するため、
+    到着時に schedule_turn を打って起こす経路が必要。travel_stage が
+    is_traveling=True → False の遷移を検知して on_arrival を呼ぶ。
+    """
+
+    def test_到着時に_on_arrival_が呼ばれる(self) -> None:
+        """travel が at_rest に遷移した tick で on_arrival(player_id) が来る。"""
+        graph = _line_graph_three_spots(travel_ticks=1)
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+
+        svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+        ctx = _FixedContext(items=frozenset(), flags=frozenset())
+        arrived: list[int] = []
+        stage = SpotGraphTravelStageService(
+            player_repo, svc, ctx,
+            on_arrival=lambda pid: arrived.append(pid.value),
+        )
+
+        svc.start_travel_to_spot(PlayerId(1), SpotId.create(3), frozenset(), frozenset())
+        stage.run(WorldTick(1))  # leg1 終了 (S1→S2)、まだ travel 中
+        assert arrived == []
+        stage.run(WorldTick(2))  # leg2 終了 (S2→S3)、at_rest に遷移
+        assert arrived == [1]
+
+    def test_途中_tick_では_on_arrival_が呼ばれない(self) -> None:
+        """is_traveling が継続している間はコールバックが鳴らない。"""
+        graph = _line_graph_three_spots(travel_ticks=3)
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+
+        svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+        ctx = _FixedContext(items=frozenset(), flags=frozenset())
+        arrived: list[int] = []
+        stage = SpotGraphTravelStageService(
+            player_repo, svc, ctx,
+            on_arrival=lambda pid: arrived.append(pid.value),
+        )
+
+        svc.start_travel_to_spot(PlayerId(1), SpotId.create(3), frozenset(), frozenset())
+        for t in range(1, 5):
+            stage.run(WorldTick(t))
+        assert arrived == []  # 6 tick 必要 (3+3) なのでまだ未到着
+
+    def test_set_on_arrival_で後付け注入できる(self) -> None:
+        """wiring の順序制約 (turn_trigger が travel_stage より後で構築される) を
+        満たすため、コールバックは後付けで差し替えられる必要がある。"""
+        graph = _line_graph_three_spots(travel_ticks=1)
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+
+        svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+        ctx = _FixedContext(items=frozenset(), flags=frozenset())
+        stage = SpotGraphTravelStageService(player_repo, svc, ctx)
+        arrived: list[int] = []
+        stage.set_on_arrival(lambda pid: arrived.append(pid.value))
+
+        svc.start_travel_to_spot(PlayerId(1), SpotId.create(2), frozenset(), frozenset())
+        stage.run(WorldTick(1))
+        assert arrived == [1]
+
+    def test_on_arrival_の例外は_travel_stage_を倒さない(self) -> None:
+        """コールバック失敗は他 player の advance を止めない (fail-safe)。"""
+        graph = _line_graph_three_spots(travel_ticks=1)
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+
+        svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+        ctx = _FixedContext(items=frozenset(), flags=frozenset())
+
+        def boom(pid):
+            raise RuntimeError("notify boom")
+
+        stage = SpotGraphTravelStageService(player_repo, svc, ctx, on_arrival=boom)
+
+        svc.start_travel_to_spot(PlayerId(1), SpotId.create(2), frozenset(), frozenset())
+        # 例外を呑む (fail-safe) のでテストが通る
+        stage.run(WorldTick(1))
+
+        # 到着自体はちゃんと完了している (travel_stage の本体は走り切る)
+        p = player_repo.find_by_id(PlayerId(1))
+        assert p is not None
+        assert p.spot_navigation_state is not None
+        assert not p.spot_navigation_state.is_traveling

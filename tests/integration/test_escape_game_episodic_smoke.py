@@ -63,7 +63,10 @@ class TestSmokeOffByDefault:
         # カイト = player_a を 入口広間 → 閲覧室 に移動
         kaito_id = runtime.get_player_ids()[0]
         runtime.do_move(kaito_id, "reading_room")
-        # 移動完了で例外無し
+        # #404 修正後: do_move は travel 開始のみで return する非同期
+        # セマンティクス。テストで「到着まで待つ」場合は advance_until_player_idle
+        # で明示的に world tick を進める。
+        runtime.advance_until_player_idle(kaito_id)
         assert runtime.get_player_spot_name(kaito_id) == "閲覧室"
 
 

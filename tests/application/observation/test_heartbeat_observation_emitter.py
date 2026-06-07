@@ -246,3 +246,81 @@ class TestHeartbeatObservationEmitter:
             "tick": 104,
             "interval_ticks": 4,
         }
+
+
+class TestHeartbeatSkipsTravelingPlayers:
+    """``#404`` fix: 移動中の player には heartbeat を発行しない。
+
+    旧実装は heartbeat が ``schedules_turn=True`` で届いて移動中 player の LLM
+    ターンが空回りし、travel 73 tick × 4 player × 約 15s = ~656s の wall time
+    スパイクを生んでいた。is_traveling_provider で skip させる。
+    """
+
+    def _build_emitter_with_traveling(
+        self,
+        traveling_pids: set[int],
+    ) -> tuple[
+        HeartbeatObservationEmitter,
+        DefaultObservationContextBuffer,
+        _RecordingTurnTrigger,
+    ]:
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer)
+        turn_trigger = _RecordingTurnTrigger()
+        turn_scheduler = ObservationTurnScheduler(
+            turn_trigger=turn_trigger,
+            llm_player_resolver=_AllLlmPlayerResolver(),
+        )
+        emitter = HeartbeatObservationEmitter(
+            observation_appender=appender,
+            turn_scheduler=turn_scheduler,
+            llm_player_ids_provider=lambda: [PlayerId(1), PlayerId(2)],
+            interval_ticks=2,
+            now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
+            is_traveling_provider=lambda pid: pid.value in traveling_pids,
+        )
+        return emitter, buffer, turn_trigger
+
+    def test_移動中の_player_には_heartbeat_を発行しない(self) -> None:
+        """is_traveling=True の player は buffer に観測が積まれず schedule も走らない。"""
+        emitter, buffer, trigger = self._build_emitter_with_traveling({1})
+        emitter.run(WorldTick(10))  # anchor
+        emitter.run(WorldTick(12))  # gap=2 → 通常は emit
+        assert buffer.get_observations(PlayerId(1)) == []
+        # 同じ tick で別 player (移動中でない) には届く
+        assert len(buffer.get_observations(PlayerId(2))) == 1
+        assert trigger.scheduled == [2]
+
+    def test_provider_が例外を投げても_fail_safe_で従来通り発行する(self) -> None:
+        """provider 失敗は heartbeat を止めない。silent failure 防止のため fail-open。"""
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer)
+        turn_trigger = _RecordingTurnTrigger()
+        turn_scheduler = ObservationTurnScheduler(
+            turn_trigger=turn_trigger,
+            llm_player_resolver=_AllLlmPlayerResolver(),
+        )
+
+        def raising_provider(pid: PlayerId) -> bool:
+            raise RuntimeError("provider boom")
+
+        emitter = HeartbeatObservationEmitter(
+            observation_appender=appender,
+            turn_scheduler=turn_scheduler,
+            llm_player_ids_provider=lambda: [PlayerId(1)],
+            interval_ticks=2,
+            now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
+            is_traveling_provider=raising_provider,
+        )
+        emitter.run(WorldTick(10))  # anchor
+        emitter.run(WorldTick(12))  # emit
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        assert turn_trigger.scheduled == [1]
+
+    def test_provider_未指定なら従来通り全員発行(self) -> None:
+        """is_traveling_provider 省略時 (後方互換) は全員に発行される。"""
+        emitter, buffer, trigger = _build_emitter(interval_ticks=2)
+        emitter.run(WorldTick(10))
+        emitter.run(WorldTick(12))
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        assert trigger.scheduled == [1]
