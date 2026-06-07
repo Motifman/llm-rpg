@@ -144,6 +144,97 @@ class SpotGraphToolExecutor:
         # say_inline が指定されても silent (= 短発話だけ無視) で本処理は走る。
         self._speech_service = speech_service
 
+    # PR β (実験 #29 後続): 疲労 ≥100 (exhausted) で実行を block する重い tool 群。
+    # tool list を動的に変えると prefix cache を破壊するため、executor 冒頭で
+    # exhausted を検知して EXHAUSTED error を返す形にする (docs/design_decisions.md #1 / #2 参照)。
+    # 「動けないが、座ったまま回復行動はできる」モデル: use_item / wait /
+    # speech / memo / give_item / drop_item / pickup_item / explore /
+    # set_sub_location / listen / prepare_action は通す。
+    HEAVY_TOOLS_BLOCKED_AT_EXHAUSTED = frozenset({
+        TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+        TOOL_NAME_SPOT_GRAPH_ATTACK,
+        TOOL_NAME_SPOT_GRAPH_INTERACT,
+    })
+
+    # PR β: 各 heavy action 後に蓄積する疲労量。scenario JSON の
+    # interaction.fatigue_cost が将来導入されたらここを上書きする。
+    FATIGUE_COST_TRAVEL_LEG = 1
+    FATIGUE_COST_ATTACK = 5
+    FATIGUE_COST_INTERACT_DEFAULT = 2
+
+    # wait 1 tick あたりの回復量。
+    FATIGUE_RECOVERY_WAIT = 2
+
+    def _get_status(self, player_id: int):
+        """疲労チェック / 蓄積 / 回復用に PlayerStatusAggregate を取得する。
+
+        repo 未注入 (= minimal wiring) の構成では None を返す。呼び出し側は
+        None なら疲労操作を skip する fail-safe。
+        """
+        if self._player_status_repository is None:
+            return None
+        try:
+            from ai_rpg_world.domain.player.value_object.player_id import PlayerId as _PID
+            return self._player_status_repository.find_by_id(_PID(player_id))
+        except Exception:
+            return None
+
+    def _is_exhausted_and_block(
+        self, player_id: int, tool_name: str
+    ) -> Optional[LlmCommandResultDto]:
+        """exhausted (疲労 100) で重い tool を呼んだ場合の block 判定 (PR β)。
+
+        block 該当なら EXHAUSTED error を返す。それ以外は None。
+        """
+        if tool_name not in self.HEAVY_TOOLS_BLOCKED_AT_EXHAUSTED:
+            return None
+        status = self._get_status(player_id)
+        if status is None or not status.is_exhausted():
+            return None
+        return LlmCommandResultDto(
+            success=False,
+            message=(
+                "疲労が限界に達してその場に崩れ落ちている。激しい行動 "
+                "(travel_to / attack / interact) は今できない。"
+                "wait や食事 (use_item) で回復してから動き直すこと。"
+            ),
+            error_code="EXHAUSTED",
+            remediation=(
+                "wait で休む / 食料や寝具系アイテムを use_item する / 仲間に"
+                "助けを求める speech で短期的に凌ぐ。回復したら再度試す。"
+            ),
+        )
+
+    def _apply_fatigue_safe(self, player_id: int, amount: int) -> None:
+        """疲労蓄積を best-effort で適用する (PR β)。失敗時は silent。
+
+        action 成功時の post-処理として呼ぶ。repo 未注入や save 失敗で親
+        action を倒さないために silent (debug log 程度に留める)。
+        """
+        if amount <= 0:
+            return
+        status = self._get_status(player_id)
+        if status is None:
+            return
+        try:
+            status.apply_fatigue(amount)
+            self._player_status_repository.save(status)
+        except Exception:
+            pass
+
+    def _recover_fatigue_safe(self, player_id: int, amount: int) -> None:
+        """疲労回復を best-effort で適用する (PR β)。"""
+        if amount <= 0:
+            return
+        status = self._get_status(player_id)
+        if status is None:
+            return
+        try:
+            status.recover_fatigue(amount)
+            self._player_status_repository.save(status)
+        except Exception:
+            pass
+
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         return {
             TOOL_NAME_SPOT_GRAPH_TRAVEL_TO: self._travel_to,
@@ -162,6 +253,10 @@ class SpotGraphToolExecutor:
         }
 
     def _travel_to(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        # PR β: 疲労 limit (100) で重い tool は block。
+        blocked = self._is_exhausted_and_block(player_id, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO)
+        if blocked is not None:
+            return blocked
         raw = args.get("destination_spot_id")
         try:
             dest = int(raw) if raw is not None else 0
@@ -197,6 +292,11 @@ class SpotGraphToolExecutor:
             # 実験 #29 後続: 立ち去り際の一言 (say_inline) を short SAY として
             # 発火する。失敗しても travel 結果は変えない (silent fail-safe)。
             self._maybe_emit_say_inline(player_id, args)
+            # PR β: travel は 1 leg = 1 fatigue。実装上ここで合計を厳密に
+            # 計算するのは route の leg 数を取り直す手間があるため、travel
+            # 開始時に +1 だけ蓄積する暫定実装にする。残りは travel_stage が
+            # 各 tick で進める時に補足蓄積するのが理想だが、Phase 1 では簡素化。
+            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_TRAVEL_LEG)
             base = f"スポット {dest} への移動を開始しました。"
             return LlmCommandResultDto(
                 success=True, message=append_inner_thought_to_message(base, args)
@@ -299,6 +399,10 @@ class SpotGraphToolExecutor:
             return exception_result(e)
 
     def _interact(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        # PR β: 疲労 limit (100) で interact は block。
+        blocked = self._is_exhausted_and_block(player_id, TOOL_NAME_SPOT_GRAPH_INTERACT)
+        if blocked is not None:
+            return blocked
         try:
             oid = int(args.get("object_id", 0))
             action = str(args.get("action_name", "")).strip()
@@ -322,6 +426,10 @@ class SpotGraphToolExecutor:
                 current_tick=self._time_provider.get_current_tick(),
             )
             msg = "\n".join(out.messages) if out.messages else "操作を実行しました。"
+            # PR β: interact は heavy 行動。Phase 1 では fatigue_cost を
+            # 一律 default 値 (2) で蓄積。将来 scenario JSON で各 interaction
+            # に fatigue_cost を持たせるなら、out.fatigue_cost を読む形に拡張。
+            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_INTERACT_DEFAULT)
             return LlmCommandResultDto(
                 success=True, message=append_inner_thought_to_message(msg, args)
             )
@@ -465,6 +573,11 @@ class SpotGraphToolExecutor:
                         item_spec_id=item_instance.item_spec.item_spec_id,
                     )
                 )
+            # PR β: アイテムの fatigue_recovery を適用 (scenario JSON 由来)。
+            # 食料 / 茶 / 薬の類で疲労回復を表現する。0 ならスキップ。
+            recovery = getattr(item_instance.item_spec, "fatigue_recovery", 0) or 0
+            if recovery > 0:
+                self._recover_fatigue_safe(player_id, recovery)
             base = f"{name}を使用した。"
             if item_instance.item_spec.consume_effect is not None:
                 base += f"（効果が適用された）"
@@ -807,6 +920,10 @@ class SpotGraphToolExecutor:
         （cooldown / target_dead / damage=0 / wiring 不足）は
         `success=False` で返す。
         """
+        # PR β: 疲労 limit (100) で attack は block。
+        blocked = self._is_exhausted_and_block(player_id, TOOL_NAME_SPOT_GRAPH_ATTACK)
+        if blocked is not None:
+            return blocked
         orchestrator = self._resolve_attack_orchestrator()
         if (
             orchestrator is None
@@ -865,6 +982,8 @@ class SpotGraphToolExecutor:
             base = f"{display_name}に {outcome.damage} のダメージを与えた。"
             if outcome.target_incapacitated:
                 base += " 致命傷で倒した。"
+            # PR β: 戦闘は激しい消耗。executed のみ蓄積 (空振り cooldown は除外)。
+            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_ATTACK)
             return LlmCommandResultDto(
                 success=True,
                 message=append_inner_thought_to_message(base, args),
@@ -936,7 +1055,7 @@ class SpotGraphToolExecutor:
             return exception_result(e)
 
     def _wait(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
-        del player_id
+        # PR β: wait は exhausted でも実行可 (= 回復の主経路)。block しない。
         reason = str(args.get("reason", "")).strip()
         if self._svc.simulation is None:
             return LlmCommandResultDto(
@@ -946,6 +1065,8 @@ class SpotGraphToolExecutor:
             )
         try:
             tick = self._svc.simulation.tick()
+            # PR β: wait は微回復 (専用 rest tool は作らない設計)。
+            self._recover_fatigue_safe(player_id, self.FATIGUE_RECOVERY_WAIT)
             suffix = f"（理由: {reason}）" if reason else ""
             base = f"待機して時間が進んだ: tick={tick.value}{suffix}"
             return LlmCommandResultDto(

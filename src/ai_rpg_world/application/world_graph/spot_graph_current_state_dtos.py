@@ -135,6 +135,12 @@ class SpotGraphNearbyEntityEntry:
     # 判断が破綻する。entity の現在 is_down 状態を snapshot に lift する。
     # status 未解決 (entity が player でない / repo に居ない) なら False。
     is_down: bool = False
+    # PR β (実験 #29 後続): 同 spot の他 player の疲労 tier。
+    # ``ok`` / ``tired`` / ``fatigued`` / ``severe`` / ``exhausted`` の 5 段階。
+    # nearby_entities の prompt 表示で「(ぐったりしている)」等を出すために使う。
+    # 仲間の状態を「常時見えている」モデル: Observation ではなく state として
+    # 毎 tick 反映する (#421/#425 のラベル → 名前+状態 設計に対称的)。
+    fatigue_level: str = "ok"
 
 
 @dataclass(frozen=True)

@@ -120,6 +120,9 @@ class ItemSpecDefinition:
     # runtime で ItemType.CONSUMABLE として登録される。複合効果は
     # CompositeItemEffect で表現。
     consume_effect: Optional["ItemEffect"] = None
+    # PR β (実験 #29 後続): 疲労回復量。0 (default) なら効果なし。
+    # use_item 成功時に PlayerStatusAggregate.recover_fatigue() が呼ばれる。
+    fatigue_recovery: int = 0
 
 
 @dataclass(frozen=True)
@@ -612,6 +615,17 @@ class ScenarioLoader:
             consume_effect = self._parse_consume_effect(
                 item.get("consume_effect"), sid,
             )
+            fatigue_recovery_raw = item.get("fatigue_recovery", 0)
+            try:
+                fatigue_recovery = int(fatigue_recovery_raw)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"item '{sid}': fatigue_recovery must be int, got {fatigue_recovery_raw!r}"
+                )
+            if fatigue_recovery < 0:
+                raise ValueError(
+                    f"item '{sid}': fatigue_recovery must be non-negative, got {fatigue_recovery}"
+                )
             defs.append(ItemSpecDefinition(
                 string_id=sid,
                 spec_id=ItemSpecId.create(numeric),
@@ -621,6 +635,7 @@ class ScenarioLoader:
                 is_light_source=item.get("is_light_source", False),
                 spoils_after_ticks=spoils_after_ticks,
                 consume_effect=consume_effect,
+                fatigue_recovery=fatigue_recovery,
             ))
         return defs
 

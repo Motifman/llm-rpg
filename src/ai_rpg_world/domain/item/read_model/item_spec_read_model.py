@@ -32,6 +32,8 @@ class ItemSpecReadModel:
     is_light_source: bool = False
     # Phase D-2: 食料腐敗。詳細は ItemSpec.spoils_after_ticks を参照。
     spoils_after_ticks: Optional[int] = None
+    # PR β (実験 #29 後続): 疲労回復量。0 (default) なら回復なし。
+    fatigue_recovery: int = 0
 
     @classmethod
     def create_from_item_spec(
@@ -49,6 +51,7 @@ class ItemSpecReadModel:
         consume_effect: Optional["ItemEffect"] = None,
         is_light_source: bool = False,
         spoils_after_ticks: Optional[int] = None,
+        fatigue_recovery: int = 0,
     ) -> "ItemSpecReadModel":
         """ItemSpecからReadModelを作成"""
         return cls(
@@ -65,6 +68,7 @@ class ItemSpecReadModel:
             consume_effect=consume_effect,
             is_light_source=is_light_source,
             spoils_after_ticks=spoils_after_ticks,
+            fatigue_recovery=fatigue_recovery,
         )
 
     @property
@@ -99,4 +103,5 @@ class ItemSpecReadModel:
             consume_effect=self.consume_effect,
             is_light_source=self.is_light_source,
             spoils_after_ticks=self.spoils_after_ticks,
+            fatigue_recovery=self.fatigue_recovery,
         )
