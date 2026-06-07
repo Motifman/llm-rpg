@@ -116,6 +116,19 @@ class TestThreadPoolShortTermMemoryScheduler:
         sch.shutdown()  # wait=True で完了待ち
         assert progress["done"] is True
 
+    def test_shutdown_に_timeout_を_渡すと_warning_を出す(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """review MEDIUM #2: ThreadPoolExecutor.shutdown は timeout を取らないので
+        サポートできない事実を warning で明示する。"""
+        sch = ThreadPoolShortTermMemoryScheduler(max_workers=1)
+        with caplog.at_level(
+            logging.WARNING,
+            logger="ai_rpg_world.application.llm.services.short_term_memory_schedulers",
+        ):
+            sch.shutdown(timeout=1.0)
+        assert any("timeout" in rec.message for rec in caplog.records)
+
     def test_shutdown_後の_submit_は_drop_して_warning_と_trace(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:

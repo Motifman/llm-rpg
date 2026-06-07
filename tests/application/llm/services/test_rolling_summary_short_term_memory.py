@@ -476,20 +476,53 @@ class TestRollingSummarySchedulerIntegration:
             for i in range(DEFAULT_L1_SOFT_CAP):
                 mem.append(_PID, _obs(f"p{i}", seq=i))
             assert mem._mid_generations(_PID.value) == []
-            # worker 解放
+            # worker 解放 + shutdown で完了待ち
             gate.set()
-            # shutdown で完了待ち
-            scheduler.shutdown()
-            gens = mem._mid_generations(_PID.value)
-            assert len(gens) == 1
-            assert gens[0].compressed_activity == "slow result"
         finally:
+            # 例外経路でも worker が hang しないよう gate を必ず set。
+            # shutdown は 1 回だけ呼ぶ (review MEDIUM #5: 旧版は二重呼び出し)
             gate.set()
             scheduler.shutdown()
+        # shutdown 完了後にアサート (この時点で in-flight task が install 済み)
+        gens = mem._mid_generations(_PID.value)
+        assert len(gens) == 1
+        assert gens[0].compressed_activity == "slow result"
 
     def test_scheduler_が_非_IShortTermMemoryScheduler_なら_type_error(self) -> None:
         with pytest.raises(TypeError, match="scheduler"):
             RollingSummaryShortTermMemory(scheduler="not-a-scheduler")  # type: ignore[arg-type]
+
+    def test_scheduler_が_drop_すると_warning_と_件数を_log(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """review HIGH #1: scheduler.submit が False を返すと observations は
+        L1 / L4 から消える silent data loss になる。consumed 件数を WARNING
+        ログに残して可観測化する。"""
+
+        class _DroppingScheduler(InlineShortTermMemoryScheduler):
+            def submit(self, player_id, task):  # type: ignore[override]
+                return False  # 常に drop
+
+        stub = _StubSummaryService.make(
+            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
+        )
+        mem = RollingSummaryShortTermMemory(
+            summary_service=stub,
+            scheduler=_DroppingScheduler(),
+        )
+        with caplog.at_level(
+            logging.WARNING,
+            logger="ai_rpg_world.application.llm.services.rolling_summary_short_term_memory",
+        ):
+            for i in range(DEFAULT_L1_SOFT_CAP):
+                mem.append(_PID, _obs(f"p{i}", seq=i))
+        # consumed は popleft 済みなので L1 = 0、L4 install もされず L4 = 0
+        assert mem._raw_queue_len(_PID.value) == 0
+        assert mem._mid_generations(_PID.value) == []
+        # WARNING ログに件数が含まれる
+        assert any(
+            "drop" in rec.message and "15" in rec.message for rec in caplog.records
+        )
 
     def test_shutdown_は_scheduler_に_委譲(self) -> None:
         called = {"n": 0}

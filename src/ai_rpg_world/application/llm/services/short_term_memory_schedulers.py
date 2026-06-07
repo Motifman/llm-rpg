@@ -64,10 +64,15 @@ class InlineShortTermMemoryScheduler(IShortTermMemoryScheduler):
     """
 
     def submit(self, player_id: int, task: L4GenerationTask) -> bool:
+        # 通常 task (= ``RollingSummaryShortTermMemory._run_generation``) は
+        # 内部で全例外を握って template fallback を install するため、ここに
+        # 到達するのは task 内のバグ時のみ。その場合でも scheduler 自体は
+        # 止めず、warning ログを残して True を返す (受理は成功、実行は失敗)。
+        # 呼出側は True を「L4 が install される」と期待しているため、本当に
+        # install を保証したい場合は task 側で fallback を確実にすること。
         try:
             task()
         except Exception:
-            # task 内で握り潰すのが原則だが、漏れた例外は warning にだけ残す。
             _logger.exception(
                 "InlineShortTermMemoryScheduler: task raised for player_id=%s",
                 player_id,
@@ -161,18 +166,26 @@ class ThreadPoolShortTermMemoryScheduler(IShortTermMemoryScheduler):
         return True
 
     def shutdown(self, timeout: Optional[float] = None) -> None:
+        """in-flight 完了を待って executor を閉じる。
+
+        現実装の制約: Python 3.10 の ``ThreadPoolExecutor.shutdown`` は
+        ``timeout`` を取らず、また実行中タスクの強制中断手段もない。
+        ``timeout`` を渡された場合は warning を出すだけで実質的な打ち切り
+        制御は行わない (review MEDIUM #2)。
+        """
+        if timeout is not None:
+            _logger.warning(
+                "ThreadPoolShortTermMemoryScheduler.shutdown: timeout=%s は "
+                "現実装ではサポートされていません。in-flight 完了まで待ちます。",
+                timeout,
+            )
         with self._inflight_lock:
             self._is_shutdown = True
-            pending = list(self._inflight)
         # ThreadPoolExecutor.shutdown は in-flight の完了を待つ
-        # Python 3.9+ では cancel_futures / wait 引数があるが、互換性のため
-        # シンプルに wait=True で閉じる
         try:
             self._executor.shutdown(wait=True)
         except Exception:
             _logger.exception("ThreadPoolShortTermMemoryScheduler.shutdown failed")
-        # timeout は cooperative。Python 3.10 では実行中タスクを kill する手段なし
-        del pending, timeout
 
     def _worker(self, player_id: int, task: L4GenerationTask) -> None:
         start = time.monotonic()

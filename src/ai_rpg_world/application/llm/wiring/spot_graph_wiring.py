@@ -372,8 +372,11 @@ def create_spot_graph_wiring(
     )
     # Phase 2: short term memory の実装選択。persona_resolver / client が揃った
     # ここで構築する。trace_recorder_provider は Phase 2.1 scheduler の drop 計測用。
-    def _st_trace_recorder_provider():
+    from ai_rpg_world.application.trace import ITraceRecorder as _ITraceRecorder
+
+    def _st_trace_recorder_provider() -> Optional[_ITraceRecorder]:
         return trace_recorder
+
     sliding_window = _build_short_term_memory(
         explicit=sliding_window_memory,
         llm_client=client,

@@ -177,9 +177,16 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
     # ──────────────────────────────────────────────────────────
 
     def _ensure_player(self, pid: int) -> None:
-        if pid not in self._raw:
-            self._raw[pid] = deque()
+        """player 別 dict を初期化する。
+
+        現状の前提: ``_raw`` は main thread のみが触る。``_mid`` は main +
+        worker 両方が触るため ``_mid_lock`` で保護する。``_raw`` 初期化も
+        同じ lock 内で行うことで、将来 multi-thread 化されても自己防衛可能
+        にしておく (review HIGH #2)。
+        """
         with self._mid_lock:
+            if pid not in self._raw:
+                self._raw[pid] = deque()
             if pid not in self._mid:
                 self._mid[pid] = deque()
 
@@ -240,7 +247,19 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
                 force_fallback=force_fallback,
             )
 
-        self._scheduler.submit(pid, _task)
+        accepted = self._scheduler.submit(pid, _task)
+        if not accepted:
+            # review HIGH #1: scheduler が drop した時、consumed observations は
+            # 既に _raw から popleft 済みなので失われる (silent data loss)。
+            # trace event は scheduler が emit するが、件数情報は memory 側でしか
+            # 持っていないので、ここで明示的に WARNING + 件数を残す。
+            _logger.warning(
+                "RollingSummaryShortTermMemory(player_id=%s): scheduler が "
+                "task を drop。%d 件の observations は L1 / L4 のどちらにも "
+                "残らず失われます (queue_full or shutdown 由来)。",
+                pid,
+                len(consumed),
+            )
 
     def _run_generation(
         self,
@@ -303,6 +322,10 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
 
         Inline scheduler では main thread が呼ぶ。ThreadPool では worker
         thread から呼ばれるので必ず lock 内で書き込む。
+
+        通常 ``_ensure_player`` が先に呼ばれている前提だが、テストから
+        ``_install_l4`` を直接呼ぶ経路や、将来の coordinator 経路への防衛と
+        して、ここでも player 初期化を行う (review HIGH #3)。
         """
         with self._mid_lock:
             if summary.player_id not in self._mid:
