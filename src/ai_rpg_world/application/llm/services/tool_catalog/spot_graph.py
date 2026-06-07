@@ -37,20 +37,18 @@ _IT = inner_thought_property()
 
 TRAVEL_TO_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-    description="スポットグラフ上で、指定した接続先ラベルへ移動を開始する（経路は最短・通行条件を満たす必要がある）。",
+    description="スポットグラフ上で、指定した接続先へ移動を開始する（経路は最短・通行条件を満たす必要がある）。",
     parameters={
         "type": "object",
         "properties": {
             "destination_label": {
                 "type": "string",
                 "description": (
-                    "接続先ラベル（現在の状況に表示された S1, S2 等）または"
-                    "スポット名そのもの（例: \"入口広間\"）。"
-                    "スポット名は意味が不変なので、過去 turn の履歴を参照して"
-                    "再利用する場合はスポット名の方が安全。\n"
-                    "現在状況の \"S2: 扉 → 館長書斎\" のような行をそのまま"
-                    "貼っても解決を試みるが、可能なら S2 または \"館長書斎\" "
-                    "のみを渡す方が確実。"
+                    "行き先スポットの名前 (例: \"入口広間\")。"
+                    "現在の状況の \"- 扉 → 館長書斎\" のような行に出ている"
+                    "spot 名をそのまま渡す。"
+                    "同名スポットが複数ある場合 (まれ) は ``#1`` / ``#2`` の"
+                    "ordinal を含めて指定する (例: \"小部屋 #2\")。"
                 ),
             },
             "inner_thought": _IT,
@@ -68,8 +66,8 @@ SET_SUB_LOCATION_DEFINITION = ToolDefinitionDto(
             "sub_location_label": {
                 "type": "string",
                 "description": (
-                    "サブロケーションラベル（現在の状況に表示された SL1, SL2 等）"
-                    "またはサブロケーション名そのもの（例: \"祭壇前\"）。未指定でクリア。"
+                    "サブロケーションの名前 (例: \"祭壇前\")。同名衝突時は"
+                    "``#N`` ordinal を含めて指定。未指定でクリア。"
                 ),
             },
             "inner_thought": _IT,
@@ -98,7 +96,10 @@ INTERACT_DEFINITION = ToolDefinitionDto(
         "properties": {
             "object_label": {
                 "type": "string",
-                "description": "オブジェクトラベル（現在の状況に表示された OBJ1, OBJ2 等）。",
+                "description": (
+                    "オブジェクトの名前 (例: \"焚き火跡\")。"
+                    "同名衝突時は ``#N`` ordinal を含めて指定。"
+                ),
             },
             "action_name": {
                 "type": "string",
@@ -168,8 +169,8 @@ SPEECH_DEFINITION = ToolDefinitionDto(
             "target_label": {
                 "type": "string",
                 "description": (
-                    "channel=whisper のときのみ必須。同じ場所にいるプレイヤーラベル"
-                    " (P1, P2 等) または相手の名前 (例: \"リン\")。"
+                    "channel=whisper のときのみ必須。同じ場所にいるプレイヤーの"
+                    "名前 (例: \"リン\")。同名衝突時は ``#N`` を含めて指定。"
                     "say / shout では指定しても無視される。"
                 ),
             },
@@ -205,7 +206,11 @@ USE_ITEM_DEFINITION = ToolDefinitionDto(
         "properties": {
             "item_label": {
                 "type": "string",
-                "description": "使用するアイテムラベル（所持アイテムに表示された I1, I2 等）。",
+                "description": (
+                    "使用するアイテムの名前 (例: \"生の魚\")。"
+                    "同名で複数エントリある場合 (例: 新鮮/腐敗別の魚) は"
+                    "``#N`` ordinal を含めて指定。"
+                ),
             },
             "inner_thought": _IT,
         },
@@ -255,9 +260,10 @@ DROP_ITEM_DEFINITION = ToolDefinitionDto(
             "item_label": {
                 "type": "string",
                 "description": (
-                    "落とすアイテムのラベル (所持アイテムに表示された I1, I2 等)。"
-                    "同じ spec のアイテムを複数所持している場合 (例: I1: 流木 x2) は、"
-                    "代表 instance が1つだけ落とされる。"
+                    "落とすアイテムの名前 (例: \"流木\")。"
+                    "同じ spec のアイテムを複数所持している場合 (例: 流木 x2) は、"
+                    "代表 instance が 1 つだけ落とされる。同名衝突時は"
+                    "``#N`` ordinal を含めて指定。"
                 ),
             },
             "stealth": {
@@ -289,15 +295,16 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
             "item_label": {
                 "type": "string",
                 "description": (
-                    "渡すアイテムのラベル (所持アイテムに表示された I1, I2 等)。"
+                    "渡すアイテムの名前 (例: \"流木\")。"
                     "同 spec で複数所持の場合は代表 instance が 1 つ渡される。"
+                    "同名衝突時は ``#N`` ordinal を含めて指定。"
                 ),
             },
             "target_player_label": {
                 "type": "string",
                 "description": (
-                    "渡す相手のラベル (同スポット内のプレイヤー一覧に表示された "
-                    "P1, P2 等) または相手の名前 (例: \"トマ\")。自分自身は指定不可。"
+                    "渡す相手の名前 (例: \"トマ\")。同名衝突時は ``#N`` "
+                    "ordinal を含めて指定。自分自身は指定不可。"
                 ),
             },
             "inner_thought": _IT,
@@ -322,8 +329,9 @@ PICKUP_ITEM_DEFINITION = ToolDefinitionDto(
             "ground_item_label": {
                 "type": "string",
                 "description": (
-                    "拾うアイテムのラベル (現在の状況の「地面に落ちているもの」に"
-                    "表示された G1, G2 等)。"
+                    "拾うアイテムの名前 (例: \"流木\")。現在の状況の「地面に"
+                    "落ちているもの」に表示された名前をそのまま渡す。"
+                    "同名衝突時は ``#N`` ordinal を含めて指定。"
                 ),
             },
             "stealth": {
@@ -350,7 +358,11 @@ ATTACK_DEFINITION = ToolDefinitionDto(
         "properties": {
             "target_label": {
                 "type": "string",
-                "description": "攻撃対象のモンスターラベル（M1, M2 等）。",
+                "description": (
+                    "攻撃対象モンスターの名前 (例: \"灰色のオオカミ\")。"
+                    "同種が複数いる場合は ``#N`` ordinal を含めて指定"
+                    "(例: \"灰色のオオカミ #2\")。"
+                ),
             },
             "inner_thought": _IT,
         },

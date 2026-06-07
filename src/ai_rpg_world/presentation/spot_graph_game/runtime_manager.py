@@ -1388,7 +1388,7 @@ class _EscapeGameLlmWiring:
                 message = (
                     "新しい発見はなかった。"
                     f"既に見えているオブジェクト: {visible_objects}"
-                    " (interact するにはこのラベルを object_label に指定する)"
+                    " (interact するにはこのオブジェクトの名前を object_label に指定する)"
                 )
             else:
                 message = "新しい発見はなかった (この場所に interactable なオブジェクトは無い)"

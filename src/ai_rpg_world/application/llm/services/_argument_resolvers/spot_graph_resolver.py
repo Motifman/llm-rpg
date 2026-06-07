@@ -254,8 +254,13 @@ def _find_target_by_display_name(
     自スポット移動後にラベルの指す先が反転して bouncing が起きる。これを避けるため、
     スポット名 (display_name) そのものを引数として受け付け、不変な意味で解決できるようにする。
 
-    同名スポットが複数ある場合は最初にマッチしたものを採用しつつ warning を残す。
-    シナリオ規約として同名禁止が望ましいが、ここでは防御的に最初の 1 件で先へ進める。
+    PR 6 (#404 後続) で名前+ordinal 設計に倒した後の挙動:
+        - prompt 側で同名衝突時は ``灰色のオオカミ #1`` / ``灰色のオオカミ #2``
+          のように disambiguate された display_name が target に格納される
+        - LLM はこの disambiguated 名をそのまま引数として渡す想定
+        - したがって本関数で複数マッチが起きるのは、シナリオ JSON で人為的に
+          同一の display_name (disambiguated 後でも) を作ってしまった病的
+          ケースのみ。warning は引き続き残しておく
     """
     matches: list[ToolRuntimeTargetDto] = []
     for target in runtime_context.targets.values():
