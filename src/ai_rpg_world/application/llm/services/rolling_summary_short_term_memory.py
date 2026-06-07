@@ -22,7 +22,7 @@ import logging
 import threading
 from collections import deque
 from datetime import datetime, timezone
-from typing import Callable, Deque, Dict, List, Optional, Sequence
+from typing import Any, Callable, Deque, Dict, List, Optional, Sequence
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.interfaces import ISlidingWindowMemory
@@ -46,6 +46,7 @@ from ai_rpg_world.application.llm.services.short_term_memory_summary_service imp
     build_template_fallback_summary,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
+from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -98,6 +99,12 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         l1_hard_cap: int = DEFAULT_L1_HARD_CAP,
         l4_keep_generations: int = DEFAULT_L4_KEEP_GENERATIONS,
         scheduler: Optional[IShortTermMemoryScheduler] = None,
+        # PR #435: L4 / L5 が install された瞬間に trace event を 1 件吐く。
+        # 失敗時は既に DROPPED / GENERATION_FAILED が吐かれているが、成功時の
+        # 生成内容を後追いする経路が無かった。両方とも optional で、None なら
+        # 完全 no-op (= 既存挙動の後方互換 / テスト fixture が簡素)。
+        trace_recorder_provider: Optional[Callable[[], Any]] = None,
+        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
     ) -> None:
         if l1_soft_cap <= 0:
             raise ValueError("l1_soft_cap must be positive")
@@ -134,6 +141,8 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         self._scheduler: IShortTermMemoryScheduler = (
             scheduler if scheduler is not None else InlineShortTermMemoryScheduler()
         )
+        self._trace_recorder_provider = trace_recorder_provider
+        self._current_tick_provider = current_tick_provider
         self._raw: Dict[int, Deque[ObservationEntry]] = {}
         # L4 は新しい順に並べる (index 0 = 最新)。worker thread からも書く
         # ので mid_lock で保護する。
@@ -350,6 +359,68 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         )
         self._install_l4(summary)
 
+    def _emit_l4_generated(self, summary: L4MidSummary) -> None:
+        """PR #435: L4 install 直後に trace event を 1 件吐く (best-effort)。
+
+        recorder が None / 例外を投げる場合でも本体経路を倒さないよう全て握りつぶす
+        (scheduler の trace emit と同じポリシー)。
+        """
+        if self._trace_recorder_provider is None:
+            return
+        try:
+            recorder = self._trace_recorder_provider()
+            if recorder is None:
+                return
+            tick = self._safe_current_tick()
+            recorder.record(
+                TraceEventKind.SHORT_TERM_SUMMARY_GENERATED,
+                tick=tick,
+                player_id=summary.player_id,
+                summary_id=summary.summary_id,
+                raw_count=summary.raw_count,
+                compressed_activity=summary.compressed_activity,
+                emotional_summary=summary.emotional_summary,
+                unresolved=list(summary.unresolved),
+                is_fallback=summary.is_fallback,
+            )
+        except Exception:
+            _logger.exception(
+                "trace recorder.record raised for SHORT_TERM_SUMMARY_GENERATED; skipping"
+            )
+
+    def _emit_l5_generated(self, summary: L5LongSummary) -> None:
+        """PR #435: L5 install 直後に trace event を 1 件吐く (best-effort)。"""
+        if self._trace_recorder_provider is None:
+            return
+        try:
+            recorder = self._trace_recorder_provider()
+            if recorder is None:
+                return
+            tick = self._safe_current_tick()
+            recorder.record(
+                TraceEventKind.SHORT_TERM_LONG_SUMMARY_GENERATED,
+                tick=tick,
+                player_id=summary.player_id,
+                summary_id=summary.summary_id,
+                generation_index=summary.generation_index,
+                self_image=summary.self_image,
+                world_view=summary.world_view,
+                is_fallback=summary.is_fallback,
+            )
+        except Exception:
+            _logger.exception(
+                "trace recorder.record raised for SHORT_TERM_LONG_SUMMARY_GENERATED; skipping"
+            )
+
+    def _safe_current_tick(self) -> Optional[int]:
+        """current_tick_provider を best-effort で評価。例外は None に縮退。"""
+        if self._current_tick_provider is None:
+            return None
+        try:
+            return self._current_tick_provider()
+        except Exception:
+            return None
+
     def _install_l4(self, summary: L4MidSummary) -> None:
         """新世代 L4 を mid に push する (thread-safe)。
 
@@ -372,6 +443,10 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
             self._mid[pid].appendleft(summary)
             while len(self._mid[pid]) > self._keep_gen:
                 evicted_l4 = self._mid[pid].pop()
+
+        # PR #435: 成功時の生成内容を trace に残す。lock 外で emit する
+        # (recorder の I/O が L4 install を blocking しないように)。
+        self._emit_l4_generated(summary)
 
         if evicted_l4 is not None:
             self._maybe_trigger_long_summary(pid, evicted_l4)
@@ -470,7 +545,7 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         with self._long_lock:
             next_index = self._long_gen_index.get(pid, 0) + 1
             self._long_gen_index[pid] = next_index
-            self._long[pid] = L5LongSummary(
+            installed = L5LongSummary(
                 summary_id=f"l5-{uuid4().hex}",
                 player_id=pid,
                 generation_index=next_index,
@@ -479,6 +554,10 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
                 world_view=parsed.world_view,
                 is_fallback=is_fallback,
             )
+            self._long[pid] = installed
+
+        # PR #435: 成功時の生成内容を trace に残す。lock 外で emit する。
+        self._emit_l5_generated(installed)
 
     def _resolve_persona(self, pid: int) -> tuple[str, str]:
         if self._persona_resolver is None:

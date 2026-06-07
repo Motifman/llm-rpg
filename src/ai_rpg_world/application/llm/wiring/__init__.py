@@ -972,6 +972,10 @@ def _build_short_term_memory(
         long_summary_service=long_summary_service,
         persona_resolver=persona_resolver,
         scheduler=scheduler,
+        # PR #435: L4 / L5 が install されたときの生成内容を trace に残す
+        # (scheduler に渡しているのと同じ provider を再利用)
+        trace_recorder_provider=trace_recorder_provider,
+        current_tick_provider=current_tick_provider,
     )
 
 

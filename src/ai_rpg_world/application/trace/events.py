@@ -101,6 +101,19 @@ class TraceEventKind:
     # 事象。log だけでなく trace でも見えるようにする (silent failure 防止)。
     # payload: error_type / error_message_snippet / latency_ms (worker 開始からの)
     SHORT_TERM_SUMMARY_GENERATION_FAILED = "short_term_summary_generation_failed"
+    # PR #435: L4 mid summary が install された瞬間 (LLM 成功 / template fallback
+    # の両方を含む)。失敗時の trace は既に SHORT_TERM_SUMMARY_DROPPED /
+    # _GENERATION_FAILED にあるが、**成功時の生成内容** を捕捉する経路が無く、
+    # 「rolling が何を圧縮して覚えていたか」が事後追えなかった (実験 #30 前準備で
+    # ギャップとして発覚)。
+    # payload: summary_id / raw_count / compressed_activity / emotional_summary /
+    # unresolved / is_fallback
+    SHORT_TERM_SUMMARY_GENERATED = "short_term_summary_generated"
+    # PR #435: L5 long summary が install された瞬間 (LLM 成功 / template fallback
+    # / previous_l5 延命を含む)。Phase 3 で生成される self_image / world_view を
+    # 後から振り返るための trace。生成タイミング + 内容を 1 件で残す。
+    # payload: summary_id / generation_index / self_image / world_view / is_fallback
+    SHORT_TERM_LONG_SUMMARY_GENERATED = "short_term_long_summary_generated"
 
 
 @dataclass(frozen=True)
