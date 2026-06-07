@@ -45,6 +45,11 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
 from ai_rpg_world.application.world_graph.spot_graph_world_services import SpotGraphWorldServices
+from ai_rpg_world.application.speech.services.player_speech_service import (
+    PlayerSpeechApplicationService,
+)
+from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     ItemTransferException,
     SpotGraphItemTransferService,
@@ -94,6 +99,7 @@ class SpotGraphToolExecutor:
         player_status_repository: Optional[PlayerStatusRepository] = None,
         attack_orchestrator: Optional[SpotAttackOrchestrator] = None,
         item_transfer_service: Optional["SpotGraphItemTransferService"] = None,
+        speech_service: Optional["PlayerSpeechApplicationService"] = None,
     ) -> None:
         if spot_graph_world_services.movement is None:
             raise TypeError("SpotGraphWorldServices.movement が必要です")
@@ -126,6 +132,10 @@ class SpotGraphToolExecutor:
         # 注入されない構成では drop/pickup ハンドラは「未対応」エラーを返す
         # (後方互換 + minimal wiring 用)。
         self._item_transfer_service = item_transfer_service
+        # 実験 #29 後続: travel_to / give_item / drop_item / pickup_item の
+        # ``say_inline`` パラメータ用に speech_service を保持。未注入なら
+        # say_inline が指定されても silent (= 短発話だけ無視) で本処理は走る。
+        self._speech_service = speech_service
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         return {
@@ -176,12 +186,62 @@ class SpotGraphToolExecutor:
                 owned,
                 flags,
             )
+            # 実験 #29 後続: 立ち去り際の一言 (say_inline) を short SAY として
+            # 発火する。失敗しても travel 結果は変えない (silent fail-safe)。
+            self._maybe_emit_say_inline(player_id, args)
             base = f"スポット {dest} への移動を開始しました。"
             return LlmCommandResultDto(
                 success=True, message=append_inner_thought_to_message(base, args)
             )
         except Exception as e:
             return exception_result(e)
+
+    def _maybe_emit_say_inline(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+    ) -> None:
+        """``say_inline`` (任意短発話) を SAY channel で発火する。
+
+        実験 #29 後続: 移動 / アイテム系ツールに 「立ち去り際の一言」 を
+        付けられるようにするためのヘルパ。
+
+        条件:
+        - args["say_inline"] が非空 str
+        - speech_service が注入されている
+
+        失敗 (例外 / speech_service 未注入 / 空文字) は全部 silent で、
+        親アクションの結果には影響させない。長 speech が欲しい人は
+        speech_speak を使う。
+        """
+        if self._speech_service is None:
+            return
+        raw = args.get("say_inline")
+        if not isinstance(raw, str):
+            return
+        content = raw.strip()
+        if not content:
+            return
+        # 80 char 上限は tool schema 側で maxLength として宣言済みだが、
+        # 防御的にここでも切り詰める (LLM が JSON を雑に返した場合の保険)。
+        from ai_rpg_world.application.llm.services.tool_catalog.say_inline import (
+            SAY_INLINE_MAX_LENGTH,
+        )
+        if len(content) > SAY_INLINE_MAX_LENGTH:
+            content = content[:SAY_INLINE_MAX_LENGTH]
+        try:
+            self._speech_service.speak(
+                SpeakCommand(
+                    speaker_player_id=player_id,
+                    content=content,
+                    channel=SpeechChannel.SAY,
+                    target_player_id=None,
+                )
+            )
+        except Exception:
+            # 親 action は成功扱いを維持する。inline speech 失敗で travel /
+            # give が巻き戻ると LLM 体験が壊れる。
+            pass
 
     def _set_sub_location(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         raw = args.get("sub_location_id")
@@ -524,6 +584,7 @@ class SpotGraphToolExecutor:
                 PlayerId(player_id), SlotId(slot_id_int),
                 witness_policy=policy,
             )
+            self._maybe_emit_say_inline(player_id, args)
             msg = "; ".join(result.messages) if result.messages else "地面に置いた。"
             return LlmCommandResultDto(
                 success=True, message=append_inner_thought_to_message(msg, args)
@@ -574,6 +635,7 @@ class SpotGraphToolExecutor:
                 PlayerId(player_id), ItemInstanceId.create(iid_int),
                 witness_policy=policy,
             )
+            self._maybe_emit_say_inline(player_id, args)
             msg = "; ".join(result.messages) if result.messages else "拾い上げた。"
             return LlmCommandResultDto(
                 success=True, message=append_inner_thought_to_message(msg, args)
@@ -620,6 +682,7 @@ class SpotGraphToolExecutor:
             result = self._item_transfer_service.give_item(
                 PlayerId(player_id), PlayerId(to_int), SlotId(slot_int),
             )
+            self._maybe_emit_say_inline(player_id, args)
             msg = "; ".join(result.messages) if result.messages else "渡した。"
             return LlmCommandResultDto(
                 success=True, message=append_inner_thought_to_message(msg, args)

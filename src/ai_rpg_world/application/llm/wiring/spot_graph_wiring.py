@@ -392,6 +392,9 @@ def create_spot_graph_wiring(
         player_status_repository=player_status_repository,
         attack_orchestrator=attack_orchestrator,
         item_transfer_service=item_transfer_service,
+        # 実験 #29 後続: travel_to / give_item / drop_item / pickup_item の
+        # say_inline 短発話用。speech_service が None なら say_inline は silent。
+        speech_service=speech_service,
     )
 
     # モンスター行動 tick サービス。世界 tick driver (presentation 層) が
