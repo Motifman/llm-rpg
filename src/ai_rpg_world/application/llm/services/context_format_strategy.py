@@ -85,6 +85,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         objective_text: str = "",
         inventory_text: str = "",
         learned_text: str = "",
+        mid_summary_text: str = "",
     ) -> str:
         for name, value in (
             ("current_state_text", current_state_text),
@@ -94,6 +95,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             ("objective_text", objective_text),
             ("inventory_text", inventory_text),
             ("learned_text", learned_text),
+            ("mid_summary_text", mid_summary_text),
         ):
             if not isinstance(value, str):
                 raise TypeError(f"{name} must be str")
@@ -107,6 +109,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
                 objective_text=objective_text,
                 inventory_text=inventory_text,
                 learned_text=learned_text,
+                mid_summary_text=mid_summary_text,
             )
         return _format_stable_to_volatile(
             current_state_text=current_state_text,
@@ -116,6 +119,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             objective_text=objective_text,
             inventory_text=inventory_text,
             learned_text=learned_text,
+            mid_summary_text=mid_summary_text,
         )
 
 
@@ -240,6 +244,20 @@ def _emit_learned(sections: list, learned_text: str) -> None:
         ])
 
 
+def _emit_mid_summary(sections: list, mid_summary_text: str) -> None:
+    """Phase 2: ``【最近の流れ】`` (L4 mid summary) を legacy 順序で挿入。
+
+    learned の直後 (current_state より前) に来るよう、legacy formatter から
+    呼ぶときの位置で使う。空なら section ごと省略。
+    """
+    if mid_summary_text.strip():
+        sections.extend([
+            "",
+            "【最近の流れ】",
+            mid_summary_text.strip(),
+        ])
+
+
 def _format_stable_to_volatile(
     *,
     current_state_text: str,
@@ -249,15 +267,19 @@ def _format_stable_to_volatile(
     objective_text: str,
     inventory_text: str,
     learned_text: str,
+    mid_summary_text: str,
 ) -> str:
     """Phase 0 default: 更新頻度の低い section から並べる。
 
-    順序: objective → learned (Phase 1c) → memos → inventory → memories →
-    recent_events → current_state。current_state を末尾にして prefix cache
-    安定領域を最大化する。
+    順序: objective → learned (Phase 1c) → mid_summary (Phase 2) → memos →
+    inventory → memories → recent_events → current_state。current_state を
+    末尾にして prefix cache 安定領域を最大化する。
 
-    Phase 1c で §learned を objective 直後に挿入。semantic は cluster 昇格時
-    のみ更新 = 最も安定なので objective に並べて prefix cache 寿命を伸ばす。
+    section 寿命 (cache 寿命の根拠):
+    - learned: cluster 昇格時のみ更新 (最も安定、10+ ターン)
+    - mid_summary: 15 ターンに 1 世代追加・内容は確定後不変 (~15 ターン安定)
+    - memos: memo_add/done 時のみ
+    - ... 末尾 current_state は毎ターン更新
     """
     sections: list[str] = []
 
@@ -272,7 +294,15 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 3. 進行中のメモ (semi-static、空なら省略)
+    # 3. 最近の流れ (L4 mid summary、空なら省略) ★ Phase 2
+    if mid_summary_text.strip():
+        sections.extend([
+            "【最近の流れ】",
+            mid_summary_text.strip(),
+            "",
+        ])
+
+    # 4. 進行中のメモ (semi-static、空なら省略)
     if active_memos_text.strip():
         # objective が出た直後だと改行が二重になるので、ここでは先頭の空行を
         # 入れない。_emit_active_memos は先頭に "" を入れる前提なので使えない。
@@ -324,16 +354,19 @@ def _format_legacy(
     objective_text: str,
     inventory_text: str,
     learned_text: str,
+    mid_summary_text: str,
 ) -> str:
     """Issue #227 chore β 時代の旧順序。A/B 検証用に保持。
 
-    順序: objective → learned → current_state → memos → recent_events →
-    memories → inventory。learned (Phase 1c) は objective 直後に挿入。
+    順序: objective → learned → mid_summary → current_state → memos →
+    recent_events → memories → inventory。learned / mid_summary (Phase 1c, 2)
+    は objective 直後に挿入。
     """
     sections: list[str] = []
 
     _emit_objective(sections, objective_text)
     _emit_learned(sections, learned_text)
+    _emit_mid_summary(sections, mid_summary_text)
     _emit_current_state(sections, current_state_text)
     _emit_active_memos(sections, active_memos_text)
     _emit_recent_events(sections, recent_events_text)

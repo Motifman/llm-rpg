@@ -196,3 +196,48 @@ def log_semantic_search_state(enabled: bool) -> None:
         ENV_SEMANTIC_SEARCH_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Short-term memory: rolling summary (Phase 2)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_SHORT_TERM_MEMORY_KIND = "SHORT_TERM_MEMORY_KIND"
+SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW = "sliding_window"
+SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY = "rolling_summary"
+_VALID_SHORT_TERM_MEMORY_KINDS = frozenset({
+    SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW,
+    SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
+})
+
+
+def resolve_short_term_memory_kind(
+    env: Optional[Mapping[str, str]] = None,
+) -> str:
+    """``SHORT_TERM_MEMORY_KIND`` env を解決する。
+
+    default は ``sliding_window`` (検証中の安定設定)。
+    未知文字列は warning + default に縮退。
+
+    詳細は docs/memory_system/short_term_memory_design.md §6.1。
+    """
+    source = env if env is not None else os.environ
+    raw = (source.get(ENV_SHORT_TERM_MEMORY_KIND) or "").strip().lower()
+    if not raw:
+        return SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
+    if raw not in _VALID_SHORT_TERM_MEMORY_KINDS:
+        _logger.warning(
+            "Unknown %s=%r; falling back to %s. valid: %s",
+            ENV_SHORT_TERM_MEMORY_KIND,
+            raw,
+            SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW,
+            sorted(_VALID_SHORT_TERM_MEMORY_KINDS),
+        )
+        return SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
+    return raw
+
+
+def log_short_term_memory_kind_state(kind: str) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info("%s resolved to %s", ENV_SHORT_TERM_MEMORY_KIND, kind)

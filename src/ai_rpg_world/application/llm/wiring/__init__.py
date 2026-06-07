@@ -118,14 +118,17 @@ from ai_rpg_world.application.llm.services.context_format_strategy import (
     build_section_format_strategy_from_env,
 )
 from ai_rpg_world.application.llm.wiring.feature_flags import (
+    SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
     log_episodic_explore_related_state,
     log_semantic_llm_gist_state,
     log_semantic_passive_top_k_state,
     log_semantic_search_state,
+    log_short_term_memory_kind_state,
     resolve_episodic_explore_related_enabled,
     resolve_semantic_llm_gist_enabled,
     resolve_semantic_passive_top_k,
     resolve_semantic_search_enabled,
+    resolve_short_term_memory_kind,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
@@ -887,6 +890,52 @@ def _build_runtime_tool_state() -> _RuntimeToolState:
     return _RuntimeToolState(todo_store=InMemoryTodoStore())
 
 
+def _build_short_term_memory(
+    *,
+    explicit: Optional[ISlidingWindowMemory],
+    llm_client: ILLMClient,
+    persona_resolver: Callable[[int], tuple[str, str]],
+    kind: Optional[str] = None,
+) -> ISlidingWindowMemory:
+    """Phase 2: env で short term memory の実装を選択する。
+
+    - 明示注入 (``sliding_window_memory=`` を渡された) → そのまま
+    - ``kind`` (None なら env) が ``rolling_summary`` + LiteLLM client →
+      ``RollingSummaryShortTermMemory`` (LLM 経路あり)
+    - rolling_summary だが LLM 非対応 → ``RollingSummaryShortTermMemory``
+      (LLM なし、template fallback only)
+    - default (sliding_window) → ``DefaultSlidingWindowMemory``
+
+    ``kind=None`` のとき env から ``SHORT_TERM_MEMORY_KIND`` を解決する。
+    呼出側で事前解決済みの値を渡せるようにすることで、wiring 経路全体での
+    env 読みを一箇所に集約しやすくする (テストでも env 差し込みが楽になる)。
+
+    persona_resolver は LLM gist (Phase 1b) と共通の resolver を渡す前提。
+    """
+    if explicit is not None:
+        return explicit
+    resolved_kind = kind if kind is not None else resolve_short_term_memory_kind()
+    log_short_term_memory_kind_state(resolved_kind)
+    if resolved_kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
+        return DefaultSlidingWindowMemory()
+    # rolling_summary kind
+    from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
+        RollingSummaryShortTermMemory,
+    )
+    from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
+        ShortTermMemorySummaryService,
+    )
+    from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
+
+    summary_service: Optional[ShortTermMemorySummaryService] = None
+    if isinstance(llm_client, LiteLLMClient):
+        summary_service = ShortTermMemorySummaryService(llm_client)
+    return RollingSummaryShortTermMemory(
+        summary_service=summary_service,
+        persona_resolver=persona_resolver,
+    )
+
+
 def _build_semantic_persona_resolver(
     *,
     player_profile_repository: Any,
@@ -1095,11 +1144,8 @@ def create_llm_agent_wiring(
     )
     current_state_formatter = DefaultCurrentStateFormatter()
 
-    sliding_window = (
-        sliding_window_memory
-        if sliding_window_memory is not None
-        else DefaultSlidingWindowMemory()
-    )
+    # sliding_window は client / persona_resolver の構築後 (下の方) で組み立てる。
+    # rolling_summary kind を選んだとき LLM port と persona_resolver が要るため。
     action_result_store = (
         action_result_store
         if action_result_store is not None
@@ -1148,6 +1194,13 @@ def create_llm_agent_wiring(
     _semantic_persona_resolver = _build_semantic_persona_resolver(
         player_profile_repository=player_profile_repository,
         persona_block_provider=persona_block_provider,
+    )
+    # Phase 2: short term memory の実装選択 (sliding_window | rolling_summary)。
+    # persona_resolver / client が揃ったここで構築する。
+    sliding_window = _build_short_term_memory(
+        explicit=sliding_window_memory,
+        llm_client=client,
+        persona_resolver=_semantic_persona_resolver,
     )
     episodic_stack = build_episodic_memory_stack(
         episodic_episode_store,

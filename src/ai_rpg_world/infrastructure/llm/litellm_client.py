@@ -31,6 +31,9 @@ from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
 from ai_rpg_world.application.llm.contracts.semantic_gist_completion_port import (
     ISemanticGistCompletionPort,
 )
+from ai_rpg_world.application.llm.contracts.short_term_memory import (
+    IShortTermMemorySummaryCompletionPort,
+)
 from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
     LlmCallMetrics,
     LlmCallMetricsSink,
@@ -95,6 +98,7 @@ class LiteLLMClient(
     IEpisodicChunkSubjectiveCompletionPort,
     IEpisodicReinterpretationCompletionPort,
     ISemanticGistCompletionPort,
+    IShortTermMemorySummaryCompletionPort,
 ):
     """
     LiteLLM の completion API で messages + tools を送り、1 つの tool_call を返す実装。
@@ -380,6 +384,17 @@ class LiteLLMClient(
 
         ``complete_episode_subjective_json`` と同じ json_object 強制完了を
         使う (LLM 側から見れば同じ呼び出し)。失敗ハンドリングも共通。
+        """
+        return self.complete_episode_subjective_json(messages)
+
+    def complete_short_term_summary_json(
+        self,
+        messages: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """tools 無しで L4 mid summary JSON object を返す (Phase 2)。
+
+        既存の json_object 強制完了をそのまま使う (LLM 側から見れば同じ呼出)。
+        prompt 構築や parse は ``ShortTermMemorySummaryService`` 側の責務。
         """
         return self.complete_episode_subjective_json(messages)
 

@@ -155,6 +155,39 @@ class TestSectionBasedContextFormatStrategyDefault:
         )
         assert "【関連する学び】" not in text
 
+    def test_mid_summary_text_が_learned_直後で_memos_より前に_出る(self, strategy):
+        """Phase 2: 【最近の流れ】section が learned 直後 / memos より前。"""
+        text = strategy.format(
+            current_state_text="x",
+            recent_events_text="y",
+            objective_text="目的",
+            learned_text="- 学び",
+            mid_summary_text="[最新] 動き",
+            active_memos_text="メモ",
+        )
+        assert "【最近の流れ】" in text
+        assert "[最新] 動き" in text
+        idx_learned = text.index("【関連する学び】")
+        idx_mid = text.index("【最近の流れ】")
+        idx_memos = text.index("【進行中のメモ】")
+        assert idx_learned < idx_mid < idx_memos
+
+    def test_mid_summary_text_が_空なら_section_ごと_省略(self, strategy):
+        text = strategy.format(
+            current_state_text="x",
+            recent_events_text="y",
+            mid_summary_text="",
+        )
+        assert "【最近の流れ】" not in text
+
+    def test_mid_summary_text_が_str_でなければ_type_error(self, strategy):
+        with pytest.raises(TypeError, match="mid_summary_text must be str"):
+            strategy.format(
+                current_state_text="",
+                recent_events_text="",
+                mid_summary_text=[],  # type: ignore[arg-type]
+            )
+
 
 class TestSectionBasedContextFormatStrategyLegacyMode:
     """legacy order (Issue #227 chore β 時代の旧順序) の挙動。A/B 検証用。"""
