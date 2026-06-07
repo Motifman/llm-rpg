@@ -872,3 +872,77 @@ class TestShortTermSummaryGeneratedTrace:
         assert ev["world_view"] == "この島は不気味"
         assert ev["is_fallback"] is False
         assert ev["summary_id"].startswith("l5-")
+
+
+class TestPostHocSetters:
+    """PR #439: trace_recorder_provider / current_tick_provider / summary_services
+    を runtime 構築後に注入できる setter。escape_game_runtime 等で必要。"""
+
+    def test_set_trace_recorder_provider_で_emit_経路が_有効化される(self) -> None:
+        """ctor で None 渡し → setter で注入 → L4 install 時に trace 出る。"""
+        rec = _RecordingRecorder()
+        mem = RollingSummaryShortTermMemory(summary_service=None)
+        # 最初は provider 未設定
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"o{i}", seq=i))
+        assert len([e for e in rec.events if e["kind"] == "short_term_summary_generated"]) == 0
+
+        # setter で注入
+        mem.set_trace_recorder_provider(lambda: rec)
+        mem.set_current_tick_provider(lambda: 77)
+        # 次の L4 cycle で trace が出る
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"o2_{i}", seq=100 + i))
+        l4_events = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
+        assert len(l4_events) == 1
+        assert l4_events[0]["tick"] == 77
+
+    def test_set_trace_recorder_provider_None_で_no_op_に戻る(self) -> None:
+        """provider=None で再び no-op (= 過去のセットアップを解除可能)。"""
+        rec = _RecordingRecorder()
+        mem = RollingSummaryShortTermMemory(
+            summary_service=None,
+            trace_recorder_provider=lambda: rec,
+        )
+        mem.set_trace_recorder_provider(None)
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"o{i}", seq=i))
+        assert len([e for e in rec.events if e["kind"] == "short_term_summary_generated"]) == 0
+
+    def test_set_summary_services_で_LLM_経路に切り替わる(self) -> None:
+        """ctor で None (template fallback) → setter で service 注入 → 次の L4 は LLM 経由。"""
+        rec = _RecordingRecorder()
+        parsed = _ParsedSummary(
+            compressed_activity="LLM が圧縮した活動",
+            emotional_summary="集中",
+            unresolved=(),
+        )
+        mem = RollingSummaryShortTermMemory(
+            summary_service=None,
+            trace_recorder_provider=lambda: rec,
+        )
+        # 1 サイクル目: template fallback で L4
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"a{i}", seq=i))
+        events_after_first = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
+        assert len(events_after_first) == 1
+        assert events_after_first[0]["is_fallback"] is True
+
+        # setter で LLM 経路注入
+        mem.set_summary_services(summary_service=_StubSummaryService.make(result=parsed))
+        # 2 サイクル目: LLM 経路で L4
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"b{i}", seq=100 + i))
+        events_all = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
+        assert len(events_all) == 2
+        assert events_all[1]["is_fallback"] is False
+        assert events_all[1]["compressed_activity"] == "LLM が圧縮した活動"
+
+    def test_set_summary_services_型違いは_TypeError(self) -> None:
+        mem = RollingSummaryShortTermMemory()
+        with pytest.raises(TypeError, match="summary_service"):
+            mem.set_summary_services(summary_service="not-a-service")  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match="long_summary_service"):
+            mem.set_summary_services(long_summary_service="not-a-service")  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match="persona_resolver"):
+            mem.set_summary_services(persona_resolver="not-callable")  # type: ignore[arg-type]
