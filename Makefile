@@ -43,7 +43,7 @@ help:
 	@echo "  make experiment-relay-r1      - R1 のみ"
 	@echo "  make experiment-relay-r2      - R2 のみ"
 	@echo "  make experiment-relay-cloud   - OpenAI クラウド（OPENAI_API_BASE 空）"
-	@echo "  make experiment SCENARIO=... MAX_TICKS=... [WORKERS=4 EPISODIC=1 OUT=...]"
+	@echo "  make experiment SCENARIO=... MAX_WORLD_TICKS=... [WORKERS=4 EPISODIC=1 OUT=...]"
 	@echo "                                - 汎用シナリオ実験 (任意 scenario JSON)"
 	@echo "  make experiment-publish ...   - experiment + 自動 gist publish"
 	@echo "  make experiment-survival OUT=... [EPISODIC=1]"
@@ -143,20 +143,23 @@ experiment-relay-cloud:
 #
 # 使い方:
 #   make experiment SCENARIO=data/scenarios/survival_island_v2.json
-#   make experiment SCENARIO=data/scenarios/foo.json MAX_TICKS=140 OUT=var/runs/foo-001 WORKERS=4
+#   make experiment SCENARIO=data/scenarios/foo.json MAX_WORLD_TICKS=140 OUT=var/runs/foo-001 WORKERS=4
 #   make experiment SCENARIO=... EPISODIC=1   # episodic memory pipeline 有効
 #
 # 引数 (= make 変数):
-#   SCENARIO       実行するシナリオ JSON のパス (必須)
-#   MAX_TICKS      外側ループ回数 (既定 30)
-#   OUT            出力ディレクトリ (省略時 var/runs/<scenario>-<timestamp>)
-#   WORKERS        LLM Phase A 並列ワーカー数 (既定 1。実験は 4 推奨)
-#   EPISODIC       1 で episodic memory 有効 (= LLM_EPISODIC_ENABLED=1)
-#   PUBLISH        1 で gist 自動 publish (= --publish-gist)
+#   SCENARIO        実行するシナリオ JSON のパス (必須)
+#   MAX_WORLD_TICKS world_tick がこの値に達したらループ終了 (既定 30)。
+#                   旧名 MAX_TICKS は外側 iteration 回数だったが #404 P1 で
+#                   意味論を world tick 基準に統一した。
+#   OUT             出力ディレクトリ (省略時 var/runs/<scenario>-<timestamp>)
+#   WORKERS         LLM Phase A 並列ワーカー数 (既定 1。実験は 4 推奨)
+#   EPISODIC        1 で episodic memory 有効 (= LLM_EPISODIC_ENABLED=1)
+#   IDLE_TICKS      per-agent idle timer の沈黙上限 tick (既定 6)
+#   PUBLISH         1 で gist 自動 publish (= --publish-gist)
 #
 # その他の env (litellm 接続):
 #   OPENAI_API_BASE / LLM_MODEL / OPENAI_API_KEY
-MAX_TICKS ?= 30
+MAX_WORLD_TICKS ?= 30
 WORKERS ?= 1
 experiment:
 	@if [ -z "$(SCENARIO)" ]; then \
@@ -168,14 +171,14 @@ experiment:
 	$(if $(EPISODIC),LLM_EPISODIC_ENABLED=1,) \
 	$(PYTHON) scripts/run_scenario_experiment.py \
 		--scenario $(SCENARIO) \
-		--max-ticks $(MAX_TICKS) \
+		--max-world-ticks $(MAX_WORLD_TICKS) \
 		$(if $(OUT),--out $(OUT),) \
 		$(if $(PUBLISH),--publish-gist,)
 
 # experiment + secret gist 自動 publish (PUBLISH=1 と同等)
 experiment-publish:
 	$(MAKE) experiment \
-		SCENARIO=$(SCENARIO) MAX_TICKS=$(MAX_TICKS) OUT=$(OUT) \
+		SCENARIO=$(SCENARIO) MAX_WORLD_TICKS=$(MAX_WORLD_TICKS) OUT=$(OUT) \
 		WORKERS=$(WORKERS) EPISODIC=$(EPISODIC) PUBLISH=1
 
 # survival_island_v2 専用のショートカット。
@@ -188,15 +191,15 @@ experiment-publish:
 #   make experiment-survival OUT=var/runs/issue390_exp27_on_full_r1 EPISODIC=1
 #
 # 上書き可能な変数 (省略時の survival 既定値):
-#   MAX_TICKS=140  WORKERS=4  PUBLISH=1
+#   MAX_WORLD_TICKS=140  WORKERS=4  PUBLISH=1
 #   EPISODIC は未指定 (= OFF)。1 で ON_FULL。
-SURVIVAL_MAX_TICKS ?= 140
+SURVIVAL_MAX_WORLD_TICKS ?= 140
 SURVIVAL_WORKERS ?= 4
 SURVIVAL_PUBLISH ?= 1
 experiment-survival:
 	$(MAKE) experiment \
 		SCENARIO=data/scenarios/survival_island_v2.json \
-		MAX_TICKS=$(SURVIVAL_MAX_TICKS) \
+		MAX_WORLD_TICKS=$(SURVIVAL_MAX_WORLD_TICKS) \
 		WORKERS=$(SURVIVAL_WORKERS) \
 		OUT=$(OUT) \
 		EPISODIC=$(EPISODIC) \

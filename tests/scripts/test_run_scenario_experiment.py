@@ -1,5 +1,6 @@
 """scripts/run_scenario_experiment.py のレポートビルダーテスト (Phase 1d)。"""
 
+import json
 import sys
 from pathlib import Path
 
@@ -55,7 +56,7 @@ class TestBuildReport:
             summary={
                 "outcome": "WIN",
                 "last_tick": 2,
-                "max_ticks": 30,
+                "max_world_ticks": 30,
                 "elapsed_sec": 1.2,
             },
         )
@@ -107,7 +108,7 @@ class TestBuildReport:
             summary={
                 "outcome": "WIN",
                 "last_tick": 10,
-                "max_ticks": 30,
+                "max_world_ticks": 30,
                 "elapsed_sec": 1.0,
             },
         )
@@ -131,9 +132,53 @@ class TestBuildReport:
             summary={
                 "outcome": "TIMEOUT",
                 "last_tick": 0,
-                "max_ticks": 30,
+                "max_world_ticks": 30,
                 "elapsed_sec": 0.1,
             },
         )
         assert "action: 0" in report
         assert "memo_add: 0" in report
+
+
+class TestMaxWorldTicksRename:
+    """``#404`` P1 回帰: ``--max-world-ticks`` フラグと ``max_world_ticks`` フィールド。"""
+
+    def test_progress_jsonl_は_max_world_ticks_キーを使う(self, tmp_path: Path) -> None:
+        """progress.jsonl entry の最大値フィールドが ``max_world_ticks``
+        (旧 ``max_ticks``) になっている。集計スクリプトの追従漏れを検知する。"""
+        from scripts.run_scenario_experiment import _ExperimentProgressReporter
+        import io
+        progress_path = tmp_path / "progress.jsonl"
+        reporter = _ExperimentProgressReporter(
+            max_world_ticks=10,
+            stdout=io.StringIO(),
+            stderr=None,
+            progress_jsonl=progress_path,
+        )
+        reporter.tick_end(i=0, world_tick=1)
+        reporter.finalize()
+        entry = json.loads(progress_path.read_text(encoding="utf-8").strip())
+        assert entry["max_world_ticks"] == 10
+        assert "max_ticks" not in entry
+
+    def test_build_report_は_max_world_ticks_を表示する(
+        self, tmp_path: Path
+    ) -> None:
+        """report.md に ``max world ticks`` 行が含まれる (旧 ``max ticks`` リネーム)。"""
+        scenario = tmp_path / "demo.json"
+        scenario.write_text("{}", encoding="utf-8")
+        trace_path = tmp_path / "trace.jsonl"
+        with JsonlTraceRecorder(trace_path) as rec:
+            rec.record(TraceEventKind.RUN_START)
+            rec.record(TraceEventKind.RUN_END, outcome="WIN", last_tick=5)
+        report = _build_report(
+            scenario_path=scenario,
+            trace_path=trace_path,
+            summary={
+                "outcome": "WIN",
+                "last_tick": 5,
+                "max_world_ticks": 30,
+                "elapsed_sec": 1.0,
+            },
+        )
+        assert "max world ticks: 30" in report
