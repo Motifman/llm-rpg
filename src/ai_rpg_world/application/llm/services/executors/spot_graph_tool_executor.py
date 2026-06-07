@@ -49,7 +49,13 @@ from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
+from ai_rpg_world.application.llm.services.tool_catalog.say_inline import (
+    SAY_INLINE_MAX_LENGTH,
+)
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+import logging
+
+logger = logging.getLogger(__name__)
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     ItemTransferException,
     SpotGraphItemTransferService,
@@ -224,10 +230,14 @@ class SpotGraphToolExecutor:
             return
         # 80 char 上限は tool schema 側で maxLength として宣言済みだが、
         # 防御的にここでも切り詰める (LLM が JSON を雑に返した場合の保険)。
-        from ai_rpg_world.application.llm.services.tool_catalog.say_inline import (
-            SAY_INLINE_MAX_LENGTH,
-        )
+        # レビュー反映 (#422 MEDIUM-1): 定数は module-level import に揃えた。
+        # `len()` は Unicode コードポイント基準。サロゲートペア絵文字は
+        # 表示上の文字数とズレる可能性があるが、survival シナリオでは実害なし。
         if len(content) > SAY_INLINE_MAX_LENGTH:
+            logger.debug(
+                "say_inline truncated: player_id=%s len=%d → %d",
+                player_id, len(content), SAY_INLINE_MAX_LENGTH,
+            )
             content = content[:SAY_INLINE_MAX_LENGTH]
         try:
             self._speech_service.speak(
@@ -238,10 +248,16 @@ class SpotGraphToolExecutor:
                     target_player_id=None,
                 )
             )
-        except Exception:
+        except Exception as e:
             # 親 action は成功扱いを維持する。inline speech 失敗で travel /
             # give が巻き戻ると LLM 体験が壊れる。
-            pass
+            # レビュー反映 (#422 MEDIUM-3): silent ではなく debug ログを残し、
+            # デバッグ時に「なぜ say_inline が届かなかったか」を追えるようにする。
+            logger.debug(
+                "say_inline speak failed: player_id=%s err=%s",
+                player_id, str(e),
+                exc_info=True,
+            )
 
     def _set_sub_location(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         raw = args.get("sub_location_id")
