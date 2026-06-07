@@ -113,6 +113,55 @@ class TestProgressJsonl:
         # tmp_path に progress.jsonl が無いことを確認
         assert not (tmp_path / "progress.jsonl").exists()
 
+    def test_可観測性フィールド_world_tick_start_llm_calls_travel_active_を含む(
+        self, tmp_path: Path
+    ) -> None:
+        """``#404`` P2 で追加した内訳フィールドが progress.jsonl に出る。
+
+        - ``world_tick_start`` + ``nested_world_ticks`` で 1 driver iteration
+          あたり world tick が何個進んだかが分かる (旧 do_move のネスト
+          advance_tick が再発したら nested_world_ticks が跳ねるので検知できる)
+        - ``llm_calls`` で 656 秒スパイクの原因 (134 LLM call) のような状況が
+          progress を見ただけで分かる
+        - ``travel_active`` で「いま何人が移動中か」がトレース可能
+        """
+        out = io.StringIO()
+        progress_path = tmp_path / "progress.jsonl"
+        reporter = _ExperimentProgressReporter(
+            max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
+        )
+        reporter.tick_end(
+            i=0,
+            world_tick=10,
+            world_tick_start=8,  # 2 ticks 進んだ
+            llm_calls=4,
+            travel_active=2,
+        )
+        reporter.finalize()
+
+        entry = json.loads(progress_path.read_text(encoding="utf-8").strip())
+        assert entry["world_tick"] == 10
+        assert entry["world_tick_start"] == 8
+        assert entry["nested_world_ticks"] == 2
+        assert entry["llm_calls"] == 4
+        assert entry["travel_active"] == 2
+
+    def test_可観測性フィールド未指定なら省略される(self, tmp_path: Path) -> None:
+        """後方互換: optional パラメータを渡さなければ従来通り。"""
+        out = io.StringIO()
+        progress_path = tmp_path / "progress.jsonl"
+        reporter = _ExperimentProgressReporter(
+            max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
+        )
+        reporter.tick_end(i=0, world_tick=10)
+        reporter.finalize()
+
+        entry = json.loads(progress_path.read_text(encoding="utf-8").strip())
+        assert "world_tick_start" not in entry
+        assert "nested_world_ticks" not in entry
+        assert "llm_calls" not in entry
+        assert "travel_active" not in entry
+
 
 class TestFinalize:
     """finalize でファイルが閉じる / 二重 finalize 安全。"""

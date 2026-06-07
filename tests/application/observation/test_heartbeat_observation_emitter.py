@@ -324,3 +324,54 @@ class TestHeartbeatSkipsTravelingPlayers:
         emitter.run(WorldTick(12))
         assert len(buffer.get_observations(PlayerId(1))) == 1
         assert trigger.scheduled == [1]
+
+
+class TestPerAgentIdleTimer:
+    """``#346 Step 3``: per-agent idle timer 意味論。
+
+    LLM turn trigger が turn 完了直後に ``note_player_activity`` を呼ぶことで、
+    event 駆動で頻繁に動く player には heartbeat が出なくなる。完全 idle な
+    player だけ ``interval_ticks`` 経過後に 1 回起こされる。
+    """
+
+    def test_note_player_activity_は_heartbeat_発火を_interval_遅延させる(self) -> None:
+        """活動を通知すると last_emitted がリセットされ、次の発火が後ろにずれる。"""
+        emitter, buffer, trigger = _build_emitter(interval_ticks=5)
+        # anchor
+        emitter.run(WorldTick(10))
+        # tick 12 で event 駆動で turn が回った想定
+        emitter.note_player_activity(PlayerId(1), WorldTick(12))
+        # tick 15: anchor から 5 経ったが、note は 12 なので gap=3 < 5 で未発火
+        emitter.run(WorldTick(15))
+        assert buffer.get_observations(PlayerId(1)) == []
+        assert trigger.scheduled == []
+        # tick 17: 12 から 5 経ったので発火
+        emitter.run(WorldTick(17))
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        assert trigger.scheduled == [1]
+
+    def test_event_駆動で動き続ける_player_には_heartbeat_が出ない(self) -> None:
+        """毎 tick の event 駆動 turn で last が更新され続けると heartbeat は永続 silent。"""
+        emitter, buffer, trigger = _build_emitter(interval_ticks=3)
+        emitter.run(WorldTick(0))  # anchor
+        for t in range(1, 20):
+            emitter.note_player_activity(PlayerId(1), WorldTick(t))
+            emitter.run(WorldTick(t))
+        assert buffer.get_observations(PlayerId(1)) == []
+        assert trigger.scheduled == []
+
+    def test_完全_idle_な_player_は_interval_経過で_1回起きる(self) -> None:
+        """活動通知が無いまま interval が経つと、想定通り heartbeat 1 回。"""
+        emitter, buffer, trigger = _build_emitter(interval_ticks=6)
+        emitter.run(WorldTick(0))  # anchor
+        for t in range(1, 7):
+            emitter.run(WorldTick(t))
+        # tick 6 で発火 (gap=6 >= 6)
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        assert trigger.scheduled == [1]
+
+    def test_PlayerId_以外を渡しても落ちない(self) -> None:
+        """note_player_activity の入口は防御的に PlayerId 型をチェックする。"""
+        emitter, _, _ = _build_emitter(interval_ticks=5)
+        # 例外を投げないこと (型違いは黙って no-op)
+        emitter.note_player_activity("not-a-player", WorldTick(10))  # type: ignore[arg-type]

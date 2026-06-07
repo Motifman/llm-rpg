@@ -43,7 +43,7 @@ help:
 	@echo "  make experiment-relay-r1      - R1 のみ"
 	@echo "  make experiment-relay-r2      - R2 のみ"
 	@echo "  make experiment-relay-cloud   - OpenAI クラウド（OPENAI_API_BASE 空）"
-	@echo "  make experiment SCENARIO=... MAX_WORLD_TICKS=... [WORKERS=4 EPISODIC=1 OUT=...]"
+	@echo "  make experiment SCENARIO=... MAX_WORLD_TICKS=... [WORKERS=4 EPISODIC=1 IDLE_TICKS=6 OUT=...]"
 	@echo "                                - 汎用シナリオ実験 (任意 scenario JSON)"
 	@echo "  make experiment-publish ...   - experiment + 自動 gist publish"
 	@echo "  make experiment-survival OUT=... [EPISODIC=1]"
@@ -161,6 +161,11 @@ experiment-relay-cloud:
 #   OPENAI_API_BASE / LLM_MODEL / OPENAI_API_KEY
 MAX_WORLD_TICKS ?= 30
 WORKERS ?= 1
+# #346 Step 3 / #404: per-agent idle timer (heartbeat 沈黙上限) tick 数。
+# 既定 6 = 「event 駆動で active なら heartbeat は出ず、丸 6 tick 何もなければ
+# 1 回起こす」。0 / 未指定 = 既定 (6) を使う。沈黙を強めたい実験では 12 / 24
+# に上げる。
+IDLE_TICKS ?=
 experiment:
 	@if [ -z "$(SCENARIO)" ]; then \
 		echo "SCENARIO is required. e.g. make experiment SCENARIO=data/scenarios/survival_island_v2.json"; \
@@ -169,6 +174,7 @@ experiment:
 	@mkdir -p var/runs
 	LLM_TURN_PARALLEL_WORKERS=$(WORKERS) \
 	$(if $(EPISODIC),LLM_EPISODIC_ENABLED=1,) \
+	$(if $(IDLE_TICKS),LLM_IDLE_TIMEOUT_TICKS=$(IDLE_TICKS),) \
 	$(PYTHON) scripts/run_scenario_experiment.py \
 		--scenario $(SCENARIO) \
 		--max-world-ticks $(MAX_WORLD_TICKS) \
@@ -179,7 +185,7 @@ experiment:
 experiment-publish:
 	$(MAKE) experiment \
 		SCENARIO=$(SCENARIO) MAX_WORLD_TICKS=$(MAX_WORLD_TICKS) OUT=$(OUT) \
-		WORKERS=$(WORKERS) EPISODIC=$(EPISODIC) PUBLISH=1
+		WORKERS=$(WORKERS) EPISODIC=$(EPISODIC) IDLE_TICKS=$(IDLE_TICKS) PUBLISH=1
 
 # survival_island_v2 専用のショートカット。
 # 4 player + 14 day (= 140 driver tick) + parallel workers=4 + 自動 publish を
@@ -203,6 +209,7 @@ experiment-survival:
 		WORKERS=$(SURVIVAL_WORKERS) \
 		OUT=$(OUT) \
 		EPISODIC=$(EPISODIC) \
+		IDLE_TICKS=$(IDLE_TICKS) \
 		PUBLISH=$(SURVIVAL_PUBLISH)
 
 # vLLM への SSH トンネル (~/.ssh/config の Host エイリアス、既定 v108-vllm)
