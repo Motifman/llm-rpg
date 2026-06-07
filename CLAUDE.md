@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 重要: 設計判断・思想集
+
+新機能を実装する前に、以下を必ず参照すること:
+
+- **[docs/design_decisions.md](docs/design_decisions.md)** — 過去の実験で生まれた設計判断 (prefix cache 不変 / 詰み回避 / ラベル → 名前 / silent failure 構造的対処 / per-agent idle timer 等) を集約
+
+「なぜこの形になっているか」を理解せずに変更すると、過去に解決した問題が再発する。新しい判断を作った場合は同ファイルに追記する。
+
 ## Build & Run Commands
 
 ```bash
