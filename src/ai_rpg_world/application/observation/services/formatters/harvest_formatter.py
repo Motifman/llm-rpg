@@ -50,10 +50,14 @@ class HarvestObservationFormatter:
     ) -> Optional[ObservationOutput]:
         prose = f"採集を中断しました（理由: {event.reason}）。"
         structured = {"type": "harvest_cancelled", "reason": event.reason}
+        # schedules_turn 網羅性 audit (#404): 採集中断は「予約していた行動が
+        # 失敗した」状態遷移。LLM が「採集が走ってる前提」で別行動を始めるのを
+        # 防ぐため即時に起こす。
         return ObservationOutput(
             prose=prose,
             structured=structured,
             observation_category="self_only",
+            schedules_turn=True,
         )
 
     def _format_harvest_completed(
@@ -61,8 +65,13 @@ class HarvestObservationFormatter:
     ) -> Optional[ObservationOutput]:
         prose = "採集が完了しました。"
         structured = {"type": "harvest_completed"}
+        # schedules_turn 網羅性 audit (#404): 採集完了で再び動けるようになった
+        # ので、idle timer 待ちにせず即時にターンを積む。ResourceHarvestedEvent
+        # が別経路で True で積むケースが多いが、harvest_completed 単独でも
+        # silent failure しないよう保険を掛ける。
         return ObservationOutput(
             prose=prose,
             structured=structured,
             observation_category="self_only",
+            schedules_turn=True,
         )

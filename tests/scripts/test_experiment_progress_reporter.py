@@ -44,7 +44,7 @@ class TestProgressReporterStdout:
         out = io.StringIO()
         err = io.StringIO()
         reporter = _ExperimentProgressReporter(
-            max_ticks=10, stdout=out, stderr=err, progress_jsonl=None
+            max_world_ticks=10, stdout=out, stderr=err, progress_jsonl=None
         )
         reporter.tick_end(i=0, world_tick=1)
         stdout = out.getvalue()
@@ -61,7 +61,7 @@ class TestProgressReporterStderr:
         out = io.StringIO()
         err = io.StringIO()  # StringIO は isatty() を持たない (= False)
         reporter = _ExperimentProgressReporter(
-            max_ticks=5, stdout=out, stderr=err, progress_jsonl=None
+            max_world_ticks=5, stdout=out, stderr=err, progress_jsonl=None
         )
         reporter.tick_end(i=0, world_tick=42)
         stderr_value = err.getvalue()
@@ -74,7 +74,7 @@ class TestProgressReporterStderr:
     def test_stderr_None_なら_出力されない(self) -> None:
         out = io.StringIO()
         reporter = _ExperimentProgressReporter(
-            max_ticks=5, stdout=out, stderr=None, progress_jsonl=None
+            max_world_ticks=5, stdout=out, stderr=None, progress_jsonl=None
         )
         reporter.tick_end(i=0, world_tick=1)
         # stdout はあるが stderr 文字列は存在しない (None 渡しで)
@@ -88,7 +88,7 @@ class TestProgressJsonl:
         out = io.StringIO()
         progress_path = tmp_path / "progress.jsonl"
         reporter = _ExperimentProgressReporter(
-            max_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
+            max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
         )
         reporter.tick_end(i=0, world_tick=10)
         reporter.tick_end(i=1, world_tick=11)
@@ -98,7 +98,7 @@ class TestProgressJsonl:
         assert len(lines) == 2
         entry0 = json.loads(lines[0])
         assert entry0["tick_index"] == 1
-        assert entry0["max_ticks"] == 3
+        assert entry0["max_world_ticks"] == 3
         assert entry0["world_tick"] == 10
         assert "eta_seconds" in entry0
         assert "elapsed_seconds" in entry0
@@ -106,7 +106,7 @@ class TestProgressJsonl:
     def test_jsonl_None_なら_書かない(self, tmp_path: Path) -> None:
         out = io.StringIO()
         reporter = _ExperimentProgressReporter(
-            max_ticks=3, stdout=out, stderr=None, progress_jsonl=None
+            max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=None
         )
         reporter.tick_end(i=0, world_tick=1)
         reporter.finalize()
@@ -128,7 +128,7 @@ class TestProgressJsonl:
         out = io.StringIO()
         progress_path = tmp_path / "progress.jsonl"
         reporter = _ExperimentProgressReporter(
-            max_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
+            max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
         )
         reporter.tick_end(
             i=0,
@@ -151,7 +151,7 @@ class TestProgressJsonl:
         out = io.StringIO()
         progress_path = tmp_path / "progress.jsonl"
         reporter = _ExperimentProgressReporter(
-            max_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
+            max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
         )
         reporter.tick_end(i=0, world_tick=10)
         reporter.finalize()
@@ -170,7 +170,7 @@ class TestFinalize:
         out = io.StringIO()
         progress_path = tmp_path / "progress.jsonl"
         reporter = _ExperimentProgressReporter(
-            max_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
+            max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
         )
         reporter.tick_end(i=0, world_tick=1)
         reporter.finalize()

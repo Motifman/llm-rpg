@@ -14,7 +14,7 @@ scenario 固有の集計 (relay_puzzle の latch tick / kaito-rin marker など)
 
     python scripts/run_scenario_experiment.py \\
         --scenario data/scenarios/relay_puzzle_demo.json \\
-        --max-ticks 30 \\
+        --max-world-ticks 30 \\
         --out var/runs/relay-foo
 
     # 出力:
@@ -76,12 +76,15 @@ class _ExperimentProgressReporter:
     def __init__(
         self,
         *,
-        max_ticks: int,
+        max_world_ticks: int,
         stdout: TextIO,
         stderr: Optional[TextIO],
         progress_jsonl: Optional[Path],
     ) -> None:
-        self._max_ticks = max(1, int(max_ticks))
+        # #404 P1: 旧 max_ticks (= 外側 for ループ回数) を max_world_ticks
+        # (= world_tick の上限) に意味論変更。`#405` で 1 iteration = 1 world tick
+        # に揃ったため両者はほぼ同義だが、概念整理として world tick 基準に統一する。
+        self._max_world_ticks = max(1, int(max_world_ticks))
         self._stdout = stdout
         self._stderr = stderr
         self._stderr_is_tty = bool(stderr is not None and getattr(stderr, "isatty", lambda: False)())
@@ -119,16 +122,16 @@ class _ExperimentProgressReporter:
         self._tick_durations.append(last_tick_duration)
         elapsed = now - self._t0
         avg = sum(self._tick_durations) / max(1, len(self._tick_durations))
-        remaining_ticks = max(0, self._max_ticks - (i + 1))
+        remaining_ticks = max(0, self._max_world_ticks - (i + 1))
         eta = avg * remaining_ticks
-        pct = (i + 1) / self._max_ticks * 100.0
+        pct = (i + 1) / self._max_world_ticks * 100.0
         nested_world_ticks: Optional[int] = None
         if world_tick_start is not None:
             nested_world_ticks = max(0, int(world_tick) - int(world_tick_start))
 
         # stdout: 1 行 print (旧来互換)。
         self._stdout.write(
-            f"  駆動 {i + 1}/{self._max_ticks} world_tick={world_tick} "
+            f"  駆動 {i + 1}/{self._max_world_ticks} world_tick={world_tick} "
             f"last_tick={last_tick_duration:.1f}s elapsed={_format_duration(elapsed)} "
             f"eta={_format_duration(eta)}\n"
         )
@@ -138,7 +141,7 @@ class _ExperimentProgressReporter:
         if self._stderr is not None:
             terminator = "\r" if self._stderr_is_tty else "\n"
             line = (
-                f"[{i + 1:>3}/{self._max_ticks}] ({pct:5.1f}%) "
+                f"[{i + 1:>3}/{self._max_world_ticks}] ({pct:5.1f}%) "
                 f"tick={world_tick} last={last_tick_duration:5.1f}s "
                 f"avg={avg:4.1f}s elapsed={_format_duration(elapsed)} "
                 f"eta={_format_duration(eta)}"
@@ -153,7 +156,7 @@ class _ExperimentProgressReporter:
         if self._progress_fh is not None:
             entry: Dict[str, Any] = {
                 "tick_index": i + 1,
-                "max_ticks": self._max_ticks,
+                "max_world_ticks": self._max_world_ticks,
                 "world_tick": int(world_tick),
                 "last_tick_seconds": round(last_tick_duration, 3),
                 "elapsed_seconds": round(elapsed, 1),
@@ -206,7 +209,7 @@ def _load_dotenv_safe() -> None:
 def _drive_scenario(
     *,
     scenario_path: Path,
-    max_ticks: int,
+    max_world_ticks: int,
     recorder: JsonlTraceRecorder,
     progress: Any,
     reporter: Optional[_ExperimentProgressReporter] = None,
@@ -215,6 +218,12 @@ def _drive_scenario(
 
     GameRuntimeManager を内部で使う。:class:`EscapeGameRuntime` 経由なので
     既存の escape_game / relay_puzzle 路線と互換。
+
+    Args:
+        max_world_ticks: ループ終了条件 (#404 P1)。``runtime.current_tick()`` が
+            この値に達するまで ``advance_tick`` を呼ぶ。旧名 ``max_ticks`` は
+            外側 for ループの回数だったが、``#405`` で 1 iteration = 1 world tick
+            に揃ったので world tick 基準に意味論統一する。
     """
     from tempfile import TemporaryDirectory
 
@@ -282,11 +291,19 @@ def _drive_scenario(
             int(pid.value): runtime.get_player_spot_id(pid)
             for pid in runtime.get_player_ids()
         }
-        for i in range(max_ticks):
+        # #404 P1: 外側ループを「world_tick が max_world_ticks に達するまで」に
+        # 統一する。旧 ``for i in range(max_ticks)`` は外側 iteration 回数だった
+        # ため、do_move のネスト advance_tick で world_tick が大量にジャンプすると
+        # 「MAX_TICKS=140 なのに 14 日進まなかった」事象を生んでいた。
+        # 安全弁: iteration 上限 = max_world_ticks * 2。仮に 1 iteration で
+        # world_tick が進まないバグが入ってもループが暴走しないようにする。
+        max_iterations = max(1, max_world_ticks * 2)
+        i = 0
+        while runtime.current_tick() < max_world_ticks and i < max_iterations:
             w0 = runtime.current_tick()
             # 旧 progress callable は legacy (start 通知)。新 reporter は
             # tick 完了時に ETA / per-tick wall time を出す。
-            progress(f"駆動 {i + 1}/{max_ticks} world_tick={w0}")
+            progress(f"駆動 {i + 1}/{max_world_ticks} world_tick={w0}")
             recorder.record(TraceEventKind.TICK_START, tick=w0)
             # #404 P2: iteration 内 LLM 呼び出し数を計測するため、advance_tick
             # の前に counter をリセットしておく (前 iteration の余り = 0 のはず
@@ -359,6 +376,19 @@ def _drive_scenario(
                         f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
                     )
                 break
+            i += 1
+        if i >= max_iterations and runtime.current_tick() < max_world_ticks:
+            # 安全弁が発火 = 1 iteration で world_tick が進まないバグ。
+            # silent ではなく明確に log + message で警告する。
+            warn = (
+                f"iteration 安全弁発火: {max_iterations} 回 advance_tick しても "
+                f"world_tick が {max_world_ticks} に達しなかった (現 "
+                f"{runtime.current_tick()})。advance_tick が無限ループ気味の "
+                f"シナリオの可能性 — trace.jsonl を確認してください。"
+            )
+            logger.warning(warn)
+            if reporter is not None:
+                reporter.message(warn)
         elapsed = time.monotonic() - t0
         # Issue #311/#325 後続: 非同期 LLM 主観文付与 scheduler (#310) の in-flight
         # ジョブを drain してから return する。これをしないと、scenario 終了
@@ -380,7 +410,7 @@ def _drive_scenario(
             "outcome": outcome,
             "last_tick": last_tick,
             "elapsed_sec": elapsed,
-            "max_ticks": max_ticks,
+            "max_world_ticks": max_world_ticks,
         }
 
 
@@ -449,7 +479,7 @@ def _build_report(
     lines.append(f"- scenario: `{scenario_path}`")
     lines.append(f"- outcome: **{summary['outcome']}**")
     lines.append(
-        f"- last tick: {summary['last_tick']} / max ticks: {summary['max_ticks']}"
+        f"- last tick: {summary['last_tick']} / max world ticks: {summary['max_world_ticks']}"
     )
     lines.append(f"- elapsed: {summary['elapsed_sec']:.1f}s")
     lines.append(f"- total events: {len(events)}")
@@ -505,10 +535,23 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Path to scenario JSON (e.g. data/scenarios/relay_puzzle_demo.json)",
     )
     parser.add_argument(
-        "--max-ticks",
+        "--max-world-ticks",
         type=int,
-        default=int(os.environ.get("EXPERIMENT_MAX_TICKS", "30")),
-        help="Outer tick driving loop count (default 30, env EXPERIMENT_MAX_TICKS)",
+        default=int(
+            os.environ.get(
+                "EXPERIMENT_MAX_WORLD_TICKS",
+                # 旧 env 名 ``EXPERIMENT_MAX_TICKS`` も backstop で読む。
+                # 既存スクリプトが env 設定だけ更新し忘れた場合の silent failure
+                # (= 既定 30 に巻き戻る) を避ける移行期限定の互換層。
+                # CLAUDE.md の「後方互換を過度に守らない」に沿って、CLI flag /
+                # Makefile 変数の方は完全 rename にする。
+                os.environ.get("EXPERIMENT_MAX_TICKS", "30"),
+            )
+        ),
+        help=(
+            "Stop when world_tick reaches this value (default 30, "
+            "env EXPERIMENT_MAX_WORLD_TICKS)"
+        ),
     )
     parser.add_argument(
         "--out",
@@ -600,7 +643,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     resolved_short_term_memory_kind = resolve_short_term_memory_kind()
     resolved_short_term_memory_scheduler_mode = resolve_short_term_memory_scheduler_mode()
 
-    print(f"[run] scenario={args.scenario.name} max_ticks={args.max_ticks}", flush=True)
+    print(
+        f"[run] scenario={args.scenario.name} max_world_ticks={args.max_world_ticks}",
+        flush=True,
+    )
     print(
         f"[run] section_order={resolved_section_order} "
         f"(override via {ENV_PROMPT_SECTION_ORDER}=stable_to_volatile|legacy)",
@@ -642,7 +688,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         rec.record(
             TraceEventKind.RUN_START,
             scenario=args.scenario.name,
-            max_ticks=args.max_ticks,
+            max_world_ticks=args.max_world_ticks,
             model=os.environ.get("LLM_MODEL"),
             api_base=os.environ.get("OPENAI_API_BASE"),
             prompt_section_order=resolved_section_order,
@@ -659,7 +705,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         # 進捗 reporter: stdout (旧来互換) + stderr inline ETA + progress.jsonl
         reporter = _ExperimentProgressReporter(
-            max_ticks=args.max_ticks,
+            max_world_ticks=args.max_world_ticks,
             stdout=sys.stdout,
             stderr=None if args.no_stderr_progress else sys.stderr,
             progress_jsonl=(
@@ -670,7 +716,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         try:
             summary = _drive_scenario(
                 scenario_path=args.scenario,
-                max_ticks=args.max_ticks,
+                max_world_ticks=args.max_world_ticks,
                 recorder=rec,
                 progress=progress,
                 reporter=reporter,

@@ -97,7 +97,14 @@ class MonsterObservationFormatter:
     ) -> Optional[ObservationOutput]:
         prose = "モンスターが再出現しました。"
         structured = {"type": "monster_respawned"}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
+        # schedules_turn 網羅性 audit (#404): respawn は spawned と同じく
+        # 「敵が居る」状態への遷移。spawned が True なら同じ扱いにする。
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
 
     def _format_monster_damaged(
         self, event: MonsterDamagedEvent, recipient_id: PlayerId
