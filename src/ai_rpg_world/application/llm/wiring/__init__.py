@@ -115,6 +115,23 @@ from ai_rpg_world.application.llm.services.available_tools_provider import (
 )
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
+    build_section_format_strategy_from_env,
+)
+from ai_rpg_world.application.llm.wiring.feature_flags import (
+    SCHEDULER_MODE_THREAD_POOL,
+    SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
+    log_episodic_explore_related_state,
+    log_semantic_llm_gist_state,
+    log_semantic_passive_top_k_state,
+    log_semantic_search_state,
+    log_short_term_memory_kind_state,
+    log_short_term_memory_scheduler_mode_state,
+    resolve_episodic_explore_related_enabled,
+    resolve_semantic_llm_gist_enabled,
+    resolve_semantic_passive_top_k,
+    resolve_semantic_search_enabled,
+    resolve_short_term_memory_kind,
+    resolve_short_term_memory_scheduler_mode,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
@@ -334,6 +351,7 @@ def _build_tool_handler_map(
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
     spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
     episodic_memory_explore_executor: Optional[EpisodicMemoryExploreToolExecutor] = None,
+    semantic_memory_search_executor: Optional[Any] = None,
     trace_recorder: Optional["ITraceRecorder"] = None,
     speech_audience_resolver: Optional[Any] = None,
 ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
@@ -439,6 +457,8 @@ def _build_tool_handler_map(
         handler_map.update(spot_graph_tool_executor.get_handlers())
     if episodic_memory_explore_executor is not None:
         handler_map.update(episodic_memory_explore_executor.get_handlers())
+    if semantic_memory_search_executor is not None:
+        handler_map.update(semantic_memory_search_executor.get_handlers())
     return handler_map
 
 
@@ -485,6 +505,8 @@ def _build_tool_stack(
     spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
     episodic_memory_explore_executor: Optional[EpisodicMemoryExploreToolExecutor] = None,
     episodic_explore_related_enabled: bool = False,
+    semantic_memory_search_executor: Optional[Any] = None,
+    semantic_search_enabled: bool = False,
     sliding_window: Optional[ISlidingWindowMemory] = None,
     action_result_store: Optional[IActionResultStore] = None,
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
@@ -528,6 +550,7 @@ def _build_tool_stack(
         ),
         todo_enabled=True,
         episodic_explore_related_enabled=episodic_explore_related_enabled,
+        semantic_search_enabled=semantic_search_enabled,
         include_movement_tools=include_tile_movement,
     )
     if spot_graph_tool_executor is not None:
@@ -571,6 +594,7 @@ def _build_tool_stack(
         current_tick_provider=current_tick_provider,
         spot_graph_tool_executor=spot_graph_tool_executor,
         episodic_memory_explore_executor=episodic_memory_explore_executor,
+        semantic_memory_search_executor=semantic_memory_search_executor,
         trace_recorder=trace_recorder,
         speech_audience_resolver=speech_audience_resolver,
     )
@@ -704,6 +728,8 @@ def _build_prompt_stack(
     episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
     episodic_reinterpretation_journal_store: Optional[IEpisodicReinterpretationJournalStore] = None,
     episodic_turn_index_provider: Optional[Callable[[PlayerId], int]] = None,
+    semantic_passive_recall: Optional[Any] = None,
+    semantic_passive_top_k: int = 0,
     memo_store: Optional["IMemoStore"] = None,
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
 ) -> DefaultPromptBuilder:
@@ -739,6 +765,8 @@ def _build_prompt_stack(
         recall_buffer_store=episodic_recall_buffer_store,
         reinterpretation_journal_store=episodic_reinterpretation_journal_store,
         turn_index_provider=episodic_turn_index_provider,
+        semantic_passive_recall=semantic_passive_recall,
+        semantic_passive_top_k=semantic_passive_top_k,
     )
     limits = PromptLimits(
         tile_map_view_distance=tile_map_view_distance,
@@ -770,6 +798,32 @@ def _optional_episodic_chunk_subjective_fields_service(
     if port is None:
         return None
     return EpisodicChunkSubjectiveFieldsService(port)
+
+
+def _optional_semantic_gist_service(
+    llm_client: ILLMClient,
+    enabled: bool,
+) -> Optional["SemanticGistService"]:
+    """``SEMANTIC_LLM_GIST_ENABLED=1`` かつ LiteLLM クライアントあるときだけ
+    ``SemanticGistService`` を返す。
+
+    Phase 1b: gist 生成の LLM 化。OFF または非 LiteLLM の場合は None を返し、
+    promotion service は既存の決定論 gist を使う。
+    """
+    if not enabled:
+        return None
+    from ai_rpg_world.application.llm.contracts.semantic_gist_completion_port import (
+        ISemanticGistCompletionPort,
+    )
+    from ai_rpg_world.application.llm.services.semantic_gist_service import (
+        SemanticGistService,
+    )
+    from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
+
+    if not isinstance(llm_client, LiteLLMClient):
+        return None
+    port: ISemanticGistCompletionPort = llm_client
+    return SemanticGistService(port)
 
 
 def _optional_episodic_reinterpretation_completion(
@@ -837,6 +891,122 @@ def _build_persona_block_provider(
 
 def _build_runtime_tool_state() -> _RuntimeToolState:
     return _RuntimeToolState(todo_store=InMemoryTodoStore())
+
+
+def _build_short_term_memory(
+    *,
+    explicit: Optional[ISlidingWindowMemory],
+    llm_client: ILLMClient,
+    persona_resolver: Callable[[int], tuple[str, str]],
+    kind: Optional[str] = None,
+    scheduler_mode: Optional[str] = None,
+    trace_recorder_provider: Optional[Callable[[], Optional["ITraceRecorder"]]] = None,
+    current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+) -> ISlidingWindowMemory:
+    """Phase 2: env で short term memory の実装を選択する。
+
+    - 明示注入 (``sliding_window_memory=`` を渡された) → そのまま
+    - ``kind`` (None なら env) が ``rolling_summary`` + LiteLLM client →
+      ``RollingSummaryShortTermMemory`` (LLM 経路あり)
+    - rolling_summary だが LLM 非対応 → ``RollingSummaryShortTermMemory``
+      (LLM なし、template fallback only)
+    - default (sliding_window) → ``DefaultSlidingWindowMemory``
+
+    ``kind=None`` のとき env から ``SHORT_TERM_MEMORY_KIND`` を解決する。
+    呼出側で事前解決済みの値を渡せるようにすることで、wiring 経路全体での
+    env 読みを一箇所に集約しやすくする (テストでも env 差し込みが楽になる)。
+
+    persona_resolver は LLM gist (Phase 1b) と共通の resolver を渡す前提。
+    """
+    if explicit is not None:
+        return explicit
+    resolved_kind = kind if kind is not None else resolve_short_term_memory_kind()
+    log_short_term_memory_kind_state(resolved_kind)
+    if resolved_kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
+        return DefaultSlidingWindowMemory()
+    # rolling_summary kind
+    from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
+        RollingSummaryShortTermMemory,
+    )
+    from ai_rpg_world.application.llm.services.short_term_memory_schedulers import (
+        InlineShortTermMemoryScheduler,
+        IShortTermMemoryScheduler,
+        ThreadPoolShortTermMemoryScheduler,
+    )
+    from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
+        ShortTermMemorySummaryService,
+    )
+    from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
+
+    summary_service: Optional[ShortTermMemorySummaryService] = None
+    long_summary_service = None
+    if isinstance(llm_client, LiteLLMClient):
+        summary_service = ShortTermMemorySummaryService(llm_client)
+        from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
+            ShortTermMemoryLongSummaryService,
+        )
+        long_summary_service = ShortTermMemoryLongSummaryService(llm_client)
+
+    # Phase 2.1: scheduler mode 選択。default は inline (Phase 2 互換)。
+    resolved_mode = (
+        scheduler_mode if scheduler_mode is not None
+        else resolve_short_term_memory_scheduler_mode()
+    )
+    log_short_term_memory_scheduler_mode_state(resolved_mode)
+    scheduler: IShortTermMemoryScheduler
+    if resolved_mode == SCHEDULER_MODE_THREAD_POOL:
+        scheduler = ThreadPoolShortTermMemoryScheduler(
+            trace_recorder_provider=trace_recorder_provider,
+            current_tick_provider=current_tick_provider,
+        )
+    else:
+        # Phase 2.2: Inline でも trace を渡し、task 例外を観測可能化する
+        scheduler = InlineShortTermMemoryScheduler(
+            trace_recorder_provider=trace_recorder_provider,
+            current_tick_provider=current_tick_provider,
+        )
+
+    return RollingSummaryShortTermMemory(
+        summary_service=summary_service,
+        long_summary_service=long_summary_service,
+        persona_resolver=persona_resolver,
+        scheduler=scheduler,
+    )
+
+
+def _build_semantic_persona_resolver(
+    *,
+    player_profile_repository: Any,
+    persona_block_provider: Optional[Callable[[PlayerId], str]],
+) -> Callable[[int], tuple[str, str]]:
+    """Phase 1b: semantic gist 用の persona_resolver。
+
+    `player_id (int) -> (player_name, persona_block)` を返す callable を作る。
+    player_profile_repository から player_name、persona_block_provider から
+    persona_block を best-effort で取得。どちらも欠落しても fail せず空文字
+    を返す (gist 生成は止めない)。
+    """
+
+    def _resolve(player_id_int: int) -> tuple[str, str]:
+        pid = PlayerId(player_id_int)
+        name = f"Player {player_id_int}"
+        if player_profile_repository is not None:
+            try:
+                profile = player_profile_repository.find_by_id(pid)
+                if profile is not None and getattr(profile, "name", None):
+                    name = str(profile.name)
+            except Exception:
+                # repository が落ちても gist 生成を止めない
+                pass
+        persona_block = ""
+        if persona_block_provider is not None:
+            try:
+                persona_block = persona_block_provider(pid) or ""
+            except Exception:
+                persona_block = ""
+        return name, persona_block
+
+    return _resolve
 
 
 class LlmAgentWiringResult:
@@ -1012,11 +1182,8 @@ def create_llm_agent_wiring(
     )
     current_state_formatter = DefaultCurrentStateFormatter()
 
-    sliding_window = (
-        sliding_window_memory
-        if sliding_window_memory is not None
-        else DefaultSlidingWindowMemory()
-    )
+    # sliding_window は client / persona_resolver の構築後 (下の方) で組み立てる。
+    # rolling_summary kind を選んだとき LLM port と persona_resolver が要るため。
     action_result_store = (
         action_result_store
         if action_result_store is not None
@@ -1024,7 +1191,9 @@ def create_llm_agent_wiring(
     )
     ui_context_builder = DefaultLlmUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
-    context_format_strategy = SectionBasedContextFormatStrategy()
+    context_format_strategy = build_section_format_strategy_from_env()
+    _resolved_episodic_explore_related_enabled = resolve_episodic_explore_related_enabled()
+    log_episodic_explore_related_state(_resolved_episodic_explore_related_enabled)
     system_prompt_builder = (
         DefaultSystemPromptBuilder(template=system_prompt_template)
         if system_prompt_template is not None
@@ -1055,9 +1224,54 @@ def create_llm_agent_wiring(
     )
 
     client = llm_client if llm_client is not None else create_llm_client_from_env()
-    episodic_stack = build_episodic_memory_stack(episodic_episode_store)
+    _semantic_llm_gist_enabled = resolve_semantic_llm_gist_enabled()
+    log_semantic_llm_gist_state(_semantic_llm_gist_enabled)
+    _semantic_gist_service = _optional_semantic_gist_service(
+        client, _semantic_llm_gist_enabled
+    )
+    _semantic_persona_resolver = _build_semantic_persona_resolver(
+        player_profile_repository=player_profile_repository,
+        persona_block_provider=persona_block_provider,
+    )
+    # Phase 2: short term memory の実装選択 (sliding_window | rolling_summary)。
+    # persona_resolver / client が揃ったここで構築する。
+    # trace_recorder_provider は Phase 2.1 scheduler の drop 計測用。
+    def _trace_recorder_provider() -> Optional[ITraceRecorder]:
+        return trace_recorder
+    sliding_window = _build_short_term_memory(
+        explicit=sliding_window_memory,
+        llm_client=client,
+        persona_resolver=_semantic_persona_resolver,
+        trace_recorder_provider=_trace_recorder_provider,
+        current_tick_provider=current_tick_provider,
+    )
+    episodic_stack = build_episodic_memory_stack(
+        episodic_episode_store,
+        semantic_gist_service=_semantic_gist_service,
+        semantic_persona_resolver=_semantic_persona_resolver,
+    )
     shared_episode_store = episodic_stack.shared_episode_store
     semantic_memory_store = episodic_stack.semantic_memory_store
+    # Phase 1c: semantic passive top-K の構築 (default OFF / top_k=0)。
+    _semantic_passive_top_k = resolve_semantic_passive_top_k()
+    log_semantic_passive_top_k_state(_semantic_passive_top_k)
+    _semantic_passive_recall_service = None
+    if _semantic_passive_top_k > 0:
+        from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+            SemanticPassiveRecallService,
+        )
+        _semantic_passive_recall_service = SemanticPassiveRecallService(semantic_memory_store)
+    # Phase 1d: memory_search_semantic tool (LLM 能動検索)。default OFF。
+    _semantic_search_enabled = resolve_semantic_search_enabled()
+    log_semantic_search_state(_semantic_search_enabled)
+    _semantic_memory_search_executor = None
+    if _semantic_search_enabled:
+        from ai_rpg_world.application.llm.services.executors.semantic_memory_search_tool_executor import (
+            SemanticMemorySearchToolExecutor,
+        )
+        _semantic_memory_search_executor = SemanticMemorySearchToolExecutor(
+            semantic_store=semantic_memory_store
+        )
     promotion_frontier = episodic_stack.promotion_frontier
     mem_bundle = episodic_stack.mem_bundle
     episodic_semantic_promotion = episodic_stack.episodic_semantic_promotion
@@ -1100,7 +1314,9 @@ def create_llm_agent_wiring(
         item_spec_repository=item_spec_repository,
         player_profile_repository=player_profile_repository,
         episodic_memory_explore_executor=mem_bundle.memory_explore_executor(),
-        episodic_explore_related_enabled=True,
+        episodic_explore_related_enabled=_resolved_episodic_explore_related_enabled,
+        semantic_memory_search_executor=_semantic_memory_search_executor,
+        semantic_search_enabled=_semantic_search_enabled,
         sliding_window=sliding_window,
         action_result_store=action_result_store,
         current_tick_provider=current_tick_provider,
@@ -1165,6 +1381,8 @@ def create_llm_agent_wiring(
         episodic_recall_buffer_store=prompt_recall_buffer,
         episodic_reinterpretation_journal_store=reinterpretation_journal,
         episodic_turn_index_provider=reinterpretation_coord.current_turn_index,
+        semantic_passive_recall=_semantic_passive_recall_service,
+        semantic_passive_top_k=_semantic_passive_top_k,
         memo_store=todo_store,
         current_tick_provider=current_tick_provider,
     )

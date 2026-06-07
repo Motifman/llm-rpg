@@ -196,9 +196,12 @@ def create_spot_graph_wiring(
         _build_persona_block_provider,
         _build_prompt_stack,
         _build_runtime_tool_state,
+        _build_semantic_persona_resolver,
+        _build_short_term_memory,
         _build_tool_stack,
         _optional_episodic_chunk_subjective_fields_service,
         _optional_episodic_reinterpretation_completion,
+        _optional_semantic_gist_service,
         _resolve_default_episodic_reinterpretation_stores,
     )
     from ai_rpg_world.application.llm.wiring._shared_builders import (
@@ -216,6 +219,17 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
     from ai_rpg_world.application.llm.services.context_format_strategy import (
         SectionBasedContextFormatStrategy,
+        build_section_format_strategy_from_env,
+    )
+    from ai_rpg_world.application.llm.wiring.feature_flags import (
+        log_episodic_explore_related_state,
+        log_semantic_llm_gist_state,
+        log_semantic_passive_top_k_state,
+        log_semantic_search_state,
+        resolve_episodic_explore_related_enabled,
+        resolve_semantic_llm_gist_enabled,
+        resolve_semantic_passive_top_k,
+        resolve_semantic_search_enabled,
     )
     from ai_rpg_world.application.llm.services.game_tool_registry import DefaultGameToolRegistry
     from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
@@ -303,9 +317,9 @@ def create_spot_graph_wiring(
     )
     current_state_formatter = SpotGraphCurrentStateFormatter()
 
-    sliding_window = (
-        sliding_window_memory if sliding_window_memory is not None else DefaultSlidingWindowMemory()
-    )
+    # Phase 2: short term memory の実装選択。rolling_summary kind を選んだとき
+    # LLM port + persona_resolver が必要なので、構築は client / persona_resolver
+    # が揃った下のブロックで行う (ここでは action_result_store だけ初期化)。
     action_result_store = (
         action_result_store if action_result_store is not None else DefaultActionResultStore()
     )
@@ -314,7 +328,9 @@ def create_spot_graph_wiring(
     )
     ui_context_builder = SpotGraphUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
-    context_format_strategy = SectionBasedContextFormatStrategy()
+    context_format_strategy = build_section_format_strategy_from_env()
+    _resolved_episodic_explore_related_enabled = resolve_episodic_explore_related_enabled()
+    log_episodic_explore_related_state(_resolved_episodic_explore_related_enabled)
     system_prompt_builder = (
         DefaultSystemPromptBuilder(template=system_prompt_template)
         if system_prompt_template is not None
@@ -345,12 +361,59 @@ def create_spot_graph_wiring(
     )
 
     client = llm_client if llm_client is not None else create_llm_client_from_env()
-    episodic_stack = build_episodic_memory_stack(episodic_episode_store)
+    _semantic_llm_gist_enabled = resolve_semantic_llm_gist_enabled()
+    log_semantic_llm_gist_state(_semantic_llm_gist_enabled)
+    _semantic_gist_service = _optional_semantic_gist_service(
+        client, _semantic_llm_gist_enabled
+    )
+    _semantic_persona_resolver = _build_semantic_persona_resolver(
+        player_profile_repository=player_profile_repository,
+        persona_block_provider=persona_block_provider,
+    )
+    # Phase 2: short term memory の実装選択。persona_resolver / client が揃った
+    # ここで構築する。trace_recorder_provider は Phase 2.1 scheduler の drop 計測用。
+    from ai_rpg_world.application.trace import ITraceRecorder as _ITraceRecorder
+
+    def _st_trace_recorder_provider() -> Optional[_ITraceRecorder]:
+        return trace_recorder
+
+    sliding_window = _build_short_term_memory(
+        explicit=sliding_window_memory,
+        llm_client=client,
+        persona_resolver=_semantic_persona_resolver,
+        trace_recorder_provider=_st_trace_recorder_provider,
+        current_tick_provider=current_tick_provider,
+    )
+    episodic_stack = build_episodic_memory_stack(
+        episodic_episode_store,
+        semantic_gist_service=_semantic_gist_service,
+        semantic_persona_resolver=_semantic_persona_resolver,
+    )
     shared_episode_store = episodic_stack.shared_episode_store
     semantic_memory_store = episodic_stack.semantic_memory_store
     promotion_frontier = episodic_stack.promotion_frontier
     mem_bundle = episodic_stack.mem_bundle
     episodic_semantic_promotion = episodic_stack.episodic_semantic_promotion
+    # Phase 1c: semantic passive top-K の構築 (default OFF / top_k=0)。
+    _semantic_passive_top_k = resolve_semantic_passive_top_k()
+    log_semantic_passive_top_k_state(_semantic_passive_top_k)
+    _semantic_passive_recall_service = None
+    if _semantic_passive_top_k > 0:
+        from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+            SemanticPassiveRecallService,
+        )
+        _semantic_passive_recall_service = SemanticPassiveRecallService(semantic_memory_store)
+    # Phase 1d: memory_search_semantic tool (LLM 能動検索)。default OFF。
+    _semantic_search_enabled = resolve_semantic_search_enabled()
+    log_semantic_search_state(_semantic_search_enabled)
+    _semantic_memory_search_executor = None
+    if _semantic_search_enabled:
+        from ai_rpg_world.application.llm.services.executors.semantic_memory_search_tool_executor import (
+            SemanticMemorySearchToolExecutor,
+        )
+        _semantic_memory_search_executor = SemanticMemorySearchToolExecutor(
+            semantic_store=semantic_memory_store
+        )
     # 攻撃ユースケースのオーケストレーター。tool executor (player→monster)
     # と将来の tick driver (monster→player) で同じ instance を共有する。
     # monster_repository が未設定の起動構成（プロト・テスト等）では None
@@ -458,7 +521,9 @@ def create_spot_graph_wiring(
         player_profile_repository=player_profile_repository,
         spot_graph_tool_executor=spot_graph_tool_executor,
         episodic_memory_explore_executor=mem_bundle.memory_explore_executor(),
-        episodic_explore_related_enabled=True,
+        episodic_explore_related_enabled=_resolved_episodic_explore_related_enabled,
+        semantic_memory_search_executor=_semantic_memory_search_executor,
+        semantic_search_enabled=_semantic_search_enabled,
         sliding_window=sliding_window,
         action_result_store=action_result_store,
         current_tick_provider=current_tick_provider,
@@ -528,6 +593,8 @@ def create_spot_graph_wiring(
         episodic_recall_buffer_store=prompt_recall_buffer,
         episodic_reinterpretation_journal_store=reinterpretation_journal,
         episodic_turn_index_provider=reinterpretation_coord.current_turn_index,
+        semantic_passive_recall=_semantic_passive_recall_service,
+        semantic_passive_top_k=_semantic_passive_top_k,
         memo_store=todo_store,
         current_tick_provider=current_tick_provider,
     )

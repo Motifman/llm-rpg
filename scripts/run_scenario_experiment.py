@@ -615,8 +615,71 @@ def main(argv: Optional[List[str]] = None) -> int:
     report_path = out_dir / "report.md"
     html_path = out_dir / "trace.html"
 
+    # Phase 0 後続: prompt section 順序 (A/B 用) を実験ごとに env で固定する
+    # ため、起動時の解決結果を stdout と RUN_START に乗せて再現性を確保する。
+    from ai_rpg_world.application.llm.services.context_format_strategy import (
+        ENV_PROMPT_SECTION_ORDER,
+        resolve_section_order_from_env,
+    )
+    from ai_rpg_world.application.llm.wiring.feature_flags import (
+        ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
+        ENV_SEMANTIC_LLM_GIST_ENABLED,
+        ENV_SEMANTIC_PASSIVE_TOP_K,
+        ENV_SEMANTIC_SEARCH_ENABLED,
+        ENV_SHORT_TERM_MEMORY_KIND,
+        ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE,
+        resolve_episodic_explore_related_enabled,
+        resolve_semantic_llm_gist_enabled,
+        resolve_semantic_passive_top_k,
+        resolve_semantic_search_enabled,
+        resolve_short_term_memory_kind,
+        resolve_short_term_memory_scheduler_mode,
+    )
+    resolved_section_order = resolve_section_order_from_env()
+    resolved_explore_related = resolve_episodic_explore_related_enabled()
+    resolved_semantic_llm_gist = resolve_semantic_llm_gist_enabled()
+    resolved_semantic_passive_top_k = resolve_semantic_passive_top_k()
+    resolved_semantic_search = resolve_semantic_search_enabled()
+    resolved_short_term_memory_kind = resolve_short_term_memory_kind()
+    resolved_short_term_memory_scheduler_mode = resolve_short_term_memory_scheduler_mode()
+
     print(
         f"[run] scenario={args.scenario.name} max_world_ticks={args.max_world_ticks}",
+        flush=True,
+    )
+    print(
+        f"[run] section_order={resolved_section_order} "
+        f"(override via {ENV_PROMPT_SECTION_ORDER}=stable_to_volatile|legacy)",
+        flush=True,
+    )
+    print(
+        f"[run] episodic_explore_related={'on' if resolved_explore_related else 'off'} "
+        f"(override via {ENV_EPISODIC_EXPLORE_RELATED_ENABLED}=1)",
+        flush=True,
+    )
+    print(
+        f"[run] semantic_llm_gist={'on' if resolved_semantic_llm_gist else 'off'} "
+        f"(override via {ENV_SEMANTIC_LLM_GIST_ENABLED}=1)",
+        flush=True,
+    )
+    print(
+        f"[run] semantic_passive_top_k={resolved_semantic_passive_top_k} "
+        f"(override via {ENV_SEMANTIC_PASSIVE_TOP_K}=<int>)",
+        flush=True,
+    )
+    print(
+        f"[run] semantic_search={'on' if resolved_semantic_search else 'off'} "
+        f"(override via {ENV_SEMANTIC_SEARCH_ENABLED}=1)",
+        flush=True,
+    )
+    print(
+        f"[run] short_term_memory_kind={resolved_short_term_memory_kind} "
+        f"(override via {ENV_SHORT_TERM_MEMORY_KIND}=sliding_window|rolling_summary)",
+        flush=True,
+    )
+    print(
+        f"[run] short_term_memory_scheduler_mode={resolved_short_term_memory_scheduler_mode} "
+        f"(override via {ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE}=inline|thread_pool)",
         flush=True,
     )
     print(f"[out] {out_dir}", flush=True)
@@ -628,6 +691,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             max_world_ticks=args.max_world_ticks,
             model=os.environ.get("LLM_MODEL"),
             api_base=os.environ.get("OPENAI_API_BASE"),
+            prompt_section_order=resolved_section_order,
+            episodic_explore_related_enabled=resolved_explore_related,
+            semantic_llm_gist_enabled=resolved_semantic_llm_gist,
+            semantic_passive_top_k=resolved_semantic_passive_top_k,
+            semantic_search_enabled=resolved_semantic_search,
+            short_term_memory_kind=resolved_short_term_memory_kind,
+            short_term_memory_scheduler_mode=resolved_short_term_memory_scheduler_mode,
         )
 
         def progress(msg: str) -> None:

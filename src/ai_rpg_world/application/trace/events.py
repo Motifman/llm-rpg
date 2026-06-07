@@ -82,6 +82,24 @@ class TraceEventKind:
     # token 数ではなく char 数で出す: 軽量 / モデル非依存 / deterministic。
     # 分析側で同 turn の prompt_tokens 比に換算する (≒ token 内訳)。
     PROMPT_SECTION_BREAKDOWN = "prompt_section_breakdown"
+    # Phase 1c: semantic memory passive top-K の発火結果。prompt build 時に
+    # ``SemanticPassiveRecallService.retrieve`` が走ったタイミングで 1 件記録。
+    # payload: situation_cues / top_k / candidate_count / candidates[].entry_id /
+    # candidates[].score / .recency / .importance / .relevance / .text_snippet /
+    # .tags / .importance_score
+    # 検証中は top_k=0 (default) で発火しない。SEMANTIC_PASSIVE_TOP_K env で
+    # 明示的に有効化したときだけ trace に出る。
+    SEMANTIC_PASSIVE_RECALL = "semantic_passive_recall"
+    # Phase 2.1: 短期記憶 L4 生成タスクが scheduler でキュー満杯 / shutdown 後に
+    # drop された瞬間。payload: reason / queue_size / max_queue_size。
+    # silent failure 防止のため、drop は trace + warning で必ず可観測化する。
+    SHORT_TERM_SUMMARY_DROPPED = "short_term_summary_dropped"
+    # Phase 2.2: 短期記憶 L4 生成タスク (scheduler worker 内) が例外で死んだ瞬間。
+    # 通常パスでは ``_run_generation`` が全例外を握って template fallback を
+    # install するため、ここに到達するのは "fallback すら失敗した" バグ性の
+    # 事象。log だけでなく trace でも見えるようにする (silent failure 防止)。
+    # payload: error_type / error_message_snippet / latency_ms (worker 開始からの)
+    SHORT_TERM_SUMMARY_GENERATION_FAILED = "short_term_summary_generation_failed"
 
 
 @dataclass(frozen=True)

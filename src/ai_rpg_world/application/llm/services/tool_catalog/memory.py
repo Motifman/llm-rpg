@@ -16,6 +16,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResol
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.application.llm.services.availability_resolvers import (
     MemoryExploreRelatedAvailabilityResolver,
+    MemorySearchSemanticAvailabilityResolver,
     TodoAddAvailabilityResolver,
     TodoCompleteAvailabilityResolver,
     TodoListAvailabilityResolver,
@@ -25,6 +26,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMO_DONE,
     TOOL_NAME_MEMO_LIST,
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
+    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
 )
 
 
@@ -149,6 +151,37 @@ MEMORY_EXPLORE_RELATED_DEFINITION = ToolDefinitionDto(
 )
 
 
+MEMORY_SEARCH_SEMANTIC_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "query": {
+            "type": "string",
+            "description": (
+                "検索したい単語・名前・キーワード (例: 「タカシ」「毒キノコ」「北の洞窟」)。"
+                "1 語または短いフレーズを推奨。tags と本文の双方を見る。"
+            ),
+        },
+        "top_k": {
+            "type": "integer",
+            "description": "返す学び (semantic 記憶) の最大件数 (既定 5、最大 32)。",
+        },
+    },
+    "required": ["query"],
+}
+
+MEMORY_SEARCH_SEMANTIC_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+    description=(
+        "あなた自身の「学び (semantic 記憶)」を能動的に検索します。"
+        "passive な想起では出てこない遠い記憶を、固有名詞や概念キーワードで"
+        "引き寄せたい時に使ってください。結果は次ターンの観測として現れる"
+        "JSON で、世界状態は変えません。"
+    ),
+    parameters=MEMORY_SEARCH_SEMANTIC_PARAMETERS,
+    category=ToolCategory.META_COGNITIVE,
+)
+
+
 def get_memo_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """memo 系ツールの (definition, resolver) 一覧を返す。"""
     return [
@@ -166,12 +199,16 @@ def get_memory_specs(
     *,
     todo_enabled: bool = False,
     episodic_explore_related_enabled: bool = False,
+    semantic_search_enabled: bool = False,
     memo_enabled: Optional[bool] = None,
 ) -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
-    """memo および任意で memory_explore_related を返す。
+    """memo および任意で memory_explore_related / memory_search_semantic を返す。
 
     ``todo_enabled`` は後方互換のための旧名引数。``memo_enabled`` を渡せば
     そちらが優先される。両方未指定は False (= memo を expose しない)。
+
+    ``semantic_search_enabled`` は Phase 1d。LLM が semantic memory を能動検索
+    したい時に使う ``memory_search_semantic`` を expose する。default False。
     """
     if memo_enabled is None:
         memo_enabled = todo_enabled
@@ -182,10 +219,15 @@ def get_memory_specs(
         specs.append(
             (MEMORY_EXPLORE_RELATED_DEFINITION, MemoryExploreRelatedAvailabilityResolver())
         )
+    if semantic_search_enabled:
+        specs.append(
+            (MEMORY_SEARCH_SEMANTIC_DEFINITION, MemorySearchSemanticAvailabilityResolver())
+        )
     return specs
 
 
 __all__ = [
+    "MEMORY_SEARCH_SEMANTIC_DEFINITION",
     "MEMO_ADD_DEFINITION",
     "MEMO_LIST_DEFINITION",
     "MEMO_DONE_DEFINITION",
