@@ -51,6 +51,20 @@ class MemoryExploreRelatedAvailabilityResolver(IAvailabilityResolver):
         return True
 
 
+class MemorySearchSemanticAvailabilityResolver(IAvailabilityResolver):
+    """semantic memory の能動検索 (Phase 1d)。
+
+    実行時には結果が空になり得るが、LLM からは常時呼び出し可能 (= 「思い出そう
+    としたが何も無かった」を学習させる)。
+    """
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        return True
+
+
 class SetDestinationAvailabilityResolver(IAvailabilityResolver):
     """目的地設定ツールは、現在地があり利用可能な移動先（スポット・ロケーション）が1件以上あるときに利用可能。"""
 

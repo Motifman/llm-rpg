@@ -524,14 +524,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
         ENV_SEMANTIC_LLM_GIST_ENABLED,
         ENV_SEMANTIC_PASSIVE_TOP_K,
+        ENV_SEMANTIC_SEARCH_ENABLED,
         resolve_episodic_explore_related_enabled,
         resolve_semantic_llm_gist_enabled,
         resolve_semantic_passive_top_k,
+        resolve_semantic_search_enabled,
     )
     resolved_section_order = resolve_section_order_from_env()
     resolved_explore_related = resolve_episodic_explore_related_enabled()
     resolved_semantic_llm_gist = resolve_semantic_llm_gist_enabled()
     resolved_semantic_passive_top_k = resolve_semantic_passive_top_k()
+    resolved_semantic_search = resolve_semantic_search_enabled()
 
     print(f"[run] scenario={args.scenario.name} max_ticks={args.max_ticks}", flush=True)
     print(
@@ -554,6 +557,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         f"(override via {ENV_SEMANTIC_PASSIVE_TOP_K}=<int>)",
         flush=True,
     )
+    print(
+        f"[run] semantic_search={'on' if resolved_semantic_search else 'off'} "
+        f"(override via {ENV_SEMANTIC_SEARCH_ENABLED}=1)",
+        flush=True,
+    )
     print(f"[out] {out_dir}", flush=True)
 
     with JsonlTraceRecorder(trace_path) as rec:
@@ -567,6 +575,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             episodic_explore_related_enabled=resolved_explore_related,
             semantic_llm_gist_enabled=resolved_semantic_llm_gist,
             semantic_passive_top_k=resolved_semantic_passive_top_k,
+            semantic_search_enabled=resolved_semantic_search,
         )
 
         def progress(msg: str) -> None:
