@@ -31,7 +31,7 @@ def test_both_paths_use_section_based_context_format_strategy() -> None:
     prompt_builder = _read(
         _REPO_ROOT / "src/ai_rpg_world/application/llm/services/prompt_builder.py"
     )
-    escape_runtime = _read(_REPO_ROOT / "demos/escape_game/escape_game_runtime.py")
+    escape_runtime = _read(_REPO_ROOT / "src/ai_rpg_world/application/escape_game/escape_game_runtime.py")
     # DefaultPromptBuilder は wiring 経由で受け取る (strategy 名は context_format_strategy.py
     # に集中)。escape_game も同じ strategy class をクラス定数で持つ。
     assert "SectionBasedContextFormatStrategy" in escape_runtime
@@ -40,13 +40,13 @@ def test_both_paths_use_section_based_context_format_strategy() -> None:
 
 def test_both_paths_use_default_recent_events_formatter() -> None:
     """両経路が DefaultRecentEventsFormatter を recent events 整形に使う。"""
-    escape_runtime = _read(_REPO_ROOT / "demos/escape_game/escape_game_runtime.py")
+    escape_runtime = _read(_REPO_ROOT / "src/ai_rpg_world/application/escape_game/escape_game_runtime.py")
     assert "DefaultRecentEventsFormatter" in escape_runtime
 
 
 def test_escape_game_uses_shared_active_memos_formatter() -> None:
     """escape_game が共通の format_active_memos を import/委譲する。"""
-    escape_runtime = _read(_REPO_ROOT / "demos/escape_game/escape_game_runtime.py")
+    escape_runtime = _read(_REPO_ROOT / "src/ai_rpg_world/application/escape_game/escape_game_runtime.py")
     assert "active_memos_formatter" in escape_runtime
     assert "format_active_memos" in escape_runtime
 
@@ -70,7 +70,7 @@ def test_escape_game_holds_formatter_instances_as_class_vars() -> None:
     silent failure が見つかったため (3 つ目の config-init split)。
     formatter (stateless) は ClassVar のまま維持。
     """
-    escape_runtime = _read(_REPO_ROOT / "demos/escape_game/escape_game_runtime.py")
+    escape_runtime = _read(_REPO_ROOT / "src/ai_rpg_world/application/escape_game/escape_game_runtime.py")
     # formatter は引き続き ClassVar (stateless / env 依存無し)
     assert "_recent_events_formatter: ClassVar" in escape_runtime
     # _context_strategy は instance field に格上げ + env 由来 factory で注入
@@ -84,7 +84,7 @@ def test_escape_game_build_full_prompt_uses_default_prompt_builder() -> None:
     Issue #227 後続 HIGH-3 Part 2 で完了。runtime は adapter 経由で
     DefaultPromptBuilder を構築し、build_full_prompt はそれを呼ぶだけになっている。
     """
-    escape_runtime = _read(_REPO_ROOT / "demos/escape_game/escape_game_runtime.py")
+    escape_runtime = _read(_REPO_ROOT / "src/ai_rpg_world/application/escape_game/escape_game_runtime.py")
     # 統合の証跡: _get_or_build_default_prompt_builder 経由で builder を構築している
     assert "_get_or_build_default_prompt_builder" in escape_runtime
     assert "DefaultPromptBuilder" in escape_runtime
@@ -93,7 +93,7 @@ def test_escape_game_build_full_prompt_uses_default_prompt_builder() -> None:
 def test_escape_game_default_prompt_builder_adapters_module_exists() -> None:
     """escape_game adapter モジュールが存在し、4 つの adapter を提供する (HIGH-3 Part 2)。"""
     adapters = _read(
-        _REPO_ROOT / "demos/escape_game/default_prompt_builder_adapters.py"
+        _REPO_ROOT / "src/ai_rpg_world/application/escape_game/default_prompt_builder_adapters.py"
     )
     assert "class EscapeGameWorldQueryAdapter" in adapters
     assert "class EscapeGameProfileRepositoryAdapter" in adapters
