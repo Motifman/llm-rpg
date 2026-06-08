@@ -47,6 +47,7 @@ from ai_rpg_world.application.llm.services.short_term_memory_summary_service imp
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.application.trace.recorder import ITraceRecorder, NullTraceRecorder
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -57,6 +58,35 @@ _logger = logging.getLogger(__name__)
 DEFAULT_L1_SOFT_CAP = 15
 DEFAULT_L1_HARD_CAP = 25
 DEFAULT_L4_KEEP_GENERATIONS = 3
+
+
+# PR #449 (PR 4/6): NullObject パターンで silent None skip を排除する helper。
+# 構築時 / setter 時にこれを通すことで、emit 経路が `if provider is None` /
+# `if recorder is None` のチェックを書かなくてよくなる。
+_DEFAULT_NULL_RECORDER = NullTraceRecorder()
+
+
+def _ensure_trace_recorder_provider(
+    provider: Optional[Callable[[], Any]],
+) -> Callable[[], ITraceRecorder]:
+    """provider を ``Callable[[], ITraceRecorder]`` に正規化する。
+
+    - None なら NullTraceRecorder を返す provider に置き換え
+    - 既存 provider が None を返した場合も NullTraceRecorder を返すように
+      wrap (= 後方互換 / lazy lookup で recorder 未確定の場合)
+    """
+    if provider is None:
+        return lambda: _DEFAULT_NULL_RECORDER
+
+    def _wrapped() -> ITraceRecorder:
+        try:
+            recorder = provider()
+        except Exception:
+            # provider 自体が例外を投げる場合も NullTraceRecorder にフォールバック
+            return _DEFAULT_NULL_RECORDER
+        return recorder if recorder is not None else _DEFAULT_NULL_RECORDER
+
+    return _wrapped
 
 
 # persona resolver は (player_id_int) -> (player_name, persona_block)
@@ -141,7 +171,13 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         self._scheduler: IShortTermMemoryScheduler = (
             scheduler if scheduler is not None else InlineShortTermMemoryScheduler()
         )
-        self._trace_recorder_provider = trace_recorder_provider
+        # PR #449 (PR 4/6): trace_recorder_provider が None でも常に
+        # NullTraceRecorder を返す callable に正規化する。これで emit 側の
+        # `if provider is None: return` / `if recorder is None: return` の
+        # silent skip 経路を排除できる (= NullObject パターン)。
+        self._trace_recorder_provider: Callable[[], ITraceRecorder] = (
+            _ensure_trace_recorder_provider(trace_recorder_provider)
+        )
         self._current_tick_provider = current_tick_provider
         self._raw: Dict[int, Deque[ObservationEntry]] = {}
         # L4 は新しい順に並べる (index 0 = 最新)。worker thread からも書く
@@ -362,13 +398,17 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
     def set_trace_recorder_provider(
         self, provider: Optional[Callable[[], Any]]
     ) -> None:
-        """trace_recorder_provider を後から差し替える (PR #439)。
+        """trace_recorder_provider を後から差し替える (PR #439 / PR #449 正規化)。
 
         ``escape_game_runtime`` のように runtime 構築時点では trace_recorder が
         まだ確定していない経路で、後付け注入するための setter。
-        provider=None で no-op に戻すことも可能。
+
+        PR #449 (PR 4/6): 受け取った provider は ``_ensure_trace_recorder_provider``
+        を通して正規化する。None / 例外 / None 返却の全パターンで NullTraceRecorder
+        にフォールバックする callable に変換されるので、emit 経路は常に
+        ``recorder.record()`` を 1 度だけ呼ぶシンプルな形を維持できる。
         """
-        self._trace_recorder_provider = provider
+        self._trace_recorder_provider = _ensure_trace_recorder_provider(provider)
 
     def set_current_tick_provider(
         self, provider: Optional[Callable[[], Optional[int]]]
@@ -413,21 +453,19 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
             self._persona_resolver = persona_resolver
 
     def _emit_l4_generated(self, summary: L4MidSummary) -> None:
-        """PR #435: L4 install 直後に trace event を 1 件吐く (best-effort)。
+        """L4 install 直後に trace event を 1 件吐く (PR #435 / PR #449 簡略化)。
 
-        recorder が None / 例外を投げる場合でも本体経路を倒さないよう全て握りつぶす
-        (scheduler の trace emit と同じポリシー)。
+        PR #449 (PR 4/6): provider は ``_ensure_trace_recorder_provider`` で
+        正規化済 = **必ず ``ITraceRecorder`` を返す** (NullTraceRecorder fallback)。
+        旧来の ``if provider is None`` / ``if recorder is None`` の silent skip
+        経路を排除し、本体は recorder.record() を 1 度だけ呼ぶシンプル形に。
+
+        recorder 側で例外が出ても本体経路を倒さないため except は残す。
         """
-        if self._trace_recorder_provider is None:
-            return
         try:
-            recorder = self._trace_recorder_provider()
-            if recorder is None:
-                return
-            tick = self._safe_current_tick()
-            recorder.record(
+            self._trace_recorder_provider().record(
                 TraceEventKind.SHORT_TERM_SUMMARY_GENERATED,
-                tick=tick,
+                tick=self._safe_current_tick(),
                 player_id=summary.player_id,
                 summary_id=summary.summary_id,
                 raw_count=summary.raw_count,
@@ -442,17 +480,11 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
             )
 
     def _emit_l5_generated(self, summary: L5LongSummary) -> None:
-        """PR #435: L5 install 直後に trace event を 1 件吐く (best-effort)。"""
-        if self._trace_recorder_provider is None:
-            return
+        """L5 install 直後に trace event を 1 件吐く (PR #435 / PR #449 簡略化)。"""
         try:
-            recorder = self._trace_recorder_provider()
-            if recorder is None:
-                return
-            tick = self._safe_current_tick()
-            recorder.record(
+            self._trace_recorder_provider().record(
                 TraceEventKind.SHORT_TERM_LONG_SUMMARY_GENERATED,
-                tick=tick,
+                tick=self._safe_current_tick(),
                 player_id=summary.player_id,
                 summary_id=summary.summary_id,
                 generation_index=summary.generation_index,
