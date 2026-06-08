@@ -1626,61 +1626,66 @@ def _include_todo_tools_from_env() -> bool:
     return raw != _LLM_TOOL_MODE_PURE_SPOT_GRAPH
 
 
-def _build_context_format_strategy_from_env() -> SectionBasedContextFormatStrategy:
-    """``PROMPT_SECTION_ORDER`` env を尊重して context format strategy を組む (PR #445)。
+def _build_context_format_strategy_from_config(
+    cfg: "ResolvedLlmRuntimeConfig",
+) -> SectionBasedContextFormatStrategy:
+    """resolved config から context format strategy を組む (PR #448 / PR 3/6)。
 
-    PR #443/#445 までは escape_game_runtime が ``ClassVar`` の hard-coded
-    default ``SectionBasedContextFormatStrategy()`` を使い、env を完全に無視して
-    いた (= 3 つ目の config-init split silent failure)。本関数は wiring 層の
-    ``build_section_format_strategy_from_env`` をそのまま呼ぶ薄い shim。
-
-    将来 PR #446 (ResolvedLlmRuntimeConfig) に集約される予定。
+    PR #445 で env 直読の shim を作ったが、本 PR で「同 env を 2 回読まない」
+    原則に従い、cfg から組む形に置き換え。
     """
-    from ai_rpg_world.application.llm.services.context_format_strategy import (
-        build_section_format_strategy_from_env,
-    )
-
-    return build_section_format_strategy_from_env()
+    return SectionBasedContextFormatStrategy(section_order=cfg.prompt_section_order)
 
 
-def _build_short_term_memory_from_env() -> ISlidingWindowMemory:
-    """env (``SHORT_TERM_MEMORY_KIND``) を尊重して短期記憶実装を組む (PR #439)。
+def _build_short_term_memory_from_config(
+    cfg: "ResolvedLlmRuntimeConfig",
+) -> ISlidingWindowMemory:
+    """resolved config から短期記憶実装を組む (PR #448 / PR 3/6)。
 
-    PR #436 までは ``DefaultSlidingWindowMemory()`` を無条件に組んでおり、
-    ``SHORT_TERM_MEMORY_KIND=rolling_summary`` env を渡しても **silent fallback
-    で sliding_window のまま実験が走る** silent failure を抱えていた (PR #438 で
-    実機計測時に発覚)。
+    PR #439 で env 直読の shim を作ったが、本 PR で cfg ベースに置き換え。
+    env を 1 度だけ読むのは ``ResolvedLlmRuntimeConfig.from_env()`` の責務に
+    集約済 (= 同 env を 2 回読まない構造)。
 
-    本関数は env を解決し、rolling_summary なら ``RollingSummaryShortTermMemory``
-    を返す。LLM 経路 (summary_service / long_summary_service) は runtime 構築
-    時点ではまだ llm_client が無いため None で初期化し、後で
-    ``set_summary_services`` / ``set_trace_recorder_provider`` 経由で wiring が
-    差し込む。template fallback only でも L4 / L5 構造による prompt 圧縮効果は
-    出るので prefix cache 試験は成立する。
-
-    本来は wiring 層の ``_build_short_term_memory`` を再利用したいが、escape_game
-    経路は ``_build_short_term_memory`` を踏まない別 wiring なので、ここで env
-    解決と同等のロジックを実装する。
+    LLM 経路 (summary_service / long_summary_service) は runtime 構築時点では
+    まだ llm_client が無いため None で初期化し、後で ``set_summary_services`` 経由で
+    wiring が差し込む (PR #444 で実装済 / 本 PR スコープ外)。
     """
     from ai_rpg_world.application.llm.wiring.feature_flags import (
         SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
         log_short_term_memory_kind_state,
-        resolve_short_term_memory_kind,
     )
 
-    kind = resolve_short_term_memory_kind()
-    log_short_term_memory_kind_state(kind)
-    if kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
+    log_short_term_memory_kind_state(cfg.short_term_memory_kind)
+    if cfg.short_term_memory_kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
         return DefaultSlidingWindowMemory()
     from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
         RollingSummaryShortTermMemory,
     )
-    # template fallback only mode: LLM 経路は後注入。template fallback でも
-    # L4 / L5 構造は出るので、prompt の volatile / stable 比率改善は機能する。
     return RollingSummaryShortTermMemory(
         summary_service=None,
         long_summary_service=None,
     )
+
+
+# PR #448 / PR 3/6: 後方互換用 alias (deprecated)。既存呼び出し元 (テスト等) を
+# すぐ全部直さなくていいように暫定で残す。PR 5/6 (escape_game → application/
+# 移行) でまとめて削除予定。
+def _build_short_term_memory_from_env() -> ISlidingWindowMemory:
+    """[deprecated] PR #448 で _build_short_term_memory_from_config に置換。"""
+    from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+        ResolvedLlmRuntimeConfig,
+    )
+
+    return _build_short_term_memory_from_config(ResolvedLlmRuntimeConfig.from_env())
+
+
+def _build_context_format_strategy_from_env() -> SectionBasedContextFormatStrategy:
+    """[deprecated] PR #448 で _build_context_format_strategy_from_config に置換。"""
+    from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+        ResolvedLlmRuntimeConfig,
+    )
+
+    return _build_context_format_strategy_from_config(ResolvedLlmRuntimeConfig.from_env())
 
 
 def create_escape_game_runtime(
@@ -1689,6 +1694,7 @@ def create_escape_game_runtime(
     escape_character: Optional[EscapeCharacterPromptInput] = None,
     llm_turn_trigger: Optional[ILlmTurnTrigger] = None,
     include_todo_tools: Optional[bool] = None,
+    config: Optional["ResolvedLlmRuntimeConfig"] = None,
 ) -> EscapeGameRuntime:
     """シナリオ JSON からゲームランタイムを構築する。
 
@@ -1700,7 +1706,21 @@ def create_escape_game_runtime(
             純スポットグラフモード (TODO 系を除外、speech は残す)。``None``
             (既定) の場合は環境変数 ``LLM_TOOL_MODE`` から解決する。Issue #155
             (TODO 設計の再評価) の判断材料を取るための比較実験用。
+        config: PR #448 (PR 3/6): LLM runtime 設定の単一窓口。省略時は
+            ``ResolvedLlmRuntimeConfig.from_env()`` で env から 1 度だけ resolve。
+            entrypoint (run_scenario_experiment 等) で既に from_env() 済みの cfg を
+            渡せば、env を 2 度読まず確実に同じ値を共有する。**run_start trace と
+            実 wiring の同一性を構造で保証する**ための引数。
     """
+    # PR #448: env を読むのはここ 1 回だけ (= 単一窓口)。引数 cfg が来ていれば
+    # それを使うが、来ていなければ from_env() で構築する (= 後方互換)。
+    from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+        ResolvedLlmRuntimeConfig,
+    )
+
+    if config is None:
+        config = ResolvedLlmRuntimeConfig.from_env()
+
     loader = ScenarioLoader()
     scenario = loader.load_from_file(scenario_path)
 
@@ -2205,7 +2225,7 @@ def create_escape_game_runtime(
         player_status_repository=player_status_repo,
     )
     obs_buffer = DefaultObservationContextBuffer()
-    sliding_window = _build_short_term_memory_from_env()
+    sliding_window = _build_short_term_memory_from_config(config)
     action_result_store = DefaultActionResultStore()
 
     class _RuntimeTravelContext(SpotGraphTravelContextProvider):
@@ -2593,8 +2613,8 @@ def create_escape_game_runtime(
         _obs_buffer=obs_buffer,
         _sliding_window=sliding_window,
         _action_result_store=action_result_store,
-        # PR #445: PROMPT_SECTION_ORDER env を尊重 (= 3 つ目の config-init split fix)
-        _context_strategy=_build_context_format_strategy_from_env(),
+        # PR #448 (PR 3/6): cfg.prompt_section_order を使う (= env を再読しない)
+        _context_strategy=_build_context_format_strategy_from_config(config),
         _time_provider=time_provider,
         _simulation_service=simulation_service,
         _travel_stage=travel_stage,

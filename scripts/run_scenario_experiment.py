@@ -617,9 +617,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # Phase 0 後続: prompt section 順序 (A/B 用) を実験ごとに env で固定する
     # ため、起動時の解決結果を stdout と RUN_START に乗せて再現性を確保する。
+    # PR #448 (PR 3/6): env を読むのは ResolvedLlmRuntimeConfig.from_env() の
+    # 1 箇所だけに集約する (= 単一窓口)。run_start trace と実 wiring が同じ cfg
+    # instance から派生することを構造で保証 (PR #439 / #446 silent failure
+    # を構造で防ぐ)。
     from ai_rpg_world.application.llm.services.context_format_strategy import (
         ENV_PROMPT_SECTION_ORDER,
-        resolve_section_order_from_env,
     )
     from ai_rpg_world.application.llm.wiring.feature_flags import (
         ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
@@ -628,94 +631,74 @@ def main(argv: Optional[List[str]] = None) -> int:
         ENV_SEMANTIC_SEARCH_ENABLED,
         ENV_SHORT_TERM_MEMORY_KIND,
         ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE,
-        resolve_episodic_explore_related_enabled,
-        resolve_semantic_llm_gist_enabled,
-        resolve_semantic_passive_top_k,
-        resolve_semantic_search_enabled,
-        resolve_short_term_memory_kind,
-        resolve_short_term_memory_scheduler_mode,
     )
-    resolved_section_order = resolve_section_order_from_env()
-    resolved_explore_related = resolve_episodic_explore_related_enabled()
-    resolved_semantic_llm_gist = resolve_semantic_llm_gist_enabled()
-    resolved_semantic_passive_top_k = resolve_semantic_passive_top_k()
-    resolved_semantic_search = resolve_semantic_search_enabled()
-    resolved_short_term_memory_kind = resolve_short_term_memory_kind()
-    resolved_short_term_memory_scheduler_mode = resolve_short_term_memory_scheduler_mode()
+    from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+        ResolvedLlmRuntimeConfig,
+    )
+    cfg = ResolvedLlmRuntimeConfig.from_env()
 
     print(
         f"[run] scenario={args.scenario.name} max_world_ticks={args.max_world_ticks}",
         flush=True,
     )
     print(
-        f"[run] section_order={resolved_section_order} "
+        f"[run] section_order={cfg.prompt_section_order} "
         f"(override via {ENV_PROMPT_SECTION_ORDER}=stable_to_volatile|legacy)",
         flush=True,
     )
     print(
-        f"[run] episodic_explore_related={'on' if resolved_explore_related else 'off'} "
+        f"[run] episodic_explore_related={'on' if cfg.episodic_explore_related_enabled else 'off'} "
         f"(override via {ENV_EPISODIC_EXPLORE_RELATED_ENABLED}=1)",
         flush=True,
     )
     print(
-        f"[run] semantic_llm_gist={'on' if resolved_semantic_llm_gist else 'off'} "
+        f"[run] semantic_llm_gist={'on' if cfg.semantic_llm_gist_enabled else 'off'} "
         f"(override via {ENV_SEMANTIC_LLM_GIST_ENABLED}=1)",
         flush=True,
     )
     print(
-        f"[run] semantic_passive_top_k={resolved_semantic_passive_top_k} "
+        f"[run] semantic_passive_top_k={cfg.semantic_passive_top_k} "
         f"(override via {ENV_SEMANTIC_PASSIVE_TOP_K}=<int>)",
         flush=True,
     )
     print(
-        f"[run] semantic_search={'on' if resolved_semantic_search else 'off'} "
+        f"[run] semantic_search={'on' if cfg.semantic_search_enabled else 'off'} "
         f"(override via {ENV_SEMANTIC_SEARCH_ENABLED}=1)",
         flush=True,
     )
     print(
-        f"[run] short_term_memory_kind={resolved_short_term_memory_kind} "
+        f"[run] short_term_memory_kind={cfg.short_term_memory_kind} "
         f"(override via {ENV_SHORT_TERM_MEMORY_KIND}=sliding_window|rolling_summary)",
         flush=True,
     )
     print(
-        f"[run] short_term_memory_scheduler_mode={resolved_short_term_memory_scheduler_mode} "
+        f"[run] short_term_memory_scheduler_mode={cfg.short_term_memory_scheduler_mode} "
         f"(override via {ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE}=inline|thread_pool)",
         flush=True,
     )
-    # OpenRouter provider routing: 設定されているときだけ表示 (vLLM / OpenAI 直結時の
-    # 余計なノイズを避ける)。
-    _or_provider = (os.environ.get("OPENROUTER_PROVIDER") or "").strip()
-    _or_quant = (os.environ.get("OPENROUTER_QUANTIZATION") or "").strip()
-    _or_req = (os.environ.get("OPENROUTER_REQUIRE_PARAMS") or "").strip()
-    if _or_provider or _or_quant or _or_req:
+    # OpenRouter provider routing: 設定されているときだけ表示
+    if cfg.openrouter_provider or cfg.openrouter_quantization or cfg.openrouter_require_params:
         print(
-            f"[run] openrouter routing: provider={_or_provider or '-'} "
-            f"quantization={_or_quant or '-'} require_params={_or_req or '-'}",
+            f"[run] openrouter routing: provider={cfg.openrouter_provider or '-'} "
+            f"quantization={cfg.openrouter_quantization or '-'} "
+            f"require_params={'true' if cfg.openrouter_require_params else '-'}",
             flush=True,
         )
     print(f"[out] {out_dir}", flush=True)
 
     with JsonlTraceRecorder(trace_path) as rec:
-        rec.record(
-            TraceEventKind.RUN_START,
+        # PR #448: trace payload は cfg.to_trace_dict() で一括出力 + scenario /
+        # max_world_ticks を追加。**API key は cfg.to_trace_dict() 内で *** に
+        # マスクされる** (= 漏洩防止)。
+        run_start_payload = cfg.to_trace_dict()
+        run_start_payload.update(
             scenario=args.scenario.name,
             max_world_ticks=args.max_world_ticks,
-            model=os.environ.get("LLM_MODEL"),
-            api_base=os.environ.get("OPENAI_API_BASE"),
-            # OpenRouter provider routing: 実験 trace から後から「どの provider /
-            # quantization / require_params で回したか」を厳密に追えるように、
-            # env をそのまま記録する (未設定なら None)。
-            openrouter_provider=os.environ.get("OPENROUTER_PROVIDER") or None,
-            openrouter_quantization=os.environ.get("OPENROUTER_QUANTIZATION") or None,
-            openrouter_require_params=os.environ.get("OPENROUTER_REQUIRE_PARAMS") or None,
-            prompt_section_order=resolved_section_order,
-            episodic_explore_related_enabled=resolved_explore_related,
-            semantic_llm_gist_enabled=resolved_semantic_llm_gist,
-            semantic_passive_top_k=resolved_semantic_passive_top_k,
-            semantic_search_enabled=resolved_semantic_search,
-            short_term_memory_kind=resolved_short_term_memory_kind,
-            short_term_memory_scheduler_mode=resolved_short_term_memory_scheduler_mode,
+            # legacy 互換 (run_start を grep する既存スクリプト向け)
+            model=cfg.llm_model,
+            api_base=cfg.llm_api_base,
         )
+        rec.record(TraceEventKind.RUN_START, **run_start_payload)
 
         def progress(msg: str) -> None:
             print(f"  {msg}", flush=True)

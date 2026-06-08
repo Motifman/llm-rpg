@@ -285,6 +285,50 @@ class TestSectionOrderEnvVsRuntime:
 # ──────────────────────────────────────────────────────────────────
 
 
+class TestConfigInjection:
+    """PR #448 (PR 3/6): create_escape_game_runtime に ResolvedLlmRuntimeConfig
+    を直接渡せる経路の確認。entrypoint が一度だけ ``from_env()`` を呼んで全部に
+    渡し回す形を構造で保証する。"""
+
+    def test_明示_cfg_を_渡すと_env_を_読まずに_使う(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """env と異なる cfg を渡したら、env ではなく cfg の値で配線される。
+
+        = 「同 env を 2 回読まない」原則の構造的保証。
+        """
+        from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
+            RollingSummaryShortTermMemory,
+        )
+        from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+            ResolvedLlmRuntimeConfig,
+        )
+        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+
+        # env では sliding_window を要求
+        monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "sliding_window")
+        # cfg では rolling_summary を要求
+        cfg = ResolvedLlmRuntimeConfig.for_tests(
+            short_term_memory_kind="rolling_summary",
+        )
+        runtime = create_escape_game_runtime(_SCENARIO, config=cfg)
+        # cfg が勝つ (env を読み直さない)
+        assert isinstance(runtime._sliding_window, RollingSummaryShortTermMemory)
+
+    def test_cfg_省略時は_env_から_resolve(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """既存挙動の後方互換: cfg 引数省略時は from_env() でフォールバック。"""
+        from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
+            RollingSummaryShortTermMemory,
+        )
+        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+
+        monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "rolling_summary")
+        runtime = create_escape_game_runtime(_SCENARIO)  # cfg 省略
+        assert isinstance(runtime._sliding_window, RollingSummaryShortTermMemory)
+
+
 class TestRunStartTraceVsRuntime:
     """run_scenario_experiment.py が run_start trace に書く env と、実体の
     runtime 内部の type が一致するか。
