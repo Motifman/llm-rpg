@@ -359,6 +359,59 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         )
         self._install_l4(summary)
 
+    def set_trace_recorder_provider(
+        self, provider: Optional[Callable[[], Any]]
+    ) -> None:
+        """trace_recorder_provider を後から差し替える (PR #439)。
+
+        ``escape_game_runtime`` のように runtime 構築時点では trace_recorder が
+        まだ確定していない経路で、後付け注入するための setter。
+        provider=None で no-op に戻すことも可能。
+        """
+        self._trace_recorder_provider = provider
+
+    def set_current_tick_provider(
+        self, provider: Optional[Callable[[], Optional[int]]]
+    ) -> None:
+        """current_tick_provider を後から差し替える (PR #439)。
+
+        trace event の tick フィールドを正しく入れたいときに使う。
+        provider=None で None tick になる。
+        """
+        self._current_tick_provider = provider
+
+    def set_summary_services(
+        self,
+        *,
+        summary_service: Optional[ShortTermMemorySummaryService] = None,
+        long_summary_service: Optional[ShortTermMemoryLongSummaryService] = None,
+        persona_resolver: Optional[PersonaResolverFn] = None,
+    ) -> None:
+        """LLM 経路の summary_service / long_summary_service を後から注入する (PR #439)。
+
+        ``escape_game_runtime`` 経路では runtime 構築時点で llm_client が無いため、
+        まず ``summary_service=None`` (= template fallback) で構築して、後で
+        wiring が llm_client を作ったあとにここで注入する。
+
+        いずれも None なら現状維持 (= 既存値を保持)。type check は ctor と同じ。
+        """
+        if summary_service is not None:
+            if not isinstance(summary_service, ShortTermMemorySummaryService):
+                raise TypeError(
+                    "summary_service must be ShortTermMemorySummaryService or None"
+                )
+            self._service = summary_service
+        if long_summary_service is not None:
+            if not isinstance(long_summary_service, ShortTermMemoryLongSummaryService):
+                raise TypeError(
+                    "long_summary_service must be ShortTermMemoryLongSummaryService or None"
+                )
+            self._long_service = long_summary_service
+        if persona_resolver is not None:
+            if not callable(persona_resolver):
+                raise TypeError("persona_resolver must be callable or None")
+            self._persona_resolver = persona_resolver
+
     def _emit_l4_generated(self, summary: L4MidSummary) -> None:
         """PR #435: L4 install 直後に trace event を 1 件吐く (best-effort)。
 

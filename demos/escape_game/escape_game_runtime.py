@@ -138,6 +138,7 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
+from ai_rpg_world.application.llm.contracts.interfaces import ISlidingWindowMemory
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
@@ -475,6 +476,17 @@ class EscapeGameRuntime:
         if self._todo_tool_executor is not None:
             self._todo_tool_executor = None
             self._wire_auxiliary_tool_stack()
+        # PR #439: RollingSummaryShortTermMemory を使っている場合、L4 / L5 trace を
+        # 出せるようにここで provider を注入する (sliding_window 構築時点では
+        # _trace_recorder が確定していなかった silent failure 対策)。
+        # 既存の sliding_window 実装 (DefaultSlidingWindowMemory) は setter を持たない
+        # ので getattr で安全に skip する。
+        set_recorder = getattr(self._sliding_window, "set_trace_recorder_provider", None)
+        if callable(set_recorder):
+            set_recorder(lambda: self._trace_recorder)
+        set_tick = getattr(self._sliding_window, "set_current_tick_provider", None)
+        if callable(set_tick):
+            set_tick(lambda: self.current_tick())
 
     @property
     def trace_recorder(self) -> Any:
@@ -1607,6 +1619,46 @@ def _include_todo_tools_from_env() -> bool:
     return raw != _LLM_TOOL_MODE_PURE_SPOT_GRAPH
 
 
+def _build_short_term_memory_from_env() -> ISlidingWindowMemory:
+    """env (``SHORT_TERM_MEMORY_KIND``) を尊重して短期記憶実装を組む (PR #439)。
+
+    PR #436 までは ``DefaultSlidingWindowMemory()`` を無条件に組んでおり、
+    ``SHORT_TERM_MEMORY_KIND=rolling_summary`` env を渡しても **silent fallback
+    で sliding_window のまま実験が走る** silent failure を抱えていた (PR #438 で
+    実機計測時に発覚)。
+
+    本関数は env を解決し、rolling_summary なら ``RollingSummaryShortTermMemory``
+    を返す。LLM 経路 (summary_service / long_summary_service) は runtime 構築
+    時点ではまだ llm_client が無いため None で初期化し、後で
+    ``set_summary_services`` / ``set_trace_recorder_provider`` 経由で wiring が
+    差し込む。template fallback only でも L4 / L5 構造による prompt 圧縮効果は
+    出るので prefix cache 試験は成立する。
+
+    本来は wiring 層の ``_build_short_term_memory`` を再利用したいが、escape_game
+    経路は ``_build_short_term_memory`` を踏まない別 wiring なので、ここで env
+    解決と同等のロジックを実装する。
+    """
+    from ai_rpg_world.application.llm.wiring.feature_flags import (
+        SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
+        log_short_term_memory_kind_state,
+        resolve_short_term_memory_kind,
+    )
+
+    kind = resolve_short_term_memory_kind()
+    log_short_term_memory_kind_state(kind)
+    if kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
+        return DefaultSlidingWindowMemory()
+    from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
+        RollingSummaryShortTermMemory,
+    )
+    # template fallback only mode: LLM 経路は後注入。template fallback でも
+    # L4 / L5 構造は出るので、prompt の volatile / stable 比率改善は機能する。
+    return RollingSummaryShortTermMemory(
+        summary_service=None,
+        long_summary_service=None,
+    )
+
+
 def create_escape_game_runtime(
     scenario_path: Path,
     *,
@@ -2129,7 +2181,7 @@ def create_escape_game_runtime(
         player_status_repository=player_status_repo,
     )
     obs_buffer = DefaultObservationContextBuffer()
-    sliding_window = DefaultSlidingWindowMemory()
+    sliding_window = _build_short_term_memory_from_env()
     action_result_store = DefaultActionResultStore()
 
     class _RuntimeTravelContext(SpotGraphTravelContextProvider):
