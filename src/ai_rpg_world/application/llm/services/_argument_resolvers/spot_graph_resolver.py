@@ -150,6 +150,82 @@ def resolve_destination_target(
     return target  # type: ignore[return-value]
 
 
+def _resolve_target_with_display_name_fallback(
+    label: str,
+    runtime_context: ToolRuntimeContextDto,
+    *,
+    kind: str,
+    expected_types: tuple = (),
+    label_name: str,
+    invalid_label_code: str = "INVALID_TARGET_LABEL",
+    invalid_kind_code: str = "INVALID_TARGET_KIND",
+) -> ToolRuntimeTargetDto:
+    """PR #441: label を「内部 label key (旧形式)」「LLM が渡す display_name」
+    「崩れ表現 (連結 / 括弧つき) 」のいずれでも解決する共通 helper。
+
+    PR #421 / #425 の「名前直書き」refactor 後、LLM は display_name を引数として
+    渡すようになった。``resolve_destination_target`` / ``resolve_sub_location_target``
+    は同等の fallback 経路を既に持っていたが、**object / use_item / drop_item /
+    pickup_item / attack / give_item の 6 resolver は require_target 直叩きのまま
+    で fallback 経路を持たず、display_name lookup が完全に効かない silent failure を
+    抱えていた** (実験 #438 で 252 件 INVALID_TARGET_LABEL = 全 action の 92.3%
+    失敗として顕在化、PR #440 で確認)。
+
+    解決順:
+    1. ``_normalize_label_candidates(label)`` で崩れ表現を分解
+    2. 各候補について ``runtime_context.targets`` の直接 lookup
+    3. miss なら ``_find_target_by_display_name(kind=kind)`` で display_name 一致を探す
+    4. expected_types が指定されていれば、見つかった target の型一致もチェック
+
+    Args:
+        label: LLM が渡した文字列
+        kind: display_name fallback で絞る ``ToolRuntimeTargetDto.kind`` 値
+            (例: ``"spot_graph_object"`` / ``"inventory_item"`` / ``"ground_item"``
+            / ``"spot_graph_monster"``)
+        expected_types: 見つかった target の許容型 tuple。空 tuple なら型 check 無し
+        label_name: エラーメッセージに含める日本語名 (例: ``"オブジェクトラベル"``)
+
+    Raises:
+        ToolArgumentResolutionException: 解決できないとき
+    """
+    if not isinstance(label, str) or not label.strip():
+        raise ToolArgumentResolutionException(
+            f"{label_name}が指定されていません。",
+            invalid_label_code,
+        )
+    target: Optional[ToolRuntimeTargetDto] = None
+    kind_mismatch = False
+    for c in _normalize_label_candidates(label):
+        if c in runtime_context.targets:
+            hit = runtime_context.targets[c]
+            if not expected_types or isinstance(hit, expected_types):
+                target = hit
+                break
+            kind_mismatch = True
+            continue
+        found = _find_target_by_display_name(
+            runtime_context,
+            kind=kind,
+            display_name=c,
+        )
+        if found is not None:
+            if not expected_types or isinstance(found, expected_types):
+                target = found
+                break
+            kind_mismatch = True
+    if target is None:
+        if kind_mismatch:
+            raise ToolArgumentResolutionException(
+                f"{label_name}として使えないラベルです: {label}",
+                invalid_kind_code,
+            )
+        raise ToolArgumentResolutionException(
+            f"指定された対象ラベルは現在の候補にありません: {label}",
+            invalid_label_code,
+        )
+    return target
+
+
 def resolve_object_target(
     label: str,
     runtime_context: ToolRuntimeContextDto,
@@ -158,17 +234,16 @@ def resolve_object_target(
 
     Issue #276 経路二重化解消: escape_game の ``_handle_interact`` と本家
     ``_resolve_interact`` の object_label → world_object_id 解決を共通化。
+
+    PR #441: PR #421 / #425 の「名前直書き」refactor に追従し、display_name
+    fallback を追加 (実験 #438 で全 interact が INVALID_TARGET_LABEL で失敗
+    した silent failure の root fix)。
     """
-    if not isinstance(label, str) or not label:
-        raise ToolArgumentResolutionException(
-            "オブジェクトラベルが指定されていません。",
-            "INVALID_TARGET_LABEL",
-        )
-    target = require_target(
+    target = _resolve_target_with_display_name_fallback(
         label,
         runtime_context,
-        "オブジェクトラベル",
-        invalid_label_code="INVALID_TARGET_LABEL",
+        kind="spot_graph_object",
+        label_name="オブジェクトラベル",
     )
     if target.world_object_id is None:
         raise ToolArgumentResolutionException(
@@ -375,16 +450,13 @@ class SpotGraphArgumentResolver:
         その慣習に合わせて item_spec_id として exec 側に渡す。
         """
         label = args.get("item_label")
-        if not isinstance(label, str) or not label.strip():
-            raise ToolArgumentResolutionException(
-                "使用するアイテムのラベルが指定されていません。",
-                "INVALID_TARGET_LABEL",
-            )
-        target = require_target_type(
+        # PR #441: display_name fallback で「真水 (食料)」等の prompt 表記も受理
+        target = _resolve_target_with_display_name_fallback(
             label,
             runtime_context,
-            "アイテムラベル",
-            (InventoryToolRuntimeTargetDto,),
+            kind="inventory_item",
+            expected_types=(InventoryToolRuntimeTargetDto,),
+            label_name="使用するアイテムのラベル",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )
@@ -417,16 +489,13 @@ class SpotGraphArgumentResolver:
         - target_player_label (P1 等 / 名前): resolve_player_target で player_id を取り出す
         """
         item_label = args.get("item_label")
-        if not isinstance(item_label, str) or not item_label.strip():
-            raise ToolArgumentResolutionException(
-                "渡すアイテムのラベルが指定されていません。",
-                "INVALID_TARGET_LABEL",
-            )
-        item_target = require_target_type(
+        # PR #441: display_name fallback
+        item_target = _resolve_target_with_display_name_fallback(
             item_label,
             runtime_context,
-            "アイテムラベル",
-            (InventoryToolRuntimeTargetDto,),
+            kind="inventory_item",
+            expected_types=(InventoryToolRuntimeTargetDto,),
+            label_name="渡すアイテムのラベル",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )
@@ -549,16 +618,13 @@ class SpotGraphArgumentResolver:
         を狙って drop することになる。
         """
         label = args.get("item_label")
-        if not isinstance(label, str) or not label.strip():
-            raise ToolArgumentResolutionException(
-                "落とすアイテムのラベルが指定されていません。",
-                "INVALID_TARGET_LABEL",
-            )
-        target = require_target_type(
+        # PR #441: display_name fallback
+        target = _resolve_target_with_display_name_fallback(
             label,
             runtime_context,
-            "アイテムラベル",
-            (InventoryToolRuntimeTargetDto,),
+            kind="inventory_item",
+            expected_types=(InventoryToolRuntimeTargetDto,),
+            label_name="落とすアイテムのラベル",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )
@@ -593,16 +659,13 @@ class SpotGraphArgumentResolver:
     ) -> Dict[str, Any]:
         """地面アイテムラベル (G1 等) を item_instance_id に解決する。"""
         label = args.get("ground_item_label")
-        if not isinstance(label, str) or not label.strip():
-            raise ToolArgumentResolutionException(
-                "拾うアイテムのラベルが指定されていません。",
-                "INVALID_TARGET_LABEL",
-            )
-        target = require_target_type(
+        # PR #441: display_name fallback
+        target = _resolve_target_with_display_name_fallback(
             label,
             runtime_context,
-            "地面アイテムラベル",
-            (InventoryToolRuntimeTargetDto,),
+            kind="ground_item",
+            expected_types=(InventoryToolRuntimeTargetDto,),
+            label_name="拾うアイテムのラベル",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )
@@ -636,16 +699,13 @@ class SpotGraphArgumentResolver:
         monster_id が None の場合は `INVALID_TARGET_LABEL` で弾く。
         """
         label = args.get("target_label")
-        if not isinstance(label, str) or not label:
-            raise ToolArgumentResolutionException(
-                "攻撃対象ラベルが指定されていません。",
-                "INVALID_TARGET_LABEL",
-            )
-        target = require_target_type(
+        # PR #441: display_name fallback
+        target = _resolve_target_with_display_name_fallback(
             label,
             runtime_context,
-            "攻撃対象ラベル",
-            (MonsterToolRuntimeTargetDto,),
+            kind="spot_graph_monster",
+            expected_types=(MonsterToolRuntimeTargetDto,),
+            label_name="攻撃対象ラベル",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )

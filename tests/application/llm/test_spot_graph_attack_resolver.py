@@ -96,3 +96,49 @@ class TestAttackResolverErrors:
                 _make_context(),
             )
         assert exc.value.error_code == "INVALID_TARGET_LABEL"
+
+
+class TestAttackResolverDisplayNameFallback:
+    """PR #441: PR #421/#425 後の「display_name 直書き」LLM 引数を受理する。
+
+    旧 (PR #421 以前): LLM は ``target_label='M1'`` を渡していた。
+    新 (PR #421 以降): LLM は ``target_label='灰色のオオカミ'`` を渡す。
+    本テスト群は新仕様の引数経路を保証する。
+    """
+
+    def test_display_name_だけで_monster_id_に解決される(self) -> None:
+        """target_label='灰色のオオカミ' (display_name) でも resolver は解決する。"""
+        resolver = SpotGraphArgumentResolver()
+        result = resolver.resolve_args(
+            TOOL_NAME_SPOT_GRAPH_ATTACK,
+            {"target_label": "灰色のオオカミ", "inner_thought": "倒す"},
+            _make_context(),
+        )
+        assert result is not None
+        assert result["monster_id"] == 101
+        assert result["target_display_name"] == "灰色のオオカミ"
+
+    def test_崩れ表現_M1_括弧_でも解決される(self) -> None:
+        """'M1 (灰色のオオカミ)' のような崩れ表現も _normalize_label_candidates 経由で解決。"""
+        resolver = SpotGraphArgumentResolver()
+        result = resolver.resolve_args(
+            TOOL_NAME_SPOT_GRAPH_ATTACK,
+            {"target_label": "M1 (灰色のオオカミ)", "inner_thought": ""},
+            _make_context(),
+        )
+        assert result is not None
+        assert result["monster_id"] == 101
+
+    def test_display_name_で_player_を_指したら_invalid_target_kind(self) -> None:
+        """display_name 経路でも Player target を指した場合は kind mismatch で弾く。"""
+        resolver = SpotGraphArgumentResolver()
+        with pytest.raises(ToolArgumentResolutionException) as exc:
+            resolver.resolve_args(
+                TOOL_NAME_SPOT_GRAPH_ATTACK,
+                {"target_label": "勇者", "inner_thought": ""},
+                _make_context(),
+            )
+        # 「勇者」は kind=spot_graph_player の display_name なので
+        # _find_target_by_display_name(kind=spot_graph_monster) では見つからない
+        # → INVALID_TARGET_LABEL (= 候補に無い)
+        assert exc.value.error_code == "INVALID_TARGET_LABEL"
