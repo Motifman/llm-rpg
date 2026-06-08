@@ -61,13 +61,21 @@ def test_prompt_builder_uses_shared_active_memos_formatter() -> None:
 
 
 def test_escape_game_holds_formatter_instances_as_class_vars() -> None:
-    """escape_game runtime が formatter/strategy を class-level に保持している。
+    """escape_game runtime が formatter を class-level に、context_strategy を
+    env 注入式の instance field として保持している。
 
-    毎回 new するのではなく ClassVar として共有 (HIGH-3 改善)。
+    旧: 両方 ClassVar (= 毎回 new を避ける HIGH-3 改善)。
+    PR #445: ``_context_strategy`` だけ instance field に格上げした。
+    ClassVar の hard-coded default で PROMPT_SECTION_ORDER env を黙って無視する
+    silent failure が見つかったため (3 つ目の config-init split)。
+    formatter (stateless) は ClassVar のまま維持。
     """
     escape_runtime = _read(_REPO_ROOT / "demos/escape_game/escape_game_runtime.py")
+    # formatter は引き続き ClassVar (stateless / env 依存無し)
     assert "_recent_events_formatter: ClassVar" in escape_runtime
-    assert "_context_strategy: ClassVar" in escape_runtime
+    # _context_strategy は instance field に格上げ + env 由来 factory で注入
+    assert "_context_strategy: SectionBasedContextFormatStrategy = field" in escape_runtime
+    assert "_build_context_format_strategy_from_env" in escape_runtime
 
 
 def test_escape_game_build_full_prompt_uses_default_prompt_builder() -> None:
