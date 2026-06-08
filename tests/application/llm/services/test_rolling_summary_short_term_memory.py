@@ -946,3 +946,62 @@ class TestPostHocSetters:
             mem.set_summary_services(long_summary_service="not-a-service")  # type: ignore[arg-type]
         with pytest.raises(TypeError, match="persona_resolver"):
             mem.set_summary_services(persona_resolver="not-callable")  # type: ignore[arg-type]
+
+
+class TestTraceRecorderNullObjectNormalization:
+    """PR #449 (PR 4/6): trace_recorder_provider が None / 例外 / None 返却の
+    すべてのパターンで NullTraceRecorder にフォールバックする (= NullObject)。
+
+    旧来は ``if provider is None`` / ``if recorder is None`` の silent skip 経路で
+    分岐していたが、PR #449 で `_ensure_trace_recorder_provider` 経由の正規化に
+    統一した。本テストは emit 経路が常に recorder.record() を 1 度呼べる構造を
+    保証する。
+    """
+
+    def test_provider_None_でも_emit_は_例外を投げない(self) -> None:
+        """ctor で None を渡しても emit は NullTraceRecorder に流れる。"""
+        mem = RollingSummaryShortTermMemory(
+            summary_service=None,
+            trace_recorder_provider=None,
+        )
+        # 例外なく L4 install まで通る
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"o{i}", seq=i))
+        assert len(mem._mid_generations(_PID.value)) == 1
+
+    def test_provider_が_例外を投げても_NullTraceRecorder_にフォールバック(self) -> None:
+        """provider 自体が raise するケースでも本体は止まらない。"""
+        def boom() -> object:
+            raise RuntimeError("recorder broken")
+
+        mem = RollingSummaryShortTermMemory(
+            summary_service=None,
+            trace_recorder_provider=boom,
+        )
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"o{i}", seq=i))
+        assert len(mem._mid_generations(_PID.value)) == 1
+
+    def test_provider_が_None_を返しても_NullTraceRecorder_にフォールバック(self) -> None:
+        """lazy lookup で recorder 未確定の場合 (provider が None を返す) でも emit する。"""
+        mem = RollingSummaryShortTermMemory(
+            summary_service=None,
+            trace_recorder_provider=lambda: None,
+        )
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"o{i}", seq=i))
+        assert len(mem._mid_generations(_PID.value)) == 1
+
+    def test_setter_経由でも_正規化が効く(self) -> None:
+        """set_trace_recorder_provider(None) で no-op に戻しても emit は安全。"""
+        rec = _RecordingRecorder()
+        mem = RollingSummaryShortTermMemory(
+            summary_service=None,
+            trace_recorder_provider=lambda: rec,
+        )
+        mem.set_trace_recorder_provider(None)  # ← None で解除
+        for i in range(DEFAULT_L1_SOFT_CAP):
+            mem.append(_PID, _obs(f"o{i}", seq=i))
+        # rec には record されないが、本体は動く
+        assert len([e for e in rec.events if e["kind"] == "short_term_summary_generated"]) == 0
+        assert len(mem._mid_generations(_PID.value)) == 1
