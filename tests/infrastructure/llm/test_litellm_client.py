@@ -695,3 +695,65 @@ class TestLiteLLMClientOpenRouterCostTracking:
         response = MagicMock()
         response.usage = {"prompt_tokens": 10, "completion_tokens": 2, "cost": 0.0001}
         assert LiteLLMClient._extract_cost_usd(response) == pytest.approx(0.0001)
+
+
+class TestLiteLLMClientTimeout:
+    """PR #444: long-tail hang を打ち切る timeout 設定。
+
+    PR #443 で 303 秒の異常 call が wall_time 38 分の主因と判明。litellm の
+    既定 request_timeout=6000 (= 100 分) が silent に許容していたのが原因。
+    本テスト群は LiteLLMClient が timeout を必ず litellm に渡すことを保証する。
+    """
+
+    def test_default_timeout_は_90秒(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """env / 引数指定なしなら default 90 秒 (long-tail を抑制する程度)。"""
+        monkeypatch.delenv("LLM_REQUEST_TIMEOUT_SECONDS", raising=False)
+        client = LiteLLMClient(model="openai/gpt-4o-mini", api_key="sk-x")
+        assert client._timeout_seconds == 90.0
+
+    def test_引数で_timeout_を_明示できる(self) -> None:
+        client = LiteLLMClient(
+            model="m", api_key="sk-x", timeout_seconds=30.0
+        )
+        assert client._timeout_seconds == 30.0
+
+    def test_env_LLM_REQUEST_TIMEOUT_SECONDS_で_override_できる(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECONDS", "45")
+        client = LiteLLMClient(model="m", api_key="sk-x")
+        assert client._timeout_seconds == 45.0
+
+    def test_引数_env_どちらもあれば_引数が優先(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECONDS", "10")
+        client = LiteLLMClient(
+            model="m", api_key="sk-x", timeout_seconds=120.0
+        )
+        assert client._timeout_seconds == 120.0
+
+    def test_env_が_非数値なら_ValueError(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """typo 防止 (silent fallback しない / PR #434 ポリシー継承)。"""
+        monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECONDS", "ten")
+        with pytest.raises(ValueError, match="LLM_REQUEST_TIMEOUT_SECONDS"):
+            LiteLLMClient(model="m", api_key="sk-x")
+
+    def test_completion_base_kwargs_に_timeout_が_含まれる(self) -> None:
+        client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=60.0)
+        kw = client.completion_base_kwargs()
+        assert kw["timeout"] == 60.0
+
+    def test_invoke_が_litellm_completion_に_timeout_を_渡す(self) -> None:
+        client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=45.0)
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("noop", {})
+            client.invoke(messages=[{"role": "user", "content": "hi"}], tools=[{}])
+            _, call_kw = mock_completion.call_args
+            assert call_kw["timeout"] == 45.0
