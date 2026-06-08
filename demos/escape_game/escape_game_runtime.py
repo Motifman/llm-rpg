@@ -2885,4 +2885,100 @@ def create_escape_game_runtime(
             episode_store=shared_episode_store,
         )
 
+    # PR #444: rolling short-term memory に LLM 経路を後注入する。
+    # PR #439 で setter (set_summary_services) を作ったが、呼び出し側 wiring が
+    # 未実装で、PR #443 の実機 run で L4 / L5 が全件 is_fallback=True (=
+    # template fallback only) で動いていた。本ブロックで EPISODIC とは独立に
+    # LLM 経路を注入する (EPISODIC OFF でも L4 / L5 の LLM 圧縮が動くように)。
+    #
+    # setter を持たない DefaultSlidingWindowMemory には何もしない (= 後方互換)。
+    _wire_short_term_llm_services(
+        sliding_window=sliding_window,
+        scenario=scenario,
+        escape_character=escape_character,
+        persona_block=persona_block,
+    )
+
     return runtime
+
+
+def _wire_short_term_llm_services(
+    *,
+    sliding_window,
+    scenario,
+    escape_character,
+    persona_block: str,
+) -> None:
+    """PR #444: rolling short-term memory の LLM 経路を後注入する。
+
+    create_escape_game_runtime の末尾で呼ぶ:
+    1. ``sliding_window`` が ``RollingSummaryShortTermMemory`` (= setter を持つ) でなければ no-op
+    2. ``LLM_CLIENT=litellm`` で LiteLLMClient が取れなければ no-op (= template fallback で動く)
+    3. summary_service / long_summary_service を作って setter で注入
+    4. persona_resolver は scenario.player_spawns から (name, persona_block) を引ける callable
+
+    PR #439 の Future work の完成版。EPISODIC とは独立に動く。
+    """
+    set_summary_services = getattr(sliding_window, "set_summary_services", None)
+    if not callable(set_summary_services):
+        return
+
+    from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+        create_llm_client_from_env,
+    )
+    from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
+    from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
+        ShortTermMemorySummaryService,
+    )
+    from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
+        ShortTermMemoryLongSummaryService,
+    )
+
+    try:
+        client = create_llm_client_from_env()
+    except Exception:
+        logger.exception("LLM client factory failed; short-term LLM services disabled")
+        return
+    if not isinstance(client, LiteLLMClient):
+        logger.info(
+            "LLM_CLIENT=litellm が未設定 (またはエラー)。short-term memory は "
+            "template fallback only で動作 (L4 / L5 の LLM 圧縮は無効)。"
+        )
+        return
+
+    summary_service = ShortTermMemorySummaryService(client)
+    long_summary_service = ShortTermMemoryLongSummaryService(client)
+
+    # persona_resolver: int -> (player_name, persona_block)
+    # subjective scheduler wiring と同じロジックで player ごとに persona_block を
+    # 引ける map を作る。escape_character 指定の player には rich persona、
+    # それ以外は fallback persona。
+    name_persona_by_pid: dict[int, tuple[str, str]] = {}
+    if scenario.player_spawns:
+        if len(scenario.player_spawns) > 1 and escape_character is not None:
+            ec_cid = (escape_character.character_id or "").strip()
+            ec_name = (escape_character.name or "").strip()
+            for s in scenario.player_spawns:
+                if (ec_cid and s.string_id == ec_cid) or (ec_name and s.name == ec_name):
+                    name_persona_by_pid[int(s.player_id)] = (s.name, persona_block)
+                else:
+                    fallback = build_persona_block_from_escape_character(
+                        None, fallback_display_name=s.name
+                    )
+                    name_persona_by_pid[int(s.player_id)] = (s.name, fallback)
+        else:
+            for s in scenario.player_spawns:
+                name_persona_by_pid[int(s.player_id)] = (s.name, persona_block)
+
+    def _persona_resolver(pid: int) -> tuple[str, str]:
+        return name_persona_by_pid.get(int(pid), (f"player_{pid}", ""))
+
+    set_summary_services(
+        summary_service=summary_service,
+        long_summary_service=long_summary_service,
+        persona_resolver=_persona_resolver,
+    )
+    logger.info(
+        "short-term memory に LLM 経路を注入 (rolling_summary + LiteLLM)。"
+        "L4 / L5 は LLM 圧縮で生成される。"
+    )

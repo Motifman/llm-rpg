@@ -48,6 +48,14 @@ _ENV_VAR_API_KEY = "OPENAI_API_KEY"
 _ENV_VAR_API_BASE = "OPENAI_API_BASE"
 _VLLM_DEFAULT_PLACEHOLDER_KEY = "EMPTY"
 
+# PR #444: litellm 既定の request_timeout=6000 (= 100 分) は long-tail hang を
+# silent に許容し、1 件の slow call が実験全体を 38 分に引き延ばす silent
+# failure を引き起こしていた (PR #443 で 303 秒の outlier を発見)。
+# 実験 / 本番ともに 60-120 秒で打ち切る方が観測上ノイズが少ない (= 同 LLM call
+# は通常 1-5 秒)。env override 可能。
+_ENV_VAR_LLM_TIMEOUT = "LLM_REQUEST_TIMEOUT_SECONDS"
+_DEFAULT_LLM_TIMEOUT_SECONDS = 90.0
+
 # OpenRouter provider routing 用の env 群。
 # `OPENROUTER_PROVIDER=DeepInfra OPENROUTER_QUANTIZATION=fp8` のように指定すると
 # 全 litellm.completion 呼び出しに `extra_body.provider.{order, quantizations,
@@ -171,6 +179,7 @@ class LiteLLMClient(
         api_key: Optional[str] = None,
         api_key_env_var: str = _ENV_VAR_API_KEY,
         api_base: Optional[str] = None,
+        timeout_seconds: Optional[float] = None,
     ) -> None:
         if not isinstance(model, str) or not model.strip():
             raise ValueError("model must be a non-empty string")
@@ -196,6 +205,23 @@ class LiteLLMClient(
         else:
             resolved_base = (os.environ.get(_ENV_VAR_API_BASE) or "").strip()
         self._api_base = resolved_base or None
+
+        # PR #444: timeout を明示。引数 > env > default の優先で解決し、毎呼び
+        # 出しの litellm.completion に渡す。これがないと litellm 既定 6000 秒
+        # (= 100 分) で長期 hang を許容してしまう。
+        if timeout_seconds is not None:
+            self._timeout_seconds: float = float(timeout_seconds)
+        else:
+            raw = (os.environ.get(_ENV_VAR_LLM_TIMEOUT) or "").strip()
+            if raw:
+                try:
+                    self._timeout_seconds = float(raw)
+                except ValueError:
+                    raise ValueError(
+                        f"{_ENV_VAR_LLM_TIMEOUT}={raw!r} must be a number (seconds)"
+                    )
+            else:
+                self._timeout_seconds = _DEFAULT_LLM_TIMEOUT_SECONDS
 
         # OpenRouter provider routing: constructor 時点で env を 1 度だけ resolve
         # して保持する。invoke() / complete_*_json() の度に env を読み直すと、実験
@@ -249,7 +275,12 @@ class LiteLLMClient(
         を返してもらう。
         """
         self._assert_can_call_litellm()
-        base: Dict[str, Any] = {"model": self._model, "api_key": self._lite_api_key()}
+        base: Dict[str, Any] = {
+            "model": self._model,
+            "api_key": self._lite_api_key(),
+            # PR #444: 長期 hang を必ず打ち切る (default 90s / env override 可)
+            "timeout": self._timeout_seconds,
+        }
         if self._api_base is not None:
             base["api_base"] = self._api_base
         extra_body = self._build_extra_body()
@@ -289,6 +320,8 @@ class LiteLLMClient(
                 "tools": tools,
                 "tool_choice": tool_choice,
                 "api_key": self._lite_api_key(),
+                # PR #444: 長期 hang を必ず打ち切る
+                "timeout": self._timeout_seconds,
             }
             if self._api_base is not None:
                 completion_kw["api_base"] = self._api_base
