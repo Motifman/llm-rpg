@@ -890,8 +890,15 @@ class EscapeGameRuntime:
     _recent_events_formatter: ClassVar[DefaultRecentEventsFormatter] = (
         DefaultRecentEventsFormatter()
     )
-    _context_strategy: ClassVar[SectionBasedContextFormatStrategy] = (
-        SectionBasedContextFormatStrategy()
+    # PR #445: _context_strategy は env (PROMPT_SECTION_ORDER) を尊重するため
+    # **instance field に格上げ**。ClassVar の hard-coded default だと
+    # run_scenario_experiment が env を読んで run_start trace に書くのに、
+    # 実体は無視するという 3 つ目の config-init split silent failure を起こす。
+    # PR #438 の Run A (legacy) はこの bug で実際は stable_to_volatile で
+    # 動いていた可能性が高い。create_escape_game_runtime 末尾で env から作って
+    # 注入する。
+    _context_strategy: SectionBasedContextFormatStrategy = field(
+        default_factory=SectionBasedContextFormatStrategy
     )
 
     def _get_or_build_default_prompt_builder(self) -> "DefaultPromptBuilder":
@@ -1617,6 +1624,23 @@ def _include_todo_tools_from_env() -> bool:
         )
         return True
     return raw != _LLM_TOOL_MODE_PURE_SPOT_GRAPH
+
+
+def _build_context_format_strategy_from_env() -> SectionBasedContextFormatStrategy:
+    """``PROMPT_SECTION_ORDER`` env を尊重して context format strategy を組む (PR #445)。
+
+    PR #443/#445 までは escape_game_runtime が ``ClassVar`` の hard-coded
+    default ``SectionBasedContextFormatStrategy()`` を使い、env を完全に無視して
+    いた (= 3 つ目の config-init split silent failure)。本関数は wiring 層の
+    ``build_section_format_strategy_from_env`` をそのまま呼ぶ薄い shim。
+
+    将来 PR #446 (ResolvedLlmRuntimeConfig) に集約される予定。
+    """
+    from ai_rpg_world.application.llm.services.context_format_strategy import (
+        build_section_format_strategy_from_env,
+    )
+
+    return build_section_format_strategy_from_env()
 
 
 def _build_short_term_memory_from_env() -> ISlidingWindowMemory:
@@ -2569,6 +2593,8 @@ def create_escape_game_runtime(
         _obs_buffer=obs_buffer,
         _sliding_window=sliding_window,
         _action_result_store=action_result_store,
+        # PR #445: PROMPT_SECTION_ORDER env を尊重 (= 3 つ目の config-init split fix)
+        _context_strategy=_build_context_format_strategy_from_env(),
         _time_provider=time_provider,
         _simulation_service=simulation_service,
         _travel_stage=travel_stage,
