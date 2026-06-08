@@ -15,6 +15,7 @@ from ai_rpg_world.application.world.handlers.consumable_effect_handler import (
 from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.item_effect import (
+    DamageHpEffect,
     HealEffect,
     RecoverMpEffect,
     GoldEffect,
@@ -124,6 +125,34 @@ class TestConsumableEffectHandler:
         handler.handle(event)
 
         assert player_status.hp.value == 80
+        player_status_repo.save.assert_called_once_with(player_status)
+
+    def test_apply_damage_hp_effect(self):
+        """DamageHpEffect で HP が減少する (毒キノコ等の害アイテム)。"""
+        handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
+        player_id = PlayerId(1)
+        item_spec_id = ItemSpecId(905)
+        spec_rm = ItemSpecReadModel(
+            item_spec_id=item_spec_id,
+            name="毒キノコ",
+            item_type=ItemType.CONSUMABLE,
+            rarity=Rarity.COMMON,
+            description="毒",
+            max_stack_size=MaxStackSize(10),
+            consume_effect=DamageHpEffect(amount=15),
+        )
+        item_spec_repo.find_by_id.return_value = spec_rm
+        player_status = _create_player_status(1, hp_current=80, hp_max=100)
+        player_status_repo.find_by_id.return_value = player_status
+
+        event = ConsumableUsedEvent.create(
+            aggregate_id=player_id,
+            aggregate_type="PlayerStatusAggregate",
+            item_spec_id=item_spec_id,
+        )
+        handler.handle(event)
+
+        assert player_status.hp.value == 65
         player_status_repo.save.assert_called_once_with(player_status)
 
     def test_apply_recover_mp_effect(self):

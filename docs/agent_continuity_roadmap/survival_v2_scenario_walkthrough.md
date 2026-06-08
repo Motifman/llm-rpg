@@ -5,6 +5,12 @@
 >
 > このドキュメントは v2 シナリオで **「何が起きうるか」「どんなギミックが仕込まれているか」「何がメカニカルに保証され、何が LLM の判断に委ねられるか」** を網羅する。実走確認 (LLM simulation) 前のチェックリストとしても使う。
 
+> ⚠️ **本文中の tick 数値は #435 (8日 / 48 tick/day / 救助3回) 以前の旧設計を反映している箇所がある**。現在の実装は以下:
+> - `ticks_per_day = 48`、`stranded_at_tick = 384` (= 8 日)
+> - `rescue_at_ticks = [192, 288, 336]` (Day 4 / Day 6 / Day 7 の 3 回)
+> - `storm_arrives`: tick 96、`tide_rises`: tick 144、`tide_falls`: tick 240
+> - 旧設計の数値 (14 日 / 140 tick / tick 55 満潮 等) は段階的に書き直す予定。実装側 (`survival_island_v2.json`) と `tests/infrastructure/scenario/test_survival_island_v2_smoke.py` を一次資料とする。
+
 ---
 
 ## 1. 設定
