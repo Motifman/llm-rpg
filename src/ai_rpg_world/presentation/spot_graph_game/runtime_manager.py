@@ -1989,7 +1989,9 @@ class GameRuntimeManager:
         if not scenario_path.exists():
             raise ValueError(f"World not found: {request.world_id}")
 
-        from demos.escape_game.escape_game_runtime import (
+        # PR #450: escape_game_runtime は demos/ から application/ に移動済。
+        # presentation 層が demos/ を import する旧構造を解消する。
+        from ai_rpg_world.application.escape_game.escape_game_runtime import (
             create_escape_game_runtime,
         )
 

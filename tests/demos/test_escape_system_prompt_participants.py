@@ -8,7 +8,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import PlayerSpawnConf
 
 
 def test_other_explorer_names_excludes_controlled_character_id() -> None:
-    from demos.escape_game.escape_game_runtime import _other_explorer_names_for_escape_system_prompt
+    from ai_rpg_world.application.escape_game.escape_game_runtime import _other_explorer_names_for_escape_system_prompt
 
     spot = SpotId.create(1)
     me = PlayerSpawnConfig(
@@ -31,7 +31,7 @@ def test_other_explorer_names_excludes_controlled_character_id() -> None:
 
 
 def test_other_explorer_names_falls_back_first_spawn_without_character() -> None:
-    from demos.escape_game.escape_game_runtime import _other_explorer_names_for_escape_system_prompt
+    from ai_rpg_world.application.escape_game.escape_game_runtime import _other_explorer_names_for_escape_system_prompt
 
     spot = SpotId.create(1)
     a = PlayerSpawnConfig(
