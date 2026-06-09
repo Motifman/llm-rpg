@@ -184,6 +184,63 @@
 
 ---
 
+## 11. 設定は単一 DTO で集約、構築は「全部揃ってから 1 回 build」
+
+**何を**: env / scenario JSON / 引数由来の設定は `ResolvedLlmRuntimeConfig` のような **1 つの frozen DTO** に集約してから wiring に渡す。サービスは **「依存が揃ってから ctor で全部注入」** で構築し、setter で後注入する経路は作らない。
+
+**なぜ**:
+- 「env を 2 箇所で別解釈する」silent failure が大量発生した (PR #439 / PR #446: section_order や memory_kind が trace に書かれた値と実体でズレる)
+- 「setter で後注入する Future work が忘れられる」silent failure も発生した (PR #444: `set_summary_services` setter は作ったが呼び出し側 wiring が未実装で 1 ヶ月放置 → 実機実験で L4/L5 が全件 template fallback)
+- 「`Optional[X] = None` + 後注入」は呼び忘れを型エラーに昇格できない設計上の弱点
+
+**どう実装するか**:
+- env を読むのは `ResolvedLlmRuntimeConfig.from_env()` の 1 箇所だけ。entrypoint で 1 度だけ呼び、cfg を引数で渡し回す
+- cfg は frozen dataclass。構築後の改変を封じる
+- `to_trace_dict()` で trace 用 dict を出すとき API key は `***` にマスク
+- 不正値は `ValueError` で fail-fast (= 設計判断 10 と併用)
+- サービス構築は `_build_*(cfg, *args)` 形式で、依存物 (llm_client / persona_resolver) を ctor で全部受け取る
+- setter は禁止ではないが、Optional dependency に対して使ったら **同時に「呼ばないと動かない場面」を構造的に作らない**こと
+
+**どうしないと壊れるか**:
+- 2 箇所目の env 解釈が必ずいつか追加される → silent failure 再発
+- setter の呼び忘れが型チェックや CI で捕まらない → 実機実験で初めて発覚
+- 「動いてるように見える別モード」が増える
+
+**どこでこの判断が出てきたか**:
+- PR #439 / #441 / #444 / #446 の 4 連続 silent failure
+- architect レビュー (PR #444 後) → リファクタリング 6 PR (#446 / #447 / #448 / #449 / #450 / #451) で構造的対処
+
+---
+
+## 12. Future work は xfail-strict pytest で可視化する
+
+**何を**: 「次の PR で対応する」という TODO を、**コメントではなく `@pytest.mark.xfail(strict=True, reason="PR #N: ...")`** で表現する。
+
+**なぜ**:
+- PR #439 で `set_summary_services` setter を作ったが「後で wiring が呼ぶ」が忘れられ PR #444 まで放置された
+- リポジトリ内に散在する `# TODO` / `# 後で` / `# 仮` コメントは grep しないと発見できず、レビュー時にも見落とされる
+- pytest なら CI で必ず実行され、強い可視性がある
+
+**どう実装するか**:
+- 「将来の PR で動くべきテスト」を `xfail(strict=True)` で書く。strict=True なので、対応した瞬間に "expected fail but passed" で CI が落ち、修正完了を強制 unmark させる
+- reason に PR 番号 / target PR を必ず明記
+- 例 (架空):
+  ```python
+  @pytest.mark.xfail(strict=True, reason="PR #439: setter is wired but no caller yet (target: PR #444)")
+  def test_rolling_summary_llm_path_is_actually_wired_in_production():
+      ...
+  ```
+
+**どうしないと壊れるか**:
+- `# 後で` コメントが恒久放置される
+- レビュー時に「ここ後で誰かが直すから OK」と通された scope split が忘れられる
+
+**どこでこの判断が出てきたか**:
+- PR #439 → PR #444 の 1 ヶ月放置事案
+- architect レビュー (PR #444 後)
+
+---
+
 ## 9. 速度より「LLM の判断ミス」を優先して直す
 
 **何を**: 並列化 / 非同期化 / cache 最適化のような **wall time 改善** より、LLM が誤判断する原因を 1 つずつ潰す方を優先する。
@@ -216,3 +273,5 @@
 | 8. 状態情報は state section へ | 2026-06-07 | (新規) PR β |
 | 9. LLM 判断ミス > wall time | 2026-06-07 | 実験 #29 feedback 群 |
 | 10. 実験 env は fail-fast | 2026-06-07 | PR #433 / #434 |
+| 11. 設定 DTO 集約 + ctor 注入 | 2026-06-09 | PR #446-#451 (リファクタ 6 PR) |
+| 12. Future work は xfail-strict で可視化 | 2026-06-09 | PR #451 (慣習化) |

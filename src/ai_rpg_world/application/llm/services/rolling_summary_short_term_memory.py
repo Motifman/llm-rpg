@@ -420,37 +420,12 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         """
         self._current_tick_provider = provider
 
-    def set_summary_services(
-        self,
-        *,
-        summary_service: Optional[ShortTermMemorySummaryService] = None,
-        long_summary_service: Optional[ShortTermMemoryLongSummaryService] = None,
-        persona_resolver: Optional[PersonaResolverFn] = None,
-    ) -> None:
-        """LLM 経路の summary_service / long_summary_service を後から注入する (PR #439)。
-
-        ``escape_game_runtime`` 経路では runtime 構築時点で llm_client が無いため、
-        まず ``summary_service=None`` (= template fallback) で構築して、後で
-        wiring が llm_client を作ったあとにここで注入する。
-
-        いずれも None なら現状維持 (= 既存値を保持)。type check は ctor と同じ。
-        """
-        if summary_service is not None:
-            if not isinstance(summary_service, ShortTermMemorySummaryService):
-                raise TypeError(
-                    "summary_service must be ShortTermMemorySummaryService or None"
-                )
-            self._service = summary_service
-        if long_summary_service is not None:
-            if not isinstance(long_summary_service, ShortTermMemoryLongSummaryService):
-                raise TypeError(
-                    "long_summary_service must be ShortTermMemoryLongSummaryService or None"
-                )
-            self._long_service = long_summary_service
-        if persona_resolver is not None:
-            if not callable(persona_resolver):
-                raise TypeError("persona_resolver must be callable or None")
-            self._persona_resolver = persona_resolver
+    # PR #451 (PR 6/6): set_summary_services は廃止。
+    # ctor で summary_service / long_summary_service / persona_resolver を必ず
+    # 指定する経路に統一した (= setter 呼び忘れ silent failure を構造で排除)。
+    # 旧来は escape_game_runtime が runtime 構築時点で llm_client を持っていない
+    # ライフサイクル都合で空殻 ctor + 後注入していたが、PR #451 で構築順序を
+    # 整理して LLM 経路を ctor で揃えるようにした。
 
     def _emit_l4_generated(self, summary: L4MidSummary) -> None:
         """L4 install 直後に trace event を 1 件吐く (PR #435 / PR #449 簡略化)。

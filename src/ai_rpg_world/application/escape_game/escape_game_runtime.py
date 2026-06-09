@@ -1629,26 +1629,43 @@ def _include_todo_tools_from_env() -> bool:
 def _build_context_format_strategy_from_config(
     cfg: "ResolvedLlmRuntimeConfig",
 ) -> SectionBasedContextFormatStrategy:
-    """resolved config から context format strategy を組む (PR #448 / PR 3/6)。
-
-    PR #445 で env 直読の shim を作ったが、本 PR で「同 env を 2 回読まない」
-    原則に従い、cfg から組む形に置き換え。
-    """
+    """resolved config から context format strategy を組む。"""
     return SectionBasedContextFormatStrategy(section_order=cfg.prompt_section_order)
 
 
-def _build_short_term_memory_from_config(
+def _build_short_term_memory(
     cfg: "ResolvedLlmRuntimeConfig",
+    *,
+    scenario: Any,
+    escape_character: Optional[EscapeCharacterPromptInput],
+    persona_block: str,
 ) -> ISlidingWindowMemory:
-    """resolved config から短期記憶実装を組む (PR #448 / PR 3/6)。
+    """PR #451 (PR 6/6): 短期記憶を **「全部揃ってから 1 回 build」** で作る。
 
-    PR #439 で env 直読の shim を作ったが、本 PR で cfg ベースに置き換え。
-    env を 1 度だけ読むのは ``ResolvedLlmRuntimeConfig.from_env()`` の責務に
-    集約済 (= 同 env を 2 回読まない構造)。
+    旧構造 (PR #439-#449):
+      1. ``_build_short_term_memory_from_config(cfg)`` で setter 用の「殻」だけ作る
+         (summary_service=None / template fallback only)
+      2. runtime / llm_client が完成した後に
+         ``_wire_short_term_llm_services()`` が setter で LLM 経路を後注入
 
-    LLM 経路 (summary_service / long_summary_service) は runtime 構築時点では
-    まだ llm_client が無いため None で初期化し、後で ``set_summary_services`` 経由で
-    wiring が差し込む (PR #444 で実装済 / 本 PR スコープ外)。
+      → setter 呼び忘れで silent failure を量産 (PR #444 で実害発生)。
+
+    新構造 (本 PR):
+      1. cfg + scenario + persona から LLM client / summary services /
+         persona resolver を **構築時点で全部揃える**
+      2. ``RollingSummaryShortTermMemory(summary_service=X, long_summary_service=Y,
+         persona_resolver=Z)`` を ctor 一発で組む
+      3. ``set_summary_services`` 経由の後注入経路は廃止
+
+    trace_recorder / current_tick は runtime instance に依存するため、別経路
+    (``EscapeGameRuntime.set_trace_recorder``) で provider を差し替える。これは
+    PR #449 の NullObject 正規化により呼び忘れても本体が止まらない。
+
+    Args:
+        cfg: resolved runtime config (env を 1 度だけ読んだ DTO)
+        scenario: ScenarioLoader の結果 (persona resolver 構築に使う)
+        escape_character: 操作対象キャラ (rich persona を割り当てる対象)
+        persona_block: escape_character 由来の persona テキスト
     """
     from ai_rpg_world.application.llm.wiring.feature_flags import (
         SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
@@ -1658,34 +1675,90 @@ def _build_short_term_memory_from_config(
     log_short_term_memory_kind_state(cfg.short_term_memory_kind)
     if cfg.short_term_memory_kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
         return DefaultSlidingWindowMemory()
+
+    # rolling_summary 経路: LLM 経路を **構築時点で揃える**
     from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
         RollingSummaryShortTermMemory,
     )
+    from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
+        ShortTermMemoryLongSummaryService,
+    )
+    from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
+        ShortTermMemorySummaryService,
+    )
+    from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+        create_llm_client_from_env,
+    )
+    from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
+
+    summary_service = None
+    long_summary_service = None
+    persona_resolver = None
+    if cfg.llm_client_kind == "litellm":
+        try:
+            client = create_llm_client_from_env()
+        except Exception:
+            logger.exception("LLM client factory failed; short-term LLM services disabled")
+            client = None
+        if isinstance(client, LiteLLMClient):
+            summary_service = ShortTermMemorySummaryService(client)
+            long_summary_service = ShortTermMemoryLongSummaryService(client)
+            persona_resolver = _build_persona_resolver(
+                scenario=scenario,
+                escape_character=escape_character,
+                persona_block=persona_block,
+            )
+            logger.info(
+                "short-term memory: LLM 経路を ctor 注入 (rolling_summary + LiteLLM)。"
+                "L4 / L5 は LLM 圧縮で生成される。"
+            )
+        else:
+            logger.info(
+                "LLM_CLIENT=litellm が未取得。short-term memory は template fallback "
+                "only で動作 (L4 / L5 の LLM 圧縮は無効)。"
+            )
+
     return RollingSummaryShortTermMemory(
-        summary_service=None,
-        long_summary_service=None,
+        summary_service=summary_service,
+        long_summary_service=long_summary_service,
+        persona_resolver=persona_resolver,
     )
 
 
-# PR #448 / PR 3/6: 後方互換用 alias (deprecated)。既存呼び出し元 (テスト等) を
-# すぐ全部直さなくていいように暫定で残す。PR 5/6 (escape_game → application/
-# 移行) でまとめて削除予定。
-def _build_short_term_memory_from_env() -> ISlidingWindowMemory:
-    """[deprecated] PR #448 で _build_short_term_memory_from_config に置換。"""
-    from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
-        ResolvedLlmRuntimeConfig,
-    )
+def _build_persona_resolver(
+    *,
+    scenario: Any,
+    escape_character: Optional[EscapeCharacterPromptInput],
+    persona_block: str,
+) -> Callable[[int], tuple[str, str]]:
+    """player_id -> (name, persona_block) を引ける callable を組む。
 
-    return _build_short_term_memory_from_config(ResolvedLlmRuntimeConfig.from_env())
+    旧 _wire_short_term_llm_services 内に inline されていたロジックを抽出。
+    subjective scheduler wiring と同じ規則:
+        - escape_character 指定 player には rich persona
+        - それ以外は fallback persona
+    """
+    name_persona_by_pid: dict[int, tuple[str, str]] = {}
+    if scenario.player_spawns:
+        if len(scenario.player_spawns) > 1 and escape_character is not None:
+            ec_cid = (escape_character.character_id or "").strip()
+            ec_name = (escape_character.name or "").strip()
+            for s in scenario.player_spawns:
+                if (ec_cid and s.string_id == ec_cid) or (ec_name and s.name == ec_name):
+                    name_persona_by_pid[int(s.player_id)] = (s.name, persona_block)
+                else:
+                    fallback = build_persona_block_from_escape_character(
+                        None, fallback_display_name=s.name
+                    )
+                    name_persona_by_pid[int(s.player_id)] = (s.name, fallback)
+        else:
+            for s in scenario.player_spawns:
+                name_persona_by_pid[int(s.player_id)] = (s.name, persona_block)
 
+    def _resolver(pid: int) -> tuple[str, str]:
+        return name_persona_by_pid.get(int(pid), (f"player_{pid}", ""))
 
-def _build_context_format_strategy_from_env() -> SectionBasedContextFormatStrategy:
-    """[deprecated] PR #448 で _build_context_format_strategy_from_config に置換。"""
-    from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
-        ResolvedLlmRuntimeConfig,
-    )
-
-    return _build_context_format_strategy_from_config(ResolvedLlmRuntimeConfig.from_env())
+    return _resolver
 
 
 def create_escape_game_runtime(
@@ -2225,7 +2298,17 @@ def create_escape_game_runtime(
         player_status_repository=player_status_repo,
     )
     obs_buffer = DefaultObservationContextBuffer()
-    sliding_window = _build_short_term_memory_from_config(config)
+    # PR #451 (PR 6/6): 短期記憶を「全部揃ってから 1 回 build」式に統合。
+    # LLM 経路 (summary_service / long_summary_service / persona_resolver) は
+    # 旧来 setter で後注入していたが、ctor 注入に統一して呼び忘れ silent failure
+    # を構造で排除。trace_recorder / current_tick は runtime instance に依存する
+    # ため別経路 (set_trace_recorder) で差し替え (NullObject 経由で安全)。
+    sliding_window = _build_short_term_memory(
+        config,
+        scenario=scenario,
+        escape_character=escape_character,
+        persona_block=persona_block,
+    )
     action_result_store = DefaultActionResultStore()
 
     class _RuntimeTravelContext(SpotGraphTravelContextProvider):
@@ -2931,100 +3014,14 @@ def create_escape_game_runtime(
             episode_store=shared_episode_store,
         )
 
-    # PR #444: rolling short-term memory に LLM 経路を後注入する。
-    # PR #439 で setter (set_summary_services) を作ったが、呼び出し側 wiring が
-    # 未実装で、PR #443 の実機 run で L4 / L5 が全件 is_fallback=True (=
-    # template fallback only) で動いていた。本ブロックで EPISODIC とは独立に
-    # LLM 経路を注入する (EPISODIC OFF でも L4 / L5 の LLM 圧縮が動くように)。
-    #
-    # setter を持たない DefaultSlidingWindowMemory には何もしない (= 後方互換)。
-    _wire_short_term_llm_services(
-        sliding_window=sliding_window,
-        scenario=scenario,
-        escape_character=escape_character,
-        persona_block=persona_block,
-    )
-
+    # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
+    # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
+    # (setter 呼び忘れ silent failure を構造で排除)。
     return runtime
 
 
-def _wire_short_term_llm_services(
-    *,
-    sliding_window,
-    scenario,
-    escape_character,
-    persona_block: str,
-) -> None:
-    """PR #444: rolling short-term memory の LLM 経路を後注入する。
-
-    create_escape_game_runtime の末尾で呼ぶ:
-    1. ``sliding_window`` が ``RollingSummaryShortTermMemory`` (= setter を持つ) でなければ no-op
-    2. ``LLM_CLIENT=litellm`` で LiteLLMClient が取れなければ no-op (= template fallback で動く)
-    3. summary_service / long_summary_service を作って setter で注入
-    4. persona_resolver は scenario.player_spawns から (name, persona_block) を引ける callable
-
-    PR #439 の Future work の完成版。EPISODIC とは独立に動く。
-    """
-    set_summary_services = getattr(sliding_window, "set_summary_services", None)
-    if not callable(set_summary_services):
-        return
-
-    from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-        create_llm_client_from_env,
-    )
-    from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-    from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
-        ShortTermMemorySummaryService,
-    )
-    from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
-        ShortTermMemoryLongSummaryService,
-    )
-
-    try:
-        client = create_llm_client_from_env()
-    except Exception:
-        logger.exception("LLM client factory failed; short-term LLM services disabled")
-        return
-    if not isinstance(client, LiteLLMClient):
-        logger.info(
-            "LLM_CLIENT=litellm が未設定 (またはエラー)。short-term memory は "
-            "template fallback only で動作 (L4 / L5 の LLM 圧縮は無効)。"
-        )
-        return
-
-    summary_service = ShortTermMemorySummaryService(client)
-    long_summary_service = ShortTermMemoryLongSummaryService(client)
-
-    # persona_resolver: int -> (player_name, persona_block)
-    # subjective scheduler wiring と同じロジックで player ごとに persona_block を
-    # 引ける map を作る。escape_character 指定の player には rich persona、
-    # それ以外は fallback persona。
-    name_persona_by_pid: dict[int, tuple[str, str]] = {}
-    if scenario.player_spawns:
-        if len(scenario.player_spawns) > 1 and escape_character is not None:
-            ec_cid = (escape_character.character_id or "").strip()
-            ec_name = (escape_character.name or "").strip()
-            for s in scenario.player_spawns:
-                if (ec_cid and s.string_id == ec_cid) or (ec_name and s.name == ec_name):
-                    name_persona_by_pid[int(s.player_id)] = (s.name, persona_block)
-                else:
-                    fallback = build_persona_block_from_escape_character(
-                        None, fallback_display_name=s.name
-                    )
-                    name_persona_by_pid[int(s.player_id)] = (s.name, fallback)
-        else:
-            for s in scenario.player_spawns:
-                name_persona_by_pid[int(s.player_id)] = (s.name, persona_block)
-
-    def _persona_resolver(pid: int) -> tuple[str, str]:
-        return name_persona_by_pid.get(int(pid), (f"player_{pid}", ""))
-
-    set_summary_services(
-        summary_service=summary_service,
-        long_summary_service=long_summary_service,
-        persona_resolver=_persona_resolver,
-    )
-    logger.info(
-        "short-term memory に LLM 経路を注入 (rolling_summary + LiteLLM)。"
-        "L4 / L5 は LLM 圧縮で生成される。"
-    )
+# PR #451 (PR 6/6): _wire_short_term_llm_services は廃止。
+# 旧来は ctor で空殻 (summary_service=None) を作り、後で setter 注入する 2 段階
+# 構築だったが、setter 呼び忘れで silent failure を量産 (PR #444 の実害)。
+# 本 PR で _build_short_term_memory に統合し ctor 一発注入に変更したため、
+# 後注入用のこの helper は不要になった。

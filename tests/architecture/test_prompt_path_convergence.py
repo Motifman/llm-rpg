@@ -73,9 +73,10 @@ def test_escape_game_holds_formatter_instances_as_class_vars() -> None:
     escape_runtime = _read(_REPO_ROOT / "src/ai_rpg_world/application/escape_game/escape_game_runtime.py")
     # formatter は引き続き ClassVar (stateless / env 依存無し)
     assert "_recent_events_formatter: ClassVar" in escape_runtime
-    # _context_strategy は instance field に格上げ + env 由来 factory で注入
+    # _context_strategy は instance field に格上げ + cfg 由来 factory で注入
     assert "_context_strategy: SectionBasedContextFormatStrategy = field" in escape_runtime
-    assert "_build_context_format_strategy_from_env" in escape_runtime
+    # PR #451 (PR 6/6): _from_env → _from_config に rename
+    assert "_build_context_format_strategy_from_config" in escape_runtime
 
 
 def test_escape_game_build_full_prompt_uses_default_prompt_builder() -> None:
