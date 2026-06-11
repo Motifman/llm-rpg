@@ -20,7 +20,7 @@ from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEven
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
-from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
 from tests.demos._escape_game_helpers import (
     FORBIDDEN_LIBRARY_PATH as _FORBIDDEN_LIBRARY,

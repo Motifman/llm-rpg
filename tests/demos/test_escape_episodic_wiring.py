@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from demos.escape_game.escape_episodic_wiring import (
+from ai_rpg_world.application.escape_game.escape_episodic_wiring import (
     build_escape_episodic_stack,
     build_scenario_noun_matcher,
     is_episodic_enabled,
@@ -85,7 +85,7 @@ class TestBuildScenarioNounMatcher:
     ) -> None:
         """env を有効化して runtime を作り、内部の matcher を直接調べる。"""
         monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
         scenario_path = (
             Path(__file__).resolve().parents[2]
@@ -111,7 +111,7 @@ class TestEscapeGameRuntimeEpisodicSwitch:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
         scenario_path = (
             Path(__file__).resolve().parents[2]
@@ -126,7 +126,7 @@ class TestEscapeGameRuntimeEpisodicSwitch:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
         scenario_path = (
             Path(__file__).resolve().parents[2]

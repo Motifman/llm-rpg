@@ -10,7 +10,7 @@ SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "ab
 
 
 def test_create_escape_game_runtime_installs_noop_llm_turn_trigger() -> None:
-    from demos.escape_game.escape_game_runtime import (
+    from ai_rpg_world.application.escape_game.escape_game_runtime import (
         EscapeGameStandaloneNoopLlmTurnTrigger,
         create_escape_game_runtime,
     )
@@ -22,7 +22,7 @@ def test_create_escape_game_runtime_installs_noop_llm_turn_trigger() -> None:
 
 
 def test_set_simulation_llm_turn_trigger_replaces_post_tick_hook() -> None:
-    from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+    from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
     class _RecordingTrigger:
         def __init__(self) -> None:

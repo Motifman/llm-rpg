@@ -22,7 +22,7 @@ from pathlib import Path
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]

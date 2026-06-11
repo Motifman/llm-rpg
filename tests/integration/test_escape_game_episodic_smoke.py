@@ -41,7 +41,7 @@ def _build_runtime(monkeypatch: pytest.MonkeyPatch, enabled: bool):
         monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
     else:
         monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
-    from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+    from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
     return create_escape_game_runtime(_SCENARIO_PATH)
 
@@ -337,7 +337,7 @@ class TestSmokeSubjectiveServiceWiring:
         monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
         monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
         monkeypatch.delenv("LLM_CLIENT", raising=False)
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
         runtime = create_escape_game_runtime(_SCENARIO_PATH)
         stack = runtime._episodic_stack
@@ -352,7 +352,7 @@ class TestSmokeSubjectiveServiceWiring:
         monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
         monkeypatch.delenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", raising=False)
         monkeypatch.delenv("LLM_CLIENT", raising=False)  # = stub default
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
         runtime = create_escape_game_runtime(_SCENARIO_PATH)
         stack = runtime._episodic_stack
@@ -381,8 +381,8 @@ class TestSmokeSubjectiveServiceMergesText:
             EpisodicChunkSubjectiveFieldsService,
         )
         from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
-        from demos.escape_game.escape_episodic_wiring import (
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_episodic_wiring import (
             build_escape_episodic_stack,
         )
 
@@ -456,8 +456,8 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
             InMemorySubjectiveEpisodeStore,
         )
         from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
-        from demos.escape_game.escape_episodic_wiring import (
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_episodic_wiring import (
             build_escape_episodic_stack,
         )
 

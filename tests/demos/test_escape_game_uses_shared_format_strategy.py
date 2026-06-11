@@ -14,7 +14,7 @@ import pytest
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
 )
-from demos.escape_game.escape_game_runtime import (
+from ai_rpg_world.application.escape_game.escape_game_runtime import (
     EscapeGameRuntime,
     create_escape_game_runtime,
 )

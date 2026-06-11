@@ -28,7 +28,7 @@ class TestObservationFormatterMonsterNameWiring:
     """`create_escape_game_runtime` が monster_repository を formatter に渡す。"""
 
     def test_v2_の_obs_formatter_に_monster_repository_が_注入される(self) -> None:
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
         runtime = create_escape_game_runtime(SCENARIO_PATH)
         # 観測経路は LlmTurn セッション側に持っているが、runtime._obs_pipeline
@@ -43,7 +43,7 @@ class TestObservationFormatterMonsterNameWiring:
 
     def test_monster_name_lookup_で_template_名が_引ける(self) -> None:
         """name_resolver.monster_name_by_monster_id が「野犬」等の実名を返す。"""
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
         runtime = create_escape_game_runtime(SCENARIO_PATH)
         # シナリオ起動時に少なくとも feral_dog @ plane_wreck が spawn される
@@ -73,7 +73,7 @@ class TestForbiddenLibraryNoRegression:
     """monster を持たないシナリオでも正常に起動する (回帰防止)。"""
 
     def test_forbidden_library_demo_は_monster_repository_None_で_OK(self) -> None:
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
         scenario_path = SCENARIO_PATH.parent / "forbidden_library_demo.json"
         runtime = create_escape_game_runtime(scenario_path)

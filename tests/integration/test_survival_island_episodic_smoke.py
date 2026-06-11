@@ -35,7 +35,7 @@ def _build_runtime(monkeypatch: pytest.MonkeyPatch, scenario_name: str, *, enabl
         monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
     else:
         monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
-    from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+    from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
     return create_escape_game_runtime(_SCENARIOS_DIR / scenario_name)
 

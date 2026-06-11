@@ -31,7 +31,7 @@ class TestUseItemInventoryIter:
         `_inventory_slots: Dict[SlotId, Optional[ItemInstanceId]]` を持つ。
         executor が誤って `inv.slots` を iter していたため、全 use_item が
         AttributeError → SYSTEM_ERROR で死んでいた regression を防ぐ。"""
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
@@ -87,7 +87,7 @@ class TestObjectNameResolverFallback:
         """v2 scenario の wreck_hold (船倉) を object_name 解決する。
         graph.get_spot(spot_id).interior は None だが、
         spot_interior_repository から引いて "船倉" を返す。"""
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
         runtime = create_escape_game_runtime(SCENARIO_PATH)
         # obs_pipeline 経由で formatter を取り出し、_resolve_object_name を直接呼ぶ

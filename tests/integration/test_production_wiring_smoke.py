@@ -82,7 +82,7 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _build_runtime() -> Any:
     """env だけ事前 setup した上で production runtime を構築する。"""
-    from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+    from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
     return create_escape_game_runtime(_SCENARIO)
 
@@ -303,7 +303,7 @@ class TestConfigInjection:
         from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
             ResolvedLlmRuntimeConfig,
         )
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
         # env では sliding_window を要求
         monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "sliding_window")
@@ -322,7 +322,7 @@ class TestConfigInjection:
         from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
             RollingSummaryShortTermMemory,
         )
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
         monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "rolling_summary")
         runtime = create_escape_game_runtime(_SCENARIO)  # cfg 省略

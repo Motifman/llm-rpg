@@ -18,7 +18,7 @@ _project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_project_root / "src"))
 sys.path.insert(0, str(_project_root))
 
-from demos.escape_game.escape_game_runtime import (
+from ai_rpg_world.application.escape_game.escape_game_runtime import (
     EscapeGameRuntime,
     create_escape_game_runtime,
 )

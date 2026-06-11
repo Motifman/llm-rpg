@@ -147,7 +147,7 @@ def test_world_query_service_has_attach_spot_graph_snapshot_provider() -> None:
 
 def test_escape_game_runtime_does_not_import_in_memory_physical_map_repository() -> None:
     """escape_game runtime が InMemoryPhysicalMapRepository を import しない (PR-5)。"""
-    runtime_file = _REPO_ROOT / "demos/escape_game/escape_game_runtime.py"
+    runtime_file = _REPO_ROOT / "src/ai_rpg_world/application/escape_game/escape_game_runtime.py"
     text = runtime_file.read_text(encoding="utf-8")
     assert "InMemoryPhysicalMapRepository" not in text
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
 from tests.demos._escape_game_helpers import (
     FORBIDDEN_LIBRARY_PATH as _FORBIDDEN_LIBRARY,

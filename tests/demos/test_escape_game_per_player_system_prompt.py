@@ -7,8 +7,8 @@
 
 from pathlib import Path
 
-from demos.escape_game.escape_game_runtime import create_escape_game_runtime
-from demos.escape_game.default_prompt_builder_adapters import (
+from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+from ai_rpg_world.application.escape_game.default_prompt_builder_adapters import (
     EscapeGameSystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
