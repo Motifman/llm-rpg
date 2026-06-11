@@ -181,21 +181,21 @@ class TestBackwardCompatAlias:
     """
 
     def test_旧名_EscapeEpisodicStack_は_EpisodicStack_の_alias(self) -> None:
-        from demos.escape_game.escape_episodic_wiring import (
+        from ai_rpg_world.application.escape_game.escape_episodic_wiring import (
             EpisodicStack as NewName,
             EscapeEpisodicStack as OldName,
         )
         assert OldName is NewName
 
     def test_旧名_build_escape_episodic_stack_は_build_episodic_stack_の_alias(self) -> None:
-        from demos.escape_game.escape_episodic_wiring import (
+        from ai_rpg_world.application.escape_game.escape_episodic_wiring import (
             build_episodic_stack as new_build,
             build_escape_episodic_stack as old_build,
         )
         assert old_build is new_build
 
     def test_旧名_envヘルパ_も_alias_経由で_動く(self) -> None:
-        from demos.escape_game.escape_episodic_wiring import (
+        from ai_rpg_world.application.escape_game.escape_episodic_wiring import (
             is_episodic_enabled,
             is_episodic_subjective_enabled,
         )

@@ -586,7 +586,7 @@ class TestEscapeGameEpisodicTraceE2E:
         from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 
         monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        from demos.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
 
         scenario_path = (
             Path(__file__).resolve().parents[4]

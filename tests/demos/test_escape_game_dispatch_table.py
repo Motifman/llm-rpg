@@ -96,7 +96,7 @@ class TestEscapeGameDispatchTable:
         # PipelineEventPublisher は InMemoryEventPublisher を委譲経由で保持しており、
         # register_handler で登録された handler を _handlers に持つ。
         # 直接 attribute は internal だが、テスト目的でアクセス。
-        from demos.escape_game.pipeline_event_publisher import PipelineEventPublisher
+        from ai_rpg_world.application.escape_game.pipeline_event_publisher import PipelineEventPublisher
         assert isinstance(publisher, PipelineEventPublisher)
         # PipelineEventPublisher は _side_handlers に (event_type, handler) を持つ。
         registered = [
