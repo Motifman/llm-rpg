@@ -292,6 +292,189 @@ class TestLiteLLMClientMaxRetriesZero:
             assert call_kw["max_retries"] == 0
 
 
+class TestLiteLLMClientSelectiveRetry:
+    """RateLimit / 一時 5xx だけアプリ層で backoff retry し、それ以外は即失敗する挙動を保証。
+
+    背景: PR #454 で max_retries=0 を入れて SDK 透過 retry を全切りした (timeout
+    outlier 対策)。しかしこれは副作用として 429/5xx も即失敗にしてしまい、
+    実機で「ほぼ全 LLM call が 429 で死ぬ」状況が発生 (D run 第 1 回 14/148
+    成功、9% 成功率)。本クラスは「timeout / auth は retry しない、RateLimit /
+    5xx は短い backoff で retry する」二面性を構造的に保証する。
+    """
+
+    def test_rate_limit_error_is_retried_then_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """RateLimitError 1 回 → 2 回目で成功する場合、結果が返る。"""
+        monkeypatch.setattr(
+            "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
+            lambda _s: None,
+        )
+        client = LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x")
+        import litellm as _ll
+
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.RateLimitError = _ll.RateLimitError
+            m_litellm.InternalServerError = _ll.InternalServerError
+            m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
+            m_litellm.completion.side_effect = [
+                _ll.RateLimitError("rate limited", "openai", "gpt-5-mini"),
+                _make_tool_call_response("ok_tool", {"k": 1}),
+            ]
+            result = client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="required",
+            )
+        assert result is not None
+        assert result["name"] == "ok_tool"
+        assert m_litellm.completion.call_count == 2
+
+    def test_rate_limit_exhausted_raises_llm_api_call_exception(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """全 retry 失敗 (default 3 回) で LlmApiCallException(error_code=LLM_RATE_LIMIT) を投げる。"""
+        monkeypatch.setattr(
+            "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
+            lambda _s: None,
+        )
+        client = LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x")
+        import litellm as _ll
+
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.RateLimitError = _ll.RateLimitError
+            m_litellm.InternalServerError = _ll.InternalServerError
+            m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
+            m_litellm.completion.side_effect = _ll.RateLimitError(
+                "rate limited", "openai", "gpt-5-mini"
+            )
+            with pytest.raises(LlmApiCallException) as exc_info:
+                client.invoke(
+                    messages=[{"role": "user", "content": "x"}],
+                    tools=[],
+                    tool_choice="required",
+                )
+        # default 3 attempts → 1 + 3 = 4 回 call (最初 1 回 + retry 3 回)
+        assert m_litellm.completion.call_count == 4
+        assert exc_info.value.error_code == "LLM_RATE_LIMIT"
+
+    def test_timeout_is_not_retried(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """litellm.Timeout (= httpx.TimeoutException 由来) は retry されず即 raise。
+
+        PR #454 の意図: timeout を retry すると wall_time が 3 倍まで膨らむ。
+        次ターンで recover するのが正解で、SDK レベルでも app レベルでも
+        retry してはならない。
+        """
+        slept: list[float] = []
+        monkeypatch.setattr(
+            "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
+            lambda s: slept.append(s),
+        )
+        client = LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x")
+        import litellm as _ll
+
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.RateLimitError = _ll.RateLimitError
+            m_litellm.InternalServerError = _ll.InternalServerError
+            m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
+            m_litellm.completion.side_effect = _ll.Timeout(
+                "timeout", "openai", "gpt-5-mini"
+            )
+            with pytest.raises(LlmApiCallException):
+                client.invoke(
+                    messages=[{"role": "user", "content": "x"}],
+                    tools=[],
+                    tool_choice="required",
+                )
+        # retry されないので 1 回だけ呼ばれ、sleep も発生しない
+        assert m_litellm.completion.call_count == 1
+        assert slept == []
+
+    def test_authentication_error_is_not_retried(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """認証エラーは retry しても直らないので即失敗。"""
+        slept: list[float] = []
+        monkeypatch.setattr(
+            "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
+            lambda s: slept.append(s),
+        )
+        client = LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x")
+        import litellm as _ll
+
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.RateLimitError = _ll.RateLimitError
+            m_litellm.InternalServerError = _ll.InternalServerError
+            m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
+            m_litellm.completion.side_effect = _ll.AuthenticationError(
+                "bad key", "openai", "gpt-5-mini"
+            )
+            with pytest.raises(LlmApiCallException) as exc_info:
+                client.invoke(
+                    messages=[{"role": "user", "content": "x"}],
+                    tools=[],
+                    tool_choice="required",
+                )
+        assert m_litellm.completion.call_count == 1
+        assert slept == []
+        assert exc_info.value.error_code == "LLM_AUTHENTICATION_ERROR"
+
+    def test_retry_attempts_env_override(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """LLM_RATE_LIMIT_RETRY_ATTEMPTS env で retry 回数を上書きできる (実験再現性)。"""
+        monkeypatch.setenv("LLM_RATE_LIMIT_RETRY_ATTEMPTS", "1")
+        monkeypatch.setattr(
+            "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
+            lambda _s: None,
+        )
+        client = LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x")
+        import litellm as _ll
+
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.RateLimitError = _ll.RateLimitError
+            m_litellm.InternalServerError = _ll.InternalServerError
+            m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
+            m_litellm.completion.side_effect = _ll.RateLimitError(
+                "rate limited", "openai", "gpt-5-mini"
+            )
+            with pytest.raises(LlmApiCallException):
+                client.invoke(
+                    messages=[{"role": "user", "content": "x"}],
+                    tools=[],
+                    tool_choice="required",
+                )
+        # attempts=1 → 1 + 1 = 2 回 call
+        assert m_litellm.completion.call_count == 2
+
+    def test_internal_server_error_is_retried(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """500 系の一時的サーバエラーも retry 対象。"""
+        monkeypatch.setattr(
+            "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
+            lambda _s: None,
+        )
+        client = LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x")
+        import litellm as _ll
+
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.RateLimitError = _ll.RateLimitError
+            m_litellm.InternalServerError = _ll.InternalServerError
+            m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
+            m_litellm.completion.side_effect = [
+                _ll.InternalServerError("500", "openai", "gpt-5-mini"),
+                _make_tool_call_response("ok", {}),
+            ]
+            result = client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="required",
+            )
+        assert result is not None
+        assert m_litellm.completion.call_count == 2
+
+
 class TestLiteLLMClientInvokeExceptions:
     """invoke 時の LiteLLM 例外を LlmApiCallException に包む"""
 
