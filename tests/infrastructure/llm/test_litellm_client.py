@@ -660,14 +660,23 @@ class TestLiteLLMClientOpenRouterProviderRouting:
     防ぐ。env 未設定なら何も注入しない後方互換を厳守する。
     """
 
-    def test_env_未設定なら_extra_body_は付かない(
+    def test_env_未設定なら_provider_routing_は_extra_body_に_入らない(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """既存挙動の後方互換: OPENROUTER_* が無ければ litellm に extra_body を渡さない。"""
+        """OPENROUTER_* が無ければ provider routing は extra_body に乗らない。
+
+        注: 別途 LLM_REASONING_EFFORT=none が default で reasoning/thinking を inject
+        するため extra_body 自体は存在する。ここでは「provider routing が乗っていない」
+        ことを assert する (既存テストの本来の意図はこちら)。
+        """
+        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
         client = LiteLLMClient(model="openai/gpt-4o-mini", api_key="sk-x")
         assert client.openrouter_routing is None
         kwargs = client.completion_base_kwargs()
-        assert "extra_body" not in kwargs
+        eb = kwargs.get("extra_body")
+        if eb is not None:
+            assert "provider" not in eb
+            assert "quantizations" not in eb
 
     def test_provider_だけ_設定で_order_と_allow_fallbacks_が入る(
         self, monkeypatch: pytest.MonkeyPatch
@@ -734,15 +743,18 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         complete_*_json 全部に効く。"""
         monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
         monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
+        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
         client = LiteLLMClient(model="openrouter/google/gemma-4-31b-it", api_key="sk-x")
         kwargs = client.completion_base_kwargs()
-        assert kwargs.get("extra_body") == {
-            "provider": {
-                "order": ["DeepInfra"],
-                "allow_fallbacks": False,
-                "quantizations": ["fp8"],
-            }
+        eb = kwargs.get("extra_body")
+        # provider routing が入っている (本テストの主眼)
+        assert eb is not None
+        assert eb["provider"] == {
+            "order": ["DeepInfra"],
+            "allow_fallbacks": False,
+            "quantizations": ["fp8"],
         }
+        # reasoning は default OFF として乗っているはず (別テストで保証)
 
     def test_invoke_が_litellm_completion_に_extra_body_を_渡す(
         self, monkeypatch: pytest.MonkeyPatch
@@ -750,6 +762,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         """tool_choice='required' 経路でも extra_body が litellm に流れる。"""
         monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
         monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
+        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-x",
@@ -761,12 +774,11 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             client.invoke(messages=[{"role": "user", "content": "hi"}], tools=[{"x": 1}])
             assert mock_completion.called
             _, call_kw = mock_completion.call_args
-            assert call_kw["extra_body"] == {
-                "provider": {
-                    "order": ["DeepInfra"],
-                    "allow_fallbacks": False,
-                    "quantizations": ["fp8"],
-                }
+            # provider routing が流れていることだけ assert (本テストの主眼)
+            assert call_kw["extra_body"]["provider"] == {
+                "order": ["DeepInfra"],
+                "allow_fallbacks": False,
+                "quantizations": ["fp8"],
             }
 
     def test_openrouter_routing_property_は_コピーを返す(
@@ -824,25 +836,35 @@ class TestLiteLLMClientOpenRouterCostTracking:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """api_base に 'openrouter.ai' を含む場合に限り usage.include を注入する。"""
+        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-or-x",
             api_base="https://openrouter.ai/api/v1",
         )
         kw = client.completion_base_kwargs()
-        assert kw["extra_body"] == {"usage": {"include": True}}
+        # usage.include が乗っていることだけ assert (本テストの主眼)
+        assert kw["extra_body"]["usage"] == {"include": True}
 
-    def test_api_base_が_openai_直結なら_extra_body_は_付かない(
+    def test_api_base_が_openai_直結なら_provider_routing_系_field_は_付かない(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """OpenAI / vLLM 直結では cost 取得対象外なので usage.include を付けない。"""
+        """OpenAI / vLLM 直結では usage.include / provider 系は付けない。
+
+        reasoning/thinking は別 axis (default OFF) で乗るので、ここでは
+        provider routing と usage 系が漏れ出ていないことを保証する。
+        """
+        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
         client = LiteLLMClient(
             model="openai/gpt-4o-mini",
             api_key="sk-x",
             api_base="https://api.openai.com/v1",
         )
         kw = client.completion_base_kwargs()
-        assert "extra_body" not in kw
+        eb = kw.get("extra_body")
+        if eb is not None:
+            assert "usage" not in eb
+            assert "provider" not in eb
 
     def test_provider_routing_と_usage_include_が_同じ_extra_body_に_共存する(
         self, monkeypatch: pytest.MonkeyPatch
@@ -850,20 +872,22 @@ class TestLiteLLMClientOpenRouterCostTracking:
         """OPENROUTER_PROVIDER + api_base=openrouter の組み合わせで両方乗る。"""
         monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
         monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
+        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-or-x",
             api_base="https://openrouter.ai/api/v1",
         )
         kw = client.completion_base_kwargs()
-        assert kw["extra_body"] == {
-            "provider": {
-                "order": ["DeepInfra"],
-                "allow_fallbacks": False,
-                "quantizations": ["fp8"],
-            },
-            "usage": {"include": True},
+        eb = kw["extra_body"]
+        # provider routing と usage.include が共存していることを assert
+        # (reasoning/thinking は別テストの責務)
+        assert eb["provider"] == {
+            "order": ["DeepInfra"],
+            "allow_fallbacks": False,
+            "quantizations": ["fp8"],
         }
+        assert eb["usage"] == {"include": True}
 
     def test_response_の_usage_cost_が_metrics_の_cost_usd_に_流れる(
         self, monkeypatch: pytest.MonkeyPatch
@@ -973,3 +997,92 @@ class TestLiteLLMClientTimeout:
             client.invoke(messages=[{"role": "user", "content": "hi"}], tools=[{}])
             _, call_kw = mock_completion.call_args
             assert call_kw["timeout"] == 45.0
+
+
+class TestLiteLLMClientReasoningEffort:
+    """``LLM_REASONING_EFFORT`` env による reasoning ON/OFF 制御の挙動を保証。
+
+    背景: deepseek-v4-flash 等の reasoning model は default で effort=high が
+    乗り、output token を 5-15x 膨らませる。litellm 1.44 の OpenrouterConfig は
+    reasoning_effort を素通しせず DeepSeekChatConfig が thinking:{enabled} に
+    collapse する (#27439 / #27453)。そのため top-level 引数は信頼できず、
+    extra_body 経由で OpenRouter envelope + DeepSeek native の両方を inject する
+    belt-and-suspenders 戦略を採る。
+    """
+
+    def test_default_は_reasoning_none_と_thinking_disabled_を_注入する(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """env 未設定なら reasoning OFF + thinking disabled が extra_body に乗る。"""
+        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+        client = LiteLLMClient(model="m", api_key="sk-x")
+        eb = client._build_extra_body()
+        assert eb is not None
+        assert eb["reasoning"]["effort"] == "none"
+        assert eb["reasoning"]["exclude"] is True
+        assert eb["thinking"] == {"type": "disabled"}
+
+    def test_high_を_指定すると_reasoning_high_が_乗り_thinking_は_付かない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """effort=high のとき OpenRouter envelope だけ inject、native kill switch は不要。"""
+        monkeypatch.setenv("LLM_REASONING_EFFORT", "high")
+        client = LiteLLMClient(model="m", api_key="sk-x")
+        eb = client._build_extra_body()
+        assert eb is not None
+        assert eb["reasoning"]["effort"] == "high"
+        # high のときは thinking:disabled は意味がないので入れない
+        assert "thinking" not in eb
+
+    def test_空文字_指定で_reasoning_系_field_を_一切_注入しない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """LLM_REASONING_EFFORT="" は古い model 互換用のエスケープハッチ。"""
+        monkeypatch.setenv("LLM_REASONING_EFFORT", "")
+        client = LiteLLMClient(model="m", api_key="sk-x")
+        eb = client._build_extra_body()
+        # extra_body 自体が None でなくてもよいが、reasoning/thinking は乗らない
+        if eb is not None:
+            assert "reasoning" not in eb
+            assert "thinking" not in eb
+
+    def test_未知の_effort_文字列_は_ValueError(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """typo 防止 (silent fallback しない / PR #434 ポリシー継承)。"""
+        monkeypatch.setenv("LLM_REASONING_EFFORT", "extreme")
+        with pytest.raises(ValueError, match="LLM_REASONING_EFFORT"):
+            LiteLLMClient(model="m", api_key="sk-x")
+
+    def test_invoke_が_extra_body_に_reasoning_block_を_渡す(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """invoke の litellm.completion 呼び出し時、extra_body に reasoning が乗る。"""
+        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+        client = LiteLLMClient(model="m", api_key="sk-x")
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("noop", {})
+            client.invoke(messages=[{"role": "user", "content": "hi"}], tools=[{}])
+            _, call_kw = mock_completion.call_args
+            eb = call_kw["extra_body"]
+            assert eb["reasoning"]["effort"] == "none"
+            assert eb["thinking"] == {"type": "disabled"}
+
+    def test_openrouter_routing_と_共存する(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """provider routing + reasoning が同一 extra_body に並ぶ (どちらも保持)。"""
+        monkeypatch.setenv("OPENROUTER_PROVIDER", "Baidu")
+        monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
+        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+        client = LiteLLMClient(model="openrouter/x", api_key="sk-x")
+        eb = client._build_extra_body()
+        assert eb is not None
+        # provider routing
+        assert eb["provider"]["order"] == ["Baidu"]
+        assert eb["provider"]["quantizations"] == ["fp8"]
+        # reasoning + thinking
+        assert eb["reasoning"]["effort"] == "none"
+        assert eb["thinking"] == {"type": "disabled"}

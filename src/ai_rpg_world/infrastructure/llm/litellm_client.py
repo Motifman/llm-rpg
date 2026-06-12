@@ -74,6 +74,41 @@ _ENV_VAR_OPENROUTER_QUANTIZATION = "OPENROUTER_QUANTIZATION"
 _ENV_VAR_OPENROUTER_REQUIRE_PARAMS = "OPENROUTER_REQUIRE_PARAMS"
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
+# Reasoning effort 制御 (deepseek-v4-flash 等の reasoning model 対策)。
+#
+# 背景: deepseek-v4-flash は reasoning model で、default で `effort: "high"` が
+# 乗り、output token を 5-15× 膨らませて latency / cost を爆発させる (我々の
+# agent turn では reasoning は不要、確定 tool_call が欲しいだけ)。
+#
+# litellm 1.44 の OpenrouterConfig は `reasoning_effort` を素通しせず、
+# DeepSeekChatConfig は `thinking: {type: enabled}` に強制 collapse する
+# (issues #27439 / #27453)。そのため top-level `reasoning_effort=` は信頼でき
+# ない。
+#
+# 解決: ``extra_body`` に **OpenRouter 統一 envelope** (`reasoning`) と
+# **DeepSeek native kill switch** (`thinking`) を **両方** inject する
+# (belt-and-suspenders)。どちらが provider passthrough されても効くように。
+#
+# 値:
+# - `"none"` (default) = reasoning 完全 OFF
+# - `"minimal"` = 最小 budget で reasoning (~10% of max_tokens)
+# - `"low"` / `"medium"` / `"high"` / `"xhigh"` = OpenRouter 標準段階
+# - 空文字 = inject しない (= reasoning フィールド一切付けない / 古い model 互換)
+#
+# 非 reasoning model に対しても付与可だが、provider 側で無視されるはず
+# (OpenAI 経由でも unknown field は silently dropped)。
+_ENV_VAR_REASONING_EFFORT = "LLM_REASONING_EFFORT"
+_DEFAULT_REASONING_EFFORT = "none"  # reasoning OFF が agent turn 用途の安全 default
+_VALID_REASONING_EFFORTS = frozenset({
+    "",          # 何も inject しない (旧 model 互換)
+    "none",      # 明示 OFF
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+})
+
 # 選択的リトライ (PR #X): max_retries=0 (litellm/openai SDK の透過リトライ無効化) を
 # 維持しつつ、本クラスのアプリ層で「特定の一時失敗」だけを手動 backoff で retry する。
 #
@@ -146,6 +181,49 @@ def _resolve_openrouter_routing_from_env() -> Optional[Dict[str, Any]]:
     if require_params:
         block["require_parameters"] = True
     return {"provider": block}
+
+
+def _resolve_reasoning_effort_from_env() -> Optional[Dict[str, Any]]:
+    """``LLM_REASONING_EFFORT`` env を解決し、``extra_body`` 用の reasoning フラグ dict を返す。
+
+    - 未設定 → default の ``"none"`` (= 完全 OFF) として扱う
+    - 空文字 ``""`` (明示) → ``None`` を返す = reasoning 系 field を **一切 inject
+      しない**。reasoning 概念のない古い model (gemma 等) で extra_body を汚さない
+      ためのエスケープハッチ
+    - ``"none"`` 〜 ``"xhigh"`` → OpenRouter ``reasoning`` envelope と DeepSeek
+      native ``thinking`` の両方を返す (belt-and-suspenders)
+    - 未知文字列 → ValueError (silent fallback 防止 / PR #433 経緯と同じ方針)
+
+    Returns:
+        ``{"reasoning": {...}, "thinking": {...}}`` か None
+    """
+    raw_env = os.environ.get(_ENV_VAR_REASONING_EFFORT)
+    if raw_env is None:
+        effort = _DEFAULT_REASONING_EFFORT
+    else:
+        effort = raw_env.strip().lower()
+    if effort not in _VALID_REASONING_EFFORTS:
+        raise ValueError(
+            f"{_ENV_VAR_REASONING_EFFORT}={effort!r} is not recognized. "
+            f"valid: {sorted(_VALID_REASONING_EFFORTS)}"
+        )
+    if effort == "":
+        # 明示 OFF: reasoning フィールド自体を inject しない
+        return None
+    block: Dict[str, Any] = {
+        # OpenRouter 統一 envelope (primary control path)
+        "reasoning": {
+            "effort": effort,
+            # exclude=True で response から reasoning token を剥がす (= prompt
+            # cache hit / cost 計測の安定化に寄与)
+            "exclude": True,
+        },
+    }
+    if effort == "none":
+        # DeepSeek API native kill switch。OpenRouter が provider passthrough
+        # するときに reasoning envelope を読み落とすケースの保険
+        block["thinking"] = {"type": "disabled"}
+    return block
 
 
 def _extract_first_json_object(text: str) -> str:
@@ -262,6 +340,12 @@ class LiteLLMClient(
         # 中の env 変動で挙動がブレるため。
         self._openrouter_routing: Optional[Dict[str, Any]] = _resolve_openrouter_routing_from_env()
 
+        # reasoning model (deepseek-v4-flash 等) に対する effort 制御。
+        # default = "none" (= reasoning 完全 OFF)。LLM_REASONING_EFFORT で上書き可能。
+        # 非 reasoning model でも余計な field が乗るだけで害はない (= provider 側で
+        # silently dropped)。
+        self._reasoning_block: Optional[Dict[str, Any]] = _resolve_reasoning_effort_from_env()
+
         # OpenRouter は api_base が openrouter ドメインかで判定する。
         # ``extra_body.usage.include=True`` を付けると response.usage.cost に
         # USD コストを乗せて返してくれる (per-call cost を計測したい)。
@@ -353,14 +437,17 @@ class LiteLLMClient(
 
         - provider routing (OPENROUTER_PROVIDER 等の env が設定されているとき)
         - usage.include (api_base が OpenRouter のとき、cost を返してもらう)
+        - reasoning + thinking (reasoning model 用、default OFF)
 
-        どちらも要らないときは None を返す (= extra_body を一切渡さない)。
+        どれも要らないときは None を返す (= extra_body を一切渡さない)。
         """
         block: Dict[str, Any] = {}
         if self._openrouter_routing is not None:
             block.update(copy.deepcopy(self._openrouter_routing))
         if self._is_openrouter_base:
             block["usage"] = {"include": True}
+        if self._reasoning_block is not None:
+            block.update(copy.deepcopy(self._reasoning_block))
         return block or None
 
     def _lite_api_key(self) -> str:
