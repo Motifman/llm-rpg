@@ -280,6 +280,13 @@ class LiteLLMClient(
             "api_key": self._lite_api_key(),
             # PR #444: 長期 hang を必ず打ち切る (default 90s / env override 可)
             "timeout": self._timeout_seconds,
+            # litellm 1.44 + OpenAI SDK 1.x の合成挙動として、max_retries 未指定だと
+            # openai.DEFAULT_MAX_RETRIES=2 が黙って注入され、httpx.TimeoutException
+            # 発生時に exponential backoff (INITIAL=0.5s, MAX=8s) で 2 回 retry する。
+            # 結果として timeout=90s 設定でも wall_time が 90 + 90 + 成功時間 ≈ 220s+
+            # まで膨らむ outlier が観測された (C run v3: 222s/164s/130s)。
+            # ここで明示的に 0 を渡し、wall_time 上限を実効的に self._timeout_seconds に固定する。
+            "max_retries": 0,
         }
         if self._api_base is not None:
             base["api_base"] = self._api_base
@@ -322,6 +329,10 @@ class LiteLLMClient(
                 "api_key": self._lite_api_key(),
                 # PR #444: 長期 hang を必ず打ち切る
                 "timeout": self._timeout_seconds,
+                # max_retries=0: OpenAI SDK の default 2 回 retry + exponential backoff
+                # で wall_time が timeout の 3 倍まで膨らむ outlier を防ぐ。
+                # 詳細は completion_base_kwargs() 内のコメントを参照。
+                "max_retries": 0,
             }
             if self._api_base is not None:
                 completion_kw["api_base"] = self._api_base
