@@ -259,6 +259,39 @@ class TestLiteLLMClientOpenAiCompatibleApiBase:
         assert kw["api_key"] == "EMPTY"
 
 
+class TestLiteLLMClientMaxRetriesZero:
+    """OpenAI SDK default の max_retries=2 を明示的に 0 に固定する挙動を保証。
+
+    背景: litellm 1.44 + openai SDK 1.x は max_retries 未指定だと
+    DEFAULT_MAX_RETRIES=2 を黙って注入し、httpx.TimeoutException で exponential
+    backoff retry (0.5s → 8s + jitter) する。timeout=90s でも 90+0.5+90+1+成功
+    ≈ 222s に wall_time が膨らむ outlier が C run v3 で実機観測された。
+    completion_base_kwargs() と invoke() の両方で max_retries=0 を渡すことを
+    構造的に固定する。
+    """
+
+    def test_completion_base_kwargs_includes_max_retries_zero(self) -> None:
+        """completion_base_kwargs の戻りに max_retries=0 が必ず含まれる。"""
+        client = LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x")
+        kw = client.completion_base_kwargs()
+        assert "max_retries" in kw, "max_retries key must be present to override SDK default"
+        assert kw["max_retries"] == 0
+
+    def test_invoke_passes_max_retries_zero_to_litellm(self) -> None:
+        """invoke が litellm.completion を呼ぶとき max_retries=0 を渡す。"""
+        client = LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x")
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("t", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="required",
+            )
+            call_kw = m_litellm.completion.call_args[1]
+            assert "max_retries" in call_kw
+            assert call_kw["max_retries"] == 0
+
+
 class TestLiteLLMClientInvokeExceptions:
     """invoke 時の LiteLLM 例外を LlmApiCallException に包む"""
 
