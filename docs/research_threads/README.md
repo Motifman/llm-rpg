@@ -17,6 +17,11 @@
 | [active_inference_and_predictive_error_learning.md](active_inference_and_predictive_error_learning.md) | 能動的推論 / 自由エネルギー原理を LLM agent に持ち込めるか | 2026-06-13: 「予測の方は人間が予測との誤差から学習するという知見から考えてみた」 |
 | [dynamic_hierarchical_planning.md](dynamic_hierarchical_planning.md) | 動的な階層的計画と L4/L5 への統合 | 2026-06-13: 「プランは動的に変化していく必要がある。L4, L5 にプランを入れる話もありか?」 |
 
+> 2026-06-13: 上記 2 スレッドは統合実装計画
+> [docs/being_architecture_master_plan.md](../being_architecture_master_plan.md)
+> に昇格した (議論ポイントへの決定一覧は同 doc §10)。計画レビュー合意後に
+> 完了スタンプを付ける。
+
 ## 使い方
 
 1. 議論したい話題が出たら、このディレクトリに新規 .md を作る
