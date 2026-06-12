@@ -20,7 +20,9 @@ from typing import Any, Dict, List, Optional
 
 import litellm
 from litellm import AuthenticationError as LitellmAuthenticationError
+from litellm import InternalServerError as LitellmInternalServerError
 from litellm import RateLimitError as LitellmRateLimitError
+from litellm import ServiceUnavailableError as LitellmServiceUnavailableError
 
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
     IEpisodicChunkSubjectiveCompletionPort,
@@ -71,6 +73,38 @@ _ENV_VAR_OPENROUTER_PROVIDER = "OPENROUTER_PROVIDER"
 _ENV_VAR_OPENROUTER_QUANTIZATION = "OPENROUTER_QUANTIZATION"
 _ENV_VAR_OPENROUTER_REQUIRE_PARAMS = "OPENROUTER_REQUIRE_PARAMS"
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+
+# 選択的リトライ (PR #X): max_retries=0 (litellm/openai SDK の透過リトライ無効化) を
+# 維持しつつ、本クラスのアプリ層で「特定の一時失敗」だけを手動 backoff で retry する。
+#
+# なぜ「全 retry を SDK に任せない」か:
+# - SDK の retry は httpx.TimeoutException でも回り、timeout=90s 設定下でも
+#   wall_time が 222s まで膨らむ outlier を発生させた (#454 で fix)
+# - 一方で 429 (rate limit) や 5xx (一時サーバエラー) の retry は agent turn の
+#   成功率に直結する。ここを切ると単発失敗が連鎖して run が空回りする
+#
+# 解決: SDK の透過 retry は完全に切り (max_retries=0)、アプリ層で
+# RateLimitError / InternalServerError / ServiceUnavailableError のみを catch
+# して短い backoff で N 回 retry する。timeout / 認証エラー / BadRequest 等は
+# retry しない (= 即失敗で turn_runner レベルに上げる)。
+_ENV_VAR_RATE_LIMIT_RETRY_ATTEMPTS = "LLM_RATE_LIMIT_RETRY_ATTEMPTS"
+_ENV_VAR_RATE_LIMIT_RETRY_BASE_SLEEP = "LLM_RATE_LIMIT_RETRY_BASE_SLEEP"
+_DEFAULT_RATE_LIMIT_RETRY_ATTEMPTS = 3       # 1 回目失敗後、最大 3 回再試行
+_DEFAULT_RATE_LIMIT_RETRY_BASE_SLEEP = 2.0   # 2s → 4s → 8s (exponential)
+_RATE_LIMIT_RETRY_MAX_SLEEP = 30.0           # 1 回あたりの上限 (秒)
+
+
+def _is_retryable_transient_error(exc: BaseException) -> bool:
+    """RateLimit / 一時 5xx のような「待てば直る」例外かを判定する。
+
+    timeout / auth / bad_request は対象外。前者は SDK 透過 retry で延長して
+    しまうので「即失敗」が正しい (turn_runner で次ターンに recover)。
+    後者 2 つはリトライしても直らない。
+    """
+    return isinstance(
+        exc,
+        (LitellmRateLimitError, LitellmInternalServerError, LitellmServiceUnavailableError),
+    )
 
 
 def _detect_openrouter_base(api_base: Optional[str]) -> bool:
@@ -234,7 +268,85 @@ class LiteLLMClient(
         # OpenAI 直結 / vLLM には影響しない (api_base が違うので付かない)。
         self._is_openrouter_base: bool = _detect_openrouter_base(self._api_base)
 
+        # 選択的リトライの設定。env override 可能 (実験再現性)。
+        self._rate_limit_retry_attempts: int = self._resolve_int_env(
+            _ENV_VAR_RATE_LIMIT_RETRY_ATTEMPTS,
+            _DEFAULT_RATE_LIMIT_RETRY_ATTEMPTS,
+            minimum=0,
+        )
+        self._rate_limit_retry_base_sleep: float = self._resolve_float_env(
+            _ENV_VAR_RATE_LIMIT_RETRY_BASE_SLEEP,
+            _DEFAULT_RATE_LIMIT_RETRY_BASE_SLEEP,
+            minimum=0.0,
+        )
+
         self._logger = logging.getLogger(self.__class__.__name__)
+
+    @staticmethod
+    def _resolve_int_env(name: str, default: int, *, minimum: int) -> int:
+        raw = (os.environ.get(name) or "").strip()
+        if not raw:
+            return default
+        try:
+            value = int(raw)
+        except ValueError:
+            raise ValueError(f"{name}={raw!r} must be an integer")
+        if value < minimum:
+            raise ValueError(f"{name}={value} must be >= {minimum}")
+        return value
+
+    @staticmethod
+    def _resolve_float_env(name: str, default: float, *, minimum: float) -> float:
+        raw = (os.environ.get(name) or "").strip()
+        if not raw:
+            return default
+        try:
+            value = float(raw)
+        except ValueError:
+            raise ValueError(f"{name}={raw!r} must be a number")
+        if value < minimum:
+            raise ValueError(f"{name}={value} must be >= {minimum}")
+        return value
+
+    def _call_with_selective_retry(self, call_fn):
+        """RateLimit / 一時 5xx のみ手動 backoff で retry し、それ以外は即 raise。
+
+        SDK の透過 retry を無効化 (max_retries=0) しているため、ここで補う。
+        timeout / auth / bad_request は retry しない:
+        - timeout: SDK retry で wall_time が 3 倍に膨らむ outlier の原因 (#454)。
+          turn_runner レベルの「次ターンで再試行」に任せる
+        - auth: retry しても直らない
+        - bad_request: payload が壊れているので retry しても直らない
+
+        backoff: base * 2^attempt (cap _RATE_LIMIT_RETRY_MAX_SLEEP)。jitter は
+        意図的に入れない (1 client の retry が他 client と衝突する状況は想定外
+        で、ここでは入れると実験再現性が下がるだけ)。
+        """
+        last_exc: Optional[BaseException] = None
+        for attempt in range(self._rate_limit_retry_attempts + 1):
+            try:
+                return call_fn()
+            except Exception as exc:
+                if not _is_retryable_transient_error(exc):
+                    raise
+                last_exc = exc
+                if attempt >= self._rate_limit_retry_attempts:
+                    break
+                sleep_for = min(
+                    self._rate_limit_retry_base_sleep * (2 ** attempt),
+                    _RATE_LIMIT_RETRY_MAX_SLEEP,
+                )
+                self._logger.warning(
+                    "Retryable LLM error (%s) attempt=%d/%d, sleeping %.1fs: %s",
+                    type(exc).__name__,
+                    attempt + 1,
+                    self._rate_limit_retry_attempts,
+                    sleep_for,
+                    exc,
+                )
+                time.sleep(sleep_for)
+        assert last_exc is not None
+        raise last_exc
 
     def _build_extra_body(self) -> Optional[Dict[str, Any]]:
         """litellm.completion に渡す ``extra_body`` を組み立てる。
@@ -339,7 +451,11 @@ class LiteLLMClient(
             extra_body = self._build_extra_body()
             if extra_body is not None:
                 completion_kw["extra_body"] = extra_body
-            response = litellm.completion(**completion_kw)
+            # SDK 透過 retry は max_retries=0 で無効化済み。RateLimit / 一時 5xx の
+            # みアプリ層で短い backoff retry する。
+            response = self._call_with_selective_retry(
+                lambda: litellm.completion(**completion_kw)
+            )
         except Exception as e:
             wall_latency_ms = int((time.monotonic() - start_monotonic) * 1000)
             error_code = "LLM_API_CALL_FAILED"
@@ -501,10 +617,14 @@ class LiteLLMClient(
         """
         kwargs = self.completion_base_kwargs()
         try:
-            response = litellm.completion(
-                messages=messages,
-                response_format={"type": "json_object"},
-                **kwargs,
+            # SDK 透過 retry は max_retries=0 で無効化済み。RateLimit / 一時 5xx の
+            # みアプリ層で短い backoff retry する。
+            response = self._call_with_selective_retry(
+                lambda: litellm.completion(
+                    messages=messages,
+                    response_format={"type": "json_object"},
+                    **kwargs,
+                )
             )
         except Exception as e:
             self._logger.exception("LiteLLM subjective completion failed: %s", e)
