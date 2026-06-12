@@ -42,14 +42,22 @@ class TestEscapeGameUsesSharedFormatStrategy:
         assert "【直近の出来事】" in user
 
     def test_prompt_renders_objective_section(self) -> None:
-        """escape_game 固定の目的文 ``【現在の目的】`` が含まれる。"""
+        """``【現在の目的】`` セクションが scenario.metadata.llm_objective_text 駆動で出る。
+
+        旧 hardcoded 「廃墟から外へ脱出する」は撤廃され、シナリオごとに勝利条件文を
+        定義する設計に切り替えた。forbidden_library_demo の llm_objective_text には
+        「館長書斎にたどり着く」が含まれる。
+        """
         runtime = create_escape_game_runtime(_FORBIDDEN_LIBRARY)
         kaito = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(kaito)
         user = prompt["messages"][1]["content"]
 
         assert "【現在の目的】" in user
-        assert "この廃墟から外へ脱出する" in user
+        # シナリオ JSON の llm_objective_text の主要キーワードが prompt に届く
+        assert "館長書斎" in user
+        # 旧 hardcoded が再混入していないことを保証
+        assert "廃墟から外へ脱出する" not in user
 
     def test_prompt_renders_inventory_section(self) -> None:
         """forbidden_library で初期インベントリ空でも ``【所持・判明した物証】`` は出る。
@@ -123,15 +131,19 @@ class TestEscapeGameUsesSharedFormatStrategy:
         # が組み立てた領域。先頭が必ず【現在の目的】(objective が空でない場合) で
         # 始まり、【現在地と周囲】が続く。
         assert context_body.startswith("【現在の目的】")
-        # objective_text の中身がそのまま入っていることを確認
-        for line in EscapeGameRuntime._ESCAPE_GAME_OBJECTIVE_TEXT.splitlines():
+        # objective_text は scenario.metadata.llm_objective_text 駆動。
+        # PR-B 以降は EscapeGameRuntime._ESCAPE_GAME_OBJECTIVE_TEXT (旧ハードコード)
+        # は撤廃されたため、scenario から直接取り出して検証する。
+        scenario_objective = runtime.scenario.metadata.llm_objective_text
+        assert scenario_objective, "scenario must provide llm_objective_text"
+        for line in scenario_objective.splitlines():
             assert line in context_body, f"missing objective line: {line!r}"
 
         # strategy を空素材で呼んだ場合も同じ section ヘッダ順序になるはず
         skeleton = strategy.format(
             current_state_text="X",
             recent_events_text="Y",
-            objective_text=EscapeGameRuntime._ESCAPE_GAME_OBJECTIVE_TEXT,
+            objective_text=scenario_objective,
             inventory_text="Z",
             active_memos_text="",
             relevant_memories_text="",

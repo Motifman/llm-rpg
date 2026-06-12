@@ -876,13 +876,36 @@ class EscapeGameRuntime:
 
     # ── 完全プロンプト構築 ──
 
-    _ESCAPE_GAME_OBJECTIVE_TEXT = (
-        "- この廃墟から外へ脱出する。\n"
-        "- 必要なら手がかり（物証・記録）を集め、判断材料にする。"
-    )
+    # NOTE: objective_text は scenario.metadata.llm_objective_text 駆動に統一。
+    # 旧 _ESCAPE_GAME_OBJECTIVE_TEXT (「廃墟から外へ脱出する」) は escape_game
+    # シナリオ専用のハードコードであり、survival_island_v2 のような別シナリオを
+    # 走らせても LLM の objective に「廃墟脱出」が出てしまう silent failure を
+    # 起こしていた (C run v3: 200 tick 走破中、誰も狼煙台に向かわず物資収集と
+    # 廃屋探索に陥った原因)。詳細は docs/memory_system/prefix_cache_v3_deep_analysis.md。
+    # consumer 側 (_resolve_scenario_llm_objective_text) で空チェックを行い
+    # fail-fast する。fallback も置かない (シナリオごとに勝利条件が違うため)。
     _ESCAPE_GAME_ACTION_INSTRUCTION = (
         "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。"
     )
+
+    def _resolve_scenario_llm_objective_text(self) -> str:
+        """``scenario.metadata.llm_objective_text`` を解決し、未設定なら ValueError。
+
+        prompt の objective section に直接埋め込む文。fallback を意図的に持たない:
+        - scenario A の objective を scenario B で再利用すると LLM が別ゲームを
+          始めてしまう (= cross-scenario silent failure)
+        - シナリオ作者に「LLM ゴール文」を明示的に書かせる強制力
+        """
+        text = (self.scenario.metadata.llm_objective_text or "").strip()
+        if not text:
+            scenario_id = self.scenario.metadata.id or "<unknown>"
+            raise ValueError(
+                f"scenario {scenario_id!r} has empty metadata.llm_objective_text; "
+                "LLM の objective section に埋め込む勝利条件文を scenario JSON の "
+                "metadata.llm_objective_text に追加してください "
+                "(例: \"- 山頂の狼煙台で火を上げ、救助船 (4日目/6日目/7日目) を待つ\")"
+            )
+        return text
 
     # Issue #227 後続 HIGH-3 改善: stateless formatter / strategy を class-level
     # に持ち、build_full_prompt の毎回 new を避ける + 本家 DefaultPromptBuilder と
@@ -940,8 +963,13 @@ class EscapeGameRuntime:
             system_prompt_builder=EscapeGameSystemPromptBuilder(self),
             available_tools_provider=EscapeGameAvailableToolsProvider(),
         )
+        # objective_text は scenario.metadata.llm_objective_text を 1 度だけ解決する。
+        # 空のとき ValueError が立つので、prompt builder 構築時点で fail-fast。
+        # lambda 内で resolve すると毎ターン呼ばれて重複ログ + 同一例外を投げる
+        # ことになるため、ここで closure キャプチャする。
+        resolved_objective_text = self._resolve_scenario_llm_objective_text()
         sections = PromptSectionProviders(
-            objective_text_provider=lambda _pid: self._ESCAPE_GAME_OBJECTIVE_TEXT,
+            objective_text_provider=lambda _pid: resolved_objective_text,
             inventory_text_provider=lambda pid: self._format_inventory_evidence(pid),
             memo_store=self._todo_store,
         )

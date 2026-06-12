@@ -143,6 +143,30 @@ class TestScenarioLoaderMinimal:
         assert result.metadata.id == "test"
         assert result.metadata.title == "Test Scenario"
 
+    def test_llm_objective_text_defaults_to_empty_string_when_omitted(self) -> None:
+        """metadata.llm_objective_text を省略したシナリオは default の空文字を持つ。
+
+        loader レベルでは必須化しない (既存テスト fixture と demo シナリオを壊さない)。
+        空チェックは consumer 側 (escape_game_runtime 等の LLM 経路) で行う設計。
+        """
+        loader = ScenarioLoader()
+        result = loader.load_from_dict(_minimal_scenario())
+        assert result.metadata.llm_objective_text == ""
+
+    def test_llm_objective_text_is_read_when_present(self) -> None:
+        """metadata.llm_objective_text がシナリオに書かれていればそのまま読まれる。"""
+        scenario_dict = _minimal_scenario()
+        scenario_dict["metadata"]["llm_objective_text"] = "- 鍵を入手して扉を開く"
+        result = ScenarioLoader().load_from_dict(scenario_dict)
+        assert result.metadata.llm_objective_text == "- 鍵を入手して扉を開く"
+
+    def test_llm_objective_text_is_stripped(self) -> None:
+        """前後の空白は trim される (llm_public_intro と同様)。"""
+        scenario_dict = _minimal_scenario()
+        scenario_dict["metadata"]["llm_objective_text"] = "  - 目的\n  "
+        result = ScenarioLoader().load_from_dict(scenario_dict)
+        assert result.metadata.llm_objective_text == "- 目的"
+
     def test_creates_spots(self) -> None:
         result = ScenarioLoader().load_from_dict(_minimal_scenario())
         nodes = list(result.graph.iter_spot_nodes())

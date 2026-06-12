@@ -104,6 +104,13 @@ class ScenarioMetadata:
     tags: Tuple[str, ...]
     #: LLM 初期文脈用。`description` のネタバレを避け、未プレイ者向けの公開レイヤーだけを書く（任意）。
     llm_public_intro: str = ""
+    #: LLM の objective section に直接埋め込む「現在のゴール」テキスト。
+    #: scenario の win condition を LLM 視点で書き下す (例: 「狼煙を上げて山頂で
+    #: 救助される」「廃墟から外へ脱出する」)。空のときは escape_game_runtime 等の
+    #: consumer 側で fail-fast する (ハードコード fallback は意図的に置かない:
+    #: シナリオごとに勝利条件が違うため、空のまま LLM を回すと別シナリオの
+    #: objective が混入する silent failure になる)。
+    llm_objective_text: str = ""
 
 
 @dataclass(frozen=True)
@@ -518,6 +525,7 @@ class ScenarioLoader:
             author=raw.get("author", ""),
             tags=tuple(raw.get("tags", [])),
             llm_public_intro=str(raw.get("llm_public_intro", "") or "").strip(),
+            llm_objective_text=str(raw.get("llm_objective_text", "") or "").strip(),
         )
 
     def _pre_register_ids(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> None:
