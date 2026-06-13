@@ -155,7 +155,7 @@ class TestJsonlTraceRecorderCloseRaceWithAsyncScheduler:
             build_chunk_encoding_input,
         )
         from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-        from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
             IEpisodicChunkSubjectiveCompletionPort,
         )
         from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (

@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from ai_rpg_world.application.llm.contracts.short_term_memory import (
+from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
     IShortTermMemorySummaryCompletionPort,
 )
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (

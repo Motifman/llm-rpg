@@ -18,7 +18,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from ai_rpg_world.application.llm.contracts.short_term_memory import (
+from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
     IShortTermMemoryLongSummaryCompletionPort,
 )
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (

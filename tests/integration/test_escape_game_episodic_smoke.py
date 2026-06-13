@@ -372,7 +372,7 @@ class TestSmokeSubjectiveServiceMergesText:
     ) -> None:
         """draft の `compute_template_recall` 結果が、注入した stub の文字列で上書きされる。"""
         from typing import Any
-        from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
             IEpisodicChunkSubjectiveCompletionPort,
         )
         from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
@@ -441,7 +441,7 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from typing import Any
-        from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
             IEpisodicChunkSubjectiveCompletionPort,
         )
         from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
