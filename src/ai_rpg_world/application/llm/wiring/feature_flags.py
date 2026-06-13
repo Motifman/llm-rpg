@@ -279,13 +279,16 @@ def resolve_short_term_memory_scheduler_mode(
 ) -> str:
     """``SHORT_TERM_MEMORY_SCHEDULER_MODE`` env を解決する。
 
-    - default は ``inline`` (Phase 2 互換、tick が L4 生成 LLM の 2-5s ブロック
-      する)
-    - ``thread_pool`` を選ぶと非同期化される (tick が止まらない)
+    - **default は ``thread_pool``** (K run #466 で検証済、tick が L4 生成 LLM
+      の 2-5s ブロックしない)
+    - ``inline`` を明示指定すると Phase 2 互換 (tick がブロックする) に戻せる。
+      テスト fixture や同期保証が必要なときに使う
+    - ``max_workers=1`` (既定) で race は構造的に防止される
     - rolling_summary を選んでも scheduler は orthogonal な knob として独立
     - 未知文字列は ``ValueError`` (silent fallback 防止 / PR #433 経緯)
 
     詳細: docs/memory_system/short_term_memory_design.md §6 (Phase 2.1)。
+    default 変更の経緯: docs/memory_system/k_run_thread_pool_deepseek_analysis.md。
 
     Raises:
         ValueError: 未知の文字列のとき
@@ -293,7 +296,7 @@ def resolve_short_term_memory_scheduler_mode(
     source = env if env is not None else os.environ
     raw = (source.get(ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE) or "").strip().lower()
     if not raw:
-        return SCHEDULER_MODE_INLINE
+        return SCHEDULER_MODE_THREAD_POOL
     if raw not in _VALID_SCHEDULER_MODES:
         raise ValueError(
             f"{ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE}={raw!r} is not recognized. "

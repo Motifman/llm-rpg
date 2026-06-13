@@ -29,7 +29,8 @@ class TestFromEnvDefaults:
     def test_全env_未設定で_default_に_resolve(self) -> None:
         cfg = ResolvedLlmRuntimeConfig.from_env(env={})
         assert cfg.short_term_memory_kind == "sliding_window"
-        assert cfg.short_term_memory_scheduler_mode == "inline"
+        # PR #467: scheduler default は thread_pool に変更 (K run #466 で検証済)
+        assert cfg.short_term_memory_scheduler_mode == "thread_pool"
         assert cfg.prompt_section_order == "stable_to_volatile"
         assert cfg.llm_client_kind == "stub"
         assert cfg.llm_model is None

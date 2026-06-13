@@ -231,7 +231,10 @@ class ResolvedLlmRuntimeConfig:
         """
         defaults: dict[str, Any] = dict(
             short_term_memory_kind="sliding_window",
-            short_term_memory_scheduler_mode="inline",
+            # PR #467: K run #466 で thread_pool を本番 default に。テスト
+            # factory も from_env と整合させる。テストで inline を要求するなら
+            # 明示 override する。
+            short_term_memory_scheduler_mode="thread_pool",
             prompt_section_order="stable_to_volatile",
             llm_client_kind="stub",
             llm_model=None,
