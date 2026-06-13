@@ -161,6 +161,54 @@ class TestSqliteBeingRepositorySchema:
         assert data["declared_memory_kinds"] == ["memo"]
 
 
+class TestSqliteBeingRepositoryFindAllAttachedTo:
+    """find_all_attached_to の挙動 (= Phase 3 Step 2 で追加、JSON1 経由クエリ)。"""
+
+    def test_attach_中の_Being_が_1_件マッチする(
+        self, repo: SqliteBeingRepository
+    ) -> None:
+        """正常系: ある (world, player) に attach 中の Being を 1 件返す。"""
+        repo.save(_being("ada", attached=True))
+        result = repo.find_all_attached_to(WorldId(1), PlayerId(2))
+        assert len(result) == 1
+        assert result[0].being_id == BeingId("ada")
+        assert result[0].is_attached is True
+
+    def test_未_attach_の_Being_はヒットしない(
+        self, repo: SqliteBeingRepository
+    ) -> None:
+        """attachment_world_id が NULL の行は WHERE で除外される。"""
+        repo.save(_being("ada", attached=False))
+        assert repo.find_all_attached_to(WorldId(1), PlayerId(2)) == []
+
+    def test_同_world_player_に_複数_Being_あれば全件返す(
+        self, repo: SqliteBeingRepository
+    ) -> None:
+        """異常状態検出は Resolver の責務なので、ここは全件返す。"""
+        repo.save(_being("ada", attached=True))
+        # ben を同じ (world=1, player=2) に attach 済みで保存
+        from ai_rpg_world.domain.being.aggregate.being import Being
+        from ai_rpg_world.domain.being.value_object.being_attachment import (
+            BeingAttachment,
+        )
+
+        ben = Being(
+            being_id=BeingId("ben"),
+            identity=BeingIdentity(name="ベン", first_person="俺"),
+            attachment=BeingAttachment(
+                world_id=WorldId(1), player_id=PlayerId(2)
+            ),
+        )
+        repo.save(ben)
+        result = repo.find_all_attached_to(WorldId(1), PlayerId(2))
+        assert {b.being_id.value for b in result} == {"ada", "ben"}
+
+    def test_非_VO_を渡すと_TypeError(self, repo: SqliteBeingRepository) -> None:
+        """型違反は TypeError で弾く。"""
+        with pytest.raises(TypeError, match="world_id"):
+            repo.find_all_attached_to(1, PlayerId(2))  # type: ignore[arg-type]
+
+
 class TestSqliteBeingRepositoryTypeGuards:
     """型違反の弾き方。"""
 

@@ -43,6 +43,8 @@ from ai_rpg_world.domain.being.service.being_snapshot_codec import (
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.sqlite_migration import (
     SqliteMigration,
     apply_migrations,
@@ -119,6 +121,26 @@ class SqliteBeingRepository(BeingRepository):
             namespace=_BEING_SCHEMA_NAMESPACE,
             migrations=[SqliteMigration(1, _init_schema_v1)],
         )
+        self._smoke_check_json1()
+
+    def _smoke_check_json1(self) -> None:
+        """SQLite JSON1 拡張が使えるかを起動時に確認する。
+
+        ``find_all_attached_to`` が ``json_extract`` に依存するため、JSON1 拡張
+        が無効な環境 (古い SQLite / 特殊ビルド) では fail-fast で落としたい。
+        SQLite 3.38+ では既定有効だが、Alpine Linux や古い CI イメージ等で
+        欠落するケースに備える。
+        """
+        try:
+            cur = self._conn.cursor()
+            cur.execute("SELECT json_extract('{\"a\":1}', '$.a')")
+            cur.fetchone()
+        except sqlite3.OperationalError as e:
+            raise RuntimeError(
+                "SqliteBeingRepository requires SQLite JSON1 extension "
+                "(json_extract) but it appears unavailable. "
+                "Use SQLite 3.38+ or a build with SQLITE_ENABLE_JSON1."
+            ) from e
 
     @property
     def connection(self) -> sqlite3.Connection:
@@ -209,6 +231,42 @@ class SqliteBeingRepository(BeingRepository):
         deleted = cur.rowcount > 0
         self._conn.commit()
         return deleted
+
+    def find_all_attached_to(
+        self, world_id: WorldId, player_id: PlayerId
+    ) -> list[Being]:
+        """JSON カラム経由で attach 検索する。
+
+        SQLite JSON1 拡張の ``json_extract`` で attachment フィールドを直接
+        WHERE 句に指定する。インデックスは貼っていないので全行 scan だが、
+        Beings は 1 run につき数件程度の想定で許容範囲。将来規模が増えたら
+        専用カラム (= attachment_world_id / attachment_player_id) を v2
+        migration で追加して indexed query に差し替える出口を残す。
+        """
+        if not isinstance(world_id, WorldId):
+            raise TypeError(
+                f"world_id must be WorldId, got {type(world_id).__name__}"
+            )
+        if not isinstance(player_id, PlayerId):
+            raise TypeError(
+                f"player_id must be PlayerId, got {type(player_id).__name__}"
+            )
+
+        cur = self._conn.cursor()
+        cur.execute(
+            """
+            SELECT snapshot_json FROM beings
+            WHERE json_extract(snapshot_json, '$.attachment_world_id') = ?
+              AND json_extract(snapshot_json, '$.attachment_player_id') = ?
+            """,
+            (world_id.value, player_id.value),
+        )
+        result: list[Being] = []
+        for row in cur.fetchall():
+            data = json.loads(row["snapshot_json"])
+            snapshot = _payload_dict_to_snapshot(data)
+            result.append(BeingSnapshotCodec.decode(snapshot))
+        return result
 
 
 __all__ = ["SqliteBeingRepository"]
