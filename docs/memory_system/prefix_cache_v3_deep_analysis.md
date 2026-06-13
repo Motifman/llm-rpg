@@ -1,34 +1,30 @@
 # C run v3 深掘り分析: 行動 / 記憶 / cache hit / timeout outlier (2026-06-12)
 
-> ⚠️ **訂正 (2026-06-13)**: 本 doc §1 の「cache hit rate 48.05%」「48% 頭打ち」「tick
-> 80-139 で cache 崩壊」等は **全て事実誤認**。C run v3 trace を直接読むと
-> cached_tokens は全 431 call で 0、ratio は **0.0%**。詳細と root cause 仮説は
-> [CORRECTION_cache_hit_was_always_zero.md](CORRECTION_cache_hit_was_always_zero.md)
-> 参照。§1 (cache 系) は信用しないでください。§2-§4 (行動 / 記憶 / timeout outlier)
-> は trace 裏付けあり、引き続き有効。
+> 🔄 **逆訂正 (2026-06-13 夜)**: 2026-06-13 昼に「§1 の 48% は事実誤認」と
+> 訂正したが、それ自体が **私 (Claude) の分析スクリプトのバグ** だった
+> (存在しない key `cached_prompt_tokens` を見ていた)。
+> **正しい key `cached_tokens` で再 grep すると 1,802,545 / 3,751,641 = 48.0%**
+> で、本 doc §1 の元の数字は実 trace と一致する。§1 は元通り有効。
+> 詳細: [CACHE_HIT_RE_CORRECTION_pr463_was_wrong.md](CACHE_HIT_RE_CORRECTION_pr463_was_wrong.md)
 
 PR #453 でまとめた v3 run の数値結果を、**ユーザーからの 4 つの問い**に答える形で深掘りした記録。
 
 1. プレイヤーの行動分析: 適切な動きができているか?
 2. 記憶 (L4/L5) の進化分析
-3. ~~cache hit ≈48% の頭打ち~~ → **訂正: cache hit は最初から 0%** (本 doc §1 は信用しないでください)
+3. cache hit ≈48% の頭打ち の意味と原因
 4. **litellm timeout 222s outlier の root cause**
 
-## 1. ~~Cache hit rate 48.05% の正確な意味~~ → 訂正: 全 0%
+## 1. Cache hit rate 48.05% の正確な意味 + 頭打ちの原因
 
-> ⚠️ 以下の節 (§1 全体) は事実誤認に基づいています。実 trace の `cached_tokens`
-> は全 431 call で 0。下記の計算式の分子 1,802,545 がそもそも誤りで、
-> 正しくは 0 でした。一次資料として残しますが、引用しないでください。
-
-### 数式の意味 (実体は 0 / 0 = 0%)
+### 数式の意味
 
 ```
 cache_hit_rate = sum(cached_tokens for c in calls) / sum(prompt_tokens for c in calls)
-                = 1,802,545 / 3,751,641   ← 分子は実 trace に裏付けがない hallucinated 値
-                = 48.05%                  ← 実体は 0%
+                = 1,802,545 / 3,751,641
+                = 48.05%
 ```
 
-~~= **「全 LLM call の入力 token のうち何 % が provider 側 cache から再利用されたか」**。Parasail fp8 では cached_tokens は `input_cache_read` 単価 ($0.06/Mtok) で課金される (通常 $0.15/Mtok の 40%)。~~
+= **「全 LLM call の入力 token のうち何 % が provider 側 cache から再利用されたか」**。Parasail fp8 では cached_tokens は `input_cache_read` 単価 ($0.06/Mtok) で課金される (通常 $0.15/Mtok の 40%)。
 
 ### per-call の構造 (2 つの世界)
 
