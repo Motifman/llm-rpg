@@ -1,10 +1,13 @@
 # Prefix cache フル run v3: 真の LLM-backed rolling 初動作 (Parasail fp8 / 2026-06-12)
 
-> ⚠️ **訂正 (2026-06-13)**: 本 doc 内の「cache hit rate 47.7% / 49.0% / 48.0%」は
-> **事実誤認**。C run v3 trace を直接読むと cached_tokens は全 431 call で 0。
-> 詳細と root cause 仮説は
-> [CORRECTION_cache_hit_was_always_zero.md](CORRECTION_cache_hit_was_always_zero.md)
-> 参照。物語品質の分析 (L4/L5 LLM 圧縮 / action 成功率) は影響なし。
+> 🔄 **逆訂正 (2026-06-13 夜)**: 2026-06-13 昼に「cache hit 48% は事実誤認」と
+> 訂正したが、それ自体が **私 (Claude) の分析スクリプトのバグ** だった。
+> 分析スクリプトが trace の存在しない key `cached_prompt_tokens` を見ていたため
+> 全 0 に見えていただけで、**実 trace の正しい key `cached_tokens` で再 grep
+> すると 1,802,545 / 3,751,641 = 48.0% であり、本 doc の元の数字は正しい**。
+> 詳細は
+> [CACHE_HIT_RE_CORRECTION_pr463_was_wrong.md](CACHE_HIT_RE_CORRECTION_pr463_was_wrong.md)
+> 参照。
 
 リファクタリング 6 PR (#446-#451) + shim 削除 (#452) 完了後、**初めて L4/L5
 が LLM 経路で実動作** した記念すべき run の記録。
@@ -18,7 +21,7 @@
 | **L4 LLM 圧縮成功** | **0%** | **0%** | **94%** ⚡⚡ |
 | **L5 LLM 圧縮成功** | **0%** | **0%** | **94%** ⚡⚡ |
 | action 成功率 | 7.3% | 88.9% | 90.0% |
-| ~~cache hit rate~~ | ~~47.7%~~ → **0%** | ~~49.0%~~ → **0%** | ~~48.0%~~ → **0%** (訂正) |
+| cache hit rate | 47.7% | 49.0% | **48.0%** (実 trace で再確認済 ✓) |
 | 総 cost | $0.29 | $0.62 | $0.42 |
 | wall_latency p99 | 7.2s | 32s | 55s |
 | wall_latency max | 7.7s | 303s (5min) | 222s (3.7min) |
