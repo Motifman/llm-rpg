@@ -89,6 +89,36 @@ class TestListForBeing:
         """未登録 being_id は空リスト。"""
         assert store.list_for_being(BeingId("nobody")) == []
 
+    def test_created_at_降順で返る(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        """SQLite 実装と挙動を揃えるため、新しい順で返る。"""
+        being_id = BeingId("ada")
+        store.add_by_being(
+            being_id,
+            SemanticMemoryEntry(
+                entry_id="old",
+                player_id=1,
+                text="先",
+                evidence_episode_ids=("ep",),
+                confidence=0.5,
+                created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            ),
+        )
+        store.add_by_being(
+            being_id,
+            SemanticMemoryEntry(
+                entry_id="new",
+                player_id=1,
+                text="後",
+                evidence_episode_ids=("ep",),
+                confidence=0.5,
+                created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            ),
+        )
+        result = store.list_for_being(being_id)
+        assert [e.entry_id for e in result] == ["new", "old"]
+
 
 class TestRegisterClusterSignatureByBeing:
     """register_cluster_signature_if_new_by_being の挙動。"""

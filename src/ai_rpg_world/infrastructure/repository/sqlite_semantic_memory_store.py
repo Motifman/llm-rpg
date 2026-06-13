@@ -97,6 +97,14 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
     # ===== Phase 3 Step 3b-1: being_id 版を並走追加 =====
 
     def add_by_being(self, being_id: BeingId, entry: SemanticMemoryEntry) -> None:
+        """being_id keyed で entry を upsert する。
+
+        ``created_at`` も上書き対象に含める設計判断: legacy ``add`` と同じ挙動で、
+        Entry 側が「最終更新時刻」相当として渡してくる前提。``list_for_being``
+        が ``ORDER BY created_at DESC`` なので、更新で再 hot 化される効果を期待。
+        「最初の登録時刻」を保持したいなら caller 側で既存 entry を re-read して
+        ``created_at`` を保ったまま渡す責務とする。
+        """
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         if not isinstance(entry, SemanticMemoryEntry):

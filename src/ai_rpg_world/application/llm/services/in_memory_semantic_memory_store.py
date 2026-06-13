@@ -43,18 +43,32 @@ class InMemorySemanticMemoryStore(SemanticMemoryRepository):
             raise TypeError("being_id must be BeingId")
         if not isinstance(entry, SemanticMemoryEntry):
             raise TypeError("entry must be SemanticMemoryEntry")
-        bucket = self._being_rows.setdefault(being_id, [])
-        # upsert: 同一 entry_id があれば置換、なければ追加
-        for i, existing in enumerate(bucket):
-            if existing.entry_id == entry.entry_id:
-                bucket[i] = entry
-                return
-        bucket.append(entry)
+        # upsert: 同一 entry_id があれば置換、なければ追加。
+        # 内部 dict 値 (list) を comprehension で再構築することで in-place 変更
+        # を避け、プロジェクトの immutability 方針に揃える。
+        existing_bucket = self._being_rows.get(being_id, [])
+        replaced = False
+        new_bucket: list[SemanticMemoryEntry] = []
+        for e in existing_bucket:
+            if e.entry_id == entry.entry_id:
+                new_bucket.append(entry)
+                replaced = True
+            else:
+                new_bucket.append(e)
+        if not replaced:
+            new_bucket.append(entry)
+        self._being_rows[being_id] = new_bucket
 
     def list_for_being(self, being_id: BeingId) -> list[SemanticMemoryEntry]:
+        """being_id keyed で entry 一覧を ``created_at`` 降順で返す。
+
+        SQLite 実装 (= ``SqliteSemanticMemoryStore.list_for_being``) と並びを揃え、
+        環境間で挙動差を出さない (Phase 3 Step 3b-1 レビュー指摘反映)。
+        """
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
-        return list(self._being_rows.get(being_id, []))
+        entries = self._being_rows.get(being_id, [])
+        return sorted(entries, key=lambda e: e.created_at, reverse=True)
 
     def register_cluster_signature_if_new_by_being(
         self, being_id: BeingId, evidence_signature: str
