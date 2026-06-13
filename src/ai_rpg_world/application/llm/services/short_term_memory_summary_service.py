@@ -20,6 +20,8 @@ from typing import List, Sequence, Tuple
 
 from ai_rpg_world.application.llm.contracts.short_term_memory import (
     IShortTermMemorySummaryCompletionPort,
+)
+from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry

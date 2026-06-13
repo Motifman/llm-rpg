@@ -20,7 +20,11 @@ from typing import Any
 
 from ai_rpg_world.application.llm.contracts.short_term_memory import (
     IShortTermMemoryLongSummaryCompletionPort,
+)
+from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
+)
+from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
     L5LongSummary,
 )
 
