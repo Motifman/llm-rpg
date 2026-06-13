@@ -180,6 +180,11 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
     full promotion フローは複雑な事前条件 (= 強リンク・3 件以上 episode 等) を
     要するため、本テストでは ``_register_signature`` / ``_add_entry`` の単体
     挙動だけ確認する。
+
+    TODO (Phase 3 Step 3b-3): legacy 撤去で dual-path helper を消すとき、本テスト
+    も併せて整理する。``on_after_tool_turn`` 経由の integration test を 1 件
+    追加する案もあり (= リファクタリング耐性 ↑)。private API 直呼びはステップ
+    完了時に再評価する。
     """
 
     def test_register_signature_は_being_id_store_に書く(

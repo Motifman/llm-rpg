@@ -53,6 +53,19 @@ class SemanticMemorySearchToolExecutor:
     being_attachment_resolver: Optional[BeingAttachmentResolver] = None
     default_world_id: Optional[WorldId] = None
 
+    def __post_init__(self) -> None:
+        """Phase 3 Step 3b-2: 他 caller と型ガードを揃える。"""
+        if self.being_attachment_resolver is not None and not isinstance(
+            self.being_attachment_resolver, BeingAttachmentResolver
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if self.default_world_id is not None and not isinstance(
+            self.default_world_id, WorldId
+        ):
+            raise TypeError("default_world_id must be WorldId")
+
     def _list_entries(self, player_id: int) -> List[SemanticMemoryEntry]:
         """dual-path helper: Resolver+WorldId+Being 揃えば新 API、なければ legacy。"""
         if self.being_attachment_resolver is not None and self.default_world_id is not None:

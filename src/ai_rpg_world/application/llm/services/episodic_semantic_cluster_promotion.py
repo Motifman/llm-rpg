@@ -191,6 +191,20 @@ class EpisodicSemanticClusterPromotionService:
     being_attachment_resolver: Optional[BeingAttachmentResolver] = None
     default_world_id: Optional[WorldId] = None
 
+    def __post_init__(self) -> None:
+        """Phase 3 Step 3b-2: SemanticPassiveRecallService と同じ型ガードを
+        dataclass にも適用する (= caller 間の一貫性確保)。"""
+        if self.being_attachment_resolver is not None and not isinstance(
+            self.being_attachment_resolver, BeingAttachmentResolver
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if self.default_world_id is not None and not isinstance(
+            self.default_world_id, WorldId
+        ):
+            raise TypeError("default_world_id must be WorldId")
+
     def _resolve_being_id(self, player_id: int) -> Optional[BeingId]:
         """Resolver + WorldId が両方揃っていれば being_id を引く。未注入 or
         Being 未 provision なら None (= legacy 経路に fallback)。"""
