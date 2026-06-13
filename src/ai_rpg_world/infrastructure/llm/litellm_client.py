@@ -10,13 +10,14 @@ OpenAI 互換エンドポイント（SSH 越しの vLLM 等）: ``OPENAI_API_BAS
 その場合 OPENAI_API_KEY が空でも ``EMPTY`` を送り続行する（vLLM 既定の無認証構成向け）。
 """
 
+import concurrent.futures
 import json
 import logging
 import copy
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import litellm
 from litellm import AuthenticationError as LitellmAuthenticationError
@@ -57,6 +58,25 @@ _VLLM_DEFAULT_PLACEHOLDER_KEY = "EMPTY"
 # は通常 1-5 秒)。env override 可能。
 _ENV_VAR_LLM_TIMEOUT = "LLM_REQUEST_TIMEOUT_SECONDS"
 _DEFAULT_LLM_TIMEOUT_SECONDS = 90.0
+
+# Wall-time hard cap (PR #463 後続: H run で 122s outlier を観測した対策)。
+#
+# 背景: litellm に渡した `timeout=90` (float) は httpx で
+# `Timeout(connect=90, read=90, write=90, pool=90)` に展開される。read=90 は
+# 「1 回の socket.recv 待ち上限」であり total wall-time ではない。
+# OpenRouter が backend hang 中に TCP keep-alive ack / partial chunk / proxy
+# heartbeat を時々返すと read timer がリセットされ、結果 122s 等まで延びる。
+#
+# 対策: アプリ層で `concurrent.futures.ThreadPoolExecutor.result(timeout=)`
+# を使い **wall-time の hard cap** を独立に強制する。litellm が何秒待つかに
+# 依存せず、確実に N 秒で打ち切る。
+#
+# default: self._timeout_seconds + 5.0 (= 95s) → 通常 timeout より少しだけ
+# 余裕を持たせ、httpx 経路が正常に効いた場合の例外伝播を優先する。
+# 実験で「全体の律速を避けたい」用途では env で短く (例 45) してよい:
+# 通常 p99 ≈ 30-40s なので 45s なら正常 call はほぼ通る + outlier だけ切れる。
+_ENV_VAR_LLM_WALL_CAP = "LLM_WALL_TIME_CAP_SECONDS"
+_DEFAULT_WALL_CAP_BUFFER_SECONDS = 5.0
 
 # OpenRouter provider routing 用の env 群。
 # `OPENROUTER_PROVIDER=DeepInfra OPENROUTER_QUANTIZATION=fp8` のように指定すると
@@ -364,6 +384,29 @@ class LiteLLMClient(
             minimum=0.0,
         )
 
+        # Wall-time hard cap: httpx の per-recv read timeout が効かないケースの
+        # 保険として、`concurrent.futures.ThreadPoolExecutor.result(timeout=)`
+        # で wall-time を独立に強制する。default は self._timeout_seconds + 5s
+        # (httpx 経路が正常に動くケースの邪魔をしない)。env で短く設定すれば
+        # 「全体の律速を避ける」用途に使える (= 通常 p99 < 40s なので 45s 等
+        # 短めでも正常 call はほぼ通る + outlier だけ確実に切れる)。
+        env_cap = (os.environ.get(_ENV_VAR_LLM_WALL_CAP) or "").strip()
+        if env_cap:
+            try:
+                self._wall_cap_seconds: float = float(env_cap)
+            except ValueError:
+                raise ValueError(
+                    f"{_ENV_VAR_LLM_WALL_CAP}={env_cap!r} must be a number (seconds)"
+                )
+            if self._wall_cap_seconds <= 0:
+                raise ValueError(
+                    f"{_ENV_VAR_LLM_WALL_CAP}={self._wall_cap_seconds} must be > 0"
+                )
+        else:
+            self._wall_cap_seconds = (
+                self._timeout_seconds + _DEFAULT_WALL_CAP_BUFFER_SECONDS
+            )
+
         self._logger = logging.getLogger(self.__class__.__name__)
 
     @staticmethod
@@ -392,8 +435,55 @@ class LiteLLMClient(
             raise ValueError(f"{name}={value} must be >= {minimum}")
         return value
 
+    def _call_with_wall_cap(self, call_fn: Callable[[], Any]) -> Any:
+        """``self._wall_cap_seconds`` を per-attempt wall-time hard cap として強制する。
+
+        ``concurrent.futures.ThreadPoolExecutor.result(timeout=)`` で wall-time を
+        独立に計測し、上限超過時は ``litellm.Timeout`` を投げる
+        (= selective_retry の retry 対象外として扱われ、turn_runner レベルで
+        recover される)。
+
+        なぜ wall cap を per-attempt にするか:
+        - per-total (全 retry 合算) にすると、retry sleep (2/4/8s) が cap を
+          食い潰して 1 attempt も成立しないケースが出る
+        - per-attempt なら正常 call は影響を受けず、outlier だけ確実に切れる
+        - ユーザー希望「全体の律速を避ける」を満たす最短距離
+
+        なぜ ThreadPoolExecutor を毎回 new するか:
+        - max_workers=1 + with 文で確実に shutdown され、daemon thread を放置
+          しない
+        - per-call の executor 作成 overhead は microsec オーダーで無視できる
+        - 共有 executor を持つと shutdown 責務 / リーク管理が複雑化する
+        """
+        # litellm.Timeout を遅延 import (テストで mock しやすいように、
+        # クラスレベルでなくここで取得する)
+        try:
+            from litellm import Timeout as LitellmTimeout  # type: ignore
+        except ImportError:  # pragma: no cover
+            LitellmTimeout = Exception  # type: ignore
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            fut = ex.submit(call_fn)
+            try:
+                return fut.result(timeout=self._wall_cap_seconds)
+            except concurrent.futures.TimeoutError:
+                # 下位 socket は GC で閉じる。Future はキャンセル試行のみ
+                # (LLM call は止まらないが、メインスレッドはここで進める)
+                fut.cancel()
+                raise LitellmTimeout(
+                    message=(
+                        f"LLM call exceeded wall-time cap "
+                        f"{self._wall_cap_seconds:.1f}s "
+                        f"({_ENV_VAR_LLM_WALL_CAP} で調整可)"
+                    ),
+                    model=self._model,
+                    llm_provider="litellm_client",
+                )
+
     def _call_with_selective_retry(self, call_fn):
         """RateLimit / 一時 5xx のみ手動 backoff で retry し、それ以外は即 raise。
+
+        各 attempt は ``_call_with_wall_cap`` で wall-time 上限を強制される。
 
         SDK の透過 retry を無効化 (max_retries=0) しているため、ここで補う。
         timeout / auth / bad_request は retry しない:
@@ -409,7 +499,7 @@ class LiteLLMClient(
         last_exc: Optional[BaseException] = None
         for attempt in range(self._rate_limit_retry_attempts + 1):
             try:
-                return call_fn()
+                return self._call_with_wall_cap(call_fn)
             except Exception as exc:
                 if not _is_retryable_transient_error(exc):
                     raise

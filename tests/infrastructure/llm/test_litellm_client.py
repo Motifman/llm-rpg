@@ -1,6 +1,8 @@
 """LiteLLMClient のテスト（正常・境界・例外・初期化）"""
 
 import json
+import time
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1086,3 +1088,135 @@ class TestLiteLLMClientReasoningEffort:
         # reasoning + thinking
         assert eb["reasoning"]["effort"] == "none"
         assert eb["thinking"] == {"type": "disabled"}
+
+
+class TestLiteLLMClientWallTimeHardCap:
+    """``LLM_WALL_TIME_CAP_SECONDS`` env による wall-time hard cap の挙動を保証。
+
+    背景: httpx の `Timeout(read=90)` は per-recv 単位の wait であり、サーバが
+    時々 1byte でも返せば永遠に待ち続ける (PR #463 後続調査で確定)。H run で
+    timeout=90s 設定下に wall_latency=122s の outlier を観測。
+    対策として ``concurrent.futures.ThreadPoolExecutor.result(timeout=)`` で
+    アプリ層から wall-time を独立に強制する。
+    """
+
+    def test_default_wall_cap_は_timeout_seconds_プラス_5秒(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """env 未設定なら self._timeout_seconds + 5 が wall cap になる。"""
+        monkeypatch.delenv("LLM_WALL_TIME_CAP_SECONDS", raising=False)
+        client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=60.0)
+        assert client._wall_cap_seconds == 65.0
+
+    def test_env_で_wall_cap_を_短く_設定できる(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """LLM_WALL_TIME_CAP_SECONDS=45 で 45.0 秒に絞れる (全体律速を避ける用途)。"""
+        monkeypatch.setenv("LLM_WALL_TIME_CAP_SECONDS", "45")
+        client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=90.0)
+        assert client._wall_cap_seconds == 45.0
+
+    def test_env_の_非数値_は_ValueError(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """typo 防止 (silent fallback しない / PR #434 ポリシー継承)。"""
+        monkeypatch.setenv("LLM_WALL_TIME_CAP_SECONDS", "thirty")
+        with pytest.raises(ValueError, match="LLM_WALL_TIME_CAP_SECONDS"):
+            LiteLLMClient(model="m", api_key="sk-x")
+
+    def test_env_の_ゼロ以下_は_ValueError(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """0 以下は意味がない (即 timeout = 1 回も呼べない) ので fail-fast。"""
+        monkeypatch.setenv("LLM_WALL_TIME_CAP_SECONDS", "0")
+        with pytest.raises(ValueError, match="must be > 0"):
+            LiteLLMClient(model="m", api_key="sk-x")
+
+    def test_wall_cap_を_超えた_call_は_LitellmTimeout_に_packaged(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """litellm.completion が遅延するときに wall cap で打ち切られ Timeout になる。
+
+        Note: time.sleep を monkeypatch すると Python の time module 全体が
+        変わってしまい test 内の sleep にも影響するので、ここでは monkeypatch
+        を使わず threading.Event.wait で「絶対 sleep する」を実装する。
+        """
+        import threading
+
+        # 短い wall cap で test (0.3s で確実に切れる)
+        monkeypatch.setenv("LLM_WALL_TIME_CAP_SECONDS", "0.3")
+        client = LiteLLMClient(model="m", api_key="sk-x")
+
+        # Event.wait は monkeypatch されないので確実に N 秒 block する
+        _block = threading.Event()
+
+        def slow_completion(**_kw: Any) -> Any:
+            _block.wait(timeout=3.0)  # wall cap (0.3s) を超える
+            return _make_tool_call_response("noop", {})
+
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion",
+            side_effect=slow_completion,
+        ):
+            with pytest.raises(LlmApiCallException) as exc_info:
+                client.invoke(
+                    messages=[{"role": "user", "content": "x"}],
+                    tools=[],
+                    tool_choice="required",
+                )
+        # litellm.Timeout に packaging されているはず (LlmApiCallException 経由)
+        msg = str(exc_info.value)
+        assert "wall-time cap" in msg or "Timeout" in msg, msg
+
+    def test_通常_call_は_wall_cap_の_影響を_受けない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """wall cap 内に完走する call は普通に結果を返す。"""
+        monkeypatch.setenv("LLM_WALL_TIME_CAP_SECONDS", "5.0")
+        client = LiteLLMClient(model="m", api_key="sk-x")
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion",
+            return_value=_make_tool_call_response("ok", {}),
+        ):
+            result = client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="required",
+            )
+        assert result is not None
+        assert result["name"] == "ok"
+
+    def test_wall_cap_は_per_attempt_で_retry_累積_しない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """wall cap は各 attempt 個別に効き、retry 合算には適用されない。
+
+        = 「最大 wall = (cap × retry 回数 + sleep 合計)」 ではあるが、
+        正常 call が cap に引きずられて切られることはない。
+        """
+        monkeypatch.setenv("LLM_WALL_TIME_CAP_SECONDS", "1.0")
+        monkeypatch.setattr(
+            "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
+            lambda _s: None,
+        )
+        client = LiteLLMClient(model="m", api_key="sk-x")
+        import litellm as _ll
+
+        # 1 回目 RateLimit → 2 回目で成功 (それぞれ 0.1s 程度の short call)
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.RateLimitError = _ll.RateLimitError
+            m_litellm.InternalServerError = _ll.InternalServerError
+            m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
+            m_litellm.Timeout = _ll.Timeout
+            m_litellm.completion.side_effect = [
+                _ll.RateLimitError("rate limited", "openai", "m"),
+                _make_tool_call_response("ok", {}),
+            ]
+            result = client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="required",
+            )
+        # 2 回目で成功 (= per-attempt wall cap は各 call に独立で適用される)
+        assert result is not None
+        assert result["name"] == "ok"
