@@ -118,7 +118,7 @@ class MemoCompletionHintService:
         self._resolver = being_attachment_resolver
         self._default_world_id = default_world_id
 
-    def _list_uncompleted(self, player_id: PlayerId):
+    def _list_uncompleted(self, player_id: PlayerId) -> list[MemoEntry]:
         """dual-path helper: Resolver + WorldId が揃えば新 API、なければ旧。"""
         if self._resolver is not None and self._default_world_id is not None:
             being_id = self._resolver.resolve_being_id(

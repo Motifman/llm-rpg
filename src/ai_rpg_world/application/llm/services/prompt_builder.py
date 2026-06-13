@@ -3,7 +3,13 @@
 import logging
 from datetime import datetime, timezone
 from importlib import import_module
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
+    from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -24,6 +30,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISystemPromptBuilder,
 )
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.services.active_memos_formatter import (
@@ -123,8 +130,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         trace_recorder_provider: Optional[
             Callable[[], Optional["ITraceRecorder"]]
         ] = None,
-        being_attachment_resolver: Optional[Any] = None,
-        default_world_id: Optional[Any] = None,
+        being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
+        default_world_id: Optional["WorldId"] = None,
     ) -> None:
         """Config dataclass ベースの API (Issue #227 後続 HIGH-1)。
 
@@ -899,7 +906,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 exc_info=True,
             )
 
-    def _fetch_uncompleted_memos(self, player_id: PlayerId):
+    def _fetch_uncompleted_memos(self, player_id: PlayerId) -> list[MemoEntry]:
         """dual-path helper (Phase 3 Step 3a-2): Resolver + WorldId が揃えば
         being_id 経路で memo を引く、なければ legacy player_id 経路。"""
         assert self._memo_store is not None

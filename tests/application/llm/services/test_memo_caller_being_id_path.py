@@ -183,6 +183,34 @@ class TestMemoCompletionHintServiceNewPath:
         assert hint.memo.content == "りんごを採集する"
 
 
+class _FetchUncompletedAdapter:
+    """``DefaultPromptBuilder._fetch_uncompleted_memos`` の dual-path 分岐を
+    最小依存で検査するためのアダプター。
+
+    実際の ``DefaultPromptBuilder`` は多数の協調オブジェクトを要するので、
+    本テストでは「_fetch_uncompleted_memos がどう memo_store / Resolver を
+    使うか」のロジックだけを切り出して検証する (= MagicMock 直叩きより明示的)。
+    本体側の helper 実装が変わったら本テストも追従が必要。
+    """
+
+    def __init__(
+        self,
+        memo_store: InMemoryMemoStore,
+        resolver: BeingAttachmentResolver | None,
+        world_id: WorldId | None,
+    ) -> None:
+        self._memo_store = memo_store
+        self._being_attachment_resolver = resolver
+        self._default_world_id = world_id
+
+    # DefaultPromptBuilder._fetch_uncompleted_memos のロジックを再現
+    def fetch(self, player_id: PlayerId):
+        from ai_rpg_world.application.llm.services.prompt_builder import (
+            DefaultPromptBuilder,
+        )
+        return DefaultPromptBuilder._fetch_uncompleted_memos(self, player_id)
+
+
 class TestPromptBuilderNewPath:
     """DefaultPromptBuilder: Resolver 注入時の memo 取得経路。
 
@@ -201,20 +229,7 @@ class TestPromptBuilderNewPath:
         being_id = provisioning.ensure_attached(PlayerId(2))
         memo_store.add_by_being(being_id, "via being")
 
-        # DefaultPromptBuilder を構築せず helper メソッドだけ独立して検査する
-        # ため、最小限の attribute stub で代用する。実際の constructor は
-        # 多数の依存があるため統合テストは e2e に委ねる。
-        stub_pb = MagicMock()
-        stub_pb._memo_store = memo_store
-        stub_pb._being_attachment_resolver = resolver
-        stub_pb._default_world_id = world_id
-
-        from ai_rpg_world.application.llm.services.prompt_builder import (
-            DefaultPromptBuilder,
-        )
-
-        entries = DefaultPromptBuilder._fetch_uncompleted_memos(
-            stub_pb, PlayerId(2)
-        )
+        adapter = _FetchUncompletedAdapter(memo_store, resolver, world_id)
+        entries = adapter.fetch(PlayerId(2))
         assert len(entries) == 1
         assert entries[0].content == "via being"

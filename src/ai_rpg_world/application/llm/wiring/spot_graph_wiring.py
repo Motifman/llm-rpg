@@ -350,6 +350,10 @@ def create_spot_graph_wiring(
     # Phase 3 Step 3a-2: BeingRepository を中心に Resolver + Provisioning を組む。
     # 未注入なら新規 InMemoryBeingRepository を生成 (= 既存挙動は変えないが、
     # turn 起動時に Being が作られて memo caller が新 API 経路を使えるようになる)。
+    # NOTE: 本 wiring file は他の場所でも局所 import 多数 (例: line 633 で
+    # MemoCompletionHintService) なので、循環 import 回避のための既存パターンに
+    # 揃えて関数 body 内 import としている。先頭 import に移すと wiring 全体の
+    # import 依存 graph が膨らむため。
     from ai_rpg_world.application.being.being_provisioning_service import (
         BeingProvisioningService,
     )

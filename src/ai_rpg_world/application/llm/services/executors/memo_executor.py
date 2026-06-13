@@ -23,6 +23,7 @@ from ai_rpg_world.domain.being.service.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
@@ -123,7 +124,7 @@ class MemoToolExecutor:
             player_id, content, current_tick=self._current_tick()
         )
 
-    def _list_uncompleted(self, player_id: PlayerId):
+    def _list_uncompleted(self, player_id: PlayerId) -> list[MemoEntry]:
         assert self._memo_store is not None
         being_id = self._resolve_being_id(player_id)
         if being_id is not None:
