@@ -19,6 +19,8 @@ from abc import ABC, abstractmethod
 
 from ai_rpg_world.domain.being.aggregate.being import Being
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 
 class BeingRepository(ABC):
@@ -39,6 +41,21 @@ class BeingRepository(ABC):
     @abstractmethod
     def delete(self, being_id: BeingId) -> bool:
         """Being を削除する。存在しなければ False。"""
+
+    @abstractmethod
+    def find_all_attached_to(
+        self, world_id: WorldId, player_id: PlayerId
+    ) -> list[Being]:
+        """指定 (world, player) に attach 中の Being をすべて返す。
+
+        正常系では 0..1 件しか返らない (= ``Being.attach`` で 0..1 を強制)。
+        2 件以上返るのは attach 制約が破られた異常状態なので、
+        ``BeingAttachmentResolver`` 等の呼び出し元で検出して
+        ``BeingMultipleAttachmentException`` を投げる。
+
+        本 interface 自体はリスト返却に留め、不変条件の判定は domain service
+        側に委ねる (= Repository は「集約の取り出し器」、judgement は service)。
+        """
 
 
 __all__ = ["BeingRepository"]
