@@ -61,10 +61,16 @@ from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
     IEpisodicReinterpretationCompletionPort,
     IEpisodicReinterpretationJournalStore,
 )
-from ai_rpg_world.application.llm.contracts.persona import (
-    AgentPersonaDto,
+# -- domain VO re-exports: persona (Issue #470 Phase 1 PR4) --
+# 旧 ``persona.py`` から domain に昇格した VO の後方互換 re-export。
+# 新規コードは concrete file から import すること:
+#     from ai_rpg_world.domain.persona.value_object.agent_persona_dto import AgentPersonaDto
+from ai_rpg_world.domain.persona.value_object.agent_persona_dto import AgentPersonaDto
+from ai_rpg_world.domain.persona.value_object.persona_prompt_policy import (
     PersonaPromptPolicy,
 )
+# -- end persona re-exports --
+
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IAvailabilityResolver,

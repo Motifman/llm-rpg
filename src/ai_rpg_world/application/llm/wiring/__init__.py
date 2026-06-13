@@ -185,10 +185,8 @@ from ai_rpg_world.application.llm.services.recent_events_formatter import (
 from ai_rpg_world.application.llm.services.system_prompt_builder import (
     DefaultSystemPromptBuilder,
 )
-from ai_rpg_world.application.llm.contracts.persona import (
-    AgentPersonaDto,
-    PersonaPromptPolicy,
-)
+from ai_rpg_world.domain.persona.value_object.agent_persona_dto import AgentPersonaDto
+from ai_rpg_world.domain.persona.value_object.persona_prompt_policy import PersonaPromptPolicy
 from ai_rpg_world.application.llm.services.persona_prompt_fragment_builder import (
     PersonaPromptFragmentBuilder,
 )
