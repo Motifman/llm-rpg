@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Iterable, Optional, Sequence
 
-from ai_rpg_world.application.llm.contracts.dtos import MemoEntry
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.application.llm.services.memo_id_display import short_memo_id
 
 

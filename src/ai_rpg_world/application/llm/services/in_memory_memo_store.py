@@ -10,10 +10,8 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from ai_rpg_world.application.llm.contracts.dtos import (
-    MemoEntry,
-    MemoFulfillmentContext,
-)
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
+from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.application.llm.contracts.interfaces import IMemoStore
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 

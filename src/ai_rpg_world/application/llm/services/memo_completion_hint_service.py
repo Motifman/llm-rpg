@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Optional
 
-from ai_rpg_world.application.llm.contracts.dtos import MemoEntry
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.application.llm.contracts.interfaces import IMemoStore
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 

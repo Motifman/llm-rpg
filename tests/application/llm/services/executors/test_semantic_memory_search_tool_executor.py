@@ -11,9 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from ai_rpg_world.application.llm.contracts.semantic_memory_entry import (
-    SemanticMemoryEntry,
-)
+from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.application.llm.services.executors.semantic_memory_search_tool_executor import (
     SemanticMemorySearchToolExecutor,
 )

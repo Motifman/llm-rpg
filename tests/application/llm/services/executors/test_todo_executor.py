@@ -212,7 +212,7 @@ class TestMemoExecutorBatchComplete:
         として個別報告される。"""
         # uuid4 はランダムなので、無理やり同じ先頭にするためにモンキーパッチで対応
         # ここでは store に直接 ID を仕込む簡易テスト
-        from ai_rpg_world.application.llm.contracts.dtos import MemoEntry
+        from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
         from datetime import datetime
         pid = PlayerId(1)
         key = todo_store._key(pid)

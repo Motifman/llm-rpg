@@ -535,82 +535,9 @@ class LlmUiContextDto:
 # ツールの利用可否判定に必要な現在地・接続先・視界・移動先等はすべて PlayerCurrentStateDto に含まれる。
 
 
-@dataclass(frozen=True)
-class MemoFulfillmentContext:
-    """``memo_done`` 呼び出し時の周辺コンテキスト snapshot。
-
-    LLM が memo を完了マークした瞬間の sliding_window / action_result_store の
-    抜粋を凍結保存する。後で episodic cue 経由で recall する際に「何があって
-    達成したか」を辿る情報源となる (Issue #188 Phase 1a)。
-
-    完了タイミングを LLM が逃すと snapshot が空になりがちなので、tool
-    description で「達成したらすぐに memo_done」を促す。
-    """
-
-    completed_at: datetime
-    completed_at_tick: Optional[int] = None
-    recent_observation_proses: Tuple[str, ...] = ()
-    recent_action_summaries: Tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.completed_at, datetime):
-            raise TypeError("completed_at must be datetime")
-        if self.completed_at_tick is not None and not isinstance(
-            self.completed_at_tick, int
-        ):
-            raise TypeError("completed_at_tick must be int or None")
-        if not isinstance(self.recent_observation_proses, tuple):
-            raise TypeError("recent_observation_proses must be tuple")
-        if not isinstance(self.recent_action_summaries, tuple):
-            raise TypeError("recent_action_summaries must be tuple")
-
-
-@dataclass(frozen=True)
-class MemoEntry:
-    """LLM が context に固定したい情報の 1 件。
-
-    Issue #188 Phase 1a で TodoEntry から改名・拡張。
-    「TODO」というより **LLM が意図的にプロンプトに置いておきたい memo** で、
-    抽象的な目標 / 戦略メモ / 注意事項 / 観察メモなど自由な内容を含められる。
-
-    フィールド:
-    - ``id``: 一意 ID (UUID)。memo_done で参照
-    - ``content``: 自由文字列。tool 呼び出し時に LLM が指定
-    - ``added_at``: 追加 datetime
-    - ``added_at_tick``: 追加時の game tick (age 表示用)
-    - ``completed``: LLM が memo_done を呼んだら True
-    - ``completed_at`` / ``fulfillment_context``: 完了時の周辺 context snapshot
-    """
-
-    id: str
-    content: str
-    added_at: datetime
-    completed: bool = False
-    added_at_tick: Optional[int] = None
-    completed_at: Optional[datetime] = None
-    fulfillment_context: Optional[MemoFulfillmentContext] = None
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.id, str):
-            raise TypeError("id must be str")
-        if not isinstance(self.content, str):
-            raise TypeError("content must be str")
-        if not isinstance(self.added_at, datetime):
-            raise TypeError("added_at must be datetime")
-        if not isinstance(self.completed, bool):
-            raise TypeError("completed must be bool")
-        if self.added_at_tick is not None and not isinstance(self.added_at_tick, int):
-            raise TypeError("added_at_tick must be int or None")
-        if self.completed_at is not None and not isinstance(self.completed_at, datetime):
-            raise TypeError("completed_at must be datetime or None")
-        if self.fulfillment_context is not None and not isinstance(
-            self.fulfillment_context, MemoFulfillmentContext
-        ):
-            raise TypeError(
-                "fulfillment_context must be MemoFulfillmentContext or None"
-            )
-
-
-# 後方互換: 旧 TodoEntry 名は MemoEntry の alias として残す (Issue #188 リネーム)。
-# 新規コードは MemoEntry を使うこと。
-TodoEntry = MemoEntry
+# NOTE (Issue #470 Phase 1 PR3):
+# MemoEntry / MemoFulfillmentContext / TodoEntry (旧名 alias) は
+# ``domain/memory/memo/value_object/`` に昇格しました。
+# 新規コードは:
+#     from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
+# から import してください。
