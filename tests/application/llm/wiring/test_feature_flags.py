@@ -264,13 +264,23 @@ class TestLogShortTermMemoryKindState:
 class TestResolveShortTermMemorySchedulerMode:
     """``SHORT_TERM_MEMORY_SCHEDULER_MODE`` env 解決 (Phase 2.1)。"""
 
-    def test_default_は_inline(self) -> None:
-        assert resolve_short_term_memory_scheduler_mode(env={}) == SCHEDULER_MODE_INLINE
+    def test_default_は_thread_pool(self) -> None:
+        """PR #467 以降の default は thread_pool (K run #466 で検証済)。
+
+        旧 default = inline は Phase 2 互換用に env 明示で残る。
+        """
+        assert (
+            resolve_short_term_memory_scheduler_mode(env={})
+            == SCHEDULER_MODE_THREAD_POOL
+        )
 
     def test_env_空文字でも_default(self) -> None:
-        assert resolve_short_term_memory_scheduler_mode(
-            env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: ""}
-        ) == SCHEDULER_MODE_INLINE
+        assert (
+            resolve_short_term_memory_scheduler_mode(
+                env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: ""}
+            )
+            == SCHEDULER_MODE_THREAD_POOL
+        )
 
     def test_有効な_inline(self) -> None:
         assert resolve_short_term_memory_scheduler_mode(
