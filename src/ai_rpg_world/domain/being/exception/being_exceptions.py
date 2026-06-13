@@ -10,6 +10,7 @@ from __future__ import annotations
 from ai_rpg_world.domain.common.exception import (
     DomainException,
     NotFoundException,
+    StateException,
     ValidationException,
 )
 
@@ -44,7 +45,25 @@ class BeingNotFoundException(BeingDomainException, NotFoundException):
     error_code = "BEING.NOT_FOUND"
 
 
+class BeingAttachmentValidationException(BeingDomainException, ValidationException):
+    """BeingAttachment バリデーション例外 (world_id / player_id の型違反)。"""
+
+    error_code = "BEING.ATTACHMENT_VALIDATION"
+
+
+class BeingAlreadyAttachedException(BeingDomainException, StateException):
+    """既に attachment を持つ Being への再 attach を防ぐ状態遷移例外。
+
+    PR #462 §2.1 (R1): attachment は 0..1。同時に複数の world に乗ることは
+    本 PR 時点で不許可 (= YAGNI)。乗り換える場合は先に ``detach`` する。
+    """
+
+    error_code = "BEING.ALREADY_ATTACHED"
+
+
 __all__ = [
+    "BeingAlreadyAttachedException",
+    "BeingAttachmentValidationException",
     "BeingDomainException",
     "BeingIdValidationException",
     "BeingIdentityValidationException",
