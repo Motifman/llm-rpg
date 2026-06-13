@@ -5,11 +5,11 @@ from __future__ import annotations
 from collections import deque
 from datetime import datetime
 
-from ai_rpg_world.application.llm.contracts.episodic_memory_link import (
+from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     effective_link_strength,
     other_episode_id,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory_link_store_port import (
+from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
     IMemoryLinkStore,
 )
 

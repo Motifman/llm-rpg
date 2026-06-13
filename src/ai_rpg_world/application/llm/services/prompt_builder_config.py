@@ -23,20 +23,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Optional, TYPE_CHECKING
 
-from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
-    IEpisodicRecallBufferStore,
-    IEpisodicReinterpretationJournalStore,
-)
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
-    IMemoStore,
     IRecentEventsFormatter,
     ISlidingWindowMemory,
     ISystemPromptBuilder,
 )
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import IMemoStore
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )

@@ -1,14 +1,22 @@
-"""エピソード記憶リンクの永続化ポート。"""
+"""MemoryLinkRepository — エピソード記憶リンクの保管庫 interface。
+
+DDD 再編 (Issue #470 Phase 1 PR5): 元
+``application/llm/contracts/episodic_memory_link_store_port.py::IMemoryLinkStore``
+を domain に昇格し、``*Repository`` 命名に統一。
+"""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from ai_rpg_world.application.llm.contracts.episodic_memory_link import MemoryLink, MemoryLinkType
+from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
+    MemoryLink,
+    MemoryLinkType,
+)
 
 
-class IMemoryLinkStore(ABC):
+class MemoryLinkRepository(ABC):
     """プレイヤー単位で MemoryLink を保持する。"""
 
     @abstractmethod
@@ -65,4 +73,7 @@ class IMemoryLinkStore(ABC):
         """当該プレイヤーの全リンク（クラスタ検出・一括処理用）。"""
 
 
-__all__ = ["IMemoryLinkStore"]
+# 後方互換: 旧名 ``IMemoryLinkStore`` は本 Repository の alias。
+IMemoryLinkStore = MemoryLinkRepository
+
+__all__ = ["MemoryLinkRepository", "IMemoryLinkStore"]

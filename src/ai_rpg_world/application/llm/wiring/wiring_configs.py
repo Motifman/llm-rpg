@@ -20,14 +20,14 @@ from typing import Any, Optional
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
-from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     IEpisodicEpisodeStore,
 )
 from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
-    IEpisodicRecallBufferStore,
     IEpisodicReinterpretationCompletionPort,
-    IEpisodicReinterpretationJournalStore,
 )
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
 )

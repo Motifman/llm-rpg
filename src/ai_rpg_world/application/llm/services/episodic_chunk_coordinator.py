@@ -24,7 +24,7 @@ from ai_rpg_world.application.llm.chunk_boundary.rules import (
 )
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     IEpisodicEpisodeStore,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (

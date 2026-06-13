@@ -17,8 +17,8 @@ from ai_rpg_world.application.llm.wiring import (
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.contracts.interfaces import (
-        ILlmTurnTrigger,
-    )
+    ILlmTurnTrigger,
+)
     from ai_rpg_world.infrastructure.events.observation_event_handler_registry import (
         ObservationEventHandlerRegistry,
     )

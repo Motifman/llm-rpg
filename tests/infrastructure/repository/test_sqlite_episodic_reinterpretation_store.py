@@ -4,10 +4,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
 
-from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
-    EpisodicRecallObservation,
-    EpisodicReinterpretationEntry,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
 from ai_rpg_world.infrastructure.repository.sqlite_episodic_reinterpretation_store import (
     SqliteEpisodicReinterpretationStore,
 )

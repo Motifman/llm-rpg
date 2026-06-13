@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
-from ai_rpg_world.application.llm.contracts.semantic_memory_store_port import ISemanticMemoryStore
+from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import ISemanticMemoryStore
 from ai_rpg_world.infrastructure.repository.sqlite_memory_graph_schema import (
     apply_memory_graph_migrations,
 )

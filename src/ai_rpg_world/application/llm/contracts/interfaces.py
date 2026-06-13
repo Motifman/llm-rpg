@@ -97,54 +97,12 @@ class IActionResultStore(ABC):
         pass
 
 
-class IMemoStore(ABC):
-    """プレイヤーごとの memo を保持する。
-
-    Issue #188 Phase 1a で ``ITodoStore`` から改名。LLM が context に固定
-    したい情報 (タスク / 目標 / 戦略メモ / 注意事項など) を扱う。
-
-    ``add`` には optional な ``current_tick`` を渡せる: age 表示 / stale 判定
-    用。``complete`` には fulfillment_context (周辺 sliding_window 抜粋) を
-    渡せる: 後で episodic cue 経由で recall するときに「達成時の状況」を辿る
-    情報源となる。
-    """
-
-    @abstractmethod
-    def add(
-        self,
-        player_id: PlayerId,
-        content: str,
-        *,
-        current_tick: Optional[int] = None,
-    ) -> str:
-        """memo を追加し、生成された ID を返す。"""
-        pass
-
-    @abstractmethod
-    def list_uncompleted(self, player_id: PlayerId) -> List[MemoEntry]:
-        """未完了 memo を新しい順で返す。"""
-        pass
-
-    @abstractmethod
-    def complete(
-        self,
-        player_id: PlayerId,
-        memo_id: str,
-        *,
-        fulfillment_context: Optional[MemoFulfillmentContext] = None,
-    ) -> bool:
-        """memo を完了する。存在しなければ False。"""
-        pass
-
-    @abstractmethod
-    def remove(self, player_id: PlayerId, memo_id: str) -> bool:
-        """memo を削除する。存在しなければ False。"""
-        pass
-
-
-# 後方互換: 旧名 ``ITodoStore`` は ``IMemoStore`` のエイリアス。
-# 新規コードは IMemoStore を使うこと。
-ITodoStore = IMemoStore
+# NOTE (Issue #470 Phase 1 PR5):
+# 旧 IMemoStore / ITodoStore は domain/memory/memo/repository/ に昇格し
+# MemoRepository に改名された (旧名 alias は同 file に残る)。
+# 新規コードは concrete file から import すること:
+#     from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
+#     from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 
 
 class ICurrentStateFormatter(ABC):

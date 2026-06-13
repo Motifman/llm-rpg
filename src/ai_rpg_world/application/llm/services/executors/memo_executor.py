@@ -17,9 +17,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
-    IMemoStore,
     ISlidingWindowMemory,
 )
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import IMemoStore
 from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.memo_id_display import (

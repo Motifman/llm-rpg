@@ -43,7 +43,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, wait
 from typing import Callable, Optional
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
-from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     IEpisodicEpisodeStore,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
