@@ -11,6 +11,7 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
+from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
@@ -130,3 +131,73 @@ class TestBeingAttachDetach:
         assert previous == _attachment(world=1)
         being.attach(_attachment(world=2))
         assert being.attachment == _attachment(world=2)
+
+
+class TestBeingDeclaredMemoryKinds:
+    """Being.declared_memory_kinds の宣言挙動。"""
+
+    def test_省略時は空集合(self) -> None:
+        """declared_memory_kinds を省略すれば空 frozenset。"""
+        being = Being(being_id=BeingId("ada"), identity=_identity())
+        assert being.declared_memory_kinds == frozenset()
+        assert being.declares(MemoryKind.MEMO) is False
+
+    def test_宣言した_kind_が_declares_で_True_になる(self) -> None:
+        """渡した kind は declared_memory_kinds に含まれ declares が True。"""
+        being = Being(
+            being_id=BeingId("ada"),
+            identity=_identity(),
+            declared_memory_kinds=[MemoryKind.EPISODIC, MemoryKind.MEMO],
+        )
+        assert being.declared_memory_kinds == frozenset(
+            {MemoryKind.EPISODIC, MemoryKind.MEMO}
+        )
+        assert being.declares(MemoryKind.EPISODIC) is True
+        assert being.declares(MemoryKind.MEMO) is True
+        assert being.declares(MemoryKind.SEMANTIC) is False
+
+    def test_重複した_kind_は_frozenset_で吸収される(self) -> None:
+        """同じ kind を 2 回渡しても集合化される。"""
+        being = Being(
+            being_id=BeingId("ada"),
+            identity=_identity(),
+            declared_memory_kinds=[MemoryKind.MEMO, MemoryKind.MEMO],
+        )
+        assert being.declared_memory_kinds == frozenset({MemoryKind.MEMO})
+
+    def test_非_MemoryKind_要素を渡すと_TypeError(self) -> None:
+        """型違反は TypeError として弾く。"""
+        with pytest.raises(TypeError, match="MemoryKind"):
+            Being(
+                being_id=BeingId("ada"),
+                identity=_identity(),
+                declared_memory_kinds=["memo"],  # type: ignore[list-item]
+            )
+
+    def test_with_declared_memory_kinds_は新しい_Being_を返し元は不変(self) -> None:
+        """宣言差し替えは副作用なし: 元 Being の宣言は変わらず、新 Being に反映。"""
+        original = Being(
+            being_id=BeingId("ada"),
+            identity=_identity(),
+            declared_memory_kinds=[MemoryKind.EPISODIC],
+        )
+        updated = original.with_declared_memory_kinds(
+            [MemoryKind.EPISODIC, MemoryKind.SEMANTIC]
+        )
+        assert original.declared_memory_kinds == frozenset({MemoryKind.EPISODIC})
+        assert updated.declared_memory_kinds == frozenset(
+            {MemoryKind.EPISODIC, MemoryKind.SEMANTIC}
+        )
+        assert updated.being_id == original.being_id
+        assert updated.identity == original.identity
+
+    def test_with_declared_memory_kinds_は_attachment_を引き継ぐ(self) -> None:
+        """宣言差し替え時に既存 attachment はそのまま新 Being に複製される。"""
+        original = Being(
+            being_id=BeingId("ada"),
+            identity=_identity(),
+            attachment=_attachment(),
+            declared_memory_kinds=[MemoryKind.MEMO],
+        )
+        updated = original.with_declared_memory_kinds([MemoryKind.MEMO, MemoryKind.SEMANTIC])
+        assert updated.attachment == _attachment()
