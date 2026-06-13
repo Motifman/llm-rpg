@@ -97,12 +97,11 @@ class IActionResultStore(ABC):
         pass
 
 
-# NOTE (Issue #470 Phase 1 PR5):
-# 旧 IMemoStore / ITodoStore は domain/memory/memo/repository/ に昇格し
-# MemoRepository に改名された (旧名 alias は同 file に残る)。
-# 新規コードは concrete file から import すること:
+# NOTE (Issue #470 Phase 1):
+# 旧 IMemoStore / ITodoStore / MemoEntry は domain/memory/memo/ に昇格・改名された:
 #     from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 #     from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
+# 旧名 alias は Phase 1 cleanup で削除済。
 
 
 class ICurrentStateFormatter(ABC):

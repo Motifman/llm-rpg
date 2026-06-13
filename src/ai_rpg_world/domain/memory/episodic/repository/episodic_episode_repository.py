@@ -1,7 +1,7 @@
 """EpisodicEpisodeRepository — SubjectiveEpisode の保管庫 interface。
 
 DDD 再編 (Issue #470 Phase 1 PR5): 元
-``application/llm/contracts/episodic_episode_store_port.py::IEpisodicEpisodeStore``
+``application/llm/contracts/episodic_episode_store_port.py::EpisodicEpisodeRepository``
 を domain に昇格し、既存 `domain/<context>/repository/` 慣例に合わせて
 ``*Repository`` 命名に統一。
 
@@ -57,8 +57,4 @@ class EpisodicEpisodeRepository(ABC):
         """
 
 
-# 後方互換: 旧名 ``IEpisodicEpisodeStore`` は本 Repository の alias。
-# 新規コードは ``EpisodicEpisodeRepository`` を使うこと。
-IEpisodicEpisodeStore = EpisodicEpisodeRepository
-
-__all__ = ["EpisodicEpisodeRepository", "IEpisodicEpisodeStore"]
+__all__ = ["EpisodicEpisodeRepository"]

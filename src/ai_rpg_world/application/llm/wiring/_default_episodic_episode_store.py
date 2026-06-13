@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import os
 
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import IEpisodicEpisodeStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
 
 
 def resolve_default_episodic_episode_store(
-    override: IEpisodicEpisodeStore | None,
-) -> IEpisodicEpisodeStore:
+    override: EpisodicEpisodeRepository | None,
+) -> EpisodicEpisodeRepository:
     """
     呼び出し元がストアを渡したときはそれを使い、未指定なら環境変数で SQLite かインメモリを選ぶ。
     """

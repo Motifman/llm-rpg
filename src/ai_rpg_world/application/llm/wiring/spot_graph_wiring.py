@@ -15,13 +15,13 @@ from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port i
     IEpisodicChunkSubjectiveCompletionPort,
 )
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    IEpisodicEpisodeStore,
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
     IEpisodicReinterpretationCompletionPort,
 )
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     ILLMClient,

@@ -11,7 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    IEpisodicEpisodeStore,
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
@@ -19,8 +19,8 @@ from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -89,20 +89,20 @@ class EpisodicReinterpretationCoordinator:
     def __init__(
         self,
         *,
-        episode_store: IEpisodicEpisodeStore,
-        recall_buffer_store: IEpisodicRecallBufferStore,
-        journal_store: IEpisodicReinterpretationJournalStore,
+        episode_store: EpisodicEpisodeRepository,
+        recall_buffer_store: EpisodicRecallBufferRepository,
+        journal_store: EpisodicReinterpretationJournalRepository,
         completion: IEpisodicReinterpretationCompletionPort | None,
         turn_interval: int = DEFAULT_REINTERPRETATION_TURN_INTERVAL,
         batch_size: int = DEFAULT_REINTERPRETATION_BATCH_SIZE,
         max_contexts_per_episode: int = DEFAULT_REINTERPRETATION_MAX_CONTEXTS_PER_EPISODE,
     ) -> None:
-        if not isinstance(episode_store, IEpisodicEpisodeStore):
-            raise TypeError("episode_store must be IEpisodicEpisodeStore")
-        if not isinstance(recall_buffer_store, IEpisodicRecallBufferStore):
-            raise TypeError("recall_buffer_store must be IEpisodicRecallBufferStore")
-        if not isinstance(journal_store, IEpisodicReinterpretationJournalStore):
-            raise TypeError("journal_store must be IEpisodicReinterpretationJournalStore")
+        if not isinstance(episode_store, EpisodicEpisodeRepository):
+            raise TypeError("episode_store must be EpisodicEpisodeRepository")
+        if not isinstance(recall_buffer_store, EpisodicRecallBufferRepository):
+            raise TypeError("recall_buffer_store must be EpisodicRecallBufferRepository")
+        if not isinstance(journal_store, EpisodicReinterpretationJournalRepository):
+            raise TypeError("journal_store must be EpisodicReinterpretationJournalRepository")
         if completion is not None and not isinstance(
             completion, IEpisodicReinterpretationCompletionPort
         ):

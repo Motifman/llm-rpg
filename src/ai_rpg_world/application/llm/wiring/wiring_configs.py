@@ -21,13 +21,13 @@ from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port i
     IEpisodicChunkSubjectiveCompletionPort,
 )
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    IEpisodicEpisodeStore,
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
     IEpisodicReinterpretationCompletionPort,
 )
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
 )
@@ -146,9 +146,9 @@ class EpisodicWiringConfig:
       override
     """
 
-    episode_store: Optional[IEpisodicEpisodeStore] = None
-    recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None
-    reinterpretation_journal_store: Optional[IEpisodicReinterpretationJournalStore] = None
+    episode_store: Optional[EpisodicEpisodeRepository] = None
+    recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None
+    reinterpretation_journal_store: Optional[EpisodicReinterpretationJournalRepository] = None
     reinterpretation_completion: Optional[IEpisodicReinterpretationCompletionPort] = None
     chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder] = None
     chunk_coordinator: Optional[EpisodicChunkCoordinator] = None

@@ -16,12 +16,12 @@ from datetime import datetime, timezone
 from typing import Callable, Dict, Optional, Sequence, Set
 from uuid import uuid4
 
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import IEpisodicEpisodeStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import effective_link_strength
-from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import IMemoryLinkStore
+from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import MemoryLinkRepository
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
-from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import ISemanticMemoryStore
+from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import SemanticMemoryRepository
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.episodic_promotion_frontier import EpisodicPromotionFrontier
 from ai_rpg_world.application.llm.services.semantic_gist_service import (
@@ -58,7 +58,7 @@ def _evidence_signature(episode_ids: Set[str]) -> str:
 
 def _build_strong_adjacency(
     player_id: int,
-    link_store: IMemoryLinkStore,
+    link_store: MemoryLinkRepository,
     now: datetime,
 ) -> Dict[str, Set[str]]:
     """実効強度 >= 閾値の無向辺を隣接リスト化する。"""
@@ -76,7 +76,7 @@ def _build_strong_adjacency(
 
 def _expand_frontier_nodes(
     player_id: int,
-    link_store: IMemoryLinkStore,
+    link_store: MemoryLinkRepository,
     seeds: Set[str],
     now: datetime,
     max_hops: int,
@@ -105,7 +105,7 @@ def _expand_frontier_nodes(
 
 def _build_strong_adjacency_for_nodes(
     player_id: int,
-    link_store: IMemoryLinkStore,
+    link_store: MemoryLinkRepository,
     nodes: Set[str],
     now: datetime,
 ) -> Dict[str, Set[str]]:
@@ -171,9 +171,9 @@ class EpisodicSemanticClusterPromotionService:
     callable。LLM gist の prompt 構築に必要。未指定なら ("Player {id}", "")。
     """
 
-    episode_store: IEpisodicEpisodeStore
-    link_store: IMemoryLinkStore
-    semantic_store: ISemanticMemoryStore
+    episode_store: EpisodicEpisodeRepository
+    link_store: MemoryLinkRepository
+    semantic_store: SemanticMemoryRepository
     promotion_frontier: EpisodicPromotionFrontier | None = None
     expansion_hops: int = field(default_factory=_default_expansion_hops)
     # Phase 1b: LLM gist (optional)。注入時のみ LLM 抽象化を試みる。

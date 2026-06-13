@@ -10,8 +10,8 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     SystemPromptPlayerInfoDto,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IAvailableToolsProvider,
@@ -23,7 +23,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISlidingWindowMemory,
     ISystemPromptBuilder,
 )
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import IMemoStore
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.services.active_memos_formatter import (
@@ -76,7 +76,7 @@ _module_logger = logging.getLogger(__name__)
 def _join_passive_recall_texts(
     player_id: int,
     candidates: tuple[EpisodicPassiveRecallCandidate, ...],
-    journal_store: IEpisodicReinterpretationJournalStore | None = None,
+    journal_store: EpisodicReinterpretationJournalRepository | None = None,
 ) -> str:
     """retrieve の候補順のまま、active 再解釈を優先して recall text を改行で連結する。"""
     parts: list[str] = []
@@ -247,18 +247,18 @@ class DefaultPromptBuilder(IPromptBuilder):
                 "episodic_memory_link_service must be EpisodicMemoryLinkApplicationService or None"
             )
         if episodic_recall_buffer_store is not None and not isinstance(
-            episodic_recall_buffer_store, IEpisodicRecallBufferStore
+            episodic_recall_buffer_store, EpisodicRecallBufferRepository
         ):
             raise TypeError(
-                "episodic_recall_buffer_store must be IEpisodicRecallBufferStore or None"
+                "episodic_recall_buffer_store must be EpisodicRecallBufferRepository or None"
             )
         if episodic_reinterpretation_journal_store is not None and not isinstance(
             episodic_reinterpretation_journal_store,
-            IEpisodicReinterpretationJournalStore,
+            EpisodicReinterpretationJournalRepository,
         ):
             raise TypeError(
                 "episodic_reinterpretation_journal_store must be "
-                "IEpisodicReinterpretationJournalStore or None"
+                "EpisodicReinterpretationJournalRepository or None"
             )
         if episodic_turn_index_provider is not None and not callable(
             episodic_turn_index_provider
@@ -276,8 +276,8 @@ class DefaultPromptBuilder(IPromptBuilder):
                 )
         if semantic_passive_top_k < 0:
             raise ValueError("semantic_passive_top_k must be 0 or greater")
-        if memo_store is not None and not isinstance(memo_store, IMemoStore):
-            raise TypeError("memo_store must be IMemoStore or None")
+        if memo_store is not None and not isinstance(memo_store, MemoRepository):
+            raise TypeError("memo_store must be MemoRepository or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
         if memo_stale_age_ticks < 0:

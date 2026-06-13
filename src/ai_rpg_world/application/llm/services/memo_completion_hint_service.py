@@ -19,7 +19,7 @@ from difflib import SequenceMatcher
 from typing import Optional
 
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import IMemoStore
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -85,12 +85,12 @@ class MemoCompletionHintService:
 
     def __init__(
         self,
-        memo_store: IMemoStore,
+        memo_store: MemoRepository,
         *,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
     ) -> None:
-        if not isinstance(memo_store, IMemoStore):
-            raise TypeError("memo_store must be IMemoStore")
+        if not isinstance(memo_store, MemoRepository):
+            raise TypeError("memo_store must be MemoRepository")
         if not isinstance(similarity_threshold, (int, float)):
             raise TypeError("similarity_threshold must be a number")
         if not (0.0 <= float(similarity_threshold) <= 1.0):

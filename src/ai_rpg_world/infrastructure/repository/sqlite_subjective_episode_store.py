@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import IEpisodicEpisodeStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
@@ -162,7 +162,7 @@ def _init_schema_v1(connection: sqlite3.Connection) -> None:
     )
 
 
-class SqliteSubjectiveEpisodeStore(IEpisodicEpisodeStore):
+class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
     """
     SubjectiveEpisode を JSON 1 行 + cue 逆引きで保持する。
     並びは occurred_at の新しい順（UTC 正規化）・同一キーは episode_id 降順。

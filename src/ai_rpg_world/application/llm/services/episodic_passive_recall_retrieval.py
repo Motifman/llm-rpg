@@ -7,10 +7,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import IEpisodicEpisodeStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import IMemoryLinkStore
+from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import MemoryLinkRepository
 from ai_rpg_world.application.llm.services.episodic_spreading_activation import (
     neighbor_priming_scores,
 )
@@ -28,7 +28,7 @@ PASSIVE_RECALL_AXIS_SPREADING = "spreading"
 
 def _occurrence_sort_key(ep: SubjectiveEpisode) -> tuple[datetime, str]:
     """
-    IEpisodicEpisodeStore の並び（occurred_at 降順、同一時刻は episode_id 降順）と整合するキー。
+    EpisodicEpisodeRepository の並び（occurred_at 降順、同一時刻は episode_id 降順）と整合するキー。
     naive datetime は UTC 相当として比較する（本体は変更しない）。
     """
 
@@ -58,7 +58,7 @@ def _episode_arm_sort_quality(
 
 
 def _merged_ordered_episodes_for_cue_bucket(
-    store: IEpisodicEpisodeStore,
+    store: EpisodicEpisodeRepository,
     player_id: int,
     *,
     bucket: str,
@@ -148,9 +148,9 @@ class EpisodicPassiveRecallRetrievalService:
 
     def __init__(
         self,
-        store: IEpisodicEpisodeStore,
+        store: EpisodicEpisodeRepository,
         *,
-        link_store: IMemoryLinkStore | None = None,
+        link_store: MemoryLinkRepository | None = None,
         spreading_max_hops: int = 2,
     ) -> None:
         self._store = store

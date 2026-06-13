@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import EpisodicReinterpretationStatus
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 
 
 def _dt_key(dt: datetime) -> datetime:
@@ -19,7 +19,7 @@ def _dt_key(dt: datetime) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
-class InMemoryEpisodicRecallBufferStore(IEpisodicRecallBufferStore):
+class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
     """player ごとに pending recall observations を保持する。"""
 
     def __init__(self) -> None:
@@ -69,7 +69,7 @@ class InMemoryEpisodicRecallBufferStore(IEpisodicRecallBufferStore):
         return len(self._pending.get(player_id, ()))
 
 
-class InMemoryEpisodicReinterpretationJournalStore(IEpisodicReinterpretationJournalStore):
+class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJournalRepository):
     """再解釈履歴と active pointer を保持する。"""
 
     def __init__(self) -> None:

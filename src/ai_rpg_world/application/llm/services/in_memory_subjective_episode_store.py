@@ -12,7 +12,7 @@ from __future__ import annotations
 import threading
 from datetime import datetime, timezone
 
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import IEpisodicEpisodeStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 def _occurrence_sort_key(ep: SubjectiveEpisode) -> tuple[datetime, str]:
@@ -29,7 +29,7 @@ def _occurrence_sort_key(ep: SubjectiveEpisode) -> tuple[datetime, str]:
     return (dt, ep.episode_id)
 
 
-class InMemorySubjectiveEpisodeStore(IEpisodicEpisodeStore):
+class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
     """
     プレイヤーごとにエピソード本体と cue 逆引き索引を保持する。
     cue 照合は canonical（axis:value）のみ。EpisodicCue.source は索引に含めない。

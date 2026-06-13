@@ -9,14 +9,14 @@ from typing import Any, Callable, Dict
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    IEpisodicEpisodeStore,
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     effective_link_strength,
     other_episode_id,
 )
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
-    IMemoryLinkStore,
+    MemoryLinkRepository,
 )
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
@@ -28,8 +28,8 @@ from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMORY_EXPLORE
 class EpisodicMemoryExploreToolExecutor:
     """リンクストアから隣接エピソードを列挙し、JSON メッセージを返す。"""
 
-    episode_store: IEpisodicEpisodeStore
-    link_store: IMemoryLinkStore
+    episode_store: EpisodicEpisodeRepository
+    link_store: MemoryLinkRepository
     link_service: EpisodicMemoryLinkApplicationService
 
     def get_handlers(

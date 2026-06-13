@@ -19,8 +19,8 @@ def player_id() -> PlayerId:
 class TestMemoCompletionHintServiceConstruction:
     """MemoCompletionHintService コンストラクタの引数バリデーション挙動。"""
 
-    def test_memo_store_が_IMemoStore_でなければ_TypeError_を投げる(self) -> None:
-        """memo_store が IMemoStore 実装でない場合は TypeError。"""
+    def test_memo_store_が_MemoRepository_でなければ_TypeError_を投げる(self) -> None:
+        """memo_store が MemoRepository 実装でない場合は TypeError。"""
         with pytest.raises(TypeError, match="memo_store"):
             MemoCompletionHintService(memo_store="not-a-store")  # type: ignore[arg-type]
 

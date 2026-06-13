@@ -1,7 +1,7 @@
 """EpisodicReinterpretationJournalRepository — 再解釈履歴の保管庫 interface。
 
 DDD 再編 (Issue #470 Phase 1 PR5): 元
-``application/llm/contracts/episodic_reinterpretation.py::IEpisodicReinterpretationJournalStore``
+``application/llm/contracts/episodic_reinterpretation.py::EpisodicReinterpretationJournalRepository``
 を domain に昇格し、``*Repository`` 命名に統一。
 """
 
@@ -38,10 +38,4 @@ class EpisodicReinterpretationJournalRepository(ABC):
         """監査用に履歴を新しい順で返す。"""
 
 
-# 後方互換: 旧名 ``IEpisodicReinterpretationJournalStore`` は本 Repository の alias。
-IEpisodicReinterpretationJournalStore = EpisodicReinterpretationJournalRepository
-
-__all__ = [
-    "EpisodicReinterpretationJournalRepository",
-    "IEpisodicReinterpretationJournalStore",
-]
+__all__ = ["EpisodicReinterpretationJournalRepository"]

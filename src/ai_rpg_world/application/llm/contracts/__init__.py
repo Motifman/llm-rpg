@@ -20,7 +20,7 @@ from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context impor
 )
 # -- end memo re-exports --
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    IEpisodicEpisodeStore,
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
     IEpisodicChunkSubjectiveCompletionPort,
@@ -69,10 +69,10 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_
 )
 # -- domain Repository re-exports: episodic reinterpretation (Issue #470 Phase 1 PR5) --
 from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
-    IEpisodicRecallBufferStore,
+    EpisodicRecallBufferRepository,
 )
 from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
-    IEpisodicReinterpretationJournalStore,
+    EpisodicReinterpretationJournalRepository,
 )
 # -- end episodic reinterpretation re-exports --
 # -- domain VO re-exports: persona (Issue #470 Phase 1 PR4) --
@@ -100,7 +100,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISlidingWindowMemory,
     ISystemPromptBuilder,
 )
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import ITodoStore
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 
 __all__ = [
     "ChunkEncodingInput",
@@ -109,7 +109,7 @@ __all__ = [
     "chunk_encoding_episode_generation_allowed",
     "format_unified_timeline_as_recent_events_bullets",
     "merge_observations_and_action_results_to_unified_timeline",
-    "IEpisodicEpisodeStore",
+    "EpisodicEpisodeRepository",
     "IEpisodicChunkSubjectiveCompletionPort",
     "EpisodicCue",
     "EpisodicCueSource",
@@ -120,9 +120,9 @@ __all__ = [
     "EpisodicRecallObservation",
     "EpisodicReinterpretationEntry",
     "EpisodicReinterpretationStatus",
-    "IEpisodicRecallBufferStore",
+    "EpisodicRecallBufferRepository",
     "IEpisodicReinterpretationCompletionPort",
-    "IEpisodicReinterpretationJournalStore",
+    "EpisodicReinterpretationJournalRepository",
     "ActionResultEntry",
     "LlmCommandResultDto",
     "SystemPromptPlayerInfoDto",
@@ -146,5 +146,5 @@ __all__ = [
     "IRecentEventsFormatter",
     "ISlidingWindowMemory",
     "ISystemPromptBuilder",
-    "ITodoStore",
+    "MemoRepository",
 ]

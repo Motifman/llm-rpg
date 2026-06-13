@@ -1,7 +1,7 @@
 """EpisodicRecallBufferRepository — 想起イベントを再解釈 flush まで保持するリポジトリ。
 
 DDD 再編 (Issue #470 Phase 1 PR5): 元
-``application/llm/contracts/episodic_reinterpretation.py::IEpisodicRecallBufferStore``
+``application/llm/contracts/episodic_reinterpretation.py::EpisodicRecallBufferRepository``
 を domain に昇格し、``*Repository`` 命名に統一。
 """
 
@@ -40,7 +40,4 @@ class EpisodicRecallBufferRepository(ABC):
         """指定 player の pending 件数。"""
 
 
-# 後方互換: 旧名 ``IEpisodicRecallBufferStore`` は本 Repository の alias。
-IEpisodicRecallBufferStore = EpisodicRecallBufferRepository
-
-__all__ = ["EpisodicRecallBufferRepository", "IEpisodicRecallBufferStore"]
+__all__ = ["EpisodicRecallBufferRepository"]

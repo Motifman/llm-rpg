@@ -1,7 +1,7 @@
 """MemoRepository — プレイヤーごとの memo を保持するリポジトリ interface。
 
 DDD 再編 (Issue #470 Phase 1 PR5): 元
-``application/llm/contracts/interfaces.py::IMemoStore`` を domain に昇格し、
+``application/llm/contracts/interfaces.py::MemoRepository`` を domain に昇格し、
 ``*Repository`` 命名に統一。
 
 K run (PR #466) で memo が **LLM agent の Plan tier 相当** の役割を担うことが
@@ -24,8 +24,9 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 class MemoRepository(ABC):
     """プレイヤーごとの memo を保持する。
 
-    Issue #188 Phase 1a で ``ITodoStore`` から ``IMemoStore`` に改名され、
-    Issue #470 Phase 1 PR5 で ``MemoRepository`` に再命名された。
+    Issue #188 Phase 1a で ``ITodoStore`` → ``IMemoStore`` に改名され、
+    Issue #470 Phase 1 PR5 で ``MemoRepository`` に再命名された
+    (旧名 alias は同 Issue の cleanup で削除)。
     LLM が context に固定したい情報 (タスク / 目標 / 戦略メモ / 注意事項など)
     を扱う。
 
@@ -64,10 +65,4 @@ class MemoRepository(ABC):
         """memo を削除する。存在しなければ False。"""
 
 
-# 後方互換: 旧名 ``IMemoStore`` / ``ITodoStore`` は ``MemoRepository`` のエイリアス。
-# 新規コードは MemoRepository を使うこと。
-IMemoStore = MemoRepository
-ITodoStore = MemoRepository
-
-
-__all__ = ["MemoRepository", "IMemoStore", "ITodoStore"]
+__all__ = ["MemoRepository"]

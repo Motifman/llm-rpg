@@ -99,7 +99,7 @@ def _minimal_episode(*, player_id: int, recall_text: str) -> SubjectiveEpisode:
 
 
 class TestEpisodicMemoryWiringIntegration:
-    """オーケストレータと DefaultPromptBuilder が同一 IEpisodicEpisodeStore を参照すること"""
+    """オーケストレータと DefaultPromptBuilder が同一 EpisodicEpisodeRepository を参照すること"""
 
     def test_wiring_exposes_shared_store_matching_orchestrator(self) -> None:
         """返却 episodic_episode_store が、オーケストレータ内部のストアと同一インスタンス。"""
