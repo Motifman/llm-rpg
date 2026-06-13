@@ -21,14 +21,26 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     format_unified_timeline_as_recent_events_bullets,
     merge_observations_and_action_results_to_unified_timeline,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory import (
-    EpisodicCue,
-    EpisodicCueSource,
-    EpisodeAction,
+
+# -- domain VO re-exports (Issue #470 Phase 1 PR2) --
+# 旧 ``application/llm/contracts/episodic_memory.py`` から domain に昇格した
+# Value Object 群を、既存 import パターン互換のため本 __init__ で re-export する。
+# 新規コードは concrete file から直接 import すること:
+#     from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
+from ai_rpg_world.domain.memory.episodic.value_object.episode_location import (
     EpisodeLocation,
-    EpisodeSource,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import (
+    EpisodicCueSource,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
+# -- end domain re-exports --
+
 from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
     EpisodicRecallObservation,
     EpisodicReinterpretationEntry,

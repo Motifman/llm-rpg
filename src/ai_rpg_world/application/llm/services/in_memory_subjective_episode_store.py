@@ -13,9 +13,8 @@ import threading
 from datetime import datetime, timezone
 
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import IEpisodicEpisodeStore
-from ai_rpg_world.application.llm.contracts.episodic_memory import EpisodicCue, SubjectiveEpisode
-
-
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 def _occurrence_sort_key(ep: SubjectiveEpisode) -> tuple[datetime, str]:
     """
     occurred_at が naive のときは UTC として解釈し、aware は UTC に寄せて比較可能にする。

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from ai_rpg_world.application.llm.contracts.episodic_memory import EpisodicCue, SubjectiveEpisode
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 
 
 class IEpisodicEpisodeStore(ABC):

@@ -5,14 +5,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from ai_rpg_world.application.llm.contracts.episodic_memory import (
-    EpisodicCue,
-    EpisodicCueSource,
-    EpisodeAction,
-    EpisodeLocation,
-    EpisodeSource,
-    SubjectiveEpisode,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
+from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
+from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.contracts.episodic_memory_link import MemoryLink, MemoryLinkType
 from ai_rpg_world.application.llm.services.episodic_promotion_frontier import EpisodicPromotionFrontier
 from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (

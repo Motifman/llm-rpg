@@ -11,10 +11,8 @@ from typing import List
 
 import pytest
 
-from ai_rpg_world.application.llm.contracts.episodic_memory import (
-    EpisodicCue,
-    EpisodicCueSource,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.application.llm.contracts.semantic_memory_entry import (
     SemanticMemoryEntry,
 )

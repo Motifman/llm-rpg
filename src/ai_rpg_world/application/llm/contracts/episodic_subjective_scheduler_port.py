@@ -33,7 +33,7 @@ from __future__ import annotations
 from typing import Optional, Protocol, runtime_checkable
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
-from ai_rpg_world.application.llm.contracts.episodic_memory import SubjectiveEpisode
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 
 
 @runtime_checkable

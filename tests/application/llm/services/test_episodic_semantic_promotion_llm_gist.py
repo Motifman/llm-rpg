@@ -18,14 +18,12 @@ from uuid import uuid4
 
 import pytest
 
-from ai_rpg_world.application.llm.contracts.episodic_memory import (
-    EpisodeAction,
-    EpisodeLocation,
-    EpisodeSource,
-    EpisodicCue,
-    EpisodicCueSource,
-    SubjectiveEpisode,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
+from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
+from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.contracts.episodic_memory_link import (
     MemoryLink,
     MemoryLinkType,

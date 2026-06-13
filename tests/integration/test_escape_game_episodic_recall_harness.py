@@ -32,14 +32,12 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory import (
-    EpisodeAction,
-    EpisodeLocation,
-    EpisodeSource,
-    EpisodicCue,
-    EpisodicCueSource,
-    SubjectiveEpisode,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
+from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
+from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.services.episodic_cue_rules import (
     build_situation_episodic_cues,
 )

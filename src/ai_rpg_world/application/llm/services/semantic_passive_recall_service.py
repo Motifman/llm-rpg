@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Sequence
 
-from ai_rpg_world.application.llm.contracts.episodic_memory import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.application.llm.contracts.semantic_memory_entry import (
     SemanticMemoryEntry,
 )

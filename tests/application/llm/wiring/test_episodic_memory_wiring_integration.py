@@ -7,14 +7,12 @@ from ai_rpg_world.application.llm.chunk_boundary.rules import (
     ChunkBoundaryDecision,
     ChunkBoundaryReason,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory import (
-    EpisodicCue,
-    EpisodicCueSource,
-    EpisodeAction,
-    EpisodeLocation,
-    EpisodeSource,
-    SubjectiveEpisode,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
+from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
+from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_NO_OP
 from ai_rpg_world.application.llm.wiring import create_llm_agent_wiring

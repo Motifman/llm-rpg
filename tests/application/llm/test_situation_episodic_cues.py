@@ -8,7 +8,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     WorldObjectToolRuntimeTargetDto,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.application.llm.services.episodic_cue_rules import (
     MAX_EPISODIC_CUES,
     build_episodic_cues_for_tool_turn,
@@ -176,9 +176,7 @@ class TestSituationCueFreeTextProse:
     def test_matcher_注入で_prose_に含まれる固有名詞から_cue_が立つ(self) -> None:
         """``WorldNounMatcher`` を渡せば prose 中の固有名詞が cue 化される。
         ``OBSERVATION_FREETEXT`` source で来るので structured cue と区別可能。"""
-        from ai_rpg_world.application.llm.contracts.episodic_memory import (
-            EpisodicCueSource,
-        )
+        from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
         from ai_rpg_world.application.llm.services.world_noun_matcher import (
             WorldNounMatcherBuilder,
         )
