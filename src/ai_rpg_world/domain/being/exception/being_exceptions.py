@@ -61,6 +61,27 @@ class BeingAlreadyAttachedException(BeingDomainException, StateException):
     error_code = "BEING.ALREADY_ATTACHED"
 
 
+class BeingSnapshotIncompleteException(BeingDomainException, ValidationException):
+    """BeingSnapshot の構造が不整合な場合に投げる例外。
+
+    PR #462 §2.1 R1 「all-or-nothing で復元の完全性を保証 (部分復元を構造的に
+    禁止)」を強制する例外。snapshot の attachment フィールドが片方だけ埋まって
+    いる / 認識できない memory_kind が含まれる等の構造的破綻時に投げる。
+    """
+
+    error_code = "BEING.SNAPSHOT_INCOMPLETE"
+
+
+class BeingSnapshotVersionException(BeingDomainException, ValidationException):
+    """BeingSnapshot のバージョンが現バージョン codec で復元不能な場合に投げる例外。
+
+    将来の schema 進化に備えた構造化バージョニング (= 設計判断 5)。古い snapshot
+    を新 codec で読む場合の明示的なフォールバック地点として使う。
+    """
+
+    error_code = "BEING.SNAPSHOT_VERSION"
+
+
 __all__ = [
     "BeingAlreadyAttachedException",
     "BeingAttachmentValidationException",
@@ -68,4 +89,6 @@ __all__ = [
     "BeingIdValidationException",
     "BeingIdentityValidationException",
     "BeingNotFoundException",
+    "BeingSnapshotIncompleteException",
+    "BeingSnapshotVersionException",
 ]
