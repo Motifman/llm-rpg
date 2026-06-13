@@ -15,9 +15,6 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
     MemoFulfillmentContext,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
-
 @pytest.fixture
 def store() -> InMemoryMemoStore:
     return InMemoryMemoStore()
@@ -161,28 +158,7 @@ class TestRemoveByBeing:
         assert store.remove_by_being(BeingId("ada"), m3) is True
 
 
-class TestIndependenceFromPlayerIdApi:
-    """新旧 API の独立性 (= 並走 store は同期しない)。"""
-
-    def test_player_id_経由で追加した_memo_は_being_id_経由では見えない(
-        self, store: InMemoryMemoStore
-    ) -> None:
-        """旧 API で追加すると新 API からは取れない (独立 namespace)。"""
-        store.add(PlayerId(2), "via player")
-        assert store.list_uncompleted_by_being(BeingId("ada")) == []
-
-    def test_being_id_経由で追加した_memo_は_player_id_経由では見えない(
-        self, store: InMemoryMemoStore
-    ) -> None:
-        """逆方向も独立。"""
-        store.add_by_being(BeingId("ada"), "via being")
-        assert store.list_uncompleted(PlayerId(2)) == []
-
-    def test_新旧_両_API_を同一_store_で同時に使える(
-        self, store: InMemoryMemoStore
-    ) -> None:
-        """両 API は内部 store が別なので独立に動作する。"""
-        store.add(PlayerId(2), "player side")
-        store.add_by_being(BeingId("ada"), "being side")
-        assert len(store.list_uncompleted(PlayerId(2))) == 1
-        assert len(store.list_uncompleted_by_being(BeingId("ada"))) == 1
+# Phase 3 Step 3a-3: 旧 player_id API を撤去したため「新旧独立性」テストは削除済。
+# 撤去前は ``_store`` (player_id keyed) と ``_being_store`` (being_id keyed) の
+# 独立性を検証していたが、player_id 経路 (add / list_uncompleted / complete /
+# remove) がなくなった現在は being_id 経路しか存在しない。

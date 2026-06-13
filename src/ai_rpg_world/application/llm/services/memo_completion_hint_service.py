@@ -97,8 +97,8 @@ class MemoCompletionHintService:
             raise TypeError("similarity_threshold must be a number")
         if not (0.0 <= float(similarity_threshold) <= 1.0):
             raise ValueError("similarity_threshold must be in [0.0, 1.0]")
-        # Phase 3 Step 3a-2: Resolver + WorldId 注入時のみ being_id 経路。
-        # 詳細は memo_executor の同様 dual-path コメント参照。
+        # Phase 3 Step 3a-3: constructor では optional だが、detect 呼び出し時に
+        # Resolver/Being が無ければ hint なし (= 空 list 返却) で graceful 縮退する。
         from ai_rpg_world.domain.being.service.being_attachment_resolver import (
             BeingAttachmentResolver as _BAR,
         )
@@ -119,14 +119,19 @@ class MemoCompletionHintService:
         self._default_world_id = default_world_id
 
     def _list_uncompleted(self, player_id: PlayerId) -> list[MemoEntry]:
-        """dual-path helper: Resolver + WorldId が揃えば新 API、なければ旧。"""
-        if self._resolver is not None and self._default_world_id is not None:
-            being_id = self._resolver.resolve_being_id(
-                self._default_world_id, player_id
-            )
-            if being_id is not None:
-                return self._memo_store.list_uncompleted_by_being(being_id)
-        return self._memo_store.list_uncompleted(player_id)
+        """being_id 経路で未完了 memo を引く。
+
+        Resolver 未注入 or Being 未 provision の場合は空リスト (= hint 不要として
+        扱う、turn は止めない)。
+        """
+        if self._resolver is None or self._default_world_id is None:
+            return []
+        being_id = self._resolver.resolve_being_id(
+            self._default_world_id, player_id
+        )
+        if being_id is None:
+            return []
+        return self._memo_store.list_uncompleted_by_being(being_id)
 
     def detect(
         self,

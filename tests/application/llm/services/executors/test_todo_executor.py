@@ -1,4 +1,9 @@
-"""TodoToolExecutor のユニットテスト"""
+"""TodoToolExecutor のユニットテスト
+
+Phase 3 Step 3a-3: Resolver+WorldId 必須 + provision 済 Being を前提に書換。
+共通 fixture が make_memo_being_setup() で Being を 1 体 provision し、
+todo_store として共有する。
+"""
 
 import pytest
 
@@ -12,21 +17,42 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMO_LIST,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from tests.application.llm._memo_being_test_helpers import (
+    MemoBeingTestSetup,
+    make_memo_being_setup,
+)
 
 
 @pytest.fixture
-def todo_store():
-    return InMemoryTodoStore()
+def being_setup() -> MemoBeingTestSetup:
+    setup = make_memo_being_setup()
+    # テスト内で使う player_id = 1 を provision (handler 引数 1 と一致)
+    setup.provision(1)
+    return setup
 
 
 @pytest.fixture
-def executor_with_store(todo_store):
-    return TodoToolExecutor(todo_store=todo_store)
+def todo_store(being_setup: MemoBeingTestSetup) -> InMemoryTodoStore:
+    # 共有 store を InMemoryTodoStore として参照 (= 既存 fixture と互換)
+    return being_setup.memo_store
 
 
 @pytest.fixture
-def executor_without_store():
-    return TodoToolExecutor(todo_store=None)
+def executor_with_store(being_setup: MemoBeingTestSetup) -> TodoToolExecutor:
+    return TodoToolExecutor(
+        todo_store=being_setup.memo_store,
+        being_attachment_resolver=being_setup.resolver,
+        default_world_id=being_setup.world_id,
+    )
+
+
+@pytest.fixture
+def executor_without_store(being_setup: MemoBeingTestSetup) -> TodoToolExecutor:
+    return TodoToolExecutor(
+        todo_store=None,
+        being_attachment_resolver=being_setup.resolver,
+        default_world_id=being_setup.world_id,
+    )
 
 
 class TestTodoToolExecutorGetHandlers:
@@ -96,10 +122,10 @@ class TestTodoToolExecutorList:
 class TestTodoToolExecutorComplete:
     """memo_done の実行 (常に memo_ids 配列を受ける、batch 対応)"""
 
-    def test_complete_success_returns_dto(self, executor_with_store, todo_store):
+    def test_complete_success_returns_dto(self, executor_with_store, todo_store, being_setup):
         """単一 ID を 1 要素配列で渡すと完了する。"""
         executor_with_store._execute_memo_add(1, {"content": "完了対象"})
-        entries = todo_store.list_uncompleted(PlayerId(1))
+        entries = todo_store.list_uncompleted_by_being(being_setup.being_id_for(1))
         todo_id = entries[0].id
         result = executor_with_store._execute_memo_done(
             1, {"memo_ids": [todo_id]}
@@ -149,25 +175,25 @@ class TestTodoToolExecutorComplete:
 class TestMemoExecutorBatchComplete:
     """memo_done の batch 完了挙動 (Issue #228)。"""
 
-    def test_複数_id_を一括で完了できる(self, executor_with_store, todo_store):
+    def test_複数_id_を一括で完了できる(self, executor_with_store, todo_store, being_setup):
         """配列に複数 ID を渡すと全て完了状態になる。"""
         executor_with_store._execute_memo_add(1, {"content": "A"})
         executor_with_store._execute_memo_add(1, {"content": "B"})
         executor_with_store._execute_memo_add(1, {"content": "C"})
-        ids = [e.id for e in todo_store.list_uncompleted(PlayerId(1))]
+        ids = [e.id for e in todo_store.list_uncompleted_by_being(being_setup.being_id_for(1))]
         result = executor_with_store._execute_memo_done(1, {"memo_ids": ids})
         assert result.success is True
         # 3 件全て完了したので remaining は 0
-        assert todo_store.list_uncompleted(PlayerId(1)) == []
+        assert todo_store.list_uncompleted_by_being(being_setup.being_id_for(1)) == []
         # message に 3 件まとめて完了した旨が含まれる
         assert "3" in result.message
 
     def test_存在する_id_と存在しない_id_が混在しても_存在分は完了する(
-        self, executor_with_store, todo_store
+        self, executor_with_store, todo_store, being_setup
     ):
         """部分成功: 存在する ID は done、存在しない ID は not_found として個別報告。"""
         executor_with_store._execute_memo_add(1, {"content": "A"})
-        valid_id = todo_store.list_uncompleted(PlayerId(1))[0].id
+        valid_id = todo_store.list_uncompleted_by_being(being_setup.being_id_for(1))[0].id
         result = executor_with_store._execute_memo_done(
             1, {"memo_ids": [valid_id, "nonexistent-xxx"]}
         )
@@ -178,14 +204,14 @@ class TestMemoExecutorBatchComplete:
         # Issue #276: 完了 ID は短縮形 (先頭 6 文字 + …) で表示される
         assert valid_id[:6] in result.message
         # 有効 ID 側は実際に completed 化されている
-        assert todo_store.list_uncompleted(PlayerId(1)) == []
+        assert todo_store.list_uncompleted_by_being(being_setup.being_id_for(1)) == []
 
     def test_重複_id_を含めても二重完了でエラーにならない(
-        self, executor_with_store, todo_store
+        self, executor_with_store, todo_store, being_setup
     ):
         """同じ ID を 2 回含めると、1 回目で done、2 回目は not_found 扱い。"""
         executor_with_store._execute_memo_add(1, {"content": "A"})
-        memo_id = todo_store.list_uncompleted(PlayerId(1))[0].id
+        memo_id = todo_store.list_uncompleted_by_being(being_setup.being_id_for(1))[0].id
         result = executor_with_store._execute_memo_done(
             1, {"memo_ids": [memo_id, memo_id]}
         )
@@ -194,29 +220,28 @@ class TestMemoExecutorBatchComplete:
         # Issue #276: 完了 ID は短縮形で表示される
         assert memo_id[:6] in result.message
 
-    def test_短縮形_prefix_で完了できる(self, executor_with_store, todo_store):
+    def test_短縮形_prefix_で完了できる(self, executor_with_store, todo_store, being_setup):
         """Issue #276: memo_done は full UUID と先頭 6 文字短縮形のどちらも
         受け付ける (git commit hash 風 prefix 一致)。"""
         executor_with_store._execute_memo_add(1, {"content": "A"})
-        full_id = todo_store.list_uncompleted(PlayerId(1))[0].id
+        full_id = todo_store.list_uncompleted_by_being(being_setup.being_id_for(1))[0].id
         short = full_id[:6]
         result = executor_with_store._execute_memo_done(
             1, {"memo_ids": [short]}
         )
         assert result.success is True
         # 完了済み
-        assert todo_store.list_uncompleted(PlayerId(1)) == []
+        assert todo_store.list_uncompleted_by_being(being_setup.being_id_for(1)) == []
 
-    def test_曖昧な_prefix_は_ambiguous_エラー(self, executor_with_store, todo_store):
+    def test_曖昧な_prefix_は_ambiguous_エラー(self, executor_with_store, todo_store, being_setup):
         """同じ先頭文字で始まる 2 つの memo に短縮形が一致すると、ambiguous
         として個別報告される。"""
         # uuid4 はランダムなので、無理やり同じ先頭にするためにモンキーパッチで対応
-        # ここでは store に直接 ID を仕込む簡易テスト
+        # ここでは being store に直接 ID を仕込む簡易テスト
         from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
         from datetime import datetime
-        pid = PlayerId(1)
-        key = todo_store._key(pid)
-        todo_store._store[key] = [
+        being_id = being_setup.being_id_for(1)
+        todo_store._being_store[being_id] = [
             MemoEntry(
                 id="abc123-aaa",
                 content="A",
@@ -230,12 +255,12 @@ class TestMemoExecutorBatchComplete:
                 completed=False,
             ),
         ]
-        todo_store._id_to_index[key] = {"abc123-aaa": 0, "abc123-bbb": 1}
+        todo_store._being_id_to_index[being_id] = {"abc123-aaa": 0, "abc123-bbb": 1}
         result = executor_with_store._execute_memo_done(
             1, {"memo_ids": ["abc123"]}
         )
         # どちらも未完了のまま
-        assert len(todo_store.list_uncompleted(pid)) == 2
+        assert len(todo_store.list_uncompleted_by_being(being_id)) == 2
         assert result.success is False
         assert "曖昧" in result.message
 

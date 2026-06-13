@@ -164,20 +164,19 @@ class TestOrchestratorMemoHintTrace:
     def test_memo_hint_発火時に_TraceEventKind_MEMO_HINT_が_record_される(self) -> None:
         """memo store + hint service を注入し、action_summary に memo 内容が再出現する形で
         run_turn を回すと、ACTION / ACTION_RESULT に加えて MEMO_HINT も記録される。"""
-        from datetime import datetime
-        from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-        from ai_rpg_world.application.llm.services.in_memory_memo_store import (
-            InMemoryMemoStore,
-        )
         from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
             MemoCompletionHintService,
+        )
+        from tests.application.llm._memo_being_test_helpers import (
+            make_memo_being_setup,
         )
 
         rec = _CapturingRecorder()
 
         # memo を 1 件追加 (custom_tool の action_summary に「custom_tool」が含まれるよう設計)
-        store = InMemoryMemoStore()
-        store.add(PlayerId(1), content="custom_tool を実行する")
+        being_setup = make_memo_being_setup()
+        being_id = being_setup.provision(1)
+        being_setup.memo_store.add_by_being(being_id, content="custom_tool を実行する")
 
         # _build_orch とほぼ同じだが、hint service を注入する
         action_store = DefaultActionResultStore(max_entries_per_player=10)
@@ -203,7 +202,11 @@ class TestOrchestratorMemoHintTrace:
             tool_argument_resolver=_StubArgumentResolver(),
             trace_recorder=rec,
             tick_provider=lambda: 13,
-            memo_completion_hint_service=MemoCompletionHintService(store),
+            memo_completion_hint_service=MemoCompletionHintService(
+                being_setup.memo_store,
+                being_attachment_resolver=being_setup.resolver,
+                default_world_id=being_setup.world_id,
+            ),
         )
         orch.run_turn(PlayerId(1))
 

@@ -907,19 +907,24 @@ class DefaultPromptBuilder(IPromptBuilder):
             )
 
     def _fetch_uncompleted_memos(self, player_id: PlayerId) -> list[MemoEntry]:
-        """dual-path helper (Phase 3 Step 3a-2): Resolver + WorldId が揃えば
-        being_id 経路で memo を引く、なければ legacy player_id 経路。"""
+        """being_id 経路で未完了 memo を引く (Phase 3 Step 3a-3)。
+
+        Resolver/WorldId 未注入か Being 未 provision の場合は空リストを返す
+        (= prompt 内 memo セクションが「未完了なし」相当として表示される、
+        既存 prompt 構築テストが Resolver なしで動く余地を残す)。
+        """
         assert self._memo_store is not None
         if (
-            self._being_attachment_resolver is not None
-            and self._default_world_id is not None
+            self._being_attachment_resolver is None
+            or self._default_world_id is None
         ):
-            being_id = self._being_attachment_resolver.resolve_being_id(
-                self._default_world_id, player_id
-            )
-            if being_id is not None:
-                return self._memo_store.list_uncompleted_by_being(being_id)
-        return self._memo_store.list_uncompleted(player_id)
+            return []
+        being_id = self._being_attachment_resolver.resolve_being_id(
+            self._default_world_id, player_id
+        )
+        if being_id is None:
+            return []
+        return self._memo_store.list_uncompleted_by_being(being_id)
 
     def _build_active_memos_text(self, player_id: PlayerId) -> str:
         """LLM が固定した未完了 memo を「進行中のメモ」用テキストに整形する。
