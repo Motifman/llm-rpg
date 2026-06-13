@@ -21,8 +21,8 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory import EpisodicCue, EpisodicCueSource
-
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 if TYPE_CHECKING:
     # Issue #283 後続: 観測 prose の自由文 cue 抽出に使う。Protocol なので
     # 型チェック時のみ参照。runtime には依存しない (caller が None でも安全)。

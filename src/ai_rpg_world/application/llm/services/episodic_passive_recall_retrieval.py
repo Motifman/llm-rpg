@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import IEpisodicEpisodeStore
-from ai_rpg_world.application.llm.contracts.episodic_memory import EpisodicCue, SubjectiveEpisode
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.contracts.episodic_memory_link_store_port import IMemoryLinkStore
 from ai_rpg_world.application.llm.services.episodic_spreading_activation import (
     neighbor_priming_scores,

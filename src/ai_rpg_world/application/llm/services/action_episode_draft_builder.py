@@ -20,13 +20,11 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory import (
-    EpisodicCue,
-    EpisodeAction,
-    EpisodeLocation,
-    EpisodeSource,
-    SubjectiveEpisode,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
+from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
+from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 
 _EMOTION_HINT_SET = frozenset(EMOTION_HINT_VALUES)

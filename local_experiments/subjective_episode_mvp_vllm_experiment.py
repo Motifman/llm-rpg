@@ -65,14 +65,12 @@ from ai_rpg_world.application.llm.contracts.dtos import (  # noqa: E402
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory import (  # noqa: E402
-    EpisodicCue,
-    EpisodicCueSource,
-    EpisodeAction,
-    EpisodeLocation,
-    EpisodeSource,
-    SubjectiveEpisode,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
+from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
+from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.services.action_episode_draft_builder import (  # noqa: E402
     ActionEpisodeDraftBuilder,
 )

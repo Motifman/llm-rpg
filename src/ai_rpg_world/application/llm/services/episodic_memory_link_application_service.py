@@ -10,7 +10,7 @@ from uuid import uuid4
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
     IEpisodicEpisodeStore,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory import SubjectiveEpisode
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.contracts.episodic_memory_link import (
     MemoryLink,
     MemoryLinkType,
