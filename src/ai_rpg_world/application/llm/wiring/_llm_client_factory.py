@@ -2,7 +2,7 @@
 
 import os
 
-from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
+from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 
 _VALID_LLM_CLIENT_VALUES = frozenset({"stub", "litellm"})

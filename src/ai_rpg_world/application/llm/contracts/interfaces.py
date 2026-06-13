@@ -281,24 +281,6 @@ class ILlmTurnTrigger(ABC):
         pass
 
 
-class ILLMClient(ABC):
-    """LLM 呼び出しクライアント。"""
-
-    @abstractmethod
-    def invoke(
-        self,
-        messages: List[Dict[str, str]],
-        tools: List[Dict[str, Any]],
-        tool_choice: str = "required",
-        *,
-        metrics_sink: Optional[Any] = None,
-    ) -> Optional[Dict[str, Any]]:
-        """
-        LLM を呼び出し、選択された tool_call を返す。
-        返り値例: {"name": "move_to_destination", "arguments": "{...}"}
-
-        ``metrics_sink`` (``LlmCallMetricsSink``) が渡されたら、呼び出し完了時に
-        ``LlmCallMetrics`` で記録する (実装側の任意)。実 LLM クライアントは
-        wall_latency + token usage を埋め、stub 系は best-effort で実装する。
-        """
-        pass
+# NOTE (Issue #470 Phase 1 cleanup A3):
+# ``ILLMClient`` は ``application/llm/ports/llm_client_port.py`` に移動した。
+# 本ファイルから直接 import していたコードは ports/ から import すること。

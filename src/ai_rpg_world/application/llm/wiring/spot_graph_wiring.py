@@ -24,10 +24,10 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repos
 from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
-    ILLMClient,
     ILLMPlayerResolver,
     ISlidingWindowMemory,
 )
+from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
 from ai_rpg_world.domain.persona.value_object.persona_prompt_policy import PersonaPromptPolicy
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
