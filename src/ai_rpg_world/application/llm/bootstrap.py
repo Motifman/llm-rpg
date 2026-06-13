@@ -24,8 +24,8 @@ from ai_rpg_world.infrastructure.events.observation_event_handler_registry impor
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.contracts.interfaces import (
-        ILlmTurnTrigger,
-    )
+    ILlmTurnTrigger,
+)
 
 
 def compose_llm_runtime(

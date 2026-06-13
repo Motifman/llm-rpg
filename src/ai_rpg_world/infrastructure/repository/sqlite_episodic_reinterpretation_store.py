@@ -7,13 +7,11 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
-from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
-    EpisodicRecallObservation,
-    EpisodicReinterpretationEntry,
-    EpisodicReinterpretationStatus,
-    IEpisodicRecallBufferStore,
-    IEpisodicReinterpretationJournalStore,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import EpisodicReinterpretationStatus
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
 from ai_rpg_world.infrastructure.repository.sqlite_migration import (
     SqliteMigration,
     apply_migrations,

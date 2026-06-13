@@ -6,13 +6,13 @@ from collections import defaultdict
 from datetime import datetime
 from typing import DefaultDict, Dict, Set, Tuple
 
-from ai_rpg_world.application.llm.contracts.episodic_memory_link import (
+from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     MemoryLink,
     MemoryLinkType,
     effective_link_strength,
     normalize_episode_pair,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory_link_store_port import (
+from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
     IMemoryLinkStore,
 )
 

@@ -6,13 +6,11 @@ from collections import defaultdict
 from dataclasses import replace
 from datetime import datetime, timezone
 
-from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
-    EpisodicRecallObservation,
-    EpisodicReinterpretationEntry,
-    EpisodicReinterpretationStatus,
-    IEpisodicRecallBufferStore,
-    IEpisodicReinterpretationJournalStore,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import EpisodicReinterpretationStatus
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
 
 
 def _dt_key(dt: datetime) -> datetime:

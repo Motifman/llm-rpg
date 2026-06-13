@@ -1,4 +1,12 @@
-"""エピソード記憶間リンク（連想結合）の契約型。"""
+"""MemoryLink — エピソード記憶間リンク (連想結合) の Value Object。
+
+DDD 再編 (Issue #470 Phase 1 PR5): 元
+``application/llm/contracts/episodic_memory_link.py`` から domain に昇格。
+
+関連 helper (``normalize_episode_pair``, ``other_episode_id``,
+``effective_link_strength``) は同 module 内に同居する。これらは MemoryLink の
+domain logic で、外部利用を想定する。
+"""
 
 from __future__ import annotations
 
@@ -27,10 +35,19 @@ def normalize_episode_pair(episode_id_a: str, episode_id_b: str) -> Tuple[str, s
     return (a, b) if a < b else (b, a)
 
 
+def _strip_required(label: str, value: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{label} must be str")
+    s = value.strip()
+    if not s:
+        raise ValueError(f"{label} must not be empty")
+    return s
+
+
 @dataclass(frozen=True)
 class MemoryLink:
-    """
-    双方向リンクを 1 レコードで表す（episode_id_a < episode_id_b で正規化）。
+    """双方向リンクを 1 レコードで表す (episode_id_a < episode_id_b で正規化)。
+
     実効強度は参照時に lazy decay で算出する。
     """
 
@@ -66,15 +83,6 @@ class MemoryLink:
             raise ValueError("decay_rate must be a non-negative float")
 
 
-def _strip_required(label: str, value: str) -> str:
-    if not isinstance(value, str):
-        raise TypeError(f"{label} must be str")
-    s = value.strip()
-    if not s:
-        raise ValueError(f"{label} must not be empty")
-    return s
-
-
 def other_episode_id(link: MemoryLink, episode_id: str) -> str:
     """無向リンクの反対側の episode_id。"""
     if link.episode_id_a == episode_id:
@@ -85,11 +93,18 @@ def other_episode_id(link: MemoryLink, episode_id: str) -> str:
 
 
 def effective_link_strength(link: MemoryLink, now: datetime) -> float:
-    """
-    遅延減衰: last_activated_at からの経過日数に対して指数減衰を適用した実効強度。
-    """
+    """遅延減衰: last_activated_at からの経過日数に対して指数減衰を適用した実効強度。"""
     if now.tzinfo is None and link.last_activated_at.tzinfo is not None:
         now = now.replace(tzinfo=timezone.utc)
     elapsed_sec = (now - link.last_activated_at).total_seconds()
     elapsed_days = max(0.0, elapsed_sec / 86400.0)
     return float(link.strength) * exp(-float(link.decay_rate) * elapsed_days)
+
+
+__all__ = [
+    "MemoryLink",
+    "MemoryLinkType",
+    "effective_link_strength",
+    "normalize_episode_pair",
+    "other_episode_id",
+]

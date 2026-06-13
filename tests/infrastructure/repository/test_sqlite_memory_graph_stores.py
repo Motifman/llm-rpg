@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_rpg_world.application.llm.contracts.episodic_memory_link import MemoryLink, MemoryLinkType
+from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import SqliteMemoryLinkStore
 from ai_rpg_world.infrastructure.repository.sqlite_semantic_memory_store import SqliteSemanticMemoryStore

@@ -8,14 +8,14 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     IEpisodicEpisodeStore,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory_link import (
+from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     effective_link_strength,
     other_episode_id,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory_link_store_port import (
+from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
     IMemoryLinkStore,
 )
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (

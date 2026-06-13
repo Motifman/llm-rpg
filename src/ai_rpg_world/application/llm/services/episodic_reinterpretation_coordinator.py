@@ -10,17 +10,17 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     IEpisodicEpisodeStore,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
-    EpisodicRecallObservation,
-    EpisodicReinterpretationEntry,
-    IEpisodicRecallBufferStore,
     IEpisodicReinterpretationCompletionPort,
-    IEpisodicReinterpretationJournalStore,
 )
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 

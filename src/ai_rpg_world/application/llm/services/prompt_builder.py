@@ -9,23 +9,21 @@ from uuid import uuid4
 from ai_rpg_world.application.llm.contracts.dtos import (
     SystemPromptPlayerInfoDto,
 )
-from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
-    EpisodicRecallObservation,
-    IEpisodicRecallBufferStore,
-    IEpisodicReinterpretationJournalStore,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
     ILlmUiContextBuilder,
-    IMemoStore,
     IPromptBuilder,
     IRecentEventsFormatter,
     ISlidingWindowMemory,
     ISystemPromptBuilder,
 )
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import IMemoStore
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.services.active_memos_formatter import (

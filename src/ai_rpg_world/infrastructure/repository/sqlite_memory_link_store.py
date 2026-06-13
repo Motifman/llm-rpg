@@ -5,13 +5,13 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 
-from ai_rpg_world.application.llm.contracts.episodic_memory_link import (
+from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     MemoryLink,
     MemoryLinkType,
     effective_link_strength,
     normalize_episode_pair,
 )
-from ai_rpg_world.application.llm.contracts.episodic_memory_link_store_port import (
+from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
     IMemoryLinkStore,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_memory_graph_schema import (

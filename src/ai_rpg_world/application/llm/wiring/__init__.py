@@ -73,26 +73,26 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ILLMClient,
     ILLMPlayerResolver,
     ILlmTurnTrigger,
-    IMemoStore,
     ISlidingWindowMemory,
 )
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import IMemoStore
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
 )
-from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     IEpisodicEpisodeStore,
 )
-from ai_rpg_world.application.llm.contracts.semantic_memory_store_port import (
+from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     ISemanticMemoryStore,
 )
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
 from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
-    IEpisodicRecallBufferStore,
     IEpisodicReinterpretationCompletionPort,
-    IEpisodicReinterpretationJournalStore,
 )
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
 from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,

@@ -19,7 +19,7 @@ from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context impor
     MemoFulfillmentContext,
 )
 # -- end memo re-exports --
-from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     IEpisodicEpisodeStore,
 )
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
@@ -54,13 +54,27 @@ from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import 
 # -- end domain re-exports --
 
 from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
-    EpisodicRecallObservation,
-    EpisodicReinterpretationEntry,
-    EpisodicReinterpretationStatus,
-    IEpisodicRecallBufferStore,
     IEpisodicReinterpretationCompletionPort,
+)
+
+# -- domain VO re-exports: episodic reinterpretation (Issue #470 Phase 1 PR5) --
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
+    EpisodicRecallObservation,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import (
+    EpisodicReinterpretationEntry,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import (
+    EpisodicReinterpretationStatus,
+)
+# -- domain Repository re-exports: episodic reinterpretation (Issue #470 Phase 1 PR5) --
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
+    IEpisodicRecallBufferStore,
+)
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
     IEpisodicReinterpretationJournalStore,
 )
+# -- end episodic reinterpretation re-exports --
 # -- domain VO re-exports: persona (Issue #470 Phase 1 PR4) --
 # 旧 ``persona.py`` から domain に昇格した VO の後方互換 re-export。
 # 新規コードは concrete file から import すること:
@@ -85,8 +99,8 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IRecentEventsFormatter,
     ISlidingWindowMemory,
     ISystemPromptBuilder,
-    ITodoStore,
 )
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import ITodoStore
 
 __all__ = [
     "ChunkEncodingInput",

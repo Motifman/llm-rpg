@@ -21,7 +21,7 @@ from typing import Sequence
 
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
-from ai_rpg_world.application.llm.contracts.semantic_memory_store_port import (
+from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     ISemanticMemoryStore,
 )
 

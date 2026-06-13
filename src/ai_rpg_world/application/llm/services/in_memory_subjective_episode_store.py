@@ -12,7 +12,7 @@ from __future__ import annotations
 import threading
 from datetime import datetime, timezone
 
-from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import IEpisodicEpisodeStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import IEpisodicEpisodeStore
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 def _occurrence_sort_key(ep: SubjectiveEpisode) -> tuple[datetime, str]:

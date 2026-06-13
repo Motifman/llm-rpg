@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import IEpisodicEpisodeStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import IEpisodicEpisodeStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )

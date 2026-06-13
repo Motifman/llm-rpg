@@ -16,12 +16,12 @@ from datetime import datetime, timezone
 from typing import Callable, Dict, Optional, Sequence, Set
 from uuid import uuid4
 
-from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import IEpisodicEpisodeStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import IEpisodicEpisodeStore
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.application.llm.contracts.episodic_memory_link import effective_link_strength
-from ai_rpg_world.application.llm.contracts.episodic_memory_link_store_port import IMemoryLinkStore
+from ai_rpg_world.domain.memory.episodic.value_object.memory_link import effective_link_strength
+from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import IMemoryLinkStore
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
-from ai_rpg_world.application.llm.contracts.semantic_memory_store_port import ISemanticMemoryStore
+from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import ISemanticMemoryStore
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.episodic_promotion_frontier import EpisodicPromotionFrontier
 from ai_rpg_world.application.llm.services.semantic_gist_service import (
