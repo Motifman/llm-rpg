@@ -1232,7 +1232,9 @@ def create_llm_agent_wiring(
     from ai_rpg_world.domain.being.service.being_attachment_resolver import (
         BeingAttachmentResolver,
     )
-    from ai_rpg_world.domain.world.value_object.world_id import WorldId
+    from ai_rpg_world.domain.world.value_object.world_id import (
+        DEFAULT_SINGLE_WORLD_ID,
+    )
     from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
         InMemoryBeingRepository,
     )
@@ -1240,7 +1242,7 @@ def create_llm_agent_wiring(
     _being_repository = InMemoryBeingRepository()
     _being_resolver = BeingAttachmentResolver(_being_repository)
     _being_provisioning_service = BeingProvisioningService(_being_repository)
-    _default_world_id = WorldId(1)
+    _default_world_id = DEFAULT_SINGLE_WORLD_ID
 
     def _current_tick_provider() -> Optional[int]:
         if game_time_provider is None:

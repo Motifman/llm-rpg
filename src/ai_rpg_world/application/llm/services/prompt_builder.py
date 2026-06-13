@@ -301,8 +301,10 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("trace_recorder_provider must be callable or None")
 
         self._memo_store = memo_store
-        # Phase 3 Step 3a-2: Resolver + WorldId 注入時のみ being_id 経路で memo を
-        # 読む dual-path。詳細は memo_executor の同様コメント参照。
+        # Phase 3 Step 3a-3: Resolver/WorldId は constructor では Optional のまま。
+        # 未注入のときは ``_fetch_uncompleted_memos`` が空 list を返して
+        # graceful 縮退する (= prompt 内 memo セクションが「未完了なし」表示)。
+        # 詳細は _fetch_uncompleted_memos の docstring を参照。
         from ai_rpg_world.domain.being.service.being_attachment_resolver import (
             BeingAttachmentResolver as _BAR,
         )

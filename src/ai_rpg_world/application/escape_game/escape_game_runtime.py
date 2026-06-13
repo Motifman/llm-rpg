@@ -823,7 +823,9 @@ class EscapeGameRuntime:
         from ai_rpg_world.domain.being.service.being_attachment_resolver import (
             BeingAttachmentResolver,
         )
-        from ai_rpg_world.domain.world.value_object.world_id import WorldId
+        from ai_rpg_world.domain.world.value_object.world_id import (
+            DEFAULT_SINGLE_WORLD_ID,
+        )
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
             InMemoryBeingRepository,
         )
@@ -836,7 +838,7 @@ class EscapeGameRuntime:
             self._aux_being_resolver = BeingAttachmentResolver(
                 self._aux_being_repository
             )
-            self._aux_being_default_world_id = WorldId(1)
+            self._aux_being_default_world_id = DEFAULT_SINGLE_WORLD_ID
 
         self._todo_tool_executor = TodoToolExecutor(
             self._todo_store,
@@ -847,6 +849,19 @@ class EscapeGameRuntime:
             being_attachment_resolver=self._aux_being_resolver,
             default_world_id=self._aux_being_default_world_id,
         )
+
+    @property
+    def aux_being_resolver(self):
+        """Phase 3 Step 3a-3: presentation 層から MemoCompletionHintService 等に
+        渡すための ``_aux_being_resolver`` 公開。``_wire_auxiliary_tool_stack``
+        を呼んでいないと None。
+        """
+        return getattr(self, "_aux_being_resolver", None)
+
+    @property
+    def aux_being_default_world_id(self):
+        """Phase 3 Step 3a-3: aux Being の default WorldId 公開アクセサ。"""
+        return getattr(self, "_aux_being_default_world_id", None)
 
     def run_llm_auxiliary_tool(
         self, player_id: PlayerId, name: str, arguments: Dict[str, Any]

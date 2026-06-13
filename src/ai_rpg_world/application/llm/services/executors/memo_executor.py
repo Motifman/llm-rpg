@@ -120,17 +120,23 @@ class MemoToolExecutor:
             )
         return being_id
 
+    def _require_memo_store(self) -> MemoRepository:
+        """``get_handlers`` のガードを抜けた後の二重チェック (python -O でも生存)。"""
+        if self._memo_store is None:
+            raise RuntimeError("MemoToolExecutor: memo_store is not wired")
+        return self._memo_store
+
     def _add_memo(self, player_id: PlayerId, content: str) -> str:
-        assert self._memo_store is not None
+        store = self._require_memo_store()
         being_id = self._require_being_id(player_id)
-        return self._memo_store.add_by_being(
+        return store.add_by_being(
             being_id, content, current_tick=self._current_tick()
         )
 
     def _list_uncompleted(self, player_id: PlayerId) -> list[MemoEntry]:
-        assert self._memo_store is not None
+        store = self._require_memo_store()
         being_id = self._require_being_id(player_id)
-        return self._memo_store.list_uncompleted_by_being(being_id)
+        return store.list_uncompleted_by_being(being_id)
 
     def _complete_memo(
         self,
@@ -138,9 +144,9 @@ class MemoToolExecutor:
         memo_id: str,
         fulfillment_context: Optional[MemoFulfillmentContext],
     ) -> bool:
-        assert self._memo_store is not None
+        store = self._require_memo_store()
         being_id = self._require_being_id(player_id)
-        return self._memo_store.complete_by_being(
+        return store.complete_by_being(
             being_id, memo_id, fulfillment_context=fulfillment_context
         )
 
