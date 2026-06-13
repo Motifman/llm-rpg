@@ -17,13 +17,18 @@ import logging
 import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Sequence
+from typing import Optional, Sequence
 
+from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    BeingAttachmentResolver,
+)
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     SemanticMemoryRepository,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 
 _logger = logging.getLogger(__name__)
@@ -84,16 +89,40 @@ class SemanticPassiveRecallService:
         weight_recency: float = DEFAULT_WEIGHT_RECENCY,
         weight_importance: float = DEFAULT_WEIGHT_IMPORTANCE,
         weight_relevance: float = DEFAULT_WEIGHT_RELEVANCE,
+        being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
+        default_world_id: Optional[WorldId] = None,
     ) -> None:
         if semantic_store is None:
             raise TypeError("semantic_store must not be None")
         if recency_tau_sec <= 0:
             raise ValueError("recency_tau_sec must be positive")
+        # Phase 3 Step 3b-2: dual-path。Resolver+WorldId 両方注入時は being_id 経路、
+        # 未注入なら legacy player_id 経路。
+        if being_attachment_resolver is not None and not isinstance(
+            being_attachment_resolver, BeingAttachmentResolver
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if default_world_id is not None and not isinstance(default_world_id, WorldId):
+            raise TypeError("default_world_id must be WorldId")
         self._store = semantic_store
         self._tau = recency_tau_sec
         self._w_rec = weight_recency
         self._w_imp = weight_importance
         self._w_rel = weight_relevance
+        self._resolver = being_attachment_resolver
+        self._default_world_id = default_world_id
+
+    def _list_entries(self, player_id: int) -> list[SemanticMemoryEntry]:
+        """dual-path: Resolver+WorldId+Being 揃えば being_id 経由、なければ legacy。"""
+        if self._resolver is not None and self._default_world_id is not None:
+            being_id = self._resolver.resolve_being_id(
+                self._default_world_id, PlayerId(player_id)
+            )
+            if being_id is not None:
+                return list(self._store.list_for_being(being_id))
+        return list(self._store.list_for_player(player_id))
 
     def retrieve(
         self,
@@ -112,7 +141,7 @@ class SemanticPassiveRecallService:
         if top_k <= 0:
             return []
         effective_now = now if now is not None else datetime.now(timezone.utc)
-        entries = list(self._store.list_for_player(player_id))
+        entries = self._list_entries(player_id)
         if not entries:
             return []
 

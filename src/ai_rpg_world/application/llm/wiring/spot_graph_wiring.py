@@ -415,6 +415,8 @@ def create_spot_graph_wiring(
         episodic_episode_store,
         semantic_gist_service=_semantic_gist_service,
         semantic_persona_resolver=_semantic_persona_resolver,
+        being_attachment_resolver=_being_resolver,
+        default_world_id=_default_world_id,
     )
     shared_episode_store = episodic_stack.shared_episode_store
     semantic_memory_store = episodic_stack.semantic_memory_store
@@ -429,7 +431,11 @@ def create_spot_graph_wiring(
         from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
             SemanticPassiveRecallService,
         )
-        _semantic_passive_recall_service = SemanticPassiveRecallService(semantic_memory_store)
+        _semantic_passive_recall_service = SemanticPassiveRecallService(
+            semantic_memory_store,
+            being_attachment_resolver=_being_resolver,
+            default_world_id=_default_world_id,
+        )
     # Phase 1d: memory_search_semantic tool (LLM 能動検索)。default OFF。
     _semantic_search_enabled = resolve_semantic_search_enabled()
     log_semantic_search_state(_semantic_search_enabled)
@@ -439,7 +445,9 @@ def create_spot_graph_wiring(
             SemanticMemorySearchToolExecutor,
         )
         _semantic_memory_search_executor = SemanticMemorySearchToolExecutor(
-            semantic_store=semantic_memory_store
+            semantic_store=semantic_memory_store,
+            being_attachment_resolver=_being_resolver,
+            default_world_id=_default_world_id,
         )
     # 攻撃ユースケースのオーケストレーター。tool executor (player→monster)
     # と将来の tick driver (monster→player) で同じ instance を共有する。

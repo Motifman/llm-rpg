@@ -105,6 +105,8 @@ def build_episodic_memory_stack(
     *,
     semantic_gist_service: Optional[Any] = None,
     semantic_persona_resolver: Optional[Any] = None,
+    being_attachment_resolver: Optional[Any] = None,
+    default_world_id: Optional[Any] = None,
 ) -> EpisodicMemoryStack:
     """共有 episode store と link / semantic / promotion を組み立てる。
 
@@ -136,6 +138,8 @@ def build_episodic_memory_stack(
         promotion_frontier=promotion_frontier,
         gist_service=semantic_gist_service,
         persona_resolver=semantic_persona_resolver,
+        being_attachment_resolver=being_attachment_resolver,
+        default_world_id=default_world_id,
     )
     return EpisodicMemoryStack(
         shared_episode_store=shared_episode_store,
