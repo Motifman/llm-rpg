@@ -14,6 +14,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
     MemoFulfillmentContext,
@@ -63,6 +64,44 @@ class MemoRepository(ABC):
     @abstractmethod
     def remove(self, player_id: PlayerId, memo_id: str) -> bool:
         """memo を削除する。存在しなければ False。"""
+
+    # ===== Phase 3 Step 3a-1: being_id 版を並走追加 =====
+    # 既存 player_id 版とは独立した namespace で動く (= 内部 store も別)。
+    # Step 3a-2 で caller を本 API に切替え、Step 3a-3 で旧 player_id 版を撤去
+    # する想定。並走期間中は両 API のデータは互いに見えない (= 同一 caller が
+    # 旧新を混在させない前提)。
+    #
+    # 既知の具象実装は ``InMemoryMemoStore`` (= application/llm/services/) のみ。
+    # 新たに MemoRepository を継承する場合は below の 4 abstractmethod も
+    # 実装すること (= instantiation 時 TypeError で気付ける)。
+
+    @abstractmethod
+    def add_by_being(
+        self,
+        being_id: BeingId,
+        content: str,
+        *,
+        current_tick: int | None = None,
+    ) -> str:
+        """being_id keyed で memo を追加し、生成された ID を返す。"""
+
+    @abstractmethod
+    def list_uncompleted_by_being(self, being_id: BeingId) -> list[MemoEntry]:
+        """being_id keyed で未完了 memo を新しい順で返す。"""
+
+    @abstractmethod
+    def complete_by_being(
+        self,
+        being_id: BeingId,
+        memo_id: str,
+        *,
+        fulfillment_context: MemoFulfillmentContext | None = None,
+    ) -> bool:
+        """being_id keyed で memo を完了する。存在しなければ False。"""
+
+    @abstractmethod
+    def remove_by_being(self, being_id: BeingId, memo_id: str) -> bool:
+        """being_id keyed で memo を削除する。存在しなければ False。"""
 
 
 __all__ = ["MemoRepository"]
