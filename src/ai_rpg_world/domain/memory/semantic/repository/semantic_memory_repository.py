@@ -1,7 +1,7 @@
 """SemanticMemoryRepository — セマンティック記憶 (昇格済み要約) の保管庫 interface。
 
 DDD 再編 (Issue #470 Phase 1 PR5): 元
-``application/llm/contracts/semantic_memory_store_port.py::ISemanticMemoryStore``
+``application/llm/contracts/semantic_memory_store_port.py::SemanticMemoryRepository``
 を domain に昇格し、``*Repository`` 命名に統一。
 """
 
@@ -32,7 +32,4 @@ class SemanticMemoryRepository(ABC):
         """同一エビデンス集合が未昇格なら登録し True。既存なら False。"""
 
 
-# 後方互換: 旧名 ``ISemanticMemoryStore`` は本 Repository の alias。
-ISemanticMemoryStore = SemanticMemoryRepository
-
-__all__ = ["SemanticMemoryRepository", "ISemanticMemoryStore"]
+__all__ = ["SemanticMemoryRepository"]

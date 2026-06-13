@@ -1,12 +1,12 @@
-"""ISemanticMemoryStore のインメモリ実装。"""
+"""SemanticMemoryRepository のインメモリ実装。"""
 
 from __future__ import annotations
 
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
-from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import ISemanticMemoryStore
+from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import SemanticMemoryRepository
 
 
-class InMemorySemanticMemoryStore(ISemanticMemoryStore):
+class InMemorySemanticMemoryStore(SemanticMemoryRepository):
     def __init__(self) -> None:
         self._rows: list[SemanticMemoryEntry] = []
         self._cluster_sigs: set[tuple[int, str]] = set()

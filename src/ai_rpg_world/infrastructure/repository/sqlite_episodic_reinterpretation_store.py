@@ -10,8 +10,8 @@ from typing import Any
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import EpisodicReinterpretationStatus
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 from ai_rpg_world.infrastructure.repository.sqlite_migration import (
     SqliteMigration,
     apply_migrations,
@@ -130,8 +130,8 @@ def _init_schema_v1(connection: sqlite3.Connection) -> None:
 
 
 class SqliteEpisodicReinterpretationStore(
-    IEpisodicRecallBufferStore,
-    IEpisodicReinterpretationJournalStore,
+    EpisodicRecallBufferRepository,
+    EpisodicReinterpretationJournalRepository,
 ):
     """recall buffer と reinterpretation journal を同じ SQLite 接続で保持する。"""
 

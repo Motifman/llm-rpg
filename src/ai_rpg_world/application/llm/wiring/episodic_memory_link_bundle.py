@@ -5,13 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    IEpisodicEpisodeStore,
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
-    IMemoryLinkStore,
+    MemoryLinkRepository,
 )
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
-    ISemanticMemoryStore,
+    SemanticMemoryRepository,
 )
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
@@ -37,8 +37,8 @@ from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store impor
 class EpisodicMemoryLinkBundle:
     """共有リンクストア・リンクサービス・拡散活性化付き受動想起。"""
 
-    episode_store: IEpisodicEpisodeStore
-    link_store: IMemoryLinkStore
+    episode_store: EpisodicEpisodeRepository
+    link_store: MemoryLinkRepository
     link_service: EpisodicMemoryLinkApplicationService
     passive_recall: EpisodicPassiveRecallRetrievalService
 
@@ -51,8 +51,8 @@ class EpisodicMemoryLinkBundle:
 
 
 def default_link_and_semantic_stores_for_episode_store(
-    episode_store: IEpisodicEpisodeStore,
-) -> tuple[IMemoryLinkStore, ISemanticMemoryStore]:
+    episode_store: EpisodicEpisodeRepository,
+) -> tuple[MemoryLinkRepository, SemanticMemoryRepository]:
     """
     エピソードストアが SqliteSubjectiveEpisodeStore のとき、同一 DB 接続に
     MemoryLink / セマンティック表を同居させる。それ以外はインメモリ。
@@ -74,9 +74,9 @@ def default_link_and_semantic_stores_for_episode_store(
 
 
 def build_episodic_memory_link_bundle(
-    episode_store: IEpisodicEpisodeStore,
+    episode_store: EpisodicEpisodeRepository,
     *,
-    link_store: IMemoryLinkStore | None = None,
+    link_store: MemoryLinkRepository | None = None,
     promotion_frontier: EpisodicPromotionFrontier | None = None,
 ) -> EpisodicMemoryLinkBundle:
     ls = link_store if link_store is not None else InMemoryMemoryLinkStore()

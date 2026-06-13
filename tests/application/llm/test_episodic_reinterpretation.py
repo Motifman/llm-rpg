@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    IEpisodicEpisodeStore,
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -19,7 +19,7 @@ from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
     EpisodicReinterpretationCoordinator,
@@ -49,7 +49,7 @@ class _FakeReinterpretationPort(IEpisodicReinterpretationCompletionPort):
         return self.outcome
 
 
-class _BrokenRecallBufferStore(IEpisodicRecallBufferStore):
+class _BrokenRecallBufferStore(EpisodicRecallBufferRepository):
     def append(self, observation: EpisodicRecallObservation) -> None:
         raise RuntimeError("broken")
 
@@ -193,7 +193,7 @@ class TestEpisodicReinterpretationCoordinator:
     """10 ターンごとの flush と失敗時 pending 維持。"""
 
     def _stores(self) -> tuple[
-        IEpisodicEpisodeStore,
+        EpisodicEpisodeRepository,
         InMemoryEpisodicRecallBufferStore,
         InMemoryEpisodicReinterpretationJournalStore,
     ]:

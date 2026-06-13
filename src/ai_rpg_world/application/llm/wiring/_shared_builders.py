@@ -17,13 +17,13 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    IEpisodicEpisodeStore,
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
     IEpisodicReinterpretationCompletionPort,
 )
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     ISlidingWindowMemory,
@@ -93,7 +93,7 @@ class EpisodicMemoryStack:
     episodic_semantic_promotion: semantic cluster promotion service
     """
 
-    shared_episode_store: IEpisodicEpisodeStore
+    shared_episode_store: EpisodicEpisodeRepository
     semantic_memory_store: Any
     promotion_frontier: EpisodicPromotionFrontier
     mem_bundle: EpisodicMemoryLinkBundle
@@ -101,7 +101,7 @@ class EpisodicMemoryStack:
 
 
 def build_episodic_memory_stack(
-    episodic_episode_store: Optional[IEpisodicEpisodeStore],
+    episodic_episode_store: Optional[EpisodicEpisodeRepository],
     *,
     semantic_gist_service: Optional[Any] = None,
     semantic_persona_resolver: Optional[Any] = None,
@@ -156,23 +156,23 @@ class EpisodicCoordinatorStack:
     episodic_coord: チャンク coordinator
     """
 
-    prompt_recall_buffer: Optional[IEpisodicRecallBufferStore]
-    reinterpretation_journal: IEpisodicReinterpretationJournalStore
+    prompt_recall_buffer: Optional[EpisodicRecallBufferRepository]
+    reinterpretation_journal: EpisodicReinterpretationJournalRepository
     reinterpretation_coord: EpisodicReinterpretationCoordinator
     episodic_coord: EpisodicChunkCoordinator
 
 
 def build_episodic_coordinator_stack(
     *,
-    shared_episode_store: IEpisodicEpisodeStore,
+    shared_episode_store: EpisodicEpisodeRepository,
     mem_bundle: EpisodicMemoryLinkBundle,
     buffer: IObservationContextBuffer,
     sliding_window: ISlidingWindowMemory,
     action_result_store: IActionResultStore,
     persona_block_provider: Any,
-    recall_buffer: IEpisodicRecallBufferStore,
-    reinterpretation_journal: IEpisodicReinterpretationJournalStore,
-    episodic_recall_buffer_store_override: Optional[IEpisodicRecallBufferStore],
+    recall_buffer: EpisodicRecallBufferRepository,
+    reinterpretation_journal: EpisodicReinterpretationJournalRepository,
+    episodic_recall_buffer_store_override: Optional[EpisodicRecallBufferRepository],
     chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder],
     chunk_subjective_service: Any,
     reinterpretation_completion: Optional[IEpisodicReinterpretationCompletionPort],

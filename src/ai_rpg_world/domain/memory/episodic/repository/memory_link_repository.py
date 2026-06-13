@@ -1,7 +1,7 @@
 """MemoryLinkRepository — エピソード記憶リンクの保管庫 interface。
 
 DDD 再編 (Issue #470 Phase 1 PR5): 元
-``application/llm/contracts/episodic_memory_link_store_port.py::IMemoryLinkStore``
+``application/llm/contracts/episodic_memory_link_store_port.py::MemoryLinkRepository``
 を domain に昇格し、``*Repository`` 命名に統一。
 """
 
@@ -73,7 +73,4 @@ class MemoryLinkRepository(ABC):
         """当該プレイヤーの全リンク（クラスタ検出・一括処理用）。"""
 
 
-# 後方互換: 旧名 ``IMemoryLinkStore`` は本 Repository の alias。
-IMemoryLinkStore = MemoryLinkRepository
-
-__all__ = ["MemoryLinkRepository", "IMemoryLinkStore"]
+__all__ = ["MemoryLinkRepository"]

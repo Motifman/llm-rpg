@@ -19,7 +19,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     ISlidingWindowMemory,
 )
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import IMemoStore
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.memo_id_display import (
@@ -58,12 +58,12 @@ class MemoToolExecutor:
 
     def __init__(
         self,
-        memo_store: Optional[IMemoStore] = None,
+        memo_store: Optional[MemoRepository] = None,
         *,
         sliding_window: Optional[ISlidingWindowMemory] = None,
         action_result_store: Optional[IActionResultStore] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
-        todo_store: Optional[IMemoStore] = None,
+        todo_store: Optional[MemoRepository] = None,
         trace_recorder: Optional[ITraceRecorder] = None,
     ) -> None:
         # 後方互換: 旧 kwarg ``todo_store`` を受け付ける (Issue #188 リネーム)。

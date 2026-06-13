@@ -1,4 +1,4 @@
-"""IMemoryLinkStore の SQLite 実装（主観エピソード DB と同一ファイル）。"""
+"""MemoryLinkRepository の SQLite 実装（主観エピソード DB と同一ファイル）。"""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     normalize_episode_pair,
 )
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
-    IMemoryLinkStore,
+    MemoryLinkRepository,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_memory_graph_schema import (
     apply_memory_graph_migrations,
@@ -46,7 +46,7 @@ def _row_to_link(row: sqlite3.Row) -> MemoryLink:
     )
 
 
-class SqliteMemoryLinkStore(IMemoryLinkStore):
+class SqliteMemoryLinkStore(MemoryLinkRepository):
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._conn = connection
         if connection.row_factory is not sqlite3.Row:

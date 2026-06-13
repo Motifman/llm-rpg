@@ -10,7 +10,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     other_episode_id,
 )
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
-    IMemoryLinkStore,
+    MemoryLinkRepository,
 )
 
 
@@ -18,7 +18,7 @@ def neighbor_priming_scores(
     *,
     player_id: int,
     seed_episode_ids: frozenset[str],
-    link_store: IMemoryLinkStore,
+    link_store: MemoryLinkRepository,
     now: datetime,
     max_hops: int = 2,
     hop_decay: float = 0.5,

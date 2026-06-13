@@ -22,7 +22,7 @@ from typing import Sequence
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
-    ISemanticMemoryStore,
+    SemanticMemoryRepository,
 )
 
 
@@ -78,7 +78,7 @@ class SemanticPassiveRecallService:
 
     def __init__(
         self,
-        semantic_store: ISemanticMemoryStore,
+        semantic_store: SemanticMemoryRepository,
         *,
         recency_tau_sec: float = DEFAULT_RECENCY_TAU_SEC,
         weight_recency: float = DEFAULT_WEIGHT_RECENCY,

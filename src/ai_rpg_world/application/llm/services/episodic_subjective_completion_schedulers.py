@@ -44,7 +44,7 @@ from typing import Callable, Optional
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    IEpisodicEpisodeStore,
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
@@ -110,15 +110,15 @@ class InlineEpisodicSubjectiveScheduler:
     def __init__(
         self,
         service: EpisodicChunkSubjectiveFieldsService,
-        episode_store: IEpisodicEpisodeStore,
+        episode_store: EpisodicEpisodeRepository,
         *,
         trace_recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
-        if not isinstance(episode_store, IEpisodicEpisodeStore):
-            raise TypeError("episode_store must be IEpisodicEpisodeStore")
+        if not isinstance(episode_store, EpisodicEpisodeRepository):
+            raise TypeError("episode_store must be EpisodicEpisodeRepository")
         if trace_recorder_provider is not None and not callable(trace_recorder_provider):
             raise TypeError("trace_recorder_provider must be callable or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
@@ -205,7 +205,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
     def __init__(
         self,
         service: EpisodicChunkSubjectiveFieldsService,
-        episode_store: IEpisodicEpisodeStore,
+        episode_store: EpisodicEpisodeRepository,
         *,
         max_workers: int = 1,
         max_queue_size: int = 100,
@@ -214,8 +214,8 @@ class ThreadPoolEpisodicSubjectiveScheduler:
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
-        if not isinstance(episode_store, IEpisodicEpisodeStore):
-            raise TypeError("episode_store must be IEpisodicEpisodeStore")
+        if not isinstance(episode_store, EpisodicEpisodeRepository):
+            raise TypeError("episode_store must be EpisodicEpisodeRepository")
         if not isinstance(max_workers, int) or max_workers < 1:
             raise ValueError("max_workers must be a positive int")
         if not isinstance(max_queue_size, int) or max_queue_size < 1:

@@ -1,4 +1,4 @@
-"""IMemoryLinkStore のインメモリ実装。"""
+"""MemoryLinkRepository のインメモリ実装。"""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     normalize_episode_pair,
 )
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
-    IMemoryLinkStore,
+    MemoryLinkRepository,
 )
 
 LinkKey = Tuple[int, str, str, MemoryLinkType]
@@ -23,7 +23,7 @@ def _key_for_link(link: MemoryLink) -> LinkKey:
     return (link.player_id, link.episode_id_a, link.episode_id_b, link.link_type)
 
 
-class InMemoryMemoryLinkStore(IMemoryLinkStore):
+class InMemoryMemoryLinkStore(MemoryLinkRepository):
     def __init__(self) -> None:
         self._by_key: Dict[LinkKey, MemoryLink] = {}
         self._by_episode: DefaultDict[int, DefaultDict[str, Set[LinkKey]]] = defaultdict(

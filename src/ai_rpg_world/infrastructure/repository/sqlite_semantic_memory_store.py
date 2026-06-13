@@ -1,4 +1,4 @@
-"""ISemanticMemoryStore の SQLite 実装。"""
+"""SemanticMemoryRepository の SQLite 実装。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
-from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import ISemanticMemoryStore
+from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import SemanticMemoryRepository
 from ai_rpg_world.infrastructure.repository.sqlite_memory_graph_schema import (
     apply_memory_graph_migrations,
 )
@@ -25,7 +25,7 @@ def _dt_to_iso(dt: datetime) -> str:
     return dt.isoformat()
 
 
-class SqliteSemanticMemoryStore(ISemanticMemoryStore):
+class SqliteSemanticMemoryStore(SemanticMemoryRepository):
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._conn = connection
         if connection.row_factory is not sqlite3.Row:

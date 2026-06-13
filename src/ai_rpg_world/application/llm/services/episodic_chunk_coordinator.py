@@ -25,7 +25,7 @@ from ai_rpg_world.application.llm.chunk_boundary.rules import (
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    IEpisodicEpisodeStore,
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -79,7 +79,7 @@ class EpisodicChunkCoordinator:
         observation_buffer: IObservationContextBuffer,
         sliding_window_memory: ISlidingWindowMemory,
         action_result_store: IActionResultStore,
-        episodic_episode_store: IEpisodicEpisodeStore,
+        episodic_episode_store: EpisodicEpisodeRepository,
         chunk_episode_draft_builder: ChunkEpisodeDraftBuilder,
         *,
         recent_observations_limit: int = 20,
@@ -102,8 +102,8 @@ class EpisodicChunkCoordinator:
             raise TypeError("sliding_window_memory must be ISlidingWindowMemory")
         if not isinstance(action_result_store, IActionResultStore):
             raise TypeError("action_result_store must be IActionResultStore")
-        if not isinstance(episodic_episode_store, IEpisodicEpisodeStore):
-            raise TypeError("episodic_episode_store must be IEpisodicEpisodeStore")
+        if not isinstance(episodic_episode_store, EpisodicEpisodeRepository):
+            raise TypeError("episodic_episode_store must be EpisodicEpisodeRepository")
         if not isinstance(chunk_episode_draft_builder, ChunkEpisodeDraftBuilder):
             raise TypeError("chunk_episode_draft_builder must be ChunkEpisodeDraftBuilder")
         if chunk_subjective_fields_service is not None and not isinstance(

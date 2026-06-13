@@ -75,15 +75,15 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ILlmTurnTrigger,
     ISlidingWindowMemory,
 )
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import IMemoStore
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
 )
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    IEpisodicEpisodeStore,
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
-    ISemanticMemoryStore,
+    SemanticMemoryRepository,
 )
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
     IEpisodicChunkSubjectiveCompletionPort,
@@ -91,8 +91,8 @@ from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port i
 from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
     IEpisodicReinterpretationCompletionPort,
 )
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import IEpisodicRecallBufferStore
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import IEpisodicReinterpretationJournalStore
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
@@ -724,12 +724,12 @@ def _build_prompt_stack(
     persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
     episodic_passive_recall: Optional[EpisodicPassiveRecallRetrievalService] = None,
     episodic_memory_link_service: Optional[EpisodicMemoryLinkApplicationService] = None,
-    episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
-    episodic_reinterpretation_journal_store: Optional[IEpisodicReinterpretationJournalStore] = None,
+    episodic_recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
+    episodic_reinterpretation_journal_store: Optional[EpisodicReinterpretationJournalRepository] = None,
     episodic_turn_index_provider: Optional[Callable[[PlayerId], int]] = None,
     semantic_passive_recall: Optional[Any] = None,
     semantic_passive_top_k: int = 0,
-    memo_store: Optional["IMemoStore"] = None,
+    memo_store: Optional["MemoRepository"] = None,
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
 ) -> DefaultPromptBuilder:
     """
@@ -839,9 +839,9 @@ def _optional_episodic_reinterpretation_completion(
 
 
 def _resolve_default_episodic_reinterpretation_stores(
-    recall_buffer_store: Optional[IEpisodicRecallBufferStore],
-    journal_store: Optional[IEpisodicReinterpretationJournalStore],
-) -> tuple[IEpisodicRecallBufferStore, IEpisodicReinterpretationJournalStore]:
+    recall_buffer_store: Optional[EpisodicRecallBufferRepository],
+    journal_store: Optional[EpisodicReinterpretationJournalRepository],
+) -> tuple[EpisodicRecallBufferRepository, EpisodicReinterpretationJournalRepository]:
     if recall_buffer_store is not None and journal_store is not None:
         return recall_buffer_store, journal_store
     path = os.environ.get("SUBJECTIVE_EPISODE_DB_PATH", "").strip()
@@ -1024,12 +1024,12 @@ class LlmAgentWiringResult:
         sns_mode_session: Optional[Any] = None,
         sns_page_session: Optional[Any] = None,
         trade_page_session: Optional[Any] = None,
-        episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
-        episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
+        episodic_episode_store: Optional[EpisodicEpisodeRepository] = None,
+        episodic_recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
         episodic_reinterpretation_journal_store: Optional[
-            IEpisodicReinterpretationJournalStore
+            EpisodicReinterpretationJournalRepository
         ] = None,
-        semantic_memory_store: Optional[ISemanticMemoryStore] = None,
+        semantic_memory_store: Optional[SemanticMemoryRepository] = None,
         event_publisher: Optional[Any] = None,
         monster_behavior_tick_service: Optional[Any] = None,
     ) -> None:

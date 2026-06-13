@@ -8,7 +8,7 @@ from typing import Sequence
 from uuid import uuid4
 
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    IEpisodicEpisodeStore,
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
@@ -18,7 +18,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     normalize_episode_pair,
 )
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
-    IMemoryLinkStore,
+    MemoryLinkRepository,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallCandidate,
@@ -46,8 +46,8 @@ class EpisodicMemoryLinkApplicationService:
 
     def __init__(
         self,
-        episode_store: IEpisodicEpisodeStore,
-        link_store: IMemoryLinkStore,
+        episode_store: EpisodicEpisodeRepository,
+        link_store: MemoryLinkRepository,
         *,
         promotion_frontier: EpisodicPromotionFrontier | None = None,
         temporal_initial: float = DEFAULT_TEMPORAL_INITIAL_STRENGTH,
@@ -56,10 +56,10 @@ class EpisodicMemoryLinkApplicationService:
         max_links_per_episode: int = MAX_LINKS_PER_EPISODE,
         co_recall_episode_cap: int = CO_RECALL_EPISODE_CAP,
     ) -> None:
-        if not isinstance(episode_store, IEpisodicEpisodeStore):
-            raise TypeError("episode_store must be IEpisodicEpisodeStore")
-        if not isinstance(link_store, IMemoryLinkStore):
-            raise TypeError("link_store must be IMemoryLinkStore")
+        if not isinstance(episode_store, EpisodicEpisodeRepository):
+            raise TypeError("episode_store must be EpisodicEpisodeRepository")
+        if not isinstance(link_store, MemoryLinkRepository):
+            raise TypeError("link_store must be MemoryLinkRepository")
         self._episodes = episode_store
         self._links = link_store
         self._promotion_frontier = promotion_frontier
