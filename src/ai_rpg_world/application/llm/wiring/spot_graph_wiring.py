@@ -28,7 +28,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ILLMPlayerResolver,
     ISlidingWindowMemory,
 )
-from ai_rpg_world.application.llm.contracts.persona import PersonaPromptPolicy
+from ai_rpg_world.domain.persona.value_object.persona_prompt_policy import PersonaPromptPolicy
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
 )

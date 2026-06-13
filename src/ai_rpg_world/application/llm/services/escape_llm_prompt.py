@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from ai_rpg_world.application.llm.contracts.persona import AgentPersonaDto, PersonaPromptPolicy
+from ai_rpg_world.domain.persona.value_object.agent_persona_dto import AgentPersonaDto
+from ai_rpg_world.domain.persona.value_object.persona_prompt_policy import PersonaPromptPolicy
 from ai_rpg_world.application.llm.services.persona_prompt_fragment_builder import (
     PersonaPromptFragmentBuilder,
 )
