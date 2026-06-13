@@ -7,7 +7,7 @@ from typing import Any
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException

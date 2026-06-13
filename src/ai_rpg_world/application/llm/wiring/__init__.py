@@ -85,10 +85,10 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository 
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     SemanticMemoryRepository,
 )
-from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
-from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
+from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
 )
 from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
@@ -811,7 +811,7 @@ def _optional_semantic_gist_service(
     """
     if not enabled:
         return None
-    from ai_rpg_world.application.llm.contracts.semantic_gist_completion_port import (
+    from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
         ISemanticGistCompletionPort,
     )
     from ai_rpg_world.application.llm.services.semantic_gist_service import (

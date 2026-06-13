@@ -584,7 +584,7 @@ class EpisodeLocationEnvHint:
 
 **P8. A-MEM 流 evolution を Reinterpretation の参照実装に** ★★
 - evolution_system_prompt をそのまま流用できる。ただし「上書きではなく派生 Episode を発行」する派生に留めて Trace 不変を守る。
-- 実装: `application/llm/contracts/episodic_reinterpretation.py` の中で A-MEM の prompt を参考に refactor
+- 実装: `application/llm/ports/episodic_reinterpretation_completion_port.py` の中で A-MEM の prompt を参考に refactor
 
 **P9. AgentSelf / EnvAttachment 境界を引く (環境抽象化の根)** ★★★
 - `SubjectiveEpisode.location` を `EpisodeLocationRef + EpisodeLocationEnvHint` に分割。`AgentSelf` に `spot_id` を入れない。

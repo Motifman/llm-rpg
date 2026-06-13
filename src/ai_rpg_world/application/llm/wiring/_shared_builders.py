@@ -19,7 +19,7 @@ from typing import Any, Callable, Optional
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
-from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
+from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
 )
 from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository

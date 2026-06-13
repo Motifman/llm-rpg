@@ -15,7 +15,7 @@ def _as_utc(value: datetime) -> datetime:
     return value
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
-from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode

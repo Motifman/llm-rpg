@@ -274,7 +274,7 @@ Generative Agents の reflection は **「クラスタ検出 + LLM 抽象化」*
 再解釈する現象から発想)。
 
 実コード:
-- `src/ai_rpg_world/application/llm/contracts/episodic_reinterpretation.py`
+- `src/ai_rpg_world/application/llm/ports/episodic_reinterpretation_completion_port.py`
 - `src/ai_rpg_world/application/llm/services/episodic_reinterpretation_coordinator.py`
 - `prompt_builder._join_passive_recall_texts` で `active.current_recall_text` 上書き経路あり
 

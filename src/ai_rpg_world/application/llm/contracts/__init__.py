@@ -22,9 +22,6 @@ from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context impor
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
-from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
-    IEpisodicChunkSubjectiveCompletionPort,
-)
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     ChunkEncodingInput,
     UnifiedRecentEventLine,
@@ -52,10 +49,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import 
     SubjectiveEpisode,
 )
 # -- end domain re-exports --
-
-from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
-    IEpisodicReinterpretationCompletionPort,
-)
 
 # -- domain VO re-exports: episodic reinterpretation (Issue #470 Phase 1 PR5) --
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
@@ -110,7 +103,6 @@ __all__ = [
     "format_unified_timeline_as_recent_events_bullets",
     "merge_observations_and_action_results_to_unified_timeline",
     "EpisodicEpisodeRepository",
-    "IEpisodicChunkSubjectiveCompletionPort",
     "EpisodicCue",
     "EpisodicCueSource",
     "EpisodeAction",
@@ -121,7 +113,6 @@ __all__ = [
     "EpisodicReinterpretationEntry",
     "EpisodicReinterpretationStatus",
     "EpisodicRecallBufferRepository",
-    "IEpisodicReinterpretationCompletionPort",
     "EpisodicReinterpretationJournalRepository",
     "ActionResultEntry",
     "LlmCommandResultDto",

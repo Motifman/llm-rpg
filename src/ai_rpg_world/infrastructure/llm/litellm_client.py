@@ -25,17 +25,17 @@ from litellm import InternalServerError as LitellmInternalServerError
 from litellm import RateLimitError as LitellmRateLimitError
 from litellm import ServiceUnavailableError as LitellmServiceUnavailableError
 
-from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
-from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
+from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
-from ai_rpg_world.application.llm.contracts.semantic_gist_completion_port import (
+from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
     ISemanticGistCompletionPort,
 )
-from ai_rpg_world.application.llm.contracts.short_term_memory import (
+from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
     IShortTermMemoryLongSummaryCompletionPort,
     IShortTermMemorySummaryCompletionPort,
 )

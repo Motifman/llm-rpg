@@ -118,9 +118,9 @@ research thread §5 の対応表を、実装対象として確定させる:
 ### 2.3. 記憶階層
 - `application/llm/services/rolling_summary_short_term_memory.py` — L1(15)/L4(3世代)/L5(1)。
   reflect 機構 (soft cap 15 → L4 生成、L4 eviction → L5 生成) が既に回っている
-- `application/llm/contracts/short_term_memory.py` — `L4MidSummary` (compressed_activity /
-  emotional_summary / unresolved) と `L5LongSummary` (self_image / world_view)。
-  **計画フィールドを足す先はここ**
+- `domain/memory/short_term/value_object/l4_mid_summary.py` / `l5_long_summary.py` —
+  `L4MidSummary` (compressed_activity / emotional_summary / unresolved) と
+  `L5LongSummary` (self_image / world_view)。**計画フィールドを足す先はここ**
 - episodic: chunk 境界 (認知科学ベース) + passive recall + 主観補完。第 23 回実験で完成
 - semantic: `SemanticPassiveRecallService` + cluster promotion (Phase 1c, top-K 注入) が部分稼働
 
@@ -221,7 +221,7 @@ research thread の設計スケッチを確定させる。
 #### dataclass 拡張
 
 ```python
-# application/llm/contracts/short_term_memory.py
+# domain/memory/short_term/value_object/l4_mid_summary.py
 @dataclass(frozen=True)
 class L4MidSummary:
     # --- 既存 ---
