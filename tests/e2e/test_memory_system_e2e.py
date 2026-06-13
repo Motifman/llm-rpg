@@ -68,9 +68,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.application.llm.contracts.semantic_memory_entry import (
-    SemanticMemoryEntry,
-)
+from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,

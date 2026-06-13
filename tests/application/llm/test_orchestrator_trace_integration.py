@@ -165,7 +165,7 @@ class TestOrchestratorMemoHintTrace:
         """memo store + hint service を注入し、action_summary に memo 内容が再出現する形で
         run_turn を回すと、ACTION / ACTION_RESULT に加えて MEMO_HINT も記録される。"""
         from datetime import datetime
-        from ai_rpg_world.application.llm.contracts.dtos import MemoEntry
+        from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
         from ai_rpg_world.application.llm.services.in_memory_memo_store import (
             InMemoryMemoStore,
         )

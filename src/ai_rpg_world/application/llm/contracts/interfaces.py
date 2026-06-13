@@ -8,12 +8,12 @@ from typing import Any, Dict, List, Optional
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     LlmUiContextDto,
-    MemoEntry,
-    MemoFulfillmentContext,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
-    ToolRuntimeContextDto,  # backward-compat alias for MemoEntry
+    ToolRuntimeContextDto,
 )
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
+from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId

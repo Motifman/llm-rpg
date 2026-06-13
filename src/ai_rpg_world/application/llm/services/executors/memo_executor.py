@@ -13,8 +13,8 @@ from typing import Any, Callable, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
-    MemoFulfillmentContext,
 )
+from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IMemoStore,

@@ -1,4 +1,8 @@
-"""エピソード集約から昇格したセマンティック要約（長期記憶プロトタイプ）。"""
+"""SemanticMemoryEntry — エピソード集約から昇格したセマンティック要約 (長期記憶プロトタイプ)。
+
+DDD 再編 (Issue #470 Phase 1 PR3): 元
+``application/llm/contracts/semantic_memory_entry.py`` から domain に昇格。
+"""
 
 from __future__ import annotations
 
@@ -40,7 +44,9 @@ class SemanticMemoryEntry:
         for i, eid in enumerate(self.evidence_episode_ids):
             if not isinstance(eid, str) or not eid.strip():
                 raise ValueError(f"evidence_episode_ids[{i}] must be non-empty str")
-        if not isinstance(self.confidence, (int, float)) or not (0.0 <= float(self.confidence) <= 1.0):
+        if not isinstance(self.confidence, (int, float)) or not (
+            0.0 <= float(self.confidence) <= 1.0
+        ):
             raise ValueError("confidence must be float in [0,1]")
         if not isinstance(self.created_at, datetime):
             raise TypeError("created_at must be datetime")
@@ -53,3 +59,6 @@ class SemanticMemoryEntry:
         for i, tag in enumerate(self.tags):
             if not isinstance(tag, str) or not tag.strip():
                 raise ValueError(f"tags[{i}] must be non-empty str")
+
+
+__all__ = ["SemanticMemoryEntry"]

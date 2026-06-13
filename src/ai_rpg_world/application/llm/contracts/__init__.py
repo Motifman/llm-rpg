@@ -5,8 +5,20 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
-    TodoEntry,
 )
+
+# -- domain VO re-exports: memo (Issue #470 Phase 1 PR3) --
+# 旧 ``dtos.py`` から domain に昇格した memo 系 VO を後方互換のため re-export。
+# 新規コードは concrete file から import すること:
+#     from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import (
+    MemoEntry,
+    TodoEntry,  # 旧名 alias
+)
+from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
+    MemoFulfillmentContext,
+)
+# -- end memo re-exports --
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
     IEpisodicEpisodeStore,
 )
@@ -95,6 +107,9 @@ __all__ = [
     "LlmCommandResultDto",
     "SystemPromptPlayerInfoDto",
     "ToolDefinitionDto",
+    # memo VO (Issue #470 Phase 1 PR3 で domain に昇格、ここは後方互換 re-export)
+    "MemoEntry",
+    "MemoFulfillmentContext",
     "TodoEntry",
     "AgentPersonaDto",
     "PersonaPromptPolicy",

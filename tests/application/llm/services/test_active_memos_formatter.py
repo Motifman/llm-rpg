@@ -11,7 +11,7 @@ from datetime import datetime
 
 import pytest
 
-from ai_rpg_world.application.llm.contracts.dtos import MemoEntry
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.application.llm.services.active_memos_formatter import (
     format_active_memos,
 )

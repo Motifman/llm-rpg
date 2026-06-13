@@ -23,9 +23,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import 
 from ai_rpg_world.application.llm.contracts.semantic_gist_completion_port import (
     ISemanticGistCompletionPort,
 )
-from ai_rpg_world.application.llm.contracts.semantic_memory_entry import (
-    SemanticMemoryEntry,
-)
+from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 
 

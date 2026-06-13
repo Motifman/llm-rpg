@@ -21,9 +21,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-from ai_rpg_world.application.llm.contracts.semantic_memory_entry import (
-    SemanticMemoryEntry,
-)
+from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.application.llm.contracts.semantic_memory_store_port import (
     ISemanticMemoryStore,
 )
