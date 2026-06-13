@@ -19,7 +19,12 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     ISlidingWindowMemory,
 )
+from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    BeingAttachmentResolver,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
+from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.memo_id_display import (
@@ -65,16 +70,81 @@ class MemoToolExecutor:
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
         todo_store: Optional[MemoRepository] = None,
         trace_recorder: Optional[ITraceRecorder] = None,
+        being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
+        default_world_id: Optional[WorldId] = None,
     ) -> None:
         # 後方互換: 旧 kwarg ``todo_store`` を受け付ける (Issue #188 リネーム)。
         # 両方指定なら memo_store を優先。
         if memo_store is None and todo_store is not None:
             memo_store = todo_store
+        # Phase 3 Step 3a-2: BeingAttachmentResolver + WorldId が両方注入された
+        # ときだけ being_id keyed の新 API に切替える (= dual-path)。未注入なら
+        # 従来の player_id keyed 経路を使う (= 既存テスト互換)。
+        # Step 3a-3 で player_id 経路を撤去し、本 dual-path も解消する。
+        if being_attachment_resolver is not None and not isinstance(
+            being_attachment_resolver, BeingAttachmentResolver
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if default_world_id is not None and not isinstance(default_world_id, WorldId):
+            raise TypeError("default_world_id must be WorldId")
         self._memo_store = memo_store
         self._sliding_window = sliding_window
         self._action_result_store = action_result_store
         self._current_tick_provider = current_tick_provider
         self._trace_recorder: ITraceRecorder = trace_recorder or NullTraceRecorder()
+        self._resolver = being_attachment_resolver
+        self._default_world_id = default_world_id
+
+    def _resolve_being_id(self, player_id: PlayerId) -> Optional[BeingId]:
+        """Resolver + WorldId が両方揃っていれば being_id を引く。
+
+        未注入や解決失敗時は None を返し、呼び出し元は legacy player_id API に
+        fallback する。
+        """
+        if self._resolver is None or self._default_world_id is None:
+            return None
+        return self._resolver.resolve_being_id(self._default_world_id, player_id)
+
+    # ===== dual-path 内部ヘルパー (Phase 3 Step 3a-2) =====
+    # Resolver + WorldId が揃って being_id を引けるなら新 API、そうでなければ
+    # 旧 player_id API。Step 3a-3 で旧 API を撤去した時に本ヘルパーは新 API 直叩き
+    # にする。
+
+    def _add_memo(self, player_id: PlayerId, content: str) -> str:
+        assert self._memo_store is not None
+        being_id = self._resolve_being_id(player_id)
+        if being_id is not None:
+            return self._memo_store.add_by_being(
+                being_id, content, current_tick=self._current_tick()
+            )
+        return self._memo_store.add(
+            player_id, content, current_tick=self._current_tick()
+        )
+
+    def _list_uncompleted(self, player_id: PlayerId):
+        assert self._memo_store is not None
+        being_id = self._resolve_being_id(player_id)
+        if being_id is not None:
+            return self._memo_store.list_uncompleted_by_being(being_id)
+        return self._memo_store.list_uncompleted(player_id)
+
+    def _complete_memo(
+        self,
+        player_id: PlayerId,
+        memo_id: str,
+        fulfillment_context: Optional[MemoFulfillmentContext],
+    ) -> bool:
+        assert self._memo_store is not None
+        being_id = self._resolve_being_id(player_id)
+        if being_id is not None:
+            return self._memo_store.complete_by_being(
+                being_id, memo_id, fulfillment_context=fulfillment_context
+            )
+        return self._memo_store.complete(
+            player_id, memo_id, fulfillment_context=fulfillment_context
+        )
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。memo_store が None の場合は空辞書。"""
@@ -108,9 +178,7 @@ class MemoToolExecutor:
                     error_code="TODO_ERROR",
                     remediation=get_remediation("TODO_ERROR"),
                 )
-            memo_id = self._memo_store.add(
-                PlayerId(player_id), content, current_tick=self._current_tick()
-            )
+            memo_id = self._add_memo(PlayerId(player_id), content)
             self._trace_recorder.record(
                 TraceEventKind.MEMO_ADD,
                 tick=self._current_tick(),
@@ -136,7 +204,7 @@ class MemoToolExecutor:
         if self._memo_store is None:
             return unknown_tool("memo ツールはまだ利用できません。")
         try:
-            entries = self._memo_store.list_uncompleted(PlayerId(player_id))
+            entries = self._list_uncompleted(PlayerId(player_id))
             if not entries:
                 return LlmCommandResultDto(
                     success=True,
@@ -195,9 +263,7 @@ class MemoToolExecutor:
             # Issue #276: memo_id は short prefix (例: "a3b9f1") でも full UUID
             # でも受け付ける。uncompleted memo の ID 集合に対して prefix match で
             # 解決し、ambiguous なら個別に失敗扱いにする。
-            uncompleted_ids = [
-                e.id for e in self._memo_store.list_uncompleted(pid)
-            ]
+            uncompleted_ids = [e.id for e in self._list_uncompleted(pid)]
             completed: list[str] = []  # full UUID
             not_found: list[str] = []  # 入力のまま (短縮形 or 入力 ID)
             ambiguous: list[tuple[str, list[str]]] = []  # (入力, candidates)
@@ -214,7 +280,7 @@ class MemoToolExecutor:
                 # fulfillment_context は memo ごとに snapshot する (完了タイミングごとに
                 # 周辺 context が違うことに意味がある)。
                 fulfillment_context = self._build_fulfillment_context(pid)
-                ok = self._memo_store.complete(
+                ok = self._complete_memo(
                     pid, resolved, fulfillment_context=fulfillment_context
                 )
                 if ok:

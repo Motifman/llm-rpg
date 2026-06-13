@@ -124,6 +124,7 @@ def create_spot_graph_wiring(
     event_publisher: Optional[Any] = None,
     trace_recorder: Optional[Any] = None,
     speech_audience_resolver: Optional[Any] = None,
+    being_repository: Optional[Any] = None,
 ) -> "LlmAgentWiringResult":
     """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。
 
@@ -346,6 +347,27 @@ def create_spot_graph_wiring(
     runtime_tool_state = _build_runtime_tool_state()
     todo_store = runtime_tool_state.todo_store
 
+    # Phase 3 Step 3a-2: BeingRepository を中心に Resolver + Provisioning を組む。
+    # 未注入なら新規 InMemoryBeingRepository を生成 (= 既存挙動は変えないが、
+    # turn 起動時に Being が作られて memo caller が新 API 経路を使えるようになる)。
+    from ai_rpg_world.application.being.being_provisioning_service import (
+        BeingProvisioningService,
+    )
+    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
+    from ai_rpg_world.domain.world.value_object.world_id import WorldId
+    from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
+        InMemoryBeingRepository,
+    )
+
+    _being_repository = being_repository or InMemoryBeingRepository()
+    _being_resolver = BeingAttachmentResolver(_being_repository)
+    _being_provisioning_service = BeingProvisioningService(_being_repository)
+    # spot_graph は単一 world 前提なので暫定 default_world_id = WorldId(1)。
+    # Step 6-full で WorldId を thread する際にここを置き換える。
+    _default_world_id = WorldId(1)
+
     def _current_tick_provider() -> Optional[int]:
         if game_time_provider is None:
             return None
@@ -532,6 +554,8 @@ def create_spot_graph_wiring(
         current_tick_provider=current_tick_provider,
         trace_recorder=trace_recorder,
         speech_audience_resolver=speech_audience_resolver,
+        being_attachment_resolver=_being_resolver,
+        default_world_id=_default_world_id,
     )
     available_tools_provider = tool_stack.available_tools_provider
     tool_command_mapper = tool_stack.tool_command_mapper
@@ -600,6 +624,8 @@ def create_spot_graph_wiring(
         semantic_passive_top_k=_semantic_passive_top_k,
         memo_store=todo_store,
         current_tick_provider=current_tick_provider,
+        being_attachment_resolver=_being_resolver,
+        default_world_id=_default_world_id,
     )
 
     game_time_label_provider = build_game_time_label_provider(
@@ -609,7 +635,11 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
         MemoCompletionHintService,
     )
-    memo_completion_hint_service = MemoCompletionHintService(memo_store=todo_store)
+    memo_completion_hint_service = MemoCompletionHintService(
+        memo_store=todo_store,
+        being_attachment_resolver=_being_resolver,
+        default_world_id=_default_world_id,
+    )
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
         llm_client=client,
@@ -630,6 +660,7 @@ def create_spot_graph_wiring(
         movement_service=no_op_movement,
         action_result_store=action_result_store,
         orchestrator=orchestrator,
+        being_provisioning_service=_being_provisioning_service,
     )
     llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner, max_turns=max_turns)
 
