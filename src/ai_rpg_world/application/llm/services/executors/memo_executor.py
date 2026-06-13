@@ -78,10 +78,10 @@ class MemoToolExecutor:
         # 両方指定なら memo_store を優先。
         if memo_store is None and todo_store is not None:
             memo_store = todo_store
-        # Phase 3 Step 3a-2: BeingAttachmentResolver + WorldId が両方注入された
-        # ときだけ being_id keyed の新 API に切替える (= dual-path)。未注入なら
-        # 従来の player_id keyed 経路を使う (= 既存テスト互換)。
-        # Step 3a-3 で player_id 経路を撤去し、本 dual-path も解消する。
+        # Phase 3 Step 3a-3: Resolver+WorldId は constructor では Optional だが、
+        # 実際に memo handler が呼ばれた時点で required になる (= _require_being_id
+        # で None なら RuntimeError)。これは「memo 機能を使わないテストが多数あり、
+        # それらは Resolver なしでも constructor が通る必要がある」ため。
         if being_attachment_resolver is not None and not isinstance(
             being_attachment_resolver, BeingAttachmentResolver
         ):
@@ -98,38 +98,45 @@ class MemoToolExecutor:
         self._resolver = being_attachment_resolver
         self._default_world_id = default_world_id
 
-    def _resolve_being_id(self, player_id: PlayerId) -> Optional[BeingId]:
-        """Resolver + WorldId が両方揃っていれば being_id を引く。
+    def _require_being_id(self, player_id: PlayerId) -> BeingId:
+        """Phase 3 Step 3a-3: handler 呼び出し時点で Resolver/WorldId 必須。
 
-        未注入や解決失敗時は None を返し、呼び出し元は legacy player_id API に
-        fallback する。
+        constructor では optional でも、memo handler が呼ばれた時点では Resolver
+        + WorldId + 該当 Being が揃っている前提 (= turn hook の
+        BeingProvisioningService が事前に保証する)。揃っていなければ RuntimeError。
         """
         if self._resolver is None or self._default_world_id is None:
-            return None
-        return self._resolver.resolve_being_id(self._default_world_id, player_id)
+            raise RuntimeError(
+                "MemoToolExecutor requires being_attachment_resolver + "
+                "default_world_id to operate (Phase 3 Step 3a-3)."
+            )
+        being_id = self._resolver.resolve_being_id(
+            self._default_world_id, player_id
+        )
+        if being_id is None:
+            raise RuntimeError(
+                f"MemoToolExecutor: no Being attached to player {player_id.value}. "
+                "Ensure BeingProvisioningService is wired into the LLM turn hook."
+            )
+        return being_id
 
-    # ===== dual-path 内部ヘルパー (Phase 3 Step 3a-2) =====
-    # Resolver + WorldId が揃って being_id を引けるなら新 API、そうでなければ
-    # 旧 player_id API。Step 3a-3 で旧 API を撤去した時に本ヘルパーは新 API 直叩き
-    # にする。
+    def _require_memo_store(self) -> MemoRepository:
+        """``get_handlers`` のガードを抜けた後の二重チェック (python -O でも生存)。"""
+        if self._memo_store is None:
+            raise RuntimeError("MemoToolExecutor: memo_store is not wired")
+        return self._memo_store
 
     def _add_memo(self, player_id: PlayerId, content: str) -> str:
-        assert self._memo_store is not None
-        being_id = self._resolve_being_id(player_id)
-        if being_id is not None:
-            return self._memo_store.add_by_being(
-                being_id, content, current_tick=self._current_tick()
-            )
-        return self._memo_store.add(
-            player_id, content, current_tick=self._current_tick()
+        store = self._require_memo_store()
+        being_id = self._require_being_id(player_id)
+        return store.add_by_being(
+            being_id, content, current_tick=self._current_tick()
         )
 
     def _list_uncompleted(self, player_id: PlayerId) -> list[MemoEntry]:
-        assert self._memo_store is not None
-        being_id = self._resolve_being_id(player_id)
-        if being_id is not None:
-            return self._memo_store.list_uncompleted_by_being(being_id)
-        return self._memo_store.list_uncompleted(player_id)
+        store = self._require_memo_store()
+        being_id = self._require_being_id(player_id)
+        return store.list_uncompleted_by_being(being_id)
 
     def _complete_memo(
         self,
@@ -137,14 +144,10 @@ class MemoToolExecutor:
         memo_id: str,
         fulfillment_context: Optional[MemoFulfillmentContext],
     ) -> bool:
-        assert self._memo_store is not None
-        being_id = self._resolve_being_id(player_id)
-        if being_id is not None:
-            return self._memo_store.complete_by_being(
-                being_id, memo_id, fulfillment_context=fulfillment_context
-            )
-        return self._memo_store.complete(
-            player_id, memo_id, fulfillment_context=fulfillment_context
+        store = self._require_memo_store()
+        being_id = self._require_being_id(player_id)
+        return store.complete_by_being(
+            being_id, memo_id, fulfillment_context=fulfillment_context
         )
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:

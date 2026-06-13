@@ -808,22 +808,73 @@ class EscapeGameRuntime:
         return self._sliding_window.append_all(player_id, drained)
 
     def _wire_auxiliary_tool_stack(self) -> None:
-        """TODO ツール実行器を遅延初期化する。"""
+        """TODO ツール実行器を遅延初期化する。
+
+        Phase 3 Step 3a-3: memo は being_id 経路必須なので Resolver+WorldId を
+        ここで構築・注入する。EscapeGameRuntime は独自経路で Being を持っていない
+        ため、ローカル BeingRepository + Resolver を毎回作って provision する。
+        run_llm_auxiliary_tool が呼ばれる前に必ず Being attach を済ませる。
+        """
         if self._todo_tool_executor is not None:
             return
+        from ai_rpg_world.application.being.being_provisioning_service import (
+            BeingProvisioningService,
+        )
+        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+            BeingAttachmentResolver,
+        )
+        from ai_rpg_world.domain.world.value_object.world_id import (
+            DEFAULT_SINGLE_WORLD_ID,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
+            InMemoryBeingRepository,
+        )
+
+        if not hasattr(self, "_aux_being_repository"):
+            self._aux_being_repository = InMemoryBeingRepository()
+            self._aux_being_provisioning = BeingProvisioningService(
+                self._aux_being_repository
+            )
+            self._aux_being_resolver = BeingAttachmentResolver(
+                self._aux_being_repository
+            )
+            self._aux_being_default_world_id = DEFAULT_SINGLE_WORLD_ID
+
         self._todo_tool_executor = TodoToolExecutor(
             self._todo_store,
             sliding_window=self._sliding_window,
             action_result_store=self._action_result_store,
             current_tick_provider=self.current_tick,
             trace_recorder=self._trace_recorder,
+            being_attachment_resolver=self._aux_being_resolver,
+            default_world_id=self._aux_being_default_world_id,
         )
+
+    @property
+    def aux_being_resolver(self):
+        """Phase 3 Step 3a-3: presentation 層から MemoCompletionHintService 等に
+        渡すための ``_aux_being_resolver`` 公開。``_wire_auxiliary_tool_stack``
+        を呼んでいないと None。
+        """
+        return getattr(self, "_aux_being_resolver", None)
+
+    @property
+    def aux_being_default_world_id(self):
+        """Phase 3 Step 3a-3: aux Being の default WorldId 公開アクセサ。"""
+        return getattr(self, "_aux_being_default_world_id", None)
 
     def run_llm_auxiliary_tool(
         self, player_id: PlayerId, name: str, arguments: Dict[str, Any]
     ) -> LlmCommandResultDto:
-        """TODO 系ツールを実行する。"""
+        """TODO 系ツールを実行する。
+
+        Phase 3 Step 3a-3: memo handler を起動する前に player_id に Being が
+        attach されていることを保証する (= TodoToolExecutor が being_id 経路を
+        通れるようにする)。
+        """
         self._wire_auxiliary_tool_stack()
+        # idempotent: 既に attach 済なら何もしない
+        self._aux_being_provisioning.ensure_attached(player_id)
         assert self._todo_tool_executor is not None
         handlers = self._todo_tool_executor.get_handlers()
         handler = handlers.get(name)

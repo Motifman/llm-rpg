@@ -55,7 +55,10 @@ class _StubArgumentResolver(IToolArgumentResolver):
 
 
 def _build_orch(
-    *, memo_store: InMemoryMemoStore, tool_name: str, success_message: str
+    *,
+    being_setup,
+    tool_name: str,
+    success_message: str,
 ) -> tuple[LlmAgentOrchestrator, DefaultActionResultStore]:
     action_store = DefaultActionResultStore(max_entries_per_player=10)
     handler_map = {
@@ -65,7 +68,10 @@ def _build_orch(
     }
     mapper = ToolCommandMapper(handler_map=handler_map)
     hint_service = MemoCompletionHintService(
-        memo_store=memo_store, similarity_threshold=0.3
+        memo_store=being_setup.memo_store,
+        similarity_threshold=0.3,
+        being_attachment_resolver=being_setup.resolver,
+        default_world_id=being_setup.world_id,
     )
     # 非 memo ツールには subjective_action fields が必須なので含める
     args = {"content": "金庫室で扉固定スイッチを押す"}
@@ -96,10 +102,14 @@ class TestOrchestratorMemoHintIntegration:
     def test_memo_と類似する成功結果に_hint_が_append_される(self) -> None:
         """非 memo ツール成功時に類似 memo があれば result_summary に hint が付く。"""
         player_id = PlayerId(1)
-        memo_store = InMemoryMemoStore()
-        memo_store.add(player_id, "金庫室で扉固定スイッチを押す")
+        from tests.application.llm._memo_being_test_helpers import (
+            make_memo_being_setup,
+        )
+        being_setup = make_memo_being_setup()
+        being_id = being_setup.provision(1)
+        being_setup.memo_store.add_by_being(being_id, "金庫室で扉固定スイッチを押す")
         orch, action_store = _build_orch(
-            memo_store=memo_store,
+            being_setup=being_setup,
             tool_name="custom_tool",
             success_message="金庫室で扉固定スイッチを押しました",
         )
@@ -112,10 +122,14 @@ class TestOrchestratorMemoHintIntegration:
     def test_memo_ツール自身の実行時は_hint_を出さない(self) -> None:
         """memo_add / memo_list / memo_done 実行直後に hint を出さない (自己参照防止)。"""
         player_id = PlayerId(1)
-        memo_store = InMemoryMemoStore()
-        memo_store.add(player_id, "金庫室で扉固定スイッチを押す")
+        from tests.application.llm._memo_being_test_helpers import (
+            make_memo_being_setup,
+        )
+        being_setup = make_memo_being_setup()
+        being_id = being_setup.provision(1)
+        being_setup.memo_store.add_by_being(being_id, "金庫室で扉固定スイッチを押す")
         orch, action_store = _build_orch(
-            memo_store=memo_store,
+            being_setup=being_setup,
             tool_name="memo_add",
             success_message="金庫室で扉固定スイッチを押す",
         )

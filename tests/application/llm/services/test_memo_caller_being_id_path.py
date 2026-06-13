@@ -87,8 +87,7 @@ class TestMemoToolExecutorNewPath:
         result = handlers[TOOL_NAME_MEMO_ADD](2, {"content": "via being"})
         assert result.success is True
 
-        # 旧 store は空、新 store にデータが入っているはず
-        assert memo_store.list_uncompleted(PlayerId(2)) == []
+        # being store にデータが入っているはず (= 唯一の store、Step 3a-3 で legacy 撤去済)
         entries = memo_store.list_uncompleted_by_being(being_id)
         assert len(entries) == 1
         assert entries[0].content == "via being"
@@ -136,22 +135,25 @@ class TestMemoToolExecutorNewPath:
         # being store からは消えるが、旧 store は空のまま (= 独立性維持)
         assert memo_store.list_uncompleted_by_being(being_id) == []
 
-    def test_provision_せず_Resolver_注入だけだと_legacy_経路に_fallback(
+    def test_provision_せず_Resolver_注入だけだと_RuntimeError_で_fail_fast(
         self,
         memo_store: InMemoryMemoStore,
         resolver: BeingAttachmentResolver,
         world_id: WorldId,
     ) -> None:
-        """Being が無い場合 resolver が None を返し、legacy player_id 経路へ。"""
+        """Phase 3 Step 3a-3: Resolver は注入されたが Being が provision されて
+        いないと、exception_result でラップされた失敗結果が返る (= fail-fast)。
+        legacy fallback はもうない。
+        """
         executor = MemoToolExecutor(
             memo_store,
             being_attachment_resolver=resolver,
             default_world_id=world_id,
         )
         handlers = executor.get_handlers()
-        handlers[TOOL_NAME_MEMO_ADD](2, {"content": "legacy fallback"})
-        # legacy store にデータが残る
-        assert len(memo_store.list_uncompleted(PlayerId(2))) == 1
+        result = handlers[TOOL_NAME_MEMO_ADD](2, {"content": "no being"})
+        # exception_result で包まれた失敗 (= MemoToolExecutor 内 try/except)
+        assert result.success is False
 
 
 class TestMemoCompletionHintServiceNewPath:

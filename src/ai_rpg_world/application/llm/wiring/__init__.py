@@ -1224,6 +1224,26 @@ def create_llm_agent_wiring(
     runtime_tool_state = _build_runtime_tool_state()
     todo_store = runtime_tool_state.todo_store
 
+    # Phase 3 Step 3a-2/3a-3: tile-map 経路 (= escape_game) でも Being を provision
+    # し Resolver を構築して memo caller 群に注入する。spot_graph_wiring と同じ構成。
+    from ai_rpg_world.application.being.being_provisioning_service import (
+        BeingProvisioningService,
+    )
+    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
+    from ai_rpg_world.domain.world.value_object.world_id import (
+        DEFAULT_SINGLE_WORLD_ID,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
+        InMemoryBeingRepository,
+    )
+
+    _being_repository = InMemoryBeingRepository()
+    _being_resolver = BeingAttachmentResolver(_being_repository)
+    _being_provisioning_service = BeingProvisioningService(_being_repository)
+    _default_world_id = DEFAULT_SINGLE_WORLD_ID
+
     def _current_tick_provider() -> Optional[int]:
         if game_time_provider is None:
             return None
@@ -1337,6 +1357,8 @@ def create_llm_agent_wiring(
         current_tick_provider=current_tick_provider,
         trace_recorder=trace_recorder,
         speech_audience_resolver=speech_audience_resolver,
+        being_attachment_resolver=_being_resolver,
+        default_world_id=_default_world_id,
     )
     available_tools_provider = tool_stack.available_tools_provider
     tool_command_mapper = tool_stack.tool_command_mapper
@@ -1400,8 +1422,14 @@ def create_llm_agent_wiring(
         semantic_passive_top_k=_semantic_passive_top_k,
         memo_store=todo_store,
         current_tick_provider=current_tick_provider,
+        being_attachment_resolver=_being_resolver,
+        default_world_id=_default_world_id,
     )
-    memo_completion_hint_service = MemoCompletionHintService(memo_store=todo_store)
+    memo_completion_hint_service = MemoCompletionHintService(
+        memo_store=todo_store,
+        being_attachment_resolver=_being_resolver,
+        default_world_id=_default_world_id,
+    )
     # Issue #227 後続レビュー (MEDIUM-6) fix: tile-map 経路にも
     # game_time_label_provider を渡す (これまで spot_graph 版だけが渡していて、
     # tile-map 版は action_result の時刻ラベルが付かない潜在バグだった)
@@ -1428,6 +1456,7 @@ def create_llm_agent_wiring(
         movement_service=movement_service,
         action_result_store=action_result_store,
         orchestrator=orchestrator,
+        being_provisioning_service=_being_provisioning_service,
     )
     llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner, max_turns=max_turns)
 
