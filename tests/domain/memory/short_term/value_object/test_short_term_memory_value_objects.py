@@ -1,4 +1,8 @@
-"""``L4MidSummary`` の不変条件テスト (Phase 2)。"""
+"""``domain/memory/short_term/value_object/`` の不変条件テスト。
+
+Issue #470 Phase 1 で ``application/llm/contracts/short_term_memory.py`` から
+domain に昇格した L4MidSummary / L5LongSummary の不変条件を検証する。
+"""
 
 from __future__ import annotations
 
@@ -6,8 +10,10 @@ from datetime import datetime, timezone
 
 import pytest
 
-from ai_rpg_world.application.llm.contracts.short_term_memory import (
+from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
+)
+from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
     L5LongSummary,
 )
 
