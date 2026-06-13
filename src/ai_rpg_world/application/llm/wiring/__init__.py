@@ -352,6 +352,8 @@ def _build_tool_handler_map(
     semantic_memory_search_executor: Optional[Any] = None,
     trace_recorder: Optional["ITraceRecorder"] = None,
     speech_audience_resolver: Optional[Any] = None,
+    being_attachment_resolver: Optional[Any] = None,
+    default_world_id: Optional[Any] = None,
 ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
     """
     Executor 群を組み立て、tool_name → handler の辞書を返す。
@@ -407,6 +409,8 @@ def _build_tool_handler_map(
             action_result_store=action_result_store,
             current_tick_provider=current_tick_provider,
             trace_recorder=trace_recorder,
+            being_attachment_resolver=being_attachment_resolver,
+            default_world_id=default_world_id,
         ).get_handlers()
     )
     handler_map.update(
@@ -511,6 +515,8 @@ def _build_tool_stack(
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
     trace_recorder: Optional["ITraceRecorder"] = None,
     speech_audience_resolver: Optional[Any] = None,
+    being_attachment_resolver: Optional[Any] = None,
+    default_world_id: Optional[Any] = None,
 ) -> _ToolStackResult:
     """
     register_default_tools, available_tools_provider, tool_command_mapper, tool_argument_resolver を構築する。
@@ -596,6 +602,8 @@ def _build_tool_stack(
         semantic_memory_search_executor=semantic_memory_search_executor,
         trace_recorder=trace_recorder,
         speech_audience_resolver=speech_audience_resolver,
+        being_attachment_resolver=being_attachment_resolver,
+        default_world_id=default_world_id,
     )
     tool_command_mapper = ToolCommandMapper(handler_map=handler_map)
     tool_argument_resolver = DefaultToolArgumentResolver(
@@ -731,6 +739,8 @@ def _build_prompt_stack(
     semantic_passive_top_k: int = 0,
     memo_store: Optional["MemoRepository"] = None,
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+    being_attachment_resolver: Optional[Any] = None,
+    default_world_id: Optional[Any] = None,
 ) -> DefaultPromptBuilder:
     """
     predictive_retriever と prompt_builder を構築する。
@@ -778,6 +788,8 @@ def _build_prompt_stack(
         limits=limits,
         ui_context_builder=ui_context_builder,
         current_tick_provider=current_tick_provider,
+        being_attachment_resolver=being_attachment_resolver,
+        default_world_id=default_world_id,
     )
 
 

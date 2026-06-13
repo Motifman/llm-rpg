@@ -3,7 +3,13 @@
 import logging
 from datetime import datetime, timezone
 from importlib import import_module
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
+    from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -24,6 +30,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISystemPromptBuilder,
 )
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.services.active_memos_formatter import (
@@ -123,6 +130,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         trace_recorder_provider: Optional[
             Callable[[], Optional["ITraceRecorder"]]
         ] = None,
+        being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
+        default_world_id: Optional["WorldId"] = None,
     ) -> None:
         """Config dataclass ベースの API (Issue #227 後続 HIGH-1)。
 
@@ -292,6 +301,24 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("trace_recorder_provider must be callable or None")
 
         self._memo_store = memo_store
+        # Phase 3 Step 3a-2: Resolver + WorldId 注入時のみ being_id 経路で memo を
+        # 読む dual-path。詳細は memo_executor の同様コメント参照。
+        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+            BeingAttachmentResolver as _BAR,
+        )
+        from ai_rpg_world.domain.world.value_object.world_id import (
+            WorldId as _WI,
+        )
+        if being_attachment_resolver is not None and not isinstance(
+            being_attachment_resolver, _BAR
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if default_world_id is not None and not isinstance(default_world_id, _WI):
+            raise TypeError("default_world_id must be WorldId")
+        self._being_attachment_resolver = being_attachment_resolver
+        self._default_world_id = default_world_id
         self._objective_text_provider = objective_text_provider
         self._inventory_text_provider = inventory_text_provider
         self._current_tick_provider = current_tick_provider
@@ -879,6 +906,21 @@ class DefaultPromptBuilder(IPromptBuilder):
                 exc_info=True,
             )
 
+    def _fetch_uncompleted_memos(self, player_id: PlayerId) -> list[MemoEntry]:
+        """dual-path helper (Phase 3 Step 3a-2): Resolver + WorldId が揃えば
+        being_id 経路で memo を引く、なければ legacy player_id 経路。"""
+        assert self._memo_store is not None
+        if (
+            self._being_attachment_resolver is not None
+            and self._default_world_id is not None
+        ):
+            being_id = self._being_attachment_resolver.resolve_being_id(
+                self._default_world_id, player_id
+            )
+            if being_id is not None:
+                return self._memo_store.list_uncompleted_by_being(being_id)
+        return self._memo_store.list_uncompleted(player_id)
+
     def _build_active_memos_text(self, player_id: PlayerId) -> str:
         """LLM が固定した未完了 memo を「進行中のメモ」用テキストに整形する。
 
@@ -891,7 +933,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         if self._memo_store is None:
             return ""
         try:
-            entries = self._memo_store.list_uncompleted(player_id)
+            entries = self._fetch_uncompleted_memos(player_id)
         except Exception:
             return ""
         current_tick = (
