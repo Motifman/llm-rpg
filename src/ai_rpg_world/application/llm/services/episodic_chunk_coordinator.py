@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from ai_rpg_world.application.llm.contracts.episodic_subjective_scheduler_port import (
+    from ai_rpg_world.application.llm.scheduler import (
         IEpisodicSubjectiveCompletionScheduler,
     )
 

@@ -31,7 +31,7 @@ from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_por
 from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
 )
-from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
+from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
 from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
     ISemanticGistCompletionPort,
 )

@@ -70,11 +70,11 @@ from ai_rpg_world.application.llm.wiring._llm_client_factory import (
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
-    ILLMClient,
     ILLMPlayerResolver,
     ILlmTurnTrigger,
     ISlidingWindowMemory,
 )
+from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,

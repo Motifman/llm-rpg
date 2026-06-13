@@ -22,7 +22,7 @@ def isolate_litellm_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
+from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 

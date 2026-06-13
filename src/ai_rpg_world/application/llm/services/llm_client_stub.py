@@ -6,7 +6,7 @@ ILLMClient のスタブ実装（テスト・開発用）。
 
 from typing import Any, Dict, List, Optional
 
-from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
+from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
 
 
 class StubLlmClient(ILLMClient):

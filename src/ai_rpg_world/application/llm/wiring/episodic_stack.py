@@ -44,7 +44,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
-from ai_rpg_world.application.llm.contracts.episodic_subjective_scheduler_port import (
+from ai_rpg_world.application.llm.scheduler import (
     IEpisodicSubjectiveCompletionScheduler,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (

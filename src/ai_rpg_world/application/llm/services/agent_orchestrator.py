@@ -15,10 +15,10 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
-    ILLMClient,
     IPromptBuilder,
     IToolArgumentResolver,
 )
+from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.llm_argument_fingerprint import (
     build_argument_fingerprint,
