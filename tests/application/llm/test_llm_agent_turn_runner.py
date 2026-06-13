@@ -22,7 +22,15 @@ from ai_rpg_world.application.world.exceptions.base_exception import (
     WorldApplicationException,
     WorldSystemErrorException,
 )
+from ai_rpg_world.application.being.being_provisioning_service import (
+    BeingProvisioningService,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.world_id import WorldId
+from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
+    InMemoryBeingRepository,
+)
 
 
 class _StubPromptBuilder(IPromptBuilder):
@@ -264,4 +272,112 @@ class TestLlmAgentTurnRunnerInit:
                 movement_service=MagicMock(),
                 action_result_store=DefaultActionResultStore(),
                 orchestrator=None,  # type: ignore[arg-type]
+            )
+
+
+class TestLlmAgentTurnRunnerBeingProvisioningHook:
+    """Phase 3 Step 6-mini: being_provisioning_service が turn 開始時に呼ばれる挙動。"""
+
+    @pytest.fixture
+    def action_result_store(self):
+        return DefaultActionResultStore(max_entries_per_player=10)
+
+    @pytest.fixture
+    def orchestrator(self, action_result_store):
+        return _make_orchestrator(action_result_store)
+
+    @pytest.fixture
+    def being_repo(self):
+        return InMemoryBeingRepository()
+
+    @pytest.fixture
+    def provisioning_service(self, being_repo):
+        return BeingProvisioningService(being_repo)
+
+    @pytest.fixture
+    def runner_with_provisioning(
+        self,
+        action_result_store,
+        orchestrator,
+        provisioning_service,
+    ):
+        return LlmAgentTurnRunner(
+            observation_buffer=DefaultObservationContextBuffer(),
+            world_query_service=MagicMock(),
+            movement_service=MagicMock(),
+            action_result_store=action_result_store,
+            orchestrator=orchestrator,
+            being_provisioning_service=provisioning_service,
+        )
+
+    def test_run_turn_で_Being_が_provision_される(
+        self, runner_with_provisioning, being_repo
+    ):
+        """provisioning_service 注入時、run_turn 起動で Being が新規作成・attach される。"""
+        runner_with_provisioning.run_turn(PlayerId(1))
+        being = being_repo.find_by_id(BeingId("being_w1_p1"))
+        assert being is not None
+        assert being.is_attached is True
+
+    def test_2_回_run_turn_しても_Being_は_idempotent(
+        self, runner_with_provisioning, being_repo
+    ):
+        """同じ player に対し 2 回 run_turn しても Being は 1 つだけ (= idempotent)。"""
+        runner_with_provisioning.run_turn(PlayerId(1))
+        runner_with_provisioning.run_turn(PlayerId(1))
+        # find_all_attached_to で 1 件のみ確認
+        matches = being_repo.find_all_attached_to(WorldId(1), PlayerId(1))
+        assert len(matches) == 1
+
+    def test_provisioning_service_未注入なら_Being_は作られない(
+        self,
+        action_result_store,
+        orchestrator,
+        being_repo,
+    ):
+        """既存挙動: provisioning_service を渡さなければ Being は作られない (= 後方互換)。"""
+        runner = LlmAgentTurnRunner(
+            observation_buffer=DefaultObservationContextBuffer(),
+            world_query_service=MagicMock(),
+            movement_service=MagicMock(),
+            action_result_store=action_result_store,
+            orchestrator=orchestrator,
+        )
+        runner.run_turn(PlayerId(1))
+        assert being_repo.find_by_id(BeingId("being_w1_p1")) is None
+
+    def test_provisioning_失敗時も_turn_は続行される(
+        self,
+        action_result_store,
+        orchestrator,
+    ):
+        """provisioning 例外は warning ログのみで turn を止めない (= 最小回帰)。"""
+        broken_service = MagicMock()
+        broken_service.ensure_attached.side_effect = RuntimeError("provisioning broke")
+        runner = LlmAgentTurnRunner(
+            observation_buffer=DefaultObservationContextBuffer(),
+            world_query_service=MagicMock(),
+            movement_service=MagicMock(),
+            action_result_store=action_result_store,
+            orchestrator=orchestrator,
+            being_provisioning_service=broken_service,
+        )
+        # 例外が turn を止めないことを確認
+        result = runner.run_turn(PlayerId(1))
+        assert result is not None
+
+    def test_provisioning_service_に_ensure_attached_が無いと_TypeError(
+        self,
+        action_result_store,
+        orchestrator,
+    ):
+        """duck-typing で ensure_attached(callable) を確認。無ければ TypeError。"""
+        with pytest.raises(TypeError, match="ensure_attached"):
+            LlmAgentTurnRunner(
+                observation_buffer=DefaultObservationContextBuffer(),
+                world_query_service=MagicMock(),
+                movement_service=MagicMock(),
+                action_result_store=action_result_store,
+                orchestrator=orchestrator,
+                being_provisioning_service="not-a-service",
             )
