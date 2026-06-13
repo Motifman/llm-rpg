@@ -32,6 +32,7 @@ class LlmAgentTurnRunner:
         movement_service: Any,
         action_result_store: IActionResultStore,
         orchestrator: LlmAgentOrchestrator,
+        being_provisioning_service: Any = None,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -43,11 +44,21 @@ class LlmAgentTurnRunner:
             raise TypeError("action_result_store must be IActionResultStore")
         if not isinstance(orchestrator, LlmAgentOrchestrator):
             raise TypeError("orchestrator must be LlmAgentOrchestrator")
+        # being_provisioning_service は optional (= Issue #470 Phase 3 Step 6-mini)。
+        # 渡されたら run_turn 開始時に ensure_attached を呼ぶ。型 import を避ける
+        # ため duck-typing で ``ensure_attached(player_id)`` の callable をチェック。
+        if being_provisioning_service is not None and not callable(
+            getattr(being_provisioning_service, "ensure_attached", None)
+        ):
+            raise TypeError(
+                "being_provisioning_service must have ensure_attached(player_id)"
+            )
         self._observation_buffer = observation_buffer
         self._world_query_service = world_query_service
         self._movement_service = movement_service
         self._action_result_store = action_result_store
         self._orchestrator = orchestrator
+        self._being_provisioning_service = being_provisioning_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
@@ -84,5 +95,21 @@ class LlmAgentTurnRunner:
         )
 
     def _run_turn_impl(self, player_id: PlayerId) -> LlmCommandResultDto:
-        """run_turn の実装。オーケストレータを実行する。即時停止は ObservationEventHandler 側で済んでいる。"""
+        """run_turn の実装。オーケストレータを実行する。即時停止は ObservationEventHandler 側で済んでいる。
+
+        Issue #470 Phase 3 Step 6-mini: ``being_provisioning_service`` が注入
+        されていれば、orchestrator 起動前に「この player に Being が attach
+        されている」ことを保証する。失敗しても LLM ターン自体は続行する
+        (= Being 機能はまだ caller に接続されていないため、最小回帰)。
+        """
+        if self._being_provisioning_service is not None:
+            try:
+                self._being_provisioning_service.ensure_attached(player_id)
+            except Exception as e:
+                self._logger.warning(
+                    "BeingProvisioningService.ensure_attached failed for "
+                    "player_id=%s: %s (turn continues)",
+                    player_id.value,
+                    e,
+                )
         return self._orchestrator.run_turn(player_id)
