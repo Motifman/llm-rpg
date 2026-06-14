@@ -28,7 +28,13 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
 from ai_rpg_world.application.being.being_snapshot_file_gateway import (
     BeingSnapshotFileGateway,
 )
+from ai_rpg_world.domain.being.exception.being_exceptions import (
+    BeingSnapshotVersionException,
+)
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
+from ai_rpg_world.domain.being.service.being_snapshot_codec import (
+    BeingSnapshotCodec,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
@@ -78,6 +84,16 @@ class RestoreBeingSnapshotFromFileUseCase:
             )
 
         snapshot = self._gateway.read(input_path)
+        # Phase 8: schema 進化 (a) 厳格モード — 未サポート ``snapshot_version``
+        # を repo に書く前に弾く。``codec.SUPPORTED_VERSIONS`` チェックを使い回す
+        # (= 同じ判定基準 = 一貫性)。``BeingSnapshotVersionException`` がそのまま
+        # 上に伝播し、partial state を残さない。
+        if snapshot.snapshot_version not in BeingSnapshotCodec.SUPPORTED_VERSIONS:
+            raise BeingSnapshotVersionException(
+                f"snapshot_version={snapshot.snapshot_version} is not supported "
+                f"(supported: {sorted(BeingSnapshotCodec.SUPPORTED_VERSIONS)}). "
+                f"file={input_path}"
+            )
         being_id = BeingId(snapshot.being_id_value)
 
         # 順序: snapshot を repo に書く先に、memory restore を行うと「Being が
