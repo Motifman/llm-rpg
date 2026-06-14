@@ -30,11 +30,18 @@ Phase 9-4a (本マイルストーン): PlayerStatusAggregate の残り 4 field
 - ``PlayerPursuitStateSubsystemCodec`` — 追跡 target
 - ``PlayerSpotNavigationStateSubsystemCodec`` — 移動中 route/leg/tick
 
-Phase 9-4b 以降:
-- weather / day_night / travel stage
+Phase 9-4b: world-side time/weather
+- ``WeatherSubsystemCodec`` — weather_holder の現 WeatherState
+- ``DayNightSubsystemCodec`` — day_night cycle の現 phase (= tick から再計算)
+- travel stage は state を持たない (= PlayerSpotNavigationState で代替済)
+
+Phase 9-4c 以降:
 - sliding_window / observation_buffer / action_result
 """
 
+from ai_rpg_world.application.being.world_subsystems.day_night_codec import (
+    DayNightSubsystemCodec,
+)
 from ai_rpg_world.application.being.world_subsystems.exploration_progress_codec import (
     SpotExplorationProgressSubsystemCodec,
 )
@@ -71,6 +78,9 @@ from ai_rpg_world.application.being.world_subsystems.scenario_event_progress_cod
 from ai_rpg_world.application.being.world_subsystems.spot_interior_codec import (
     SpotInteriorSubsystemCodec,
 )
+from ai_rpg_world.application.being.world_subsystems.weather_codec import (
+    WeatherSubsystemCodec,
+)
 from ai_rpg_world.application.being.world_subsystems.world_flags_codec import (
     WorldFlagsSubsystemCodec,
 )
@@ -100,4 +110,7 @@ __all__ = [
     "PlayerAttentionLevelSubsystemCodec",
     "PlayerPursuitStateSubsystemCodec",
     "PlayerSpotNavigationStateSubsystemCodec",
+    # Phase 9-4b
+    "WeatherSubsystemCodec",
+    "DayNightSubsystemCodec",
 ]

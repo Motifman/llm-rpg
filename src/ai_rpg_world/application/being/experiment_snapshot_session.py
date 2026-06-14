@@ -50,6 +50,7 @@ from ai_rpg_world.application.being.world_state_snapshot_service import (
     WorldSubsystemCodec,
 )
 from ai_rpg_world.application.being.world_subsystems import (
+    DayNightSubsystemCodec,
     ItemInstanceSubsystemCodec,
     PlayerActiveEffectsSubsystemCodec,
     PlayerAttentionLevelSubsystemCodec,
@@ -64,6 +65,7 @@ from ai_rpg_world.application.being.world_subsystems import (
     ScenarioEventProgressSubsystemCodec,
     SpotExplorationProgressSubsystemCodec,
     SpotInteriorSubsystemCodec,
+    WeatherSubsystemCodec,
     WorldFlagsSubsystemCodec,
     WorldTickSubsystemCodec,
 )
@@ -201,6 +203,9 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         PlayerAttentionLevelSubsystemCodec(),
         PlayerPursuitStateSubsystemCodec(),
         PlayerSpotNavigationStateSubsystemCodec(),
+        # Phase 9-4b (world-side time/weather; day_night は tick 復元後に再計算)
+        WeatherSubsystemCodec(),
+        DayNightSubsystemCodec(),
     ]
 
 
