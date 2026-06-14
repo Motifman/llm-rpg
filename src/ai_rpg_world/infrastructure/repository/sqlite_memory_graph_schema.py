@@ -104,6 +104,42 @@ def _init_memory_graph_v3_drop_legacy_semantic(connection: sqlite3.Connection) -
     )
 
 
+def _init_memory_graph_v4_memory_link_by_being(connection: sqlite3.Connection) -> None:
+    """Phase 3 Step 3c-1: being_id keyed の memory_link 並走テーブルを追加。
+
+    legacy ``memory_links`` はそのまま残し、新 API は本 v4 テーブルに書き込む
+    (= caller 移行 = Step 3c-2 後、Step 3c-3 で legacy テーブルごと撤去する想定)。
+    semantic の v2/v3 と同じパターン。
+
+    PK は (being_id_value, episode_id_a, episode_id_b, link_type)。``link_id`` は
+    存在するが PK ではない (legacy 同様、UPSERT 時に更新可能フィールド扱い)。
+    """
+    connection.executescript(
+        """
+        CREATE TABLE memory_links_by_being (
+            link_id TEXT NOT NULL,
+            being_id_value TEXT NOT NULL,
+            episode_id_a TEXT NOT NULL,
+            episode_id_b TEXT NOT NULL,
+            link_type TEXT NOT NULL,
+            strength REAL NOT NULL,
+            co_activation_count INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            last_activated_at TEXT NOT NULL,
+            decay_rate REAL NOT NULL,
+            player_id INTEGER NOT NULL,
+            PRIMARY KEY (being_id_value, episode_id_a, episode_id_b, link_type)
+        );
+        CREATE INDEX idx_memory_links_by_being
+            ON memory_links_by_being (being_id_value);
+        CREATE INDEX idx_memory_links_by_being_a
+            ON memory_links_by_being (being_id_value, episode_id_a);
+        CREATE INDEX idx_memory_links_by_being_b
+            ON memory_links_by_being (being_id_value, episode_id_b);
+        """
+    )
+
+
 def apply_memory_graph_migrations(connection: sqlite3.Connection) -> int:
     """リンク・セマンティック表を同一 DB に作成する。namespace はエピソード本体と独立。"""
     return apply_migrations(
@@ -113,6 +149,7 @@ def apply_memory_graph_migrations(connection: sqlite3.Connection) -> int:
             SqliteMigration(1, _init_memory_graph_v1),
             SqliteMigration(2, _init_memory_graph_v2_semantic_by_being),
             SqliteMigration(3, _init_memory_graph_v3_drop_legacy_semantic),
+            SqliteMigration(4, _init_memory_graph_v4_memory_link_by_being),
         ],
     )
 
