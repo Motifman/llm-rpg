@@ -258,6 +258,36 @@ class TestPromptBuilderRecallBufferDualPath:
         )
         assert result == "REINTERPRETED"
 
+    def test_append_recall_observation_は_dual_path_で_dispatch_する(self) -> None:
+        """Phase 3 Step 3d-2 review (#497 MEDIUM-3) 反映: ``_append_recall_observation``
+        helper が being_id 有無で append / append_by_being を使い分ける。"""
+        # being_id 注入時 → append_by_being
+        store_new = MagicMock()
+        builder_with_being = MagicMock()
+        builder_with_being._episodic_recall_buffer_store = store_new
+        # 実関数を呼ぶため type を明示
+        from ai_rpg_world.application.llm.services.prompt_builder import (
+            DefaultPromptBuilder,
+        )
+
+        being_id_obj = MagicMock(name="BeingId")
+        observation_obj = MagicMock(name="EpisodicRecallObservation")
+        DefaultPromptBuilder._append_recall_observation(
+            builder_with_being, being_id_obj, observation_obj
+        )
+        store_new.append_by_being.assert_called_once_with(being_id_obj, observation_obj)
+        store_new.append.assert_not_called()
+
+        # being_id 未指定 → legacy append
+        store_legacy = MagicMock()
+        builder_no_being = MagicMock()
+        builder_no_being._episodic_recall_buffer_store = store_legacy
+        DefaultPromptBuilder._append_recall_observation(
+            builder_no_being, None, observation_obj
+        )
+        store_legacy.append.assert_called_once_with(observation_obj)
+        store_legacy.append_by_being.assert_not_called()
+
     def test_being_id_未指定なら_legacy_journal_を_読む(self) -> None:
         from ai_rpg_world.application.llm.services.prompt_builder import (
             _join_passive_recall_texts,

@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.being.service.being_attachment_resolver import (
         BeingAttachmentResolver,
     )
+    from ai_rpg_world.domain.being.value_object.being_id import BeingId
     from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from uuid import uuid4
 
@@ -85,7 +86,7 @@ def _join_passive_recall_texts(
     candidates: tuple[EpisodicPassiveRecallCandidate, ...],
     journal_store: EpisodicReinterpretationJournalRepository | None = None,
     *,
-    being_id: Any = None,
+    being_id: Optional["BeingId"] = None,
 ) -> str:
     """retrieve の候補順のまま、active 再解釈を優先して recall text を改行で連結する。
 
@@ -809,12 +810,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                         situation_cues=situation_cue_keys,
                         turn_index=turn_index,
                     )
-                    if being_id is not None:
-                        self._episodic_recall_buffer_store.append_by_being(
-                            being_id, observation
-                        )
-                    else:
-                        self._episodic_recall_buffer_store.append(observation)
+                    self._append_recall_observation(being_id, observation)
                 except Exception as e:
                     self._logger.warning(
                         "Failed to record episodic recall observation; prompt build continues: %s",
@@ -930,7 +926,26 @@ class DefaultPromptBuilder(IPromptBuilder):
                 exc_info=True,
             )
 
-    def _resolve_being_id(self, player_id: PlayerId) -> Any:
+    def _append_recall_observation(
+        self,
+        being_id: Optional["BeingId"],
+        observation: EpisodicRecallObservation,
+    ) -> None:
+        """recall observation を recall_buffer_store に書く dual-path helper。
+
+        Phase 3 Step 3d-2 review (#497 MEDIUM-3): dispatch を helper として
+        切り出し、テストで dual-path 双方をカバーできるようにした。
+        ``self._episodic_recall_buffer_store is None`` は呼出側で先に弾く前提。
+        """
+        assert self._episodic_recall_buffer_store is not None
+        if being_id is not None:
+            self._episodic_recall_buffer_store.append_by_being(
+                being_id, observation
+            )
+        else:
+            self._episodic_recall_buffer_store.append(observation)
+
+    def _resolve_being_id(self, player_id: PlayerId) -> Optional["BeingId"]:
         """Resolver+WorldId 揃いなら ``BeingId`` を返す。
 
         Phase 3 Step 3d-2: dual-path 用に共有化した helper (= memo / journal /
@@ -951,16 +966,13 @@ class DefaultPromptBuilder(IPromptBuilder):
         Resolver/WorldId 未注入か Being 未 provision の場合は空リストを返す
         (= prompt 内 memo セクションが「未完了なし」相当として表示される、
         既存 prompt 構築テストが Resolver なしで動く余地を残す)。
+
+        Phase 3 Step 3d-2 review (#497 MEDIUM-2): being_id 解決は共有 helper
+        ``_resolve_being_id`` 経由に統一 (= journal / recall_buffer 経路と同じ
+        ロジックで Being を引く)。
         """
         assert self._memo_store is not None
-        if (
-            self._being_attachment_resolver is None
-            or self._default_world_id is None
-        ):
-            return []
-        being_id = self._being_attachment_resolver.resolve_being_id(
-            self._default_world_id, player_id
-        )
+        being_id = self._resolve_being_id(player_id)
         if being_id is None:
             return []
         return self._memo_store.list_uncompleted_by_being(being_id)
