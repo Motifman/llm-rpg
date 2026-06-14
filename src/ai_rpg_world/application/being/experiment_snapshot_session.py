@@ -50,8 +50,10 @@ from ai_rpg_world.application.being.world_state_snapshot_service import (
     WorldSubsystemCodec,
 )
 from ai_rpg_world.application.being.world_subsystems import (
+    ActionResultStoreSubsystemCodec,
     DayNightSubsystemCodec,
     ItemInstanceSubsystemCodec,
+    ObservationBufferSubsystemCodec,
     PlayerActiveEffectsSubsystemCodec,
     PlayerAttentionLevelSubsystemCodec,
     PlayerGrowthSubsystemCodec,
@@ -63,6 +65,7 @@ from ai_rpg_world.application.being.world_subsystems import (
     PlayerStateDictSubsystemCodec,
     PlayerVitalsSubsystemCodec,
     ScenarioEventProgressSubsystemCodec,
+    SlidingWindowMemorySubsystemCodec,
     SpotExplorationProgressSubsystemCodec,
     SpotInteriorSubsystemCodec,
     WeatherSubsystemCodec,
@@ -206,6 +209,10 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         # Phase 9-4b (world-side time/weather; day_night は tick 復元後に再計算)
         WeatherSubsystemCodec(),
         DayNightSubsystemCodec(),
+        # Phase 9-4c (短期記憶 = LLM agent の prompt context)
+        SlidingWindowMemorySubsystemCodec(),
+        ObservationBufferSubsystemCodec(),
+        ActionResultStoreSubsystemCodec(),
     ]
 
 
