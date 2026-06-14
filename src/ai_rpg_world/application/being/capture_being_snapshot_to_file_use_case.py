@@ -26,6 +26,7 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
 )
 from ai_rpg_world.application.being.being_snapshot_file_gateway import (
     BeingSnapshotFileGateway,
+    BeingSnapshotFileMetadata,
 )
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.being.service.being_snapshot_codec import BeingSnapshotCodec
@@ -76,8 +77,18 @@ class CaptureBeingSnapshotToFileUseCase:
         self._gateway = file_gateway
 
     def execute(
-        self, being_id: BeingId, output_path: Path
+        self,
+        being_id: BeingId,
+        output_path: Path,
+        *,
+        metadata: BeingSnapshotFileMetadata | None = None,
     ) -> CaptureBeingSnapshotResult:
+        """snapshot を取得してファイルに書き出す。
+
+        Phase 7 (Issue #470): ``metadata`` を渡せば snapshot file の
+        ``_metadata`` ブロックに ``source_scenario`` / ``captured_at`` 等を
+        埋め込める。cross-scenario transfer 検知用。
+        """
         if not isinstance(being_id, BeingId):
             raise TypeError(
                 f"being_id must be BeingId, got {type(being_id).__name__}"
@@ -97,7 +108,7 @@ class CaptureBeingSnapshotToFileUseCase:
         snapshot = BeingSnapshotCodec.encode(
             being, memory_payload_json=memory_payload_json
         )
-        self._gateway.write(snapshot, output_path)
+        self._gateway.write(snapshot, output_path, metadata=metadata)
         return CaptureBeingSnapshotResult(
             being_id=being_id,
             output_path=output_path,

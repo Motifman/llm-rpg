@@ -40,7 +40,39 @@ cd frontend && npm install --cache .npm-cache && npm run dev
 # Asset pipeline (separate uv project)
 make asset-pipeline-sync
 make asset-pipeline CMD="split sheet.png -r 2 -c 2 -o ./out"
+
+# Experiment (Phase 6+ で snapshot による run 途中再開を統合済)
+# 通常 run + 終了時に snapshot を OUT/snapshots/ に保存
+make experiment-with-snapshot SCENARIO=data/scenarios/decay_demo.json OUT=var/runs/exp1
+
+# 前回 snapshot を読み込んで続きを走らせる
+make experiment-resume SCENARIO=data/scenarios/decay_demo.json \
+    OUT=var/runs/exp2 SNAPSHOT_LOAD_DIR=var/runs/exp1/snapshots
+
+# 同じ Being を別シナリオに転送 (cross-scenario transfer = warning のみで許容)
+make experiment-resume SCENARIO=data/scenarios/forest_world.json \
+    OUT=var/runs/transferred SNAPSHOT_LOAD_DIR=var/runs/exp1/snapshots
+
+# 個別 snapshot を CLI で touch (= 外部編集 / 共有用)
+uv run python scripts/being_snapshot_cli.py save \
+    --being-db var/game/beings.db --memory-db var/game/memory_graph.db \
+    --episode-db var/game/episodes.db --reinterpretation-db var/game/reinterpretation.db \
+    --being-id being_w1_p1 --output var/snapshots/being_w1_p1.json
+
+# Ctrl+C で run を止めても --snapshot-save-dir 指定時は snapshot は救済される
 ```
+
+### Snapshot / run 途中再開 (Issue #470)
+
+- snapshot JSON 1 ファイル = 1 Being (`being_w{world_id}_p{player_id}.json`)
+- snapshot に `_metadata.source_scenario` が埋め込まれ、別シナリオへ load する
+  と warning + trace event (`snapshot_load`) で可視化される
+- snapshot save / load は trace event (`TraceEventKind.SNAPSHOT_SAVE` /
+  `SNAPSHOT_LOAD`) に必ず 1 件残る (= run の continuity を post-hoc 分析可能)
+- 失敗ハンドリング:
+  - **save 失敗** → warning ログ + run 自体は成功扱い (= 実験データを守る)
+  - **load 失敗** → fail-fast で開始前に exit (= 壊れた state で実験を始めない)
+- 詳細設計判断: `docs/design_decisions.md` #15-#18
 
 ## Architecture
 

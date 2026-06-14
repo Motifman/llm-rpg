@@ -355,10 +355,27 @@ def _drive_scenario(
                     "loading snapshots from %s ...", snapshot_load_dir
                 )
                 restore_report = snapshot_session.restore_all_from_dir(
-                    snapshot_load_dir
+                    snapshot_load_dir,
+                    current_scenario=scenario_path.stem,
                 )
                 logger.info(
                     "restored %d being snapshot(s)", len(restore_report.restored)
+                )
+                # Phase 7: trace に「どの run から続きを取ったか」を残す。
+                # cross-scenario transfer も明示的に payload に乗せる。
+                recorder.record(
+                    TraceEventKind.SNAPSHOT_LOAD,
+                    directory=str(snapshot_load_dir),
+                    restored_count=len(restore_report.restored),
+                    restored_being_ids=[b.value for b in restore_report.restored],
+                    cross_scenario_transfers=[
+                        {
+                            "being_id": b.value,
+                            "source_scenario": src,
+                            "current_scenario": cur,
+                        }
+                        for (b, src, cur) in restore_report.cross_scenario_transfers
+                    ],
                 )
 
         for pid in runtime.get_player_ids():
@@ -523,10 +540,12 @@ def _drive_scenario(
         # すると snapshot 経路が ``shutdown=True`` の store を触る恐れがある。
         # 「shutdown 前の last consistent state」を写し取るのが安全。
         # 失敗しても run 自体は守る (= 例外を上位に飛ばさない)。
+        # Phase 7: source_scenario を埋め込み + trace event 発行。
         if snapshot_session is not None and snapshot_save_dir is not None:
             try:
                 report = snapshot_session.capture_all(
-                    list(runtime.get_player_ids())
+                    list(runtime.get_player_ids()),
+                    source_scenario=scenario_path.stem,
                 )
                 logger.info(
                     "snapshot save: %d succeeded, %d failed (dir=%s)",
@@ -540,12 +559,42 @@ def _drive_scenario(
                         being_id.value,
                         err,
                     )
+                # Phase 7: trace に save 結果を残す。failures が空なら成功 trace、
+                # 1 件でも failed があれば warning として残す (= post-hoc 分析で
+                # 「ここで snapshot が部分的にしか取れなかった」を発見できる)。
+                recorder.record(
+                    TraceEventKind.SNAPSHOT_SAVE,
+                    directory=str(snapshot_save_dir),
+                    source_scenario=scenario_path.stem,
+                    succeeded_count=len(report.succeeded),
+                    failed_count=len(report.failed),
+                    succeeded_being_ids=[b.value for b in report.succeeded],
+                    failures=[
+                        {"being_id": b.value, "error": err}
+                        for (b, err) in report.failed
+                    ],
+                )
             except Exception:
                 logger.warning(
                     "snapshot save raised; experiment results are preserved "
                     "but resume from this run will not be possible",
                     exc_info=True,
                 )
+                # Phase 7: 例外で死んでも trace には「snapshot 全滅」を残す。
+                try:
+                    recorder.record(
+                        TraceEventKind.SNAPSHOT_SAVE,
+                        directory=str(snapshot_save_dir),
+                        source_scenario=scenario_path.stem,
+                        succeeded_count=0,
+                        failed_count=-1,  # -1 = capture_all 自体が raise
+                        error="capture_all raised; see logs",
+                    )
+                except Exception:
+                    logger.warning(
+                        "also failed to record SNAPSHOT_SAVE trace event",
+                        exc_info=True,
+                    )
 
         # Issue #311/#325 後続: 非同期 LLM 主観文付与 scheduler (#310) の in-flight
         # ジョブを drain してから return する。これをしないと、scenario 終了
