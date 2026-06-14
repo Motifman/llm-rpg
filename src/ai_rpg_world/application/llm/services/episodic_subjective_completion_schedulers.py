@@ -152,22 +152,35 @@ class InlineEpisodicSubjectiveScheduler:
         self._default_world_id = default_world_id
 
     def _put_episode(self, episode: SubjectiveEpisode) -> None:
-        """dual-path: being_id があれば by_being、なければ legacy。"""
+        """being_id 経路で put。Resolver 未注入 / Being 未 provision なら
+        silent skip + warning ログ (Phase 3 Step 3e-3)。"""
         if (
-            self._being_attachment_resolver is not None
-            and self._default_world_id is not None
+            self._being_attachment_resolver is None
+            or self._default_world_id is None
         ):
-            from ai_rpg_world.domain.player.value_object.player_id import (
-                PlayerId as _PID,
+            _logger.warning(
+                "Subjective scheduler skipped episode put: Resolver / WorldId "
+                "unresolved (episode_id=%s, player_id=%s)。",
+                episode.episode_id,
+                episode.player_id,
             )
+            return
+        from ai_rpg_world.domain.player.value_object.player_id import (
+            PlayerId as _PID,
+        )
 
-            being_id = self._being_attachment_resolver.resolve_being_id(
-                self._default_world_id, _PID(int(episode.player_id))
+        being_id = self._being_attachment_resolver.resolve_being_id(
+            self._default_world_id, _PID(int(episode.player_id))
+        )
+        if being_id is None:
+            _logger.warning(
+                "Subjective scheduler skipped episode put: Being not "
+                "provisioned (episode_id=%s, player_id=%s)。",
+                episode.episode_id,
+                episode.player_id,
             )
-            if being_id is not None:
-                self._store.put_by_being(being_id, episode)
-                return
-        self._store.put(episode)
+            return
+        self._store.put_by_being(being_id, episode)
 
     def submit(
         self,
@@ -401,27 +414,39 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             self._inflight.pop(episode_id, None)
 
     def _put_episode(self, episode: SubjectiveEpisode) -> None:
-        """dual-path: being_id があれば by_being、なければ legacy。
+        """being_id 経路で put。Resolver 未注入 / Being 未 provision なら
+        silent skip + warning ログ (Phase 3 Step 3e-3)。
 
-        Phase 3 Step 3e-2: ワーカー thread から呼ばれるため、Resolver は
-        thread-safe 前提 (= InMemoryBeingRepository は構造的に read-only
-        相当)。
+        ワーカー thread から呼ばれるため Resolver は thread-safe 前提
+        (= InMemoryBeingRepository は構造的に read-only 相当)。
         """
         if (
-            self._being_attachment_resolver is not None
-            and self._default_world_id is not None
+            self._being_attachment_resolver is None
+            or self._default_world_id is None
         ):
-            from ai_rpg_world.domain.player.value_object.player_id import (
-                PlayerId as _PID,
+            _logger.warning(
+                "ThreadPool scheduler skipped episode put: Resolver / WorldId "
+                "unresolved (episode_id=%s, player_id=%s)。",
+                episode.episode_id,
+                episode.player_id,
             )
+            return
+        from ai_rpg_world.domain.player.value_object.player_id import (
+            PlayerId as _PID,
+        )
 
-            being_id = self._being_attachment_resolver.resolve_being_id(
-                self._default_world_id, _PID(int(episode.player_id))
+        being_id = self._being_attachment_resolver.resolve_being_id(
+            self._default_world_id, _PID(int(episode.player_id))
+        )
+        if being_id is None:
+            _logger.warning(
+                "ThreadPool scheduler skipped episode put: Being not "
+                "provisioned (episode_id=%s, player_id=%s)。",
+                episode.episode_id,
+                episode.player_id,
             )
-            if being_id is not None:
-                self._store.put_by_being(being_id, episode)
-                return
-        self._store.put(episode)
+            return
+        self._store.put_by_being(being_id, episode)
 
     def _worker(
         self,

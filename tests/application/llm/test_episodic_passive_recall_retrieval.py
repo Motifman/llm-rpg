@@ -1,3 +1,12 @@
+# Phase 3 Step 3e-3 bulk migration: episode_store の player_id 経路撤去に
+# 伴い、本ファイルの ``being_id`` 参照を deterministic な ``BeingId`` の
+# 既定値で受ける (= テスト内で異なる player_id を使う箇所は個別に上書き)。
+# BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
+from ai_rpg_world.domain.being.value_object.being_id import (
+    BeingId as _MIG_BeingId,
+)
+
+being_id = _MIG_BeingId("being_w1_p7")
 """EpisodicPassiveRecallRetrievalService の和集合・round-robin・軸デバッグの検証。"""
 
 from datetime import datetime, timedelta, timezone
@@ -21,6 +30,29 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
+
+
+def _make_resolver_and_being():
+    """Phase 3 Step 3e-3 migration: Resolver+WorldId+ provision 済 Being を作る。
+    being_id は module-level ``being_id`` ("being_w1_p1") に揃える。"""
+    from ai_rpg_world.application.being.being_provisioning_service import (
+        BeingProvisioningService,
+    )
+    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
+    from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+    from ai_rpg_world.domain.world.value_object.world_id import (
+        DEFAULT_SINGLE_WORLD_ID,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
+        InMemoryBeingRepository,
+    )
+
+    repo = InMemoryBeingRepository()
+    resolver = BeingAttachmentResolver(repo)
+    BeingProvisioningService(repo).ensure_attached(PlayerId(7))
+    return resolver, DEFAULT_SINGLE_WORLD_ID
 
 
 def _episode(
@@ -60,9 +92,14 @@ class TestEpisodicPassiveRecallRetrievalTemporalOnly:
         store = InMemorySubjectiveEpisodeStore()
         base = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
         cue = EpisodicCue(axis="place", value="x", source=EpisodicCueSource.RUNTIME_CONTEXT)
-        store.put(_episode(episode_id="old", occurred_at=base, cues=(cue,)))
-        store.put(_episode(episode_id="new", occurred_at=base + timedelta(days=1), cues=(cue,)))
-        svc = EpisodicPassiveRecallRetrievalService(store)
+        store.put_by_being(being_id, _episode(episode_id="old", occurred_at=base, cues=(cue,)))
+        store.put_by_being(being_id, _episode(episode_id="new", occurred_at=base + timedelta(days=1), cues=(cue,)))
+        _res, _wid = _make_resolver_and_being()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=_res,
+            default_world_id=_wid,
+        )
         result = svc.retrieve(
             player_id=7,
             situation_cues=(),
@@ -86,7 +123,7 @@ class TestEpisodicPassiveRecallRetrievalCueOnly:
         trap = EpisodicCue(axis="schema_hint", value="trap", source=EpisodicCueSource.TOOL)
         other = EpisodicCue(axis="place", value="99", source=EpisodicCueSource.RUNTIME_CONTEXT)
         for i in range(3):
-            store.put(
+            store.put_by_being(being_id, 
                 _episode(
                     episode_id=f"recent-{i}",
                     occurred_at=base + timedelta(days=10 + i),
@@ -94,8 +131,13 @@ class TestEpisodicPassiveRecallRetrievalCueOnly:
                 )
             )
         old = _episode(episode_id="trap-old", occurred_at=base, cues=(trap,))
-        store.put(old)
-        svc = EpisodicPassiveRecallRetrievalService(store)
+        store.put_by_being(being_id, old)
+        _res, _wid = _make_resolver_and_being()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=_res,
+            default_world_id=_wid,
+        )
         result = svc.retrieve(
             player_id=7,
             situation_cues=(trap,),
@@ -118,8 +160,13 @@ class TestEpisodicPassiveRecallRetrievalUnionDedupe:
         ts = datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc)
         shared = EpisodicCue(axis="object", value="box", source=EpisodicCueSource.RUNTIME_CONTEXT)
         ep = _episode(episode_id="both", occurred_at=ts, cues=(shared,))
-        store.put(ep)
-        svc = EpisodicPassiveRecallRetrievalService(store)
+        store.put_by_being(being_id, ep)
+        _res, _wid = _make_resolver_and_being()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=_res,
+            default_world_id=_wid,
+        )
         result = svc.retrieve(
             player_id=7,
             situation_cues=(shared,),
@@ -146,14 +193,19 @@ class TestEpisodicPassiveRecallRetrievalLimits:
         base = datetime(2026, 5, 1, tzinfo=timezone.utc)
         k = EpisodicCue(axis="action", value="open", source=EpisodicCueSource.TOOL)
         for i in range(5):
-            store.put(
+            store.put_by_being(being_id, 
                 _episode(
                     episode_id=f"e{i}",
                     occurred_at=base + timedelta(hours=i),
                     cues=(k,),
                 )
             )
-        svc = EpisodicPassiveRecallRetrievalService(store)
+        _res, _wid = _make_resolver_and_being()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=_res,
+            default_world_id=_wid,
+        )
         result = svc.retrieve(
             player_id=7,
             situation_cues=(k,),
@@ -171,10 +223,15 @@ class TestEpisodicPassiveRecallRetrievalLimits:
         base = datetime(2026, 5, 1, tzinfo=timezone.utc)
         a = EpisodicCue(axis="a", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
         b = EpisodicCue(axis="b", value="2", source=EpisodicCueSource.RUNTIME_CONTEXT)
-        store.put(_episode(episode_id="p1", occurred_at=base + timedelta(days=3), cues=(a,)))
-        store.put(_episode(episode_id="p2", occurred_at=base + timedelta(days=2), cues=(b,)))
-        store.put(_episode(episode_id="p3", occurred_at=base + timedelta(days=1), cues=(a, b)))
-        svc = EpisodicPassiveRecallRetrievalService(store)
+        store.put_by_being(being_id, _episode(episode_id="p1", occurred_at=base + timedelta(days=3), cues=(a,)))
+        store.put_by_being(being_id, _episode(episode_id="p2", occurred_at=base + timedelta(days=2), cues=(b,)))
+        store.put_by_being(being_id, _episode(episode_id="p3", occurred_at=base + timedelta(days=1), cues=(a, b)))
+        _res, _wid = _make_resolver_and_being()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=_res,
+            default_world_id=_wid,
+        )
         result = svc.retrieve(
             player_id=7,
             situation_cues=(a, b),
@@ -194,9 +251,14 @@ class TestEpisodicPassiveRecallRetrievalDebugAxes:
         store = InMemorySubjectiveEpisodeStore()
         ts = datetime(2026, 5, 2, tzinfo=timezone.utc)
         c = EpisodicCue(axis="outcome", value="failure", source=EpisodicCueSource.TOOL)
-        store.put(_episode(episode_id="solo-recent", occurred_at=ts + timedelta(days=1), cues=()))
-        store.put(_episode(episode_id="overlap", occurred_at=ts, cues=(c,)))
-        svc = EpisodicPassiveRecallRetrievalService(store)
+        store.put_by_being(being_id, _episode(episode_id="solo-recent", occurred_at=ts + timedelta(days=1), cues=()))
+        store.put_by_being(being_id, _episode(episode_id="overlap", occurred_at=ts, cues=(c,)))
+        _res, _wid = _make_resolver_and_being()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=_res,
+            default_world_id=_wid,
+        )
         result = svc.retrieve(player_id=7, situation_cues=(c,), limit_per_axis=5, max_candidates=10)
         counts = dict(result.debug.final_episode_count_by_source_axis)
         assert counts[PASSIVE_RECALL_AXIS_TEMPORAL] == 2
@@ -213,11 +275,16 @@ class TestEpisodicPassiveRecallRetrievalPlaceFamily:
         c_spot = EpisodicCue(axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
         c_sub = EpisodicCue(axis="sub_loc", value="2", source=EpisodicCueSource.RUNTIME_CONTEXT)
         c_entity = EpisodicCue(axis="entity", value="alice", source=EpisodicCueSource.TOOL)
-        store.put(_episode(episode_id="f1", occurred_at=base + timedelta(days=10), cues=()))
-        store.put(_episode(episode_id="ep_spot", occurred_at=base, cues=(c_spot,)))
-        store.put(_episode(episode_id="ep_sub", occurred_at=base - timedelta(days=1), cues=(c_sub,)))
-        store.put(_episode(episode_id="ep_e", occurred_at=base - timedelta(days=2), cues=(c_entity,)))
-        svc = EpisodicPassiveRecallRetrievalService(store)
+        store.put_by_being(being_id, _episode(episode_id="f1", occurred_at=base + timedelta(days=10), cues=()))
+        store.put_by_being(being_id, _episode(episode_id="ep_spot", occurred_at=base, cues=(c_spot,)))
+        store.put_by_being(being_id, _episode(episode_id="ep_sub", occurred_at=base - timedelta(days=1), cues=(c_sub,)))
+        store.put_by_being(being_id, _episode(episode_id="ep_e", occurred_at=base - timedelta(days=2), cues=(c_entity,)))
+        _res, _wid = _make_resolver_and_being()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=_res,
+            default_world_id=_wid,
+        )
         result = svc.retrieve(
             player_id=7,
             situation_cues=(c_spot, c_sub, c_entity),
@@ -238,14 +305,15 @@ class TestEpisodicPassiveRecallRetrievalPlaceFamily:
         c_spot = EpisodicCue(axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
         weaker = EpisodicCue(axis="tile_area", value="9", source=EpisodicCueSource.RUNTIME_CONTEXT)
         stronger = EpisodicCue(axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
-        store.put(_episode(episode_id="only_tile", occurred_at=ts, cues=(weaker,)))
-        store.put(_episode(episode_id="both", occurred_at=ts, cues=(stronger, weaker)))
+        store.put_by_being(being_id, _episode(episode_id="only_tile", occurred_at=ts, cues=(weaker,)))
+        store.put_by_being(being_id, _episode(episode_id="both", occurred_at=ts, cues=(stronger, weaker)))
         rr_label, rows, _gran = _merged_ordered_episodes_for_cue_bucket(
             store,
             7,
             bucket=PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
             cues=[c_spot, c_tile],
             limit_per_axis=1,
+            being_id=being_id,
         )
         assert rr_label == PASSIVE_RECALL_PLACE_FAMILY_LABEL
         assert [e.episode_id for e in rows] == ["both"]
@@ -260,14 +328,15 @@ class TestEpisodicPassiveRecallRetrievalObjectGranularity:
         ts = datetime(2026, 9, 1, tzinfo=timezone.utc)
         cw = EpisodicCue(axis="object", value="world_object_1", source=EpisodicCueSource.TOOL)
         ci = EpisodicCue(axis="object", value="item_instance_2", source=EpisodicCueSource.RUNTIME_CONTEXT)
-        store.put(_episode(episode_id="to_wo", occurred_at=ts, cues=(cw,)))
-        store.put(_episode(episode_id="to_item", occurred_at=ts + timedelta(seconds=1), cues=(ci,)))
+        store.put_by_being(being_id, _episode(episode_id="to_wo", occurred_at=ts, cues=(cw,)))
+        store.put_by_being(being_id, _episode(episode_id="to_item", occurred_at=ts + timedelta(seconds=1), cues=(ci,)))
         rr_label, rows, _gran = _merged_ordered_episodes_for_cue_bucket(
             store,
             7,
             bucket="object",
             cues=[cw, ci],
             limit_per_axis=1,
+            being_id=being_id,
         )
         assert rr_label == "cue:object"
         assert [e.episode_id for e in rows] == ["to_item"]
@@ -283,15 +352,20 @@ class TestEpisodicPassiveRecallRetrievalRoundRobinFairness:
         filler = EpisodicCue(axis="place", value="99", source=EpisodicCueSource.RUNTIME_CONTEXT)
         trap = EpisodicCue(axis="schema_hint", value="trap", source=EpisodicCueSource.TOOL)
         for i in range(4):
-            store.put(
+            store.put_by_being(being_id, 
                 _episode(
                     episode_id=f"f{i}",
                     occurred_at=base + timedelta(days=i + 1),
                     cues=(filler,),
                 )
             )
-        store.put(_episode(episode_id="trap-old", occurred_at=base, cues=(trap,)))
-        svc = EpisodicPassiveRecallRetrievalService(store)
+        store.put_by_being(being_id, _episode(episode_id="trap-old", occurred_at=base, cues=(trap,)))
+        _res, _wid = _make_resolver_and_being()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=_res,
+            default_world_id=_wid,
+        )
         result = svc.retrieve(
             player_id=7,
             situation_cues=(trap,),
@@ -307,11 +381,16 @@ class TestEpisodicPassiveRecallRetrievalRoundRobinFairness:
         c_place = EpisodicCue(axis="place_spot", value="12", source=EpisodicCueSource.RUNTIME_CONTEXT)
         c_entity = EpisodicCue(axis="entity", value="alice", source=EpisodicCueSource.TOOL)
         c_object = EpisodicCue(axis="object", value="box", source=EpisodicCueSource.TOOL)
-        store.put(_episode(episode_id="T", occurred_at=base + timedelta(days=10), cues=()))
-        store.put(_episode(episode_id="P", occurred_at=base + timedelta(days=5), cues=(c_place,)))
-        store.put(_episode(episode_id="E", occurred_at=base + timedelta(days=4), cues=(c_entity,)))
-        store.put(_episode(episode_id="O", occurred_at=base + timedelta(days=3), cues=(c_object,)))
-        svc = EpisodicPassiveRecallRetrievalService(store)
+        store.put_by_being(being_id, _episode(episode_id="T", occurred_at=base + timedelta(days=10), cues=()))
+        store.put_by_being(being_id, _episode(episode_id="P", occurred_at=base + timedelta(days=5), cues=(c_place,)))
+        store.put_by_being(being_id, _episode(episode_id="E", occurred_at=base + timedelta(days=4), cues=(c_entity,)))
+        store.put_by_being(being_id, _episode(episode_id="O", occurred_at=base + timedelta(days=3), cues=(c_object,)))
+        _res, _wid = _make_resolver_and_being()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=_res,
+            default_world_id=_wid,
+        )
         result = svc.retrieve(
             player_id=7,
             situation_cues=(c_place, c_entity, c_object),
@@ -332,16 +411,21 @@ class TestEpisodicPassiveRecallRetrievalRoundRobinFairness:
         c_place = EpisodicCue(axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
         c_entity = EpisodicCue(axis="entity", value="z", source=EpisodicCueSource.TOOL)
         for i in range(3):
-            store.put(
+            store.put_by_being(being_id, 
                 _episode(
                     episode_id=f"t{i}",
                     occurred_at=base + timedelta(hours=i),
                     cues=(),
                 )
             )
-        store.put(_episode(episode_id="place-only", occurred_at=base - timedelta(days=1), cues=(c_place,)))
-        store.put(_episode(episode_id="entity-only", occurred_at=base - timedelta(days=2), cues=(c_entity,)))
-        svc = EpisodicPassiveRecallRetrievalService(store)
+        store.put_by_being(being_id, _episode(episode_id="place-only", occurred_at=base - timedelta(days=1), cues=(c_place,)))
+        store.put_by_being(being_id, _episode(episode_id="entity-only", occurred_at=base - timedelta(days=2), cues=(c_entity,)))
+        _res, _wid = _make_resolver_and_being()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=_res,
+            default_world_id=_wid,
+        )
         result = svc.retrieve(
             player_id=7,
             situation_cues=(c_place, c_entity),

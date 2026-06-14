@@ -202,27 +202,40 @@ class EpisodicChunkCoordinator:
         self._current_tick_provider = current_tick_provider
 
     def _put_episode(self, episode: SubjectiveEpisode) -> None:
-        """episode_store への put を dual-path で発行する。
+        """episode_store への put を being_id 経路で発行する。
 
-        Phase 3 Step 3e-2: Resolver+WorldId 注入時は being_id 経路、未注入なら
-        legacy player_id 経路。``episode.player_id`` を介して being_id を引く。
-        Step 3e-3 で legacy 撤去予定。
+        Phase 3 Step 3e-3: legacy player_id 経路は撤去済。Resolver+WorldId が
+        未注入 / Being 未 provision なら silent skip (= turn 副作用なので
+        次回 turn で再試行)。デバッグ可視性のため warning ログを 1 回出す。
         """
         if (
-            self._being_attachment_resolver is not None
-            and self._default_world_id is not None
+            self._being_attachment_resolver is None
+            or self._default_world_id is None
         ):
-            from ai_rpg_world.domain.player.value_object.player_id import (
-                PlayerId as _PID,
+            _logger.warning(
+                "EpisodicChunkCoordinator skipped episode put: Resolver / WorldId "
+                "unresolved (episode_id=%s, player_id=%s)。chunk は捨てられるが "
+                "turn は継続。",
+                episode.episode_id,
+                episode.player_id,
             )
+            return
+        from ai_rpg_world.domain.player.value_object.player_id import (
+            PlayerId as _PID,
+        )
 
-            being_id = self._being_attachment_resolver.resolve_being_id(
-                self._default_world_id, _PID(int(episode.player_id))
+        being_id = self._being_attachment_resolver.resolve_being_id(
+            self._default_world_id, _PID(int(episode.player_id))
+        )
+        if being_id is None:
+            _logger.warning(
+                "EpisodicChunkCoordinator skipped episode put: Being not "
+                "provisioned (episode_id=%s, player_id=%s)。",
+                episode.episode_id,
+                episode.player_id,
             )
-            if being_id is not None:
-                self._episodic_episode_store.put_by_being(being_id, episode)
-                return
-        self._episodic_episode_store.put(episode)
+            return
+        self._episodic_episode_store.put_by_being(being_id, episode)
 
     def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
         if self._trace_recorder_provider is not None:

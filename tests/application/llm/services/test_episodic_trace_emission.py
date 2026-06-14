@@ -9,6 +9,16 @@
 
 from __future__ import annotations
 
+# Phase 3 Step 3e-3 bulk migration: episode_store の player_id 経路撤去に
+# 伴い、本ファイルの ``being_id`` 参照を deterministic な ``BeingId`` の
+# 既定値で受ける (= テスト内で異なる player_id を使う箇所は個別に上書き)。
+# BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
+from ai_rpg_world.domain.being.value_object.being_id import (
+    BeingId as _MIG_BeingId,
+)
+
+being_id = _MIG_BeingId("being_w1_p1")
+
 from datetime import datetime, timezone
 from typing import Any, List
 
@@ -115,10 +125,28 @@ class TestChunkCoordinatorTraceEmission:
     """chunk 書き込み時に EPISODIC_CHUNK_WRITTEN が記録される。"""
 
     def _build_coord(self, *, recorder=None, tick: int = 5):
+        # Phase 3 Step 3e-3: ChunkCoordinator は episode_store を being_id 経路で
+        # 触るため、Resolver+WorldId 注入 + Being provision が必要。
+        from ai_rpg_world.application.being.being_provisioning_service import (
+            BeingProvisioningService,
+        )
+        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+            BeingAttachmentResolver,
+        )
+        from ai_rpg_world.domain.world.value_object.world_id import (
+            DEFAULT_SINGLE_WORLD_ID,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
+            InMemoryBeingRepository,
+        )
+
         buffer = DefaultObservationContextBuffer()
         sliding = DefaultSlidingWindowMemory()
         action_store = DefaultActionResultStore()
         episode_store = InMemorySubjectiveEpisodeStore()
+        being_repo = InMemoryBeingRepository()
+        resolver = BeingAttachmentResolver(being_repo)
+        BeingProvisioningService(being_repo).ensure_attached(PlayerId(1))
         coord = EpisodicChunkCoordinator(
             observation_buffer=buffer,
             sliding_window_memory=sliding,
@@ -127,6 +155,8 @@ class TestChunkCoordinatorTraceEmission:
             chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),
             trace_recorder=recorder,
             current_tick_provider=lambda: tick,
+            being_attachment_resolver=resolver,
+            default_world_id=DEFAULT_SINGLE_WORLD_ID,
         )
         return coord, buffer, action_store, episode_store
 
@@ -188,7 +218,7 @@ class TestChunkCoordinatorTraceEmission:
         pid = PlayerId(1)
         self._trigger_chunk_close(coord, buffer, action_store, pid)
         # episode は書かれた
-        assert len(episode_store.list_recent(pid.value, 10)) > 0
+        assert len(episode_store.list_recent_by_being(being_id, 10)) > 0
         # chunk_written event が 1 件以上
         chunk_events = [
             e for e in captured if e.kind == TraceEventKind.EPISODIC_CHUNK_WRITTEN
@@ -263,7 +293,7 @@ class TestChunkCoordinatorTraceEmission:
         )
         coord.after_action_recorded(pid)
         # chunk write が完走したことを episode_store の有無で確認
-        assert len(episode_store.list_recent(pid.value, 10)) > 0
+        assert len(episode_store.list_recent_by_being(being_id, 10)) > 0
 
     def test_obs_slice_に_naive_と_aware_が_複数件混在しても_sort_で_落ちない(self) -> None:
         """``obs_slice`` の sort key も _as_utc で正規化されている (Issue #311 後続)。
@@ -327,7 +357,7 @@ class TestChunkCoordinatorTraceEmission:
             scene_boundary=True,
         )
         coord.after_action_recorded(pid)
-        assert len(episode_store.list_recent(pid.value, 10)) > 0
+        assert len(episode_store.list_recent_by_being(being_id, 10)) > 0
 
     def test_recorder_例外は_chunk_書き込みを止めない(self) -> None:
         """recorder.record が例外を投げても episode は store に書かれる。"""
@@ -345,7 +375,7 @@ class TestChunkCoordinatorTraceEmission:
         pid = PlayerId(1)
         self._trigger_chunk_close(coord, buffer, action_store, pid)
         # trace 失敗でも episode は書かれている
-        assert len(episode_store.list_recent(pid.value, 10)) > 0
+        assert len(episode_store.list_recent_by_being(being_id, 10)) > 0
 
 
 # ──────────────────────────────────────────────────────────────────

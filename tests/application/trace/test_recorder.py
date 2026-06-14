@@ -1,3 +1,12 @@
+# Phase 3 Step 3e-3 bulk migration: episode_store の player_id 経路撤去に
+# 伴い、本ファイルの ``being_id`` 参照を deterministic な ``BeingId`` の
+# 既定値で受ける (= テスト内で異なる player_id を使う箇所は個別に上書き)。
+# BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
+from ai_rpg_world.domain.being.value_object.being_id import (
+    BeingId as _MIG_BeingId,
+)
+
+being_id = _MIG_BeingId("being_w1_p1")
 """TraceRecorder と TraceEvent の挙動テスト (Issue #188 Phase 1d)。"""
 
 import json
@@ -196,7 +205,7 @@ class TestJsonlTraceRecorderCloseRaceWithAsyncScheduler:
         )
         enc = build_chunk_encoding_input(PlayerId(1), (), (act,))
         draft = ChunkEpisodeDraftBuilder().build(enc)
-        store.put(draft)
+        store.put_by_being(being_id, draft)
         scheduler.submit(draft, persona_text="", encoding_input=enc)
         # 即座に shutdown timeout=0 → worker は drop されず走り続ける
         scheduler.shutdown(timeout=0.01)

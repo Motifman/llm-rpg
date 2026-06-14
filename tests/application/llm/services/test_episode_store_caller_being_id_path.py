@@ -89,7 +89,9 @@ class TestChunkCoordinatorPutEpisodeDualPath:
         store.put_by_being.assert_called_once_with(being_id, ep)
         store.put.assert_not_called()
 
-    def test_resolver_未注入時は_legacy_put(self) -> None:
+    def test_resolver_未注入時は_silent_skip(self) -> None:
+        """Phase 3 Step 3e-3: legacy 撤去後、Resolver 未注入は silent skip
+        (= turn 副作用なので止めない)。warning log は呼出側で出す。"""
         store = MagicMock()
         builder = MagicMock()
         builder._episodic_episode_store = store
@@ -97,7 +99,7 @@ class TestChunkCoordinatorPutEpisodeDualPath:
         builder._default_world_id = None
         ep = _ep()
         EpisodicChunkCoordinator._put_episode(builder, ep)
-        store.put.assert_called_once_with(ep)
+        # silent skip: store には何も書かれない
         store.put_by_being.assert_not_called()
 
 
@@ -119,7 +121,8 @@ class TestInlineSchedulerPutDualPath:
         InlineEpisodicSubjectiveScheduler._put_episode(scheduler, ep)
         store.put_by_being.assert_called_once_with(being_id, ep)
 
-    def test_resolver_未注入時は_legacy_put(self) -> None:
+    def test_resolver_未注入時は_silent_skip(self) -> None:
+        """Phase 3 Step 3e-3: scheduler も silent skip + warning log。"""
         scheduler = MagicMock()
         store = MagicMock()
         scheduler._store = store
@@ -127,7 +130,6 @@ class TestInlineSchedulerPutDualPath:
         scheduler._default_world_id = None
         ep = _ep()
         InlineEpisodicSubjectiveScheduler._put_episode(scheduler, ep)
-        store.put.assert_called_once_with(ep)
         store.put_by_being.assert_not_called()
 
 

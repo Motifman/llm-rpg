@@ -168,6 +168,24 @@ def _init_schema_v1(connection: sqlite3.Connection) -> None:
     )
 
 
+def _init_schema_v3_drop_legacy(connection: sqlite3.Connection) -> None:
+    """Phase 3 Step 3e-3: legacy player_id keyed の 2 テーブルを撤去。
+
+    Step 3e-2 で全 caller が ``*_by_being`` API に切り替わったため、player_id
+    keyed の旧テーブル/インデックスは参照されなくなった。schema migration で
+    DROP して DB ファイル上にも残らないようにする。semantic v3 /
+    memory_link v5 / reinterpretation v3 と同型。
+    """
+    connection.executescript(
+        """
+        DROP INDEX IF EXISTS idx_subjective_episodes_player_time;
+        DROP INDEX IF EXISTS idx_subjective_episode_cues_lookup;
+        DROP TABLE IF EXISTS subjective_episode_cues;
+        DROP TABLE IF EXISTS subjective_episodes;
+        """
+    )
+
+
 def _init_schema_v2_by_being(connection: sqlite3.Connection) -> None:
     """Phase 3 Step 3e-1: being_id keyed の並走テーブルを追加。
 
@@ -221,6 +239,7 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
             migrations=[
                 SqliteMigration(1, _init_schema_v1),
                 SqliteMigration(2, _init_schema_v2_by_being),
+                SqliteMigration(3, _init_schema_v3_drop_legacy),
             ],
         )
 
@@ -235,84 +254,6 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
         store = cls(conn)
         conn.commit()
         return store
-
-    def put(self, episode: SubjectiveEpisode) -> None:
-        payload = json.dumps(_episode_to_payload_dict(episode), ensure_ascii=False)
-        key = _occurred_at_sort_key(episode)
-        pid = episode.player_id
-        eid = episode.episode_id
-        canonicals = [c.to_canonical() for c in episode.cues]
-        cur = self._conn.cursor()
-        cur.execute(
-            "DELETE FROM subjective_episode_cues WHERE player_id = ? AND episode_id = ?",
-            (pid, eid),
-        )
-        cur.execute(
-            """
-            INSERT OR REPLACE INTO subjective_episodes
-                (player_id, episode_id, occurred_at_key, payload_json)
-            VALUES (?, ?, ?, ?)
-            """,
-            (pid, eid, key, payload),
-        )
-        for ck in canonicals:
-            cur.execute(
-                """
-                INSERT OR IGNORE INTO subjective_episode_cues
-                    (player_id, episode_id, cue_canonical)
-                VALUES (?, ?, ?)
-                """,
-                (pid, eid, ck),
-            )
-        self._conn.commit()
-
-    def get(self, player_id: int, episode_id: str) -> SubjectiveEpisode | None:
-        cur = self._conn.execute(
-            """
-            SELECT payload_json FROM subjective_episodes
-            WHERE player_id = ? AND episode_id = ?
-            """,
-            (player_id, episode_id),
-        )
-        row = cur.fetchone()
-        if row is None:
-            return None
-        data = json.loads(str(row[0]))
-        return _payload_dict_to_episode(data)
-
-    def list_recent(self, player_id: int, limit: int) -> list[SubjectiveEpisode]:
-        if limit <= 0:
-            return []
-        cur = self._conn.execute(
-            """
-            SELECT payload_json FROM subjective_episodes
-            WHERE player_id = ?
-            ORDER BY occurred_at_key DESC, episode_id DESC
-            LIMIT ?
-            """,
-            (player_id, limit),
-        )
-        return [_payload_dict_to_episode(json.loads(str(r[0]))) for r in cur.fetchall()]
-
-    def list_by_cue(self, player_id: int, cue: EpisodicCue, limit: int) -> list[SubjectiveEpisode]:
-        if limit <= 0:
-            return []
-        canonical = cue.to_canonical()
-        cur = self._conn.execute(
-            """
-            SELECT e.payload_json
-            FROM subjective_episode_cues c
-            JOIN subjective_episodes e
-              ON e.player_id = c.player_id AND e.episode_id = c.episode_id
-            WHERE c.player_id = ? AND c.cue_canonical = ?
-            ORDER BY e.occurred_at_key DESC, e.episode_id DESC
-            LIMIT ?
-            """,
-            (player_id, canonical, limit),
-        )
-        return [_payload_dict_to_episode(json.loads(str(r[0]))) for r in cur.fetchall()]
-
-    # ===== Phase 3 Step 3e-1: being_id 版を並走追加 =====
 
     def put_by_being(self, being_id: BeingId, episode: SubjectiveEpisode) -> None:
         if not isinstance(being_id, BeingId):

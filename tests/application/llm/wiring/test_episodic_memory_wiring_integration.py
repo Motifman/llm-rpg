@@ -1,3 +1,12 @@
+# Phase 3 Step 3e-3 bulk migration: episode_store の player_id 経路撤去に
+# 伴い、本ファイルの ``being_id`` 参照を deterministic な ``BeingId`` の
+# 既定値で受ける (= テスト内で異なる player_id を使う箇所は個別に上書き)。
+# BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
+from ai_rpg_world.domain.being.value_object.being_id import (
+    BeingId as _MIG_BeingId,
+)
+
+being_id = _MIG_BeingId("being_w1_p1")
 """create_llm_agent_wiring によるエピソードストア共有（保存側・受動想起側）の結合検証。"""
 
 from datetime import datetime, timezone
@@ -118,8 +127,12 @@ class TestEpisodicMemoryWiringIntegration:
         result = create_llm_agent_wiring(**_deps_with_profile(player_id=1))
         store = result.episodic_episode_store
         assert store is not None
+        # Phase 3 Step 3e-3: prompt_builder.build を turn_runner 経由なしで
+        # 直接呼ぶため、Being を事前 provision する必要がある (= 本番は
+        # turn_runner が毎 turn ``ensure_attached`` する)
+        result.being_provisioning_service.ensure_attached(PlayerId(1))
         recall_phrase = "wiring_shared_store_recall_smoke"
-        store.put(_minimal_episode(player_id=1, recall_text=recall_phrase))
+        store.put_by_being(being_id, _minimal_episode(player_id=1, recall_text=recall_phrase))
 
         turn_runner = result.llm_turn_trigger._turn_runner  # noqa: SLF001
         orch = turn_runner._orchestrator  # noqa: SLF001
@@ -156,7 +169,11 @@ class TestEpisodicMemoryWiringIntegration:
         assert orch._episodic_chunk_coordinator._episodic_episode_store is custom  # noqa: SLF001
 
         recall_phrase = "injected_store_recall"
-        custom.put(_minimal_episode(player_id=1, recall_text=recall_phrase))
+        # Phase 3 Step 3e-3: being_id 経路で put
+        result.being_provisioning_service.ensure_attached(PlayerId(1))
+        custom.put_by_being(
+            being_id, _minimal_episode(player_id=1, recall_text=recall_phrase)
+        )
         out = orch._prompt_builder.build(PlayerId(1))  # noqa: SLF001
         user_content = out["messages"][1]["content"]
         assert "【関連する記憶】" in user_content
@@ -170,7 +187,8 @@ class TestEpisodicMemoryWiringIntegration:
         result = create_llm_agent_wiring(**_deps_with_profile(player_id=1))
         store = result.episodic_episode_store
         assert store is not None
-        store.put(_minimal_episode(player_id=1, recall_text="stub_no_record_recall"))
+        result.being_provisioning_service.ensure_attached(PlayerId(1))
+        store.put_by_being(being_id, _minimal_episode(player_id=1, recall_text="stub_no_record_recall"))
 
         turn_runner = result.llm_turn_trigger._turn_runner  # noqa: SLF001
         orch = turn_runner._orchestrator  # noqa: SLF001
@@ -218,15 +236,11 @@ class TestEpisodicChunkWiringIntegration:
             return_value=close,
         ):
             turn_runner.run_turn(PlayerId(1))
-        # Phase 3 Step 3e-2: wiring が being_id 経路で episode を書くため、
-        # being_id 経由で読む必要がある (= 内部 ``_episodes_by_being`` を直接
-        # 検査する代わりに、本テストでは「dual-path のどちらかに 1 件入っている」
-        # ことを確認する)
-        recent_legacy = store.list_recent(1, 5)
+        # Phase 3 Step 3e-3: wiring が being_id 経路で episode を書く。
+        # legacy 撤去後は by_being のみを読めば十分。
         from ai_rpg_world.domain.being.value_object.being_id import BeingId as _BID
 
-        recent_by_being = store.list_recent_by_being(_BID("being_w1_p1"), 5)
-        recent = recent_legacy + recent_by_being
+        recent = store.list_recent_by_being(_BID("being_w1_p1"), 5)
         assert len(recent) == 1
         ep = recent[0]
         assert ep.player_id == 1
@@ -269,19 +283,13 @@ class TestEpisodicChunkWiringIntegration:
             store = result.episodic_episode_store
             assert store is not None
             turn_runner = result.llm_turn_trigger._turn_runner  # noqa: SLF001
-            # Phase 3 Step 3e-2: wiring が being_id 経路で書くため、本 helper で
-            # legacy + by_being 両方の list_recent を集めて検証する。
+            # Phase 3 Step 3e-3: wiring が being_id 経路で書く。
             from ai_rpg_world.domain.being.value_object.being_id import BeingId as _BID
 
-            def _all_recent(limit: int) -> list:
-                return (
-                    store.list_recent(1, limit)
-                    + store.list_recent_by_being(_BID("being_w1_p1"), limit)
-                )
-
+            _bid_1 = _BID("being_w1_p1")
             turn_runner.run_turn(PlayerId(1))
-            assert _all_recent(5) == []
+            assert store.list_recent_by_being(_bid_1, 5) == []
             turn_runner.run_turn(PlayerId(1))
-            recent = _all_recent(5)
+            recent = store.list_recent_by_being(_bid_1, 5)
             assert len(recent) == 1
             assert recent[0].player_id == 1

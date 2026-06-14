@@ -142,20 +142,31 @@ class TestSqliteByBeingBasic:
         assert store.list_by_cue_by_being(being, cue, limit=0) == []
 
 
-class TestSqliteByBeingIsolation:
-    """新旧テーブルが独立: legacy と by_being が混ざらない。"""
+# Phase 3 Step 3e-3 (Issue #470): legacy player_id 版 API + テーブル撤去に
+# 伴い、独立性検証は不要 (schema v3 で legacy 2 テーブルが DROP されたこと
+# は別途回帰テストで確認)。
 
-    def test_player_id_経由で_保存しても_being_id_経由では_見えない(
-        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
-    ) -> None:
-        store.put(_episode(episode_id="legacy"))
-        assert store.get_by_being(being, "legacy") is None
 
-    def test_being_id_経由で_保存しても_player_id_経由では_見えない(
-        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
+class TestSqliteV3DropLegacy:
+    """schema v3 で legacy 2 テーブルが DROP されている回帰防止。"""
+
+    def test_legacy_subjective_episodes_table_is_dropped(
+        self, store: SqliteSubjectiveEpisodeStore
     ) -> None:
-        store.put_by_being(being, _episode(episode_id="new", player_id=1))
-        assert store.get(1, "new") is None
+        rows = store._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+        table_names = {row["name"] for row in rows}
+        assert "subjective_episodes" not in table_names
+
+    def test_legacy_subjective_episode_cues_table_is_dropped(
+        self, store: SqliteSubjectiveEpisodeStore
+    ) -> None:
+        rows = store._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+        table_names = {row["name"] for row in rows}
+        assert "subjective_episode_cues" not in table_names
 
 
 class TestSqliteByBeingPersistence:
