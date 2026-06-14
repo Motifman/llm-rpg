@@ -14,15 +14,26 @@ Phase 9-2b (= tier 1a 後半):
 - ``PlayerGrowthSubsystemCodec`` — base_stats / growth_factor / exp_table / growth
 - ``PlayerStateDictSubsystemCodec`` — scenario-defined ``_state`` dict
 
-Phase 9-2c 候補 (= 必要になったら):
-- ``_active_effects`` / ``_attention_level`` / ``_pursuit_state`` /
-  ``_spot_navigation_state`` (= combat / nav sub-state)
+Phase 9-3 (= tier 1b 前半):
+- ``WorldFlagsSubsystemCodec`` — scenario flag 集合
+- ``ScenarioEventProgressSubsystemCodec`` — 発火済 / scheduled event_id
+- ``SpotExplorationProgressSubsystemCodec`` — (player, spot) → 探索回数
 
-Phase 9-3 以降:
-- spot_interior / world_flags / scenario_event_progress / weather / travel
-  / monster / quest 系
+Phase 9-3b (= tier 1b 後半):
+- ``SpotInteriorSubsystemCodec`` — sub_locations / objects / ground_items /
+  discoverable_items の dynamic 部分
+- ``ItemInstanceSubsystemCodec`` — ItemInstance 自体の state / decay
+
+Phase 9-4 候補:
+- combat sub-state (``_active_effects`` / ``_pursuit_state`` /
+  ``_spot_navigation_state`` / ``_attention_level``)
+- weather / day_night / travel stage
+- sliding_window / observation_buffer / action_result
 """
 
+from ai_rpg_world.application.being.world_subsystems.exploration_progress_codec import (
+    SpotExplorationProgressSubsystemCodec,
+)
 from ai_rpg_world.application.being.world_subsystems.player_growth_codec import (
     PlayerGrowthSubsystemCodec,
 )
@@ -41,6 +52,12 @@ from ai_rpg_world.application.being.world_subsystems.player_state_dict_codec imp
 from ai_rpg_world.application.being.world_subsystems.player_vitals_codec import (
     PlayerVitalsSubsystemCodec,
 )
+from ai_rpg_world.application.being.world_subsystems.scenario_event_progress_codec import (
+    ScenarioEventProgressSubsystemCodec,
+)
+from ai_rpg_world.application.being.world_subsystems.world_flags_codec import (
+    WorldFlagsSubsystemCodec,
+)
 from ai_rpg_world.application.being.world_subsystems.world_tick_codec import (
     WorldTickSubsystemCodec,
 )
@@ -55,4 +72,8 @@ __all__ = [
     "PlayerInventorySubsystemCodec",
     "PlayerGrowthSubsystemCodec",
     "PlayerStateDictSubsystemCodec",
+    # Phase 9-3
+    "WorldFlagsSubsystemCodec",
+    "ScenarioEventProgressSubsystemCodec",
+    "SpotExplorationProgressSubsystemCodec",
 ]

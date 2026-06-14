@@ -56,6 +56,9 @@ from ai_rpg_world.application.being.world_subsystems import (
     PlayerPositionSubsystemCodec,
     PlayerStateDictSubsystemCodec,
     PlayerVitalsSubsystemCodec,
+    ScenarioEventProgressSubsystemCodec,
+    SpotExplorationProgressSubsystemCodec,
+    WorldFlagsSubsystemCodec,
     WorldTickSubsystemCodec,
 )
 from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case import (
@@ -180,6 +183,10 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         PlayerInventorySubsystemCodec(),
         PlayerGrowthSubsystemCodec(),
         PlayerStateDictSubsystemCodec(),
+        # Phase 9-3 (world-side flags / progress)
+        WorldFlagsSubsystemCodec(),
+        ScenarioEventProgressSubsystemCodec(),
+        SpotExplorationProgressSubsystemCodec(),
     ]
 
 
