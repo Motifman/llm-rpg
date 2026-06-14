@@ -81,10 +81,11 @@ def test_temporal_link_created_between_recent_pair() -> None:
     )
     first = _ep(episode_id="e1", player_id=7)
     second = _ep(episode_id="e2", player_id=7)
-    store.put(first)
-    store.put(second)
+    # Phase 3 Step 3e-2: link service が being_id 経由で list_recent
+    store.put_by_being(being_id, first)
+    store.put_by_being(being_id, second)
     svc.on_episode_committed(second)
-    assert store.list_recent(7, 2)[0].episode_id == "e2"
+    assert store.list_recent_by_being(being_id, 2)[0].episode_id == "e2"
     assert (
         setup.link_store.get_link_by_being(
             being_id, "e1", "e2", MemoryLinkType.TEMPORAL
@@ -111,8 +112,8 @@ def test_passive_recall_triggers_co_recall_links() -> None:
     )
     e1 = _ep(episode_id="a", player_id=1)
     e2 = _ep(episode_id="b", player_id=1)
-    store.put(e1)
-    store.put(e2)
+    store.put_by_being(being_id, e1)
+    store.put_by_being(being_id, e2)
     cue = EpisodicCue(axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
     res = pr.retrieve(
         player_id=1,
@@ -173,7 +174,7 @@ def test_semantic_cluster_promotion_writes_store() -> None:
     )
     for i, eid in enumerate(["x", "y", "z"]):
         ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
-        store.put(ep)
+        store.put_by_being(being_id, ep)
     now = datetime.now(timezone.utc)
     links.upsert_link_by_being(being_id, _strong_link(1, "x", "y"))
     links.upsert_link_by_being(being_id, _strong_link(1, "y", "z"))
@@ -201,8 +202,8 @@ def test_memory_link_store_supports_co_recall_candidates_tuple() -> None:
     )
     e1 = _ep(episode_id="p", player_id=2)
     e2 = _ep(episode_id="q", player_id=2)
-    store.put(e1)
-    store.put(e2)
+    store.put_by_being(being_id, e1)
+    store.put_by_being(being_id, e2)
     cands = (
         EpisodicPassiveRecallCandidate(episode=e1, source_axes=("temporal",)),
         EpisodicPassiveRecallCandidate(episode=e2, source_axes=("temporal",)),

@@ -145,7 +145,8 @@ def _build_cluster(
             recall_count=5,
             interpreted=f"主観文{i}",
         )
-        episode_store.put(ep)
+        # Phase 3 Step 3e-2: promotion service が being_id 経由で episode を引く
+        episode_store.put_by_being(being_id, ep)
     # Phase 3 Step 3c-2: link 走査も being_id 経路で読まれるため同じ being_id で書く
     link_store.upsert_link_by_being(being_id, _strong_link(1, "x", "y"))
     link_store.upsert_link_by_being(being_id, _strong_link(1, "y", "z"))

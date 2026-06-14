@@ -115,8 +115,9 @@ class TestEpisodicMemoryLinkApplicationServiceDualPath:
         from datetime import timedelta as _td
         prev = _ep(episode_id="prev", occurred_at=_NOW - _td(minutes=5))
         newest = _ep(episode_id="newest", occurred_at=_NOW)
-        episodes.put(prev)
-        episodes.put(newest)
+        # Phase 3 Step 3e-2: service が being_id 経由で list_recent するため
+        episodes.put_by_being(being_id, prev)
+        episodes.put_by_being(being_id, newest)
         svc.on_episode_committed(newest, now=_NOW)
         # being_id 経路に書かれる
         assert len(setup.link_store.list_all_links_for_being(being_id)) == 1
@@ -169,8 +170,9 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
         being_id = setup.provision(1)
-        episodes.put(_ep(episode_id="seed"))
-        episodes.put(_ep(episode_id="other"))
+        # Phase 3 Step 3e-2: executor が get_by_being で episode を引くため
+        episodes.put_by_being(being_id, _ep(episode_id="seed"))
+        episodes.put_by_being(being_id, _ep(episode_id="other"))
         setup.link_store.upsert_link_by_being(
             being_id, _link(a="seed", b="other", strength=0.9)
         )
@@ -242,8 +244,9 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
         being_id = setup.provision(1)
         seed_ep = _ep(episode_id="seed")
         far_ep = _ep(episode_id="far")
-        episodes.put(seed_ep)
-        episodes.put(far_ep)
+        # Phase 3 Step 3e-2: passive recall が being_id 経路で list_recent / get
+        episodes.put_by_being(being_id, seed_ep)
+        episodes.put_by_being(being_id, far_ep)
         setup.link_store.upsert_link_by_being(
             being_id, _link(a="seed", b="far", strength=0.9)
         )
@@ -308,7 +311,8 @@ class TestEpisodicSemanticClusterPromotionServiceMemoryLinkPath:
             from dataclasses import replace as _replace
 
             base = _ep(episode_id=eid)
-            episodes.put(_replace(base, interpreted=f"主観文{i}"))
+            # Phase 3 Step 3e-2: promotion が being_id 経由で episode を引く
+            episodes.put_by_being(being_id, _replace(base, interpreted=f"主観文{i}"))
         # being_id 経路に link を 3 本書く
         link_store.upsert_link_by_being(being_id, _link(a="x", b="y"))
         link_store.upsert_link_by_being(being_id, _link(a="y", b="z"))
