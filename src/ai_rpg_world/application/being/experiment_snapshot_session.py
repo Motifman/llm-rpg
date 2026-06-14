@@ -30,7 +30,7 @@ Phase 6 (Issue #470): ``scripts/run_scenario_experiment.py`` が
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -39,6 +39,7 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
 )
 from ai_rpg_world.application.being.being_snapshot_file_gateway import (
     BeingSnapshotFileGateway,
+    BeingSnapshotFileMetadata,
 )
 from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case import (
     BeingNotFoundForSnapshotError,
@@ -132,6 +133,15 @@ class RestoreAllReport:
     """``restore_all`` の集計レポート。"""
 
     restored: list[BeingId]
+    # Phase 7 (Issue #470): 各 snapshot ファイルから読み取った metadata。
+    # ``source_scenario`` が現 scenario と異なる場合は別シナリオへの
+    # cross-transfer (= わざと許容、warning ログのみ)。
+    metadata_by_being: dict[BeingId, BeingSnapshotFileMetadata | None] = field(
+        default_factory=dict
+    )
+    cross_scenario_transfers: list[tuple[BeingId, str, str]] = field(
+        default_factory=list
+    )  # (being_id, source_scenario, current_scenario)
 
 
 class ExperimentSnapshotSession:
@@ -266,20 +276,39 @@ class ExperimentSnapshotSession:
         return out
 
     def capture_all(
-        self, player_ids: Sequence[PlayerId]
+        self,
+        player_ids: Sequence[PlayerId],
+        *,
+        source_scenario: str | None = None,
     ) -> CaptureAllReport:
         """全 player の Being snapshot を ``snapshot_dir`` 配下に書き出す。
 
         各 player の失敗は warning に残しつつ続行 (= 全体が止まらない)。
         実験 run のデータ救済を最優先する設計。
+
+        Phase 7: ``source_scenario`` を渡すと snapshot file の ``_metadata``
+        に埋め込まれ、後で ``restore_all_from_dir`` 経由で読めば
+        cross-scenario transfer を検知できる。
         """
         self._snapshot_dir.mkdir(parents=True, exist_ok=True)
         mappings = self._resolve_player_being_ids(player_ids)
         succeeded: list[BeingId] = []
         failed: list[tuple[BeingId, str]] = []
+        # captured_at は呼出側 (= runner) で 1 度生成して渡したい場合もあるが、
+        # 現状は session 内で 1 度だけ取って全 player に揃える (= run 終了時の
+        # 1 snapshot run = 同タイムスタンプ)。
+        from datetime import datetime, timezone
+
+        captured_at = datetime.now(timezone.utc).isoformat()
+        metadata = BeingSnapshotFileMetadata(
+            source_scenario=source_scenario,
+            captured_at=captured_at,
+        )
         for m in mappings:
             try:
-                self._capture_use_case.execute(m.being_id, m.file_path)
+                self._capture_use_case.execute(
+                    m.being_id, m.file_path, metadata=metadata
+                )
                 succeeded.append(m.being_id)
                 logger.info(
                     "snapshot captured: being_id=%s file=%s",
@@ -303,11 +332,22 @@ class ExperimentSnapshotSession:
                 failed.append((m.being_id, repr(exc)))
         return CaptureAllReport(succeeded=succeeded, failed=failed)
 
-    def restore_all_from_dir(self, input_dir: Path) -> RestoreAllReport:
+    def restore_all_from_dir(
+        self,
+        input_dir: Path,
+        *,
+        current_scenario: str | None = None,
+    ) -> RestoreAllReport:
         """``input_dir`` 配下の ``*.json`` を全て restore する。
 
         1 件でも失敗したら例外 (= partial state で experiment を始めない
         fail-fast)。ファイルがゼロ件なら no-op で空 report を返す。
+
+        Phase 7: ``current_scenario`` を渡すと、各 snapshot の
+        ``_metadata.source_scenario`` と比較し、異なれば
+        ``cross_scenario_transfers`` に記録 + warning ログを出す。
+        **mismatch はエラーにしない** (= 同じキャラクターを別シナリオに
+        転送する use case を許容)。
         """
         if not input_dir.exists():
             raise FileNotFoundError(
@@ -319,16 +359,59 @@ class ExperimentSnapshotSession:
         # ファイル名順で読み込む = 決定的な順序にする (= 復元が冪等)。
         files = sorted(p for p in input_dir.iterdir() if p.suffix == ".json")
         restored: list[BeingId] = []
+        metadata_by_being: dict[BeingId, BeingSnapshotFileMetadata | None] = {}
+        cross_transfers: list[tuple[BeingId, str, str]] = []
         for path in files:
+            # metadata は restore_use_case の中では読まないので、別途 gateway
+            # から読む (= 失敗しても restore 本体は続行 = silent failure 防止
+            # のため warning ログのみ)。
+            try:
+                metadata = self._gateway.read_metadata(path)
+            except Exception:
+                logger.warning(
+                    "failed to read metadata from %s; continuing without metadata",
+                    path,
+                    exc_info=True,
+                )
+                metadata = None
+
             result = self._restore_use_case.execute(path)
             restored.append(result.being_id)
+            metadata_by_being[result.being_id] = metadata
             logger.info(
                 "snapshot restored: being_id=%s file=%s memory_restored=%s",
                 result.being_id.value,
                 path,
                 result.memory_restored,
             )
-        return RestoreAllReport(restored=restored)
+
+            # cross-scenario 検知。両方とも None でない時だけ比較。
+            if (
+                metadata is not None
+                and metadata.source_scenario is not None
+                and current_scenario is not None
+                and metadata.source_scenario != current_scenario
+            ):
+                cross_transfers.append(
+                    (
+                        result.being_id,
+                        metadata.source_scenario,
+                        current_scenario,
+                    )
+                )
+                logger.warning(
+                    "cross-scenario transfer detected: being_id=%s "
+                    "saved in scenario %r, loading into scenario %r "
+                    "(allowed but flagged)",
+                    result.being_id.value,
+                    metadata.source_scenario,
+                    current_scenario,
+                )
+        return RestoreAllReport(
+            restored=restored,
+            metadata_by_being=metadata_by_being,
+            cross_scenario_transfers=cross_transfers,
+        )
 
 
 __all__ = [

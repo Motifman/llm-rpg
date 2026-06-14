@@ -232,3 +232,121 @@ class TestRestoreAll:
         )
         with pytest.raises(Exception):
             session.restore_all_from_dir(bad_dir)
+
+
+class TestScenarioMetadata:
+    """Phase 7: scenario メタデータの埋め込み + cross-scenario transfer 検知。"""
+
+    def test_capture_は_source_scenario_を_metadata_に書き込む(
+        self, tmp_path: Path
+    ) -> None:
+        from ai_rpg_world.application.being.being_snapshot_file_gateway import (
+            BeingSnapshotFileGateway,
+        )
+
+        wiring, prov = _make_wiring_stub()
+        prov.ensure_attached(PlayerId(1))
+        session = ExperimentSnapshotSession(
+            wiring_result=wiring, snapshot_dir=tmp_path / "snap"
+        )
+        session.capture_all(
+            [PlayerId(1)], source_scenario="decay_demo"
+        )
+
+        gateway = BeingSnapshotFileGateway()
+        files = list((tmp_path / "snap").iterdir())
+        assert len(files) == 1
+        metadata = gateway.read_metadata(files[0])
+        assert metadata is not None
+        assert metadata.source_scenario == "decay_demo"
+        assert metadata.captured_at is not None  # ISO 8601 文字列
+
+    def test_同じ_scenario_の_restore_は_cross_transfer_に乗らない(
+        self, tmp_path: Path
+    ) -> None:
+        src_wiring, src_prov = _make_wiring_stub()
+        src_prov.ensure_attached(PlayerId(1))
+        src_session = ExperimentSnapshotSession(
+            wiring_result=src_wiring, snapshot_dir=tmp_path / "snap"
+        )
+        src_session.capture_all([PlayerId(1)], source_scenario="A")
+
+        dst_wiring, _ = _make_wiring_stub()
+        dst_session = ExperimentSnapshotSession(
+            wiring_result=dst_wiring, snapshot_dir=tmp_path / "snap"
+        )
+        report = dst_session.restore_all_from_dir(
+            tmp_path / "snap", current_scenario="A"
+        )
+        assert report.cross_scenario_transfers == []
+        assert len(report.metadata_by_being) == 1
+
+    def test_別_scenario_への_restore_は_warning_と_report_に乗る(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """同じ Being を別シナリオに転送する use case が許容されることを担保。"""
+        src_wiring, src_prov = _make_wiring_stub()
+        src_prov.ensure_attached(PlayerId(1))
+        src_session = ExperimentSnapshotSession(
+            wiring_result=src_wiring, snapshot_dir=tmp_path / "snap"
+        )
+        src_session.capture_all([PlayerId(1)], source_scenario="forest_world")
+
+        dst_wiring, _ = _make_wiring_stub()
+        dst_session = ExperimentSnapshotSession(
+            wiring_result=dst_wiring, snapshot_dir=tmp_path / "snap"
+        )
+        with caplog.at_level("WARNING"):
+            report = dst_session.restore_all_from_dir(
+                tmp_path / "snap", current_scenario="desert_world"
+            )
+        # restore 自体は成功
+        assert len(report.restored) == 1
+        # cross-transfer に記録される
+        assert len(report.cross_scenario_transfers) == 1
+        bid, src, cur = report.cross_scenario_transfers[0]
+        assert src == "forest_world"
+        assert cur == "desert_world"
+        # warning ログにも出る
+        assert any(
+            "cross-scenario transfer" in r.message for r in caplog.records
+        )
+
+    def test_metadata_なし_旧_snapshot_の_restore_は_問題なく動く(
+        self, tmp_path: Path
+    ) -> None:
+        """``_metadata`` キー無しの旧 snapshot ファイルでも壊れない (後方互換)。"""
+        from ai_rpg_world.application.being.being_snapshot_file_gateway import (
+            BeingSnapshotFileGateway,
+        )
+        from ai_rpg_world.domain.being.value_object.being_snapshot import (
+            BeingSnapshot,
+        )
+
+        snap_dir = tmp_path / "old"
+        snap_dir.mkdir()
+        # metadata=None で write = ``_metadata`` キーが書かれない
+        gateway = BeingSnapshotFileGateway()
+        snap = BeingSnapshot(
+            being_id_value="being_w1_p1",
+            identity_name="agent",
+            identity_first_person="わたし",
+            attachment_world_id=1,
+            attachment_player_id=1,
+            declared_memory_kinds=(),
+            snapshot_version=2,
+            memory_payload_json=None,
+        )
+        gateway.write(snap, snap_dir / "being_w1_p1.json")  # metadata 省略
+
+        wiring, _ = _make_wiring_stub()
+        session = ExperimentSnapshotSession(
+            wiring_result=wiring, snapshot_dir=tmp_path / "snap"
+        )
+        report = session.restore_all_from_dir(
+            snap_dir, current_scenario="anything"
+        )
+        assert len(report.restored) == 1
+        assert report.cross_scenario_transfers == []  # 比較対象がないので空
+        # metadata_by_being には None が入る
+        assert all(v is None for v in report.metadata_by_being.values())

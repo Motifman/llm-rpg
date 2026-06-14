@@ -114,6 +114,22 @@ class TraceEventKind:
     # 後から振り返るための trace。生成タイミング + 内容を 1 件で残す。
     # payload: summary_id / generation_index / self_image / world_view / is_fallback
     SHORT_TERM_LONG_SUMMARY_GENERATED = "short_term_long_summary_generated"
+    # Phase 7 (Issue #470): Being snapshot save / load。run が前回 snapshot
+    # からの続きか・どの player の memory が今 run の trace に乗っているかを
+    # post-hoc 分析できるようにする。silent failure 防止用に **必ず** trace に
+    # 1 件残す (= load 成功 / 失敗、save 成功 / 失敗いずれの場合も)。
+    # SNAPSHOT_LOAD payload:
+    #   - directory: str (= --snapshot-load-dir)
+    #   - restored_count: int (= 成功した Being 数)
+    #   - source_scenario: str | None (= snapshot 内に書かれていた元シナリオ名。
+    #     現 scenario と異なる場合は cross-scenario transfer)
+    # SNAPSHOT_SAVE payload:
+    #   - directory: str (= --snapshot-save-dir)
+    #   - succeeded_count: int
+    #   - failed_count: int
+    #   - failures: list[{being_id, error}]
+    SNAPSHOT_LOAD = "snapshot_load"
+    SNAPSHOT_SAVE = "snapshot_save"
 
 
 @dataclass(frozen=True)
