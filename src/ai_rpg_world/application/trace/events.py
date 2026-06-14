@@ -130,6 +130,21 @@ class TraceEventKind:
     #   - failures: list[{being_id, error}]
     SNAPSHOT_LOAD = "snapshot_load"
     SNAPSHOT_SAVE = "snapshot_save"
+    # Phase 9-1 (Issue #470): WorldStateSnapshot (= scenario 全体の world state)
+    # の save / load。Being snapshot とは独立に発火 (= 同じ run で両方出る)。
+    # WORLD_SNAPSHOT_LOAD payload:
+    #   - directory: str
+    #   - source_scenario: str (= snapshot 内に書かれていた scenario)
+    #   - current_scenario: str (= 現 run の scenario)
+    #   - world_tick: int (= restore 元の tick = 続きから start する tick)
+    #   - restored_subsystems: list[str] (= 実際に codec が走った subsystem 名)
+    # WORLD_SNAPSHOT_SAVE payload:
+    #   - directory: str
+    #   - source_scenario: str
+    #   - world_tick: int (= save 時点の world tick)
+    #   - captured_subsystems: list[str]
+    WORLD_SNAPSHOT_LOAD = "world_snapshot_load"
+    WORLD_SNAPSHOT_SAVE = "world_snapshot_save"
 
 
 @dataclass(frozen=True)

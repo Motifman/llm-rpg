@@ -177,8 +177,80 @@ class BeingSnapshotFileGateway:
         return BeingSnapshotFileMetadata.from_dict(meta)
 
 
+class WorldStateSnapshotFileGateway:
+    """``WorldStateSnapshot`` をローカルファイル (``world.json``) に読み書きする。
+
+    Phase 9-1 (Issue #470): Being snapshot と並列の世界状態 snapshot 用。
+    snapshot directory 配下に **1 ファイル固定** (= 全 player 共有なので 1 つ)。
+    """
+
+    _FILENAME = "world.json"
+
+    @classmethod
+    def file_path_in_dir(cls, snapshot_dir: Path) -> Path:
+        """snapshot directory 内の ``world.json`` への path を返す。"""
+        if not isinstance(snapshot_dir, Path):
+            raise TypeError(
+                f"snapshot_dir must be Path, got {type(snapshot_dir).__name__}"
+            )
+        return snapshot_dir / cls._FILENAME
+
+    def write(self, snapshot: Any, output_dir: Path) -> Path:
+        """``snapshot`` を ``output_dir/world.json`` に書く。返り値は file path。"""
+        from ai_rpg_world.application.being.world_state_snapshot import (
+            WorldStateSnapshot,
+        )
+
+        if not isinstance(snapshot, WorldStateSnapshot):
+            raise TypeError(
+                f"snapshot must be WorldStateSnapshot, "
+                f"got {type(snapshot).__name__}"
+            )
+        if not isinstance(output_dir, Path):
+            raise TypeError(
+                f"output_dir must be Path, got {type(output_dir).__name__}"
+            )
+        output_dir.mkdir(parents=True, exist_ok=True)
+        path = self.file_path_in_dir(output_dir)
+        path.write_text(
+            json.dumps(snapshot.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return path
+
+    def read(self, input_dir: Path) -> Any:
+        """``input_dir/world.json`` から ``WorldStateSnapshot`` を返す。
+
+        ファイルが無ければ ``FileNotFoundError`` を投げる。
+        """
+        from ai_rpg_world.application.being.world_state_snapshot import (
+            WorldStateSnapshot,
+        )
+
+        if not isinstance(input_dir, Path):
+            raise TypeError(
+                f"input_dir must be Path, got {type(input_dir).__name__}"
+            )
+        path = self.file_path_in_dir(input_dir)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"world snapshot file not found: {path}"
+            )
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return WorldStateSnapshot.from_dict(data)
+
+    def exists_in(self, input_dir: Path) -> bool:
+        """``input_dir/world.json`` が存在するなら True。"""
+        if not isinstance(input_dir, Path):
+            raise TypeError(
+                f"input_dir must be Path, got {type(input_dir).__name__}"
+            )
+        return self.file_path_in_dir(input_dir).exists()
+
+
 __all__ = [
     "BeingSnapshotFileGateway",
+    "WorldStateSnapshotFileGateway",
     "snapshot_to_dict",
     "dict_to_snapshot",
 ]
