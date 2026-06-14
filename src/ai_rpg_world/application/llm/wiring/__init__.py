@@ -1402,6 +1402,8 @@ def create_llm_agent_wiring(
         chunk_subjective_service=chunk_subjective_service,
         reinterpretation_completion=reinterpretation_completion,
         episodic_chunk_coordinator_override=episodic_chunk_coordinator,
+        being_attachment_resolver=_being_resolver,
+        default_world_id=_default_world_id,
     )
     reinterpretation_coord = coord_stack.reinterpretation_coord
     prompt_recall_buffer = coord_stack.prompt_recall_buffer

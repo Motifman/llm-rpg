@@ -189,6 +189,8 @@ def build_episodic_coordinator_stack(
     chunk_subjective_service: Any,
     reinterpretation_completion: Optional[IEpisodicReinterpretationCompletionPort],
     episodic_chunk_coordinator_override: Optional[EpisodicChunkCoordinator],
+    being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
+    default_world_id: Optional["WorldId"] = None,
 ) -> EpisodicCoordinatorStack:
     """recall_buffer / reinterpretation_coord / episodic_coord の組み立てを集約する。
 
@@ -196,6 +198,9 @@ def build_episodic_coordinator_stack(
     ブロックを抽出。recall_buffer / reinterpretation_journal の解決は呼び出し側
     (`__init__.py` の `_resolve_default_episodic_reinterpretation_stores`) で
     済ませてから渡す (循環 import 回避)。
+
+    Phase 3 Step 3d-2: Resolver+WorldId を ``EpisodicReinterpretationCoordinator``
+    に伝播する。未注入なら legacy player_id 経路で動く (3d-3 で legacy 撤去)。
     """
     chunk_builder = (
         chunk_episode_draft_builder
@@ -207,6 +212,8 @@ def build_episodic_coordinator_stack(
         recall_buffer_store=recall_buffer,
         journal_store=reinterpretation_journal,
         completion=reinterpretation_completion,
+        being_attachment_resolver=being_attachment_resolver,
+        default_world_id=default_world_id,
     )
     # prompt 経路で recall buffer を覗くのは
     # (a) reinterpretation_completion が有効、または

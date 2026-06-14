@@ -84,14 +84,28 @@ def _join_passive_recall_texts(
     player_id: int,
     candidates: tuple[EpisodicPassiveRecallCandidate, ...],
     journal_store: EpisodicReinterpretationJournalRepository | None = None,
+    *,
+    being_id: Any = None,
 ) -> str:
-    """retrieve の候補順のまま、active 再解釈を優先して recall text を改行で連結する。"""
+    """retrieve の候補順のまま、active 再解釈を優先して recall text を改行で連結する。
+
+    Phase 3 Step 3d-2: dual-path。``being_id`` が渡されたら
+    ``get_active_by_being`` を使い、未渡しなら legacy ``get_active`` で読む。
+    Step 3d-3 で legacy 経路撤去予定。
+    """
     parts: list[str] = []
     for cand in candidates:
         active = None
         if journal_store is not None:
             try:
-                active = journal_store.get_active(player_id, cand.episode.episode_id)
+                if being_id is not None:
+                    active = journal_store.get_active_by_being(
+                        being_id, cand.episode.episode_id
+                    )
+                else:
+                    active = journal_store.get_active(
+                        player_id, cand.episode.episode_id
+                    )
             except Exception:
                 # 再解釈 store の障害で recall を止めず生の recall_text に縮退する。
                 # 「sail と active が drift している」状況を後追いできるよう WARN
@@ -747,10 +761,12 @@ class DefaultPromptBuilder(IPromptBuilder):
             max_candidates=self._episodic_passive_recall_max_candidates,
             now=recall_now,
         )
+        being_id = self._resolve_being_id(player_id)
         relevant_memories_text = _join_passive_recall_texts(
             player_id.value,
             recall_result.candidates,
             self._episodic_reinterpretation_journal_store,
+            being_id=being_id,
         )
 
         # Issue #283 後続: recall 結果を trace に残す (Viewer / jq から
@@ -777,22 +793,28 @@ class DefaultPromptBuilder(IPromptBuilder):
                 else 0
             )
             situation_cue_keys = tuple(c.to_canonical() for c in situation_cues)
+            # Phase 3 Step 3d-2: dual-path。being_id が引ければ being_id 経路、
+            # 引けなければ legacy player_id 経路 (Step 3d-3 で legacy 撤去予定)。
             for cand in recall_result.candidates:
                 try:
-                    self._episodic_recall_buffer_store.append(
-                        EpisodicRecallObservation(
-                            recall_id=f"recall-{uuid4().hex}",
-                            player_id=player_id.value,
-                            episode_id=cand.episode.episode_id,
-                            recalled_at=datetime.now(timezone.utc),
-                            source_axes=cand.source_axes,
-                            current_state_snapshot=current_state_text,
-                            recent_events_snapshot=recent_events_text,
-                            persona_snapshot=player_info.persona_block,
-                            situation_cues=situation_cue_keys,
-                            turn_index=turn_index,
-                        )
+                    observation = EpisodicRecallObservation(
+                        recall_id=f"recall-{uuid4().hex}",
+                        player_id=player_id.value,
+                        episode_id=cand.episode.episode_id,
+                        recalled_at=datetime.now(timezone.utc),
+                        source_axes=cand.source_axes,
+                        current_state_snapshot=current_state_text,
+                        recent_events_snapshot=recent_events_text,
+                        persona_snapshot=player_info.persona_block,
+                        situation_cues=situation_cue_keys,
+                        turn_index=turn_index,
                     )
+                    if being_id is not None:
+                        self._episodic_recall_buffer_store.append_by_being(
+                            being_id, observation
+                        )
+                    else:
+                        self._episodic_recall_buffer_store.append(observation)
                 except Exception as e:
                     self._logger.warning(
                         "Failed to record episodic recall observation; prompt build continues: %s",
@@ -907,6 +929,21 @@ class DefaultPromptBuilder(IPromptBuilder):
                 "trace recorder.record raised for SEMANTIC_PASSIVE_RECALL; skipping",
                 exc_info=True,
             )
+
+    def _resolve_being_id(self, player_id: PlayerId) -> Any:
+        """Resolver+WorldId 揃いなら ``BeingId`` を返す。
+
+        Phase 3 Step 3d-2: dual-path 用に共有化した helper (= memo / journal /
+        recall_buffer から呼べる)。未注入 or Being 未 provision なら ``None``。
+        """
+        if (
+            self._being_attachment_resolver is None
+            or self._default_world_id is None
+        ):
+            return None
+        return self._being_attachment_resolver.resolve_being_id(
+            self._default_world_id, player_id
+        )
 
     def _fetch_uncompleted_memos(self, player_id: PlayerId) -> list[MemoEntry]:
         """being_id 経路で未完了 memo を引く (Phase 3 Step 3a-3)。
