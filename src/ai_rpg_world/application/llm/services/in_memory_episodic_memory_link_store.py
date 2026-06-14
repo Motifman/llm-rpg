@@ -163,6 +163,13 @@ class InMemoryMemoryLinkStore(MemoryLinkRepository):
             del self._by_being_episode[being_id]
 
     def upsert_link_by_being(self, being_id: BeingId, link: MemoryLink) -> None:
+        """being_id keyed で link を upsert する。
+
+        ``link`` は ``MemoryLink`` VO であり、``__post_init__`` で
+        ``normalize_episode_pair`` 済 (= ``a < b``) であることを前提とする。
+        そのため key 生成・index 登録の側では再正規化しない (``get_link_by_being``
+        は呼出側が生文字列を渡しうるため正規化する)。
+        """
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         if not isinstance(link, MemoryLink):
@@ -258,8 +265,11 @@ class InMemoryMemoryLinkStore(MemoryLinkRepository):
         link = self._by_being_key.pop(weakest_key, None)
         if link is None:
             return False
-        self._unregister_being_episode(being_id, link.episode_id_a, weakest_key)
-        self._unregister_being_episode(being_id, link.episode_id_b, weakest_key)
+        # weakest_key のタプルから直接 episode_id を取り出す (= pop 済の link
+        # フィールドに依存せずインデックス整合性を保つ。レビュー指摘反映)
+        _, key_episode_a, key_episode_b, _ = weakest_key
+        self._unregister_being_episode(being_id, key_episode_a, weakest_key)
+        self._unregister_being_episode(being_id, key_episode_b, weakest_key)
         return True
 
     def list_all_links_for_being(self, being_id: BeingId) -> list[MemoryLink]:

@@ -311,6 +311,9 @@ class SqliteMemoryLinkStore(MemoryLinkRepository):
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         eid = episode_id.strip()
+        # MemoryLink VO の `__post_init__` で a < b に正規化されるため、
+        # 同一行が `episode_id_a = ?` と `episode_id_b = ?` の両方を満たす
+        # ことはなく、OR で COUNT しても二重カウントにならない。
         cur = self._conn.execute(
             """
             SELECT COUNT(*) AS c FROM memory_links_by_being
@@ -342,8 +345,11 @@ class SqliteMemoryLinkStore(MemoryLinkRepository):
         if not rows:
             return False
         weakest = min(rows, key=lambda r: effective_link_strength(_row_to_link(r), now))
-        # 一意性は (being_id_value, episode_id_a, episode_id_b, link_type) で確保
-        # されているため、PK でなく link_id ではなく組で DELETE する
+        # 一意性は PK の 4 列組 (being_id_value, episode_id_a, episode_id_b,
+        # link_type) で確保される。link_id は本テーブルでは非 PK (= UPSERT 時に
+        # 更新可能フィールド扱い) なので、legacy の `DELETE WHERE link_id=?` は
+        # 使えない。同じ link_id が複数 PK 組に紐づきうるため、PK 4 列組で
+        # DELETE するのが安全。
         self._conn.execute(
             """
             DELETE FROM memory_links_by_being
