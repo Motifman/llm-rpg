@@ -286,7 +286,9 @@ class EpisodicSemanticClusterPromotionService:
             eps: list[SubjectiveEpisode] = []
             cluster_ok = True
             for eid in comp:
-                ep = self.episode_store.get(player_id, eid)
+                # Phase 3 Step 3e-2: episode_store も being_id 経路に統一。
+                # ここに来た時点で being_id は resolve 済 (= 先頭で early return)
+                ep = self.episode_store.get_by_being(being_id, eid)
                 if ep is None or ep.recall_count < MIN_RECALL_COUNT:
                     cluster_ok = False
                     break

@@ -115,7 +115,8 @@ class EpisodicMemoryLinkApplicationService:
         being_id = self._resolve_being_id(pid)
         if being_id is None:
             return
-        recent = self._episodes.list_recent(pid, 2)
+        # Phase 3 Step 3e-2: episode_store も dual-path 化
+        recent = self._list_recent_episodes(pid, being_id, limit=2)
         if len(recent) < 2:
             return
         newest, prev = recent[0], recent[1]
@@ -155,7 +156,7 @@ class EpisodicMemoryLinkApplicationService:
                 seen.add(eid)
                 ordered_ids.append(eid)
         capped = ordered_ids[: self._co_cap]
-        self._bump_recall_counts(player_id, capped, now)
+        self._bump_recall_counts(player_id, being_id, capped, now)
         for i in range(len(capped)):
             for j in range(i + 1, len(capped)):
                 self._ensure_capacity_before_link(being_id, capped[i], capped[j], now)
@@ -195,9 +196,42 @@ class EpisodicMemoryLinkApplicationService:
                 now=now,
             )
 
-    def _bump_recall_counts(self, player_id: int, episode_ids: Sequence[str], now: datetime) -> None:
+    def _list_recent_episodes(
+        self,
+        player_id: int,  # noqa: ARG002 - 3e-3 で削除予定 (現状は呼出側 API 維持用)
+        being_id: BeingId,
+        limit: int,
+    ) -> list[SubjectiveEpisode]:
+        """being_id 経路で episode の list_recent を取得する。
+
+        Phase 3 Step 3e-2: 本サービスは入口で being_id を resolve 済 (= None
+        なら early return) のため、内部 helper は ``by_being`` のみで足りる。
+        ``player_id`` 引数は呼出側のシグネチャ互換のため残置 (3e-3 で整理)。
+        """
+        return self._episodes.list_recent_by_being(being_id, limit)
+
+    def _get_episode(
+        self,
+        player_id: int,  # noqa: ARG002 - 3e-3 で削除予定
+        being_id: BeingId,
+        episode_id: str,
+    ) -> SubjectiveEpisode | None:
+        """being_id 経路で episode を取得 (resolve-once-per-entry 前提)。"""
+        return self._episodes.get_by_being(being_id, episode_id)
+
+    def _put_episode(self, being_id: BeingId, episode: SubjectiveEpisode) -> None:
+        """being_id 経路で episode を upsert (resolve-once-per-entry 前提)。"""
+        self._episodes.put_by_being(being_id, episode)
+
+    def _bump_recall_counts(
+        self,
+        player_id: int,
+        being_id: BeingId,
+        episode_ids: Sequence[str],
+        now: datetime,
+    ) -> None:
         for eid in episode_ids:
-            ep = self._episodes.get(player_id, eid)
+            ep = self._get_episode(player_id, being_id, eid)
             if ep is None:
                 continue
             updated = replace(
@@ -205,7 +239,7 @@ class EpisodicMemoryLinkApplicationService:
                 recall_count=ep.recall_count + 1,
                 last_recalled_at=now,
             )
-            self._episodes.put(updated)
+            self._put_episode(being_id, updated)
 
     def _ensure_capacity_before_link(
         self,

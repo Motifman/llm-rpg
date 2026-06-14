@@ -108,7 +108,8 @@ class TestCoordinatorDualPath:
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_reinterpretation_being_setup()
         being_id = setup.provision(1)
-        episodes.put(_ep("e1"))
+        # Phase 3 Step 3e-2: Coordinator が being_id 経由で episode を引く
+        episodes.put_by_being(being_id, _ep("e1"))
         # being_id 経路に observation を書く
         setup.recall_buffer.append_by_being(being_id, _obs(recall_id="r1"))
         completion = _StubCompletion(

@@ -222,10 +222,12 @@ class TestEpisodicReinterpretationCoordinator:
         )
 
         episodes = InMemorySubjectiveEpisodeStore()
-        episodes.put(_episode(episode_id="ep-a"))
-        episodes.put(_episode(episode_id="ep-b"))
         setup = make_reinterpretation_being_setup()
         being_id = setup.provision(7)
+        # Phase 3 Step 3e-2: Coordinator が being_id 経由で episode を引くため、
+        # episode も being_id 経路で書く必要がある
+        episodes.put_by_being(being_id, _episode(episode_id="ep-a"))
+        episodes.put_by_being(being_id, _episode(episode_id="ep-b"))
         return episodes, setup, being_id
 
     def test_after_turn_completed_flushes_only_on_tenth_turn(self) -> None:

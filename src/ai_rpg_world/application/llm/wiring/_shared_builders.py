@@ -238,6 +238,8 @@ def build_episodic_coordinator_stack(
         if chunk_subjective_service is not None
         else None,
         episodic_memory_link_service=mem_bundle.link_service,
+        being_attachment_resolver=being_attachment_resolver,
+        default_world_id=default_world_id,
     )
     return EpisodicCoordinatorStack(
         prompt_recall_buffer=prompt_recall_buffer,

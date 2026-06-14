@@ -71,6 +71,7 @@ def _merged_ordered_episodes_for_cue_bucket(
     bucket: str,
     cues: Sequence[EpisodicCue],
     limit_per_axis: int,
+    being_id: Optional[BeingId] = None,
 ) -> tuple[str, list[SubjectiveEpisode], dict[str, frozenset[str]]]:
     """
     単一論理バケツ内で list_by_cue を統合する。
@@ -99,7 +100,11 @@ def _merged_ordered_episodes_for_cue_bucket(
         else:
             g_weight = 0.0
 
-        for ep in store.list_by_cue(player_id, cue, limit_per_axis):
+        if being_id is not None:
+            cue_episodes = store.list_by_cue_by_being(being_id, cue, limit_per_axis)
+        else:
+            cue_episodes = store.list_by_cue(player_id, cue, limit_per_axis)
+        for ep in cue_episodes:
             eid = ep.episode_id
             merged[eid] = ep
             labels_by_ep[eid].add(ax_label)
@@ -197,7 +202,14 @@ class EpisodicPassiveRecallRetrievalService:
         max_candidates: int,
         now: datetime | None = None,
     ) -> EpisodicPassiveRecallRetrievalResult:
-        temporal_rows = self._store.list_recent(player_id, limit_per_axis)
+        # Phase 3 Step 3e-2: episode_store も dual-path 化。入口で 1 度だけ
+        # being_id を解決し、temporal / cue / spreading の各経路で再利用する
+        # (resolve-once-per-entry)。Step 3e-3 で legacy 撤去予定。
+        being_id = self._resolve_being_id(player_id)
+        if being_id is not None:
+            temporal_rows = self._store.list_recent_by_being(being_id, limit_per_axis)
+        else:
+            temporal_rows = self._store.list_recent(player_id, limit_per_axis)
 
         axis_order: list[str] = []
         axis_to_cues: dict[str, list[EpisodicCue]] = defaultdict(list)
@@ -222,6 +234,7 @@ class EpisodicPassiveRecallRetrievalService:
                 bucket=bucket,
                 cues=cues,
                 limit_per_axis=limit_per_axis,
+                being_id=being_id,
             )
             cue_arms.append((rr_label, rows, granular))
 
@@ -241,7 +254,6 @@ class EpisodicPassiveRecallRetrievalService:
 
         effective_now = now if now is not None else datetime.now(timezone.utc)
         spreading_rows: list[SubjectiveEpisode] = []
-        being_id = self._resolve_being_id(player_id)
         if self._link_store is not None and episode_by_id and being_id is not None:
             # Phase 3 Step 3c-3: spreading activation は being_id keyed only。
             # Being 未解決時は spreading 軸を skip (= prompt 強化が痩せるだけで
@@ -258,7 +270,8 @@ class EpisodicPassiveRecallRetrievalService:
             for eid, _score in ranked[:limit_per_axis]:
                 if eid in episode_by_id:
                     continue
-                ep = self._store.get(player_id, eid)
+                # being_id がここまで来ているなら必ず非 None (= 上記 if で確認済)
+                ep = self._store.get_by_being(being_id, eid)
                 if ep is None:
                     continue
                 episode_by_id[eid] = ep

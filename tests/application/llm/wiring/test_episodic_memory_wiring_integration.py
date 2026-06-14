@@ -218,7 +218,15 @@ class TestEpisodicChunkWiringIntegration:
             return_value=close,
         ):
             turn_runner.run_turn(PlayerId(1))
-        recent = store.list_recent(1, 5)
+        # Phase 3 Step 3e-2: wiring が being_id 経路で episode を書くため、
+        # being_id 経由で読む必要がある (= 内部 ``_episodes_by_being`` を直接
+        # 検査する代わりに、本テストでは「dual-path のどちらかに 1 件入っている」
+        # ことを確認する)
+        recent_legacy = store.list_recent(1, 5)
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId as _BID
+
+        recent_by_being = store.list_recent_by_being(_BID("being_w1_p1"), 5)
+        recent = recent_legacy + recent_by_being
         assert len(recent) == 1
         ep = recent[0]
         assert ep.player_id == 1
@@ -261,9 +269,19 @@ class TestEpisodicChunkWiringIntegration:
             store = result.episodic_episode_store
             assert store is not None
             turn_runner = result.llm_turn_trigger._turn_runner  # noqa: SLF001
+            # Phase 3 Step 3e-2: wiring が being_id 経路で書くため、本 helper で
+            # legacy + by_being 両方の list_recent を集めて検証する。
+            from ai_rpg_world.domain.being.value_object.being_id import BeingId as _BID
+
+            def _all_recent(limit: int) -> list:
+                return (
+                    store.list_recent(1, limit)
+                    + store.list_recent_by_being(_BID("being_w1_p1"), limit)
+                )
+
             turn_runner.run_turn(PlayerId(1))
-            assert store.list_recent(1, 5) == []
+            assert _all_recent(5) == []
             turn_runner.run_turn(PlayerId(1))
-            recent = store.list_recent(1, 5)
+            recent = _all_recent(5)
             assert len(recent) == 1
             assert recent[0].player_id == 1

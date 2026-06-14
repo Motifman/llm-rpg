@@ -15,6 +15,11 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.scheduler import (
         IEpisodicSubjectiveCompletionScheduler,
     )
+    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
+    from ai_rpg_world.domain.being.value_object.being_id import BeingId
+    from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 _logger = logging.getLogger(__name__)
 
@@ -24,6 +29,9 @@ from ai_rpg_world.application.llm.chunk_boundary.rules import (
 )
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
+    SubjectiveEpisode,
+)
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
@@ -95,6 +103,8 @@ class EpisodicChunkCoordinator:
         subjective_completion_scheduler: Optional[
             "IEpisodicSubjectiveCompletionScheduler"
         ] = None,
+        being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
+        default_world_id: Optional["WorldId"] = None,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -150,6 +160,23 @@ class EpisodicChunkCoordinator:
                 "を scheduler 引数に渡してください。"
             )
 
+        # Phase 3 Step 3e-2: episode_store の dual-path 経路用 Resolver
+        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+            BeingAttachmentResolver as _BAR,
+        )
+        from ai_rpg_world.domain.world.value_object.world_id import (
+            WorldId as _WID,
+        )
+
+        if being_attachment_resolver is not None and not isinstance(
+            being_attachment_resolver, _BAR
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if default_world_id is not None and not isinstance(default_world_id, _WID):
+            raise TypeError("default_world_id must be WorldId")
+
         self._observation_buffer = observation_buffer
         self._sliding_window_memory = sliding_window_memory
         self._action_result_store = action_result_store
@@ -158,6 +185,8 @@ class EpisodicChunkCoordinator:
         self._chunk_subjective_fields_service = chunk_subjective_fields_service
         self._subjective_completion_scheduler = subjective_completion_scheduler
         self._persona_block_provider = persona_block_provider
+        self._being_attachment_resolver = being_attachment_resolver
+        self._default_world_id = default_world_id
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._chunk_actions: Dict[int, List[ActionResultEntry]] = {}
@@ -171,6 +200,29 @@ class EpisodicChunkCoordinator:
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
+
+    def _put_episode(self, episode: SubjectiveEpisode) -> None:
+        """episode_store への put を dual-path で発行する。
+
+        Phase 3 Step 3e-2: Resolver+WorldId 注入時は being_id 経路、未注入なら
+        legacy player_id 経路。``episode.player_id`` を介して being_id を引く。
+        Step 3e-3 で legacy 撤去予定。
+        """
+        if (
+            self._being_attachment_resolver is not None
+            and self._default_world_id is not None
+        ):
+            from ai_rpg_world.domain.player.value_object.player_id import (
+                PlayerId as _PID,
+            )
+
+            being_id = self._being_attachment_resolver.resolve_being_id(
+                self._default_world_id, _PID(int(episode.player_id))
+            )
+            if being_id is not None:
+                self._episodic_episode_store.put_by_being(being_id, episode)
+                return
+        self._episodic_episode_store.put(episode)
 
     def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
         if self._trace_recorder_provider is not None:
@@ -343,7 +395,11 @@ class EpisodicChunkCoordinator:
         # なので「LLM 完了前でも recall_text が空にならない」が保証される。
         # ワーカーが merge_llm_subjective_fields を実行して同じ episode_id で
         # store を上書きする (Pattern A: Fire-and-forget + eventual consistency)。
-        self._episodic_episode_store.put(episode)
+        #
+        # Phase 3 Step 3e-2: episode_store も dual-path 化。Resolver+WorldId が
+        # 注入されていれば being_id 経路、未注入なら legacy player_id 経路。
+        # episode.player_id から being_id を引く。3e-3 で legacy 撤去予定。
+        self._put_episode(episode)
         if self._subjective_completion_scheduler is not None:
             persona_block = (
                 self._persona_block_provider(player_id)

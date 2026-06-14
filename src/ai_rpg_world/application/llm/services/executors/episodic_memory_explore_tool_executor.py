@@ -118,7 +118,9 @@ class EpisodicMemoryExploreToolExecutor:
         touched: list[str] = [eid]
         for ln in ranked[:top_k]:
             other = other_episode_id(ln, eid)
-            ep = self.episode_store.get(player_id, other)
+            # Phase 3 Step 3e-2: episode_store も being_id 経路 (= being_id は
+            # tool 入口で既に解決済、INVALID_STATE をクリアしている)。
+            ep = self.episode_store.get_by_being(being_id, other)
             if ep is None:
                 continue
             eff = effective_link_strength(ln, now)

@@ -237,7 +237,8 @@ class EpisodicReinterpretationCoordinator:
             grouped[row.episode_id].append(row)
         items: list[_EpisodeBatchItem] = []
         for episode_id, recalls in grouped.items():
-            ep = self._episode_store.get(player_id, episode_id)
+            # Phase 3 Step 3e-2: episode_store も being_id 経路。
+            ep = self._episode_store.get_by_being(being_id, episode_id)
             if ep is None:
                 continue
             active = self._journal_store.get_active_by_being(being_id, episode_id)
