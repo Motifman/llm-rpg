@@ -131,6 +131,127 @@ class TestActionResultStoreCodec:
         assert captured["entries"] == []
 
 
+class TestSlidingWindowCodecRollingSummaryBackend:
+    """``MEMORY_KIND=rolling_summary`` (= K run の最適構成) backend での
+    capture / restore を検証する (#471 後続)。L4 / L5 が失われると agent の
+    self_image / world_view が空に戻るため、永続化は実験再現性に必須。"""
+
+    def _make_rolling(self) -> Any:
+        from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
+            RollingSummaryShortTermMemory,
+        )
+
+        return RollingSummaryShortTermMemory(
+            l1_soft_cap=15, l1_hard_cap=25, l4_keep_generations=3
+        )
+
+    def test_L1_raw_と_L4_と_L5_が_全部_往復する(self) -> None:
+        from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
+            L4MidSummary,
+        )
+        from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
+            L5LongSummary,
+        )
+
+        src = self._make_rolling()
+        # L1 raw に 3 件 (= soft_cap 未満なので畳まれない)
+        src.append(PlayerId(1), _obs_entry("raw-1"))
+        src.append(PlayerId(1), _obs_entry("raw-2"))
+        src.append(PlayerId(2), _obs_entry("p2-raw"))
+        # L4 を手で 1 世代 install
+        src._install_l4(
+            L4MidSummary(
+                summary_id="l4-test",
+                player_id=1,
+                raw_count=15,
+                generated_at=_NOW,
+                compressed_activity="3 時間山を登った",
+                emotional_summary="達成感がある",
+                unresolved=("狼煙の燃料",),
+                is_fallback=False,
+            )
+        )
+        # L5 も書き込む (= _install_l4 は L4 evict 時のみ L5 trigger なので直接書く)
+        with src._long_lock:
+            src._long[1] = L5LongSummary(
+                summary_id="l5-test",
+                player_id=1,
+                generation_index=2,
+                generated_at=_NOW,
+                self_image="探索者カイ",
+                world_view="火を絶やしてはならない島",
+                is_fallback=False,
+            )
+            src._long_gen_index[1] = 2
+
+        src_runtime = SimpleNamespace(_sliding_window=src)
+        captured = SlidingWindowMemorySubsystemCodec().capture(src_runtime)
+        assert captured["mode"] == "rolling_summary"
+        assert captured["schema_version"] == 2
+        assert len(captured["raw_entries"]) == 2  # player 1, 2
+        assert len(captured["mid_summaries"][0]["summaries"]) == 1
+        assert captured["long_summaries"][0]["summary"]["self_image"] == "探索者カイ"
+        assert captured["long_gen_indices"][0]["index"] == 2
+
+        # 別 instance に restore
+        dst = self._make_rolling()
+        dst.append(PlayerId(99), _obs_entry("stale"))  # 復元で消える
+        dst_runtime = SimpleNamespace(_sliding_window=dst)
+        SlidingWindowMemorySubsystemCodec().restore(dst_runtime, captured)
+
+        assert 99 not in dst._raw
+        p1_recent = dst.get_recent(PlayerId(1), limit=10)
+        assert [e.output.prose for e in p1_recent] == ["raw-2", "raw-1"]  # 新しい順
+        assert dst._mid_generations(1)[0].compressed_activity == "3 時間山を登った"
+        l5 = dst._long_summary(1)
+        assert l5 is not None
+        assert l5.self_image == "探索者カイ"
+        assert dst._long_gen_index[1] == 2
+
+    def test_sliding_v1_snapshot_を_rolling_backend_に_load_できる(self) -> None:
+        """v1 (sliding 専用) フォーマットを rolling backend が読めるか (= マイグレーション互換)。"""
+        v1_data = {
+            "schema_version": 1,
+            "entries": [
+                {
+                    "player_id": 1,
+                    "entries": [
+                        {
+                            "occurred_at": _NOW.isoformat(),
+                            "game_time_label": "Day 1",
+                            "output": {
+                                "prose": "migrated",
+                                "structured": {},
+                                "observation_category": "self_only",
+                                "schedules_turn": False,
+                                "breaks_movement": False,
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+        dst = self._make_rolling()
+        runtime = SimpleNamespace(_sliding_window=dst)
+        SlidingWindowMemorySubsystemCodec().restore(runtime, v1_data)
+        recent = dst.get_recent(PlayerId(1), limit=5)
+        assert [e.output.prose for e in recent] == ["migrated"]
+        assert dst._long_summary(1) is None  # v1 には L5 が無い
+
+    def test_rolling_snapshot_を_sliding_backend_に_load_は_raw_のみ移送(self) -> None:
+        """cross-backend (rolling → sliding): L4 / L5 は捨てて raw だけ復元。"""
+        src = self._make_rolling()
+        src.append(PlayerId(1), _obs_entry("raw-only"))
+        captured = SlidingWindowMemorySubsystemCodec().capture(
+            SimpleNamespace(_sliding_window=src)
+        )
+        dst = DefaultSlidingWindowMemory()
+        runtime = SimpleNamespace(_sliding_window=dst)
+        SlidingWindowMemorySubsystemCodec().restore(runtime, captured)
+        recent = dst.get_recent(PlayerId(1), limit=5)
+        assert [e.output.prose for e in recent] == ["raw-only"]
+
+
 class TestUnsupportedSchemaVersion:
     @pytest.mark.parametrize(
         "codec_cls",
