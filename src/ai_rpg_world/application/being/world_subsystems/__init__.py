@@ -35,8 +35,10 @@ Phase 9-4b: world-side time/weather
 - ``DayNightSubsystemCodec`` — day_night cycle の現 phase (= tick から再計算)
 - travel stage は state を持たない (= PlayerSpotNavigationState で代替済)
 
-Phase 9-4c 以降:
-- sliding_window / observation_buffer / action_result
+Phase 9-4c: 短期記憶 (= LLM agent の prompt context)
+- ``SlidingWindowMemorySubsystemCodec`` — 直近観測の rolling window
+- ``ObservationBufferSubsystemCodec`` — 未 drain の pending 観測
+- ``ActionResultStoreSubsystemCodec`` — 直近の tool 実行結果
 """
 
 from ai_rpg_world.application.being.world_subsystems.day_night_codec import (
@@ -74,6 +76,11 @@ from ai_rpg_world.application.being.world_subsystems.player_vitals_codec import 
 )
 from ai_rpg_world.application.being.world_subsystems.scenario_event_progress_codec import (
     ScenarioEventProgressSubsystemCodec,
+)
+from ai_rpg_world.application.being.world_subsystems.short_term_memory_codec import (
+    ActionResultStoreSubsystemCodec,
+    ObservationBufferSubsystemCodec,
+    SlidingWindowMemorySubsystemCodec,
 )
 from ai_rpg_world.application.being.world_subsystems.spot_interior_codec import (
     SpotInteriorSubsystemCodec,
@@ -113,4 +120,8 @@ __all__ = [
     # Phase 9-4b
     "WeatherSubsystemCodec",
     "DayNightSubsystemCodec",
+    # Phase 9-4c
+    "SlidingWindowMemorySubsystemCodec",
+    "ObservationBufferSubsystemCodec",
+    "ActionResultStoreSubsystemCodec",
 ]
