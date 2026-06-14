@@ -130,6 +130,17 @@ class TestSqliteByBeingBasic:
         assert store.list_by_cue_by_being(being, cue_old, limit=10) == []
         assert len(store.list_by_cue_by_being(being, cue_new, limit=10)) == 1
 
+    def test_limit_0_以下は_空_list(
+        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
+    ) -> None:
+        """``limit <= 0`` は SQL 発行前に早期 return (= InMemory 側と挙動一致)。"""
+        ep = _episode(episode_id="e1")
+        store.put_by_being(being, ep)
+        cue = ep.cues[0]
+        assert store.list_recent_by_being(being, limit=0) == []
+        assert store.list_recent_by_being(being, limit=-1) == []
+        assert store.list_by_cue_by_being(being, cue, limit=0) == []
+
 
 class TestSqliteByBeingIsolation:
     """新旧テーブルが独立: legacy と by_being が混ざらない。"""

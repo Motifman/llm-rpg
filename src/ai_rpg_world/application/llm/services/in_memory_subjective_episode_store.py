@@ -123,7 +123,8 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
             return ordered[:limit]
 
     def _remove_from_cue_index(self, player_id: int, episode_id: str) -> None:
-        # _lock 保持中の private helper (put からのみ呼ばれる)。
+        # _lock 保持中の private helper — put 内の upsert (= 同 episode_id
+        # 上書き) と eviction (= 上限超過の最古削除) の両パスから呼ばれる。
         keys = self._episode_canonicals.get(player_id, {}).pop(episode_id, frozenset())
         cidx = self._cue_index.get(player_id)
         if not cidx:
@@ -156,6 +157,11 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
             for ck in keys:
                 self._cue_index_by_being[being_id].setdefault(ck, set()).add(eid)
             # 上限超過分を最古から evict する (long-run でのメモリ / sort 遅延対策)
+            # NOTE: 端境のケースとして、被 put episode の ``occurred_at`` が既存
+            # 最古より過去の場合、その episode 自体が即 evict される。これは
+            # legacy ``put`` と同じ「occurred_at 単純比較」の意図的な挙動で、
+            # 「過去時刻の補完 put は long-run 容量を圧迫しない」ことを優先
+            # している (= 実運用では put は常に最新時刻なので影響ゼロ)。
             bucket = self._episodes_by_being[being_id]
             if len(bucket) > self._max_episodes_per_player:
                 ordered = sorted(bucket.values(), key=_occurrence_sort_key)
@@ -206,7 +212,8 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
     def _remove_from_cue_index_by_being(
         self, being_id: BeingId, episode_id: str
     ) -> None:
-        # _lock 保持中の private helper (put_by_being からのみ呼ばれる)
+        # _lock 保持中の private helper — put_by_being 内の upsert (= 同 episode_id
+        # 上書き) と eviction (= 上限超過の最古削除) の両パスから呼ばれる。
         keys = self._episode_canonicals_by_being.get(being_id, {}).pop(
             episode_id, frozenset()
         )
