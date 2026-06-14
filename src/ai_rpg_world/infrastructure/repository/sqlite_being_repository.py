@@ -84,6 +84,9 @@ def _snapshot_to_payload_dict(snapshot: BeingSnapshot) -> dict[str, Any]:
         "attachment_player_id": snapshot.attachment_player_id,
         "declared_memory_kinds": list(snapshot.declared_memory_kinds),
         "snapshot_version": snapshot.snapshot_version,
+        # Phase 4 Step 4-1: v2 snapshot から導入。v1 行を読むときは
+        # ``data.get(..., None)`` で None になるので後方互換は保たれる。
+        "memory_payload_json": snapshot.memory_payload_json,
     }
 
 
@@ -106,6 +109,7 @@ def _payload_dict_to_snapshot(data: dict[str, Any]) -> BeingSnapshot:
         attachment_player_id=data.get("attachment_player_id"),
         declared_memory_kinds=tuple(raw_kinds),
         snapshot_version=data.get("snapshot_version", _FALLBACK_SNAPSHOT_VERSION),
+        memory_payload_json=data.get("memory_payload_json"),
     )
 
 

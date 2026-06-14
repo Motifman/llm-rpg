@@ -152,13 +152,65 @@ class TestSqliteBeingRepositorySchema:
         )
         row = cur.fetchone()
         assert row is not None
-        assert row["snapshot_version"] == 1
+        # Phase 4 Step 4-1: codec が常に最新 (=2) を出すため、ここも 2 を期待する。
+        # 後方互換 (v1 行の load) は別テストで担保。
+        assert row["snapshot_version"] == 2
         data = json.loads(row["snapshot_json"])
         assert data["being_id_value"] == "ada"
         assert data["identity_name"] == "アダ"
         assert data["attachment_world_id"] == 1
         assert data["attachment_player_id"] == 2
         assert data["declared_memory_kinds"] == ["memo"]
+
+
+class TestSqliteBeingRepositoryMemoryPayload:
+    """Phase 4 Step 4-1: memory_payload_json の永続化 round-trip。"""
+
+    def test_payload_dict_に_memory_payload_json_が乗る(self) -> None:
+        """_snapshot_to_payload_dict が v2 snapshot の payload を落とさない。"""
+        from ai_rpg_world.domain.being.value_object.being_snapshot import (
+            BeingSnapshot,
+        )
+        from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
+            _payload_dict_to_snapshot,
+            _snapshot_to_payload_dict,
+        )
+
+        snapshot = BeingSnapshot(
+            being_id_value="ada",
+            identity_name="アダ",
+            identity_first_person="わたし",
+            attachment_world_id=1,
+            attachment_player_id=2,
+            declared_memory_kinds=("memo",),
+            snapshot_version=2,
+            memory_payload_json='{"memo": [{"id": "m1"}]}',
+        )
+        payload_dict = _snapshot_to_payload_dict(snapshot)
+        assert payload_dict["memory_payload_json"] == '{"memo": [{"id": "m1"}]}'
+
+        # JSON シリアライズ → 復元の round-trip でも payload が保たれる。
+        restored = _payload_dict_to_snapshot(json.loads(json.dumps(payload_dict)))
+        assert restored == snapshot
+
+    def test_v1_行を読むときは_payload_は_None_になる(self) -> None:
+        """v1 schema の snapshot_json には memory_payload_json キーがない。"""
+        from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
+            _payload_dict_to_snapshot,
+        )
+
+        v1_data = {
+            "being_id_value": "ada",
+            "identity_name": "アダ",
+            "identity_first_person": "わたし",
+            "attachment_world_id": None,
+            "attachment_player_id": None,
+            "declared_memory_kinds": [],
+            "snapshot_version": 1,
+        }
+        snapshot = _payload_dict_to_snapshot(v1_data)
+        assert snapshot.memory_payload_json is None
+        assert snapshot.snapshot_version == 1
 
 
 class TestSqliteBeingRepositoryFindAllAttachedTo:

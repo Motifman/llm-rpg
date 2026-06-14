@@ -131,3 +131,79 @@ class TestBeingSnapshotCodecDecode:
         """型違反は TypeError で弾く。"""
         with pytest.raises(TypeError):
             BeingSnapshotCodec.decode({"being_id_value": "ada"})  # type: ignore[arg-type]
+
+
+class TestBeingSnapshotCodecMemoryPayload:
+    """Phase 4 Step 4-1: memory payload を載せた v2 snapshot の挙動。"""
+
+    def test_memory_payload_付きで_encode_すると_snapshot_に保持される(self) -> None:
+        """``memory_payload_json`` を渡すと snapshot にそのまま乗る。"""
+        snapshot = BeingSnapshotCodec.encode(
+            _attached_being(), memory_payload_json='{"memo": [], "semantic": []}'
+        )
+        assert snapshot.memory_payload_json == '{"memo": [], "semantic": []}'
+        assert snapshot.snapshot_version == CURRENT_SNAPSHOT_VERSION
+        assert snapshot.has_memory_payload is True
+
+    def test_encode_は_常に最新版_snapshot_を出す(self) -> None:
+        """memory_payload_json=None でも v2 snapshot として出す。"""
+        snapshot = BeingSnapshotCodec.encode(_attached_being())
+        assert snapshot.snapshot_version == CURRENT_SNAPSHOT_VERSION
+        assert snapshot.memory_payload_json is None
+        assert snapshot.has_memory_payload is False
+
+    def test_memory_payload_に_str_以外を渡すと_TypeError(self) -> None:
+        """渡し間違いは TypeError で弾く (= 形式エラーは早期に検出)。"""
+        with pytest.raises(TypeError, match="memory_payload_json"):
+            BeingSnapshotCodec.encode(
+                _attached_being(), memory_payload_json=123  # type: ignore[arg-type]
+            )
+
+    def test_v1_snapshot_は_引き続き_decode_できる(self) -> None:
+        """SUPPORTED_VERSIONS が v1 を含むため後方互換で復元可能。"""
+        snapshot = BeingSnapshot(
+            being_id_value="ada",
+            identity_name="アダ",
+            identity_first_person="わたし",
+            attachment_world_id=1,
+            attachment_player_id=2,
+            declared_memory_kinds=("episodic",),
+            snapshot_version=1,
+        )
+        being = BeingSnapshotCodec.decode(snapshot)
+        assert being.being_id == BeingId("ada")
+        assert being.attachment is not None
+
+    def test_v1_snapshot_に_memory_payload_が紛れたら_例外(self) -> None:
+        """v1 と memory_payload_json の組み合わせは整合性エラー。"""
+        snapshot = BeingSnapshot(
+            being_id_value="ada",
+            identity_name="アダ",
+            identity_first_person="わたし",
+            attachment_world_id=None,
+            attachment_player_id=None,
+            declared_memory_kinds=(),
+            snapshot_version=1,
+            memory_payload_json='{"memo": []}',
+        )
+        with pytest.raises(BeingSnapshotIncompleteException, match="v1"):
+            BeingSnapshotCodec.decode(snapshot)
+
+    def test_decode_は_Being_集約のみ復元し_payload_は無視する(self) -> None:
+        """memory payload は Phase 4-2 の service 責務なので codec では復元しない。"""
+        snapshot = BeingSnapshotCodec.encode(
+            _attached_being(), memory_payload_json='{"any": "thing"}'
+        )
+        being = BeingSnapshotCodec.decode(snapshot)
+        # codec は Being 集約 root の状態 (identity / attachment / kinds) だけ復元
+        assert being.attachment is not None
+        assert MemoryKind.EPISODIC in being.declared_memory_kinds
+
+    def test_v2_snapshot_の_round_trip(self) -> None:
+        """encode → decode → encode で payload も保持される。"""
+        being = _attached_being()
+        payload = '{"memo": [{"id": "m1"}]}'
+        s1 = BeingSnapshotCodec.encode(being, memory_payload_json=payload)
+        decoded = BeingSnapshotCodec.decode(s1)
+        s2 = BeingSnapshotCodec.encode(decoded, memory_payload_json=payload)
+        assert s2 == s1

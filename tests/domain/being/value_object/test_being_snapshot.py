@@ -94,6 +94,44 @@ class TestBeingSnapshotPartialStateRejection:
             _minimal_snapshot(snapshot_version=True)  # type: ignore[arg-type]
 
 
+class TestBeingSnapshotMemoryPayload:
+    """Phase 4 Step 4-1: memory_payload_json フィールドの不変条件挙動。"""
+
+    def test_memory_payload_を_省略すると_None(self) -> None:
+        """デフォルトでは memory_payload_json は None (= v1 互換挙動)。"""
+        snapshot = _minimal_snapshot()
+        assert snapshot.memory_payload_json is None
+        assert snapshot.has_memory_payload is False
+
+    def test_memory_payload_に_json_文字列を渡せる(self) -> None:
+        """非空 str を持つ snapshot は has_memory_payload True。"""
+        snapshot = _minimal_snapshot(memory_payload_json='{"memo": []}')
+        assert snapshot.memory_payload_json == '{"memo": []}'
+        assert snapshot.has_memory_payload is True
+
+    def test_memory_payload_が_空文字列なら_例外を投げる(self) -> None:
+        """has_memory_payload=True なのに中身が空、を構造的に禁止する。"""
+        with pytest.raises(BeingSnapshotIncompleteException, match="non-empty"):
+            _minimal_snapshot(memory_payload_json="")
+
+    def test_memory_payload_が_str_でないと_例外を投げる(self) -> None:
+        """memory_payload_json は str | None 以外不許可。"""
+        with pytest.raises(BeingSnapshotIncompleteException, match="memory_payload_json"):
+            _minimal_snapshot(memory_payload_json=123)  # type: ignore[arg-type]
+
+    def test_デフォルトの_snapshot_version_は_最新値(self) -> None:
+        """``CURRENT_SNAPSHOT_VERSION`` が dataclass default として使われている。"""
+        snapshot = BeingSnapshot(
+            being_id_value="ada",
+            identity_name="アダ",
+            identity_first_person="わたし",
+            attachment_world_id=None,
+            attachment_player_id=None,
+            declared_memory_kinds=(),
+        )
+        assert snapshot.snapshot_version == CURRENT_SNAPSHOT_VERSION
+
+
 class TestBeingSnapshotEquality:
     """BeingSnapshot の等価性 (frozen dataclass)。"""
 
