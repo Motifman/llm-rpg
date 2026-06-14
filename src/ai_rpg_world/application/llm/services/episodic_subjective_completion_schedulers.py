@@ -125,12 +125,29 @@ class InlineEpisodicSubjectiveScheduler:
             raise TypeError("trace_recorder_provider must be callable or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
+        # Phase 3 Step 3e-2: episode_store も dual-path 化。Resolver+WorldId が
+        # 注入されていれば being_id 経路で put、未注入なら legacy。
+        # ctor で fail-fast に型ガード (= EpisodicChunkCoordinator と同 pattern)。
+        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+            BeingAttachmentResolver as _BAR,
+        )
+        from ai_rpg_world.domain.world.value_object.world_id import (
+            WorldId as _WID,
+        )
+
+        if being_attachment_resolver is not None and not isinstance(
+            being_attachment_resolver, _BAR
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if default_world_id is not None and not isinstance(default_world_id, _WID):
+            raise TypeError("default_world_id must be WorldId")
+
         self._service = service
         self._store = episode_store
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
-        # Phase 3 Step 3e-2: episode_store も dual-path 化。Resolver+WorldId が
-        # 注入されていれば being_id 経路で put、未注入なら legacy。
         self._being_attachment_resolver = being_attachment_resolver
         self._default_world_id = default_world_id
 
@@ -251,12 +268,28 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
 
+        # Phase 3 Step 3e-2: episode_store も dual-path 化。ctor fail-fast 型ガード
+        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+            BeingAttachmentResolver as _BAR,
+        )
+        from ai_rpg_world.domain.world.value_object.world_id import (
+            WorldId as _WID,
+        )
+
+        if being_attachment_resolver is not None and not isinstance(
+            being_attachment_resolver, _BAR
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if default_world_id is not None and not isinstance(default_world_id, _WID):
+            raise TypeError("default_world_id must be WorldId")
+
         self._service = service
         self._store = episode_store
         self._max_queue_size = max_queue_size
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
-        # Phase 3 Step 3e-2: episode_store も dual-path 化。
         self._being_attachment_resolver = being_attachment_resolver
         self._default_world_id = default_world_id
         self._executor = ThreadPoolExecutor(

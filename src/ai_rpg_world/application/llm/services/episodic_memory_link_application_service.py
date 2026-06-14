@@ -197,21 +197,30 @@ class EpisodicMemoryLinkApplicationService:
             )
 
     def _list_recent_episodes(
-        self, player_id: int, being_id: BeingId, limit: int
+        self,
+        player_id: int,  # noqa: ARG002 - 3e-3 で削除予定 (現状は呼出側 API 維持用)
+        being_id: BeingId,
+        limit: int,
     ) -> list[SubjectiveEpisode]:
-        """dual-path: being_id があれば by_being、なければ legacy。
+        """being_id 経路で episode の list_recent を取得する。
 
-        Phase 3 Step 3e-2 から episode_store 経路も dual-path 化。3e-3 で
-        legacy 撤去予定。
+        Phase 3 Step 3e-2: 本サービスは入口で being_id を resolve 済 (= None
+        なら early return) のため、内部 helper は ``by_being`` のみで足りる。
+        ``player_id`` 引数は呼出側のシグネチャ互換のため残置 (3e-3 で整理)。
         """
         return self._episodes.list_recent_by_being(being_id, limit)
 
     def _get_episode(
-        self, player_id: int, being_id: BeingId, episode_id: str
+        self,
+        player_id: int,  # noqa: ARG002 - 3e-3 で削除予定
+        being_id: BeingId,
+        episode_id: str,
     ) -> SubjectiveEpisode | None:
+        """being_id 経路で episode を取得 (resolve-once-per-entry 前提)。"""
         return self._episodes.get_by_being(being_id, episode_id)
 
     def _put_episode(self, being_id: BeingId, episode: SubjectiveEpisode) -> None:
+        """being_id 経路で episode を upsert (resolve-once-per-entry 前提)。"""
         self._episodes.put_by_being(being_id, episode)
 
     def _bump_recall_counts(

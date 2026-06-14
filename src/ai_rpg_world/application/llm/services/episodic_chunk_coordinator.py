@@ -29,6 +29,9 @@ from ai_rpg_world.application.llm.chunk_boundary.rules import (
 )
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
+    SubjectiveEpisode,
+)
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
@@ -198,7 +201,7 @@ class EpisodicChunkCoordinator:
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
 
-    def _put_episode(self, episode: Any) -> None:
+    def _put_episode(self, episode: SubjectiveEpisode) -> None:
         """episode_store への put を dual-path で発行する。
 
         Phase 3 Step 3e-2: Resolver+WorldId 注入時は being_id 経路、未注入なら
