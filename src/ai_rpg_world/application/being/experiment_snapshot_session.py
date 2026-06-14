@@ -47,6 +47,13 @@ from ai_rpg_world.application.being.world_state_snapshot import (
 )
 from ai_rpg_world.application.being.world_state_snapshot_service import (
     WorldStateSnapshotService,
+    WorldSubsystemCodec,
+)
+from ai_rpg_world.application.being.world_subsystems import (
+    PlayerNeedsSubsystemCodec,
+    PlayerPositionSubsystemCodec,
+    PlayerVitalsSubsystemCodec,
+    WorldTickSubsystemCodec,
 )
 from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case import (
     BeingNotFoundForSnapshotError,
@@ -151,6 +158,21 @@ class RestoreAllReport:
     )  # (being_id, source_scenario, current_scenario)
 
 
+def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
+    """Phase 9-2 既定で登録する subsystem codec 一覧。
+
+    順序は **capture / restore の順番** に影響する。restore 時に
+    依存関係がある場合 (例: world_tick を最初に戻してから他の subsystem)
+    に意味を持つ。現状の 4 codec には相互依存はない。
+    """
+    return [
+        WorldTickSubsystemCodec(),
+        PlayerPositionSubsystemCodec(),
+        PlayerVitalsSubsystemCodec(),
+        PlayerNeedsSubsystemCodec(),
+    ]
+
+
 class ExperimentSnapshotSession:
     """experiment runner からみた snapshot 操作の入口。
 
@@ -246,10 +268,14 @@ class ExperimentSnapshotSession:
         self._resolver = wiring_result.being_attachment_resolver
         self._snapshot_dir = snapshot_dir
         self._world_id = world_id or DEFAULT_SINGLE_WORLD_ID
-        # Phase 9-1: world snapshot 用 service。subsystem codec はまだ登録
-        # されていないため capture / restore は subsystems={} で素通す
-        # (= 器だけ用意した状態)。Phase 9-2 以降で codec を増やす。
-        self._world_snapshot_service = WorldStateSnapshotService()
+        # Phase 9-2: 既定で 4 つの subsystem codec を登録する
+        # (= tick / position / vitals / needs)。Tier 1a の核となる
+        # 部分を resume できる。inventory / 残り status は Phase 9-2b 以降。
+        # ``override_codecs`` を将来追加するなら ``__init__`` に kwarg を
+        # 増やしてここを差し替えるパターン。
+        self._world_snapshot_service = WorldStateSnapshotService(
+            subsystem_codecs=_default_world_subsystem_codecs(),
+        )
         self._world_gateway = WorldStateSnapshotFileGateway()
 
     @property
