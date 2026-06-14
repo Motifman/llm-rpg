@@ -7,10 +7,18 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from typing import Optional
+
+from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    BeingAttachmentResolver,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import MemoryLinkRepository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.application.llm.services.episodic_spreading_activation import (
     neighbor_priming_scores,
 )
@@ -152,10 +160,34 @@ class EpisodicPassiveRecallRetrievalService:
         *,
         link_store: MemoryLinkRepository | None = None,
         spreading_max_hops: int = 2,
+        being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
+        default_world_id: Optional[WorldId] = None,
     ) -> None:
+        # Phase 3 Step 3c-2: dual-path。Resolver+WorldId 注入時は being_id 経路で
+        # spreading activation を走らせる。未注入なら legacy player_id 経路に
+        # fallback。Step 3c-3 で legacy 経路を撤去する。
+        if being_attachment_resolver is not None and not isinstance(
+            being_attachment_resolver, BeingAttachmentResolver
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if default_world_id is not None and not isinstance(default_world_id, WorldId):
+            raise TypeError("default_world_id must be WorldId")
         self._store = store
         self._link_store = link_store
         self._spreading_max_hops = spreading_max_hops
+        self._resolver = being_attachment_resolver
+        self._default_world_id = default_world_id
+
+    def _resolve_being_id(self, player_id: int) -> Optional[BeingId]:
+        """dual-path: Resolver+WorldId 揃いつつ Being が attach 済なら BeingId、
+        いずれか欠ければ None (= legacy 経路へ fallback)。"""
+        if self._resolver is None or self._default_world_id is None:
+            return None
+        return self._resolver.resolve_being_id(
+            self._default_world_id, PlayerId(player_id)
+        )
 
     def retrieve(
         self,
@@ -218,6 +250,7 @@ class EpisodicPassiveRecallRetrievalService:
                 link_store=self._link_store,
                 now=effective_now,
                 max_hops=self._spreading_max_hops,
+                being_id=self._resolve_being_id(player_id),
             )
             ranked = sorted(priming.items(), key=lambda t: t[1], reverse=True)
             for eid, _score in ranked[:limit_per_axis]:

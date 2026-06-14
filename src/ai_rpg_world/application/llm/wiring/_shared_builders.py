@@ -136,6 +136,8 @@ def build_episodic_memory_stack(
         shared_episode_store,
         link_store=link_store,
         promotion_frontier=promotion_frontier,
+        being_attachment_resolver=being_attachment_resolver,
+        default_world_id=default_world_id,
     )
     episodic_semantic_promotion = EpisodicSemanticClusterPromotionService(
         episode_store=shared_episode_store,

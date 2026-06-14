@@ -129,8 +129,10 @@ def test_semantic_cluster_promotion_writes_store() -> None:
     store = InMemorySubjectiveEpisodeStore()
     links = InMemoryMemoryLinkStore()
     # Phase 3 Step 3b-3: semantic は being_id 経路必須。
+    # Phase 3 Step 3c-2: cluster promotion が Resolver 注入時に link store も
+    # `*_by_being` で読みにいくため、links 側も同じ being_id で書く必要がある。
     setup = make_semantic_being_setup()
-    setup.provision(1)
+    being_id = setup.provision(1)
     promo = EpisodicSemanticClusterPromotionService(
         episode_store=store,
         link_store=links,
@@ -142,9 +144,9 @@ def test_semantic_cluster_promotion_writes_store() -> None:
         ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
         store.put(ep)
     now = datetime.now(timezone.utc)
-    links.upsert_link(_strong_link(1, "x", "y"))
-    links.upsert_link(_strong_link(1, "y", "z"))
-    links.upsert_link(_strong_link(1, "x", "z"))
+    links.upsert_link_by_being(being_id, _strong_link(1, "x", "y"))
+    links.upsert_link_by_being(being_id, _strong_link(1, "y", "z"))
+    links.upsert_link_by_being(being_id, _strong_link(1, "x", "z"))
     promo.on_after_tool_turn(1, now=now)
     assert len(setup.list_entries(1)) == 1
 
