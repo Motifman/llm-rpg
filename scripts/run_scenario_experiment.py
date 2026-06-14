@@ -378,6 +378,33 @@ def _drive_scenario(
                     ],
                 )
 
+                # Phase 9-1: world snapshot も load (= 旧 snapshot dir に
+                # world.json が無ければ no-op = 後方互換)。world snapshot は
+                # scenario fail-fast 方針なので例外は素通し。
+                world_snapshot = snapshot_session.restore_world_from_dir(
+                    runtime,
+                    snapshot_load_dir,
+                    current_scenario=scenario_path.stem,
+                )
+                if world_snapshot is not None:
+                    logger.info(
+                        "restored world snapshot: source_scenario=%s "
+                        "world_tick=%d subsystems=%s",
+                        world_snapshot.source_scenario,
+                        world_snapshot.world_tick,
+                        sorted(world_snapshot.subsystems.keys()),
+                    )
+                    recorder.record(
+                        TraceEventKind.WORLD_SNAPSHOT_LOAD,
+                        directory=str(snapshot_load_dir),
+                        source_scenario=world_snapshot.source_scenario,
+                        current_scenario=scenario_path.stem,
+                        world_tick=world_snapshot.world_tick,
+                        restored_subsystems=sorted(
+                            world_snapshot.subsystems.keys()
+                        ),
+                    )
+
         for pid in runtime.get_player_ids():
             state.llm_wiring.llm_turn_trigger.schedule_turn(pid)
 
@@ -593,6 +620,54 @@ def _drive_scenario(
                 except Exception:
                     logger.warning(
                         "also failed to record SNAPSHOT_SAVE trace event",
+                        exc_info=True,
+                    )
+
+            # Phase 9-1: world snapshot save。subsystem codec が未登録のため
+            # subsystems={} の空 snapshot が出るが、ファイルは生成される。
+            # Phase 9-2 以降で中身が埋まる。world snapshot save 失敗は
+            # warning に留め、run の trace は守る (= Being snapshot と同方針)。
+            try:
+                snapshot_session.capture_world(
+                    runtime,
+                    source_scenario=scenario_path.stem,
+                    world_tick=int(runtime.current_tick()),
+                )
+                # 公開アクセサで登録済 subsystem 名を取得 (= 観察用)。
+                captured_keys = (
+                    snapshot_session.world_snapshot_service.registered_subsystem_keys
+                )
+                logger.info(
+                    "world snapshot save: world_tick=%d subsystems=%s (dir=%s)",
+                    int(runtime.current_tick()),
+                    captured_keys,
+                    snapshot_save_dir,
+                )
+                recorder.record(
+                    TraceEventKind.WORLD_SNAPSHOT_SAVE,
+                    directory=str(snapshot_save_dir),
+                    source_scenario=scenario_path.stem,
+                    world_tick=int(runtime.current_tick()),
+                    captured_subsystems=captured_keys,
+                )
+            except Exception:
+                logger.warning(
+                    "world snapshot save raised; experiment results are "
+                    "preserved but world state resume from this run will "
+                    "not be possible",
+                    exc_info=True,
+                )
+                try:
+                    recorder.record(
+                        TraceEventKind.WORLD_SNAPSHOT_SAVE,
+                        directory=str(snapshot_save_dir),
+                        source_scenario=scenario_path.stem,
+                        world_tick=int(runtime.current_tick()),
+                        error="capture_world raised; see logs",
+                    )
+                except Exception:
+                    logger.warning(
+                        "also failed to record WORLD_SNAPSHOT_SAVE trace event",
                         exc_info=True,
                     )
 

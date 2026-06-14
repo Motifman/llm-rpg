@@ -40,6 +40,13 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
 from ai_rpg_world.application.being.being_snapshot_file_gateway import (
     BeingSnapshotFileGateway,
     BeingSnapshotFileMetadata,
+    WorldStateSnapshotFileGateway,
+)
+from ai_rpg_world.application.being.world_state_snapshot import (
+    WorldStateSnapshot,
+)
+from ai_rpg_world.application.being.world_state_snapshot_service import (
+    WorldStateSnapshotService,
 )
 from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case import (
     BeingNotFoundForSnapshotError,
@@ -239,10 +246,73 @@ class ExperimentSnapshotSession:
         self._resolver = wiring_result.being_attachment_resolver
         self._snapshot_dir = snapshot_dir
         self._world_id = world_id or DEFAULT_SINGLE_WORLD_ID
+        # Phase 9-1: world snapshot 用 service。subsystem codec はまだ登録
+        # されていないため capture / restore は subsystems={} で素通す
+        # (= 器だけ用意した状態)。Phase 9-2 以降で codec を増やす。
+        self._world_snapshot_service = WorldStateSnapshotService()
+        self._world_gateway = WorldStateSnapshotFileGateway()
 
     @property
     def snapshot_dir(self) -> Path:
         return self._snapshot_dir
+
+    # ---- Phase 9-1: world snapshot ----------------------------------------
+    def capture_world(
+        self,
+        runtime: Any,
+        *,
+        source_scenario: str,
+        world_tick: int,
+    ) -> Path:
+        """world snapshot を取って ``snapshot_dir/world.json`` に書く。
+
+        Phase 9-1: 中身の subsystem は未登録なので ``subsystems={}`` の空
+        snapshot が出る。Phase 9-2 以降で 1 subsystem ずつ追加される。
+        失敗時は例外伝播 (= warning でなく hard 失敗 = world は中途半端
+        だと意味がない)。
+        """
+        from datetime import datetime, timezone
+
+        snapshot = self._world_snapshot_service.capture(
+            runtime,
+            source_scenario=source_scenario,
+            world_tick=world_tick,
+            captured_at=datetime.now(timezone.utc).isoformat(),
+        )
+        return self._world_gateway.write(snapshot, self._snapshot_dir)
+
+    def restore_world_from_dir(
+        self,
+        runtime: Any,
+        input_dir: Path,
+        *,
+        current_scenario: str,
+    ) -> WorldStateSnapshot | None:
+        """``input_dir/world.json`` を読み runtime に書き戻す。
+
+        ``world.json`` が無ければ ``None`` を返す (= 旧 snapshot directory
+        (Being snapshot のみ) との後方互換)。あれば fail-fast で復元する。
+        scenario 不一致は ``WorldStateScenarioMismatchError`` で停止
+        (= world は scenario 依存なので別 scenario への load は不可)。
+        """
+        if not self._world_gateway.exists_in(input_dir):
+            logger.info(
+                "no world.json in %s; skipping world state restore "
+                "(legacy snapshot directory)",
+                input_dir,
+            )
+            return None
+        snapshot = self._world_gateway.read(input_dir)
+        self._world_snapshot_service.restore(
+            runtime, snapshot, current_scenario=current_scenario
+        )
+        return snapshot
+
+    @property
+    def world_snapshot_service(self) -> WorldStateSnapshotService:
+        """world snapshot service への公開アクセサ (= test / Phase 9-2 以降の
+        subsystem 登録用)。"""
+        return self._world_snapshot_service
 
     def file_path_for(self, being_id: BeingId) -> Path:
         """``being_id`` の snapshot file path を返す。"""
@@ -357,7 +427,13 @@ class ExperimentSnapshotSession:
             raise NotADirectoryError(f"not a directory: {input_dir}")
 
         # ファイル名順で読み込む = 決定的な順序にする (= 復元が冪等)。
-        files = sorted(p for p in input_dir.iterdir() if p.suffix == ".json")
+        # Phase 9-1: ``world.json`` は別 path (= WorldStateSnapshot) なので
+        # Being restore のループからは除外する。
+        files = sorted(
+            p
+            for p in input_dir.iterdir()
+            if p.suffix == ".json" and p.name != "world.json"
+        )
         restored: list[BeingId] = []
         metadata_by_being: dict[BeingId, BeingSnapshotFileMetadata | None] = {}
         cross_transfers: list[tuple[BeingId, str, str]] = []

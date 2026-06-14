@@ -312,6 +312,59 @@ class TestScenarioMetadata:
             "cross-scenario transfer" in r.message for r in caplog.records
         )
 
+    def test_旧_snapshot_dir_に_world_json_が無い_restore_は_world_skip(
+        self, tmp_path: Path
+    ) -> None:
+        """Phase 9-1: world.json なしの snapshot dir (= Phase 6 までの形式) の
+        後方互換。restore_world_from_dir が None を返す。"""
+        wiring, _ = _make_wiring_stub()
+        session = ExperimentSnapshotSession(
+            wiring_result=wiring, snapshot_dir=tmp_path / "snap"
+        )
+        empty = tmp_path / "no_world"
+        empty.mkdir()
+        result = session.restore_world_from_dir(
+            runtime=None, input_dir=empty, current_scenario="demo"
+        )
+        assert result is None
+
+    def test_capture_world_で_world_json_が出る(self, tmp_path: Path) -> None:
+        """Phase 9-1: subsystem codec 未登録でも capture_world は空 snapshot
+        を書く (= 配線が通っていることの確認)。"""
+        wiring, _ = _make_wiring_stub()
+        session = ExperimentSnapshotSession(
+            wiring_result=wiring, snapshot_dir=tmp_path / "snap"
+        )
+        path = session.capture_world(
+            runtime=None, source_scenario="demo", world_tick=42
+        )
+        assert path.exists()
+        assert path.name == "world.json"
+
+    def test_world_snapshot_の_scenario_mismatch_は_fail_fast(
+        self, tmp_path: Path
+    ) -> None:
+        """Phase 9-1: world は scenario 不一致を hard-error で弾く。"""
+        from ai_rpg_world.application.being.world_state_snapshot import (
+            WorldStateScenarioMismatchError,
+        )
+
+        wiring, _ = _make_wiring_stub()
+        session = ExperimentSnapshotSession(
+            wiring_result=wiring, snapshot_dir=tmp_path / "snap"
+        )
+        # forest_world で save
+        session.capture_world(
+            runtime=None, source_scenario="forest_world", world_tick=10
+        )
+        # desert_world で load → fail-fast
+        with pytest.raises(WorldStateScenarioMismatchError, match="forest_world"):
+            session.restore_world_from_dir(
+                runtime=None,
+                input_dir=tmp_path / "snap",
+                current_scenario="desert_world",
+            )
+
     def test_metadata_なし_旧_snapshot_の_restore_は_問題なく動く(
         self, tmp_path: Path
     ) -> None:
