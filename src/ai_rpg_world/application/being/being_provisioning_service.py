@@ -107,12 +107,10 @@ class BeingProvisioningService:
         # Case 2: 決定論 BeingId で Being が既に存在するなら、それを (world, player)
         # に attach し直す (= 別箇所に attach 中なら detach してから)。
         #
-        # NOTE: InMemoryBeingRepository.find_by_id は内部 dict の Being インスタンス
-        # を直接返す (= 参照共有)。本 mutate は直後の save() でリポジトリ状態が
-        # 確定する想定で、間に他スレッドが Being を読むと中間状態が見える。
-        # 本 service は単一スレッド LLM ターン前提 (= 上の docstring) なので OK。
-        # SqliteBeingRepository は codec.decode で毎回新インスタンスを返すので
-        # 参照共有の問題は発生しない。
+        # NOTE: ``find_by_id`` は ``BeingSnapshotCodec.decode`` 経由で **毎回
+        # 新インスタンス** を返す (Phase 4 Step 4-3 以降、InMemory / Sqlite 共)。
+        # 参照共有はないので、ここで mutate しても repo の内部状態は変わらない。
+        # **必ず ``save()`` を呼んで永続化すること**。
         being_id = self._derive_being_id(target_world, player_id)
         existing_being = self._repo.find_by_id(being_id)
         if existing_being is not None:

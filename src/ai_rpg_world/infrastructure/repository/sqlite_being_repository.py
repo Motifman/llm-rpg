@@ -165,8 +165,14 @@ class SqliteBeingRepository(BeingRepository):
     def save(self, being: Being) -> None:
         if not isinstance(being, Being):
             raise TypeError(f"being must be Being, got {type(being).__name__}")
+        # 既存経路: codec encode (payload=None の v2) → snapshot 直接保存
+        self.save_snapshot(BeingSnapshotCodec.encode(being))
 
-        snapshot = BeingSnapshotCodec.encode(being)
+    def save_snapshot(self, snapshot: BeingSnapshot) -> None:
+        if not isinstance(snapshot, BeingSnapshot):
+            raise TypeError(
+                f"snapshot must be BeingSnapshot, got {type(snapshot).__name__}"
+            )
         payload = json.dumps(
             _snapshot_to_payload_dict(snapshot), ensure_ascii=False
         )
@@ -192,6 +198,12 @@ class SqliteBeingRepository(BeingRepository):
         self._conn.commit()
 
     def find_by_id(self, being_id: BeingId) -> Being | None:
+        snapshot = self.find_snapshot_by_id(being_id)
+        if snapshot is None:
+            return None
+        return BeingSnapshotCodec.decode(snapshot)
+
+    def find_snapshot_by_id(self, being_id: BeingId) -> BeingSnapshot | None:
         if not isinstance(being_id, BeingId):
             raise TypeError(
                 f"being_id must be BeingId, got {type(being_id).__name__}"
@@ -207,8 +219,7 @@ class SqliteBeingRepository(BeingRepository):
             return None
 
         data = json.loads(row["snapshot_json"])
-        snapshot = _payload_dict_to_snapshot(data)
-        return BeingSnapshotCodec.decode(snapshot)
+        return _payload_dict_to_snapshot(data)
 
     def exists(self, being_id: BeingId) -> bool:
         if not isinstance(being_id, BeingId):
