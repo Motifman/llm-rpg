@@ -19,10 +19,10 @@ Phase 9-3 (= tier 1b 前半):
 - ``ScenarioEventProgressSubsystemCodec`` — 発火済 / scheduled event_id
 - ``SpotExplorationProgressSubsystemCodec`` — (player, spot) → 探索回数
 
-Phase 9-3b (= tier 1b 後半):
-- ``SpotInteriorSubsystemCodec`` — sub_locations / objects / ground_items /
-  discoverable_items の dynamic 部分
-- ``ItemInstanceSubsystemCodec`` — ItemInstance 自体の state / decay
+Phase 9-3b (= tier 1b 後半、戦略 C = selective dynamic-only):
+- ``SpotInteriorSubsystemCodec`` — sub_locations.is_hidden / objects.state /
+  is_visible / puzzle / detail_read_by / ground_items / discoverable_items.is_discovered
+- ``ItemInstanceSubsystemCodec`` — ItemInstance.quantity / durability.current / state
 
 Phase 9-4 候補:
 - combat sub-state (``_active_effects`` / ``_pursuit_state`` /
@@ -33,6 +33,9 @@ Phase 9-4 候補:
 
 from ai_rpg_world.application.being.world_subsystems.exploration_progress_codec import (
     SpotExplorationProgressSubsystemCodec,
+)
+from ai_rpg_world.application.being.world_subsystems.item_instance_codec import (
+    ItemInstanceSubsystemCodec,
 )
 from ai_rpg_world.application.being.world_subsystems.player_growth_codec import (
     PlayerGrowthSubsystemCodec,
@@ -55,6 +58,9 @@ from ai_rpg_world.application.being.world_subsystems.player_vitals_codec import 
 from ai_rpg_world.application.being.world_subsystems.scenario_event_progress_codec import (
     ScenarioEventProgressSubsystemCodec,
 )
+from ai_rpg_world.application.being.world_subsystems.spot_interior_codec import (
+    SpotInteriorSubsystemCodec,
+)
 from ai_rpg_world.application.being.world_subsystems.world_flags_codec import (
     WorldFlagsSubsystemCodec,
 )
@@ -76,4 +82,7 @@ __all__ = [
     "WorldFlagsSubsystemCodec",
     "ScenarioEventProgressSubsystemCodec",
     "SpotExplorationProgressSubsystemCodec",
+    # Phase 9-3b
+    "SpotInteriorSubsystemCodec",
+    "ItemInstanceSubsystemCodec",
 ]
