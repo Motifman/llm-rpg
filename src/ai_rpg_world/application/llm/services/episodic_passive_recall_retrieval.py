@@ -6,7 +6,6 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
-
 from typing import Optional
 
 from ai_rpg_world.domain.being.service.being_attachment_resolver import (

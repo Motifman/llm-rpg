@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Sequence
+from typing import Optional, Sequence
 from uuid import uuid4
-
-from typing import Optional
 
 from ai_rpg_world.domain.being.service.being_attachment_resolver import (
     BeingAttachmentResolver,
@@ -105,6 +103,14 @@ class EpisodicMemoryLinkApplicationService:
         )
 
     # --- dual-path link store wrappers ---
+    #
+    # NOTE (Phase 3 Step 3c-3 TODO): 各 wrapper が呼び出しごとに
+    # ``_resolve_being_id`` を実行するため、``_ensure_capacity_before_link`` の
+    # while ループでは 1 イテレーションあたり Repository lookup が複数回走る。
+    # InMemory 実装では実害は無視できるが、SQLite 実装に切り替わると DB 往復が
+    # 増幅する可能性がある。Step 3c-3 で legacy 撤去するタイミングで
+    # 「caller 入口で 1 度だけ being_id を解決して各 method に渡す」パターン
+    # への移行を検討する。
 
     def _count_links(self, player_id: int, episode_id: str) -> int:
         being_id = self._resolve_being_id(player_id)

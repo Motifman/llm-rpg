@@ -42,7 +42,13 @@ from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store impor
 
 @dataclass(frozen=True)
 class EpisodicMemoryLinkBundle:
-    """共有リンクストア・リンクサービス・拡散活性化付き受動想起。"""
+    """共有リンクストア・リンクサービス・拡散活性化付き受動想起。
+
+    本 bundle は ``build_episodic_memory_link_bundle`` factory 経由でのみ
+    生成される想定なので、引数バリデーションはせず factory 側に委ねる
+    (= 他 caller の dataclass が ``__post_init__`` で型ガードしているのと
+    方針が異なる。wiring 層 dataclass は構築規律を factory に集約する)。
+    """
 
     episode_store: EpisodicEpisodeRepository
     link_store: MemoryLinkRepository
