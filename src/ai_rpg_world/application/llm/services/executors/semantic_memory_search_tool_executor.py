@@ -18,13 +18,18 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    BeingAttachmentResolver,
+)
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     SemanticMemoryRepository,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMORY_SEARCH_SEMANTIC
 
 
@@ -43,6 +48,33 @@ class SemanticMemorySearchToolExecutor:
     """
 
     semantic_store: SemanticMemoryRepository
+    # Phase 3 Step 3b-2: dual-path。Resolver+WorldId 注入時は being_id 経路、
+    # 未注入なら legacy player_id 経路 (= 既存テスト互換)。
+    being_attachment_resolver: Optional[BeingAttachmentResolver] = None
+    default_world_id: Optional[WorldId] = None
+
+    def __post_init__(self) -> None:
+        """Phase 3 Step 3b-2: 他 caller と型ガードを揃える。"""
+        if self.being_attachment_resolver is not None and not isinstance(
+            self.being_attachment_resolver, BeingAttachmentResolver
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if self.default_world_id is not None and not isinstance(
+            self.default_world_id, WorldId
+        ):
+            raise TypeError("default_world_id must be WorldId")
+
+    def _list_entries(self, player_id: int) -> List[SemanticMemoryEntry]:
+        """dual-path helper: Resolver+WorldId+Being 揃えば新 API、なければ legacy。"""
+        if self.being_attachment_resolver is not None and self.default_world_id is not None:
+            being_id = self.being_attachment_resolver.resolve_being_id(
+                self.default_world_id, PlayerId(player_id)
+            )
+            if being_id is not None:
+                return list(self.semantic_store.list_for_being(being_id))
+        return list(self.semantic_store.list_for_player(player_id))
 
     def get_handlers(
         self,
@@ -72,7 +104,7 @@ class SemanticMemorySearchToolExecutor:
                 error_code="INVALID_ARGUMENT",
             )
 
-        entries = list(self.semantic_store.list_for_player(player_id))
+        entries = self._list_entries(player_id)
         ranked = _rank_entries(entries, query=query)
         top = ranked[:top_k]
 

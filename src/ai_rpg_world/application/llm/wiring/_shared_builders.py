@@ -14,7 +14,13 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
+    from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
@@ -105,6 +111,8 @@ def build_episodic_memory_stack(
     *,
     semantic_gist_service: Optional[Any] = None,
     semantic_persona_resolver: Optional[Any] = None,
+    being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
+    default_world_id: Optional["WorldId"] = None,
 ) -> EpisodicMemoryStack:
     """共有 episode store と link / semantic / promotion を組み立てる。
 
@@ -136,6 +144,8 @@ def build_episodic_memory_stack(
         promotion_frontier=promotion_frontier,
         gist_service=semantic_gist_service,
         persona_resolver=semantic_persona_resolver,
+        being_attachment_resolver=being_attachment_resolver,
+        default_world_id=default_world_id,
     )
     return EpisodicMemoryStack(
         shared_episode_store=shared_episode_store,

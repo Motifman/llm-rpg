@@ -16,12 +16,18 @@ from datetime import datetime, timezone
 from typing import Callable, Dict, Optional, Sequence, Set
 from uuid import uuid4
 
+from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    BeingAttachmentResolver,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import effective_link_strength
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import MemoryLinkRepository
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import SemanticMemoryRepository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.episodic_promotion_frontier import EpisodicPromotionFrontier
 from ai_rpg_world.application.llm.services.semantic_gist_service import (
@@ -179,6 +185,53 @@ class EpisodicSemanticClusterPromotionService:
     # Phase 1b: LLM gist (optional)。注入時のみ LLM 抽象化を試みる。
     gist_service: Optional[SemanticGistService] = None
     persona_resolver: Optional[Callable[[int], tuple[str, str]]] = None
+    # Phase 3 Step 3b-2: Resolver + WorldId が両方注入されたときだけ being_id
+    # keyed の新 API に切替える (= dual-path)。未注入なら legacy player_id 経路。
+    # Step 3b-3 で legacy 経路を撤去する。
+    being_attachment_resolver: Optional[BeingAttachmentResolver] = None
+    default_world_id: Optional[WorldId] = None
+
+    def __post_init__(self) -> None:
+        """Phase 3 Step 3b-2: SemanticPassiveRecallService と同じ型ガードを
+        dataclass にも適用する (= caller 間の一貫性確保)。"""
+        if self.being_attachment_resolver is not None and not isinstance(
+            self.being_attachment_resolver, BeingAttachmentResolver
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if self.default_world_id is not None and not isinstance(
+            self.default_world_id, WorldId
+        ):
+            raise TypeError("default_world_id must be WorldId")
+
+    def _resolve_being_id(self, player_id: int) -> Optional[BeingId]:
+        """Resolver + WorldId が両方揃っていれば being_id を引く。未注入 or
+        Being 未 provision なら None (= legacy 経路に fallback)。"""
+        if self.being_attachment_resolver is None or self.default_world_id is None:
+            return None
+        return self.being_attachment_resolver.resolve_being_id(
+            self.default_world_id, PlayerId(player_id)
+        )
+
+    def _register_signature(self, player_id: int, sig: str) -> bool:
+        """dual-path: being_id 経由で signature 登録、未解決なら legacy。"""
+        being_id = self._resolve_being_id(player_id)
+        if being_id is not None:
+            return self.semantic_store.register_cluster_signature_if_new_by_being(
+                being_id, sig
+            )
+        return self.semantic_store.register_cluster_signature_if_new(
+            player_id, sig
+        )
+
+    def _add_entry(self, player_id: int, entry: SemanticMemoryEntry) -> None:
+        """dual-path: being_id 経由で entry 追加、未解決なら legacy。"""
+        being_id = self._resolve_being_id(player_id)
+        if being_id is not None:
+            self.semantic_store.add_by_being(being_id, entry)
+            return
+        self.semantic_store.add(entry)
 
     def on_after_tool_turn(self, player_id: int, *, now: datetime | None = None) -> None:
         """LLM ツール実行 1 回成功後に呼び、昇格候補があればストアへ追加する。"""
@@ -220,7 +273,7 @@ class EpisodicSemanticClusterPromotionService:
             if not cluster_ok or len(eps) < MIN_CLUSTER_SIZE:
                 continue
             sig = _evidence_signature(comp)
-            if not self.semantic_store.register_cluster_signature_if_new(player_id, sig):
+            if not self._register_signature(player_id, sig):
                 continue
             confidence = min(1.0, 0.4 + 0.1 * len(eps))
             gist_result = self._build_gist(player_id, eps)
@@ -234,7 +287,7 @@ class EpisodicSemanticClusterPromotionService:
                 importance_score=gist_result.importance_score,
                 tags=gist_result.tags,
             )
-            self.semantic_store.add(entry)
+            self._add_entry(player_id, entry)
 
     def _build_gist(
         self,
