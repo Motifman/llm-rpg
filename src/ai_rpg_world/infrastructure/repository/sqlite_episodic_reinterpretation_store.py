@@ -18,6 +18,9 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import EpisodicReinterpretationStatus
 from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
 from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
+from ai_rpg_world.application.llm.services._episodic_recall_batch import (
+    select_episode_batched,
+)
 from ai_rpg_world.infrastructure.repository.sqlite_migration import (
     SqliteMigration,
     apply_migrations,
@@ -142,8 +145,13 @@ def _init_schema_v2_by_being(connection: sqlite3.Connection) -> None:
     (= caller 移行 = Step 3d-2 後、Step 3d-3 で legacy テーブルごと撤去予定)。
     memory_link の v4 と同じパターン。
 
-    ``player_id`` は attach 元として保持 (= entry/observation VO の
-    ``player_id`` フィールドを保つため)。
+    ``player_id`` 列を残す理由: ``payload_json`` の中にも ``player_id`` は
+    エンコード済だが、SQL WHERE で player_id を絞り込みたい運用 (= 監査・
+    debug script からの読み出し) を素早く出来るよう列としても保持する。
+    また ``EpisodicReinterpretationEntry`` / ``EpisodicRecallObservation`` VO
+    が ``player_id`` フィールドを必須にしているため、読み戻し時に再構築できる
+    冗長性を維持する目的もある。Step 3d-3 で legacy 撤去後は本列を一次キーから
+    外す方針は維持される (= PK は引き続き being_id 経路)。
     """
     connection.executescript(
         """
@@ -243,20 +251,11 @@ class SqliteEpisodicReinterpretationStore(
             (player_id,),
         )
         rows = [_payload_to_recall(json.loads(str(r[0]))) for r in cur.fetchall()]
-        selected: list[str] = []
-        counts: dict[str, int] = {}
-        out: list[EpisodicRecallObservation] = []
-        for row in rows:
-            if row.episode_id not in counts:
-                if len(selected) >= batch_size:
-                    continue
-                selected.append(row.episode_id)
-                counts[row.episode_id] = 0
-            if counts[row.episode_id] >= max_contexts_per_episode:
-                continue
-            counts[row.episode_id] += 1
-            out.append(row)
-        return tuple(out)
+        return select_episode_batched(
+            rows,
+            batch_size=batch_size,
+            max_contexts_per_episode=max_contexts_per_episode,
+        )
 
     def mark_processed(self, player_id: int, recall_ids: tuple[str, ...]) -> None:
         if not recall_ids:
@@ -416,20 +415,11 @@ class SqliteEpisodicReinterpretationStore(
             (being_id.value,),
         )
         rows = [_payload_to_recall(json.loads(str(r[0]))) for r in cur.fetchall()]
-        selected: list[str] = []
-        counts: dict[str, int] = {}
-        out: list[EpisodicRecallObservation] = []
-        for row in rows:
-            if row.episode_id not in counts:
-                if len(selected) >= batch_size:
-                    continue
-                selected.append(row.episode_id)
-                counts[row.episode_id] = 0
-            if counts[row.episode_id] >= max_contexts_per_episode:
-                continue
-            counts[row.episode_id] += 1
-            out.append(row)
-        return tuple(out)
+        return select_episode_batched(
+            rows,
+            batch_size=batch_size,
+            max_contexts_per_episode=max_contexts_per_episode,
+        )
 
     def mark_processed_by_being(
         self, being_id: BeingId, recall_ids: tuple[str, ...]

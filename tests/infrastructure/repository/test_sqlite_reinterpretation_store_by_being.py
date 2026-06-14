@@ -121,6 +121,30 @@ class TestSqliteRecallBufferByBeing:
         store.mark_processed_by_being(being, ("r1",))
         assert store.pending_count_by_being(being) == 1
 
+    def test_batch_size_0_は_空_tuple(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        """``batch_size <= 0`` は早期 return で空 tuple。"""
+        store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
+        assert (
+            store.peek_batch_by_being(
+                being, batch_size=0, max_contexts_per_episode=5
+            )
+            == ()
+        )
+
+    def test_max_contexts_per_episode_0_は_空_tuple(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        """``max_contexts_per_episode <= 0`` も早期 return で空 tuple。"""
+        store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
+        assert (
+            store.peek_batch_by_being(
+                being, batch_size=5, max_contexts_per_episode=0
+            )
+            == ()
+        )
+
 
 class TestSqliteJournalByBeing:
     """SQLite journal の by_being API。"""

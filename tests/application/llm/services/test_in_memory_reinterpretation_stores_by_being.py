@@ -137,6 +137,28 @@ class TestRecallBufferByBeing:
         with pytest.raises(TypeError, match="being_id"):
             store.append_by_being("not-being", _obs(recall_id="r", episode_id="e"))  # type: ignore[arg-type]
 
+    def test_batch_size_0_は_空_tuple(self, being: BeingId) -> None:
+        """``batch_size <= 0`` は早期 return で空 tuple (= disabled 経路)。"""
+        store = InMemoryEpisodicRecallBufferStore()
+        store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
+        assert (
+            store.peek_batch_by_being(
+                being, batch_size=0, max_contexts_per_episode=5
+            )
+            == ()
+        )
+
+    def test_max_contexts_per_episode_0_は_空_tuple(self, being: BeingId) -> None:
+        """``max_contexts_per_episode <= 0`` も早期 return で空 tuple。"""
+        store = InMemoryEpisodicRecallBufferStore()
+        store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
+        assert (
+            store.peek_batch_by_being(
+                being, batch_size=5, max_contexts_per_episode=0
+            )
+            == ()
+        )
+
 
 class TestRecallBufferIsolation:
     """新旧 API の独立性 (= 並走 index は同期しない)。"""

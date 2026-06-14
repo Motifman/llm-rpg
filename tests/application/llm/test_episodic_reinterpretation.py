@@ -17,6 +17,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import 
 from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
 from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
@@ -69,18 +70,30 @@ class _BrokenRecallBufferStore(EpisodicRecallBufferRepository):
         raise RuntimeError("broken")
 
     # Phase 3 Step 3d-1: by_being abstractmethod も実装必須 (= raise で揃える)
-    def append_by_being(self, being_id, observation):  # type: ignore[no-untyped-def]
+    def append_by_being(
+        self, being_id: BeingId, observation: EpisodicRecallObservation
+    ) -> None:
+        """常に RuntimeError (= sidecar 失敗の伝播テスト用 stub)。"""
         raise RuntimeError("broken")
 
-    def peek_batch_by_being(  # type: ignore[no-untyped-def]
-        self, being_id, *, batch_size, max_contexts_per_episode
-    ):
+    def peek_batch_by_being(
+        self,
+        being_id: BeingId,
+        *,
+        batch_size: int,
+        max_contexts_per_episode: int,
+    ) -> tuple[EpisodicRecallObservation, ...]:
+        """常に RuntimeError。"""
         raise RuntimeError("broken")
 
-    def mark_processed_by_being(self, being_id, recall_ids):  # type: ignore[no-untyped-def]
+    def mark_processed_by_being(
+        self, being_id: BeingId, recall_ids: tuple[str, ...]
+    ) -> None:
+        """常に RuntimeError。"""
         raise RuntimeError("broken")
 
-    def pending_count_by_being(self, being_id):  # type: ignore[no-untyped-def]
+    def pending_count_by_being(self, being_id: BeingId) -> int:
+        """常に RuntimeError。"""
         raise RuntimeError("broken")
 
 

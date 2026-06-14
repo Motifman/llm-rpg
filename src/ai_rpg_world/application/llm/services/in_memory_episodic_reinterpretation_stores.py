@@ -12,6 +12,9 @@ from collections import defaultdict
 from dataclasses import replace
 from datetime import datetime, timezone
 
+from ai_rpg_world.application.llm.services._episodic_recall_batch import (
+    select_episode_batched,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
@@ -24,29 +27,6 @@ def _dt_key(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
-
-
-def _select_batch(
-    rows: list[EpisodicRecallObservation],
-    *,
-    batch_size: int,
-    max_contexts_per_episode: int,
-) -> tuple[EpisodicRecallObservation, ...]:
-    """recalled_at + recall_id でソート済 rows から episode-batched 結果を組む。"""
-    rows = sorted(rows, key=lambda r: (_dt_key(r.recalled_at), r.recall_id))
-    selected_episode_ids: list[str] = []
-    counts: dict[str, int] = defaultdict(int)
-    out: list[EpisodicRecallObservation] = []
-    for row in rows:
-        if row.episode_id not in counts:
-            if len(selected_episode_ids) >= batch_size:
-                continue
-            selected_episode_ids.append(row.episode_id)
-        if counts[row.episode_id] >= max_contexts_per_episode:
-            continue
-        counts[row.episode_id] += 1
-        out.append(row)
-    return tuple(out)
 
 
 class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
@@ -71,7 +51,7 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
     ) -> tuple[EpisodicRecallObservation, ...]:
         if batch_size <= 0 or max_contexts_per_episode <= 0:
             return ()
-        return _select_batch(
+        return select_episode_batched(
             list(self._pending.get(player_id, ())),
             batch_size=batch_size,
             max_contexts_per_episode=max_contexts_per_episode,
@@ -110,7 +90,7 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
             raise TypeError("being_id must be BeingId")
         if batch_size <= 0 or max_contexts_per_episode <= 0:
             return ()
-        return _select_batch(
+        return select_episode_batched(
             list(self._pending_by_being.get(being_id, ())),
             batch_size=batch_size,
             max_contexts_per_episode=max_contexts_per_episode,
