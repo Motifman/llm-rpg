@@ -50,8 +50,11 @@ from ai_rpg_world.application.being.world_state_snapshot_service import (
     WorldSubsystemCodec,
 )
 from ai_rpg_world.application.being.world_subsystems import (
+    PlayerGrowthSubsystemCodec,
+    PlayerInventorySubsystemCodec,
     PlayerNeedsSubsystemCodec,
     PlayerPositionSubsystemCodec,
+    PlayerStateDictSubsystemCodec,
     PlayerVitalsSubsystemCodec,
     WorldTickSubsystemCodec,
 )
@@ -159,17 +162,24 @@ class RestoreAllReport:
 
 
 def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
-    """Phase 9-2 既定で登録する subsystem codec 一覧。
+    """Phase 9-2/9-2b 既定で登録する subsystem codec 一覧。
 
-    順序は **capture / restore の順番** に影響する。restore 時に
-    依存関係がある場合 (例: world_tick を最初に戻してから他の subsystem)
-    に意味を持つ。現状の 4 codec には相互依存はない。
+    順序は **capture / restore の順番** に影響する。restore 時に依存関係が
+    ある場合に意味を持つ。現状の codec 群は相互依存なし。
+    growth は base_stats を内含するので vitals (= max_hp 由来) より先に
+    restore したいが、本 PR の vitals codec は ``hp_max`` を直接保存して
+    いるので順序非依存。
     """
     return [
+        # Phase 9-2
         WorldTickSubsystemCodec(),
         PlayerPositionSubsystemCodec(),
         PlayerVitalsSubsystemCodec(),
         PlayerNeedsSubsystemCodec(),
+        # Phase 9-2b
+        PlayerInventorySubsystemCodec(),
+        PlayerGrowthSubsystemCodec(),
+        PlayerStateDictSubsystemCodec(),
     ]
 
 
