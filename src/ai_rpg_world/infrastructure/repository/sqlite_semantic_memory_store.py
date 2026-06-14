@@ -1,4 +1,8 @@
-"""SemanticMemoryRepository の SQLite 実装。"""
+"""SemanticMemoryRepository の SQLite 実装。
+
+Phase 3 Step 3b-3 (Issue #470): legacy player_id 版を撤去し、being_id 版のみ
+を残した。schema v3 で legacy テーブルも DROP される。
+"""
 
 from __future__ import annotations
 
@@ -33,77 +37,14 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
             connection.row_factory = sqlite3.Row
         apply_memory_graph_migrations(connection)
 
-    def add(self, entry: SemanticMemoryEntry) -> None:
-        payload = json.dumps(list(entry.evidence_episode_ids), ensure_ascii=False)
-        self._conn.execute(
-            """
-            INSERT INTO semantic_memory_entries (
-                entry_id, player_id, text, evidence_episode_ids_json, confidence, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(entry_id) DO UPDATE SET
-                player_id = excluded.player_id,
-                text = excluded.text,
-                evidence_episode_ids_json = excluded.evidence_episode_ids_json,
-                confidence = excluded.confidence,
-                created_at = excluded.created_at
-            """,
-            (
-                entry.entry_id,
-                entry.player_id,
-                entry.text,
-                payload,
-                float(entry.confidence),
-                _dt_to_iso(entry.created_at),
-            ),
-        )
-        self._conn.commit()
-
-    def list_for_player(self, player_id: int) -> list[SemanticMemoryEntry]:
-        cur = self._conn.execute(
-            """
-            SELECT * FROM semantic_memory_entries
-            WHERE player_id = ?
-            ORDER BY created_at DESC
-            """,
-            (player_id,),
-        )
-        out: list[SemanticMemoryEntry] = []
-        for row in cur.fetchall():
-            raw_ids = json.loads(str(row["evidence_episode_ids_json"]))
-            eids = tuple(str(x) for x in raw_ids)
-            out.append(
-                SemanticMemoryEntry(
-                    entry_id=str(row["entry_id"]),
-                    player_id=int(row["player_id"]),
-                    text=str(row["text"]),
-                    evidence_episode_ids=eids,
-                    confidence=float(row["confidence"]),
-                    created_at=_dt_from_iso(str(row["created_at"])),
-                )
-            )
-        return out
-
-    def register_cluster_signature_if_new(self, player_id: int, evidence_signature: str) -> bool:
-        cur = self._conn.execute(
-            """
-            INSERT OR IGNORE INTO semantic_cluster_signatures (player_id, evidence_signature)
-            VALUES (?, ?)
-            """,
-            (player_id, evidence_signature),
-        )
-        self._conn.commit()
-        return cur.rowcount > 0
-
-    # ===== Phase 3 Step 3b-1: being_id 版を並走追加 =====
-
     def add_by_being(self, being_id: BeingId, entry: SemanticMemoryEntry) -> None:
         """being_id keyed で entry を upsert する。
 
-        ``created_at`` も上書き対象に含める設計判断: legacy ``add`` と同じ挙動で、
-        Entry 側が「最終更新時刻」相当として渡してくる前提。``list_for_being``
-        が ``ORDER BY created_at DESC`` なので、更新で再 hot 化される効果を期待。
-        「最初の登録時刻」を保持したいなら caller 側で既存 entry を re-read して
-        ``created_at`` を保ったまま渡す責務とする。
+        ``created_at`` も上書き対象に含める設計判断: Entry 側が「最終更新時刻」
+        相当として渡してくる前提。``list_for_being`` が ``ORDER BY created_at DESC``
+        なので、更新で再 hot 化される効果を期待。「最初の登録時刻」を保持
+        したいなら caller 側で既存 entry を re-read して ``created_at`` を保った
+        まま渡す責務とする。
         """
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")

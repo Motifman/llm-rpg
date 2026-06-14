@@ -207,7 +207,12 @@ class EpisodicSemanticClusterPromotionService:
 
     def _resolve_being_id(self, player_id: int) -> Optional[BeingId]:
         """Resolver + WorldId が両方揃っていれば being_id を引く。未注入 or
-        Being 未 provision なら None (= legacy 経路に fallback)。"""
+        Being 未 provision なら None (= 本 service の operation は silent no-op)。
+
+        Phase 3 Step 3b-3: legacy player_id 経路は撤去。promotion は turn の
+        副作用なので、解決できなければ「何もしない」 (= 次回 turn で再試行) が
+        正しい挙動。
+        """
         if self.being_attachment_resolver is None or self.default_world_id is None:
             return None
         return self.being_attachment_resolver.resolve_being_id(
@@ -215,23 +220,21 @@ class EpisodicSemanticClusterPromotionService:
         )
 
     def _register_signature(self, player_id: int, sig: str) -> bool:
-        """dual-path: being_id 経由で signature 登録、未解決なら legacy。"""
+        """being_id 経路で signature 登録。Being 未解決なら ``False`` (= 既存扱い
+        で skip)。promotion を進ませないので結果として no-op になる。"""
         being_id = self._resolve_being_id(player_id)
-        if being_id is not None:
-            return self.semantic_store.register_cluster_signature_if_new_by_being(
-                being_id, sig
-            )
-        return self.semantic_store.register_cluster_signature_if_new(
-            player_id, sig
+        if being_id is None:
+            return False
+        return self.semantic_store.register_cluster_signature_if_new_by_being(
+            being_id, sig
         )
 
     def _add_entry(self, player_id: int, entry: SemanticMemoryEntry) -> None:
-        """dual-path: being_id 経由で entry 追加、未解決なら legacy。"""
+        """being_id 経路で entry 追加。Being 未解決なら silent no-op。"""
         being_id = self._resolve_being_id(player_id)
-        if being_id is not None:
-            self.semantic_store.add_by_being(being_id, entry)
+        if being_id is None:
             return
-        self.semantic_store.add(entry)
+        self.semantic_store.add_by_being(being_id, entry)
 
     def on_after_tool_turn(self, player_id: int, *, now: datetime | None = None) -> None:
         """LLM ツール実行 1 回成功後に呼び、昇格候補があればストアへ追加する。"""

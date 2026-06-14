@@ -23,6 +23,9 @@ from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store impor
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
+from tests.application.llm._semantic_being_test_helpers import (
+    make_semantic_being_setup,
+)
 
 
 def _ep(
@@ -86,14 +89,18 @@ def test_incremental_promotion_matches_full_scan_for_triangle() -> None:
     def run(*, use_frontier: bool) -> list[str]:
         store = InMemorySubjectiveEpisodeStore()
         links = InMemoryMemoryLinkStore()
-        sem = InMemorySemanticMemoryStore()
+        # Phase 3 Step 3b-3: semantic は being_id 経路必須。
+        setup = make_semantic_being_setup()
+        setup.provision(1)
         frontier = EpisodicPromotionFrontier() if use_frontier else None
         promo = EpisodicSemanticClusterPromotionService(
             episode_store=store,
             link_store=links,
-            semantic_store=sem,
+            semantic_store=setup.semantic_store,
             promotion_frontier=frontier,
             expansion_hops=4,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         for i, eid in enumerate(["x", "y", "z"]):
             ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
@@ -104,7 +111,7 @@ def test_incremental_promotion_matches_full_scan_for_triangle() -> None:
         if frontier is not None:
             frontier.add(1, "x")
         promo.on_after_tool_turn(1, now=now)
-        return [e.text for e in sem.list_for_player(1)]
+        return [e.text for e in setup.list_entries(1)]
 
     full = run(use_frontier=False)
     incr = run(use_frontier=True)
@@ -116,15 +123,18 @@ def test_incremental_zero_hops_misses_distant_cluster() -> None:
     now = datetime.now(timezone.utc)
     store = InMemorySubjectiveEpisodeStore()
     links = InMemoryMemoryLinkStore()
-    sem = InMemorySemanticMemoryStore()
+    setup = make_semantic_being_setup()
+    setup.provision(1)
     frontier = EpisodicPromotionFrontier()
     frontier.add(1, "x")
     promo = EpisodicSemanticClusterPromotionService(
         episode_store=store,
         link_store=links,
-        semantic_store=sem,
+        semantic_store=setup.semantic_store,
         promotion_frontier=frontier,
         expansion_hops=0,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
     )
     for i, eid in enumerate(["x", "y", "z"]):
         ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
@@ -133,7 +143,7 @@ def test_incremental_zero_hops_misses_distant_cluster() -> None:
     links.upsert_link(_strong_link(1, "y", "z"))
     links.upsert_link(_strong_link(1, "x", "z"))
     promo.on_after_tool_turn(1, now=now)
-    assert len(sem.list_for_player(1)) == 0
+    assert len(setup.list_entries(1)) == 0
 
 
 def test_empty_frontier_falls_back_to_full_scan() -> None:
@@ -141,14 +151,17 @@ def test_empty_frontier_falls_back_to_full_scan() -> None:
     now = datetime.now(timezone.utc)
     store = InMemorySubjectiveEpisodeStore()
     links = InMemoryMemoryLinkStore()
-    sem = InMemorySemanticMemoryStore()
+    setup = make_semantic_being_setup()
+    setup.provision(1)
     frontier = EpisodicPromotionFrontier()
     promo = EpisodicSemanticClusterPromotionService(
         episode_store=store,
         link_store=links,
-        semantic_store=sem,
+        semantic_store=setup.semantic_store,
         promotion_frontier=frontier,
         expansion_hops=4,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
     )
     for i, eid in enumerate(["x", "y", "z"]):
         ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
@@ -157,5 +170,5 @@ def test_empty_frontier_falls_back_to_full_scan() -> None:
     links.upsert_link(_strong_link(1, "y", "z"))
     links.upsert_link(_strong_link(1, "x", "z"))
     promo.on_after_tool_turn(1, now=now)
-    assert len(sem.list_for_player(1)) == 1
+    assert len(setup.list_entries(1)) == 1
 

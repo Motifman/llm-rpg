@@ -446,26 +446,36 @@ class TestSemanticPassiveRecallE2E:
     """Phase 1c: semantic store の top-K が prompt §learned に出る。"""
 
     def test_passive_recall_と_section_format_の_連動(self) -> None:
-        store = InMemorySemanticMemoryStore()
-        store.add(_make_semantic_entry(
+        # Phase 3 Step 3b-3: semantic は being_id 経路必須。
+        from tests.application.llm._semantic_being_test_helpers import (
+            make_semantic_being_setup,
+        )
+
+        setup = make_semantic_being_setup()
+        setup.provision(_PID.value)
+        setup.populate(_PID.value, _make_semantic_entry(
             entry_id="s1",
             text="タカシは信頼できる",
             importance=8,
             tags=("タカシ", "信頼"),
         ))
-        store.add(_make_semantic_entry(
+        setup.populate(_PID.value, _make_semantic_entry(
             entry_id="s2",
             text="北の洞窟は危険",
             importance=9,
             tags=("北の洞窟", "危険"),
         ))
-        store.add(_make_semantic_entry(
+        setup.populate(_PID.value, _make_semantic_entry(
             entry_id="s3",
             text="嵐の前は鳥が消える",
             importance=4,
             tags=("嵐",),
         ))
-        svc = SemanticPassiveRecallService(store)
+        svc = SemanticPassiveRecallService(
+            setup.semantic_store,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
+        )
         # cue が "タカシ" のとき top-2 を出すと s1 が上位
         cues = (
             EpisodicCue(

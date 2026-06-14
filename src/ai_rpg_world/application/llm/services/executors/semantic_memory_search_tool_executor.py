@@ -48,8 +48,10 @@ class SemanticMemorySearchToolExecutor:
     """
 
     semantic_store: SemanticMemoryRepository
-    # Phase 3 Step 3b-2: dual-path。Resolver+WorldId 注入時は being_id 経路、
-    # 未注入なら legacy player_id 経路 (= 既存テスト互換)。
+    # Phase 3 Step 3b-3: Resolver+WorldId は constructor 上は Optional のまま
+    # (= 既存テスト互換) だが、tool 実行時に未注入 / Being 未 provision なら
+    # error_code=INVALID_STATE で fail-fast する。tool は LLM-visible なので
+    # 黙って空結果を返すと「該当なし」と区別がつかない。
     being_attachment_resolver: Optional[BeingAttachmentResolver] = None
     default_world_id: Optional[WorldId] = None
 
@@ -66,15 +68,31 @@ class SemanticMemorySearchToolExecutor:
         ):
             raise TypeError("default_world_id must be WorldId")
 
-    def _list_entries(self, player_id: int) -> List[SemanticMemoryEntry]:
-        """dual-path helper: Resolver+WorldId+Being 揃えば新 API、なければ legacy。"""
-        if self.being_attachment_resolver is not None and self.default_world_id is not None:
-            being_id = self.being_attachment_resolver.resolve_being_id(
-                self.default_world_id, PlayerId(player_id)
+    def _require_being_id(self, player_id: int):  # type: ignore[no-untyped-def]
+        """Resolver+WorldId+Being が揃わなければ RuntimeError を投げる。
+
+        Phase 3 Step 3b-3: legacy player_id 経路は撤去済。tool 実行時に Being
+        が解決できないのは wiring の bug なので、握り潰さず明示的に失敗させる。
+        """
+        if self.being_attachment_resolver is None or self.default_world_id is None:
+            raise RuntimeError(
+                "SemanticMemorySearchToolExecutor requires being_attachment_resolver "
+                "and default_world_id (Phase 3 Step 3b-3)."
             )
-            if being_id is not None:
-                return list(self.semantic_store.list_for_being(being_id))
-        return list(self.semantic_store.list_for_player(player_id))
+        being_id = self.being_attachment_resolver.resolve_being_id(
+            self.default_world_id, PlayerId(player_id)
+        )
+        if being_id is None:
+            raise RuntimeError(
+                f"Being not provisioned for player_id={player_id} in world="
+                f"{self.default_world_id.value} (Phase 3 Step 3b-3)."
+            )
+        return being_id
+
+    def _list_entries(self, player_id: int) -> List[SemanticMemoryEntry]:
+        """being_id 経路で entry 一覧を返す。"""
+        being_id = self._require_being_id(player_id)
+        return list(self.semantic_store.list_for_being(being_id))
 
     def get_handlers(
         self,
@@ -104,7 +122,16 @@ class SemanticMemorySearchToolExecutor:
                 error_code="INVALID_ARGUMENT",
             )
 
-        entries = self._list_entries(player_id)
+        try:
+            entries = self._list_entries(player_id)
+        except RuntimeError as exc:
+            # Phase 3 Step 3b-3: Resolver/WorldId/Being が未設定なら wiring の
+            # bug。LLM 側には「内部状態が未準備」と分かる形で返す。
+            return LlmCommandResultDto(
+                success=False,
+                message=str(exc),
+                error_code="INVALID_STATE",
+            )
         ranked = _rank_entries(entries, query=query)
         top = ranked[:top_k]
 

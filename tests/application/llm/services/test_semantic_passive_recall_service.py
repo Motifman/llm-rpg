@@ -23,6 +23,25 @@ from ai_rpg_world.application.llm.services.semantic_passive_recall_service impor
     SemanticRecallCandidate,
     format_semantic_recall_section,
 )
+from tests.application.llm._semantic_being_test_helpers import (
+    SemanticBeingTestSetup,
+    make_semantic_being_setup,
+)
+
+
+def _make_setup_and_svc() -> tuple[SemanticBeingTestSetup, SemanticPassiveRecallService]:
+    """Phase 3 Step 3b-3: passive recall は being_id 経路のみ。
+
+    Resolver+WorldId を注入し、provision 済 Being 経由で entry を読む形に揃える。
+    """
+    setup = make_semantic_being_setup()
+    setup.provision(1)
+    svc = SemanticPassiveRecallService(
+        setup.semantic_store,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
+    )
+    return setup, svc
 
 
 _NOW = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
@@ -66,26 +85,23 @@ class TestSemanticPassiveRecallBoundaries:
 
     def test_top_k_が_0_なら_空_list(self) -> None:
         """disabled 経路: top_k <= 0 で必ず空。"""
-        store = InMemorySemanticMemoryStore()
-        store.add(_entry(entry_id="s1"))
-        svc = SemanticPassiveRecallService(store)
+        setup, svc = _make_setup_and_svc()
+        setup.populate(1, _entry(entry_id="s1"))
         assert svc.retrieve(player_id=1, situation_cues=(), top_k=0, now=_NOW) == []
 
     def test_top_k_が_負数_なら_空_list(self) -> None:
-        store = InMemorySemanticMemoryStore()
-        store.add(_entry(entry_id="s1"))
-        svc = SemanticPassiveRecallService(store)
+        setup, svc = _make_setup_and_svc()
+        setup.populate(1, _entry(entry_id="s1"))
         assert svc.retrieve(player_id=1, situation_cues=(), top_k=-3, now=_NOW) == []
 
     def test_store_が_空_なら_空_list(self) -> None:
-        svc = SemanticPassiveRecallService(InMemorySemanticMemoryStore())
+        _setup, svc = _make_setup_and_svc()
         assert svc.retrieve(player_id=1, situation_cues=(_cue("3"),), top_k=5, now=_NOW) == []
 
     def test_top_k_が_候補数_より大きい場合_存在数だけ_返す(self) -> None:
-        store = InMemorySemanticMemoryStore()
+        setup, svc = _make_setup_and_svc()
         for i in range(3):
-            store.add(_entry(entry_id=f"s{i}", text=f"t{i}"))
-        svc = SemanticPassiveRecallService(store)
+            setup.populate(1, _entry(entry_id=f"s{i}", text=f"t{i}"))
         result = svc.retrieve(player_id=1, situation_cues=(), top_k=10, now=_NOW)
         assert len(result) == 3
 
@@ -100,28 +116,25 @@ class TestSemanticPassiveRecallScoring:
 
     def test_新しい_entry_の_方が_recency_が_高く_top_に来る(self) -> None:
         """importance が同点なら作成が新しいほうが上位。"""
-        store = InMemorySemanticMemoryStore()
-        store.add(_entry(entry_id="old", created_at=_NOW - timedelta(days=180)))
-        store.add(_entry(entry_id="new", created_at=_NOW))
-        svc = SemanticPassiveRecallService(store)
+        setup, svc = _make_setup_and_svc()
+        setup.populate(1, _entry(entry_id="old", created_at=_NOW - timedelta(days=180)))
+        setup.populate(1, _entry(entry_id="new", created_at=_NOW))
         result = svc.retrieve(player_id=1, situation_cues=(), top_k=2, now=_NOW)
         assert result[0].entry.entry_id == "new"
 
     def test_importance_score_が_高い_entry_が_上位(self) -> None:
         """recency / relevance が同点なら importance が分ける。"""
-        store = InMemorySemanticMemoryStore()
-        store.add(_entry(entry_id="low", importance_score=2))
-        store.add(_entry(entry_id="high", importance_score=9))
-        svc = SemanticPassiveRecallService(store)
+        setup, svc = _make_setup_and_svc()
+        setup.populate(1, _entry(entry_id="low", importance_score=2))
+        setup.populate(1, _entry(entry_id="high", importance_score=9))
         result = svc.retrieve(player_id=1, situation_cues=(), top_k=2, now=_NOW)
         assert result[0].entry.entry_id == "high"
 
     def test_cue_が_tag_と一致する_entry_が_relevance_で_上位(self) -> None:
         """tag マッチがあれば relevance>0 で順位に反映される。"""
-        store = InMemorySemanticMemoryStore()
-        store.add(_entry(entry_id="no_tag", tags=()))
-        store.add(_entry(entry_id="match", tags=("3",)))
-        svc = SemanticPassiveRecallService(store)
+        setup, svc = _make_setup_and_svc()
+        setup.populate(1, _entry(entry_id="no_tag", tags=()))
+        setup.populate(1, _entry(entry_id="match", tags=("3",)))
         result = svc.retrieve(
             player_id=1, situation_cues=(_cue("3"),), top_k=2, now=_NOW
         )
@@ -131,28 +144,25 @@ class TestSemanticPassiveRecallScoring:
 
     def test_cue_が_本文に_含まれていれば_relevance_に_寄与(self) -> None:
         """tag に無くても text に含まれていれば cheap lexical match で hit。"""
-        store = InMemorySemanticMemoryStore()
-        store.add(_entry(entry_id="text_match", text="北の洞窟は危険", tags=()))
-        store.add(_entry(entry_id="other", text="海は穏やか", tags=()))
-        svc = SemanticPassiveRecallService(store)
+        setup, svc = _make_setup_and_svc()
+        setup.populate(1, _entry(entry_id="text_match", text="北の洞窟は危険", tags=()))
+        setup.populate(1, _entry(entry_id="other", text="海は穏やか", tags=()))
         result = svc.retrieve(
             player_id=1, situation_cues=(_cue("北の洞窟"),), top_k=2, now=_NOW
         )
         assert result[0].entry.entry_id == "text_match"
 
     def test_cue_未指定_なら_relevance_は_全件_0(self) -> None:
-        store = InMemorySemanticMemoryStore()
-        store.add(_entry(entry_id="x", tags=("anything",)))
-        svc = SemanticPassiveRecallService(store)
+        setup, svc = _make_setup_and_svc()
+        setup.populate(1, _entry(entry_id="x", tags=("anything",)))
         result = svc.retrieve(player_id=1, situation_cues=(), top_k=1, now=_NOW)
         assert result[0].relevance == 0.0
 
     def test_clock_skew_で_未来の_entry_でも_recency_は_1_0_でクランプ(self) -> None:
         """now より後の created_at でも score は崩れず recency=1.0。"""
-        store = InMemorySemanticMemoryStore()
+        setup, svc = _make_setup_and_svc()
         future = _NOW + timedelta(days=1)
-        store.add(_entry(entry_id="future", created_at=future))
-        svc = SemanticPassiveRecallService(store)
+        setup.populate(1, _entry(entry_id="future", created_at=future))
         result = svc.retrieve(player_id=1, situation_cues=(), top_k=1, now=_NOW)
         assert result[0].recency == pytest.approx(1.0)
 

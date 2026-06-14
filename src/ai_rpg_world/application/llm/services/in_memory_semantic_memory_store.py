@@ -1,9 +1,7 @@
 """SemanticMemoryRepository のインメモリ実装。
 
-Phase 3 Step 3b-1 (Issue #470): being_id 版 API を並走追加。
-内部に 2 つの独立した store を持つ:
-- ``_rows`` / ``_cluster_sigs``: player_id 版 (= 旧 API、Step 3b-3 で撤去予定)
-- ``_being_rows`` / ``_being_cluster_sigs``: being_id 版 (= 新 API)
+Phase 3 Step 3b-3 (Issue #470): legacy player_id 版を撤去し、being_id 版のみ
+を残した。
 """
 
 from __future__ import annotations
@@ -15,28 +13,8 @@ from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository i
 
 class InMemorySemanticMemoryStore(SemanticMemoryRepository):
     def __init__(self) -> None:
-        self._rows: list[SemanticMemoryEntry] = []
-        self._cluster_sigs: set[tuple[int, str]] = set()
-        # Phase 3 Step 3b-1: being_id 版並走 store
         self._being_rows: dict[BeingId, list[SemanticMemoryEntry]] = {}
         self._being_cluster_sigs: set[tuple[BeingId, str]] = set()
-
-    # ===== legacy player_id 版 =====
-
-    def add(self, entry: SemanticMemoryEntry) -> None:
-        self._rows.append(entry)
-
-    def list_for_player(self, player_id: int) -> list[SemanticMemoryEntry]:
-        return [e for e in self._rows if e.player_id == player_id]
-
-    def register_cluster_signature_if_new(self, player_id: int, evidence_signature: str) -> bool:
-        key = (player_id, evidence_signature)
-        if key in self._cluster_sigs:
-            return False
-        self._cluster_sigs.add(key)
-        return True
-
-    # ===== Phase 3 Step 3b-1: being_id 版を並走追加 =====
 
     def add_by_being(self, being_id: BeingId, entry: SemanticMemoryEntry) -> None:
         if not isinstance(being_id, BeingId):
