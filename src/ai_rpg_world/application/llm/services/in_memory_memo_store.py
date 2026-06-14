@@ -102,6 +102,26 @@ class InMemoryMemoStore(MemoRepository):
         self._being_store[being_id][idx] = new_entry
         return True
 
+    def list_all_by_being(self, being_id: BeingId) -> List[MemoEntry]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        # 保持順 (= insertion order) で返す。完了済も含む。
+        return list(self._being_store.get(being_id, []))
+
+    def replace_all_by_being(
+        self, being_id: BeingId, entries: List[MemoEntry]
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(entries, list):
+            raise TypeError("entries must be list")
+        for e in entries:
+            if not isinstance(e, MemoEntry):
+                raise TypeError("entries elements must be MemoEntry")
+        # all-or-nothing: 一旦差し替えるので並び順は entries 通り。
+        self._being_store[being_id] = list(entries)
+        self._being_id_to_index[being_id] = {e.id: i for i, e in enumerate(entries)}
+
     def remove_by_being(self, being_id: BeingId, memo_id: str) -> bool:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")

@@ -48,6 +48,37 @@ class InMemorySemanticMemoryStore(SemanticMemoryRepository):
         entries = self._being_rows.get(being_id, [])
         return sorted(entries, key=lambda e: e.created_at, reverse=True)
 
+    def list_cluster_signatures_by_being(self, being_id: BeingId) -> list[str]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        sigs = [s for (b, s) in self._being_cluster_sigs if b == being_id]
+        return sorted(sigs)
+
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        entries: list[SemanticMemoryEntry],
+        cluster_signatures: list[str],
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(entries, list):
+            raise TypeError("entries must be list")
+        for e in entries:
+            if not isinstance(e, SemanticMemoryEntry):
+                raise TypeError("entries elements must be SemanticMemoryEntry")
+        if not isinstance(cluster_signatures, list):
+            raise TypeError("cluster_signatures must be list")
+        for s in cluster_signatures:
+            if not isinstance(s, str):
+                raise TypeError("cluster_signatures elements must be str")
+        self._being_rows[being_id] = list(entries)
+        # 当該 being の signature を全 drop して再構築。他 being の signature は
+        # そのまま保持。
+        self._being_cluster_sigs = {
+            (b, s) for (b, s) in self._being_cluster_sigs if b != being_id
+        } | {(being_id, s) for s in cluster_signatures}
+
     def register_cluster_signature_if_new_by_being(
         self, being_id: BeingId, evidence_signature: str
     ) -> bool:

@@ -202,3 +202,51 @@ class TestSqliteV3DropLegacy:
         ).fetchall()
         table_names = {row["name"] for row in rows}
         assert "episodic_reinterpretation_journal" not in table_names
+
+
+class TestSqliteRecallBufferReplaceAll:
+    """Phase 4 Step 4-2a: list_pending_by_being / replace_all_pending_by_being。"""
+
+    def test_replace_all_pending_で全置換(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        store.append_by_being(being, _obs(recall_id="old", episode_id="e1"))
+        store.replace_all_pending_by_being(
+            being, [_obs(recall_id="new", episode_id="e2")]
+        )
+        listed = store.list_pending_by_being(being)
+        assert [o.recall_id for o in listed] == ["new"]
+
+    def test_他_being_は影響しない(
+        self, store: SqliteEpisodicReinterpretationStore
+    ) -> None:
+        ada = BeingId("being_w1_p1")
+        ben = BeingId("being_w1_p2")
+        store.append_by_being(ada, _obs(recall_id="r-ada", episode_id="e1"))
+        store.append_by_being(ben, _obs(recall_id="r-ben", episode_id="e2"))
+        store.replace_all_pending_by_being(ada, [])
+        ids = [o.recall_id for o in store.list_pending_by_being(ben)]
+        assert ids == ["r-ben"]
+
+
+class TestSqliteJournalReplaceAll:
+    """Phase 4 Step 4-2a: list_all_by_being / replace_all_by_being。"""
+
+    def test_list_all_by_being_は全episode横断(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        store.put_active_by_being(being, _entry(entry_id="a", episode_id="ep-1"))
+        store.put_active_by_being(being, _entry(entry_id="b", episode_id="ep-2"))
+        ids = [e.entry_id for e in store.list_all_by_being(being)]
+        assert set(ids) == {"a", "b"}
+
+    def test_replace_all_で_active_get_に整合する(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        """status=ACTIVE の entry を replace で持ち込めば get_active_by_being で引ける。"""
+        store.put_active_by_being(being, _entry(entry_id="old", episode_id="ep-1"))
+        new = _entry(entry_id="new", episode_id="ep-1")
+        store.replace_all_by_being(being, [new])
+        got = store.get_active_by_being(being, "ep-1")
+        assert got is not None
+        assert got.entry_id == "new"

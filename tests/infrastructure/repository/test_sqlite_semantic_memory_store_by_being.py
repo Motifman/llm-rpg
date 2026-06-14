@@ -174,6 +174,42 @@ class TestSqliteSemanticTypeGuards:
             )
 
 
+class TestSqliteSemanticReplaceAll:
+    """Phase 4 Step 4-2a: replace_all_by_being の挙動 (snapshot restore primitive)。"""
+
+    def test_既存_entries_と_signatures_を一括置換する(
+        self, store: SqliteSemanticMemoryStore
+    ) -> None:
+        b = BeingId("ada")
+        store.add_by_being(b, _make_entry("old"))
+        store.register_cluster_signature_if_new_by_being(b, "sig-old")
+        new = _make_entry("new")
+        store.replace_all_by_being(b, [new], ["sig-new"])
+        ids = [e.entry_id for e in store.list_for_being(b)]
+        assert ids == ["new"]
+        assert store.list_cluster_signatures_by_being(b) == ["sig-new"]
+
+    def test_他_being_の状態は影響を受けない(
+        self, store: SqliteSemanticMemoryStore
+    ) -> None:
+        store.add_by_being(BeingId("ada"), _make_entry("a1"))
+        store.register_cluster_signature_if_new_by_being(BeingId("ada"), "sig-a")
+        store.add_by_being(BeingId("ben"), _make_entry("b1"))
+        store.register_cluster_signature_if_new_by_being(BeingId("ben"), "sig-b")
+        store.replace_all_by_being(BeingId("ada"), [], [])
+        ids = [e.entry_id for e in store.list_for_being(BeingId("ben"))]
+        assert ids == ["b1"]
+        assert store.list_cluster_signatures_by_being(BeingId("ben")) == ["sig-b"]
+
+    def test_list_cluster_signatures_は_辞書順(
+        self, store: SqliteSemanticMemoryStore
+    ) -> None:
+        b = BeingId("ada")
+        store.register_cluster_signature_if_new_by_being(b, "z")
+        store.register_cluster_signature_if_new_by_being(b, "a")
+        assert store.list_cluster_signatures_by_being(b) == ["a", "z"]
+
+
 # Phase 3 Step 3b-3 (Issue #470): legacy player_id 版テーブルは schema v3 で
 # DROP され、対応する API も撤去された。新旧テーブルの独立性を検証していた
 # ``TestSqliteSemanticParallelTablesIndependence`` は削除された。schema レベルで

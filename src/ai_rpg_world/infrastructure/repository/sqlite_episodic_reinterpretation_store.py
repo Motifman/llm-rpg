@@ -419,4 +419,124 @@ class SqliteEpisodicReinterpretationStore(
         return [_payload_to_entry(json.loads(str(r[0]))) for r in cur.fetchall()]
 
 
+    def list_pending_by_being(
+        self, being_id: BeingId
+    ) -> list[EpisodicRecallObservation]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        cur = self._conn.execute(
+            """
+            SELECT payload_json FROM episodic_recall_observations_by_being
+            WHERE being_id_value = ?
+            ORDER BY recalled_at_key ASC, recall_id ASC
+            """,
+            (being_id.value,),
+        )
+        return [_payload_to_recall(json.loads(str(r[0]))) for r in cur.fetchall()]
+
+    def replace_all_pending_by_being(
+        self,
+        being_id: BeingId,
+        observations: list[EpisodicRecallObservation],
+    ) -> None:
+        """recall buffer の pending を ``observations`` で完全置換する (single transaction)。"""
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(observations, list):
+            raise TypeError("observations must be list")
+        for o in observations:
+            if not isinstance(o, EpisodicRecallObservation):
+                raise TypeError(
+                    "observations elements must be EpisodicRecallObservation"
+                )
+        # 注意: 明示的 BEGIN は打たない (implicit transaction との衝突回避)。
+        # 詳細は sqlite_semantic_memory_store.py の同コメント参照。
+        try:
+            self._conn.execute(
+                "DELETE FROM episodic_recall_observations_by_being WHERE being_id_value = ?",
+                (being_id.value,),
+            )
+            for obs in observations:
+                self._conn.execute(
+                    """
+                    INSERT INTO episodic_recall_observations_by_being
+                        (being_id_value, recall_id, episode_id, recalled_at_key,
+                         payload_json, player_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        being_id.value,
+                        obs.recall_id,
+                        obs.episode_id,
+                        _dt_key(obs.recalled_at),
+                        json.dumps(_recall_to_payload(obs), ensure_ascii=False),
+                        obs.player_id,
+                    ),
+                )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+
+    def list_all_by_being(
+        self, being_id: BeingId
+    ) -> list[EpisodicReinterpretationEntry]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        cur = self._conn.execute(
+            """
+            SELECT payload_json FROM episodic_reinterpretation_journal_by_being
+            WHERE being_id_value = ?
+            ORDER BY created_at_key ASC, entry_id ASC
+            """,
+            (being_id.value,),
+        )
+        return [_payload_to_entry(json.loads(str(r[0]))) for r in cur.fetchall()]
+
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        entries: list[EpisodicReinterpretationEntry],
+    ) -> None:
+        """journal を ``entries`` で完全置換する (single transaction)。"""
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(entries, list):
+            raise TypeError("entries must be list")
+        for e in entries:
+            if not isinstance(e, EpisodicReinterpretationEntry):
+                raise TypeError(
+                    "entries elements must be EpisodicReinterpretationEntry"
+                )
+        # 注意: 明示的 BEGIN は打たない (implicit transaction との衝突回避)。
+        # 詳細は sqlite_semantic_memory_store.py の同コメント参照。
+        try:
+            self._conn.execute(
+                "DELETE FROM episodic_reinterpretation_journal_by_being WHERE being_id_value = ?",
+                (being_id.value,),
+            )
+            for entry in entries:
+                self._conn.execute(
+                    """
+                    INSERT INTO episodic_reinterpretation_journal_by_being
+                        (being_id_value, entry_id, episode_id, created_at_key,
+                         status, payload_json, player_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        being_id.value,
+                        entry.entry_id,
+                        entry.episode_id,
+                        _dt_key(entry.created_at),
+                        entry.status.value,
+                        json.dumps(_entry_to_payload(entry), ensure_ascii=False),
+                        entry.player_id,
+                    ),
+                )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+
+
 __all__ = ["SqliteEpisodicReinterpretationStore"]

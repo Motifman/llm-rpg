@@ -185,6 +185,51 @@ class TestListAllForBeing:
         assert len(store.list_all_links_for_being(other)) == 1
 
 
+class TestReplaceAllByBeing:
+    """replace_all_by_being の挙動 (Phase 4 Step 4-2a, snapshot restore primitive)。"""
+
+    def test_既存_link_を一括置換できる(self, store: InMemoryMemoryLinkStore) -> None:
+        b = BeingId("ada")
+        old = _link(episode_id_a="ep-1", episode_id_b="ep-2")
+        store.upsert_link_by_being(b, old)
+        new = _link(episode_id_a="ep-3", episode_id_b="ep-4")
+        store.replace_all_by_being(b, [new])
+        all_links = store.list_all_links_for_being(b)
+        assert len(all_links) == 1
+        assert all_links[0].episode_id_a == "ep-3"
+
+    def test_空リストで全削除できる(self, store: InMemoryMemoryLinkStore) -> None:
+        b = BeingId("ada")
+        store.upsert_link_by_being(
+            b, _link(episode_id_a="ep-1", episode_id_b="ep-2")
+        )
+        store.replace_all_by_being(b, [])
+        assert store.list_all_links_for_being(b) == []
+
+    def test_他_being_の_link_は影響しない(self, store: InMemoryMemoryLinkStore) -> None:
+        store.upsert_link_by_being(
+            BeingId("ada"), _link(episode_id_a="ep-1", episode_id_b="ep-2")
+        )
+        store.upsert_link_by_being(
+            BeingId("ben"), _link(episode_id_a="ep-3", episode_id_b="ep-4")
+        )
+        store.replace_all_by_being(BeingId("ada"), [])
+        assert len(store.list_all_links_for_being(BeingId("ben"))) == 1
+
+    def test_replace_後_episode_index_経由でも引ける(
+        self, store: InMemoryMemoryLinkStore
+    ) -> None:
+        """list_links_for_episode_by_being が replace 後も整合する。"""
+        b = BeingId("ada")
+        store.replace_all_by_being(
+            b, [_link(episode_id_a="ep-X", episode_id_b="ep-Y")]
+        )
+        results = store.list_links_for_episode_by_being(
+            b, "ep-X", now=_NOW, limit=10
+        )
+        assert len(results) == 1
+
+
 # Phase 3 Step 3c-3 (Issue #470): legacy player_id 版 API が撤去されたため、
 # 旧/新 API の独立性を検証していたテストクラス ``TestIndependenceFromPlayerIdApi``
 # は削除された。新 API のみが残り、being_id を一次キーとして扱う設計に統一。

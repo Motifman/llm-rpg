@@ -67,5 +67,25 @@ class EpisodicEpisodeRepository(ABC):
         cue 一致は cue.to_canonical() で比較する。
         """
 
+    @abstractmethod
+    def list_all_by_being(self, being_id: BeingId) -> list[SubjectiveEpisode]:
+        """being_id keyed で **全 episode** を ``occurred_at`` 昇順で返す。
+
+        Phase 4 Step 4-2a (Issue #470): snapshot 用の enumeration。
+        ``list_recent_by_being`` は limit 必須なので、永続化用途には足りない。
+        """
+
+    @abstractmethod
+    def replace_all_by_being(
+        self, being_id: BeingId, episodes: list[SubjectiveEpisode]
+    ) -> None:
+        """being_id 配下を ``episodes`` で完全置換する。
+
+        Phase 4 Step 4-2a: snapshot restore primitive。**既存 episode は全て
+        削除** され、``episodes`` の通りに再構築される。cue index 等の付随
+        index も整合する形で再構築される責務。Snapshot 経路以外からの呼び
+        出しは想定しない。
+        """
+
 
 __all__ = ["EpisodicEpisodeRepository"]

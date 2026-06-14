@@ -184,3 +184,56 @@ class TestEvictionByBeing:
         # 上限 2 件 → oldest が evict される
         result = store.list_recent_by_being(being, limit=10)
         assert [ep.episode_id for ep in result] == ["newest", "mid"]
+
+
+class TestEpisodeReplaceAll:
+    """Phase 4 Step 4-2a: list_all_by_being / replace_all_by_being。"""
+
+    def test_list_all_は_occurred_at_昇順(
+        self, store: InMemorySubjectiveEpisodeStore, being: BeingId
+    ) -> None:
+        from datetime import datetime, timezone
+        e1 = _episode(
+            episode_id="e1",
+            occurred_at=datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc),
+        )
+        e2 = _episode(
+            episode_id="e2",
+            occurred_at=datetime(2026, 6, 14, 11, 0, tzinfo=timezone.utc),
+        )
+        store.put_by_being(being, e1)
+        store.put_by_being(being, e2)
+        ids = [e.episode_id for e in store.list_all_by_being(being)]
+        assert ids == ["e2", "e1"]
+
+    def test_replace_all_で全置換とcue_index再構築(
+        self, store: InMemorySubjectiveEpisodeStore, being: BeingId
+    ) -> None:
+        from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import (
+            EpisodicCue,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import (
+            EpisodicCueSource,
+        )
+
+        old = _episode(episode_id="old")
+        store.put_by_being(being, old)
+        cue_new = EpisodicCue(
+            axis="place_spot", value="999", source=EpisodicCueSource.RUNTIME_CONTEXT
+        )
+        new = _episode(episode_id="new", cues=(cue_new,))
+        store.replace_all_by_being(being, [new])
+        assert [e.episode_id for e in store.list_all_by_being(being)] == ["new"]
+        # cue index: 新 cue で hit、旧 cue では空。
+        hit = store.list_by_cue_by_being(being, cue_new, limit=10)
+        assert [e.episode_id for e in hit] == ["new"]
+
+    def test_他_being_は影響しない(
+        self, store: InMemorySubjectiveEpisodeStore
+    ) -> None:
+        a = BeingId("being_w1_p1")
+        b = BeingId("being_w1_p2")
+        store.put_by_being(a, _episode(episode_id="a"))
+        store.put_by_being(b, _episode(episode_id="b"))
+        store.replace_all_by_being(a, [])
+        assert [e.episode_id for e in store.list_all_by_being(b)] == ["b"]

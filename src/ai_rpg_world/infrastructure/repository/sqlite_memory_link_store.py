@@ -238,4 +238,54 @@ class SqliteMemoryLinkStore(MemoryLinkRepository):
         return [_row_to_link(r) for r in cur.fetchall()]
 
 
+    def replace_all_by_being(
+        self, being_id: BeingId, links: list[MemoryLink]
+    ) -> None:
+        """being_id 配下のリンクを single transaction で完全置換する。
+
+        Phase 4 Step 4-2a: snapshot restore primitive。
+        """
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(links, list):
+            raise TypeError("links must be list")
+        for ln in links:
+            if not isinstance(ln, MemoryLink):
+                raise TypeError("links elements must be MemoryLink")
+        # 注意: 明示的 BEGIN を打たない理由は sqlite_semantic_memory_store.py の
+        # ``replace_all_by_being`` 同コメント参照 (implicit transaction との衝突回避)。
+        try:
+            self._conn.execute(
+                "DELETE FROM memory_links_by_being WHERE being_id_value = ?",
+                (being_id.value,),
+            )
+            for link in links:
+                self._conn.execute(
+                    """
+                    INSERT INTO memory_links_by_being (
+                        link_id, being_id_value, episode_id_a, episode_id_b, link_type,
+                        strength, co_activation_count, created_at, last_activated_at,
+                        decay_rate, player_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        link.link_id,
+                        being_id.value,
+                        link.episode_id_a,
+                        link.episode_id_b,
+                        link.link_type.value,
+                        link.strength,
+                        link.co_activation_count,
+                        _dt_to_iso(link.created_at),
+                        _dt_to_iso(link.last_activated_at),
+                        link.decay_rate,
+                        link.player_id,
+                    ),
+                )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+
+
 __all__ = ["SqliteMemoryLinkStore"]

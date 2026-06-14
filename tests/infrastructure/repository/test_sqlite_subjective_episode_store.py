@@ -84,3 +84,38 @@ class TestSqliteSubjectiveEpisodeStoreBasics:
             found = store2.list_by_cue_by_being(being_id, cue, limit=5)
             assert len(found) == 1
             assert found[0].episode_id == "a"
+
+
+class TestSqliteSubjectiveEpisodeReplaceAll:
+    """Phase 4 Step 4-2a: list_all_by_being / replace_all_by_being。"""
+
+    def test_replace_all_で全置換と_cue_index_再構築(self) -> None:
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
+        being_id = BeingId("being_w1_p7")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "episodes.db")
+            store = SqliteSubjectiveEpisodeStore.connect(path)
+            store.put_by_being(being_id, _episode(episode_id="old"))
+            new_cue = EpisodicCue(
+                axis="place_spot", value="999", source=EpisodicCueSource.RUNTIME_CONTEXT
+            )
+            new = _episode(episode_id="new", cues=(new_cue,))
+            store.replace_all_by_being(being_id, [new])
+            ids = [e.episode_id for e in store.list_all_by_being(being_id)]
+            assert ids == ["new"]
+            hits = store.list_by_cue_by_being(being_id, new_cue, limit=5)
+            assert [e.episode_id for e in hits] == ["new"]
+
+    def test_他_being_は影響しない(self) -> None:
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
+        a = BeingId("being_w1_p1")
+        b = BeingId("being_w1_p2")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "episodes.db")
+            store = SqliteSubjectiveEpisodeStore.connect(path)
+            store.put_by_being(a, _episode(episode_id="a"))
+            store.put_by_being(b, _episode(episode_id="b"))
+            store.replace_all_by_being(a, [])
+            assert [e.episode_id for e in store.list_all_by_being(b)] == ["b"]

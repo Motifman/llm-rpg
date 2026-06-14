@@ -169,3 +169,26 @@ class InMemoryMemoryLinkStore(MemoryLinkRepository):
             for key, ln in self._by_being_key.items()
             if key[0] == being_id
         ]
+
+    def replace_all_by_being(
+        self, being_id: BeingId, links: list[MemoryLink]
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(links, list):
+            raise TypeError("links must be list")
+        for ln in links:
+            if not isinstance(ln, MemoryLink):
+                raise TypeError("links elements must be MemoryLink")
+        # 当該 being の既存 entry / episode index を drop。
+        for key in list(self._by_being_key.keys()):
+            if key[0] == being_id:
+                del self._by_being_key[key]
+        if being_id in self._by_being_episode:
+            del self._by_being_episode[being_id]
+        # 改めて登録。
+        for ln in links:
+            key = _being_key_for_link(being_id, ln)
+            self._by_being_key[key] = ln
+            self._register_being_episode(being_id, ln.episode_id_a, key)
+            self._register_being_episode(being_id, ln.episode_id_b, key)

@@ -138,6 +138,45 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
             ordered = sorted(eps, key=_occurrence_sort_key, reverse=True)
             return ordered[:limit]
 
+    def list_all_by_being(self, being_id: BeingId) -> list[SubjectiveEpisode]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        with self._lock:
+            bucket = self._episodes_by_being.get(being_id, {})
+            return sorted(bucket.values(), key=_occurrence_sort_key)
+
+    def replace_all_by_being(
+        self, being_id: BeingId, episodes: list[SubjectiveEpisode]
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(episodes, list):
+            raise TypeError("episodes must be list")
+        for ep in episodes:
+            if not isinstance(ep, SubjectiveEpisode):
+                raise TypeError("episodes elements must be SubjectiveEpisode")
+        with self._lock:
+            # 当該 being 関連 index を全 drop して再構築。max cap は再適用する
+            # (= snapshot に大量 episode が入っていた場合の安全策)。
+            self._episodes_by_being[being_id] = {}
+            self._cue_index_by_being[being_id] = {}
+            self._episode_canonicals_by_being[being_id] = {}
+            for ep in episodes:
+                eid = ep.episode_id
+                self._episodes_by_being[being_id][eid] = ep
+                keys = frozenset(c.to_canonical() for c in ep.cues)
+                self._episode_canonicals_by_being[being_id][eid] = keys
+                for ck in keys:
+                    self._cue_index_by_being[being_id].setdefault(ck, set()).add(eid)
+            # cap 超過なら最古から evict (= put_by_being と同じ方針)。
+            bucket = self._episodes_by_being[being_id]
+            if len(bucket) > self._max_episodes_per_being:
+                ordered = sorted(bucket.values(), key=_occurrence_sort_key)
+                excess = len(bucket) - self._max_episodes_per_being
+                for old in ordered[:excess]:
+                    self._remove_from_cue_index_by_being(being_id, old.episode_id)
+                    bucket.pop(old.episode_id, None)
+
     def _remove_from_cue_index_by_being(
         self, being_id: BeingId, episode_id: str
     ) -> None:

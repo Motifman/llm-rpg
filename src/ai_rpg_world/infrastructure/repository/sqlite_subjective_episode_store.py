@@ -347,3 +347,73 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
             (being_id.value, canonical, limit),
         )
         return [_payload_dict_to_episode(json.loads(str(r[0]))) for r in cur.fetchall()]
+
+    def list_all_by_being(self, being_id: BeingId) -> list[SubjectiveEpisode]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        cur = self._conn.execute(
+            """
+            SELECT payload_json FROM subjective_episodes_by_being
+            WHERE being_id_value = ?
+            ORDER BY occurred_at_key ASC, episode_id ASC
+            """,
+            (being_id.value,),
+        )
+        return [
+            _payload_dict_to_episode(json.loads(str(r[0])))
+            for r in cur.fetchall()
+        ]
+
+    def replace_all_by_being(
+        self, being_id: BeingId, episodes: list[SubjectiveEpisode]
+    ) -> None:
+        """being_id 配下を ``episodes`` で完全置換する (single transaction)。
+
+        Phase 4 Step 4-2a: snapshot restore primitive。cue index も整合する
+        形で再構築する。
+        """
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(episodes, list):
+            raise TypeError("episodes must be list")
+        for ep in episodes:
+            if not isinstance(ep, SubjectiveEpisode):
+                raise TypeError("episodes elements must be SubjectiveEpisode")
+        # 注意: 明示的 BEGIN は打たない (implicit transaction との衝突回避)。
+        # 詳細は sqlite_semantic_memory_store.py の同コメント参照。
+        try:
+            cur = self._conn.cursor()
+            cur.execute(
+                "DELETE FROM subjective_episode_cues_by_being WHERE being_id_value = ?",
+                (being_id.value,),
+            )
+            cur.execute(
+                "DELETE FROM subjective_episodes_by_being WHERE being_id_value = ?",
+                (being_id.value,),
+            )
+            for ep in episodes:
+                payload = json.dumps(
+                    _episode_to_payload_dict(ep), ensure_ascii=False
+                )
+                key = _occurred_at_sort_key(ep)
+                cur.execute(
+                    """
+                    INSERT INTO subjective_episodes_by_being
+                        (being_id_value, episode_id, occurred_at_key, payload_json, player_id)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (being_id.value, ep.episode_id, key, payload, ep.player_id),
+                )
+                for ck in (c.to_canonical() for c in ep.cues):
+                    cur.execute(
+                        """
+                        INSERT OR IGNORE INTO subjective_episode_cues_by_being
+                            (being_id_value, episode_id, cue_canonical)
+                        VALUES (?, ?, ?)
+                        """,
+                        (being_id.value, ep.episode_id, ck),
+                    )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
