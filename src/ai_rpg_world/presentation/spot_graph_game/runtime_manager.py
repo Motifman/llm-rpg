@@ -1600,6 +1600,9 @@ class _EscapeGameLlmWiring:
     ) -> LlmCommandResultDto:
         del runtime_context  # unused — wait は targets を見ない
         reason = str(arguments.get("reason", "")).strip()
+        # #471 fix: do_wait は world tick を進めなくなった。返り値は現在 tick。
+        # message も「時間が進んだ」ではなく「今ターンは行動を控えた」に変更し、
+        # LLM に対しても「wait は時間進行のショートカットではない」ことを示す。
         tick = self.runtime.do_wait(player_id, reason=reason)
         suffix = f"（理由: {reason}）" if reason else ""
         return with_inner_thought_empty_warning(
@@ -1607,7 +1610,7 @@ class _EscapeGameLlmWiring:
             arguments,
             LlmCommandResultDto(
                 success=True,
-                message=f"待機して時間が進んだ: tick={tick}{suffix}",
+                message=f"今ターンは行動を控えた: tick={tick}{suffix}",
             ),
         )
 
