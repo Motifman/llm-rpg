@@ -1046,6 +1046,13 @@ class LlmAgentWiringResult:
         monster_behavior_tick_service: Optional[Any] = None,
         being_provisioning_service: Optional[Any] = None,
         being_attachment_resolver: Optional[Any] = None,
+        # Phase 6 (Issue #470): snapshot save / restore を experiment runner から
+        # 呼ぶための store ハンドル。本 wiring 結果から
+        # ``BeingMemorySnapshotService`` を組み立てるのに必要。
+        # 既存呼出側は渡さなくて良い (= 全 Optional)。
+        memo_store: Optional[Any] = None,
+        memory_link_store: Optional[Any] = None,
+        being_repository: Optional[Any] = None,
     ) -> None:
         self.observation_registry = observation_registry
         self.llm_turn_trigger = llm_turn_trigger
@@ -1075,6 +1082,11 @@ class LlmAgentWiringResult:
         # 走らせるので影響なし。
         self.being_provisioning_service = being_provisioning_service
         self.being_attachment_resolver = being_attachment_resolver
+        # Phase 6 (Issue #470): snapshot 用 store ハンドル。spot_graph_wiring が
+        # 渡さなければ None のまま (= 既存挙動互換)。
+        self.memo_store = memo_store
+        self.memory_link_store = memory_link_store
+        self.being_repository = being_repository
 
     def __iter__(self) -> Any:
         yield self.observation_registry
