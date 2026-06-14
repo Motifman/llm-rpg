@@ -178,32 +178,27 @@ class EpisodicReinterpretationCoordinator:
     def flush_player(self, player_id: PlayerId) -> int:
         """pending recall を 1 batch 処理する。処理済みにした recall 観測数を返す。
 
-        Phase 3 Step 3d-2: 入口で being_id を 1 度だけ解決し、内部 helper に
-        伝播する resolve-once-per-entry パターン (= memory_link 3c-3 と同型)。
+        Phase 3 Step 3d-3: legacy player_id 経路は撤去済。Being 未解決時は
+        silent no-op (= turn 副作用なので止めない。次回 turn で再試行)。
+        入口で being_id を 1 度だけ解決する resolve-once-per-entry パターン。
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if self._completion is None:
             return 0
         being_id = self._resolve_being_id(player_id)
-        if being_id is not None:
-            batch = self._recall_buffer_store.peek_batch_by_being(
-                being_id,
-                batch_size=self._batch_size,
-                max_contexts_per_episode=self._max_contexts_per_episode,
-            )
-        else:
-            batch = self._recall_buffer_store.peek_batch(
-                player_id.value,
-                batch_size=self._batch_size,
-                max_contexts_per_episode=self._max_contexts_per_episode,
-            )
+        if being_id is None:
+            return 0
+        batch = self._recall_buffer_store.peek_batch_by_being(
+            being_id,
+            batch_size=self._batch_size,
+            max_contexts_per_episode=self._max_contexts_per_episode,
+        )
         if not batch:
             return 0
         items = self._build_episode_items(player_id.value, batch, being_id=being_id)
         if not items:
-            self._mark_processed(
-                player_id.value,
+            self._recall_buffer_store.mark_processed_by_being(
                 being_id,
                 tuple(row.recall_id for row in batch),
             )
@@ -227,27 +222,15 @@ class EpisodicReinterpretationCoordinator:
             player_id.value, items, raw_obj, being_id=being_id
         )
         if processed_ids:
-            self._mark_processed(player_id.value, being_id, processed_ids)
+            self._recall_buffer_store.mark_processed_by_being(being_id, processed_ids)
         return len(processed_ids)
-
-    def _mark_processed(
-        self,
-        player_id: int,
-        being_id: Optional[BeingId],
-        recall_ids: tuple[str, ...],
-    ) -> None:
-        """dual-path: being_id があれば by_being、なければ legacy。"""
-        if being_id is not None:
-            self._recall_buffer_store.mark_processed_by_being(being_id, recall_ids)
-            return
-        self._recall_buffer_store.mark_processed(player_id, recall_ids)
 
     def _build_episode_items(
         self,
         player_id: int,
         batch: tuple[EpisodicRecallObservation, ...],
         *,
-        being_id: Optional[BeingId] = None,
+        being_id: BeingId,
     ) -> tuple[_EpisodeBatchItem, ...]:
         grouped: dict[str, list[EpisodicRecallObservation]] = defaultdict(list)
         for row in batch:
@@ -257,10 +240,7 @@ class EpisodicReinterpretationCoordinator:
             ep = self._episode_store.get(player_id, episode_id)
             if ep is None:
                 continue
-            if being_id is not None:
-                active = self._journal_store.get_active_by_being(being_id, episode_id)
-            else:
-                active = self._journal_store.get_active(player_id, episode_id)
+            active = self._journal_store.get_active_by_being(being_id, episode_id)
             items.append(
                 _EpisodeBatchItem(
                     episode=ep,
@@ -320,7 +300,7 @@ class EpisodicReinterpretationCoordinator:
         items: tuple[_EpisodeBatchItem, ...],
         raw_obj: dict[str, Any],
         *,
-        being_id: Optional[BeingId] = None,
+        being_id: BeingId,
     ) -> tuple[str, ...]:
         if not isinstance(raw_obj, dict):
             return ()
@@ -362,10 +342,7 @@ class EpisodicReinterpretationCoordinator:
                 current_recall_text=recall,
                 source_recall_ids=source_recall_ids,
             )
-            if being_id is not None:
-                self._journal_store.put_active_by_being(being_id, entry)
-            else:
-                self._journal_store.put_active(entry)
+            self._journal_store.put_active_by_being(being_id, entry)
             processed_recall_ids.extend(source_recall_ids)
         return tuple(processed_recall_ids)
 

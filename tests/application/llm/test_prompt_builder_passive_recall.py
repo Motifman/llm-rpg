@@ -252,7 +252,15 @@ class TestPromptBuilderPassiveRecall:
         """
         active な再解釈がある episode は current_recall_text を prompt に使い、
         想起された episode と状況 snapshot は recall buffer に積まれる。
+
+        Phase 3 Step 3d-3: legacy 撤去後、journal / recall_buffer は being_id
+        経路必須。Resolver+WorldId を inject し、provision 済の Being で
+        active entry を書く形に揃える。
         """
+        from tests.application.llm._reinterpretation_being_test_helpers import (
+            make_reinterpretation_being_setup,
+        )
+
         player_num = 4
         place_c = EpisodicCue(axis="place_spot", value="77", source=EpisodicCueSource.RUNTIME_CONTEXT)
         base = datetime(2026, 5, 2, 8, 0, tzinfo=timezone.utc)
@@ -267,8 +275,11 @@ class TestPromptBuilderPassiveRecall:
             )
         )
         recall_svc = EpisodicPassiveRecallRetrievalService(store)
-        journal = InMemoryEpisodicReinterpretationJournalStore()
-        journal.put_active(
+        reinterp_setup = make_reinterpretation_being_setup()
+        being_id = reinterp_setup.provision(player_num)
+        journal = reinterp_setup.journal
+        journal.put_active_by_being(
+            being_id,
             EpisodicReinterpretationEntry(
                 entry_id="j-active",
                 player_id=player_num,
@@ -278,9 +289,9 @@ class TestPromptBuilderPassiveRecall:
                 current_interpretation="今なら罠への警戒として意味づけられる。",
                 current_recall_text="私はあの場で感じた違和感を、今もはっきり覚えている。",
                 source_recall_ids=("r-old",),
-            )
+            ),
         )
-        recall_buffer = InMemoryEpisodicRecallBufferStore()
+        recall_buffer = reinterp_setup.recall_buffer
 
         buffer = MagicMock(spec=IObservationContextBuffer)
         buffer.drain = MagicMock(return_value=[])
@@ -327,12 +338,16 @@ class TestPromptBuilderPassiveRecall:
                 reinterpretation_journal_store=journal,
                 turn_index_provider=lambda _pid: 12,
             ),
+            being_attachment_resolver=reinterp_setup.resolver,
+            default_world_id=reinterp_setup.world_id,
         )
         out = builder.build(PlayerId(player_num))
         user = out["messages"][1]["content"]
         assert "私はあの場で感じた違和感" in user
         assert "古い回想は使われない" not in user
-        pending = recall_buffer.peek_batch(player_num, batch_size=8, max_contexts_per_episode=3)
+        pending = recall_buffer.peek_batch_by_being(
+            being_id, batch_size=8, max_contexts_per_episode=3
+        )
         assert len(pending) == 1
         assert pending[0].episode_id == "e_reinterpreted"
         assert pending[0].current_state_snapshot == "ui-current"

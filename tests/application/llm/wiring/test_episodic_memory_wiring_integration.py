@@ -177,7 +177,15 @@ class TestEpisodicMemoryWiringIntegration:
         out = orch._prompt_builder.build(PlayerId(1))  # noqa: SLF001
         assert "stub_no_record_recall" in out["messages"][1]["content"]
         assert result.episodic_recall_buffer_store is not None
-        assert result.episodic_recall_buffer_store.pending_count(1) == 0
+        # Phase 3 Step 3d-3: legacy pending_count(player_id) は撤去済。
+        # 内部 ``_pending`` (being_id keyed) が空であることで「stub では何も
+        # 記録されない」を確認する (= caller でない wiring 統合テストのため
+        # private 属性アクセスで十分)
+        recall_buffer = result.episodic_recall_buffer_store
+        assert all(
+            len(rows) == 0
+            for rows in getattr(recall_buffer, "_pending", {}).values()
+        )
 
 
 class TestEpisodicChunkWiringIntegration:

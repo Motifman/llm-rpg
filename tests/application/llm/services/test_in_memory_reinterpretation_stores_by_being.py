@@ -160,25 +160,9 @@ class TestRecallBufferByBeing:
         )
 
 
-class TestRecallBufferIsolation:
-    """新旧 API の独立性 (= 並走 index は同期しない)。"""
-
-    def test_player_id_経由で追加した_観測_は_being_id_経由では見えない(
-        self, being: BeingId
-    ) -> None:
-        store = InMemoryEpisodicRecallBufferStore()
-        store.append(_obs(recall_id="r-legacy", episode_id="e1"))
-        assert store.pending_count_by_being(being) == 0
-        assert store.peek_batch_by_being(
-            being, batch_size=10, max_contexts_per_episode=10
-        ) == ()
-
-    def test_being_id_経由で追加した_観測_は_player_id_経由では見えない(
-        self, being: BeingId
-    ) -> None:
-        store = InMemoryEpisodicRecallBufferStore()
-        store.append_by_being(being, _obs(recall_id="r-new", episode_id="e1"))
-        assert store.pending_count(1) == 0
+# Phase 3 Step 3d-3 (Issue #470): legacy player_id 版 API が撤去されたため、
+# 旧/新 API の独立性を検証していたテストクラス ``TestRecallBufferIsolation``
+# は削除された。新 API のみが残り、being_id を一次キーとして扱う設計に統一。
 
 
 class TestJournalByBeing:
@@ -234,21 +218,5 @@ class TestJournalByBeing:
             )
 
 
-class TestJournalIsolation:
-    """journal 新旧 API の独立性。"""
-
-    def test_player_id_経由の_active_は_being_id_経由では見えない(
-        self, being: BeingId
-    ) -> None:
-        store = InMemoryEpisodicReinterpretationJournalStore()
-        store.put_active(_entry(entry_id="legacy", episode_id="ep-1"))
-        assert store.get_active_by_being(being, "ep-1") is None
-        assert store.list_by_episode_by_being(being, "ep-1") == []
-
-    def test_being_id_経由の_active_は_player_id_経由では見えない(
-        self, being: BeingId
-    ) -> None:
-        store = InMemoryEpisodicReinterpretationJournalStore()
-        store.put_active_by_being(being, _entry(entry_id="new", episode_id="ep-1"))
-        assert store.get_active(1, "ep-1") is None
-        assert store.list_by_episode(1, "ep-1") == []
+# Phase 3 Step 3d-3 (Issue #470): legacy player_id 版 API 撤去に伴い
+# ``TestJournalIsolation`` も削除済。新 API only に統一。

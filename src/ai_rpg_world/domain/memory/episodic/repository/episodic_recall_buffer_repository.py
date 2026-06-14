@@ -4,10 +4,9 @@ DDD 再編 (Issue #470 Phase 1 PR5): 元
 ``application/llm/contracts/episodic_reinterpretation.py::EpisodicRecallBufferRepository``
 を domain に昇格し、``*Repository`` 命名に統一。
 
-Phase 3 Step 3d-1 (Issue #470): ``*_by_being`` API を並走追加。Step 3d-2 で
-caller を新 API に切替え、Step 3d-3 で旧 player_id 版を撤去する想定。
-並走期間中は両 API のデータは互いに見えない (= 同一 caller が新旧を
-混在させない前提)。memo / semantic / memory_link と同じパターン。
+Phase 3 Step 3d-3 (Issue #470): legacy player_id 版 API (4 method) を撤去し、
+being_id 版のみを残した。caller は全て ``*_by_being`` 経路で読み書きする
+(Step 3d-2 で caller 切替済)。
 """
 
 from __future__ import annotations
@@ -21,31 +20,11 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observatio
 
 
 class EpisodicRecallBufferRepository(ABC):
-    """想起イベントを再解釈 flush まで保持するストア。"""
+    """想起イベントを再解釈 flush まで保持するストア。
 
-    @abstractmethod
-    def append(self, observation: EpisodicRecallObservation) -> None:
-        """想起観測を追加する。"""
-
-    @abstractmethod
-    def peek_batch(
-        self,
-        player_id: int,
-        *,
-        batch_size: int,
-        max_contexts_per_episode: int,
-    ) -> tuple[EpisodicRecallObservation, ...]:
-        """episode ごとに束ねた pending batch を返す。削除はしない。"""
-
-    @abstractmethod
-    def mark_processed(self, player_id: int, recall_ids: tuple[str, ...]) -> None:
-        """処理済み recall_id を pending から除く。"""
-
-    @abstractmethod
-    def pending_count(self, player_id: int) -> int:
-        """指定 player の pending 件数。"""
-
-    # ===== Phase 3 Step 3d-1: being_id 版を並走追加 =====
+    一次キーは ``BeingId``。run 跨ぎ identity を保つため Being 集約を識別子に
+    使う設計 (Phase 2 で導入、Phase 3 で全 caller を Being keyed に統一)。
+    """
 
     @abstractmethod
     def append_by_being(
@@ -65,7 +44,11 @@ class EpisodicRecallBufferRepository(ABC):
         batch_size: int,
         max_contexts_per_episode: int,
     ) -> tuple[EpisodicRecallObservation, ...]:
-        """being_id keyed で pending batch を返す。"""
+        """being_id keyed で pending batch を返す。
+
+        ``batch_size <= 0`` または ``max_contexts_per_episode <= 0`` の場合は
+        空 tuple (= disabled 経路)。
+        """
 
     @abstractmethod
     def mark_processed_by_being(
