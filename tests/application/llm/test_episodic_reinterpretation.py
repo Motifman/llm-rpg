@@ -386,6 +386,9 @@ class TestEpisodicReinterpretationCoordinator:
         episodes = InMemorySubjectiveEpisodeStore()
         episodes.put(_episode(episode_id="ep-a"))
         setup = make_reinterpretation_being_setup()
+        # _BrokenRecallBufferStore で peek_batch_by_being が即 raise する経路
+        # を踏ませるため、Being の provision は必要 (= Resolver が being_id を
+        # 引けないと sidecar 実行が始まらず、本テストの意図が崩れる)。
         setup.provision(7)
         port = _FakeReinterpretationPort({"episode_updates": []})
         coord = EpisodicReinterpretationCoordinator(

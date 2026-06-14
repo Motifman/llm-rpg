@@ -178,13 +178,19 @@ class TestEpisodicMemoryWiringIntegration:
         assert "stub_no_record_recall" in out["messages"][1]["content"]
         assert result.episodic_recall_buffer_store is not None
         # Phase 3 Step 3d-3: legacy pending_count(player_id) は撤去済。
-        # 内部 ``_pending`` (being_id keyed) が空であることで「stub では何も
-        # 記録されない」を確認する (= caller でない wiring 統合テストのため
-        # private 属性アクセスで十分)
+        # ``LlmAgentWiringResult`` は Resolver を公開フィールドで持たないため、
+        # InMemory 実装の ``_pending`` を直接覗いて「stub では何も記録されない」
+        # を確認する (= caller でない wiring 統合層なので許容、本 stub では
+        # 確実に InMemoryEpisodicRecallBufferStore が使われる契約)。
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
+
         recall_buffer = result.episodic_recall_buffer_store
+        assert isinstance(recall_buffer, InMemoryEpisodicRecallBufferStore)
+        # _pending が空 dict 化、または全 BeingId 配列が空である
         assert all(
-            len(rows) == 0
-            for rows in getattr(recall_buffer, "_pending", {}).values()
+            len(rows) == 0 for rows in recall_buffer._pending.values()
         )
 
 
