@@ -185,21 +185,6 @@ class TestListAllForBeing:
         assert len(store.list_all_links_for_being(other)) == 1
 
 
-class TestIndependenceFromPlayerIdApi:
-    """新旧 API の独立性 (= 並走 index は同期しない)。"""
-
-    def test_player_id_経由で追加した_link_は_being_id_経由では見えない(
-        self, store: InMemoryMemoryLinkStore, being: BeingId
-    ) -> None:
-        store.upsert_link(_link(episode_id_a="a", episode_id_b="b", player_id=1))
-        assert store.get_link_by_being(being, "a", "b", MemoryLinkType.CO_RECALL) is None
-        assert store.list_all_links_for_being(being) == []
-
-    def test_being_id_経由で追加した_link_は_player_id_経由では見えない(
-        self, store: InMemoryMemoryLinkStore, being: BeingId
-    ) -> None:
-        store.upsert_link_by_being(being, _link(episode_id_a="a", episode_id_b="b", player_id=1))
-        assert (
-            store.get_link(1, "a", "b", MemoryLinkType.CO_RECALL) is None
-        )
-        assert store.list_all_links_for_player(1) == []
+# Phase 3 Step 3c-3 (Issue #470): legacy player_id 版 API が撤去されたため、
+# 旧/新 API の独立性を検証していたテストクラス ``TestIndependenceFromPlayerIdApi``
+# は削除された。新 API のみが残り、being_id を一次キーとして扱う設計に統一。

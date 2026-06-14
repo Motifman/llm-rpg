@@ -269,6 +269,39 @@
 
 ---
 
+## 14. promotion_frontier は Phase 3 Step 3c の scope 外 (= player_id keyed のまま)
+
+**何を**: ``EpisodicPromotionFrontier`` は ``memory_link`` / ``recall_buffer`` /
+``reinterpretation_journal`` の 3 連携 store とは別レイヤーで、現状は
+player_id keyed のまま残す。``EpisodicMemoryLinkApplicationService`` から frontier
+に追記するとき、Resolver で BeingId → player_id を逆引きする
+``_player_id_for(being_id)`` helper を経由する。
+
+**なぜ**:
+- frontier は「次回 promotion で対象にすべき episode_id の集合」を保持する
+  小さな in-memory ストア。run 跨ぎ identity を保つ必要が無く、Being 化の
+  優先度が低い
+- Step 3c は 3 store の being_id keyed 移行に集中するスコープで、frontier
+  まで含めると変更範囲が膨らみすぎる
+- 「caller 入口で being_id を 1 度だけ解決する」 resolve-once パターンを
+  維持するには、frontier への追記時のみ player_id が必要 → 逆引き helper で
+  橋渡しする方が、frontier 自体を Being 化するより安く済む
+
+**どうしないと壊れるか**:
+- frontier ごと一気に Being 化しようとすると、関連 service (
+  ``EpisodicSemanticClusterPromotionService.drain`` / ``add`` /
+  ``EpisodicMemoryLinkApplicationService.note_promotion_frontier_episodes``) を
+  すべて同時に書き換える羽目になり、PR が肥大化してレビュー困難になる
+- 逆引き helper を撤去し忘れると「Resolver の余分な lookup が turn ごとに
+  走る」 dead code が残る
+
+**どこでこの判断が出てきたか**:
+- PR #495 (Phase 3 Step 3c-3) のレビュー指摘 MEDIUM-2
+- 後続 Phase で frontier を being_id 化したら ``_player_id_for`` helper は
+  撤去する
+
+---
+
 ## 9. 速度より「LLM の判断ミス」を優先して直す
 
 **何を**: 並列化 / 非同期化 / cache 最適化のような **wall time 改善** より、LLM が誤判断する原因を 1 つずつ潰す方を優先する。
@@ -304,3 +337,4 @@
 | 11. 設定 DTO 集約 + ctor 注入 | 2026-06-09 | PR #446-#451 (リファクタ 6 PR) |
 | 12. Future work は xfail-strict で可視化 | 2026-06-09 | PR #451 (慣習化) |
 | 13. memory caller の未解決時挙動は役割で分岐 | 2026-06-14 | PR #491 / #492 |
+| 14. promotion_frontier は Phase 3 Step 3c scope 外 | 2026-06-14 | PR #495 |

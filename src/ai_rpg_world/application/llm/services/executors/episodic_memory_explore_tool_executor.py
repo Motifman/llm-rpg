@@ -37,8 +37,11 @@ class EpisodicMemoryExploreToolExecutor:
     episode_store: EpisodicEpisodeRepository
     link_store: MemoryLinkRepository
     link_service: EpisodicMemoryLinkApplicationService
-    # Phase 3 Step 3c-2: dual-path。Resolver+WorldId 注入時は being_id 経路、
-    # 未注入なら legacy player_id 経路。Step 3c-3 で必須化を検討。
+    # Phase 3 Step 3c-3: legacy player_id 経路は撤去済。constructor 上は
+    # Optional のまま (= 既存テスト互換) だが、tool 実行時に未注入 / Being
+    # 未 provision なら ``INVALID_STATE`` で fail-fast する。tool は LLM-visible
+    # なので「該当 0 件」と「内部状態未準備」を区別する必要がある (= semantic
+    # search の 3b-3 と同じ判断、design_decisions.md #13 参照)。
     being_attachment_resolver: Optional[BeingAttachmentResolver] = None
     default_world_id: Optional[WorldId] = None
 
@@ -91,14 +94,21 @@ class EpisodicMemoryExploreToolExecutor:
             )
         now = datetime.now(timezone.utc)
         being_id = self._resolve_being_id(player_id)
-        if being_id is not None:
-            links = self.link_store.list_links_for_episode_by_being(
-                being_id, eid, now=now, limit=256
+        if being_id is None:
+            return LlmCommandResultDto(
+                success=False,
+                # LLM-visible message: 言語混在を避けて英語で統一 (semantic
+                # search executor 3b-3 と同様のポリシー)
+                message=(
+                    "EpisodicMemoryExploreToolExecutor requires "
+                    "being_attachment_resolver and default_world_id, and the "
+                    "Being must be provisioned (Phase 3 Step 3c-3)."
+                ),
+                error_code="INVALID_STATE",
             )
-        else:
-            links = self.link_store.list_links_for_episode(
-                player_id, eid, now=now, limit=256
-            )
+        links = self.link_store.list_links_for_episode_by_being(
+            being_id, eid, now=now, limit=256
+        )
         ranked = sorted(
             links,
             key=lambda ln: effective_link_strength(ln, now),

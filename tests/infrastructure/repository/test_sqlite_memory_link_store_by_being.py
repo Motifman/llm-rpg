@@ -117,20 +117,11 @@ class TestSqliteMemoryLinkByBeingBasic:
         assert len(store.list_all_links_for_being(being)) == 2
 
 
-class TestSqliteMemoryLinkByBeingIsolation:
-    """新旧テーブルが独立: legacy memory_links と memory_links_by_being は混ざらない。"""
-
-    def test_player_id_経由で保存しても_being_id_経由では見えない(
-        self, store: SqliteMemoryLinkStore, being: BeingId
-    ) -> None:
-        store.upsert_link(_link(episode_id_a="a", episode_id_b="b", player_id=1))
-        assert store.get_link_by_being(being, "a", "b", MemoryLinkType.CO_RECALL) is None
-
-    def test_being_id_経由で保存しても_player_id_経由では見えない(
-        self, store: SqliteMemoryLinkStore, being: BeingId
-    ) -> None:
-        store.upsert_link_by_being(being, _link(episode_id_a="a", episode_id_b="b", player_id=1))
-        assert store.get_link(1, "a", "b", MemoryLinkType.CO_RECALL) is None
+# Phase 3 Step 3c-3 (Issue #470): legacy player_id 版テーブルは schema v5 で
+# DROP され、対応する API も撤去された。新旧テーブル独立性検証はもはや意味を持たない。
+# schema レベルで legacy テーブルが消えていることは
+# ``tests/infrastructure/repository/test_sqlite_memory_graph_stores.py``
+# (v5 migration の DROP テスト) でカバーされる。
 
 
 class TestSqliteMemoryLinkByBeingTypeGuard:

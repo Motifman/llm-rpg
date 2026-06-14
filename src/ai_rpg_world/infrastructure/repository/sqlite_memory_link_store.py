@@ -1,8 +1,7 @@
 """MemoryLinkRepository の SQLite 実装（主観エピソード DB と同一ファイル）。
 
-Phase 3 Step 3c-1 (Issue #470): being_id 版 API を並走追加。書き込み先テーブルは
-``memory_links_by_being`` (= schema v4)。legacy ``memory_links`` は Step 3c-3 で
-DROP 予定。
+Phase 3 Step 3c-3 (Issue #470): legacy player_id 版を撤去し、being_id 版のみ
+を残した。schema v5 で legacy ``memory_links`` テーブルも DROP される。
 """
 
 from __future__ import annotations
@@ -59,147 +58,11 @@ class SqliteMemoryLinkStore(MemoryLinkRepository):
             connection.row_factory = sqlite3.Row
         apply_memory_graph_migrations(connection)
 
-    def upsert_link(self, link: MemoryLink) -> None:
-        cur = self._conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO memory_links (
-                link_id, player_id, episode_id_a, episode_id_b, link_type,
-                strength, co_activation_count, created_at, last_activated_at, decay_rate
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(player_id, episode_id_a, episode_id_b, link_type) DO UPDATE SET
-                link_id = excluded.link_id,
-                strength = excluded.strength,
-                co_activation_count = excluded.co_activation_count,
-                created_at = excluded.created_at,
-                last_activated_at = excluded.last_activated_at,
-                decay_rate = excluded.decay_rate
-            """,
-            (
-                link.link_id,
-                link.player_id,
-                link.episode_id_a,
-                link.episode_id_b,
-                link.link_type.value,
-                link.strength,
-                link.co_activation_count,
-                _dt_to_iso(link.created_at),
-                _dt_to_iso(link.last_activated_at),
-                link.decay_rate,
-            ),
-        )
-        self._conn.commit()
-
-    def get_link(
-        self,
-        player_id: int,
-        episode_id_a: str,
-        episode_id_b: str,
-        link_type: MemoryLinkType,
-    ) -> MemoryLink | None:
-        a, b = normalize_episode_pair(episode_id_a, episode_id_b)
-        cur = self._conn.execute(
-            """
-            SELECT * FROM memory_links
-            WHERE player_id = ? AND episode_id_a = ? AND episode_id_b = ? AND link_type = ?
-            """,
-            (player_id, a, b, link_type.value),
-        )
-        row = cur.fetchone()
-        if row is None:
-            return None
-        return _row_to_link(row)
-
-    def list_links_for_episode(
-        self,
-        player_id: int,
-        episode_id: str,
-        *,
-        now: datetime,
-        limit: int,
-    ) -> list[MemoryLink]:
-        if limit <= 0:
-            return []
-        eid = episode_id.strip()
-        cur = self._conn.execute(
-            """
-            SELECT * FROM memory_links
-            WHERE player_id = ? AND (episode_id_a = ? OR episode_id_b = ?)
-            """,
-            (player_id, eid, eid),
-        )
-        rows = cur.fetchall()
-        links = [_row_to_link(r) for r in rows]
-        links.sort(key=lambda ln: effective_link_strength(ln, now), reverse=True)
-        return links[:limit]
-
-    def list_all_incident_links(
-        self,
-        player_id: int,
-        episode_id: str,
-        *,
-        now: datetime,
-    ) -> list[MemoryLink]:
-        _ = now
-        eid = episode_id.strip()
-        cur = self._conn.execute(
-            """
-            SELECT * FROM memory_links
-            WHERE player_id = ? AND (episode_id_a = ? OR episode_id_b = ?)
-            """,
-            (player_id, eid, eid),
-        )
-        return [_row_to_link(r) for r in cur.fetchall()]
-
-    def count_links_for_episode(self, player_id: int, episode_id: str) -> int:
-        eid = episode_id.strip()
-        cur = self._conn.execute(
-            """
-            SELECT COUNT(*) AS c FROM memory_links
-            WHERE player_id = ? AND (episode_id_a = ? OR episode_id_b = ?)
-            """,
-            (player_id, eid, eid),
-        )
-        row = cur.fetchone()
-        return int(row[0]) if row is not None else 0
-
-    def remove_weakest_link_for_episode(
-        self,
-        player_id: int,
-        episode_id: str,
-        *,
-        now: datetime,
-    ) -> bool:
-        cur = self._conn.execute(
-            """
-            SELECT * FROM memory_links
-            WHERE player_id = ? AND (episode_id_a = ? OR episode_id_b = ?)
-            """,
-            (player_id, episode_id.strip(), episode_id.strip()),
-        )
-        rows = cur.fetchall()
-        if not rows:
-            return False
-        weakest = min(rows, key=lambda r: effective_link_strength(_row_to_link(r), now))
-        lid = str(weakest["link_id"])
-        self._conn.execute("DELETE FROM memory_links WHERE link_id = ?", (lid,))
-        self._conn.commit()
-        return True
-
-    def list_all_links_for_player(self, player_id: int) -> list[MemoryLink]:
-        cur = self._conn.execute(
-            "SELECT * FROM memory_links WHERE player_id = ?",
-            (player_id,),
-        )
-        return [_row_to_link(r) for r in cur.fetchall()]
-
-    # ===== Phase 3 Step 3c-1: being_id 版を並走追加 =====
-
     def upsert_link_by_being(self, being_id: BeingId, link: MemoryLink) -> None:
         """being_id keyed で link を upsert する。
 
         PK は (being_id_value, episode_id_a, episode_id_b, link_type)。link_id は
-        非 PK で、UPSERT 時に最新値で上書きされる (legacy 挙動と一致)。
+        非 PK で、UPSERT 時に最新値で上書きされる。
         """
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
@@ -346,10 +209,9 @@ class SqliteMemoryLinkStore(MemoryLinkRepository):
             return False
         weakest = min(rows, key=lambda r: effective_link_strength(_row_to_link(r), now))
         # 一意性は PK の 4 列組 (being_id_value, episode_id_a, episode_id_b,
-        # link_type) で確保される。link_id は本テーブルでは非 PK (= UPSERT 時に
-        # 更新可能フィールド扱い) なので、legacy の `DELETE WHERE link_id=?` は
-        # 使えない。同じ link_id が複数 PK 組に紐づきうるため、PK 4 列組で
-        # DELETE するのが安全。
+        # link_type) で確保されている。link_id は本テーブルでは非 PK (= UPSERT
+        # 時の更新可能フィールド) で複数 PK 組に同じ link_id が紐づきうるため、
+        # PK 4 列組で DELETE する。
         self._conn.execute(
             """
             DELETE FROM memory_links_by_being

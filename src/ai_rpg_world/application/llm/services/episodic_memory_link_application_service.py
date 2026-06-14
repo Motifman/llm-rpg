@@ -93,8 +93,9 @@ class EpisodicMemoryLinkApplicationService:
     def _resolve_being_id(self, player_id: int) -> Optional[BeingId]:
         """Resolver+WorldId が両方注入されていれば being_id を引く。
 
-        Phase 3 Step 3c-2: dual-path。未注入 or Being 未 provision なら None
-        (= legacy 経路へ fallback)。Step 3c-3 で legacy 撤去予定。
+        Phase 3 Step 3c-3: legacy player_id 経路は撤去済。Resolver 未注入 or
+        Being 未 provision の場合は None を返し、caller 入口で silent skip
+        する設計 (= turn 副作用なので next turn で再試行)。
         """
         if self._resolver is None or self._default_world_id is None:
             return None
@@ -102,67 +103,27 @@ class EpisodicMemoryLinkApplicationService:
             self._default_world_id, PlayerId(player_id)
         )
 
-    # --- dual-path link store wrappers ---
-    #
-    # NOTE (Phase 3 Step 3c-3 TODO): 各 wrapper が呼び出しごとに
-    # ``_resolve_being_id`` を実行するため、``_ensure_capacity_before_link`` の
-    # while ループでは 1 イテレーションあたり Repository lookup が複数回走る。
-    # InMemory 実装では実害は無視できるが、SQLite 実装に切り替わると DB 往復が
-    # 増幅する可能性がある。Step 3c-3 で legacy 撤去するタイミングで
-    # 「caller 入口で 1 度だけ being_id を解決して各 method に渡す」パターン
-    # への移行を検討する。
-
-    def _count_links(self, player_id: int, episode_id: str) -> int:
-        being_id = self._resolve_being_id(player_id)
-        if being_id is not None:
-            return self._links.count_links_for_episode_by_being(being_id, episode_id)
-        return self._links.count_links_for_episode(player_id, episode_id)
-
-    def _remove_weakest(
-        self, player_id: int, episode_id: str, *, now: datetime
-    ) -> bool:
-        being_id = self._resolve_being_id(player_id)
-        if being_id is not None:
-            return self._links.remove_weakest_link_for_episode_by_being(
-                being_id, episode_id, now=now
-            )
-        return self._links.remove_weakest_link_for_episode(
-            player_id, episode_id, now=now
-        )
-
-    def _get_link(
-        self,
-        player_id: int,
-        episode_id_a: str,
-        episode_id_b: str,
-        link_type: MemoryLinkType,
-    ) -> MemoryLink | None:
-        being_id = self._resolve_being_id(player_id)
-        if being_id is not None:
-            return self._links.get_link_by_being(
-                being_id, episode_id_a, episode_id_b, link_type
-            )
-        return self._links.get_link(player_id, episode_id_a, episode_id_b, link_type)
-
-    def _upsert_link(self, player_id: int, link: MemoryLink) -> None:
-        being_id = self._resolve_being_id(player_id)
-        if being_id is not None:
-            self._links.upsert_link_by_being(being_id, link)
-            return
-        self._links.upsert_link(link)
-
     def on_episode_committed(self, episode: SubjectiveEpisode, *, now: datetime | None = None) -> None:
-        """直近の別エピソードとの TEMPORAL リンクを 1 本作成する。"""
+        """直近の別エピソードとの TEMPORAL リンクを 1 本作成する。
+
+        Phase 3 Step 3c-3: 入口で being_id を 1 度だけ解決し、内部メソッドに
+        伝播する (= ``_ensure_capacity_before_link`` の while ループでの
+        Repository 多重 lookup を防ぐ。3c-2 レビューの MEDIUM-2 反映)。
+        """
         now = now or datetime.now(timezone.utc)
         pid = episode.player_id
+        being_id = self._resolve_being_id(pid)
+        if being_id is None:
+            return
         recent = self._episodes.list_recent(pid, 2)
         if len(recent) < 2:
             return
         newest, prev = recent[0], recent[1]
         if newest.episode_id != episode.episode_id:
             return
-        self._ensure_capacity_before_link(pid, newest.episode_id, prev.episode_id, now)
+        self._ensure_capacity_before_link(being_id, newest.episode_id, prev.episode_id, now)
         self._put_fresh_link(
+            being_id=being_id,
             player_id=pid,
             ep_a=newest.episode_id,
             ep_b=prev.episode_id,
@@ -180,6 +141,9 @@ class EpisodicMemoryLinkApplicationService:
     ) -> None:
         """Passive Recall 候補について CO_RECALL リンクと recall メタデータを更新する。"""
         now = now or datetime.now(timezone.utc)
+        being_id = self._resolve_being_id(player_id)
+        if being_id is None:
+            return
         if self._promotion_frontier is not None:
             for c in candidates:
                 self._promotion_frontier.add(player_id, c.episode.episode_id)
@@ -194,8 +158,8 @@ class EpisodicMemoryLinkApplicationService:
         self._bump_recall_counts(player_id, capped, now)
         for i in range(len(capped)):
             for j in range(i + 1, len(capped)):
-                self._ensure_capacity_before_link(player_id, capped[i], capped[j], now)
-                self._merge_co_recall(player_id, capped[i], capped[j], now)
+                self._ensure_capacity_before_link(being_id, capped[i], capped[j], now)
+                self._merge_co_recall(being_id, player_id, capped[i], capped[j], now)
 
     def note_promotion_frontier_episodes(
         self,
@@ -217,9 +181,12 @@ class EpisodicMemoryLinkApplicationService:
     ) -> None:
         """memory_explore_related 等で辿った隣接エピソード間を強化する。"""
         now = now or datetime.now(timezone.utc)
+        being_id = self._resolve_being_id(player_id)
+        if being_id is None:
+            return
         for lt in (MemoryLinkType.CO_RECALL, MemoryLinkType.TEMPORAL):
             self._hebbian_strengthen_pair(
-                player_id,
+                being_id,
                 center_episode_id,
                 neighbor_episode_id,
                 link_type=lt,
@@ -242,22 +209,33 @@ class EpisodicMemoryLinkApplicationService:
 
     def _ensure_capacity_before_link(
         self,
-        player_id: int,
+        being_id: BeingId,
         episode_id_a: str,
         episode_id_b: str,
         now: datetime,
     ) -> None:
+        # 削除された link の player_id がその場で参照できないため、frontier 追記用
+        # の player_id は Resolver で逆引きする (= _hebbian_strengthen_existing
+        # 側は既存 link から ``updated.player_id`` を直接使えるので逆引き不要)。
         for eid in (episode_id_a, episode_id_b):
-            while self._count_links(player_id, eid) >= self._max_links:
-                removed = self._remove_weakest(player_id, eid, now=now)
+            while self._links.count_links_for_episode_by_being(being_id, eid) >= self._max_links:
+                removed = self._links.remove_weakest_link_for_episode_by_being(
+                    being_id, eid, now=now
+                )
                 if self._promotion_frontier is not None:
-                    self._promotion_frontier.add(player_id, eid)
+                    # promotion_frontier は player_id keyed のまま (Step 3c 範囲外)。
+                    # 逆引きに失敗した場合 (= Being が同 turn 内で detach された
+                    # 等の特殊状況) は frontier 追記を skip する graceful 設計
+                    pid = self._player_id_for(being_id)
+                    if pid is not None:
+                        self._promotion_frontier.add(pid, eid)
                 if not removed:
                     break
 
     def _put_fresh_link(
         self,
         *,
+        being_id: BeingId,
         player_id: int,
         ep_a: str,
         ep_b: str,
@@ -266,9 +244,10 @@ class EpisodicMemoryLinkApplicationService:
         now: datetime,
     ) -> None:
         a, b = normalize_episode_pair(ep_a, ep_b)
-        existing = self._get_link(player_id, a, b, link_type)
+        existing = self._links.get_link_by_being(being_id, a, b, link_type)
         if existing is not None:
             self._hebbian_strengthen_existing(
+                being_id,
                 existing,
                 activation_a=ACTIVATION_PASSIVE,
                 activation_b=ACTIVATION_PASSIVE,
@@ -287,16 +266,26 @@ class EpisodicMemoryLinkApplicationService:
             last_activated_at=now,
             decay_rate=self._decay_rate_initial,
         )
-        self._upsert_link(player_id, link)
+        self._links.upsert_link_by_being(being_id, link)
         if self._promotion_frontier is not None:
             self._promotion_frontier.add(player_id, a)
             self._promotion_frontier.add(player_id, b)
 
-    def _merge_co_recall(self, player_id: int, ep_a: str, ep_b: str, now: datetime) -> None:
+    def _merge_co_recall(
+        self,
+        being_id: BeingId,
+        player_id: int,
+        ep_a: str,
+        ep_b: str,
+        now: datetime,
+    ) -> None:
         a, b = normalize_episode_pair(ep_a, ep_b)
-        existing = self._get_link(player_id, a, b, MemoryLinkType.CO_RECALL)
+        existing = self._links.get_link_by_being(
+            being_id, a, b, MemoryLinkType.CO_RECALL
+        )
         if existing is None:
             self._put_fresh_link(
+                being_id=being_id,
                 player_id=player_id,
                 ep_a=a,
                 ep_b=b,
@@ -306,14 +295,38 @@ class EpisodicMemoryLinkApplicationService:
             )
             return
         self._hebbian_strengthen_existing(
+            being_id,
             existing,
             activation_a=ACTIVATION_PASSIVE,
             activation_b=ACTIVATION_PASSIVE,
             now=now,
         )
 
+    def _player_id_for(self, being_id: BeingId) -> Optional[int]:
+        """``BeingId → player_id`` を Resolver で逆引きする helper。
+
+        Phase 3 Step 3c 範囲では ``promotion_frontier`` の being_id 化は scope 外
+        (= 引き続き player_id keyed)。frontier 追記時にだけ呼ばれる。
+
+        呼出 contract:
+        - 本 helper が呼ばれる時点では ``_resolve_being_id`` が成功しているはず
+          なので ``self._resolver is None`` には到達しないが、保険として
+          ``None`` を返す (= 呼出側で graceful skip)
+        - Being が直前に detach されている等の race 状況では ``resolve_player_id``
+          が ``None`` を返しうる。これも ``None`` を伝播し、呼出側で skip させる
+          (= 例外で turn を止めない方針、design_decisions.md #13 と一貫)
+
+        後続 Phase で frontier も being_id 化したら本 helper は撤去する
+        (= design_decisions.md #14 として記録)。
+        """
+        if self._resolver is None:
+            return None
+        pid = self._resolver.resolve_player_id(being_id)
+        return pid.value if pid is not None else None
+
     def _hebbian_strengthen_existing(
         self,
+        being_id: BeingId,
         link: MemoryLink,
         *,
         activation_a: float,
@@ -332,14 +345,17 @@ class EpisodicMemoryLinkApplicationService:
             last_activated_at=now,
             decay_rate=new_decay,
         )
-        self._upsert_link(updated.player_id, updated)
+        self._links.upsert_link_by_being(being_id, updated)
         if self._promotion_frontier is not None:
+            # 既存 link が手元にあるので link.player_id を直接使う
+            # (= _ensure_capacity_before_link は削除済 link から取れないため
+            # _player_id_for による逆引きを使うが、ここでは不要)
             self._promotion_frontier.add(updated.player_id, updated.episode_id_a)
             self._promotion_frontier.add(updated.player_id, updated.episode_id_b)
 
     def _hebbian_strengthen_pair(
         self,
-        player_id: int,
+        being_id: BeingId,
         ep_a: str,
         ep_b: str,
         *,
@@ -349,10 +365,11 @@ class EpisodicMemoryLinkApplicationService:
         now: datetime,
     ) -> None:
         a, b = normalize_episode_pair(ep_a, ep_b)
-        existing = self._get_link(player_id, a, b, link_type)
+        existing = self._links.get_link_by_being(being_id, a, b, link_type)
         if existing is None:
             return
         self._hebbian_strengthen_existing(
+            being_id,
             existing,
             activation_a=activation_a,
             activation_b=activation_b,
