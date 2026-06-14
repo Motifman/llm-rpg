@@ -37,12 +37,19 @@ class TestInMemoryBeingRepository:
     """InMemoryBeingRepository の CRUD 挙動。"""
 
     def test_save_して_find_by_id_で取り出せる(self) -> None:
-        """save 後に同じ ID で find すると同一 Being が返る。"""
+        """save 後に同じ ID で find すると等価な Being が返る (= snapshot 経由で再構築)。"""
         repo = InMemoryBeingRepository()
         being = _being("ada")
         repo.save(being)
         found = repo.find_by_id(BeingId("ada"))
-        assert found is being
+        # Phase 4 Step 4-3: 内部 store が snapshot keyed になったため、codec
+        # で再 decode した別 instance が返る。Being aggregate に ``__eq__`` は
+        # ないので属性ごとに比較する。
+        assert found is not None
+        assert found.being_id == being.being_id
+        assert found.identity == being.identity
+        assert found.attachment == being.attachment
+        assert found.declared_memory_kinds == being.declared_memory_kinds
 
     def test_存在しない_ID_の_find_by_id_は_None(self) -> None:
         """未保存の ID では None が返る。"""
