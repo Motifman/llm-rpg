@@ -1,4 +1,9 @@
-"""想起後再解釈の SQLite ストア。"""
+"""想起後再解釈の SQLite ストア。
+
+Phase 3 Step 3d-1 (Issue #470): being_id 版 API を並走追加。書き込み先は
+``episodic_recall_observations_by_being`` / ``episodic_reinterpretation_journal_by_being``
+(= schema v2)。legacy テーブルは Step 3d-3 で DROP 予定。
+"""
 
 from __future__ import annotations
 
@@ -7,6 +12,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import EpisodicReinterpretationStatus
@@ -129,6 +135,51 @@ def _init_schema_v1(connection: sqlite3.Connection) -> None:
     )
 
 
+def _init_schema_v2_by_being(connection: sqlite3.Connection) -> None:
+    """Phase 3 Step 3d-1: being_id keyed の並走テーブルを追加。
+
+    legacy テーブルはそのまま残し、新 API は本 v2 テーブルに書き込む
+    (= caller 移行 = Step 3d-2 後、Step 3d-3 で legacy テーブルごと撤去予定)。
+    memory_link の v4 と同じパターン。
+
+    ``player_id`` は attach 元として保持 (= entry/observation VO の
+    ``player_id`` フィールドを保つため)。
+    """
+    connection.executescript(
+        """
+        CREATE TABLE episodic_recall_observations_by_being (
+            being_id_value TEXT NOT NULL,
+            recall_id TEXT NOT NULL,
+            episode_id TEXT NOT NULL,
+            recalled_at_key REAL NOT NULL,
+            payload_json TEXT NOT NULL,
+            player_id INTEGER NOT NULL,
+            PRIMARY KEY (being_id_value, recall_id)
+        );
+        CREATE INDEX idx_episodic_recall_observations_by_being_pending
+            ON episodic_recall_observations_by_being
+                (being_id_value, recalled_at_key ASC, recall_id ASC);
+
+        CREATE TABLE episodic_reinterpretation_journal_by_being (
+            being_id_value TEXT NOT NULL,
+            entry_id TEXT NOT NULL,
+            episode_id TEXT NOT NULL,
+            created_at_key REAL NOT NULL,
+            status TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            player_id INTEGER NOT NULL,
+            PRIMARY KEY (being_id_value, entry_id)
+        );
+        CREATE INDEX idx_episodic_reinterpretation_by_being_active
+            ON episodic_reinterpretation_journal_by_being
+                (being_id_value, episode_id, status);
+        CREATE INDEX idx_episodic_reinterpretation_by_being_episode_time
+            ON episodic_reinterpretation_journal_by_being
+                (being_id_value, episode_id, created_at_key DESC, entry_id DESC);
+        """
+    )
+
+
 class SqliteEpisodicReinterpretationStore(
     EpisodicRecallBufferRepository,
     EpisodicReinterpretationJournalRepository,
@@ -142,7 +193,10 @@ class SqliteEpisodicReinterpretationStore(
         apply_migrations(
             connection,
             namespace=_SCHEMA_NAMESPACE,
-            migrations=[SqliteMigration(1, _init_schema_v1)],
+            migrations=[
+                SqliteMigration(1, _init_schema_v1),
+                SqliteMigration(2, _init_schema_v2_by_being),
+            ],
         )
 
     @classmethod
@@ -310,6 +364,200 @@ class SqliteEpisodicReinterpretationStore(
             ORDER BY created_at_key DESC, entry_id DESC
             """,
             (player_id, episode_id),
+        )
+        return [_payload_to_entry(json.loads(str(r[0]))) for r in cur.fetchall()]
+
+    # ===== Phase 3 Step 3d-1: being_id 版を並走追加 =====
+
+    def append_by_being(
+        self, being_id: BeingId, observation: EpisodicRecallObservation
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(observation, EpisodicRecallObservation):
+            raise TypeError("observation must be EpisodicRecallObservation")
+        payload = json.dumps(_recall_to_payload(observation), ensure_ascii=False)
+        self._conn.execute(
+            """
+            INSERT OR IGNORE INTO episodic_recall_observations_by_being
+                (being_id_value, recall_id, episode_id, recalled_at_key,
+                 payload_json, player_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                being_id.value,
+                observation.recall_id,
+                observation.episode_id,
+                _dt_key(observation.recalled_at),
+                payload,
+                observation.player_id,
+            ),
+        )
+        self._conn.commit()
+
+    def peek_batch_by_being(
+        self,
+        being_id: BeingId,
+        *,
+        batch_size: int,
+        max_contexts_per_episode: int,
+    ) -> tuple[EpisodicRecallObservation, ...]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if batch_size <= 0 or max_contexts_per_episode <= 0:
+            return ()
+        cur = self._conn.execute(
+            """
+            SELECT payload_json
+            FROM episodic_recall_observations_by_being
+            WHERE being_id_value = ?
+            ORDER BY recalled_at_key ASC, recall_id ASC
+            """,
+            (being_id.value,),
+        )
+        rows = [_payload_to_recall(json.loads(str(r[0]))) for r in cur.fetchall()]
+        selected: list[str] = []
+        counts: dict[str, int] = {}
+        out: list[EpisodicRecallObservation] = []
+        for row in rows:
+            if row.episode_id not in counts:
+                if len(selected) >= batch_size:
+                    continue
+                selected.append(row.episode_id)
+                counts[row.episode_id] = 0
+            if counts[row.episode_id] >= max_contexts_per_episode:
+                continue
+            counts[row.episode_id] += 1
+            out.append(row)
+        return tuple(out)
+
+    def mark_processed_by_being(
+        self, being_id: BeingId, recall_ids: tuple[str, ...]
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not recall_ids:
+            return
+        placeholders = ",".join("?" for _ in recall_ids)
+        self._conn.execute(
+            f"""
+            DELETE FROM episodic_recall_observations_by_being
+            WHERE being_id_value = ? AND recall_id IN ({placeholders})
+            """,
+            (being_id.value, *recall_ids),
+        )
+        self._conn.commit()
+
+    def pending_count_by_being(self, being_id: BeingId) -> int:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        cur = self._conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM episodic_recall_observations_by_being
+            WHERE being_id_value = ?
+            """,
+            (being_id.value,),
+        )
+        return int(cur.fetchone()[0])
+
+    def put_active_by_being(
+        self, being_id: BeingId, entry: EpisodicReinterpretationEntry
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(entry, EpisodicReinterpretationEntry):
+            raise TypeError("entry must be EpisodicReinterpretationEntry")
+        if entry.status != EpisodicReinterpretationStatus.ACTIVE:
+            raise ValueError("put_active_by_being requires an active entry")
+        cur = self._conn.cursor()
+        active_rows = cur.execute(
+            """
+            SELECT payload_json FROM episodic_reinterpretation_journal_by_being
+            WHERE being_id_value = ? AND episode_id = ? AND status = ?
+            """,
+            (being_id.value, entry.episode_id, EpisodicReinterpretationStatus.ACTIVE.value),
+        ).fetchall()
+        for row in active_rows:
+            old = _payload_to_entry(json.loads(str(row[0])))
+            superseded = EpisodicReinterpretationEntry(
+                entry_id=old.entry_id,
+                player_id=old.player_id,
+                episode_id=old.episode_id,
+                created_at=old.created_at,
+                turn_index=old.turn_index,
+                current_interpretation=old.current_interpretation,
+                current_recall_text=old.current_recall_text,
+                source_recall_ids=old.source_recall_ids,
+                status=EpisodicReinterpretationStatus.SUPERSEDED,
+                superseded_at=entry.created_at,
+            )
+            cur.execute(
+                """
+                UPDATE episodic_reinterpretation_journal_by_being
+                SET status = ?, payload_json = ?
+                WHERE being_id_value = ? AND entry_id = ?
+                """,
+                (
+                    EpisodicReinterpretationStatus.SUPERSEDED.value,
+                    json.dumps(_entry_to_payload(superseded), ensure_ascii=False),
+                    being_id.value,
+                    old.entry_id,
+                ),
+            )
+        cur.execute(
+            """
+            INSERT OR REPLACE INTO episodic_reinterpretation_journal_by_being
+                (being_id_value, entry_id, episode_id, created_at_key, status,
+                 payload_json, player_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                being_id.value,
+                entry.entry_id,
+                entry.episode_id,
+                _dt_key(entry.created_at),
+                entry.status.value,
+                json.dumps(_entry_to_payload(entry), ensure_ascii=False),
+                entry.player_id,
+            ),
+        )
+        self._conn.commit()
+
+    def get_active_by_being(
+        self,
+        being_id: BeingId,
+        episode_id: str,
+    ) -> EpisodicReinterpretationEntry | None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        cur = self._conn.execute(
+            """
+            SELECT payload_json FROM episodic_reinterpretation_journal_by_being
+            WHERE being_id_value = ? AND episode_id = ? AND status = ?
+            ORDER BY created_at_key DESC, entry_id DESC
+            LIMIT 1
+            """,
+            (being_id.value, episode_id, EpisodicReinterpretationStatus.ACTIVE.value),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        return _payload_to_entry(json.loads(str(row[0])))
+
+    def list_by_episode_by_being(
+        self,
+        being_id: BeingId,
+        episode_id: str,
+    ) -> list[EpisodicReinterpretationEntry]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        cur = self._conn.execute(
+            """
+            SELECT payload_json FROM episodic_reinterpretation_journal_by_being
+            WHERE being_id_value = ? AND episode_id = ?
+            ORDER BY created_at_key DESC, entry_id DESC
+            """,
+            (being_id.value, episode_id),
         )
         return [_payload_to_entry(json.loads(str(r[0]))) for r in cur.fetchall()]
 

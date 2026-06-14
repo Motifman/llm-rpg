@@ -68,6 +68,21 @@ class _BrokenRecallBufferStore(EpisodicRecallBufferRepository):
     def pending_count(self, player_id: int) -> int:
         raise RuntimeError("broken")
 
+    # Phase 3 Step 3d-1: by_being abstractmethod も実装必須 (= raise で揃える)
+    def append_by_being(self, being_id, observation):  # type: ignore[no-untyped-def]
+        raise RuntimeError("broken")
+
+    def peek_batch_by_being(  # type: ignore[no-untyped-def]
+        self, being_id, *, batch_size, max_contexts_per_episode
+    ):
+        raise RuntimeError("broken")
+
+    def mark_processed_by_being(self, being_id, recall_ids):  # type: ignore[no-untyped-def]
+        raise RuntimeError("broken")
+
+    def pending_count_by_being(self, being_id):  # type: ignore[no-untyped-def]
+        raise RuntimeError("broken")
+
 
 def _episode(
     *,
