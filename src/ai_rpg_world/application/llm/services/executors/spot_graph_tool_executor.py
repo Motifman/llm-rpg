@@ -1056,19 +1056,23 @@ class SpotGraphToolExecutor:
 
     def _wait(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         # PR β: wait は exhausted でも実行可 (= 回復の主経路)。block しない。
+        # #471 fix: ここで ``self._svc.simulation.tick()`` を呼んで world tick を
+        # 進めていたが、これは tool 実行中に nested tick advance を起こし
+        # ``_run_post_tick_hooks`` → ``run_scheduled_turns`` → 他プレイヤー LLM
+        # ターン → さらに ``spot_graph_wait`` … の再帰カスケードを生んでいた
+        # (= MAX_WORLD_TICKS 上限を黙ってバイパス)。``do_move`` (#404) と同型
+        # の bug。wait は「今ターンは何もしない」記録だけ残し、tick の進行は
+        # 外側 driver loop に任せる。
         reason = str(args.get("reason", "")).strip()
-        if self._svc.simulation is None:
-            return LlmCommandResultDto(
-                success=False,
-                message="wait は現在のワイヤリングでは未対応です。",
-                error_code="UNSUPPORTED_TOOL",
-            )
         try:
-            tick = self._svc.simulation.tick()
             # PR β: wait は微回復 (専用 rest tool は作らない設計)。
             self._recover_fatigue_safe(player_id, self.FATIGUE_RECOVERY_WAIT)
             suffix = f"（理由: {reason}）" if reason else ""
-            base = f"待機して時間が進んだ: tick={tick.value}{suffix}"
+            if self._time_provider is not None:
+                tick_value = self._time_provider.get_current_tick().value
+                base = f"今ターンは行動を控えた: tick={tick_value}{suffix}"
+            else:
+                base = f"今ターンは行動を控えた{suffix}"
             return LlmCommandResultDto(
                 success=True,
                 message=append_inner_thought_to_message(base, args),

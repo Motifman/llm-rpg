@@ -272,20 +272,20 @@ class TestSurvivalIslandV2RescueE2E:
             "arguments": {"reason": "待機", "inner_thought": "待つ"},
         })
 
-        # tick 168 まで進める。途中で game_end したら break。
-        # #377 後:
-        # - v2 は飢餓ダメ 2/tick + HUNGER decay 1/tick で約 100 tick で 餓死
-        # - さらに post_tick_hooks → run_scheduled_turns → do_wait →
-        #   advance_tick の再帰カスケードで、1 回の test loop 反復内に
-        #   数百 tick が進行する。
-        # 本テストの目的は rescue 経路の貫通検証 (= flag + summit presence で
-        # outcome=RESCUED になるか) で、飢餓と HUNGER decay は直交関心。
-        # NeedsDecayStage の 飢餓ダメと need 増加を test 期間中だけ無効化する。
+        # rescue が成立する tick まで進める。途中で game_end したら break。
+        # #471 以前: do_wait の nested advance_tick による再帰カスケードで
+        # 1 test loop 反復内に数百 tick がジャンプしていたため、170 iteration で
+        # rescue tick (384) に到達できていた。#471 で nested advance_tick を
+        # 除去した結果、1 iteration = 1 tick の自然な進行になり、rescue 成立
+        # までに 400 iteration 弱が必要になった。テスト本来の意図 (rescue 経路
+        # の貫通検証) は変わらないので iteration 上限を素直に引き上げる。
+        # 飢餓と HUNGER decay は本テストの関心外なので無効化する。
         decay_stage = runtime._simulation_service._needs_decay_stage
         decay_stage._starvation_damage_per_tick = 0
         decay_stage._rates = {}
 
-        for _ in range(170):
+        MAX_ITERATIONS = 500
+        for _ in range(MAX_ITERATIONS):
             if runtime.check_game_end().is_ended:
                 break
             runtime.advance_tick()
@@ -297,7 +297,8 @@ class TestSurvivalIslandV2RescueE2E:
 
         result = runtime.check_game_end()
         assert result.is_ended is True, (
-            f"tick 170 過ぎても game_end が立たない: reason={result.reason}"
+            f"{MAX_ITERATIONS} iteration 過ぎても game_end が立たない: "
+            f"reason={result.reason} tick={runtime.current_tick()}"
         )
         # ada は summit に残っているので RESCUED
         outcome_registry = runtime._player_outcome_registry

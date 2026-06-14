@@ -1347,20 +1347,35 @@ class EscapeGameRuntime:
         )
 
     def do_wait(self, player_id: PlayerId, reason: str = "") -> int:
-        tick = self.advance_tick()
+        """その場で待機する (#471 fix: ネスト advance_tick を排除)。
+
+        旧実装: 内部で ``self.advance_tick()`` を呼んで world tick を 1 進めて
+        いた。これが #404 ``do_move`` と同型の再帰カスケードを生んでいた:
+        ``advance_tick`` → ``_run_post_tick_hooks`` → ``run_scheduled_turns``
+        → 他プレイヤーの LLM ターン → ``spot_graph_wait`` → ``do_wait`` →
+        ``advance_tick`` …。driver loop の ``current_tick < MAX_WORLD_TICKS``
+        ガードは iteration 先頭でしか効かないため、cascade 中は ``MAX_WORLD_TICKS``
+        を黙ってバイパスし、1 driver iteration で +100 tick / 200 LLM call /
+        wall 30 分のスパイクが発生していた (#468 L run で観測)。
+
+        新実装: ``do_wait`` は「自分のこのターンは何もしない」という意思決定
+        だけを記録する。world tick の進行は外側 driver loop に任せる。
+        返り値は現在 tick (進めていない) を返す互換のため。
+        """
+        tick = self.current_tick()
         r = (reason or "").strip()
         if r:
             self._record_action_result(
                 player_id,
                 f"待機した（理由: {r}）",
-                f"時間が進んだ（tick={tick}）",
+                f"今ターンは行動を控えた（tick={tick}）",
                 tool_name=TOOL_NAME_SPOT_GRAPH_WAIT,
             )
         else:
             self._record_action_result(
                 player_id,
                 "短く待機した",
-                f"時間が進んだ（tick={tick}）",
+                f"今ターンは行動を控えた（tick={tick}）",
                 tool_name=TOOL_NAME_SPOT_GRAPH_WAIT,
             )
         return tick
