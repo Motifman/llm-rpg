@@ -135,7 +135,7 @@ def _build_cluster(
     episode_store = InMemorySubjectiveEpisodeStore()
     link_store = InMemoryMemoryLinkStore()
     setup = make_semantic_being_setup()
-    setup.provision(1)
+    being_id = setup.provision(1)
 
     for i, eid in enumerate(["x", "y", "z"]):
         ep = _make_episode(
@@ -146,9 +146,10 @@ def _build_cluster(
             interpreted=f"主観文{i}",
         )
         episode_store.put(ep)
-    link_store.upsert_link(_strong_link(1, "x", "y"))
-    link_store.upsert_link(_strong_link(1, "y", "z"))
-    link_store.upsert_link(_strong_link(1, "x", "z"))
+    # Phase 3 Step 3c-2: link 走査も being_id 経路で読まれるため同じ being_id で書く
+    link_store.upsert_link_by_being(being_id, _strong_link(1, "x", "y"))
+    link_store.upsert_link_by_being(being_id, _strong_link(1, "y", "z"))
+    link_store.upsert_link_by_being(being_id, _strong_link(1, "x", "z"))
 
     svc = EpisodicSemanticClusterPromotionService(
         episode_store=episode_store,

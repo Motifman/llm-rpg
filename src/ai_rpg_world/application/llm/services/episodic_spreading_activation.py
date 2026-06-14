@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import datetime
+from typing import Optional
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     effective_link_strength,
     other_episode_id,
@@ -23,9 +25,14 @@ def neighbor_priming_scores(
     max_hops: int = 2,
     hop_decay: float = 0.5,
     min_score: float = 0.02,
+    being_id: Optional[BeingId] = None,
 ) -> dict[str, float]:
     """
     シードからリンクを辿り、各ノードへの最大プライミング強度を返す（シード自身は含めない）。
+
+    Phase 3 Step 3c-2 (Issue #470): dual-path。``being_id`` が渡された場合は
+    ``list_links_for_episode_by_being`` で読む。None なら legacy
+    ``list_links_for_episode`` で読む。Step 3c-3 で legacy 経路撤去予定。
     """
     best: dict[str, float] = {}
     q: deque[tuple[str, int, float]] = deque()
@@ -36,9 +43,15 @@ def neighbor_priming_scores(
         node, hop, act = q.popleft()
         if hop >= max_hops:
             continue
-        for link in link_store.list_links_for_episode(
-            player_id, node, now=now, limit=256
-        ):
+        if being_id is not None:
+            links = link_store.list_links_for_episode_by_being(
+                being_id, node, now=now, limit=256
+            )
+        else:
+            links = link_store.list_links_for_episode(
+                player_id, node, now=now, limit=256
+            )
+        for link in links:
             other = other_episode_id(link, node)
             if other in seed_episode_ids:
                 continue

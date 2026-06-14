@@ -89,9 +89,9 @@ def test_incremental_promotion_matches_full_scan_for_triangle() -> None:
     def run(*, use_frontier: bool) -> list[str]:
         store = InMemorySubjectiveEpisodeStore()
         links = InMemoryMemoryLinkStore()
-        # Phase 3 Step 3b-3: semantic は being_id 経路必須。
+        # Phase 3 Step 3b-3 / 3c-2: semantic + link 共に being_id 経路必須。
         setup = make_semantic_being_setup()
-        setup.provision(1)
+        being_id = setup.provision(1)
         frontier = EpisodicPromotionFrontier() if use_frontier else None
         promo = EpisodicSemanticClusterPromotionService(
             episode_store=store,
@@ -105,9 +105,9 @@ def test_incremental_promotion_matches_full_scan_for_triangle() -> None:
         for i, eid in enumerate(["x", "y", "z"]):
             ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
             store.put(ep)
-        links.upsert_link(_strong_link(1, "x", "y"))
-        links.upsert_link(_strong_link(1, "y", "z"))
-        links.upsert_link(_strong_link(1, "x", "z"))
+        links.upsert_link_by_being(being_id, _strong_link(1, "x", "y"))
+        links.upsert_link_by_being(being_id, _strong_link(1, "y", "z"))
+        links.upsert_link_by_being(being_id, _strong_link(1, "x", "z"))
         if frontier is not None:
             frontier.add(1, "x")
         promo.on_after_tool_turn(1, now=now)
@@ -124,7 +124,7 @@ def test_incremental_zero_hops_misses_distant_cluster() -> None:
     store = InMemorySubjectiveEpisodeStore()
     links = InMemoryMemoryLinkStore()
     setup = make_semantic_being_setup()
-    setup.provision(1)
+    being_id = setup.provision(1)
     frontier = EpisodicPromotionFrontier()
     frontier.add(1, "x")
     promo = EpisodicSemanticClusterPromotionService(
@@ -139,9 +139,9 @@ def test_incremental_zero_hops_misses_distant_cluster() -> None:
     for i, eid in enumerate(["x", "y", "z"]):
         ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
         store.put(ep)
-    links.upsert_link(_strong_link(1, "x", "y"))
-    links.upsert_link(_strong_link(1, "y", "z"))
-    links.upsert_link(_strong_link(1, "x", "z"))
+    links.upsert_link_by_being(being_id, _strong_link(1, "x", "y"))
+    links.upsert_link_by_being(being_id, _strong_link(1, "y", "z"))
+    links.upsert_link_by_being(being_id, _strong_link(1, "x", "z"))
     promo.on_after_tool_turn(1, now=now)
     assert len(setup.list_entries(1)) == 0
 
@@ -152,7 +152,7 @@ def test_empty_frontier_falls_back_to_full_scan() -> None:
     store = InMemorySubjectiveEpisodeStore()
     links = InMemoryMemoryLinkStore()
     setup = make_semantic_being_setup()
-    setup.provision(1)
+    being_id = setup.provision(1)
     frontier = EpisodicPromotionFrontier()
     promo = EpisodicSemanticClusterPromotionService(
         episode_store=store,
@@ -166,9 +166,9 @@ def test_empty_frontier_falls_back_to_full_scan() -> None:
     for i, eid in enumerate(["x", "y", "z"]):
         ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
         store.put(ep)
-    links.upsert_link(_strong_link(1, "x", "y"))
-    links.upsert_link(_strong_link(1, "y", "z"))
-    links.upsert_link(_strong_link(1, "x", "z"))
+    links.upsert_link_by_being(being_id, _strong_link(1, "x", "y"))
+    links.upsert_link_by_being(being_id, _strong_link(1, "y", "z"))
+    links.upsert_link_by_being(being_id, _strong_link(1, "x", "z"))
     promo.on_after_tool_turn(1, now=now)
     assert len(setup.list_entries(1)) == 1
 

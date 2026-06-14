@@ -22,7 +22,10 @@ from ai_rpg_world.domain.being.service.being_attachment_resolver import (
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.domain.memory.episodic.value_object.memory_link import effective_link_strength
+from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
+    MemoryLink,
+    effective_link_strength,
+)
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import MemoryLinkRepository
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import SemanticMemoryRepository
@@ -66,10 +69,21 @@ def _build_strong_adjacency(
     player_id: int,
     link_store: MemoryLinkRepository,
     now: datetime,
+    *,
+    being_id: Optional[BeingId] = None,
 ) -> Dict[str, Set[str]]:
-    """実効強度 >= 閾値の無向辺を隣接リスト化する。"""
+    """実効強度 >= 閾値の無向辺を隣接リスト化する。
+
+    Phase 3 Step 3c-2: dual-path。``being_id`` 指定時は
+    ``list_all_links_for_being`` を使い、未指定なら legacy
+    ``list_all_links_for_player`` を使う。Step 3c-3 で legacy 経路撤去予定。
+    """
     adj: Dict[str, Set[str]] = {}
-    for ln in link_store.list_all_links_for_player(player_id):
+    if being_id is not None:
+        all_links = link_store.list_all_links_for_being(being_id)
+    else:
+        all_links = link_store.list_all_links_for_player(player_id)
+    for ln in all_links:
         eff = effective_link_strength(ln, now)
         if eff < MIN_EFFECTIVE_STRENGTH:
             continue
@@ -80,14 +94,35 @@ def _build_strong_adjacency(
     return adj
 
 
+def _incident_links_dual_path(
+    link_store: MemoryLinkRepository,
+    player_id: int,
+    episode_id: str,
+    *,
+    now: datetime,
+    being_id: Optional[BeingId],
+) -> list[MemoryLink]:
+    """dual-path: being_id があれば by_being、なければ legacy。"""
+    if being_id is not None:
+        return link_store.list_all_incident_links_by_being(
+            being_id, episode_id, now=now
+        )
+    return link_store.list_all_incident_links(player_id, episode_id, now=now)
+
+
 def _expand_frontier_nodes(
     player_id: int,
     link_store: MemoryLinkRepository,
     seeds: Set[str],
     now: datetime,
     max_hops: int,
+    *,
+    being_id: Optional[BeingId] = None,
 ) -> Set[str]:
-    """強リンクのみを辿り、シードから最大 max_hops ホップで到達するノード集合。"""
+    """強リンクのみを辿り、シードから最大 max_hops ホップで到達するノード集合。
+
+    Phase 3 Step 3c-2: dual-path。``being_id`` 指定時は ``*_by_being`` API。
+    """
     seeds_clean = {s.strip() for s in seeds if s.strip()}
     if not seeds_clean:
         return set()
@@ -96,7 +131,9 @@ def _expand_frontier_nodes(
     for _ in range(max(0, max_hops)):
         nxt: Set[str] = set()
         for n in frontier:
-            for ln in link_store.list_all_incident_links(player_id, n, now=now):
+            for ln in _incident_links_dual_path(
+                link_store, player_id, n, now=now, being_id=being_id
+            ):
                 if effective_link_strength(ln, now) < MIN_EFFECTIVE_STRENGTH:
                     continue
                 other = ln.episode_id_b if ln.episode_id_a == n else ln.episode_id_a
@@ -114,11 +151,18 @@ def _build_strong_adjacency_for_nodes(
     link_store: MemoryLinkRepository,
     nodes: Set[str],
     now: datetime,
+    *,
+    being_id: Optional[BeingId] = None,
 ) -> Dict[str, Set[str]]:
-    """nodes に含まれる頂点のみを対象に、強リンクで誘導する無向グラフの隣接リスト。"""
+    """nodes に含まれる頂点のみを対象に、強リンクで誘導する無向グラフの隣接リスト。
+
+    Phase 3 Step 3c-2: dual-path。``being_id`` 指定時は ``*_by_being`` API。
+    """
     adj: Dict[str, Set[str]] = {}
     for n in nodes:
-        for ln in link_store.list_all_incident_links(player_id, n, now=now):
+        for ln in _incident_links_dual_path(
+            link_store, player_id, n, now=now, being_id=being_id
+        ):
             if effective_link_strength(ln, now) < MIN_EFFECTIVE_STRENGTH:
                 continue
             other = ln.episode_id_b if ln.episode_id_a == n else ln.episode_id_a
@@ -240,12 +284,19 @@ class EpisodicSemanticClusterPromotionService:
         """LLM ツール実行 1 回成功後に呼び、昇格候補があればストアへ追加する。"""
         now = now or datetime.now(timezone.utc)
         force_full = _env_force_full_scan()
+        # Phase 3 Step 3c-2: link 走査も dual-path 化。being_id が引ければ
+        # ``*_by_being`` 経路、欠ければ legacy player_id 経路。
+        being_id = self._resolve_being_id(player_id)
         if force_full or self.promotion_frontier is None:
-            adj = _build_strong_adjacency(player_id, self.link_store, now)
+            adj = _build_strong_adjacency(
+                player_id, self.link_store, now, being_id=being_id
+            )
         else:
             seeds = self.promotion_frontier.drain(player_id)
             if not seeds:
-                adj = _build_strong_adjacency(player_id, self.link_store, now)
+                adj = _build_strong_adjacency(
+                    player_id, self.link_store, now, being_id=being_id
+                )
             else:
                 nodes = _expand_frontier_nodes(
                     player_id,
@@ -253,12 +304,14 @@ class EpisodicSemanticClusterPromotionService:
                     seeds,
                     now,
                     self.expansion_hops,
+                    being_id=being_id,
                 )
                 adj = _build_strong_adjacency_for_nodes(
                     player_id,
                     self.link_store,
                     nodes,
                     now,
+                    being_id=being_id,
                 )
         if not adj:
             return

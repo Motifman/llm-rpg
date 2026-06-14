@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Sequence
+from typing import Optional, Sequence
 from uuid import uuid4
 
+from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    BeingAttachmentResolver,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
@@ -20,6 +24,8 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
     MemoryLinkRepository,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallCandidate,
 )
@@ -55,11 +61,24 @@ class EpisodicMemoryLinkApplicationService:
         decay_rate_initial: float = DEFAULT_DECAY_RATE,
         max_links_per_episode: int = MAX_LINKS_PER_EPISODE,
         co_recall_episode_cap: int = CO_RECALL_EPISODE_CAP,
+        being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
+        default_world_id: Optional[WorldId] = None,
     ) -> None:
         if not isinstance(episode_store, EpisodicEpisodeRepository):
             raise TypeError("episode_store must be EpisodicEpisodeRepository")
         if not isinstance(link_store, MemoryLinkRepository):
             raise TypeError("link_store must be MemoryLinkRepository")
+        # Phase 3 Step 3c-2: Resolver+WorldId 注入時は being_id 経路、未注入なら
+        # legacy player_id 経路。link 更新は turn の副作用なので Being 未解決時は
+        # silent no-op (= 次回 turn で再試行) を許容する設計。
+        if being_attachment_resolver is not None and not isinstance(
+            being_attachment_resolver, BeingAttachmentResolver
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if default_world_id is not None and not isinstance(default_world_id, WorldId):
+            raise TypeError("default_world_id must be WorldId")
         self._episodes = episode_store
         self._links = link_store
         self._promotion_frontier = promotion_frontier
@@ -68,6 +87,69 @@ class EpisodicMemoryLinkApplicationService:
         self._decay_rate_initial = decay_rate_initial
         self._max_links = max_links_per_episode
         self._co_cap = co_recall_episode_cap
+        self._resolver = being_attachment_resolver
+        self._default_world_id = default_world_id
+
+    def _resolve_being_id(self, player_id: int) -> Optional[BeingId]:
+        """Resolver+WorldId が両方注入されていれば being_id を引く。
+
+        Phase 3 Step 3c-2: dual-path。未注入 or Being 未 provision なら None
+        (= legacy 経路へ fallback)。Step 3c-3 で legacy 撤去予定。
+        """
+        if self._resolver is None or self._default_world_id is None:
+            return None
+        return self._resolver.resolve_being_id(
+            self._default_world_id, PlayerId(player_id)
+        )
+
+    # --- dual-path link store wrappers ---
+    #
+    # NOTE (Phase 3 Step 3c-3 TODO): 各 wrapper が呼び出しごとに
+    # ``_resolve_being_id`` を実行するため、``_ensure_capacity_before_link`` の
+    # while ループでは 1 イテレーションあたり Repository lookup が複数回走る。
+    # InMemory 実装では実害は無視できるが、SQLite 実装に切り替わると DB 往復が
+    # 増幅する可能性がある。Step 3c-3 で legacy 撤去するタイミングで
+    # 「caller 入口で 1 度だけ being_id を解決して各 method に渡す」パターン
+    # への移行を検討する。
+
+    def _count_links(self, player_id: int, episode_id: str) -> int:
+        being_id = self._resolve_being_id(player_id)
+        if being_id is not None:
+            return self._links.count_links_for_episode_by_being(being_id, episode_id)
+        return self._links.count_links_for_episode(player_id, episode_id)
+
+    def _remove_weakest(
+        self, player_id: int, episode_id: str, *, now: datetime
+    ) -> bool:
+        being_id = self._resolve_being_id(player_id)
+        if being_id is not None:
+            return self._links.remove_weakest_link_for_episode_by_being(
+                being_id, episode_id, now=now
+            )
+        return self._links.remove_weakest_link_for_episode(
+            player_id, episode_id, now=now
+        )
+
+    def _get_link(
+        self,
+        player_id: int,
+        episode_id_a: str,
+        episode_id_b: str,
+        link_type: MemoryLinkType,
+    ) -> MemoryLink | None:
+        being_id = self._resolve_being_id(player_id)
+        if being_id is not None:
+            return self._links.get_link_by_being(
+                being_id, episode_id_a, episode_id_b, link_type
+            )
+        return self._links.get_link(player_id, episode_id_a, episode_id_b, link_type)
+
+    def _upsert_link(self, player_id: int, link: MemoryLink) -> None:
+        being_id = self._resolve_being_id(player_id)
+        if being_id is not None:
+            self._links.upsert_link_by_being(being_id, link)
+            return
+        self._links.upsert_link(link)
 
     def on_episode_committed(self, episode: SubjectiveEpisode, *, now: datetime | None = None) -> None:
         """直近の別エピソードとの TEMPORAL リンクを 1 本作成する。"""
@@ -166,8 +248,8 @@ class EpisodicMemoryLinkApplicationService:
         now: datetime,
     ) -> None:
         for eid in (episode_id_a, episode_id_b):
-            while self._links.count_links_for_episode(player_id, eid) >= self._max_links:
-                removed = self._links.remove_weakest_link_for_episode(player_id, eid, now=now)
+            while self._count_links(player_id, eid) >= self._max_links:
+                removed = self._remove_weakest(player_id, eid, now=now)
                 if self._promotion_frontier is not None:
                     self._promotion_frontier.add(player_id, eid)
                 if not removed:
@@ -184,7 +266,7 @@ class EpisodicMemoryLinkApplicationService:
         now: datetime,
     ) -> None:
         a, b = normalize_episode_pair(ep_a, ep_b)
-        existing = self._links.get_link(player_id, a, b, link_type)
+        existing = self._get_link(player_id, a, b, link_type)
         if existing is not None:
             self._hebbian_strengthen_existing(
                 existing,
@@ -205,14 +287,14 @@ class EpisodicMemoryLinkApplicationService:
             last_activated_at=now,
             decay_rate=self._decay_rate_initial,
         )
-        self._links.upsert_link(link)
+        self._upsert_link(player_id, link)
         if self._promotion_frontier is not None:
             self._promotion_frontier.add(player_id, a)
             self._promotion_frontier.add(player_id, b)
 
     def _merge_co_recall(self, player_id: int, ep_a: str, ep_b: str, now: datetime) -> None:
         a, b = normalize_episode_pair(ep_a, ep_b)
-        existing = self._links.get_link(player_id, a, b, MemoryLinkType.CO_RECALL)
+        existing = self._get_link(player_id, a, b, MemoryLinkType.CO_RECALL)
         if existing is None:
             self._put_fresh_link(
                 player_id=player_id,
@@ -250,7 +332,7 @@ class EpisodicMemoryLinkApplicationService:
             last_activated_at=now,
             decay_rate=new_decay,
         )
-        self._links.upsert_link(updated)
+        self._upsert_link(updated.player_id, updated)
         if self._promotion_frontier is not None:
             self._promotion_frontier.add(updated.player_id, updated.episode_id_a)
             self._promotion_frontier.add(updated.player_id, updated.episode_id_b)
@@ -267,7 +349,7 @@ class EpisodicMemoryLinkApplicationService:
         now: datetime,
     ) -> None:
         a, b = normalize_episode_pair(ep_a, ep_b)
-        existing = self._links.get_link(player_id, a, b, link_type)
+        existing = self._get_link(player_id, a, b, link_type)
         if existing is None:
             return
         self._hebbian_strengthen_existing(
