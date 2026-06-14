@@ -30,6 +30,9 @@ from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store impor
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
+from tests.application.llm._memory_link_being_test_helpers import (
+    make_memory_link_being_setup,
+)
 from uuid import uuid4
 
 
@@ -66,23 +69,46 @@ def _ep(
 
 
 def test_temporal_link_created_between_recent_pair() -> None:
+    """Phase 3 Step 3c-3: link 書き込みは being_id keyed only。Resolver 注入必須。"""
     store = InMemorySubjectiveEpisodeStore()
-    links = InMemoryMemoryLinkStore()
-    svc = EpisodicMemoryLinkApplicationService(store, links)
+    setup = make_memory_link_being_setup()
+    being_id = setup.provision(7)
+    svc = EpisodicMemoryLinkApplicationService(
+        store,
+        setup.link_store,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
+    )
     first = _ep(episode_id="e1", player_id=7)
     second = _ep(episode_id="e2", player_id=7)
     store.put(first)
     store.put(second)
     svc.on_episode_committed(second)
     assert store.list_recent(7, 2)[0].episode_id == "e2"
-    assert links.get_link(7, "e1", "e2", MemoryLinkType.TEMPORAL) is not None
+    assert (
+        setup.link_store.get_link_by_being(
+            being_id, "e1", "e2", MemoryLinkType.TEMPORAL
+        )
+        is not None
+    )
 
 
 def test_passive_recall_triggers_co_recall_links() -> None:
     store = InMemorySubjectiveEpisodeStore()
-    links = InMemoryMemoryLinkStore()
-    link_svc = EpisodicMemoryLinkApplicationService(store, links)
-    pr = EpisodicPassiveRecallRetrievalService(store, link_store=links)
+    setup = make_memory_link_being_setup()
+    being_id = setup.provision(1)
+    link_svc = EpisodicMemoryLinkApplicationService(
+        store,
+        setup.link_store,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
+    )
+    pr = EpisodicPassiveRecallRetrievalService(
+        store,
+        link_store=setup.link_store,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
+    )
     e1 = _ep(episode_id="a", player_id=1)
     e2 = _ep(episode_id="b", player_id=1)
     store.put(e1)
@@ -95,7 +121,12 @@ def test_passive_recall_triggers_co_recall_links() -> None:
         max_candidates=5,
     )
     link_svc.on_passive_recall_candidates(1, res.candidates)
-    assert links.get_link(1, "a", "b", MemoryLinkType.CO_RECALL) is not None
+    assert (
+        setup.link_store.get_link_by_being(
+            being_id, "a", "b", MemoryLinkType.CO_RECALL
+        )
+        is not None
+    )
 
 
 def _strong_link(
@@ -151,16 +182,23 @@ def test_semantic_cluster_promotion_writes_store() -> None:
     assert len(setup.list_entries(1)) == 1
 
 
-def test_link_store_lists_all_for_player() -> None:
-    links = InMemoryMemoryLinkStore()
-    links.upsert_link(_strong_link(3, "a", "b"))
-    assert len(links.list_all_links_for_player(3)) == 1
+def test_link_store_lists_all_for_being() -> None:
+    setup = make_memory_link_being_setup()
+    being_id = setup.provision(3)
+    setup.link_store.upsert_link_by_being(being_id, _strong_link(3, "a", "b"))
+    assert len(setup.link_store.list_all_links_for_being(being_id)) == 1
 
 
 def test_memory_link_store_supports_co_recall_candidates_tuple() -> None:
     store = InMemorySubjectiveEpisodeStore()
-    links = InMemoryMemoryLinkStore()
-    link_svc = EpisodicMemoryLinkApplicationService(store, links)
+    setup = make_memory_link_being_setup()
+    being_id = setup.provision(2)
+    link_svc = EpisodicMemoryLinkApplicationService(
+        store,
+        setup.link_store,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
+    )
     e1 = _ep(episode_id="p", player_id=2)
     e2 = _ep(episode_id="q", player_id=2)
     store.put(e1)
@@ -170,4 +208,9 @@ def test_memory_link_store_supports_co_recall_candidates_tuple() -> None:
         EpisodicPassiveRecallCandidate(episode=e2, source_axes=("temporal",)),
     )
     link_svc.on_passive_recall_candidates(2, cands)
-    assert links.get_link(2, "p", "q", MemoryLinkType.CO_RECALL) is not None
+    assert (
+        setup.link_store.get_link_by_being(
+            being_id, "p", "q", MemoryLinkType.CO_RECALL
+        )
+        is not None
+    )

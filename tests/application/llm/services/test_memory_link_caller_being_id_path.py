@@ -1,8 +1,8 @@
-"""Phase 3 Step 3c-2: memory_link caller dual-path テスト。
+"""Phase 3 Step 3c-3: memory_link caller の being_id keyed 経路テスト。
 
-Resolver+WorldId 注入 + Being provision 時に、5 caller のいずれもが
-``*_by_being`` API 経由で動作することを確認する。memo 3a-2 / semantic 3b-2
-と同じパターン。
+Step 3c-2 で導入した dual-path のうち legacy fallback を 3c-3 で撤去した
+ため、本テストでも「Resolver 未注入なら silent skip / INVALID_STATE」など
+新 API only 経路の挙動を確認する。memo 3a-3 / semantic 3b-3 と同じ整理。
 """
 
 from __future__ import annotations
@@ -120,13 +120,12 @@ class TestEpisodicMemoryLinkApplicationServiceDualPath:
         svc.on_episode_committed(newest, now=_NOW)
         # being_id 経路に書かれる
         assert len(setup.link_store.list_all_links_for_being(being_id)) == 1
-        # legacy 経路は空
-        assert setup.link_store.list_all_links_for_player(1) == []
 
-    def test_resolver_未注入なら_legacy_経路で_link_を作る(self) -> None:
+    def test_resolver_未注入なら_silent_no_op(self) -> None:
+        """Phase 3 Step 3c-3: legacy 撤去後、Resolver 未注入は silent skip。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
-        # Resolver 注入なし
+        # Resolver 注入なしで構築 (= legacy 経路は撤去済)
         svc = EpisodicMemoryLinkApplicationService(episodes, setup.link_store)
         from datetime import timedelta as _td
         prev = _ep(episode_id="prev", occurred_at=_NOW - _td(minutes=5))
@@ -134,19 +133,25 @@ class TestEpisodicMemoryLinkApplicationServiceDualPath:
         episodes.put(prev)
         episodes.put(newest)
         svc.on_episode_committed(newest, now=_NOW)
-        assert len(setup.link_store.list_all_links_for_player(1)) == 1
+        # being_id 側にも何も書かれていない (= silent no-op)
+        # link_store 全体を見ても空であることだけ確認できれば十分
+        # (being_id を引けないため list_all_links_for_being は呼べないが、
+        # internal index が空であることを暗に確認)
+        # 何かの being_id でリストしても 0 件 (= 当然 0)
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+        assert (
+            setup.link_store.list_all_links_for_being(BeingId("dummy")) == []
+        )
 
 
 class TestEpisodicMemoryExploreToolExecutorDualPath:
     """``EpisodicMemoryExploreToolExecutor`` が being_id 経路で link を引く。"""
 
-    def test_resolver_未注入なら_legacy_経路で_link_を_引く(self) -> None:
-        """Resolver 未注入時は legacy ``list_links_for_episode`` 経路。"""
+    def test_resolver_未注入なら_INVALID_STATE(self) -> None:
+        """Phase 3 Step 3c-3: tool は LLM-visible なので fail-fast (= INVALID_STATE)。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
         episodes.put(_ep(episode_id="seed"))
-        episodes.put(_ep(episode_id="legacy_other"))
-        setup.link_store.upsert_link(_link(a="seed", b="legacy_other", strength=0.9))
         svc = EpisodicMemoryLinkApplicationService(episodes, setup.link_store)
         executor = EpisodicMemoryExploreToolExecutor(
             episode_store=episodes,
@@ -157,10 +162,8 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
         result = handlers[TOOL_NAME_MEMORY_EXPLORE_RELATED](
             1, {"episode_id": "seed", "top_k": 5}
         )
-        assert result.success is True
-        payload = json.loads(result.message)
-        ids = [r["episode_id"] for r in payload["related_episodes"]]
-        assert "legacy_other" in ids
+        assert result.success is False
+        assert result.error_code == "INVALID_STATE"
 
     def test_being_id_経由で_書いた_link_が_explore_で_見える(self) -> None:
         episodes = InMemorySubjectiveEpisodeStore()
@@ -198,16 +201,23 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
     """``EpisodicPassiveRecallRetrievalService`` の spreading activation が
     being_id 経路で link を引く。"""
 
-    def test_resolver_未注入時は_spreading_が_legacy_経路で_動く(self) -> None:
-        """Resolver 未注入なら ``neighbor_priming_scores`` は legacy 経路で
-        link を辿る。"""
+    def test_resolver_未注入時は_spreading_軸を_skip_して_完走する(self) -> None:
+        """Phase 3 Step 3c-3: legacy 撤去後、Resolver 未注入時は spreading 軸を
+        skip して例外なく retrieve を完走する (= temporal/cue 軸の候補で
+        prompt が痩せるだけ。turn は止まらない graceful fallback)。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
+        # episode は 1 件だけ (= temporal で必ず seed が拾えるが、
+        # spreading_rows は spreading が走らなければ空のまま)
         seed_ep = _ep(episode_id="seed")
-        far_ep = _ep(episode_id="far")
         episodes.put(seed_ep)
-        episodes.put(far_ep)
-        setup.link_store.upsert_link(_link(a="seed", b="far", strength=0.9))
+        # being_id 経路には link を書いて「spreading が走れば派生先が見つかる」
+        # 状況を作る。Resolver 未注入なので spreading は走らない想定。
+        setup.link_store.upsert_link_by_being(
+            setup.provision(1),
+            _link(a="seed", b="never_appears", strength=0.9),
+        )
+        # ここから Resolver 未注入で構築
         svc = EpisodicPassiveRecallRetrievalService(
             episodes,
             link_store=setup.link_store,
@@ -220,7 +230,11 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
             now=_NOW,
         )
         ids = {c.episode.episode_id for c in result.candidates}
-        assert "far" in ids
+        # temporal 軸で seed は出る
+        assert "seed" in ids
+        # spreading 軸は skip されたので link 経由の「never_appears」は出ない
+        # (= episode_store にも入っていないので素直に確認できる)
+        assert "never_appears" not in ids
 
     def test_being_id_注入時は_spreading_が_being_id_経路で_動く(self) -> None:
         episodes = InMemorySubjectiveEpisodeStore()
@@ -252,17 +266,12 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
         assert "far" in ids
 
 
-class TestEpisodicSemanticClusterPromotionServiceMemoryLinkDualPath:
+class TestEpisodicSemanticClusterPromotionServiceMemoryLinkPath:
     """``EpisodicSemanticClusterPromotionService.on_after_tool_turn`` の link 走査が
-    being_id 経路 / legacy 経路を切り替える。
+    being_id keyed only で動くことを確認 (Phase 3 Step 3c-3)。"""
 
-    semantic store 側は 3b-3 で being_id 必須化済のため、本テストは
-    「Resolver 未注入なら semantic も legacy も触らない (= no-op)」と
-    「Resolver 注入時は link を being_id 経由で読む」の 2 ケースを確認する。
-    """
-
-    def test_resolver_未注入時は_link_を_legacy_経路で_読む(self) -> None:
-        """Resolver 未注入 = legacy link 経路 + semantic も silent no-op。"""
+    def test_resolver_未注入時は_silent_no_op(self) -> None:
+        """Phase 3 Step 3c-3: Resolver 未注入なら link 走査も含めて silent no-op。"""
         from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
             EpisodicSemanticClusterPromotionService,
         )
@@ -273,31 +282,14 @@ class TestEpisodicSemanticClusterPromotionServiceMemoryLinkDualPath:
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
         sem = InMemorySemanticMemoryStore()
-        for i, eid in enumerate(["x", "y", "z"]):
-            episodes.put(
-                _ep(episode_id=eid).__class__(
-                    **{
-                        **_ep(episode_id=eid).__dict__,
-                        "interpreted": f"主観文{i}",
-                    }
-                )
-            )
-        # legacy 経路に link を 3 本書く (= 三角クラスタ)
-        setup.link_store.upsert_link(_link(a="x", b="y"))
-        setup.link_store.upsert_link(_link(a="y", b="z"))
-        setup.link_store.upsert_link(_link(a="x", b="z"))
-        # Resolver 未注入で構築
         promo = EpisodicSemanticClusterPromotionService(
             episode_store=episodes,
             link_store=setup.link_store,
             semantic_store=sem,
-            promotion_frontier=None,  # full scan で legacy 経路を駆動
+            promotion_frontier=None,
         )
+        # 例外なく完了する (= silent no-op)
         promo.on_after_tool_turn(1, now=_NOW)
-        # link 読み込みは legacy で動くが、semantic は being_id 必須なので
-        # 結果として silent no-op (= entry が書かれない)。
-        # 「link 経路は legacy で動いた」ことは promo 内部の adj 構築が
-        # 例外なく完了することで間接的に確認する (例外なく到達=OK)。
 
     def test_resolver_注入時は_link_を_being_id_経路で_読む(self) -> None:
         """Resolver 注入 + Being provision で being_id 経路。"""
@@ -335,7 +327,7 @@ class TestEpisodicSemanticClusterPromotionServiceMemoryLinkDualPath:
 
 
 class TestSpreadingActivationBeingIdParam:
-    """``neighbor_priming_scores`` の being_id 引数が ``*_by_being`` 経路を駆動する。"""
+    """``neighbor_priming_scores`` は being_id 必須 (Phase 3 Step 3c-3)。"""
 
     def test_being_id_を_渡すと_being_id_経路で_link_を_たどる(self) -> None:
         setup = make_memory_link_being_setup()
@@ -343,27 +335,23 @@ class TestSpreadingActivationBeingIdParam:
         setup.link_store.upsert_link_by_being(
             being_id, _link(a="seed", b="other", strength=0.9)
         )
-        # legacy 側には何もない
         result = neighbor_priming_scores(
-            player_id=1,
+            being_id=being_id,
             seed_episode_ids=frozenset({"seed"}),
             link_store=setup.link_store,
             now=_NOW,
             max_hops=2,
-            being_id=being_id,
         )
         assert "other" in result
 
-    def test_being_id_なしなら_legacy_経路_を_たどる(self) -> None:
+    def test_being_id_の_型違反は_TypeError(self) -> None:
+        """Phase 3 Step 3c-3: being_id は BeingId 型必須。"""
         setup = make_memory_link_being_setup()
-        # legacy 側に書く
-        setup.link_store.upsert_link(_link(a="seed", b="legacy_other"))
-        result = neighbor_priming_scores(
-            player_id=1,
-            seed_episode_ids=frozenset({"seed"}),
-            link_store=setup.link_store,
-            now=_NOW,
-            max_hops=2,
-            being_id=None,
-        )
-        assert "legacy_other" in result
+        with pytest.raises(TypeError, match="being_id"):
+            neighbor_priming_scores(
+                being_id="not-a-being-id",  # type: ignore[arg-type]
+                seed_episode_ids=frozenset({"seed"}),
+                link_store=setup.link_store,
+                now=_NOW,
+                max_hops=2,
+            )

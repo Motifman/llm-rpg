@@ -162,9 +162,9 @@ class EpisodicPassiveRecallRetrievalService:
         being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
         default_world_id: Optional[WorldId] = None,
     ) -> None:
-        # Phase 3 Step 3c-2: dual-path。Resolver+WorldId 注入時は being_id 経路で
-        # spreading activation を走らせる。未注入なら legacy player_id 経路に
-        # fallback。Step 3c-3 で legacy 経路を撤去する。
+        # Phase 3 Step 3c-3: legacy player_id 経路は撤去済。Resolver+WorldId が
+        # 未注入 / Being 未 provision の場合は spreading 軸を skip
+        # (= prompt 強化が痩せるだけで turn は止めない graceful fallback)。
         if being_attachment_resolver is not None and not isinstance(
             being_attachment_resolver, BeingAttachmentResolver
         ):
@@ -241,15 +241,18 @@ class EpisodicPassiveRecallRetrievalService:
 
         effective_now = now if now is not None else datetime.now(timezone.utc)
         spreading_rows: list[SubjectiveEpisode] = []
-        if self._link_store is not None and episode_by_id:
+        being_id = self._resolve_being_id(player_id)
+        if self._link_store is not None and episode_by_id and being_id is not None:
+            # Phase 3 Step 3c-3: spreading activation は being_id keyed only。
+            # Being 未解決時は spreading 軸を skip (= prompt 強化が痩せるだけで
+            # turn は止めない)。
             seeds = frozenset(episode_by_id.keys())
             priming = neighbor_priming_scores(
-                player_id=player_id,
+                being_id=being_id,
                 seed_episode_ids=seeds,
                 link_store=self._link_store,
                 now=effective_now,
                 max_hops=self._spreading_max_hops,
-                being_id=self._resolve_being_id(player_id),
             )
             ranked = sorted(priming.items(), key=lambda t: t[1], reverse=True)
             for eid, _score in ranked[:limit_per_axis]:
