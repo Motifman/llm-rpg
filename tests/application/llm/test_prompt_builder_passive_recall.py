@@ -1,3 +1,12 @@
+# Phase 3 Step 3e-3 bulk migration: episode_store の player_id 経路撤去に
+# 伴い、本ファイルの ``being_id`` 参照を deterministic な ``BeingId`` の
+# 既定値で受ける (= テスト内で異なる player_id を使う箇所は個別に上書き)。
+# BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
+from ai_rpg_world.domain.being.value_object.being_id import (
+    BeingId as _MIG_BeingId,
+)
+
+being_id = _MIG_BeingId("being_w1_p1")
 """DefaultPromptBuilder の受動想起（エピソード recall_text）注入の検証。"""
 
 from datetime import datetime, timedelta, timezone
@@ -160,29 +169,54 @@ class TestPromptBuilderPassiveRecall:
         situation_cues（runtime + 最新観測 structured）で retrieve し、
         候補 episode の recall_text が 【関連する記憶】 に載る。
         """
+        from ai_rpg_world.application.being.being_provisioning_service import (
+            BeingProvisioningService,
+        )
+        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+            BeingAttachmentResolver,
+        )
+        from ai_rpg_world.domain.world.value_object.world_id import (
+            DEFAULT_SINGLE_WORLD_ID,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
+            InMemoryBeingRepository,
+        )
+
         player_num = 3
+        # Phase 3 Step 3e-3: episode_store / passive recall は being_id 経路のみ
+        _being_repo = InMemoryBeingRepository()
+        _resolver = BeingAttachmentResolver(_being_repo)
+        being_id_3 = BeingProvisioningService(_being_repo).ensure_attached(
+            PlayerId(player_num)
+        )
         place_c = EpisodicCue(axis="place_spot", value="77", source=EpisodicCueSource.RUNTIME_CONTEXT)
         base = datetime(2026, 5, 2, 8, 0, tzinfo=timezone.utc)
         store = InMemorySubjectiveEpisodeStore()
-        store.put(
+        store.put_by_being(
+            being_id_3,
             _episode(
                 episode_id="e_recent",
                 player_id=player_num,
                 occurred_at=base + timedelta(hours=1),
                 recall_text="最近の出来事",
                 cues=(place_c,),
-            )
+            ),
         )
-        store.put(
+        store.put_by_being(
+            being_id_3,
             _episode(
                 episode_id="e_old",
                 player_id=player_num,
                 occurred_at=base,
                 recall_text="古いが cue で拾える",
                 cues=(place_c,),
-            )
+            ),
         )
-        recall_svc = EpisodicPassiveRecallRetrievalService(store)
+        recall_svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=_resolver,
+            default_world_id=DEFAULT_SINGLE_WORLD_ID,
+        )
 
         buffer = MagicMock(spec=IObservationContextBuffer)
         buffer.drain = MagicMock(return_value=[])
@@ -265,18 +299,26 @@ class TestPromptBuilderPassiveRecall:
         place_c = EpisodicCue(axis="place_spot", value="77", source=EpisodicCueSource.RUNTIME_CONTEXT)
         base = datetime(2026, 5, 2, 8, 0, tzinfo=timezone.utc)
         store = InMemorySubjectiveEpisodeStore()
-        store.put(
+        # Phase 3 Step 3e-3: 統合テスト用に reinterp_setup を先に作って being_id を
+        # 取得 (= journal と episode_store で同じ being_id を共有する)
+        reinterp_setup = make_reinterpretation_being_setup()
+        being_id_4 = reinterp_setup.provision(player_num)
+        store.put_by_being(
+            being_id_4,
             _episode(
                 episode_id="e_reinterpreted",
                 player_id=player_num,
                 occurred_at=base + timedelta(hours=1),
                 recall_text="古い回想は使われない",
                 cues=(place_c,),
-            )
+            ),
         )
-        recall_svc = EpisodicPassiveRecallRetrievalService(store)
-        reinterp_setup = make_reinterpretation_being_setup()
-        being_id = reinterp_setup.provision(player_num)
+        recall_svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=reinterp_setup.resolver,
+            default_world_id=reinterp_setup.world_id,
+        )
+        being_id = being_id_4
         journal = reinterp_setup.journal
         journal.put_active_by_being(
             being_id,

@@ -77,7 +77,12 @@ class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
 
 
 def _build_encoding_and_draft(*, player_id: int = 7) -> tuple:
-    """最小限の ChunkEncodingInput + draft Episode を作る。"""
+    """最小限の ChunkEncodingInput + draft Episode + Being 一式を作る。
+
+    Phase 3 Step 3e-3: scheduler は being_id 経路必須となったため、helper で
+    Being 解決一式 (being_id / resolver / world_id) も同時に返す。
+    返り値: ``(enc, draft, being_id, resolver, world_id)``。
+    """
     t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
     act = ActionResultEntry(
         occurred_at=t,
@@ -88,7 +93,33 @@ def _build_encoding_and_draft(*, player_id: int = 7) -> tuple:
     )
     enc = build_chunk_encoding_input(PlayerId(player_id), (), (act,))
     draft = ChunkEpisodeDraftBuilder().build(enc)
-    return enc, draft
+    being_id, resolver, world_id = _provision_scheduler(player_id)
+    return enc, draft, being_id, resolver, world_id
+
+
+def _provision_scheduler(player_id: int):
+    """Phase 3 Step 3e-3: 各テストで scheduler に Resolver を inject するための
+    Being+Resolver+WorldId 一式を組み立てる helper。
+
+    返り値: ``(being_id, resolver, world_id)``。
+    """
+    from ai_rpg_world.application.being.being_provisioning_service import (
+        BeingProvisioningService,
+    )
+    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
+    from ai_rpg_world.domain.world.value_object.world_id import (
+        DEFAULT_SINGLE_WORLD_ID,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
+        InMemoryBeingRepository,
+    )
+
+    repo = InMemoryBeingRepository()
+    resolver = BeingAttachmentResolver(repo)
+    being_id = BeingProvisioningService(repo).ensure_attached(PlayerId(player_id))
+    return being_id, resolver, DEFAULT_SINGLE_WORLD_ID
 
 
 # ─────────────────────────────────────────────
@@ -100,25 +131,27 @@ class TestInlineScheduler:
     """同期 scheduler が同じ thread 内で merge → store 上書きを完結させる。"""
 
     def test_submit_で_store_の_episode_が_LLM_文に上書きされる(self) -> None:
-        enc, draft = _build_encoding_and_draft()
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
-        store.put(draft)  # chunk_coordinator が事前に draft を入れた状態を模す
+        store.put_by_being(being_id, draft)  # chunk_coordinator が事前に draft を入れた状態を模す
         port = _StubPort(returns={"interpreted": "STUB_I", "recall_text": "STUB_R"})
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
+                    being_attachment_resolver=resolver,
+            default_world_id=world_id,
         )
         scheduler.submit(draft, persona_text="ペルソナ", encoding_input=enc)
-        ep_after = store.get(draft.player_id, draft.episode_id)
+        ep_after = store.get_by_being(being_id, draft.episode_id)
         assert ep_after is not None
         assert ep_after.interpreted == "STUB_I"
         assert ep_after.recall_text == "STUB_R"
         assert port.call_count == 1
 
     def test_LLM_失敗時は_draft_のまま_FAILED_trace_を出す(self) -> None:
-        enc, draft = _build_encoding_and_draft()
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
-        store.put(draft)
+        store.put_by_being(being_id, draft)
         # service 自体は例外を呑むのでテンプレで上書きされてしまう。
         # 「FAILED trace を出す」挙動を確認するために scheduler 内部例外を仕込む:
         # service.merge_llm_subjective_fields 自体が呼べないケースを stub する。
@@ -133,6 +166,8 @@ class TestInlineScheduler:
             bad_svc, store,
             trace_recorder_provider=lambda: recorder,
             current_tick_provider=lambda: 42,
+                    being_attachment_resolver=resolver,
+            default_world_id=world_id,
         )
         scheduler.submit(draft, persona_text="", encoding_input=enc)
         failed = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FAILED]
@@ -141,13 +176,13 @@ class TestInlineScheduler:
         assert failed[0].tick == 42
         assert failed[0].payload["episode_id"] == draft.episode_id
         # store の episode は draft のまま (上書き無し)
-        ep_after = store.get(draft.player_id, draft.episode_id)
+        ep_after = store.get_by_being(being_id, draft.episode_id)
         assert ep_after == draft
 
     def test_FILLED_trace_の_recall_text_snippet_は_120_文字まで(self) -> None:
-        enc, draft = _build_encoding_and_draft()
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
-        store.put(draft)
+        store.put_by_being(being_id, draft)
         long_recall = "あ" * 500
         port = _StubPort(returns={"interpreted": "X", "recall_text": long_recall})
         recorder = NullTraceRecorder()
@@ -156,6 +191,8 @@ class TestInlineScheduler:
             EpisodicChunkSubjectiveFieldsService(port),
             store,
             trace_recorder_provider=lambda: recorder,
+                    being_attachment_resolver=resolver,
+            default_world_id=world_id,
         )
         scheduler.submit(draft, persona_text="", encoding_input=enc)
         filled = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FILLED]
@@ -163,11 +200,14 @@ class TestInlineScheduler:
         assert len(filled[0].payload["recall_text_snippet"]) <= 120
 
     def test_shutdown_は_noop(self) -> None:
-        enc, draft = _build_encoding_and_draft()
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         port = _StubPort()
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store
+        ,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
         )
         scheduler.shutdown()  # 例外なく終わる
         scheduler.shutdown(timeout=1.0)  # 何度呼んでも安全
@@ -182,14 +222,16 @@ class TestThreadPoolScheduler:
     """非同期 scheduler が裏で merge → store 上書きを完了する。"""
 
     def test_submit_後_shutdown_で_store_が_LLM_文に上書きされる(self) -> None:
-        enc, draft = _build_encoding_and_draft()
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
-        store.put(draft)
+        store.put_by_being(being_id, draft)
         port = _StubPort(returns={"interpreted": "ASYNC_I", "recall_text": "ASYNC_R"})
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
             max_workers=1,
+                    being_attachment_resolver=resolver,
+            default_world_id=world_id,
         )
         try:
             scheduler.submit(draft, persona_text="", encoding_input=enc)
@@ -197,19 +239,22 @@ class TestThreadPoolScheduler:
         except Exception:
             scheduler.shutdown(timeout=2.0)
             raise
-        ep_after = store.get(draft.player_id, draft.episode_id)
+        ep_after = store.get_by_being(being_id, draft.episode_id)
         assert ep_after is not None
         assert ep_after.recall_text == "ASYNC_R"
         assert ep_after.interpreted == "ASYNC_I"
 
     def test_submit_は_非ブロッキング(self) -> None:
         """重い LLM (1 秒 sleep) を投げても submit は瞬時に返る。"""
-        enc, draft = _build_encoding_and_draft()
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
-        store.put(draft)
+        store.put_by_being(being_id, draft)
         port = _StubPort(delay=1.0)
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store
+        ,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
         )
         try:
             t0 = time.monotonic()
@@ -220,9 +265,9 @@ class TestThreadPoolScheduler:
             scheduler.shutdown(timeout=2.0)
 
     def test_LLM_失敗時_は_draft_のまま_FAILED_trace_が出る(self) -> None:
-        enc, draft = _build_encoding_and_draft()
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
-        store.put(draft)
+        store.put_by_being(being_id, draft)
         # scheduler レベルで失敗するには service 自体に例外を仕込む
         class _BoomService(EpisodicChunkSubjectiveFieldsService):
             def merge_llm_subjective_fields(self, *a, **kw):  # type: ignore[override]
@@ -233,22 +278,27 @@ class TestThreadPoolScheduler:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             _BoomService(port), store,
             trace_recorder_provider=lambda: recorder,
+                    being_attachment_resolver=resolver,
+            default_world_id=world_id,
         )
         scheduler.submit(draft, persona_text="", encoding_input=enc)
         scheduler.shutdown()
         failed = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FAILED]
         assert len(failed) == 1
         # draft が store に残っている (上書き無し)
-        assert store.get(draft.player_id, draft.episode_id) == draft
+        assert store.get_by_being(being_id, draft.episode_id) == draft
 
     def test_同一_episode_id_の_重複_submit_は_dedupe_される(self) -> None:
-        enc, draft = _build_encoding_and_draft()
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
-        store.put(draft)
+        store.put_by_being(being_id, draft)
         # delay を入れて 2 回目の submit が 1 回目と同時 in-flight になるよう仕組む
         port = _StubPort(delay=0.3)
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store
+        ,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
         )
         try:
             scheduler.submit(draft, persona_text="", encoding_input=enc)
@@ -263,12 +313,17 @@ class TestThreadPoolScheduler:
 
     def test_max_queue_size_超過で_DROPPED_trace_が出る(self) -> None:
         """max_queue_size=2 に設定して 3 件投げると 1 件は drop される。"""
-        enc1, draft1 = _build_encoding_and_draft(player_id=1)
-        enc2, draft2 = _build_encoding_and_draft(player_id=2)
-        enc3, draft3 = _build_encoding_and_draft(player_id=3)
+        enc1, draft1, being1, resolver, world_id = _build_encoding_and_draft(player_id=1)
+        enc2, draft2, being2, _, _ = _build_encoding_and_draft(player_id=2)
+        enc3, draft3, being3, _, _ = _build_encoding_and_draft(player_id=3)
+        # 各 player ごとに別 Being。代表で player_id=1 の Resolver を scheduler に注入
+        # (= 各 player_id を Resolver で解決するとそれぞれ別 Being にぶつかるが、
+        # 本テストの主目的は queue 満杯時の DROPPED trace 検出なので Resolver は
+        # 1 player 分で足りる。put_by_being は各 Being で行う)
         store = InMemorySubjectiveEpisodeStore()
-        for d in (draft1, draft2, draft3):
-            store.put(d)
+        store.put_by_being(being1, draft1)
+        store.put_by_being(being2, draft2)
+        store.put_by_being(being3, draft3)
         # 全 worker が詰まるように長めの delay
         port = _StubPort(delay=0.5)
         recorder = NullTraceRecorder()
@@ -278,6 +333,8 @@ class TestThreadPoolScheduler:
             max_workers=1,
             max_queue_size=2,
             trace_recorder_provider=lambda: recorder,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
         )
         try:
             scheduler.submit(draft1, persona_text="", encoding_input=enc1)
@@ -293,15 +350,17 @@ class TestThreadPoolScheduler:
 
     def test_shutdown_後の_submit_は_DROPPED_trace_付きで_drop_される(self) -> None:
         """無音 drop ではなく観測可能にする (silent-failure-hunter #1 への対応)。"""
-        enc, draft = _build_encoding_and_draft()
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
-        store.put(draft)
+        store.put_by_being(being_id, draft)
         port = _StubPort()
         recorder = NullTraceRecorder()
         events = _capture(recorder)
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store,
             trace_recorder_provider=lambda: recorder,
+                    being_attachment_resolver=resolver,
+            default_world_id=world_id,
         )
         scheduler.shutdown()
         # shutdown 後の submit は例外を上げない
@@ -318,13 +377,16 @@ class TestThreadPoolScheduler:
         assert dropped[0].payload["reason"] == "shutdown"
 
     def test_shutdown_timeout_で_未完了は_諦める(self) -> None:
-        enc, draft = _build_encoding_and_draft()
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
-        store.put(draft)
+        store.put_by_being(being_id, draft)
         # 5 秒寝るので 0.1 秒 timeout では完了しない
         port = _StubPort(delay=5.0)
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store
+        ,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
         )
         scheduler.submit(draft, persona_text="", encoding_input=enc)
         t0 = time.monotonic()
@@ -339,12 +401,15 @@ class TestThreadPoolScheduler:
         """timeout 超過ジョブは episode_id 付きで WARN ログに出る
         (silent-failure-hunter #2 への対応)。"""
         import logging
-        enc, draft = _build_encoding_and_draft(player_id=11)
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft(player_id=11)
         store = InMemorySubjectiveEpisodeStore()
-        store.put(draft)
+        store.put_by_being(being_id, draft)
         port = _StubPort(delay=5.0)
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store
+        ,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
         )
         scheduler.submit(draft, persona_text="", encoding_input=enc)
         with caplog.at_level(
@@ -362,14 +427,15 @@ class TestThreadPoolScheduler:
 
     def test_thread_safety_store_concurrent_read_during_worker_put(self) -> None:
         """ワーカーが put する裏で main thread が list_recent しても壊れない。"""
-        enc, draft = _build_encoding_and_draft()
+        # 本テストは player_id=99 で動かす (= _provision_scheduler で別 Being を作る)
+        being_99, resolver_99, world_id_99 = _provision_scheduler(99)
         store = InMemorySubjectiveEpisodeStore()
-        store.put(draft)
         port = _StubPort(delay=0.05)
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
-            EpisodicChunkSubjectiveFieldsService(port), store, max_workers=2
+            EpisodicChunkSubjectiveFieldsService(port), store, max_workers=2,
+            being_attachment_resolver=resolver_99,
+            default_world_id=world_id_99,
         )
-        # 同じ player に対して 10 件 chunk を投入し、メインから list_recent を回す
         drafts = []
         for i in range(10):
             t = datetime(2026, 6, 1, 9, i, tzinfo=timezone.utc)
@@ -382,22 +448,20 @@ class TestThreadPoolScheduler:
             )
             enc_i = build_chunk_encoding_input(PlayerId(99), (), (act,))
             d = ChunkEpisodeDraftBuilder().build(enc_i)
-            store.put(d)
+            store.put_by_being(being_99, d)
             scheduler.submit(d, persona_text="", encoding_input=enc_i)
             drafts.append(d)
         try:
-            # メインからの並列 read
+            # メインからの並列 read (= 同 store の by_being を読む)
             for _ in range(50):
-                res = store.list_recent(99, 20)
-                # 壊れた dict / 例外なく取得できれば OK
+                res = store.list_recent_by_being(being_99, 20)
                 assert isinstance(res, list)
         finally:
             scheduler.shutdown(timeout=3.0)
-        # 完了後、全 episode が merged (recall_text != draft.recall_text)
+        # 完了後、全 episode が merged (recall_text="R" に変わる)
         for d in drafts:
-            ep_after = store.get(99, d.episode_id)
+            ep_after = store.get_by_being(being_99, d.episode_id)
             assert ep_after is not None
-            # stub は recall_text="R" を返す。draft の recall_text と一致しないことを確認
             assert ep_after.recall_text == "R"
 
 

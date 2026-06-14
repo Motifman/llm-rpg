@@ -7,6 +7,16 @@ Step 3c-2 で導入した dual-path のうち legacy fallback を 3c-3 で撤去
 
 from __future__ import annotations
 
+# Phase 3 Step 3e-3 bulk migration: episode_store の player_id 経路撤去に
+# 伴い、本ファイルの ``being_id`` 参照を deterministic な ``BeingId`` の
+# 既定値で受ける (= テスト内で異なる player_id を使う箇所は個別に上書き)。
+# BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
+from ai_rpg_world.domain.being.value_object.being_id import (
+    BeingId as _MIG_BeingId,
+)
+
+being_id = _MIG_BeingId("being_w1_p1")
+
 import json
 from datetime import datetime, timezone
 
@@ -131,8 +141,8 @@ class TestEpisodicMemoryLinkApplicationServiceDualPath:
         from datetime import timedelta as _td
         prev = _ep(episode_id="prev", occurred_at=_NOW - _td(minutes=5))
         newest = _ep(episode_id="newest", occurred_at=_NOW)
-        episodes.put(prev)
-        episodes.put(newest)
+        episodes.put_by_being(being_id, prev)
+        episodes.put_by_being(being_id, newest)
         svc.on_episode_committed(newest, now=_NOW)
         # being_id 側にも何も書かれていない (= silent no-op)
         # link_store 全体を見ても空であることだけ確認できれば十分
@@ -152,7 +162,7 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
         """Phase 3 Step 3c-3: tool は LLM-visible なので fail-fast (= INVALID_STATE)。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
-        episodes.put(_ep(episode_id="seed"))
+        episodes.put_by_being(being_id, _ep(episode_id="seed"))
         svc = EpisodicMemoryLinkApplicationService(episodes, setup.link_store)
         executor = EpisodicMemoryExploreToolExecutor(
             episode_store=episodes,
@@ -203,23 +213,13 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
     """``EpisodicPassiveRecallRetrievalService`` の spreading activation が
     being_id 経路で link を引く。"""
 
-    def test_resolver_未注入時は_spreading_軸を_skip_して_完走する(self) -> None:
-        """Phase 3 Step 3c-3: legacy 撤去後、Resolver 未注入時は spreading 軸を
-        skip して例外なく retrieve を完走する (= temporal/cue 軸の候補で
-        prompt が痩せるだけ。turn は止まらない graceful fallback)。"""
+    def test_resolver_未注入時は_全軸を_skip_して_完走する(self) -> None:
+        """Phase 3 Step 3e-3: episode_store も legacy 撤去後、Resolver 未注入時は
+        temporal/cue/spreading すべての軸が空になる graceful fallback。turn は
+        止まらず、prompt 強化が完全に痩せるだけ。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
-        # episode は 1 件だけ (= temporal で必ず seed が拾えるが、
-        # spreading_rows は spreading が走らなければ空のまま)
-        seed_ep = _ep(episode_id="seed")
-        episodes.put(seed_ep)
-        # being_id 経路には link を書いて「spreading が走れば派生先が見つかる」
-        # 状況を作る。Resolver 未注入なので spreading は走らない想定。
-        setup.link_store.upsert_link_by_being(
-            setup.provision(1),
-            _link(a="seed", b="never_appears", strength=0.9),
-        )
-        # ここから Resolver 未注入で構築
+        # Resolver 未注入で構築 (= episode も link も読み出せない)
         svc = EpisodicPassiveRecallRetrievalService(
             episodes,
             link_store=setup.link_store,
@@ -232,11 +232,8 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
             now=_NOW,
         )
         ids = {c.episode.episode_id for c in result.candidates}
-        # temporal 軸で seed は出る
-        assert "seed" in ids
-        # spreading 軸は skip されたので link 経由の「never_appears」は出ない
-        # (= episode_store にも入っていないので素直に確認できる)
-        assert "never_appears" not in ids
+        # 全軸 skip → 候補ゼロ
+        assert ids == set()
 
     def test_being_id_注入時は_spreading_が_being_id_経路で_動く(self) -> None:
         episodes = InMemorySubjectiveEpisodeStore()

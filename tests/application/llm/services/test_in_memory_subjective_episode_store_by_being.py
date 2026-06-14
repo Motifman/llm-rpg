@@ -160,22 +160,9 @@ class TestListByCueByBeing:
         assert len(store.list_by_cue_by_being(being, cue_new, limit=10)) == 1
 
 
-class TestIndependenceFromPlayerIdApi:
-    """新旧 API の独立性 (= 並走 index は同期しない)。"""
-
-    def test_player_id_経由で_put_した_episode_は_being_id_経由では_見えない(
-        self, store: InMemorySubjectiveEpisodeStore, being: BeingId
-    ) -> None:
-        store.put(_episode(episode_id="legacy", player_id=1))
-        assert store.get_by_being(being, "legacy") is None
-        assert store.list_recent_by_being(being, limit=10) == []
-
-    def test_being_id_経由で_put_した_episode_は_player_id_経由では_見えない(
-        self, store: InMemorySubjectiveEpisodeStore, being: BeingId
-    ) -> None:
-        store.put_by_being(being, _episode(episode_id="new", player_id=1))
-        assert store.get(1, "new") is None
-        assert store.list_recent(1, limit=10) == []
+# Phase 3 Step 3e-3 (Issue #470): legacy player_id 版 API 撤去に伴い
+# ``TestIndependenceFromPlayerIdApi`` は削除済 (= 並走パスが無くなり
+# 独立性の概念自体が消えた)。新 API only に統一。
 
 
 class TestEvictionByBeing:

@@ -186,6 +186,8 @@ def build_episodic_stack(
     persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
     subjective_completion_scheduler: Optional[IEpisodicSubjectiveCompletionScheduler] = None,
     episode_store: Optional[InMemorySubjectiveEpisodeStore] = None,
+    being_attachment_resolver: Optional[Any] = None,
+    default_world_id: Optional[Any] = None,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
@@ -236,8 +238,14 @@ def build_episodic_stack(
         subjective_completion_scheduler=subjective_completion_scheduler,
         persona_block_provider=persona_block_provider,
         # memory link service は未注入のまま (= リンクなし)。MVP 構成として最小。
+        being_attachment_resolver=being_attachment_resolver,
+        default_world_id=default_world_id,
     )
-    passive_recall = EpisodicPassiveRecallRetrievalService(episode_store)
+    passive_recall = EpisodicPassiveRecallRetrievalService(
+        episode_store,
+        being_attachment_resolver=being_attachment_resolver,
+        default_world_id=default_world_id,
+    )
     noun_matcher = build_scenario_noun_matcher(scenario=scenario, graph=graph)
     return EpisodicStack(
         chunk_coordinator=chunk_coordinator,

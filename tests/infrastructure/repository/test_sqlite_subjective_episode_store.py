@@ -50,13 +50,18 @@ def _episode(
 
 
 class TestSqliteSubjectiveEpisodeStoreBasics:
+    """Phase 3 Step 3e-3: being_id keyed only。"""
+
     def test_put_get_roundtrip(self) -> None:
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
+        being_id = BeingId("being_w1_p7")
         with tempfile.TemporaryDirectory() as tmp:
             path = str(Path(tmp) / "episodes.db")
             store = SqliteSubjectiveEpisodeStore.connect(path)
             ep = _episode()
-            store.put(ep)
-            got = store.get(7, "ep-1")
+            store.put_by_being(being_id, ep)
+            got = store.get_by_being(being_id, "ep-1")
             assert got is not None
             assert got.episode_id == ep.episode_id
             assert got.player_id == ep.player_id
@@ -64,15 +69,18 @@ class TestSqliteSubjectiveEpisodeStoreBasics:
             assert got.recall_text == ep.recall_text
 
     def test_list_by_cue_after_reopen(self) -> None:
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
+        being_id = BeingId("being_w1_p7")
         with tempfile.TemporaryDirectory() as tmp:
             path = str(Path(tmp) / "episodes.db")
             cue = EpisodicCue(
                 axis="place_spot", value="12", source=EpisodicCueSource.RUNTIME_CONTEXT
             )
             store = SqliteSubjectiveEpisodeStore.connect(path)
-            store.put(_episode(episode_id="a"))
+            store.put_by_being(being_id, _episode(episode_id="a"))
             del store
             store2 = SqliteSubjectiveEpisodeStore.connect(path)
-            found = store2.list_by_cue(7, cue, limit=5)
+            found = store2.list_by_cue_by_being(being_id, cue, limit=5)
             assert len(found) == 1
             assert found[0].episode_id == "a"

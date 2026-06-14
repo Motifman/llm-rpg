@@ -2994,6 +2994,22 @@ def create_escape_game_runtime(
         is_episodic_subjective_enabled,
     )
     if is_episodic_enabled():
+        # Phase 3 Step 3e-3: ChunkCoordinator / Scheduler / passive_recall は
+        # episode_store 経路で being_id 必須化済。escape_game の aux Being 配線
+        # を早期に確立し、各 player_spawn 分の Being を provision しておく。
+        runtime._wire_auxiliary_tool_stack()
+        for s in getattr(scenario, "player_spawns", ()):
+            try:
+                runtime._aux_being_provisioning.ensure_attached(
+                    PlayerId(int(s.player_id))
+                )
+            except Exception:
+                logger.exception(
+                    "escape_game: Being provision failed for player_id=%s (chunk "
+                    "coordinator は silent skip するが、episode が書かれない)",
+                    s.player_id,
+                )
+
         # Issue #295 後続: LLM 主観文付与の opt-in 配線。
         # LLM_EPISODIC_SUBJECTIVE_ENABLED (default on, #308) かつ LiteLLMClient
         # が取れるときだけ chunk write 後に裏で LLM が走り、interpreted /
@@ -3041,6 +3057,9 @@ def create_escape_game_runtime(
                 # scheduler と chunk_coordinator (= stack) が同じ store を
                 # 共有することで、worker が書き込んだ merged episode を
                 # passive_recall が読める ( = Pattern A の整合性条件)。
+                # Phase 3 Step 3e-3: scheduler は episode_store を being_id 経路で
+                # 触るため、Resolver+WorldId を伝播する (= aux_being_* は本 runtime
+                # の __init__ で構築済)
                 subjective_scheduler = ThreadPoolEpisodicSubjectiveScheduler(
                     _subjective_service,
                     shared_episode_store,
@@ -3048,6 +3067,8 @@ def create_escape_game_runtime(
                     max_queue_size=100,
                     trace_recorder_provider=lambda: runtime._trace_recorder,
                     current_tick_provider=runtime.current_tick,
+                    being_attachment_resolver=runtime._aux_being_resolver,
+                    default_world_id=runtime._aux_being_default_world_id,
                 )
                 # 各 player の persona_block を player_id 引きで返す provider。
                 # escape_character (= 操作対象) は rich persona、その他は spawn 名
@@ -3091,6 +3112,10 @@ def create_escape_game_runtime(
             subjective_completion_scheduler=subjective_scheduler,
             persona_block_provider=persona_provider,
             episode_store=shared_episode_store,
+            # Phase 3 Step 3e-3: episode_store 経路を being_id 統一済のため、
+            # aux Being 配線をそのまま使う
+            being_attachment_resolver=runtime._aux_being_resolver,
+            default_world_id=runtime._aux_being_default_world_id,
         )
 
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で

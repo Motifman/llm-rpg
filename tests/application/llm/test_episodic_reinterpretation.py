@@ -2,6 +2,16 @@
 
 from __future__ import annotations
 
+# Phase 3 Step 3e-3 bulk migration: episode_store の player_id 経路撤去に
+# 伴い、本ファイルの ``being_id`` 参照を deterministic な ``BeingId`` の
+# 既定値で受ける (= テスト内で異なる player_id を使う箇所は個別に上書き)。
+# BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
+from ai_rpg_world.domain.being.value_object.being_id import (
+    BeingId as _MIG_BeingId,
+)
+
+being_id = _MIG_BeingId("being_w1_p1")
+
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -386,7 +396,7 @@ class TestEpisodicReinterpretationCoordinator:
         )
 
         episodes = InMemorySubjectiveEpisodeStore()
-        episodes.put(_episode(episode_id="ep-a"))
+        episodes.put_by_being(being_id, _episode(episode_id="ep-a"))
         setup = make_reinterpretation_being_setup()
         # _BrokenRecallBufferStore で peek_batch_by_being が即 raise する経路
         # を踏ませるため、Being の provision は必要 (= Resolver が being_id を

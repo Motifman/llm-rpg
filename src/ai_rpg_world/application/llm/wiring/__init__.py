@@ -1044,6 +1044,8 @@ class LlmAgentWiringResult:
         semantic_memory_store: Optional[SemanticMemoryRepository] = None,
         event_publisher: Optional[Any] = None,
         monster_behavior_tick_service: Optional[Any] = None,
+        being_provisioning_service: Optional[Any] = None,
+        being_attachment_resolver: Optional[Any] = None,
     ) -> None:
         self.observation_registry = observation_registry
         self.llm_turn_trigger = llm_turn_trigger
@@ -1066,6 +1068,13 @@ class LlmAgentWiringResult:
         # tick driver が `tick(current_tick)` を呼び出して attack + wander を
         # 実行する。spot_graph_wiring 経由で構築された場合のみ非 None。
         self.monster_behavior_tick_service = monster_behavior_tick_service
+        # Phase 3 Step 3e-3: episode_store などが being_id 経路必須化された後、
+        # turn_runner 経由でない直接呼出 (= テストが prompt_builder.build を直接
+        # たたく等) でも Being を provision できるよう、resolver/provisioning を
+        # 結果に露出する。本番経路は turn_runner が ``ensure_attached`` を毎ターン
+        # 走らせるので影響なし。
+        self.being_provisioning_service = being_provisioning_service
+        self.being_attachment_resolver = being_attachment_resolver
 
     def __iter__(self) -> Any:
         yield self.observation_registry
@@ -1512,6 +1521,8 @@ def create_llm_agent_wiring(
         episodic_recall_buffer_store=recall_buffer,
         episodic_reinterpretation_journal_store=reinterpretation_journal,
         semantic_memory_store=semantic_memory_store,
+        being_provisioning_service=_being_provisioning_service,
+        being_attachment_resolver=_being_resolver,
     )
 
 

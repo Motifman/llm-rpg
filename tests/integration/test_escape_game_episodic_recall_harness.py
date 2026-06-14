@@ -47,6 +47,7 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -57,6 +58,27 @@ SPOT_LIBRARY_HALL = 2  # 閲覧室
 SPOT_SHELF_A = 3       # 書架A
 SPOT_SHELF_B = 5       # 書架B
 PLAYER_LIN = 2         # リン
+
+
+def _resolver_for_lin():
+    from ai_rpg_world.application.being.being_provisioning_service import (
+        BeingProvisioningService,
+    )
+    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
+    from ai_rpg_world.domain.world.value_object.world_id import (
+        DEFAULT_SINGLE_WORLD_ID,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
+        InMemoryBeingRepository,
+    )
+
+    repo = InMemoryBeingRepository()
+    resolver = BeingAttachmentResolver(repo)
+    BeingProvisioningService(repo).ensure_attached(PlayerId(PLAYER_LIN))
+    return resolver, DEFAULT_SINGLE_WORLD_ID
+
 PLAYER_KAITO = 1       # カイト
 
 
@@ -108,6 +130,11 @@ def lin_visit_history() -> InMemorySubjectiveEpisodeStore:
 
     各 episode に place_spot 軸の cue が乗っている (chunk_coordinator が出す形を模倣)。
     """
+    # Phase 3 Step 3e-3: episode_store は being_id 経路のみ。PLAYER_LIN=2 用の
+    # deterministic な BeingId で put する。
+    from ai_rpg_world.domain.being.value_object.being_id import BeingId as _BID
+
+    being_lin = _BID(f"being_w1_p{PLAYER_LIN}")
     base = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
     store = InMemorySubjectiveEpisodeStore()
     episodes = [
@@ -118,7 +145,8 @@ def lin_visit_history() -> InMemorySubjectiveEpisodeStore:
         ("ep5-library-return", SPOT_LIBRARY_HALL, "閲覧室", "戻ってきた", base + timedelta(minutes=16)),
     ]
     for ep_id, spot_id, spot_name, what, occurred_at in episodes:
-        store.put(
+        store.put_by_being(
+            being_lin,
             _make_visit_episode(
                 episode_id=ep_id,
                 player_id=PLAYER_LIN,
@@ -126,7 +154,7 @@ def lin_visit_history() -> InMemorySubjectiveEpisodeStore:
                 spot_name=spot_name,
                 what=what,
                 occurred_at=occurred_at,
-            )
+            ),
         )
     return store
 
@@ -148,7 +176,11 @@ class TestRecallByCurrentLocationCue:
     ) -> None:
         """リンが閲覧室に戻った場面で、過去の閲覧室訪問 (ep1, ep5) が cue 軸で
         recall される。**place_spot:2 が現在地から自然に作られる**ことを利用。"""
-        svc = EpisodicPassiveRecallRetrievalService(lin_visit_history)
+        svc = EpisodicPassiveRecallRetrievalService(
+            lin_visit_history,
+            being_attachment_resolver=_resolver_for_lin()[0],
+            default_world_id=_resolver_for_lin()[1],
+        )
         cues = build_situation_episodic_cues(
             runtime_context=_runtime_context_at(SPOT_LIBRARY_HALL),
             observation_structured=None,
@@ -188,7 +220,11 @@ class TestRecallByObservationStructuredCue:
         ``_cues_from_observation_structured`` が place_spot:3 cue を吐くので、
         書架A 訪問 episode が recall に入る。
         """
-        svc = EpisodicPassiveRecallRetrievalService(lin_visit_history)
+        svc = EpisodicPassiveRecallRetrievalService(
+            lin_visit_history,
+            being_attachment_resolver=_resolver_for_lin()[0],
+            default_world_id=_resolver_for_lin()[1],
+        )
         observation_structured = {
             "type": "speech_message",
             "speaker_player_id": PLAYER_KAITO,
@@ -233,7 +269,11 @@ class TestRecallByFreeTextMention:
         """matcher を渡さなければ自由文経路は無効 = 旧挙動を維持する後方互換。
         ``WorldNounMatcher`` を wire しない demo / scenario で動作が
         変わらないことを担保。"""
-        svc = EpisodicPassiveRecallRetrievalService(lin_visit_history)
+        svc = EpisodicPassiveRecallRetrievalService(
+            lin_visit_history,
+            being_attachment_resolver=_resolver_for_lin()[0],
+            default_world_id=_resolver_for_lin()[1],
+        )
         observation_structured = {
             "type": "speech_message",
             "speaker_player_id": PLAYER_KAITO,
@@ -270,7 +310,11 @@ class TestRecallByFreeTextMention:
             .add_spot("書架B", spot_id=SPOT_SHELF_B)
             .build()
         )
-        svc = EpisodicPassiveRecallRetrievalService(lin_visit_history)
+        svc = EpisodicPassiveRecallRetrievalService(
+            lin_visit_history,
+            being_attachment_resolver=_resolver_for_lin()[0],
+            default_world_id=_resolver_for_lin()[1],
+        )
         observation_structured = {
             "type": "speech_message",
             "speaker_player_id": PLAYER_KAITO,
@@ -313,7 +357,11 @@ class TestRecallScalesWithRepeatedVisits:
     def test_閲覧室_2_回訪問が_distinct_episode_としてrecallされる(
         self, lin_visit_history: InMemorySubjectiveEpisodeStore
     ) -> None:
-        svc = EpisodicPassiveRecallRetrievalService(lin_visit_history)
+        svc = EpisodicPassiveRecallRetrievalService(
+            lin_visit_history,
+            being_attachment_resolver=_resolver_for_lin()[0],
+            default_world_id=_resolver_for_lin()[1],
+        )
         cues = build_situation_episodic_cues(
             runtime_context=_runtime_context_at(SPOT_LIBRARY_HALL),
             observation_structured=None,

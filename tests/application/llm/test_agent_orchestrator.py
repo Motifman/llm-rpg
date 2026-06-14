@@ -1,3 +1,12 @@
+# Phase 3 Step 3e-3 bulk migration: episode_store の player_id 経路撤去に
+# 伴い、本ファイルの ``being_id`` 参照を deterministic な ``BeingId`` の
+# 既定値で受ける (= テスト内で異なる player_id を使う箇所は個別に上書き)。
+# BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
+from ai_rpg_world.domain.being.value_object.being_id import (
+    BeingId as _MIG_BeingId,
+)
+
+being_id = _MIG_BeingId("being_w1_p7")
 """LlmAgentOrchestrator のエピソード保存境界（tool 実行後にチャンク協調が保存する）の検証。"""
 
 from typing import Any, Dict
@@ -87,16 +96,40 @@ def _orchestrator_with_episode(
     mapper: ToolCommandMapper,
     resolver: IToolArgumentResolver | None = None,
 ) -> tuple[LlmAgentOrchestrator, InMemorySubjectiveEpisodeStore]:
+    # Phase 3 Step 3e-3: episode_store は being_id 経路のみ。Resolver+WorldId を
+    # ChunkCoordinator に注入する (= module-level ``being_id`` が "being_w1_p1"
+    # なので player_id=1 用に Being を provision する)
+    from ai_rpg_world.application.being.being_provisioning_service import (
+        BeingProvisioningService,
+    )
+    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
+    from ai_rpg_world.domain.world.value_object.world_id import (
+        DEFAULT_SINGLE_WORLD_ID,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
+        InMemoryBeingRepository,
+    )
+
     episode_store = InMemorySubjectiveEpisodeStore()
     buffer = DefaultObservationContextBuffer()
     sliding = DefaultSlidingWindowMemory(max_entries_per_player=10)
     action_store = DefaultActionResultStore(max_entries_per_player=10)
+    _being_repo = InMemoryBeingRepository()
+    _resolver = BeingAttachmentResolver(_being_repo)
+    # 各テストが異なる player_id を使う可能性に備えて 1〜10 まで provision
+    _provisioning = BeingProvisioningService(_being_repo)
+    for _pid in range(1, 11):
+        _provisioning.ensure_attached(PlayerId(_pid))
     coordinator = EpisodicChunkCoordinator(
         observation_buffer=buffer,
         sliding_window_memory=sliding,
         action_result_store=action_store,
         episodic_episode_store=episode_store,
         chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),
+        being_attachment_resolver=_resolver,
+        default_world_id=DEFAULT_SINGLE_WORLD_ID,
     )
     orch = LlmAgentOrchestrator(
         prompt_builder=_StubPromptBuilder(),
@@ -138,7 +171,7 @@ class TestOrchestratorEpisodicActionCapture:
             return_value=self._CLOSE_CHUNK,
         ):
             orch.run_turn(PlayerId(7))
-        recent = store.list_recent(7, 10)
+        recent = store.list_recent_by_being(being_id, 10)
         assert len(recent) == 1
         assert recent[0].player_id == 7
         assert recent[0].action is not None
@@ -166,8 +199,10 @@ class TestOrchestratorEpisodicActionCapture:
             return_value=self._CLOSE_CHUNK,
         ):
             orch.run_turn(PlayerId(2))
-        assert len(store.list_recent(2, 10)) == 1
-        ep = store.list_recent(2, 10)[0]
+        # player_id=2 用の being_id で検証
+        being_id_2 = _MIG_BeingId("being_w1_p2")
+        assert len(store.list_recent_by_being(being_id_2, 10)) == 1
+        ep = store.list_recent_by_being(being_id_2, 10)[0]
         assert "失敗" in ep.outcome
         assert "罠が発動した" in ep.outcome
 
@@ -185,7 +220,7 @@ class TestOrchestratorEpisodicActionCapture:
             mapper=mapper,
         )
         orch.run_turn(PlayerId(3))
-        assert store.list_recent(3, 10) == []
+        assert store.list_recent_by_being(being_id, 10) == []
 
     def test_no_tool_call_does_not_persist_episode(self) -> None:
         """tool_call 無しでは execute に至らない。"""
@@ -199,7 +234,7 @@ class TestOrchestratorEpisodicActionCapture:
             mapper=mapper,
         )
         orch.run_turn(PlayerId(4))
-        assert store.list_recent(4, 10) == []
+        assert store.list_recent_by_being(being_id, 10) == []
 
     def test_subjective_validation_error_does_not_persist_episode(self) -> None:
         """主観入力検証エラーは execute 前に終わるため保存しない。"""
@@ -215,7 +250,7 @@ class TestOrchestratorEpisodicActionCapture:
             mapper=mapper,
         )
         orch.run_turn(PlayerId(5))
-        assert store.list_recent(5, 10) == []
+        assert store.list_recent_by_being(being_id, 10) == []
 
     def test_argument_resolution_error_does_not_persist_episode(self) -> None:
         """引数解決失敗は execute 前に終わるため保存しない。"""
@@ -232,7 +267,7 @@ class TestOrchestratorEpisodicActionCapture:
             resolver=_FailingResolver(),
         )
         orch.run_turn(PlayerId(6))
-        assert store.list_recent(6, 10) == []
+        assert store.list_recent_by_being(being_id, 10) == []
 
     def test_episodic_coordinator_none_is_noop(self) -> None:
         """チャンク協調を注入しない場合はエピソードを増やさない（クラッシュもしない）。"""
@@ -254,4 +289,4 @@ class TestOrchestratorEpisodicActionCapture:
             episodic_chunk_coordinator=None,
         )
         orch.run_turn(PlayerId(8))
-        assert episode_store.list_recent(8, 10) == []
+        assert episode_store.list_recent_by_being(being_id, 10) == []

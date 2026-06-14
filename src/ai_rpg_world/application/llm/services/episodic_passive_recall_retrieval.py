@@ -100,10 +100,12 @@ def _merged_ordered_episodes_for_cue_bucket(
         else:
             g_weight = 0.0
 
-        if being_id is not None:
-            cue_episodes = store.list_by_cue_by_being(being_id, cue, limit_per_axis)
+        # Phase 3 Step 3e-3: legacy 撤去済。being_id 未解決時は空 list で
+        # graceful fallback (= prompt 強化が痩せるだけで turn は止めない)。
+        if being_id is None:
+            cue_episodes: list[SubjectiveEpisode] = []
         else:
-            cue_episodes = store.list_by_cue(player_id, cue, limit_per_axis)
+            cue_episodes = store.list_by_cue_by_being(being_id, cue, limit_per_axis)
         for ep in cue_episodes:
             eid = ep.episode_id
             merged[eid] = ep
@@ -202,14 +204,14 @@ class EpisodicPassiveRecallRetrievalService:
         max_candidates: int,
         now: datetime | None = None,
     ) -> EpisodicPassiveRecallRetrievalResult:
-        # Phase 3 Step 3e-2: episode_store も dual-path 化。入口で 1 度だけ
-        # being_id を解決し、temporal / cue / spreading の各経路で再利用する
-        # (resolve-once-per-entry)。Step 3e-3 で legacy 撤去予定。
+        # Phase 3 Step 3e-3: legacy 経路は撤去済。Being 未解決時は temporal/cue
+        # 軸も空になる graceful fallback (= prompt 強化が痩せるだけで turn は
+        # 止めない)。spreading 軸の skip と挙動を揃える。
         being_id = self._resolve_being_id(player_id)
-        if being_id is not None:
-            temporal_rows = self._store.list_recent_by_being(being_id, limit_per_axis)
+        if being_id is None:
+            temporal_rows: list[SubjectiveEpisode] = []
         else:
-            temporal_rows = self._store.list_recent(player_id, limit_per_axis)
+            temporal_rows = self._store.list_recent_by_being(being_id, limit_per_axis)
 
         axis_order: list[str] = []
         axis_to_cues: dict[str, list[EpisodicCue]] = defaultdict(list)
