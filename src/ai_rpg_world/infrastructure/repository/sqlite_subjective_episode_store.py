@@ -1,4 +1,9 @@
-"""SubjectiveEpisode の SQLite 永続化（MVP エピソード記憶ストア）。"""
+"""SubjectiveEpisode の SQLite 永続化（MVP エピソード記憶ストア）。
+
+Phase 3 Step 3e-1 (Issue #470): being_id 版 API を並走追加。書き込み先は
+``subjective_episodes_by_being`` / ``subjective_episode_cues_by_being``
+(= schema v2)。legacy テーブルは Step 3e-3 で DROP 予定。
+"""
 
 from __future__ import annotations
 
@@ -7,6 +12,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -162,6 +168,43 @@ def _init_schema_v1(connection: sqlite3.Connection) -> None:
     )
 
 
+def _init_schema_v2_by_being(connection: sqlite3.Connection) -> None:
+    """Phase 3 Step 3e-1: being_id keyed の並走テーブルを追加。
+
+    legacy テーブルはそのまま残し、新 API は本 v2 テーブルに書き込む
+    (= caller 移行 = Step 3e-2 後、Step 3e-3 で legacy テーブルごと撤去予定)。
+    semantic / memory_link / reinterpretation の by_being テーブルと同型。
+
+    ``player_id`` 列を本テーブルにも残す理由は ``payload_json`` の中にも
+    ``player_id`` がエンコードされているが、SQL WHERE で player_id 絞り込み
+    したい運用 (= 監査・デバッグ) を高速化するため。
+    """
+    connection.executescript(
+        """
+        CREATE TABLE subjective_episodes_by_being (
+            being_id_value TEXT NOT NULL,
+            episode_id TEXT NOT NULL,
+            occurred_at_key REAL NOT NULL,
+            payload_json TEXT NOT NULL,
+            player_id INTEGER NOT NULL,
+            PRIMARY KEY (being_id_value, episode_id)
+        );
+        CREATE INDEX idx_subjective_episodes_by_being_time
+            ON subjective_episodes_by_being
+                (being_id_value, occurred_at_key DESC, episode_id DESC);
+
+        CREATE TABLE subjective_episode_cues_by_being (
+            being_id_value TEXT NOT NULL,
+            episode_id TEXT NOT NULL,
+            cue_canonical TEXT NOT NULL,
+            PRIMARY KEY (being_id_value, episode_id, cue_canonical)
+        );
+        CREATE INDEX idx_subjective_episode_cues_by_being_lookup
+            ON subjective_episode_cues_by_being (being_id_value, cue_canonical);
+        """
+    )
+
+
 class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
     """
     SubjectiveEpisode を JSON 1 行 + cue 逆引きで保持する。
@@ -175,7 +218,10 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
         apply_migrations(
             connection,
             namespace=_SUBJECTIVE_EPISODE_SCHEMA_NAMESPACE,
-            migrations=[SqliteMigration(1, _init_schema_v1)],
+            migrations=[
+                SqliteMigration(1, _init_schema_v1),
+                SqliteMigration(2, _init_schema_v2_by_being),
+            ],
         )
 
     @property
@@ -263,5 +309,100 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
             LIMIT ?
             """,
             (player_id, canonical, limit),
+        )
+        return [_payload_dict_to_episode(json.loads(str(r[0]))) for r in cur.fetchall()]
+
+    # ===== Phase 3 Step 3e-1: being_id 版を並走追加 =====
+
+    def put_by_being(self, being_id: BeingId, episode: SubjectiveEpisode) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(episode, SubjectiveEpisode):
+            raise TypeError("episode must be SubjectiveEpisode")
+        payload = json.dumps(_episode_to_payload_dict(episode), ensure_ascii=False)
+        key = _occurred_at_sort_key(episode)
+        eid = episode.episode_id
+        canonicals = [c.to_canonical() for c in episode.cues]
+        cur = self._conn.cursor()
+        cur.execute(
+            """
+            DELETE FROM subjective_episode_cues_by_being
+            WHERE being_id_value = ? AND episode_id = ?
+            """,
+            (being_id.value, eid),
+        )
+        cur.execute(
+            """
+            INSERT OR REPLACE INTO subjective_episodes_by_being
+                (being_id_value, episode_id, occurred_at_key, payload_json, player_id)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (being_id.value, eid, key, payload, episode.player_id),
+        )
+        for ck in canonicals:
+            cur.execute(
+                """
+                INSERT OR IGNORE INTO subjective_episode_cues_by_being
+                    (being_id_value, episode_id, cue_canonical)
+                VALUES (?, ?, ?)
+                """,
+                (being_id.value, eid, ck),
+            )
+        self._conn.commit()
+
+    def get_by_being(
+        self, being_id: BeingId, episode_id: str
+    ) -> SubjectiveEpisode | None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        cur = self._conn.execute(
+            """
+            SELECT payload_json FROM subjective_episodes_by_being
+            WHERE being_id_value = ? AND episode_id = ?
+            """,
+            (being_id.value, episode_id),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        return _payload_dict_to_episode(json.loads(str(row[0])))
+
+    def list_recent_by_being(
+        self, being_id: BeingId, limit: int
+    ) -> list[SubjectiveEpisode]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if limit <= 0:
+            return []
+        cur = self._conn.execute(
+            """
+            SELECT payload_json FROM subjective_episodes_by_being
+            WHERE being_id_value = ?
+            ORDER BY occurred_at_key DESC, episode_id DESC
+            LIMIT ?
+            """,
+            (being_id.value, limit),
+        )
+        return [_payload_dict_to_episode(json.loads(str(r[0]))) for r in cur.fetchall()]
+
+    def list_by_cue_by_being(
+        self, being_id: BeingId, cue: EpisodicCue, limit: int
+    ) -> list[SubjectiveEpisode]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if limit <= 0:
+            return []
+        canonical = cue.to_canonical()
+        cur = self._conn.execute(
+            """
+            SELECT e.payload_json
+            FROM subjective_episode_cues_by_being c
+            JOIN subjective_episodes_by_being e
+              ON e.being_id_value = c.being_id_value AND e.episode_id = c.episode_id
+            WHERE c.being_id_value = ? AND c.cue_canonical = ?
+            ORDER BY e.occurred_at_key DESC, e.episode_id DESC
+            LIMIT ?
+            """,
+            (being_id.value, canonical, limit),
         )
         return [_payload_dict_to_episode(json.loads(str(r[0]))) for r in cur.fetchall()]
