@@ -177,29 +177,28 @@ class TestSqliteJournalByBeing:
         )
 
 
-class TestSqliteReinterpretationIsolation:
-    """SQLite: 新旧テーブルが独立。"""
+# Phase 3 Step 3d-3 (Issue #470): legacy player_id 版テーブルは schema v3 で
+# DROP され、対応する API も撤去された。新旧テーブル独立性検証はもはや意味を
+# 持たない。schema v3 で legacy テーブルが消えていることは下記テストでカバー。
 
-    def test_player_id_経由_recall_は_being_id_経由では見えない(
-        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
-    ) -> None:
-        store.append(_obs(recall_id="legacy-r", episode_id="e1"))
-        assert store.pending_count_by_being(being) == 0
 
-    def test_being_id_経由_recall_は_player_id_経由では見えない(
-        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
-    ) -> None:
-        store.append_by_being(being, _obs(recall_id="new-r", episode_id="e1"))
-        assert store.pending_count(1) == 0
+class TestSqliteV3DropLegacy:
+    """schema v3 で legacy 2 テーブルが DROP されている回帰防止。"""
 
-    def test_player_id_経由_journal_は_being_id_経由では見えない(
-        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    def test_legacy_recall_observations_table_is_dropped(
+        self, store: SqliteEpisodicReinterpretationStore
     ) -> None:
-        store.put_active(_entry(entry_id="legacy", episode_id="ep-1"))
-        assert store.get_active_by_being(being, "ep-1") is None
+        rows = store._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+        table_names = {row["name"] for row in rows}
+        assert "episodic_recall_observations" not in table_names
 
-    def test_being_id_経由_journal_は_player_id_経由では見えない(
-        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    def test_legacy_journal_table_is_dropped(
+        self, store: SqliteEpisodicReinterpretationStore
     ) -> None:
-        store.put_active_by_being(being, _entry(entry_id="new", episode_id="ep-1"))
-        assert store.get_active(1, "ep-1") is None
+        rows = store._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+        table_names = {row["name"] for row in rows}
+        assert "episodic_reinterpretation_journal" not in table_names

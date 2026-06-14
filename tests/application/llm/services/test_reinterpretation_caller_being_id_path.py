@@ -142,12 +142,14 @@ class TestCoordinatorDualPath:
         # being_id 経路の recall_buffer は 0 件に
         assert setup.recall_buffer.pending_count_by_being(being_id) == 0
 
-    def test_resolver_未注入_時は_legacy_経路で_動く(self) -> None:
+    def test_resolver_未注入_時は_silent_no_op(self) -> None:
+        """Phase 3 Step 3d-3: legacy 撤去後、Resolver 未注入は silent skip。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_reinterpretation_being_setup()
+        being_id = setup.provision(1)
         episodes.put(_ep("e1"))
-        # legacy 経路に observation を書く
-        setup.recall_buffer.append(_obs(recall_id="r-legacy"))
+        # being_id 経路に observation を書いておく
+        setup.recall_buffer.append_by_being(being_id, _obs(recall_id="r1"))
         completion = _StubCompletion(
             {
                 "episode_updates": [
@@ -159,6 +161,7 @@ class TestCoordinatorDualPath:
                 ]
             }
         )
+        # Resolver 注入なしで構築 (= legacy 経路は撤去済)
         coord = EpisodicReinterpretationCoordinator(
             episode_store=episodes,
             recall_buffer_store=setup.recall_buffer,
@@ -169,11 +172,12 @@ class TestCoordinatorDualPath:
             max_contexts_per_episode=3,
         )
         processed = coord.flush_player(PlayerId(1))
-        assert processed == 1
-        # legacy 経路の journal に書かれる
-        assert setup.journal.get_active(1, "e1") is not None
-        # legacy 経路の recall_buffer は 0 件に
-        assert setup.recall_buffer.pending_count(1) == 0
+        # being_id を解決できないため silent no-op
+        assert processed == 0
+        # recall_buffer は手付かず (= 次回 turn で再試行できる)
+        assert setup.recall_buffer.pending_count_by_being(being_id) == 1
+        # journal にも書かれない
+        assert setup.journal.get_active_by_being(being_id, "e1") is None
 
 
 class TestCoordinatorTypeGuard:
@@ -258,14 +262,12 @@ class TestPromptBuilderRecallBufferDualPath:
         )
         assert result == "REINTERPRETED"
 
-    def test_append_recall_observation_は_dual_path_で_dispatch_する(self) -> None:
-        """Phase 3 Step 3d-2 review (#497 MEDIUM-3) 反映: ``_append_recall_observation``
-        helper が being_id 有無で append / append_by_being を使い分ける。"""
-        # being_id 注入時 → append_by_being
+    def test_append_recall_observation_は_being_id_あれば_書き_None_なら_skip(self) -> None:
+        """Phase 3 Step 3d-3: legacy 撤去後、Being 未解決時は silent skip。"""
+        # being_id 注入時 → append_by_being が呼ばれる
         store_new = MagicMock()
         builder_with_being = MagicMock()
         builder_with_being._episodic_recall_buffer_store = store_new
-        # 実関数を呼ぶため type を明示
         from ai_rpg_world.application.llm.services.prompt_builder import (
             DefaultPromptBuilder,
         )
@@ -276,47 +278,27 @@ class TestPromptBuilderRecallBufferDualPath:
             builder_with_being, being_id_obj, observation_obj
         )
         store_new.append_by_being.assert_called_once_with(being_id_obj, observation_obj)
-        store_new.append.assert_not_called()
 
-        # being_id 未指定 → legacy append
-        store_legacy = MagicMock()
+        # being_id 未指定 → silent skip (= 何も書かれない)
+        store_no_buffer = MagicMock()
         builder_no_being = MagicMock()
-        builder_no_being._episodic_recall_buffer_store = store_legacy
+        builder_no_being._episodic_recall_buffer_store = store_no_buffer
         DefaultPromptBuilder._append_recall_observation(
             builder_no_being, None, observation_obj
         )
-        store_legacy.append.assert_called_once_with(observation_obj)
-        store_legacy.append_by_being.assert_not_called()
+        store_no_buffer.append_by_being.assert_not_called()
 
-    def test_being_id_未指定なら_legacy_journal_を_読む(self) -> None:
+    def test_being_id_未指定なら_生_recall_text_に_縮退(self) -> None:
+        """Phase 3 Step 3d-3: legacy journal lookup 撤去後、Being 未解決時は
+        journal をスキップして生の ``recall_text`` を使う graceful fallback。"""
         from ai_rpg_world.application.llm.services.prompt_builder import (
             _join_passive_recall_texts,
         )
         from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
             EpisodicPassiveRecallCandidate,
         )
-        from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import (
-            EpisodicReinterpretationEntry,
-        )
-        from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import (
-            EpisodicReinterpretationStatus,
-        )
 
         setup = make_reinterpretation_being_setup()
-        setup.journal.put_active(
-            EpisodicReinterpretationEntry(
-                entry_id="ent-legacy",
-                player_id=1,
-                episode_id="e1",
-                created_at=_NOW,
-                turn_index=1,
-                current_interpretation="reinterp",
-                current_recall_text="LEGACY_REINTERPRETED",
-                source_recall_ids=("r-1",),
-                status=EpisodicReinterpretationStatus.ACTIVE,
-                superseded_at=None,
-            )
-        )
         cand = EpisodicPassiveRecallCandidate(
             episode=_ep("e1"),
             source_axes=("temporal",),
@@ -327,4 +309,5 @@ class TestPromptBuilderRecallBufferDualPath:
             setup.journal,
             being_id=None,
         )
-        assert result == "LEGACY_REINTERPRETED"
+        # being_id 未指定 → 生 recall_text を返す
+        assert result == "raw recall"

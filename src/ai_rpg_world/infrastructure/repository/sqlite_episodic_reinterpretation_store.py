@@ -1,8 +1,9 @@
 """想起後再解釈の SQLite ストア。
 
-Phase 3 Step 3d-1 (Issue #470): being_id 版 API を並走追加。書き込み先は
-``episodic_recall_observations_by_being`` / ``episodic_reinterpretation_journal_by_being``
-(= schema v2)。legacy テーブルは Step 3d-3 で DROP 予定。
+Phase 3 Step 3d-3 (Issue #470): legacy player_id 版を撤去し、being_id 版のみを
+残した。schema v3 で legacy 2 テーブル
+(``episodic_recall_observations`` / ``episodic_reinterpretation_journal``) も
+DROP される。
 """
 
 from __future__ import annotations
@@ -12,15 +13,15 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
+from ai_rpg_world.application.llm.services._episodic_recall_batch import (
+    select_episode_batched,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import EpisodicReinterpretationStatus
 from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
 from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
-from ai_rpg_world.application.llm.services._episodic_recall_batch import (
-    select_episode_batched,
-)
 from ai_rpg_world.infrastructure.repository.sqlite_migration import (
     SqliteMigration,
     apply_migrations,
@@ -188,6 +189,25 @@ def _init_schema_v2_by_being(connection: sqlite3.Connection) -> None:
     )
 
 
+def _init_schema_v3_drop_legacy(connection: sqlite3.Connection) -> None:
+    """Phase 3 Step 3d-3: legacy player_id keyed のテーブルを撤去。
+
+    Step 3d-2 で全 caller が ``*_by_being`` API に切り替わったため、player_id
+    keyed の旧 2 テーブル/index は参照されなくなった。schema migration で
+    DROP して DB ファイル上にも残らないようにする。semantic v3 /
+    memory_link v5 と同型。
+    """
+    connection.executescript(
+        """
+        DROP INDEX IF EXISTS idx_episodic_recall_observations_pending;
+        DROP INDEX IF EXISTS idx_episodic_reinterpretation_active;
+        DROP INDEX IF EXISTS idx_episodic_reinterpretation_episode_time;
+        DROP TABLE IF EXISTS episodic_recall_observations;
+        DROP TABLE IF EXISTS episodic_reinterpretation_journal;
+        """
+    )
+
+
 class SqliteEpisodicReinterpretationStore(
     EpisodicRecallBufferRepository,
     EpisodicReinterpretationJournalRepository,
@@ -204,6 +224,7 @@ class SqliteEpisodicReinterpretationStore(
             migrations=[
                 SqliteMigration(1, _init_schema_v1),
                 SqliteMigration(2, _init_schema_v2_by_being),
+                SqliteMigration(3, _init_schema_v3_drop_legacy),
             ],
         )
 
@@ -213,160 +234,6 @@ class SqliteEpisodicReinterpretationStore(
         store = cls(conn)
         conn.commit()
         return store
-
-    def append(self, observation: EpisodicRecallObservation) -> None:
-        payload = json.dumps(_recall_to_payload(observation), ensure_ascii=False)
-        self._conn.execute(
-            """
-            INSERT OR IGNORE INTO episodic_recall_observations
-                (player_id, recall_id, episode_id, recalled_at_key, payload_json)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (
-                observation.player_id,
-                observation.recall_id,
-                observation.episode_id,
-                _dt_key(observation.recalled_at),
-                payload,
-            ),
-        )
-        self._conn.commit()
-
-    def peek_batch(
-        self,
-        player_id: int,
-        *,
-        batch_size: int,
-        max_contexts_per_episode: int,
-    ) -> tuple[EpisodicRecallObservation, ...]:
-        if batch_size <= 0 or max_contexts_per_episode <= 0:
-            return ()
-        cur = self._conn.execute(
-            """
-            SELECT payload_json
-            FROM episodic_recall_observations
-            WHERE player_id = ?
-            ORDER BY recalled_at_key ASC, recall_id ASC
-            """,
-            (player_id,),
-        )
-        rows = [_payload_to_recall(json.loads(str(r[0]))) for r in cur.fetchall()]
-        return select_episode_batched(
-            rows,
-            batch_size=batch_size,
-            max_contexts_per_episode=max_contexts_per_episode,
-        )
-
-    def mark_processed(self, player_id: int, recall_ids: tuple[str, ...]) -> None:
-        if not recall_ids:
-            return
-        placeholders = ",".join("?" for _ in recall_ids)
-        self._conn.execute(
-            f"""
-            DELETE FROM episodic_recall_observations
-            WHERE player_id = ? AND recall_id IN ({placeholders})
-            """,
-            (player_id, *recall_ids),
-        )
-        self._conn.commit()
-
-    def pending_count(self, player_id: int) -> int:
-        cur = self._conn.execute(
-            "SELECT COUNT(*) AS c FROM episodic_recall_observations WHERE player_id = ?",
-            (player_id,),
-        )
-        return int(cur.fetchone()[0])
-
-    def put_active(self, entry: EpisodicReinterpretationEntry) -> None:
-        if entry.status != EpisodicReinterpretationStatus.ACTIVE:
-            raise ValueError("put_active requires an active entry")
-        cur = self._conn.cursor()
-        active_rows = cur.execute(
-            """
-            SELECT payload_json FROM episodic_reinterpretation_journal
-            WHERE player_id = ? AND episode_id = ? AND status = ?
-            """,
-            (entry.player_id, entry.episode_id, EpisodicReinterpretationStatus.ACTIVE.value),
-        ).fetchall()
-        for row in active_rows:
-            old = _payload_to_entry(json.loads(str(row[0])))
-            superseded = EpisodicReinterpretationEntry(
-                entry_id=old.entry_id,
-                player_id=old.player_id,
-                episode_id=old.episode_id,
-                created_at=old.created_at,
-                turn_index=old.turn_index,
-                current_interpretation=old.current_interpretation,
-                current_recall_text=old.current_recall_text,
-                source_recall_ids=old.source_recall_ids,
-                status=EpisodicReinterpretationStatus.SUPERSEDED,
-                superseded_at=entry.created_at,
-            )
-            cur.execute(
-                """
-                UPDATE episodic_reinterpretation_journal
-                SET status = ?, payload_json = ?
-                WHERE player_id = ? AND entry_id = ?
-                """,
-                (
-                    EpisodicReinterpretationStatus.SUPERSEDED.value,
-                    json.dumps(_entry_to_payload(superseded), ensure_ascii=False),
-                    old.player_id,
-                    old.entry_id,
-                ),
-            )
-        cur.execute(
-            """
-            INSERT OR REPLACE INTO episodic_reinterpretation_journal
-                (player_id, entry_id, episode_id, created_at_key, status, payload_json)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                entry.player_id,
-                entry.entry_id,
-                entry.episode_id,
-                _dt_key(entry.created_at),
-                entry.status.value,
-                json.dumps(_entry_to_payload(entry), ensure_ascii=False),
-            ),
-        )
-        self._conn.commit()
-
-    def get_active(
-        self,
-        player_id: int,
-        episode_id: str,
-    ) -> EpisodicReinterpretationEntry | None:
-        cur = self._conn.execute(
-            """
-            SELECT payload_json FROM episodic_reinterpretation_journal
-            WHERE player_id = ? AND episode_id = ? AND status = ?
-            ORDER BY created_at_key DESC, entry_id DESC
-            LIMIT 1
-            """,
-            (player_id, episode_id, EpisodicReinterpretationStatus.ACTIVE.value),
-        )
-        row = cur.fetchone()
-        if row is None:
-            return None
-        return _payload_to_entry(json.loads(str(row[0])))
-
-    def list_by_episode(
-        self,
-        player_id: int,
-        episode_id: str,
-    ) -> list[EpisodicReinterpretationEntry]:
-        cur = self._conn.execute(
-            """
-            SELECT payload_json FROM episodic_reinterpretation_journal
-            WHERE player_id = ? AND episode_id = ?
-            ORDER BY created_at_key DESC, entry_id DESC
-            """,
-            (player_id, episode_id),
-        )
-        return [_payload_to_entry(json.loads(str(r[0]))) for r in cur.fetchall()]
-
-    # ===== Phase 3 Step 3d-1: being_id 版を並走追加 =====
 
     def append_by_being(
         self, being_id: BeingId, observation: EpisodicRecallObservation

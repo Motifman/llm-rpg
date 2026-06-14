@@ -177,7 +177,21 @@ class TestEpisodicMemoryWiringIntegration:
         out = orch._prompt_builder.build(PlayerId(1))  # noqa: SLF001
         assert "stub_no_record_recall" in out["messages"][1]["content"]
         assert result.episodic_recall_buffer_store is not None
-        assert result.episodic_recall_buffer_store.pending_count(1) == 0
+        # Phase 3 Step 3d-3: legacy pending_count(player_id) は撤去済。
+        # ``LlmAgentWiringResult`` は Resolver を公開フィールドで持たないため、
+        # InMemory 実装の ``_pending`` を直接覗いて「stub では何も記録されない」
+        # を確認する (= caller でない wiring 統合層なので許容、本 stub では
+        # 確実に InMemoryEpisodicRecallBufferStore が使われる契約)。
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
+
+        recall_buffer = result.episodic_recall_buffer_store
+        assert isinstance(recall_buffer, InMemoryEpisodicRecallBufferStore)
+        # _pending が空 dict 化、または全 BeingId 配列が空である
+        assert all(
+            len(rows) == 0 for rows in recall_buffer._pending.values()
+        )
 
 
 class TestEpisodicChunkWiringIntegration:

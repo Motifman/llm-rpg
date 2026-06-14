@@ -51,29 +51,12 @@ class _FakeReinterpretationPort(IEpisodicReinterpretationCompletionPort):
 
 
 class _BrokenRecallBufferStore(EpisodicRecallBufferRepository):
-    def append(self, observation: EpisodicRecallObservation) -> None:
-        raise RuntimeError("broken")
+    """sidecar 失敗の伝播テスト用 stub (Phase 3 Step 3d-3 で by_being のみ残す)。"""
 
-    def peek_batch(
-        self,
-        player_id: int,
-        *,
-        batch_size: int,
-        max_contexts_per_episode: int,
-    ) -> tuple[EpisodicRecallObservation, ...]:
-        raise RuntimeError("broken")
-
-    def mark_processed(self, player_id: int, recall_ids: tuple[str, ...]) -> None:
-        raise RuntimeError("broken")
-
-    def pending_count(self, player_id: int) -> int:
-        raise RuntimeError("broken")
-
-    # Phase 3 Step 3d-1: by_being abstractmethod も実装必須 (= raise で揃える)
     def append_by_being(
         self, being_id: BeingId, observation: EpisodicRecallObservation
     ) -> None:
-        """常に RuntimeError (= sidecar 失敗の伝播テスト用 stub)。"""
+        """常に RuntimeError。"""
         raise RuntimeError("broken")
 
     def peek_batch_by_being(
@@ -153,6 +136,9 @@ def _recall(
     )
 
 
+_BEING_7 = BeingId("being_w1_p7")
+
+
 class TestInMemoryEpisodicRecallBufferStore:
     """想起 observation を episode 単位で束ねる。"""
 
@@ -161,25 +147,29 @@ class TestInMemoryEpisodicRecallBufferStore:
         base = datetime(2026, 5, 4, tzinfo=timezone.utc)
         store = InMemoryEpisodicRecallBufferStore()
         for i in range(5):
-            store.append(
+            store.append_by_being(
+                _BEING_7,
                 _recall(
                     recall_id=f"r{i}",
                     episode_id="ep-a",
                     at=base + timedelta(minutes=i),
                     turn_index=i,
-                )
+                ),
             )
-        store.append(
+        store.append_by_being(
+            _BEING_7,
             _recall(
                 recall_id="r-b",
                 episode_id="ep-b",
                 at=base + timedelta(minutes=10),
                 turn_index=10,
-            )
+            ),
         )
-        batch = store.peek_batch(7, batch_size=1, max_contexts_per_episode=3)
+        batch = store.peek_batch_by_being(
+            _BEING_7, batch_size=1, max_contexts_per_episode=3
+        )
         assert [r.recall_id for r in batch] == ["r0", "r1", "r2"]
-        assert store.pending_count(7) == 6
+        assert store.pending_count_by_being(_BEING_7) == 6
 
 
 class TestInMemoryEpisodicReinterpretationJournalStore:
@@ -209,41 +199,48 @@ class TestInMemoryEpisodicReinterpretationJournalStore:
             current_recall_text="新しい回想。",
             source_recall_ids=("r2",),
         )
-        store.put_active(first)
-        store.put_active(second)
-        assert store.get_active(7, "ep-a") == second
-        history = store.list_by_episode(7, "ep-a")
+        store.put_active_by_being(_BEING_7, first)
+        store.put_active_by_being(_BEING_7, second)
+        assert store.get_active_by_being(_BEING_7, "ep-a") == second
+        history = store.list_by_episode_by_being(_BEING_7, "ep-a")
         assert [e.entry_id for e in history] == ["j2", "j1"]
         assert history[1].status.value == "superseded"
 
 
 class TestEpisodicReinterpretationCoordinator:
-    """10 ターンごとの flush と失敗時 pending 維持。"""
+    """10 ターンごとの flush と失敗時 pending 維持。
 
-    def _stores(self) -> tuple[
-        EpisodicEpisodeRepository,
-        InMemoryEpisodicRecallBufferStore,
-        InMemoryEpisodicReinterpretationJournalStore,
-    ]:
+    Phase 3 Step 3d-3: legacy player_id 経路撤去後、Coordinator は
+    Resolver+WorldId が必須となった (= 未注入なら silent no-op)。
+    各テストで provision 済 BeingId を準備した上で、Coordinator にも
+    Resolver+WorldId を渡す。
+    """
+
+    def _stores(self):
+        from tests.application.llm._reinterpretation_being_test_helpers import (
+            make_reinterpretation_being_setup,
+        )
+
         episodes = InMemorySubjectiveEpisodeStore()
         episodes.put(_episode(episode_id="ep-a"))
         episodes.put(_episode(episode_id="ep-b"))
-        return (
-            episodes,
-            InMemoryEpisodicRecallBufferStore(),
-            InMemoryEpisodicReinterpretationJournalStore(),
-        )
+        setup = make_reinterpretation_being_setup()
+        being_id = setup.provision(7)
+        return episodes, setup, being_id
 
     def test_after_turn_completed_flushes_only_on_tenth_turn(self) -> None:
         """9 ターン目までは LLM を呼ばず、10 ターン目で active entry を保存する。"""
-        episodes, buffer, journal = self._stores()
-        buffer.append(
+        episodes, setup, being_id = self._stores()
+        buffer = setup.recall_buffer
+        journal = setup.journal
+        buffer.append_by_being(
+            being_id,
             _recall(
                 recall_id="r1",
                 episode_id="ep-a",
                 at=datetime(2026, 5, 4, tzinfo=timezone.utc),
                 turn_index=0,
-            )
+            ),
         )
         port = _FakeReinterpretationPort(
             {
@@ -262,23 +259,29 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=journal,
             completion=port,
             turn_interval=10,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         for _ in range(9):
             coord.after_turn_completed(PlayerId(7))
         assert port.calls == []
-        assert journal.get_active(7, "ep-a") is None
+        assert journal.get_active_by_being(being_id, "ep-a") is None
         coord.after_turn_completed(PlayerId(7))
         assert len(port.calls) == 1
-        active = journal.get_active(7, "ep-a")
+        active = journal.get_active_by_being(being_id, "ep-a")
         assert active is not None
         assert "合図" in active.current_interpretation
-        assert buffer.pending_count(7) == 0
+        assert buffer.pending_count_by_being(being_id) == 0
 
     def test_llm_failure_keeps_pending_recall_and_existing_active(self) -> None:
         """LLM 失敗時は pending を消さず、既存 active entry も保持する。"""
-        episodes, buffer, journal = self._stores()
+        episodes, setup, being_id = self._stores()
+        buffer = setup.recall_buffer
+        journal = setup.journal
         t0 = datetime(2026, 5, 4, tzinfo=timezone.utc)
-        buffer.append(_recall(recall_id="r1", episode_id="ep-a", at=t0, turn_index=0))
+        buffer.append_by_being(
+            being_id, _recall(recall_id="r1", episode_id="ep-a", at=t0, turn_index=0)
+        )
         old = EpisodicReinterpretationEntry(
             entry_id="old",
             player_id=7,
@@ -289,7 +292,7 @@ class TestEpisodicReinterpretationCoordinator:
             current_recall_text="既存の回想。",
             source_recall_ids=("r0",),
         )
-        journal.put_active(old)
+        journal.put_active_by_being(being_id, old)
         port = _FakeReinterpretationPort(
             LlmApiCallException("down", error_code="LLM_API_CALL_FAILED")
         )
@@ -299,16 +302,22 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=journal,
             completion=port,
             turn_interval=1,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         coord.after_turn_completed(PlayerId(7))
-        assert buffer.pending_count(7) == 1
-        assert journal.get_active(7, "ep-a") == old
+        assert buffer.pending_count_by_being(being_id) == 1
+        assert journal.get_active_by_being(being_id, "ep-a") == old
 
     def test_invalid_llm_json_keeps_pending_recall(self) -> None:
         """JSON shape 不正や必須 field 欠落では pending を消さず retry 可能にする。"""
-        episodes, buffer, journal = self._stores()
+        episodes, setup, being_id = self._stores()
+        buffer = setup.recall_buffer
+        journal = setup.journal
         t0 = datetime(2026, 5, 4, tzinfo=timezone.utc)
-        buffer.append(_recall(recall_id="r1", episode_id="ep-a", at=t0, turn_index=0))
+        buffer.append_by_being(
+            being_id, _recall(recall_id="r1", episode_id="ep-a", at=t0, turn_index=0)
+        )
         port = _FakeReinterpretationPort({"episode_updates": []})
         coord = EpisodicReinterpretationCoordinator(
             episode_store=episodes,
@@ -316,23 +325,30 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=journal,
             completion=port,
             turn_interval=1,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         assert coord.flush_player(PlayerId(7)) == 0
-        assert buffer.pending_count(7) == 1
-        assert journal.get_active(7, "ep-a") is None
+        assert buffer.pending_count_by_being(being_id) == 1
+        assert journal.get_active_by_being(being_id, "ep-a") is None
 
     def test_partial_llm_updates_mark_only_successful_episode_recalls_processed(self) -> None:
         """batch の一部だけ成功したら、成功 episode の recall_id だけ pending から除く。"""
-        episodes, buffer, journal = self._stores()
+        episodes, setup, being_id = self._stores()
+        buffer = setup.recall_buffer
+        journal = setup.journal
         t0 = datetime(2026, 5, 4, tzinfo=timezone.utc)
-        buffer.append(_recall(recall_id="r-a", episode_id="ep-a", at=t0, turn_index=0))
-        buffer.append(
+        buffer.append_by_being(
+            being_id, _recall(recall_id="r-a", episode_id="ep-a", at=t0, turn_index=0)
+        )
+        buffer.append_by_being(
+            being_id,
             _recall(
                 recall_id="r-b",
                 episode_id="ep-b",
                 at=t0 + timedelta(minutes=1),
                 turn_index=1,
-            )
+            ),
         )
         port = _FakeReinterpretationPort(
             {
@@ -351,23 +367,37 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=journal,
             completion=port,
             turn_interval=1,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         assert coord.flush_player(PlayerId(7)) == 1
-        assert journal.get_active(7, "ep-a") is not None
-        pending = buffer.peek_batch(7, batch_size=8, max_contexts_per_episode=3)
+        assert journal.get_active_by_being(being_id, "ep-a") is not None
+        pending = buffer.peek_batch_by_being(
+            being_id, batch_size=8, max_contexts_per_episode=3
+        )
         assert [row.recall_id for row in pending] == ["r-b"]
 
     def test_after_turn_completed_does_not_propagate_sidecar_store_failure(self) -> None:
         """再解釈 sidecar の store 例外は本体ターンへ伝播させない。"""
+        from tests.application.llm._reinterpretation_being_test_helpers import (
+            make_reinterpretation_being_setup,
+        )
+
         episodes = InMemorySubjectiveEpisodeStore()
         episodes.put(_episode(episode_id="ep-a"))
-        journal = InMemoryEpisodicReinterpretationJournalStore()
+        setup = make_reinterpretation_being_setup()
+        # _BrokenRecallBufferStore で peek_batch_by_being が即 raise する経路
+        # を踏ませるため、Being の provision は必要 (= Resolver が being_id を
+        # 引けないと sidecar 実行が始まらず、本テストの意図が崩れる)。
+        setup.provision(7)
         port = _FakeReinterpretationPort({"episode_updates": []})
         coord = EpisodicReinterpretationCoordinator(
             episode_store=episodes,
             recall_buffer_store=_BrokenRecallBufferStore(),
-            journal_store=journal,
+            journal_store=setup.journal,
             completion=port,
             turn_interval=1,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         coord.after_turn_completed(PlayerId(7))

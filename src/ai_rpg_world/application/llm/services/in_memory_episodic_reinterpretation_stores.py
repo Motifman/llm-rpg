@@ -1,9 +1,7 @@
 """想起後再解釈用の in-memory ストア実装。
 
-Phase 3 Step 3d-1 (Issue #470): being_id 版 API を並走追加。
-内部に 2 つの独立した index を持つ:
-- ``_pending`` / ``_entries`` / ``_active``: player_id 版 (= 旧 API、Step 3d-3 で撤去予定)
-- ``_pending_by_being`` / ``_entries_by_being`` / ``_active_by_being``: being_id 版
+Phase 3 Step 3d-3 (Issue #470): legacy player_id 版を撤去し、being_id 版のみを
+残した。
 """
 
 from __future__ import annotations
@@ -30,45 +28,10 @@ def _dt_key(dt: datetime) -> datetime:
 
 
 class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
-    """player ごとに pending recall observations を保持する。"""
+    """Being ごとに pending recall observations を保持する。"""
 
     def __init__(self) -> None:
-        self._pending: dict[int, list[EpisodicRecallObservation]] = defaultdict(list)
-        # Phase 3 Step 3d-1: being_id 版並走 index
-        self._pending_by_being: dict[BeingId, list[EpisodicRecallObservation]] = defaultdict(list)
-
-    def append(self, observation: EpisodicRecallObservation) -> None:
-        if not isinstance(observation, EpisodicRecallObservation):
-            raise TypeError("observation must be EpisodicRecallObservation")
-        self._pending[observation.player_id].append(observation)
-
-    def peek_batch(
-        self,
-        player_id: int,
-        *,
-        batch_size: int,
-        max_contexts_per_episode: int,
-    ) -> tuple[EpisodicRecallObservation, ...]:
-        if batch_size <= 0 or max_contexts_per_episode <= 0:
-            return ()
-        return select_episode_batched(
-            list(self._pending.get(player_id, ())),
-            batch_size=batch_size,
-            max_contexts_per_episode=max_contexts_per_episode,
-        )
-
-    def mark_processed(self, player_id: int, recall_ids: tuple[str, ...]) -> None:
-        if not recall_ids:
-            return
-        done = set(recall_ids)
-        self._pending[player_id] = [
-            row for row in self._pending.get(player_id, ()) if row.recall_id not in done
-        ]
-
-    def pending_count(self, player_id: int) -> int:
-        return len(self._pending.get(player_id, ()))
-
-    # ===== Phase 3 Step 3d-1: being_id 版を並走追加 =====
+        self._pending: dict[BeingId, list[EpisodicRecallObservation]] = defaultdict(list)
 
     def append_by_being(
         self, being_id: BeingId, observation: EpisodicRecallObservation
@@ -77,7 +40,7 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
             raise TypeError("being_id must be BeingId")
         if not isinstance(observation, EpisodicRecallObservation):
             raise TypeError("observation must be EpisodicRecallObservation")
-        self._pending_by_being[being_id].append(observation)
+        self._pending[being_id].append(observation)
 
     def peek_batch_by_being(
         self,
@@ -91,7 +54,7 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
         if batch_size <= 0 or max_contexts_per_episode <= 0:
             return ()
         return select_episode_batched(
-            list(self._pending_by_being.get(being_id, ())),
+            list(self._pending.get(being_id, ())),
             batch_size=batch_size,
             max_contexts_per_episode=max_contexts_per_episode,
         )
@@ -104,75 +67,24 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
         if not recall_ids:
             return
         done = set(recall_ids)
-        self._pending_by_being[being_id] = [
+        self._pending[being_id] = [
             row
-            for row in self._pending_by_being.get(being_id, ())
+            for row in self._pending.get(being_id, ())
             if row.recall_id not in done
         ]
 
     def pending_count_by_being(self, being_id: BeingId) -> int:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
-        return len(self._pending_by_being.get(being_id, ()))
+        return len(self._pending.get(being_id, ()))
 
 
 class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJournalRepository):
-    """再解釈履歴と active pointer を保持する。"""
+    """Being ごとに再解釈履歴と active pointer を保持する。"""
 
     def __init__(self) -> None:
-        self._entries: dict[int, list[EpisodicReinterpretationEntry]] = defaultdict(list)
-        self._active: dict[int, dict[str, str]] = defaultdict(dict)
-        # Phase 3 Step 3d-1: being_id 版並走 index
-        self._entries_by_being: dict[BeingId, list[EpisodicReinterpretationEntry]] = defaultdict(list)
-        self._active_by_being: dict[BeingId, dict[str, str]] = defaultdict(dict)
-
-    def put_active(self, entry: EpisodicReinterpretationEntry) -> None:
-        if not isinstance(entry, EpisodicReinterpretationEntry):
-            raise TypeError("entry must be EpisodicReinterpretationEntry")
-        if entry.status != EpisodicReinterpretationStatus.ACTIVE:
-            raise ValueError("put_active requires an active entry")
-        pid = entry.player_id
-        old_entry_id = self._active.get(pid, {}).get(entry.episode_id)
-        now = entry.created_at
-        if old_entry_id is not None:
-            bucket = self._entries.get(pid, [])
-            for idx, old in enumerate(bucket):
-                if old.entry_id == old_entry_id and old.status == EpisodicReinterpretationStatus.ACTIVE:
-                    bucket[idx] = replace(
-                        old,
-                        status=EpisodicReinterpretationStatus.SUPERSEDED,
-                        superseded_at=now,
-                    )
-                    break
-        self._entries[pid].append(entry)
-        self._active.setdefault(pid, {})[entry.episode_id] = entry.entry_id
-
-    def get_active(
-        self,
-        player_id: int,
-        episode_id: str,
-    ) -> EpisodicReinterpretationEntry | None:
-        entry_id = self._active.get(player_id, {}).get(episode_id)
-        if entry_id is None:
-            return None
-        for entry in self._entries.get(player_id, ()):
-            if entry.entry_id == entry_id and entry.status == EpisodicReinterpretationStatus.ACTIVE:
-                return entry
-        return None
-
-    def list_by_episode(
-        self,
-        player_id: int,
-        episode_id: str,
-    ) -> list[EpisodicReinterpretationEntry]:
-        rows = [
-            entry
-            for entry in self._entries.get(player_id, ())
-            if entry.episode_id == episode_id
-        ]
-        return sorted(rows, key=lambda e: (_dt_key(e.created_at), e.entry_id), reverse=True)
-
-    # ===== Phase 3 Step 3d-1: being_id 版を並走追加 =====
+        self._entries: dict[BeingId, list[EpisodicReinterpretationEntry]] = defaultdict(list)
+        self._active: dict[BeingId, dict[str, str]] = defaultdict(dict)
 
     def put_active_by_being(
         self, being_id: BeingId, entry: EpisodicReinterpretationEntry
@@ -183,10 +95,10 @@ class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJourn
             raise TypeError("entry must be EpisodicReinterpretationEntry")
         if entry.status != EpisodicReinterpretationStatus.ACTIVE:
             raise ValueError("put_active_by_being requires an active entry")
-        old_entry_id = self._active_by_being.get(being_id, {}).get(entry.episode_id)
+        old_entry_id = self._active.get(being_id, {}).get(entry.episode_id)
         now = entry.created_at
         if old_entry_id is not None:
-            bucket = self._entries_by_being.get(being_id, [])
+            bucket = self._entries.get(being_id, [])
             for idx, old in enumerate(bucket):
                 if (
                     old.entry_id == old_entry_id
@@ -198,8 +110,8 @@ class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJourn
                         superseded_at=now,
                     )
                     break
-        self._entries_by_being[being_id].append(entry)
-        self._active_by_being.setdefault(being_id, {})[entry.episode_id] = entry.entry_id
+        self._entries[being_id].append(entry)
+        self._active.setdefault(being_id, {})[entry.episode_id] = entry.entry_id
 
     def get_active_by_being(
         self,
@@ -208,10 +120,10 @@ class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJourn
     ) -> EpisodicReinterpretationEntry | None:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
-        entry_id = self._active_by_being.get(being_id, {}).get(episode_id)
+        entry_id = self._active.get(being_id, {}).get(episode_id)
         if entry_id is None:
             return None
-        for entry in self._entries_by_being.get(being_id, ()):
+        for entry in self._entries.get(being_id, ()):
             if (
                 entry.entry_id == entry_id
                 and entry.status == EpisodicReinterpretationStatus.ACTIVE
@@ -228,7 +140,7 @@ class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJourn
             raise TypeError("being_id must be BeingId")
         rows = [
             entry
-            for entry in self._entries_by_being.get(being_id, ())
+            for entry in self._entries.get(being_id, ())
             if entry.episode_id == episode_id
         ]
         return sorted(

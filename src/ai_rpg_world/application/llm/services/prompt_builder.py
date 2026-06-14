@@ -90,30 +90,30 @@ def _join_passive_recall_texts(
 ) -> str:
     """retrieve の候補順のまま、active 再解釈を優先して recall text を改行で連結する。
 
-    Phase 3 Step 3d-2: dual-path。``being_id`` が渡されたら
-    ``get_active_by_being`` を使い、未渡しなら legacy ``get_active`` で読む。
-    Step 3d-3 で legacy 経路撤去予定。
+    Phase 3 Step 3d-3: legacy player_id 経路は撤去済。``being_id`` が ``None``
+    の場合は journal をスキップして生の ``recall_text`` を使う (= prompt
+    強化の graceful degradation)。``journal_store`` 自体が ``None`` の場合も
+    同じく生 recall に縮退する。
+
+    ``player_id`` は warning ログ用に保持 (journal 走査は being_id 経由のみ)。
+    後続フェーズで Being の player_id 逆引きが容易になった場合は引数から
+    削除可能。
     """
     parts: list[str] = []
     for cand in candidates:
         active = None
-        if journal_store is not None:
+        if journal_store is not None and being_id is not None:
             try:
-                if being_id is not None:
-                    active = journal_store.get_active_by_being(
-                        being_id, cand.episode.episode_id
-                    )
-                else:
-                    active = journal_store.get_active(
-                        player_id, cand.episode.episode_id
-                    )
+                active = journal_store.get_active_by_being(
+                    being_id, cand.episode.episode_id
+                )
             except Exception:
                 # 再解釈 store の障害で recall を止めず生の recall_text に縮退する。
                 # 「sail と active が drift している」状況を後追いできるよう WARN
                 # で traceback ごと残す (silent failure 防止)。
                 _module_logger.warning(
-                    "journal_store.get_active failed for player=%s episode=%s; "
-                    "falling back to raw recall_text",
+                    "journal_store.get_active_by_being failed for player=%s "
+                    "episode=%s; falling back to raw recall_text",
                     player_id,
                     cand.episode.episode_id,
                     exc_info=True,
@@ -794,8 +794,19 @@ class DefaultPromptBuilder(IPromptBuilder):
                 else 0
             )
             situation_cue_keys = tuple(c.to_canonical() for c in situation_cues)
-            # Phase 3 Step 3d-2: dual-path。being_id が引ければ being_id 経路、
-            # 引けなければ legacy player_id 経路 (Step 3d-3 で legacy 撤去予定)。
+            # Phase 3 Step 3d-3: legacy 経路は撤去済。Being 未解決時は
+            # `_append_recall_observation` が silent skip する (turn は継続)。
+            # 未解決をデバッグ可能にするため、ここで 1 度だけ warning ログを
+            # 残す (= 候補ごとには出さず recall buffer 全体への記録試行と
+            # して 1 回。silent failure 構造的対処、design_decisions.md #5)。
+            if being_id is None and recall_result.candidates:
+                self._logger.warning(
+                    "episodic_recall_buffer skipped: being_id unresolved "
+                    "(player_id=%s, candidates=%d). 再解釈 sidecar は動かないが "
+                    "turn は継続する。",
+                    player_id.value,
+                    len(recall_result.candidates),
+                )
             for cand in recall_result.candidates:
                 try:
                     observation = EpisodicRecallObservation(
@@ -931,25 +942,27 @@ class DefaultPromptBuilder(IPromptBuilder):
         being_id: Optional["BeingId"],
         observation: EpisodicRecallObservation,
     ) -> None:
-        """recall observation を recall_buffer_store に書く dual-path helper。
+        """recall observation を recall_buffer_store に書く helper。
 
-        Phase 3 Step 3d-2 review (#497 MEDIUM-3): dispatch を helper として
-        切り出し、テストで dual-path 双方をカバーできるようにした。
+        Phase 3 Step 3d-3: legacy player_id 経路は撤去済。Being 未解決時は
+        silent skip (= prompt 強化の graceful fallback、turn は止めない)。
         ``self._episodic_recall_buffer_store is None`` は呼出側で先に弾く前提。
+
+        ``being_id is None`` 時のデバッグ可視性は、呼出側 ``_run_passive_recall``
+        で 1 回の warning ログとして残す (= silent failure 構造的対処)。
         """
         assert self._episodic_recall_buffer_store is not None
-        if being_id is not None:
-            self._episodic_recall_buffer_store.append_by_being(
-                being_id, observation
-            )
-        else:
-            self._episodic_recall_buffer_store.append(observation)
+        if being_id is None:
+            return
+        self._episodic_recall_buffer_store.append_by_being(being_id, observation)
 
     def _resolve_being_id(self, player_id: PlayerId) -> Optional["BeingId"]:
         """Resolver+WorldId 揃いなら ``BeingId`` を返す。
 
-        Phase 3 Step 3d-2: dual-path 用に共有化した helper (= memo / journal /
-        recall_buffer から呼べる)。未注入 or Being 未 provision なら ``None``。
+        Phase 3 Step 3d-3: ``DefaultPromptBuilder`` の各 Being keyed 経路
+        (memo / journal lookup / recall_buffer append) から共有される helper。
+        未注入 or Being 未 provision なら ``None`` を返し、呼出側で
+        graceful skip / 生 recall_text への縮退に分岐させる。
         """
         if (
             self._being_attachment_resolver is None
