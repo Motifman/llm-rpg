@@ -19,6 +19,10 @@ from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store impor
     InMemorySemanticMemoryStore,
 )
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMORY_SEARCH_SEMANTIC
+from tests.application.llm._semantic_being_test_helpers import (
+    SemanticBeingTestSetup,
+    make_semantic_being_setup,
+)
 
 
 _NOW = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
@@ -45,13 +49,31 @@ def _entry(
 
 
 @pytest.fixture
-def executor() -> SemanticMemorySearchToolExecutor:
-    store = InMemorySemanticMemoryStore()
-    return SemanticMemorySearchToolExecutor(semantic_store=store)
+def setup() -> SemanticBeingTestSetup:
+    """Phase 3 Step 3b-3: executor は being_id 経路必須。
+
+    Being provision + Resolver 注入を仕込んだ helper を返す。
+    """
+    s = make_semantic_being_setup()
+    s.provision(1)
+    return s
 
 
-def _add(executor: SemanticMemorySearchToolExecutor, entry: SemanticMemoryEntry) -> None:
-    executor.semantic_store.add(entry)
+@pytest.fixture
+def executor(setup: SemanticBeingTestSetup) -> SemanticMemorySearchToolExecutor:
+    return SemanticMemorySearchToolExecutor(
+        semantic_store=setup.semantic_store,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
+    )
+
+
+def _add(
+    setup: SemanticBeingTestSetup,
+    entry: SemanticMemoryEntry,
+    player_id: int = 1,
+) -> None:
+    setup.populate(player_id, entry)
 
 
 class TestSemanticMemorySearchHandlerRegistration:
@@ -89,10 +111,12 @@ class TestSemanticMemorySearchArgValidation:
         assert result.success is False
 
     def test_top_k_の_非数値は_default_に_縮退(
-        self, executor: SemanticMemorySearchToolExecutor
+        self,
+        executor: SemanticMemorySearchToolExecutor,
+        setup: SemanticBeingTestSetup,
     ) -> None:
         """top_k='abc' は default 5 として動作する (例外を伝播しない)。"""
-        _add(executor, _entry(entry_id="x", tags=("a",)))
+        _add(setup, _entry(entry_id="x", tags=("a",)))
         result = executor._run_search_semantic(
             player_id=1, arguments={"query": "a", "top_k": "abc"}
         )
@@ -108,10 +132,12 @@ class TestSemanticMemorySearchArgValidation:
             assert result.success is True
 
     def test_top_k_が_最大値_を超えたら_32_で_cap(
-        self, executor: SemanticMemorySearchToolExecutor
+        self,
+        executor: SemanticMemorySearchToolExecutor,
+        setup: SemanticBeingTestSetup,
     ) -> None:
         for i in range(50):
-            _add(executor, _entry(entry_id=f"s{i}", text=f"q{i}", tags=("q",)))
+            _add(setup, _entry(entry_id=f"s{i}", text=f"q{i}", tags=("q",)))
         result = executor._run_search_semantic(
             player_id=1, arguments={"query": "q", "top_k": 1000}
         )
@@ -123,10 +149,12 @@ class TestSemanticMemorySearchScoring:
     """tag 完全一致 / tag 部分一致 / 本文一致 の score 優先順。"""
 
     def test_tag_完全一致が_最上位(
-        self, executor: SemanticMemorySearchToolExecutor
+        self,
+        executor: SemanticMemorySearchToolExecutor,
+        setup: SemanticBeingTestSetup,
     ) -> None:
-        _add(executor, _entry(entry_id="text_only", text="タカシは漁の名手", tags=()))
-        _add(executor, _entry(entry_id="exact", text="ある記憶", tags=("タカシ",)))
+        _add(setup, _entry(entry_id="text_only", text="タカシは漁の名手", tags=()))
+        _add(setup, _entry(entry_id="exact", text="ある記憶", tags=("タカシ",)))
         result = executor._run_search_semantic(
             player_id=1, arguments={"query": "タカシ"}
         )
@@ -135,10 +163,12 @@ class TestSemanticMemorySearchScoring:
         assert ids[0] == "exact"
 
     def test_match_しない_entry_は_結果に出ない(
-        self, executor: SemanticMemorySearchToolExecutor
+        self,
+        executor: SemanticMemorySearchToolExecutor,
+        setup: SemanticBeingTestSetup,
     ) -> None:
-        _add(executor, _entry(entry_id="match", text="毒キノコ", tags=()))
-        _add(executor, _entry(entry_id="miss", text="ココナッツ", tags=()))
+        _add(setup, _entry(entry_id="match", text="毒キノコ", tags=()))
+        _add(setup, _entry(entry_id="miss", text="ココナッツ", tags=()))
         result = executor._run_search_semantic(
             player_id=1, arguments={"query": "毒"}
         )
@@ -147,9 +177,11 @@ class TestSemanticMemorySearchScoring:
         assert ids == ["match"]
 
     def test_本文部分一致でも_hit_する(
-        self, executor: SemanticMemorySearchToolExecutor
+        self,
+        executor: SemanticMemorySearchToolExecutor,
+        setup: SemanticBeingTestSetup,
     ) -> None:
-        _add(executor, _entry(entry_id="text", text="北の洞窟は熊の巣", tags=()))
+        _add(setup, _entry(entry_id="text", text="北の洞窟は熊の巣", tags=()))
         result = executor._run_search_semantic(
             player_id=1, arguments={"query": "北の洞窟"}
         )
@@ -157,10 +189,12 @@ class TestSemanticMemorySearchScoring:
         assert any(row["entry_id"] == "text" for row in payload["matched_entries"])
 
     def test_case_insensitive_に_match(
-        self, executor: SemanticMemorySearchToolExecutor
+        self,
+        executor: SemanticMemorySearchToolExecutor,
+        setup: SemanticBeingTestSetup,
     ) -> None:
         """英語混在: tag "Boss" と query "boss" は match する。"""
-        _add(executor, _entry(entry_id="b", tags=("Boss",)))
+        _add(setup, _entry(entry_id="b", tags=("Boss",)))
         result = executor._run_search_semantic(
             player_id=1, arguments={"query": "boss"}
         )
@@ -168,10 +202,12 @@ class TestSemanticMemorySearchScoring:
         assert payload["matched_entries"][0]["entry_id"] == "b"
 
     def test_同じ_match_score_なら_importance_が_高い方が_上位(
-        self, executor: SemanticMemorySearchToolExecutor
+        self,
+        executor: SemanticMemorySearchToolExecutor,
+        setup: SemanticBeingTestSetup,
     ) -> None:
-        _add(executor, _entry(entry_id="low", tags=("q",), importance_score=3))
-        _add(executor, _entry(entry_id="high", tags=("q",), importance_score=9))
+        _add(setup, _entry(entry_id="low", tags=("q",), importance_score=3))
+        _add(setup, _entry(entry_id="high", tags=("q",), importance_score=9))
         result = executor._run_search_semantic(
             player_id=1, arguments={"query": "q"}
         )
@@ -183,9 +219,11 @@ class TestSemanticMemorySearchPayload:
     """返却 JSON が想定通り。"""
 
     def test_query_と_matched_entries_が_含まれる(
-        self, executor: SemanticMemorySearchToolExecutor
+        self,
+        executor: SemanticMemorySearchToolExecutor,
+        setup: SemanticBeingTestSetup,
     ) -> None:
-        _add(executor, _entry(entry_id="x", text="ok", tags=("k",), importance_score=7))
+        _add(setup, _entry(entry_id="x", text="ok", tags=("k",), importance_score=7))
         result = executor._run_search_semantic(
             player_id=1, arguments={"query": "k"}
         )

@@ -174,19 +174,9 @@ class TestSqliteSemanticTypeGuards:
             )
 
 
-class TestSqliteSemanticParallelTablesIndependence:
-    """新旧 API の独立性: legacy テーブルと新テーブルは互いに見えない。"""
-
-    def test_player_id_経由で保存しても_being_id_経由では見えない(
-        self, store: SqliteSemanticMemoryStore
-    ) -> None:
-        """legacy add → being_id list_for_being では見えない。"""
-        store.add(_make_entry(player_id=2))
-        assert store.list_for_being(BeingId("ada")) == []
-
-    def test_being_id_経由で保存しても_player_id_経由では見えない(
-        self, store: SqliteSemanticMemoryStore
-    ) -> None:
-        """being_id add_by_being → legacy list_for_player では見えない。"""
-        store.add_by_being(BeingId("ada"), _make_entry(player_id=2))
-        assert store.list_for_player(2) == []
+# Phase 3 Step 3b-3 (Issue #470): legacy player_id 版テーブルは schema v3 で
+# DROP され、対応する API も撤去された。新旧テーブルの独立性を検証していた
+# ``TestSqliteSemanticParallelTablesIndependence`` は削除された。schema レベルで
+# legacy テーブルが消えていることは
+# ``tests/infrastructure/repository/test_sqlite_memory_graph_stores.py::
+# test_sqlite_legacy_semantic_tables_are_dropped`` でカバーされる。

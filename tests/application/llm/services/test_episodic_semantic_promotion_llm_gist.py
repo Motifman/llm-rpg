@@ -121,14 +121,21 @@ def _build_cluster(
     *,
     gist_service=None,
     persona_resolver=None,
-) -> Tuple[
-    EpisodicSemanticClusterPromotionService,
-    InMemorySemanticMemoryStore,
-]:
-    """3 episode の強リンククラスタを用意した promotion service を作る。"""
+):
+    """3 episode の強リンククラスタを用意した promotion service を作る。
+
+    Phase 3 Step 3b-3 で semantic は being_id 経路必須となったため、
+    ``SemanticBeingTestSetup`` を返して呼出側が ``setup.list_entries(1)`` で
+    結果を読めるようにする。
+    """
+    from tests.application.llm._semantic_being_test_helpers import (
+        make_semantic_being_setup,
+    )
+
     episode_store = InMemorySubjectiveEpisodeStore()
     link_store = InMemoryMemoryLinkStore()
-    semantic_store = InMemorySemanticMemoryStore()
+    setup = make_semantic_being_setup()
+    setup.provision(1)
 
     for i, eid in enumerate(["x", "y", "z"]):
         ep = _make_episode(
@@ -146,12 +153,14 @@ def _build_cluster(
     svc = EpisodicSemanticClusterPromotionService(
         episode_store=episode_store,
         link_store=link_store,
-        semantic_store=semantic_store,
+        semantic_store=setup.semantic_store,
         promotion_frontier=None,  # full scan
         gist_service=gist_service,
         persona_resolver=persona_resolver,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
     )
-    return svc, semantic_store
+    return svc, setup
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -167,7 +176,7 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
         svc, sem_store = _build_cluster(gist_service=None)
         svc.on_after_tool_turn(player_id=1)
 
-        entries = sem_store.list_for_player(1)
+        entries = sem_store.list_entries(1)
         assert len(entries) == 1
         entry = entries[0]
         # 決定論 gist は interpreted を concat する
@@ -190,7 +199,7 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
         )
         svc.on_after_tool_turn(player_id=1)
 
-        entries = sem_store.list_for_player(1)
+        entries = sem_store.list_entries(1)
         assert len(entries) == 1
         entry = entries[0]
         assert entry.text == "タカシは信頼できる"
@@ -211,7 +220,7 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
         ):
             svc.on_after_tool_turn(player_id=1)
 
-        entries = sem_store.list_for_player(1)
+        entries = sem_store.list_entries(1)
         assert len(entries) == 1
         # 決定論 gist の形跡
         assert "主観文0" in entries[0].text
@@ -236,7 +245,7 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
             persona_resolver=broken_resolver,
         )
         svc.on_after_tool_turn(player_id=1)
-        entries = sem_store.list_for_player(1)
+        entries = sem_store.list_entries(1)
         assert len(entries) == 1
         assert entries[0].text == "ok"
 
@@ -252,5 +261,5 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
             persona_resolver=None,
         )
         svc.on_after_tool_turn(player_id=1)
-        entries = sem_store.list_for_player(1)
+        entries = sem_store.list_entries(1)
         assert len(entries) == 1

@@ -96,8 +96,10 @@ class SemanticPassiveRecallService:
             raise TypeError("semantic_store must not be None")
         if recency_tau_sec <= 0:
             raise ValueError("recency_tau_sec must be positive")
-        # Phase 3 Step 3b-2: dual-path。Resolver+WorldId 両方注入時は being_id 経路、
-        # 未注入なら legacy player_id 経路。
+        # Phase 3 Step 3b-3: Resolver+WorldId は構造的に Optional のままだが
+        # (= 旧 test 互換のため constructor は通したい)、未注入 / Being 未 provision
+        # の場合は recall を黙って no-op (空 list) とする。passive recall は
+        # side feature なので turn を止めない方針。
         if being_attachment_resolver is not None and not isinstance(
             being_attachment_resolver, BeingAttachmentResolver
         ):
@@ -115,14 +117,20 @@ class SemanticPassiveRecallService:
         self._default_world_id = default_world_id
 
     def _list_entries(self, player_id: int) -> list[SemanticMemoryEntry]:
-        """dual-path: Resolver+WorldId+Being 揃えば being_id 経由、なければ legacy。"""
-        if self._resolver is not None and self._default_world_id is not None:
-            being_id = self._resolver.resolve_being_id(
-                self._default_world_id, PlayerId(player_id)
-            )
-            if being_id is not None:
-                return list(self._store.list_for_being(being_id))
-        return list(self._store.list_for_player(player_id))
+        """Resolver+WorldId+Being が揃えば being_id 経路、いずれか欠ければ空 list。
+
+        Phase 3 Step 3b-3: legacy player_id 経路は撤去済。passive recall は
+        side feature なので、Being 未 provision / Resolver 未注入で turn を
+        止めない (= 空 list で黙って sink)。
+        """
+        if self._resolver is None or self._default_world_id is None:
+            return []
+        being_id = self._resolver.resolve_being_id(
+            self._default_world_id, PlayerId(player_id)
+        )
+        if being_id is None:
+            return []
+        return list(self._store.list_for_being(being_id))
 
     def retrieve(
         self,

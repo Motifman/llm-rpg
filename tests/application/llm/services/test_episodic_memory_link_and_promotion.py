@@ -122,13 +122,21 @@ def _strong_link(
 
 
 def test_semantic_cluster_promotion_writes_store() -> None:
+    from tests.application.llm._semantic_being_test_helpers import (
+        make_semantic_being_setup,
+    )
+
     store = InMemorySubjectiveEpisodeStore()
     links = InMemoryMemoryLinkStore()
-    sem = InMemorySemanticMemoryStore()
+    # Phase 3 Step 3b-3: semantic は being_id 経路必須。
+    setup = make_semantic_being_setup()
+    setup.provision(1)
     promo = EpisodicSemanticClusterPromotionService(
         episode_store=store,
         link_store=links,
-        semantic_store=sem,
+        semantic_store=setup.semantic_store,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
     )
     for i, eid in enumerate(["x", "y", "z"]):
         ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
@@ -138,7 +146,7 @@ def test_semantic_cluster_promotion_writes_store() -> None:
     links.upsert_link(_strong_link(1, "y", "z"))
     links.upsert_link(_strong_link(1, "x", "z"))
     promo.on_after_tool_turn(1, now=now)
-    assert len(sem.list_for_player(1)) == 1
+    assert len(setup.list_entries(1)) == 1
 
 
 def test_link_store_lists_all_for_player() -> None:

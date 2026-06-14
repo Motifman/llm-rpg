@@ -1,7 +1,8 @@
-"""Phase 3 Step 3b-2: semantic caller 3 file の dual-path 新 API 経路テスト。
+"""Phase 3 Step 3b-3: semantic caller 3 file の being_id 経路テスト。
 
-Resolver + WorldId を注入したときに ``*_by_being`` API 経路が走ることを確認する。
-memo の Step 3a-2 と同じパターン。
+Step 3b-2 で導入した dual-path のうち legacy fallback を 3b-3 で撤去したため、
+本テストでも legacy 経路に関する分岐検証は削除し、新 API のみが動く前提に
+揃える。memo の Step 3a-3 後の状態と同じ。
 """
 
 from __future__ import annotations
@@ -32,7 +33,6 @@ from ai_rpg_world.application.llm.tool_constants import (
 from ai_rpg_world.domain.being.service.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import (
     EpisodicCueSource,
@@ -121,14 +121,13 @@ class TestSemanticPassiveRecallServiceNewPath:
         assert len(result) == 1
         assert result[0].entry.text == "りんご"
 
-    def test_未_provision_なら_legacy_経路に_fallback(
+    def test_未_provision_なら_空_list(
         self,
         store: InMemorySemanticMemoryStore,
         resolver: BeingAttachmentResolver,
         world_id: WorldId,
     ) -> None:
-        """Resolver 注入 + Being 未 provision なら legacy 経路で動く。"""
-        store.add(_make_entry(text="legacy 側"))
+        """Resolver 注入済でも Being 未 provision なら空 list (= side feature の graceful 失敗)。"""
         service = SemanticPassiveRecallService(
             store,
             being_attachment_resolver=resolver,
@@ -139,8 +138,16 @@ class TestSemanticPassiveRecallServiceNewPath:
             situation_cues=(),
             top_k=5,
         )
-        # legacy store にあるので fallback で取れる
-        assert len(result) == 1
+        assert result == []
+
+    def test_resolver_未注入なら_空_list(
+        self,
+        store: InMemorySemanticMemoryStore,
+    ) -> None:
+        """Phase 3 Step 3b-3: Resolver 未注入は黙って空 list (= legacy 経路は撤去済)。"""
+        service = SemanticPassiveRecallService(store)
+        result = service.retrieve(player_id=2, situation_cues=(), top_k=5)
+        assert result == []
 
 
 class TestSemanticMemorySearchToolExecutorNewPath:
@@ -173,18 +180,47 @@ class TestSemanticMemorySearchToolExecutorNewPath:
         assert len(payload["matched_entries"]) == 1
         assert "りんご" in payload["matched_entries"][0]["summary"]
 
+    def test_resolver_未注入なら_INVALID_STATE(
+        self,
+        store: InMemorySemanticMemoryStore,
+    ) -> None:
+        """Phase 3 Step 3b-3: tool は LLM-visible なので fail-fast。"""
+        executor = SemanticMemorySearchToolExecutor(semantic_store=store)
+        handlers = executor.get_handlers()
+        result = handlers[TOOL_NAME_MEMORY_SEARCH_SEMANTIC](
+            2, {"query": "りんご", "top_k": 5}
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_STATE"
+
+    def test_being_未_provision_なら_INVALID_STATE(
+        self,
+        store: InMemorySemanticMemoryStore,
+        resolver: BeingAttachmentResolver,
+        world_id: WorldId,
+    ) -> None:
+        """Resolver 注入済でも Being 未 provision なら fail-fast。"""
+        executor = SemanticMemorySearchToolExecutor(
+            semantic_store=store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+        )
+        handlers = executor.get_handlers()
+        result = handlers[TOOL_NAME_MEMORY_SEARCH_SEMANTIC](
+            2, {"query": "りんご", "top_k": 5}
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_STATE"
+
 
 class TestEpisodicSemanticClusterPromotionServiceNewPath:
-    """EpisodicSemanticClusterPromotionService の dual-path 内部ヘルパー検証。
+    """EpisodicSemanticClusterPromotionService の being_id 経路内部ヘルパー検証。
 
     full promotion フローは複雑な事前条件 (= 強リンク・3 件以上 episode 等) を
     要するため、本テストでは ``_register_signature`` / ``_add_entry`` の単体
-    挙動だけ確認する。
-
-    TODO (Phase 3 Step 3b-3): legacy 撤去で dual-path helper を消すとき、本テスト
-    も併せて整理する。``on_after_tool_turn`` 経由の integration test を 1 件
-    追加する案もあり (= リファクタリング耐性 ↑)。private API 直呼びはステップ
-    完了時に再評価する。
+    挙動だけ確認する。``on_after_tool_turn`` 経由の integration カバレッジは
+    ``test_episodic_memory_link_and_promotion`` / ``test_episodic_semantic_promotion_*``
+    で別途取れている。
     """
 
     def test_register_signature_は_being_id_store_に書く(
@@ -195,7 +231,7 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
         provisioning: BeingProvisioningService,
     ) -> None:
         """provision 済 Being があれば being_id 経路で signature 登録される。"""
-        provisioning.ensure_attached(PlayerId(2))
+        being_id = provisioning.ensure_attached(PlayerId(2))
 
         from unittest.mock import MagicMock
 
@@ -209,10 +245,11 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
         # 初回 True、2 回目 False
         assert service._register_signature(2, "sig-1") is True
         assert service._register_signature(2, "sig-1") is False
-        # being store に登録されたことを確認 (= legacy 側は登録されていない)
+        # 直接 being_id 経由で再登録試行 → False (= being store に入っている証拠)
         assert (
-            store.register_cluster_signature_if_new(2, "sig-1") is True
-        )  # legacy 側は未登録なので初回扱い
+            store.register_cluster_signature_if_new_by_being(being_id, "sig-1")
+            is False
+        )
 
     def test_add_entry_は_being_id_store_に書く(
         self,
@@ -235,7 +272,34 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
         )
         entry = _make_entry()
         service._add_entry(2, entry)
-        # being store に入る
         assert len(store.list_for_being(being_id)) == 1
-        # legacy 側は空
-        assert store.list_for_player(2) == []
+
+    def test_being_未_provision_なら_no_op(
+        self,
+        store: InMemorySemanticMemoryStore,
+        resolver: BeingAttachmentResolver,
+        world_id: WorldId,
+        being_repo: InMemoryBeingRepository,
+    ) -> None:
+        """Phase 3 Step 3b-3: promotion は turn 副作用なので silent no-op。"""
+        from unittest.mock import MagicMock
+
+        service = EpisodicSemanticClusterPromotionService(
+            episode_store=MagicMock(),
+            link_store=MagicMock(),
+            semantic_store=store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+        )
+        # register_signature は False、_add_entry は何もしない
+        assert service._register_signature(99, "sig-x") is False
+        service._add_entry(99, _make_entry(player_id=99))
+        # 後から Being を attach して public API 経由で store が空であることを確認
+        provisioning = BeingProvisioningService(being_repo)
+        being_id = provisioning.ensure_attached(PlayerId(99))
+        assert store.list_for_being(being_id) == []
+        # signature 集合も空 (= 再登録で「初回扱い」になる)
+        assert (
+            store.register_cluster_signature_if_new_by_being(being_id, "sig-x")
+            is True
+        )

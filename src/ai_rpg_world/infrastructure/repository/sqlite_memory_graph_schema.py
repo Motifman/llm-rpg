@@ -85,6 +85,25 @@ def _init_memory_graph_v2_semantic_by_being(connection: sqlite3.Connection) -> N
     )
 
 
+def _init_memory_graph_v3_drop_legacy_semantic(connection: sqlite3.Connection) -> None:
+    """Phase 3 Step 3b-3: legacy player_id keyed の semantic テーブルを撤去。
+
+    Step 3b-2 で全 caller が ``*_by_being`` API に切り替わったため、player_id keyed
+    の旧テーブル/インデックスは参照されなくなった。schema migration で DROP して
+    DB ファイル上にも残らないようにする。
+
+    ``memory_links`` テーブル (= MemoryLinkRepository 用) は本 v3 では触らない。
+    そちらの being_id keyed 移行は後続 Step 3c で行う。
+    """
+    connection.executescript(
+        """
+        DROP INDEX IF EXISTS idx_semantic_entries_player;
+        DROP TABLE IF EXISTS semantic_memory_entries;
+        DROP TABLE IF EXISTS semantic_cluster_signatures;
+        """
+    )
+
+
 def apply_memory_graph_migrations(connection: sqlite3.Connection) -> int:
     """リンク・セマンティック表を同一 DB に作成する。namespace はエピソード本体と独立。"""
     return apply_migrations(
@@ -93,6 +112,7 @@ def apply_memory_graph_migrations(connection: sqlite3.Connection) -> int:
         migrations=[
             SqliteMigration(1, _init_memory_graph_v1),
             SqliteMigration(2, _init_memory_graph_v2_semantic_by_being),
+            SqliteMigration(3, _init_memory_graph_v3_drop_legacy_semantic),
         ],
     )
 

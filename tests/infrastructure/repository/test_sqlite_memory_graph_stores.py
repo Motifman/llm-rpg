@@ -100,10 +100,18 @@ def test_default_link_semantic_factory_in_memory_when_episode_in_memory() -> Non
 
 
 def test_sqlite_semantic_signature_and_entries(db_path: Path) -> None:
+    """Phase 3 Step 3b-3: being_id 経路のみで signature + entry が永続化される。
+
+    legacy ``register_cluster_signature_if_new`` / ``add`` / ``list_for_player`` は
+    撤去済 (= schema v3 で legacy テーブルも DROP)。
+    """
+    from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
     episode_store = SqliteSubjectiveEpisodeStore.connect(str(db_path))
     sem = SqliteSemanticMemoryStore(episode_store.connection)
-    assert sem.register_cluster_signature_if_new(1, "sig-a") is True
-    assert sem.register_cluster_signature_if_new(1, "sig-a") is False
+    being_id = BeingId("being_w1_p1")
+    assert sem.register_cluster_signature_if_new_by_being(being_id, "sig-a") is True
+    assert sem.register_cluster_signature_if_new_by_being(being_id, "sig-a") is False
     now = datetime(2026, 5, 4, 12, 0, 0, tzinfo=timezone.utc)
     entry = SemanticMemoryEntry(
         entry_id="sem-1",
@@ -113,8 +121,23 @@ def test_sqlite_semantic_signature_and_entries(db_path: Path) -> None:
         confidence=0.8,
         created_at=now,
     )
-    sem.add(entry)
-    rows = sem.list_for_player(1)
+    sem.add_by_being(being_id, entry)
+    rows = sem.list_for_being(being_id)
     assert len(rows) == 1
     assert rows[0].entry_id == "sem-1"
     assert rows[0].evidence_episode_ids == ("e1", "e2")
+
+
+def test_sqlite_legacy_semantic_tables_are_dropped(db_path: Path) -> None:
+    """Phase 3 Step 3b-3: schema v3 で legacy テーブルが完全に消えていること。"""
+    episode_store = SqliteSubjectiveEpisodeStore.connect(str(db_path))
+    SqliteSemanticMemoryStore(episode_store.connection)
+    conn = episode_store.connection
+    legacy_tables = {"semantic_memory_entries", "semantic_cluster_signatures"}
+    rows = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()
+    table_names = {row["name"] for row in rows}
+    assert legacy_tables.isdisjoint(table_names), (
+        f"legacy table 残存: {legacy_tables & table_names}"
+    )

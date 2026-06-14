@@ -241,6 +241,34 @@
 
 ---
 
+## 13. memory caller の Being 未解決時挙動は「役割」で分岐する
+
+**何を**: Being / Resolver / WorldId のいずれかが未注入 / 未 provision で memory store の being_id 経路を引けないとき、caller の挙動は **役割によって 3 種類** を使い分ける。
+
+| caller の役割 | 未解決時の挙動 | 理由 |
+|---|---|---|
+| LLM-visible tool (例: `SemanticMemorySearchToolExecutor`) | **fail-fast** (`INVALID_STATE` で `success=False`) | 「該当 0 件」と「内部状態未準備」を LLM が区別できないと、誤った判断につながる |
+| turn の副作用 (例: `EpisodicSemanticClusterPromotionService`) | **silent no-op** | promotion 失敗で turn を止めない。次回 turn で再試行できる |
+| prompt 強化 (例: `SemanticPassiveRecallService`) | **graceful empty list** | side feature なので turn を止めない。 wiring 漏れは別途 wiring level の test で塞ぐ責務 |
+
+**なぜ**:
+- すべて fail-fast にすると prompt 系の side feature で turn が落ちる
+- すべて silent にすると LLM が「該当なし」と誤認して間違った行動を取る
+- すべて graceful にすると wiring 漏れが本番で見えなくなる
+- 「caller がどう失敗してほしいか」は本質的に **caller 側の関心** なので Repository 側でなく caller で判定する
+
+**どうしないと壊れるか**:
+- 一律 silent: LLM-visible tool で「該当なし」と「内部 bug」が判別不能になり、誤判断が trace から追えない
+- 一律 fail-fast: passive recall や promotion の小さな失敗で turn 全体が止まる
+
+**残るリスク**: graceful empty (passive recall) は wiring 漏れを隠す可能性がある。これは wiring-level test (= Resolver+WorldId が必ず注入される) で補完する責務とし、本 caller では「prompt が痩せるだけ」の縮退に留める。
+
+**どこでこの判断が出てきたか**:
+- PR #491 / #492 (Phase 3 Step 3b-2 / 3b-3 = semantic legacy 撤去)
+- code-reviewer (MEDIUM-1) でも「Optional 設計は wiring 漏れを隠しうる」と指摘あり、トレードオフ込みで採用
+
+---
+
 ## 9. 速度より「LLM の判断ミス」を優先して直す
 
 **何を**: 並列化 / 非同期化 / cache 最適化のような **wall time 改善** より、LLM が誤判断する原因を 1 つずつ潰す方を優先する。
@@ -275,3 +303,4 @@
 | 10. 実験 env は fail-fast | 2026-06-07 | PR #433 / #434 |
 | 11. 設定 DTO 集約 + ctor 注入 | 2026-06-09 | PR #446-#451 (リファクタ 6 PR) |
 | 12. Future work は xfail-strict で可視化 | 2026-06-09 | PR #451 (慣習化) |
+| 13. memory caller の未解決時挙動は役割で分岐 | 2026-06-14 | PR #491 / #492 |

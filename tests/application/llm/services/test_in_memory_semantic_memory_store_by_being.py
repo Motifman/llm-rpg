@@ -169,32 +169,7 @@ class TestRegisterClusterSignatureByBeing:
             )
 
 
-class TestIndependenceFromPlayerIdApi:
-    """新旧 API の独立性 (= 並走 store は同期しない)。"""
-
-    def test_player_id_経由で追加した_entry_は_being_id_経由では見えない(
-        self, store: InMemorySemanticMemoryStore
-    ) -> None:
-        """旧 API で追加すると新 API からは取れない (独立 namespace)。"""
-        store.add(_make_entry(player_id=2))
-        assert store.list_for_being(BeingId("ada")) == []
-
-    def test_being_id_経由で追加した_entry_は_player_id_経由では見えない(
-        self, store: InMemorySemanticMemoryStore
-    ) -> None:
-        """逆方向も独立。"""
-        store.add_by_being(BeingId("ada"), _make_entry(player_id=2))
-        assert store.list_for_player(2) == []
-
-    def test_cluster_signature_も独立(
-        self, store: InMemorySemanticMemoryStore
-    ) -> None:
-        """signature 集合も新旧で混ざらない。"""
-        store.register_cluster_signature_if_new(2, "sig-a")
-        # 同 signature を being 側で登録しても初回扱い
-        assert (
-            store.register_cluster_signature_if_new_by_being(
-                BeingId("ada"), "sig-a"
-            )
-            is True
-        )
+# Phase 3 Step 3b-3 (Issue #470): legacy player_id 版 API が撤去されたため、
+# 旧/新 API の独立性を検証していたテストクラス
+# ``TestIndependenceFromPlayerIdApi`` は削除された。新 API のみが残り、
+# being_id を一次キーとして扱う設計に統一されている。
