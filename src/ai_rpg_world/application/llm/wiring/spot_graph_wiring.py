@@ -767,6 +767,18 @@ def create_spot_graph_wiring(
         semantic_memory_store=semantic_memory_store,
         event_publisher=event_publisher,
         monster_behavior_tick_service=monster_behavior_tick_service,
+        being_provisioning_service=_being_provisioning_service,
+        being_attachment_resolver=_being_resolver,
+        # Phase 6 (Issue #470): snapshot 用 store ハンドル。Phase 5 で作った
+        # ``BeingMemorySnapshotService`` / ``BeingPersistenceService`` を
+        # experiment runner から組み立てるための入口。注: spot_graph_wiring
+        # で being_provisioning_service / being_attachment_resolver を露出する
+        # のも本 PR で追加 (Phase 6 では runner が snapshot service を組むのに
+        # being_repository / resolver 両方が必要なため)。既存呼出側は属性参照
+        # していないので影響なし。
+        memo_store=todo_store,
+        memory_link_store=mem_bundle.link_store,
+        being_repository=_being_repository,
     )
 
 

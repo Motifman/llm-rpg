@@ -338,6 +338,70 @@ schema は application 層の `BeingMemorySnapshotService` (Phase 4-2) が版管
 
 ---
 
+## 17. experiment runner の snapshot は escape_game runtime の限定 store だけを拾う
+
+**何を**: ``scripts/run_scenario_experiment.py`` の Phase 6 統合では、
+``_wiring_stub_from_escape_runtime`` が ``EscapeGameRuntime`` の private
+attribute から **拾える分だけ** store を集めて
+``ExperimentSnapshotSession`` に渡す。escape_game runtime には semantic /
+memory_link / recall_buffer / reinterpretation_journal の 4 store がそもそも
+存在しないため、これらは ``None`` で渡され、session 側で空 in-memory store
+に fallback される。
+
+**なぜ**:
+- escape_game runtime は ``EpisodicStack`` (memo + episode のみ) を使う
+  構成で、semantic / memory_link 等の高度 memory pipeline は
+  ``create_llm_agent_wiring`` 経路でしか組まれない
+- ここで「足りない store を後付けで配線する」と既存実験の挙動を変えてしまう
+  (= 既存 trace との比較ができなくなる)
+- 「snapshot に乗らない情報は空 array でも整合性が取れる」のが Phase 4-2b
+  の JSON schema 設計の素敵な性質。fallback で問題が起きない
+
+**どうしないと壊れるか**:
+- 強制配線を入れると prompt 構築 / observation pipeline に副作用が混じる
+- 「拾えない store → silent に snapshot off」だと、後で気付かれず復元に
+  失敗する。info ログで fallback 使用を明示する (= silent failure を構造で
+  防ぐ #5 と整合)
+
+**どこでこの判断が出てきたか**:
+- Phase 6 着手時 (= 本 PR)
+- 将来 escape_game runtime に semantic stores を入れたら、wiring stub の
+  attribute lookup を増やすだけで済む
+
+---
+
+## 18. snapshot save は SIGINT を flag 化して run 終了経路に合流させる
+
+**何を**: ``run_scenario_experiment.py`` で ``--snapshot-save-dir`` を指定した
+ときだけ SIGINT (Ctrl+C) を ``_interrupted = True`` フラグ立てに変える。
+``KeyboardInterrupt`` を直接 raise させず、main loop が次の iteration で
+正常に break する。break 後の通常終了経路 (= snapshot save + runtime.shutdown)
+を必ず通すため。
+
+**なぜ**:
+- ``runtime.advance_tick()`` の中に LLM 呼び出し / async scheduler / 観測
+  pipeline が絡んでいる。``KeyboardInterrupt`` が突然 raise されると
+  partial state (= 観測が途中で止まる、scheduler が drain されない) で
+  snapshot を取るリスクがある
+- flag 化すれば「現 iteration の advance_tick() が綺麗に終わってから break」
+  になる。snapshot は **整合性の取れた状態** から取れる
+- ``--snapshot-save-dir`` 未指定なら SIGINT ハンドラを触らない (= 既存挙動
+  完全互換)。snapshot を使わない実験では Ctrl+C は引き続き
+  ``KeyboardInterrupt`` を即時 raise する
+
+**どうしないと壊れるか**:
+- グローバルに SIGINT を flag 化すると、snapshot を使わない既存実験の
+  Ctrl+C の即時性が失われる (= ユーザーが Ctrl+C を 2 回押す習慣に行き着く)
+- 直接 ``except KeyboardInterrupt`` で受けると、advance_tick の途中で止まる
+  ので scheduler の drain が呼ばれず ``"recorder is already closed"``
+  RuntimeError が後追いで出る (= 第21回実験の既知 silent failure と同型)
+
+**どこでこの判断が出てきたか**:
+- Phase 6 着手時 (= 本 PR)、user が「実験後にエラーが出られると困る」と
+  明示的に要求した点をきっかけに
+
+---
+
 ## 16. run 途中再開 CLI は 4 SQLite DB + in-memory memo の構成で動く
 
 **何を**: ``scripts/being_snapshot_cli.py`` の ``_build_stack`` は 4 つの SQLite
@@ -406,3 +470,5 @@ schema は application 層の `BeingMemorySnapshotService` (Phase 4-2) が版管
 | 14. promotion_frontier は Phase 3 Step 3c scope 外 | 2026-06-14 | PR #495 |
 | 15. BeingSnapshot v2 は memory payload をオペーク JSON で持つ | 2026-06-14 | Phase 4 Step 4-1 |
 | 16. run 途中再開 CLI は 4 DB + in-memory memo で動く | 2026-06-14 | Phase 5 |
+| 17. experiment runner の snapshot は escape_game runtime 限定 store のみ拾う | 2026-06-14 | Phase 6 |
+| 18. snapshot save 経路の SIGINT は flag 化 (KeyboardInterrupt を抑制) | 2026-06-14 | Phase 6 |

@@ -211,7 +211,61 @@ experiment:
 		--scenario $(SCENARIO) \
 		--max-world-ticks $(MAX_WORLD_TICKS) \
 		$(if $(OUT),--out $(OUT),) \
-		$(if $(PUBLISH),--publish-gist,)
+		$(if $(PUBLISH),--publish-gist,) \
+		$(if $(SNAPSHOT_SAVE_DIR),--snapshot-save-dir $(SNAPSHOT_SAVE_DIR),) \
+		$(if $(SNAPSHOT_LOAD_DIR),--snapshot-load-dir $(SNAPSHOT_LOAD_DIR),)
+
+# Phase 6 (Issue #470): 実験 run の Being snapshot を OUT 配下の snapshots/ に
+# 自動保存する shortcut。次回 run-resume で読み込める。
+# 使い方:
+#   make experiment-with-snapshot SCENARIO=... OUT=var/runs/foo
+#   # OUT/snapshots/being_w1_p1.json などが書き出される
+experiment-with-snapshot:
+	@if [ -z "$(OUT)" ]; then \
+		echo "OUT is required for experiment-with-snapshot. e.g. make experiment-with-snapshot SCENARIO=... OUT=var/runs/foo"; \
+		exit 2; \
+	fi
+	$(MAKE) experiment \
+		SCENARIO=$(SCENARIO) \
+		MAX_WORLD_TICKS=$(MAX_WORLD_TICKS) \
+		OUT=$(OUT) \
+		WORKERS=$(WORKERS) \
+		EPISODIC=$(EPISODIC) \
+		IDLE_TICKS=$(IDLE_TICKS) \
+		SECTION_ORDER=$(SECTION_ORDER) \
+		MEMORY_KIND=$(MEMORY_KIND) \
+		SCHEDULER_MODE=$(SCHEDULER_MODE) \
+		PROVIDER=$(PROVIDER) \
+		QUANTIZATION=$(QUANTIZATION) \
+		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
+		PUBLISH=$(PUBLISH) \
+		SNAPSHOT_SAVE_DIR=$(OUT)/snapshots
+
+# Phase 6: 別の OUT で同じ scenario を再開する shortcut。
+# 使い方:
+#   make experiment-resume SCENARIO=... OUT=var/runs/foo_resume \
+#     SNAPSHOT_LOAD_DIR=var/runs/foo/snapshots
+experiment-resume:
+	@if [ -z "$(SNAPSHOT_LOAD_DIR)" ]; then \
+		echo "SNAPSHOT_LOAD_DIR is required. e.g. make experiment-resume SCENARIO=... OUT=... SNAPSHOT_LOAD_DIR=var/runs/prev/snapshots"; \
+		exit 2; \
+	fi
+	$(MAKE) experiment \
+		SCENARIO=$(SCENARIO) \
+		MAX_WORLD_TICKS=$(MAX_WORLD_TICKS) \
+		OUT=$(OUT) \
+		WORKERS=$(WORKERS) \
+		EPISODIC=$(EPISODIC) \
+		IDLE_TICKS=$(IDLE_TICKS) \
+		SECTION_ORDER=$(SECTION_ORDER) \
+		MEMORY_KIND=$(MEMORY_KIND) \
+		SCHEDULER_MODE=$(SCHEDULER_MODE) \
+		PROVIDER=$(PROVIDER) \
+		QUANTIZATION=$(QUANTIZATION) \
+		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
+		PUBLISH=$(PUBLISH) \
+		SNAPSHOT_LOAD_DIR=$(SNAPSHOT_LOAD_DIR) \
+		SNAPSHOT_SAVE_DIR=$(if $(OUT),$(OUT)/snapshots,)
 
 # experiment + secret gist 自動 publish (PUBLISH=1 と同等)
 experiment-publish:

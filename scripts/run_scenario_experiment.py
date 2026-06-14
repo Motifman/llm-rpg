@@ -206,6 +206,43 @@ def _load_dotenv_safe() -> None:
         pass
 
 
+def _wiring_stub_from_escape_runtime(runtime: Any) -> Any:
+    """``EscapeGameRuntime`` から ``ExperimentSnapshotSession`` 用の wiring stub を作る。
+
+    Phase 6 (Issue #470): escape_game runtime には ``LlmAgentWiringResult`` の
+    全 store ハンドルが揃わない (semantic / memory_link / recall_buffer /
+    journal は escape_game の通常経路では作られない) ため、runtime の
+    内部 field から **拾える分だけ** 集めて wiring 風オブジェクトを返す。
+    足りない store は ``ExperimentSnapshotSession`` 側で空 in-memory に
+    fallback する。
+    """
+    from types import SimpleNamespace
+
+    # episode_store は _episodic_stack が None のときは None。
+    episodic_stack = getattr(runtime, "_episodic_stack", None)
+    episode_store = (
+        getattr(episodic_stack, "episode_store", None)
+        if episodic_stack is not None
+        else None
+    )
+    # 注意: ``_aux_being_repository`` は private 属性 (public property なし)。
+    # ``aux_being_resolver`` の方は public property があるのでそちらを使う。
+    # 将来 ``aux_being_repository`` の public property が追加されたら同じ
+    # 形式に揃える。
+    aux_resolver = getattr(runtime, "aux_being_resolver", None)
+    aux_repo = getattr(runtime, "_aux_being_repository", None)
+    return SimpleNamespace(
+        memo_store=getattr(runtime, "_todo_store", None),
+        semantic_memory_store=None,
+        memory_link_store=None,
+        episodic_recall_buffer_store=None,
+        episodic_reinterpretation_journal_store=None,
+        episodic_episode_store=episode_store,
+        being_repository=aux_repo,
+        being_attachment_resolver=aux_resolver,
+    )
+
+
 def _drive_scenario(
     *,
     scenario_path: Path,
@@ -213,6 +250,8 @@ def _drive_scenario(
     recorder: JsonlTraceRecorder,
     progress: Any,
     reporter: Optional[_ExperimentProgressReporter] = None,
+    snapshot_save_dir: Optional[Path] = None,
+    snapshot_load_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """シナリオを 1 セッション分回し、最終ステートを dict で返す。
 
@@ -280,116 +319,234 @@ def _drive_scenario(
                 player_name=player_name,
             )
 
+        # Phase 6 (Issue #470): snapshot load / save の準備。
+        # - 全 player について aux Being を ensure_attached しておく (= snapshot
+        #   capture / restore の前提条件)。これは ``run_turn`` でも idempotent に
+        #   呼ばれる operation だが、snapshot を始める前に明示的に走らせて
+        #   「Being が attach されていない」によるスキップを避ける。
+        # - load 経路: snapshot_load_dir があれば全 JSON を restore。失敗は
+        #   fail-fast (= 例外伝播)。
+        # - save 経路は run 終了時 (= 下の try / finally) で行う。
+        snapshot_session: Optional[Any] = None
+        if snapshot_save_dir is not None or snapshot_load_dir is not None:
+            from ai_rpg_world.application.being.experiment_snapshot_session import (
+                ExperimentSnapshotSession,
+            )
+
+            # aux Being stack を確実に初期化 (= _aux_being_repository を作る)
+            if hasattr(runtime, "_wire_auxiliary_tool_stack"):
+                runtime._wire_auxiliary_tool_stack()
+            for pid in runtime.get_player_ids():
+                provisioning = getattr(runtime, "_aux_being_provisioning", None)
+                if provisioning is not None:
+                    provisioning.ensure_attached(pid)
+
+            wiring_stub = _wiring_stub_from_escape_runtime(runtime)
+            # snapshot_dir は save 用の出力先 / restore 用の入力先 両方を
+            # 兼ねる。本 PR では「snapshot_dir」を共通化し、restore は
+            # snapshot_load_dir から別途読む。
+            snapshot_session = ExperimentSnapshotSession(
+                wiring_result=wiring_stub,
+                snapshot_dir=snapshot_save_dir or snapshot_load_dir,
+            )
+
+            if snapshot_load_dir is not None:
+                logger.info(
+                    "loading snapshots from %s ...", snapshot_load_dir
+                )
+                restore_report = snapshot_session.restore_all_from_dir(
+                    snapshot_load_dir
+                )
+                logger.info(
+                    "restored %d being snapshot(s)", len(restore_report.restored)
+                )
+
         for pid in runtime.get_player_ids():
             state.llm_wiring.llm_turn_trigger.schedule_turn(pid)
 
         outcome = "TIMEOUT"
         last_tick = 0
         t0 = time.monotonic()
-        # 各 player の前 tick の spot を保持して差分検出に使う
-        prev_spots: Dict[int, Optional[str]] = {
-            int(pid.value): runtime.get_player_spot_id(pid)
-            for pid in runtime.get_player_ids()
-        }
-        # #404 P1: 外側ループを「world_tick が max_world_ticks に達するまで」に
-        # 統一する。旧 ``for i in range(max_ticks)`` は外側 iteration 回数だった
-        # ため、do_move のネスト advance_tick で world_tick が大量にジャンプすると
-        # 「MAX_TICKS=140 なのに 14 日進まなかった」事象を生んでいた。
-        # 安全弁: iteration 上限 = max_world_ticks * 2。仮に 1 iteration で
-        # world_tick が進まないバグが入ってもループが暴走しないようにする。
-        max_iterations = max(1, max_world_ticks * 2)
-        i = 0
-        while runtime.current_tick() < max_world_ticks and i < max_iterations:
-            w0 = runtime.current_tick()
-            # 旧 progress callable は legacy (start 通知)。新 reporter は
-            # tick 完了時に ETA / per-tick wall time を出す。
-            progress(f"駆動 {i + 1}/{max_world_ticks} world_tick={w0}")
-            recorder.record(TraceEventKind.TICK_START, tick=w0)
-            # #404 P2: iteration 内 LLM 呼び出し数を計測するため、advance_tick
-            # の前に counter をリセットしておく (前 iteration の余り = 0 のはず
-            # だが防御的に)。
-            _pop = getattr(runtime, "pop_llm_call_count", None)
-            if callable(_pop):
-                _pop()
-            runtime.advance_tick()
-            last_tick = runtime.current_tick()
-            # tick 終了直後に position 差分を emit (移動が起きた player のみ)
-            for pid in runtime.get_player_ids():
-                pid_int = int(pid.value)
-                new_spot = runtime.get_player_spot_id(pid)
-                old_spot = prev_spots.get(pid_int)
-                if new_spot is not None and new_spot != old_spot:
-                    try:
-                        spot_name = runtime.get_player_spot_name(pid)
-                    except Exception:
-                        spot_name = new_spot
-                    try:
-                        player_name = runtime.get_player_name(pid)
-                    except Exception:
-                        player_name = None
-                    recorder.record(
-                        TraceEventKind.POSITION_CHANGE,
-                        tick=last_tick,
-                        player_id=pid_int,
-                        from_spot_id=old_spot,
-                        to_spot_id=new_spot,
-                        spot_name=spot_name,
-                        player_name=player_name,
+        # Phase 6: Ctrl+C で snapshot save まで届かせるため、SIGINT を flag
+        # 立てに変える (= KeyboardInterrupt を直接 raise させない)。
+        # snapshot_save_dir 未指定時は no-op の context manager になる
+        # (= 既存挙動完全互換)。
+        # context manager で wrap することで、tick loop が KeyboardInterrupt
+        # 以外の例外で死んでも __exit__ が必ず handler を復元する
+        # (= main() 以降の Ctrl+C を壊さない)。
+        import contextlib
+        import signal as _signal  # local import: 既存 import top に触らない
+
+        _interrupted = {"flag": False}
+
+        @contextlib.contextmanager
+        def _sigint_to_flag_guard():
+            if snapshot_save_dir is None:
+                yield
+                return
+
+            def _handler(_signum: int, _frame: Any) -> None:
+                _interrupted["flag"] = True
+                logger.warning(
+                    "SIGINT received; will stop tick loop and capture "
+                    "snapshot before exit"
+                )
+
+            old = _signal.signal(_signal.SIGINT, _handler)
+            try:
+                yield
+            finally:
+                try:
+                    _signal.signal(_signal.SIGINT, old)
+                except Exception:
+                    logger.warning(
+                        "failed to restore SIGINT handler", exc_info=True
                     )
-                    prev_spots[pid_int] = new_spot
-            recorder.record(TraceEventKind.TICK_END, tick=last_tick)
-            # 進捗 reporter: tick 完了時の wall time / ETA を stderr + progress.jsonl に出す
-            # #404 P2: スパイク原因の内訳 (nested world tick / LLM 呼出 / 移動中数) を渡す。
-            llm_calls: Optional[int] = None
-            travel_active: Optional[int] = None
-            pop_llm = getattr(runtime, "pop_llm_call_count", None)
-            if callable(pop_llm):
-                try:
-                    llm_calls = int(pop_llm())
-                except Exception:
-                    llm_calls = None
-            count_traveling = getattr(runtime, "count_traveling_players", None)
-            if callable(count_traveling):
-                try:
-                    travel_active = int(count_traveling())
-                except Exception:
-                    travel_active = None
-            if reporter is not None:
-                reporter.tick_end(
-                    i,
-                    last_tick,
-                    world_tick_start=int(w0),
-                    llm_calls=llm_calls,
-                    travel_active=travel_active,
-                )
-            end_check = runtime.check_game_end()
-            if end_check.is_ended:
-                outcome = (
-                    str(getattr(end_check, "result", None) or "ENDED").upper()
-                )
+        with _sigint_to_flag_guard():
+            # 各 player の前 tick の spot を保持して差分検出に使う
+            prev_spots: Dict[int, Optional[str]] = {
+                int(pid.value): runtime.get_player_spot_id(pid)
+                for pid in runtime.get_player_ids()
+            }
+            # #404 P1: 外側ループを「world_tick が max_world_ticks に達するまで」に
+            # 統一する。旧 ``for i in range(max_ticks)`` は外側 iteration 回数だった
+            # ため、do_move のネスト advance_tick で world_tick が大量にジャンプすると
+            # 「MAX_TICKS=140 なのに 14 日進まなかった」事象を生んでいた。
+            # 安全弁: iteration 上限 = max_world_ticks * 2。仮に 1 iteration で
+            # world_tick が進まないバグが入ってもループが暴走しないようにする。
+            max_iterations = max(1, max_world_ticks * 2)
+            i = 0
+            while (
+                runtime.current_tick() < max_world_ticks
+                and i < max_iterations
+                and not _interrupted["flag"]
+            ):
+                w0 = runtime.current_tick()
+                # 旧 progress callable は legacy (start 通知)。新 reporter は
+                # tick 完了時に ETA / per-tick wall time を出す。
+                progress(f"駆動 {i + 1}/{max_world_ticks} world_tick={w0}")
+                recorder.record(TraceEventKind.TICK_START, tick=w0)
+                # #404 P2: iteration 内 LLM 呼び出し数を計測するため、advance_tick
+                # の前に counter をリセットしておく (前 iteration の余り = 0 のはず
+                # だが防御的に)。
+                _pop = getattr(runtime, "pop_llm_call_count", None)
+                if callable(_pop):
+                    _pop()
+                runtime.advance_tick()
+                last_tick = runtime.current_tick()
+                # tick 終了直後に position 差分を emit (移動が起きた player のみ)
+                for pid in runtime.get_player_ids():
+                    pid_int = int(pid.value)
+                    new_spot = runtime.get_player_spot_id(pid)
+                    old_spot = prev_spots.get(pid_int)
+                    if new_spot is not None and new_spot != old_spot:
+                        try:
+                            spot_name = runtime.get_player_spot_name(pid)
+                        except Exception:
+                            spot_name = new_spot
+                        try:
+                            player_name = runtime.get_player_name(pid)
+                        except Exception:
+                            player_name = None
+                        recorder.record(
+                            TraceEventKind.POSITION_CHANGE,
+                            tick=last_tick,
+                            player_id=pid_int,
+                            from_spot_id=old_spot,
+                            to_spot_id=new_spot,
+                            spot_name=spot_name,
+                            player_name=player_name,
+                        )
+                        prev_spots[pid_int] = new_spot
+                recorder.record(TraceEventKind.TICK_END, tick=last_tick)
+                # 進捗 reporter: tick 完了時の wall time / ETA を stderr + progress.jsonl に出す
+                # #404 P2: スパイク原因の内訳 (nested world tick / LLM 呼出 / 移動中数) を渡す。
+                llm_calls: Optional[int] = None
+                travel_active: Optional[int] = None
+                pop_llm = getattr(runtime, "pop_llm_call_count", None)
+                if callable(pop_llm):
+                    try:
+                        llm_calls = int(pop_llm())
+                    except Exception:
+                        llm_calls = None
+                count_traveling = getattr(runtime, "count_traveling_players", None)
+                if callable(count_traveling):
+                    try:
+                        travel_active = int(count_traveling())
+                    except Exception:
+                        travel_active = None
                 if reporter is not None:
-                    reporter.message(
-                        f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
+                    reporter.tick_end(
+                        i,
+                        last_tick,
+                        world_tick_start=int(w0),
+                        llm_calls=llm_calls,
+                        travel_active=travel_active,
                     )
-                else:
-                    progress(
-                        f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
+                end_check = runtime.check_game_end()
+                if end_check.is_ended:
+                    outcome = (
+                        str(getattr(end_check, "result", None) or "ENDED").upper()
                     )
-                break
-            i += 1
-        if i >= max_iterations and runtime.current_tick() < max_world_ticks:
-            # 安全弁が発火 = 1 iteration で world_tick が進まないバグ。
-            # silent ではなく明確に log + message で警告する。
-            warn = (
-                f"iteration 安全弁発火: {max_iterations} 回 advance_tick しても "
-                f"world_tick が {max_world_ticks} に達しなかった (現 "
-                f"{runtime.current_tick()})。advance_tick が無限ループ気味の "
-                f"シナリオの可能性 — trace.jsonl を確認してください。"
-            )
-            logger.warning(warn)
-            if reporter is not None:
-                reporter.message(warn)
-        elapsed = time.monotonic() - t0
+                    if reporter is not None:
+                        reporter.message(
+                            f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
+                        )
+                    else:
+                        progress(
+                            f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
+                        )
+                    break
+                i += 1
+            if _interrupted["flag"]:
+                outcome = "INTERRUPTED"
+            if i >= max_iterations and runtime.current_tick() < max_world_ticks:
+                # 安全弁が発火 = 1 iteration で world_tick が進まないバグ。
+                # silent ではなく明確に log + message で警告する。
+                warn = (
+                    f"iteration 安全弁発火: {max_iterations} 回 advance_tick しても "
+                    f"world_tick が {max_world_ticks} に達しなかった (現 "
+                    f"{runtime.current_tick()})。advance_tick が無限ループ気味の "
+                    f"シナリオの可能性 — trace.jsonl を確認してください。"
+                )
+                logger.warning(warn)
+                if reporter is not None:
+                    reporter.message(warn)
+            elapsed = time.monotonic() - t0
+        # ↑ ``with _sigint_to_flag_guard():`` を抜けた = SIGINT handler は
+        # 確実に元に戻った状態でここに到達する (= main() 以降の Ctrl+C は
+        # 通常通り KeyboardInterrupt を raise する)。
+
+        # Phase 6: snapshot save。**runtime.shutdown より前** に行う理由:
+        # async LLM scheduler の drain が終わると episode_store に最後の
+        # 主観文 episode が書き込まれる可能性があるが、その後に capture
+        # すると snapshot 経路が ``shutdown=True`` の store を触る恐れがある。
+        # 「shutdown 前の last consistent state」を写し取るのが安全。
+        # 失敗しても run 自体は守る (= 例外を上位に飛ばさない)。
+        if snapshot_session is not None and snapshot_save_dir is not None:
+            try:
+                report = snapshot_session.capture_all(
+                    list(runtime.get_player_ids())
+                )
+                logger.info(
+                    "snapshot save: %d succeeded, %d failed (dir=%s)",
+                    len(report.succeeded),
+                    len(report.failed),
+                    snapshot_save_dir,
+                )
+                for being_id, err in report.failed:
+                    logger.warning(
+                        "snapshot save failed for being_id=%s: %s",
+                        being_id.value,
+                        err,
+                    )
+            except Exception:
+                logger.warning(
+                    "snapshot save raised; experiment results are preserved "
+                    "but resume from this run will not be possible",
+                    exc_info=True,
+                )
+
         # Issue #311/#325 後続: 非同期 LLM 主観文付与 scheduler (#310) の in-flight
         # ジョブを drain してから return する。これをしないと、scenario 終了
         # 直後に `with JsonlTraceRecorder` が close され、後追いで完了した worker
@@ -411,6 +568,8 @@ def _drive_scenario(
             "last_tick": last_tick,
             "elapsed_sec": elapsed,
             "max_world_ticks": max_world_ticks,
+            "snapshot_save_dir": str(snapshot_save_dir) if snapshot_save_dir else None,
+            "snapshot_load_dir": str(snapshot_load_dir) if snapshot_load_dir else None,
         }
 
 
@@ -601,6 +760,26 @@ def main(argv: Optional[List[str]] = None) -> int:
             "(default: emit progress.jsonl for `tail -f` consumers and post-hoc analysis)."
         ),
     )
+    parser.add_argument(
+        "--snapshot-save-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Phase 6 / Issue #470: 実験終了時に各 player の Being snapshot を "
+            "JSON で書き出すディレクトリ。SIGINT (Ctrl+C) 時も capture される。"
+            "未指定なら snapshot は取らない (= 既存挙動完全互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--snapshot-load-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Phase 6 / Issue #470: 実験開始前に読み込む snapshot ディレクトリ。"
+            "前回 run の --snapshot-save-dir で生成された JSON を渡すと、"
+            "前回の memory 状態から続きの実験が走る。"
+        ),
+    )
     args = parser.parse_args(argv)
 
     if not args.scenario.exists():
@@ -713,6 +892,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             ),
         )
 
+        # Phase 6 (Issue #470): snapshot-load-dir が指定されていれば存在チェック。
+        # 不在 dir で進めると "途中で読めない" が分かるのが load 後になり、
+        # 既存 experiment data の汚染リスクが上がる。ここで早期 fail-fast。
+        if args.snapshot_load_dir is not None and not args.snapshot_load_dir.exists():
+            parser.error(
+                f"snapshot-load-dir does not exist: {args.snapshot_load_dir}"
+            )
+        if args.snapshot_save_dir is not None:
+            args.snapshot_save_dir.mkdir(parents=True, exist_ok=True)
+
         try:
             summary = _drive_scenario(
                 scenario_path=args.scenario,
@@ -720,6 +909,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 recorder=rec,
                 progress=progress,
                 reporter=reporter,
+                snapshot_save_dir=args.snapshot_save_dir,
+                snapshot_load_dir=args.snapshot_load_dir,
             )
         finally:
             # 例外で抜けても progress.jsonl は閉じる + stderr の改行を出す
