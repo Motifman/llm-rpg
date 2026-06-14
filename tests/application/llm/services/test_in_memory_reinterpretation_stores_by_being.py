@@ -220,3 +220,59 @@ class TestJournalByBeing:
 
 # Phase 3 Step 3d-3 (Issue #470): legacy player_id 版 API 撤去に伴い
 # ``TestJournalIsolation`` も削除済。新 API only に統一。
+
+
+class TestRecallBufferReplaceAll:
+    """Phase 4 Step 4-2a: list_pending_by_being / replace_all_pending_by_being。"""
+
+    def test_list_pending_は全件_古い順(self, being: BeingId) -> None:
+        store = InMemoryEpisodicRecallBufferStore()
+        store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
+        store.append_by_being(being, _obs(recall_id="r2", episode_id="e2"))
+        ids = [o.recall_id for o in store.list_pending_by_being(being)]
+        assert ids == ["r1", "r2"]
+
+    def test_replace_all_pending_で一括置換(self, being: BeingId) -> None:
+        store = InMemoryEpisodicRecallBufferStore()
+        store.append_by_being(being, _obs(recall_id="old", episode_id="e1"))
+        store.replace_all_pending_by_being(
+            being, [_obs(recall_id="new", episode_id="e2")]
+        )
+        ids = [o.recall_id for o in store.list_pending_by_being(being)]
+        assert ids == ["new"]
+
+    def test_空リストで全クリア(self, being: BeingId) -> None:
+        store = InMemoryEpisodicRecallBufferStore()
+        store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
+        store.replace_all_pending_by_being(being, [])
+        assert store.pending_count_by_being(being) == 0
+
+
+class TestJournalReplaceAll:
+    """Phase 4 Step 4-2a: list_all_by_being / replace_all_by_being。"""
+
+    def test_list_all_by_being_は全episode横断(self, being: BeingId) -> None:
+        store = InMemoryEpisodicReinterpretationJournalStore()
+        store.put_active_by_being(being, _entry(entry_id="a", episode_id="ep-1"))
+        store.put_active_by_being(being, _entry(entry_id="b", episode_id="ep-2"))
+        ids = [e.entry_id for e in store.list_all_by_being(being)]
+        assert set(ids) == {"a", "b"}
+
+    def test_replace_all_でactive_index_が再構築される(
+        self, being: BeingId
+    ) -> None:
+        """ACTIVE entry を持ち込めば get_active_by_being で引ける。"""
+        store = InMemoryEpisodicReinterpretationJournalStore()
+        store.put_active_by_being(being, _entry(entry_id="a", episode_id="ep-1"))
+        new = _entry(entry_id="new", episode_id="ep-1")
+        store.replace_all_by_being(being, [new])
+        got = store.get_active_by_being(being, "ep-1")
+        assert got is not None
+        assert got.entry_id == "new"
+
+    def test_replace_all_の空で_active_も消える(self, being: BeingId) -> None:
+        store = InMemoryEpisodicReinterpretationJournalStore()
+        store.put_active_by_being(being, _entry(entry_id="a", episode_id="ep-1"))
+        store.replace_all_by_being(being, [])
+        assert store.get_active_by_being(being, "ep-1") is None
+        assert store.list_all_by_being(being) == []

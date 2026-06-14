@@ -89,6 +89,20 @@ class _BrokenRecallBufferStore(EpisodicRecallBufferRepository):
         """常に RuntimeError。"""
         raise RuntimeError("broken")
 
+    def list_pending_by_being(
+        self, being_id: BeingId
+    ) -> list[EpisodicRecallObservation]:
+        """常に RuntimeError。"""
+        raise RuntimeError("broken")
+
+    def replace_all_pending_by_being(
+        self,
+        being_id: BeingId,
+        observations: list[EpisodicRecallObservation],
+    ) -> None:
+        """常に RuntimeError。"""
+        raise RuntimeError("broken")
+
 
 def _episode(
     *,

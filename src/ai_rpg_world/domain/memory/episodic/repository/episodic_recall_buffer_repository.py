@@ -60,5 +60,28 @@ class EpisodicRecallBufferRepository(ABC):
     def pending_count_by_being(self, being_id: BeingId) -> int:
         """being_id keyed で pending 件数を返す。"""
 
+    @abstractmethod
+    def list_pending_by_being(
+        self, being_id: BeingId
+    ) -> list[EpisodicRecallObservation]:
+        """being_id keyed で pending observation を **全件** 古い→新しい順で返す。
+
+        Phase 4 Step 4-2a (Issue #470): snapshot 用の enumeration。
+        ``peek_batch_by_being`` は batch_size / max_contexts_per_episode の
+        thinning が入るので、永続化用途には足りない。
+        """
+
+    @abstractmethod
+    def replace_all_pending_by_being(
+        self,
+        being_id: BeingId,
+        observations: list[EpisodicRecallObservation],
+    ) -> None:
+        """being_id 配下の pending observation を ``observations`` で完全置換する。
+
+        Phase 4 Step 4-2a: snapshot restore primitive。Snapshot 経路以外からの
+        呼び出しは想定しない。
+        """
+
 
 __all__ = ["EpisodicRecallBufferRepository"]

@@ -158,6 +158,77 @@ class TestRemoveByBeing:
         assert store.remove_by_being(BeingId("ada"), m3) is True
 
 
+class TestListAllByBeing:
+    """list_all_by_being の挙動 (Phase 4 Step 4-2a)。"""
+
+    def test_未完了と完了済の両方を返す(self, store: InMemoryMemoStore) -> None:
+        """``list_uncompleted_by_being`` と違い、完了済も含めて全件返す。"""
+        b = BeingId("ada")
+        m1 = store.add_by_being(b, "active")
+        m2 = store.add_by_being(b, "done")
+        store.complete_by_being(b, m2)
+        all_entries = store.list_all_by_being(b)
+        ids = [e.id for e in all_entries]
+        assert set(ids) == {m1, m2}
+
+    def test_未登録_being_は空リスト(self, store: InMemoryMemoStore) -> None:
+        """未知の being には空リストを返す。"""
+        assert store.list_all_by_being(BeingId("missing")) == []
+
+    def test_being_id_型違いは_TypeError(self, store: InMemoryMemoStore) -> None:
+        with pytest.raises(TypeError):
+            store.list_all_by_being("ada")  # type: ignore[arg-type]
+
+
+class TestReplaceAllByBeing:
+    """replace_all_by_being の挙動 (Phase 4 Step 4-2a, snapshot restore primitive)。"""
+
+    def test_既存_memo_は全削除されて_entries_で置換される(
+        self, store: InMemoryMemoStore
+    ) -> None:
+        """destructive overwrite。entries の通りに再構築。"""
+        from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
+        from datetime import datetime
+
+        b = BeingId("ada")
+        store.add_by_being(b, "old")
+        new_entries = [
+            MemoEntry(id="m-new", content="new", added_at=datetime.now(), completed=False),
+        ]
+        store.replace_all_by_being(b, new_entries)
+        listed = store.list_all_by_being(b)
+        assert [e.id for e in listed] == ["m-new"]
+
+    def test_空リストでクリアできる(self, store: InMemoryMemoStore) -> None:
+        """``entries=[]`` で being 配下を空にできる。"""
+        b = BeingId("ada")
+        store.add_by_being(b, "x")
+        store.replace_all_by_being(b, [])
+        assert store.list_all_by_being(b) == []
+
+    def test_replace_後の_memo_は_complete_remove_で操作可能(
+        self, store: InMemoryMemoStore
+    ) -> None:
+        """index 再構築が正しく、id ベースで complete / remove が引ける。"""
+        from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
+        from datetime import datetime
+
+        b = BeingId("ada")
+        entries = [
+            MemoEntry(id="m-a", content="A", added_at=datetime.now(), completed=False),
+            MemoEntry(id="m-b", content="B", added_at=datetime.now(), completed=False),
+        ]
+        store.replace_all_by_being(b, entries)
+        assert store.complete_by_being(b, "m-a") is True
+        assert store.remove_by_being(b, "m-b") is True
+
+    def test_entries_に_非_MemoEntry_が混ざると_TypeError(
+        self, store: InMemoryMemoStore
+    ) -> None:
+        with pytest.raises(TypeError):
+            store.replace_all_by_being(BeingId("ada"), ["not-an-entry"])  # type: ignore[list-item]
+
+
 # Phase 3 Step 3a-3: 旧 player_id API を撤去したため「新旧独立性」テストは削除済。
 # 撤去前は ``_store`` (player_id keyed) と ``_being_store`` (being_id keyed) の
 # 独立性を検証していたが、player_id 経路 (add / list_uncompleted / complete /

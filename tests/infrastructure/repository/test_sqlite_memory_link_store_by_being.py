@@ -133,3 +133,26 @@ class TestSqliteMemoryLinkByBeingTypeGuard:
                 "not-a-being",  # type: ignore[arg-type]
                 _link(episode_id_a="a", episode_id_b="b"),
             )
+
+
+class TestSqliteMemoryLinkReplaceAll:
+    """Phase 4 Step 4-2a: replace_all_by_being の挙動 (snapshot restore primitive)。"""
+
+    def test_既存_link_を一括置換する(self, store) -> None:
+        b = BeingId("ada")
+        store.upsert_link_by_being(b, _link(episode_id_a="ep-1", episode_id_b="ep-2"))
+        new = _link(episode_id_a="ep-3", episode_id_b="ep-4")
+        store.replace_all_by_being(b, [new])
+        listed = store.list_all_links_for_being(b)
+        assert len(listed) == 1
+        assert listed[0].episode_id_a == "ep-3"
+
+    def test_他_being_は影響しない(self, store) -> None:
+        store.upsert_link_by_being(
+            BeingId("ada"), _link(episode_id_a="ep-1", episode_id_b="ep-2")
+        )
+        store.upsert_link_by_being(
+            BeingId("ben"), _link(episode_id_a="ep-3", episode_id_b="ep-4")
+        )
+        store.replace_all_by_being(BeingId("ada"), [])
+        assert len(store.list_all_links_for_being(BeingId("ben"))) == 1

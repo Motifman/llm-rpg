@@ -88,5 +88,16 @@ class MemoryLinkRepository(ABC):
     def list_all_links_for_being(self, being_id: BeingId) -> list[MemoryLink]:
         """being_id keyed で全リンク一覧を返す。"""
 
+    @abstractmethod
+    def replace_all_by_being(
+        self, being_id: BeingId, links: list[MemoryLink]
+    ) -> None:
+        """being_id 配下のリンクを ``links`` で完全置換する。
+
+        Phase 4 Step 4-2a (Issue #470): snapshot restore primitive。**既存の
+        being 配下リンクは全て削除** され、``links`` の通りに再構築される。
+        Snapshot 経路以外からの呼び出しは想定しない。
+        """
+
 
 __all__ = ["MemoryLinkRepository"]

@@ -45,5 +45,28 @@ class SemanticMemoryRepository(ABC):
     ) -> bool:
         """being_id keyed で cluster signature を登録。既存なら False。"""
 
+    @abstractmethod
+    def list_cluster_signatures_by_being(self, being_id: BeingId) -> list[str]:
+        """being_id keyed で登録済 cluster signature を **辞書順** で返す。
+
+        Phase 4 Step 4-2a (Issue #470): snapshot 用の enumeration。
+        ``register_cluster_signature_if_new_by_being`` で True を返した signature
+        の集合を取り出すための readout API。
+        """
+
+    @abstractmethod
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        entries: list[SemanticMemoryEntry],
+        cluster_signatures: list[str],
+    ) -> None:
+        """being_id 配下の entries と cluster_signatures を完全置換する。
+
+        Phase 4 Step 4-2a: snapshot restore primitive。**既存の entries / cluster
+        signatures は全て削除** され、引数で再構築される。順序保持。Snapshot 経路
+        以外からの呼び出しは想定しない。
+        """
+
 
 __all__ = ["SemanticMemoryRepository"]

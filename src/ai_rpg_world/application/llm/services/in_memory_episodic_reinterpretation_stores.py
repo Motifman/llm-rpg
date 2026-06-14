@@ -78,6 +78,29 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
             raise TypeError("being_id must be BeingId")
         return len(self._pending.get(being_id, ()))
 
+    def list_pending_by_being(
+        self, being_id: BeingId
+    ) -> list[EpisodicRecallObservation]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        return list(self._pending.get(being_id, ()))
+
+    def replace_all_pending_by_being(
+        self,
+        being_id: BeingId,
+        observations: list[EpisodicRecallObservation],
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(observations, list):
+            raise TypeError("observations must be list")
+        for o in observations:
+            if not isinstance(o, EpisodicRecallObservation):
+                raise TypeError(
+                    "observations elements must be EpisodicRecallObservation"
+                )
+        self._pending[being_id] = list(observations)
+
 
 class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJournalRepository):
     """Being ごとに再解釈履歴と active pointer を保持する。"""
@@ -148,6 +171,40 @@ class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJourn
             key=lambda e: (_dt_key(e.created_at), e.entry_id),
             reverse=True,
         )
+
+
+    def list_all_by_being(
+        self, being_id: BeingId
+    ) -> list[EpisodicReinterpretationEntry]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        rows = list(self._entries.get(being_id, ()))
+        # created_at 昇順 (= 古い→新しい) で snapshot に並べ替える。snapshot は
+        # 「保存順を再現」が目的なので、新しい順の `list_by_episode_by_being`
+        # とは並びが違って良い。
+        return sorted(rows, key=lambda e: (_dt_key(e.created_at), e.entry_id))
+
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        entries: list[EpisodicReinterpretationEntry],
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(entries, list):
+            raise TypeError("entries must be list")
+        for e in entries:
+            if not isinstance(e, EpisodicReinterpretationEntry):
+                raise TypeError(
+                    "entries elements must be EpisodicReinterpretationEntry"
+                )
+        self._entries[being_id] = list(entries)
+        # active index を episode_id ごとに再構築 (= 最後の ACTIVE entry を採用)。
+        active_map: dict[str, str] = {}
+        for entry in entries:
+            if entry.status == EpisodicReinterpretationStatus.ACTIVE:
+                active_map[entry.episode_id] = entry.entry_id
+        self._active[being_id] = active_map
 
 
 __all__ = [

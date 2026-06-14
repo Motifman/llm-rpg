@@ -69,5 +69,29 @@ class MemoRepository(ABC):
     def remove_by_being(self, being_id: BeingId, memo_id: str) -> bool:
         """being_id keyed で memo を削除する。存在しなければ False。"""
 
+    @abstractmethod
+    def list_all_by_being(self, being_id: BeingId) -> list[MemoEntry]:
+        """being_id keyed で **完了済も含む** 全 memo を保持順 (= 古い→新しい) で返す。
+
+        Phase 4 Step 4-2 (Issue #470): ``BeingMemorySnapshotService`` が
+        run 途中再開のため snapshot を取る際に呼ぶ。``list_uncompleted_by_being``
+        は LLM 走行時の active list だけを返すので、完了済 memo の永続化に
+        足りない。
+        """
+
+    @abstractmethod
+    def replace_all_by_being(
+        self, being_id: BeingId, entries: list[MemoEntry]
+    ) -> None:
+        """being_id 配下を ``entries`` で完全置換する (= restore primitive)。
+
+        Phase 4 Step 4-2: snapshot restore 用。**既存エントリは全て削除** され
+        ``entries`` の順序通りに再構築される。memo_id は ``entries`` 側の値を
+        そのまま使う (= ``add_by_being`` のような uuid 自動生成は行わない)。
+
+        Snapshot 経路以外からの呼び出しは想定しない (= destructive overwrite
+        なので一般 use case で安易に使わないこと)。
+        """
+
 
 __all__ = ["MemoRepository"]

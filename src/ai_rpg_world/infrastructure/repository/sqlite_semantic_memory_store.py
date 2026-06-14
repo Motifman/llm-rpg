@@ -131,4 +131,96 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
         return cur.rowcount > 0
 
 
+    def list_cluster_signatures_by_being(self, being_id: BeingId) -> list[str]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        cur = self._conn.execute(
+            """
+            SELECT evidence_signature FROM semantic_cluster_signatures_by_being
+            WHERE being_id_value = ?
+            ORDER BY evidence_signature ASC
+            """,
+            (being_id.value,),
+        )
+        return [str(row["evidence_signature"]) for row in cur.fetchall()]
+
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        entries: list[SemanticMemoryEntry],
+        cluster_signatures: list[str],
+    ) -> None:
+        """being_id 配下の entries と cluster_signatures を SQLite トランザクション内で完全置換する。
+
+        Phase 4 Step 4-2a: snapshot restore primitive。delete → insert の 2 段を
+        単一トランザクションで実行することで、片方だけ消えた状態を構造的に防ぐ
+        (= silent failure 構造的対処方針)。
+        """
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(entries, list):
+            raise TypeError("entries must be list")
+        for e in entries:
+            if not isinstance(e, SemanticMemoryEntry):
+                raise TypeError("entries elements must be SemanticMemoryEntry")
+        if not isinstance(cluster_signatures, list):
+            raise TypeError("cluster_signatures must be list")
+        for s in cluster_signatures:
+            if not isinstance(s, str):
+                raise TypeError("cluster_signatures elements must be str")
+
+        # 注意: sqlite3 module は ``isolation_level=''`` (deferred) で
+        # 動いており、最初の DML が implicit transaction を開く。明示的に
+        # ``BEGIN`` を打つと「既に txn 内」のケースで OperationalError に
+        # なるので、ここでは打たない。失敗時 rollback でロールバックする
+        # 範囲は「本メソッド内の全 DML」になり、partial state の構造禁止
+        # は保たれる (= 既存 store の put_by_being 等と同じパターン)。
+        try:
+            self._conn.execute(
+                "DELETE FROM semantic_memory_entries_by_being WHERE being_id_value = ?",
+                (being_id.value,),
+            )
+            self._conn.execute(
+                "DELETE FROM semantic_cluster_signatures_by_being WHERE being_id_value = ?",
+                (being_id.value,),
+            )
+            for entry in entries:
+                payload = json.dumps(
+                    list(entry.evidence_episode_ids), ensure_ascii=False
+                )
+                tags_json = json.dumps(list(entry.tags), ensure_ascii=False)
+                self._conn.execute(
+                    """
+                    INSERT INTO semantic_memory_entries_by_being (
+                        entry_id, being_id_value, text, evidence_episode_ids_json,
+                        confidence, created_at, importance_score, tags_json, player_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        entry.entry_id,
+                        being_id.value,
+                        entry.text,
+                        payload,
+                        float(entry.confidence),
+                        _dt_to_iso(entry.created_at),
+                        int(entry.importance_score),
+                        tags_json,
+                        entry.player_id,
+                    ),
+                )
+            for sig in cluster_signatures:
+                self._conn.execute(
+                    """
+                    INSERT INTO semantic_cluster_signatures_by_being
+                        (being_id_value, evidence_signature)
+                    VALUES (?, ?)
+                    """,
+                    (being_id.value, sig),
+                )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+
+
 __all__ = ["SqliteSemanticMemoryStore"]

@@ -169,6 +169,61 @@ class TestRegisterClusterSignatureByBeing:
             )
 
 
+class TestListClusterSignaturesByBeing:
+    """list_cluster_signatures_by_being の挙動 (Phase 4 Step 4-2a)。"""
+
+    def test_登録済_signature_を辞書順で返す(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        b = BeingId("ada")
+        store.register_cluster_signature_if_new_by_being(b, "z-sig")
+        store.register_cluster_signature_if_new_by_being(b, "a-sig")
+        assert store.list_cluster_signatures_by_being(b) == ["a-sig", "z-sig"]
+
+    def test_他_being_の_signature_は混ざらない(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        store.register_cluster_signature_if_new_by_being(BeingId("ada"), "x")
+        store.register_cluster_signature_if_new_by_being(BeingId("ben"), "y")
+        assert store.list_cluster_signatures_by_being(BeingId("ada")) == ["x"]
+
+
+class TestReplaceAllByBeing:
+    """replace_all_by_being の挙動 (snapshot restore primitive)。"""
+
+    def test_entries_と_signatures_を一括置換できる(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        b = BeingId("ada")
+        store.add_by_being(b, _make_entry("old"))
+        store.register_cluster_signature_if_new_by_being(b, "old-sig")
+        new = _make_entry("new")
+        store.replace_all_by_being(b, [new], ["new-sig"])
+        assert [e.entry_id for e in store.list_for_being(b)] == ["new"]
+        assert store.list_cluster_signatures_by_being(b) == ["new-sig"]
+
+    def test_空入力で全クリアできる(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        b = BeingId("ada")
+        store.add_by_being(b, _make_entry())
+        store.register_cluster_signature_if_new_by_being(b, "sig")
+        store.replace_all_by_being(b, [], [])
+        assert store.list_for_being(b) == []
+        assert store.list_cluster_signatures_by_being(b) == []
+
+    def test_他_being_の状態は影響を受けない(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        store.add_by_being(BeingId("ada"), _make_entry("a1"))
+        store.register_cluster_signature_if_new_by_being(BeingId("ada"), "sig-a")
+        store.add_by_being(BeingId("ben"), _make_entry("b1"))
+        store.register_cluster_signature_if_new_by_being(BeingId("ben"), "sig-b")
+        store.replace_all_by_being(BeingId("ada"), [], [])
+        assert [e.entry_id for e in store.list_for_being(BeingId("ben"))] == ["b1"]
+        assert store.list_cluster_signatures_by_being(BeingId("ben")) == ["sig-b"]
+
+
 # Phase 3 Step 3b-3 (Issue #470): legacy player_id 版 API が撤去されたため、
 # 旧/新 API の独立性を検証していたテストクラス
 # ``TestIndependenceFromPlayerIdApi`` は削除された。新 API のみが残り、
