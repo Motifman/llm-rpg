@@ -7,12 +7,17 @@ import json
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
+from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    BeingAttachmentResolver,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
+from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
@@ -96,6 +101,8 @@ class EpisodicReinterpretationCoordinator:
         turn_interval: int = DEFAULT_REINTERPRETATION_TURN_INTERVAL,
         batch_size: int = DEFAULT_REINTERPRETATION_BATCH_SIZE,
         max_contexts_per_episode: int = DEFAULT_REINTERPRETATION_MAX_CONTEXTS_PER_EPISODE,
+        being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
+        default_world_id: Optional[WorldId] = None,
     ) -> None:
         if not isinstance(episode_store, EpisodicEpisodeRepository):
             raise TypeError("episode_store must be EpisodicEpisodeRepository")
@@ -115,6 +122,17 @@ class EpisodicReinterpretationCoordinator:
             raise ValueError("batch_size must be positive")
         if max_contexts_per_episode < 1:
             raise ValueError("max_contexts_per_episode must be positive")
+        # Phase 3 Step 3d-2: Resolver+WorldId 注入時は being_id 経路で recall
+        # buffer / journal を読み書きする。未注入なら legacy player_id 経路に
+        # fallback (= 既存テスト互換)。Step 3d-3 で legacy 撤去予定。
+        if being_attachment_resolver is not None and not isinstance(
+            being_attachment_resolver, BeingAttachmentResolver
+        ):
+            raise TypeError(
+                "being_attachment_resolver must be BeingAttachmentResolver"
+            )
+        if default_world_id is not None and not isinstance(default_world_id, WorldId):
+            raise TypeError("default_world_id must be WorldId")
         self._episode_store = episode_store
         self._recall_buffer_store = recall_buffer_store
         self._journal_store = journal_store
@@ -124,6 +142,14 @@ class EpisodicReinterpretationCoordinator:
         self._max_contexts_per_episode = max_contexts_per_episode
         self._turn_counts: dict[int, int] = defaultdict(int)
         self._logger = logging.getLogger(self.__class__.__name__)
+        self._resolver = being_attachment_resolver
+        self._default_world_id = default_world_id
+
+    def _resolve_being_id(self, player_id: PlayerId) -> Optional[BeingId]:
+        """Resolver+WorldId 揃いなら BeingId、欠ければ None (= legacy fallback)。"""
+        if self._resolver is None or self._default_world_id is None:
+            return None
+        return self._resolver.resolve_being_id(self._default_world_id, player_id)
 
     def current_turn_index(self, player_id: PlayerId) -> int:
         if not isinstance(player_id, PlayerId):
@@ -150,22 +176,35 @@ class EpisodicReinterpretationCoordinator:
             )
 
     def flush_player(self, player_id: PlayerId) -> int:
-        """pending recall を 1 batch 処理する。処理済みにした recall 観測数を返す。"""
+        """pending recall を 1 batch 処理する。処理済みにした recall 観測数を返す。
+
+        Phase 3 Step 3d-2: 入口で being_id を 1 度だけ解決し、内部 helper に
+        伝播する resolve-once-per-entry パターン (= memory_link 3c-3 と同型)。
+        """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if self._completion is None:
             return 0
-        batch = self._recall_buffer_store.peek_batch(
-            player_id.value,
-            batch_size=self._batch_size,
-            max_contexts_per_episode=self._max_contexts_per_episode,
-        )
+        being_id = self._resolve_being_id(player_id)
+        if being_id is not None:
+            batch = self._recall_buffer_store.peek_batch_by_being(
+                being_id,
+                batch_size=self._batch_size,
+                max_contexts_per_episode=self._max_contexts_per_episode,
+            )
+        else:
+            batch = self._recall_buffer_store.peek_batch(
+                player_id.value,
+                batch_size=self._batch_size,
+                max_contexts_per_episode=self._max_contexts_per_episode,
+            )
         if not batch:
             return 0
-        items = self._build_episode_items(player_id.value, batch)
+        items = self._build_episode_items(player_id.value, batch, being_id=being_id)
         if not items:
-            self._recall_buffer_store.mark_processed(
+            self._mark_processed(
                 player_id.value,
+                being_id,
                 tuple(row.recall_id for row in batch),
             )
             return 0
@@ -184,15 +223,31 @@ class EpisodicReinterpretationCoordinator:
                 e,
             )
             return 0
-        processed_ids = self._apply_updates(player_id.value, items, raw_obj)
+        processed_ids = self._apply_updates(
+            player_id.value, items, raw_obj, being_id=being_id
+        )
         if processed_ids:
-            self._recall_buffer_store.mark_processed(player_id.value, processed_ids)
+            self._mark_processed(player_id.value, being_id, processed_ids)
         return len(processed_ids)
+
+    def _mark_processed(
+        self,
+        player_id: int,
+        being_id: Optional[BeingId],
+        recall_ids: tuple[str, ...],
+    ) -> None:
+        """dual-path: being_id があれば by_being、なければ legacy。"""
+        if being_id is not None:
+            self._recall_buffer_store.mark_processed_by_being(being_id, recall_ids)
+            return
+        self._recall_buffer_store.mark_processed(player_id, recall_ids)
 
     def _build_episode_items(
         self,
         player_id: int,
         batch: tuple[EpisodicRecallObservation, ...],
+        *,
+        being_id: Optional[BeingId] = None,
     ) -> tuple[_EpisodeBatchItem, ...]:
         grouped: dict[str, list[EpisodicRecallObservation]] = defaultdict(list)
         for row in batch:
@@ -202,7 +257,10 @@ class EpisodicReinterpretationCoordinator:
             ep = self._episode_store.get(player_id, episode_id)
             if ep is None:
                 continue
-            active = self._journal_store.get_active(player_id, episode_id)
+            if being_id is not None:
+                active = self._journal_store.get_active_by_being(being_id, episode_id)
+            else:
+                active = self._journal_store.get_active(player_id, episode_id)
             items.append(
                 _EpisodeBatchItem(
                     episode=ep,
@@ -261,6 +319,8 @@ class EpisodicReinterpretationCoordinator:
         player_id: int,
         items: tuple[_EpisodeBatchItem, ...],
         raw_obj: dict[str, Any],
+        *,
+        being_id: Optional[BeingId] = None,
     ) -> tuple[str, ...]:
         if not isinstance(raw_obj, dict):
             return ()
@@ -302,7 +362,10 @@ class EpisodicReinterpretationCoordinator:
                 current_recall_text=recall,
                 source_recall_ids=source_recall_ids,
             )
-            self._journal_store.put_active(entry)
+            if being_id is not None:
+                self._journal_store.put_active_by_being(being_id, entry)
+            else:
+                self._journal_store.put_active(entry)
             processed_recall_ids.extend(source_recall_ids)
         return tuple(processed_recall_ids)
 

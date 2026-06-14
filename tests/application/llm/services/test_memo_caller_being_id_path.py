@@ -212,6 +212,20 @@ class _FetchUncompletedAdapter:
         )
         return DefaultPromptBuilder._fetch_uncompleted_memos(self, player_id)
 
+    # Phase 3 Step 3d-2 review (#497 MEDIUM-2): _fetch_uncompleted_memos が
+    # _resolve_being_id helper 経由になったため、Adapter にも同 helper を
+    # 模倣メソッドとして用意する (= DefaultPromptBuilder._resolve_being_id の
+    # ロジックと完全一致)
+    def _resolve_being_id(self, player_id: PlayerId):
+        if (
+            self._being_attachment_resolver is None
+            or self._default_world_id is None
+        ):
+            return None
+        return self._being_attachment_resolver.resolve_being_id(
+            self._default_world_id, player_id
+        )
+
 
 class TestPromptBuilderNewPath:
     """DefaultPromptBuilder: Resolver 注入時の memo 取得経路。
