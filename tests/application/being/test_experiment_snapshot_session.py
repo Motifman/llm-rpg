@@ -329,14 +329,35 @@ class TestScenarioMetadata:
         assert result is None
 
     def test_capture_world_で_world_json_が出る(self, tmp_path: Path) -> None:
-        """Phase 9-1: subsystem codec 未登録でも capture_world は空 snapshot
-        を書く (= 配線が通っていることの確認)。"""
+        """Phase 9-2: 既定 subsystem codec が登録されたので、capture_world
+        には runtime が必要。空の subsystem 群でも世界 snapshot が成立する
+        ことを担保するため、minimum stub を渡す。"""
+        from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
+            InMemoryGameTimeProvider,
+        )
+
         wiring, _ = _make_wiring_stub()
         session = ExperimentSnapshotSession(
             wiring_result=wiring, snapshot_dir=tmp_path / "snap"
         )
+        # codec が必要とする最小限の attribute を持つ stub。
+        stub_runtime = SimpleNamespace(
+            _time_provider=InMemoryGameTimeProvider(initial_tick=42),
+            _spot_graph_repo=None,
+            _player_status_repo=None,
+            get_player_ids=lambda: [],
+            get_player_spot_id=lambda pid: None,
+        )
+        # _spot_graph_repo=None だと position codec が raise する。
+        # codec を override したいので、subsystem codec を入れない session を
+        # 別建てで作る (= 配線確認のみが目的)。
+        from ai_rpg_world.application.being.world_state_snapshot_service import (
+            WorldStateSnapshotService,
+        )
+
+        session._world_snapshot_service = WorldStateSnapshotService()
         path = session.capture_world(
-            runtime=None, source_scenario="demo", world_tick=42
+            runtime=stub_runtime, source_scenario="demo", world_tick=42
         )
         assert path.exists()
         assert path.name == "world.json"
@@ -348,19 +369,24 @@ class TestScenarioMetadata:
         from ai_rpg_world.application.being.world_state_snapshot import (
             WorldStateScenarioMismatchError,
         )
+        from ai_rpg_world.application.being.world_state_snapshot_service import (
+            WorldStateSnapshotService,
+        )
 
         wiring, _ = _make_wiring_stub()
         session = ExperimentSnapshotSession(
             wiring_result=wiring, snapshot_dir=tmp_path / "snap"
         )
+        # 既定 codec を空にして配線テストのみ
+        session._world_snapshot_service = WorldStateSnapshotService()
         # forest_world で save
         session.capture_world(
-            runtime=None, source_scenario="forest_world", world_tick=10
+            runtime=SimpleNamespace(), source_scenario="forest_world", world_tick=10
         )
         # desert_world で load → fail-fast
         with pytest.raises(WorldStateScenarioMismatchError, match="forest_world"):
             session.restore_world_from_dir(
-                runtime=None,
+                runtime=SimpleNamespace(),
                 input_dir=tmp_path / "snap",
                 current_scenario="desert_world",
             )
