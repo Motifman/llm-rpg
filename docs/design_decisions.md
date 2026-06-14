@@ -338,6 +338,36 @@ schema は application 層の `BeingMemorySnapshotService` (Phase 4-2) が版管
 
 ---
 
+## 16. run 途中再開 CLI は 4 SQLite DB + in-memory memo の構成で動く
+
+**何を**: ``scripts/being_snapshot_cli.py`` の ``_build_stack`` は 4 つの SQLite
+ファイル (``being`` / ``memory_graph`` / ``episode`` / ``reinterpretation``) を
+明示引数で取り、memo store だけは ``InMemoryMemoStore`` で新規に作る。
+
+**なぜ**:
+- 5 memory store のうち memo にだけ SQLite 実装がなく、in-memory にしか
+  住んでいない (= Phase 3 までの整理で必要にならなかった)
+- 「memo は持たないと困るが永続化先がない」を解決するのが snapshot JSON。
+  CLI 起動ごとに memo store は新規になるが、 ``capture`` で payload に
+  乗り、``restore`` で書き戻されるので **JSON ファイル自体が memo の
+  永続化媒体** として機能する
+- semantic + memory_link は同一 SQLite ファイルに共住 (=
+  ``apply_memory_graph_migrations`` が両 schema を一括適用) なので CLI も
+  同じ接続を共有
+
+**どうしないと壊れるか**:
+- memo の SQLite 実装を急いで作ると、Phase 5 のマイルストーン (= JSON 経由
+  の途中再開) が遅れる。「memo は in-memory + JSON 経由保存」という整理で
+  最短 path を取る
+- 4 DB の役割を CLI 引数で明示することで、将来 DB 配置が変わっても CLI を
+  作り直す必要がない (= 既存 game DB と同じ path を指定すれば動く)
+
+**どこでこの判断が出てきたか**:
+- Phase 5 着手時 (= 本 PR)
+- 将来 memo SQLite を入れるときは ``--memo-db`` 引数を追加する
+
+---
+
 ## 9. 速度より「LLM の判断ミス」を優先して直す
 
 **何を**: 並列化 / 非同期化 / cache 最適化のような **wall time 改善** より、LLM が誤判断する原因を 1 つずつ潰す方を優先する。
@@ -375,3 +405,4 @@ schema は application 層の `BeingMemorySnapshotService` (Phase 4-2) が版管
 | 13. memory caller の未解決時挙動は役割で分岐 | 2026-06-14 | PR #491 / #492 |
 | 14. promotion_frontier は Phase 3 Step 3c scope 外 | 2026-06-14 | PR #495 |
 | 15. BeingSnapshot v2 は memory payload をオペーク JSON で持つ | 2026-06-14 | Phase 4 Step 4-1 |
+| 16. run 途中再開 CLI は 4 DB + in-memory memo で動く | 2026-06-14 | Phase 5 |
