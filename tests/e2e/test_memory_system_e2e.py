@@ -79,6 +79,9 @@ from ai_rpg_world.application.trace import (
     TraceEventKind,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from tests.application.llm._semantic_being_test_helpers import (
+    make_semantic_being_setup,
+)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -447,10 +450,6 @@ class TestSemanticPassiveRecallE2E:
 
     def test_passive_recall_と_section_format_の_連動(self) -> None:
         # Phase 3 Step 3b-3: semantic は being_id 経路必須。
-        from tests.application.llm._semantic_being_test_helpers import (
-            make_semantic_being_setup,
-        )
-
         setup = make_semantic_being_setup()
         setup.provision(_PID.value)
         setup.populate(_PID.value, _make_semantic_entry(

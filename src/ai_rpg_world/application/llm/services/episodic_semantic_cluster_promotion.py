@@ -185,15 +185,15 @@ class EpisodicSemanticClusterPromotionService:
     # Phase 1b: LLM gist (optional)。注入時のみ LLM 抽象化を試みる。
     gist_service: Optional[SemanticGistService] = None
     persona_resolver: Optional[Callable[[int], tuple[str, str]]] = None
-    # Phase 3 Step 3b-2: Resolver + WorldId が両方注入されたときだけ being_id
-    # keyed の新 API に切替える (= dual-path)。未注入なら legacy player_id 経路。
-    # Step 3b-3 で legacy 経路を撤去する。
+    # Phase 3 Step 3b-3: legacy player_id 経路は撤去済。Resolver + WorldId が
+    # 未注入 / Being 未 provision の場合は silent no-op (= promotion は turn の
+    # 副作用なので止めない。次回 turn で再試行される)。
     being_attachment_resolver: Optional[BeingAttachmentResolver] = None
     default_world_id: Optional[WorldId] = None
 
     def __post_init__(self) -> None:
-        """Phase 3 Step 3b-2: SemanticPassiveRecallService と同じ型ガードを
-        dataclass にも適用する (= caller 間の一貫性確保)。"""
+        """SemanticPassiveRecallService と同じ型ガードを dataclass にも適用する
+        (= caller 間の一貫性確保)。"""
         if self.being_attachment_resolver is not None and not isinstance(
             self.being_attachment_resolver, BeingAttachmentResolver
         ):

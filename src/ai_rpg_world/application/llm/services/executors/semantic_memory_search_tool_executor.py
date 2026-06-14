@@ -24,6 +24,7 @@ from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.domain.being.service.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     SemanticMemoryRepository,
@@ -68,7 +69,7 @@ class SemanticMemorySearchToolExecutor:
         ):
             raise TypeError("default_world_id must be WorldId")
 
-    def _require_being_id(self, player_id: int):  # type: ignore[no-untyped-def]
+    def _require_being_id(self, player_id: int) -> BeingId:
         """Resolver+WorldId+Being が揃わなければ RuntimeError を投げる。
 
         Phase 3 Step 3b-3: legacy player_id 経路は撤去済。tool 実行時に Being

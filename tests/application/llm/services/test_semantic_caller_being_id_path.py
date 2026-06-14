@@ -279,6 +279,7 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
         store: InMemorySemanticMemoryStore,
         resolver: BeingAttachmentResolver,
         world_id: WorldId,
+        being_repo: InMemoryBeingRepository,
     ) -> None:
         """Phase 3 Step 3b-3: promotion は turn 副作用なので silent no-op。"""
         from unittest.mock import MagicMock
@@ -293,6 +294,12 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
         # register_signature は False、_add_entry は何もしない
         assert service._register_signature(99, "sig-x") is False
         service._add_entry(99, _make_entry(player_id=99))
-        # store には何も登録されていない
-        assert store._being_rows == {}
-        assert store._being_cluster_sigs == set()
+        # 後から Being を attach して public API 経由で store が空であることを確認
+        provisioning = BeingProvisioningService(being_repo)
+        being_id = provisioning.ensure_attached(PlayerId(99))
+        assert store.list_for_being(being_id) == []
+        # signature 集合も空 (= 再登録で「初回扱い」になる)
+        assert (
+            store.register_cluster_signature_if_new_by_being(being_id, "sig-x")
+            is True
+        )

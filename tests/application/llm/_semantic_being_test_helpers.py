@@ -65,23 +65,24 @@ class SemanticBeingTestSetup:
         return self.provisioned_being_ids[pid]
 
     def populate(self, player_id: int, entry: SemanticMemoryEntry) -> None:
-        """legacy ``store.add(entry)`` 相当を being_id 経由で行う。
+        """being_id 経路経由で entry を追加する (テスト用)。
 
-        旧 player_id 版 API 撤去 (Step 3b-3) で消えた最頻パターンのため、
-        テストの差し替えコストを下げる helper として用意。
+        Step 3b-3 以降、semantic store への書き込みは全て being_id keyed API
+        経由。player_id を PlayerId に昇格して Being を解決し ``add_by_being``
+        に委譲する。
         """
         being_id = self.being_id_for(player_id)
         self.semantic_store.add_by_being(being_id, entry)
 
     def register_signature(self, player_id: int, signature: str) -> bool:
-        """legacy ``store.register_cluster_signature_if_new(player_id, sig)`` 相当。"""
+        """being_id 経路で cluster signature を登録 (テスト用)。"""
         being_id = self.being_id_for(player_id)
         return self.semantic_store.register_cluster_signature_if_new_by_being(
             being_id, signature
         )
 
     def list_entries(self, player_id: int) -> list[SemanticMemoryEntry]:
-        """legacy ``store.list_for_player(player_id)`` 相当。"""
+        """being_id 経路で entry 一覧を取得 (テスト用)。"""
         being_id = self.being_id_for(player_id)
         return self.semantic_store.list_for_being(being_id)
 
