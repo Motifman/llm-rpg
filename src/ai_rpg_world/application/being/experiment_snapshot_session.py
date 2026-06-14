@@ -51,10 +51,14 @@ from ai_rpg_world.application.being.world_state_snapshot_service import (
 )
 from ai_rpg_world.application.being.world_subsystems import (
     ItemInstanceSubsystemCodec,
+    PlayerActiveEffectsSubsystemCodec,
+    PlayerAttentionLevelSubsystemCodec,
     PlayerGrowthSubsystemCodec,
     PlayerInventorySubsystemCodec,
     PlayerNeedsSubsystemCodec,
     PlayerPositionSubsystemCodec,
+    PlayerPursuitStateSubsystemCodec,
+    PlayerSpotNavigationStateSubsystemCodec,
     PlayerStateDictSubsystemCodec,
     PlayerVitalsSubsystemCodec,
     ScenarioEventProgressSubsystemCodec,
@@ -192,6 +196,11 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         # Phase 9-3b (spot interior + item instance dynamic state)
         SpotInteriorSubsystemCodec(),
         ItemInstanceSubsystemCodec(),
+        # Phase 9-4a (PlayerStatusAggregate combat/navigation sub-state)
+        PlayerActiveEffectsSubsystemCodec(),
+        PlayerAttentionLevelSubsystemCodec(),
+        PlayerPursuitStateSubsystemCodec(),
+        PlayerSpotNavigationStateSubsystemCodec(),
     ]
 
 
