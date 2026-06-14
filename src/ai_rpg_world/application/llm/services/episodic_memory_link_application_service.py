@@ -214,14 +214,21 @@ class EpisodicMemoryLinkApplicationService:
         episode_id_b: str,
         now: datetime,
     ) -> None:
+        # 削除された link の player_id がその場で参照できないため、frontier 追記用
+        # の player_id は Resolver で逆引きする (= _hebbian_strengthen_existing
+        # 側は既存 link から ``updated.player_id`` を直接使えるので逆引き不要)。
         for eid in (episode_id_a, episode_id_b):
             while self._links.count_links_for_episode_by_being(being_id, eid) >= self._max_links:
                 removed = self._links.remove_weakest_link_for_episode_by_being(
                     being_id, eid, now=now
                 )
                 if self._promotion_frontier is not None:
-                    # promotion_frontier は player_id keyed のまま (Step 3c 範囲外)
-                    self._promotion_frontier.add(self._player_id_for(being_id), eid)
+                    # promotion_frontier は player_id keyed のまま (Step 3c 範囲外)。
+                    # 逆引きに失敗した場合 (= Being が同 turn 内で detach された
+                    # 等の特殊状況) は frontier 追記を skip する graceful 設計
+                    pid = self._player_id_for(being_id)
+                    if pid is not None:
+                        self._promotion_frontier.add(pid, eid)
                 if not removed:
                     break
 
@@ -295,19 +302,27 @@ class EpisodicMemoryLinkApplicationService:
             now=now,
         )
 
-    def _player_id_for(self, being_id: BeingId) -> int:
-        """promotion_frontier は player_id keyed のまま残るため、
-        BeingId → player_id を逆引きするヘルパー (= Resolver 経由)。
+    def _player_id_for(self, being_id: BeingId) -> Optional[int]:
+        """``BeingId → player_id`` を Resolver で逆引きする helper。
 
-        Phase 3 Step 3c 範囲では promotion_frontier の being_id 化は scope 外。
-        後続 Phase で frontier も being_id 化したら本 helper は撤去する。
+        Phase 3 Step 3c 範囲では ``promotion_frontier`` の being_id 化は scope 外
+        (= 引き続き player_id keyed)。frontier 追記時にだけ呼ばれる。
+
+        呼出 contract:
+        - 本 helper が呼ばれる時点では ``_resolve_being_id`` が成功しているはず
+          なので ``self._resolver is None`` には到達しないが、保険として
+          ``None`` を返す (= 呼出側で graceful skip)
+        - Being が直前に detach されている等の race 状況では ``resolve_player_id``
+          が ``None`` を返しうる。これも ``None`` を伝播し、呼出側で skip させる
+          (= 例外で turn を止めない方針、design_decisions.md #13 と一貫)
+
+        後続 Phase で frontier も being_id 化したら本 helper は撤去する
+        (= design_decisions.md #14 として記録)。
         """
         if self._resolver is None:
-            raise RuntimeError("resolver missing")
+            return None
         pid = self._resolver.resolve_player_id(being_id)
-        if pid is None:
-            raise RuntimeError(f"being {being_id.value} has no attached player")
-        return pid.value
+        return pid.value if pid is not None else None
 
     def _hebbian_strengthen_existing(
         self,
@@ -332,6 +347,9 @@ class EpisodicMemoryLinkApplicationService:
         )
         self._links.upsert_link_by_being(being_id, updated)
         if self._promotion_frontier is not None:
+            # 既存 link が手元にあるので link.player_id を直接使う
+            # (= _ensure_capacity_before_link は削除済 link から取れないため
+            # _player_id_for による逆引きを使うが、ここでは不要)
             self._promotion_frontier.add(updated.player_id, updated.episode_id_a)
             self._promotion_frontier.add(updated.player_id, updated.episode_id_b)
 

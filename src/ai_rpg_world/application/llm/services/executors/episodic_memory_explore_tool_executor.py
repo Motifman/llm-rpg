@@ -97,10 +97,12 @@ class EpisodicMemoryExploreToolExecutor:
         if being_id is None:
             return LlmCommandResultDto(
                 success=False,
+                # LLM-visible message: 言語混在を避けて英語で統一 (semantic
+                # search executor 3b-3 と同様のポリシー)
                 message=(
-                    "internal state not ready: being_attachment_resolver / "
-                    "default_world_id / Being provision のいずれかが欠落 "
-                    "(Phase 3 Step 3c-3)。"
+                    "EpisodicMemoryExploreToolExecutor requires "
+                    "being_attachment_resolver and default_world_id, and the "
+                    "Being must be provisioned (Phase 3 Step 3c-3)."
                 ),
                 error_code="INVALID_STATE",
             )
