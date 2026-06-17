@@ -39,10 +39,17 @@ Phase 9-4c: 短期記憶 (= LLM agent の prompt context)
 - ``SlidingWindowMemorySubsystemCodec`` — 直近観測の rolling window
 - ``ObservationBufferSubsystemCodec`` — 未 drain の pending 観測
 - ``ActionResultStoreSubsystemCodec`` — 直近の tool 実行結果
+
+Encounter Memory PR2: familiarity 信号
+- ``EncounterMemorySubsystemCodec`` — player ごとの (entity / spot / event-type)
+  との初対面 / 再会 / 初訪問 / 再訪 の記録
 """
 
 from ai_rpg_world.application.being.world_subsystems.day_night_codec import (
     DayNightSubsystemCodec,
+)
+from ai_rpg_world.application.being.world_subsystems.encounter_memory_codec import (
+    EncounterMemorySubsystemCodec,
 )
 from ai_rpg_world.application.being.world_subsystems.exploration_progress_codec import (
     SpotExplorationProgressSubsystemCodec,
@@ -124,4 +131,6 @@ __all__ = [
     "SlidingWindowMemorySubsystemCodec",
     "ObservationBufferSubsystemCodec",
     "ActionResultStoreSubsystemCodec",
+    # Encounter Memory (PR2)
+    "EncounterMemorySubsystemCodec",
 ]

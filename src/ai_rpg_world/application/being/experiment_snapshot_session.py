@@ -213,6 +213,9 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         SlidingWindowMemorySubsystemCodec(),
         ObservationBufferSubsystemCodec(),
         ActionResultStoreSubsystemCodec(),
+        # EncounterMemorySubsystemCodec は PR3 で runtime._encounter_memory
+        # を wiring 完了後にここに登録する。先に登録すると snapshot save が
+        # _encounter_memory 不在で fail-fast する (= 既存 run を壊す)。
     ]
 
 
