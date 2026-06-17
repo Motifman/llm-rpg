@@ -119,10 +119,23 @@ class TestRuntimeWiring:
         collector = encounter_observer.__self__
         assert collector._memory is runtime._encounter_memory
 
-    def test_初期状態の_encounter_memory_は_空(self) -> None:
+    def test_初期状態は_spawn_spot_だけが_encounter_に_立つ(self) -> None:
+        """PR4 後: 初期 spawn 時に自分の spot encounter が直接記録される。
+        forbidden_library_demo では kaito=entrance_hall, rin=reading_room
+        が spawn 直後の唯一の encounter。"""
         runtime = _create_runtime()
-        for pid in runtime.get_player_ids():
-            assert runtime._encounter_memory.get_records_for(pid) == {}
+        kaito = runtime.get_player_ids()[0]
+        rin = runtime.get_player_ids()[1]
+
+        kaito_records = runtime._encounter_memory.get_records_for(kaito)
+        rin_records = runtime._encounter_memory.get_records_for(rin)
+        assert set(kaito_records.keys()) == {
+            EncounterKey.spot("entrance_hall")
+        }
+        assert set(rin_records.keys()) == {EncounterKey.spot("reading_room")}
+        # 両方とも初回 (is_first=True) かつ tick=0 で記録される
+        assert kaito_records[EncounterKey.spot("entrance_hall")].is_first
+        assert rin_records[EncounterKey.spot("reading_room")].is_first
 
 
 class TestAppenderToEncounterEndToEnd:
@@ -235,7 +248,9 @@ class TestSnapshotRoundTripViaRuntime:
         captured = encounter_codec.capture(runtime_a)
 
         runtime_b = _create_runtime()
-        assert runtime_b._encounter_memory.get_records_for(rin) == {}
+        # PR4 後: runtime_b は spawn 直後で rin の spot encounter
+        # (reading_room) を持つ。restore で上書きされて runtime_a の
+        # encounter (spot + 上で append した player/event) に置き換わる。
         encounter_codec.restore(runtime_b, captured)
 
         # restore 後の runtime_b で rin の encounter が完全復元
