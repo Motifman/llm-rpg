@@ -6,9 +6,13 @@ LLM が読めるテキスト行と、ツール実行用の ToolRuntimeContextDto
 
 from __future__ import annotations
 
+import logging
 import re
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
+from ai_rpg_world.application.encounter.contracts.interfaces import (
+    IEncounterMemory,
+)
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
@@ -25,10 +29,15 @@ from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphPlayerSnapshotDto,
 )
-
 from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
     HEALTH_BUCKET_JP,
 )
+from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
+    EncounterKey,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+_logger = logging.getLogger(__name__)
 
 
 PREFIX_CONNECTION = "S"
@@ -154,7 +163,39 @@ def _format_item_type_tag(item_type: str) -> str:
 
 
 class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
-    """スポットグラフのスナップショットにラベルを付与する UiContextBuilder。"""
+    """スポットグラフのスナップショットにラベルを付与する UiContextBuilder。
+
+    PR4 (Encounter Memory): ``encounter_memory`` / ``current_tick_provider`` /
+    ``spot_str_id_resolver`` を optional に受け取る。3 つ揃っていれば「現在地」
+    と「同じ場所にいるプレイヤー」line に familiarity 注記 (= ``(初めて訪れた)``
+    / ``(初めて会った)``) を付ける。1 つでも欠ければ既存挙動と完全に同じ
+    (= 後方互換)。
+    """
+
+    def __init__(
+        self,
+        *,
+        encounter_memory: Optional[IEncounterMemory] = None,
+        current_tick_provider: Optional[Callable[[], int]] = None,
+        spot_str_id_resolver: Optional[Callable[[int], str]] = None,
+    ) -> None:
+        if encounter_memory is not None and not isinstance(
+            encounter_memory, IEncounterMemory
+        ):
+            raise TypeError(
+                "encounter_memory must be IEncounterMemory or None"
+            )
+        if current_tick_provider is not None and not callable(
+            current_tick_provider
+        ):
+            raise TypeError("current_tick_provider must be callable or None")
+        if spot_str_id_resolver is not None and not callable(
+            spot_str_id_resolver
+        ):
+            raise TypeError("spot_str_id_resolver must be callable or None")
+        self._encounter_memory = encounter_memory
+        self._current_tick_provider = current_tick_provider
+        self._spot_str_id_resolver = spot_str_id_resolver
 
     def build(
         self,
@@ -172,10 +213,19 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         collector = RuntimeTargetCollector()
         extra_lines: List[str] = []
 
+        viewer_player_id: Optional[PlayerId] = None
+        if current_state.player_id is not None:
+            try:
+                viewer_player_id = PlayerId(int(current_state.player_id))
+            except Exception:
+                viewer_player_id = None
+
         self._build_connection_section(snap, allocator, collector, extra_lines)
         self._build_object_section(snap, allocator, collector, extra_lines)
         self._build_sub_location_section(snap, allocator, collector, extra_lines)
-        self._build_entity_section(snap, allocator, collector, extra_lines)
+        self._build_entity_section(
+            snap, allocator, collector, extra_lines, viewer_player_id
+        )
         self._build_monster_section(snap, allocator, collector, extra_lines)
         self._build_inventory_section(snap, allocator, collector, extra_lines)
         self._build_ground_items_section(snap, allocator, collector, extra_lines)
@@ -183,9 +233,18 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         self._build_active_effects_section(snap, extra_lines)
         self._build_agent_status_section(snap, extra_lines)
 
-        augmented_text = current_state_text
+        # PR4: 「現在地」行に spot familiarity 注記を埋め込む。
+        annotated_current_state_text = self._annotate_current_spot_familiarity(
+            current_state_text, snap, viewer_player_id
+        )
+
+        augmented_text = annotated_current_state_text
         if extra_lines:
-            augmented_text = current_state_text.rstrip() + "\n" + "\n".join(extra_lines)
+            augmented_text = (
+                annotated_current_state_text.rstrip()
+                + "\n"
+                + "\n".join(extra_lines)
+            )
 
         return LlmUiContextDto(
             current_state_text=augmented_text,
@@ -194,6 +253,102 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 current_spot_id=snap.current_spot_id,
                 current_sub_location_id=_current_sub_location_id_from_snapshot(snap),
             ),
+        )
+
+    # ────────────────────────────────────────────────────────
+    # Familiarity helpers (PR4)
+    # ────────────────────────────────────────────────────────
+
+    def _annotate_current_spot_familiarity(
+        self,
+        current_state_text: str,
+        snap: SpotGraphPlayerSnapshotDto,
+        viewer_player_id: Optional[PlayerId],
+    ) -> str:
+        """「現在地: 〇〇」 line に ``(初めて訪れた)`` 等の familiarity 注記を
+        追加する。encounter 注入が無い場合や lookup 失敗時は原文をそのまま返す。
+        """
+        if not self._encounter_enabled() or viewer_player_id is None:
+            return current_state_text
+        if snap.current_spot_id is None:
+            return current_state_text
+        annotation = self._spot_familiarity_annotation(
+            viewer_player_id, snap.current_spot_id
+        )
+        if annotation is None:
+            return current_state_text
+        # 「現在地: <name>」line を find & 1 行だけ差し替える。description は触らない。
+        # str.replace で部分一致させると、spot 名が description や他 line の
+        # 部分文字列として現れたときに誤置換する。完全一致の行を探すため
+        # split-join 経由で 1 行単位に絞る。
+        spot_name = snap.current_spot_name or ""
+        target_line = f"現在地: {spot_name}"
+        replacement = f"{target_line} {annotation}"
+        lines = current_state_text.split("\n")
+        for i, line in enumerate(lines):
+            if line == target_line:
+                lines[i] = replacement
+                return "\n".join(lines)
+        return current_state_text
+
+    def _spot_familiarity_annotation(
+        self,
+        viewer_player_id: PlayerId,
+        spot_int_id: int,
+    ) -> Optional[str]:
+        try:
+            spot_str_id = self._spot_str_id_resolver(spot_int_id)  # type: ignore[misc]
+        except Exception:
+            _logger.exception(
+                "spot_str_id_resolver failed (spot_id=%s)", spot_int_id
+            )
+            return None
+        try:
+            record = self._encounter_memory.lookup(  # type: ignore[union-attr]
+                viewer_player_id, EncounterKey.spot(spot_str_id)
+            )
+        except Exception:
+            _logger.exception(
+                "encounter_memory.lookup failed (spot=%s)", spot_str_id
+            )
+            return None
+        if record is None:
+            return None
+        if record.is_first:
+            return "(初めて訪れた)"
+        return None
+
+    def _player_familiarity_annotation(
+        self,
+        viewer_player_id: Optional[PlayerId],
+        target_display_name: str,
+    ) -> Optional[str]:
+        if not self._encounter_enabled() or viewer_player_id is None:
+            return None
+        if not target_display_name:
+            return None
+        try:
+            record = self._encounter_memory.lookup(  # type: ignore[union-attr]
+                viewer_player_id, EncounterKey.player(target_display_name)
+            )
+        except Exception:
+            _logger.exception(
+                "encounter_memory.lookup failed (player=%s)",
+                target_display_name,
+            )
+            return None
+        if record is None:
+            # まだ encounter が立っていない (= observation 未到達) なら注記しない
+            return None
+        if record.is_first:
+            return "(初めて会った)"
+        return None
+
+    def _encounter_enabled(self) -> bool:
+        return (
+            self._encounter_memory is not None
+            and self._current_tick_provider is not None
+            and self._spot_str_id_resolver is not None
         )
 
     def _build_connection_section(
@@ -312,6 +467,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
         lines: List[str],
+        viewer_player_id: Optional[PlayerId] = None,
     ) -> None:
         """同じ場所にいる他プレイヤーを列挙する。
 
@@ -346,7 +502,14 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 fatigue_suffix = _format_fatigue_suffix(entry.fatigue_level)
                 if fatigue_suffix:
                     suffix = fatigue_suffix
-            lines.append(f"  - {disambiguated_name}{suffix}")
+            # PR4 (Encounter Memory): familiarity 注記 (= 「初めて会った」)。
+            # display_name (= 表示名 / 安定名) で encounter を引く。is_down /
+            # fatigue suffix と併存させたいので suffix の後に追加する。
+            familiarity = self._player_familiarity_annotation(
+                viewer_player_id, entry.display_name or ""
+            )
+            familiarity_suffix = f" {familiarity}" if familiarity else ""
+            lines.append(f"  - {disambiguated_name}{suffix}{familiarity_suffix}")
             collector.add(
                 label,
                 PlayerToolRuntimeTargetDto(

@@ -158,6 +158,9 @@ from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
 from ai_rpg_world.application.encounter.services.encounter_observation_collector import (
     EncounterObservationCollector,
 )
+from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
+    EncounterKey,
+)
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
     HeartbeatObservationEmitter,
@@ -2013,6 +2016,13 @@ def create_escape_game_runtime(
     player_status_repo = InMemoryPlayerStatusRepository(data_store)
     player_inventory_repo = InMemoryPlayerInventoryRepository(data_store)
 
+    # PR4 (Encounter Memory): spawn loop で初期 spot encounter を直接記録する
+    # ため、ここで先に instance を生成する。line 2132 で ``graph.clear_events()``
+    # が走るので、spawn 時の EntityEnteredSpotEvent (from_spot_id=None) は
+    # publisher 経由では届かない。直接 observe する形で「世界に登場した最初の
+    # 場所」を familiarity に残す。
+    encounter_memory = InMemoryEncounterMemory()
+
     graph = spot_graph_repo.find_graph()
     for spawn in scenario.player_spawns:
         pid = PlayerId(spawn.player_id)
@@ -2044,6 +2054,14 @@ def create_escape_game_runtime(
         eid = EntityId.create(spawn.player_id)
         if not graph.presence_at(spawn.spawn_spot_id).is_present(eid):
             graph.place_entity(eid, spawn.spawn_spot_id)
+        # PR4: 初回 spawn の spot encounter を直接記録する (handler 経由では
+        # 拾えない、上のコメント参照)。tick は 0 (= scenario 開始時点)。
+        spawn_spot_str_id = scenario.id_mapper.get_str(
+            "spot", spawn.spawn_spot_id.value
+        )
+        encounter_memory.observe(
+            pid, EncounterKey.spot(spawn_spot_str_id), 0
+        )
 
     # ── Phase B-2a: モンスターの初期配置 ──
     # シナリオで宣言された MonsterTemplate を template repo に登録し、
@@ -2415,10 +2433,7 @@ def create_escape_game_runtime(
         persona_block=persona_block,
     )
     action_result_store = DefaultActionResultStore()
-    # PR3 (Encounter Memory): familiarity 信号の保持先。factory で 1 instance
-    # 生成し、runtime field として保持する。observation_appender が collector
-    # 経由でここに observe を書き込む。
-    encounter_memory = InMemoryEncounterMemory()
+    # encounter_memory は上 (spawn loop 直前) で生成済 (PR4)。
 
     class _RuntimeTravelContext(SpotGraphTravelContextProvider):
         def __init__(
@@ -2450,6 +2465,48 @@ def create_escape_game_runtime(
         movement_service=movement_service,
         travel_context=travel_context,
     )
+
+    # PR4 (Encounter Memory): travel 完了時に actor 本人の spot encounter を
+    # 記録する。observation pipeline 経由 (PR3) では他 player の到着が対象に
+    # なり、本人の到着は recipient filter で除外されるため、travel_stage の
+    # on_arrival callback に独立した hook を入れて補う。
+    #
+    # ⚠ 制限事項 (= 既知債務、観察者リスト化で解消予定):
+    # ``SpotGraphTravelStageService.set_on_arrival`` は単一 callback の上書き
+    # API。上位 wiring (= ``presentation/spot_graph_game/runtime_manager.py``
+    # の LLM ターン再起床 callback) が後から set すると本 hook は消える。
+    # その結果、**ゲームサーバー (= runtime_manager) 経由の実走では本 hook が
+    # 発火しない**。escape_game_runtime を直接立てる test / 実験経路でのみ
+    # 動作する。観察者リスト (set ではなく append) への refactor は別 PR で
+    # 行う。それまでの間、production の travel 到着 encounter は
+    # observer-list 化後に有効化される。
+    def _record_self_spot_encounter_on_arrival(player_id: PlayerId) -> None:
+        try:
+            spot_id_raw = runtime.get_player_spot_id(player_id)
+            if spot_id_raw is None:
+                # player がまだ配置されていない / spot 取得不可。happy-path で
+                # 起き得る (= 直後に test や別経路から呼ばれる) ので debug log
+                # に留める。
+                logger.debug(
+                    "encounter on_arrival: spot_id unavailable for player %s",
+                    player_id.value,
+                )
+                return
+            spot_int = int(spot_id_raw)
+            spot_canonical = scenario.id_mapper.get_str("spot", spot_int)
+            encounter_memory.observe(
+                player_id,
+                EncounterKey.spot(spot_canonical),
+                runtime.current_tick(),
+            )
+        except Exception:
+            logger.exception(
+                "encounter on_arrival hook failed for player %s",
+                player_id.value,
+            )
+
+    travel_stage.set_on_arrival(_record_self_spot_encounter_on_arrival)
+
     scenario_event_progress = InMemorySpotGraphScenarioEventProgressStore()
     # 評価器は scenario_event_stage と reactive_binding_stage で共有する。
     # weather_state_provider を渡すことで WEATHER_IS 条件が解ける。
@@ -2800,7 +2857,16 @@ def create_escape_game_runtime(
         _state_builder=state_builder,
         _game_end_evaluator=GameEndConditionEvaluator(),
         _formatter=SpotGraphCurrentStateFormatter(),
-        _ui_context_builder=SpotGraphUiContextBuilder(),
+        # PR4: encounter familiarity 注記を【現在地と周囲】に出す。lambda は
+        # runtime instance を closure する (= runtime.current_tick / id_mapper
+        # は instance method なので、factory function 完了時に bind 済)。
+        _ui_context_builder=SpotGraphUiContextBuilder(
+            encounter_memory=encounter_memory,
+            current_tick_provider=lambda: runtime.current_tick(),
+            spot_str_id_resolver=lambda spot_int: scenario.id_mapper.get_str(
+                "spot", spot_int
+            ),
+        ),
         _obs_pipeline=obs_pipeline,
         _obs_buffer=obs_buffer,
         _sliding_window=sliding_window,
@@ -2936,6 +3002,39 @@ def create_escape_game_runtime(
     pipeline_event_publisher.register_handler(
         ConsumableUsedEvent,
         consumable_effect_handler,
+    )
+    # PR4 (Encounter Memory): actor 本人の spot 到着を encounter として記録する
+    # ための side handler を登録する。
+    #
+    # ⚠ 現状の有効範囲:
+    # - **初回 spawn** の EntityEnteredSpotEvent は spawn loop 直後の
+    #   ``graph.clear_events()`` で破棄されるため、本 handler は spawn では
+    #   発火しない (= spawn の encounter は spawn loop 内で直接 observe する
+    #   経路で記録済み)
+    # - **travel 完了**は ``travel_stage.on_arrival`` callback 経由で記録される
+    #   (= 上の wiring)
+    # - 上記 2 経路のため、本 handler は現時点で production パスで fire しない
+    #   **inert state** だが、将来 ``advance_tick`` 後に
+    #   ``_process_graph_events`` を呼ぶ refactor や、interact / NPC AI の
+    #   置換経路が graph events を publish するようになった時に、漏れなく
+    #   encounter を補捉する forward-compat 防御として残しておく。
+    from ai_rpg_world.application.encounter.handlers.spot_arrival_encounter_handler import (
+        SpotArrivalEncounterHandler,
+    )
+    from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+        EntityEnteredSpotEvent as _EntityEnteredSpotEvent,
+    )
+
+    spot_arrival_encounter_handler = SpotArrivalEncounterHandler(
+        memory=encounter_memory,
+        current_tick_provider=runtime.current_tick,
+        spot_str_id_resolver=lambda spot_int: runtime.id_mapper.get_str(
+            "spot", spot_int
+        ),
+    )
+    pipeline_event_publisher.register_handler(
+        _EntityEnteredSpotEvent,
+        spot_arrival_encounter_handler,
     )
     # runtime からも access できるように field に保持。
     runtime._player_outcome_registry = outcome_registry
