@@ -1,7 +1,8 @@
 """Phase 9 完成版 E2E テスト: 実 ``EscapeGameRuntime`` で world snapshot 往復 (Issue #470)。
 
-Phase 9 全体 (9-1〜9-4c) で 21 subsystem の world snapshot が揃った。本ファイル
-は **実 EscapeGameRuntime を立てて** snapshot → 復元の end-to-end を担保する。
+Phase 9 全体 (9-1〜9-4c) で 21 subsystem の world snapshot が揃い、PR3 で
+Encounter Memory を加えて計 22 subsystem になった。本ファイルは **実
+EscapeGameRuntime を立てて** snapshot → 復元の end-to-end を担保する。
 
 ## カバレッジ
 
@@ -116,14 +117,15 @@ def _normalize_world_json(path: Path) -> dict:
 
 
 class TestE2ECaptureRestoreRoundTrip:
-    """Phase 9 完成のテスト: 21 subsystem 全て round-trip で bit-identical。"""
+    """Phase 9 完成のテスト: 21 subsystem + Encounter Memory が round-trip で bit-identical。"""
 
     def test_capture_restore_round_trip_bit_identical(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """src で capture → dst で restore → recapture が bit-identical。
 
-        これにより全 21 subsystem の codec が正しく往復することを担保。
+        これにより全 22 subsystem (Phase 9-2〜9-4c + Encounter Memory PR3) の
+        codec が正しく往復することを担保。
         """
         # --- src 環境
         src_dir = tmp_path / "src"
@@ -168,8 +170,8 @@ class TestE2ECaptureRestoreRoundTrip:
             "subsystem codec のいずれかで非対称な変換が起きている可能性。"
         )
 
-    def test_subsystems_に_全_21_が乗る(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Phase 9 完成版で世界状態 snapshot に 21 subsystem が含まれる。"""
+    def test_subsystems_に_全_22_が乗る(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Phase 9 完成版 + PR3 で世界状態 snapshot に 22 subsystem が含まれる。"""
         runtime, session, _mgr = _build_runtime_session(tmp_path, monkeypatch)
         session.capture_world(
             runtime,
@@ -208,9 +210,14 @@ class TestE2ECaptureRestoreRoundTrip:
             "sliding_window",
             "observation_buffer",
             "action_result_store",
+            # Encounter Memory (PR3)
+            "encounter_memory",
         }
+        # set 比較 1 本で全 subsystem の存在を担保する。count assertion を
+        # 別途持つと subsystem 追加時に 2 箇所修正が必要になり mechanical
+        # な負担が増えるため、set 比較に集約する (= count は len(set) と
+        # 暗黙に等価)。
         assert set(data["subsystems"].keys()) == expected_subsystems
-        assert len(data["subsystems"]) == 21
 
     def test_round_trip_with_mutated_non_initial_state(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

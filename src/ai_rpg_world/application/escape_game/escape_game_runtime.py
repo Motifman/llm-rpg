@@ -152,6 +152,12 @@ from ai_rpg_world.application.llm.services.escape_llm_prompt import (
     build_persona_block_from_escape_character,
     safe_world_intro_text,
 )
+from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
+    InMemoryEncounterMemory,
+)
+from ai_rpg_world.application.encounter.services.encounter_observation_collector import (
+    EncounterObservationCollector,
+)
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
     HeartbeatObservationEmitter,
@@ -281,6 +287,11 @@ class EscapeGameRuntime:
     _obs_buffer: DefaultObservationContextBuffer
     _sliding_window: DefaultSlidingWindowMemory
     _action_result_store: DefaultActionResultStore
+    # PR3 (Encounter Memory): familiarity 信号 (初対面 / 再会 / 初訪問 / 再訪)
+    # を保持する。observation pipeline 経由で entity / event の encounter を記録、
+    # snapshot codec で永続化される。factory function が必ず生成して渡す
+    # (= default なし、既存の memory subsystem と同列の扱い)。
+    _encounter_memory: InMemoryEncounterMemory
     _time_provider: InMemoryGameTimeProvider
     _simulation_service: SpotGraphSimulationApplicationService
     _scenario_event_stage: SpotGraphScenarioEventStageService
@@ -2404,6 +2415,10 @@ def create_escape_game_runtime(
         persona_block=persona_block,
     )
     action_result_store = DefaultActionResultStore()
+    # PR3 (Encounter Memory): familiarity 信号の保持先。factory で 1 instance
+    # 生成し、runtime field として保持する。observation_appender が collector
+    # 経由でここに observe を書き込む。
+    encounter_memory = InMemoryEncounterMemory()
 
     class _RuntimeTravelContext(SpotGraphTravelContextProvider):
         def __init__(
@@ -2790,6 +2805,7 @@ def create_escape_game_runtime(
         _obs_buffer=obs_buffer,
         _sliding_window=sliding_window,
         _action_result_store=action_result_store,
+        _encounter_memory=encounter_memory,
         # PR #448 (PR 3/6): cfg.prompt_section_order を使う (= env を再読しない)
         _context_strategy=_build_context_format_strategy_from_config(config),
         _time_provider=time_provider,
@@ -2836,10 +2852,19 @@ def create_escape_game_runtime(
     # Issue #276: 観測 trace 可視化のため、buffer に積むタイミングで
     # ``TraceEventKind.OBSERVATION`` を記録する。trace_recorder は
     # ``set_trace_recorder`` で後から差し込まれるので provider 経由で参照。
+    # PR3 (Encounter Memory): observation を encounter signal に変換する
+    # collector を構築し、ObservationAppender の observer slot に注入する。
+    # ObservationAppender 側は callable しか知らないので、observation 層と
+    # encounter 層を疎結合に保てる (= 後で別 observer を足すのも同じ slot)。
+    encounter_collector = EncounterObservationCollector(
+        memory=runtime._encounter_memory,
+        current_tick_provider=runtime.current_tick,
+    )
     observation_appender = ObservationAppender(
         buffer=obs_buffer,
         trace_recorder_provider=lambda: runtime._trace_recorder,
         current_tick_provider=runtime.current_tick,
+        observers=[encounter_collector.on_observation],
     )
     pipeline_event_publisher = PipelineEventPublisher(runtime)
 

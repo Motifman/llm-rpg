@@ -15,6 +15,16 @@ from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
+# PR3 (Encounter Memory) 後付け hook の signature。
+# ``ObservationAppender`` から ``encounter`` を直接 import すると application 層
+# 内に観測 → 出来事認識という別軸の依存が生まれる。observer-style の Callable
+# slot を介すことで、ObservationAppender は「observation を 1 件届けたことを
+# 副次的に観測者に知らせる」という最小責務だけを引き受ける形にできる。
+# PR3 では encounter collector がこの slot に入るが、将来別目的の observer
+# (例えば metrics, debug visualization) も同じ slot に挿せる。
+ObservationObserver = Callable[[PlayerId, ObservationOutput], None]
+
+
 class ObservationAppender:
     """
     観測エントリを構築し、バッファに append する。
@@ -23,6 +33,11 @@ class ObservationAppender:
     Issue #276: trace_recorder が注入されていれば、buffer に積んだ観測を
     ``TraceEventKind.OBSERVATION`` として trace にも残す (LLM の prompt に
     届いた観測を後から追跡できるよう、buffer append と同じ場所で記録する)。
+
+    PR3 (Encounter Memory): ``observers`` に Callable を渡すと、buffer append の
+    後に順次呼ばれる。``ObservationAppender`` は observer の中身を知らない
+    (= encounter / metrics / debug 等、任意の観察者に開かれている)。空 list /
+    省略時は完全に既存挙動と一致する (= 後方互換)。
     """
 
     def __init__(
@@ -37,6 +52,7 @@ class ObservationAppender:
             Callable[[], Optional[ITraceRecorder]]
         ] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        observers: Optional[list[ObservationObserver]] = None,
     ) -> None:
         self._buffer = buffer
         self._runtime_context_provider = runtime_context_provider
@@ -48,9 +64,18 @@ class ObservationAppender:
             raise TypeError("trace_recorder_provider must be callable or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
+        if observers is not None:
+            for i, obs in enumerate(observers):
+                if not callable(obs):
+                    raise TypeError(
+                        f"observers[{i}] must be callable (got {type(obs)!r})"
+                    )
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
+        self._observers: tuple[ObservationObserver, ...] = (
+            tuple(observers) if observers else ()
+        )
 
     def append(
         self,
@@ -76,6 +101,22 @@ class ObservationAppender:
         )
         self._buffer.append(player_id, entry, runtime_context=rtc)
         self._record_trace(player_id, output, game_time_label)
+        # PR3: 各 observer に通知する。observer は副次的な観察 (encounter 抽出
+        # / metrics / debug) を意図し、append の本流は止めない契約。例外は
+        # observer 側で握ることを期待するが、念のためここでも握って続行する。
+        for observer in self._observers:
+            try:
+                observer(player_id, output)
+            except Exception:
+                # observer 自身がログを残すべきだが、誤った observer が裸の
+                # raise を残しても append 本流を倒さない構造的防衛。
+                import logging
+
+                logging.getLogger(__name__).exception(
+                    "ObservationAppender observer raised; "
+                    "skipping (player_id=%s)",
+                    int(player_id.value),
+                )
 
     def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
         """use 時に最新の trace_recorder を取得する (provider 優先)。"""
