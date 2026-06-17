@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -70,6 +71,24 @@ class ISlidingWindowMemory(ABC):
         ``DefaultSlidingWindowMemory`` は空文字 → §「【自己像と世界観】」非表示。
         """
         return ""
+
+    def get_oldest_entry_datetime(
+        self, player_id: PlayerId
+    ) -> Optional[datetime]:
+        """PR5 (R1): 現在 short-term window に乗っている最古 entry の occurred_at。
+
+        episodic recall の時間下限フィルタとして使う。
+        sliding window に entry が無い (= まだ何も観測していない) なら None を
+        返す。caller (prompt_builder) は None を見たら recall に時間下限を渡さない。
+
+        返す ``datetime`` は naive / aware どちらの可能性もある (=
+        ``ObservationEntry.occurred_at`` の値をそのまま返すため)。比較側で
+        UTC 正規化することが前提 (``in_memory_subjective_episode_store._normalize_to_utc``
+        / ``sqlite_subjective_episode_store._datetime_to_occurred_at_key`` 参照)。
+
+        default 実装は None を返す (= 後方互換)。各実装で override する。
+        """
+        return None
 
 
 class IActionResultStore(ABC):

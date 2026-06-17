@@ -72,6 +72,7 @@ def _merged_ordered_episodes_for_cue_bucket(
     cues: Sequence[EpisodicCue],
     limit_per_axis: int,
     being_id: Optional[BeingId] = None,
+    min_occurred_at: Optional[datetime] = None,
 ) -> tuple[str, list[SubjectiveEpisode], dict[str, frozenset[str]]]:
     """
     単一論理バケツ内で list_by_cue を統合する。
@@ -105,7 +106,12 @@ def _merged_ordered_episodes_for_cue_bucket(
         if being_id is None:
             cue_episodes: list[SubjectiveEpisode] = []
         else:
-            cue_episodes = store.list_by_cue_by_being(being_id, cue, limit_per_axis)
+            cue_episodes = store.list_by_cue_by_being(
+                being_id,
+                cue,
+                limit_per_axis,
+                min_occurred_at=min_occurred_at,
+            )
         for ep in cue_episodes:
             eid = ep.episode_id
             merged[eid] = ep
@@ -203,15 +209,33 @@ class EpisodicPassiveRecallRetrievalService:
         limit_per_axis: int,
         max_candidates: int,
         now: datetime | None = None,
+        min_occurred_at: datetime | None = None,
     ) -> EpisodicPassiveRecallRetrievalResult:
+        """過去 episode を situation cues に基づいて recall する。
+
+        PR5 (R1): ``min_occurred_at`` が与えられたとき、temporal / cue 軸とも
+        その時刻より厳密に古い episode のみを対象にする (= sliding window に
+        まだ生きている直近 episode を recall から排除)。
+        PR5 (R2): temporal 軸は **situation_cues が空のときのみ** 発火する
+        fallback として動かす。cue が立つ通常 turn では「直近の出来事」を
+        recall に紛れ込ませない。
+        """
         # Phase 3 Step 3e-3: legacy 経路は撤去済。Being 未解決時は temporal/cue
         # 軸も空になる graceful fallback (= prompt 強化が痩せるだけで turn は
         # 止めない)。spreading 軸の skip と挙動を揃える。
         being_id = self._resolve_being_id(player_id)
-        if being_id is None:
+
+        # R2: temporal 軸の発火条件。cue が立っている通常 turn では skip し、
+        # cue が一切無い idle 等の状況でのみ「直近の出来事」を fallback として
+        # 引く。R1 の min_occurred_at と合わせれば、そのときも sliding window
+        # 範囲外のものだけが拾われる。
+        temporal_axis_enabled = len(situation_cues) == 0
+        if being_id is None or not temporal_axis_enabled:
             temporal_rows: list[SubjectiveEpisode] = []
         else:
-            temporal_rows = self._store.list_recent_by_being(being_id, limit_per_axis)
+            temporal_rows = self._store.list_recent_by_being(
+                being_id, limit_per_axis, min_occurred_at=min_occurred_at
+            )
 
         axis_order: list[str] = []
         axis_to_cues: dict[str, list[EpisodicCue]] = defaultdict(list)
@@ -237,6 +261,7 @@ class EpisodicPassiveRecallRetrievalService:
                 cues=cues,
                 limit_per_axis=limit_per_axis,
                 being_id=being_id,
+                min_occurred_at=min_occurred_at,
             )
             cue_arms.append((rr_label, rows, granular))
 

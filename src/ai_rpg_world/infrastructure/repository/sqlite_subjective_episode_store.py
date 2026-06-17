@@ -39,6 +39,20 @@ def _occurred_at_sort_key(ep: SubjectiveEpisode) -> float:
     return dt.timestamp()
 
 
+def _datetime_to_occurred_at_key(dt: datetime) -> float:
+    """``datetime`` を ``occurred_at_key`` の表現 (UTC 秒) に揃える (PR5)。
+
+    返り値は 64-bit float (IEEE 754) で、現在世代 (2026 年付近) では
+    マイクロ秒精度を保てる。``.timestamp()`` の戻りは ``occurred_at_key``
+    column と同じスケールなので、SQL の ``WHERE occurred_at_key < ?`` 比較は
+    insert 時の格納値とビット同一の精度になる。境界 episode 自身は ``<``
+    で除外されるので、float 端数によって境界判定がブレるリスクは無視できる。
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc).timestamp()
+    return dt.astimezone(timezone.utc).timestamp()
+
+
 def _episode_to_payload_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
     loc = ep.location
     act = ep.action
@@ -309,43 +323,79 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
         return _payload_dict_to_episode(json.loads(str(row[0])))
 
     def list_recent_by_being(
-        self, being_id: BeingId, limit: int
+        self,
+        being_id: BeingId,
+        limit: int,
+        min_occurred_at: datetime | None = None,
     ) -> list[SubjectiveEpisode]:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         if limit <= 0:
             return []
-        cur = self._conn.execute(
-            """
-            SELECT payload_json FROM subjective_episodes_by_being
-            WHERE being_id_value = ?
-            ORDER BY occurred_at_key DESC, episode_id DESC
-            LIMIT ?
-            """,
-            (being_id.value, limit),
-        )
+        if min_occurred_at is None:
+            cur = self._conn.execute(
+                """
+                SELECT payload_json FROM subjective_episodes_by_being
+                WHERE being_id_value = ?
+                ORDER BY occurred_at_key DESC, episode_id DESC
+                LIMIT ?
+                """,
+                (being_id.value, limit),
+            )
+        else:
+            border_key = _datetime_to_occurred_at_key(min_occurred_at)
+            cur = self._conn.execute(
+                """
+                SELECT payload_json FROM subjective_episodes_by_being
+                WHERE being_id_value = ?
+                  AND occurred_at_key < ?
+                ORDER BY occurred_at_key DESC, episode_id DESC
+                LIMIT ?
+                """,
+                (being_id.value, border_key, limit),
+            )
         return [_payload_dict_to_episode(json.loads(str(r[0]))) for r in cur.fetchall()]
 
     def list_by_cue_by_being(
-        self, being_id: BeingId, cue: EpisodicCue, limit: int
+        self,
+        being_id: BeingId,
+        cue: EpisodicCue,
+        limit: int,
+        min_occurred_at: datetime | None = None,
     ) -> list[SubjectiveEpisode]:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         if limit <= 0:
             return []
         canonical = cue.to_canonical()
-        cur = self._conn.execute(
-            """
-            SELECT e.payload_json
-            FROM subjective_episode_cues_by_being c
-            JOIN subjective_episodes_by_being e
-              ON e.being_id_value = c.being_id_value AND e.episode_id = c.episode_id
-            WHERE c.being_id_value = ? AND c.cue_canonical = ?
-            ORDER BY e.occurred_at_key DESC, e.episode_id DESC
-            LIMIT ?
-            """,
-            (being_id.value, canonical, limit),
-        )
+        if min_occurred_at is None:
+            cur = self._conn.execute(
+                """
+                SELECT e.payload_json
+                FROM subjective_episode_cues_by_being c
+                JOIN subjective_episodes_by_being e
+                  ON e.being_id_value = c.being_id_value AND e.episode_id = c.episode_id
+                WHERE c.being_id_value = ? AND c.cue_canonical = ?
+                ORDER BY e.occurred_at_key DESC, e.episode_id DESC
+                LIMIT ?
+                """,
+                (being_id.value, canonical, limit),
+            )
+        else:
+            border_key = _datetime_to_occurred_at_key(min_occurred_at)
+            cur = self._conn.execute(
+                """
+                SELECT e.payload_json
+                FROM subjective_episode_cues_by_being c
+                JOIN subjective_episodes_by_being e
+                  ON e.being_id_value = c.being_id_value AND e.episode_id = c.episode_id
+                WHERE c.being_id_value = ? AND c.cue_canonical = ?
+                  AND e.occurred_at_key < ?
+                ORDER BY e.occurred_at_key DESC, e.episode_id DESC
+                LIMIT ?
+                """,
+                (being_id.value, canonical, border_key, limit),
+            )
         return [_payload_dict_to_episode(json.loads(str(r[0]))) for r in cur.fetchall()]
 
     def list_all_by_being(self, being_id: BeingId) -> list[SubjectiveEpisode]:

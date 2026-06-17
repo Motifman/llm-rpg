@@ -16,6 +16,8 @@ Being keyed 化が完了する。
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Optional
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
@@ -48,23 +50,37 @@ class EpisodicEpisodeRepository(ABC):
 
     @abstractmethod
     def list_recent_by_being(
-        self, being_id: BeingId, limit: int
+        self,
+        being_id: BeingId,
+        limit: int,
+        min_occurred_at: Optional[datetime] = None,
     ) -> list[SubjectiveEpisode]:
         """being_id keyed で occurred_at 降順に最大 limit 件返す。
 
         同一タイムスタンプでは episode_id の降順で安定化。
         limit が 0 以下のときは空リスト。
         naive datetime はソート比較のみ UTC 固定オフセットとして扱う。
+
+        PR5 (R1) 後: ``min_occurred_at`` を渡すと **その時刻より古い episode のみ**
+        を返す (= sliding window にまだ生きている直近 episode を recall から
+        排除する用途)。None なら従来通り全件から最近を取る。
         """
 
     @abstractmethod
     def list_by_cue_by_being(
-        self, being_id: BeingId, cue: EpisodicCue, limit: int
+        self,
+        being_id: BeingId,
+        cue: EpisodicCue,
+        limit: int,
+        min_occurred_at: Optional[datetime] = None,
     ) -> list[SubjectiveEpisode]:
         """being_id keyed で cue 一致する episode を返す。
 
         並びは list_recent_by_being と同じ。
         cue 一致は cue.to_canonical() で比較する。
+
+        PR5 (R1) 後: ``min_occurred_at`` 引数は ``list_recent_by_being`` と
+        同じ意味で機能する。
         """
 
     @abstractmethod

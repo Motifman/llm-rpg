@@ -224,6 +224,24 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         # 新しい順で返す (sliding window 互換)
         return list(reversed(list(raw)[-limit:]))
 
+    def get_oldest_entry_datetime(
+        self, player_id: PlayerId
+    ) -> Optional[datetime]:
+        """PR5 (R1): 現在 short-term window に乗っている最古 entry の ``occurred_at``。
+
+        L1 raw queue の最古 entry を返す。L4 mid summary は raw を畳んだ
+        概要であり、構成要素の raw entry そのものは既に retire 済みなので、
+        ここでは含めない (= 「**今 raw として手元にあるもの**」の最古を
+        返す)。
+        """
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        pid = int(player_id.value)
+        raw = self._raw.get(pid)
+        if not raw:
+            return None
+        return min(entry.occurred_at for entry in raw)
+
     def get_long_summary_text(self, player_id: PlayerId) -> str:
         """Phase 3: L5 long summary を prompt 用テキストに整形する。
 

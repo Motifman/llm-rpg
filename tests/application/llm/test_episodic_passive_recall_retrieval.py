@@ -154,8 +154,14 @@ class TestEpisodicPassiveRecallRetrievalCueOnly:
 class TestEpisodicPassiveRecallRetrievalUnionDedupe:
     """temporal と cue の重複が和集合で 1 件になること"""
 
-    def test_same_episode_from_temporal_and_cue_has_single_row_and_merged_axes(self) -> None:
-        """同一 episode_id が両軸から来たとき候補は 1 行、source_axes に両方が残る。"""
+    def test_episode_は_cue_軸経由でのみ出る_R2_後(self) -> None:
+        """PR5 R2 後: cue が立っているときは temporal 軸が off になる。
+
+        旧テスト名 ``test_same_episode_from_temporal_and_cue_has_single_row_and_merged_axes``
+        は「cue + temporal が同じ episode を出して merge される」挙動を担保
+        していたが、R2 で temporal 軸は fallback (= cue 軸が空のときのみ)
+        になったので、source_axes に temporal は出なくなる。
+        """
         store = InMemorySubjectiveEpisodeStore()
         ts = datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc)
         shared = EpisodicCue(axis="object", value="box", source=EpisodicCueSource.RUNTIME_CONTEXT)
@@ -175,12 +181,13 @@ class TestEpisodicPassiveRecallRetrievalUnionDedupe:
         )
         assert len(result.candidates) == 1
         axes = result.candidates[0].source_axes
-        assert PASSIVE_RECALL_AXIS_TEMPORAL in axes
+        # R2 後: temporal は cue 立つときは走らないので source_axes から外れる
+        assert PASSIVE_RECALL_AXIS_TEMPORAL not in axes
         assert passive_recall_cue_axis_label(shared) == "cue:object"
         assert passive_recall_cue_axis_label(shared) in axes
         assert result.debug.union_episode_count_before_max_cap == 1
         assert result.debug.candidate_episode_sources == (
-            ("both", ("cue:object", PASSIVE_RECALL_AXIS_TEMPORAL)),
+            ("both", ("cue:object",)),
         )
 
 
@@ -188,12 +195,17 @@ class TestEpisodicPassiveRecallRetrievalLimits:
     """limit_per_axis / max_candidates が効くこと"""
 
     def test_limit_per_axis_caps_each_axis_fetch(self) -> None:
-        """list_recent / list_by_cue それぞれが limit_per_axis で打ち切られる。"""
+        """list_by_cue が limit_per_axis で打ち切られる。
+
+        PR5 R2 後: cue が立つときは temporal 軸が走らないので、temporal の
+        raw_row_count は記録されない。cue 軸のみが limit_per_axis (=2) で
+        打ち切られる。
+        """
         store = InMemorySubjectiveEpisodeStore()
         base = datetime(2026, 5, 1, tzinfo=timezone.utc)
         k = EpisodicCue(axis="action", value="open", source=EpisodicCueSource.TOOL)
         for i in range(5):
-            store.put_by_being(being_id, 
+            store.put_by_being(being_id,
                 _episode(
                     episode_id=f"e{i}",
                     occurred_at=base + timedelta(hours=i),
@@ -212,10 +224,11 @@ class TestEpisodicPassiveRecallRetrievalLimits:
             limit_per_axis=2,
             max_candidates=20,
         )
-        temporal_count = dict(result.debug.raw_row_count_by_axis)[PASSIVE_RECALL_AXIS_TEMPORAL]
-        cue_count = dict(result.debug.raw_row_count_by_axis)["cue:action"]
-        assert temporal_count == 2
-        assert cue_count == 2
+        raw = dict(result.debug.raw_row_count_by_axis)
+        # R2 後: cue が立つときの temporal は走らないため、temporal の raw
+        # row count は 0 で記録される (= 軸 key 自体は debug に残る)
+        assert raw.get(PASSIVE_RECALL_AXIS_TEMPORAL, 0) == 0
+        assert raw["cue:action"] == 2
 
     def test_max_candidates_uses_round_robin_not_global_recency(self) -> None:
         """max_candidates 件は全体時刻順の先頭ではなく、軸巡回で選ばれる。"""
@@ -239,7 +252,9 @@ class TestEpisodicPassiveRecallRetrievalLimits:
             max_candidates=2,
         )
         assert len(result.candidates) == 2
-        assert [c.episode.episode_id for c in result.candidates] == ["p1", "p3"]
+        # PR5 R2 後: cue が立つので temporal は off。round-robin は a/b 軸の
+        # interleave となり、a 軸の先頭 (p1) と b 軸の先頭 (p2) が選ばれる。
+        assert [c.episode.episode_id for c in result.candidates] == ["p1", "p2"]
         assert result.debug.union_episode_count_before_max_cap == 3
 
 
@@ -261,7 +276,8 @@ class TestEpisodicPassiveRecallRetrievalDebugAxes:
         )
         result = svc.retrieve(player_id=7, situation_cues=(c,), limit_per_axis=5, max_candidates=10)
         counts = dict(result.debug.final_episode_count_by_source_axis)
-        assert counts[PASSIVE_RECALL_AXIS_TEMPORAL] == 2
+        # PR5 R2 後: cue 立つときの temporal は走らない → counts に temporal キー無し
+        assert PASSIVE_RECALL_AXIS_TEMPORAL not in counts
         assert counts["cue:outcome"] == 1
 
 
@@ -295,7 +311,9 @@ class TestEpisodicPassiveRecallRetrievalPlaceFamily:
         assert raw[PASSIVE_RECALL_PLACE_FAMILY_LABEL] == 1
         assert raw["cue:entity"] == 1
         ids = [c.episode.episode_id for c in result.candidates]
-        assert ids == ["f1", "ep_spot", "ep_e"]
+        # PR5 R2 後: cue が立っているため temporal 軸 (f1) は出ない。
+        # cue 由来の ep_spot / ep_e のみ round-robin で並ぶ。
+        assert ids == ["ep_spot", "ep_e"]
 
     def test_place_family_prefers_place_spot_over_tile_under_limit_cap(self) -> None:
         """場所ファミリー統合リストでは place_spot 一致を tile_area 単独一致より先に並べ limit が効く。"""
@@ -372,10 +390,18 @@ class TestEpisodicPassiveRecallRetrievalRoundRobinFairness:
             limit_per_axis=3,
             max_candidates=2,
         )
-        assert [c.episode.episode_id for c in result.candidates] == ["f3", "trap-old"]
+        # PR5 R2 後: cue (trap) が立っているため temporal は走らない。
+        # filler は cue ("place") も別軸として立つが、retrieve に渡している
+        # situation_cues には trap のみ含まれるため、filler を持つ f0-f3 は
+        # cue 軸でも recall されない。結果は trap-old のみ。
+        assert [c.episode.episode_id for c in result.candidates] == ["trap-old"]
 
-    def test_round_robin_interleaves_temporal_and_distinct_cue_axes(self) -> None:
-        """temporal, cue:place_spot, cue:entity, cue:object を巡回して採用する。"""
+    def test_round_robin_interleaves_distinct_cue_axes(self) -> None:
+        """cue:place_spot, cue:entity, cue:object を巡回して採用する。
+
+        PR5 R2 後: cue が立つときの temporal は走らない。3 つの cue 軸での
+        interleave のみが結果に出る。
+        """
         store = InMemorySubjectiveEpisodeStore()
         base = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
         c_place = EpisodicCue(axis="place_spot", value="12", source=EpisodicCueSource.RUNTIME_CONTEXT)
@@ -397,15 +423,20 @@ class TestEpisodicPassiveRecallRetrievalRoundRobinFairness:
             limit_per_axis=1,
             max_candidates=4,
         )
-        assert [c.episode.episode_id for c in result.candidates] == ["T", "P", "E", "O"]
+        # T (cues=()) は temporal 経路でしか入らないので R2 後は消える
+        assert [c.episode.episode_id for c in result.candidates] == ["P", "E", "O"]
         axes_by_id = {c.episode.episode_id: set(c.source_axes) for c in result.candidates}
-        assert axes_by_id["T"] == {PASSIVE_RECALL_AXIS_TEMPORAL}
         assert axes_by_id["P"] == {"cue:place_spot"}
         assert axes_by_id["E"] == {"cue:entity"}
         assert axes_by_id["O"] == {"cue:object"}
 
-    def test_small_max_candidates_does_not_fill_only_from_temporal(self) -> None:
-        """max_candidates が小さくても temporal だけで枠を埋めない。"""
+    def test_small_max_candidates_picks_only_cue_axes_under_r2(self) -> None:
+        """PR5 R2 後: cue が立つときは temporal が走らない。
+
+        旧テストは「max_candidates が小さくても temporal だけで枠を埋めない」
+        を verify していたが、R2 後は temporal そのものが off になるため、
+        cue 軸の round-robin のみが結果。
+        """
         store = InMemorySubjectiveEpisodeStore()
         base = datetime(2026, 7, 1, tzinfo=timezone.utc)
         c_place = EpisodicCue(axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
@@ -433,6 +464,6 @@ class TestEpisodicPassiveRecallRetrievalRoundRobinFairness:
             max_candidates=3,
         )
         ids = [c.episode.episode_id for c in result.candidates]
-        assert ids == ["t2", "place-only", "entity-only"]
+        # R2: cue が立つので temporal は off、t0/t1/t2 は出ない
+        assert ids == ["place-only", "entity-only"]
         assert "entity-only" in ids
-        assert ids.count("t2") == 1
