@@ -120,14 +120,26 @@ class IWorldNounMatcher(Protocol):
 def _normalize_for_matching(text: str) -> str:
     """trie 構築 / 検索の両方で使う正規化。
 
-    NFKC で全角→半角 + 合成文字分解、casefold で unicode lowercase。
+    1. NFKC で全角→半角 + 合成文字分解
+    2. casefold で unicode lowercase
+    3. すべての whitespace を除去 (PR7 / R4)
+
     パターンと text を同じ正規化で揃えることで、表記揺れを吸収する。
 
     例:
-    - ``書架Ａ`` (全角A) → ``書架a`` (NFKC で半角化 + casefold)
+    - ``書架Ａ`` (全角A) → ``書架a`` (NFKC + casefold)
+    - ``書架 A`` (半角空白) / ``書架　A`` (全角空白) → ``書架a``
+      (NFKC で全角空白→半角空白 → whitespace 除去)
     - ``リン`` ← 変わらず (カタカナは NFKC 対象外)
+
+    whitespace 除去の判断: scenario の固有名詞 (`書架 A`, `World Object 1` 等)
+    が text 中で書き方によって `書架A` / `WorldObject1` と表記される実例が
+    多いため、両方をマッチさせる。副作用として「A B」というパターンは text
+    `AB` にもマッチするが、シナリオ固有名詞では実害が薄い (登録される名前は
+    通常ユニーク)。tokenization 言語ではないため語境界の概念は元々無い。
     """
-    return unicodedata.normalize("NFKC", text).casefold()
+    nfkc = unicodedata.normalize("NFKC", text).casefold()
+    return "".join(ch for ch in nfkc if not ch.isspace())
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -393,6 +405,27 @@ class WorldNounMatcherBuilder:
             normalized = _normalize_for_matching(stripped)
             if not normalized:
                 continue
+            # PR7 (R4): whitespace 除去正規化を入れたため、「書架 A」と「書架A」が
+            # 同じ canonical に潰れる。**異なる cue value** を別パターンで登録し、
+            # 正規化後に衝突する場合は warn する (= silent override 防止)。同一
+            # (axis, value) の alias 再登録は既存仕様どおり last-write-wins。
+            for existing in self._patterns:
+                if existing.normalized_text == normalized and (
+                    existing.axis != axis or existing.value != value
+                ):
+                    import warnings
+
+                    warnings.warn(
+                        f"WorldNounMatcher: pattern collision after normalization "
+                        f"(normalized={normalized!r}, "
+                        f"existing=({existing.axis}, {existing.value}, {existing.display_text!r}), "
+                        f"new=({axis}, {value}, {primary!r})). "
+                        f"両方のパターンが同じ text にマッチするため、Aho-Corasick は "
+                        f"両方の cue を立てる。意図的でない場合は別名の登録を検討。",
+                        RuntimeWarning,
+                        stacklevel=3,
+                    )
+                    break
             self._patterns.append(
                 _Pattern(
                     normalized_text=normalized,
