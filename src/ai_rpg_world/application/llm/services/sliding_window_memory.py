@@ -1,6 +1,7 @@
 """スライディングウィンドウ記憶のデフォルト実装（in-memory）"""
 
-from typing import Dict, List
+from datetime import datetime
+from typing import Dict, List, Optional
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.llm.contracts.interfaces import ISlidingWindowMemory
@@ -65,3 +66,18 @@ class DefaultSlidingWindowMemory(ISlidingWindowMemory):
             entries, key=lambda e: e.occurred_at.timestamp(), reverse=True
         )
         return sorted_entries[:limit]
+
+    def get_oldest_entry_datetime(
+        self, player_id: PlayerId
+    ) -> Optional[datetime]:
+        """PR5 (R1): 現在 window に乗っている最古 entry の ``occurred_at``。
+
+        episodic recall の時間下限フィルタに使う。entry が無ければ None。
+        sliding window は max_entries で打ち切られるので、最古 = 「直近 N 件
+        の中の最古」を返す。"""
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        entries = self._store.get(self._key(player_id))
+        if not entries:
+            return None
+        return min(entry.occurred_at for entry in entries)

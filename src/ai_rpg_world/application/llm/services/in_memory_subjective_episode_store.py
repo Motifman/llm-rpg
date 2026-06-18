@@ -35,6 +35,25 @@ def _occurrence_sort_key(ep: SubjectiveEpisode) -> tuple[datetime, str]:
     return (dt, ep.episode_id)
 
 
+def _normalize_to_utc(dt: datetime) -> datetime:
+    """naive を UTC として解釈し、aware を UTC に寄せる (比較用に正規化)。"""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _is_strictly_older(
+    episode_occurred_at: datetime, threshold: datetime
+) -> bool:
+    """PR5 (R1): episode が ``threshold`` より厳密に古いかを判定する。
+
+    境界 (``episode.occurred_at == threshold``) は **より新しい側に含める** ため
+    False を返す (= sliding window の最古 entry そのものを recall から
+    排除する側に倒す)。両 datetime は UTC に正規化してから比較する。
+    """
+    return _normalize_to_utc(episode_occurred_at) < _normalize_to_utc(threshold)
+
+
 class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
     """
     Being ごとにエピソード本体と cue 逆引き索引を保持する。
@@ -108,7 +127,10 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
             return self._episodes_by_being.get(being_id, {}).get(episode_id)
 
     def list_recent_by_being(
-        self, being_id: BeingId, limit: int
+        self,
+        being_id: BeingId,
+        limit: int,
+        min_occurred_at: datetime | None = None,
     ) -> list[SubjectiveEpisode]:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
@@ -118,11 +140,22 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
             bucket = self._episodes_by_being.get(being_id)
             if not bucket:
                 return []
-            ordered = sorted(bucket.values(), key=_occurrence_sort_key, reverse=True)
+            episodes = bucket.values()
+            if min_occurred_at is not None:
+                episodes = [
+                    ep
+                    for ep in episodes
+                    if _is_strictly_older(ep.occurred_at, min_occurred_at)
+                ]
+            ordered = sorted(episodes, key=_occurrence_sort_key, reverse=True)
             return ordered[:limit]
 
     def list_by_cue_by_being(
-        self, being_id: BeingId, cue: EpisodicCue, limit: int
+        self,
+        being_id: BeingId,
+        cue: EpisodicCue,
+        limit: int,
+        min_occurred_at: datetime | None = None,
     ) -> list[SubjectiveEpisode]:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
@@ -135,6 +168,12 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
                 return []
             bucket = self._episodes_by_being.get(being_id, {})
             eps = [bucket[i] for i in ids if i in bucket]
+            if min_occurred_at is not None:
+                eps = [
+                    ep
+                    for ep in eps
+                    if _is_strictly_older(ep.occurred_at, min_occurred_at)
+                ]
             ordered = sorted(eps, key=_occurrence_sort_key, reverse=True)
             return ordered[:limit]
 

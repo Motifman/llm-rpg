@@ -755,12 +755,35 @@ class DefaultPromptBuilder(IPromptBuilder):
             noun_matcher=self._noun_matcher,
         )
         recall_now = datetime.now(timezone.utc)
+        # PR5 (R1): sliding window にまだ生きている直近 episode を recall から
+        # 排除するため、最古 entry の occurred_at を時間下限として渡す。entry
+        # が空のとき (= 起動直後) は None。安全 floor (= 最低 5 tick / scenario の
+        # 1 tick 相当秒に変換) は加味せず、現時点の最古 entry 自身を境界に
+        # 倒す。「境界 episode 自身は recall から外す」という保守的な側に倒す。
+        #
+        # 防衛: 旧 ISlidingWindowMemory 実装やテスト mock が default で None /
+        # 不正な型を返すことがある。``None`` 以外で ``datetime`` でなければ、
+        # 「実装側のバグ」として warning ログを残し、recall の時間下限フィルタを
+        # off に倒す。silent fallback ではなく "noisy" な degradation にして、
+        # ログから発見できるようにする。
+        raw_oldest = self._sliding_window.get_oldest_entry_datetime(player_id)
+        if raw_oldest is not None and not isinstance(raw_oldest, datetime):
+            _module_logger.warning(
+                "ISlidingWindowMemory.get_oldest_entry_datetime returned "
+                "unexpected type %s for player_id=%s; recall の時間下限フィルタ "
+                "を off にして fallback します。",
+                type(raw_oldest).__name__,
+                player_id.value,
+            )
+            raw_oldest = None
+        min_recall_dt: Optional[datetime] = raw_oldest
         recall_result = self._episodic_passive_recall.retrieve(
             player_id=player_id.value,
             situation_cues=situation_cues,
             limit_per_axis=self._episodic_passive_recall_limit_per_axis,
             max_candidates=self._episodic_passive_recall_max_candidates,
             now=recall_now,
+            min_occurred_at=min_recall_dt,
         )
         being_id = self._resolve_being_id(player_id)
         relevant_memories_text = _join_passive_recall_texts(
