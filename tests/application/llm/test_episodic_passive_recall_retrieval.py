@@ -252,9 +252,12 @@ class TestEpisodicPassiveRecallRetrievalLimits:
             max_candidates=2,
         )
         assert len(result.candidates) == 2
-        # PR5 R2 後: cue が立つので temporal は off。round-robin は a/b 軸の
-        # interleave となり、a 軸の先頭 (p1) と b 軸の先頭 (p2) が選ばれる。
-        assert [c.episode.episode_id for c in result.candidates] == ["p1", "p2"]
+        # PR6 (R3) 後: p3 は a と b の両方にマッチする (= multi_cue_score=2)
+        # ため、各 arm 内で stable sort により先頭に押し上げられる。
+        # round-robin は a 軸 → p3、b 軸 → p3 は既選ばれなので b 軸の次=p2。
+        # 結果として「単一 cue マッチ p1」よりも「複数 cue マッチ p3」が
+        # 優先される (R3 の狙い)。
+        assert [c.episode.episode_id for c in result.candidates] == ["p3", "p2"]
         assert result.debug.union_episode_count_before_max_cap == 3
 
 
@@ -325,7 +328,7 @@ class TestEpisodicPassiveRecallRetrievalPlaceFamily:
         stronger = EpisodicCue(axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
         store.put_by_being(being_id, _episode(episode_id="only_tile", occurred_at=ts, cues=(weaker,)))
         store.put_by_being(being_id, _episode(episode_id="both", occurred_at=ts, cues=(stronger, weaker)))
-        rr_label, rows, _gran = _merged_ordered_episodes_for_cue_bucket(
+        rr_label, rows, _gran, _keys = _merged_ordered_episodes_for_cue_bucket(
             store,
             7,
             bucket=PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
@@ -348,7 +351,7 @@ class TestEpisodicPassiveRecallRetrievalObjectGranularity:
         ci = EpisodicCue(axis="object", value="item_instance_2", source=EpisodicCueSource.RUNTIME_CONTEXT)
         store.put_by_being(being_id, _episode(episode_id="to_wo", occurred_at=ts, cues=(cw,)))
         store.put_by_being(being_id, _episode(episode_id="to_item", occurred_at=ts + timedelta(seconds=1), cues=(ci,)))
-        rr_label, rows, _gran = _merged_ordered_episodes_for_cue_bucket(
+        rr_label, rows, _gran, _keys = _merged_ordered_episodes_for_cue_bucket(
             store,
             7,
             bucket="object",
