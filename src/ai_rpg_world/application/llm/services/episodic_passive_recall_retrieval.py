@@ -73,11 +73,20 @@ def _merged_ordered_episodes_for_cue_bucket(
     limit_per_axis: int,
     being_id: Optional[BeingId] = None,
     min_occurred_at: Optional[datetime] = None,
-) -> tuple[str, list[SubjectiveEpisode], dict[str, frozenset[str]]]:
+) -> tuple[
+    str,
+    list[SubjectiveEpisode],
+    dict[str, frozenset[str]],
+    dict[str, frozenset[str]],
+]:
     """
     単一論理バケツ内で list_by_cue を統合する。
     place ファミリーはラウンドロビン・ラベルが cue:place_family、ソースは cue:{axis} のまま。
     object および place は粒度の高い一致を arm 内の並びで優先する。
+
+    返り値 4 番目の ``cue_keys_by_ep`` は、各 episode がこの bucket 内で
+    マッチした EpisodicCue の canonical 形 (``axis:value``) の集合。
+    PR6 (R3) の cross-bucket スコアリングで使う。
     """
 
     rr_label = (
@@ -90,10 +99,19 @@ def _merged_ordered_episodes_for_cue_bucket(
 
     merged: dict[str, SubjectiveEpisode] = {}
     labels_by_ep: dict[str, set[str]] = defaultdict(set)
+    cue_keys_by_ep: dict[str, set[str]] = defaultdict(set)
     max_gran: dict[str, float] = defaultdict(float)
+
+    # PR6 (R3): 個別 cue の fetch は ``limit_per_axis * len(cues)`` まで広げる。
+    # こうしないと「ある cue の top N からだけ漏れた multi-match episode」が
+    # 別の cue の query で再発見されても within-bucket cue hit 数が 1 のまま
+    # になり、上位化されない。最終的に bucket 単位で ``limit_per_axis`` まで
+    # 切り直すため、外向きの contract は変えない。
+    per_cue_fetch_limit = max(limit_per_axis, limit_per_axis * len(cues))
 
     for cue in cues:
         ax_label = passive_recall_cue_axis_source_label(cue)
+        cue_canonical = cue.to_canonical()
         if bucket == PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY:
             g_weight = passive_recall_place_axis_granularity_weight(cue.axis)
         elif cue.axis == "object":
@@ -109,27 +127,37 @@ def _merged_ordered_episodes_for_cue_bucket(
             cue_episodes = store.list_by_cue_by_being(
                 being_id,
                 cue,
-                limit_per_axis,
+                per_cue_fetch_limit,
                 min_occurred_at=min_occurred_at,
             )
         for ep in cue_episodes:
             eid = ep.episode_id
             merged[eid] = ep
             labels_by_ep[eid].add(ax_label)
+            cue_keys_by_ep[eid].add(cue_canonical)
             if use_quality:
                 max_gran[eid] = max(max_gran[eid], g_weight)
 
-    def arm_sort_key(ep: SubjectiveEpisode) -> tuple[float, datetime, str]:
+    def arm_sort_key(ep: SubjectiveEpisode) -> tuple[int, float, datetime, str]:
+        # PR6 (R3): within-bucket での distinct cue マッチ数を最優先キーに乗せる。
+        # これにより「同 bucket 内で複数 cue 値にマッチした episode」が
+        # limit_per_axis の切断より前に上位化される (cross-bucket 分の score は
+        # bucket fetch 後に retrieve() 側で再計算するが、cross-bucket での
+        # 加点が limit に阻まれて反映できないケースは「両 bucket とも
+        # limit_per_axis に収まる」前提に依存する — 通常運用の limit は
+        # 充分大きく、現状その想定で OK)。
+        bucket_cue_hits = len(cue_keys_by_ep.get(ep.episode_id, ()))
         gran = max_gran[ep.episode_id] if use_quality else 0.0
         dt, eid = _occurrence_sort_key(ep)
-        return (gran, dt, eid)
+        return (bucket_cue_hits, gran, dt, eid)
 
     ordered = sorted(merged.values(), key=arm_sort_key, reverse=True)
     if limit_per_axis > 0:
         ordered = ordered[:limit_per_axis]
 
     labels_frozen = {eid: frozenset(ls) for eid, ls in labels_by_ep.items()}
-    return rr_label, ordered, labels_frozen
+    cue_keys_frozen = {eid: frozenset(ks) for eid, ks in cue_keys_by_ep.items()}
+    return rr_label, ordered, labels_frozen, cue_keys_frozen
 
 
 @dataclass(frozen=True)
@@ -251,10 +279,17 @@ class EpisodicPassiveRecallRetrievalService:
             if len(axis_to_cues[bucket]) == 1:
                 axis_order.append(bucket)
 
-        cue_arms: list[tuple[str, list[SubjectiveEpisode], dict[str, frozenset[str]]]] = []
+        cue_arms: list[
+            tuple[
+                str,
+                list[SubjectiveEpisode],
+                dict[str, frozenset[str]],
+                dict[str, frozenset[str]],
+            ]
+        ] = []
         for bucket in axis_order:
             cues = axis_to_cues[bucket]
-            rr_label, rows, granular = _merged_ordered_episodes_for_cue_bucket(
+            rr_label, rows, granular, cue_keys = _merged_ordered_episodes_for_cue_bucket(
                 self._store,
                 player_id,
                 bucket=bucket,
@@ -263,7 +298,39 @@ class EpisodicPassiveRecallRetrievalService:
                 being_id=being_id,
                 min_occurred_at=min_occurred_at,
             )
-            cue_arms.append((rr_label, rows, granular))
+            cue_arms.append((rr_label, rows, granular, cue_keys))
+
+        # PR6 (R3): cross-bucket での cue マッチ数を episode 単位で集計する。
+        # 同一 episode が複数 bucket (= 別 axis ファミリー) の cue にヒット
+        # していれば、その distinct canonical 数 (axis:value) を score とする。
+        # 各 cue arm の rows を score 降順に stable sort (= 同点は bucket 内
+        # の既存順 = within-bucket cue hit 数 + granularity + occurred_at を
+        # 保つ)。
+        #
+        # NOTE: temporal / spreading 軸の rows は cue マッチ由来ではないため
+        # ここでは並べ替えない (= multi_cue_canonicals は cue_arms 由来のみで
+        # 集計し、temporal / spreading 軸の episode の score は 0 になる)。
+        # 実運用上の整合性: R2 で temporal は cue 不在時のみ発火し、spreading
+        # は cue を seed にした派生のため、両者と cue が同一 episode を
+        # 出すことは稀。
+        multi_cue_canonicals: dict[str, frozenset[str]] = {}
+        accum: dict[str, set[str]] = defaultdict(set)
+        for _label, _rows, _granular, cue_keys in cue_arms:
+            for eid, keys in cue_keys.items():
+                accum[eid].update(keys)
+        for eid, keys in accum.items():
+            multi_cue_canonicals[eid] = frozenset(keys)
+
+        def multi_cue_score(eid: str) -> int:
+            return len(multi_cue_canonicals.get(eid, frozenset()))
+
+        def _arm_score_key(ep: SubjectiveEpisode) -> int:
+            return multi_cue_score(ep.episode_id)
+
+        cue_arms = [
+            (label, sorted(rows, key=_arm_score_key, reverse=True), granular, cue_keys)
+            for label, rows, granular, cue_keys in cue_arms
+        ]
 
         episode_by_id: dict[str, SubjectiveEpisode] = {}
         source_axes_by_episode: dict[str, set[str]] = defaultdict(set)
@@ -272,7 +339,7 @@ class EpisodicPassiveRecallRetrievalService:
             episode_by_id[ep.episode_id] = ep
             source_axes_by_episode[ep.episode_id].add(PASSIVE_RECALL_AXIS_TEMPORAL)
 
-        for _, rows, granular in cue_arms:
+        for _, rows, granular, _ in cue_arms:
             for ep in rows:
                 eid = ep.episode_id
                 episode_by_id[eid] = ep
@@ -306,14 +373,14 @@ class EpisodicPassiveRecallRetrievalService:
                 spreading_rows.append(ep)
 
         raw_counts: list[tuple[str, int]] = [(PASSIVE_RECALL_AXIS_TEMPORAL, len(temporal_rows))]
-        raw_counts.extend((lab, len(rows)) for lab, rows, _g in cue_arms)
+        raw_counts.extend((lab, len(rows)) for lab, rows, _g, _k in cue_arms)
         if spreading_rows:
             raw_counts.append((PASSIVE_RECALL_AXIS_SPREADING, len(spreading_rows)))
 
         union_before_cap = len(episode_by_id)
 
         arms: list[tuple[str, list[SubjectiveEpisode]]] = [(PASSIVE_RECALL_AXIS_TEMPORAL, temporal_rows)]
-        arms.extend((lab, rows) for lab, rows, _g in cue_arms)
+        arms.extend((lab, rows) for lab, rows, _g, _k in cue_arms)
         if spreading_rows:
             arms.append((PASSIVE_RECALL_AXIS_SPREADING, spreading_rows))
 
