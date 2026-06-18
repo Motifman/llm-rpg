@@ -106,6 +106,7 @@ def build_situation_episodic_cues(
     latest_action: ActionResultEntry | None = None,
     observation_prose: str | None = None,
     noun_matcher: "IWorldNounMatcher | None" = None,
+    additional_freetexts: Sequence[str] | None = None,
 ) -> tuple[EpisodicCue, ...]:
     """
     受動想起用の「現在局面」に相当する cue 列を、保存時 `build_episodic_cues_for_tool_turn` と
@@ -119,6 +120,11 @@ def build_situation_episodic_cues(
     から ``OBSERVATION_FREETEXT`` source で cue を追加する。これにより SNS / speech
     の prose に「書架A」とだけ書かれているケースでも place_spot:3 cue が立つ。
 
+    PR7 (R4): ``additional_freetexts`` が与えられたら、各文字列にも noun_matcher を
+    適用する。caller は直近 N 件の観測 prose / 自分の発話 / 自分の内心などを
+    まとめて渡す想定。これにより「最新観測 1 件にしか matcher が当たらない」
+    狭さが解消される。None / 空 list / matcher 未注入の場合は何もしない。
+
     None の入力や未知フィールドは黙って無視する。
     """
     collected: list[EpisodicCue] = []
@@ -130,6 +136,7 @@ def build_situation_episodic_cues(
             observation_structured=observation_structured,
             observation_prose=observation_prose,
             noun_matcher=noun_matcher,
+            additional_freetexts=additional_freetexts,
         )
     )
     validated = _validate_and_dedupe(collected)
@@ -142,9 +149,10 @@ def _collect_situation_episodic_cues(
     observation_structured: Mapping[str, Any] | None,
     observation_prose: str | None = None,
     noun_matcher: "IWorldNounMatcher | None" = None,
+    additional_freetexts: Sequence[str] | None = None,
 ) -> list[EpisodicCue]:
-    """runtime / 観測 structured / 観測 prose から局面 cue を組み立てる
-    (重複除去・件数上限は呼び出し側)。"""
+    """runtime / 観測 structured / 観測 prose / 追加 freetexts から局面 cue を
+    組み立てる (重複除去・件数上限は呼び出し側)。"""
     out: list[EpisodicCue] = []
     rt = runtime_context
     if rt is not None:
@@ -156,6 +164,12 @@ def _collect_situation_episodic_cues(
 
     if observation_prose and noun_matcher is not None:
         out.extend(_cues_from_observation_prose(observation_prose, noun_matcher))
+
+    if additional_freetexts and noun_matcher is not None:
+        for raw in additional_freetexts:
+            if not raw:
+                continue
+            out.extend(_cues_from_observation_prose(raw, noun_matcher))
 
     if rt is not None:
         out.extend(_cues_from_runtime_targets(rt.targets))

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.dtos import (
+    ActionResultEntry,
     SystemPromptPlayerInfoDto,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
@@ -77,8 +78,51 @@ DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS = 10
 DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES = 10
 MESSAGE_WHEN_PLAYER_NOT_PLACED = "現在地: 未配置。ゲームに参加するまで待機しています。"
 
+# PR7 (R4): noun_matcher に通す追加テキストの上限。直近 N 件の観測 / 行動結果
+# を対象にする。長すぎる prose は per-text char cap で打ち切り、Aho-Corasick
+# の線形性を信じても pathological 入力で時間爆発しないようにする。
+_R4_RECENT_FREETEXT_LIMIT = 5
+_R4_PER_TEXT_CHAR_CAP = 2048
+
 
 _module_logger = logging.getLogger(__name__)
+
+
+def _gather_additional_freetexts_for_recall(
+    observations: List[ObservationEntry],
+    action_results: List[ActionResultEntry],
+) -> list[str]:
+    """PR7 (R4): recall 用に noun_matcher に通す追加文字列を集める。
+
+    対象:
+    - 直近 ``_R4_RECENT_FREETEXT_LIMIT`` 件の観測 prose ([1:] = 最新を除く。
+      最新は別途 ``observation_prose`` として渡されるため重複させない)
+    - 直近 ``_R4_RECENT_FREETEXT_LIMIT`` 件の行動結果の action_summary +
+      result_summary (= 自分の speech / inner_thought / その他ツール発話の
+      文字列)
+
+    NOTE: ``action_results[0]`` は ``build_situation_episodic_cues`` に
+    ``latest_action`` として別途渡されるが、そちらの経路は tool_name と outcome
+    の cue を立てるだけで **action_summary / result_summary の自由文に対しては
+    noun_matcher を当てない**。よってここで `[0]` を含めるのが正しい (= noun
+    抽出パスはこちらが唯一)。下流 ``_validate_and_dedupe`` で重複 cue は 1 件化
+    されるので最終 cue 列に重複は出ない。
+
+    各テキストは ``_R4_PER_TEXT_CHAR_CAP`` 文字に切る (pathological prose
+    での matcher 時間爆発を避ける safety cap)。
+    """
+    out: list[str] = []
+    # observations は新しい順なので [0] は除いて [1:LIMIT+1] を取る
+    for entry in observations[1 : _R4_RECENT_FREETEXT_LIMIT + 1]:
+        prose = entry.output.prose
+        if prose:
+            out.append(prose[:_R4_PER_TEXT_CHAR_CAP])
+    for ar in action_results[:_R4_RECENT_FREETEXT_LIMIT]:
+        if ar.action_summary:
+            out.append(ar.action_summary[:_R4_PER_TEXT_CHAR_CAP])
+        if ar.result_summary:
+            out.append(ar.result_summary[:_R4_PER_TEXT_CHAR_CAP])
+    return out
 
 
 def _join_passive_recall_texts(
@@ -747,12 +791,16 @@ class DefaultPromptBuilder(IPromptBuilder):
             observation_structured = observations[0].output.structured
             observation_prose = observations[0].output.prose
         latest_action = action_results[0] if action_results else None
+        additional_freetexts = _gather_additional_freetexts_for_recall(
+            observations, action_results
+        )
         situation_cues = build_situation_episodic_cues(
             runtime_context=ui_context.tool_runtime_context,
             observation_structured=observation_structured,
             latest_action=latest_action,
             observation_prose=observation_prose,
             noun_matcher=self._noun_matcher,
+            additional_freetexts=additional_freetexts,
         )
         recall_now = datetime.now(timezone.utc)
         # PR5 (R1): sliding window にまだ生きている直近 episode を recall から
@@ -877,12 +925,16 @@ class DefaultPromptBuilder(IPromptBuilder):
             observation_structured = observations[0].output.structured
             observation_prose = observations[0].output.prose
         latest_action = action_results[0] if action_results else None
+        additional_freetexts = _gather_additional_freetexts_for_recall(
+            observations, action_results
+        )
         situation_cues = build_situation_episodic_cues(
             runtime_context=ui_context.tool_runtime_context,
             observation_structured=observation_structured,
             latest_action=latest_action,
             observation_prose=observation_prose,
             noun_matcher=self._noun_matcher,
+            additional_freetexts=additional_freetexts,
         )
         now = datetime.now(timezone.utc)
         try:
