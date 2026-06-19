@@ -331,9 +331,13 @@ experiment-survival:
 #   RECALL_PROBE_MODEL    既定 openrouter/deepseek/deepseek-v4-flash
 #   RECALL_PROBE_PROVIDER 既定 DeepInfra
 #   RECALL_PROBE_QUANT    既定 fp4
+#   RECALL_PROBE_SCENARIO 既定 data/scenarios/recall_probe_v1.json
+#                         v2 (中立 objective + passive 痩せ) を使うときは
+#                         data/scenarios/recall_probe_v2.json
 RECALL_PROBE_MODEL ?= openrouter/deepseek/deepseek-v4-flash
 RECALL_PROBE_PROVIDER ?= DeepInfra
 RECALL_PROBE_QUANT ?= fp4
+RECALL_PROBE_SCENARIO ?= data/scenarios/recall_probe_v1.json
 experiment-recall-probe:
 	@mkdir -p var/runs
 	LLM_CLIENT=$(if $(DRY_RUN),stub,litellm) \
@@ -349,6 +353,7 @@ experiment-recall-probe:
 	LLM_TURN_PARALLEL_WORKERS=1 \
 	SPOT_GRAPH_TICK_LOOP_ENABLED=false \
 	uv run python scripts/run_recall_probe_experiment.py \
+		--scenario $(RECALL_PROBE_SCENARIO) \
 		$(if $(DRY_RUN),--no-llm,) \
 		$(if $(OUT),--out $(OUT),)
 

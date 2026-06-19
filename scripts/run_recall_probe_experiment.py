@@ -67,7 +67,7 @@ for p in (_REPO_ROOT, _REPO_ROOT / "src"):
 
 logger = logging.getLogger("run_recall_probe_experiment")
 
-_SCENARIO_PATH = _REPO_ROOT / "data" / "scenarios" / "recall_probe_v1.json"
+_DEFAULT_SCENARIO_PATH = _REPO_ROOT / "data" / "scenarios" / "recall_probe_v1.json"
 
 # 質問プログラム (tick, prose, structured.content)。
 # tick は probe injection を実施するタイミング (= advance_tick の前)。
@@ -121,10 +121,20 @@ _PAST_EPISODES: Tuple[Dict[str, Any], ...] = (
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--scenario",
+        type=Path,
+        default=_DEFAULT_SCENARIO_PATH,
+        help=(
+            f"シナリオ JSON のパス (default {_DEFAULT_SCENARIO_PATH.name})。"
+            "v2 (= 中立 objective + 接続切り) を使うときは "
+            "data/scenarios/recall_probe_v2.json を指定する。"
+        ),
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         default=None,
-        help="出力 dir (省略時は var/runs/recall_probe_v1_<timestamp>/)",
+        help="出力 dir (省略時は var/runs/<scenario_id>_<timestamp>/)",
     )
     parser.add_argument(
         "--max-world-ticks",
@@ -140,11 +150,11 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _resolve_out_dir(arg_out: Optional[Path]) -> Path:
+def _resolve_out_dir(arg_out: Optional[Path], scenario_path: Path) -> Path:
     if arg_out is not None:
         return arg_out
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    return _REPO_ROOT / "var" / "runs" / f"recall_probe_v1_{ts}"
+    return _REPO_ROOT / "var" / "runs" / f"{scenario_path.stem}_{ts}"
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -152,7 +162,7 @@ def _resolve_out_dir(arg_out: Optional[Path]) -> Path:
 # ─────────────────────────────────────────────────────────────────────
 
 
-def _setup_runtime(*, no_llm: bool) -> Tuple[Any, Any, str]:
+def _setup_runtime(*, no_llm: bool, scenario_path: Path) -> Tuple[Any, Any, str]:
     """GameRuntimeManager 経由で runtime / session を作る。"""
     if no_llm:
         os.environ["LLM_CLIENT"] = "stub"
@@ -172,12 +182,12 @@ def _setup_runtime(*, no_llm: bool) -> Tuple[Any, Any, str]:
     tmp = tempfile.mkdtemp(prefix="recall_probe_")
     chars_path = Path(tmp) / "characters.json"
     mgr = GameRuntimeManager(
-        scenarios_dir=_SCENARIO_PATH.parent, characters_path=chars_path
+        scenarios_dir=scenario_path.parent, characters_path=chars_path
     )
     char = mgr.create_character(CharacterCreateRequest(name="recall_probe"))
     summary = mgr.create_session(
         SessionCreateRequest(
-            world_id=_SCENARIO_PATH.stem, character_ids=[char.id]
+            world_id=scenario_path.stem, character_ids=[char.id]
         )
     )
     state = mgr._sessions[summary.session_id]
@@ -489,7 +499,7 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
 
     args = _parse_args()
-    out_dir = _resolve_out_dir(args.out)
+    out_dir = _resolve_out_dir(args.out, args.scenario)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     from ai_rpg_world.application.trace import JsonlTraceRecorder
@@ -499,7 +509,7 @@ def main() -> int:
 
     t0 = time.monotonic()
     try:
-        runtime, state, _tmp = _setup_runtime(no_llm=args.no_llm)
+        runtime, state, _tmp = _setup_runtime(no_llm=args.no_llm, scenario_path=args.scenario)
         runtime.set_trace_recorder(recorder)
         _inject_past_episodes(runtime, recorder)
         _run_tick_loop(
