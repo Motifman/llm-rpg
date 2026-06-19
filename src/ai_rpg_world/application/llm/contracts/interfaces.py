@@ -107,6 +107,8 @@ class IActionResultStore(ABC):
         argument_fingerprint: Optional[str] = None,
         should_reschedule: bool = False,
         expected_result: Optional[str] = None,
+        intention: Optional[str] = None,
+        emotion_hint: Optional[str] = None,
     ) -> None:
         """行動結果を 1 件追加する。"""
         pass

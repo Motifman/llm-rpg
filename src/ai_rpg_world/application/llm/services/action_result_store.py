@@ -35,6 +35,8 @@ class DefaultActionResultStore(IActionResultStore):
         game_time_label: Optional[str] = None,
         omit_result_in_prompt: bool = False,
         expected_result: Optional[str] = None,
+        intention: Optional[str] = None,
+        emotion_hint: Optional[str] = None,
         scene_boundary: bool = False,
         occurred_tick: Optional[int] = None,
     ) -> None:
@@ -64,6 +66,10 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("omit_result_in_prompt must be bool")
         if expected_result is not None and not isinstance(expected_result, str):
             raise TypeError("expected_result must be str or None")
+        if intention is not None and not isinstance(intention, str):
+            raise TypeError("intention must be str or None")
+        if emotion_hint is not None and not isinstance(emotion_hint, str):
+            raise TypeError("emotion_hint must be str or None")
         if not isinstance(scene_boundary, bool):
             raise TypeError("scene_boundary must be bool")
         if occurred_tick is not None and (
@@ -85,6 +91,8 @@ class DefaultActionResultStore(IActionResultStore):
             game_time_label=game_time_label,
             omit_result_in_prompt=omit_result_in_prompt,
             expected_result=expected_result,
+            intention=intention,
+            emotion_hint=emotion_hint,
             scene_boundary=scene_boundary,
             occurred_tick=occurred_tick,
         )
