@@ -188,3 +188,112 @@ class TestComputeTemplateHelpers:
         out = compute_template_recall(long_line, what="x")
         assert len(out) <= 700
         assert out.endswith("…")
+
+
+class TestPredictionErrorCompletion:
+    """prediction_error が LLM 補完 + 構造的 fallback で埋まる (PR2b)。"""
+
+    def _encoding_with_expected(self, *, success: bool = True) -> Any:
+        t = datetime(2026, 5, 4, 4, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t,
+            action_summary="ノアに声をかけた",
+            result_summary="ok" if success else "無視された",
+            tool_name="speech_say",
+            success=success,
+            expected_result="ノアが返事をする",
+        )
+        return build_chunk_encoding_input(PlayerId(7), (), (act,))
+
+    def test_llm_prediction_error_is_set(self) -> None:
+        """LLM が返した prediction_error が episode に入る。"""
+        enc = self._encoding_with_expected()
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        svc = EpisodicChunkSubjectiveFieldsService(
+            _StubSubjectivePort(
+                {
+                    "interpreted": "i",
+                    "recall_text": "r",
+                    "prediction_error": "話せると思ったが黙って立ち去られた。",
+                }
+            ),
+        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+        assert merged.prediction_error == "話せると思ったが黙って立ち去られた。"
+
+    def test_empty_llm_prediction_error_with_no_failure_is_none(self) -> None:
+        """予測どおり (空 prediction_error) かつ失敗なしなら None。"""
+        enc = self._encoding_with_expected(success=True)
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        svc = EpisodicChunkSubjectiveFieldsService(
+            _StubSubjectivePort(
+                {"interpreted": "i", "recall_text": "r", "prediction_error": ""}
+            ),
+        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+        assert merged.prediction_error is None
+
+    def test_structured_fallback_on_llm_failure_with_expected_and_failure(self) -> None:
+        """LLM 失敗 + expected あり + 失敗 action ありなら構造的 fallback が入る。"""
+        enc = self._encoding_with_expected(success=False)
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        svc = EpisodicChunkSubjectiveFieldsService(
+            _StubSubjectivePort(
+                LlmApiCallException("down", error_code="LLM_API_CALL_FAILED")
+            ),
+        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+        assert merged.prediction_error == "予測していたが、行動の一部が失敗した。"
+
+    def test_no_structured_fallback_when_all_success(self) -> None:
+        """LLM 失敗 + expected あり + 全成功なら None (誤った驚きを捏造しない)。"""
+        enc = self._encoding_with_expected(success=True)
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        svc = EpisodicChunkSubjectiveFieldsService(
+            _StubSubjectivePort(
+                LlmApiCallException("down", error_code="LLM_API_CALL_FAILED")
+            ),
+        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+        assert merged.prediction_error is None
+
+    def test_no_fallback_when_no_expected(self) -> None:
+        """expected が無ければ失敗があっても prediction_error は None。"""
+        t = datetime(2026, 5, 4, 5, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t,
+            action_summary="x",
+            result_summary="失敗した",
+            tool_name="inspect",
+            success=False,
+        )
+        enc = build_chunk_encoding_input(PlayerId(7), (), (act,))
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        svc = EpisodicChunkSubjectiveFieldsService(
+            _StubSubjectivePort(
+                LlmApiCallException("down", error_code="LLM_API_CALL_FAILED")
+            ),
+        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+        assert merged.prediction_error is None
+
+    def test_prompt_includes_prediction_error_instruction_and_expected(self) -> None:
+        """system prompt に prediction_error 指示、user に expected が渡る。"""
+        enc = self._encoding_with_expected()
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        port = _StubSubjectivePort(
+            {"interpreted": "i", "recall_text": "r", "prediction_error": ""}
+        )
+        svc = EpisodicChunkSubjectiveFieldsService(port)
+        svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+        assert port.last_messages is not None
+        sys_content = next(
+            (m["content"] for m in port.last_messages if m.get("role") == "system"), ""
+        )
+        user_content = next(
+            (m["content"] for m in port.last_messages if m.get("role") == "user"), ""
+        )
+        assert "prediction_error" in sys_content
+        assert "expected" in user_content
+        # 予測本文がプロンプトに渡り、LLM が乖離を判断できる
+        assert "ノアが返事をする" in user_content
