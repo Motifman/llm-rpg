@@ -16,12 +16,11 @@ from typing import Any, Dict, FrozenSet, Optional
 # このセットに含まれる field は LLM が「自分の心情・推論を記述する」フィールドで、
 # 外界に対する効果 (どの object に / どの場所へ / どんな action を) には寄与しない。
 NARRATIVE_ARG_FIELDS: FrozenSet[str] = frozenset({
-    "inner_thought",      # 全 tool 共通の subjective narrative
+    "inner_thought",      # 全 world-action tool 共通の subjective narrative
     "reason",             # spot_graph_wait など
-    "intention",          # legacy / 一部 tool で使用
-    "expected_result",    # legacy / 一部 tool で使用
-    "attention",          # legacy
-    "emotion_hint",       # legacy
+    "intention",          # world-action tool の主観入力 (目的)
+    "expected_result",    # world-action tool の主観入力 (行動前の予測)
+    "emotion_hint",       # world-action tool の主観入力 (主要感情)
 })
 
 

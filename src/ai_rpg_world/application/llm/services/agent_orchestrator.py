@@ -140,7 +140,7 @@ def _validate_subjective_action_arguments(
                 error_code="MISSING_SUBJECTIVE_ACTION_FIELD",
                 remediation=(
                     "世界へ作用する tool では inner_thought / intention / "
-                    "expected_result / attention / emotion_hint を必ず指定してください。"
+                    "expected_result / emotion_hint を必ず指定してください。"
                 ),
                 should_reschedule=True,
             )

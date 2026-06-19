@@ -84,7 +84,6 @@ def _build_orch(*, recorder, tick_provider=lambda: 7):
         "inner_thought": "y",
         "intention": "y",
         "expected_result": "y",
-        "attention": "y",
         "emotion_hint": "neutral",
     }
     return LlmAgentOrchestrator(
@@ -134,7 +133,6 @@ class TestOrchestratorTraceRecording:
                     "inner_thought": "x",
                     "intention": "x",
                     "expected_result": "x",
-                    "attention": "x",
                     "emotion_hint": "neutral",
                 },
             ),
@@ -191,7 +189,6 @@ class TestOrchestratorMemoHintTrace:
             "inner_thought": "y",
             "intention": "y",
             "expected_result": "y",
-            "attention": "y",
             "emotion_hint": "neutral",
         }
         orch = LlmAgentOrchestrator(
