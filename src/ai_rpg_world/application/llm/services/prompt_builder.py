@@ -83,9 +83,82 @@ MESSAGE_WHEN_PLAYER_NOT_PLACED = "現在地: 未配置。ゲームに参加す�
 # の線形性を信じても pathological 入力で時間爆発しないようにする。
 _R4_RECENT_FREETEXT_LIMIT = 5
 _R4_PER_TEXT_CHAR_CAP = 2048
+_PREDICTION_FEEDBACK_FOLLOWUP_OBSERVATION_LIMIT = 2
 
 
 _module_logger = logging.getLogger(__name__)
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _nonempty_text(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    return text or None
+
+
+def build_prediction_feedback_text(
+    action_results: List[ActionResultEntry],
+    observations: List[ObservationEntry],
+) -> str:
+    """最新の予測付き action を、実際の結果と並べる prompt section 本文にする。"""
+
+    if not isinstance(action_results, list):
+        raise TypeError("action_results must be list")
+    if not isinstance(observations, list):
+        raise TypeError("observations must be list")
+    for entry in action_results:
+        if not isinstance(entry, ActionResultEntry):
+            raise TypeError("action_results must contain only ActionResultEntry")
+    for obs in observations:
+        if not isinstance(obs, ObservationEntry):
+            raise TypeError("observations must contain only ObservationEntry")
+
+    predicted_action: ActionResultEntry | None = None
+    expected: str | None = None
+    for entry in sorted(action_results, key=lambda e: _as_utc(e.occurred_at), reverse=True):
+        expected = _nonempty_text(getattr(entry, "expected_result", None))
+        if expected is not None:
+            predicted_action = entry
+            break
+    if predicted_action is None or expected is None:
+        return ""
+
+    action_at = _as_utc(predicted_action.occurred_at)
+    followups: list[str] = []
+    for obs in sorted(observations, key=lambda e: _as_utc(e.occurred_at)):
+        if _as_utc(obs.occurred_at) <= action_at:
+            continue
+        prose = _nonempty_text(obs.output.prose)
+        if prose is None:
+            continue
+        followups.append(prose)
+        if len(followups) >= _PREDICTION_FEEDBACK_FOLLOWUP_OBSERVATION_LIMIT:
+            break
+
+    tool = _nonempty_text(predicted_action.tool_name) or "unknown_tool"
+    status = "success=True" if predicted_action.success else "success=False"
+    actual_parts = [f"tool={tool}", status]
+    if not predicted_action.success and predicted_action.error_code:
+        actual_parts.append(f"error_code={predicted_action.error_code}")
+    result_summary = _nonempty_text(predicted_action.result_summary)
+    if result_summary is not None:
+        actual_parts.append(f"result={result_summary}")
+
+    lines = [
+        "前回の予測を、願望ではなく世界への仮説として読み直してください。",
+        f"- 予測: {expected}",
+        f"- 実際: {' / '.join(actual_parts)}",
+    ]
+    if followups:
+        lines.append("- 後続観測:")
+        lines.extend(f"  - {text}" for text in followups)
+    return "\n".join(lines)
 
 
 def _gather_additional_freetexts_for_recall(
@@ -491,6 +564,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         instruction: str,
         tools: List[Dict[str, Any]],
         user_content: str,
+        prediction_feedback_text: str = "",
     ) -> None:
         """``PROMPT_SECTION_BREAKDOWN`` を 1 件記録する (失敗は握りつぶす)。
 
@@ -525,6 +599,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 objective_chars=len(objective_text),
                 current_state_chars=len(current_state_text),
                 memos_chars=len(active_memos_text),
+                prediction_feedback_chars=len(prediction_feedback_text),
                 recent_events_chars=len(recent_events_text),
                 recall_chars=len(relevant_memories_text),
                 inventory_chars=len(inventory_text),
@@ -659,6 +734,9 @@ class DefaultPromptBuilder(IPromptBuilder):
         recent_events_text = self._recent_events_formatter.format(
             observations, action_results
         )
+        prediction_feedback_text = build_prediction_feedback_text(
+            action_results, observations
+        )
 
         # 5. 利用可能ツール取得
         tools = self._available_tools_provider.get_available_tools(current_state_dto)
@@ -740,6 +818,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             learned_text=learned_text,
             mid_summary_text=mid_summary_text,
             long_summary_text=long_summary_text,
+            prediction_feedback_text=prediction_feedback_text,
         )
 
         # Issue #227 chore β: failure_block (直前ターン失敗時の補正セクション)
@@ -780,6 +859,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             objective_text=objective_text,
             current_state_text=current_state_text,
             active_memos_text=active_memos_text,
+            prediction_feedback_text=prediction_feedback_text,
             recent_events_text=recent_events_text,
             relevant_memories_text=relevant_memories_text,
             inventory_text=inventory_text,

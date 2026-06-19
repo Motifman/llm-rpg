@@ -18,7 +18,6 @@ SUBJECTIVE_ACTION_FIELDS = (
     "inner_thought",
     "intention",
     "expected_result",
-    "attention",
     "emotion_hint",
 )
 
@@ -26,7 +25,6 @@ SUBJECTIVE_ACTION_TEXT_FIELDS = (
     "inner_thought",
     "intention",
     "expected_result",
-    "attention",
 )
 
 SUBJECTIVE_ACTION_FIELD_PROPERTIES: Dict[str, Dict[str, Any]] = {
@@ -51,12 +49,6 @@ SUBJECTIVE_ACTION_FIELD_PROPERTIES: Dict[str, Dict[str, Any]] = {
             "この行動をした結果、何が分かる・何が起きると予測しているか。"
             "願望や目的ではなく、行動前の予測を書く。"
         ),
-        "minLength": 1,
-        "maxLength": 500,
-    },
-    "attention": {
-        "type": "string",
-        "description": "現在もっとも注意している対象、手がかり、関係、危険、問いを短く書く。",
         "minLength": 1,
         "maxLength": 500,
     },

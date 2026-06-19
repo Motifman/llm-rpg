@@ -81,7 +81,6 @@ def _build_orch(
                 "inner_thought": "押そう",
                 "intention": "扉を固定する",
                 "expected_result": "扉が固定される",
-                "attention": "スイッチ",
                 "emotion_hint": "determination",
             }
         )
@@ -155,7 +154,6 @@ class TestOrchestratorMemoHintIntegration:
                     "inner_thought": "x",
                     "intention": "x",
                     "expected_result": "x",
-                    "attention": "x",
                     "emotion_hint": "neutral",
                 },
             ),

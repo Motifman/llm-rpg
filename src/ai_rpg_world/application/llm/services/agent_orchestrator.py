@@ -90,6 +90,20 @@ def _format_action_summary(tool_name: str, arguments: Optional[Dict[str, Any]] =
     return f"{tool_name}({args_str}) を実行しました。"
 
 
+def _extract_subjective_text(arguments: Dict[str, Any], key: str) -> Optional[str]:
+    """raw tool arguments から主観入力フィールド (予測 / 目的 / 感情) を取り出す。
+
+    canonical 化前の validated raw arguments から取る (resolver が subjective
+    fields を落とす場合があるため)。非文字列・空文字は None に倒す。
+    """
+
+    raw = arguments.get(key)
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    return text or None
+
+
 def _append_to_action_store(
     store: IActionResultStore,
     player_id: PlayerId,
@@ -100,6 +114,9 @@ def _append_to_action_store(
     tool_name: Optional[str] = None,
     fingerprint_args: Optional[Dict[str, Any]] = None,
     game_time_label: Optional[str] = None,
+    expected_result: Optional[str] = None,
+    intention: Optional[str] = None,
+    emotion_hint: Optional[str] = None,
 ) -> None:
     """行動結果を IActionResultStore に記録する（失敗メタ・引数フィンガープリント付き）。
 
@@ -120,6 +137,9 @@ def _append_to_action_store(
         should_reschedule=result_dto.should_reschedule,
         game_time_label=game_time_label,
         omit_result_in_prompt=result_dto.omit_result_in_prompt,
+        expected_result=expected_result,
+        intention=intention,
+        emotion_hint=emotion_hint,
     )
 
 
@@ -140,7 +160,7 @@ def _validate_subjective_action_arguments(
                 error_code="MISSING_SUBJECTIVE_ACTION_FIELD",
                 remediation=(
                     "世界へ作用する tool では inner_thought / intention / "
-                    "expected_result / attention / emotion_hint を必ず指定してください。"
+                    "expected_result / emotion_hint を必ず指定してください。"
                 ),
                 should_reschedule=True,
             )
@@ -422,6 +442,9 @@ class LlmAgentOrchestrator:
                 runtime_context,
             )
         except ToolArgumentResolutionException as e:
+            expected_result = _extract_subjective_text(arguments, "expected_result")
+            intention = _extract_subjective_text(arguments, "intention")
+            emotion_hint = _extract_subjective_text(arguments, "emotion_hint")
             result_dto = LlmCommandResultDto(
                 success=False,
                 message=str(e),
@@ -440,9 +463,15 @@ class LlmAgentOrchestrator:
                 tool_name=name or None,
                 fingerprint_args=arguments,
                 game_time_label=time_label,
+                expected_result=expected_result,
+                intention=intention,
+                emotion_hint=emotion_hint,
             )
             return result_dto
 
+        expected_result = _extract_subjective_text(arguments, "expected_result")
+        intention = _extract_subjective_text(arguments, "intention")
+        emotion_hint = _extract_subjective_text(arguments, "emotion_hint")
         current_tick = self._current_tick()
         self._trace_recorder.record(
             TraceEventKind.ACTION,
@@ -479,6 +508,9 @@ class LlmAgentOrchestrator:
             tool_name=name or None,
             fingerprint_args=canonical_arguments,
             game_time_label=time_label,
+            expected_result=expected_result,
+            intention=intention,
+            emotion_hint=emotion_hint,
         )
         if self._tool_call_loop_guard is not None and name:
             # action_result_store への記録成功後に loop guard を回す。

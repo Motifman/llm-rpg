@@ -108,6 +108,9 @@ def _action_result_entry_to_dict(entry: Any) -> dict[str, Any]:
         "should_reschedule": bool(entry.should_reschedule),
         "game_time_label": entry.game_time_label,
         "omit_result_in_prompt": bool(entry.omit_result_in_prompt),
+        "expected_result": entry.expected_result,
+        "intention": entry.intention,
+        "emotion_hint": entry.emotion_hint,
         "scene_boundary": bool(entry.scene_boundary),
         "occurred_tick": entry.occurred_tick,
     }
@@ -127,6 +130,9 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         should_reschedule=bool(data.get("should_reschedule", False)),
         game_time_label=data.get("game_time_label"),
         omit_result_in_prompt=bool(data.get("omit_result_in_prompt", False)),
+        expected_result=data.get("expected_result"),
+        intention=data.get("intention"),
+        emotion_hint=data.get("emotion_hint"),
         scene_boundary=bool(data.get("scene_boundary", False)),
         occurred_tick=data.get("occurred_tick"),
     )
@@ -475,7 +481,10 @@ class ObservationBufferSubsystemCodec(WorldSubsystemCodec):
 # 3. Action result store
 # ----------------------------------------------------------------------------
 _AR_SUBSYSTEM_KEY = "action_result_store"
-_AR_SCHEMA_VERSION = 1
+# v2: expected_result 追加 (PR1)。v3: intention / emotion_hint 追加 (PR2a)。
+# 旧 snapshot 互換は不要 (ユーザー判断)。restore は data.get で欠損を None に倒すため
+# 実害は出ないが、schema の意味変更を明示するため version を上げる。
+_AR_SCHEMA_VERSION = 3
 
 
 class ActionResultStoreSubsystemCodec(WorldSubsystemCodec):
