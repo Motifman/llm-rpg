@@ -19,6 +19,11 @@ class EpisodicCueSource(str, Enum):
     # から自動付与された cue (例: SNS で「書架A」と言及されると place_spot:3 が立つ)。
     # 構造化されていない自由文経由なので別 source として区別する。
     OBSERVATION_FREETEXT = "observation_freetext"
+    # PR8 (R5): Encounter Memory の record から直接立つ cue。直近 N tick 以内
+    # に encounter (初対面 / 再会) が起きた entity / spot / event をそのまま
+    # recall trigger に乗せる。runtime / prose では拾えない構造化 spawn /
+    # arrival の場面でも、過去 episode が recall されるようにするための経路。
+    ENCOUNTER = "encounter"
 
 
 __all__ = ["EpisodicCueSource"]

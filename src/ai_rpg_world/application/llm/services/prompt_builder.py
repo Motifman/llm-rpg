@@ -259,6 +259,9 @@ class DefaultPromptBuilder(IPromptBuilder):
         # service=None または top_k=0 なら prompt §「【関連する学び】」は出ない。
         semantic_passive_recall = episodic.semantic_passive_recall
         semantic_passive_top_k = episodic.semantic_passive_top_k
+        # PR8 (R5): encounter memory を recall cue 源にする。注入時のみ動く。
+        encounter_memory_for_recall = episodic.encounter_memory
+        encounter_recent_window_ticks = episodic.encounter_recent_window_ticks
 
         recent_observations_limit = limits.recent_observations_limit
         recent_actions_limit = limits.recent_actions_limit
@@ -422,9 +425,36 @@ class DefaultPromptBuilder(IPromptBuilder):
         # Phase 1c
         self._semantic_passive_recall = semantic_passive_recall
         self._semantic_passive_top_k = semantic_passive_top_k
+        # PR8 (R5)
+        self._encounter_memory_for_recall = encounter_memory_for_recall
+        self._encounter_recent_window_ticks = encounter_recent_window_ticks
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
         self._logger = logging.getLogger(self.__class__.__name__)
+
+    def _resolve_encounter_tick(self) -> Optional[int]:
+        """PR8 (R5): encounter cue 抽出のための現在 tick を返す。
+
+        - ``current_tick_provider`` 未注入なら None (= encounter cue は skip)
+        - provider 例外時は None フォールバック (recall を止めない)
+        - provider が int 以外を返したら None フォールバック (silent な
+          recall 停止より「encounter cue が立たないだけ」に倒す)
+        """
+        if self._current_tick_provider is None:
+            return None
+        try:
+            tick = self._current_tick_provider()
+        except Exception:
+            # encounter cue が立たなくなるため、provider 例外は warning で
+            # 残す (`encounter_memory.get_records_for` 側と粒度を揃える)。
+            self._logger.warning(
+                "current_tick_provider raised; skipping encounter cue",
+                exc_info=True,
+            )
+            return None
+        if not isinstance(tick, int) or isinstance(tick, bool):
+            return None
+        return tick
 
     def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
         """recall trace 用の recorder を runtime 時点で取得する。
@@ -794,6 +824,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         additional_freetexts = _gather_additional_freetexts_for_recall(
             observations, action_results
         )
+        encounter_tick = self._resolve_encounter_tick()
         situation_cues = build_situation_episodic_cues(
             runtime_context=ui_context.tool_runtime_context,
             observation_structured=observation_structured,
@@ -801,6 +832,10 @@ class DefaultPromptBuilder(IPromptBuilder):
             observation_prose=observation_prose,
             noun_matcher=self._noun_matcher,
             additional_freetexts=additional_freetexts,
+            encounter_memory=self._encounter_memory_for_recall,
+            encounter_player_id=player_id,
+            encounter_current_tick=encounter_tick,
+            encounter_recent_window_ticks=self._encounter_recent_window_ticks,
         )
         recall_now = datetime.now(timezone.utc)
         # PR5 (R1): sliding window にまだ生きている直近 episode を recall から
@@ -928,6 +963,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         additional_freetexts = _gather_additional_freetexts_for_recall(
             observations, action_results
         )
+        encounter_tick = self._resolve_encounter_tick()
         situation_cues = build_situation_episodic_cues(
             runtime_context=ui_context.tool_runtime_context,
             observation_structured=observation_structured,
@@ -935,6 +971,10 @@ class DefaultPromptBuilder(IPromptBuilder):
             observation_prose=observation_prose,
             noun_matcher=self._noun_matcher,
             additional_freetexts=additional_freetexts,
+            encounter_memory=self._encounter_memory_for_recall,
+            encounter_player_id=player_id,
+            encounter_current_tick=encounter_tick,
+            encounter_recent_window_ticks=self._encounter_recent_window_ticks,
         )
         now = datetime.now(timezone.utc)
         try:

@@ -56,6 +56,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.world_noun_matcher import (
         IWorldNounMatcher,
     )
+    from ai_rpg_world.application.encounter.contracts.interfaces import (
+        IEncounterMemory,
+    )
 
 
 DEFAULT_RECENT_OBSERVATIONS_LIMIT = 20
@@ -124,6 +127,12 @@ class EpisodicRecallConfig:
     # 詳細は docs/memory_system/semantic_memory_activation_plan.md §4。
     semantic_passive_recall: Optional["SemanticPassiveRecallService"] = None
     semantic_passive_top_k: int = 0
+    # PR8 (R5): Encounter Memory を recall cue trigger として使う。注入時、
+    # 直近 ``encounter_recent_window_ticks`` 以内に encounter した entity /
+    # spot / event が ``ENCOUNTER`` source の cue として recall に乗る。
+    # current_tick 取得は prompt_builder の ``current_tick_provider`` を流用。
+    encounter_memory: Optional["IEncounterMemory"] = None
+    encounter_recent_window_ticks: int = 5
 
 
 @dataclass(frozen=True)
