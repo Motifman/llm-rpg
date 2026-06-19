@@ -2002,19 +2002,25 @@ def create_escape_game_runtime(
         enable_string_seed_of_thought=_escape_llm_ssot_enabled_from_env(),
     )
 
-    # Issue #264 第16回実験 fix: シナリオに複数 player_spawns がある場合、
+    # Issue #264 第16回実験 fix: シナリオに player_spawns がある場合、
     # 各 player に persona を埋めた system prompt を個別に構築する。
     # これにより player 2 (例: リン) は「自分はリン」という persona block を
     # 受け取り、自呼び回帰 (リンが「リン、」と speech する) が解消される。
     #
+    # Issue #526 後続: 旧コードは ``len(player_spawns) > 1`` のときだけ
+    # per-player path を走らせていた。これは「1 player なら escape_character の
+    # legacy single-player path が persona を作るから不要」という前提だったが、
+    # ``escape_character is None`` で 1 player を実験する recall_probe 系で
+    # ``spawn.persona_prompt`` が完全に無視される設計バグになっていた。
+    # 制約を外して **player_spawns があれば常に per-player persona を構築** する。
+    #
     # ロジック:
-    #   - escape_character が指定されていればその player_id は escape_character の
-    #     rich persona を使う (旧挙動と一致)
-    #   - その他の player_id は fallback persona (= スポーン名から生成された
-    #     最小ペルソナ) を使う
+    #   - spawn.persona_prompt が設定されていれば最優先
+    #   - escape_character がこの spawn を指していれば rich persona
+    #   - それ以外は fallback persona (= スポーン名から生成された最小ペルソナ)
     #   - participant_names は各 player から見た「自分以外の探索者」のリスト
     system_prompts_by_player_id: Dict[int, str] = {}
-    if len(scenario.player_spawns) > 1:
+    if scenario.player_spawns:
         # escape_character に一致する spawn を特定
         escape_spawn: Optional[PlayerSpawnConfig] = None
         if escape_character is not None:
