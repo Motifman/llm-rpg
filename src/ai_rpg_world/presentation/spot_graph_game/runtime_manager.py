@@ -61,6 +61,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
+    TOOL_NAME_MEMORY_RECALL_EPISODES,
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
     TOOL_NAME_TODO_LIST,
@@ -700,6 +701,13 @@ class _EscapeGameLlmWiring:
             TOOL_NAME_TODO_LIST: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_LIST),
             TOOL_NAME_TODO_COMPLETE: self._make_auxiliary_tool_handler(
                 TOOL_NAME_TODO_COMPLETE
+            ),
+            # Issue #526 後続: memory_recall_episodes も aux 経路で dispatch する。
+            # ``runtime.run_llm_auxiliary_tool`` が ``_memory_recall_tool_executor``
+            # を併用するよう PR #535 で配線済み。tool 定義は episodic_stack ON
+            # のときだけ ``get_tool_definitions`` で expose される。
+            TOOL_NAME_MEMORY_RECALL_EPISODES: self._make_auxiliary_tool_handler(
+                TOOL_NAME_MEMORY_RECALL_EPISODES
             ),
         }
         # #344 配線漏れ修正: spot_graph_use_item / attack / give_item /

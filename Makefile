@@ -3,7 +3,8 @@
 	web-frontend-test web-frontend-build web-frontend \
 	asset-pipeline-sync asset-pipeline-sync-rembg asset-pipeline \
 	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud \
-	experiment experiment-publish experiment-survival vllm-tunnel vllm-check \
+	experiment experiment-publish experiment-survival experiment-recall-probe \
+	vllm-tunnel vllm-check \
 	check-no-internal-hostnames build-trace-viewer
 
 WEB_GAME_DB ?= var/game/ai_rpg_world.db
@@ -52,6 +53,8 @@ help:
 	@echo "  make experiment-publish ...   - experiment + 自動 gist publish"
 	@echo "  make experiment-survival OUT=... [EPISODIC=1]"
 	@echo "                                - survival_island_v2 専用 (140 tick / workers 4 / publish 既定)"
+	@echo "  make experiment-recall-probe OUT=... [DRY_RUN=1]"
+	@echo "                                - Issue #526 不在 2 検証用 (recall_probe_v1 / 15 tick / 1 player)"
 	@echo "  make build-trace-viewer RUN_DIR=...  - viewer 3 種 (main + episodic + timeline) を build"
 	@echo "  make vllm-tunnel              - v108 vLLM 用 SSH トンネル起動 (port $(VLLM_LOCAL_PORT))"
 	@echo "  make vllm-check               - トンネル + vLLM 応答確認"
@@ -313,6 +316,41 @@ experiment-survival:
 		QUANTIZATION=$(QUANTIZATION) \
 		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
 		PUBLISH=$(SURVIVAL_PUBLISH)
+
+# Issue #526 後続: 能動 recall (memory_recall_episodes) 検証用の小規模実験。
+# 1 player + 15 tick + 過去 episode 強制注入 + scripted NPC「シキ」の質問 3 つ。
+#
+# 使い方:
+#   make experiment-recall-probe OUT=var/runs/recall_probe_001
+#   make experiment-recall-probe DRY_RUN=1 OUT=/tmp/dryrun   # LLM 呼ばずに構造確認
+#
+# 既定: K run 設定 (rolling_summary / thread_pool / stable_to_volatile) +
+#       DeepInfra fp4 / deepseek-v4-flash。OPENROUTER_API_KEY が要る。
+#
+# 環境変数で上書き可能:
+#   RECALL_PROBE_MODEL    既定 openrouter/deepseek/deepseek-v4-flash
+#   RECALL_PROBE_PROVIDER 既定 DeepInfra
+#   RECALL_PROBE_QUANT    既定 fp4
+RECALL_PROBE_MODEL ?= openrouter/deepseek/deepseek-v4-flash
+RECALL_PROBE_PROVIDER ?= DeepInfra
+RECALL_PROBE_QUANT ?= fp4
+experiment-recall-probe:
+	@mkdir -p var/runs
+	LLM_CLIENT=$(if $(DRY_RUN),stub,litellm) \
+	LLM_MODEL=$(RECALL_PROBE_MODEL) \
+	OPENROUTER_PROVIDER=$(RECALL_PROBE_PROVIDER) \
+	OPENROUTER_QUANTIZATION=$(RECALL_PROBE_QUANT) \
+	OPENROUTER_REQUIRE_PARAMS=true \
+	LLM_EPISODIC_ENABLED=1 \
+	SHORT_TERM_MEMORY_KIND=rolling_summary \
+	SHORT_TERM_MEMORY_SCHEDULER_MODE=thread_pool \
+	PROMPT_SECTION_ORDER=stable_to_volatile \
+	LLM_IDLE_TIMEOUT_TICKS=1 \
+	LLM_TURN_PARALLEL_WORKERS=1 \
+	SPOT_GRAPH_TICK_LOOP_ENABLED=false \
+	uv run python scripts/run_recall_probe_experiment.py \
+		$(if $(DRY_RUN),--no-llm,) \
+		$(if $(OUT),--out $(OUT),)
 
 # vLLM への SSH トンネル (~/.ssh/config の Host エイリアス、既定 v108-vllm)
 # 実 FQDN は本リポジトリには書かない。docs/security_hosts_policy.md 参照。
