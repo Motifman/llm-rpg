@@ -146,6 +146,11 @@ TOOL_NAME_TODO_LIST = TOOL_NAME_MEMO_LIST
 TOOL_NAME_TODO_COMPLETE = TOOL_NAME_MEMO_DONE
 TOOL_NAME_MEMORY_EXPLORE_RELATED = TOOL_NAME_PREFIX_MEMORY + "explore_related"
 TOOL_NAME_MEMORY_SEARCH_SEMANTIC = TOOL_NAME_PREFIX_MEMORY + "search_semantic"
+# Issue #526 後続: episodic memory の能動 recall ツール (= 「思い出そう」と
+# 意志して過去 episode を取り戻す経路)。passive recall は prompt 構築で
+# 自動で走るが、この tool は LLM が ``about`` + ``time_range`` を渡して
+# 能動的に過去を呼び戻す。
+TOOL_NAME_MEMORY_RECALL_EPISODES = TOOL_NAME_PREFIX_MEMORY + "recall_episodes"
 TOOL_NAME_SPOT_GRAPH_TRAVEL_TO = TOOL_NAME_PREFIX_SPOT_GRAPH + "travel_to"
 TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION = TOOL_NAME_PREFIX_SPOT_GRAPH + "set_sub_location"
 TOOL_NAME_SPOT_GRAPH_EXPLORE = TOOL_NAME_PREFIX_SPOT_GRAPH + "explore"

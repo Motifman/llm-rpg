@@ -16,6 +16,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResol
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.application.llm.services.availability_resolvers import (
     MemoryExploreRelatedAvailabilityResolver,
+    MemoryRecallEpisodesAvailabilityResolver,
     MemorySearchSemanticAvailabilityResolver,
     TodoAddAvailabilityResolver,
     TodoCompleteAvailabilityResolver,
@@ -26,6 +27,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMO_DONE,
     TOOL_NAME_MEMO_LIST,
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
+    TOOL_NAME_MEMORY_RECALL_EPISODES,
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
 )
 
@@ -182,6 +184,70 @@ MEMORY_SEARCH_SEMANTIC_DEFINITION = ToolDefinitionDto(
 )
 
 
+# Issue #526 後続: episodic memory の能動 recall (= "思い出そう" と意志する)
+MEMORY_RECALL_EPISODES_DESCRIPTION = (
+    "過去に自分が経験した出来事を能動的に思い出そうとします。"
+    "passive な想起 (= prompt に自動で並ぶ「関連する記憶」) では拾えなかった "
+    "場面 (= 場所違いの過去 / 古い episode / 質問への返答) のための経路です。"
+    "\n\n"
+    "# いつ使うか\n"
+    "- 「昨日何してた?」「先週どこ行った?」のような時間軸の問いに答えるとき\n"
+    "- 誰かの名前を聞いて、その人物との過去の出来事を思い出したいとき\n"
+    "- 似た状況に再び遭遇して、過去の似た経験を参照したいとき\n"
+    "- 何か違和感があり、自分の過去の判断や約束を確認したいとき\n"
+    "\n"
+    "# 引数の書き方\n"
+    "- about: 思い出したい内容の自由文。**具体的な人物名・場所名・物の名前が"
+    "含まれていると recall がより的確になります** (例: 「カイトと閲覧室で"
+    "何を話したか」)。固有名詞が含まれない概念的な問い (例: 「俺昨日何"
+    "したっけ?」) でも使えますが、その場合は time_range と組み合わせる"
+    "のが効果的。\n"
+    "- time_range: 時間範囲の絞り込み (任意)。\"recent\"=直近の数時間、"
+    "\"today\"=今日、\"yesterday\"=昨日、\"this_week\"=今週、\"any\"=絞らない (既定)。\n"
+    "\n"
+    "# 結果\n"
+    "思い出した過去の出来事の説明文 (複数件のことがあります)。"
+    "全く思い出せなかったときは「思い出そうとしたが何も浮かばなかった」と"
+    "返ります。\n"
+    "\n"
+    "# 注意\n"
+    "うろ覚え・誤想起の可能性があります。返ってきた内容を新しい事実として"
+    "外部に言及するときは、自分の記憶であることを明示する (例: 「確か...だった"
+    "気がする」「うろ覚えだけど...」) と人間らしくなります。世界状態は変えません。"
+)
+
+MEMORY_RECALL_EPISODES_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "about": {
+            "type": "string",
+            "description": (
+                "思い出したい内容の自由文。具体的な人物名・場所名・物の名前が"
+                "含まれているとマッチしやすい (例: 「カイトと閲覧室で話した内容」)。"
+                "固有名詞が無いときは time_range と組み合わせる。"
+            ),
+        },
+        "time_range": {
+            "type": "string",
+            "enum": ["recent", "today", "yesterday", "this_week", "any"],
+            "description": (
+                "時間範囲の絞り込み。"
+                "recent=直近数時間 / today=今日 / yesterday=昨日 / "
+                "this_week=今週 / any=絞らない (既定)。"
+            ),
+        },
+    },
+    "required": ["about"],
+}
+
+MEMORY_RECALL_EPISODES_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_MEMORY_RECALL_EPISODES,
+    description=MEMORY_RECALL_EPISODES_DESCRIPTION,
+    parameters=MEMORY_RECALL_EPISODES_PARAMETERS,
+    category=ToolCategory.META_COGNITIVE,
+)
+
+
 def get_memo_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """memo 系ツールの (definition, resolver) 一覧を返す。"""
     return [
@@ -201,14 +267,20 @@ def get_memory_specs(
     episodic_explore_related_enabled: bool = False,
     semantic_search_enabled: bool = False,
     memo_enabled: Optional[bool] = None,
+    episodic_recall_enabled: bool = False,
 ) -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
-    """memo および任意で memory_explore_related / memory_search_semantic を返す。
+    """memo および任意で memory_explore_related / memory_search_semantic /
+    memory_recall_episodes を返す。
 
     ``todo_enabled`` は後方互換のための旧名引数。``memo_enabled`` を渡せば
     そちらが優先される。両方未指定は False (= memo を expose しない)。
 
     ``semantic_search_enabled`` は Phase 1d。LLM が semantic memory を能動検索
     したい時に使う ``memory_search_semantic`` を expose する。default False。
+
+    ``episodic_recall_enabled`` は Issue #526 後続。LLM が過去 episode を
+    「思い出そう」と能動的に呼び戻す ``memory_recall_episodes`` を expose
+    する。default False (= 検証フェーズで明示的に ON にする)。
     """
     if memo_enabled is None:
         memo_enabled = todo_enabled
@@ -223,11 +295,16 @@ def get_memory_specs(
         specs.append(
             (MEMORY_SEARCH_SEMANTIC_DEFINITION, MemorySearchSemanticAvailabilityResolver())
         )
+    if episodic_recall_enabled:
+        specs.append(
+            (MEMORY_RECALL_EPISODES_DEFINITION, MemoryRecallEpisodesAvailabilityResolver())
+        )
     return specs
 
 
 __all__ = [
     "MEMORY_SEARCH_SEMANTIC_DEFINITION",
+    "MEMORY_RECALL_EPISODES_DEFINITION",
     "MEMO_ADD_DEFINITION",
     "MEMO_LIST_DEFINITION",
     "MEMO_DONE_DEFINITION",

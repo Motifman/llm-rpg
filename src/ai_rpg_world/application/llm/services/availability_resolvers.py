@@ -65,6 +65,20 @@ class MemorySearchSemanticAvailabilityResolver(IAvailabilityResolver):
         return True
 
 
+class MemoryRecallEpisodesAvailabilityResolver(IAvailabilityResolver):
+    """episodic memory の能動 recall (Issue #526 不在 2)。
+
+    LLM からは常時呼び出し可能。実行時に 0 件なら「思い出そうとしたが何も
+    浮かばなかった」を message として返す (= 失敗の質感を学習させる)。
+    """
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        return True
+
+
 class SetDestinationAvailabilityResolver(IAvailabilityResolver):
     """目的地設定ツールは、現在地があり利用可能な移動先（スポット・ロケーション）が1件以上あるときに利用可能。"""
 
