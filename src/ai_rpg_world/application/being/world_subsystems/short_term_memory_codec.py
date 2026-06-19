@@ -108,6 +108,7 @@ def _action_result_entry_to_dict(entry: Any) -> dict[str, Any]:
         "should_reschedule": bool(entry.should_reschedule),
         "game_time_label": entry.game_time_label,
         "omit_result_in_prompt": bool(entry.omit_result_in_prompt),
+        "expected_result": entry.expected_result,
         "scene_boundary": bool(entry.scene_boundary),
         "occurred_tick": entry.occurred_tick,
     }
@@ -127,6 +128,7 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         should_reschedule=bool(data.get("should_reschedule", False)),
         game_time_label=data.get("game_time_label"),
         omit_result_in_prompt=bool(data.get("omit_result_in_prompt", False)),
+        expected_result=data.get("expected_result"),
         scene_boundary=bool(data.get("scene_boundary", False)),
         occurred_tick=data.get("occurred_tick"),
     )
@@ -475,7 +477,7 @@ class ObservationBufferSubsystemCodec(WorldSubsystemCodec):
 # 3. Action result store
 # ----------------------------------------------------------------------------
 _AR_SUBSYSTEM_KEY = "action_result_store"
-_AR_SCHEMA_VERSION = 1
+_AR_SCHEMA_VERSION = 2
 
 
 class ActionResultStoreSubsystemCodec(WorldSubsystemCodec):

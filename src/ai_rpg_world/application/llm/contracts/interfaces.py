@@ -106,6 +106,7 @@ class IActionResultStore(ABC):
         tool_name: Optional[str] = None,
         argument_fingerprint: Optional[str] = None,
         should_reschedule: bool = False,
+        expected_result: Optional[str] = None,
     ) -> None:
         """行動結果を 1 件追加する。"""
         pass
@@ -173,6 +174,7 @@ class IContextFormatStrategy(ABC):
         learned_text: str = "",
         mid_summary_text: str = "",
         long_summary_text: str = "",
+        prediction_feedback_text: str = "",
     ) -> str:
         """user prompt に入れる文脈テキストを返す。
 

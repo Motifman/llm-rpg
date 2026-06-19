@@ -90,6 +90,16 @@ def _format_action_summary(tool_name: str, arguments: Optional[Dict[str, Any]] =
     return f"{tool_name}({args_str}) を実行しました。"
 
 
+def _extract_expected_result(arguments: Dict[str, Any]) -> Optional[str]:
+    """raw tool arguments から行動前予測を取り出す。"""
+
+    raw = arguments.get("expected_result")
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    return text or None
+
+
 def _append_to_action_store(
     store: IActionResultStore,
     player_id: PlayerId,
@@ -100,6 +110,7 @@ def _append_to_action_store(
     tool_name: Optional[str] = None,
     fingerprint_args: Optional[Dict[str, Any]] = None,
     game_time_label: Optional[str] = None,
+    expected_result: Optional[str] = None,
 ) -> None:
     """行動結果を IActionResultStore に記録する（失敗メタ・引数フィンガープリント付き）。
 
@@ -120,6 +131,7 @@ def _append_to_action_store(
         should_reschedule=result_dto.should_reschedule,
         game_time_label=game_time_label,
         omit_result_in_prompt=result_dto.omit_result_in_prompt,
+        expected_result=expected_result,
     )
 
 
@@ -422,6 +434,7 @@ class LlmAgentOrchestrator:
                 runtime_context,
             )
         except ToolArgumentResolutionException as e:
+            expected_result = _extract_expected_result(arguments)
             result_dto = LlmCommandResultDto(
                 success=False,
                 message=str(e),
@@ -440,9 +453,11 @@ class LlmAgentOrchestrator:
                 tool_name=name or None,
                 fingerprint_args=arguments,
                 game_time_label=time_label,
+                expected_result=expected_result,
             )
             return result_dto
 
+        expected_result = _extract_expected_result(arguments)
         current_tick = self._current_tick()
         self._trace_recorder.record(
             TraceEventKind.ACTION,
@@ -479,6 +494,7 @@ class LlmAgentOrchestrator:
             tool_name=name or None,
             fingerprint_args=canonical_arguments,
             game_time_label=time_label,
+            expected_result=expected_result,
         )
         if self._tool_call_loop_guard is not None and name:
             # action_result_store への記録成功後に loop guard を回す。

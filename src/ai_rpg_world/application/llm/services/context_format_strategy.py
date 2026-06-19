@@ -87,6 +87,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         learned_text: str = "",
         mid_summary_text: str = "",
         long_summary_text: str = "",
+        prediction_feedback_text: str = "",
     ) -> str:
         for name, value in (
             ("current_state_text", current_state_text),
@@ -98,6 +99,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             ("learned_text", learned_text),
             ("mid_summary_text", mid_summary_text),
             ("long_summary_text", long_summary_text),
+            ("prediction_feedback_text", prediction_feedback_text),
         ):
             if not isinstance(value, str):
                 raise TypeError(f"{name} must be str")
@@ -113,6 +115,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
                 learned_text=learned_text,
                 mid_summary_text=mid_summary_text,
                 long_summary_text=long_summary_text,
+                prediction_feedback_text=prediction_feedback_text,
             )
         return _format_stable_to_volatile(
             current_state_text=current_state_text,
@@ -124,6 +127,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             learned_text=learned_text,
             mid_summary_text=mid_summary_text,
             long_summary_text=long_summary_text,
+            prediction_feedback_text=prediction_feedback_text,
         )
 
 
@@ -215,6 +219,15 @@ def _emit_recent_events(sections: list, recent_events_text: str) -> None:
     ])
 
 
+def _emit_prediction_feedback(sections: list, prediction_feedback_text: str) -> None:
+    if prediction_feedback_text.strip():
+        sections.extend([
+            "",
+            "【前回の予測と実際】",
+            prediction_feedback_text.strip(),
+        ])
+
+
 def _emit_relevant_memories(sections: list, relevant_memories_text: str) -> None:
     if relevant_memories_text.strip():
         sections.extend([
@@ -286,6 +299,7 @@ def _format_stable_to_volatile(
     learned_text: str,
     mid_summary_text: str,
     long_summary_text: str,
+    prediction_feedback_text: str,
 ) -> str:
     """Phase 0 default: 更新頻度の低い section から並べる。
 
@@ -355,7 +369,15 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 6. 直近の出来事 (常に出す。空なら「（なし）」)
+    # 6. 前回の予測と実際 (空なら省略)。直近出来事の読み方なので直前に置く。
+    if prediction_feedback_text.strip():
+        sections.extend([
+            "【前回の予測と実際】",
+            prediction_feedback_text.strip(),
+            "",
+        ])
+
+    # 7. 直近の出来事 (常に出す。空なら「（なし）」)
     sections.extend([
         "【直近の出来事】",
         _RECENT_EVENTS_PREAMBLE,
@@ -363,7 +385,7 @@ def _format_stable_to_volatile(
         "",
     ])
 
-    # 7. 現在地と周囲 (必須、最 volatile なので末尾)
+    # 8. 現在地と周囲 (必須、最 volatile なので末尾)
     sections.extend([
         "【現在地と周囲】",
         current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
@@ -383,6 +405,7 @@ def _format_legacy(
     learned_text: str,
     mid_summary_text: str,
     long_summary_text: str,
+    prediction_feedback_text: str,
 ) -> str:
     """Issue #227 chore β 時代の旧順序。A/B 検証用に保持。
 
@@ -398,6 +421,7 @@ def _format_legacy(
     _emit_mid_summary(sections, mid_summary_text)
     _emit_current_state(sections, current_state_text)
     _emit_active_memos(sections, active_memos_text)
+    _emit_prediction_feedback(sections, prediction_feedback_text)
     _emit_recent_events(sections, recent_events_text)
     _emit_relevant_memories(sections, relevant_memories_text)
     _emit_inventory(sections, inventory_text)

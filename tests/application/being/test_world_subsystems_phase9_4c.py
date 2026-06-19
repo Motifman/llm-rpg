@@ -55,6 +55,7 @@ def _action_entry(action: str = "walk") -> ActionResultEntry:
         success=True,
         tool_name=action,
         game_time_label="Day 1",
+        expected_result=f"{action} で道が開ける",
         occurred_tick=42,
     )
 
@@ -113,7 +114,9 @@ class TestActionResultStoreCodec:
         src._store[1] = [_action_entry("walk"), _action_entry("attack")]
         src_runtime = SimpleNamespace(_action_result_store=src)
         captured = ActionResultStoreSubsystemCodec().capture(src_runtime)
+        assert captured["schema_version"] == 2
         assert len(captured["entries"][0]["entries"]) == 2
+        assert captured["entries"][0]["entries"][0]["expected_result"] == "walk で道が開ける"
 
         dst = DefaultActionResultStore()
         dst_runtime = SimpleNamespace(_action_result_store=dst)
@@ -123,6 +126,7 @@ class TestActionResultStoreCodec:
             "walk_summary",
             "attack_summary",
         ]
+        assert results[0].expected_result == "walk で道が開ける"
         assert results[0].occurred_tick == 42
 
     def test_action_result_store_が_None_でも_no_op(self) -> None:
