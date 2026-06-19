@@ -100,3 +100,4 @@
 - memo_add
 - memo_list
 - memo_done
+- memory_recall_episodes
