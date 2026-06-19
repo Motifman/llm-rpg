@@ -123,7 +123,35 @@ recall trigger としての時間 cue は未解決。
 - in_window: ✅ 改善 (= 「素材を narrative にする」プロンプト側の支援が成立)
 - out_of_window: ⚪ 中立 (= 「直近の出来事」が「カイトの声 / たった今」になって区別はついたが、過去 episode 側は依然として現在地一致頼み)
 
+## memory_recall_episodes e2e 配線後の所感 (2026-06-19)
+
+dump 更新: 両 variant の `=== tools ===` セクション末尾に
+`memory_recall_episodes` が出るようになった:
+
+```
+=== tools ===
+...
+- memo_done
+- memory_recall_episodes      ← 新規
+```
+
+### 質感判定
+
+- **tools 側**: LLM が「思い出そう」と意志して tool を呼べる状態に到達 (= Issue #526 不在 2 への構造的経路が開通)
+- **prompt 側**: 「直近の出来事」「関連する記憶」section は変わらず (= 主観時間 v0 + 既存 passive recall のまま)
+
+### 残る穴
+
+実 LLM 呼び出しでは検証していない。次の点が宿題:
+
+- LLM はカイトの「昨日何してた?」を見たとき、`memory_recall_episodes` を **実際に呼ぶか**? それとも passive recall だけで済ませようとするか?
+- 呼んだ場合、`about` と `time_range` をどう組み立てるか? (= description の指示が効くか)
+- 呼ばないとしたら、prompt の system 指示で誘導する必要があるか?
+
+これは実 LLM 試走 (= LLM_CLIENT=litellm) で検証する別 task。
+
 ## 改訂履歴
 
 - **2026-06-19** (PR #531 = quality scenario 導入時): 初回 baseline
 - **2026-06-19** (主観時間 v0 PR): in_window に "[昨日]" / "[たった今]" のラベルが乗るようになった
+- **2026-06-19** (memory_recall_episodes e2e 配線): tools list に `memory_recall_episodes` が出るようになった (= Issue #526 不在 2 への経路開通)

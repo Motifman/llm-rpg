@@ -334,6 +334,14 @@ class EscapeGameRuntime:
     )
     _todo_store: InMemoryTodoStore = field(default_factory=InMemoryTodoStore, repr=False)
     _todo_tool_executor: Optional[TodoToolExecutor] = field(default=None, repr=False)
+    # Issue #526 後続: LLM が「思い出そう」と意志して過去 episode を呼び戻す
+    # ``memory_recall_episodes`` tool の executor。``_wire_auxiliary_tool_stack``
+    # 時に episodic_stack が wire されていれば構築。OFF (= 構築されない) なら
+    # tool 定義もリストに出さず、run_llm_auxiliary_tool でも未対応扱い。
+    # 型は ``Optional["EpisodicMemoryRecallToolExecutor"]`` だが circular import
+    # 回避のため lazy import + ``Any`` 注釈にしている (= 既存の lazy executor
+    # 配線と同じパターン)。
+    _memory_recall_tool_executor: Optional[Any] = field(default=None, repr=False)
     # シナリオ実行 trace の recorder。未設定なら NullTraceRecorder にフォールバック
     # (Phase 1d 配線)。
     _trace_recorder: Any = field(default=None, repr=False)
@@ -700,12 +708,29 @@ class EscapeGameRuntime:
         todo_complete) を除外し、spot_graph_* + speech (say / whisper) のみ
         を返す。LLM が「TODO 操作の連打」に逃げない条件で挙動を比較するため
         の純スポットグラフモード (B-4 / Issue #155 の判断材料)。
+
+        Issue #526 後続: episodic_stack が wire されていれば
+        ``memory_recall_episodes`` (= LLM が能動的に過去 episode を呼び戻す
+        tool) も併せて含める。``_episodic_stack=None`` 時は出さない (= 学習
+        パイプラインが無い実験 run と区別する)。
         """
         spot = [defn for defn, _ in get_spot_graph_specs()]
         if not self._include_todo_tools:
             return spot
-        todo = [defn for defn, _ in get_memory_specs(todo_enabled=True)]
-        return spot + todo
+        # Issue #526 後続: tool を expose するタイミングで auxiliary stack を
+        # 確実に wire しておく (= 「定義は出すが handler が無い」状態を防ぐ)。
+        # idempotent なので毎回呼んで OK。
+        if self._episodic_stack is not None:
+            self._wire_auxiliary_tool_stack()
+        episodic_recall_enabled = self._memory_recall_tool_executor is not None
+        memo = [
+            defn
+            for defn, _ in get_memory_specs(
+                todo_enabled=True,
+                episodic_recall_enabled=episodic_recall_enabled,
+            )
+        ]
+        return spot + memo
 
     # ── 観測パイプライン: イベントを処理して各プレイヤーに配信 ──
 
@@ -829,8 +854,15 @@ class EscapeGameRuntime:
         ここで構築・注入する。EscapeGameRuntime は独自経路で Being を持っていない
         ため、ローカル BeingRepository + Resolver を毎回作って provision する。
         run_llm_auxiliary_tool が呼ばれる前に必ず Being attach を済ませる。
+
+        Issue #526 後続: episodic_stack が wire 済なら memory_recall_episodes
+        の executor も組み立てる (idempotent)。
         """
+        # 既に両方 wire 済ならスキップ。recall executor は episodic_stack の
+        # 注入タイミング次第で「todo は wire 済だが recall がまだ」になり得る
+        # ため、各々の None check で個別に判定する。
         if self._todo_tool_executor is not None:
+            self._wire_memory_recall_executor_if_possible()
             return
         from ai_rpg_world.application.being.being_provisioning_service import (
             BeingProvisioningService,
@@ -864,6 +896,34 @@ class EscapeGameRuntime:
             being_attachment_resolver=self._aux_being_resolver,
             default_world_id=self._aux_being_default_world_id,
         )
+        self._wire_memory_recall_executor_if_possible()
+
+    def _wire_memory_recall_executor_if_possible(self) -> None:
+        """Issue #526 後続: memory_recall_episodes tool を idempotent に組み立てる。
+
+        episodic_stack が無いと episode store / noun_matcher にアクセス
+        できないため、その場合は executor を作らない (= tool は LLM 側
+        に出さない)。``_aux_being_resolver`` / ``_aux_being_default_world_id``
+        は ``_wire_auxiliary_tool_stack`` 内で先に初期化される前提。
+        """
+        if self._memory_recall_tool_executor is not None:
+            return
+        if self._episodic_stack is None:
+            return
+        if not hasattr(self, "_aux_being_resolver"):
+            return
+        from ai_rpg_world.application.llm.services.executors.episodic_memory_recall_tool_executor import (
+            EpisodicMemoryRecallToolExecutor,
+        )
+        from ai_rpg_world.application.llm.services.subjective_time import utc_now
+
+        self._memory_recall_tool_executor = EpisodicMemoryRecallToolExecutor(
+            episode_store=self._episodic_stack.episode_store,
+            being_attachment_resolver=self._aux_being_resolver,
+            default_world_id=self._aux_being_default_world_id,
+            noun_matcher=self._episodic_stack.noun_matcher,
+            time_provider=utc_now,
+        )
 
     @property
     def aux_being_resolver(self):
@@ -881,17 +941,31 @@ class EscapeGameRuntime:
     def run_llm_auxiliary_tool(
         self, player_id: PlayerId, name: str, arguments: Dict[str, Any]
     ) -> LlmCommandResultDto:
-        """TODO 系ツールを実行する。
+        """TODO 系ツール および memory_recall_episodes を実行する。
 
         Phase 3 Step 3a-3: memo handler を起動する前に player_id に Being が
         attach されていることを保証する (= TodoToolExecutor が being_id 経路を
         通れるようにする)。
+
+        Issue #526 後続: ``memory_recall_episodes`` も同じ aux Being 経路で
+        動くため、handler 辞書に merge する。executor が wire されていない
+        (= ``_episodic_stack=None``) なら memory_recall は未対応扱いになる。
         """
         self._wire_auxiliary_tool_stack()
         # idempotent: 既に attach 済なら何もしない
         self._aux_being_provisioning.ensure_attached(player_id)
         assert self._todo_tool_executor is not None
-        handlers = self._todo_tool_executor.get_handlers()
+        handlers: Dict[str, Any] = dict(self._todo_tool_executor.get_handlers())
+        if self._memory_recall_tool_executor is not None:
+            recall_handlers = self._memory_recall_tool_executor.get_handlers()
+            # サイレント上書き防止: 将来 executor が増えたとき同名 tool が
+            # 出ると後勝ちで挙動が変わるため、明示的に衝突を検出する。
+            overlap = handlers.keys() & recall_handlers.keys()
+            if overlap:
+                raise RuntimeError(
+                    f"tool handler name collision in aux stack: {sorted(overlap)}"
+                )
+            handlers.update(recall_handlers)
         handler = handlers.get(name)
         if handler is None:
             return LlmCommandResultDto(

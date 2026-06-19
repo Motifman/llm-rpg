@@ -315,6 +315,148 @@ class TestSmokeRecallSide:
         )
 
 
+class TestSmokeMemoryRecallTool:
+    """Issue #526 後続: ``memory_recall_episodes`` tool が end-to-end 配線されている。
+
+    1. tool 定義が ``get_tool_definitions`` で expose される
+    2. ``run_llm_auxiliary_tool`` 経由で handler が dispatch される
+    3. 過去 episode が能動 recall で引ける
+    """
+
+    def test_tool_is_exposed_when_episodic_enabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """env=1 で episodic stack が wire されているとき、tool 定義に memory_recall_episodes が含まれる。"""
+        runtime = _build_runtime(monkeypatch, enabled=True)
+        names = {d.name for d in runtime.get_tool_definitions()}
+        assert "memory_recall_episodes" in names
+
+    def test_tool_is_not_exposed_when_episodic_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """env 未設定で episodic stack が wire されていないとき、memory_recall_episodes は出ない。"""
+        runtime = _build_runtime(monkeypatch, enabled=False)
+        names = {d.name for d in runtime.get_tool_definitions()}
+        assert "memory_recall_episodes" not in names
+
+    def test_run_llm_auxiliary_tool_dispatches_memory_recall(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``run_llm_auxiliary_tool`` で memory_recall_episodes を呼ぶと、過去 episode が返る。"""
+        from datetime import datetime, timedelta, timezone
+
+        from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (
+            EpisodeAction,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.episode_location import (
+            EpisodeLocation,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.episode_source import (
+            EpisodeSource,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import (
+            EpisodicCue,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import (
+            EpisodicCueSource,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
+            SubjectiveEpisode,
+        )
+
+        runtime = _build_runtime(monkeypatch, enabled=True)
+        stack = runtime._episodic_stack
+        assert stack is not None
+
+        # リン (player_b) の player_id を取得
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        rin_id = None
+        for spawn in runtime.scenario.player_spawns:
+            if spawn.name == "リン":
+                rin_id = PlayerId(spawn.player_id)
+                break
+        assert rin_id is not None
+
+        # 書架A spot_id を取得
+        graph = runtime._spot_graph_repo.find_graph()
+        shelf_a_spot_id = None
+        for node in graph._spots.values():
+            if node.name == "書架 A":
+                shelf_a_spot_id = int(node.spot_id.value)
+                break
+        assert shelf_a_spot_id is not None
+
+        # aux Being を attach (= run_llm_auxiliary_tool が中でやるが、test 内で直接 put するので先に解決)
+        runtime._wire_auxiliary_tool_stack()
+        runtime._aux_being_provisioning.ensure_attached(rin_id)
+        rin_being = runtime._aux_being_resolver.resolve_being_id(
+            runtime._aux_being_default_world_id, rin_id
+        )
+        assert rin_being is not None
+
+        # 過去 episode を直接注入
+        stack.episode_store.put_by_being(
+            rin_being,
+            SubjectiveEpisode(
+                episode_id="recall-tool-shelf-a",
+                player_id=int(rin_id.value),
+                occurred_at=datetime.now(timezone.utc) - timedelta(hours=2),
+                game_time_label=None,
+                source=EpisodeSource(event_ids=("evt-recall-tool",)),
+                location=EpisodeLocation(spot_id=shelf_a_spot_id),
+                action=EpisodeAction(tool_name="spot_graph_travel_to"),
+                who=("player_lin",),
+                what="書架Aで断片語を見つけた",
+                why=None,
+                observed="書架A",
+                expected=None,
+                outcome="ok",
+                prediction_error=None,
+                felt=None,
+                interpreted=None,
+                cues=(
+                    EpisodicCue(
+                        axis="place_spot",
+                        value=str(shelf_a_spot_id),
+                        source=EpisodicCueSource.RUNTIME_CONTEXT,
+                    ),
+                ),
+                recall_text="RECALL_TOOL_MARKER: 書架Aで断片語を見つけた",
+            ),
+        )
+
+        # LLM が memory_recall_episodes を呼ぶシナリオを模倣
+        result = runtime.run_llm_auxiliary_tool(
+            rin_id,
+            "memory_recall_episodes",
+            {"about": "書架Aでのこと", "time_range": "today"},
+        )
+        assert result.success is True
+        assert "RECALL_TOOL_MARKER" in result.message
+
+    def test_returns_empty_message_when_no_match(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """過去 episode が無い状態で memory_recall_episodes を呼ぶと「思い出そうとしたが何も浮かばなかった」。"""
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        runtime = _build_runtime(monkeypatch, enabled=True)
+        rin_id = None
+        for spawn in runtime.scenario.player_spawns:
+            if spawn.name == "リン":
+                rin_id = PlayerId(spawn.player_id)
+                break
+        assert rin_id is not None
+        result = runtime.run_llm_auxiliary_tool(
+            rin_id,
+            "memory_recall_episodes",
+            {"about": "存在しない過去"},
+        )
+        assert result.success is True
+        assert "思い出そうとしたが何も浮かばなかった" in result.message
+
+
 class TestSmokeSubjectiveServiceWiring:
     """``LLM_EPISODIC_SUBJECTIVE_ENABLED`` の配線挙動 (Issue #295 後続)。
 
