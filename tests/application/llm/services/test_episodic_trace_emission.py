@@ -562,6 +562,7 @@ class TestPromptBuilderSectionBreakdownTraceEmission:
         assert p["objective_chars"] == 6
         assert p["current_state_chars"] == 5
         assert p["memos_chars"] == 2
+        assert p["prediction_feedback_chars"] == 0
         assert p["recent_events_chars"] == 60
         assert p["recall_chars"] == 10
         assert p["inventory_chars"] == 3

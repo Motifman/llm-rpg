@@ -47,6 +47,11 @@ class _StubArgumentResolver(IToolArgumentResolver):
         return arguments
 
 
+class _DroppingSubjectiveFieldResolver(IToolArgumentResolver):
+    def resolve(self, tool_name, arguments, runtime_context):
+        return {"content": arguments.get("content")}
+
+
 class _CapturingRecorder(ITraceRecorder):
     """記録された TraceEvent を全部メモリに保持する recorder。"""
 
@@ -154,6 +159,36 @@ class TestOrchestratorTraceRecording:
         orch.run_turn(PlayerId(1))
         action_event = next(e for e in rec.events if e.kind == TraceEventKind.ACTION)
         assert action_event.tick is None
+
+    def test_expected_result_は_resolver_後で落ちても_raw_args_から保存される(self) -> None:
+        """expected_result は canonical_arguments ではなく raw arguments から ActionResultEntry に入る。"""
+        action_store = DefaultActionResultStore(max_entries_per_player=10)
+        handler_map = {
+            "custom_tool": lambda pid, args: LlmCommandResultDto(
+                success=True, message="扉は開かなかった"
+            )
+        }
+        mapper = ToolCommandMapper(handler_map=handler_map)
+        args = {
+            "content": "扉を調べる",
+            "inner_thought": "嫌な予感がする",
+            "intention": "扉の仕掛けを確かめる",
+            "expected_result": "扉の開け方が分かる",
+            "emotion_hint": "caution",
+        }
+        orch = LlmAgentOrchestrator(
+            prompt_builder=_StubPromptBuilder(),
+            llm_client=_StubLlmClient("custom_tool", args),
+            tool_command_mapper=mapper,
+            action_result_store=action_store,
+            tool_argument_resolver=_DroppingSubjectiveFieldResolver(),
+            trace_recorder=NullTraceRecorder(),
+        )
+        orch.run_turn(PlayerId(1))
+
+        recent = action_store.get_recent(PlayerId(1), 1)
+        assert recent[0].expected_result == "扉の開け方が分かる"
+        assert recent[0].argument_fingerprint == '{"content": "扉を調べる"}'
 
 
 class TestOrchestratorMemoHintTrace:

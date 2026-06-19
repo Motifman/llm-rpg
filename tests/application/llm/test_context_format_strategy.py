@@ -110,6 +110,20 @@ class TestSectionBasedContextFormatStrategyDefault:
         }
         assert idx["obj"] < idx["memos"] < idx["inv"] < idx["mem"] < idx["events"] < idx["current"]
 
+    def test_prediction_feedback_は_recent_events_直前に出る(self, strategy):
+        """【前回の予測と実際】は section order に関わらず直近出来事の読み方として直前に置く。"""
+        text = strategy.format(
+            current_state_text="現在地",
+            recent_events_text="出来事",
+            relevant_memories_text="記憶",
+            prediction_feedback_text="- 予測: 扉が開く\n- 実際: 開かなかった",
+        )
+        assert "【前回の予測と実際】" in text
+        idx_mem = text.index("【関連する記憶】")
+        idx_feedback = text.index("【前回の予測と実際】")
+        idx_events = text.index("【直近の出来事】")
+        assert idx_mem < idx_feedback < idx_events
+
     def test_inventory_セクションが出ても順序が崩れない(self, strategy):
         """inventory は memories の前。"""
         text = strategy.format(
@@ -275,6 +289,19 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
         idx_state = text.index("【現在地と周囲】")
         assert idx_obj < idx_learned < idx_state
 
+    def test_legacy_でも_prediction_feedback_は_recent_events_直前(self, strategy):
+        """legacy 順序でも予測 feedback は【直近の出来事】の直前。"""
+        text = strategy.format(
+            current_state_text="現在地",
+            recent_events_text="出来事",
+            active_memos_text="メモ",
+            prediction_feedback_text="- 予測: 音がする\n- 実際: 静かだった",
+        )
+        idx_memos = text.index("【進行中のメモ】")
+        idx_feedback = text.index("【前回の予測と実際】")
+        idx_events = text.index("【直近の出来事】")
+        assert idx_memos < idx_feedback < idx_events
+
 
 class TestSectionBasedContextFormatStrategyValidation:
     """constructor / format の入力検証。"""
@@ -340,6 +367,16 @@ class TestSectionBasedContextFormatStrategyValidation:
                 current_state_text="",
                 recent_events_text="",
                 learned_text=[],  # type: ignore[arg-type]
+            )
+
+    def test_prediction_feedback_text_が_str_でなければ_type_error(self):
+        """prediction_feedback_text が str でないとき TypeError を投げる。"""
+        strategy = SectionBasedContextFormatStrategy()
+        with pytest.raises(TypeError, match="prediction_feedback_text must be str"):
+            strategy.format(
+                current_state_text="",
+                recent_events_text="",
+                prediction_feedback_text=[],  # type: ignore[arg-type]
             )
 
 

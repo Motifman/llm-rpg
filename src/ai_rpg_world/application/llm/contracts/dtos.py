@@ -117,6 +117,7 @@ class ActionResultEntry:
     should_reschedule: bool = False
     game_time_label: Optional[str] = None
     omit_result_in_prompt: bool = False
+    expected_result: Optional[str] = None
     # Issue #311 後続: エピソード記憶のチャンク境界判定で「シーン切り替え」を
     # 明示的に伝えるためのヒント。``True`` の action が bucket に入ったら
     # chunk を閉じる候補とする (cognitive science の "doorway effect" 等を
@@ -153,6 +154,8 @@ class ActionResultEntry:
             raise TypeError("game_time_label must be str or None")
         if not isinstance(self.omit_result_in_prompt, bool):
             raise TypeError("omit_result_in_prompt must be bool")
+        if self.expected_result is not None and not isinstance(self.expected_result, str):
+            raise TypeError("expected_result must be str or None")
         if not isinstance(self.scene_boundary, bool):
             raise TypeError("scene_boundary must be bool")
         if self.occurred_tick is not None and not isinstance(self.occurred_tick, int):
