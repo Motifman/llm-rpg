@@ -350,6 +350,7 @@ def _build_tool_handler_map(
     spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
     episodic_memory_explore_executor: Optional[EpisodicMemoryExploreToolExecutor] = None,
     semantic_memory_search_executor: Optional[Any] = None,
+    episodic_memory_recall_executor: Optional[Any] = None,
     trace_recorder: Optional["ITraceRecorder"] = None,
     speech_audience_resolver: Optional[Any] = None,
     being_attachment_resolver: Optional[Any] = None,
@@ -462,6 +463,8 @@ def _build_tool_handler_map(
         handler_map.update(episodic_memory_explore_executor.get_handlers())
     if semantic_memory_search_executor is not None:
         handler_map.update(semantic_memory_search_executor.get_handlers())
+    if episodic_memory_recall_executor is not None:
+        handler_map.update(episodic_memory_recall_executor.get_handlers())
     return handler_map
 
 
@@ -510,6 +513,8 @@ def _build_tool_stack(
     episodic_explore_related_enabled: bool = False,
     semantic_memory_search_executor: Optional[Any] = None,
     semantic_search_enabled: bool = False,
+    episodic_memory_recall_executor: Optional[Any] = None,
+    episodic_recall_enabled: bool = False,
     sliding_window: Optional[ISlidingWindowMemory] = None,
     action_result_store: Optional[IActionResultStore] = None,
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
@@ -556,6 +561,7 @@ def _build_tool_stack(
         todo_enabled=True,
         episodic_explore_related_enabled=episodic_explore_related_enabled,
         semantic_search_enabled=semantic_search_enabled,
+        episodic_recall_enabled=episodic_recall_enabled,
         include_movement_tools=include_tile_movement,
     )
     if spot_graph_tool_executor is not None:
@@ -600,6 +606,7 @@ def _build_tool_stack(
         spot_graph_tool_executor=spot_graph_tool_executor,
         episodic_memory_explore_executor=episodic_memory_explore_executor,
         semantic_memory_search_executor=semantic_memory_search_executor,
+        episodic_memory_recall_executor=episodic_memory_recall_executor,
         trace_recorder=trace_recorder,
         speech_audience_resolver=speech_audience_resolver,
         being_attachment_resolver=being_attachment_resolver,

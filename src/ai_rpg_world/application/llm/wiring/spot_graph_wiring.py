@@ -225,9 +225,11 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.wiring.feature_flags import (
         log_episodic_explore_related_state,
         log_semantic_llm_gist_state,
+        log_episodic_recall_state,
         log_semantic_passive_top_k_state,
         log_semantic_search_state,
         resolve_episodic_explore_related_enabled,
+        resolve_episodic_recall_enabled,
         resolve_semantic_llm_gist_enabled,
         resolve_semantic_passive_top_k,
         resolve_semantic_search_enabled,
@@ -452,6 +454,21 @@ def create_spot_graph_wiring(
             being_attachment_resolver=_being_resolver,
             default_world_id=_default_world_id,
         )
+    # Issue #526 後続: memory_recall_episodes tool は本ファイルでは config 解決
+    # のみ。executor の組み立ては noun_matcher の参照が必要なため、scenario+graph
+    # を知っている caller (escape_game_runtime 等) 側で行う follow-up PR で配線
+    # する。default OFF のまま flag だけ通す。
+    #
+    # executor が無い間は **flag を False に倒して** register_default_tools に
+    # 渡す (= tool schema だけ露出して handler が無い状態を防ぐ)。env で
+    # EPISODIC_RECALL_ENABLED=1 を立てても、ここに executor を渡す経路が
+    # 整うまでは LLM 側からは見えない。
+    _episodic_recall_env_enabled = resolve_episodic_recall_enabled()
+    log_episodic_recall_state(_episodic_recall_env_enabled)
+    _episodic_memory_recall_executor = None
+    _episodic_recall_enabled = (
+        _episodic_recall_env_enabled and _episodic_memory_recall_executor is not None
+    )
     # 攻撃ユースケースのオーケストレーター。tool executor (player→monster)
     # と将来の tick driver (monster→player) で同じ instance を共有する。
     # monster_repository が未設定の起動構成（プロト・テスト等）では None
@@ -565,6 +582,8 @@ def create_spot_graph_wiring(
         episodic_explore_related_enabled=_resolved_episodic_explore_related_enabled,
         semantic_memory_search_executor=_semantic_memory_search_executor,
         semantic_search_enabled=_semantic_search_enabled,
+        episodic_memory_recall_executor=_episodic_memory_recall_executor,
+        episodic_recall_enabled=_episodic_recall_enabled,
         sliding_window=sliding_window,
         action_result_store=action_result_store,
         current_tick_provider=current_tick_provider,

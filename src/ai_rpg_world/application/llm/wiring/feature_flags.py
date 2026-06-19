@@ -215,6 +215,36 @@ def log_semantic_search_state(enabled: bool) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────
+# Episodic memory: active recall tool (Issue #526 後続)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_EPISODIC_RECALL_ENABLED = "EPISODIC_RECALL_ENABLED"
+
+
+def resolve_episodic_recall_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """``memory_recall_episodes`` tool を LLM に expose するか。
+
+    ``EPISODIC_RECALL_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    Issue #526 の不在 2 (agent-driven 想起) に対する v0 実装。検証
+    フェーズで明示的に有効化する。
+    """
+    return _parse_bool_env(ENV_EPISODIC_RECALL_ENABLED, env=env, default=False)
+
+
+def log_episodic_recall_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_EPISODIC_RECALL_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────
 # Short-term memory: rolling summary (Phase 2)
 # ──────────────────────────────────────────────────────────────────
 
