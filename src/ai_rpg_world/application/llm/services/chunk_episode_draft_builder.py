@@ -147,6 +147,63 @@ def _compose_outcome(action_results: tuple[ActionResultEntry, ...]) -> str:
     return f"{n_fail}件失敗を含む / {n_ok}成功（末尾要約: {rs}）"
 
 
+# chunk が複数 action を含むとき、expected / why は全 action 分を箇条書きで残す
+# (最新だけだと前半 action の予測が消える)。トークン肥大を避けるため上限を設け、
+# 超過分は「ほか N 件」に畳む。SubjectiveEpisode.expected / why は str なので
+# 構造化リストにはせず、LLM 露出・再解釈に向く自然文 (箇条書き) として持つ。
+_MAX_SUBJECTIVE_BULLETS = 3
+
+
+def _compose_subjective_bullets(
+    action_results: tuple[ActionResultEntry, ...],
+    field_name: str,
+) -> str | None:
+    """各 action の主観テキスト (expected_result / intention) を時系列順に
+    ``- {tool}: {text}`` で箇条書き化する。最大 _MAX_SUBJECTIVE_BULLETS 件、
+    超過分は ``- ほか N 件`` に畳む。1 件も無ければ None (= フィールド未充填)。
+    """
+    items: list[tuple[str, str]] = []
+    for e in _sorted_actions(action_results):
+        raw = getattr(e, field_name, None)
+        if isinstance(raw, str) and raw.strip():
+            items.append((_tool_name_segment(e), raw.strip()))
+    if not items:
+        return None
+    head = items[:_MAX_SUBJECTIVE_BULLETS]
+    lines = [f"- {tool}: {text}" for tool, text in head]
+    remainder = len(items) - len(head)
+    if remainder > 0:
+        lines.append(f"- ほか {remainder} 件")
+    return "\n".join(lines)
+
+
+def _compose_expected(action_results: tuple[ActionResultEntry, ...]) -> str | None:
+    """各 action の行動前予測 (expected_result) を箇条書きにする。"""
+    return _compose_subjective_bullets(action_results, "expected_result")
+
+
+def _compose_why(action_results: tuple[ActionResultEntry, ...]) -> str | None:
+    """各 action の目的 (intention) を箇条書きにする (= episode.why)。"""
+    return _compose_subjective_bullets(action_results, "intention")
+
+
+def _compose_felt(action_results: tuple[ActionResultEntry, ...]) -> str | None:
+    """chunk 内の emotion_hint を時系列順・重複除去で連結する (= episode.felt)。
+
+    emotion_hint は enum ラベルなので箇条書きではなく短い連結にする。無ければ None。
+    """
+    seen: list[str] = []
+    for e in _sorted_actions(action_results):
+        raw = e.emotion_hint
+        if isinstance(raw, str) and raw.strip():
+            label = raw.strip()
+            if label not in seen:
+                seen.append(label)
+    if not seen:
+        return None
+    return "、".join(seen)
+
+
 def _canonical_args_fingerprint_text(action_results: tuple[ActionResultEntry, ...]) -> str | None:
     fps = [
         e.argument_fingerprint.strip()
@@ -254,12 +311,14 @@ class ChunkEpisodeDraftBuilder:
             ),
             who=_who_from_observations(obs_for_place_who),
             what=what,
-            why=None,
+            why=_compose_why(acts),
             observed=observed,
-            expected=None,
+            expected=_compose_expected(acts),
             outcome=_compose_outcome(acts),
+            # prediction_error は質的乖離判定なので LLM 補完に委ねる (PR2b)。
+            # ここでは決定論的に埋められないため None のまま。
             prediction_error=None,
-            felt=None,
+            felt=_compose_felt(acts),
             interpreted=compute_template_interpreted(what),
             cues=_build_chunk_cues(inp),
             recall_text=compute_template_recall(observed, what),

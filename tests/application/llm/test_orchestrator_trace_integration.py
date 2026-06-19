@@ -188,6 +188,9 @@ class TestOrchestratorTraceRecording:
 
         recent = action_store.get_recent(PlayerId(1), 1)
         assert recent[0].expected_result == "扉の開け方が分かる"
+        # intention / emotion_hint も同じく raw args から保存される (PR2a)
+        assert recent[0].intention == "扉の仕掛けを確かめる"
+        assert recent[0].emotion_hint == "caution"
         assert recent[0].argument_fingerprint == '{"content": "扉を調べる"}'
 
 
