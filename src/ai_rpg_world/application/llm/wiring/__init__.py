@@ -1226,7 +1226,12 @@ def create_llm_agent_wiring(
         else DefaultActionResultStore()
     )
     ui_context_builder = DefaultLlmUiContextBuilder()
-    recent_events_formatter = DefaultRecentEventsFormatter()
+    # Issue #526 後続 (主観時間 v0): 「直近の出来事」の各行に
+    # 「昨日 / 数分前」等のラベルを付ける。``utc_now`` は observation の
+    # occurred_at と同じ wall-clock 時間軸。
+    from ai_rpg_world.application.llm.services.subjective_time import utc_now
+
+    recent_events_formatter = DefaultRecentEventsFormatter(time_provider=utc_now)
     context_format_strategy = build_section_format_strategy_from_env()
     _resolved_episodic_explore_related_enabled = resolve_episodic_explore_related_enabled()
     log_episodic_explore_related_state(_resolved_episodic_explore_related_enabled)
