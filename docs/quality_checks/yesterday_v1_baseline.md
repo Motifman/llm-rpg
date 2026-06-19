@@ -1,0 +1,91 @@
+# yesterday_v1 — baseline 所感
+
+## このシナリオが見るもの
+
+「カイトに『昨日何してた?』と聞かれたリンが自然に答えられるか」を、prompt
+構造の側から見るシナリオ。LLM は呼ばず、prompt の中身そのものを点検する。
+
+詳細とテストコード: `tests/quality/test_yesterday_v1.py`、README:
+`docs/quality_checks/README.md`。
+
+## 初回 baseline (= PR #530 直後 / 主観時間も能動想起も未実装の状態)
+
+dump: [`yesterday_v1_in_window.prompt.txt`](./yesterday_v1_in_window.prompt.txt)
+[`yesterday_v1_out_of_window.prompt.txt`](./yesterday_v1_out_of_window.prompt.txt)
+
+### in_window 版 — 「素材は揃っているのに時系列ラベルが無い」
+
+「直近の出来事」section に **3 件が並列** に並ぶ:
+
+```
+- 閲覧室で見習い司書の覚書を読んだ
+- 書架 A で『水』の断片語を見つけた
+- カイトの声: 「リン、昨日何してた?」
+```
+
+問題:
+
+- **時系列のラベルが無い**。最初の 2 つは "昨日" のはずだが prompt の上では
+  「いま起きたばかり」と区別できない
+- LLM 側からは「直前にやったこと」と「昨日のこと」が **同列のリストに
+  見える** ため、カイトの質問に「いま閲覧室で覚書を読んだ」と答えてしまう
+  可能性が高い (= 時間軸が崩壊している)
+- 主観時間語彙 (「昨日の昼」「夕方」など) が一切登場していない
+
+「素材は揃っているのに、語彙が無いせいで narrative に組み立てられない」状態。
+
+### out_of_window 版 — 「現在地が同じ場所だけ引けている」
+
+「【関連する記憶】」section に **1 件だけ** 出る:
+
+```
+QUALITY_MARKER_NOON: 昨日の昼、閲覧室で見習い司書の覚書を読んだ。
+```
+
+書架 A の episode (= 「書架Aで『水』の断片語を見つけた」) は **拾えていない**。
+
+何が起きているかの推定 (= trace で要確認だが、構造から):
+
+1. リンの現在地が「閲覧室」→ runtime context cue として `place_spot:閲覧室_id` が立つ
+2. 過去 episode の片方は `place_spot:閲覧室_id` を持つ → cue マッチ ✅
+3. もう片方は `place_spot:書架A_id` を持つ → 現在地と一致しない ❌
+4. カイトの発話「リン、昨日何してた?」には固有名詞が含まれない → noun_matcher (PR7 R4) でも entity/place cue が立たない
+5. 「昨日」という時間表現は cue 化されない (= R5 で encounter cue は入ったが時間 cue は未対応)
+
+結果として:
+- **現在地と一致する過去だけが偶然引ける**
+- **「思い出そう」という意図駆動の recall は存在しない**
+- 場所違いの episode は永遠に呼び戻されない
+
+## 浮かび上がった構造的問題 (Issue #526 との対応)
+
+| 観察 | 対応する Issue #526 の不在 |
+|---|---|
+| 「昨日」が cue にならない | 1. 時間軸の不在 |
+| カイトの質問が recall trigger にならない | 2. agent-driven 想起の不在 |
+| 「直近の出来事」に時系列ラベルが無い | 1. 時間軸の不在 (prompt 露出側) |
+| 場所違いの過去 episode が永遠に拾われない | 2. agent-driven 想起の不在 |
+
+特に **out_of_window 版で書架 A の episode が出ない** ことは、Issue #526 の
+仮説 1+2 が実際に prompt 構造として刺さっていることを具体的に示している。
+「2. agent-driven 想起の不在」が「思い出してみる」経路の不在として顕在化
+していて、これが無いと「現状況の cue マッチで偶然引ける範囲」しか過去に
+アクセスできない。
+
+## 次に試したい変更 (探索メモ、決定ではない)
+
+1. **「直近の出来事」section に時系列ラベルを足す**: tick → "昨日" / "今朝" /
+   "数分前" のラベリングを観測 entry に付ける (= 主観時間 v0)。これだけで
+   in_window 版の「素材を narrative にする」プロンプト側の支援になる
+2. **時間表現を cue に変換する経路**: 観測 prose の「昨日」「先週」を検出
+   して、「過去 N tick の episode」を recall 対象に追加する (= 時間 cue)
+3. **質問が来たことを agent-driven recall の trigger にする**: 観測種別が
+   `speech_message` で質問形式 (= "?" を含む) のとき、recall を能動側で
+   1 回打つ
+
+これらは別 PR で 1 つずつ試す。次回 baseline 取り直したときに、それぞれの
+変更で in_window / out_of_window がどう変わるかを追記する。
+
+## 改訂履歴
+
+- **2026-06-19** (PR #531 = quality scenario 導入時): 初回 baseline
