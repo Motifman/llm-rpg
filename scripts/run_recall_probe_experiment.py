@@ -338,6 +338,47 @@ def _inject_probe(
 # ─────────────────────────────────────────────────────────────────────
 
 
+def _resolve_haru_id(runtime: Any) -> Any:
+    """player_spawns から「ハル」の PlayerId を返す。"""
+    for spawn in runtime.scenario.player_spawns:
+        if spawn.name == "ハル":
+            from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+            return PlayerId(int(spawn.player_id))
+    # fallback: 最初の spawn
+    return runtime.get_player_ids()[0]
+
+
+def _suppress_non_haru_llm_turns(runtime: Any) -> None:
+    """ハル以外の player_spawns (= シキなど) を LLM 制御から外す。
+
+    ``recall_probe_v3`` では シキ を 2 番目の player_spawn として追加した。
+    persona builder の per-player path を活性化する目的だが、シキは scripted
+    NPC として扱いたいので LLM ターンが走らないように suppress する。
+
+    実装: ``runtime._observation_turn_scheduler._llm_player_resolver`` を
+    wrapper で差し替える。これにより observation 駆動 / heartbeat / action
+    failed のすべての schedule_turn 経路で シキが filter される。
+    """
+    haru_id = _resolve_haru_id(runtime)
+    scheduler = getattr(runtime, "_observation_turn_scheduler", None)
+    if scheduler is None or not hasattr(scheduler, "_llm_player_resolver"):
+        return
+    base_resolver = scheduler._llm_player_resolver
+
+    class _OnlyHaruResolver:
+        def __init__(self, base: Any, allowed_id: int) -> None:
+            self._base = base
+            self._allowed = allowed_id
+
+        def is_llm_controlled(self, pid: Any) -> bool:
+            if pid.value != self._allowed:
+                return False
+            return self._base.is_llm_controlled(pid)
+
+    scheduler._llm_player_resolver = _OnlyHaruResolver(base_resolver, haru_id.value)
+    logger.info("suppressed LLM turns for non-Haru spawns (haru_id=%d)", haru_id.value)
+
+
 def _run_tick_loop(
     runtime: Any,
     state: Any,
@@ -356,8 +397,12 @@ def _run_tick_loop(
         t: (pid, content, prose) for t, pid, content, prose in _PROBES
     }
 
-    for pid in runtime.get_player_ids():
-        state.llm_wiring.llm_turn_trigger.schedule_turn(pid)
+    # シキなど非ハル spawn の LLM ターンを抑制 (= NPC として扱う)
+    _suppress_non_haru_llm_turns(runtime)
+    haru_id = _resolve_haru_id(runtime)
+
+    # ハルだけ初期 schedule。シキを schedule しないことで「最初の LLM 起動」も走らない
+    state.llm_wiring.llm_turn_trigger.schedule_turn(haru_id)
 
     t0 = time.monotonic()
     i = 0
