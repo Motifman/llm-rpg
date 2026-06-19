@@ -415,9 +415,9 @@ def _build_report(
         if kind_name == "probe_past_episode_injected":
             past_injected.append({"tick": tick, **payload})
             continue
-        # action は ACTION kind で記録される (tool_name + arguments を含む)
+        # action は ACTION kind で記録される (tool + arguments を含む)
         if kind == "action":
-            tool_name = payload.get("tool_name") or payload.get("name")
+            tool_name = payload.get("tool") or payload.get("tool_name") or payload.get("name")
             args = payload.get("arguments") or payload.get("args") or {}
             if tool_name == "memory_recall_episodes":
                 recall_calls.append({"tick": tick, "args": args})
