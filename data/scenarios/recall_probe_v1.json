@@ -1,0 +1,93 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "recall_probe_v1",
+    "title": "能動 recall vs 受動 recall — 漂着島の対話 probe (Issue #526)",
+    "description": "Issue #526 不在 2 (agent-driven 想起) の検証用専用シナリオ。LLM agent ハル 1 人 + scripted NPC シキ。run 開始前に runner script で過去 episode 2 件 (浜辺で釣り / 森で薬草) を episode_store に強制注入する。tick 進行中、scripted NPC シキの speech 観測を 3 回注入し、ハルが各々にどう反応するかを trace で観察する。質問パターンは: (a) 固有名詞無しの時間質問 (= passive recall が痩せる、tool 出番) / (b) 場所名入り (= passive で十分なはず) / (d) 時系列推論。",
+    "theme": "memory_probe",
+    "difficulty": "easy",
+    "estimated_ticks": 15,
+    "author": "issue_526_probe",
+    "tags": ["memory_probe", "episodic_recall", "agent_driven_recall"],
+    "llm_objective_text": "- 仲間のシキが投げてくる「今日のこと」についての質問に、自分の記憶を頼りに自然に答える。\n- 質問が来たら一旦立ち止まり、自分が浜辺と森で経験したことを思い出してから話す。\n- 思い出せないことは『覚えていない』と素直に言う。創作はしない。"
+  },
+  "item_specs": [
+    {"id": "fishing_rod", "name": "釣竿", "description": "古びた木製の釣竿。浜辺や川で魚を釣れる。", "category": "KEY_ITEM"}
+  ],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 1000,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "camp",
+      "name": "拠点",
+      "description": "島の中央に作った簡素な拠点。流木で組んだ屋根の下に焚き火の跡がある。ハルとシキはここを根城にしている。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"}
+    },
+    {
+      "id": "beach",
+      "name": "浜辺",
+      "description": "白い砂と波が広がる浜辺。波打ち際で釣りや貝拾いができる。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"}
+    },
+    {
+      "id": "forest",
+      "name": "森",
+      "description": "拠点の北に広がる深い森。薬草や食べられる実が見つかることがある。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"}
+    }
+  ],
+  "connections": [
+    {
+      "id": "camp_to_beach",
+      "from": "camp",
+      "to": "beach",
+      "name": "浜辺へ続く小道",
+      "description": "白砂の浜へ繋がる踏み固められた道。"
+    },
+    {
+      "id": "beach_to_camp",
+      "from": "beach",
+      "to": "camp",
+      "name": "拠点へ戻る小道",
+      "description": "浜辺から拠点へ戻る道。"
+    },
+    {
+      "id": "camp_to_forest",
+      "from": "camp",
+      "to": "forest",
+      "name": "森へ続く小道",
+      "description": "拠点の北、森の入口へ繋がる細い道。"
+    },
+    {
+      "id": "forest_to_camp",
+      "from": "forest",
+      "to": "camp",
+      "name": "拠点へ戻る小道",
+      "description": "森から拠点へ戻る道。"
+    }
+  ],
+  "players": [
+    {
+      "id": "haru",
+      "name": "ハル",
+      "spawn_spot": "camp",
+      "initial_items": ["fishing_rod"]
+    }
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 30}]
+  },
+  "initial_flags": [],
+  "scenario_events": [],
+  "reactive_bindings": {}
+}
