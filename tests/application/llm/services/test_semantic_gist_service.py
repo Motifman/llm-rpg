@@ -34,6 +34,7 @@ def _make_episode(
     occurred_at_minute: int = 0,
     recall_text: str = "ある記憶",
     interpreted: str | None = None,
+    prediction_error: str | None = None,
 ) -> SubjectiveEpisode:
     return SubjectiveEpisode(
         episode_id=episode_id,
@@ -49,7 +50,7 @@ def _make_episode(
         observed="観測本文",
         expected=None,
         outcome="ok",
-        prediction_error=None,
+        prediction_error=prediction_error,
         felt=None,
         interpreted=interpreted,
         cues=(),
@@ -193,6 +194,45 @@ class TestSemanticGistServicePromptStructure:
         assert "ハル" in user_content
         assert "慎重で寡黙な漁師" in user_content
         assert "魚を獲った" in user_content
+
+    def test_prediction_error_が_evidence_として_user_に乗る(self) -> None:
+        """予測との食い違いが記憶の sub-bullet として gist prompt に渡る (PR3)。"""
+        port = _StubPort(response={"gist_text": "g", "importance_score": 5, "tags": []})
+        svc = SemanticGistService(port)
+        svc.generate(
+            player_name="リン",
+            persona_block="",
+            cluster_episodes=[
+                _make_episode(
+                    recall_text="ノアに話しかけた",
+                    prediction_error="話せると思ったが無視された",
+                )
+            ],
+        )
+        user_content = port.captured_messages[0][1]["content"]
+        assert "予測との食い違い: 話せると思ったが無視された" in user_content
+
+    def test_prediction_error_が_無い記憶には_食い違い行を出さない(self) -> None:
+        """prediction_error が None の記憶では食い違い行を付けない。"""
+        port = _StubPort(response={"gist_text": "g", "importance_score": 5, "tags": []})
+        svc = SemanticGistService(port)
+        svc.generate(
+            player_name="リン",
+            persona_block="",
+            cluster_episodes=[_make_episode(recall_text="散歩した", prediction_error=None)],
+        )
+        user_content = port.captured_messages[0][1]["content"]
+        assert "予測との食い違い" not in user_content
+
+    def test_system_prompt_が_予測誤差からの学びを_促す(self) -> None:
+        """system prompt に予測誤差を重視する指示と importance rubric がある。"""
+        port = _StubPort(response={"gist_text": "g", "importance_score": 5, "tags": []})
+        svc = SemanticGistService(port)
+        svc.generate(player_name="x", persona_block="", cluster_episodes=[_make_episode()])
+        system_content = port.captured_messages[0][0]["content"]
+        assert "予測との食い違い" in system_content
+        # 予測が繰り返し外れた経験を重要度高に評価する rubric
+        assert "予測が繰り返し" in system_content
 
     def test_既存_semantic_が_あれば_参考として乗る(self) -> None:
         port = _StubPort(response={"gist_text": "g", "importance_score": 5, "tags": []})
