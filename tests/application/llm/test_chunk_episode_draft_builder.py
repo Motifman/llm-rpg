@@ -372,3 +372,99 @@ class TestChunkEpisodeDraftBuilderNounMatcher:
         ep = ChunkEpisodeDraftBuilder(noun_matcher=matcher).build(inp)
         axes_in_episode = {c.axis for c in ep.cues}
         assert "place_spot" not in axes_in_episode
+
+
+class TestChunkEpisodeDraftBuilderRuntimeContext:
+    """#526 後続 C2: chunk write 時に runtime_context provider が呼ばれ、
+    現在の player の場所 / 視界 object / 同席者が episode の cue に固定される。
+    """
+
+    def test_runtime_context_provider_未注入なら_既存挙動と同一(self) -> None:
+        """provider が ``None`` のときは place_spot / object cue が運ばれない
+        (Fix A 単独の挙動を維持)。"""
+        from ai_rpg_world.application.llm.contracts.dtos import (
+            ToolRuntimeContextDto,
+        )
+        t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t0,
+            action_summary="x",
+            result_summary="ok",
+            tool_name="t",
+        )
+        inp = build_chunk_encoding_input(PlayerId(1), (), (act,))
+        ep = ChunkEpisodeDraftBuilder().build(inp)
+        axes_in_episode = {c.axis for c in ep.cues}
+        assert "place_spot" not in axes_in_episode
+        assert "object" not in axes_in_episode
+
+    def test_runtime_context_provider_注入時_current_spot_id_が_place_spot_cue_に乗る(self) -> None:
+        """provider が ``current_spot_id=5`` を返せば、episode に
+        ``place_spot:5`` cue が貼られる。これにより memo_add のような
+        prose / structured が乏しいターンでも場所文脈が episode に残る。"""
+        from ai_rpg_world.application.llm.contracts.dtos import (
+            ToolRuntimeContextDto,
+        )
+        t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t0,
+            action_summary="memo_add",
+            result_summary="ok",
+            tool_name="memo_add",
+        )
+        inp = build_chunk_encoding_input(PlayerId(1), (), (act,))
+
+        context = ToolRuntimeContextDto(targets={}, current_spot_id=5)
+        provider_calls = []
+
+        def provider(pid):
+            provider_calls.append(pid)
+            return context
+
+        ep = ChunkEpisodeDraftBuilder(
+            runtime_context_provider=provider
+        ).build(inp)
+
+        # provider は player_id を引数に呼ばれる
+        assert provider_calls == [PlayerId(1)]
+        canons = {c.to_canonical() for c in ep.cues}
+        assert "place_spot:5" in canons, f"current_spot_id が cue 化されていない: {canons}"
+
+    def test_runtime_context_provider_例外を投げても_episode_は_書ける(self) -> None:
+        """provider が例外を投げても chunk write 自体は止めない (graceful)。
+        cue は付かないが episode は成立する。"""
+        t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t0,
+            action_summary="x",
+            result_summary="ok",
+            tool_name="t",
+        )
+        inp = build_chunk_encoding_input(PlayerId(1), (), (act,))
+
+        def provider(pid):
+            raise RuntimeError("simulated runtime broken")
+
+        # 例外を握りつぶし、episode は書ける
+        ep = ChunkEpisodeDraftBuilder(
+            runtime_context_provider=provider
+        ).build(inp)
+        assert ep.episode_id  # 正常に id が振られている
+
+    def test_runtime_context_provider_が_None_を返したら_cue_は_増えない(self) -> None:
+        """provider が ``None`` (= 「context が取れない」明示) を返すケースでも
+        例外を投げず既存挙動と同一。"""
+        t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t0,
+            action_summary="x",
+            result_summary="ok",
+            tool_name="t",
+        )
+        inp = build_chunk_encoding_input(PlayerId(1), (), (act,))
+
+        ep = ChunkEpisodeDraftBuilder(
+            runtime_context_provider=lambda pid: None
+        ).build(inp)
+        axes_in_episode = {c.axis for c in ep.cues}
+        assert "place_spot" not in axes_in_episode

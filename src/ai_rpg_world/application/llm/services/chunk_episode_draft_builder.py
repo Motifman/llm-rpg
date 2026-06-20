@@ -6,9 +6,12 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Callable, Optional
+
+_logger = logging.getLogger(__name__)
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     ChunkEncodingInput,
@@ -18,7 +21,9 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     LlmCommandResultDto,
+    ToolRuntimeContextDto,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
@@ -223,17 +228,25 @@ def _build_chunk_cues(
     inp: ChunkEncodingInput,
     *,
     noun_matcher: Optional[IWorldNounMatcher] = None,
+    runtime_context: Optional[ToolRuntimeContextDto] = None,
 ) -> tuple[EpisodicCue, ...]:
     """chunk から episode に貼る cue 列を組み立てる。
 
     #526 後続 Fix A: ``noun_matcher`` が渡されれば、観測 ``prose`` 中の
     固有名詞 (spot 名 / 人物名 / object 名) から place_spot / entity / object
-    cue を episode に貼る。これにより read 側 (prompt_builder._run_passive_recall)
-    が同じ matcher で問い合わせる cue と対称になり、recall が機能する。
+    cue を episode に貼る。
 
-    Note: runtime_context は依然として None で渡す。chunk は複数 tick に
-    またがるため「どの瞬間の runtime か」設計判断が要る (= Fix C の領分)。
-    Fix A では prose 経路だけを通す。
+    #526 後続 C2: ``runtime_context`` が渡されれば、chunk write 時点の
+    player の場所 (``current_spot_id``) と視界 object / 同席者 (``targets``)
+    を **chunk 全体に行き渡る固定 cue** として episode に貼る。これにより
+    観測 prose も structured も乏しい静かなターン (memo_add / wait のみ等)
+    でも場所文脈が確実に episode に残る。
+
+    chunk 全体の代表 runtime_context として 1 つの context を全観測 /
+    全 action に同じく適用する。chunk 内で player が複数 spot を跨いだ
+    場合の精度は完全ではないが、chunk は最大 7 actions / 8 tick gap で
+    閉じる設計 (= 場面が大きく変わる前に必ず閉じる) のため、実用上
+    「chunk のひとまとめの場面」に対する近似として妥当。
     """
     parts: list[tuple[EpisodicCue, ...]] = []
     for o in sorted(_all_observation_entries(inp), key=lambda x: _as_utc(x.occurred_at)):
@@ -241,7 +254,7 @@ def _build_chunk_cues(
         prose = o.output.prose if isinstance(o.output.prose, str) and o.output.prose.strip() else None
         parts.append(
             build_situation_episodic_cues(
-                runtime_context=None,
+                runtime_context=runtime_context,
                 observation_structured=st,
                 observation_prose=prose,
                 noun_matcher=noun_matcher,
@@ -258,7 +271,7 @@ def _build_chunk_cues(
             build_episodic_cues_for_tool_turn(
                 tool_name=_tool_name_segment(e),
                 canonical_arguments=None,
-                runtime_context=None,
+                runtime_context=runtime_context,
                 command_result=res,
                 observation_structured=None,
             )
@@ -293,9 +306,25 @@ class ChunkEpisodeDraftBuilder:
     """
 
     def __init__(
-        self, *, noun_matcher: Optional[IWorldNounMatcher] = None
+        self,
+        *,
+        noun_matcher: Optional[IWorldNounMatcher] = None,
+        runtime_context_provider: Optional[
+            Callable[[PlayerId], Optional[ToolRuntimeContextDto]]
+        ] = None,
     ) -> None:
+        """
+        Args:
+            noun_matcher: 観測 prose に含まれる固有名詞を cue 化する matcher
+                (#526 後続 Fix A)
+            runtime_context_provider: chunk write 時に player の現在の
+                ``ToolRuntimeContextDto`` を取得する callback (#526 後続 C2)。
+                呼ばれるのは ``build()`` の中で 1 回 (= chunk 閉じる瞬間)。
+                例外を投げても episode 自体は書ける (graceful)。``None`` 返却
+                時は cue 抽出を skip。未注入なら従来挙動と同一。
+        """
         self._noun_matcher = noun_matcher
+        self._runtime_context_provider = runtime_context_provider
 
     def build(self, inp: ChunkEncodingInput) -> SubjectiveEpisode:
         if not isinstance(inp, ChunkEncodingInput):
@@ -358,8 +387,33 @@ class ChunkEpisodeDraftBuilder:
             prediction_error=None,
             felt=_compose_felt(acts),
             interpreted=compute_template_interpreted(what),
-            cues=_build_chunk_cues(inp, noun_matcher=self._noun_matcher),
+            cues=_build_chunk_cues(
+                inp,
+                noun_matcher=self._noun_matcher,
+                runtime_context=self._resolve_runtime_context(inp.player_id),
+            ),
             recall_text=compute_template_recall(observed, what),
             recall_count=0,
             last_recalled_at=None,
         )
+
+    def _resolve_runtime_context(
+        self, player_id: PlayerId
+    ) -> Optional[ToolRuntimeContextDto]:
+        """provider が注入されていれば chunk write 時の runtime_context を
+        取得する。例外 / None 返却ともに graceful に握りつぶす (#526 後続 C2)。
+        """
+        if self._runtime_context_provider is None:
+            return None
+        try:
+            return self._runtime_context_provider(player_id)
+        except Exception:
+            # runtime 側のバグで chunk write を止めない (graceful)。
+            # 後追い可能なよう WARN 級でログだけ残す (silent failure 防止)。
+            _logger.warning(
+                "runtime_context_provider raised; "
+                "chunk write は context 無しで続行します (player_id=%s)",
+                getattr(player_id, "value", player_id),
+                exc_info=True,
+            )
+            return None
