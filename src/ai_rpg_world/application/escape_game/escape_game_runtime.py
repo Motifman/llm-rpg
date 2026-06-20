@@ -3350,14 +3350,11 @@ def create_escape_game_runtime(
         # SEMANTIC_PASSIVE_TOP_K / SEMANTIC_LLM_GIST_ENABLED で「学びを作る
         # (promotion) / 出す (passive recall)」を on/off できるようにする。
         # 既定 OFF (top_k=0 / gist off) で従来の episodic-only 動作を保つ。
-        # 各 flag は feature_flags の resolver で一度だけ読む (env 二重読み回避)。
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            resolve_semantic_llm_gist_enabled,
-            resolve_semantic_passive_top_k,
-        )
-
-        _semantic_top_k = resolve_semantic_passive_top_k()
-        _semantic_gist_enabled = resolve_semantic_llm_gist_enabled()
+        # フラグは env を直読みせず ResolvedLlmRuntimeConfig (= config) から取る。
+        # こうしないと create_escape_game_runtime(config=...) の明示 config が
+        # semantic だけ無視され、短期記憶など他設定との config 契約が崩れる。
+        _semantic_top_k = config.semantic_passive_top_k
+        _semantic_gist_enabled = config.semantic_llm_gist_enabled
         _semantic_enabled = _semantic_top_k > 0 or _semantic_gist_enabled
         _semantic_gist_service = None
         _semantic_persona_resolver = None
@@ -3373,7 +3370,9 @@ def create_escape_game_runtime(
                     _p,
                 )
             )
-            if _semantic_gist_enabled:
+            # gist は短期記憶 builder と同じく config.llm_client_kind で gate する
+            # (config が stub なのに env 側で litellm が動く余地を残さない)。
+            if _semantic_gist_enabled and config.llm_client_kind == "litellm":
                 from ai_rpg_world.application.llm.wiring import (
                     _optional_semantic_gist_service,
                 )

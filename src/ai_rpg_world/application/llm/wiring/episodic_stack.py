@@ -149,10 +149,12 @@ class EpisodicStack:
     #   semantic_passive_top_k: prompt に出す semantic 件数 (0 = 出さない)
     #   episodic_semantic_promotion: action 後に on_after_tool_turn を呼ぶ昇格 service
     #   semantic_memory_store: 昇格先 store (snapshot / 検証用に公開)
+    #   memory_link_store: 昇格の根拠となる memory link graph (snapshot 用に公開)
     semantic_passive_recall: Optional[Any] = None
     semantic_passive_top_k: int = 0
     episodic_semantic_promotion: Optional[Any] = None
     semantic_memory_store: Optional[Any] = None
+    memory_link_store: Optional[Any] = None
 
 
 def build_scenario_noun_matcher(*, scenario: object, graph: object) -> IWorldNounMatcher:
@@ -248,6 +250,7 @@ def build_episodic_stack(
     link_service: Optional[Any] = None
     episodic_semantic_promotion: Optional[Any] = None
     semantic_memory_store: Optional[Any] = None
+    memory_link_store: Optional[Any] = None
     if semantic_enabled:
         # 循環 import 回避のため関数内 import。
         from ai_rpg_world.application.llm.wiring._shared_builders import (
@@ -268,6 +271,9 @@ def build_episodic_stack(
         link_service = mem_stack.mem_bundle.link_service
         episodic_semantic_promotion = mem_stack.episodic_semantic_promotion
         semantic_memory_store = mem_stack.semantic_memory_store
+        # promotion の根拠となる link graph も snapshot 用に公開する
+        # (semantic entries だけ保存して link graph が空 fallback になるのを防ぐ)。
+        memory_link_store = mem_stack.mem_bundle.link_store
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
     chunk_coordinator = EpisodicChunkCoordinator(
@@ -317,6 +323,7 @@ def build_episodic_stack(
         semantic_passive_top_k=semantic_passive_top_k if semantic_enabled else 0,
         episodic_semantic_promotion=episodic_semantic_promotion,
         semantic_memory_store=semantic_memory_store,
+        memory_link_store=memory_link_store,
     )
 
 

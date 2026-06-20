@@ -116,3 +116,57 @@ class TestEscapeGameSemanticFlagOn:
         )
         assert "【関連する学び】" in user
         assert "SEMANTIC_FLAG_MARKER" in user
+
+    def test_semantic_on_exposes_memory_link_store(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """semantic ON では昇格根拠の memory_link_store も公開される
+        (semantic entries だけ保存され link graph が空 fallback になるのを防ぐ)。"""
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        monkeypatch.setenv("SEMANTIC_PASSIVE_TOP_K", "3")
+        runtime = _build_runtime(monkeypatch)
+        assert runtime._episodic_stack.memory_link_store is not None
+        # snapshot stub が semantic store と memory_link_store の両方を拾う
+        from scripts.run_scenario_experiment import _wiring_stub_from_escape_runtime
+
+        stub = _wiring_stub_from_escape_runtime(runtime)
+        assert stub.semantic_memory_store is not None
+        assert stub.memory_link_store is not None
+
+
+class TestEscapeGameSemanticConfigWins:
+    """create_escape_game_runtime(config=...) の semantic 設定が env に勝つ
+    (HIGH: silent config drift 防止)。短期記憶 (TestConfigInjection) と同じ契約。"""
+
+    def _cfg(self, **overrides):
+        from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+            ResolvedLlmRuntimeConfig,
+        )
+
+        return ResolvedLlmRuntimeConfig.for_tests(**overrides)
+
+    def test_config_on_beats_env_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """env で semantic OFF でも config で top_k=3 なら配線される。"""
+        from ai_rpg_world.application.escape_game.escape_game_runtime import (
+            create_escape_game_runtime,
+        )
+
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        monkeypatch.delenv("SEMANTIC_PASSIVE_TOP_K", raising=False)
+        cfg = self._cfg(semantic_passive_top_k=3)
+        runtime = create_escape_game_runtime(_SCENARIO_PATH, config=cfg)
+        assert runtime._episodic_stack.semantic_passive_top_k == 3
+        assert runtime._episodic_stack.semantic_passive_recall is not None
+
+    def test_config_off_beats_env_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """env で semantic ON でも config で top_k=0 なら配線されない。"""
+        from ai_rpg_world.application.escape_game.escape_game_runtime import (
+            create_escape_game_runtime,
+        )
+
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        monkeypatch.setenv("SEMANTIC_PASSIVE_TOP_K", "5")
+        cfg = self._cfg(semantic_passive_top_k=0)
+        runtime = create_escape_game_runtime(_SCENARIO_PATH, config=cfg)
+        assert runtime._episodic_stack.semantic_passive_top_k == 0
+        assert runtime._episodic_stack.semantic_passive_recall is None
