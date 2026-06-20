@@ -1,6 +1,6 @@
 """Movement サービスの wiring。SetDestinationService・MovementStepExecutor・MovementApplicationService を明示的に注入する。
 
-create_llm_agent_wiring 等に movement_service を渡す際、本モジュールの create_movement_application_service を用いて
+ランタイム配線 等に movement_service を渡す際、本モジュールの create_movement_application_service を用いて
 構築すると、依存関係が明示的になる。
 """
 
@@ -42,7 +42,7 @@ def create_movement_application_service(
     SetDestinationService・MovementStepExecutor・MovementApplicationService を構築し、
     MovementApplicationService を返す。
 
-    create_llm_agent_wiring(movement_service=create_movement_application_service(...)) のように使用する。
+    ランタイム配線(movement_service=create_movement_application_service(...)) のように使用する。
 
     Args:
         player_status_repository: プレイヤー状態リポジトリ

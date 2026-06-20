@@ -93,7 +93,7 @@ class TestSpotGraphDayNightStageService:
         assert captured == [("morning", "noon"), ("noon", "evening")]
 
     def test_set_phase_changed_callback_で後付け注入できる(self) -> None:
-        """二段構築 (escape_game_runtime 経路) のために set でも注入可能。"""
+        """二段構築 (world_runtime 経路) のために set でも注入可能。"""
         cycle = _make_4phase_cycle(ticks_per_day=12)
         stage = SpotGraphDayNightStageService(cycle=cycle)
         captured = []

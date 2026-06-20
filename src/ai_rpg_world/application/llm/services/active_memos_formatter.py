@@ -1,7 +1,7 @@
 """進行中のメモ (active memos) のテキスト整形ユーティリティ。
 
 Issue #188 Phase 1a で導入された未完了メモのテキスト化を、PromptBuilder と
-escape_game runtime の双方で再利用できるよう共通関数に集約する。
+world_runtime runtime の双方で再利用できるよう共通関数に集約する。
 
 並列 2 実装で drift する以前の振る舞いを正確に維持する。
 """

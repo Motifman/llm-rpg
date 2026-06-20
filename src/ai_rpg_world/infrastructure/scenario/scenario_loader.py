@@ -106,7 +106,7 @@ class ScenarioMetadata:
     llm_public_intro: str = ""
     #: LLM の objective section に直接埋め込む「現在のゴール」テキスト。
     #: scenario の win condition を LLM 視点で書き下す (例: 「狼煙を上げて山頂で
-    #: 救助される」「廃墟から外へ脱出する」)。空のときは escape_game_runtime 等の
+    #: 救助される」「廃墟から外へ脱出する」)。空のときは world_runtime 等の
     #: consumer 側で fail-fast する (ハードコード fallback は意図的に置かない:
     #: シナリオごとに勝利条件が違うため、空のまま LLM を回すと別シナリオの
     #: objective が混入する silent failure になる)。

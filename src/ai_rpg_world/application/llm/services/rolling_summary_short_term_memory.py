@@ -420,7 +420,7 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
     ) -> None:
         """trace_recorder_provider を後から差し替える (PR #439 / PR #449 正規化)。
 
-        ``escape_game_runtime`` のように runtime 構築時点では trace_recorder が
+        ``world_runtime`` のように runtime 構築時点では trace_recorder が
         まだ確定していない経路で、後付け注入するための setter。
 
         PR #449 (PR 4/6): 受け取った provider は ``_ensure_trace_recorder_provider``
@@ -443,7 +443,7 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
     # PR #451 (PR 6/6): set_summary_services は廃止。
     # ctor で summary_service / long_summary_service / persona_resolver を必ず
     # 指定する経路に統一した (= setter 呼び忘れ silent failure を構造で排除)。
-    # 旧来は escape_game_runtime が runtime 構築時点で llm_client を持っていない
+    # 旧来は world_runtime が runtime 構築時点で llm_client を持っていない
     # ライフサイクル都合で空殻 ctor + 後注入していたが、PR #451 で構築順序を
     # 整理して LLM 経路を ctor で揃えるようにした。
 

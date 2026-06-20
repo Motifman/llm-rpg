@@ -73,11 +73,11 @@ _DUMP_DIR = Path(__file__).resolve().parents[2] / "docs" / "quality_checks"
 
 def _build_runtime(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    from ai_rpg_world.application.escape_game.escape_game_runtime import (
-        create_escape_game_runtime,
+    from ai_rpg_world.application.world_runtime.world_runtime import (
+        create_world_runtime,
     )
 
-    return create_escape_game_runtime(_SCENARIO_PATH)
+    return create_world_runtime(_SCENARIO_PATH)
 
 
 def _resolve_player_id(runtime, name: str) -> PlayerId:

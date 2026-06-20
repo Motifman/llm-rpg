@@ -1,7 +1,7 @@
 """スポットグラフ世界における drop / pickup の最小サービス。
 
 タイルマップ時代の ItemDroppedFromInventoryDropHandler は ``physical_map``
-依存で escape_game / spot-graph 世界では発火しない (escape_game_runtime
+依存で world_runtime / spot-graph 世界では発火しない (world_runtime
 で ``physical_map_repository=None`` を渡している)。spot-graph 世界では
 SpotInterior.ground_items にアイテムを置き、SpotInterior 経路で
 プレイヤーが拾い直せる必要がある。
@@ -95,7 +95,7 @@ class SpotGraphItemTransferService:
     def set_event_publisher(self, event_publisher: Optional[object]) -> None:
         """event_publisher を後付けで注入する (二段構築用)。
 
-        通常は constructor で渡すのが望ましいが、escape_game_runtime のように
+        通常は constructor で渡すのが望ましいが、world_runtime のように
         publisher が runtime 本体に依存して構築順序的に後になるケースで使う。
         """
         self._event_publisher = event_publisher

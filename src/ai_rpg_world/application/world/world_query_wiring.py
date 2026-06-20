@@ -1,6 +1,6 @@
 """WorldQueryService の wiring。PlayerLocationQueryService・SpotContextQueryService 等を明示的に注入する。
 
-create_llm_agent_wiring 等に world_query_service を渡す際、本モジュールの create_world_query_service を用いて
+ランタイム配線 等に world_query_service を渡す際、本モジュールの create_world_query_service を用いて
 構築すると、依存関係が明示的になる。
 """
 
@@ -91,7 +91,7 @@ def create_world_query_service(
     PlayerLocationQueryService・SpotContextQueryService・AvailableMovesQueryService・
     VisibleContextQueryService・PlayerCurrentStateBuilder を構築し、WorldQueryService を返す。
 
-    create_llm_agent_wiring(world_query_service=create_world_query_service(...)) のように使用する。
+    ランタイム配線(world_query_service=create_world_query_service(...)) のように使用する。
 
     Args:
         player_status_repository: プレイヤー状態リポジトリ
@@ -114,10 +114,10 @@ def create_world_query_service(
         shop_repository: ショップリポジトリ（省略可）
         personal_trade_query_service: 個人取引クエリサービス（省略可）
         player_audience_query: プレイヤーオーディエンスクエリ（省略可、省略時は PlayerAudienceQueryService を自前構築）
-        sns_mode_session: SNS モード状態（省略可）。`create_llm_agent_wiring` に渡すインスタンスと同一にすること。
-        sns_page_session: 仮想 SNS 画面（省略可）。`create_llm_agent_wiring` の `sns_page_session` と同一にすること。
+        sns_mode_session: SNS モード状態（省略可）。`ランタイム配線` に渡すインスタンスと同一にすること。
+        sns_page_session: 仮想 SNS 画面（省略可）。`ランタイム配線` の `sns_page_session` と同一にすること。
         sns_page_query_service: 現在画面スナップショット供給用。prompt に現在画面を自動同梱したい場合は同一インスタンスを渡すこと。
-        trade_page_session: 仮想取引所画面（省略可）。`create_llm_agent_wiring` の `trade_page_session` と同一にすること。
+        trade_page_session: 仮想取引所画面（省略可）。`ランタイム配線` の `trade_page_session` と同一にすること。
         trade_page_query_service: 取引所ページのスナップショット本文（省略可）。
             `PlayerCurrentStateDto.trade_current_page_snapshot_json` に行一覧を載せるときは `GlobalMarketQueryService` 等と同一インスタンス。
             ReadModel を SQLite に置く場合は `TRADE_READMODEL_DB_PATH` または `GAME_DB_PATH` と

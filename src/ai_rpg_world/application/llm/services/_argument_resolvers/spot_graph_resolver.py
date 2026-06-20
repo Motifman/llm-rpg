@@ -94,9 +94,9 @@ def resolve_destination_target(
 ) -> "DestinationToolRuntimeTargetDto":
     """destination_label を ``DestinationToolRuntimeTargetDto`` に解決する。
 
-    Issue #276: escape_game の ``_handle_travel_to`` と本家
+    Issue #276: world_runtime の ``_handle_travel_to`` と本家
     ``_resolve_travel_to`` で同じ解決ロジックを 2 ヶ所に書いていたのを
-    こちらに集約した。escape_game 経路は本関数で target を得てから
+    こちらに集約した。world_runtime 経路は本関数で target を得てから
     ``runtime.do_move`` を直接呼ぶ。本家経路は本関数の結果から
     ``destination_spot_id`` を抽出して canonical 引数に変換する。
 
@@ -232,7 +232,7 @@ def resolve_object_target(
 ) -> ToolRuntimeTargetDto:
     """interact 用の object_label を target に解決する。
 
-    Issue #276 経路二重化解消: escape_game の ``_handle_interact`` と本家
+    Issue #276 経路二重化解消: world_runtime の ``_handle_interact`` と本家
     ``_resolve_interact`` の object_label → world_object_id 解決を共通化。
 
     PR #441: PR #421 / #425 の「名前直書き」refactor に追従し、display_name
@@ -297,7 +297,7 @@ def resolve_player_target(
     Issue #269 + #276: 「P1」のラベル / 「リン」の display_name / 「P1 (リン)」
     の連結形のいずれでも引ける。見つからなければ None (空文字も None)。
 
-    escape_game の ``_handle_speech`` whisper 経路で使う。本家側からは現状
+    world_runtime の ``_handle_speech`` whisper 経路で使う。本家側からは現状
     呼ばれていないが、後続で whisper resolver を統合する際の seed。
     """
     if not label:

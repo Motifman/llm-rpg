@@ -1,6 +1,6 @@
 """Encounter Memory 〜 prompt 露出の E2E 統合テスト (PR4)。
 
-実 ``EscapeGameRuntime`` を立てて ``build_full_prompt`` 経由で:
+実 ``WorldRuntime`` を立てて ``build_full_prompt`` 経由で:
 
 - 初訪問 spot に対して「現在地: 〇〇 (初めて訪れた)」が出る
 - 同 spot にいる他 player に対して「- 名前 (初めて会った)」が出る
@@ -29,11 +29,11 @@ _SCENARIO_PATH = (
 
 
 def _create_runtime():
-    from ai_rpg_world.application.escape_game.escape_game_runtime import (
-        create_escape_game_runtime,
+    from ai_rpg_world.application.world_runtime.world_runtime import (
+        create_world_runtime,
     )
 
-    return create_escape_game_runtime(_SCENARIO_PATH)
+    return create_world_runtime(_SCENARIO_PATH)
 
 
 def _user_prompt_text(runtime, player_id) -> str:

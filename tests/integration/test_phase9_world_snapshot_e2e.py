@@ -1,8 +1,8 @@
-"""Phase 9 完成版 E2E テスト: 実 ``EscapeGameRuntime`` で world snapshot 往復 (Issue #470)。
+"""Phase 9 完成版 E2E テスト: 実 ``WorldRuntime`` で world snapshot 往復 (Issue #470)。
 
 Phase 9 全体 (9-1〜9-4c) で 21 subsystem の world snapshot が揃い、PR3 で
 Encounter Memory を加えて計 22 subsystem になった。本ファイルは **実
-EscapeGameRuntime を立てて** snapshot → 復元の end-to-end を担保する。
+WorldRuntime を立てて** snapshot → 復元の end-to-end を担保する。
 
 ## カバレッジ
 
@@ -56,7 +56,7 @@ _SCENARIO_FILE = "decay_demo.json"
 
 
 def _build_runtime_session(out_dir: Path, monkeypatch: pytest.MonkeyPatch):
-    """``EscapeGameRuntime`` を 1 つ立てて ``ExperimentSnapshotSession`` を返す。
+    """``WorldRuntime`` を 1 つ立てて ``ExperimentSnapshotSession`` を返す。
 
     既存の ``scripts/run_scenario_experiment.py`` の wiring 構築を再現するが、
     完全には呼び出さない (= LLM turn loop は走らせない、scenario 起動のみ)。
@@ -97,10 +97,10 @@ def _build_runtime_session(out_dir: Path, monkeypatch: pytest.MonkeyPatch):
             provisioning.ensure_attached(pid)
 
     from scripts.run_scenario_experiment import (
-        _wiring_stub_from_escape_runtime,
+        _wiring_stub_from_world_runtime,
     )
 
-    wiring_stub = _wiring_stub_from_escape_runtime(runtime)
+    wiring_stub = _wiring_stub_from_world_runtime(runtime)
     session = ExperimentSnapshotSession(
         wiring_result=wiring_stub,
         snapshot_dir=out_dir / "snapshots",

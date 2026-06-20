@@ -1,6 +1,6 @@
 """``#404`` 修正の回帰テスト: ``do_move`` がネスト ``advance_tick`` を回さない。
 
-旧実装: ``EscapeGameRuntime.do_move`` は ``start_travel_to_spot`` 後に
+旧実装: ``WorldRuntime.do_move`` は ``start_travel_to_spot`` 後に
 ``for _ in range(200): advance_tick()`` を回し、travel が完了するまでツール
 内で同期的に world tick を進めていた。これが 1 driver tick = 656 秒の
 wall time スパイクと「travel 1 回で 134 LLM call」の silent failure (#404)
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -32,7 +32,7 @@ _SCENARIO_PATH = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.jso
 def runtime(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
     monkeypatch.setenv("SPOT_GRAPH_TICK_LOOP_ENABLED", "false")
-    return create_escape_game_runtime(_SCENARIO_PATH)
+    return create_world_runtime(_SCENARIO_PATH)
 
 
 class TestDoMoveNoNestedAdvanceTick:

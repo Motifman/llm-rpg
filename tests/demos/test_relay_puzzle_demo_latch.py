@@ -23,7 +23,7 @@ from pathlib import Path
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
-from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
 
 _SCENARIO_PATH = (
@@ -35,7 +35,7 @@ _SCENARIO_PATH = (
 
 
 def _setup():
-    rt = create_escape_game_runtime(_SCENARIO_PATH)
+    rt = create_world_runtime(_SCENARIO_PATH)
     mapper = rt.scenario.id_mapper
     control_room = SpotId(mapper.get_int("spot", "control_room"))
     vault = SpotId(mapper.get_int("spot", "vault"))

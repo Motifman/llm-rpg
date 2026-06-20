@@ -31,14 +31,14 @@ class TestUseItemInventoryIter:
         `_inventory_slots: Dict[SlotId, Optional[ItemInstanceId]]` を持つ。
         executor が誤って `inv.slots` を iter していたため、全 use_item が
         AttributeError → SYSTEM_ERROR で死んでいた regression を防ぐ。"""
-        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-        runtime = create_escape_game_runtime(SCENARIO_PATH)
+        runtime = create_world_runtime(SCENARIO_PATH)
         ada = PlayerId(int(runtime.scenario.player_spawns[0].player_id))
         # 椰子の実 (CONSUMABLE) を付与
         coconut_id = runtime.id_mapper.get_int("item_spec", "coconut")
@@ -87,9 +87,9 @@ class TestObjectNameResolverFallback:
         """v2 scenario の wreck_hold (船倉) を object_name 解決する。
         graph.get_spot(spot_id).interior は None だが、
         spot_interior_repository から引いて "船倉" を返す。"""
-        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-        runtime = create_escape_game_runtime(SCENARIO_PATH)
+        runtime = create_world_runtime(SCENARIO_PATH)
         # obs_pipeline 経由で formatter を取り出し、_resolve_object_name を直接呼ぶ
         formatter = runtime._obs_pipeline._formatter
         # 内部 SpotGraphObservationFormatter にアクセス
@@ -123,13 +123,13 @@ class TestInteractionNotFoundRemediation:
     def test_存在しない_action_name_では_利用可能_action_一覧が_返る(
         self, monkeypatch, tmp_path,
     ) -> None:
-        from tests.demos._escape_game_helpers import create_escape_game_session
+        from tests.demos._world_runtime_helpers import create_world_runtime_session
         from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
         from ai_rpg_world.application.llm.tool_constants import (
             TOOL_NAME_SPOT_GRAPH_INTERACT,
         )
 
-        state = create_escape_game_session(monkeypatch, tmp_path)
+        state = create_world_runtime_session(monkeypatch, tmp_path)
         wiring = state.llm_wiring
         # 存在しない action_name "search" を投げる
         stub = StubLlmClient(tool_call_to_return={

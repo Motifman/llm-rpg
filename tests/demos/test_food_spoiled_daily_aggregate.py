@@ -26,8 +26,8 @@ SCENARIO_PATH = (
 
 @pytest.fixture
 def runtime():
-    from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
-    rt = create_escape_game_runtime(SCENARIO_PATH)
+    from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+    rt = create_world_runtime(SCENARIO_PATH)
     return rt
 
 

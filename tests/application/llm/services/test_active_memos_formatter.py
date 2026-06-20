@@ -1,6 +1,6 @@
 """active_memos_formatter.format_active_memos のテスト。
 
-本家 PromptBuilder と escape_game runtime で重複していた整形ロジックを
+本家 PromptBuilder と world_runtime runtime で重複していた整形ロジックを
 抽出した共通関数 (Issue #227 後続 HIGH-2)。両 caller が依存するため、
 振る舞いを単体テストで固定する。
 """

@@ -1,7 +1,7 @@
 """Issue #168 PR-2: ``SpotGraphToolExecutor`` の失敗 DTO が learnable に
 なっているか検証する。
 
-PR #167 (escape_game 経路) と PR #170 (sns/trade enter) で確立した不変条件
+PR #167 (world_runtime 経路) と PR #170 (sns/trade enter) で確立した不変条件
 を spot_graph 経路にも展開する:
 
 - 失敗 DTO に ``error_code`` が必ず付く

@@ -1,6 +1,6 @@
 """``application/llm/services/failure_helpers`` の単体テスト (PR-0)。
 
-PR #167 (escape_game 経路) で導入したラベル列挙ヘルパーを executor 横断
+PR #167 (world_runtime 経路) で導入したラベル列挙ヘルパーを executor 横断
 共通モジュール化し、その挙動を本テストで保証する。
 
 加えて新規ファクトリ:

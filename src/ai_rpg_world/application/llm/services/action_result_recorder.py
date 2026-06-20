@@ -1,6 +1,6 @@
 """行動結果の記録 + 直後の記憶 hook を 1 箇所に束ねる共有サービス (U1)。
 
-従来 escape_game._record_action_result が inline で持っていた
+従来 world_runtime._record_action_result が inline で持っていた
 「action store append → chunk_coordinator.after_action_recorded →
 semantic_promotion.on_after_tool_turn」を共有コアに抽出する。escape runtime は
 この recorder への thin delegate になり、挙動は不変 (#553 で contract 化済み)。

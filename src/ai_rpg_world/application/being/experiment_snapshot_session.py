@@ -1,7 +1,7 @@
 """ExperimentSnapshotSession — 実験 runner と Phase 4-5 snapshot 機構を結ぶ薄い orchestrator。
 
 Phase 6 (Issue #470): ``scripts/run_scenario_experiment.py`` が wiring stub
-(escape runtime から組む ``_wiring_stub_from_escape_runtime`` の返り値) から直接
+(escape runtime から組む ``_wiring_stub_from_world_runtime`` の返り値) から直接
 snapshot を取れるようにする統合層。
 
 ## 責務
@@ -249,7 +249,7 @@ class ExperimentSnapshotSession:
                 f"{missing_required}."
             )
 
-        # 任意 store: 「未配線なら空 in-memory store で代用」する。escape_game
+        # 任意 store: 「未配線なら空 in-memory store で代用」する。world_runtime
         # runtime のように semantic / memory_link / recall_buffer / journal を
         # 使わない構成でも snapshot を取れるようにするため (= 空の payload に
         # なるが file の整合性は保たれる)。memo / episode は普段使うので強く

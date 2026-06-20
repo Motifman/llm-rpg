@@ -96,7 +96,7 @@ class PromptBuilderCoreServices:
 class PromptSectionProviders:
     """各 prompt section の任意 provider 群。
 
-    未設定なら該当 section は省略される。escape_game runtime のような独自の
+    未設定なら該当 section は省略される。world_runtime runtime のような独自の
     objective / inventory section を持つ runtime はこれらを注入する。
     """
 

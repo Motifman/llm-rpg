@@ -6,7 +6,7 @@
 - give_item: 18 件失敗 (同上)
 - pickup_item: 15 件失敗 (同上)
 
-原因: `_EscapeGameLlmWiring._wire_missing_spot_graph_tools` が executor を
+原因: `_WorldLlmWiring._wire_missing_spot_graph_tools` が executor を
 `_adapt_executor_handler` で直接ラップしていて、引数 resolver
 (SpotGraphArgumentResolver) を経由していなかった。
 
@@ -45,7 +45,7 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
-    _EscapeGameLlmWiring,
+    _WorldLlmWiring,
 )
 
 
@@ -125,7 +125,7 @@ class TestAdapterWithResolver:
         resolver.resolve_args.return_value = {
             "item_spec_id": 42, "inner_thought": "ok",
         }
-        handler = _EscapeGameLlmWiring._adapt_executor_handler_with_resolver(
+        handler = _WorldLlmWiring._adapt_executor_handler_with_resolver(
             fake_executor, TOOL_NAME_SPOT_GRAPH_USE_ITEM, resolver,
         )
         result = handler(PlayerId(1), {"item_label": "I1"}, _runtime_context({}))
@@ -142,7 +142,7 @@ class TestAdapterWithResolver:
         resolver.resolve_args.side_effect = ToolArgumentResolutionException(
             "ラベルが見つかりません: I99", "INVALID_TARGET_LABEL",
         )
-        handler = _EscapeGameLlmWiring._adapt_executor_handler_with_resolver(
+        handler = _WorldLlmWiring._adapt_executor_handler_with_resolver(
             fake_executor, TOOL_NAME_SPOT_GRAPH_USE_ITEM, resolver,
         )
         result = handler(PlayerId(1), {"item_label": "I99"}, _runtime_context({}))
@@ -168,7 +168,7 @@ class TestAdapterWithResolver:
 
         resolver = MagicMock()
         resolver.resolve_args.return_value = None
-        handler = _EscapeGameLlmWiring._adapt_executor_handler_with_resolver(
+        handler = _WorldLlmWiring._adapt_executor_handler_with_resolver(
             fake_executor, "unknown_tool", resolver,
         )
         result = handler(PlayerId(1), {"item_label": "I1"}, _runtime_context({}))
@@ -195,9 +195,9 @@ class TestDispatchTableUsesResolver:
         検査する代わりに、不正 label を送って INVALID_TARGET_LABEL が返ること
         (= resolver が動いた証拠) で確認する。
         """
-        from tests.demos._escape_game_helpers import create_escape_game_session
+        from tests.demos._world_runtime_helpers import create_world_runtime_session
 
-        state = create_escape_game_session(monkeypatch, tmp_path)
+        state = create_world_runtime_session(monkeypatch, tmp_path)
         wiring = state.llm_wiring
         for tool_name in (
             TOOL_NAME_SPOT_GRAPH_USE_ITEM,

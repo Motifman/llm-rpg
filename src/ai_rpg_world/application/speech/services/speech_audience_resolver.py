@@ -11,9 +11,9 @@ agent が「届かなかった」事実を学習できるようにする。
   「Event 解決」と「事前 audience 問い合わせ」で挙動が drift しないよう、
   共通の SoundPropagationService にロジックを集約する
 - 戻り値は ``PlayerId`` の list (名前解決は呼び出し側の責務)。
-  名前 ↔ id のマッピングは escape_game runtime や PlayerProfileRepository に
+  名前 ↔ id のマッピングは world_runtime runtime や PlayerProfileRepository に
   あり、resolver からはアクセスしないことで疎結合を保つ
-- 未注入時 (escape_game 以外) の executor は audience 情報なしで動作する
+- 未注入時 (world_runtime 以外) の executor は audience 情報なしで動作する
   fallback を持つ
 """
 

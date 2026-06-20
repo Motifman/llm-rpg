@@ -70,7 +70,7 @@ def _create_v2_session(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     )
     # SessionCreateRequest は character_ids が non-empty を要求する。v2 シナリオの
     # spawn は内部的に scenario 側で定義されるが、API 上は 1 件以上の character_id
-    # が要る。escape_character として 1 件渡す (内容は session 内では使われない)。
+    # が要る。world_character として 1 件渡す (内容は session 内では使われない)。
     char = mgr.create_character(CharacterCreateRequest(name="テスト探索者"))
     summary = mgr.create_session(
         SessionCreateRequest(world_id="survival_island_v2", character_ids=[char.id])

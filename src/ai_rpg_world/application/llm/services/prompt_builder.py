@@ -293,7 +293,7 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         # Issue #227 HIGH-3 Part 2: world_query_service / player_profile_repository は
         # 「DefaultPromptBuilder が呼ぶ 1〜2 メソッドを満たせばよい」duck-type 契約に
-        # ゆるめる。escape_game runtime のような独自経路から adapter を差し込めるよう、
+        # ゆるめる。world_runtime runtime のような独自経路から adapter を差し込めるよう、
         # isinstance ではなく hasattr で構造チェックする。
         if not hasattr(core.world_query_service, "get_player_current_state"):
             raise TypeError(
@@ -813,7 +813,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         active_memos_text = self._build_active_memos_text(player_id)
 
         # Issue #227 chore β: 実行ランタイム固有の固定目的文 + 所持物証テキスト
-        # を provider 経由で取得 (escape_game format への統一)。
+        # を provider 経由で取得 (world_runtime format への統一)。
         # provider が落ちた場合は ERROR で記録した上で空文字に degrade する。
         # WARNING ではなく ERROR にする理由: provider 実装バグはサイレントに
         # 黙過すべきでなく、ログ集約側で必ず可視化したい (silent failure 防止)。

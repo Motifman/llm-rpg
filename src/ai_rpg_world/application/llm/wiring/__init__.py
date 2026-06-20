@@ -5,9 +5,9 @@
 かつて本 ``__init__.py`` は full wiring (``create_llm_agent_wiring`` /
 ``LlmAgentWiringResult`` + 多数の ``_build_*`` helper) を抱えていたが、本番
 (spot_graph_game サーバ) と全実験は escape runtime
-(``application/escape_game/escape_game_runtime.py`` の
-``create_escape_game_runtime`` → ``presentation/spot_graph_game/runtime_manager.py``
-の ``_EscapeGameLlmWiring``) 一本で動いており、full wiring はどの本番経路からも
+(``application/world_runtime/world_runtime.py`` の
+``create_world_runtime`` → ``presentation/spot_graph_game/runtime_manager.py``
+の ``_WorldLlmWiring``) 一本で動いており、full wiring はどの本番経路からも
 到達しない死蔵だった (調査: 経路統一アーク)。
 
 R2c-2 で ``create_llm_agent_wiring`` / ``LlmAgentOrchestrator`` /

@@ -20,11 +20,11 @@
 # 設計判断
 
 - **シナリオは duck-type で受ける**: ``scenario.player_spawns`` /
-  ``graph._spots`` 等の getattr で取れる属性だけを要求。具体型 (escape の
-  ``EscapeScenario`` 等) には依存しない
+  ``graph._spots`` 等の getattr で取れる属性だけを要求。具体型
+  (``ScenarioLoadResult`` 等) には依存しない
 - **本家 ``_shared_builders.py`` の重い builder には頼らない**:
   ``EpisodicMemoryLinkApplicationService`` 等の高度機能 (LLM 駆動の
-  reinterpretation / semantic cluster promotion) は escape_game の MVP では
+  reinterpretation / semantic cluster promotion) は world_runtime の MVP では
   over-engineering。後で必要になったら本家経路に乗り換える
 - **In-memory store がデフォルト**: SQLite store に差し替えるときは
   ``episode_store`` 引数で外側から渡す
@@ -33,9 +33,9 @@
 
 # 移行履歴
 
-PR #330 で ``demos/escape_game/escape_episodic_wiring.py`` から application
-層に持ち上げた。escape_game 側には後方互換のため re-export shim が残る
-(``EscapeEpisodicStack`` / ``build_escape_episodic_stack`` 名で alias)。
+PR #330 で ``demos/world_runtime/world_episodic_wiring.py`` から application
+層に持ち上げた。world_runtime 側には後方互換のため re-export shim が残る
+(``WorldEpisodicStack`` / ``build_world_episodic_stack`` 名で alias)。
 """
 
 from __future__ import annotations
@@ -165,7 +165,7 @@ class EpisodicStack:
     subjective_completion_scheduler: Optional[IEpisodicSubjectiveCompletionScheduler] = None
     # semantic 拡張 (default OFF)。``semantic_passive_top_k > 0`` または LLM gist
     # 有効時に full 共有 builder (build_episodic_memory_stack) で組み、
-    # escape_game でも「学びを作る (promotion) + 学びを出す (passive recall)」が
+    # world_runtime でも「学びを作る (promotion) + 学びを出す (passive recall)」が
     # 動くようにする。OFF のときは全て None / 0 で従来の episodic-only 動作。
     #
     #   semantic_passive_recall: prompt の【関連する学び】用 (top_k>0 のとき非 None)
@@ -214,7 +214,7 @@ def build_scenario_noun_matcher(
     - world_object: 各 SpotNode の ``interior.objects`` から
       ``object_id.value`` と ``name`` (#526 後続 C1)
 
-    すべて getattr で参照するため、具体型は escape_game / survival_island
+    すべて getattr で参照するため、具体型は world_runtime / survival_island
     の Scenario / SpotGraphAggregate どちらでも動く。
 
     #526 後続 C1: 観測 prose に「案内板」「覚書」等の world_object 名が
@@ -314,7 +314,7 @@ def build_episodic_stack(
     # 引数
 
     - ``scenario`` / ``graph``: 固有名詞 matcher の構築元。``getattr`` で参照する
-      ので duck-type (escape_game / survival_island どちらでも可)
+      ので duck-type (world_runtime / survival_island どちらでも可)
     - ``observation_buffer`` / ``sliding_window_memory`` / ``action_result_store``:
       呼び出し側の runtime が保持する I/O 群を共有する
     - ``trace_recorder_provider`` / ``current_tick_provider``: trace 配線
@@ -347,7 +347,7 @@ def build_episodic_stack(
     # ため (両者が違う store だと、worker が書き込んだ merged episode を
     # passive_recall が読めない)。
     # semantic 拡張 (default OFF)。ON のときは full 共有 builder で link/semantic/
-    # promotion を組み、chunk_coordinator に link service を渡す。escape_game の
+    # promotion を組み、chunk_coordinator に link service を渡す。world_runtime の
     # 軽量 MVP では従来 semantic を持たなかったが、フラグで本家 builder に委譲する
     # ことで「学びを作る/出す」を実験経路でも動かせるようにする (#526 後続)。
     link_service: Optional[Any] = None

@@ -2,7 +2,7 @@
 
 These tests intentionally freeze the current runtime path contract:
 
-- ``escape_game`` runtime used by experiments/server sessions
+- ``world_runtime`` runtime used by experiments/server sessions
 - retired spot-graph full wiring
 - generic LLM agent wiring that still carries tile-map compatibility
 
@@ -27,20 +27,20 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_experiment_and_server_entrypoints_use_escape_game_runtime() -> None:
-    """The experiment/server path is still GameRuntimeManager -> escape_game."""
+def test_experiment_and_server_entrypoints_use_world_runtime() -> None:
+    """The experiment/server path is still GameRuntimeManager -> world_runtime."""
     experiment = _read(_REPO_ROOT / "scripts/run_scenario_experiment.py")
     app = _read(_SRC / "ai_rpg_world/presentation/spot_graph_game/app.py")
     manager = _read(_SRC / "ai_rpg_world/presentation/spot_graph_game/runtime_manager.py")
 
     assert "GameRuntimeManager" in experiment
     assert "GameRuntimeManager" in app
-    assert "create_escape_game_runtime" in manager
+    assert "create_world_runtime" in manager
     assert "create_spot_graph_wiring" not in experiment
 
 
-def test_escape_game_memory_stack_has_flag_gated_semantic_extension() -> None:
-    """escape_game's episodic builder now exposes semantic/link handles behind flags."""
+def test_world_runtime_memory_stack_has_flag_gated_semantic_extension() -> None:
+    """world_runtime's episodic builder now exposes semantic/link handles behind flags."""
     from ai_rpg_world.application.llm.wiring.episodic_stack import (
         EpisodicStack,
         build_episodic_stack,
@@ -92,14 +92,14 @@ def test_full_wiring_is_retired() -> None:
         assert not (_SRC / rel).exists(), rel
 
 
-def test_memory_recall_episodes_is_escape_game_specific() -> None:
-    """Active episode recall is wired in escape_game."""
-    escape_runtime = _read(
-        _SRC / "ai_rpg_world/application/escape_game/escape_game_runtime.py"
+def test_memory_recall_episodes_is_world_runtime_specific() -> None:
+    """Active episode recall is wired in world_runtime."""
+    world_runtime = _read(
+        _SRC / "ai_rpg_world/application/world_runtime/world_runtime.py"
     )
     runtime_manager = _read(
         _SRC / "ai_rpg_world/presentation/spot_graph_game/runtime_manager.py"
     )
 
-    assert "memory_recall_episodes" in escape_runtime
+    assert "memory_recall_episodes" in world_runtime
     assert "TOOL_NAME_MEMORY_RECALL_EPISODES" in runtime_manager

@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from typing import Any, Dict
 
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
-    _EscapeGameLlmWiring,
+    _WorldLlmWiring,
 )
 
 
@@ -31,7 +31,7 @@ def _make_targets() -> Dict[str, Any]:
     }
 
 
-class _Manager(_EscapeGameLlmWiring):
+class _Manager(_WorldLlmWiring):
     """テスト用に __init__ をスキップした manager。
 
     ``_resolve_whisper_target`` は self を一切参照しないので、空インスタンス

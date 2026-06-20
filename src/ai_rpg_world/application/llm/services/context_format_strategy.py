@@ -1,4 +1,4 @@
-"""コンテキストフォーマット戦略 (escape_game format に統一)。"""
+"""コンテキストフォーマット戦略 (world_runtime format に統一)。"""
 
 import logging
 import os

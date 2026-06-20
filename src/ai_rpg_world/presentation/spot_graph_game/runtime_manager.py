@@ -1,6 +1,6 @@
 """Central manager that bridges FastAPI routers with the game runtime.
 
-Wires ``EscapeGameRuntime`` / scenario loaders / session lifecycle to
+Wires ``WorldRuntime`` / scenario loaders / session lifecycle to
 the API layer.  Methods that are not yet backed by real logic return
 stub data so that the full API surface remains exercisable.
 """
@@ -56,8 +56,8 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
 from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
     ToolCallLoopGuardService,
 )
-from ai_rpg_world.application.llm.services.escape_llm_prompt import (
-    EscapeCharacterPromptInput,
+from ai_rpg_world.application.llm.services.world_llm_prompt import (
+    CharacterPromptInput,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
@@ -117,12 +117,12 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
 logger = logging.getLogger(__name__)
 
 
-def _character_to_escape_prompt_input(
+def _character_to_prompt_input(
     character: Optional[CharacterDetailResponse],
-) -> Optional[EscapeCharacterPromptInput]:
+) -> Optional[CharacterPromptInput]:
     if character is None:
         return None
-    return EscapeCharacterPromptInput(
+    return CharacterPromptInput(
         character_id=character.id,
         name=character.name,
         first_person=character.first_person or "私",
@@ -143,7 +143,7 @@ def _utcnow_iso() -> str:
 
 
 @dataclass
-class _EscapeSpawnAllPlayersLlmResolver(ILLMPlayerResolver):
+class _WorldSpawnAllPlayersLlmResolver(ILLMPlayerResolver):
     """スポーンした全員をプレゼン層脱出セッションでは LLM ターン対象とみなす。"""
 
     spawn_player_ids: frozenset[int]
@@ -376,10 +376,10 @@ class _LlmPhaseAResult:
 
 
 @dataclass
-class _EscapeGameLlmTurnTrigger:
+class _WorldLlmTurnTrigger:
     """Queues escape-game LLM turns and runs them against the session runtime."""
 
-    wiring: "_EscapeGameLlmWiring"
+    wiring: "_WorldLlmWiring"
     max_turns: int = 5
     pending_player_ids: set[int] = field(default_factory=set)
     _turn_counts: dict[int, int] = field(default_factory=dict)
@@ -599,7 +599,7 @@ class _EscapeGameLlmTurnTrigger:
 
 
 @dataclass
-class _EscapeGameLlmWiring:
+class _WorldLlmWiring:
     """Session-local LLM loop for the escape-game runtime.
 
     **Two-phase construction invariant**:
@@ -608,7 +608,7 @@ class _EscapeGameLlmWiring:
     必要とするため、本クラスの ``__init__`` 直後に注入する必要がある。
     ``create_session`` の流れは:
 
-        1. ``_EscapeGameLlmWiring(...)`` を ctor で作成 (内部で trigger 生成)
+        1. ``_WorldLlmWiring(...)`` を ctor で作成 (内部で trigger 生成)
         2. ``ObservationTurnScheduler`` を trigger を使って組み立て
         3. ``ActionFailedObservationEmitter`` を scheduler を使って組み立て
         4. ``attach_action_failed_wiring(emitter, generator)`` を呼ぶ
@@ -633,13 +633,13 @@ class _EscapeGameLlmWiring:
 
     def __post_init__(self) -> None:
         self.observation_appender = ObservationAppender(self.observation_buffer)
-        self.llm_turn_trigger = _EscapeGameLlmTurnTrigger(
+        self.llm_turn_trigger = _WorldLlmTurnTrigger(
             wiring=self,
             max_turns=self.max_turns,
         )
         # PR 4 (#227): 同一ツール連打を engine 側で検知し、警告を観測として
         # 注入する loop guard。PR #230 で LlmAgentOrchestrator 経由で配線
-        # していたが、escape_game の独自 turn 実行はそれを経由しないため、
+        # していたが、world_runtime の独自 turn 実行はそれを経由しないため、
         # ここで wiring に直接組み込む。閾値は ToolCallLoopGuardService の
         # 既定値 (wait=3 / travel_to=2 / interact=4 / その他=5) を使う。
         # Issue #240 後続: trace_recorder + current_tick_provider を注入し、
@@ -664,10 +664,10 @@ class _EscapeGameLlmWiring:
         # 放置するケースを救済するため、action_summary / result_summary と
         # 未完了 memo の content を SequenceMatcher で比較し、類似度が高ければ
         # 「memo を完了したかも」hint を result.message に append する。
-        # PR #230 で本家経路に配線済みだが、escape_game の独自 turn 実行は
+        # PR #230 で本家経路に配線済みだが、world_runtime の独自 turn 実行は
         # 経由しないため、ここで wiring に直接組み込む。
         # Phase 3 Step 3a-3: MemoCompletionHintService に Resolver/WorldId を
-        # 注入する。escape_game の auxiliary tool stack 経由で provision された
+        # 注入する。world_runtime の auxiliary tool stack 経由で provision された
         # Being を参照できるよう、runtime の aux_being_resolver property を利用する。
         memo_store = getattr(self.runtime, "_todo_store", None)
         # runtime 側で aux being stack を初期化しておく (= property が None で
@@ -983,7 +983,7 @@ class _EscapeGameLlmWiring:
 
         Step 1 並列化 (#346) 以降、両 phase は分離されているが、本メソッドは
         旧来の同期挙動 (1 player 完結) を維持するための wrapper。並列化は
-        `_EscapeGameLlmTurnTrigger.run_scheduled_turns` 側で行う。
+        `_WorldLlmTurnTrigger.run_scheduled_turns` 側で行う。
         """
         phase_a = self.run_phase_a(player_id)
         return self.run_phase_b(phase_a)
@@ -1090,7 +1090,7 @@ class _EscapeGameLlmWiring:
         name = str(tool_call.get("name", ""))
         arguments = self._coerce_arguments(tool_call.get("arguments"))
         # Phase 1d: ACTION 自動 trace (実行前)。runtime に trace_recorder が
-        # 注入されていれば記録。LlmAgentOrchestrator 経路を通らない escape_game
+        # 注入されていれば記録。LlmAgentOrchestrator 経路を通らない world_runtime
         # 専用 wiring のための補完。
         trace_recorder = getattr(self.runtime, "trace_recorder", None)
         current_tick: Optional[int] = None
@@ -1845,7 +1845,7 @@ class _EscapeGameLlmWiring:
         # 漂流島 v2 で 1 tick = 1 時間スケールに統一されて以降、tick 140 で
         # 11:40 表示 (実際は day 5 20:00) のように LLM プロンプトに渡る時刻が
         # 嘘になっていた。runtime 側に day_night ベースの正規実装
-        # (escape_game_runtime._time_label) があるのでそれに委譲する。
+        # (world_runtime._time_label) があるのでそれに委譲する。
         runtime_label = getattr(self.runtime, "_time_label", None)
         if callable(runtime_label):
             return runtime_label()
@@ -2070,22 +2070,22 @@ class GameRuntimeManager:
         if not scenario_path.exists():
             raise ValueError(f"World not found: {request.world_id}")
 
-        # PR #450: escape_game_runtime は demos/ から application/ に移動済。
+        # PR #450: world_runtime は demos/ から application/ に移動済。
         # presentation 層が demos/ を import する旧構造を解消する。
-        from ai_rpg_world.application.escape_game.escape_game_runtime import (
-            create_escape_game_runtime,
+        from ai_rpg_world.application.world_runtime.world_runtime import (
+            create_world_runtime,
         )
 
-        escape_character = None
+        world_character = None
         if request.character_ids:
             detail = self.get_character(request.character_ids[0])
-            escape_character = _character_to_escape_prompt_input(detail)
+            world_character = _character_to_prompt_input(detail)
 
-        runtime = create_escape_game_runtime(
-            scenario_path, escape_character=escape_character
+        runtime = create_world_runtime(
+            scenario_path, world_character=world_character
         )
         spawn_ids = frozenset(int(sp.player_id) for sp in runtime.scenario.player_spawns)
-        llm_resolver = _EscapeSpawnAllPlayersLlmResolver(spawn_player_ids=spawn_ids)
+        llm_resolver = _WorldSpawnAllPlayersLlmResolver(spawn_player_ids=spawn_ids)
         # appender / turn_scheduler は heartbeat と ActionFailed の両方で
         # 共有する (同じ observation buffer に書き込み、同じ turn trigger を
         # 呼ぶため)。
@@ -2093,7 +2093,7 @@ class GameRuntimeManager:
         # 注意: llm_wiring を構築する前に turn_scheduler を作る必要がある
         # ため、最初に空の wiring を作り、それから scheduler / emitter を
         # 組み立てて wiring に注入する流れにする。
-        llm_wiring = _EscapeGameLlmWiring(
+        llm_wiring = _WorldLlmWiring(
             runtime=runtime, observation_buffer=runtime._obs_buffer
         )
         turn_scheduler = ObservationTurnScheduler(
