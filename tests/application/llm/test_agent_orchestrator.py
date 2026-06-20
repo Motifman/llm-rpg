@@ -252,6 +252,41 @@ class TestOrchestratorEpisodicActionCapture:
         orch.run_turn(PlayerId(5))
         assert store.list_recent_by_being(being_id, 10) == []
 
+    def test_subjective_validation_error_preserves_expected_result_in_action_store(self) -> None:
+        """#552 PR-A: validation 失敗でも構造化 expected_result を action_store に残す。
+
+        sanitizer が action_summary の JSON から expected_result を落とすので、失敗
+        経路で構造化フィールドにも渡さないと、失敗行の [予測:] が完全に消える。"""
+        mapper = ToolCommandMapper(
+            handler_map={
+                "spot_graph_interact": lambda pid, a: LlmCommandResultDto(success=True, message="ok")
+            }
+        )
+        orch, _ = _orchestrator_with_episode(
+            llm_client=StubLlmClient(
+                tool_call_to_return={
+                    "name": "spot_graph_interact",
+                    # inner_thought 欠落で validation 失敗。だが予測は宣言済み。
+                    "arguments": {
+                        "object_label": "OBJ1",
+                        "action_name": "inspect",
+                        "expected_result": "祭壇が光る",
+                        "intention": "封印を確かめる",
+                    },
+                }
+            ),
+            mapper=mapper,
+        )
+        orch.run_turn(PlayerId(5))
+        entries = orch._action_result_store.get_recent(PlayerId(5), 10)
+        assert len(entries) == 1
+        entry = entries[0]
+        assert entry.success is False
+        # JSON からは落ちるが構造化フィールドには残る
+        assert "expected_result" not in entry.action_summary
+        assert entry.expected_result == "祭壇が光る"
+        assert entry.intention == "封印を確かめる"
+
     def test_argument_resolution_error_does_not_persist_episode(self) -> None:
         """引数解決失敗は execute 前に終わるため保存しない。"""
         mapper = ToolCommandMapper(

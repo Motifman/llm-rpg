@@ -234,7 +234,11 @@ class _ContractRuntime:
         success: bool = True,
         error_code: str | None = None,
         scene_boundary: bool = False,
+        expected_result: str | None = None,
+        intention: str | None = None,
+        emotion_hint: str | None = None,
     ) -> None:
+        # 実 escape _record_action_result (U2) と同じ subjective kwargs を受ける。
         self.events.extend(["append", "chunk", "promotion"])
         self.action_results.append(
             {
@@ -245,6 +249,9 @@ class _ContractRuntime:
                 "success": success,
                 "error_code": error_code,
                 "scene_boundary": scene_boundary,
+                "expected_result": expected_result,
+                "intention": intention,
+                "emotion_hint": emotion_hint,
             }
         )
 
@@ -796,10 +803,61 @@ def test_phase_b_records_unsupported_tool_failure_with_raw_tool_summary(
     assert result.error_code == "UNSUPPORTED_TOOL"
     assert len(runtime.action_results) == 1
     entry = runtime.action_results[0]
-    assert entry["action_summary"] == 'contract_unknown_tool({"probe": "x"})'
+    # #552 PR-A: 失敗パスの action_summary も共有 sanitizer に集約され、orchestrator と
+    # 同じ「...) を実行しました。」形式に統一された (outcome arg "probe" は保持)。
+    assert entry["action_summary"] == 'contract_unknown_tool({"probe": "x"}) を実行しました。'
     assert entry["tool_name"] == "contract_unknown_tool"
     assert entry["success"] is False
     assert entry["error_code"] == "UNSUPPORTED_TOOL"
+
+
+def test_phase_b_generic_failure_preserves_expected_result_for_prediction_line(
+    clean_runtime_env: None,
+) -> None:
+    """#552 PR-A: sanitizer が JSON から予測を落とすので、失敗 (unsupported) 経路でも
+    構造化 expected_result を _record_action_result に渡し、失敗行の [予測:] を守る。"""
+    player_id = PlayerId(1)
+    runtime = _ContractRuntime()
+    wiring = _wiring_for_contract_runtime(runtime)
+
+    wiring.run_phase_b(
+        _phase_a(
+            player_id,
+            tool_call={
+                "name": "contract_unknown_tool",
+                "arguments": {
+                    "probe": "x",
+                    "expected_result": "未知ツールでも何か起きる",
+                    "intention": "試しに呼ぶ",
+                    "emotion_hint": "curiosity",
+                },
+            },
+        )
+    )
+
+    entry = runtime.action_results[0]
+    # JSON からは落ちるが構造化フィールドには残る
+    assert "expected_result" not in entry["action_summary"]
+    assert entry["expected_result"] == "未知ツールでも何か起きる"
+    assert entry["intention"] == "試しに呼ぶ"
+    # その entry を recent-events 行にすると失敗行に [予測:] が出る
+    from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+        format_action_result_line_for_recent_events,
+    )
+    from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
+
+    line = format_action_result_line_for_recent_events(
+        ActionResultEntry(
+            occurred_at=datetime.now(timezone.utc),
+            action_summary=entry["action_summary"],
+            result_summary=entry["result_summary"],
+            success=False,
+            error_code=entry["error_code"],
+            expected_result=entry["expected_result"],
+        )
+    )
+    assert "[予測: 未知ツールでも何か起きる]" in line
+    assert "[失敗]" in line
 
 
 def test_direct_explore_records_natural_language_action_summary(

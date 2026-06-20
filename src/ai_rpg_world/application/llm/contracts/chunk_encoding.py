@@ -41,14 +41,20 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
     if not isinstance(entry, ActionResultEntry):
         raise TypeError("entry must be ActionResultEntry")
     time_prefix = f"[{entry.game_time_label}] " if entry.game_time_label else ""
+    # #552 PR-A: 行動前の予測 (expected_result) を [予測: ...] として行内に別表記する。
+    # action_summary の JSON からは sanitizer で落としてあるので二重表示にならない。
+    # 構造化フィールドから読むので、予測が無ければ何も足さない。「行動 → 予測 → 結果」
+    # の順で並べ、失敗 / omit_result 行にも付ける (予測と実際のズレを読み取れるように)。
+    prediction = (entry.expected_result or "").strip()
+    prediction_label = f" [予測: {prediction}]" if prediction else ""
     if entry.success:
         if entry.omit_result_in_prompt:
-            return f"{time_prefix}[行動] {entry.action_summary}"
+            return f"{time_prefix}[行動] {entry.action_summary}{prediction_label}"
         return (
-            f"{time_prefix}[行動] {entry.action_summary} → [結果] {entry.result_summary}"
+            f"{time_prefix}[行動] {entry.action_summary}{prediction_label} → [結果] {entry.result_summary}"
         )
     parts = [
-        f"{time_prefix}[行動] {entry.action_summary} → [失敗]",
+        f"{time_prefix}[行動] {entry.action_summary}{prediction_label} → [失敗]",
         f"error_code={entry.error_code or '不明'}",
     ]
     if entry.tool_name:

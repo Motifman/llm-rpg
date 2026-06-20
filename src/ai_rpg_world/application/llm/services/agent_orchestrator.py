@@ -24,6 +24,9 @@ from ai_rpg_world.application.llm.llm_argument_fingerprint import (
     build_argument_fingerprint,
 )
 from ai_rpg_world.application.llm.result_summary_builder import build_result_summary
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    format_action_summary_for_display,
+)
 from ai_rpg_world.application.llm.services.subjective_args import (
     extract_subjective_text as _extract_subjective_text,
 )
@@ -83,14 +86,14 @@ _TOOLS_SKIPPING_EPISODIC_CHUNK: frozenset[str] = frozenset(
 
 
 def _format_action_summary(tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> str:
-    """ツール名と引数から「直近の出来事」用の行動要約文を組み立てる。"""
-    if not arguments:
-        return f"{tool_name} を実行しました。"
-    try:
-        args_str = json.dumps(arguments, ensure_ascii=False)
-    except (TypeError, ValueError):
-        args_str = str(arguments)
-    return f"{tool_name}({args_str}) を実行しました。"
+    """ツール名と引数から「直近の出来事」用の行動要約文を組み立てる。
+
+    #552 PR-A: raw args 全体を json.dumps すると主観入力 (intention /
+    expected_result / emotion_hint / reason) の生 JSON が outcome args に埋もれて
+    読みにくいので、共有 sanitizer で主観ノイズを落とす。expected_result は
+    chunk_encoding が ``[予測: ...]`` で別表記する。
+    """
+    return format_action_summary_for_display(tool_name, arguments)
 
 
 def _append_to_action_store(
@@ -410,6 +413,13 @@ class LlmAgentOrchestrator:
 
         validation_error = _validate_subjective_action_arguments(name, arguments)
         if validation_error is not None:
+            # #552 PR-A: sanitizer が action_summary の JSON から expected_result を
+            # 落とすので、validation 失敗でも構造化フィールドに予測を残さないと
+            # 失敗行の [予測:] が消える。resolution-error / success branch と同様に
+            # raw args から subjective を取り出して渡す (失敗行も予測×実際を読める)。
+            expected_result = _extract_subjective_text(arguments, "expected_result")
+            intention = _extract_subjective_text(arguments, "intention")
+            emotion_hint = _extract_subjective_text(arguments, "emotion_hint")
             action_summary = _format_action_summary(name, arguments)
             result_summary = build_result_summary(validation_error)
             _append_to_action_store(
@@ -421,6 +431,9 @@ class LlmAgentOrchestrator:
                 tool_name=name or None,
                 fingerprint_args=arguments,
                 game_time_label=time_label,
+                expected_result=expected_result,
+                intention=intention,
+                emotion_hint=emotion_hint,
             )
             return validation_error
 

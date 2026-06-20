@@ -47,6 +47,9 @@ from ai_rpg_world.application.llm.services.tool_executor_helpers import (
 from ai_rpg_world.application.llm.services.subjective_args import (
     extract_subjective_action_fields,
 )
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    format_action_summary_for_display,
+)
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
 )
@@ -1167,7 +1170,9 @@ class _EscapeGameLlmWiring:
             and name not in (TOOL_NAME_TODO_ADD, TOOL_NAME_TODO_LIST, TOOL_NAME_TODO_COMPLETE)
         ):
             try:
-                action_summary = f"{name}({json.dumps(arguments, ensure_ascii=False)})"
+                # #552 PR-A: memo hint は target/action/result に key すべきで、
+                # 主観入力に依存させない。sanitized summary を使う (健全化)。
+                action_summary = format_action_summary_for_display(name, arguments)
                 # Issue #240 後続: detect() を直接呼び、hint 発火時に trace に
                 # MEMO_HINT を emit。これにより実 LLM 試走で「hint が出たか / その後
                 # LLM が memo_done を呼んだか」を trace 経由で追える。
@@ -1199,13 +1204,19 @@ class _EscapeGameLlmWiring:
             TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
         )
         if not skip_duplicate_action_log:
+            # #552 PR-A: raw args の json.dumps をやめ、主観ノイズを落とした
+            # sanitized summary を記録する (失敗 / wait / listen 等の経路)。
+            # sanitizer が JSON から expected_result を落とすので、構造化フィールドに
+            # 予測を残さないと失敗行の [予測:] が消える。subjective を明示的に渡す
+            # (成功 core action は do_* 経路で配線済 = U2、ここは generic 経路の補完)。
             self.runtime._record_action_result(
                 player_id,
-                f"{name}({json.dumps(arguments, ensure_ascii=False)})",
+                format_action_summary_for_display(name, arguments),
                 result.message,
                 tool_name=name,
                 success=result.success,
                 error_code=result.error_code,
+                **extract_subjective_action_fields(arguments),
             )
         if trace_recorder is not None:
             try:
