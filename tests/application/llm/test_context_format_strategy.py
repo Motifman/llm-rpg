@@ -46,7 +46,11 @@ class TestSectionBasedContextFormatStrategyDefault:
         assert "- イベント1" in text
 
     def test_空のオプション_section_は省略される(self, strategy):
-        """memo / 記憶 / 目的 / 物証 は空なら section ごと省略される。"""
+        """memo / 記憶 / 目的 / 物証 は空なら section ごと省略される。
+
+        Issue #526 後続: 「受動想起では何も浮かばなかった」の sentinel text 注入は
+        prompt_builder._run_passive_recall 側の責務。formatter は受け取った
+        relevant_memories_text を信じて、空なら従来通り section を省略する。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
@@ -108,10 +112,10 @@ class TestSectionBasedContextFormatStrategyDefault:
             "events":   text.index("【直近の出来事】"),
             "current":  text.index("【現在地と周囲】"),
         }
-        assert idx["obj"] < idx["memos"] < idx["inv"] < idx["mem"] < idx["events"] < idx["current"]
+        assert idx["obj"] < idx["memos"] < idx["inv"] < idx["events"] < idx["mem"] < idx["current"]
 
-    def test_prediction_feedback_は_recent_events_直前に出る(self, strategy):
-        """【前回の予測と実際】は section order に関わらず直近出来事の読み方として直前に置く。"""
+    def test_prediction_feedback_は_recent_events_と_memories_の間に出る(self, strategy):
+        """【前回の予測と実際】は直近出来事の直後、関連する記憶の直前に置く (prefix cache 順)。"""
         text = strategy.format(
             current_state_text="現在地",
             recent_events_text="出来事",
@@ -119,10 +123,10 @@ class TestSectionBasedContextFormatStrategyDefault:
             prediction_feedback_text="- 予測: 扉が開く\n- 実際: 開かなかった",
         )
         assert "【前回の予測と実際】" in text
-        idx_mem = text.index("【関連する記憶】")
-        idx_feedback = text.index("【前回の予測と実際】")
         idx_events = text.index("【直近の出来事】")
-        assert idx_mem < idx_feedback < idx_events
+        idx_feedback = text.index("【前回の予測と実際】")
+        idx_mem = text.index("【関連する記憶】")
+        assert idx_events < idx_feedback < idx_mem
 
     def test_inventory_セクションが出ても順序が崩れない(self, strategy):
         """inventory は memories の前。"""

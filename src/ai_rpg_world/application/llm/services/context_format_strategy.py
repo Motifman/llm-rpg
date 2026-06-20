@@ -41,14 +41,18 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
     1. **【現在の目的】** — objective_text (scenario 固定の目標文)
     2. **【進行中のメモ】** — active_memos_text (memo 操作時のみ変動)
     3. **【所持・判明した物証】** — inventory_text (mid-volatile)
-    4. **【関連する記憶】** — relevant_memories_text (mid-volatile)
-    5. **【直近の出来事】** — recent_events_text (sliding window 由来の volatile)
-    6. **【現在地と周囲】** — current_state_text (毎ターン更新の最 volatile / 必須)
+    4. **【直近の出来事】** — recent_events_text (append 中心で head 安定)
+    5. **【前回の予測と実際】** — prediction_feedback_text (毎ターン直前 action 依存)
+    6. **【関連する記憶】** — relevant_memories_text (cue 再計算で全変動しうる volatile)
+    7. **【現在地と周囲】** — current_state_text (毎ターン更新の最 volatile / 必須)
 
-    意図: 「現在地と周囲」を末尾に置くことで:
-      - prefix cache は ① 〜 ⑤ までで止まり、安定 prefix を最大化
-      - LLM の attention は末尾が強い (Lost in the Middle, Liu et al. 2023) ので
-        「今ここ」情報の重みが上がり、tool 選択精度が高まる
+    意図:
+      - prefix cache は ④ までで止めたい (= 末尾 append の直近の出来事 は head 安定)。
+        「関連する記憶」は cue 由来で毎ターン全変動しうるため、その下に置く。
+      - 「現在地と周囲」を末尾に置くことで LLM の attention (Lost in the Middle,
+        Liu et al. 2023) が末尾に強く向き、「今ここ」情報の重みが上がる。
+      - 「関連する記憶」も末尾近くに置くと recall 内容への attention が高まり、
+        副産物として hallucination 抑制効果が見込める。
 
     ## legacy (旧順序、A/B 用)
 
@@ -229,10 +233,16 @@ def _emit_prediction_feedback(sections: list, prediction_feedback_text: str) -> 
 
 
 def _emit_relevant_memories(sections: list, relevant_memories_text: str) -> None:
+    """【関連する記憶】 section を emit する。
+
+    受動想起 service が未注入なら ``relevant_memories_text`` は空文字
+    (= section ごと省略)。注入されていれば最低でも「(受動想起では何も
+    浮かばなかった)」が ``prompt_builder._run_passive_recall`` で生成
+    されて渡る。"""
     if relevant_memories_text.strip():
         sections.extend([
             "",
-            "【関連する記憶】",
+            "【関連する記憶】(あなた自身の過去の体験として自動的に思い出されたもの)",
             relevant_memories_text.strip(),
         ])
 
@@ -361,15 +371,18 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 5. 関連する記憶 (mid-volatile、空なら省略)
-    if relevant_memories_text.strip():
-        sections.extend([
-            "【関連する記憶】",
-            relevant_memories_text.strip(),
-            "",
-        ])
+    # 5. 直近の出来事 (常に出す。空なら「（なし）」)
+    # 末尾 append 中心で head は安定 (= prefix cache hit する) ため、
+    # cue 再計算で全変動しうる「関連する記憶」より上に置く。
+    sections.extend([
+        "【直近の出来事】",
+        _RECENT_EVENTS_PREAMBLE,
+        recent_events_text.strip() or _PLACEHOLDER_RECENT_EVENTS,
+        "",
+    ])
 
-    # 6. 前回の予測と実際 (空なら省略)。直近出来事の読み方なので直前に置く。
+    # 6. 前回の予測と実際 (空なら省略)
+    # 毎ターン直前 action 依存で volatile なので直近の出来事より下に。
     if prediction_feedback_text.strip():
         sections.extend([
             "【前回の予測と実際】",
@@ -377,13 +390,15 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 7. 直近の出来事 (常に出す。空なら「（なし）」)
-    sections.extend([
-        "【直近の出来事】",
-        _RECENT_EVENTS_PREAMBLE,
-        recent_events_text.strip() or _PLACEHOLDER_RECENT_EVENTS,
-        "",
-    ])
+    # 7. 関連する記憶 (volatile、cue 再計算)
+    # 受動想起 service が未注入なら空文字 → section ごと省略。
+    # 注入されていれば最低でも「(受動想起では何も浮かばなかった)」が来る。
+    if relevant_memories_text.strip():
+        sections.extend([
+            "【関連する記憶】(あなた自身の過去の体験として自動的に思い出されたもの)",
+            relevant_memories_text.strip(),
+            "",
+        ])
 
     # 8. 現在地と周囲 (必須、最 volatile なので末尾)
     sections.extend([

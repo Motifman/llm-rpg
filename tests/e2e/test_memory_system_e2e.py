@@ -386,8 +386,9 @@ class TestPromptSectionsE2E:
         assert "【直近の出来事】" in text
         assert "【現在地と周囲】" in text
 
-        # stable_to_volatile 順序 (Phase 3 design doc §5):
-        # objective → L5 → learned → L4 → memos → inventory → memories → events → current
+        # stable_to_volatile 順序 (= 関連する記憶 は cue 全再計算で volatile なので
+        # append 中心 head 安定の 直近の出来事 より下に置く):
+        # objective → L5 → learned → L4 → memos → inventory → events → memories → current
         idx = {
             "obj": text.index("【現在の目的】"),
             "l5": text.index("【自己像と世界観】"),
@@ -402,7 +403,7 @@ class TestPromptSectionsE2E:
         # 「最も安定」→「最も volatile」の順
         assert (
             idx["obj"] < idx["l5"] < idx["learned"] < idx["l4"]
-            < idx["memos"] < idx["inv"] < idx["mem"] < idx["events"] < idx["current"]
+            < idx["memos"] < idx["inv"] < idx["events"] < idx["mem"] < idx["current"]
         )
 
     def test_L5_あり_L4_あり_で_両_section_が_見える(self) -> None:

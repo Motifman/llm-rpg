@@ -199,6 +199,73 @@ def _setup_runtime(*, no_llm: bool, scenario_path: Path) -> Tuple[Any, Any, str]
 # ─────────────────────────────────────────────────────────────────────
 
 
+def _inject_past_encounters(runtime: Any, recorder: Any) -> None:
+    """過去 episode と整合する encounter record を注入する。
+
+    ハルの persona は「漂流して半月」、過去 episode (= 浜辺釣り / 森薬草) も
+    過去時点の出来事として注入する。**Encounter Memory は episode_store と
+    独立した store** で、観測 pipeline 経由でしか更新されない。test setup
+    のように直接 episode_store に inject する経路だと両者が不整合になり、
+    「現在地: 拠点 (初めて訪れた)」が偽情報として出る。
+
+    対処: **本番と同じ ``encounter_memory.observe()`` API** を test setup
+    でも使って整合させる。特殊 path は作らない。
+
+    - 過去 episode の spot (= 浜辺/森) → observe (= 「過去訪問あり」を記録)
+    - spawn 地点 (= 拠点) → もう 1 回 observe (= spawn-time の 1 件と
+      合わせて count=2、「初めて訪れた」 注記が消える)
+    """
+    from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
+        EncounterKey,
+    )
+    from ai_rpg_world.application.trace import TraceEventKind
+
+    haru_id = _resolve_haru_id(runtime)
+    encounter_memory = getattr(runtime, "_encounter_memory", None)
+    if encounter_memory is None:
+        logger.warning("runtime has no _encounter_memory; skipping encounter injection")
+        return
+    scenario = runtime.scenario
+    graph = runtime._spot_graph_repo.find_graph()
+    spot_id_by_name = {n.name: int(n.spot_id.value) for n in graph._spots.values()}
+
+    # 過去 episode の場所への過去訪問を記録
+    for past in _PAST_EPISODES:
+        spot_int_id = spot_id_by_name[past["spot_name"]]
+        spot_str_id = scenario.id_mapper.get_str("spot", spot_int_id)
+        encounter_memory.observe(
+            haru_id, EncounterKey.spot(spot_str_id), current_tick=0
+        )
+        recorder.record(
+            TraceEventKind.NOTE,
+            kind_name="probe_past_encounter_injected",
+            spot_name=past["spot_name"],
+            spot_str_id=spot_str_id,
+        )
+        logger.info("injected past encounter: %s (%s)", past["spot_name"], spot_str_id)
+
+    # spawn 地点 (= 拠点) も「半月暮らしてきた」前提で 1 回 observe
+    # (spawn 時点で既に 1 件記録されているので count=2 になり「初めて」 が消える)
+    for spawn in scenario.player_spawns:
+        if spawn.name == "ハル":
+            spawn_int_id = int(spawn.spawn_spot_id.value)
+            spawn_str_id = scenario.id_mapper.get_str("spot", spawn_int_id)
+            encounter_memory.observe(
+                haru_id, EncounterKey.spot(spawn_str_id), current_tick=0
+            )
+            recorder.record(
+                TraceEventKind.NOTE,
+                kind_name="probe_past_encounter_injected",
+                spot_str_id=spawn_str_id,
+                reason="spawn_spot_count_increment",
+            )
+            logger.info(
+                "incremented spawn-spot encounter: %s (= 「初めて」を消す)",
+                spawn_str_id,
+            )
+            break
+
+
 def _inject_past_episodes(runtime: Any, recorder: Any) -> None:
     """ハルの episode_store に過去 episode を 2 件強制注入する。"""
     from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (
@@ -557,6 +624,7 @@ def main() -> int:
         runtime, state, _tmp = _setup_runtime(no_llm=args.no_llm, scenario_path=args.scenario)
         runtime.set_trace_recorder(recorder)
         _inject_past_episodes(runtime, recorder)
+        _inject_past_encounters(runtime, recorder)
         _run_tick_loop(
             runtime, state, recorder, max_world_ticks=args.max_world_ticks
         )
