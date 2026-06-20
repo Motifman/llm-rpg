@@ -839,6 +839,21 @@ class EscapeGameRuntime:
                     "for player=%s",
                     player_id.value,
                 )
+            # #526 後続: semantic 有効時は chunk write 直後に昇格 hook を回す。
+            # full path では LlmAgentOrchestrator が担うが、escape_game は独自
+            # turn 経路 (_record_action_result) なのでここで明示的に呼ぶ。これが
+            # 無いと passive recall の器だけできて semantic store が空のまま。
+            # 失敗は memory pipeline に留め、本来の action 完了は止めない。
+            promotion = self._episodic_stack.episodic_semantic_promotion
+            if promotion is not None:
+                try:
+                    promotion.on_after_tool_turn(player_id.value)
+                except Exception:
+                    logger.exception(
+                        "episodic_semantic_promotion.on_after_tool_turn failed "
+                        "for player=%s",
+                        player_id.value,
+                    )
 
     def _drain_buffer_to_sliding_window(self, player_id: PlayerId) -> List[ObservationEntry]:
         """観測バッファをスライディングウィンドウに移す。溢れた観測を返す。"""
@@ -1125,9 +1140,13 @@ class EscapeGameRuntime:
         # (recall section が出ない)。
         episodic_config = EpisodicRecallConfig()
         if self._episodic_stack is not None:
+            # #526 後続: stack に semantic passive recall があれば
+            # 【関連する学び】section を出すために渡す (default OFF では None/0)。
             episodic_config = EpisodicRecallConfig(
                 passive_recall=self._episodic_stack.passive_recall,
                 noun_matcher=self._episodic_stack.noun_matcher,
+                semantic_passive_recall=self._episodic_stack.semantic_passive_recall,
+                semantic_passive_top_k=self._episodic_stack.semantic_passive_top_k,
             )
         builder = DefaultPromptBuilder(
             core,
@@ -3321,6 +3340,51 @@ def create_escape_game_runtime(
                     "LLM_EPISODIC_SUBJECTIVE_ENABLED=1 だが LiteLLMClient 未使用 "
                     "(LLM_CLIENT=litellm が必要)。subjective scheduler を無効化。"
                 )
+        # #526 後続: semantic 拡張のフラグ解決。escape_game でも
+        # SEMANTIC_PASSIVE_TOP_K / SEMANTIC_LLM_GIST_ENABLED で「学びを作る
+        # (promotion) / 出す (passive recall)」を on/off できるようにする。
+        # 既定 OFF (top_k=0 / gist off) で従来の episodic-only 動作を保つ。
+        # フラグは env を直読みせず ResolvedLlmRuntimeConfig (= config) から取る。
+        # こうしないと create_escape_game_runtime(config=...) の明示 config が
+        # semantic だけ無視され、短期記憶など他設定との config 契約が崩れる。
+        _semantic_top_k = config.semantic_passive_top_k
+        _semantic_gist_enabled = config.semantic_llm_gist_enabled
+        _semantic_enabled = _semantic_top_k > 0 or _semantic_gist_enabled
+        _semantic_gist_service = None
+        _semantic_persona_resolver = None
+        if _semantic_enabled:
+            _names_by_pid = {
+                int(s.player_id): (s.name or "") for s in scenario.player_spawns
+            }
+            # persona resolver: player_id(int) → (player_name, persona_block)。
+            # gist prompt / promotion が persona を載せるために使う。
+            _semantic_persona_resolver = (
+                lambda pid_int, _n=_names_by_pid, _p=persona_block: (
+                    _n.get(int(pid_int), ""),
+                    _p,
+                )
+            )
+            # gist は短期記憶 builder と同じく config.llm_client_kind で gate する
+            # (config が stub なのに env 側で litellm が動く余地を残さない)。
+            if _semantic_gist_enabled and config.llm_client_kind == "litellm":
+                from ai_rpg_world.application.llm.wiring import (
+                    _optional_semantic_gist_service,
+                )
+                from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+                    create_llm_client_from_env,
+                )
+
+                try:
+                    _gist_client = create_llm_client_from_env()
+                except Exception:
+                    logger.exception(
+                        "LLM client factory failed; semantic gist disabled"
+                    )
+                    _gist_client = None
+                if _gist_client is not None:
+                    _semantic_gist_service = _optional_semantic_gist_service(
+                        _gist_client, True
+                    )
         runtime._episodic_stack = build_episodic_stack(
             scenario=scenario,
             graph=spot_graph_repo.find_graph(),
@@ -3339,6 +3403,10 @@ def create_escape_game_runtime(
             # aux Being 配線をそのまま使う
             being_attachment_resolver=runtime._aux_being_resolver,
             default_world_id=runtime._aux_being_default_world_id,
+            semantic_enabled=_semantic_enabled,
+            semantic_passive_top_k=_semantic_top_k,
+            semantic_gist_service=_semantic_gist_service,
+            semantic_persona_resolver=_semantic_persona_resolver,
         )
 
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で

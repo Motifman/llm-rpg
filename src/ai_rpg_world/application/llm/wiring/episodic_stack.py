@@ -42,7 +42,15 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
+        EpisodicSemanticClusterPromotionService,
+    )
+    from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+        SemanticPassiveRecallService,
+    )
 
 from ai_rpg_world.application.llm.scheduler import (
     IEpisodicSubjectiveCompletionScheduler,
@@ -140,6 +148,22 @@ class EpisodicStack:
     noun_matcher: IWorldNounMatcher
     episode_store: InMemorySubjectiveEpisodeStore
     subjective_completion_scheduler: Optional[IEpisodicSubjectiveCompletionScheduler] = None
+    # semantic 拡張 (default OFF)。``semantic_passive_top_k > 0`` または LLM gist
+    # 有効時に full 共有 builder (build_episodic_memory_stack) で組み、
+    # escape_game でも「学びを作る (promotion) + 学びを出す (passive recall)」が
+    # 動くようにする。OFF のときは全て None / 0 で従来の episodic-only 動作。
+    #
+    #   semantic_passive_recall: prompt の【関連する学び】用 (top_k>0 のとき非 None)
+    #   semantic_passive_top_k: prompt に出す semantic 件数 (0 = 出さない)
+    #   episodic_semantic_promotion: action 後に on_after_tool_turn を呼ぶ昇格 service
+    #   semantic_memory_store: 昇格先 store (snapshot / 検証用に公開)
+    #   memory_link_store: 昇格の根拠となる memory link graph (snapshot 用に公開)
+    semantic_passive_recall: Optional["SemanticPassiveRecallService"] = None
+    semantic_passive_top_k: int = 0
+    episodic_semantic_promotion: Optional["EpisodicSemanticClusterPromotionService"] = None
+    # store は上流 EpisodicMemoryStack が Any 扱いのため合わせる (repo 実装差を許容)。
+    semantic_memory_store: Optional[Any] = None
+    memory_link_store: Optional[Any] = None
 
 
 def build_scenario_noun_matcher(*, scenario: object, graph: object) -> IWorldNounMatcher:
@@ -188,6 +212,10 @@ def build_episodic_stack(
     episode_store: Optional[InMemorySubjectiveEpisodeStore] = None,
     being_attachment_resolver: Optional[Any] = None,
     default_world_id: Optional[Any] = None,
+    semantic_enabled: bool = False,
+    semantic_passive_top_k: int = 0,
+    semantic_gist_service: Optional[Any] = None,
+    semantic_persona_resolver: Optional[Any] = None,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
@@ -211,6 +239,12 @@ def build_episodic_stack(
       scheduler と stack で同じ ``episode_store`` を共有することが整合性条件
     - ``episode_store``: 呼び出し側が事前に scheduler と共有する store を渡せる。
       None なら新規作成
+    - ``semantic_enabled``: True で本家 ``build_episodic_memory_stack`` を再利用し
+      link/semantic/promotion を組む (default False = 従来の episodic-only)
+    - ``semantic_passive_top_k``: >0 で ``SemanticPassiveRecallService`` を作り
+      prompt の【関連する学び】に出す。0 (gist のみ ON) は write-only 構成
+    - ``semantic_gist_service`` / ``semantic_persona_resolver``: cluster 昇格時の
+      LLM gist と persona。``build_episodic_memory_stack`` にそのまま渡す
 
     # 履歴
 
@@ -224,7 +258,38 @@ def build_episodic_stack(
     # で「スケジューラと chunk_coordinator が同じ store を共有する必要がある」
     # ため (両者が違う store だと、worker が書き込んだ merged episode を
     # passive_recall が読めない)。
-    if episode_store is None:
+    # semantic 拡張 (default OFF)。ON のときは full 共有 builder で link/semantic/
+    # promotion を組み、chunk_coordinator に link service を渡す。escape_game の
+    # 軽量 MVP では従来 semantic を持たなかったが、フラグで本家 builder に委譲する
+    # ことで「学びを作る/出す」を実験経路でも動かせるようにする (#526 後続)。
+    link_service: Optional[Any] = None
+    episodic_semantic_promotion: Optional[Any] = None
+    semantic_memory_store: Optional[Any] = None
+    memory_link_store: Optional[Any] = None
+    if semantic_enabled:
+        # 循環 import 回避のため関数内 import。
+        from ai_rpg_world.application.llm.wiring._shared_builders import (
+            build_episodic_memory_stack,
+        )
+
+        mem_stack = build_episodic_memory_stack(
+            episode_store,
+            semantic_gist_service=semantic_gist_service,
+            semantic_persona_resolver=semantic_persona_resolver,
+            being_attachment_resolver=being_attachment_resolver,
+            default_world_id=default_world_id,
+        )
+        # build_episodic_memory_stack が episode_store を解決して返す。以降は
+        # 全コンポーネントがこの shared store を共有する (chunk write / recall /
+        # promotion が同じ store を見る整合性条件)。
+        episode_store = mem_stack.shared_episode_store
+        link_service = mem_stack.mem_bundle.link_service
+        episodic_semantic_promotion = mem_stack.episodic_semantic_promotion
+        semantic_memory_store = mem_stack.semantic_memory_store
+        # promotion の根拠となる link graph も snapshot 用に公開する
+        # (semantic entries だけ保存して link graph が空 fallback になるのを防ぐ)。
+        memory_link_store = mem_stack.mem_bundle.link_store
+    elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
     chunk_coordinator = EpisodicChunkCoordinator(
         observation_buffer=observation_buffer,
@@ -237,7 +302,9 @@ def build_episodic_stack(
         chunk_subjective_fields_service=chunk_subjective_fields_service,
         subjective_completion_scheduler=subjective_completion_scheduler,
         persona_block_provider=persona_block_provider,
-        # memory link service は未注入のまま (= リンクなし)。MVP 構成として最小。
+        # semantic OFF なら link service なし (= MVP の従来動作)。ON なら昇格に
+        # 必要な memory link を chunk write 経路に通す。
+        episodic_memory_link_service=link_service,
         being_attachment_resolver=being_attachment_resolver,
         default_world_id=default_world_id,
     )
@@ -247,12 +314,33 @@ def build_episodic_stack(
         default_world_id=default_world_id,
     )
     noun_matcher = build_scenario_noun_matcher(scenario=scenario, graph=graph)
+
+    # semantic passive recall は top_k>0 のときだけ作る (= prompt の【関連する学び】)。
+    # gist のみ ON (top_k=0) は「学びを作るが prompt には出さない」write-only 構成で、
+    # ここで recall=None になるのは意図どおり (promotion は上で配線済)。
+    semantic_passive_recall: Optional[Any] = None
+    if semantic_enabled and semantic_passive_top_k > 0:
+        from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+            SemanticPassiveRecallService,
+        )
+
+        semantic_passive_recall = SemanticPassiveRecallService(
+            semantic_memory_store,
+            being_attachment_resolver=being_attachment_resolver,
+            default_world_id=default_world_id,
+        )
+
     return EpisodicStack(
         chunk_coordinator=chunk_coordinator,
         passive_recall=passive_recall,
         noun_matcher=noun_matcher,
         episode_store=episode_store,
         subjective_completion_scheduler=subjective_completion_scheduler,
+        semantic_passive_recall=semantic_passive_recall,
+        semantic_passive_top_k=semantic_passive_top_k if semantic_enabled else 0,
+        episodic_semantic_promotion=episodic_semantic_promotion,
+        semantic_memory_store=semantic_memory_store,
+        memory_link_store=memory_link_store,
     )
 
 
