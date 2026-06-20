@@ -331,12 +331,18 @@ def build_episodic_stack(
         memory_link_store = mem_stack.mem_bundle.link_store
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
+    # #526 後続 Fix A: noun_matcher を chunk_coordinator より先に作り、
+    # ChunkEpisodeDraftBuilder と passive_recall の両方に同じ matcher を
+    # 渡すことで write/read 経路の cue 生成を対称化する。
+    noun_matcher = build_scenario_noun_matcher(scenario=scenario, graph=graph)
     chunk_coordinator = EpisodicChunkCoordinator(
         observation_buffer=observation_buffer,
         sliding_window_memory=sliding_window_memory,
         action_result_store=action_result_store,
         episodic_episode_store=episode_store,
-        chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),
+        chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(
+            noun_matcher=noun_matcher
+        ),
         trace_recorder_provider=trace_recorder_provider,
         current_tick_provider=current_tick_provider,
         chunk_subjective_fields_service=chunk_subjective_fields_service,
@@ -364,7 +370,7 @@ def build_episodic_stack(
         habituation_store=recall_habituation_store,
         habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
     )
-    noun_matcher = build_scenario_noun_matcher(scenario=scenario, graph=graph)
+    # noun_matcher は上で chunk_coordinator 用に先に構築済 (Fix A)
 
     # semantic passive recall は top_k>0 のときだけ作る (= prompt の【関連する学び】)。
     # gist のみ ON (top_k=0) は「学びを作るが prompt には出さない」write-only 構成で、
