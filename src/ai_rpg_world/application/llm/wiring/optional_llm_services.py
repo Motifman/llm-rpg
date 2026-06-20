@@ -3,7 +3,10 @@
 元は ``wiring/__init__.py`` (full wiring = create_llm_agent_wiring) 内の private 関数
 ``_optional_semantic_gist_service`` / ``_optional_episodic_reinterpretation_completion``
 だったが、escape runtime もこれらに依存しており、full wiring 本体 (create_llm_agent_wiring /
-LlmAgentOrchestrator) を退役 (R2c-2) する前に、依存だけを独立モジュールへ切り出す。
+LlmAgentOrchestrator) を退役 (R2c-2) する前に、**symbol 依存だけ**を独立モジュールへ切り出す。
+(注: 本モジュールは ``wiring`` package 配下なので import すると ``wiring/__init__.py`` も
+ロードされる = import-time の full wiring 依存は残る。これは R2c-2 で __init__ から full
+wiring 本体を削除して軽量化することで解消する。)
 
 どちらも「LiteLLM クライアントのときだけ実 LLM サービス/ポートを返し、それ以外は None」
 という同じ判定で、full wiring 固有のロジックには依存しない。
