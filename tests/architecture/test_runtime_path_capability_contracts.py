@@ -38,8 +38,8 @@ def test_experiment_and_server_entrypoints_use_escape_game_runtime() -> None:
     assert "create_spot_graph_wiring" not in experiment
 
 
-def test_escape_game_memory_stack_is_currently_lightweight_episodic_only() -> None:
-    """escape_game's shared builder has episodic chunk/recall, not semantic/link."""
+def test_escape_game_memory_stack_has_flag_gated_semantic_extension() -> None:
+    """escape_game's episodic builder now exposes semantic/link handles behind flags."""
     from ai_rpg_world.application.llm.wiring.episodic_stack import (
         EpisodicStack,
         build_episodic_stack,
@@ -48,16 +48,25 @@ def test_escape_game_memory_stack_is_currently_lightweight_episodic_only() -> No
     stack_fields = {field.name for field in fields(EpisodicStack)}
     build_params = inspect.signature(build_episodic_stack).parameters
 
-    assert {"chunk_coordinator", "passive_recall", "noun_matcher", "episode_store"} <= stack_fields
-    assert "semantic_memory_store" not in stack_fields
-    assert "semantic_passive_recall" not in stack_fields
-    assert "memory_link_store" not in stack_fields
-    assert "semantic_enabled" not in build_params
-    assert "semantic_passive_top_k" not in build_params
+    assert {
+        "chunk_coordinator",
+        "passive_recall",
+        "noun_matcher",
+        "episode_store",
+        "semantic_passive_recall",
+        "semantic_passive_top_k",
+        "episodic_semantic_promotion",
+        "semantic_memory_store",
+        "memory_link_store",
+    } <= stack_fields
+    assert build_params["semantic_enabled"].default is False
+    assert build_params["semantic_passive_top_k"].default == 0
+    assert "semantic_gist_service" in build_params
+    assert "semantic_persona_resolver" in build_params
 
 
 def test_full_spot_graph_wiring_has_semantic_link_and_snapshot_handles() -> None:
-    """spot_graph full wiring owns the heavier memory path today."""
+    """spot_graph full wiring still owns the always-built heavier memory path."""
     wiring = _read(_SRC / "ai_rpg_world/application/llm/wiring/spot_graph_wiring.py")
 
     assert "build_episodic_memory_stack" in wiring
