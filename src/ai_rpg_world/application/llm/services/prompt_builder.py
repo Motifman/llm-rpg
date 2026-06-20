@@ -495,6 +495,10 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._episodic_recall_buffer_store = episodic_recall_buffer_store
         self._episodic_reinterpretation_journal_store = episodic_reinterpretation_journal_store
         self._episodic_turn_index_provider = episodic_turn_index_provider
+        # #526 段階 2: 慣化 sidecar (任意)。default off。retrieve service 側
+        # にも別途注入されており、prompt_builder 側は record_recall (書込)
+        # のためにだけ参照する (retrieve は read-only)。
+        self._episodic_recall_habituation_store = episodic.recall_habituation_store
         self._noun_matcher = noun_matcher
         # Phase 1c
         self._semantic_passive_recall = semantic_passive_recall
@@ -973,6 +977,19 @@ class DefaultPromptBuilder(IPromptBuilder):
             )
             raw_oldest = None
         min_recall_dt: Optional[datetime] = raw_oldest
+        # #526 段階 2: 慣化ペナルティのため現在 tick を retrieve に渡す。
+        # provider が None / 例外を返したときは慣化を skip (= 既存挙動)。
+        current_tick_for_habituation: Optional[int] = None
+        if self._current_tick_provider is not None:
+            try:
+                tick_val = self._current_tick_provider()
+                if isinstance(tick_val, int) and not isinstance(tick_val, bool):
+                    current_tick_for_habituation = tick_val
+            except Exception:
+                self._logger.debug(
+                    "current_tick_provider raised; habituation を skip して進む",
+                    exc_info=True,
+                )
         recall_result = self._episodic_passive_recall.retrieve(
             player_id=player_id.value,
             situation_cues=situation_cues,
@@ -980,6 +997,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             max_candidates=self._episodic_passive_recall_max_candidates,
             now=recall_now,
             min_occurred_at=min_recall_dt,
+            current_tick=current_tick_for_habituation,
         )
         being_id = self._resolve_being_id(player_id)
         relevant_memories_text = _join_passive_recall_texts(
@@ -988,6 +1006,28 @@ class DefaultPromptBuilder(IPromptBuilder):
             self._episodic_reinterpretation_journal_store,
             being_id=being_id,
         )
+
+        # #526 段階 2: 慣化 sidecar の更新は retrieve 後に呼び出し側で行う
+        # (retrieve は read-only を保つ)。store / being_id / tick が揃った
+        # ときだけ書き込み、いずれかが欠ければ silent skip。
+        if (
+            self._episodic_recall_habituation_store is not None
+            and being_id is not None
+            and current_tick_for_habituation is not None
+            and recall_result.candidates
+        ):
+            try:
+                self._episodic_recall_habituation_store.record_recall(
+                    being_id,
+                    [c.episode.episode_id for c in recall_result.candidates],
+                    current_tick_for_habituation,
+                )
+            except Exception:
+                # sidecar 書き込み失敗は recall 自体を止めない (graceful)。
+                self._logger.warning(
+                    "habituation_store.record_recall failed; recall は完走しました",
+                    exc_info=True,
+                )
 
         # Issue #283 後続: recall 結果を trace に残す (Viewer / jq から
         # 「どのエピソードが想起されたか」を後追いできる)。candidates が 0

@@ -63,6 +63,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
         EpisodicRecallBufferRepository,
     )
+    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+        IEpisodicRecallHabituationStore,
+    )
 
 from ai_rpg_world.application.llm.scheduler import (
     IEpisodicSubjectiveCompletionScheduler,
@@ -189,6 +192,12 @@ class EpisodicStack:
     reinterpretation_coordinator: Optional["EpisodicReinterpretationCoordinator"] = None
     reinterpretation_journal: Optional["EpisodicReinterpretationJournalRepository"] = None
     recall_buffer_store: Optional["EpisodicRecallBufferRepository"] = None
+    # #526 段階 2: 慣化 sidecar (default off)。env で enable 時に in-memory store
+    # を構築し、passive_recall service と prompt_builder の両方に渡す。
+    recall_habituation_store: Optional[
+        "IEpisodicRecallHabituationStore"
+    ] = None
+    recall_habituation_decay_window_ticks: int = 5
 
 
 def build_scenario_noun_matcher(*, scenario: object, graph: object) -> IWorldNounMatcher:
@@ -245,6 +254,8 @@ def build_episodic_stack(
     reinterpretation_completion: Optional[
         "IEpisodicReinterpretationCompletionPort"
     ] = None,
+    recall_habituation_enabled: bool = False,
+    recall_habituation_decay_window_ticks: int = 5,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
@@ -337,10 +348,21 @@ def build_episodic_stack(
         being_attachment_resolver=being_attachment_resolver,
         default_world_id=default_world_id,
     )
+    # #526 段階 2: 慣化 sidecar (default off)。enable 時のみ store を作り、
+    # passive_recall に注入する。prompt_builder 側にも同 store を渡して
+    # 採用 episode の last_recalled_tick を retrieve 後に書き込む。
+    recall_habituation_store: Optional["IEpisodicRecallHabituationStore"] = None
+    if recall_habituation_enabled:
+        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+            InMemoryEpisodicRecallHabituationStore,
+        )
+        recall_habituation_store = InMemoryEpisodicRecallHabituationStore()
     passive_recall = EpisodicPassiveRecallRetrievalService(
         episode_store,
         being_attachment_resolver=being_attachment_resolver,
         default_world_id=default_world_id,
+        habituation_store=recall_habituation_store,
+        habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
     )
     noun_matcher = build_scenario_noun_matcher(scenario=scenario, graph=graph)
 
@@ -409,6 +431,8 @@ def build_episodic_stack(
         reinterpretation_coordinator=reinterpretation_coordinator,
         reinterpretation_journal=reinterpretation_journal,
         recall_buffer_store=prompt_recall_buffer,
+        recall_habituation_store=recall_habituation_store,
+        recall_habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
     )
 
 

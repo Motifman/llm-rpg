@@ -470,3 +470,141 @@ class TestEpisodicPassiveRecallRetrievalRoundRobinFairness:
         # R2: cue が立つので temporal は off、t0/t1/t2 は出ない
         assert ids == ["place-only", "entity-only"]
         assert "entity-only" in ids
+
+
+class TestEpisodicPassiveRecallRetrievalHabituation:
+    """慣化ペナルティ (#526 後続 段階 2) — 直近 recall された episode は
+    arm 内 score を下げ、他の episode が round-robin で上に来る。
+    """
+
+    def _setup(self):
+        """同一 cue (place_spot:1) に hit する episode を 2 件作り、
+        どちらが先に拾われるかを慣化で操作できる構成にする。"""
+        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+            InMemoryEpisodicRecallHabituationStore,
+        )
+
+        store = InMemorySubjectiveEpisodeStore()
+        c_place = EpisodicCue(
+            axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT
+        )
+        c_obj = EpisodicCue(
+            axis="object", value="o1", source=EpisodicCueSource.TOOL
+        )
+        base = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        # ep-A: place_spot のみで hit (multi_cue_score=1)
+        store.put_by_being(
+            being_id,
+            _episode(
+                episode_id="ep-A",
+                occurred_at=base,
+                cues=(c_place,),
+            ),
+        )
+        # ep-B: place_spot + object の両方で hit (multi_cue_score=2 → 通常は上位)
+        store.put_by_being(
+            being_id,
+            _episode(
+                episode_id="ep-B",
+                occurred_at=base - timedelta(hours=1),
+                cues=(c_place, c_obj),
+            ),
+        )
+        _res, _wid = _make_resolver_and_being()
+        habit_store = InMemoryEpisodicRecallHabituationStore()
+        return store, habit_store, _res, _wid, c_place, c_obj
+
+    def test_habituation_未注入なら_既存挙動と同一(self) -> None:
+        """``habituation_store=None`` で構成すれば既存の round-robin 結果と同じ。"""
+        store, _, res, wid, c_place, c_obj = self._setup()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store, being_attachment_resolver=res, default_world_id=wid
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=2,
+        )
+        ids = [c.episode.episode_id for c in result.candidates]
+        # ep-B は 2 cue hit (place_spot + object) で arm 内 score が高い
+        assert "ep-A" in ids and "ep-B" in ids
+        # debug に habituation 関連キーは出ない (= default off)
+        assert result.debug.habituation_penalty_by_episode == ()
+
+    def test_直前_tick_で_recall_された_episode_は_順位が下がる(self) -> None:
+        """ep-B を直前 tick で recall 済にすると、arm 内 score が下がって
+        ep-A が同 arm の上位になる。round-robin で ep-A が先に選ばれる。"""
+        store, habit, res, wid, c_place, c_obj = self._setup()
+        # ep-B を current_tick=10 の 1 tick 前に recall 済にする
+        habit.record_recall(being_id, ["ep-B"], tick=9)
+
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            habituation_store=habit,
+            habituation_decay_window_ticks=5,
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=2,
+            current_tick=10,
+        )
+        ids = [c.episode.episode_id for c in result.candidates]
+        # ペナルティで ep-B の有効 score = 2 - 4 = -2 < ep-A の score = 1
+        # → arm 内では ep-A が上位、ep-B が下位になる
+        # round-robin で同 arm から取るとき ep-A → ep-B の順で並ぶ
+        # 厳密な順序は arm の組合せ次第なので、両方含むことと、debug を確認
+        assert set(ids) == {"ep-A", "ep-B"}
+        penalty_dict = dict(result.debug.habituation_penalty_by_episode)
+        assert penalty_dict["ep-B"] == 4  # decay_window 5 - age 1 = 4
+        # ep-A は未 recall なので penalty 0 (または非含)
+        assert penalty_dict.get("ep-A", 0) == 0
+
+    def test_decay_window_経過後は_慣化が解ける(self) -> None:
+        """十分時間が経った recall は penalty を出さない (= 再度引かれる)。"""
+        store, habit, res, wid, c_place, c_obj = self._setup()
+        habit.record_recall(being_id, ["ep-B"], tick=1)
+
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            habituation_store=habit,
+            habituation_decay_window_ticks=5,
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=2,
+            current_tick=100,  # decay_window=5 を遥かに超える
+        )
+        # ep-B のペナルティは 0 になっているはず
+        penalty_dict = dict(result.debug.habituation_penalty_by_episode)
+        # decay 切れの episode は debug にも含めない (penalty=0 は記録不要)
+        assert penalty_dict.get("ep-B", 0) == 0
+
+    def test_current_tick_未指定なら_penalty_は_適用されない(self) -> None:
+        """tick が分からない呼び出し (idle 等) では penalty を出さない。"""
+        store, habit, res, wid, c_place, c_obj = self._setup()
+        habit.record_recall(being_id, ["ep-B"], tick=0)
+
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            habituation_store=habit,
+            habituation_decay_window_ticks=5,
+        )
+        # current_tick を渡さない
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=2,
+        )
+        assert result.debug.habituation_penalty_by_episode == ()

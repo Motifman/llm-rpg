@@ -59,6 +59,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.encounter.contracts.interfaces import (
         IEncounterMemory,
     )
+    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+        IEpisodicRecallHabituationStore,
+    )
 
 
 DEFAULT_RECENT_OBSERVATIONS_LIMIT = 20
@@ -133,6 +136,11 @@ class EpisodicRecallConfig:
     # current_tick 取得は prompt_builder の ``current_tick_provider`` を流用。
     encounter_memory: Optional["IEncounterMemory"] = None
     encounter_recent_window_ticks: int = 5
+    # #526 段階 2: 慣化ペナルティの sidecar store。注入時のみ動く
+    # (= default off で既存挙動と同一)。retrieve 後に prompt_builder が
+    # 採用された episode の last_recalled_tick を記録する。
+    recall_habituation_store: Optional["IEpisodicRecallHabituationStore"] = None
+    recall_habituation_decay_window_ticks: int = 5
 
 
 @dataclass(frozen=True)
