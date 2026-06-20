@@ -413,6 +413,13 @@ class LlmAgentOrchestrator:
 
         validation_error = _validate_subjective_action_arguments(name, arguments)
         if validation_error is not None:
+            # #552 PR-A: sanitizer が action_summary の JSON から expected_result を
+            # 落とすので、validation 失敗でも構造化フィールドに予測を残さないと
+            # 失敗行の [予測:] が消える。resolution-error / success branch と同様に
+            # raw args から subjective を取り出して渡す (失敗行も予測×実際を読める)。
+            expected_result = _extract_subjective_text(arguments, "expected_result")
+            intention = _extract_subjective_text(arguments, "intention")
+            emotion_hint = _extract_subjective_text(arguments, "emotion_hint")
             action_summary = _format_action_summary(name, arguments)
             result_summary = build_result_summary(validation_error)
             _append_to_action_store(
@@ -424,6 +431,9 @@ class LlmAgentOrchestrator:
                 tool_name=name or None,
                 fingerprint_args=arguments,
                 game_time_label=time_label,
+                expected_result=expected_result,
+                intention=intention,
+                emotion_hint=emotion_hint,
             )
             return validation_error
 

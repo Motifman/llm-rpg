@@ -1206,6 +1206,9 @@ class _EscapeGameLlmWiring:
         if not skip_duplicate_action_log:
             # #552 PR-A: raw args の json.dumps をやめ、主観ノイズを落とした
             # sanitized summary を記録する (失敗 / wait / listen 等の経路)。
+            # sanitizer が JSON から expected_result を落とすので、構造化フィールドに
+            # 予測を残さないと失敗行の [予測:] が消える。subjective を明示的に渡す
+            # (成功 core action は do_* 経路で配線済 = U2、ここは generic 経路の補完)。
             self.runtime._record_action_result(
                 player_id,
                 format_action_summary_for_display(name, arguments),
@@ -1213,6 +1216,7 @@ class _EscapeGameLlmWiring:
                 tool_name=name,
                 success=result.success,
                 error_code=result.error_code,
+                **extract_subjective_action_fields(arguments),
             )
         if trace_recorder is not None:
             try:
