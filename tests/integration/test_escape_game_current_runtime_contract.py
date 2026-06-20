@@ -155,6 +155,24 @@ class _OrderedPromotionSpy:
         self.calls.append(player_id)
 
 
+class _RaisingChunkCoordinatorSpy:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    def after_action_recorded(self, player_id: PlayerId) -> None:
+        self.events.append("chunk")
+        raise RuntimeError("chunk failed")
+
+
+class _RaisingPromotionSpy:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    def on_after_tool_turn(self, player_id: int) -> None:
+        self.events.append("promotion")
+        raise RuntimeError("promotion failed")
+
+
 class _LoopGuardSpy:
     def __init__(self, events: list[str]) -> None:
         self.events = events
@@ -407,9 +425,98 @@ def test_record_action_result_preserves_escape_hook_order(
     )
 
     assert events == ["append", "chunk", "promotion"]
+    assert set(store.kwargs) == {
+        "player_id",
+        "action_summary",
+        "result_summary",
+        "occurred_at",
+        "tool_name",
+        "success",
+        "error_code",
+        "scene_boundary",
+        "occurred_tick",
+    }
+    assert store.kwargs["occurred_at"].tzinfo is timezone.utc
     assert store.kwargs["tool_name"] == "contract_probe"
     assert chunk.calls == [player_id]
     assert promotion.calls == [player_id.value]
+
+
+def test_record_action_result_skips_memory_hooks_when_episodic_stack_absent(
+    clean_runtime_env: None,
+) -> None:
+    runtime = _create_runtime()
+    player_id = runtime.get_player_ids()[0]
+    events: list[str] = []
+    runtime._action_result_store = _OrderedActionStoreSpy(events)
+    runtime._episodic_stack = None
+
+    runtime._record_action_result(
+        player_id,
+        "CONTRACT_ACTION: 待機した",
+        "CONTRACT_RESULT: 何も起きなかった",
+        tool_name="contract_probe",
+    )
+
+    assert events == ["append"]
+
+
+def test_record_action_result_skips_promotion_when_not_configured(
+    clean_runtime_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
+    runtime = _create_runtime()
+    player_id = runtime.get_player_ids()[0]
+    events: list[str] = []
+    runtime._action_result_store = _OrderedActionStoreSpy(events)
+    runtime._episodic_stack = replace(
+        runtime._episodic_stack,
+        chunk_coordinator=_OrderedChunkCoordinatorSpy(events),
+        episodic_semantic_promotion=None,
+    )
+
+    runtime._record_action_result(
+        player_id,
+        "CONTRACT_ACTION: 周囲を見た",
+        "CONTRACT_RESULT: 記録した",
+        tool_name="contract_probe",
+    )
+
+    assert events == ["append", "chunk"]
+
+
+def test_record_action_result_keeps_action_success_when_memory_hooks_fail(
+    clean_runtime_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chunk/promotion failures are logged but do not block the action record."""
+    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(semantic_passive_top_k=3)
+    )
+    player_id = runtime.get_player_ids()[0]
+    events: list[str] = []
+    runtime._episodic_stack = replace(
+        runtime._episodic_stack,
+        chunk_coordinator=_RaisingChunkCoordinatorSpy(events),
+        episodic_semantic_promotion=_RaisingPromotionSpy(events),
+    )
+
+    runtime._record_action_result(
+        player_id,
+        "CONTRACT_ACTION: 失敗する記憶 hook を通る",
+        "CONTRACT_RESULT: action 自体は完了した",
+        tool_name="contract_probe",
+    )
+
+    assert events == ["chunk", "promotion"]
+    entries = runtime._action_result_store.get_recent(player_id, 10)
+    assert len(entries) == 1
+    assert entries[0].action_summary == "CONTRACT_ACTION: 失敗する記憶 hook を通る"
+    assert entries[0].success is True
 
 
 def test_phase_b_runs_loop_guard_after_escape_recording_hooks(
@@ -577,6 +684,12 @@ def test_direct_explore_records_natural_language_action_summary(
     entry = entries[0]
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_EXPLORE
     assert entry.success is True
+    assert entry.expected_result is None
+    assert entry.intention is None
+    assert entry.emotion_hint is None
+    assert entry.argument_fingerprint is None
+    assert entry.should_reschedule is False
+    assert entry.omit_result_in_prompt is False
     assert entry.action_summary == "「入口広間」の周辺を探索した"
     assert not entry.action_summary.startswith(f"{TOOL_NAME_SPOT_GRAPH_EXPLORE}(")
 
