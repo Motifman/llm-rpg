@@ -153,7 +153,7 @@ class TestEscapeGameSemanticConfigWins:
 
         monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
         monkeypatch.delenv("SEMANTIC_PASSIVE_TOP_K", raising=False)
-        cfg = self._cfg(semantic_passive_top_k=3)
+        cfg = self._cfg(episodic_enabled=True, semantic_passive_top_k=3)
         runtime = create_escape_game_runtime(_SCENARIO_PATH, config=cfg)
         assert runtime._episodic_stack.semantic_passive_top_k == 3
         assert runtime._episodic_stack.semantic_passive_recall is not None
@@ -166,7 +166,7 @@ class TestEscapeGameSemanticConfigWins:
 
         monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
         monkeypatch.setenv("SEMANTIC_PASSIVE_TOP_K", "5")
-        cfg = self._cfg(semantic_passive_top_k=0)
+        cfg = self._cfg(episodic_enabled=True, semantic_passive_top_k=0)
         runtime = create_escape_game_runtime(_SCENARIO_PATH, config=cfg)
         assert runtime._episodic_stack.semantic_passive_top_k == 0
         assert runtime._episodic_stack.semantic_passive_recall is None
