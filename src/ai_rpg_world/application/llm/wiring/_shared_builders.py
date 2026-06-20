@@ -25,33 +25,11 @@ if TYPE_CHECKING:
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
-from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
-    IEpisodicReinterpretationCompletionPort,
-)
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
-from ai_rpg_world.application.llm.contracts.interfaces import (
-    IActionResultStore,
-    ISlidingWindowMemory,
-)
-from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
-    ChunkEpisodeDraftBuilder,
-)
-from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
-    EpisodicChunkCoordinator,
-)
 from ai_rpg_world.application.llm.services.episodic_promotion_frontier import (
     EpisodicPromotionFrontier,
 )
-from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
-    EpisodicReinterpretationCoordinator,
-)
 from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
     EpisodicSemanticClusterPromotionService,
-)
-from ai_rpg_world.application.llm.services.prompt_builder import (
-    DEFAULT_RECENT_ACTIONS_LIMIT,
-    DEFAULT_RECENT_OBSERVATIONS_LIMIT,
 )
 from ai_rpg_world.application.llm.wiring._default_episodic_episode_store import (
     resolve_default_episodic_episode_store,
@@ -60,9 +38,6 @@ from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
     EpisodicMemoryLinkBundle,
     build_episodic_memory_link_bundle,
     default_link_and_semantic_stores_for_episode_store,
-)
-from ai_rpg_world.application.observation.contracts.interfaces import (
-    IObservationContextBuffer,
 )
 
 
@@ -154,97 +129,6 @@ def build_episodic_memory_stack(
         promotion_frontier=promotion_frontier,
         mem_bundle=mem_bundle,
         episodic_semantic_promotion=episodic_semantic_promotion,
-    )
-
-
-@dataclass(frozen=True)
-class EpisodicCoordinatorStack:
-    """recall buffer / reinterpretation / chunk coordinator の束。
-
-    prompt_recall_buffer: prompt 用 (reinterpretation または explicit 指定時のみ非 None)
-    reinterpretation_journal: 再解釈 journal
-    reinterpretation_coord: 再解釈 coordinator
-    episodic_coord: チャンク coordinator
-    """
-
-    prompt_recall_buffer: Optional[EpisodicRecallBufferRepository]
-    reinterpretation_journal: EpisodicReinterpretationJournalRepository
-    reinterpretation_coord: EpisodicReinterpretationCoordinator
-    episodic_coord: EpisodicChunkCoordinator
-
-
-def build_episodic_coordinator_stack(
-    *,
-    shared_episode_store: EpisodicEpisodeRepository,
-    mem_bundle: EpisodicMemoryLinkBundle,
-    buffer: IObservationContextBuffer,
-    sliding_window: ISlidingWindowMemory,
-    action_result_store: IActionResultStore,
-    persona_block_provider: Any,
-    recall_buffer: EpisodicRecallBufferRepository,
-    reinterpretation_journal: EpisodicReinterpretationJournalRepository,
-    episodic_recall_buffer_store_override: Optional[EpisodicRecallBufferRepository],
-    chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder],
-    chunk_subjective_service: Any,
-    reinterpretation_completion: Optional[IEpisodicReinterpretationCompletionPort],
-    episodic_chunk_coordinator_override: Optional[EpisodicChunkCoordinator],
-    being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
-    default_world_id: Optional["WorldId"] = None,
-) -> EpisodicCoordinatorStack:
-    """recall_buffer / reinterpretation_coord / episodic_coord の組み立てを集約する。
-
-    wiring factory 間で 40 行重複していたブロックを抽出。recall_buffer /
-    reinterpretation_journal の解決は呼び出し側
-    (`__init__.py` の `_resolve_default_episodic_reinterpretation_stores`) で
-    済ませてから渡す (循環 import 回避)。
-
-    Phase 3 Step 3d-2: Resolver+WorldId を ``EpisodicReinterpretationCoordinator``
-    に伝播する。未注入なら legacy player_id 経路で動く (3d-3 で legacy 撤去)。
-    """
-    chunk_builder = (
-        chunk_episode_draft_builder
-        if chunk_episode_draft_builder is not None
-        else ChunkEpisodeDraftBuilder()
-    )
-    reinterpretation_coord = EpisodicReinterpretationCoordinator(
-        episode_store=shared_episode_store,
-        recall_buffer_store=recall_buffer,
-        journal_store=reinterpretation_journal,
-        completion=reinterpretation_completion,
-        being_attachment_resolver=being_attachment_resolver,
-        default_world_id=default_world_id,
-    )
-    # prompt 経路で recall buffer を覗くのは
-    # (a) reinterpretation_completion が有効、または
-    # (b) caller が明示的に store を渡している
-    # ときのみ。それ以外は prompt builder には None を渡し、無駄な query を防ぐ。
-    prompt_recall_buffer = (
-        recall_buffer
-        if reinterpretation_completion is not None
-        or episodic_recall_buffer_store_override is not None
-        else None
-    )
-    episodic_coord = episodic_chunk_coordinator_override or EpisodicChunkCoordinator(
-        observation_buffer=buffer,
-        sliding_window_memory=sliding_window,
-        action_result_store=action_result_store,
-        episodic_episode_store=shared_episode_store,
-        chunk_episode_draft_builder=chunk_builder,
-        recent_observations_limit=DEFAULT_RECENT_OBSERVATIONS_LIMIT,
-        recent_actions_limit=DEFAULT_RECENT_ACTIONS_LIMIT,
-        chunk_subjective_fields_service=chunk_subjective_service,
-        persona_block_provider=persona_block_provider
-        if chunk_subjective_service is not None
-        else None,
-        episodic_memory_link_service=mem_bundle.link_service,
-        being_attachment_resolver=being_attachment_resolver,
-        default_world_id=default_world_id,
-    )
-    return EpisodicCoordinatorStack(
-        prompt_recall_buffer=prompt_recall_buffer,
-        reinterpretation_journal=reinterpretation_journal,
-        reinterpretation_coord=reinterpretation_coord,
-        episodic_coord=episodic_coord,
     )
 
 

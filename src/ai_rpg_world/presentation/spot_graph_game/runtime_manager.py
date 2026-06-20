@@ -1429,10 +1429,8 @@ class _EscapeGameLlmWiring:
         各ハンドラは ``(player_id, arguments, runtime_context) -> LlmCommandResultDto``。
         未登録のツールは UNSUPPORTED_TOOL を返す。
 
-        将来の経路統一 (本家 ``LlmAgentOrchestrator`` への移行) では、
-        ``runtime.do_*`` ラッパー呼出しを本家の ``_argument_resolvers`` +
-        ``executors`` 経由に差し替える方向に進める。本テーブルがその移行先
-        になる。
+        経路統一 (R2c) で full wiring (LlmAgentOrchestrator) は退役し、本 escape 経路が
+        唯一の turn 実行経路になった。本テーブルが tool ディスパッチの SSOT である。
         """
         handler = self._tool_handlers.get(name)
         if handler is None:
