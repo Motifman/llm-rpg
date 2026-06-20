@@ -600,7 +600,7 @@ class _WorldLlmTurnTrigger:
 
 @dataclass
 class _WorldLlmWiring:
-    """Session-local LLM loop for the escape-game runtime.
+    """Session-local LLM loop for the world runtime.
 
     **Two-phase construction invariant**:
     ``action_failed_emitter`` と ``intent_id_generator`` は ``ObservationTurnScheduler``

@@ -18,9 +18,9 @@ _project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_project_root / "src"))
 sys.path.insert(0, str(_project_root))
 
-from ai_rpg_world.application.escape_game.escape_game_runtime import (
-    EscapeGameRuntime,
-    create_escape_game_runtime,
+from ai_rpg_world.application.world_runtime.world_runtime import (
+    WorldRuntime,
+    create_world_runtime,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -30,7 +30,7 @@ DIVIDER = "=" * 72
 THIN = "─" * 72
 
 
-def show_player_prompt(runtime: EscapeGameRuntime, player_id: PlayerId) -> None:
+def show_player_prompt(runtime: WorldRuntime, player_id: PlayerId) -> None:
     """1プレイヤー分の完全プロンプトを表示する。"""
     prompt = runtime.build_full_prompt(player_id)
     name = runtime.get_player_name(player_id)
@@ -74,7 +74,7 @@ def show_player_prompt(runtime: EscapeGameRuntime, player_id: PlayerId) -> None:
             print(f"    {lbl}: {target.display_name} ({', '.join(parts)})")
 
 
-def show_all_players_prompt(runtime: EscapeGameRuntime, player_ids: list, phase: str) -> None:
+def show_all_players_prompt(runtime: WorldRuntime, player_ids: list, phase: str) -> None:
     """全プレイヤーのプロンプトを表示する。"""
     print(f"\n{'━' * 72}")
     print(f"  📍 {phase}")
@@ -98,7 +98,7 @@ def main() -> None:
     print("  廃病院脱出ゲームデモ — 各プレイヤーの LLM プロンプト完全可視化")
     print(f"{'━' * 72}")
 
-    runtime = create_escape_game_runtime(SCENARIO_PATH)
+    runtime = create_world_runtime(SCENARIO_PATH)
     print(f"\nシナリオ: {runtime.metadata.title}")
     print(f"テーマ: {runtime.metadata.theme}")
 

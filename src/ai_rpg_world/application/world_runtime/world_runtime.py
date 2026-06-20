@@ -1,7 +1,8 @@
-"""廃病院脱出ゲームのランタイム。
+"""LLM エージェントが世界で生きる汎用ランタイム (world_runtime)。
 
 シナリオ JSON → インメモリリポジトリ → アプリケーションサービス をワイヤリングし、
-プログラム的にアクションを実行できるようにする。
+プログラム的にアクションを実行できるようにする。escape ゲーム・survival 等のジャンルに
+依存せず、勝敗のない永続世界も含めて同じ turn 実行経路で動かす (経路統一 層1)。
 
 LLM エージェントが**実際に**受け取る観測テキスト・ツール定義・ラベル解決コンテキストを
 そのまま可視化する。デモ専用の加工は行わない。
@@ -272,7 +273,7 @@ def _other_explorer_names_for_world_system_prompt(
 
 @dataclass
 class WorldRuntime:
-    """脱出ゲームデモの実行ランタイム（全てインメモリ）。"""
+    """LLM エージェントが世界で生きる汎用ランタイム（全てインメモリ）。"""
 
     scenario: ScenarioLoadResult
     _spot_graph_repo: InMemorySpotGraphRepository
