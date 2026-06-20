@@ -140,6 +140,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.llm.contracts.interfaces import ISlidingWindowMemory
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
+from ai_rpg_world.application.llm.services.action_result_recorder import ActionResultRecorder
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
 )
@@ -812,8 +813,13 @@ class EscapeGameRuntime:
         意味するかどうか。cognitive science の "doorway effect" を反映して、
         spot 遷移成功時は True を渡すと chunk が閉じやすくなる (Issue #311 後続)。
         """
-        # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)
-        self._action_result_store.append(
+        # U1 (#526 後続): append → chunk write → semantic promotion (escape baseline
+        # の順序・error isolation) を共有 ActionResultRecorder に委譲する。挙動は
+        # #553 で contract 化済みで不変。subjective fields (expected_result 等) を
+        # 通す口は recorder にあるが、escape からの配線は U2 で行う (当面 None)。
+        # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)。
+        recorder = ActionResultRecorder(self._action_result_store, logger=logger)
+        recorder.record(
             player_id,
             action_summary=action_summary,
             result_summary=result_summary,
@@ -824,36 +830,8 @@ class EscapeGameRuntime:
             scene_boundary=scene_boundary,
             # Issue #311 後続: bucket 内 actions の tick 差で TEMPORAL_GAP 判定するため
             occurred_tick=self.current_tick(),
+            episodic_stack=self._episodic_stack,
         )
-        # Issue #283 後続: episodic memory が有効なら、action_result が
-        # store に積まれた直後に chunk_coordinator を起動する。chunk
-        # coordinator が observation buffer を drain → sliding window に流し、
-        # 必要なら episode を 1 件以上 store に書く。失敗は memory pipeline
-        # の責務に留め、本来の action 完了は止めない。
-        if self._episodic_stack is not None:
-            try:
-                self._episodic_stack.chunk_coordinator.after_action_recorded(player_id)
-            except Exception:
-                logger.exception(
-                    "episodic chunk_coordinator.after_action_recorded failed "
-                    "for player=%s",
-                    player_id.value,
-                )
-            # #526 後続: semantic 有効時は chunk write 直後に昇格 hook を回す。
-            # full path では LlmAgentOrchestrator が担うが、escape_game は独自
-            # turn 経路 (_record_action_result) なのでここで明示的に呼ぶ。これが
-            # 無いと passive recall の器だけできて semantic store が空のまま。
-            # 失敗は memory pipeline に留め、本来の action 完了は止めない。
-            promotion = self._episodic_stack.episodic_semantic_promotion
-            if promotion is not None:
-                try:
-                    promotion.on_after_tool_turn(player_id.value)
-                except Exception:
-                    logger.exception(
-                        "episodic_semantic_promotion.on_after_tool_turn failed "
-                        "for player=%s",
-                        player_id.value,
-                    )
 
     def _drain_buffer_to_sliding_window(self, player_id: PlayerId) -> List[ObservationEntry]:
         """観測バッファをスライディングウィンドウに移す。溢れた観測を返す。"""
