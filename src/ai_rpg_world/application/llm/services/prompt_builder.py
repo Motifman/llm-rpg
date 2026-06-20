@@ -742,7 +742,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         tools = self._available_tools_provider.get_available_tools(current_state_dto)
 
         # 6. 受動想起（任意注入）: runtime + 直近観測 structured から situation_cues → recall_text を連結
-        relevant_memories_text = self._run_passive_recall(
+        relevant_memories_text, _passive_candidate_count = self._run_passive_recall(
             player_id=player_id,
             observations=observations,
             action_results=action_results,
@@ -879,8 +879,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         current_state_text: str,
         recent_events_text: str,
         player_info: SystemPromptPlayerInfoDto,
-    ) -> str:
-        """受動想起ブロックを実行し、関連する記憶テキストを返す。
+    ) -> tuple[str, Optional[int]]:
+        """受動想起ブロックを実行し、(関連する記憶テキスト, 候補件数) を返す。
 
         Issue #227 後続レビュー (Prompt MEDIUM-5) で build() 本体から抽出。
         responsibilities:
@@ -890,10 +890,12 @@ class DefaultPromptBuilder(IPromptBuilder):
         4. memory_link_service があれば passive recall 通知を流す
         5. recall_buffer_store があれば EpisodicRecallObservation を append
 
-        passive_recall が未注入なら何もせず空文字を返す。
+        候補件数は ``None`` で 「機構自体が未注入」 を表す (= 「0 件しか
+        浮かばなかった」 と意味が異なる)。 ``int`` で 「機構は走ったが N 件」
+        を表す。 sentinel int を避けて Optional で区別する。
         """
         if self._episodic_passive_recall is None:
-            return ""
+            return "", None
 
         observation_structured = None
         observation_prose: str | None = None
@@ -1015,7 +1017,14 @@ class DefaultPromptBuilder(IPromptBuilder):
                         exc_info=True,
                     )
 
-        return relevant_memories_text
+        # Issue #526 後続: 候補 0 件のときも「受動想起の機構は走ったが何も
+        # 浮かばなかった」事実を agent 側で可観測にする。``_episodic_passive_recall``
+        # 未注入時は上の早期 return で空文字を返しており、ここには到達しない。
+        candidate_count = len(recall_result.candidates)
+        if not relevant_memories_text.strip():
+            relevant_memories_text = "(受動想起では何も浮かばなかった)"
+
+        return relevant_memories_text, candidate_count
 
     def _run_semantic_passive_recall(
         self,
