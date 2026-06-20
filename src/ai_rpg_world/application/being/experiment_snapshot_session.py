@@ -1,11 +1,12 @@
 """ExperimentSnapshotSession — 実験 runner と Phase 4-5 snapshot 機構を結ぶ薄い orchestrator。
 
-Phase 6 (Issue #470): ``scripts/run_scenario_experiment.py`` が
-``LlmAgentWiringResult`` から直接 snapshot を取れるようにする統合層。
+Phase 6 (Issue #470): ``scripts/run_scenario_experiment.py`` が wiring stub
+(escape runtime から組む ``_wiring_stub_from_escape_runtime`` の返り値) から直接
+snapshot を取れるようにする統合層。
 
 ## 責務
 
-1. ``LlmAgentWiringResult`` から 5 memory store + being_repository を取り出し、
+1. wiring stub から 5 memory store + being_repository を取り出し、
    ``BeingMemorySnapshotService`` と ``CaptureBeingSnapshotToFileUseCase`` /
    ``RestoreBeingSnapshotFromFileUseCase`` を組み立てる
 2. runtime の player_ids を ``BeingAttachmentResolver`` で being_id に変換

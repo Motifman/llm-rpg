@@ -444,8 +444,8 @@ def build_episodic_stack(
 
     # reinterpretation 拡張 (段1 / default OFF)。ON のとき recall_buffer + journal +
     # coordinator を直接構築する。escape は chunk_coordinator を既に上で持つので、
-    # full wiring の build_episodic_coordinator_stack (chunk_coordinator も束ねる) は
-    # 使わず、再解釈に必要な 3 点だけを組む (semantic とは独立 = mem_bundle 不要)。
+    # chunk_coordinator も束ねる汎用 stack builder は使わず、再解釈に必要な 3 点だけを
+    # 組む (semantic とは独立 = mem_bundle 不要)。
     reinterpretation_coordinator: Optional[Any] = None
     reinterpretation_journal: Optional[Any] = None
     prompt_recall_buffer: Optional[Any] = None
