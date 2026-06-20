@@ -3540,6 +3540,10 @@ def create_escape_game_runtime(
             recall_habituation_decay_window_ticks=(
                 config.recall_habituation_decay_window_ticks
             ),
+            # #526 後続 C1: spot_interior_repo を渡し、noun_matcher が
+            # world_object 名を index できるようにする。SpotNode.interior は
+            # 実 runtime では None で保管され、別 repository に格納されている。
+            spot_interior_repo=spot_interior_repo,
         )
 
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で

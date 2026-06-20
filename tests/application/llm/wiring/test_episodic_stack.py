@@ -37,16 +37,37 @@ from ai_rpg_world.application.observation.services.observation_context_buffer im
 )
 
 
-def _stub_graph(*, spots: dict[int, str]) -> SimpleNamespace:
+def _stub_graph(
+    *,
+    spots: dict[int, str],
+    interior_objects: dict[int, list[tuple[int, str]]] | None = None,
+) -> SimpleNamespace:
     """``graph._spots`` を模した SimpleNamespace を作る。
 
     builder は ``graph._spots.values()`` を呼ぶだけなので key 型は不問。
     dict key は int を使い、value 側に ``spot_id`` / ``name`` 属性を持たせる。
+
+    ``interior_objects`` を渡すと、各 spot の ``interior.objects`` に
+    ``SpotObject`` 風の SimpleNamespace を仕込む (#526 後続 C1)。dict の値は
+    ``[(object_id, name), ...]`` のリスト。
     """
+    interior_objects = interior_objects or {}
     nodes: dict = {}
     for sid, name in spots.items():
         spot_id_obj = SimpleNamespace(value=sid)
-        nodes[sid] = SimpleNamespace(spot_id=spot_id_obj, name=name)
+        objs = tuple(
+            SimpleNamespace(
+                object_id=SimpleNamespace(value=oid),
+                name=oname,
+            )
+            for oid, oname in interior_objects.get(sid, [])
+        )
+        interior = SimpleNamespace(objects=objs)
+        nodes[sid] = SimpleNamespace(
+            spot_id=spot_id_obj,
+            name=name,
+            interior=interior,
+        )
     return SimpleNamespace(_spots=nodes)
 
 
@@ -124,6 +145,49 @@ class TestBuildScenarioNounMatcher:
         scenario = SimpleNamespace()  # player_spawns 欠落
         matcher = build_scenario_noun_matcher(scenario=scenario, graph=graph)
         # spot だけは取れる
+        assert matcher.find_in_text("広間に入った")
+
+    def test_world_object_名_を抽出する(self) -> None:
+        """#526 後続 C1: 各 spot の ``interior.objects`` から world_object 名を
+        抽出し、``object:world_object_{id}`` cue として recall に乗るようにする。
+
+        実 run の trace 解析で「観測 prose に『案内板』『覚書』等の object 名
+        が出てくるが、matcher が知らないため write/read 双方で object cue が
+        立たない」ことが判明したため、scenario data から object 名を index
+        する経路を足す。
+        """
+        graph = _stub_graph(
+            spots={1: "入口広間", 2: "閲覧室"},
+            interior_objects={
+                1: [(101, "案内板"), (102, "侵入者の手記")],
+                2: [(201, "見習い司書の覚書")],
+            },
+        )
+        scenario = _stub_scenario(players=[(10, "カイト")])
+        matcher = build_scenario_noun_matcher(scenario=scenario, graph=graph)
+        # prose に object 名が出れば object cue にマッチ
+        obj_hits = matcher.find_in_text("案内板を読んだ")
+        assert any(
+            m.axis == "object" and m.value == "world_object_101"
+            for m in obj_hits
+        ), f"案内板が world_object_101 にマッチしない: {obj_hits}"
+        # 別 spot の object も index されている (= グローバル走査)
+        obj_hits2 = matcher.find_in_text("見習い司書の覚書には印の順序が書いてあった")
+        assert any(
+            m.axis == "object" and m.value == "world_object_201"
+            for m in obj_hits2
+        )
+
+    def test_interior_が_欠落しても_落ちない(self) -> None:
+        """``interior`` 属性が無い古い stub / scenario でも落とさない (getattr 安全側)。"""
+        # interior 属性そのものを持たない spot を作る
+        spot_id_obj = SimpleNamespace(value=1)
+        spot_node = SimpleNamespace(spot_id=spot_id_obj, name="広間")
+        graph = SimpleNamespace(_spots={1: spot_node})
+        scenario = _stub_scenario(players=[(10, "カイト")])
+        # 例外なく構築できる
+        matcher = build_scenario_noun_matcher(scenario=scenario, graph=graph)
+        # spot 名は引き続き拾える
         assert matcher.find_in_text("広間に入った")
 
 
