@@ -410,13 +410,27 @@ def test_escape_game_build_full_prompt_uses_shared_default_prompt_builder(
     assert builder is runtime._get_or_build_default_prompt_builder()
 
 
+def test_episodic_stack_gate_follows_config_not_env(
+    clean_runtime_env: None,
+) -> None:
+    """#558 MEDIUM-1 後続: env 未設定でも explicit config.episodic_enabled だけで
+    stack が立つ。親 gate を env 直読みから config 単一窓口に寄せた回帰テスト。
+
+    clean_runtime_env が LLM_EPISODIC_ENABLED を消すので、env 経路では立たない。
+    config だけで立つことが、env と config を別解釈する silent failure の不在を示す。"""
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
+    assert runtime._episodic_stack is not None
+    # episodic OFF の config なら立たない (= gate が config を見ている裏付け)
+    off = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=False))
+    assert off._episodic_stack is None
+
+
 def test_episodic_on_exposes_episode_recall_with_semantic_default_off(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime()
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
 
     stack = runtime._episodic_stack
     assert stack is not None
@@ -444,6 +458,7 @@ def test_semantic_config_wires_escape_game_stack_and_prompt_learning(
     monkeypatch.delenv("SEMANTIC_LLM_GIST_ENABLED", raising=False)
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True,
             semantic_passive_top_k=3,
             semantic_llm_gist_enabled=False,
         )
@@ -478,7 +493,9 @@ def test_action_result_recording_runs_semantic_promotion_hook_when_enabled(
     monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
     runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(semantic_passive_top_k=3)
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True, semantic_passive_top_k=3
+        )
     )
     player_id = runtime.get_player_ids()[0]
     spy = _PromotionSpy()
@@ -505,7 +522,9 @@ def test_record_action_result_preserves_escape_hook_order(
     monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
     runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(semantic_passive_top_k=3)
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True, semantic_passive_top_k=3
+        )
     )
     player_id = runtime.get_player_ids()[0]
     events: list[str] = []
@@ -577,7 +596,7 @@ def test_record_action_result_skips_promotion_when_not_configured(
 ) -> None:
     monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime()
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
     player_id = runtime.get_player_ids()[0]
     events: list[str] = []
     runtime._action_result_store = _OrderedActionStoreSpy(events)
@@ -605,7 +624,9 @@ def test_record_action_result_keeps_action_success_when_memory_hooks_fail(
     monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
     runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(semantic_passive_top_k=3)
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True, semantic_passive_top_k=3
+        )
     )
     player_id = runtime.get_player_ids()[0]
     events: list[str] = []
@@ -953,6 +974,7 @@ def test_semantic_env_does_not_override_explicit_config_off(
 
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True,
             semantic_passive_top_k=0,
             semantic_llm_gist_enabled=False,
         )
@@ -974,7 +996,7 @@ def test_experiment_wiring_stub_exposes_current_escape_game_snapshot_surface(
 
     monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime()
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
 
     stub = _wiring_stub_from_escape_runtime(runtime)
 
@@ -998,7 +1020,9 @@ def test_experiment_wiring_stub_exposes_semantic_stores_when_enabled(
     monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
     runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(semantic_passive_top_k=3)
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True, semantic_passive_top_k=3
+        )
     )
 
     stub = _wiring_stub_from_escape_runtime(runtime)

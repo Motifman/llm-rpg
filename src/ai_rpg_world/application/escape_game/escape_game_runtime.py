@@ -3315,20 +3315,20 @@ def create_escape_game_runtime(
     runtime._observation_appender = observation_appender
 
     # Issue #283 後続: episodic memory pipeline の on/off。
-    # 環境変数 LLM_EPISODIC_ENABLED=1 のときだけ scenario load 時に matcher
-    # + chunk coordinator + passive recall を組み立てる。未設定なら従来動作。
+    # episodic ON のときだけ scenario load 時に matcher + chunk coordinator +
+    # passive recall を組み立てる。OFF なら従来動作。
     # PR #330: シナリオ非依存の builder に統一。escape_episodic_wiring 経由の
     # 旧 alias も後方互換で生きているが、application 層から直接 import する。
-    # NOTE (#558 MEDIUM-1): この親 gate は env 直読みで、ResolvedLlmRuntimeConfig
-    # 単一窓口から外れている (U3 で追加した config.episodic_reinterpretation_enabled
-    # とは別軸)。config.episodic_enabled へ寄せる移行は既存 contract テスト
-    # 多数を巻き込むため、reinterpretation opt-in (U3) とは分けて別 PR で行う。
+    # #558 MEDIUM-1 後続: 親 gate を env 直読み (is_episodic_enabled) から
+    # config.episodic_enabled に寄せ、ResolvedLlmRuntimeConfig 単一窓口に揃えた。
+    # config=None のときは from_env() が LLM_EPISODIC_ENABLED を読むので、env で
+    # 立てる experiment 経路は不変。explicit config を渡すと env でなく config が
+    # 効くため「同 env を 2 経路で別解釈する」silent failure を構造で防げる。
     from ai_rpg_world.application.llm.wiring.episodic_stack import (
         build_episodic_stack,
-        is_episodic_enabled,
         is_episodic_subjective_enabled,
     )
-    if is_episodic_enabled():
+    if config.episodic_enabled:
         # Phase 3 Step 3e-3: ChunkCoordinator / Scheduler / passive_recall は
         # episode_store 経路で being_id 必須化済。escape_game の aux Being 配線
         # を早期に確立し、各 player_spawn 分の Being を provision しておく。
