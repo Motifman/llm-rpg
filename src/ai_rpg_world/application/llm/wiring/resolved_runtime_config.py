@@ -130,6 +130,24 @@ class ResolvedLlmRuntimeConfig:
     expected_result_policy: str
 
     # ──────────────────────────────────────────────────────────────
+    # Invariants
+    # ──────────────────────────────────────────────────────────────
+
+    def __post_init__(self) -> None:
+        """frozen DTO の不変条件を全構築経路で検証する (silent failure の構造的対処)。
+
+        ``from_env`` は env typo を resolver 段で fail-fast 化しているが、
+        ``for_tests`` / ``cls(...)`` 直接構築はそこを通らない。policy のような
+        enum 的フィールドは、どの構築経路でも未知値が silent に通らないよう
+        本メソッドで一括検証する (codex PR #557 レビュー反映)。
+        """
+        if self.expected_result_policy not in _VALID_EXPECTED_RESULT_POLICIES:
+            raise ValueError(
+                f"expected_result_policy={self.expected_result_policy!r} is not recognized. "
+                f"valid: {sorted(_VALID_EXPECTED_RESULT_POLICIES)}"
+            )
+
+    # ──────────────────────────────────────────────────────────────
     # Construction
     # ──────────────────────────────────────────────────────────────
 

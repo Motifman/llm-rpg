@@ -84,6 +84,19 @@ class TestExpectedResultPolicy:
         cfg = ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="optional")
         assert cfg.to_trace_dict()["expected_result_policy"] == "optional"
 
+    def test_for_tests_不正値も_fail_fast(self) -> None:
+        """for_tests 経由の typo も __post_init__ で ValueError (from_env 以外も fail-fast)。"""
+        with pytest.raises(ValueError, match="expected_result_policy"):
+            ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="optionnal")
+
+    def test_直接構築の不正値も_fail_fast(self) -> None:
+        """cls(...) 直接構築の typo も __post_init__ で ValueError。"""
+        base = ResolvedLlmRuntimeConfig.for_tests()
+        from dataclasses import replace
+
+        with pytest.raises(ValueError, match="expected_result_policy"):
+            replace(base, expected_result_policy="maybe")
+
 
 class TestFromEnvExplicit:
     """env 明示で全フィールドが正しく resolve される。"""
