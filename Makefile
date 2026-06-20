@@ -354,6 +354,8 @@ experiment-recall-probe:
 	SPOT_GRAPH_TICK_LOOP_ENABLED=false \
 	uv run python scripts/run_recall_probe_experiment.py \
 		--scenario $(RECALL_PROBE_SCENARIO) \
+		$(if $(RECALL_PROBE_MODE),--mode $(RECALL_PROBE_MODE),) \
+		$(if $(RECALL_PROBE_MAX_TICKS),--max-world-ticks $(RECALL_PROBE_MAX_TICKS),) \
 		$(if $(DRY_RUN),--no-llm,) \
 		$(if $(OUT),--out $(OUT),)
 

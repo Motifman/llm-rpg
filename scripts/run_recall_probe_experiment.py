@@ -92,6 +92,36 @@ _PROBES: Tuple[Tuple[int, str, str, str], ...] = (
     ),
 )
 
+# Issue #526 不在 5 (情報源タグ) 観察用 probe プログラム。
+# tick=3 の S1-setup は伝聞情報を注入するだけで質問ではない (= response も期待しない)。
+# 後続 tick で 「ハルが伝聞 / 自体験 / 想像 を区別できるか」 を測る。
+_PROBES_EPISTEMIC: Tuple[Tuple[int, str, str, str], ...] = (
+    (
+        3,
+        "epi_s1_setup_hearsay",
+        "今朝、森の奥で青い光を見たんだ。気になってる。",
+        "シキの声: 「なあ、今朝、森の奥で青い光を見たんだ。気になってる。」",
+    ),
+    (
+        7,
+        "epi_s1_verify_hearsay",
+        "お前も森の奥で何か見たか?",
+        "シキの声: 「ハル、お前も森の奥で何か見たか?」",
+    ),
+    (
+        12,
+        "epi_s2_imagination_marker",
+        "夕方、北の崖で何を見た?",
+        "シキの声: 「ハル、夕方、北の崖で何を見た?」",
+    ),
+    (
+        17,
+        "epi_s5_false_claim",
+        "お前、明日水場に行くって言ってたよな?",
+        "シキの声: 「ハル、お前、明日水場に行くって言ってたよな?」",
+    ),
+)
+
 # 過去 episode の inject 内容 (= ハルが「以前経験した」とされる出来事)。
 # occurred_at は run 開始時刻から N 時間前 (= 主観時間 v0 で「数時間前」あたり
 # のラベルが付くように)。recall_text は LLM に直接見せる文字列。
@@ -140,7 +170,17 @@ def _parse_args() -> argparse.Namespace:
         "--max-world-ticks",
         type=int,
         default=15,
-        help="シナリオの最大 tick (default 15)",
+        help="シナリオの最大 tick (default 15。epistemic mode は 25 程度推奨)",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("memory", "epistemic"),
+        default="memory",
+        help=(
+            "probe プログラム。 memory (default) = 不在 2 検証 (= probe_a/b/d)。 "
+            "epistemic = 不在 5 検証 (= S1 hearsay / S2 想像補完 / S5 false claim)。 "
+            "epistemic mode は --max-world-ticks 25 程度を推奨。"
+        ),
     )
     parser.add_argument(
         "--no-llm",
@@ -452,16 +492,23 @@ def _run_tick_loop(
     recorder: Any,
     *,
     max_world_ticks: int,
+    mode: str = "memory",
 ) -> None:
     """recall_probe シナリオ用の tick loop。
 
     通常の run_scenario_experiment.py と違い、特定 tick で probe injection を
-    挟む。
+    挟む。 ``mode`` で probe プログラムを選ぶ:
+      - "memory" (default): 不在 2 検証用 probe (= probe_a/b/d)
+      - "epistemic": 不在 5 検証用 probe (= S1/S2/S5)
     """
     from ai_rpg_world.application.trace import TraceEventKind
 
+    if mode == "epistemic":
+        probes = _PROBES_EPISTEMIC
+    else:
+        probes = _PROBES
     probe_by_tick: Dict[int, Tuple[str, str, str]] = {
-        t: (pid, content, prose) for t, pid, content, prose in _PROBES
+        t: (pid, content, prose) for t, pid, content, prose in probes
     }
 
     # シキなど非ハル spawn の LLM ターンを抑制 (= NPC として扱う)
@@ -626,7 +673,9 @@ def main() -> int:
         _inject_past_episodes(runtime, recorder)
         _inject_past_encounters(runtime, recorder)
         _run_tick_loop(
-            runtime, state, recorder, max_world_ticks=args.max_world_ticks
+            runtime, state, recorder,
+            max_world_ticks=args.max_world_ticks,
+            mode=args.mode,
         )
     finally:
         recorder.close()
