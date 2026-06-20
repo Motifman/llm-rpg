@@ -66,27 +66,30 @@ def test_escape_game_memory_stack_has_flag_gated_semantic_extension() -> None:
     assert "semantic_persona_resolver" in build_params
 
 
-def test_generic_llm_agent_wiring_remains_tile_map_compatible() -> None:
-    """Only the generic wiring still accepts tile-map dependencies."""
-    from ai_rpg_world.application.llm.wiring import create_llm_agent_wiring
+def test_full_wiring_is_retired() -> None:
+    """full wiring (create_llm_agent_wiring / create_spot_graph_wiring /
+    LlmAgentOrchestrator / LlmAgentTurnRunner / DefaultLlmTurnTrigger) is retired.
 
-    sig = inspect.signature(create_llm_agent_wiring)
-    assert "physical_map_repository" in sig.parameters
-    assert sig.parameters["physical_map_repository"].default is None
-
-    generic = _read(_SRC / "ai_rpg_world/application/llm/wiring/__init__.py")
-    assert "include_tile_movement: bool = True" in generic
-    assert "tile_map_enabled: bool = True" in generic
-
-
-def test_spot_graph_full_wiring_is_retired() -> None:
-    """spot_graph full wiring is no longer an exported runtime path."""
-    spot_graph_wiring = _SRC / "ai_rpg_world/application/llm/wiring/spot_graph_wiring.py"
-    assert not spot_graph_wiring.exists()
-
+    R2c-2: 本番・実験は escape runtime 一本になり、full wiring の turn 実行経路は
+    退役した。wiring package も services も full wiring symbol を export しない。"""
     wiring_pkg = importlib.import_module("ai_rpg_world.application.llm.wiring")
-    assert not hasattr(wiring_pkg, "create_spot_graph_wiring")
-    assert "create_spot_graph_wiring" not in getattr(wiring_pkg, "__all__", ())
+    for name in ("create_llm_agent_wiring", "create_spot_graph_wiring", "LlmAgentWiringResult"):
+        assert not hasattr(wiring_pkg, name), name
+        assert name not in getattr(wiring_pkg, "__all__", ()), name
+
+    # full wiring 専用の turn 実行クラスは services からも消えている
+    services_pkg = importlib.import_module("ai_rpg_world.application.llm.services")
+    for name in ("LlmAgentOrchestrator", "LlmAgentTurnRunner", "DefaultLlmTurnTrigger"):
+        assert not hasattr(services_pkg, name), name
+
+    # 旧 module ファイル自体も存在しない
+    for rel in (
+        "ai_rpg_world/application/llm/wiring/spot_graph_wiring.py",
+        "ai_rpg_world/application/llm/services/agent_orchestrator.py",
+        "ai_rpg_world/application/llm/services/llm_agent_turn_runner.py",
+        "ai_rpg_world/application/llm/services/llm_turn_trigger.py",
+    ):
+        assert not (_SRC / rel).exists(), rel
 
 
 def test_memory_recall_episodes_is_escape_game_specific() -> None:
