@@ -41,9 +41,15 @@ _SYSTEM_PROMPT = """\
 - プレイヤー・スポット・オブジェクトは必ず固有名詞で書く
 - P1, P2, OBJ3 のような短縮ラベルは絶対に使わない (ターンごとに変わるため)
 
+【予測との食い違い (予測誤差) を重視する】
+- 「予測との食い違い」が付いた記憶は、世界の見立てが外れた経験です。そこからは
+  「X すると Y になりがち」「A は B だと思ったが違った」のような、次の予測を
+  変える学びを優先して抽象化してください。
+- 同じ食い違いが繰り返されている / 食い違いが大きいほど、その学びは重要です。
+
 【重要度 (importance_score) の付け方】
 - 10: 命や根本的目標に関わる学び
-- 7-9: 信頼/裏切り、重大な世界ルール
+- 7-9: 信頼/裏切り、重大な世界ルール、予測が繰り返し大きく外れた経験からの学び
 - 4-6: 中程度の関係性・行動指針
 - 1-3: 軽い嗜好・観察
 
@@ -113,8 +119,14 @@ class SemanticGistService:
         user_lines.append("【記憶群】(時系列、新しい順)")
         for ep in sorted(cluster_episodes, key=lambda e: e.occurred_at, reverse=True):
             body = (ep.interpreted or ep.recall_text or ep.what or "").strip()
-            if body:
-                user_lines.append(f"- {body}")
+            if not body:
+                continue
+            user_lines.append(f"- {body}")
+            # 予測との食い違い (prediction_error) を evidence として添える。
+            # 予測が外れた経験は次の予測を変える学びの素なので、gist に明示的に渡す。
+            prediction_error = (ep.prediction_error or "").strip()
+            if prediction_error:
+                user_lines.append(f"  ↳ 予測との食い違い: {prediction_error}")
         if existing_related_semantic:
             user_lines.append("")
             user_lines.append("【既存の関連 semantic (重複避けの参考)】")
