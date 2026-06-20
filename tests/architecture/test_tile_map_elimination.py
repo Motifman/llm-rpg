@@ -5,12 +5,12 @@ PR-1〜6 を通じて達成した tile-map 依存除去が、将来のリファ�
 再混入した」ことを意味するため、慎重に意図を確認すること。
 
 カバー範囲:
-1. wiring シグネチャ: create_spot_graph_wiring から physical_map_repository が削除済み (PR-5)
+1. wiring API: spot_graph_wiring は退役済み (R2b)
 2. observation factory: physical_map_repository が default=None で省略可 (PR-1)
 3. wiring API: create_llm_agent_wiring の physical_map_repository が Optional (PR-2)
 4. WorldQueryService 系列: 5 クラス + factory の physical_map_repository が Optional (PR-3)
 5. DefaultPromptBuilder: tile_map_enabled パラメータが存在し default=True (PR-4)
-6. spot_graph_wiring 内部: tile_map_enabled=False を渡している (PR-4)
+6. spot_graph_wiring 退役: tile-map prompt 切替は escape/generic 側で管理 (R2b)
 7. Decorator 廃止: SpotGraphAugmentingWorldQueryService が存在しない (PR-6)
 8. escape_game runtime: InMemoryPhysicalMapRepository を import しない (PR-5)
 9. WorldQueryService: spot_graph_snapshot_provider 注入 API が存在 (PR-6)
@@ -26,18 +26,21 @@ import pytest
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_SRC = _REPO_ROOT / "src"
 
 
-# ── 1. wiring シグネチャ ────────────────────────────────────────────────
+# ── 1. wiring API ───────────────────────────────────────────────────────
 
-def test_create_spot_graph_wiring_does_not_accept_physical_map_repository() -> None:
-    """create_spot_graph_wiring から physical_map_repository 引数が完全削除されている (PR-5)。"""
-    from ai_rpg_world.application.llm.wiring.spot_graph_wiring import (
-        create_spot_graph_wiring,
-    )
-    sig = inspect.signature(create_spot_graph_wiring)
-    assert "physical_map_repository" not in sig.parameters
+def test_spot_graph_wiring_module_is_removed() -> None:
+    """spot_graph_wiring module は R2b で退役済み。"""
+    with pytest.raises(ImportError):
+        importlib.import_module("ai_rpg_world.application.llm.wiring.spot_graph_wiring")
+
+
+def test_spot_graph_wiring_is_not_exported() -> None:
+    """retired spot_graph_wiring は package API からも露出しない。"""
+    wiring_pkg = importlib.import_module("ai_rpg_world.application.llm.wiring")
+    assert not hasattr(wiring_pkg, "create_spot_graph_wiring")
+    assert "create_spot_graph_wiring" not in getattr(wiring_pkg, "__all__", ())
 
 
 def test_create_llm_agent_wiring_physical_map_repository_is_optional() -> None:
@@ -106,18 +109,6 @@ def test_default_prompt_builder_has_tile_map_enabled_parameter() -> None:
     assert instance.tile_map_enabled is True
 
 
-def test_spot_graph_wiring_passes_tile_map_enabled_false() -> None:
-    """spot_graph_wiring.py 内に tile_map_enabled=False が記述されている (PR-4)。
-
-    実行時の動作確認は test_prompt_builder_tile_map_enabled.py に任せ、
-    ここでは「spot_graph_wiring がこの設定を渡している」というソース上の事実を
-    grep で固定する (リファクタで漏れた場合に検出する)。
-    """
-    spot_graph_wiring = _SRC / "ai_rpg_world/application/llm/wiring/spot_graph_wiring.py"
-    text = spot_graph_wiring.read_text(encoding="utf-8")
-    assert "tile_map_enabled=False" in text
-
-
 # ── 4. Decorator 廃止 (PR-6) ────────────────────────────────────────────
 
 def test_spot_graph_augmenting_world_query_module_is_removed() -> None:
@@ -126,13 +117,6 @@ def test_spot_graph_augmenting_world_query_module_is_removed() -> None:
         importlib.import_module(
             "ai_rpg_world.application.world_graph.spot_graph_augmenting_world_query"
         )
-
-
-def test_spot_graph_wiring_does_not_import_augmenting_decorator() -> None:
-    """spot_graph_wiring.py が SpotGraphAugmentingWorldQueryService を import しない (PR-6)。"""
-    spot_graph_wiring = _SRC / "ai_rpg_world/application/llm/wiring/spot_graph_wiring.py"
-    text = spot_graph_wiring.read_text(encoding="utf-8")
-    assert "SpotGraphAugmentingWorldQueryService" not in text
 
 
 def test_world_query_service_has_attach_spot_graph_snapshot_provider() -> None:
@@ -150,18 +134,3 @@ def test_escape_game_runtime_does_not_import_in_memory_physical_map_repository()
     runtime_file = _REPO_ROOT / "src/ai_rpg_world/application/escape_game/escape_game_runtime.py"
     text = runtime_file.read_text(encoding="utf-8")
     assert "InMemoryPhysicalMapRepository" not in text
-
-
-# ── 6. spot_graph_wiring 内部 (PR-5) ────────────────────────────────────
-
-def test_spot_graph_wiring_does_not_import_physical_map_repository() -> None:
-    """spot_graph_wiring.py に PhysicalMapRepository の import が無い (PR-5)。"""
-    spot_graph_wiring = _SRC / "ai_rpg_world/application/llm/wiring/spot_graph_wiring.py"
-    text = spot_graph_wiring.read_text(encoding="utf-8")
-    # コメント内に "PhysicalMap" の言及が残るのは OK。import 文だけを検査
-    for line in text.splitlines():
-        stripped = line.lstrip()
-        if stripped.startswith(("from ", "import ")):
-            assert "PhysicalMapRepository" not in line, (
-                f"unexpected PhysicalMapRepository import: {line!r}"
-            )

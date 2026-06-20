@@ -53,7 +53,7 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
 - テスト等でストアだけ差し替える場合は `episodic_episode_store=` を指定する（ストアと retrieval・coordinator で共有される）。
 - 協調全体を差し替える場合は `episodic_chunk_coordinator=` を渡す（未指定時は上記ポートから組み立てる）。
 - `LLM_CLIENT=litellm`（`LiteLLMClient`）時はチャンク保存で `interpreted` / `recall_text` を JSON 完了で付与し、失敗時はテンプレへフォールバックする。`episodic_chunk_subjective_completion=` で明示ポート差し替え可。Stub では未付与のまま。
-- `create_spot_graph_wiring` も同方針で既定配線する（スポットグラフ専用のツール・画面組み立てのみが異なる）。
+- escape runtime は別経路で同じ episode/link/semantic stack を構築する。
 
 """
 
@@ -1080,7 +1080,7 @@ class LlmAgentWiringResult:
         self.semantic_memory_store = semantic_memory_store
         # Phase 1 (PR #131): モンスター行動 tick サービス。presentation 側
         # tick driver が `tick(current_tick)` を呼び出して attack + wander を
-        # 実行する。spot_graph_wiring 経由で構築された場合のみ非 None。
+        # 実行する。specialized caller が明示的に渡した場合のみ非 None。
         self.monster_behavior_tick_service = monster_behavior_tick_service
         # Phase 3 Step 3e-3: episode_store などが being_id 経路必須化された後、
         # turn_runner 経由でない直接呼出 (= テストが prompt_builder.build を直接
@@ -1089,8 +1089,8 @@ class LlmAgentWiringResult:
         # 走らせるので影響なし。
         self.being_provisioning_service = being_provisioning_service
         self.being_attachment_resolver = being_attachment_resolver
-        # Phase 6 (Issue #470): snapshot 用 store ハンドル。spot_graph_wiring が
-        # 渡さなければ None のまま (= 既存挙動互換)。
+        # Phase 6 (Issue #470): snapshot 用 store ハンドル。caller が渡さなければ
+        # None のまま (= 既存挙動互換)。
         self.memo_store = memo_store
         self.memory_link_store = memory_link_store
         self.being_repository = being_repository
@@ -1258,7 +1258,7 @@ def create_llm_agent_wiring(
     todo_store = runtime_tool_state.todo_store
 
     # Phase 3 Step 3a-2/3a-3: tile-map 経路 (= escape_game) でも Being を provision
-    # し Resolver を構築して memo caller 群に注入する。spot_graph_wiring と同じ構成。
+    # し Resolver を構築して memo caller 群に注入する。
     from ai_rpg_world.application.being.being_provisioning_service import (
         BeingProvisioningService,
     )
@@ -1550,6 +1550,4 @@ def create_llm_agent_wiring(
     )
 
 
-from ai_rpg_world.application.llm.wiring.spot_graph_wiring import create_spot_graph_wiring
-
-__all__ = ["create_llm_agent_wiring", "create_spot_graph_wiring", "LlmAgentWiringResult"]
+__all__ = ["create_llm_agent_wiring", "LlmAgentWiringResult"]

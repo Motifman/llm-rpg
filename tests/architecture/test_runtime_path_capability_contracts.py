@@ -1,9 +1,9 @@
 """Runtime path capability contracts.
 
-These tests intentionally freeze the current split between:
+These tests intentionally freeze the current runtime path contract:
 
 - ``escape_game`` runtime used by experiments/server sessions
-- spot-graph full wiring
+- retired spot-graph full wiring
 - generic LLM agent wiring that still carries tile-map compatibility
 
 If one of these assertions fails, update the capability matrix deliberately in
@@ -13,6 +13,7 @@ drift between the code and the team's shared mental model.
 
 from __future__ import annotations
 
+import importlib
 import inspect
 from dataclasses import fields
 from pathlib import Path
@@ -65,18 +66,6 @@ def test_escape_game_memory_stack_has_flag_gated_semantic_extension() -> None:
     assert "semantic_persona_resolver" in build_params
 
 
-def test_full_spot_graph_wiring_has_semantic_link_and_snapshot_handles() -> None:
-    """spot_graph full wiring still owns the always-built heavier memory path."""
-    wiring = _read(_SRC / "ai_rpg_world/application/llm/wiring/spot_graph_wiring.py")
-
-    assert "build_episodic_memory_stack" in wiring
-    assert "build_episodic_coordinator_stack" in wiring
-    assert "SemanticPassiveRecallService" in wiring
-    assert "semantic_memory_store=" in wiring
-    assert "memory_link_store=" in wiring
-    assert "mem_bundle.link_store" in wiring
-
-
 def test_generic_llm_agent_wiring_remains_tile_map_compatible() -> None:
     """Only the generic wiring still accepts tile-map dependencies."""
     from ai_rpg_world.application.llm.wiring import create_llm_agent_wiring
@@ -90,34 +79,24 @@ def test_generic_llm_agent_wiring_remains_tile_map_compatible() -> None:
     assert "tile_map_enabled: bool = True" in generic
 
 
-def test_spot_graph_wiring_is_spot_graph_only_for_tile_map_features() -> None:
-    """spot_graph full wiring disables tile movement and tile-map prompt fields."""
-    from ai_rpg_world.application.llm.wiring.spot_graph_wiring import (
-        create_spot_graph_wiring,
-    )
+def test_spot_graph_full_wiring_is_retired() -> None:
+    """spot_graph full wiring is no longer an exported runtime path."""
+    spot_graph_wiring = _SRC / "ai_rpg_world/application/llm/wiring/spot_graph_wiring.py"
+    assert not spot_graph_wiring.exists()
 
-    sig = inspect.signature(create_spot_graph_wiring)
-    assert "physical_map_repository" not in sig.parameters
-
-    wiring = _read(_SRC / "ai_rpg_world/application/llm/wiring/spot_graph_wiring.py")
-    assert "include_tile_movement=False" in wiring
-    assert "tile_map_enabled=False" in wiring
-    assert "physical_map_repository=None" in wiring
+    wiring_pkg = importlib.import_module("ai_rpg_world.application.llm.wiring")
+    assert not hasattr(wiring_pkg, "create_spot_graph_wiring")
+    assert "create_spot_graph_wiring" not in getattr(wiring_pkg, "__all__", ())
 
 
-def test_memory_recall_episodes_is_currently_escape_game_specific() -> None:
-    """Active episode recall is wired in escape_game, not spot_graph full wiring."""
+def test_memory_recall_episodes_is_escape_game_specific() -> None:
+    """Active episode recall is wired in escape_game."""
     escape_runtime = _read(
         _SRC / "ai_rpg_world/application/escape_game/escape_game_runtime.py"
     )
     runtime_manager = _read(
         _SRC / "ai_rpg_world/presentation/spot_graph_game/runtime_manager.py"
     )
-    spot_graph_wiring = _read(
-        _SRC / "ai_rpg_world/application/llm/wiring/spot_graph_wiring.py"
-    )
 
     assert "memory_recall_episodes" in escape_runtime
     assert "TOOL_NAME_MEMORY_RECALL_EPISODES" in runtime_manager
-    assert "_episodic_memory_recall_executor" in spot_graph_wiring
-    assert "executor が無い間" in spot_graph_wiring

@@ -1,13 +1,13 @@
-"""create_llm_agent_wiring と create_spot_graph_wiring の共有ビルダー群。
+"""LLM wiring と escape episodic stack の共有ビルダー群。
 
-Issue #227 後続: 両 factory で完全重複していた 4 ブロックを抽出した:
+Issue #227 後続: wiring factory 間で完全重複していた 4 ブロックを抽出した:
 
 1. effective_view_distance の env / argument 解決
 2. EpisodicPromotionFrontier + memory_link_bundle + semantic_promotion の構築
 3. recall_buffer / reinterpretation_coord / episodic_coord の構築
 4. game_time_label_provider クロージャ生成 (action_result の時刻ラベル用)
 
-呼び出し側のロジックを薄くし、両 factory の挙動が drift しないことを保証する。
+呼び出し側のロジックを薄くし、episodic/link/semantic 構築の挙動が drift しないことを保証する。
 """
 
 from __future__ import annotations
@@ -116,8 +116,7 @@ def build_episodic_memory_stack(
 ) -> EpisodicMemoryStack:
     """共有 episode store と link / semantic / promotion を組み立てる。
 
-    create_llm_agent_wiring と create_spot_graph_wiring で完全に同じロジック
-    だった 5 連鎖を 1 か所に集約する。
+    wiring factory 間で完全に同じロジックだった 5 連鎖を 1 か所に集約する。
 
     Phase 1b (semantic LLM gist):
     - ``semantic_gist_service`` を渡すと cluster 昇格時に LLM gist を試みる
@@ -194,8 +193,8 @@ def build_episodic_coordinator_stack(
 ) -> EpisodicCoordinatorStack:
     """recall_buffer / reinterpretation_coord / episodic_coord の組み立てを集約する。
 
-    create_llm_agent_wiring と create_spot_graph_wiring で 40 行重複していた
-    ブロックを抽出。recall_buffer / reinterpretation_journal の解決は呼び出し側
+    wiring factory 間で 40 行重複していたブロックを抽出。recall_buffer /
+    reinterpretation_journal の解決は呼び出し側
     (`__init__.py` の `_resolve_default_episodic_reinterpretation_stores`) で
     済ませてから渡す (循環 import 回避)。
 

@@ -43,9 +43,9 @@ JSON Lines。1 行 = 1 `TraceEvent`。
 
 新しい kind を足したい場合は、まず使ってみて固まったらこの表に追記する。
 
-## 使い方 (orchestrator 経由の自動記録 — 推奨)
+## 使い方 (runtime 経由の自動記録 — 推奨)
 
-`LlmAgentOrchestrator` と `MemoToolExecutor` は `trace_recorder` kwarg を受け取り、以下を自動で記録します:
+escape runtime / legacy `LlmAgentOrchestrator` と `MemoToolExecutor` は trace recorder を受け取り、以下を自動で記録します:
 
 | 自動記録される event | 発火タイミング |
 |---|---|
@@ -54,7 +54,7 @@ JSON Lines。1 行 = 1 `TraceEvent`。
 | `memo_add` | `memo_add` ツール成功時 |
 | `memo_done` | `memo_done` ツール成功時 (失敗時は出さない) |
 
-`create_llm_agent_wiring(..., trace_recorder=...)` または `create_spot_graph_wiring(..., trace_recorder=...)` に渡せば、内部で orchestrator と memo executor に自動で配線されます。**呼び出し側は `run_start` / `run_end` / `observation` を自分で記録するだけ**。
+legacy full wiring では `create_llm_agent_wiring(..., trace_recorder=...)` に渡します。escape runtime では runtime 作成後に `runtime.set_trace_recorder(rec)` を呼ぶと、phase B と memo executor に自動で配線されます。**呼び出し側は `run_start` / `run_end` を自分で記録するだけ**。
 
 ```python
 from pathlib import Path
@@ -62,13 +62,11 @@ from ai_rpg_world.application.trace import JsonlTraceRecorder, TraceEventKind
 
 with JsonlTraceRecorder(Path("var/runs/exp-10.jsonl")) as rec:
     rec.record(TraceEventKind.RUN_START, run_id="exp-10", model="gemma-4-31b")
-    wiring = create_spot_graph_wiring(
-        ...,  # 既存引数
-        trace_recorder=rec,
-    )
+    runtime = create_escape_game_runtime(...)
+    runtime.set_trace_recorder(rec)
     while not game_ended:
         runtime.advance_tick()
-        # action / action_result / memo_add / memo_done は orchestrator 側で自動記録
+        # action / action_result / memo_add / memo_done は runtime 側で自動記録
     rec.record(TraceEventKind.RUN_END, outcome="WIN", total_ticks=tick)
 ```
 
