@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     ChunkEncodingInput,
@@ -35,6 +36,9 @@ from ai_rpg_world.application.llm.services.episodic_cue_rules import (
     build_episodic_cues_for_tool_turn,
     build_situation_episodic_cues,
     merge_ordered_episodic_cues,
+)
+from ai_rpg_world.application.llm.services.world_noun_matcher import (
+    IWorldNounMatcher,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 
@@ -215,11 +219,34 @@ def _canonical_args_fingerprint_text(action_results: tuple[ActionResultEntry, ..
     return "|".join(fps)
 
 
-def _build_chunk_cues(inp: ChunkEncodingInput) -> tuple[EpisodicCue, ...]:
+def _build_chunk_cues(
+    inp: ChunkEncodingInput,
+    *,
+    noun_matcher: Optional[IWorldNounMatcher] = None,
+) -> tuple[EpisodicCue, ...]:
+    """chunk から episode に貼る cue 列を組み立てる。
+
+    #526 後続 Fix A: ``noun_matcher`` が渡されれば、観測 ``prose`` 中の
+    固有名詞 (spot 名 / 人物名 / object 名) から place_spot / entity / object
+    cue を episode に貼る。これにより read 側 (prompt_builder._run_passive_recall)
+    が同じ matcher で問い合わせる cue と対称になり、recall が機能する。
+
+    Note: runtime_context は依然として None で渡す。chunk は複数 tick に
+    またがるため「どの瞬間の runtime か」設計判断が要る (= Fix C の領分)。
+    Fix A では prose 経路だけを通す。
+    """
     parts: list[tuple[EpisodicCue, ...]] = []
     for o in sorted(_all_observation_entries(inp), key=lambda x: _as_utc(x.occurred_at)):
         st = o.output.structured if isinstance(o.output.structured, dict) else None
-        parts.append(build_situation_episodic_cues(runtime_context=None, observation_structured=st))
+        prose = o.output.prose if isinstance(o.output.prose, str) and o.output.prose.strip() else None
+        parts.append(
+            build_situation_episodic_cues(
+                runtime_context=None,
+                observation_structured=st,
+                observation_prose=prose,
+                noun_matcher=noun_matcher,
+            )
+        )
     for e in _sorted_actions(inp.action_results):
         res = LlmCommandResultDto(
             success=e.success,
@@ -257,7 +284,18 @@ def _game_time_label_newest_in_window(inp: ChunkEncodingInput) -> str | None:
 
 
 class ChunkEpisodeDraftBuilder:
-    """チャンク境界の ChunkEncodingInput から SubjectiveEpisode 草案を組み立てる。"""
+    """チャンク境界の ChunkEncodingInput から SubjectiveEpisode 草案を組み立てる。
+
+    #526 後続 Fix A: ``noun_matcher`` を任意で注入できる。注入時は観測 prose
+    中の固有名詞から place_spot / entity / object cue を episode に貼り、
+    read 側 (passive_recall) が立てる cue と対称化する。未注入時は従来挙動
+    (structured / action / outcome cue のみ) で完全互換。
+    """
+
+    def __init__(
+        self, *, noun_matcher: Optional[IWorldNounMatcher] = None
+    ) -> None:
+        self._noun_matcher = noun_matcher
 
     def build(self, inp: ChunkEncodingInput) -> SubjectiveEpisode:
         if not isinstance(inp, ChunkEncodingInput):
@@ -320,7 +358,7 @@ class ChunkEpisodeDraftBuilder:
             prediction_error=None,
             felt=_compose_felt(acts),
             interpreted=compute_template_interpreted(what),
-            cues=_build_chunk_cues(inp),
+            cues=_build_chunk_cues(inp, noun_matcher=self._noun_matcher),
             recall_text=compute_template_recall(observed, what),
             recall_count=0,
             last_recalled_at=None,

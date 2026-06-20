@@ -263,3 +263,112 @@ class TestChunkEpisodeDraftBuilder:
         inp = build_chunk_encoding_input(PlayerId(1), (), acts)
         ep = ChunkEpisodeDraftBuilder().build(inp)
         assert ep.felt == "fear"
+
+
+class _FakeNounMatcher:
+    """テスト用の固定 noun_matcher。``find_in_text`` で渡された text の中から
+    事前登録した語を見つけたら NounMatch を返す (Aho-Corasick の代替)。"""
+
+    def __init__(self, patterns: list[tuple[str, str, str]]) -> None:
+        # patterns: list of (word, axis, value)
+        self._patterns = patterns
+
+    def find_in_text(self, text):
+        from ai_rpg_world.application.llm.services.world_noun_matcher import NounMatch
+        out = []
+        for word, axis, value in self._patterns:
+            idx = text.find(word)
+            if idx >= 0:
+                out.append(
+                    NounMatch(
+                        axis=axis,
+                        value=value,
+                        matched_text=word,
+                        start=idx,
+                        end=idx + len(word),
+                    )
+                )
+        return tuple(out)
+
+
+class TestChunkEpisodeDraftBuilderNounMatcher:
+    """#526 後続 Fix A: write 側で noun_matcher を使い、観測 prose 中の
+    固有名詞から place_spot / entity / object cue を episode に貼る。"""
+
+    def test_noun_matcher_未注入なら_既存挙動と同一(self) -> None:
+        """``noun_matcher=None`` (default) では prose 由来 cue は付かない。
+        既存の structured / action / outcome cue のみ。"""
+        t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
+        obs = ObservationEntry(
+            occurred_at=t0,
+            output=ObservationOutput(
+                prose="書架Aで青い背表紙の本を見つけた。",
+                structured={},
+                observation_category="environment",
+            ),
+            game_time_label=None,
+        )
+        act = ActionResultEntry(
+            occurred_at=t0 + timedelta(minutes=1),
+            action_summary="examine",
+            result_summary="ok",
+            tool_name="spot_graph_interact",
+        )
+        inp = build_chunk_encoding_input(PlayerId(1), (obs,), (act,))
+        ep = ChunkEpisodeDraftBuilder().build(inp)
+        axes_in_episode = {c.axis for c in ep.cues}
+        assert "place_spot" not in axes_in_episode
+        assert "entity" not in axes_in_episode
+        assert "object" not in axes_in_episode
+
+    def test_noun_matcher_注入時_観測_prose_由来_cue_が_episode_に_乗る(self) -> None:
+        """matcher が「書架A」を spot_id=3 として登録していれば、
+        観測 prose にその語が含まれる episode の cues に place_spot:3 が乗る。"""
+        t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
+        obs = ObservationEntry(
+            occurred_at=t0,
+            output=ObservationOutput(
+                prose="書架Aで青い背表紙の本を見つけた。",
+                structured={},
+                observation_category="environment",
+            ),
+            game_time_label=None,
+        )
+        act = ActionResultEntry(
+            occurred_at=t0 + timedelta(minutes=1),
+            action_summary="examine",
+            result_summary="ok",
+            tool_name="spot_graph_interact",
+        )
+        inp = build_chunk_encoding_input(PlayerId(1), (obs,), (act,))
+        matcher = _FakeNounMatcher(
+            [("書架A", "place_spot", "3"), ("青", "object", "world_object_1")]
+        )
+        ep = ChunkEpisodeDraftBuilder(noun_matcher=matcher).build(inp)
+        canons = {c.to_canonical() for c in ep.cues}
+        assert "place_spot:3" in canons
+        assert "object:world_object_1" in canons
+
+    def test_noun_matcher_注入時_観測_prose_が_None_なら_cue_は_増えない(self) -> None:
+        """observation の prose が None / 空でも例外を投げず、追加 cue 0 件。"""
+        t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
+        obs = ObservationEntry(
+            occurred_at=t0,
+            output=ObservationOutput(
+                prose="",
+                structured={"type": "x"},
+                observation_category="environment",
+            ),
+            game_time_label=None,
+        )
+        act = ActionResultEntry(
+            occurred_at=t0 + timedelta(minutes=1),
+            action_summary="examine",
+            result_summary="ok",
+            tool_name="t",
+        )
+        inp = build_chunk_encoding_input(PlayerId(1), (obs,), (act,))
+        matcher = _FakeNounMatcher([("書架A", "place_spot", "3")])
+        ep = ChunkEpisodeDraftBuilder(noun_matcher=matcher).build(inp)
+        axes_in_episode = {c.axis for c in ep.cues}
+        assert "place_spot" not in axes_in_episode
