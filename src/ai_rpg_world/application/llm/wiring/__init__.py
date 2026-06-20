@@ -818,43 +818,13 @@ def _optional_episodic_chunk_subjective_fields_service(
     return EpisodicChunkSubjectiveFieldsService(port)
 
 
-def _optional_semantic_gist_service(
-    llm_client: ILLMClient,
-    enabled: bool,
-) -> Optional["SemanticGistService"]:
-    """``SEMANTIC_LLM_GIST_ENABLED=1`` かつ LiteLLM クライアントあるときだけ
-    ``SemanticGistService`` を返す。
-
-    Phase 1b: gist 生成の LLM 化。OFF または非 LiteLLM の場合は None を返し、
-    promotion service は既存の決定論 gist を使う。
-    """
-    if not enabled:
-        return None
-    from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
-        ISemanticGistCompletionPort,
-    )
-    from ai_rpg_world.application.llm.services.semantic_gist_service import (
-        SemanticGistService,
-    )
-    from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-
-    if not isinstance(llm_client, LiteLLMClient):
-        return None
-    port: ISemanticGistCompletionPort = llm_client
-    return SemanticGistService(port)
-
-
-def _optional_episodic_reinterpretation_completion(
-    llm_client: ILLMClient,
-    explicit: Optional[IEpisodicReinterpretationCompletionPort],
-) -> Optional[IEpisodicReinterpretationCompletionPort]:
-    port: Optional[IEpisodicReinterpretationCompletionPort] = explicit
-    if port is None:
-        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-
-        if isinstance(llm_client, LiteLLMClient):
-            port = llm_client
-    return port
+# R2c-1: _optional_* helper は optional_llm_services モジュールへ抽出した
+# (escape runtime も使うため full wiring 本体退役 R2c-2 前に依存を分離)。
+# 旧名 (_optional_*) で参照する内部呼び出しのため alias で受ける。
+from ai_rpg_world.application.llm.wiring.optional_llm_services import (  # noqa: E402
+    optional_episodic_reinterpretation_completion as _optional_episodic_reinterpretation_completion,
+    optional_semantic_gist_service as _optional_semantic_gist_service,
+)
 
 
 def _resolve_default_episodic_reinterpretation_stores(
