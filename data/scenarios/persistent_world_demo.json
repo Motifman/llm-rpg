@@ -1,0 +1,63 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "persistent_world_demo",
+    "title": "永続世界デモ — 勝敗のない世界 (U5)",
+    "description": "勝敗・終了条件を一切持たない『永続世界』の最小デモ。``game_end_conditions`` ブロックを宣言しないことで win/lose 条件が空になり、check_game_end は決して is_ended=True を返さない。世界は外的停止 (MAX_WORLD_TICKS) でしか止まらず、エージェントは目的の達成/失敗で終わらず暮らし続ける。\n\n勝敗のある脱出/サバイバルではなく、勝敗概念を runtime から切り離して『ただ生きる世界』を成立させられることを示す参照シナリオ。",
+    "theme": "persistent_world",
+    "difficulty": "easy",
+    "estimated_ticks": 0,
+    "author": "u5_persistent_world",
+    "tags": ["persistent_world", "no_win_loss", "sandbox"],
+    "llm_objective_text": "- 終わりのない世界で、好きに過ごす。"
+  },
+  "item_specs": [],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 1000,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "plaza",
+      "name": "広場",
+      "description": "石畳の小さな広場。中央に古い噴水があり、人々がのんびり行き交う。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"}
+    },
+    {
+      "id": "garden",
+      "name": "庭",
+      "description": "広場の隣の手入れされた庭。木陰のベンチで休める。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"}
+    }
+  ],
+  "connections": [
+    {
+      "id": "plaza_to_garden",
+      "from": "plaza",
+      "to": "garden",
+      "name": "小道",
+      "description": "広場と庭を繋ぐ短い小道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "OPEN"}
+    }
+  ],
+  "players": [
+    {
+      "id": "resident",
+      "name": "住人",
+      "spawn_spot": "plaza",
+      "initial_items": [],
+      "persona_prompt": "あなたはこの街に暮らす住人。特に達成すべき使命はなく、日々を気ままに過ごしている。\n\n話し方: 穏やかで自然な口調。\n\n性格傾向: のんびり、好奇心は人並み。\n\n価値観: 急がず、今日を心地よく過ごす。"
+    }
+  ],
+  "initial_flags": [],
+  "scenario_events": [],
+  "reactive_bindings": {}
+}
