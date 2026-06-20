@@ -1203,6 +1203,23 @@ class EscapeGameRuntime:
             # Issue #283 後続: recall trace を可視化するため、trace_recorder を
             # provider 経由で渡す (set_trace_recorder で後から差し込まれる)。
             trace_recorder_provider=lambda: self._trace_recorder,
+            # #526 後続 (habituation 配線漏れ修正): being_id 解決のため
+            # ``being_attachment_resolver`` と ``default_world_id`` を渡す。
+            # これらが None のままだと ``_resolve_being_id`` が常に None を
+            # 返し、慣化 (PR #565) / memo / recall_buffer / reinterpretation
+            # journal lookup の being_id 経路が silent skip されていた。
+            # passive_recall service 側 (build_episodic_stack 経由) には
+            # 既に渡している (escape_episodic_wiring 経路) が、prompt_builder
+            # 側の ctor だけ落ちていた。
+            # ``_aux_being_resolver`` は ``_wire_auxiliary_tool_stack()`` で
+            # 初期化される lazy attribute なので、未配線時 (= 古いテスト
+            # 経路) でも graceful に None を渡せるよう getattr で守る。
+            being_attachment_resolver=getattr(
+                self, "_aux_being_resolver", None
+            ),
+            default_world_id=getattr(
+                self, "_aux_being_default_world_id", None
+            ),
         )
         self._cached_default_prompt_builder = builder
         return builder
