@@ -301,15 +301,26 @@ def _normalize_error_code(code: str) -> str | None:
 def _outcome_cue_from_success_and_error(
     *, success: bool, error_code: str | None
 ) -> EpisodicCue | None:
+    """成功 / 失敗から outcome cue を作る。
+
+    #526 後続 Fix D: 成功時は cue を出さない。実 run の trace 解析で、
+    ほぼ全 episode が ``outcome:success`` を持ち、毎ターン全 successful
+    episode が hit して recall が肥大することが判明したため。outcome cue は
+    失敗時 (= 希少 + 「何かおかしかった」シグナル) にのみ意味がある。
+
+    失敗は error_code があれば ``failure_{normalized}``、無ければ ``failure``。
+    成功は ``None`` (= cue なし)。read 側でも同じ判定を共有するため、本関数を
+    通る全経路 (build / recall 両方) で対称に効く。
+    """
     if success:
-        value = "success"
+        # Fix D: 成功 outcome cue は index 選択性が極端に低いので出さない。
+        return None
+    ec = error_code
+    if isinstance(ec, str) and ec.strip():
+        norm = _normalize_error_code(ec)
+        value = f"failure_{norm}" if norm else "failure"
     else:
-        ec = error_code
-        if isinstance(ec, str) and ec.strip():
-            norm = _normalize_error_code(ec)
-            value = f"failure_{norm}" if norm else "failure"
-        else:
-            value = "failure"
+        value = "failure"
     safe = _truncate_value(value)
     if not safe:
         return None
