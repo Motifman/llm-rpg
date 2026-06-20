@@ -231,9 +231,17 @@ def _wiring_stub_from_escape_runtime(runtime: Any) -> Any:
     # 形式に揃える。
     aux_resolver = getattr(runtime, "aux_being_resolver", None)
     aux_repo = getattr(runtime, "_aux_being_repository", None)
+    # #526 後続: SEMANTIC_PASSIVE_TOP_K / SEMANTIC_LLM_GIST_ENABLED が ON だと
+    # episodic_stack が semantic store を持つ。あれば snapshot に拾う (OFF なら
+    # 従来どおり None = 空 in-memory fallback)。
+    semantic_store = (
+        getattr(episodic_stack, "semantic_memory_store", None)
+        if episodic_stack is not None
+        else None
+    )
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
-        semantic_memory_store=None,
+        semantic_memory_store=semantic_store,
         memory_link_store=None,
         episodic_recall_buffer_store=None,
         episodic_reinterpretation_journal_store=None,
