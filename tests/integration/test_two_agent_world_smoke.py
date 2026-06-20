@@ -1,7 +1,7 @@
 """PR1-5 の主要コンポーネント間の配線検証テスト (端的なスモーク)。
 
 **スコープ限定**: 実 ``SpotGraphSimulationApplicationService`` も
-``EscapeGameRuntime`` も使わない。代わりに最小スタブ ``_CountingRuntime`` を
+``WorldRuntime`` も使わない。代わりに最小スタブ ``_CountingRuntime`` を
 通して、以下のピース群が他コンポーネントなしで正しく連携することだけを
 保証する:
 

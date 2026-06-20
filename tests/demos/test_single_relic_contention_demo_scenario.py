@@ -30,10 +30,10 @@ SCENARIO_PATH = (
 
 @pytest.fixture
 def runtime():
-    """escape_game_runtime にシナリオをロードして返す。"""
-    from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+    """world_runtime にシナリオをロードして返す。"""
+    from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-    return create_escape_game_runtime(SCENARIO_PATH)
+    return create_world_runtime(SCENARIO_PATH)
 
 
 class TestSingleRelicContentionDemoScenarioLoad:
@@ -97,7 +97,7 @@ class TestSingleRelicContentionResolution:
         ``InteractionNotAllowedException`` を投げる。
 
         ドメイン層は失敗を例外で表現する。アプリケーション層 (LLM 経路) では
-        ``_EscapeGameLlmWiring._execute_tool`` の外側 try/except がこれを捕捉し、
+        ``_WorldLlmWiring._execute_tool`` の外側 try/except がこれを捕捉し、
         ``success=False`` の DTO に変換する。intent キュー導入後はこの失敗 DTO を
         ``ActionFailedObservationEmitter`` が ``type: action_failed`` 観測として
         敗者に届ける (B-1 wiring 後に統合確認)。

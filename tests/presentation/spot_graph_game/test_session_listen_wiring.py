@@ -2,7 +2,7 @@
 
 Issue #154 のデモ実走で ``spot_graph_listen`` が常に ``UNSUPPORTED_TOOL`` を
 返してループを引き起こしていた配線漏れの修正。LLM の tools リストに
-``LISTEN_DEFINITION`` が存在するのに ``_EscapeGameLlmWiring._execute_tool``
+``LISTEN_DEFINITION`` が存在するのに ``_WorldLlmWiring._execute_tool``
 に dispatch case が無く、毎回 fallback の "未対応のツール" 応答になっていた。
 
 本テストでは:

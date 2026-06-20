@@ -1,9 +1,9 @@
 """scripts/run_scenario_experiment.py の Phase 6 snapshot 統合テスト。
 
-実 EscapeGameRuntime を立てる integration は LLM が要るため、ここでは
+実 WorldRuntime を立てる integration は LLM が要るため、ここでは
 プラグの正しさだけを確認する:
 
-- ``_wiring_stub_from_escape_runtime`` が runtime の private 属性を正しく拾う
+- ``_wiring_stub_from_world_runtime`` が runtime の private 属性を正しく拾う
 - ``--snapshot-save-dir`` / ``--snapshot-load-dir`` の argparse が通る
 - ``--snapshot-load-dir`` が存在しないと parser.error で exit する
 """
@@ -20,16 +20,16 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts.run_scenario_experiment import (  # noqa: E402
-    _wiring_stub_from_escape_runtime,
+    _wiring_stub_from_world_runtime,
     main,
 )
 
 
 class TestWiringStub:
-    """``_wiring_stub_from_escape_runtime`` の attribute pickup。"""
+    """``_wiring_stub_from_world_runtime`` の attribute pickup。"""
 
     def test_runtime_の_private_属性を拾う(self) -> None:
-        # 既存の EscapeGameRuntime と同じ名前で attribute を立てる。
+        # 既存の WorldRuntime と同じ名前で attribute を立てる。
         # ``aux_being_resolver`` は public property、``_aux_being_repository``
         # は private 属性として直接読む (= helper の現実装に合わせる)。
         episode_store = object()
@@ -39,12 +39,12 @@ class TestWiringStub:
             aux_being_resolver="resolver-handle",
             _episodic_stack=SimpleNamespace(episode_store=episode_store),
         )
-        stub = _wiring_stub_from_escape_runtime(runtime)
+        stub = _wiring_stub_from_world_runtime(runtime)
         assert stub.memo_store == "memo-handle"
         assert stub.being_repository == "repo-handle"
         assert stub.being_attachment_resolver == "resolver-handle"
         assert stub.episodic_episode_store is episode_store
-        # 他 4 store は escape_game 経路では拾えないので None
+        # 他 4 store は world_runtime 経路では拾えないので None
         assert stub.semantic_memory_store is None
         assert stub.memory_link_store is None
         assert stub.episodic_recall_buffer_store is None
@@ -57,7 +57,7 @@ class TestWiringStub:
             aux_being_resolver=None,
             _episodic_stack=None,
         )
-        stub = _wiring_stub_from_escape_runtime(runtime)
+        stub = _wiring_stub_from_world_runtime(runtime)
         assert stub.episodic_episode_store is None
 
     def test_どの_attribute_も_欠落なら_None_を返す(self) -> None:
@@ -66,7 +66,7 @@ class TestWiringStub:
         class _Bare:
             pass
 
-        stub = _wiring_stub_from_escape_runtime(_Bare())
+        stub = _wiring_stub_from_world_runtime(_Bare())
         assert stub.memo_store is None
         assert stub.being_repository is None
         assert stub.being_attachment_resolver is None

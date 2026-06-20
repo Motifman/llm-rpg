@@ -2,7 +2,7 @@
 
 # 何のため
 
-PR #307 で escape_game に LLM 主観文付与 (`EpisodicChunkSubjectiveFieldsService`)
+PR #307 で world_runtime に LLM 主観文付与 (`EpisodicChunkSubjectiveFieldsService`)
 を配線したが、同期実行のためゲーム tick が LLM レイテンシ (1〜3 秒) ぶん
 止まる。プレイヤー数が増えると 1 tick 内の chunk 数も増え、累積で体感に響く。
 

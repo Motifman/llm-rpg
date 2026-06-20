@@ -117,7 +117,7 @@ class TestPromptBuilderPassiveRecall:
     """Optional 注入時のみ関連記憶セクションに recall_text が載ること"""
 
     def test_without_service_relevant_memories_section_is_omitted(self) -> None:
-        """受動想起未注入時は【関連する記憶】section ごと省略される (chore β: escape_game format)。"""
+        """受動想起未注入時は【関連する記憶】section ごと省略される (chore β: world_runtime format)。"""
         buffer = MagicMock(spec=IObservationContextBuffer)
         buffer.drain = MagicMock(return_value=[])
         sliding = MagicMock(spec=ISlidingWindowMemory)
@@ -160,7 +160,7 @@ class TestPromptBuilderPassiveRecall:
         )
         out = builder.build(PlayerId(1))
         user = out["messages"][1]["content"]
-        # chore β: 受動想起未注入時は section ごと出力されない (escape_game format)
+        # chore β: 受動想起未注入時は section ごと出力されない (world_runtime format)
         assert "【関連する記憶】" not in user
         assert out["current_beliefs_snapshot"] == ""
 

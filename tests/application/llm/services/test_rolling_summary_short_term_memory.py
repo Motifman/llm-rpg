@@ -878,7 +878,7 @@ class TestShortTermSummaryGeneratedTrace:
 
 class TestPostHocSetters:
     """PR #439: trace_recorder_provider / current_tick_provider / summary_services
-    を runtime 構築後に注入できる setter。escape_game_runtime 等で必要。"""
+    を runtime 構築後に注入できる setter。world_runtime 等で必要。"""
 
     def test_set_trace_recorder_provider_で_emit_経路が_有効化される(self) -> None:
         """ctor で None 渡し → setter で注入 → L4 install 時に trace 出る。"""

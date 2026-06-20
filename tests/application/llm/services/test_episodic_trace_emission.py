@@ -246,12 +246,12 @@ class TestChunkCoordinatorTraceEmission:
         第20回実験で 48/50 件の chunk write が
         ``TypeError: can't compare offset-naive and offset-aware datetimes`` で
         失敗していた。供給源 (HeartbeatObservationEmitter は aware、
-        escape_game runtime は当時 naive) の不一致が原因。境界で正規化されて
+        world_runtime runtime は当時 naive) の不一致が原因。境界で正規化されて
         いることを担保する regression test。
         """
         coord, buffer, action_store, episode_store = self._build_coord(recorder=None)
         pid = PlayerId(1)
-        # action store は (修正後の escape_game runtime と同じく) aware で統一
+        # action store は (修正後の world_runtime runtime と同じく) aware で統一
         action_store.append(
             pid,
             action_summary="wait1",
@@ -756,11 +756,11 @@ class TestPromptBuilderSectionBreakdownTraceEmission:
 
 
 # ──────────────────────────────────────────────────────────────────
-# End-to-end: escape_game runtime で trace が出る
+# End-to-end: world_runtime runtime で trace が出る
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestEscapeGameEpisodicTraceE2E:
+class TestWorldRuntimeEpisodicTraceE2E:
     """env=1 で trace_recorder を runtime に差し込んで実行すると、chunk
     write と recall の両方が trace event として記録される。"""
 
@@ -772,7 +772,7 @@ class TestEscapeGameEpisodicTraceE2E:
         from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 
         monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
         scenario_path = (
             Path(__file__).resolve().parents[4]
@@ -780,7 +780,7 @@ class TestEscapeGameEpisodicTraceE2E:
             / "scenarios"
             / "forbidden_library_demo.json"
         )
-        runtime = create_escape_game_runtime(scenario_path)
+        runtime = create_world_runtime(scenario_path)
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         runtime.set_trace_recorder(recorder)

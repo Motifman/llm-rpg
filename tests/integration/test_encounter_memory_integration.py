@@ -1,6 +1,6 @@
 """Encounter Memory の integration テスト (PR3)。
 
-実 ``EscapeGameRuntime`` を立てて以下を確認する:
+実 ``WorldRuntime`` を立てて以下を確認する:
 
 - runtime が ``_encounter_memory`` を生成し、observation_appender に collector が
   注入されていること (wiring の end-to-end)
@@ -50,11 +50,11 @@ _SCENARIO_PATH = (
 
 
 def _create_runtime():
-    from ai_rpg_world.application.escape_game.escape_game_runtime import (
-        create_escape_game_runtime,
+    from ai_rpg_world.application.world_runtime.world_runtime import (
+        create_world_runtime,
     )
 
-    return create_escape_game_runtime(_SCENARIO_PATH)
+    return create_world_runtime(_SCENARIO_PATH)
 
 
 def _entered_spot_output(actor: str) -> ObservationOutput:

@@ -6,8 +6,8 @@
 - ``build_episodic_stack`` が 4 要素 (chunk_coordinator + passive_recall +
   noun_matcher + episode_store) を組み立てる
 - ``episode_store`` 引数で外側 store を共有できる (scheduler 経路の整合性条件)
-- 旧名 (``EscapeEpisodicStack`` / ``build_escape_episodic_stack``) が
-  ``demos/escape_game/escape_episodic_wiring.py`` から後方互換 alias で取れる
+- 旧名 (``WorldEpisodicStack`` / ``build_world_episodic_stack``) が
+  ``demos/world_runtime/world_episodic_wiring.py`` から後方互換 alias で取れる
 """
 
 from __future__ import annotations
@@ -308,27 +308,27 @@ class TestReinterpretationOptIn:
 
 
 class TestBackwardCompatAlias:
-    """``escape_episodic_wiring`` の旧名 alias が引き続き動く。
+    """``world_episodic_wiring`` の旧名 alias が引き続き動く。
 
     既存のテスト / 外部依存を壊さないことの保証。
     """
 
-    def test_旧名_EscapeEpisodicStack_は_EpisodicStack_の_alias(self) -> None:
-        from ai_rpg_world.application.escape_game.escape_episodic_wiring import (
+    def test_旧名_WorldEpisodicStack_は_EpisodicStack_の_alias(self) -> None:
+        from ai_rpg_world.application.world_runtime.world_episodic_wiring import (
             EpisodicStack as NewName,
-            EscapeEpisodicStack as OldName,
+            WorldEpisodicStack as OldName,
         )
         assert OldName is NewName
 
-    def test_旧名_build_escape_episodic_stack_は_build_episodic_stack_の_alias(self) -> None:
-        from ai_rpg_world.application.escape_game.escape_episodic_wiring import (
+    def test_旧名_build_world_episodic_stack_は_build_episodic_stack_の_alias(self) -> None:
+        from ai_rpg_world.application.world_runtime.world_episodic_wiring import (
             build_episodic_stack as new_build,
-            build_escape_episodic_stack as old_build,
+            build_world_episodic_stack as old_build,
         )
         assert old_build is new_build
 
     def test_旧名_envヘルパ_も_alias_経由で_動く(self) -> None:
-        from ai_rpg_world.application.escape_game.escape_episodic_wiring import (
+        from ai_rpg_world.application.world_runtime.world_episodic_wiring import (
             is_episodic_enabled,
             is_episodic_subjective_enabled,
         )

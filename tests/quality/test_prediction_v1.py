@@ -13,7 +13,7 @@ Issue #526 で議論した「予測 / 期待値の不在」(構造的不在 #3) 
   学びが戻り、次の予測を変える材料になっているか (= PR3 のループ閉じ面) を見る。
 
 ハーネス注:
-- escape_game runtime は episodic recall のみ配線し semantic recall
+- world_runtime runtime は episodic recall のみ配線し semantic recall
   (``【関連する学び】``) を配線しない。そのため ``learned`` variant は
   prompt builder へ ``SemanticPassiveRecallService`` を white-box 注入する。
 - LLM は呼ばない。失敗するのは prompt が組めない等の runtime regression のみ。
@@ -59,11 +59,11 @@ _DUMP_DIR = Path(__file__).resolve().parents[2] / "docs" / "quality_checks"
 
 def _build_runtime(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    from ai_rpg_world.application.escape_game.escape_game_runtime import (
-        create_escape_game_runtime,
+    from ai_rpg_world.application.world_runtime.world_runtime import (
+        create_world_runtime,
     )
 
-    return create_escape_game_runtime(_SCENARIO_PATH)
+    return create_world_runtime(_SCENARIO_PATH)
 
 
 def _resolve_player_id(runtime, name: str) -> PlayerId:
@@ -212,13 +212,13 @@ class TestPredictionV1Baseline:
         """learned variant: 予測由来の学びが【関連する学び】に戻り、次の予測を
         変える材料になっているか。
 
-        escape_game runtime は semantic recall を配線しないため、prompt builder に
+        world_runtime runtime は semantic recall を配線しないため、prompt builder に
         SemanticPassiveRecallService を white-box 注入する。
         """
         runtime = _build_runtime(monkeypatch)
         rin_id = _resolve_player_id(runtime, "リン")
         recall_svc = self._seed_prediction_learning(runtime, rin_id)
-        # escape_game runtime の prompt builder へ semantic recall を注入
+        # world_runtime runtime の prompt builder へ semantic recall を注入
         builder = runtime._get_or_build_default_prompt_builder()
         builder._semantic_passive_recall = recall_svc
         builder._semantic_passive_top_k = 3

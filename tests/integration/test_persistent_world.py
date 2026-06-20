@@ -30,11 +30,11 @@ _PERSISTENT_SCENARIO = (
 
 
 def _create_runtime():
-    from ai_rpg_world.application.escape_game.escape_game_runtime import (
-        create_escape_game_runtime,
+    from ai_rpg_world.application.world_runtime.world_runtime import (
+        create_world_runtime,
     )
 
-    return create_escape_game_runtime(
+    return create_world_runtime(
         _PERSISTENT_SCENARIO, config=ResolvedLlmRuntimeConfig.for_tests()
     )
 

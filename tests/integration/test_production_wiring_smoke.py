@@ -7,7 +7,7 @@ PR #443 の実機 run で連続発覚した silent failure 系 bug (PR #439 / #4
 する」種類だった。しかし当時の test suite には:
 
 - ``test_survival_island_episodic_smoke.py`` (episodic on/off の wire 確認)
-- ``test_escape_episodic_wiring.py``               (episodic stack 内部)
+- ``test_world_episodic_wiring.py``               (episodic stack 内部)
 
 など個別 wiring の確認はあったが、**「env と実体が一致しているか」「LLM 経路の
 依存 (timeout / summary_service) が正しく注入されているか」を統合的に assert
@@ -82,9 +82,9 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _build_runtime() -> Any:
     """env だけ事前 setup した上で production runtime を構築する。"""
-    from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+    from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-    return create_escape_game_runtime(_SCENARIO)
+    return create_world_runtime(_SCENARIO)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -286,7 +286,7 @@ class TestSectionOrderEnvVsRuntime:
 
 
 class TestConfigInjection:
-    """PR #448 (PR 3/6): create_escape_game_runtime に ResolvedLlmRuntimeConfig
+    """PR #448 (PR 3/6): create_world_runtime に ResolvedLlmRuntimeConfig
     を直接渡せる経路の確認。entrypoint が一度だけ ``from_env()`` を呼んで全部に
     渡し回す形を構造で保証する。"""
 
@@ -303,7 +303,7 @@ class TestConfigInjection:
         from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
             ResolvedLlmRuntimeConfig,
         )
-        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
         # env では sliding_window を要求
         monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "sliding_window")
@@ -311,7 +311,7 @@ class TestConfigInjection:
         cfg = ResolvedLlmRuntimeConfig.for_tests(
             short_term_memory_kind="rolling_summary",
         )
-        runtime = create_escape_game_runtime(_SCENARIO, config=cfg)
+        runtime = create_world_runtime(_SCENARIO, config=cfg)
         # cfg が勝つ (env を読み直さない)
         assert isinstance(runtime._sliding_window, RollingSummaryShortTermMemory)
 
@@ -322,10 +322,10 @@ class TestConfigInjection:
         from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
             RollingSummaryShortTermMemory,
         )
-        from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
         monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "rolling_summary")
-        runtime = create_escape_game_runtime(_SCENARIO)  # cfg 省略
+        runtime = create_world_runtime(_SCENARIO)  # cfg 省略
         assert isinstance(runtime._sliding_window, RollingSummaryShortTermMemory)
 
 

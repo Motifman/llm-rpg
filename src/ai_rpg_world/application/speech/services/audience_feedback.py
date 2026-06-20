@@ -8,7 +8,7 @@ Issue #269 第17回観察:
 - 0 audience 時は「届きます」を避け、聞こえる範囲には誰もいなかった旨を
   事実として書く
 
-ここでは ``runtime_manager`` (escape_game 経路) と ``speech_executor``
+ここでは ``runtime_manager`` (world_runtime 経路) と ``speech_executor``
 (LLM tool 経路) の両方から呼ばれる共通文面を提供する。LLM 向け text なので
 application 層に置くのが自然 (presentation には流さない)。
 """

@@ -348,7 +348,7 @@ class ChunkEpisodeDraftBuilder:
         # draft 時点で `recall_text` / `interpreted` をテンプレで埋めておく。
         #
         # 理由: LLM 補完サービス (EpisodicChunkSubjectiveFieldsService) を未配線の
-        # 経路 (escape_game 等の MVP wiring) でも、recall 時の prompt に「何か」が
+        # 経路 (world_runtime 等の MVP wiring) でも、recall 時の prompt に「何か」が
         # 載るようにする。第20回実験で `recall_text_snippet` が 0/21 件と全件空に
         # なり、せっかく recall が発火しても LLM に思い出を届けられていない問題が
         # 観測された (Issue #295 r2 trace)。LLM 補完が走るときは `merge_llm_subjective_fields`

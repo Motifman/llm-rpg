@@ -6,7 +6,7 @@
 PR #330 で `build_episodic_stack` をシナリオ非依存の application 層 builder
 に持ち上げた効果を、別シナリオで実証する。
 
-`demos/survival_island/run_survival_island.py` は `create_escape_game_runtime`
+`demos/survival_island/run_survival_island.py` は `create_world_runtime`
 を流用しており、その関数内で `LLM_EPISODIC_ENABLED=1` のとき自動的に
 `build_episodic_stack` が呼ばれる。つまり**コード変更なしで survival シナリオ
 にエピソード記憶が使えるはず**、というのが本テストの確認対象。
@@ -35,9 +35,9 @@ def _build_runtime(monkeypatch: pytest.MonkeyPatch, scenario_name: str, *, enabl
         monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
     else:
         monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
-    from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
+    from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-    return create_escape_game_runtime(_SCENARIOS_DIR / scenario_name)
+    return create_world_runtime(_SCENARIOS_DIR / scenario_name)
 
 
 class TestSurvivalIslandV1EpisodicWiring:

@@ -2,7 +2,7 @@
 """漂流島サバイバル MVP デモ — シナリオが正しくロードされ動くかを確認するスモークテスト。
 
 目的:
-  - survival_island.json が既存ランタイム (escape_game_runtime) でロードできる
+  - survival_island.json が既存ランタイム (world_runtime) でロードできる
   - 3 プレイヤー分のプロンプトが組み立てられる
   - 採取・移動・拠点での焚き火・狼煙までの happy path が動く
 
@@ -18,9 +18,9 @@ _project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_project_root / "src"))
 sys.path.insert(0, str(_project_root))
 
-from ai_rpg_world.application.escape_game.escape_game_runtime import (  # noqa: E402
-    EscapeGameRuntime,
-    create_escape_game_runtime,
+from ai_rpg_world.application.world_runtime.world_runtime import (  # noqa: E402
+    WorldRuntime,
+    create_world_runtime,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId  # noqa: E402
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (  # noqa: E402
@@ -32,7 +32,7 @@ SCENARIO_PATH = (
 )
 
 
-def show_player_brief(runtime: EscapeGameRuntime, player_id: PlayerId) -> None:
+def show_player_brief(runtime: WorldRuntime, player_id: PlayerId) -> None:
     """1 プレイヤーの簡易状態を表示する (システムプロンプトは長いので省略)。"""
     name = runtime.get_player_name(player_id)
     spot = runtime.get_player_spot_name(player_id)
@@ -59,7 +59,7 @@ def main() -> None:
     print("  漂流島サバイバル MVP — シナリオロードと happy path スモークテスト")
     print("━" * 72)
 
-    runtime = create_escape_game_runtime(SCENARIO_PATH)
+    runtime = create_world_runtime(SCENARIO_PATH)
     print(f"\nシナリオ: {runtime.metadata.title}")
     print(f"テーマ: {runtime.metadata.theme}")
     print(f"目標 tick 数: {runtime.metadata.estimated_ticks}")

@@ -1,6 +1,6 @@
 """TraceEventKind.POSITION_CHANGE の存在と JSONL ラウンドトリップ確認。
 
-実 runtime 経由の emit テストは escape_game の重い fixture が要るため、
+実 runtime 経由の emit テストは world_runtime の重い fixture が要るため、
 scripts/run_scenario_experiment の単体テスト側 (test_run_scenario_experiment.py)
 で別途扱う。本ファイルは schema 単体の sanity check のみ。
 """

@@ -59,7 +59,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 def _as_utc(value: datetime) -> datetime:
     """naive datetime を UTC aware として扱い、aware はそのまま返す。
 
-    occurred_at の供給源 (HeartbeatObservationEmitter, escape_game runtime,
+    occurred_at の供給源 (HeartbeatObservationEmitter, world_runtime runtime,
     PipelineEventPublisher 等) は本来 tz-aware UTC で統一されているべきだが、
     一つでも naive が混ざると比較演算で TypeError になり chunk write が
     全滅する (第20回実験で 48/50 件失敗を観測)。境界で正規化することで
@@ -318,7 +318,7 @@ class EpisodicChunkCoordinator:
         本メソッドが先に呼ばれた場合、prompt_builder.build の drain は空を返すが、
         観測自体は既に sliding_window に入っているので ``get_recent`` 経由で正しく
         prompt に届く。逆順 (prompt_builder 先) になると chunk が観測を見れず
-        boundary 判定が常に HOLD になるので注意。escape_game では
+        boundary 判定が常に HOLD になるので注意。world_runtime では
         ``_record_action_result`` 末尾 → ``build_full_prompt`` の順で確実に呼ばれている。
         """
         if not isinstance(player_id, PlayerId):

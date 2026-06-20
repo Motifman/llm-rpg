@@ -206,12 +206,12 @@ def _load_dotenv_safe() -> None:
         pass
 
 
-def _wiring_stub_from_escape_runtime(runtime: Any) -> Any:
-    """``EscapeGameRuntime`` から ``ExperimentSnapshotSession`` 用の wiring stub を作る。
+def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
+    """``WorldRuntime`` から ``ExperimentSnapshotSession`` 用の wiring stub を作る。
 
-    Phase 6 (Issue #470): escape_game runtime には ``LlmAgentWiringResult`` の
+    Phase 6 (Issue #470): world_runtime runtime には ``LlmAgentWiringResult`` の
     全 store ハンドルが揃わない (semantic / memory_link / recall_buffer /
-    journal は escape_game の通常経路では作られない) ため、runtime の
+    journal は world_runtime の通常経路では作られない) ため、runtime の
     内部 field から **拾える分だけ** 集めて wiring 風オブジェクトを返す。
     足りない store は ``ExperimentSnapshotSession`` 側で空 in-memory に
     fallback する。
@@ -284,8 +284,8 @@ def _drive_scenario(
 ) -> Dict[str, Any]:
     """シナリオを 1 セッション分回し、最終ステートを dict で返す。
 
-    GameRuntimeManager を内部で使う。:class:`EscapeGameRuntime` 経由なので
-    既存の escape_game / relay_puzzle 路線と互換。
+    GameRuntimeManager を内部で使う。:class:`WorldRuntime` 経由なので
+    既存の world_runtime / relay_puzzle 路線と互換。
 
     Args:
         max_world_ticks: ループ終了条件 (#404 P1)。``runtime.current_tick()`` が
@@ -370,7 +370,7 @@ def _drive_scenario(
                 if provisioning is not None:
                     provisioning.ensure_attached(pid)
 
-            wiring_stub = _wiring_stub_from_escape_runtime(runtime)
+            wiring_stub = _wiring_stub_from_world_runtime(runtime)
             # snapshot_dir は save 用の出力先 / restore 用の入力先 両方を
             # 兼ねる。本 PR では「snapshot_dir」を共通化し、restore は
             # snapshot_load_dir から別途読む。

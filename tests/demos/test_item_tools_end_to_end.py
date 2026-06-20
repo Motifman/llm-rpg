@@ -47,8 +47,8 @@ SCENARIO_PATH = (
 @pytest.fixture
 def session(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """survival_island_v2 セッションを LLM stub で立ち上げる共有 fixture。"""
-    from tests.demos._escape_game_helpers import create_escape_game_session
-    return create_escape_game_session(
+    from tests.demos._world_runtime_helpers import create_world_runtime_session
+    return create_world_runtime_session(
         monkeypatch, tmp_path, world_id="survival_island_v2",
     )
 

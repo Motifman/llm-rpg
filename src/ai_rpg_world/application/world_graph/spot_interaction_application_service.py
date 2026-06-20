@@ -126,8 +126,8 @@ class SpotInteractionApplicationService:
     def set_event_publisher(self, event_publisher: Any) -> None:
         """event_publisher を後付けで注入する (二段構築用)。
 
-        通常は constructor で渡すのが望ましいが、escape_game の
-        ``create_escape_game_runtime`` のように publisher が runtime
+        通常は constructor で渡すのが望ましいが、world_runtime の
+        ``create_world_runtime`` のように publisher が runtime
         本体に依存して構築順序的に後になるケースで使う。
 
         旧コードは ``interaction_service._event_publisher = ...`` と

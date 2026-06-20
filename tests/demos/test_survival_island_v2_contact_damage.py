@@ -27,8 +27,8 @@ SCENARIO_PATH = (
 
 @pytest.fixture
 def runtime():
-    from ai_rpg_world.application.escape_game.escape_game_runtime import create_escape_game_runtime
-    return create_escape_game_runtime(SCENARIO_PATH)
+    from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+    return create_world_runtime(SCENARIO_PATH)
 
 
 def _move_to_spot(runtime, player_id: PlayerId, spot_string_id: str) -> None:

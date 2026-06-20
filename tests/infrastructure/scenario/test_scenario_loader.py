@@ -147,7 +147,7 @@ class TestScenarioLoaderMinimal:
         """metadata.llm_objective_text を省略したシナリオは default の空文字を持つ。
 
         loader レベルでは必須化しない (既存テスト fixture と demo シナリオを壊さない)。
-        空チェックは consumer 側 (escape_game_runtime 等の LLM 経路) で行う設計。
+        空チェックは consumer 側 (world_runtime 等の LLM 経路) で行う設計。
         """
         loader = ScenarioLoader()
         result = loader.load_from_dict(_minimal_scenario())
