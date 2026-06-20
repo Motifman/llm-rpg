@@ -1,0 +1,72 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "recall_probe_v3_epistemic",
+    "title": "情報源タグ (epistemic source) 観察 — Issue #526 不在 5",
+    "description": "v3 を流用し、不在 5 (情報源タグ) 検証用 probe を追加した観察シナリオ。\n\n## 観察対象\n\n- **S1**: シキの発話 (= 伝聞) を agent が後で 「自分が知っている」 として再生してしまうか\n- **S2**: passive にも能動 recall にも乗らない時間/場所を聞かれた agent が、想像で埋める発話に epistemic marker (「確か」「気がする」 等) を付けるか\n- **S5**: シキが ハル の (本来していない) 過去発話を言及した時、 agent が 「言ってない」 と区別できるか\n\n## probe schedule (= 30 tick まで)\n\n- tick=3: シキ「今朝、 森の奥で青い光を見たんだ」 (= S1 setup、ハルへの伝聞情報注入)\n- tick=7: シキ「お前も森の奥で何か見たか?」 (= S1 verify、ハルが伝聞と自体験を区別できるか)\n- tick=12: シキ「夕方、 北の崖で何を見た?」 (= S2、ハルは北の崖に行った episode 無し)\n- tick=17: シキ「お前、 明日水場に行くって言ってたよな?」 (= S5、ハルはこの発話を事前にしていない)",
+    "theme": "memory_probe",
+    "difficulty": "easy",
+    "estimated_ticks": 15,
+    "author": "issue_526_probe",
+    "tags": ["memory_probe", "episodic_recall", "agent_driven_recall", "neutral_objective", "npc"],
+    "llm_objective_text": "- 漂流島で生き延びる。"
+  },
+  "item_specs": [
+    {"id": "fishing_rod", "name": "釣竿", "description": "古びた木製の釣竿。浜辺や川で魚を釣れる。", "category": "KEY_ITEM"}
+  ],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 1000,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "camp",
+      "name": "拠点",
+      "description": "島の中央に作った簡素な拠点。流木で組んだ屋根の下に焚き火の跡がある。ハルとシキはここを根城にしている。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"}
+    },
+    {
+      "id": "beach",
+      "name": "浜辺",
+      "description": "白い砂と波が広がる浜辺。ここからは見えない遠い場所。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"}
+    },
+    {
+      "id": "forest",
+      "name": "森",
+      "description": "拠点の北の森。ここからは見えない遠い場所。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"}
+    }
+  ],
+  "connections": [],
+  "players": [
+    {
+      "id": "haru",
+      "name": "ハル",
+      "spawn_spot": "camp",
+      "initial_items": ["fishing_rod"],
+      "persona_prompt": "あなたはハル、漂流民の男性。仲間のシキと 2 人で拠点を作って暮らしている。シキは隣にいるので、声をかけられたら自然に応える関係。\n\n話し方: 状況に応じた自然な口調。短めの台詞でぼそっと話す。「〜だな」「〜したよ」「うーん」「確か...」のような言い回し。\n\n性格傾向: 慎重、観察的、考えを言葉にする前に少し間がある。仲間とは飾らず話すが、確かでないことは確かな顔をしない。\n\n価値観: まずは生き延びる。仲間との関係を大事にする。"
+    },
+    {
+      "id": "shiki",
+      "name": "シキ",
+      "spawn_spot": "camp",
+      "initial_items": [],
+      "persona_prompt": "あなたはシキ、ハルの相棒。"
+    }
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 30}]
+  },
+  "initial_flags": [],
+  "scenario_events": [],
+  "reactive_bindings": {}
+}
