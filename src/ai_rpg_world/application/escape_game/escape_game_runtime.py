@@ -844,9 +844,7 @@ class EscapeGameRuntime:
             # turn 経路 (_record_action_result) なのでここで明示的に呼ぶ。これが
             # 無いと passive recall の器だけできて semantic store が空のまま。
             # 失敗は memory pipeline に留め、本来の action 完了は止めない。
-            promotion = getattr(
-                self._episodic_stack, "episodic_semantic_promotion", None
-            )
+            promotion = self._episodic_stack.episodic_semantic_promotion
             if promotion is not None:
                 try:
                     promotion.on_after_tool_turn(player_id.value)
@@ -1147,12 +1145,8 @@ class EscapeGameRuntime:
             episodic_config = EpisodicRecallConfig(
                 passive_recall=self._episodic_stack.passive_recall,
                 noun_matcher=self._episodic_stack.noun_matcher,
-                semantic_passive_recall=getattr(
-                    self._episodic_stack, "semantic_passive_recall", None
-                ),
-                semantic_passive_top_k=getattr(
-                    self._episodic_stack, "semantic_passive_top_k", 0
-                ),
+                semantic_passive_recall=self._episodic_stack.semantic_passive_recall,
+                semantic_passive_top_k=self._episodic_stack.semantic_passive_top_k,
             )
         builder = DefaultPromptBuilder(
             core,

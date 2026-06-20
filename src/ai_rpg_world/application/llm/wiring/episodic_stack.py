@@ -42,7 +42,15 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
+        EpisodicSemanticClusterPromotionService,
+    )
+    from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+        SemanticPassiveRecallService,
+    )
 
 from ai_rpg_world.application.llm.scheduler import (
     IEpisodicSubjectiveCompletionScheduler,
@@ -150,9 +158,10 @@ class EpisodicStack:
     #   episodic_semantic_promotion: action 後に on_after_tool_turn を呼ぶ昇格 service
     #   semantic_memory_store: 昇格先 store (snapshot / 検証用に公開)
     #   memory_link_store: 昇格の根拠となる memory link graph (snapshot 用に公開)
-    semantic_passive_recall: Optional[Any] = None
+    semantic_passive_recall: Optional["SemanticPassiveRecallService"] = None
     semantic_passive_top_k: int = 0
-    episodic_semantic_promotion: Optional[Any] = None
+    episodic_semantic_promotion: Optional["EpisodicSemanticClusterPromotionService"] = None
+    # store は上流 EpisodicMemoryStack が Any 扱いのため合わせる (repo 実装差を許容)。
     semantic_memory_store: Optional[Any] = None
     memory_link_store: Optional[Any] = None
 
@@ -230,6 +239,12 @@ def build_episodic_stack(
       scheduler と stack で同じ ``episode_store`` を共有することが整合性条件
     - ``episode_store``: 呼び出し側が事前に scheduler と共有する store を渡せる。
       None なら新規作成
+    - ``semantic_enabled``: True で本家 ``build_episodic_memory_stack`` を再利用し
+      link/semantic/promotion を組む (default False = 従来の episodic-only)
+    - ``semantic_passive_top_k``: >0 で ``SemanticPassiveRecallService`` を作り
+      prompt の【関連する学び】に出す。0 (gist のみ ON) は write-only 構成
+    - ``semantic_gist_service`` / ``semantic_persona_resolver``: cluster 昇格時の
+      LLM gist と persona。``build_episodic_memory_stack`` にそのまま渡す
 
     # 履歴
 
@@ -301,6 +316,8 @@ def build_episodic_stack(
     noun_matcher = build_scenario_noun_matcher(scenario=scenario, graph=graph)
 
     # semantic passive recall は top_k>0 のときだけ作る (= prompt の【関連する学び】)。
+    # gist のみ ON (top_k=0) は「学びを作るが prompt には出さない」write-only 構成で、
+    # ここで recall=None になるのは意図どおり (promotion は上で配線済)。
     semantic_passive_recall: Optional[Any] = None
     if semantic_enabled and semantic_passive_top_k > 0:
         from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
