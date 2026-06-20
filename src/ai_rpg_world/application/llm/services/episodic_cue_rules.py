@@ -534,6 +534,16 @@ def _cues_from_observation_structured(structured: Mapping[str, Any]) -> list[Epi
     si = _coerce_non_bool_int(spot)
     if si is not None:
         out.append(EpisodicCue(axis="place_spot", value=str(si), source=src))
+    # #526 後続 Fix B: 移動観測 (entity_entered_spot / entity_left_spot /
+    # to/from) が emit する ``from_spot_id_value`` / ``to_spot_id_value`` も
+    # place_spot cue に変換する。両方とも「ここに居た / ここに来た」という
+    # 意味で recall の手がかりに値する (dedupe は呼出側で行われる)。
+    from_spot = _coerce_non_bool_int(structured.get("from_spot_id_value"))
+    if from_spot is not None:
+        out.append(EpisodicCue(axis="place_spot", value=str(from_spot), source=src))
+    to_spot = _coerce_non_bool_int(structured.get("to_spot_id_value"))
+    if to_spot is not None:
+        out.append(EpisodicCue(axis="place_spot", value=str(to_spot), source=src))
     wov = structured.get("world_object_id_value")
     wi = _coerce_non_bool_int(wov)
     if wi is not None:
