@@ -425,7 +425,10 @@ def test_record_action_result_preserves_escape_hook_order(
     )
 
     assert events == ["append", "chunk", "promotion"]
-    assert set(store.kwargs) == {
+    # U1: _record_action_result は共有 ActionResultRecorder に委譲し、recorder は
+    # 全フィールドを既定値込みで append に渡す。escape が意味的に渡すフィールドが
+    # 含まれていることを subset で固定する (完全一致は呼び出し形の過剰指定)。
+    assert {
         "player_id",
         "action_summary",
         "result_summary",
@@ -435,9 +438,13 @@ def test_record_action_result_preserves_escape_hook_order(
         "error_code",
         "scene_boundary",
         "occurred_tick",
-    }
+    } <= set(store.kwargs)
     assert store.kwargs["occurred_at"].tzinfo is timezone.utc
     assert store.kwargs["tool_name"] == "contract_probe"
+    # escape は当面 subjective fields を渡さない (#553 baseline / U2 で配線)
+    assert store.kwargs["expected_result"] is None
+    assert store.kwargs["intention"] is None
+    assert store.kwargs["emotion_hint"] is None
     assert chunk.calls == [player_id]
     assert promotion.calls == [player_id.value]
 
