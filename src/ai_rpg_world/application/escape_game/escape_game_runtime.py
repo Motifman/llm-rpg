@@ -3319,6 +3319,10 @@ def create_escape_game_runtime(
     # + chunk coordinator + passive recall を組み立てる。未設定なら従来動作。
     # PR #330: シナリオ非依存の builder に統一。escape_episodic_wiring 経由の
     # 旧 alias も後方互換で生きているが、application 層から直接 import する。
+    # NOTE (#558 MEDIUM-1): この親 gate は env 直読みで、ResolvedLlmRuntimeConfig
+    # 単一窓口から外れている (U3 で追加した config.episodic_reinterpretation_enabled
+    # とは別軸)。config.episodic_enabled へ寄せる移行は既存 contract テスト
+    # 多数を巻き込むため、reinterpretation opt-in (U3) とは分けて別 PR で行う。
     from ai_rpg_world.application.llm.wiring.episodic_stack import (
         build_episodic_stack,
         is_episodic_enabled,
