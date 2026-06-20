@@ -484,6 +484,112 @@ class TestPromptBuilderRecallTraceEmission:
             candidates=[],
         )
 
+    def test_retrieval_debug_が_payload_に乗る(self) -> None:
+        """``retrieval_debug`` を渡すと axis 別 raw 件数 / union 件数 /
+        最終 source_axes 別件数 / candidate ごとの source_axes が payload に
+        乗る (#526 後続: cue 設計の post-hoc 解析のため)。"""
+        from ai_rpg_world.application.llm.services.prompt_builder import (
+            DefaultPromptBuilder,
+        )
+        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+            EpisodicPassiveRecallCandidate,
+            EpisodicPassiveRecallRetrievalDebug,
+        )
+
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+
+        builder = object.__new__(DefaultPromptBuilder)
+        builder._trace_recorder = recorder
+        builder._trace_recorder_provider = None
+        builder._current_tick_provider = lambda: 5
+
+        ep_a = _make_episode(episode_id="ep-a", recall_text="A")
+        ep_b = _make_episode(episode_id="ep-b", recall_text="B")
+        cand_a = EpisodicPassiveRecallCandidate(
+            episode=ep_a, source_axes=("place_spot", "object")
+        )
+        cand_b = EpisodicPassiveRecallCandidate(
+            episode=ep_b, source_axes=("action",)
+        )
+        debug = EpisodicPassiveRecallRetrievalDebug(
+            raw_row_count_by_axis=(
+                ("place_spot", 5),
+                ("object", 3),
+                ("action", 2),
+            ),
+            union_episode_count_before_max_cap=4,
+            candidate_episode_sources=(
+                ("ep-a", ("place_spot", "object")),
+                ("ep-b", ("action",)),
+            ),
+            final_episode_count_by_source_axis=(
+                ("action", 1),
+                ("object", 1),
+                ("place_spot", 1),
+            ),
+        )
+
+        builder._emit_episodic_recall_trace(
+            player_id=PlayerId(1),
+            situation_cues=(),
+            candidates=[cand_a, cand_b],
+            retrieval_debug=debug,
+        )
+
+        events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_RECALL]
+        assert len(events) == 1
+        p = events[0].payload
+        # axis 別 raw 件数: dict 形式で軸名 → 件数
+        assert p["raw_row_count_by_axis"] == {
+            "place_spot": 5,
+            "object": 3,
+            "action": 2,
+        }
+        # max_cap 前の union 件数
+        assert p["union_episode_count_before_max_cap"] == 4
+        # 最終 candidate の source_axes 別件数
+        assert p["final_episode_count_by_source_axis"] == {
+            "action": 1,
+            "object": 1,
+            "place_spot": 1,
+        }
+        # 各 candidate に source_axes が既に乗っているので、debug は集計のみ。
+        # candidates payload 側は既存のキーが維持されること。
+        assert p["candidates"][0]["episode_id"] == "ep-a"
+        assert p["candidates"][0]["source_axes"] == ["place_spot", "object"]
+
+    def test_retrieval_debug_未指定なら_既存_payload_と互換(self) -> None:
+        """``retrieval_debug`` を渡さない呼び出しは既存形式 (追加キー無し) を
+        維持する (= 後方互換)。"""
+        from ai_rpg_world.application.llm.services.prompt_builder import (
+            DefaultPromptBuilder,
+        )
+
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+
+        builder = object.__new__(DefaultPromptBuilder)
+        builder._trace_recorder = recorder
+        builder._trace_recorder_provider = None
+        builder._current_tick_provider = lambda: 1
+
+        builder._emit_episodic_recall_trace(
+            player_id=PlayerId(1),
+            situation_cues=(),
+            candidates=[],
+        )
+        events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_RECALL]
+        assert len(events) == 1
+        p = events[0].payload
+        # 既存キーは存在
+        assert "situation_cues" in p
+        assert "candidate_count" in p
+        # 追加キーは存在しない (= 既存 trace 読み手を壊さない)
+        assert "raw_row_count_by_axis" not in p
+        assert "union_episode_count_before_max_cap" not in p
+        assert "final_episode_count_by_source_axis" not in p
+
     def test_provider_経由_遅延注入された_recorder_に追従(self) -> None:
         """trace_recorder_provider が後から非 None を返せばその recorder に
         emit される。"""

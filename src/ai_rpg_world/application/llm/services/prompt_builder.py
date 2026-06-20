@@ -41,6 +41,7 @@ from ai_rpg_world.application.llm.services.active_memos_formatter import (
 from ai_rpg_world.application.llm.services.episodic_cue_rules import build_situation_episodic_cues
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallCandidate,
+    EpisodicPassiveRecallRetrievalDebug,
     EpisodicPassiveRecallRetrievalService,
 )
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
@@ -621,12 +622,19 @@ class DefaultPromptBuilder(IPromptBuilder):
         situation_cues: tuple,
         candidates: list,
         relevant_memories_text: str = "",
+        retrieval_debug: Optional[EpisodicPassiveRecallRetrievalDebug] = None,
     ) -> None:
         """``EPISODIC_RECALL`` を trace に記録する (失敗は握りつぶす)。
 
         ``relevant_memories_text`` は実 prompt に注入された連結後テキスト。
         recall 1 件あたりの注入サイズ ÷ prompt_tokens を post-hoc に出すための
         計測点 (実験 #356 後続: cached_tokens / TTFT 分析と組合せる)。
+
+        ``retrieval_debug`` が与えられれば、検索 axis ごとの raw 件数・
+        max_cap 前 union 件数・最終 candidate の source_axes 別件数を
+        payload に追加で乗せる (#526 後続: cue 設計の post-hoc 解析用)。
+        既定 ``None`` のときは payload に追加キーを足さず、既存の trace
+        読み手 (viewer / jq クエリ) を壊さない。
         """
         recorder = self._resolve_trace_recorder()
         if recorder is None:
@@ -654,6 +662,28 @@ class DefaultPromptBuilder(IPromptBuilder):
                 )
             except Exception:
                 continue
+        # debug 由来の追加キーは ``retrieval_debug`` が与えられたときだけ
+        # 載せる (= 既存 trace 読み手の non-strict 互換)。
+        debug_kwargs: dict = {}
+        if retrieval_debug is not None:
+            try:
+                debug_kwargs["raw_row_count_by_axis"] = {
+                    axis: count for axis, count in retrieval_debug.raw_row_count_by_axis
+                }
+                debug_kwargs["union_episode_count_before_max_cap"] = (
+                    retrieval_debug.union_episode_count_before_max_cap
+                )
+                debug_kwargs["final_episode_count_by_source_axis"] = {
+                    axis: count
+                    for axis, count in retrieval_debug.final_episode_count_by_source_axis
+                }
+            except Exception:
+                # debug 構造が想定外でも recall trace 本体は落とさない。
+                self._logger.debug(
+                    "retrieval_debug の payload 化に失敗; 既存キーのみで emit します",
+                    exc_info=True,
+                )
+                debug_kwargs = {}
         try:
             recorder.record(
                 TraceEventKind.EPISODIC_RECALL,
@@ -663,6 +693,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 candidate_count=len(cand_payload),
                 candidates=cand_payload,
                 recall_text_chars_total=len(relevant_memories_text or ""),
+                **debug_kwargs,
             )
         except Exception:
             # 例: recorder が新しい kind を未知扱いで例外を投げる等。
@@ -961,11 +992,14 @@ class DefaultPromptBuilder(IPromptBuilder):
         # Issue #283 後続: recall 結果を trace に残す (Viewer / jq から
         # 「どのエピソードが想起されたか」を後追いできる)。candidates が 0
         # でも「recall を試行したが結果は 0」事実は残しておく価値があるので emit。
+        # #526 後続: ``retrieval_debug`` を渡し、cue 設計の post-hoc 解析
+        # (axis 別 raw 件数 / union 件数 / source_axes 別件数) を可視化する。
         self._emit_episodic_recall_trace(
             player_id=player_id,
             situation_cues=situation_cues,
             candidates=list(recall_result.candidates),
             relevant_memories_text=relevant_memories_text,
+            retrieval_debug=recall_result.debug,
         )
 
         if self._episodic_memory_link_service is not None and recall_result.candidates:
