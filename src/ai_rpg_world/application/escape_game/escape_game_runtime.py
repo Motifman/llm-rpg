@@ -800,6 +800,9 @@ class EscapeGameRuntime:
         success: bool = True,
         error_code: Optional[str] = None,
         scene_boundary: bool = False,
+        expected_result: Optional[str] = None,
+        intention: Optional[str] = None,
+        emotion_hint: Optional[str] = None,
     ) -> None:
         """action_result_store に 1 件積み、episodic chunk_coordinator を起動する。
 
@@ -812,11 +815,16 @@ class EscapeGameRuntime:
         ``scene_boundary``: その行動がエピソード記憶の「シーン切り替え」を
         意味するかどうか。cognitive science の "doorway effect" を反映して、
         spot 遷移成功時は True を渡すと chunk が閉じやすくなる (Issue #311 後続)。
+
+        ``expected_result`` / ``intention`` / ``emotion_hint``: LLM が行動前に
+        宣言した主観入力 (予測 / 目的 / 感情)。予測誤差駆動の学習ループ
+        (#526) の入力。do_* 経由で raw args 由来の値が渡る (U2)。露出スキーマが
+        OFF の間は全 None なので記録挙動は不変。
         """
         # U1 (#526 後続): append → chunk write → semantic promotion (escape baseline
         # の順序・error isolation) を共有 ActionResultRecorder に委譲する。挙動は
-        # #553 で contract 化済みで不変。subjective fields (expected_result 等) を
-        # 通す口は recorder にあるが、escape からの配線は U2 で行う (当面 None)。
+        # #553 で contract 化済みで不変。subjective fields (expected_result 等) は
+        # U2 で do_* → ここ → recorder と配線した (露出 OFF の間は None)。
         # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)。
         recorder = ActionResultRecorder(self._action_result_store, logger=logger)
         recorder.record(
@@ -828,6 +836,9 @@ class EscapeGameRuntime:
             success=success,
             error_code=error_code,
             scene_boundary=scene_boundary,
+            expected_result=expected_result,
+            intention=intention,
+            emotion_hint=emotion_hint,
             # Issue #311 後続: bucket 内 actions の tick 差で TEMPORAL_GAP 判定するため
             occurred_tick=self.current_tick(),
             episodic_stack=self._episodic_stack,
@@ -1220,6 +1231,10 @@ class EscapeGameRuntime:
 
     def do_interact(
         self, player_id: PlayerId, object_str_id: str, action_name: str,
+        *,
+        expected_result: Optional[str] = None,
+        intention: Optional[str] = None,
+        emotion_hint: Optional[str] = None,
     ) -> SpotInteractionResultDto:
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotObjectInteractedEvent
         obj_int = self.id_mapper.get_int("object", object_str_id)
@@ -1251,6 +1266,9 @@ class EscapeGameRuntime:
             f"「{obj_label}」に対して{action_ja}を行った",
             result_text,
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
+            expected_result=expected_result,
+            intention=intention,
+            emotion_hint=emotion_hint,
         )
         return result
 
@@ -1334,7 +1352,14 @@ class EscapeGameRuntime:
         self._process_graph_events()
         return new_event_count
 
-    def do_explore(self, player_id: PlayerId) -> SpotExplorationResultDto:
+    def do_explore(
+        self,
+        player_id: PlayerId,
+        *,
+        expected_result: Optional[str] = None,
+        intention: Optional[str] = None,
+        emotion_hint: Optional[str] = None,
+    ) -> SpotExplorationResultDto:
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotExploredEvent
         graph = self._spot_graph_repo.find_graph()
         eid = EntityId.create(int(player_id))
@@ -1359,10 +1384,21 @@ class EscapeGameRuntime:
             f"「{spot_name}」の周辺を探索した",
             result_text,
             tool_name=TOOL_NAME_SPOT_GRAPH_EXPLORE,
+            expected_result=expected_result,
+            intention=intention,
+            emotion_hint=emotion_hint,
         )
         return result
 
-    def do_move(self, player_id: PlayerId, dest_spot_str_id: str) -> None:
+    def do_move(
+        self,
+        player_id: PlayerId,
+        dest_spot_str_id: str,
+        *,
+        expected_result: Optional[str] = None,
+        intention: Optional[str] = None,
+        emotion_hint: Optional[str] = None,
+    ) -> None:
         """目的地へ向けて移動を開始する (#404 fix: ネスト advance_tick を排除)。
 
         旧実装: ``start_travel_to_spot`` 後に ``for _ in range(200): advance_tick()``
@@ -1418,6 +1454,9 @@ class EscapeGameRuntime:
                 f"「{dest_name}」へ移動しようとした",
                 f"「{dest_name}」には既に居る",
                 tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+                expected_result=expected_result,
+                intention=intention,
+                emotion_hint=emotion_hint,
             )
             return
 
@@ -1433,9 +1472,20 @@ class EscapeGameRuntime:
             f"「{dest_name}」へ移動中。到着までは他の行動はできない。",
             tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
             scene_boundary=True,
+            expected_result=expected_result,
+            intention=intention,
+            emotion_hint=emotion_hint,
         )
 
-    def do_wait(self, player_id: PlayerId, reason: str = "") -> int:
+    def do_wait(
+        self,
+        player_id: PlayerId,
+        reason: str = "",
+        *,
+        expected_result: Optional[str] = None,
+        intention: Optional[str] = None,
+        emotion_hint: Optional[str] = None,
+    ) -> int:
         """その場で待機する (#471 fix: ネスト advance_tick を排除)。
 
         旧実装: 内部で ``self.advance_tick()`` を呼んで world tick を 1 進めて
@@ -1459,6 +1509,9 @@ class EscapeGameRuntime:
                 f"待機した（理由: {r}）",
                 f"今ターンは行動を控えた（tick={tick}）",
                 tool_name=TOOL_NAME_SPOT_GRAPH_WAIT,
+                expected_result=expected_result,
+                intention=intention,
+                emotion_hint=emotion_hint,
             )
         else:
             self._record_action_result(
@@ -1466,6 +1519,9 @@ class EscapeGameRuntime:
                 "短く待機した",
                 f"今ターンは行動を控えた（tick={tick}）",
                 tool_name=TOOL_NAME_SPOT_GRAPH_WAIT,
+                expected_result=expected_result,
+                intention=intention,
+                emotion_hint=emotion_hint,
             )
         return tick
 
