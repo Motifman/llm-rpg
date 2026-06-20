@@ -38,7 +38,16 @@ class _FakeRuntime:
             )
         ]
 
-    def do_explore(self, player_id: PlayerId) -> _ExploreResult:
+    def do_explore(
+        self,
+        player_id: PlayerId,
+        *,
+        expected_result=None,
+        intention=None,
+        emotion_hint=None,
+    ) -> _ExploreResult:
+        # U2: runtime_manager の handler が subjective fields を渡すようになったため、
+        # fake も実 runtime と同じ optional kwargs を受ける (値はこのテストでは未使用)。
         self.explore_calls.append(player_id.value)
         result = _ExploreResult()
         desc = " / ".join(result.discovery_descriptions)

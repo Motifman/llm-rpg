@@ -44,6 +44,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     with_inner_thought_empty_warning,
 )
+from ai_rpg_world.application.llm.services.subjective_args import (
+    extract_subjective_action_fields,
+)
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
 )
@@ -1412,7 +1415,9 @@ class _EscapeGameLlmWiring:
         runtime_context: Any,
     ) -> LlmCommandResultDto:
         targets = getattr(runtime_context, "targets", {})
-        result = self.runtime.do_explore(player_id)
+        result = self.runtime.do_explore(
+            player_id, **extract_subjective_action_fields(arguments)
+        )
         if result.discovery_descriptions:
             message = "発見: " + " / ".join(result.discovery_descriptions)
         else:
@@ -1470,7 +1475,9 @@ class _EscapeGameLlmWiring:
                 ),
             )
         destination_id = self.runtime.id_mapper.get_str("spot", target.spot_id)
-        self.runtime.do_move(player_id, destination_id)
+        self.runtime.do_move(
+            player_id, destination_id, **extract_subjective_action_fields(arguments)
+        )
         return with_inner_thought_empty_warning(
             TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
             arguments,
@@ -1521,7 +1528,10 @@ class _EscapeGameLlmWiring:
         # surface する。さらに「枯渇」っぽい文言なら retry を抑える remediation
         # を添える (= 同じ object に再度同 action_name を投げない指示)。
         try:
-            result = self.runtime.do_interact(player_id, object_id, action_name)
+            result = self.runtime.do_interact(
+                player_id, object_id, action_name,
+                **extract_subjective_action_fields(arguments),
+            )
         except InteractionNotAllowedException as exc:
             reason = str(exc) or "前提条件を満たさない"
             return LlmCommandResultDto(
@@ -1611,7 +1621,9 @@ class _EscapeGameLlmWiring:
         # #471 fix: do_wait は world tick を進めなくなった。返り値は現在 tick。
         # message も「時間が進んだ」ではなく「今ターンは行動を控えた」に変更し、
         # LLM に対しても「wait は時間進行のショートカットではない」ことを示す。
-        tick = self.runtime.do_wait(player_id, reason=reason)
+        tick = self.runtime.do_wait(
+            player_id, reason=reason, **extract_subjective_action_fields(arguments)
+        )
         suffix = f"（理由: {reason}）" if reason else ""
         return with_inner_thought_empty_warning(
             TOOL_NAME_SPOT_GRAPH_WAIT,

@@ -24,6 +24,9 @@ from ai_rpg_world.application.llm.llm_argument_fingerprint import (
     build_argument_fingerprint,
 )
 from ai_rpg_world.application.llm.result_summary_builder import build_result_summary
+from ai_rpg_world.application.llm.services.subjective_args import (
+    extract_subjective_text as _extract_subjective_text,
+)
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
     EpisodicChunkCoordinator,
@@ -88,20 +91,6 @@ def _format_action_summary(tool_name: str, arguments: Optional[Dict[str, Any]] =
     except (TypeError, ValueError):
         args_str = str(arguments)
     return f"{tool_name}({args_str}) を実行しました。"
-
-
-def _extract_subjective_text(arguments: Dict[str, Any], key: str) -> Optional[str]:
-    """raw tool arguments から主観入力フィールド (予測 / 目的 / 感情) を取り出す。
-
-    canonical 化前の validated raw arguments から取る (resolver が subjective
-    fields を落とす場合があるため)。非文字列・空文字は None に倒す。
-    """
-
-    raw = arguments.get(key)
-    if not isinstance(raw, str):
-        return None
-    text = raw.strip()
-    return text or None
 
 
 def _append_to_action_store(

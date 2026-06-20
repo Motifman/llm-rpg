@@ -732,6 +732,84 @@ def test_direct_travel_start_records_scene_boundary_and_tick(
     assert "移動中" in entry.result_summary
 
 
+def test_direct_explore_carries_subjective_fields_when_passed(
+    clean_runtime_env: None,
+) -> None:
+    """U2: do_explore に subjective kwargs を渡すと記録 entry に乗る (do_* → recorder 配線)。"""
+    runtime = _create_runtime()
+    player_id = runtime.get_player_ids()[0]
+
+    runtime.do_explore(
+        player_id,
+        expected_result="周囲に出口の手がかりがある",
+        intention="出口を探す",
+        emotion_hint="curiosity",
+    )
+
+    entry = runtime._action_result_store.get_recent(player_id, 1)[0]
+    assert entry.expected_result == "周囲に出口の手がかりがある"
+    assert entry.intention == "出口を探す"
+    assert entry.emotion_hint == "curiosity"
+
+
+def test_explore_handler_threads_subjective_args_into_record(
+    clean_runtime_env: None,
+) -> None:
+    """U2: runtime_manager._handle_explore が arguments の subjective を do_* 経由で記録する。
+
+    露出スキーマが OFF でも、handler は arguments dict から直接読むため、
+    arguments に値が入れば記録に届く (= スキーマ露出 PR が入った瞬間に流れる配線)。
+    """
+    runtime = _create_runtime()
+    player_id = runtime.get_player_ids()[0]
+    wiring = _EscapeGameLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        llm_client=StubLlmClient(None),
+    )
+
+    result = wiring._handle_explore(
+        player_id,
+        {
+            "inner_thought": "周囲を見る",
+            "expected_result": "出口の手がかりが見つかる",
+            "intention": "出口を探す",
+            "emotion_hint": "curiosity",
+        },
+        ToolRuntimeContextDto.empty(),
+    )
+
+    assert result.success is True
+    entry = runtime._action_result_store.get_recent(player_id, 1)[0]
+    assert entry.expected_result == "出口の手がかりが見つかる"
+    assert entry.intention == "出口を探す"
+    assert entry.emotion_hint == "curiosity"
+
+
+def test_explore_handler_records_none_subjective_when_args_absent(
+    clean_runtime_env: None,
+) -> None:
+    """U2: 露出 OFF の現状 (arguments に subjective キー無し) では全 None で記録され挙動不変。"""
+    runtime = _create_runtime()
+    player_id = runtime.get_player_ids()[0]
+    wiring = _EscapeGameLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        llm_client=StubLlmClient(None),
+    )
+
+    wiring._handle_explore(
+        player_id,
+        {"inner_thought": "周囲を見る"},
+        ToolRuntimeContextDto.empty(),
+    )
+
+    entry = runtime._action_result_store.get_recent(player_id, 1)[0]
+    assert entry.expected_result is None
+    assert entry.intention is None
+    assert entry.emotion_hint is None
+
+
 def test_semantic_env_does_not_override_explicit_config_off(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
