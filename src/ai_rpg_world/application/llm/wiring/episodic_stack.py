@@ -301,6 +301,9 @@ def build_episodic_stack(
     # 保管されているため、prose から object 名を拾うにはこの経路が必要。
     # 未指定なら従来通り node.interior 経路だけを使う (= test stub 互換)。
     spot_interior_repo: Optional[Any] = None,
+    # #526 後続 C2: chunk write 時に player の現在の runtime_context を返す
+    # provider。注入時のみ動く (= default None で挙動不変)。
+    runtime_context_provider: Optional[Callable[..., Any]] = None,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
@@ -390,7 +393,10 @@ def build_episodic_stack(
         action_result_store=action_result_store,
         episodic_episode_store=episode_store,
         chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(
-            noun_matcher=noun_matcher
+            noun_matcher=noun_matcher,
+            # #526 後続 C2: chunk write 時に runtime_context を取得する
+            # provider を流す。未指定なら従来通り context 無しで cue を作る。
+            runtime_context_provider=runtime_context_provider,
         ),
         trace_recorder_provider=trace_recorder_provider,
         current_tick_provider=current_tick_provider,

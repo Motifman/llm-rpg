@@ -3555,6 +3555,13 @@ def create_escape_game_runtime(
             # world_object 名を index できるようにする。SpotNode.interior は
             # 実 runtime では None で保管され、別 repository に格納されている。
             spot_interior_repo=spot_interior_repo,
+            # #526 後続 C2: chunk write 時の player 現在状況 (場所 / 視界 object
+            # / 同席者) を episode の固定 cue として焼き付けるための provider。
+            # runtime.build_llm_context(pid).tool_runtime_context を返す lambda
+            # を渡す。例外ハンドリングは builder 側で graceful に行う。
+            runtime_context_provider=lambda pid: runtime.build_llm_context(
+                pid
+            ).tool_runtime_context,
         )
 
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
