@@ -21,6 +21,10 @@ from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.application.llm.services.episodic_spreading_activation import (
     neighbor_priming_scores,
 )
+from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+    IEpisodicRecallHabituationStore,
+    compute_habituation_penalty,
+)
 from ai_rpg_world.application.llm.passive_recall_cue_families import (
     PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
     PASSIVE_RECALL_PLACE_FAMILY_LABEL,
@@ -177,6 +181,10 @@ class EpisodicPassiveRecallRetrievalDebug:
     candidate_episode_sources: tuple[tuple[str, tuple[str, ...]], ...]
     """最終リストにおいて、各軸ラベルを source に持つ episode 数。"""
     final_episode_count_by_source_axis: tuple[tuple[str, int], ...]
+    """#526 後続 段階 2: 慣化ペナルティが適用された episode の (id, penalty)。
+    penalty=0 のものや habituation off 時は空 tuple。post-hoc で「どの episode
+    がどれだけ沈んだか」を計測できる。"""
+    habituation_penalty_by_episode: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -202,6 +210,8 @@ class EpisodicPassiveRecallRetrievalService:
         spreading_max_hops: int = 2,
         being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
         default_world_id: Optional[WorldId] = None,
+        habituation_store: Optional[IEpisodicRecallHabituationStore] = None,
+        habituation_decay_window_ticks: int = 5,
     ) -> None:
         # Phase 3 Step 3c-3: legacy player_id 経路は撤去済。Resolver+WorldId が
         # 未注入 / Being 未 provision の場合は spreading 軸を skip
@@ -214,11 +224,23 @@ class EpisodicPassiveRecallRetrievalService:
             )
         if default_world_id is not None and not isinstance(default_world_id, WorldId):
             raise TypeError("default_world_id must be WorldId")
+        if not isinstance(habituation_decay_window_ticks, int) or isinstance(
+            habituation_decay_window_ticks, bool
+        ):
+            raise TypeError("habituation_decay_window_ticks must be int")
+        if habituation_decay_window_ticks < 0:
+            raise ValueError(
+                "habituation_decay_window_ticks must be 0 or greater"
+            )
         self._store = store
         self._link_store = link_store
         self._spreading_max_hops = spreading_max_hops
         self._resolver = being_attachment_resolver
         self._default_world_id = default_world_id
+        # #526 段階 2: 慣化ペナルティ。store 未注入なら penalty 計算 skip
+        # (= default off で既存挙動と完全同一)。
+        self._habituation_store = habituation_store
+        self._habituation_decay_window_ticks = habituation_decay_window_ticks
 
     def _resolve_being_id(self, player_id: int) -> Optional[BeingId]:
         """dual-path: Resolver+WorldId 揃いつつ Being が attach 済なら BeingId、
@@ -238,6 +260,7 @@ class EpisodicPassiveRecallRetrievalService:
         max_candidates: int,
         now: datetime | None = None,
         min_occurred_at: datetime | None = None,
+        current_tick: Optional[int] = None,
     ) -> EpisodicPassiveRecallRetrievalResult:
         """過去 episode を situation cues に基づいて recall する。
 
@@ -247,6 +270,13 @@ class EpisodicPassiveRecallRetrievalService:
         PR5 (R2): temporal 軸は **situation_cues が空のときのみ** 発火する
         fallback として動かす。cue が立つ通常 turn では「直近の出来事」を
         recall に紛れ込ませない。
+
+        #526 段階 2: ``current_tick`` と ``habituation_store`` が両方揃った
+        とき、直近で recall された episode に慣化ペナルティを score から引く。
+        どちらかが欠ければ penalty 計算は skip し既存挙動を保つ。
+        ``record_recall`` (= sidecar への書込) はこの service ではなく
+        呼び出し側 (prompt_builder) が candidates 確定後に行う。retrieve
+        自身は副作用なしを保つ。
         """
         # Phase 3 Step 3e-3: legacy 経路は撤去済。Being 未解決時は temporal/cue
         # 軸も空になる graceful fallback (= prompt 強化が痩せるだけで turn は
@@ -324,8 +354,39 @@ class EpisodicPassiveRecallRetrievalService:
         def multi_cue_score(eid: str) -> int:
             return len(multi_cue_canonicals.get(eid, frozenset()))
 
+        # #526 段階 2: 慣化ペナルティ。store 注入 + current_tick 指定が
+        # 揃ったときだけ計算し、score から減算する。条件が欠ければ
+        # 0 ペナルティで既存挙動を保つ (= silent fallback ではなく明示的に
+        # 「current_tick が無いから慣化は使えない」状態を返す)。
+        habituation_active = (
+            self._habituation_store is not None
+            and current_tick is not None
+            and self._habituation_decay_window_ticks > 0
+            and being_id is not None
+        )
+        habituation_penalty_records: dict[str, int] = {}
+
+        def habituation_penalty(eid: str) -> int:
+            if not habituation_active:
+                return 0
+            # mypy 緩和: habituation_active=True なら以下は非 None
+            assert self._habituation_store is not None
+            assert current_tick is not None
+            assert being_id is not None
+            last = self._habituation_store.get_last_recalled_tick(being_id, eid)
+            return compute_habituation_penalty(
+                last_recalled_tick=last,
+                current_tick=current_tick,
+                decay_window=self._habituation_decay_window_ticks,
+            )
+
         def _arm_score_key(ep: SubjectiveEpisode) -> int:
-            return multi_cue_score(ep.episode_id)
+            penalty = habituation_penalty(ep.episode_id)
+            if penalty > 0:
+                # debug 用に記録 (penalty=0 は記録しない)。同 episode が複数
+                # arm で評価されても結果は同じなので dict で上書き OK。
+                habituation_penalty_records[ep.episode_id] = penalty
+            return multi_cue_score(ep.episode_id) - penalty
 
         cue_arms = [
             (label, sorted(rows, key=_arm_score_key, reverse=True), granular, cue_keys)
@@ -400,11 +461,15 @@ class EpisodicPassiveRecallRetrievalService:
 
         final_axis_counts = tuple(sorted(axis_hits.items(), key=lambda t: t[0]))
 
+        habituation_payload = tuple(
+            sorted(habituation_penalty_records.items(), key=lambda t: t[0])
+        )
         debug = EpisodicPassiveRecallRetrievalDebug(
             raw_row_count_by_axis=tuple(raw_counts),
             union_episode_count_before_max_cap=union_before_cap,
             candidate_episode_sources=tuple(candidate_sources),
             final_episode_count_by_source_axis=final_axis_counts,
+            habituation_penalty_by_episode=habituation_payload,
         )
         return EpisodicPassiveRecallRetrievalResult(candidates=tuple(candidates), debug=debug)
 

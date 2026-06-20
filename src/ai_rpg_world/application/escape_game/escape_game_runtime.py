@@ -1187,6 +1187,11 @@ class EscapeGameRuntime:
                     if _reinterp_coord is not None
                     else None
                 ),
+                # #526 段階 2: 慣化 sidecar。stack で enable された時のみ非 None。
+                recall_habituation_store=self._episodic_stack.recall_habituation_store,
+                recall_habituation_decay_window_ticks=(
+                    self._episodic_stack.recall_habituation_decay_window_ticks
+                ),
             )
         builder = DefaultPromptBuilder(
             core,
@@ -3530,6 +3535,11 @@ def create_escape_game_runtime(
             semantic_persona_resolver=_semantic_persona_resolver,
             reinterpretation_enabled=_reinterpretation_enabled,
             reinterpretation_completion=_reinterpretation_completion,
+            # #526 段階 2: 慣化ペナルティ (default off)
+            recall_habituation_enabled=config.recall_habituation_enabled,
+            recall_habituation_decay_window_ticks=(
+                config.recall_habituation_decay_window_ticks
+            ),
         )
 
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で

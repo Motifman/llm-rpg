@@ -67,10 +67,21 @@ class TestPersistentWorldHasNoEndCondition:
         """ResolvedLlmRuntimeConfig は勝敗概念を持たない (勝敗はシナリオ専管)。
 
         runtime 設定 (config) 側に win/lose を足してしまうと、シナリオで宣言しない
-        永続世界にも勝敗が漏れる。config が勝敗を一切持たないことを固定する。"""
+        永続世界にも勝敗が漏れる。config が勝敗を一切持たないことを固定する。
+
+        マッチは underscore で区切られた token 単位で行う (= 単純な部分一致だと
+        ``window`` が ``win`` に hit する等の偽陽性を起こすため)。"""
         cfg = ResolvedLlmRuntimeConfig.for_tests()
         field_names = set(vars(cfg).keys())
         for forbidden in ("win", "lose", "victory", "defeat", "game_end"):
-            assert not any(forbidden in name for name in field_names), (
-                f"config が勝敗概念 ({forbidden}) を持っている: {field_names}"
-            )
+            for name in field_names:
+                tokens = set(name.split("_"))
+                # game_end は 2 語複合のため、name に "game" と "end" が両方含まれるかも見る
+                if forbidden == "game_end":
+                    assert not (
+                        "game" in tokens and "end" in tokens
+                    ), f"config が勝敗概念 ({forbidden}) を持っている: {name}"
+                else:
+                    assert forbidden not in tokens, (
+                        f"config が勝敗概念 ({forbidden}) を持っている: {name}"
+                    )

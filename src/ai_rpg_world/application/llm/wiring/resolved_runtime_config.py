@@ -134,6 +134,13 @@ class ResolvedLlmRuntimeConfig:
     # 従来の episodic-only 動作 (再解釈を組まない)。
     episodic_reinterpretation_enabled: bool
 
+    # #526 段階 2: 慣化ペナルティ (recall された episode のスコアを decay_window
+    # tick の間だけ下げる)。``LLM_EPISODIC_RECALL_HABITUATION_ENABLED=1`` で ON。
+    # default OFF で既存挙動と完全同一。decay_window は
+    # ``LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS`` で 0 以上の整数で上書き可。
+    recall_habituation_enabled: bool = False
+    recall_habituation_decay_window_ticks: int = 5
+
     # ──────────────────────────────────────────────────────────────
     # Invariants
     # ──────────────────────────────────────────────────────────────
@@ -230,6 +237,14 @@ class ResolvedLlmRuntimeConfig:
             source.get("LLM_EPISODIC_REINTERPRETATION_ENABLED"), default=False
         )
 
+        # #526 段階 2: 慣化ペナルティ (default off / decay 5 tick)
+        recall_habituation_enabled = _parse_truthy(
+            source.get("LLM_EPISODIC_RECALL_HABITUATION_ENABLED"), default=False
+        )
+        recall_habituation_decay_window_ticks = _resolve_recall_habituation_decay(
+            source
+        )
+
         return cls(
             short_term_memory_kind=short_term_memory_kind,
             short_term_memory_scheduler_mode=short_term_memory_scheduler_mode,
@@ -249,6 +264,8 @@ class ResolvedLlmRuntimeConfig:
             semantic_search_enabled=semantic_search_enabled,
             expected_result_policy=expected_result_policy,
             episodic_reinterpretation_enabled=episodic_reinterpretation_enabled,
+            recall_habituation_enabled=recall_habituation_enabled,
+            recall_habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
         )
 
     @classmethod
@@ -289,6 +306,8 @@ class ResolvedLlmRuntimeConfig:
             semantic_search_enabled=False,
             expected_result_policy="off",
             episodic_reinterpretation_enabled=False,
+            recall_habituation_enabled=False,
+            recall_habituation_decay_window_ticks=5,
         )
         unknown = set(overrides) - set(defaults)
         if unknown:
@@ -369,6 +388,27 @@ def _resolve_expected_result_policy(source: Mapping[str, str]) -> str:
             f"valid: {sorted(_VALID_EXPECTED_RESULT_POLICIES)}"
         )
     return raw
+
+
+def _resolve_recall_habituation_decay(source: Mapping[str, str]) -> int:
+    """``LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS`` を解決 (#526 段階 2)。
+
+    未設定 / 空文字 → default 5。負値・非数値は fail-fast で ``ValueError``。
+    """
+    raw = (source.get("LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS") or "").strip()
+    if not raw:
+        return 5
+    try:
+        value = int(raw)
+    except ValueError as e:
+        raise ValueError(
+            f"LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS={raw!r} is not an integer"
+        ) from e
+    if value < 0:
+        raise ValueError(
+            f"LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS={value} must be 0 or greater"
+        )
+    return value
 
 
 _VALID_LLM_CLIENT_KINDS = frozenset({"stub", "litellm"})

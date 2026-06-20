@@ -73,6 +73,67 @@ class TestEpisodicReinterpretationEnabled:
         )
 
 
+class TestRecallHabituationEnabled:
+    """段階 2 (慣化ペナルティ) の on/off + decay_window の解決。"""
+
+    def test_未設定なら_False(self) -> None:
+        """``LLM_EPISODIC_RECALL_HABITUATION_ENABLED`` 未設定なら False。"""
+        cfg = ResolvedLlmRuntimeConfig.from_env(env={})
+        assert cfg.recall_habituation_enabled is False
+        assert cfg.recall_habituation_decay_window_ticks == 5  # default
+
+    def test_truthy_で_True(self) -> None:
+        cfg = ResolvedLlmRuntimeConfig.from_env(
+            env={"LLM_EPISODIC_RECALL_HABITUATION_ENABLED": "1"}
+        )
+        assert cfg.recall_habituation_enabled is True
+
+    def test_decay_window_の_明示_env(self) -> None:
+        """``LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS`` で window を上書き。"""
+        cfg = ResolvedLlmRuntimeConfig.from_env(
+            env={
+                "LLM_EPISODIC_RECALL_HABITUATION_ENABLED": "1",
+                "LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS": "8",
+            }
+        )
+        assert cfg.recall_habituation_decay_window_ticks == 8
+
+    def test_decay_window_負値は_ValueError(self) -> None:
+        """負値は fail-fast。"""
+        with pytest.raises(ValueError, match="HABITUATION_DECAY_TICKS"):
+            ResolvedLlmRuntimeConfig.from_env(
+                env={"LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS": "-1"}
+            )
+
+    def test_decay_window_非数値は_ValueError(self) -> None:
+        with pytest.raises(ValueError, match="HABITUATION_DECAY_TICKS"):
+            ResolvedLlmRuntimeConfig.from_env(
+                env={"LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS": "abc"}
+            )
+
+    def test_for_tests_default(self) -> None:
+        cfg = ResolvedLlmRuntimeConfig.for_tests()
+        assert cfg.recall_habituation_enabled is False
+        assert cfg.recall_habituation_decay_window_ticks == 5
+
+    def test_for_tests_override(self) -> None:
+        cfg = ResolvedLlmRuntimeConfig.for_tests(
+            recall_habituation_enabled=True,
+            recall_habituation_decay_window_ticks=10,
+        )
+        assert cfg.recall_habituation_enabled is True
+        assert cfg.recall_habituation_decay_window_ticks == 10
+
+    def test_to_trace_dict_に_含まれる(self) -> None:
+        cfg = ResolvedLlmRuntimeConfig.for_tests(
+            recall_habituation_enabled=True,
+            recall_habituation_decay_window_ticks=7,
+        )
+        d = cfg.to_trace_dict()
+        assert d["recall_habituation_enabled"] is True
+        assert d["recall_habituation_decay_window_ticks"] == 7
+
+
 class TestExpectedResultPolicy:
     """予測 (expected_result) 露出 policy の解決 (off/optional/required)。"""
 
