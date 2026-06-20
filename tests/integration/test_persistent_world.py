@@ -85,3 +85,25 @@ class TestPersistentWorldHasNoEndCondition:
                     assert forbidden not in tokens, (
                         f"config が勝敗概念 ({forbidden}) を持っている: {name}"
                     )
+
+
+class TestPersistentWorldSystemPromptIsNeutral:
+    """層2: 永続世界の system prompt に escape/goal 前提が漏れない。"""
+
+    def _system_prompt(self, runtime) -> str:
+        player_id = runtime.get_player_ids()[0]
+        prompt = runtime.build_full_prompt(player_id)
+        return "\n".join(
+            m.get("content", "")
+            for m in prompt.get("messages", [])
+            if m.get("role") == "system"
+        )
+
+    def test_no_escape_or_goal_framing_in_persistent_world(self) -> None:
+        """勝敗のない永続世界では「脱出できない」「勝利条件 (最終目的)」が出ない。"""
+        system = self._system_prompt(_create_runtime())
+        assert "脱出できない" not in system
+        assert "勝利条件 (最終目的)" not in system
+        assert "全て最終目的のための手段である" not in system
+        # 中立文が入る
+        assert "固定された勝敗や達成すべき最終目的はない" in system
