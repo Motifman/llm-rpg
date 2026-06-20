@@ -3476,8 +3476,12 @@ def create_escape_game_runtime(
             # gist は短期記憶 builder と同じく config.llm_client_kind で gate する
             # (config が stub なのに env 側で litellm が動く余地を残さない)。
             if _semantic_gist_enabled and config.llm_client_kind == "litellm":
-                from ai_rpg_world.application.llm.wiring import (
-                    _optional_semantic_gist_service,
+                # R2c-1: full wiring 本体 (wiring/__init__) の private helper でなく、
+                # 抽出済みの optional_llm_services から取る (= wiring/__init__ からの
+                # symbol 依存を廃止)。import-time に wiring/__init__ がロードされる依存は
+                # R2c-2 の __init__ 軽量化 (full wiring 本体削除) で解消する。
+                from ai_rpg_world.application.llm.wiring.optional_llm_services import (
+                    optional_semantic_gist_service,
                 )
                 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
                     create_llm_client_from_env,
@@ -3491,7 +3495,7 @@ def create_escape_game_runtime(
                     )
                     _gist_client = None
                 if _gist_client is not None:
-                    _semantic_gist_service = _optional_semantic_gist_service(
+                    _semantic_gist_service = optional_semantic_gist_service(
                         _gist_client, True
                     )
         # #526 / U3: 段1 (エピソード再解釈) の opt-in 配線。
@@ -3502,8 +3506,10 @@ def create_escape_game_runtime(
         _reinterpretation_enabled = config.episodic_reinterpretation_enabled
         _reinterpretation_completion = None
         if _reinterpretation_enabled and config.llm_client_kind == "litellm":
-            from ai_rpg_world.application.llm.wiring import (
-                _optional_episodic_reinterpretation_completion,
+            # R2c-1: 抽出済み optional_llm_services から取る (wiring/__init__ の
+            # private helper symbol 依存を廃止。import-time 依存は R2c-2 で解消)。
+            from ai_rpg_world.application.llm.wiring.optional_llm_services import (
+                optional_episodic_reinterpretation_completion,
             )
             from ai_rpg_world.application.llm.wiring._llm_client_factory import (
                 create_llm_client_from_env,
@@ -3518,7 +3524,7 @@ def create_escape_game_runtime(
                 _reinterp_client = None
             if _reinterp_client is not None:
                 _reinterpretation_completion = (
-                    _optional_episodic_reinterpretation_completion(
+                    optional_episodic_reinterpretation_completion(
                         _reinterp_client, None
                     )
                 )
