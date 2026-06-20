@@ -206,3 +206,50 @@ class TestEscapeGameTurnCountNotResetOnSchedule:
         trigger.schedule_turn(pid)
 
         assert trigger._turn_counts.get(pid.value) == 0
+
+
+class TestReinterpretationAfterTurnTrigger:
+    """U3: ターン完了で reinterpretation coordinator.after_turn_completed を呼ぶ。"""
+
+    def test_coordinator_ありなら_after_turn_completed_を呼ぶ(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """_episodic_stack.reinterpretation_coordinator があれば player_id 付きで通知する。"""
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        state = _create_session(monkeypatch, tmp_path)
+        trigger = state.llm_wiring.llm_turn_trigger
+
+        class _CoordSpy:
+            def __init__(self):
+                self.calls = []
+
+            def after_turn_completed(self, player_id):
+                self.calls.append(player_id)
+
+        spy = _CoordSpy()
+        # 実 runtime の stack に coordinator を差し込む (off 構成でも構造を検証できる)
+        from types import SimpleNamespace
+
+        trigger.wiring.runtime._episodic_stack = SimpleNamespace(
+            reinterpretation_coordinator=spy
+        )
+
+        trigger._note_turn_for_reinterpretation(1)
+        assert spy.calls == [PlayerId(1)]
+
+    def test_coordinator_未配線なら_no_op(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """reinterpretation OFF (stack=None / coordinator=None) では何もしない・例外も出さない。"""
+        state = _create_session(monkeypatch, tmp_path)
+        trigger = state.llm_wiring.llm_turn_trigger
+        from types import SimpleNamespace
+
+        trigger.wiring.runtime._episodic_stack = None
+        trigger._note_turn_for_reinterpretation(1)  # 例外なく no-op
+
+        trigger.wiring.runtime._episodic_stack = SimpleNamespace(
+            reinterpretation_coordinator=None
+        )
+        trigger._note_turn_for_reinterpretation(1)  # 例外なく no-op

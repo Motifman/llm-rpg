@@ -129,6 +129,11 @@ class ResolvedLlmRuntimeConfig:
     # に出すが required にしない) | ``"required"`` (毎ターン必須)。
     expected_result_policy: str
 
+    # Prediction (#526 / U3): 段1=LLM 駆動のエピソード再解釈 (credit assignment) を
+    # 有効化するか。``LLM_EPISODIC_REINTERPRETATION_ENABLED=1`` で ON。default OFF で
+    # 従来の episodic-only 動作 (再解釈を組まない)。
+    episodic_reinterpretation_enabled: bool
+
     # ──────────────────────────────────────────────────────────────
     # Invariants
     # ──────────────────────────────────────────────────────────────
@@ -220,6 +225,11 @@ class ResolvedLlmRuntimeConfig:
         # Prediction (#526): expected_result 露出 policy
         expected_result_policy = _resolve_expected_result_policy(source)
 
+        # Prediction (#526 / U3): エピソード再解釈 on/off
+        episodic_reinterpretation_enabled = _parse_truthy(
+            source.get("LLM_EPISODIC_REINTERPRETATION_ENABLED"), default=False
+        )
+
         return cls(
             short_term_memory_kind=short_term_memory_kind,
             short_term_memory_scheduler_mode=short_term_memory_scheduler_mode,
@@ -238,6 +248,7 @@ class ResolvedLlmRuntimeConfig:
             semantic_passive_top_k=semantic_passive_top_k,
             semantic_search_enabled=semantic_search_enabled,
             expected_result_policy=expected_result_policy,
+            episodic_reinterpretation_enabled=episodic_reinterpretation_enabled,
         )
 
     @classmethod
@@ -277,6 +288,7 @@ class ResolvedLlmRuntimeConfig:
             semantic_passive_top_k=0,
             semantic_search_enabled=False,
             expected_result_policy="off",
+            episodic_reinterpretation_enabled=False,
         )
         unknown = set(overrides) - set(defaults)
         if unknown:

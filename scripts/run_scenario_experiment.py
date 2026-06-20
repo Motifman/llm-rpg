@@ -245,12 +245,27 @@ def _wiring_stub_from_escape_runtime(runtime: Any) -> Any:
         if episodic_stack is not None
         else None
     )
+    # #558 レビュー反映 (MEDIUM-2): reinterpretation (段1) ON のとき episodic_stack が
+    # in-memory の recall_buffer / journal を持つ。snapshot surface で None ハードコード
+    # だと、再解釈 journal と pending recall buffer が save/load で silent に失われ、
+    # 再開時の記憶連続性 (自己の継続性) が壊れる。semantic と同じく stack から拾う
+    # (OFF なら None = 従来どおり空 in-memory fallback)。
+    recall_buffer_store = (
+        getattr(episodic_stack, "recall_buffer_store", None)
+        if episodic_stack is not None
+        else None
+    )
+    reinterpretation_journal_store = (
+        getattr(episodic_stack, "reinterpretation_journal", None)
+        if episodic_stack is not None
+        else None
+    )
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
         semantic_memory_store=semantic_store,
         memory_link_store=memory_link_store,
-        episodic_recall_buffer_store=None,
-        episodic_reinterpretation_journal_store=None,
+        episodic_recall_buffer_store=recall_buffer_store,
+        episodic_reinterpretation_journal_store=reinterpretation_journal_store,
         episodic_episode_store=episode_store,
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,

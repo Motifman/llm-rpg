@@ -1171,11 +1171,22 @@ class EscapeGameRuntime:
         if self._episodic_stack is not None:
             # #526 後続: stack に semantic passive recall があれば
             # 【関連する学び】section を出すために渡す (default OFF では None/0)。
+            # U3: stack に reinterpretation (段1) があれば、想起時に journal を覗いて
+            # 再解釈後テキストで recall を上書きし、想起 episode を recall_buffer に
+            # 積む配線を有効化する (default OFF では全 None で従来挙動)。
+            _reinterp_coord = self._episodic_stack.reinterpretation_coordinator
             episodic_config = EpisodicRecallConfig(
                 passive_recall=self._episodic_stack.passive_recall,
                 noun_matcher=self._episodic_stack.noun_matcher,
                 semantic_passive_recall=self._episodic_stack.semantic_passive_recall,
                 semantic_passive_top_k=self._episodic_stack.semantic_passive_top_k,
+                recall_buffer_store=self._episodic_stack.recall_buffer_store,
+                reinterpretation_journal_store=self._episodic_stack.reinterpretation_journal,
+                turn_index_provider=(
+                    _reinterp_coord.current_turn_index
+                    if _reinterp_coord is not None
+                    else None
+                ),
             )
         builder = DefaultPromptBuilder(
             core,
@@ -3308,6 +3319,10 @@ def create_escape_game_runtime(
     # + chunk coordinator + passive recall を組み立てる。未設定なら従来動作。
     # PR #330: シナリオ非依存の builder に統一。escape_episodic_wiring 経由の
     # 旧 alias も後方互換で生きているが、application 層から直接 import する。
+    # NOTE (#558 MEDIUM-1): この親 gate は env 直読みで、ResolvedLlmRuntimeConfig
+    # 単一窓口から外れている (U3 で追加した config.episodic_reinterpretation_enabled
+    # とは別軸)。config.episodic_enabled へ寄せる移行は既存 contract テスト
+    # 多数を巻き込むため、reinterpretation opt-in (U3) とは分けて別 PR で行う。
     from ai_rpg_world.application.llm.wiring.episodic_stack import (
         build_episodic_stack,
         is_episodic_enabled,
@@ -3463,6 +3478,34 @@ def create_escape_game_runtime(
                     _semantic_gist_service = _optional_semantic_gist_service(
                         _gist_client, True
                     )
+        # #526 / U3: 段1 (エピソード再解釈) の opt-in 配線。
+        # LLM_EPISODIC_REINTERPRETATION_ENABLED かつ LiteLLMClient が取れるときだけ
+        # completion port (= LLM) を渡す。flag ON でも client が stub なら completion
+        # は None になり、coordinator は構築されるが再解釈 LLM は走らない
+        # (prompt も recall_buffer を覗かない = graceful)。env 直読みせず config から取る。
+        _reinterpretation_enabled = config.episodic_reinterpretation_enabled
+        _reinterpretation_completion = None
+        if _reinterpretation_enabled and config.llm_client_kind == "litellm":
+            from ai_rpg_world.application.llm.wiring import (
+                _optional_episodic_reinterpretation_completion,
+            )
+            from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+                create_llm_client_from_env,
+            )
+
+            try:
+                _reinterp_client = create_llm_client_from_env()
+            except Exception:
+                logger.exception(
+                    "LLM client factory failed; episodic reinterpretation disabled"
+                )
+                _reinterp_client = None
+            if _reinterp_client is not None:
+                _reinterpretation_completion = (
+                    _optional_episodic_reinterpretation_completion(
+                        _reinterp_client, None
+                    )
+                )
         runtime._episodic_stack = build_episodic_stack(
             scenario=scenario,
             graph=spot_graph_repo.find_graph(),
@@ -3485,6 +3528,8 @@ def create_escape_game_runtime(
             semantic_passive_top_k=_semantic_top_k,
             semantic_gist_service=_semantic_gist_service,
             semantic_persona_resolver=_semantic_persona_resolver,
+            reinterpretation_enabled=_reinterpretation_enabled,
+            reinterpretation_completion=_reinterpretation_completion,
         )
 
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で

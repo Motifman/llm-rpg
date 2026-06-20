@@ -170,3 +170,53 @@ class TestEscapeGameSemanticConfigWins:
         runtime = create_escape_game_runtime(_SCENARIO_PATH, config=cfg)
         assert runtime._episodic_stack.semantic_passive_top_k == 0
         assert runtime._episodic_stack.semantic_passive_recall is None
+
+
+class TestEscapeGameReinterpretationSnapshotSurface:
+    """U3/#558 MEDIUM-2: reinterpretation ON のとき snapshot stub が journal を拾う
+    (= save/load で再解釈 journal を silent に失わない / 自己の継続性)。"""
+
+    def _cfg(self, **overrides):
+        from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+            ResolvedLlmRuntimeConfig,
+        )
+
+        return ResolvedLlmRuntimeConfig.for_tests(**overrides)
+
+    def test_stub_exposes_reinterpretation_journal_when_on(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """reinterpretation ON の runtime から stub が journal を expose する。"""
+        from ai_rpg_world.application.escape_game.escape_game_runtime import (
+            create_escape_game_runtime,
+        )
+        from scripts.run_scenario_experiment import _wiring_stub_from_escape_runtime
+
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        cfg = self._cfg(episodic_enabled=True, episodic_reinterpretation_enabled=True)
+        runtime = create_escape_game_runtime(_SCENARIO_PATH, config=cfg)
+        assert runtime._episodic_stack.reinterpretation_journal is not None
+
+        stub = _wiring_stub_from_escape_runtime(runtime)
+        # journal は reinterpretation ON で常に非 None (空でも save 対象)。
+        assert stub.episodic_reinterpretation_journal_store is not None
+        assert (
+            stub.episodic_reinterpretation_journal_store
+            is runtime._episodic_stack.reinterpretation_journal
+        )
+
+    def test_stub_journal_none_when_reinterpretation_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """reinterpretation OFF では stub の journal は None (従来どおり)。"""
+        from ai_rpg_world.application.escape_game.escape_game_runtime import (
+            create_escape_game_runtime,
+        )
+        from scripts.run_scenario_experiment import _wiring_stub_from_escape_runtime
+
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        cfg = self._cfg(episodic_enabled=True)
+        runtime = create_escape_game_runtime(_SCENARIO_PATH, config=cfg)
+        stub = _wiring_stub_from_escape_runtime(runtime)
+        assert stub.episodic_reinterpretation_journal_store is None
+        assert stub.episodic_recall_buffer_store is None
