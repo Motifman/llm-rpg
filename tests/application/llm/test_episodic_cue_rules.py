@@ -80,17 +80,29 @@ class TestRuntimeLocationCues:
 
 
 class TestOutcomeCue:
-    """tool success/failure が outcome cue になること"""
+    """tool success/failure が outcome cue になること (#526 後続 Fix D)。
 
-    def test_success_outcome_value(self) -> None:
-        """成功時は outcome:success を付与する。"""
+    成功は意味のない一致 (= ほぼ全 episode が成功するため index として無価値)
+    なので cue 化しない。失敗は希少で意味があるので残す。
+    """
+
+    def test_success_は_outcome_cue_を_付与しない(self) -> None:
+        """成功時は ``outcome:success`` を出さない (#526 後続 Fix D)。
+
+        Why: 実 run の trace 解析で「ほぼ全 episode が outcome:success を持ち、
+        毎ターン全 successful episode が hit して recall が肥大する」ことが
+        判明した。outcome cue は「失敗で何が起きたか」のときだけ意味があり、
+        成功は cue として価値がない (index の選択性が極端に低い)。
+        """
         cues = build_episodic_cues_for_tool_turn(
             tool_name="x",
             canonical_arguments=None,
             runtime_context=ToolRuntimeContextDto.empty(),
             command_result=LlmCommandResultDto(success=True, message="done"),
         )
-        assert EpisodicCue(axis="outcome", value="success", source=EpisodicCueSource.TOOL) in cues
+        assert not any(c.axis == "outcome" for c in cues), (
+            "成功 outcome cue が混入している: " + repr(cues)
+        )
 
     def test_failure_outcome_with_error_code(self) -> None:
         """失敗時は failure と error_code を結合した単一 value とする。"""
@@ -108,12 +120,31 @@ class TestOutcomeCue:
         assert len(oc) == 1
         assert oc[0].value == "failure_trap_triggered"
 
+    def test_failure_without_error_code_では_outcome_failure_を_付与(self) -> None:
+        """error_code 無しの失敗でも ``outcome:failure`` 単独 cue は残す。
+
+        失敗は希少で「何かおかしかった」シグナルとして意味がある。
+        """
+        cues = build_episodic_cues_for_tool_turn(
+            tool_name="x",
+            canonical_arguments=None,
+            runtime_context=ToolRuntimeContextDto.empty(),
+            command_result=LlmCommandResultDto(success=False, message="?"),
+        )
+        oc = [c for c in cues if c.axis == "outcome"]
+        assert len(oc) == 1
+        assert oc[0].value == "failure"
+
 
 class TestUnknownAndNoneIgnored:
     """unknown / None は安全に無視されること"""
 
     def test_none_runtime_and_observation_skipped(self) -> None:
-        """runtime / structured が None でも構わず outcome と action だけ付く。"""
+        """runtime / structured が None でも構わず action は付く。
+
+        #526 後続 Fix D: 成功時の outcome cue は無価値なので付けない。
+        action cue は残す (tool 名の選択性は十分にある)。
+        """
         cues = build_episodic_cues_for_tool_turn(
             tool_name="todo_append",
             canonical_arguments=None,
@@ -123,7 +154,7 @@ class TestUnknownAndNoneIgnored:
         )
         canon = {c.to_canonical() for c in cues}
         assert "action:todo_append" in canon
-        assert "outcome:success" in canon
+        assert "outcome:success" not in canon  # Fix D: 成功は cue 化しない
         assert not any(c.axis == "place_spot" for c in cues)
 
     def test_structured_unknown_keys_ignored(self) -> None:
