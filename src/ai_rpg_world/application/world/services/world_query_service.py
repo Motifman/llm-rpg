@@ -234,9 +234,9 @@ class WorldQueryService:
         """spot_graph 専用ランタイムから late-binding で snapshot provider を注入する。
 
         Issue #227 PR-6 (tile-map 除去):
-            create_spot_graph_wiring は既に構築された WorldQueryService を受け取るため、
-            __init__ では provider を渡せない。配線処理で SpotGraphCurrentStateBuilder を
-            組み立てた後、本メソッドで Callable を注入する。
+            WorldQueryService 構築後に SpotGraphCurrentStateBuilder を組み立てる
+            runtime があるため、__init__ では provider を渡せない。本メソッドで
+            Callable を後から注入する。
         """
         self._spot_graph_snapshot_provider = provider
 

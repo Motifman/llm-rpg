@@ -1,4 +1,4 @@
-"""create_llm_agent_wiring / create_spot_graph_wiring 用の Config dataclass 群。
+"""create_llm_agent_wiring 用の Config dataclass 群。
 
 Issue #227 後続レビュー HIGH-4 改善: 両 factory の 100+ 引数を機能ごとの dataclass に
 グループ化し、シグネチャの認知負荷を下げる。各 Config は機能の塊として独立しており、

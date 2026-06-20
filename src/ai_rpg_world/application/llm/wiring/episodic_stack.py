@@ -200,26 +200,66 @@ class EpisodicStack:
     recall_habituation_decay_window_ticks: int = 5
 
 
-def build_scenario_noun_matcher(*, scenario: object, graph: object) -> IWorldNounMatcher:
-    """scenario の spot 名 + キャラクター名 から ``IWorldNounMatcher`` を構築する。
+def build_scenario_noun_matcher(
+    *,
+    scenario: object,
+    graph: object,
+    spot_interior_repo: Optional[Any] = None,
+) -> IWorldNounMatcher:
+    """scenario の spot 名 + キャラクター名 + world_object 名 から
+    ``IWorldNounMatcher`` を構築する。
 
     - spot: ``graph._spots.values()`` (= SpotNode) の name と spot_id
     - character: ``scenario.player_spawns`` の name と player_id
+    - world_object: 各 SpotNode の ``interior.objects`` から
+      ``object_id.value`` と ``name`` (#526 後続 C1)
 
-    両方とも getattr で参照するため、具体型は escape_game / survival_island
-    の Scenario / SpotGraphAggregate どちらでも動く。将来 world_object /
-    item の名前も追加可能だが、初期統合では spot とキャラクターだけで実害は出ない。
+    すべて getattr で参照するため、具体型は escape_game / survival_island
+    の Scenario / SpotGraphAggregate どちらでも動く。
+
+    #526 後続 C1: 観測 prose に「案内板」「覚書」等の world_object 名が
+    含まれるケースで、prose 経路から ``object:world_object_{id}`` cue が
+    立つようにする。これにより write 側 (Fix A の prose 抽出) でも read 側
+    (passive recall 時の prose 抽出) でも object 軸の recall が機能する。
+
+    interior の取得は 2 系統で柔軟に対応する:
+    1. ``node.interior`` が直接ある (= test stub やインライン構成)
+    2. ``spot_interior_repo`` が与えられている (= 実 runtime。``SpotNode`` に
+       は interior が None で、別 repository に保管されている構成)
+    両方欠落 / 解決失敗時は world_object 抽出を skip するだけで例外を投げない。
     """
     builder = WorldNounMatcherBuilder()
     # spot 名 — graph aggregate 内の SpotNode を全列挙
     spots = getattr(graph, "_spots", None)
     if spots is not None:
         for node in spots.values():
-            spot_id_value = getattr(getattr(node, "spot_id", None), "value", None)
+            spot_id_obj = getattr(node, "spot_id", None)
+            spot_id_value = getattr(spot_id_obj, "value", None)
             name = getattr(node, "name", None)
             if spot_id_value is None or not name:
                 continue
             builder.add_spot(name=name, spot_id=int(spot_id_value))
+            # #526 後続 C1: 各 spot の interior から world_object 名を index。
+            # node.interior があればそれを優先 (test stub 経路)、無ければ
+            # spot_interior_repo に問い合わせる (実 runtime 経路)。両方無ければ skip。
+            interior = getattr(node, "interior", None)
+            if interior is None and spot_interior_repo is not None and spot_id_obj is not None:
+                try:
+                    interior = spot_interior_repo.find_by_spot_id(spot_id_obj)
+                except Exception:
+                    # repo 経路の失敗で matcher 構築を止めない (degradation)
+                    interior = None
+            if interior is None:
+                continue
+            objects = getattr(interior, "objects", None) or ()
+            for obj in objects:
+                obj_id_value = getattr(getattr(obj, "object_id", None), "value", None)
+                obj_name = getattr(obj, "name", None)
+                if obj_id_value is None or not obj_name:
+                    continue
+                builder.add_world_object(
+                    name=obj_name, world_object_id=int(obj_id_value)
+                )
     # キャラクター名 — scenario の player_spawns
     spawns = getattr(scenario, "player_spawns", None) or ()
     for spawn in spawns:
@@ -256,6 +296,11 @@ def build_episodic_stack(
     ] = None,
     recall_habituation_enabled: bool = False,
     recall_habituation_decay_window_ticks: int = 5,
+    # #526 後続 C1: world_object 名を index するために spot_interior_repo を
+    # 任意で受け取る。実 runtime では SpotNode.interior が None で別 repo に
+    # 保管されているため、prose から object 名を拾うにはこの経路が必要。
+    # 未指定なら従来通り node.interior 経路だけを使う (= test stub 互換)。
+    spot_interior_repo: Optional[Any] = None,
     # #526 後続 C2: chunk write 時に player の現在の runtime_context を返す
     # provider。注入時のみ動く (= default None で挙動不変)。
     runtime_context_provider: Optional[Callable[..., Any]] = None,
@@ -337,7 +382,11 @@ def build_episodic_stack(
     # #526 後続 Fix A: noun_matcher を chunk_coordinator より先に作り、
     # ChunkEpisodeDraftBuilder と passive_recall の両方に同じ matcher を
     # 渡すことで write/read 経路の cue 生成を対称化する。
-    noun_matcher = build_scenario_noun_matcher(scenario=scenario, graph=graph)
+    # #526 後続 C1: spot_interior_repo が渡されていれば、各 spot の
+    # ``interior.objects`` から world_object 名も index される。
+    noun_matcher = build_scenario_noun_matcher(
+        scenario=scenario, graph=graph, spot_interior_repo=spot_interior_repo
+    )
     chunk_coordinator = EpisodicChunkCoordinator(
         observation_buffer=observation_buffer,
         sliding_window_memory=sliding_window_memory,

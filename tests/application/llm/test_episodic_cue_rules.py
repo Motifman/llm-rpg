@@ -174,6 +174,32 @@ class TestUnknownAndNoneIgnored:
         assert not any(k.startswith("object:") for k in canon or [])
         assert "place_spot:9" not in canon
 
+    def test_movement_structured_keys_produce_place_spot_cues(self) -> None:
+        """#526 後続 Fix B: 移動観測の ``from_spot_id_value`` / ``to_spot_id_value``
+        が両方 ``place_spot`` cue に変換される。
+
+        Why: 実 run の trace 解析で、移動観測は ``spot_id_value`` ではなく
+        ``from_spot_id_value`` / ``to_spot_id_value`` のペアを emit していて、
+        cue rule が読まないため episode に place_spot が貼られない問題が
+        判明した。両方とも「ここに居た」「ここに来た」という意味で recall
+        の手がかりに値するので両方 cue 化する (dedupe は呼出側で行われる)。
+        """
+        cues = build_episodic_cues_for_tool_turn(
+            tool_name="spot_graph_travel_to",
+            canonical_arguments=None,
+            runtime_context=ToolRuntimeContextDto.empty(),
+            command_result=LlmCommandResultDto(success=True, message=""),
+            observation_structured={
+                "type": "entity_left_spot",
+                "from_spot_id_value": 1,
+                "to_spot_id_value": 2,
+                "actor": "kaito",
+            },
+        )
+        canon = {c.to_canonical() for c in cues}
+        assert "place_spot:1" in canon, f"from_spot_id_value が cue 化されていない: {canon}"
+        assert "place_spot:2" in canon, f"to_spot_id_value が cue 化されていない: {canon}"
+
     def test_invalid_emotion_hint_skipped(self) -> None:
         """ENUM にない emotion_hint は無視する。"""
         cues = build_episodic_cues_for_tool_turn(

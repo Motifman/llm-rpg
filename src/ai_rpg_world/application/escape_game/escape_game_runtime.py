@@ -2099,7 +2099,16 @@ def create_escape_game_runtime(
         escape_character,
         fallback_display_name=fallback_name,
     )
-    safe_intro = safe_world_intro_text(scenario.metadata)
+    # 層2 (#526 / U5): 勝敗条件を宣言するシナリオか (= goal あり) を導出する。
+    # win/lose/outcome のいずれかがあれば goal 前提の文面、無ければ永続世界として
+    # escape/goal 前提 (脱出できない / 勝利条件・最終目的) を中立化する。既存シナリオは
+    # 全て game_end_conditions を持つので has_goal=True となり prompt は不変。
+    _has_goal = bool(
+        scenario.win_conditions
+        or scenario.lose_conditions
+        or scenario.outcome_resolution_config is not None
+    )
+    safe_intro = safe_world_intro_text(scenario.metadata, has_goal=_has_goal)
     participants = _other_explorer_names_for_escape_system_prompt(
         scenario.player_spawns, escape_character
     )
@@ -2110,6 +2119,7 @@ def create_escape_game_runtime(
         participant_names=participants,
         enable_string_seed_of_thought=_escape_llm_ssot_enabled_from_env(),
         expected_result_policy=config.expected_result_policy,
+        has_goal=_has_goal,
     )
 
     # Issue #264 第16回実験 fix: シナリオに player_spawns がある場合、
@@ -2167,6 +2177,7 @@ def create_escape_game_runtime(
                     participant_names=other_names,
                     enable_string_seed_of_thought=_escape_llm_ssot_enabled_from_env(),
                     expected_result_policy=config.expected_result_policy,
+                    has_goal=_has_goal,
                 )
             )
 
@@ -3540,6 +3551,10 @@ def create_escape_game_runtime(
             recall_habituation_decay_window_ticks=(
                 config.recall_habituation_decay_window_ticks
             ),
+            # #526 後続 C1: spot_interior_repo を渡し、noun_matcher が
+            # world_object 名を index できるようにする。SpotNode.interior は
+            # 実 runtime では None で保管され、別 repository に格納されている。
+            spot_interior_repo=spot_interior_repo,
             # #526 後続 C2: chunk write 時の player 現在状況 (場所 / 視界 object
             # / 同席者) を episode の固定 cue として焼き付けるための provider。
             # runtime.build_llm_context(pid).tool_runtime_context を返す lambda
