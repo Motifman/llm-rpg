@@ -41,14 +41,19 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
     if not isinstance(entry, ActionResultEntry):
         raise TypeError("entry must be ActionResultEntry")
     time_prefix = f"[{entry.game_time_label}] " if entry.game_time_label else ""
+    # #526 後続: 行動前の予測を [予測: ...] で別表記する。action_summary の JSON から
+    # expected_result を落とした分、ここで構造化フィールドから読み戻す。これにより
+    # 「行動 → 予測 → 結果」が 1 行に読める形で積まれ、短期の文脈内学習の素地になる。
+    pred = entry.expected_result.strip() if isinstance(entry.expected_result, str) and entry.expected_result.strip() else ""
+    pred_suffix = f" [予測: {pred}]" if pred else ""
     if entry.success:
         if entry.omit_result_in_prompt:
-            return f"{time_prefix}[行動] {entry.action_summary}"
+            return f"{time_prefix}[行動] {entry.action_summary}{pred_suffix}"
         return (
-            f"{time_prefix}[行動] {entry.action_summary} → [結果] {entry.result_summary}"
+            f"{time_prefix}[行動] {entry.action_summary}{pred_suffix} → [結果] {entry.result_summary}"
         )
     parts = [
-        f"{time_prefix}[行動] {entry.action_summary} → [失敗]",
+        f"{time_prefix}[行動] {entry.action_summary}{pred_suffix} → [失敗]",
         f"error_code={entry.error_code or '不明'}",
     ]
     if entry.tool_name:

@@ -44,6 +44,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     with_inner_thought_empty_warning,
 )
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    format_action_summary,
+)
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
 )
@@ -1138,7 +1141,7 @@ class _EscapeGameLlmWiring:
             and name not in (TOOL_NAME_TODO_ADD, TOOL_NAME_TODO_LIST, TOOL_NAME_TODO_COMPLETE)
         ):
             try:
-                action_summary = f"{name}({json.dumps(arguments, ensure_ascii=False)})"
+                action_summary = format_action_summary(name, arguments)
                 # Issue #240 後続: detect() を直接呼び、hint 発火時に trace に
                 # MEMO_HINT を emit。これにより実 LLM 試走で「hint が出たか / その後
                 # LLM が memo_done を呼んだか」を trace 経由で追える。
@@ -1172,7 +1175,7 @@ class _EscapeGameLlmWiring:
         if not skip_duplicate_action_log:
             self.runtime._record_action_result(
                 player_id,
-                f"{name}({json.dumps(arguments, ensure_ascii=False)})",
+                format_action_summary(name, arguments),
                 result.message,
                 tool_name=name,
                 success=result.success,

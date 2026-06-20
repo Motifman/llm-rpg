@@ -25,6 +25,9 @@ from ai_rpg_world.application.llm.llm_argument_fingerprint import (
 )
 from ai_rpg_world.application.llm.result_summary_builder import build_result_summary
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    format_action_summary,
+)
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
     EpisodicChunkCoordinator,
 )
@@ -80,14 +83,12 @@ _TOOLS_SKIPPING_EPISODIC_CHUNK: frozenset[str] = frozenset(
 
 
 def _format_action_summary(tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> str:
-    """ツール名と引数から「直近の出来事」用の行動要約文を組み立てる。"""
-    if not arguments:
-        return f"{tool_name} を実行しました。"
-    try:
-        args_str = json.dumps(arguments, ensure_ascii=False)
-    except (TypeError, ValueError):
-        args_str = str(arguments)
-    return f"{tool_name}({args_str}) を実行しました。"
+    """ツール名と引数から「直近の出来事」用の行動要約文を組み立てる。
+
+    主観入力 (intention / expected_result / emotion_hint / reason) を表示から
+    落とす整形は共有の ``format_action_summary`` に集約 (#526 後続)。
+    """
+    return format_action_summary(tool_name, arguments)
 
 
 def _extract_subjective_text(arguments: Dict[str, Any], key: str) -> Optional[str]:
