@@ -681,6 +681,15 @@ class DefaultPromptBuilder(IPromptBuilder):
                     axis: count
                     for axis, count in retrieval_debug.final_episode_count_by_source_axis
                 }
+                # #526 段階 2 (PR #565) 続き: 慣化ペナルティが適用された
+                # episode の (id → penalty 値) も載せる。PR #565 で dataclass
+                # field は追加されたが本 emission code は更新漏れだったため、
+                # ペナルティが trace から見えず「慣化が動いているか」の判定が
+                # 不可能になっていた。
+                debug_kwargs["habituation_penalty_by_episode"] = {
+                    eid: penalty
+                    for eid, penalty in retrieval_debug.habituation_penalty_by_episode
+                }
             except Exception:
                 # debug 構造が想定外でも recall trace 本体は落とさない。
                 self._logger.debug(

@@ -558,6 +558,57 @@ class TestPromptBuilderRecallTraceEmission:
         # candidates payload 側は既存のキーが維持されること。
         assert p["candidates"][0]["episode_id"] == "ep-a"
         assert p["candidates"][0]["source_axes"] == ["place_spot", "object"]
+        # PR #565 で追加された habituation_penalty_by_episode は、debug に
+        # 値が入っていなければ空 dict として乗る (key 自体は常に存在)。
+        assert p["habituation_penalty_by_episode"] == {}
+
+    def test_habituation_penalty_payload_が_乗る(self) -> None:
+        """#526 段階 2 (PR #565) 続き: retrieval_debug の
+        ``habituation_penalty_by_episode`` が trace payload にも反映される。
+
+        PR #565 で dataclass field は追加されたが emission code 側は更新漏れ
+        だったため、ペナルティ計算結果が trace から見えない状態だった。本
+        テストは regression を固定する。
+        """
+        from ai_rpg_world.application.llm.services.prompt_builder import (
+            DefaultPromptBuilder,
+        )
+        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+            EpisodicPassiveRecallCandidate,
+            EpisodicPassiveRecallRetrievalDebug,
+        )
+
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+
+        builder = object.__new__(DefaultPromptBuilder)
+        builder._trace_recorder = recorder
+        builder._trace_recorder_provider = None
+        builder._current_tick_provider = lambda: 12
+
+        ep = _make_episode(episode_id="ep-x", recall_text="X")
+        cand = EpisodicPassiveRecallCandidate(
+            episode=ep, source_axes=("place_spot",)
+        )
+        debug = EpisodicPassiveRecallRetrievalDebug(
+            raw_row_count_by_axis=(("place_spot", 1),),
+            union_episode_count_before_max_cap=1,
+            candidate_episode_sources=(("ep-x", ("place_spot",)),),
+            final_episode_count_by_source_axis=(("place_spot", 1),),
+            habituation_penalty_by_episode=(("ep-x", 3), ("ep-y", 1)),
+        )
+
+        builder._emit_episodic_recall_trace(
+            player_id=PlayerId(1),
+            situation_cues=(),
+            candidates=[cand],
+            retrieval_debug=debug,
+        )
+
+        events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_RECALL]
+        assert len(events) == 1
+        p = events[0].payload
+        assert p["habituation_penalty_by_episode"] == {"ep-x": 3, "ep-y": 1}
 
     def test_retrieval_debug_未指定なら_既存_payload_と互換(self) -> None:
         """``retrieval_debug`` を渡さない呼び出しは既存形式 (追加キー無し) を
