@@ -752,6 +752,34 @@ def test_direct_explore_carries_subjective_fields_when_passed(
     assert entry.emotion_hint == "curiosity"
 
 
+def test_direct_travel_carries_subjective_fields_when_passed(
+    clean_runtime_env: None,
+) -> None:
+    """U2: do_move に subjective kwargs を渡すと記録 entry に乗る (travel の do_* → recorder 配線)。"""
+    runtime = _create_runtime()
+    player_id = runtime.get_player_ids()[0]
+    graph = runtime._spot_graph_repo.find_graph()
+    current_spot_id = graph.get_entity_spot(EntityId.create(int(player_id.value)))
+    destination = next(
+        iter(graph.iter_outgoing_connections_from(current_spot_id))
+    ).to_spot_id
+    destination_key = runtime.id_mapper.get_str("spot", destination.value)
+
+    runtime.do_move(
+        player_id,
+        destination_key,
+        expected_result="廊下に出られる",
+        intention="次の部屋へ進む",
+        emotion_hint="determination",
+    )
+
+    entry = runtime._action_result_store.get_recent(player_id, 1)[0]
+    assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO
+    assert entry.expected_result == "廊下に出られる"
+    assert entry.intention == "次の部屋へ進む"
+    assert entry.emotion_hint == "determination"
+
+
 def test_explore_handler_threads_subjective_args_into_record(
     clean_runtime_env: None,
 ) -> None:
