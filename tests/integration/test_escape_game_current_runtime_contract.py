@@ -1089,3 +1089,173 @@ def test_experiment_wiring_stub_exposes_semantic_stores_when_enabled(
     assert stub.memory_link_store is runtime._episodic_stack.memory_link_store
     assert stub.semantic_memory_store is not None
     assert stub.memory_link_store is not None
+
+
+# ── R2a: escape run_phase_b の trace 発火カバレッジ ──
+# full wiring (LlmAgentOrchestrator) 退役に備え、ACTION / ACTION_RESULT / MEMO_HINT の
+# trace 発火と tick_provider 例外耐性を escape 経路で固定する (旧
+# test_orchestrator_trace_integration.py 相当を escape へ移植)。
+
+
+class _CapturingRecorder:
+    """記録された trace event を全部保持する recorder (escape 経路用)。"""
+
+    def __init__(self) -> None:
+        self.events: list = []
+
+    def record(self, kind, *, tick=None, player_id=None, **payload):
+        from types import SimpleNamespace
+
+        self.events.append(
+            SimpleNamespace(
+                kind=str(kind), tick=tick, player_id=player_id, payload=dict(payload)
+            )
+        )
+        return None
+
+    def close(self) -> None:
+        pass
+
+
+_CONTRACT_PROBE_TOOL = "contract_probe"
+
+
+def _run_probe_phase_b(runtime: "_ContractRuntime", *, success: bool = True):
+    """contract_probe を 1 つ登録して run_phase_b を 1 回回すヘルパ。"""
+    wiring = _wiring_for_contract_runtime(runtime)
+
+    def _handler(player_id, arguments, runtime_context):
+        return LlmCommandResultDto(
+            success=success,
+            message="DTO_RESULT: 完了" if success else "DTO_RESULT: 失敗",
+            error_code=None if success else "CONTRACT_FAILED",
+        )
+
+    wiring._tool_handlers[_CONTRACT_PROBE_TOOL] = _handler
+    wiring.run_phase_b(
+        _phase_a(
+            PlayerId(1),
+            tool_call={
+                "name": _CONTRACT_PROBE_TOOL,
+                "arguments": {"inner_thought": "見る", "expected_result": "X"},
+            },
+        )
+    )
+    return wiring
+
+
+def test_phase_b_records_action_and_action_result_trace(
+    clean_runtime_env: None,
+) -> None:
+    """成功 tool 実行で escape run_phase_b が ACTION + ACTION_RESULT を同 tick で trace 記録する。"""
+    from ai_rpg_world.application.trace import TraceEventKind
+
+    rec = _CapturingRecorder()
+    runtime = _ContractRuntime()
+    runtime.trace_recorder = rec
+
+    _run_probe_phase_b(runtime)
+
+    kinds = [e.kind for e in rec.events]
+    assert TraceEventKind.ACTION in kinds
+    assert TraceEventKind.ACTION_RESULT in kinds
+    action = next(e for e in rec.events if e.kind == TraceEventKind.ACTION)
+    result = next(e for e in rec.events if e.kind == TraceEventKind.ACTION_RESULT)
+    assert action.player_id == 1
+    assert action.tick == runtime.current_tick()  # = 7
+    assert action.payload["tool"] == _CONTRACT_PROBE_TOOL
+    assert result.tick == action.tick
+    assert result.payload["tool"] == _CONTRACT_PROBE_TOOL
+    assert result.payload["success"] is True
+
+
+def test_phase_b_records_action_result_trace_on_failure(
+    clean_runtime_env: None,
+) -> None:
+    """失敗 tool でも ACTION_RESULT が success=False / error_code 付きで trace 記録される。"""
+    from ai_rpg_world.application.trace import TraceEventKind
+
+    rec = _CapturingRecorder()
+    runtime = _ContractRuntime()
+    runtime.trace_recorder = rec
+
+    _run_probe_phase_b(runtime, success=False)
+
+    result = next(e for e in rec.events if e.kind == TraceEventKind.ACTION_RESULT)
+    assert result.payload["success"] is False
+    assert result.payload["error_code"] == "CONTRACT_FAILED"
+
+
+def test_phase_b_trace_is_noop_when_recorder_absent(
+    clean_runtime_env: None,
+) -> None:
+    """trace_recorder 未注入 (None) でも run_phase_b はクラッシュしない。"""
+    runtime = _ContractRuntime()
+    runtime.trace_recorder = None
+    # 例外なく完了すること
+    _run_probe_phase_b(runtime)
+
+
+def test_phase_b_trace_tick_none_when_current_tick_raises(
+    clean_runtime_env: None,
+) -> None:
+    """current_tick が例外を投げても trace 記録は継続する (tick=None)。"""
+    from ai_rpg_world.application.trace import TraceEventKind
+
+    class _RaisingTickRuntime(_ContractRuntime):
+        def current_tick(self) -> int:
+            raise RuntimeError("tick boom")
+
+    rec = _CapturingRecorder()
+    runtime = _RaisingTickRuntime()
+    runtime.trace_recorder = rec
+
+    _run_probe_phase_b(runtime)
+
+    action = next(e for e in rec.events if e.kind == TraceEventKind.ACTION)
+    assert action.tick is None
+
+
+def test_phase_b_records_memo_hint_trace(
+    clean_runtime_env: None,
+) -> None:
+    """memo 完了 hint 発火時に MEMO_HINT trace が memo_id/similarity 付きで記録される。
+
+    escape では hint の『メッセージ追記』は別テストで担保済みだが、MEMO_HINT trace
+    event 自体の発火は未カバーだったため移植する。"""
+    from types import SimpleNamespace
+
+    from ai_rpg_world.application.trace import TraceEventKind
+
+    rec = _CapturingRecorder()
+    runtime = _ContractRuntime()
+    runtime.trace_recorder = rec
+    wiring = _wiring_for_contract_runtime(runtime)
+
+    class _StubHintService:
+        def detect(self, player_id, action_summary, message):
+            return SimpleNamespace(
+                memo=SimpleNamespace(id="m1", content="祭壇を調べる"),
+                similarity=0.951,
+                to_hint_text=lambda: " [memo 完了?: 祭壇を調べる]",
+            )
+
+    wiring.memo_completion_hint_service = _StubHintService()
+
+    def _handler(player_id, arguments, runtime_context):
+        return LlmCommandResultDto(success=True, message="調べた")
+
+    wiring._tool_handlers[_CONTRACT_PROBE_TOOL] = _handler
+    wiring.run_phase_b(
+        _phase_a(
+            PlayerId(1),
+            tool_call={"name": _CONTRACT_PROBE_TOOL, "arguments": {"inner_thought": "x"}},
+        )
+    )
+
+    memo_events = [e for e in rec.events if e.kind == TraceEventKind.MEMO_HINT]
+    assert len(memo_events) == 1
+    payload = memo_events[0].payload
+    assert payload["memo_id"] == "m1"
+    assert payload["similarity"] == 0.951
+    assert payload["tool_name"] == _CONTRACT_PROBE_TOOL
