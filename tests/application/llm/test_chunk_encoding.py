@@ -10,6 +10,7 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     ChunkEncodingInput,
     build_chunk_encoding_input,
     chunk_encoding_episode_generation_allowed,
+    format_action_result_line_for_recent_events,
     format_unified_timeline_as_recent_events_bullets,
     merge_observations_and_action_results_to_unified_timeline,
 )
@@ -204,6 +205,59 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         )
         text = format_action_result_line_for_recent_events(entry)
         assert text.startswith("[0:30] [行動] ")
+        assert "→ [結果]" not in text
+
+    def test_prediction_label_appears_between_action_and_result(self) -> None:
+        """#552 PR-A: expected_result があれば [予測: ...] が行動と結果の間に出る。"""
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="「古い祭壇」に対して調べるを行った",
+            result_summary="石は冷たく、何も起きなかった。",
+            success=True,
+            expected_result="祭壇から封印の手がかりが得られる",
+        )
+        text = format_action_result_line_for_recent_events(entry)
+        assert "[予測: 祭壇から封印の手がかりが得られる]" in text
+        # 「行動 → 予測 → 結果」の順
+        assert text.index("[行動]") < text.index("[予測:") < text.index("[結果]")
+
+    def test_no_prediction_label_when_expected_result_absent(self) -> None:
+        """#552 PR-A: expected_result が None なら [予測: ...] は出ない (露出 OFF の現状)。"""
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="x を実行しました。",
+            result_summary="成功。",
+            success=True,
+            expected_result=None,
+        )
+        assert "[予測:" not in format_action_result_line_for_recent_events(entry)
+
+    def test_prediction_label_on_failure_line(self) -> None:
+        """#552 PR-A: 失敗行にも [予測: ...] が付く (予測と実際のズレを読めるように)。"""
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="扉を開けようとした",
+            result_summary="鍵がかかっていた",
+            success=False,
+            error_code="BLOCKED",
+            expected_result="扉が開くはず",
+        )
+        text = format_action_result_line_for_recent_events(entry)
+        assert "[予測: 扉が開くはず]" in text
+        assert "[失敗]" in text
+
+    def test_prediction_label_on_omit_result_line(self) -> None:
+        """#552 PR-A: omit_result (成功・結果省略) 行にも [予測: ...] は付く。"""
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="speech_say を実行しました。",
+            result_summary="発言しました。",
+            success=True,
+            omit_result_in_prompt=True,
+            expected_result="相手が振り向く",
+        )
+        text = format_action_result_line_for_recent_events(entry)
+        assert "[予測: 相手が振り向く]" in text
         assert "→ [結果]" not in text
 
     def test_naive_and_utc_aware_unified_timeline_sorted_without_type_error(

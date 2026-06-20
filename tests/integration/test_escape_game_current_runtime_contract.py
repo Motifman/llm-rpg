@@ -796,7 +796,9 @@ def test_phase_b_records_unsupported_tool_failure_with_raw_tool_summary(
     assert result.error_code == "UNSUPPORTED_TOOL"
     assert len(runtime.action_results) == 1
     entry = runtime.action_results[0]
-    assert entry["action_summary"] == 'contract_unknown_tool({"probe": "x"})'
+    # #552 PR-A: 失敗パスの action_summary も共有 sanitizer に集約され、orchestrator と
+    # 同じ「...) を実行しました。」形式に統一された (outcome arg "probe" は保持)。
+    assert entry["action_summary"] == 'contract_unknown_tool({"probe": "x"}) を実行しました。'
     assert entry["tool_name"] == "contract_unknown_tool"
     assert entry["success"] is False
     assert entry["error_code"] == "UNSUPPORTED_TOOL"
