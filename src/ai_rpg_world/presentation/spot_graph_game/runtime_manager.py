@@ -486,6 +486,32 @@ class _EscapeGameLlmTurnTrigger:
         # event 駆動で頻繁に動く player には heartbeat が出なくなり、
         # 完全 idle な player だけ idle_timeout 経過後に 1 回起こされる。
         self._note_activity_after_turn(player_id_value)
+        # #526 / U3: 段1 エピソード再解釈の trigger 後半。turn 完了を coordinator に
+        # 通知し、interval 到達時に pending recall batch を LLM 再解釈する。
+        # reinterpretation OFF (coordinator 未構築) では no-op。
+        self._note_turn_for_reinterpretation(player_id_value)
+
+    def _note_turn_for_reinterpretation(self, player_id_value: int) -> None:
+        """reinterpretation coordinator に turn 完了を通知する fail-safe ヘルパ。
+
+        coordinator 未配線 (reinterpretation OFF) / 異常系では何もしない
+        (turn 実行自体は壊さない)。``_note_activity_after_turn`` と同じ方式。
+        """
+        stack = getattr(self.wiring.runtime, "_episodic_stack", None)
+        coordinator = (
+            getattr(stack, "reinterpretation_coordinator", None) if stack else None
+        )
+        if coordinator is None:
+            return
+        try:
+            coordinator.after_turn_completed(PlayerId(player_id_value))
+        except Exception:
+            # 再解釈の失敗は致命ではない (worst case: 再解釈が進まないだけ)。
+            logger.warning(
+                "reinterpretation after_turn_completed failed for player=%s",
+                player_id_value,
+                exc_info=True,
+            )
 
     def _note_activity_after_turn(self, player_id_value: int) -> None:
         """heartbeat emitter に「player が今ターン走った」を通知する fail-safe ヘルパ。

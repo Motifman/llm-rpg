@@ -45,6 +45,32 @@ class TestFromEnvDefaults:
         assert cfg.semantic_llm_gist_enabled is False
         assert cfg.semantic_passive_top_k == 0
         assert cfg.semantic_search_enabled is False
+        assert cfg.episodic_reinterpretation_enabled is False
+
+
+class TestEpisodicReinterpretationEnabled:
+    """段1 (エピソード再解釈) の on/off 解決。"""
+
+    def test_未設定なら_False(self) -> None:
+        """LLM_EPISODIC_REINTERPRETATION_ENABLED 未設定なら False (= 従来 episodic-only)。"""
+        assert ResolvedLlmRuntimeConfig.from_env(env={}).episodic_reinterpretation_enabled is False
+
+    def test_truthy_で_True(self) -> None:
+        """1/true 等で True。"""
+        cfg = ResolvedLlmRuntimeConfig.from_env(
+            env={"LLM_EPISODIC_REINTERPRETATION_ENABLED": "1"}
+        )
+        assert cfg.episodic_reinterpretation_enabled is True
+
+    def test_for_tests_default_False(self) -> None:
+        """for_tests の default は False、override 可。"""
+        assert ResolvedLlmRuntimeConfig.for_tests().episodic_reinterpretation_enabled is False
+        assert (
+            ResolvedLlmRuntimeConfig.for_tests(
+                episodic_reinterpretation_enabled=True
+            ).episodic_reinterpretation_enabled
+            is True
+        )
 
 
 class TestExpectedResultPolicy:

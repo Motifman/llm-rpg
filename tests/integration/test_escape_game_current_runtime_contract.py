@@ -302,6 +302,38 @@ def _tool_by_name(runtime, name: str):
     raise AssertionError(f"tool {name} not found")
 
 
+def test_reinterpretation_off_leaves_episodic_stack_without_coordinator(
+    clean_runtime_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """U3: episodic ON / reinterpretation OFF では coordinator は組まれない (従来挙動)。"""
+    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
+    assert runtime._episodic_stack is not None
+    assert runtime._episodic_stack.reinterpretation_coordinator is None
+    assert runtime._episodic_stack.recall_buffer_store is None
+
+
+def test_reinterpretation_on_builds_coordinator_without_completion_under_stub(
+    clean_runtime_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """U3: reinterpretation ON で coordinator が組まれる。stub client なので completion は
+    None になり、prompt 用 recall_buffer_store は None のまま (graceful)。"""
+    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True, episodic_reinterpretation_enabled=True
+        )
+    )
+    stack = runtime._episodic_stack
+    assert stack is not None
+    assert stack.reinterpretation_coordinator is not None
+    assert stack.reinterpretation_journal is not None
+    # stub client = completion 無し → prompt は recall buffer を覗かない
+    assert stack.recall_buffer_store is None
+
+
 def test_expected_result_policy_off_exposes_no_prediction_field(
     clean_runtime_env: None,
 ) -> None:

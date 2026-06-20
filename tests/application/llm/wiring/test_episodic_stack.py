@@ -174,6 +174,75 @@ class TestBuildEpisodicStack:
         assert stack.episode_store is shared
 
 
+class TestReinterpretationOptIn:
+    """U3: build_episodic_stack の reinterpretation (段1) opt-in 配線。"""
+
+    def _io(self):
+        return (
+            DefaultObservationContextBuffer(),
+            DefaultSlidingWindowMemory(),
+            DefaultActionResultStore(),
+        )
+
+    def test_default_off_では_reinterpretation_は全て_None(self) -> None:
+        """reinterpretation_enabled 未指定なら coordinator/journal/buffer 全て None (従来挙動)。"""
+        obs_buf, sliding, action_store = self._io()
+        stack = build_episodic_stack(
+            scenario=_stub_scenario(players=[(1, "t")]),
+            graph=_stub_graph(spots={1: "x"}),
+            observation_buffer=obs_buf,
+            sliding_window_memory=sliding,
+            action_result_store=action_store,
+        )
+        assert stack.reinterpretation_coordinator is None
+        assert stack.reinterpretation_journal is None
+        assert stack.recall_buffer_store is None
+
+    def test_enabled_かつ_completion_None_なら_coordinator_は作るが_prompt_buffer_は_None(self) -> None:
+        """completion なし: coordinator/journal は組むが、prompt は recall buffer を覗かない。"""
+        obs_buf, sliding, action_store = self._io()
+        stack = build_episodic_stack(
+            scenario=_stub_scenario(players=[(1, "t")]),
+            graph=_stub_graph(spots={1: "x"}),
+            observation_buffer=obs_buf,
+            sliding_window_memory=sliding,
+            action_result_store=action_store,
+            reinterpretation_enabled=True,
+            reinterpretation_completion=None,
+        )
+        assert stack.reinterpretation_coordinator is not None
+        assert stack.reinterpretation_journal is not None
+        # completion 無し = 再解釈 LLM が走らないので prompt には buffer を渡さない
+        assert stack.recall_buffer_store is None
+
+    def test_enabled_かつ_completion_あり_なら_prompt_buffer_も_非None(self) -> None:
+        """completion あり: prompt 用 recall_buffer_store も非 None になる (想起を pending 化)。"""
+        from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
+            IEpisodicReinterpretationCompletionPort,
+        )
+
+        class _StubCompletion(IEpisodicReinterpretationCompletionPort):
+            def complete_episodic_reinterpretation_json(self, messages):
+                return "{}"
+
+        obs_buf, sliding, action_store = self._io()
+        stack = build_episodic_stack(
+            scenario=_stub_scenario(players=[(1, "t")]),
+            graph=_stub_graph(spots={1: "x"}),
+            observation_buffer=obs_buf,
+            sliding_window_memory=sliding,
+            action_result_store=action_store,
+            reinterpretation_enabled=True,
+            reinterpretation_completion=_StubCompletion(),
+        )
+        assert stack.reinterpretation_coordinator is not None
+        assert stack.recall_buffer_store is not None
+        # coordinator の current_turn_index が turn_index_provider として使える
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        assert stack.reinterpretation_coordinator.current_turn_index(PlayerId(1)) == 0
+
+
 class TestBackwardCompatAlias:
     """``escape_episodic_wiring`` の旧名 alias が引き続き動く。
 
