@@ -75,6 +75,12 @@ class TestFormatActionSummaryForDisplay:
         )
         assert out == "noop_tool を実行しました。"
 
+    def test_does_not_mutate_input_args(self) -> None:
+        """入力 args を破壊しない (sanitizer は新 dict を作る / immutable)。"""
+        args = dict(_FULL_ARGS)
+        format_action_summary_for_display("spot_graph_interact", args)
+        assert args == _FULL_ARGS
+
     def test_fingerprint_is_independent_of_display(self) -> None:
         """loop_guard 用 fingerprint は raw args から計算され、表示整形に影響されない。"""
         fp_full = build_argument_fingerprint(_FULL_ARGS)

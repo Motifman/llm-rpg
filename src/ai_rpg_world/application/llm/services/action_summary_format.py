@@ -28,9 +28,11 @@ from typing import Any, Mapping, Optional
 # action_summary の JSON から落とす主観入力フィールド。
 # - expected_result: chunk_encoding が [予測: ...] で別表記するので二重表示回避で隠す
 # - intention / emotion_hint: episode の why/felt 側の材料で、recent-events の生 JSON には不要
-# - reason: 主に spot_graph_wait の任意理由。wait の result_summary 側に「理由: ...」が
-#   残るので action JSON から落としても情報は消えにくい。将来 outcome に効く reason が
-#   出たら再検討する (一般名なので注意)。
+# - reason: 主に spot_graph_wait の任意理由。escape の do_wait は「待機した（理由: ...）」
+#   という自然言語を action_summary に直接渡す経路 (sanitizer を通らない) なので、raw args
+#   の JSON からこのフィールドを落としても情報は消えない。full orchestrator 等で reason が
+#   raw args に乗る場合も、現状 reason は意思決定に効かない補足なので落として読みやすくする。
+#   将来 outcome に効く reason が出たら hidden から外す (一般名なので注意)。
 # inner_thought は従来から常時プロンプトに出ており、外すと挙動が大きく変わるため残す
 # (削除するなら別 PR / 別判断)。
 ACTION_SUMMARY_HIDDEN_FIELDS = frozenset(
