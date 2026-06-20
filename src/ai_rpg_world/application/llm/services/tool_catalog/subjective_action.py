@@ -95,3 +95,39 @@ def with_subjective_action_schema(definition: ToolDefinitionDto) -> ToolDefiniti
         parameters=parameters,
         category=definition.category,
     )
+
+
+def with_expected_result_schema(
+    definition: ToolDefinitionDto, *, required: bool
+) -> ToolDefinitionDto:
+    """``expected_result`` (行動前の予測) だけを tool schema に足した定義を返す (#526 v0)。
+
+    予測誤差駆動の学習ループ (PR1-3) の入口。``with_subjective_action_schema`` が
+    4 facet を一括必須化するのに対し、本関数は予測ループの駆動因である
+    ``expected_result`` 一本だけを選択露出する (intention / emotion_hint は v0 では
+    出さない = 機能を束ねない)。
+
+    Args:
+        required: ``True`` なら ``required`` にも追加し毎ターン必須化。``False`` なら
+            ``properties`` にのみ足し、LLM が予測を持つときだけ書ける optional 露出。
+    """
+    if not isinstance(definition, ToolDefinitionDto):
+        raise TypeError("definition must be ToolDefinitionDto")
+
+    parameters = deepcopy(definition.parameters)
+    properties = dict(parameters.get("properties") or {})
+    properties["expected_result"] = deepcopy(
+        SUBJECTIVE_ACTION_FIELD_PROPERTIES["expected_result"]
+    )
+    parameters["properties"] = properties
+    if required:
+        required_fields = list(parameters.get("required") or [])
+        if "expected_result" not in required_fields:
+            required_fields.append("expected_result")
+        parameters["required"] = required_fields
+    return ToolDefinitionDto(
+        name=definition.name,
+        description=definition.description,
+        parameters=parameters,
+        category=definition.category,
+    )

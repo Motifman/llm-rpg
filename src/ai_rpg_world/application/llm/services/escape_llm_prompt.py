@@ -162,6 +162,28 @@ def _fallback_persona_block(display_name: str) -> str:
     ).build(persona)
 
 
+def _expected_result_rule_line(expected_result_policy: str) -> str:
+    """expected_result 露出 policy に応じた行動ルール行 (#526 v0)。
+
+    off では空文字 (= 行が増えず prompt 不変)。optional/required では、
+    expected_result が「願望・目的ではなく行動前の予測」であることと、後で予測と
+    実際のズレが振り返られることを伝える。
+    """
+    if expected_result_policy == "required":
+        return (
+            "- 探索・移動・相互作用・待機の各ツールでは `expected_result` に、"
+            "その行動をした結果『何が分かる・何が起きると思うか』の予測を必ず書く"
+            "（願望や目的ではなく、行動前の予測。後でこの予測と実際の結果のズレを振り返る）。"
+        )
+    if expected_result_policy == "optional":
+        return (
+            "- 探索・移動・相互作用・待機の各ツールでは、予測を持てるときは "
+            "`expected_result` に『何が起きると思うか』を書いてよい"
+            "（願望や目的ではなく、行動前の予測。後でこの予測と実際の結果のズレを振り返る）。"
+        )
+    return ""
+
+
 def build_escape_system_prompt(
     *,
     world_title: str,
@@ -169,6 +191,7 @@ def build_escape_system_prompt(
     safe_intro: str,
     participant_names: tuple[str, ...],
     enable_string_seed_of_thought: bool = False,
+    expected_result_policy: str = "off",
 ) -> str:
     """脱出ゲーム用システムプロンプト（1ターン1ツール・文面の意味づけ）。
 
@@ -178,9 +201,19 @@ def build_escape_system_prompt(
     enable_string_seed_of_thought:
         True のとき、ツール選択に String Seed of Thought（ランダム文字列の操作結果を n で割った余りで
         辞書順ツール列のインデックスを決める）を追記する。n は当該リクエストで渡される全ツール数。
+
+    expected_result_policy:
+        ``"off"`` (既定) なら予測関連の行動ルールは増えず prompt 不変。``"optional"`` /
+        ``"required"`` のとき、expected_result を書く指示行を 行動ルール に追加する (#526 v0)。
     """
     participants = "\n".join(f"  - {n}" for n in participant_names) or "  - （他の探索者はいない）"
     time_pressure = limited_action_and_time_pressure_text()
+    # #526 v0: policy != off のときだけ予測ルール行を足す。off では先頭に改行も
+    # 付けず、prompt を従来と完全一致させる (prefix cache 不変)。
+    expected_result_rule = _expected_result_rule_line(expected_result_policy)
+    expected_result_rule_block = (
+        f"\n{expected_result_rule}" if expected_result_rule else ""
+    )
     solo_line = (
         "- 当シナリオで同席の他者がいない（上記のとおり自己のみ）なら、囁き・他者の発話の観測は生じないことが多い。"
         if len(participant_names) == 0
@@ -206,7 +239,7 @@ def build_escape_system_prompt(
 
 【行動ルール（全キャラクター共通）】
 - 世界と相互作用する唯一の手段は、LLM への tool calling（関数呼び出し）である。
-- 各ツール呼び出しでは `inner_thought` に、上記【ペルソナ】の口調に揃えた短い文を必ず含める。観測者向け表示用。未発見の事実を知った体で書かない（厳密な定義は各ツールの `inner_thought` 引数の説明に従う）。
+- 各ツール呼び出しでは `inner_thought` に、上記【ペルソナ】の口調に揃えた短い文を必ず含める。観測者向け表示用。未発見の事実を知った体で書かない（厳密な定義は各ツールの `inner_thought` 引数の説明に従う）。{expected_result_rule_block}
 - 1回の応答で選べるのは 1 つのツールだけとする（サーバーは先頭の tool_call だけを実行しうる。必ず 1 つに絞る）。
 - ラベル（接続先・オブジェクト・相手プレイヤー等）は、続きの文面内の「現在地と周囲」等に表示されたものだけを使う。
 - 未発見の事実を、すでに知っているかのように断言しない。

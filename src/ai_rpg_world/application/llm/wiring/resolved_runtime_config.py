@@ -124,6 +124,11 @@ class ResolvedLlmRuntimeConfig:
     semantic_passive_top_k: int
     semantic_search_enabled: bool
 
+    # Prediction (#526): 行動前の予測 expected_result を core action tool の
+    # schema に露出するか。``"off"`` (露出せず挙動不変) | ``"optional"`` (schema
+    # に出すが required にしない) | ``"required"`` (毎ターン必須)。
+    expected_result_policy: str
+
     # ──────────────────────────────────────────────────────────────
     # Construction
     # ──────────────────────────────────────────────────────────────
@@ -194,6 +199,9 @@ class ResolvedLlmRuntimeConfig:
         # ロジック。bool 解釈は _parse_truthy で統一)
         episodic_enabled = _parse_truthy(source.get("LLM_EPISODIC_ENABLED"), default=False)
 
+        # Prediction (#526): expected_result 露出 policy
+        expected_result_policy = _resolve_expected_result_policy(source)
+
         return cls(
             short_term_memory_kind=short_term_memory_kind,
             short_term_memory_scheduler_mode=short_term_memory_scheduler_mode,
@@ -211,6 +219,7 @@ class ResolvedLlmRuntimeConfig:
             semantic_llm_gist_enabled=semantic_llm_gist_enabled,
             semantic_passive_top_k=semantic_passive_top_k,
             semantic_search_enabled=semantic_search_enabled,
+            expected_result_policy=expected_result_policy,
         )
 
     @classmethod
@@ -249,6 +258,7 @@ class ResolvedLlmRuntimeConfig:
             semantic_llm_gist_enabled=False,
             semantic_passive_top_k=0,
             semantic_search_enabled=False,
+            expected_result_policy="off",
         )
         unknown = set(overrides) - set(defaults)
         if unknown:
@@ -311,6 +321,24 @@ def _parse_truthy(value: Optional[str], *, default: bool) -> bool:
         f"{value!r} is not a recognized boolean. "
         f"truthy: {sorted(_TRUTHY)}, falsy: {sorted(_FALSY)}"
     )
+
+
+_VALID_EXPECTED_RESULT_POLICIES = frozenset({"off", "optional", "required"})
+
+
+def _resolve_expected_result_policy(source: Mapping[str, str]) -> str:
+    """``LLM_EXPECTED_RESULT_POLICY`` を解決 (#526 / PR #434 fail-fast 継承)。
+
+    未設定 / 空文字 → ``"off"`` (露出せず挙動不変)。off / optional / required の
+    いずれでもなければ ``ValueError``。
+    """
+    raw = (source.get("LLM_EXPECTED_RESULT_POLICY") or "off").strip().lower()
+    if raw not in _VALID_EXPECTED_RESULT_POLICIES:
+        raise ValueError(
+            f"LLM_EXPECTED_RESULT_POLICY={raw!r} is not recognized. "
+            f"valid: {sorted(_VALID_EXPECTED_RESULT_POLICIES)}"
+        )
+    return raw
 
 
 _VALID_LLM_CLIENT_KINDS = frozenset({"stub", "litellm"})

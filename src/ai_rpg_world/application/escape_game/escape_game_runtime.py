@@ -128,6 +128,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
+from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+    with_expected_result_schema,
+)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -350,6 +353,11 @@ class EscapeGameRuntime:
     # 含む従来構成、``False`` なら純スポットグラフ + speech のみ。
     # Issue #155 (TODO 設計の再評価) の判断材料を取るための比較実験用。
     _include_todo_tools: bool = field(default=True, repr=False)
+    # Prediction (#526 v0): 行動前の予測 expected_result を core action tool の
+    # schema に露出する policy。``"off"`` (露出せず=既定/挙動不変) | ``"optional"``
+    # (schema に出すが必須にしない) | ``"required"`` (毎ターン必須)。factory が
+    # ResolvedLlmRuntimeConfig.expected_result_policy から設定する。
+    _expected_result_policy: str = field(default="off", repr=False)
     # PR 2 (#227): speech 配信経路統一。PlayerSpokeEvent をドメインイベント
     # として fire し、ObservationPipeline → buffer 経路で配信する。直接
     # broadcast (旧 _append_agent_speech) は廃止。
@@ -715,7 +723,10 @@ class EscapeGameRuntime:
         tool) も併せて含める。``_episodic_stack=None`` 時は出さない (= 学習
         パイプラインが無い実験 run と区別する)。
         """
-        spot = [defn for defn, _ in get_spot_graph_specs()]
+        spot = [
+            self._with_expected_result_if_enabled(defn)
+            for defn, _ in get_spot_graph_specs()
+        ]
         if not self._include_todo_tools:
             return spot
         # Issue #526 後続: tool を expose するタイミングで auxiliary stack を
@@ -732,6 +743,35 @@ class EscapeGameRuntime:
             )
         ]
         return spot + memo
+
+    # Prediction (#526 v0): expected_result 露出の対象 tool。記録経路 (do_* →
+    # _record_action_result) に subjective を配線済みの core action だけに限定する
+    # (= 露出範囲と structured 保存範囲を一致させる)。listen / item 系 / attack
+    # 等は generic 記録経路が未配線なので露出しない。
+    _EXPECTED_RESULT_TARGET_TOOLS = frozenset(
+        {
+            TOOL_NAME_SPOT_GRAPH_EXPLORE,
+            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
+            TOOL_NAME_SPOT_GRAPH_WAIT,
+        }
+    )
+
+    def _with_expected_result_if_enabled(
+        self, definition: ToolDefinitionDto
+    ) -> ToolDefinitionDto:
+        """policy が off 以外かつ対象 tool なら expected_result を schema に足す。
+
+        off (既定) では definition をそのまま返す = 挙動不変。optional は properties
+        にのみ、required は required にも追加する。
+        """
+        if self._expected_result_policy == "off":
+            return definition
+        if definition.name not in self._EXPECTED_RESULT_TARGET_TOOLS:
+            return definition
+        return with_expected_result_schema(
+            definition, required=self._expected_result_policy == "required"
+        )
 
     # ── 観測パイプライン: イベントを処理して各プレイヤーに配信 ──
 
@@ -2053,6 +2093,7 @@ def create_escape_game_runtime(
         safe_intro=safe_intro,
         participant_names=participants,
         enable_string_seed_of_thought=_escape_llm_ssot_enabled_from_env(),
+        expected_result_policy=config.expected_result_policy,
     )
 
     # Issue #264 第16回実験 fix: シナリオに player_spawns がある場合、
@@ -2109,6 +2150,7 @@ def create_escape_game_runtime(
                     safe_intro=safe_intro,
                     participant_names=other_names,
                     enable_string_seed_of_thought=_escape_llm_ssot_enabled_from_env(),
+                    expected_result_policy=config.expected_result_policy,
                 )
             )
 
@@ -3031,6 +3073,8 @@ def create_escape_game_runtime(
             if include_todo_tools is not None
             else _include_todo_tools_from_env()
         ),
+        # Prediction (#526 v0): expected_result 露出 policy を config から設定。
+        _expected_result_policy=config.expected_result_policy,
     )
     scenario_event_stage.set_message_callback(
         runtime._append_scenario_event_observation
