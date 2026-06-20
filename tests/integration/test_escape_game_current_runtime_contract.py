@@ -1219,10 +1219,11 @@ def test_phase_b_trace_tick_none_when_current_tick_raises(
 def test_phase_b_records_memo_hint_trace(
     clean_runtime_env: None,
 ) -> None:
-    """memo 完了 hint 発火時に MEMO_HINT trace が memo_id/similarity 付きで記録される。
+    """memo 完了 hint 発火時に MEMO_HINT trace が memo_id/memo_content/similarity/tool_name 付きで記録される。
 
     escape では hint の『メッセージ追記』は別テストで担保済みだが、MEMO_HINT trace
-    event 自体の発火は未カバーだったため移植する。"""
+    event 自体の発火は未カバーだったため移植する。旧 orchestrator trace test が見ていた
+    memo_content も固定し、re-home の完全性を保つ (#564 レビュー反映)。"""
     from types import SimpleNamespace
 
     from ai_rpg_world.application.trace import TraceEventKind
@@ -1257,5 +1258,6 @@ def test_phase_b_records_memo_hint_trace(
     assert len(memo_events) == 1
     payload = memo_events[0].payload
     assert payload["memo_id"] == "m1"
+    assert payload["memo_content"] == "祭壇を調べる"
     assert payload["similarity"] == 0.951
     assert payload["tool_name"] == _CONTRACT_PROBE_TOOL
