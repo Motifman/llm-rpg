@@ -9,7 +9,11 @@ semantic_promotion.on_after_tool_turn」を共有コアに抽出する。escape 
 
 - **hook 順序は escape baseline**: append → chunk → promotion。full orchestrator は
   append と chunk の間に loop_guard を挟むため、loop_guard はこの recorder に
-  含めず呼び出し側に残す。将来 full path が採用する際もこの境界で寄せる。
+  含めず呼び出し側に残す。なお ``record()`` は append→chunk→promotion を一体で
+  実行する粒度なので、full path がこのまま drop-in 採用できるわけではない
+  (full の append→loop_guard→chunk 順に挿入するには append と after-append hooks を
+  分離する / after_append callback を受ける等の API 調整が要る)。これは U-later の
+  full 採用時に詰める。
 - **error isolation**: chunk / promotion が例外を投げても logger.exception で記録し、
   append 済みの action 完了は止めない (memory pipeline の失敗を行動完了に波及させない)。
 - **episodic_stack は呼び出しごとに受ける**: stack は runtime 構築後に遅延配線
