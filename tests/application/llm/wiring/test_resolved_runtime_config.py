@@ -47,6 +47,57 @@ class TestFromEnvDefaults:
         assert cfg.semantic_search_enabled is False
 
 
+class TestExpectedResultPolicy:
+    """予測 (expected_result) 露出 policy の解決 (off/optional/required)。"""
+
+    def test_未設定なら_off(self) -> None:
+        """LLM_EXPECTED_RESULT_POLICY 未設定なら off (= schema に出さず挙動不変)。"""
+        cfg = ResolvedLlmRuntimeConfig.from_env(env={})
+        assert cfg.expected_result_policy == "off"
+
+    def test_optional_を_resolve(self) -> None:
+        """optional を解決する (大文字・空白も吸収)。"""
+        cfg = ResolvedLlmRuntimeConfig.from_env(env={"LLM_EXPECTED_RESULT_POLICY": " Optional "})
+        assert cfg.expected_result_policy == "optional"
+
+    def test_required_を_resolve(self) -> None:
+        """required を解決する。"""
+        cfg = ResolvedLlmRuntimeConfig.from_env(env={"LLM_EXPECTED_RESULT_POLICY": "required"})
+        assert cfg.expected_result_policy == "required"
+
+    def test_不正値は_ValueError(self) -> None:
+        """未知の policy は fail-fast で ValueError。"""
+        with pytest.raises(ValueError, match="LLM_EXPECTED_RESULT_POLICY"):
+            ResolvedLlmRuntimeConfig.from_env(env={"LLM_EXPECTED_RESULT_POLICY": "maybe"})
+
+    def test_for_tests_default_off(self) -> None:
+        """for_tests の default は off。"""
+        assert ResolvedLlmRuntimeConfig.for_tests().expected_result_policy == "off"
+
+    def test_for_tests_override(self) -> None:
+        """for_tests で override できる。"""
+        cfg = ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="required")
+        assert cfg.expected_result_policy == "required"
+
+    def test_to_trace_dict_に_含まれる(self) -> None:
+        """trace payload に policy が出る (run の設定を post-hoc で追える)。"""
+        cfg = ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="optional")
+        assert cfg.to_trace_dict()["expected_result_policy"] == "optional"
+
+    def test_for_tests_不正値も_fail_fast(self) -> None:
+        """for_tests 経由の typo も __post_init__ で ValueError (from_env 以外も fail-fast)。"""
+        with pytest.raises(ValueError, match="expected_result_policy"):
+            ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="optionnal")
+
+    def test_直接構築の不正値も_fail_fast(self) -> None:
+        """cls(...) 直接構築の typo も __post_init__ で ValueError。"""
+        base = ResolvedLlmRuntimeConfig.for_tests()
+        from dataclasses import replace
+
+        with pytest.raises(ValueError, match="expected_result_policy"):
+            replace(base, expected_result_policy="maybe")
+
+
 class TestFromEnvExplicit:
     """env 明示で全フィールドが正しく resolve される。"""
 

@@ -22,7 +22,9 @@ from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
@@ -291,6 +293,75 @@ def test_default_escape_game_prompt_is_spot_graph_and_semantic_free(
     assert "spot_graph_travel_to" in tool_names
     assert "memory_recall_episodes" not in tool_names
     assert runtime._episodic_stack is None
+
+
+def _tool_by_name(runtime, name: str):
+    for definition in runtime.get_tool_definitions():
+        if definition.name == name:
+            return definition
+    raise AssertionError(f"tool {name} not found")
+
+
+def test_expected_result_policy_off_exposes_no_prediction_field(
+    clean_runtime_env: None,
+) -> None:
+    """U2 後続 v0: policy off (既定) では expected_result が schema にも prompt にも出ない。"""
+    runtime = _create_runtime()  # for_tests default = off
+    explore = _tool_by_name(runtime, TOOL_NAME_SPOT_GRAPH_EXPLORE)
+    assert "expected_result" not in explore.parameters["properties"]
+    player_id = runtime.get_player_ids()[0]
+    system = "\n".join(
+        m.get("content", "")
+        for m in runtime.build_full_prompt(player_id).get("messages", [])
+        if m.get("role") == "system"
+    )
+    assert "expected_result" not in system
+
+
+def test_expected_result_policy_optional_exposes_field_not_required(
+    clean_runtime_env: None,
+) -> None:
+    """v0: optional で対象4ツールに expected_result が出るが required にならない。非対象には出ない。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="optional")
+    )
+    for name in (
+        TOOL_NAME_SPOT_GRAPH_EXPLORE,
+        TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+        TOOL_NAME_SPOT_GRAPH_INTERACT,
+        TOOL_NAME_SPOT_GRAPH_WAIT,
+    ):
+        defn = _tool_by_name(runtime, name)
+        assert "expected_result" in defn.parameters["properties"], name
+        assert "expected_result" not in defn.parameters.get("required", []), name
+    # 非対象 tool (listen) には露出しない = 露出範囲 = 記録配線範囲
+    listen = _tool_by_name(runtime, TOOL_NAME_SPOT_GRAPH_LISTEN)
+    assert "expected_result" not in listen.parameters["properties"]
+    # prompt にも予測ルール行が出る
+    player_id = runtime.get_player_ids()[0]
+    system = "\n".join(
+        m.get("content", "")
+        for m in runtime.build_full_prompt(player_id).get("messages", [])
+        if m.get("role") == "system"
+    )
+    assert "expected_result" in system
+
+
+def test_expected_result_policy_required_makes_field_required(
+    clean_runtime_env: None,
+) -> None:
+    """v0: required で対象4ツールの required に expected_result が入る。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="required")
+    )
+    for name in (
+        TOOL_NAME_SPOT_GRAPH_EXPLORE,
+        TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+        TOOL_NAME_SPOT_GRAPH_INTERACT,
+        TOOL_NAME_SPOT_GRAPH_WAIT,
+    ):
+        defn = _tool_by_name(runtime, name)
+        assert "expected_result" in defn.parameters["required"], name
 
 
 def test_escape_game_build_full_prompt_uses_shared_default_prompt_builder(
