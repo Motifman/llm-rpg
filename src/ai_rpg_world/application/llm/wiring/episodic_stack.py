@@ -66,6 +66,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
         IEpisodicRecallHabituationStore,
     )
+    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+        IEpisodicRecallSlotStore,
+    )
 
 from ai_rpg_world.application.llm.scheduler import (
     IEpisodicSubjectiveCompletionScheduler,
@@ -198,6 +201,12 @@ class EpisodicStack:
         "IEpisodicRecallHabituationStore"
     ] = None
     recall_habituation_decay_window_ticks: int = 5
+    # #526 段階 3: 想起スロット sidecar (default off)。env で enable 時に
+    # in-memory store を構築し、passive_recall と prompt_builder の両方に渡す。
+    # 4 パラメータ (capacity / insert_per_tick / max_residence / cooldown_ticks)
+    # で運用を調整する。
+    recall_slot_store: Optional["IEpisodicRecallSlotStore"] = None
+    recall_slot_cooldown_ticks: int = 5
 
 
 def build_scenario_noun_matcher(
@@ -296,6 +305,12 @@ def build_episodic_stack(
     ] = None,
     recall_habituation_enabled: bool = False,
     recall_habituation_decay_window_ticks: int = 5,
+    # #526 段階 3: 想起スロット (working memory) 配線。env で enable する。
+    recall_slot_enabled: bool = False,
+    recall_slot_capacity: int = 6,
+    recall_slot_insert_per_tick: int = 3,
+    recall_slot_max_residence: int = 5,
+    recall_slot_cooldown_ticks: int = 5,
     # #526 後続 C1: world_object 名を index するために spot_interior_repo を
     # 任意で受け取る。実 runtime では SpotNode.interior が None で別 repo に
     # 保管されているため、prose から object 名を拾うにはこの経路が必要。
@@ -418,12 +433,30 @@ def build_episodic_stack(
             InMemoryEpisodicRecallHabituationStore,
         )
         recall_habituation_store = InMemoryEpisodicRecallHabituationStore()
+    # #526 段階 3: 想起スロット (working memory)。慣化と独立に on/off できる。
+    # store + policy が揃ったときだけ passive_recall に注入される。
+    recall_slot_store: Optional["IEpisodicRecallSlotStore"] = None
+    recall_slot_policy_obj = None
+    if recall_slot_enabled:
+        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+            InMemoryEpisodicRecallSlotStore,
+            RecallSlotPolicy,
+        )
+        recall_slot_store = InMemoryEpisodicRecallSlotStore()
+        recall_slot_policy_obj = RecallSlotPolicy(
+            capacity=recall_slot_capacity,
+            insert_per_tick=recall_slot_insert_per_tick,
+            max_residence=recall_slot_max_residence,
+            cooldown_ticks=recall_slot_cooldown_ticks,
+        )
     passive_recall = EpisodicPassiveRecallRetrievalService(
         episode_store,
         being_attachment_resolver=being_attachment_resolver,
         default_world_id=default_world_id,
         habituation_store=recall_habituation_store,
         habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
+        slot_store=recall_slot_store,
+        slot_policy=recall_slot_policy_obj,
     )
     # noun_matcher は上で chunk_coordinator 用に先に構築済 (Fix A)
 
@@ -494,6 +527,8 @@ def build_episodic_stack(
         recall_buffer_store=prompt_recall_buffer,
         recall_habituation_store=recall_habituation_store,
         recall_habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
+        recall_slot_store=recall_slot_store,
+        recall_slot_cooldown_ticks=recall_slot_cooldown_ticks,
     )
 
 

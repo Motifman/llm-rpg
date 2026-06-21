@@ -608,3 +608,155 @@ class TestEpisodicPassiveRecallRetrievalHabituation:
             max_candidates=2,
         )
         assert result.debug.habituation_penalty_by_episode == ()
+
+
+class TestEpisodicPassiveRecallRetrievalSlot:
+    """想起スロット (working memory) — #526 後続 段階 3。
+
+    cue match だけで毎 tick 再計算する従来挙動と異なり、前 tick の slot を
+    持ち越し、L 超過と cooldown で構造的に turn over させることを保証する。
+    """
+
+    def _setup(self):
+        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+            InMemoryEpisodicRecallSlotStore,
+            RecallSlotPolicy,
+        )
+
+        store = InMemorySubjectiveEpisodeStore()
+        c_place = EpisodicCue(
+            axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT
+        )
+        base = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        for i in range(5):
+            store.put_by_being(
+                being_id,
+                _episode(
+                    episode_id=f"ep-{i}",
+                    occurred_at=base - timedelta(hours=i),
+                    cues=(c_place,),
+                ),
+            )
+        res, wid = _make_resolver_and_being()
+        slot_store = InMemoryEpisodicRecallSlotStore()
+        policy = RecallSlotPolicy(
+            capacity=3, insert_per_tick=2, max_residence=5, cooldown_ticks=5
+        )
+        return store, slot_store, policy, res, wid, c_place
+
+    def test_slot_未注入なら_既存挙動と同一(self) -> None:
+        """``slot_store=None`` で構成すれば従来の round-robin 結果と debug は同じ。"""
+        store, _slot, _policy, res, wid, c_place = self._setup()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store, being_attachment_resolver=res, default_world_id=wid
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place,),
+            limit_per_axis=5,
+            max_candidates=3,
+        )
+        assert result.debug.recall_slot_decision is None
+
+    def test_slot_有効時は_K_insert_までしか新規挿入されない(self) -> None:
+        """初回 tick は空 slot から K_insert=2 件だけ挿入される。"""
+        store, slot_store, policy, res, wid, c_place = self._setup()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            slot_store=slot_store,
+            slot_policy=policy,
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place,),
+            limit_per_axis=5,
+            max_candidates=5,
+            current_tick=0,
+        )
+        decision = result.debug.recall_slot_decision
+        assert decision is not None
+        assert len(decision.inserted) == 2  # K_insert=2
+        assert len(decision.retained) == 0
+        ids = [c.episode.episode_id for c in result.candidates]
+        assert len(ids) == 2
+
+    def test_前_tick_の_slot_は_持ち越される(self) -> None:
+        """tick 0 で 2 件入った slot は tick 1 でも持ち越され、retained=2 になる。"""
+        store, slot_store, policy, res, wid, c_place = self._setup()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            slot_store=slot_store,
+            slot_policy=policy,
+        )
+        # tick 0: slot に 2 件入る
+        r0 = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place,),
+            limit_per_axis=5,
+            max_candidates=5,
+            current_tick=0,
+        )
+        # prompt_builder のフリをして decision を store に反映
+        slot_store.apply_decision(
+            being_id, r0.debug.recall_slot_decision,
+            current_tick=0, cooldown_ticks=5,
+        )
+        # tick 1: 持ち越し + K_insert で N まで埋まる
+        r1 = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place,),
+            limit_per_axis=5,
+            max_candidates=5,
+            current_tick=1,
+        )
+        decision = r1.debug.recall_slot_decision
+        assert decision is not None
+        retained_ids = {e.episode_id for e in decision.retained}
+        prev_ids = {e.episode_id for e in r0.debug.recall_slot_decision.inserted}
+        # tick 0 の inserted がそのまま retained に
+        assert retained_ids == prev_ids
+        # 新規挿入分と合わせて N=3 件
+        assert len(decision.new_slot) == 3
+
+    def test_max_residence_超過で退去_cooldown_で再入不可(self) -> None:
+        """L=5 超過の entry は evict、その後 C=5 tick の間は同じ episode が再入できない。"""
+        store, slot_store, policy, res, wid, c_place = self._setup()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            slot_store=slot_store,
+            slot_policy=policy,
+        )
+        # tick 0 で 2 件 ep-0, ep-1 を入れる
+        r0 = svc.retrieve(
+            player_id=7, situation_cues=(c_place,),
+            limit_per_axis=5, max_candidates=5, current_tick=0,
+        )
+        first_ids = [e.episode_id for e in r0.debug.recall_slot_decision.inserted]
+        slot_store.apply_decision(
+            being_id, r0.debug.recall_slot_decision,
+            current_tick=0, cooldown_ticks=5,
+        )
+        # tick 5 (= L 経過) で強制退去 + cooldown 行き
+        r5 = svc.retrieve(
+            player_id=7, situation_cues=(c_place,),
+            limit_per_axis=5, max_candidates=5, current_tick=5,
+        )
+        evicted = set(r5.debug.recall_slot_decision.evicted_ids)
+        assert evicted == set(first_ids)
+        slot_store.apply_decision(
+            being_id, r5.debug.recall_slot_decision,
+            current_tick=5, cooldown_ticks=5,
+        )
+        # cooldown 中 (tick 5..9) は first_ids が new_slot に登場しない
+        r6 = svc.retrieve(
+            player_id=7, situation_cues=(c_place,),
+            limit_per_axis=5, max_candidates=5, current_tick=6,
+        )
+        slot_ids = {e.episode_id for e in r6.debug.recall_slot_decision.new_slot}
+        assert slot_ids.isdisjoint(first_ids)

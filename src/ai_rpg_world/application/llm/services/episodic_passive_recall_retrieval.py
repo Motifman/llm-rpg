@@ -25,6 +25,12 @@ from ai_rpg_world.application.llm.services.episodic_recall_habituation_store imp
     IEpisodicRecallHabituationStore,
     compute_habituation_penalty,
 )
+from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+    IEpisodicRecallSlotStore,
+    RecallSlotDecision,
+    RecallSlotPolicy,
+    apply_slot_policy,
+)
 from ai_rpg_world.application.llm.passive_recall_cue_families import (
     PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
     PASSIVE_RECALL_PLACE_FAMILY_LABEL,
@@ -185,6 +191,11 @@ class EpisodicPassiveRecallRetrievalDebug:
     penalty=0 のものや habituation off 時は空 tuple。post-hoc で「どの episode
     がどれだけ沈んだか」を計測できる。"""
     habituation_penalty_by_episode: tuple[tuple[str, int], ...] = ()
+    """#526 後続 段階 3: 想起スロットが有効なときの 1 tick 分の更新内容。
+    slot off (= 従来挙動) のときは ``None``。
+    retained / inserted / evicted_ids を見ると prefix cache 親和性と慣化の
+    動きが post-hoc で追える。"""
+    recall_slot_decision: Optional[RecallSlotDecision] = None
 
 
 @dataclass(frozen=True)
@@ -212,6 +223,8 @@ class EpisodicPassiveRecallRetrievalService:
         default_world_id: Optional[WorldId] = None,
         habituation_store: Optional[IEpisodicRecallHabituationStore] = None,
         habituation_decay_window_ticks: int = 5,
+        slot_store: Optional[IEpisodicRecallSlotStore] = None,
+        slot_policy: Optional[RecallSlotPolicy] = None,
     ) -> None:
         # Phase 3 Step 3c-3: legacy player_id 経路は撤去済。Resolver+WorldId が
         # 未注入 / Being 未 provision の場合は spreading 軸を skip
@@ -241,6 +254,14 @@ class EpisodicPassiveRecallRetrievalService:
         # (= default off で既存挙動と完全同一)。
         self._habituation_store = habituation_store
         self._habituation_decay_window_ticks = habituation_decay_window_ticks
+        # #526 段階 3: 想起スロット (working memory)。store + policy が両方
+        # 揃ったときだけ動く。default off で既存挙動と完全同一。
+        if slot_store is not None and slot_policy is None:
+            raise ValueError(
+                "slot_policy must be provided when slot_store is given"
+            )
+        self._slot_store = slot_store
+        self._slot_policy = slot_policy
 
     def _resolve_being_id(self, player_id: int) -> Optional[BeingId]:
         """dual-path: Resolver+WorldId 揃いつつ Being が attach 済なら BeingId、
@@ -447,6 +468,44 @@ class EpisodicPassiveRecallRetrievalService:
 
         capped_ids = _round_robin_pick_episode_ids(arms, max_candidates)
 
+        # #526 段階 3: 想起スロットが有効なら、capped_ids を score 順候補
+        # として扱い、prev_slot を持ち越し / cooldown を尊重 / K_insert で
+        # 新規挿入数を絞った new_slot 順に並べ替える。slot off (= store /
+        # policy 未注入 or being_id 未解決) のときは round-robin 結果を
+        # そのまま使い既存挙動を保つ。
+        slot_decision: Optional[RecallSlotDecision] = None
+        if (
+            self._slot_store is not None
+            and self._slot_policy is not None
+            and being_id is not None
+            and current_tick is not None
+        ):
+            prev_slot = self._slot_store.get_slot(being_id)
+            cooldown_until = self._slot_store.get_cooldown_until(being_id)
+            slot_decision = apply_slot_policy(
+                prev_slot=prev_slot,
+                candidate_episode_ids_in_score_order=capped_ids,
+                cooldown_until=cooldown_until,
+                current_tick=current_tick,
+                policy=self._slot_policy,
+            )
+            # slot.new_slot に居る episode が今 tick の recall。retained は
+            # 前 tick の episode_by_id に無い可能性があるため、足りない分は
+            # store から取りに行く (= 想起の長続きを実現する核)。
+            for entry in slot_decision.new_slot:
+                if entry.episode_id in episode_by_id:
+                    continue
+                if being_id is None:
+                    continue
+                ep = self._store.get_by_being(being_id, entry.episode_id)
+                if ep is None:
+                    continue
+                episode_by_id[entry.episode_id] = ep
+                # retained 由来は cue arm から外れているので source_axes に
+                # 「slot_retained」を立て、trace で識別可能にする。
+                source_axes_by_episode[entry.episode_id].add("slot_retained")
+            capped_ids = [e.episode_id for e in slot_decision.new_slot]
+
         candidates: list[EpisodicPassiveRecallCandidate] = []
         candidate_sources: list[tuple[str, tuple[str, ...]]] = []
         axis_hits: defaultdict[str, int] = defaultdict(int)
@@ -470,6 +529,7 @@ class EpisodicPassiveRecallRetrievalService:
             candidate_episode_sources=tuple(candidate_sources),
             final_episode_count_by_source_axis=final_axis_counts,
             habituation_penalty_by_episode=habituation_payload,
+            recall_slot_decision=slot_decision,
         )
         return EpisodicPassiveRecallRetrievalResult(candidates=tuple(candidates), debug=debug)
 

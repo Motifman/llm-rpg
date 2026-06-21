@@ -141,6 +141,19 @@ class ResolvedLlmRuntimeConfig:
     recall_habituation_enabled: bool = False
     recall_habituation_decay_window_ticks: int = 5
 
+    # #526 段階 3: 想起スロット (working memory)。
+    # ``LLM_EPISODIC_RECALL_SLOT_ENABLED=1`` で ON、4 つのパラメータは
+    # それぞれ ``LLM_EPISODIC_RECALL_SLOT_CAPACITY`` /
+    # ``LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK`` /
+    # ``LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE`` /
+    # ``LLM_EPISODIC_RECALL_SLOT_COOLDOWN`` で上書き可。
+    # default は議論の合意値 (N=6 / K_insert=3 / L=5 / C=5)。
+    recall_slot_enabled: bool = False
+    recall_slot_capacity: int = 6
+    recall_slot_insert_per_tick: int = 3
+    recall_slot_max_residence: int = 5
+    recall_slot_cooldown_ticks: int = 5
+
     # ──────────────────────────────────────────────────────────────
     # Invariants
     # ──────────────────────────────────────────────────────────────
@@ -245,6 +258,23 @@ class ResolvedLlmRuntimeConfig:
             source
         )
 
+        # #526 段階 3: 想起スロット (default off / N=6 K=3 L=5 C=5)
+        recall_slot_enabled = _parse_truthy(
+            source.get("LLM_EPISODIC_RECALL_SLOT_ENABLED"), default=False
+        )
+        recall_slot_capacity = _resolve_non_negative_int(
+            source, "LLM_EPISODIC_RECALL_SLOT_CAPACITY", default=6
+        )
+        recall_slot_insert_per_tick = _resolve_non_negative_int(
+            source, "LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK", default=3
+        )
+        recall_slot_max_residence = _resolve_non_negative_int(
+            source, "LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE", default=5
+        )
+        recall_slot_cooldown_ticks = _resolve_non_negative_int(
+            source, "LLM_EPISODIC_RECALL_SLOT_COOLDOWN", default=5
+        )
+
         return cls(
             short_term_memory_kind=short_term_memory_kind,
             short_term_memory_scheduler_mode=short_term_memory_scheduler_mode,
@@ -266,6 +296,11 @@ class ResolvedLlmRuntimeConfig:
             episodic_reinterpretation_enabled=episodic_reinterpretation_enabled,
             recall_habituation_enabled=recall_habituation_enabled,
             recall_habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
+            recall_slot_enabled=recall_slot_enabled,
+            recall_slot_capacity=recall_slot_capacity,
+            recall_slot_insert_per_tick=recall_slot_insert_per_tick,
+            recall_slot_max_residence=recall_slot_max_residence,
+            recall_slot_cooldown_ticks=recall_slot_cooldown_ticks,
         )
 
     @classmethod
@@ -308,6 +343,11 @@ class ResolvedLlmRuntimeConfig:
             episodic_reinterpretation_enabled=False,
             recall_habituation_enabled=False,
             recall_habituation_decay_window_ticks=5,
+            recall_slot_enabled=False,
+            recall_slot_capacity=6,
+            recall_slot_insert_per_tick=3,
+            recall_slot_max_residence=5,
+            recall_slot_cooldown_ticks=5,
         )
         unknown = set(overrides) - set(defaults)
         if unknown:
@@ -388,6 +428,26 @@ def _resolve_expected_result_policy(source: Mapping[str, str]) -> str:
             f"valid: {sorted(_VALID_EXPECTED_RESULT_POLICIES)}"
         )
     return raw
+
+
+def _resolve_non_negative_int(
+    source: Mapping[str, str], key: str, *, default: int
+) -> int:
+    """``key`` を 0 以上の整数として解決。未設定 / 空文字 → ``default``。
+
+    負値・非数値は ``ValueError`` で fail-fast。``_resolve_recall_habituation_decay``
+    と同じ方針を共有 helper として一般化したもの。
+    """
+    raw = (source.get(key) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as e:
+        raise ValueError(f"{key}={raw!r} is not an integer") from e
+    if value < 0:
+        raise ValueError(f"{key}={value} must be 0 or greater")
+    return value
 
 
 def _resolve_recall_habituation_decay(source: Mapping[str, str]) -> int:
