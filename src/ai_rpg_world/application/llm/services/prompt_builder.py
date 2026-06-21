@@ -499,6 +499,13 @@ class DefaultPromptBuilder(IPromptBuilder):
         # にも別途注入されており、prompt_builder 側は record_recall (書込)
         # のためにだけ参照する (retrieve は read-only)。
         self._episodic_recall_habituation_store = episodic.recall_habituation_store
+        # #526 段階 3: 想起スロット sidecar (任意)。default off。retrieve service
+        # 側にも別途注入されており、prompt_builder 側は apply_decision (書込)
+        # のためにだけ参照する (retrieve は read-only)。
+        self._episodic_recall_slot_store = episodic.recall_slot_store
+        self._episodic_recall_slot_cooldown_ticks = (
+            episodic.recall_slot_cooldown_ticks
+        )
         self._noun_matcher = noun_matcher
         # Phase 1c
         self._semantic_passive_recall = semantic_passive_recall
@@ -690,6 +697,22 @@ class DefaultPromptBuilder(IPromptBuilder):
                     eid: penalty
                     for eid, penalty in retrieval_debug.habituation_penalty_by_episode
                 }
+                # #526 段階 3: 想起スロットの 1 tick 分の動きを trace に残す。
+                # off 時は decision=None なので何も書かない (= 既存挙動)。
+                slot_decision = retrieval_debug.recall_slot_decision
+                if slot_decision is not None:
+                    debug_kwargs["recall_slot"] = {
+                        "retained": [
+                            {"episode_id": e.episode_id, "entered_tick": e.entered_tick}
+                            for e in slot_decision.retained
+                        ],
+                        "inserted": [
+                            {"episode_id": e.episode_id, "entered_tick": e.entered_tick}
+                            for e in slot_decision.inserted
+                        ],
+                        "evicted_ids": list(slot_decision.evicted_ids),
+                        "new_slot_size": len(slot_decision.new_slot),
+                    }
             except Exception:
                 # debug 構造が想定外でも recall trace 本体は落とさない。
                 self._logger.debug(
@@ -1035,6 +1058,30 @@ class DefaultPromptBuilder(IPromptBuilder):
                 # sidecar 書き込み失敗は recall 自体を止めない (graceful)。
                 self._logger.warning(
                     "habituation_store.record_recall failed; recall は完走しました",
+                    exc_info=True,
+                )
+
+        # #526 段階 3: 想起スロット sidecar の更新も retrieve 後に行う。
+        # retrieve 内で apply_slot_policy の結果が ``debug.recall_slot_decision``
+        # に乗っているので、それを store に反映する。slot off (= decision None)
+        # のときは silent skip。
+        slot_decision = recall_result.debug.recall_slot_decision
+        if (
+            self._episodic_recall_slot_store is not None
+            and being_id is not None
+            and current_tick_for_habituation is not None
+            and slot_decision is not None
+        ):
+            try:
+                self._episodic_recall_slot_store.apply_decision(
+                    being_id,
+                    slot_decision,
+                    current_tick=current_tick_for_habituation,
+                    cooldown_ticks=self._episodic_recall_slot_cooldown_ticks,
+                )
+            except Exception:
+                self._logger.warning(
+                    "recall_slot_store.apply_decision failed; recall は完走しました",
                     exc_info=True,
                 )
 
