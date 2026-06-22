@@ -305,12 +305,14 @@ def build_episodic_stack(
     ] = None,
     recall_habituation_enabled: bool = False,
     recall_habituation_decay_window_ticks: int = 5,
-    # #526 段階 3: 想起スロット (working memory) 配線。env で enable する。
+    # #526 段階 3 + PR-A: 想起スロット (working memory) 配線。env で enable する。
+    # default は「希少資源」化された slot 運用値 (N=4 / K=1 / L=8 / C=5 / 閾値=2)。
     recall_slot_enabled: bool = False,
-    recall_slot_capacity: int = 6,
-    recall_slot_insert_per_tick: int = 3,
-    recall_slot_max_residence: int = 5,
+    recall_slot_capacity: int = 4,
+    recall_slot_insert_per_tick: int = 1,
+    recall_slot_max_residence: int = 8,
     recall_slot_cooldown_ticks: int = 5,
+    recall_slot_insert_score_threshold: int = 2,
     # #526 後続 C1: world_object 名を index するために spot_interior_repo を
     # 任意で受け取る。実 runtime では SpotNode.interior が None で別 repo に
     # 保管されているため、prose から object 名を拾うにはこの経路が必要。
@@ -448,6 +450,7 @@ def build_episodic_stack(
             insert_per_tick=recall_slot_insert_per_tick,
             max_residence=recall_slot_max_residence,
             cooldown_ticks=recall_slot_cooldown_ticks,
+            insert_score_threshold=recall_slot_insert_score_threshold,
         )
     passive_recall = EpisodicPassiveRecallRetrievalService(
         episode_store,

@@ -190,3 +190,109 @@ class TestInMemoryEpisodicRecallSlotStore:
         store.apply_decision(being_a, decision, current_tick=0, cooldown_ticks=5)
         assert store.get_slot(being_a) != ()
         assert store.get_slot(being_b) == ()
+
+
+class TestRecallSlotPolicyInsertScoreThreshold:
+    """slot を「希少資源」化するため、新規挿入には最小 score を要求する。
+
+    現状 multi_cue_score 1 (= cue が 1 種類だけマッチ) でも slot に入って
+    しまうと、N=4 / K=1 の希少枠が「ちょっと当たっただけの弱い記憶」で
+    埋まり「鮮明な記憶」と「ぼんやり覚えてる」の階層構造が壊れる。
+    そこで insert_score_threshold (= 挿入可能な最小スコア) を policy に
+    持たせる。default は 2 (= 2 つ以上の cue 軸で当たった episode のみ
+    slot に入れる)。
+    """
+
+    def test_threshold_default_is_two(self) -> None:
+        """既存の呼び出し側が threshold を明示しなくても新規挿入が
+        「弱い記憶を slot に入れない」方針に倒れる安全側 default。"""
+        policy = RecallSlotPolicy(
+            capacity=4, insert_per_tick=1, max_residence=8, cooldown_ticks=5
+        )
+        assert policy.insert_score_threshold == 2
+
+    def test_negative_threshold_raises_value_error(self) -> None:
+        """capacity 等と同じく 0 以上の int 制約。負値はエラーで弾く。"""
+        with pytest.raises(ValueError):
+            RecallSlotPolicy(
+                capacity=4,
+                insert_per_tick=1,
+                max_residence=8,
+                cooldown_ticks=5,
+                insert_score_threshold=-1,
+            )
+
+
+class TestApplySlotPolicyScoreThreshold:
+    """score 閾値を導入し、弱い候補は slot に入らない挙動を保証する。
+
+    apply_slot_policy は候補を (episode_id, score) のペアで受け取り、score が
+    policy.insert_score_threshold を満たさないものを挿入対象から除く。これに
+    より「鮮明な記憶 = 強い signal だけ」という slot の意味を構造で守る。
+    """
+
+    def _strict_policy(self) -> RecallSlotPolicy:
+        return RecallSlotPolicy(
+            capacity=4,
+            insert_per_tick=1,
+            max_residence=8,
+            cooldown_ticks=5,
+            insert_score_threshold=2,
+        )
+
+    def test_weak_candidate_loses_to_strong_when_strong_is_available(self) -> None:
+        """強い候補 (score=2) が混在するときは、弱い候補 (score=1) は閾値で
+        落ち、強い側だけが挿入される。「強いものがある限り弱いものは入れない」
+        を明文化する。fallback は強い候補が 0 件のときだけ発火するので、
+        ここでは発火しない。"""
+        decision = apply_slot_policy(
+            prev_slot=(),
+            candidate_episode_ids_in_score_order=(("strong", 2), ("weak", 1)),
+            cooldown_until={},
+            current_tick=0,
+            policy=self._strict_policy(),
+        )
+        assert [e.episode_id for e in decision.inserted] == ["strong"]
+        ids = [e.episode_id for e in decision.new_slot]
+        assert "weak" not in ids
+
+    def test_at_or_above_threshold_candidate_is_inserted(self) -> None:
+        """score が閾値以上の候補は通常通り挿入される (= 強い signal のみ通す)。"""
+        decision = apply_slot_policy(
+            prev_slot=(),
+            candidate_episode_ids_in_score_order=(("strong", 2), ("weak", 1)),
+            cooldown_until={},
+            current_tick=0,
+            policy=self._strict_policy(),
+        )
+        assert [e.episode_id for e in decision.inserted] == ["strong"]
+
+    def test_empty_slot_falls_back_to_weak_candidate(self) -> None:
+        """slot が空 (retained 0) で、閾値を満たす候補が無いときは、
+        「鮮明な記憶が無いよりは弱いものでもあった方がマシ」として
+        閾値を一段だけ緩めて 1 件挿入する。afterglow が空のときの空白を
+        防ぐ意図。"""
+        decision = apply_slot_policy(
+            prev_slot=(),
+            candidate_episode_ids_in_score_order=(("weak1", 1), ("weak2", 1)),
+            cooldown_until={},
+            current_tick=0,
+            policy=self._strict_policy(),
+        )
+        # K_insert=1 なので 1 件だけ入る
+        assert [e.episode_id for e in decision.inserted] == ["weak1"]
+
+    def test_retained_blocks_fallback_weak_insertion(self) -> None:
+        """retained が居るときは「鮮明な記憶が既にある」状態なので、
+        弱い候補で穴埋めはしない (= 空き枠は空のまま、prefix cache に
+        やさしい安定)。"""
+        prev = (RecallSlotEntry("kept", entered_tick=0),)
+        decision = apply_slot_policy(
+            prev_slot=prev,
+            candidate_episode_ids_in_score_order=(("weak", 1),),
+            cooldown_until={},
+            current_tick=1,
+            policy=self._strict_policy(),
+        )
+        assert decision.inserted == ()
+        assert [e.episode_id for e in decision.new_slot] == ["kept"]
