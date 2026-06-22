@@ -56,9 +56,21 @@ class RecallSlotPolicy:
     insert_per_tick: int
     max_residence: int
     cooldown_ticks: int
+    # 新規挿入の最小スコア (= multi_cue_score、cue 軸でマッチした distinct
+    # canonical 数)。これ未満の候補は slot に入らない。default 2 は「2 軸以上
+    # で当たった episode だけを鮮明な記憶として扱う」方針。0 で閾値無効化。
+    # 弱い候補も後段の Afterglow index に乗ることで「ぼんやり覚えてる」状態
+    # を表現できるようにし、slot は「希少資源」として強い signal だけが入る。
+    insert_score_threshold: int = 2
 
     def __post_init__(self) -> None:
-        for name in ("capacity", "insert_per_tick", "max_residence", "cooldown_ticks"):
+        for name in (
+            "capacity",
+            "insert_per_tick",
+            "max_residence",
+            "cooldown_ticks",
+            "insert_score_threshold",
+        ):
             v = getattr(self, name)
             if not isinstance(v, int) or isinstance(v, bool):
                 raise TypeError(f"{name} must be int")
@@ -92,7 +104,7 @@ class RecallSlotDecision:
 def apply_slot_policy(
     *,
     prev_slot: Sequence[RecallSlotEntry],
-    candidate_episode_ids_in_score_order: Sequence[str],
+    candidate_episode_ids_in_score_order: Sequence[str | tuple[str, int]],
     cooldown_until: Mapping[str, int],
     current_tick: int,
     policy: RecallSlotPolicy,
@@ -106,10 +118,13 @@ def apply_slot_policy(
        他は ``retained`` として順序保持
     2. 候補から ``retained`` と ``cooldown_until[eid] > current_tick`` のものを除く
     3. 空き枠 ``capacity - len(retained)`` と ``insert_per_tick`` の小さい方の数だけ、
-       score 順に新規挿入
+       score 順に新規挿入。``insert_score_threshold`` 未満の score は除外
+       (ペアでない素の ``str`` が渡されたら閾値判定を skip = 後方互換)
     4. ``new_slot`` = retained + inserted (順序保持)
 
     新規が高 score でも既存の retained を押し出さない (= prefix cache 重視)。
+    候補は ``(episode_id, score)`` ペアでも素の ``str`` でも受け取れる。
+    閾値を効かせたい呼び出し側はペア形式で渡す。
     """
     if not isinstance(current_tick, int) or isinstance(current_tick, bool):
         raise TypeError("current_tick must be int")
@@ -139,17 +154,44 @@ def apply_slot_policy(
     max_inserts = min(free_slots, policy.insert_per_tick)
     inserted: list[RecallSlotEntry] = []
     seen_inserted: set[str] = set()
-    for eid in candidate_episode_ids_in_score_order:
-        if len(inserted) >= max_inserts:
-            break
-        if eid in retained_ids or eid in seen_inserted or eid in evicted_set:
-            continue
-        # cooldown 中なら除外。current_tick >= cooldown_until で復帰
-        cd = cooldown_until.get(eid)
-        if cd is not None and current_tick < cd:
-            continue
-        inserted.append(RecallSlotEntry(episode_id=eid, entered_tick=current_tick))
-        seen_inserted.add(eid)
+
+    def _try_insert(*, ignore_threshold: bool) -> None:
+        """候補列を 1 周して入れられるものを ``inserted`` に積む。
+
+        ``ignore_threshold=True`` のときは score 閾値を無視する fallback。
+        retained が空かつ閾値 pass の候補が 1 件も無い場合だけ呼び、
+        slot が完全に空になるのを救済する。
+        """
+        for raw in candidate_episode_ids_in_score_order:
+            if len(inserted) >= max_inserts:
+                return
+            if isinstance(raw, tuple):
+                eid, score = raw
+            else:
+                eid, score = raw, None
+            if eid in retained_ids or eid in seen_inserted or eid in evicted_set:
+                continue
+            if (
+                not ignore_threshold
+                and score is not None
+                and policy.insert_score_threshold > 0
+                and score < policy.insert_score_threshold
+            ):
+                continue
+            # cooldown 中なら除外。current_tick >= cooldown_until で復帰
+            cd = cooldown_until.get(eid)
+            if cd is not None and current_tick < cd:
+                continue
+            inserted.append(
+                RecallSlotEntry(episode_id=eid, entered_tick=current_tick)
+            )
+            seen_inserted.add(eid)
+
+    _try_insert(ignore_threshold=False)
+    # retained が空 + 閾値 pass の候補も 0 件のときだけ、弱い候補の救済挿入
+    # を許す。retained が居るならその「鮮明な記憶」を弱い候補で水で薄めない。
+    if not inserted and not retained:
+        _try_insert(ignore_threshold=True)
 
     new_slot = tuple(retained) + tuple(inserted)
     return RecallSlotDecision(

@@ -3581,12 +3581,15 @@ def create_world_runtime(
             recall_habituation_decay_window_ticks=(
                 config.recall_habituation_decay_window_ticks
             ),
-            # #526 段階 3: 想起スロット (working memory / default off)
+            # #526 段階 3 + PR-A: 想起スロット (working memory / default off)
             recall_slot_enabled=config.recall_slot_enabled,
             recall_slot_capacity=config.recall_slot_capacity,
             recall_slot_insert_per_tick=config.recall_slot_insert_per_tick,
             recall_slot_max_residence=config.recall_slot_max_residence,
             recall_slot_cooldown_ticks=config.recall_slot_cooldown_ticks,
+            recall_slot_insert_score_threshold=(
+                config.recall_slot_insert_score_threshold
+            ),
             # #526 後続 C1: spot_interior_repo を渡し、noun_matcher が
             # world_object 名を index できるようにする。SpotNode.interior は
             # 実 runtime では None で保管され、別 repository に格納されている。

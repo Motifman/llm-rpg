@@ -482,9 +482,16 @@ class EpisodicPassiveRecallRetrievalService:
         ):
             prev_slot = self._slot_store.get_slot(being_id)
             cooldown_until = self._slot_store.get_cooldown_until(being_id)
+            # PR-A: 候補を ``(eid, multi_cue_score)`` ペアで渡し、policy 側で
+            # 閾値 (= 弱い signal を slot から弾く) を効かせる。temporal /
+            # spreading 軸由来の episode は multi_cue_score=0 なので閾値を
+            # 満たさず、空 slot のときだけ fallback で 1 件採用される設計。
+            candidates_with_score: list[tuple[str, int]] = [
+                (eid, multi_cue_score(eid)) for eid in capped_ids
+            ]
             slot_decision = apply_slot_policy(
                 prev_slot=prev_slot,
-                candidate_episode_ids_in_score_order=capped_ids,
+                candidate_episode_ids_in_score_order=candidates_with_score,
                 cooldown_until=cooldown_until,
                 current_tick=current_tick,
                 policy=self._slot_policy,

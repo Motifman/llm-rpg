@@ -639,8 +639,15 @@ class TestEpisodicPassiveRecallRetrievalSlot:
             )
         res, wid = _make_resolver_and_being()
         slot_store = InMemoryEpisodicRecallSlotStore()
+        # 本クラスは持ち越し / K_insert / L / cooldown の基本挙動を保証する。
+        # PR-A で導入された score 閾値はここの関心外なので明示的に 0 (無効) に
+        # しておき、cue=place_spot 1 軸の弱い候補でも slot に入る前提を保つ。
         policy = RecallSlotPolicy(
-            capacity=3, insert_per_tick=2, max_residence=5, cooldown_ticks=5
+            capacity=3,
+            insert_per_tick=2,
+            max_residence=5,
+            cooldown_ticks=5,
+            insert_score_threshold=0,
         )
         return store, slot_store, policy, res, wid, c_place
 

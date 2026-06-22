@@ -142,17 +142,25 @@ class ResolvedLlmRuntimeConfig:
     recall_habituation_decay_window_ticks: int = 5
 
     # #526 段階 3: 想起スロット (working memory)。
-    # ``LLM_EPISODIC_RECALL_SLOT_ENABLED=1`` で ON、4 つのパラメータは
-    # それぞれ ``LLM_EPISODIC_RECALL_SLOT_CAPACITY`` /
-    # ``LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK`` /
-    # ``LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE`` /
-    # ``LLM_EPISODIC_RECALL_SLOT_COOLDOWN`` で上書き可。
-    # default は議論の合意値 (N=6 / K_insert=3 / L=5 / C=5)。
+    # ``LLM_EPISODIC_RECALL_SLOT_ENABLED=1`` で ON、各パラメータは env で
+    # 上書き可:
+    #   ``LLM_EPISODIC_RECALL_SLOT_CAPACITY``           (N)
+    #   ``LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK``    (K_insert)
+    #   ``LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE``      (L)
+    #   ``LLM_EPISODIC_RECALL_SLOT_COOLDOWN``           (C)
+    #   ``LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD`` (score 閾値)
+    #
+    # PR-A: slot を「希少資源」化する default に更新。
+    # N=4 / K_insert=1 / L=8 / C=5 / threshold=2。
+    # K=1 で 1 tick で 1 件しか入れ替えないため recall section の前半が
+    # 安定し、prefix cache が育つ。閾値 2 で「2 軸以上の cue で当たった
+    # 強い signal だけ」が slot に入る (弱い候補は後段の Afterglow 行き)。
     recall_slot_enabled: bool = False
-    recall_slot_capacity: int = 6
-    recall_slot_insert_per_tick: int = 3
-    recall_slot_max_residence: int = 5
+    recall_slot_capacity: int = 4
+    recall_slot_insert_per_tick: int = 1
+    recall_slot_max_residence: int = 8
     recall_slot_cooldown_ticks: int = 5
+    recall_slot_insert_score_threshold: int = 2
 
     # ──────────────────────────────────────────────────────────────
     # Invariants
@@ -258,21 +266,24 @@ class ResolvedLlmRuntimeConfig:
             source
         )
 
-        # #526 段階 3: 想起スロット (default off / N=6 K=3 L=5 C=5)
+        # #526 段階 3 + PR-A: 想起スロット (default off / N=4 K=1 L=8 C=5 / 閾値=2)
         recall_slot_enabled = _parse_truthy(
             source.get("LLM_EPISODIC_RECALL_SLOT_ENABLED"), default=False
         )
         recall_slot_capacity = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_CAPACITY", default=6
+            source, "LLM_EPISODIC_RECALL_SLOT_CAPACITY", default=4
         )
         recall_slot_insert_per_tick = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK", default=3
+            source, "LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK", default=1
         )
         recall_slot_max_residence = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE", default=5
+            source, "LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE", default=8
         )
         recall_slot_cooldown_ticks = _resolve_non_negative_int(
             source, "LLM_EPISODIC_RECALL_SLOT_COOLDOWN", default=5
+        )
+        recall_slot_insert_score_threshold = _resolve_non_negative_int(
+            source, "LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD", default=2
         )
 
         return cls(
@@ -299,6 +310,7 @@ class ResolvedLlmRuntimeConfig:
             recall_slot_enabled=recall_slot_enabled,
             recall_slot_capacity=recall_slot_capacity,
             recall_slot_insert_per_tick=recall_slot_insert_per_tick,
+            recall_slot_insert_score_threshold=recall_slot_insert_score_threshold,
             recall_slot_max_residence=recall_slot_max_residence,
             recall_slot_cooldown_ticks=recall_slot_cooldown_ticks,
         )
@@ -344,10 +356,11 @@ class ResolvedLlmRuntimeConfig:
             recall_habituation_enabled=False,
             recall_habituation_decay_window_ticks=5,
             recall_slot_enabled=False,
-            recall_slot_capacity=6,
-            recall_slot_insert_per_tick=3,
-            recall_slot_max_residence=5,
+            recall_slot_capacity=4,
+            recall_slot_insert_per_tick=1,
+            recall_slot_max_residence=8,
             recall_slot_cooldown_ticks=5,
+            recall_slot_insert_score_threshold=2,
         )
         unknown = set(overrides) - set(defaults)
         if unknown:
