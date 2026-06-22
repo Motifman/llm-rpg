@@ -65,6 +65,10 @@ class SubjectiveEpisode:
     recall_text: str | None = None
     recall_count: int = 0
     last_recalled_at: datetime | None = None
+    # Afterglow index で使う 1 行見出し (#526 段階 3 後続)。新規 LLM コールは
+    # 増やさず、既存の主観文付与で interpreted / recall_text と同じ pass で
+    # 書かせる方針のため、未指定や空文字も None として畳み込む Optional に保つ。
+    heading: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.episode_id, str):
@@ -105,6 +109,7 @@ class SubjectiveEpisode:
         object.__setattr__(self, "felt", optional_non_blank("felt", self.felt))
         object.__setattr__(self, "interpreted", optional_non_blank("interpreted", self.interpreted))
         object.__setattr__(self, "recall_text", optional_non_blank("recall_text", self.recall_text))
+        object.__setattr__(self, "heading", optional_non_blank("heading", self.heading))
 
         object.__setattr__(
             self,

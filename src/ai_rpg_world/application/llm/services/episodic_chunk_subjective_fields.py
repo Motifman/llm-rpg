@@ -24,7 +24,13 @@ from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 _SYSTEM_EPISODE_SUBJECTIVE_JSON = """あなたは RPG エージェントの主観記憶を埋める助手です。
 入力はルールが組み立てたエピソード草案・人物像・ソース事実のみです。
 出力は JSON オブジェクトのみ（前後に説明文やコードフェンスを付けない）。
-キーは次の 3 つ: interpreted, recall_text, prediction_error。
+キーは次の 4 つ: interpreted, recall_text, prediction_error, heading。
+
+heading は、この出来事を後から「ぼんやり思い出す」ときの見出しとして使う
+1 行サマリ。30 文字以内。原則として「〜した」「〜が起きた」のような体言止め
+または過去形 1 文で、行動と印象的な要素を 1 つだけ含める。
+（例: 「司書の手記を読んだ — 水の断片語」「廊下でカイトの声を聞いた」）
+分からない / 出来事の特徴が無いときは空文字列 "" にする。
 
 interpreted は「この出来事を当時どう意味づけたか」の日本語 1 文。
 過去の出来事の意味付けなので、原則として過去形・完了形で書く
@@ -52,6 +58,29 @@ prediction_error は「行動前の予測 (expected) と実際の結果 (observe
 入力に無い人物・場所・アイテム・結果・成否を新たに創作しない。
 キューや observed の事実と矛盾しない表現にする。"""
 _MAX_SUBJECTIVE_FIELD_CHARS = 700
+# heading は afterglow index で並べる 1 行見出し。長すぎると視認性を損ね、
+# prompt も嵩むため切り詰める。30 文字は「行動 + 印象的な 1 要素」を入れる
+# 余裕としてユーザとの議論で合意した上限。
+_MAX_HEADING_CHARS = 30
+
+
+def _normalize_heading(raw: Any) -> str | None:
+    """LLM 出力の heading を value object に渡せる形に揃える。
+
+    - None / 非 str / 空白のみ → None
+    - 長すぎる → ``_MAX_HEADING_CHARS`` 文字で切り詰め、末尾に「…」
+    後続の SubjectiveEpisode コンストラクタはここで None / 非空 str だけを
+    受け取る前提のため、空文字を許さない既存の Optional フィールド規約と
+    整合する。
+    """
+    if raw is None or not isinstance(raw, str):
+        return None
+    stripped = raw.strip()
+    if not stripped:
+        return None
+    if len(stripped) <= _MAX_HEADING_CHARS:
+        return stripped
+    return stripped[: _MAX_HEADING_CHARS - 1].rstrip() + "…"
 
 
 def _truncate(label: str, raw: str, *, max_chars: int) -> str:
@@ -231,7 +260,7 @@ class EpisodicChunkSubjectiveFieldsService:
             "## ソース事実（検証用メタ。新事実の根拠にしない）",
             _format_source_facts(encoding_input),
             "## 応答形式",
-            '{"interpreted": "...", "recall_text": "...", "prediction_error": "..."}',
+            '{"interpreted": "...", "recall_text": "...", "prediction_error": "...", "heading": "..."}',
         ]
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": _SYSTEM_EPISODE_SUBJECTIVE_JSON},
@@ -240,6 +269,7 @@ class EpisodicChunkSubjectiveFieldsService:
         interp_llm: str | None = None
         recall_llm: str | None = None
         pred_err_llm: str | None = None
+        heading_llm: str | None = None
         try:
             raw_obj = self._completion.complete_episode_subjective_json(messages)
             if not isinstance(raw_obj, dict):
@@ -250,6 +280,10 @@ class EpisodicChunkSubjectiveFieldsService:
                 interp_llm = _normalize_llm_str(raw_obj.get("interpreted"))
                 recall_llm = _normalize_llm_str(raw_obj.get("recall_text"))
                 pred_err_llm = _normalize_llm_str(raw_obj.get("prediction_error"))
+                # heading は afterglow index 用の 1 行見出し (#526 段階 3 後続)。
+                # 失敗時 / 欠落時は None に倒し、SubjectiveEpisode に渡る前に
+                # 30 文字へ切り詰める (後続テストで保証)。
+                heading_llm = _normalize_heading(raw_obj.get("heading"))
         except LlmApiCallException as e:
             self._logger.warning(
                 "Episode subjective LLM failed (%s); using template fallback",
@@ -274,6 +308,7 @@ class EpisodicChunkSubjectiveFieldsService:
             interpreted=interpreted,
             recall_text=recall_text,
             prediction_error=prediction_error,
+            heading=heading_llm,
         )
         self._assert_rule_fields_unchanged(draft, merged)
         return merged
