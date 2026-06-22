@@ -1,189 +1,208 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+このファイルは Claude Code (claude.ai/code) がこのリポジトリで作業する際の指針です。
 
 ## 重要: 設計判断・思想集
 
-新機能を実装する前に、以下を必ず参照すること:
+新機能を実装する前に必ず参照してください。
 
-- **[docs/design_decisions.md](docs/design_decisions.md)** — 過去の実験で生まれた設計判断 (prefix cache 不変 / 詰み回避 / ラベル → 名前 / silent failure 構造的対処 / per-agent idle timer 等) を集約
-- **[docs/agent_design_principles.md](docs/agent_design_principles.md)** — 「ゲーム内で生きる AI エージェント」を作る上での方針 (疎結合 / 観測駆動 / 質感優先 / 自己の継続性 / 失敗の質感 / silent failure 回避 / 他者からの可視性) を集約。design_decisions が個別判断、agent_design_principles はその上位の哲学
+- **[docs/design_decisions.md](docs/design_decisions.md)** — 過去の実験で生まれた個別の設計判断 (プレフィックスキャッシュ不変 / 詰み回避 / ラベルから名前への切替 / 静かな失敗の構造的対処 / エージェントごとの待ち時間タイマー など)
+- **[docs/agent_design_principles.md](docs/agent_design_principles.md)** — 「ゲーム内で生きる AI エージェント」を作る上位方針 (疎結合 / 観測駆動 / 質感優先 / 自己の継続性 / 失敗の質感 / 静かな失敗の回避 / 他者からの可視性)
 
-「なぜこの形になっているか」を理解せずに変更すると、過去に解決した問題が再発する。新しい判断を作った場合は該当ファイルに追記する。
+「なぜこの形になっているか」を理解せずに変更すると過去に解決した問題が再発します。新しい判断を作ったら該当ファイルに追記してください。
 
-## Build & Run Commands
+## ビルドと実行
 
 ```bash
-# Install
-pip install -e .          # or: make install / make dev-install
+# インストール
+pip install -e .          # もしくは make install / make dev-install
 
-# Test
-pytest                                           # full suite
-pytest tests/domain/guild -v                     # focused slice
-pytest --cov=src --cov-report=term-missing       # with coverage
-make test-cov                                    # same via Make
-make test-html                                   # HTML report → htmlcov/index.html
+# テスト
+pytest                                         # 全テスト
+pytest tests/domain/guild -v                   # 一部のみ
+pytest --cov=src --cov-report=term-missing     # カバレッジつき
+# マーカー: -m unit | integration | slow | asyncio
 
-# Markers: -m unit | integration | slow | asyncio
-
-# Backend servers
-python -m ai_rpg_world.presentation.spot_graph_game.server   # game server (port 8080)
+# バックエンドサーバ
+python -m ai_rpg_world.presentation.spot_graph_game.server   # ゲームサーバ (8080)
 AI_RPG_WORLD_GAME_DB=var/game/ai_rpg_world.db \
-  uv run python -m ai_rpg_world.presentation.web.server      # web viewer (port 8000)
+  uv run python -m ai_rpg_world.presentation.web.server      # 観戦用 (8000)
+make web-demo-db          # 観戦用 DB を作る
+make web-demo-db-reset    # 作り直し
 
-# Web viewer DB setup
-make web-demo-db          # create demo SQLite DB
-make web-demo-db-reset    # recreate from scratch
-
-# Frontend (React + Phaser)
+# フロントエンド (React + Phaser)
 cd frontend && npm install --cache .npm-cache && npm run dev
 
-# Asset pipeline (separate uv project)
-make asset-pipeline-sync
-make asset-pipeline CMD="split sheet.png -r 2 -c 2 -o ./out"
-
-# Experiment (Phase 6+ で snapshot による run 途中再開を統合済)
-# 通常 run + 終了時に snapshot を OUT/snapshots/ に保存
+# 実験 (snapshot による途中再開を統合)
 make experiment-with-snapshot SCENARIO=data/scenarios/decay_demo.json OUT=var/runs/exp1
-
-# 前回 snapshot を読み込んで続きを走らせる
 make experiment-resume SCENARIO=data/scenarios/decay_demo.json \
     OUT=var/runs/exp2 SNAPSHOT_LOAD_DIR=var/runs/exp1/snapshots
-
-# 同じ Being を別シナリオに転送 (cross-scenario transfer = warning のみで許容)
-make experiment-resume SCENARIO=data/scenarios/forest_world.json \
-    OUT=var/runs/transferred SNAPSHOT_LOAD_DIR=var/runs/exp1/snapshots
-
-# 個別 snapshot を CLI で touch (= 外部編集 / 共有用)
-uv run python scripts/being_snapshot_cli.py save \
-    --being-db var/game/beings.db --memory-db var/game/memory_graph.db \
-    --episode-db var/game/episodes.db --reinterpretation-db var/game/reinterpretation.db \
-    --being-id being_w1_p1 --output var/snapshots/being_w1_p1.json
-
-# Ctrl+C で run を止めても --snapshot-save-dir 指定時は snapshot は救済される
 ```
 
-### Snapshot / run 途中再開 (Issue #470)
+### Snapshot と途中再開 (Issue #470)
 
-- snapshot JSON 1 ファイル = 1 Being (`being_w{world_id}_p{player_id}.json`)
-- snapshot に `_metadata.source_scenario` が埋め込まれ、別シナリオへ load する
-  と warning + trace event (`snapshot_load`) で可視化される
-- snapshot save / load は trace event (`TraceEventKind.SNAPSHOT_SAVE` /
-  `SNAPSHOT_LOAD`) に必ず 1 件残る (= run の continuity を post-hoc 分析可能)
-- 失敗ハンドリング:
-  - **save 失敗** → warning ログ + run 自体は成功扱い (= 実験データを守る)
-  - **load 失敗** → fail-fast で開始前に exit (= 壊れた state で実験を始めない)
-- 詳細設計判断: `docs/design_decisions.md` #15-#18
+- snapshot は 1 ファイル 1 Being (`being_w{world_id}_p{player_id}.json`)
+- `_metadata.source_scenario` が埋め込まれ、別シナリオへ読み込むと警告と trace イベント (`snapshot_load`) で見える
+- 保存・読み込みは `TraceEventKind.SNAPSHOT_SAVE` / `SNAPSHOT_LOAD` に必ず 1 件残る
+- 保存失敗は警告のみで実験は成功扱い (実験データを守る)。読み込み失敗は開始前に即終了 (壊れた状態で始めない)
+- 詳細は `docs/design_decisions.md` の #15-#18
 
-## Architecture
+## アーキテクチャ
 
-DDD layered architecture under `src/ai_rpg_world/`:
+`src/ai_rpg_world/` 配下にドメイン駆動設計 (DDD) のレイヤードアーキテクチャを採用しています。
 
 ```
-presentation/   ← FastAPI servers, WebSocket, REST endpoints
-application/    ← Use cases, DTOs, LLM orchestration, observation pipeline
-domain/         ← Aggregates, entities, value objects, repository interfaces
-infrastructure/ ← Repository implementations (in-memory + SQLite), LLM adapters
+presentation/   ← FastAPI サーバ、WebSocket、REST エンドポイント
+application/    ← ユースケース、DTO、LLM オーケストレーション、観測パイプライン
+domain/         ← 集約、エンティティ、値オブジェクト、リポジトリインタフェース
+infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM アダプタ
 ```
 
-### Bounded Contexts (domain/)
+### Bounded Context (`domain/` 配下)
 
-16 contexts: `world_graph` (spot graph navigation), `world` (physical map/weather), `player` (profile, status, inventory), `item`, `monster`, `combat`, `skill`, `shop`, `trade`, `quest`, `guild`, `sns` (in-world social network), `conversation`, `pursuit`, `common`.
+各 Bounded Context は自分の集約・値オブジェクト・例外・リポジトリインタフェースを持ちます。インフラ層はインメモリ実装と SQLite 実装の両方を提供します。
 
-Each context owns its aggregates, value objects, exceptions, and repository interfaces. Infrastructure provides both `InMemory*Repository` and `Sqlite*Repository` implementations.
+- `world_graph`: 空間グラフによる移動と部屋構造
+- `world`: 物理的なマップと天候、世界時刻
+- `player`: プロフィール、ステータス、所持品
+- `item`: アイテムの定義と所持
+- `monster`: 敵の定義とステータス
+- `combat`: 戦闘の進行
+- `skill`: スキルの定義と効果
+- `shop`: 売買
+- `trade`: プレイヤー間取引
+- `quest`: クエストの状態と進行
+- `guild`: ギルドの所属と進行
+- `sns`: 世界内の SNS、エージェント同士の発信
+- `conversation`: 会話セッション
+- `pursuit`: 追跡 (敵がエージェントを追う等)
+- `being`: 「経験を持つ AI 主体」の識別と継続性 (世界・実験を跨いで永続化される ID)
+- `persona`: エージェントの人格、固有名詞、口調
+- `intent`: エージェントが今やろうとしていること
+- `memory`: エピソード記憶、意味記憶、再解釈、想起
+- `common`: 横断的な値オブジェクトやイベント基盤
 
-### LLM Agent Turn Flow
+エージェントの 1 ターンの流れ: 担当エージェント選定 → 現在状態と直近イベントの収集 → `prompt_builder.py` でシステム / ユーザプロンプト構築 → LLM がツール呼び出しを返す → 実行 → ドメインイベントが観測に変換されエピソード記憶へ流入 → WebSocket で観戦者に配信。詳細は `application/llm/llm_agent_turn_runner.py` と `application/llm/prompt_builder.py`。
 
-1. Agent scheduled for turn → gather current state + recent events
-2. `prompt_builder.py` constructs system prompt (persona) + user prompt (situation)
-3. `litellm` client calls LLM with tool_use mode
-4. Tool calls parsed and executed (move, attack, trade, recall memory, etc.)
-5. Domain events emitted → converted to observations → fed into episodic memory
-6. WebSocket broadcasts scene updates
+## コーディング規約
 
-Key files: `application/llm/llm_agent_turn_runner.py`, `application/llm/prompt_builder.py`, `application/llm/tool_catalog/`.
-
-### Episodic Memory System
-
-Active development area. Domain events become structured observations, chunked into episodes, reinterpreted for subjective significance, and recalled passively as context cues for future turns.
-
-Key dirs: `application/llm/chunk_boundary/`, `application/llm/contracts/`, `application/observation/`.
-
-## Conventions
-
-- Python 3.10+, 4-space indent, `snake_case` functions/modules, `PascalCase` classes
-- Type hints required on public APIs
-- Tests mirror package structure under `tests/` (e.g., `tests/domain/shop/value_object/test_shop_id.py`)
-- Conventional Commits: `feat:`, `fix:`, `refactor:`, etc.
-- Secrets in `.env` only (copy from `.env.example`), never committed
-- LLM client via `litellm` abstraction (supports OpenAI, Anthropic, etc.)
+- Python 3.10 以上、インデントはスペース 4 つ、関数とモジュールは `snake_case`、クラスは `PascalCase`
+- 公開 API には型注釈を必須とする
+- テストはパッケージ構造を `tests/` 配下に鏡写しで配置する (例: `tests/domain/shop/value_object/test_shop_id.py`)
+- コミットメッセージは Conventional Commits 形式 (`feat:`, `fix:`, `refactor:` など)
+- 秘密情報は `.env` のみに置く (`.env.example` からコピー)。コミット禁止
+- LLM クライアントは `litellm` 抽象を経由する
 
 ### ドメイン層では組み込み例外ではなくドメイン例外を投げる
 
-`domain/` 配下のバリデーション・不変条件違反では、`ValueError` 等の組み込み例外ではなく、
-そのバウンデッドコンテキストのドメイン例外を投げる。
+`domain/` 配下のバリデーション・不変条件違反では `ValueError` などの組み込み例外ではなく、そのバウンデッドコンテキストのドメイン例外を投げてください。
 
 - 各コンテキストの `domain/<context>/exception/<context>_exception.py` に集約された例外群を使う
-- 既存パターン: `<Context>DomainException` を基底に `ValidationException` / `BusinessRuleException` /
-  `NotFoundException` などのカテゴリと多重継承し、`error_code` 属性を持たせる（例:
-  `WORLD_GRAPH.AMBIENT_SOUND_DEF_VALIDATION`）
-- 新しいエラーケースを追加する場合は、まず既存ファイルに新しい例外クラスを追加してから値オブジェクト・
-  集約側で使用する
-- `application/` 層・`infrastructure/` 層では `ValueError` / `TypeError` 等の組み込み例外も許容する
-  （引数チェックなど）
+- 既存パターンは `<Context>DomainException` を基底に `ValidationException` / `BusinessRuleException` / `NotFoundException` などのカテゴリを多重継承し、`error_code` 属性を持たせる (例: `WORLD_GRAPH.AMBIENT_SOUND_DEF_VALIDATION`)
+- 新しいエラーケースは、まず既存ファイルに新しい例外クラスを追加してから値オブジェクトや集約で使う
+- `application/` 層・`infrastructure/` 層では組み込み例外 (`ValueError` / `TypeError`) も許容する (引数チェック等)
 
 参考: `src/ai_rpg_world/domain/world_graph/exception/spot_graph_exception.py`
 
-### テストには日本語のドックストリングを付ける
+## テスト駆動開発と「テストは仕様書」
 
-テストクラスとテストメソッドには、何を保証するテストか一目で分かる 1 行の日本語ドックストリングを付ける。
+### 進め方
 
-- クラスドックストリング: 対象クラス・対象機能の挙動の概要（例: `"""SpotDarknessQueryService.is_dark の合成判定挙動。"""`）
-- メソッドドックストリング: そのテストが保証する具体的な振る舞いを「〜する／〜される／〜が返る／〜を投げる」形式で記述
-  （例: `"""ticks_per_day が 0 以下なら ValidationException を投げる。"""`）
-- 既存のテストファイル全体の文体（です・ます調 vs 体言止め）に合わせる。新規ファイルは体言止め推奨
+t_wada さんの研修で紹介されている手順を基本にします。「テストリスト」を作って 1 つずつ消化していくのが核です。
 
-## PR Workflow
+1. **テストリストを作る**: 押さえておきたいテストシナリオを洗い出し、TODO リストとして書く (PR の本文や作業ノートに残す)
+2. **ひとつだけ選ぶ**: リストから 1 件選び、実際に・具体的に・実行可能なテストコードに翻訳する。実行して **失敗する** ことを確認する (Red)
+3. **最小の実装で通す**: プロダクトコードを変更して、いま書いたテストとそれまでに書いた全テストを **成功させる** (Green)。先回りして他のケースを実装しない。途中で気づいた新たな観点はテストリストに追加する
+4. **リファクタリング**: テストが通ったまま、重複を消し命名や構造を整える。挙動は変えない (Refactor)
+5. **繰り返す**: テストリストが空になるまでステップ 2 に戻る
 
-- PRs are mandatory before merge (`gh pr create`)
-- 1 PR = 1 purpose; keep changes ~200-400 lines
-- Include test evidence in PR description
-- Feature branches use git worktrees for parallel work per `docs/memory_system/memory_feature_workflow.md`
+1 サイクル 1 振る舞いを徹底し、複数の振る舞いを 1 つのテストに詰め込まないでください。テストリストは「考えながら作業する」ための道具です。完璧に最初から埋める必要はなく、Green の過程で気づいたら追記してください。
 
-### PR タイトル・本文の書き方
+厳密に一歩ずつやるかは状況次第ですが、考え方として「先にリストを作る」「ひとつだけに集中する」「気づきはリストに戻す」を守ります。
 
-PR タイトルと本文は、コードを読まずに「何が enable されるか」「なぜ要るか」が一読で分かることを最優先にする。レビュアーや将来の自分が PR ハンドルだけ眺めて把握できる粒度を保つ。
+### テストは仕様書
 
-**タイトル**:
-- 「**何ができるようになるか**」を素直な日本語で書く。`feat: <日本語の主旨>` の形式を推奨
-- 専門用語の英語をそのまま並べない（NG: `feat: cross-instance interaction の domain primitive`）
-- 一読で分からない英語概念は日本語に置き換える（例: `cross-instance interaction` → 「物Aを物Bに使う相互作用」、`primitive` → 「基盤機能」、`reactive binding` → 「条件連動の状態書き換え」）
+テストの第一の役割は「数年後に読んだ人が、テスト本体を追わなくても、ドックストリングだけで仕様を把握できる」ことです。
 
-**本文**:
-- 概念説明・設計判断・効果は日本語ベースで書く
-- セクション構成は #93 形式: 「なぜ」「何を」「設計判断」「試験」「Test plan」「マージ後の予定」
-- 「なぜ」は「現状で書けないこと」「先送りすると何が困るか」を具体例で示す
-- **コード識別子・API 名・enum 値・既存技術用語はコード上の実名（英語）のまま残す**
-  （例: `CHANGE_TARGET_ITEM_INSTANCE_STATE`, `apply_effects`, `Mapping[ItemSpecId, int]`）。
-  翻訳すると grep やコード参照との対応関係が崩れて検索性が下がる
-- 「acting / target」など複数の PR で繰り返し使う概念には日本語の訳語を一貫させる
-  （例: 「使う側 / 使われる側」）
-- 「primitive / interaction / wiring / silent failure」のような英語の業界用語は、
-  初出で日本語の説明を添える（例: 「primitive（基盤機能）」「silent failure（黙って失敗）」）
+**望ましい書き方**:
 
-**訳語マッピング例**:
+- メソッド: 入力条件と期待される結果が分かる形で具体的に書く
+  - 例: `"""ticks_per_day に 0 以下を渡すと ValidationException を投げ、設定値は更新されない。"""`
+  - 例: `"""recall_buffer が空のとき、想起セクションは prompt から完全に省略される。"""`
+- クラス: 対象クラスのうち、このクラスでテストする観点を 1 文で書く
+  - 例: `"""SpotDarknessQueryService.is_dark が時刻・天候・室内補正を合成して暗さを決める挙動を保証する。"""`
+
+**避けるべき書き方**:
+
+- 何を保証しているのか分からない短い体言止め
+  - NG: `"""SpotDarknessQueryService.is_dark の合成判定挙動。"""` (「合成判定挙動」が何を指すのか不明)
+  - NG: `"""エラーケース。"""`
+- テスト名のオウム返し (`test_returns_none` に対して `"""returns_none。"""`)
+
+テスト名 (`test_xxx`) は識別子なので英語の `snake_case` で書きます。日本語と英語を混ぜたテスト名 (例: `test_heading_を渡さないと_None_になる`) は読みづらく grep もしづらいので避けてください。仕様の説明はドックストリングに日本語で書きます。
+
+## 文章の書き方
+
+回答・ドキュメント・PR 本文・コミットメッセージなど人間に読ませる文章は日本語で書きます。
+
+### 日本語の中に英語を織り交ぜない
+
+概念や判断の説明文に英語をそのまま混ぜないでください。
+
+- **NG**: 「ambiguous な仕様」「stochastic な揺らぎ」「robust な実装」「test が flaky」
+- **OK**: 「曖昧な仕様」「確率的な揺らぎ」「壊れにくい実装」「テストが不安定」
+
+例外として以下はそのまま英語で残します。
+
+- コード上の識別子: 関数名・変数名・型名・enum 値・API パス (`ItemSpecId`, `apply_effects` など)。grep やコード参照との対応関係を保つため
+- 訳すと逆に分かりにくい既存技術用語: 初出に日本語の補足を添えれば使用可 (例: 「プレフィックスキャッシュ (prefix cache)」)
+
+書いたら必ず推敲し、英語混じりや依頼の範囲外の固有名詞が紛れていないか確認してください。
+
+### よく使う訳語
 
 | 英語表現 | 日本語訳 |
 |---|---|
 | primitive | 基盤機能 |
-| cross-instance interaction | 二者間の相互作用 / 物Aを物Bに使う相互作用 |
-| reactive binding | 条件連動の状態書き換え |
+| cross-instance interaction | 二者間の相互作用 |
 | acting / target | 使う側 / 使われる側 |
 | wiring | 配線 / 接続 |
-| silent failure | 黙って失敗 / 静かに無視 |
+| silent failure | 静かな失敗 |
 | boundary | 入口 / 境界 |
 | guard | ガード |
 
-## Parallel Branch Note
+## コミットメッセージ
 
-`feature/observation-trace-runtime-context` (observation trace / `application/llm/wiring`) と `LlmJsonEpisodeEncoder` を同時に触る場合、`wiring/__init__.py` の競合を避けるため観測trace側を先にマージすること。
+「なぜこの変更をしたか」を必ず本文に書きます。diff で分かる「何を変えたか」ではなく、「なぜ変えたか・なぜこの方法か」を残してください。
+
+- 件名: 50 文字以内、動詞始まり (例: `fix: Safari でログインリダイレクトが動くよう修正`)
+- 本文: 解決したかった問題、検討した代替案と却下理由、副作用や注意点、関連 issue 番号
+- `update` / `fix bug` / `修正` のような情報量ゼロの件名は禁止
+
+## PR ワークフロー
+
+- マージ前に PR を必ず作る (`gh pr create`)
+- 1 PR = 1 つの目的。バグ修正とリファクタリングを混ぜない
+- 目安: 200〜400 行、10 ファイル前後。レビュアーが 30 分で読み切れるサイズ
+- リファクタリングと機能追加、DB スキーマ変更とアプリコード変更は分けて積む
+- 本文にはテストの実施根拠 (通ったテスト名や件数) を載せる
+- エピソード記憶系は `docs/memory_system/memory_feature_workflow.md` の手順に従う (git worktree で並行作業)
+
+### タイトル・本文の書き方
+
+PR タイトルと本文は、コードを読まずに「**この PR で何ができるようになるか**」「なぜ要るか」が一読で分かることを最優先にしてください。
+
+**タイトル**:
+
+- 「何ができるようになるか」を素直な日本語で書く。`feat: <日本語の主旨>` 形式を推奨
+- 専門用語の英語をそのまま並べない (NG: `feat: cross-instance interaction の domain primitive`)
+- 一読で分からない英語概念は日本語に置き換える
+
+**本文の構成 (基本)**:
+
+「なぜ」「何を」「設計判断」「試験」「試験計画」「マージ後の予定」
+
+- 「なぜ」は「現状で書けないこと」「先送りすると何が困るか」を具体例で示す
+- コード識別子・API 名・enum 値・既存技術用語はコード上の実名 (英語) のまま残す。翻訳すると grep が崩れて検索性が下がる
+- 初出の英語業界用語は日本語の説明を添える (例: 「基盤機能 (primitive)」「静かな失敗 (silent failure)」)
+- 複数の PR で繰り返し使う概念には日本語の訳語を一貫させる (例: 「使う側 / 使われる側」)
