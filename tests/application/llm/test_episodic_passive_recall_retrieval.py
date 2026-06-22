@@ -767,3 +767,193 @@ class TestEpisodicPassiveRecallRetrievalSlot:
         )
         slot_ids = {e.episode_id for e in r6.debug.recall_slot_decision.new_slot}
         assert slot_ids.isdisjoint(first_ids)
+
+
+class TestEpisodicPassiveRecallRetrievalAfterglow:
+    """slot から押し出された記憶 / 閾値で slot に入れなかった弱い候補が、
+    AfterglowStore に「ぼんやり覚えてる」見出し index として降りる挙動を
+    保証する。これは PR-C (#526 段階 3 後続) で導入する機構で、想起の
+    階層構造 (鮮明 = slot / ぼんやり = afterglow) を実 LLM の trace 上で
+    観測できる形にする。
+    """
+
+    def _setup(self):
+        from ai_rpg_world.application.llm.services.afterglow_store import (
+            AfterglowSource,
+            InMemoryAfterglowStore,
+        )
+        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+            InMemoryEpisodicRecallSlotStore,
+            RecallSlotPolicy,
+        )
+
+        store = InMemorySubjectiveEpisodeStore()
+        c_place = EpisodicCue(
+            axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT
+        )
+        c_obj = EpisodicCue(
+            axis="object", value="o1", source=EpisodicCueSource.TOOL
+        )
+        base = datetime(2026, 7, 1, tzinfo=timezone.utc)
+
+        def _ep_with_heading(eid: str, cues, heading: str | None) -> SubjectiveEpisode:
+            from dataclasses import replace as _replace
+
+            base_ep = _episode(
+                episode_id=eid, occurred_at=base, cues=tuple(cues)
+            )
+            return _replace(base_ep, heading=heading)
+
+        # 強い候補 (2 軸 hit → multi_cue_score=2): heading 付き
+        store.put_by_being(
+            being_id,
+            _ep_with_heading("ep-strong", (c_place, c_obj), heading="強い見出し"),
+        )
+        # 弱い候補 (1 軸 hit → multi_cue_score=1): heading 付き
+        store.put_by_being(
+            being_id,
+            _ep_with_heading("ep-weak", (c_place,), heading="弱い見出し"),
+        )
+        # 弱い候補 (1 軸 hit, heading 無し): afterglow には入らない
+        store.put_by_being(
+            being_id,
+            _ep_with_heading("ep-no-heading", (c_place,), heading=None),
+        )
+
+        res, wid = _make_resolver_and_being()
+        slot_store = InMemoryEpisodicRecallSlotStore()
+        slot_policy = RecallSlotPolicy(
+            capacity=2,
+            insert_per_tick=1,
+            max_residence=8,
+            cooldown_ticks=5,
+            insert_score_threshold=2,  # 強い候補のみ slot 入り
+        )
+        afterglow_store = InMemoryAfterglowStore()
+        return (
+            store,
+            slot_store,
+            slot_policy,
+            afterglow_store,
+            res,
+            wid,
+            c_place,
+            c_obj,
+            AfterglowSource,
+        )
+
+    def test_weak_candidate_with_heading_is_indexed_as_weak_recall(self) -> None:
+        """score 閾値で slot に入れなかった弱い候補は、heading が付いていれば
+        afterglow に WEAK_RECALL ソースで降りる。「ぼんやり覚えてる」階層への
+        投入経路の 1 つ目を保証する。"""
+        (
+            store, slot_store, slot_policy, afterglow_store,
+            res, wid, c_place, c_obj, AfterglowSource,
+        ) = self._setup()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            slot_store=slot_store,
+            slot_policy=slot_policy,
+            afterglow_store=afterglow_store,
+            afterglow_capacity=10,
+            afterglow_max_residence=10,
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=5,
+            current_tick=0,
+        )
+        ag = result.debug.afterglow_index
+        assert ag is not None
+        # ep-strong は slot 入りなので afterglow には居ない
+        ag_ids = {e.episode_id for e in ag}
+        assert "ep-strong" not in ag_ids
+        # ep-weak は閾値で落ちて afterglow に WEAK_RECALL で入る
+        weak_entry = next(
+            (e for e in ag if e.episode_id == "ep-weak"), None
+        )
+        assert weak_entry is not None
+        assert weak_entry.source == AfterglowSource.WEAK_RECALL
+        assert weak_entry.heading == "弱い見出し"
+
+    def test_no_heading_episodes_are_skipped_from_afterglow(self) -> None:
+        """heading が None の episode は afterglow に並べる意味がない (= 見出し
+        として表示できない) ため、投入経路で skip する。"""
+        (
+            store, slot_store, slot_policy, afterglow_store,
+            res, wid, c_place, c_obj, _AfterglowSource,
+        ) = self._setup()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            slot_store=slot_store,
+            slot_policy=slot_policy,
+            afterglow_store=afterglow_store,
+            afterglow_capacity=10,
+            afterglow_max_residence=10,
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=5,
+            current_tick=0,
+        )
+        ag = result.debug.afterglow_index or ()
+        ag_ids = {e.episode_id for e in ag}
+        assert "ep-no-heading" not in ag_ids
+
+    def test_slot_evicted_episode_falls_into_afterglow_after_l_ticks(self) -> None:
+        """slot に居る episode が滞在期間 L 超過で evict されたら、heading
+        付きならば afterglow に SLOT_EVICTED ソースで降りる。「鮮明 → ぼんやり」
+        の自然な遷移を保証する (= 投入経路の 2 つ目)。"""
+        (
+            store, slot_store, slot_policy, afterglow_store,
+            res, wid, c_place, c_obj, AfterglowSource,
+        ) = self._setup()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            slot_store=slot_store,
+            slot_policy=slot_policy,
+            afterglow_store=afterglow_store,
+            afterglow_capacity=10,
+            afterglow_max_residence=10,
+        )
+        # tick 0 で ep-strong を slot に入れる
+        r0 = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=5,
+            current_tick=0,
+        )
+        slot_store.apply_decision(
+            being_id, r0.debug.recall_slot_decision,
+            current_tick=0, cooldown_ticks=5,
+        )
+
+        # tick 8 (= L 超過) で evict される
+        r8 = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=5,
+            current_tick=8,
+        )
+        evicted_ids = set(r8.debug.recall_slot_decision.evicted_ids)
+        assert "ep-strong" in evicted_ids
+
+        ag = r8.debug.afterglow_index
+        assert ag is not None
+        entry = next(
+            (e for e in ag if e.episode_id == "ep-strong"), None
+        )
+        assert entry is not None
+        assert entry.source == AfterglowSource.SLOT_EVICTED

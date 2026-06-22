@@ -162,6 +162,15 @@ class ResolvedLlmRuntimeConfig:
     recall_slot_cooldown_ticks: int = 5
     recall_slot_insert_score_threshold: int = 2
 
+    # #526 段階 3 PR-C: afterglow index (= ぼんやり覚えてる 1 行見出し)。
+    # ``LLM_AFTERGLOW_ENABLED=1`` で ON (要 slot enable)。容量 M と滞在期間
+    # M_L は env で上書き可:
+    #   ``LLM_AFTERGLOW_CAPACITY``       (default 10)
+    #   ``LLM_AFTERGLOW_MAX_RESIDENCE``  (default 10 tick)
+    afterglow_enabled: bool = False
+    afterglow_capacity: int = 10
+    afterglow_max_residence: int = 10
+
     # ──────────────────────────────────────────────────────────────
     # Invariants
     # ──────────────────────────────────────────────────────────────
@@ -286,6 +295,17 @@ class ResolvedLlmRuntimeConfig:
             source, "LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD", default=2
         )
 
+        # #526 段階 3 PR-C: afterglow index (default off / M=10, M_L=10)
+        afterglow_enabled = _parse_truthy(
+            source.get("LLM_AFTERGLOW_ENABLED"), default=False
+        )
+        afterglow_capacity = _resolve_non_negative_int(
+            source, "LLM_AFTERGLOW_CAPACITY", default=10
+        )
+        afterglow_max_residence = _resolve_non_negative_int(
+            source, "LLM_AFTERGLOW_MAX_RESIDENCE", default=10
+        )
+
         return cls(
             short_term_memory_kind=short_term_memory_kind,
             short_term_memory_scheduler_mode=short_term_memory_scheduler_mode,
@@ -313,6 +333,9 @@ class ResolvedLlmRuntimeConfig:
             recall_slot_insert_score_threshold=recall_slot_insert_score_threshold,
             recall_slot_max_residence=recall_slot_max_residence,
             recall_slot_cooldown_ticks=recall_slot_cooldown_ticks,
+            afterglow_enabled=afterglow_enabled,
+            afterglow_capacity=afterglow_capacity,
+            afterglow_max_residence=afterglow_max_residence,
         )
 
     @classmethod
@@ -361,6 +384,9 @@ class ResolvedLlmRuntimeConfig:
             recall_slot_max_residence=8,
             recall_slot_cooldown_ticks=5,
             recall_slot_insert_score_threshold=2,
+            afterglow_enabled=False,
+            afterglow_capacity=10,
+            afterglow_max_residence=10,
         )
         unknown = set(overrides) - set(defaults)
         if unknown:

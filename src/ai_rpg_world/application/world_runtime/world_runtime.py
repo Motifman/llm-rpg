@@ -1199,6 +1199,9 @@ class WorldRuntime:
                 recall_slot_cooldown_ticks=(
                     self._episodic_stack.recall_slot_cooldown_ticks
                 ),
+                # #526 段階 3 PR-C: afterglow store。stack で enable された
+                # 時のみ非 None。retrieve 側にも同一 store が注入されている。
+                afterglow_store=self._episodic_stack.afterglow_store,
             )
         builder = DefaultPromptBuilder(
             core,
@@ -3590,6 +3593,10 @@ def create_world_runtime(
             recall_slot_insert_score_threshold=(
                 config.recall_slot_insert_score_threshold
             ),
+            # #526 段階 3 PR-C: afterglow index (= ぼんやり覚えてる 1 行見出し)
+            afterglow_enabled=config.afterglow_enabled,
+            afterglow_capacity=config.afterglow_capacity,
+            afterglow_max_residence=config.afterglow_max_residence,
             # #526 後続 C1: spot_interior_repo を渡し、noun_matcher が
             # world_object 名を index できるようにする。SpotNode.interior は
             # 実 runtime では None で保管され、別 repository に格納されている。

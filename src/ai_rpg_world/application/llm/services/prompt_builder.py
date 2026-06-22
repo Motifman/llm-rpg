@@ -199,6 +199,31 @@ def _gather_additional_freetexts_for_recall(
     return out
 
 
+def _format_afterglow_section(
+    afterglow_index: Optional[tuple[Any, ...]],
+) -> str:
+    """afterglow index を 1 行見出しの section text に整形する。
+
+    None / 空のときは空文字を返し、上位は section ごと省略する。各エントリは
+    ``[handle] heading`` 形式の 1 行で並べ、LLM から「ぼんやり覚えてる
+    記憶」として visible にする。handle は make_afterglow_handle で生成され、
+    同じ episode は常に同じ handle になる (= 後続 PR の能動想起ツールで
+    安定して引ける)。
+    """
+    if not afterglow_index:
+        return ""
+    # 関数内 import で循環依存を避ける
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        make_afterglow_handle,
+    )
+
+    lines = ["【さっき思い出した記憶の見出し】(鮮明には浮かばないが、ヒントとして残っている)"]
+    for entry in afterglow_index:
+        handle = make_afterglow_handle(entry.episode_id)
+        lines.append(f"- [{handle}] {entry.heading}")
+    return "\n".join(lines)
+
+
 def _join_passive_recall_texts(
     player_id: int,
     candidates: tuple[EpisodicPassiveRecallCandidate, ...],
@@ -506,6 +531,11 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._episodic_recall_slot_cooldown_ticks = (
             episodic.recall_slot_cooldown_ticks
         )
+        # #526 段階 3 PR-C: afterglow index sidecar (任意)。default off。
+        # retrieve service 側で apply_afterglow_policy の結果が
+        # ``debug.afterglow_index`` に乗ってくるので、ここでは store.apply_decision
+        # (書込) のためにだけ参照する。retrieve は read-only。
+        self._afterglow_store = episodic.afterglow_store
         self._noun_matcher = noun_matcher
         # Phase 1c
         self._semantic_passive_recall = semantic_passive_recall
@@ -712,6 +742,22 @@ class DefaultPromptBuilder(IPromptBuilder):
                         ],
                         "evicted_ids": list(slot_decision.evicted_ids),
                         "new_slot_size": len(slot_decision.new_slot),
+                    }
+                # #526 段階 3 PR-C: afterglow index の状態を trace に乗せる。
+                # off 時は index=None なので key 自体を出さない (= 既存挙動)。
+                afterglow_index = retrieval_debug.afterglow_index
+                if afterglow_index is not None:
+                    debug_kwargs["afterglow"] = {
+                        "size": len(afterglow_index),
+                        "entries": [
+                            {
+                                "episode_id": e.episode_id,
+                                "heading": e.heading,
+                                "entered_tick": e.entered_tick,
+                                "source": e.source.value,
+                            }
+                            for e in afterglow_index
+                        ],
                     }
             except Exception:
                 # debug 構造が想定外でも recall trace 本体は落とさない。
@@ -1039,6 +1085,21 @@ class DefaultPromptBuilder(IPromptBuilder):
             being_id=being_id,
         )
 
+        # #526 段階 3 PR-C: afterglow index を 1 行見出しの section として連結。
+        # 「鮮明な記憶」(= recall_text の本文) の後ろに「さっき思い出した記憶の
+        # 見出し」を並べ、LLM に「ぼんやり覚えてる」の層が見える形にする。
+        # afterglow off / 空のときは何も足さない。
+        afterglow_text = _format_afterglow_section(
+            recall_result.debug.afterglow_index
+        )
+        if afterglow_text:
+            if relevant_memories_text:
+                relevant_memories_text = (
+                    f"{relevant_memories_text}\n\n{afterglow_text}"
+                )
+            else:
+                relevant_memories_text = afterglow_text
+
         # #526 段階 2: 慣化 sidecar の更新は retrieve 後に呼び出し側で行う
         # (retrieve は read-only を保つ)。store / being_id / tick が揃った
         # ときだけ書き込み、いずれかが欠ければ silent skip。
@@ -1082,6 +1143,24 @@ class DefaultPromptBuilder(IPromptBuilder):
             except Exception:
                 self._logger.warning(
                     "recall_slot_store.apply_decision failed; recall は完走しました",
+                    exc_info=True,
+                )
+
+        # #526 段階 3 PR-C: afterglow store の更新も retrieve 後に行う。
+        # retrieve service が apply_afterglow_policy の結果を
+        # ``debug.afterglow_index`` に乗せているので、それを store へ反映する。
+        # afterglow off のときは index が None なので silent skip。
+        afterglow_index = recall_result.debug.afterglow_index
+        if (
+            self._afterglow_store is not None
+            and being_id is not None
+            and afterglow_index is not None
+        ):
+            try:
+                self._afterglow_store.apply_decision(being_id, afterglow_index)
+            except Exception:
+                self._logger.warning(
+                    "afterglow_store.apply_decision failed; recall は完走しました",
                     exc_info=True,
                 )
 

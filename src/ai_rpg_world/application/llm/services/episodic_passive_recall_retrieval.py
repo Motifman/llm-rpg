@@ -31,6 +31,12 @@ from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
     RecallSlotPolicy,
     apply_slot_policy,
 )
+from ai_rpg_world.application.llm.services.afterglow_store import (
+    AfterglowEntry,
+    AfterglowSource,
+    IAfterglowStore,
+    apply_afterglow_policy,
+)
 from ai_rpg_world.application.llm.passive_recall_cue_families import (
     PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
     PASSIVE_RECALL_PLACE_FAMILY_LABEL,
@@ -196,6 +202,11 @@ class EpisodicPassiveRecallRetrievalDebug:
     retained / inserted / evicted_ids を見ると prefix cache 親和性と慣化の
     動きが post-hoc で追える。"""
     recall_slot_decision: Optional[RecallSlotDecision] = None
+    """#526 段階 3 PR-C: 想起の階層構造の下層 (= afterglow = ぼんやり覚えてる)
+    の今 tick の状態。slot から押し出された記憶 + slot 閾値で入れなかった
+    弱い候補のうち heading 付きのものが並ぶ。afterglow off (= store 未注入)
+    のときは None。"""
+    afterglow_index: Optional[tuple[AfterglowEntry, ...]] = None
 
 
 @dataclass(frozen=True)
@@ -225,6 +236,9 @@ class EpisodicPassiveRecallRetrievalService:
         habituation_decay_window_ticks: int = 5,
         slot_store: Optional[IEpisodicRecallSlotStore] = None,
         slot_policy: Optional[RecallSlotPolicy] = None,
+        afterglow_store: Optional[IAfterglowStore] = None,
+        afterglow_capacity: int = 10,
+        afterglow_max_residence: int = 10,
     ) -> None:
         # Phase 3 Step 3c-3: legacy player_id 経路は撤去済。Resolver+WorldId が
         # 未注入 / Being 未 provision の場合は spreading 軸を skip
@@ -262,6 +276,15 @@ class EpisodicPassiveRecallRetrievalService:
             )
         self._slot_store = slot_store
         self._slot_policy = slot_policy
+        # #526 段階 3 PR-C: afterglow index (= ぼんやり覚えてる)。store 未注入
+        # なら一切動かさず result.debug.afterglow_index は None になる。
+        if afterglow_capacity < 0:
+            raise ValueError("afterglow_capacity must be 0 or greater")
+        if afterglow_max_residence < 0:
+            raise ValueError("afterglow_max_residence must be 0 or greater")
+        self._afterglow_store = afterglow_store
+        self._afterglow_capacity = afterglow_capacity
+        self._afterglow_max_residence = afterglow_max_residence
 
     def _resolve_being_id(self, player_id: int) -> Optional[BeingId]:
         """dual-path: Resolver+WorldId 揃いつつ Being が attach 済なら BeingId、
@@ -513,6 +536,68 @@ class EpisodicPassiveRecallRetrievalService:
                 source_axes_by_episode[entry.episode_id].add("slot_retained")
             capped_ids = [e.episode_id for e in slot_decision.new_slot]
 
+        # #526 段階 3 PR-C: afterglow 投入 (= 「ぼんやり覚えてる」index)。
+        # 経路は 2 つ:
+        #   1. SLOT_EVICTED: slot_decision.evicted_ids
+        #   2. WEAK_RECALL: 候補にはあったが slot にも入らず evict もされて
+        #      いない (= score 閾値で落ちた弱い hit)
+        # いずれも episode.heading が乗っていないと意味がない (= 見出しを
+        # 並べるため) ので skip。
+        afterglow_index_result: Optional[tuple[AfterglowEntry, ...]] = None
+        if (
+            self._afterglow_store is not None
+            and being_id is not None
+            and current_tick is not None
+            and slot_decision is not None
+        ):
+            new_slot_ids = {e.episode_id for e in slot_decision.new_slot}
+            evicted_set = set(slot_decision.evicted_ids)
+            incoming: list[AfterglowEntry] = []
+
+            def _heading_or_none(eid: str) -> Optional[str]:
+                ep = episode_by_id.get(eid)
+                if ep is None and being_id is not None:
+                    ep = self._store.get_by_being(being_id, eid)
+                if ep is None:
+                    return None
+                return getattr(ep, "heading", None)
+
+            for eid in slot_decision.evicted_ids:
+                h = _heading_or_none(eid)
+                if not h:
+                    continue
+                incoming.append(
+                    AfterglowEntry(
+                        episode_id=eid,
+                        heading=h,
+                        entered_tick=current_tick,
+                        source=AfterglowSource.SLOT_EVICTED,
+                    )
+                )
+            for eid, _score in candidates_with_score:
+                if eid in new_slot_ids or eid in evicted_set:
+                    continue
+                h = _heading_or_none(eid)
+                if not h:
+                    continue
+                incoming.append(
+                    AfterglowEntry(
+                        episode_id=eid,
+                        heading=h,
+                        entered_tick=current_tick,
+                        source=AfterglowSource.WEAK_RECALL,
+                    )
+                )
+
+            prev_index = self._afterglow_store.get_index(being_id)
+            afterglow_index_result = apply_afterglow_policy(
+                prev_index=prev_index,
+                incoming=tuple(incoming),
+                current_tick=current_tick,
+                capacity=self._afterglow_capacity,
+                max_residence=self._afterglow_max_residence,
+            )
+
         candidates: list[EpisodicPassiveRecallCandidate] = []
         candidate_sources: list[tuple[str, tuple[str, ...]]] = []
         axis_hits: defaultdict[str, int] = defaultdict(int)
@@ -537,6 +622,7 @@ class EpisodicPassiveRecallRetrievalService:
             final_episode_count_by_source_axis=final_axis_counts,
             habituation_penalty_by_episode=habituation_payload,
             recall_slot_decision=slot_decision,
+            afterglow_index=afterglow_index_result,
         )
         return EpisodicPassiveRecallRetrievalResult(candidates=tuple(candidates), debug=debug)
 
