@@ -69,6 +69,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         IEpisodicRecallSlotStore,
     )
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        IAfterglowStore,
+    )
 
 from ai_rpg_world.application.llm.scheduler import (
     IEpisodicSubjectiveCompletionScheduler,
@@ -207,6 +210,13 @@ class EpisodicStack:
     # で運用を調整する。
     recall_slot_store: Optional["IEpisodicRecallSlotStore"] = None
     recall_slot_cooldown_ticks: int = 5
+    # #526 段階 3 PR-C: afterglow index sidecar (= ぼんやり覚えてる 1 行見出し)。
+    # default off。slot 退去や score 閾値で slot 入りできなかった弱い hit を
+    # heading 付きで保持し、prompt の見出し section と能動想起ツール (別 PR)
+    # に使う。
+    afterglow_store: Optional["IAfterglowStore"] = None
+    afterglow_capacity: int = 10
+    afterglow_max_residence: int = 10
 
 
 def build_scenario_noun_matcher(
@@ -313,6 +323,10 @@ def build_episodic_stack(
     recall_slot_max_residence: int = 8,
     recall_slot_cooldown_ticks: int = 5,
     recall_slot_insert_score_threshold: int = 2,
+    # #526 段階 3 PR-C: afterglow index 配線。env で enable。
+    afterglow_enabled: bool = False,
+    afterglow_capacity: int = 10,
+    afterglow_max_residence: int = 10,
     # #526 後続 C1: world_object 名を index するために spot_interior_repo を
     # 任意で受け取る。実 runtime では SpotNode.interior が None で別 repo に
     # 保管されているため、prose から object 名を拾うにはこの経路が必要。
@@ -452,6 +466,14 @@ def build_episodic_stack(
             cooldown_ticks=recall_slot_cooldown_ticks,
             insert_score_threshold=recall_slot_insert_score_threshold,
         )
+    # #526 段階 3 PR-C: afterglow index。slot off のときは afterglow も off に
+    # 倒す (= 上層の slot が居ないと「ぼんやり」の階層構造の意味が薄れる)。
+    afterglow_store: Optional["IAfterglowStore"] = None
+    if afterglow_enabled and recall_slot_enabled:
+        from ai_rpg_world.application.llm.services.afterglow_store import (
+            InMemoryAfterglowStore,
+        )
+        afterglow_store = InMemoryAfterglowStore()
     passive_recall = EpisodicPassiveRecallRetrievalService(
         episode_store,
         being_attachment_resolver=being_attachment_resolver,
@@ -460,6 +482,9 @@ def build_episodic_stack(
         habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
         slot_store=recall_slot_store,
         slot_policy=recall_slot_policy_obj,
+        afterglow_store=afterglow_store,
+        afterglow_capacity=afterglow_capacity,
+        afterglow_max_residence=afterglow_max_residence,
     )
     # noun_matcher は上で chunk_coordinator 用に先に構築済 (Fix A)
 
@@ -532,6 +557,9 @@ def build_episodic_stack(
         recall_habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
         recall_slot_store=recall_slot_store,
         recall_slot_cooldown_ticks=recall_slot_cooldown_ticks,
+        afterglow_store=afterglow_store,
+        afterglow_capacity=afterglow_capacity,
+        afterglow_max_residence=afterglow_max_residence,
     )
 
 

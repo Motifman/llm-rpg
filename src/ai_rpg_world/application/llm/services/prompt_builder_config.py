@@ -65,6 +65,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         IEpisodicRecallSlotStore,
     )
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        IAfterglowStore,
+    )
 
 
 DEFAULT_RECENT_OBSERVATIONS_LIMIT = 20
@@ -150,6 +153,12 @@ class EpisodicRecallConfig:
     # 必要なのは ``cooldown_ticks`` のみ (他 3 つは retrieve service 側で保持)。
     recall_slot_store: Optional["IEpisodicRecallSlotStore"] = None
     recall_slot_cooldown_ticks: int = 5
+    # #526 段階 3 PR-C: afterglow index sidecar (= ぼんやり覚えてる)。
+    # 注入時のみ動く (= default off で既存挙動と同一)。retrieve service
+    # 側で apply_afterglow_policy の結果が ``debug.afterglow_index`` に乗る
+    # ので、prompt_builder は store.apply_decision (書込) と prompt 表示の
+    # ために参照する。
+    afterglow_store: Optional["IAfterglowStore"] = None
 
 
 @dataclass(frozen=True)
