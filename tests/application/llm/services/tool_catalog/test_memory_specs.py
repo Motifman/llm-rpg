@@ -47,3 +47,38 @@ class TestGetMemorySpecsFlags:
         names = _names(specs)
         assert "memo_add" in names
         assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in names
+
+
+class TestRecallByHandleSpec:
+    """afterglow 用の能動想起ツールが flag で expose されることを保証する。"""
+
+    def test_disabled_by_default(self) -> None:
+        """flag 未指定なら memory_recall_by_handle は spec に出ない (= default off)。"""
+        from ai_rpg_world.application.llm.tool_constants import (
+            TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
+        )
+
+        names = _names(get_memory_specs())
+        assert TOOL_NAME_MEMORY_RECALL_BY_HANDLE not in names
+
+    def test_recall_by_handle_enabled_exposes_the_tool(self) -> None:
+        """``recall_by_handle_enabled=True`` で expose される。
+        afterglow の見出しから本文を引き戻す経路を LLM に見せる前提。"""
+        from ai_rpg_world.application.llm.tool_constants import (
+            TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
+        )
+
+        names = _names(get_memory_specs(recall_by_handle_enabled=True))
+        assert TOOL_NAME_MEMORY_RECALL_BY_HANDLE in names
+
+    def test_tool_description_mentions_afterglow_section(self) -> None:
+        """LLM が prompt の「【さっき思い出した記憶の見出し】」と本ツールを
+        繋げて理解できるよう、description にその section 名と handle 形式
+        (``ep_``) が明示されていること。"""
+        from ai_rpg_world.application.llm.services.tool_catalog.memory import (
+            MEMORY_RECALL_BY_HANDLE_DEFINITION,
+        )
+
+        desc = MEMORY_RECALL_BY_HANDLE_DEFINITION.description
+        assert "さっき思い出した記憶の見出し" in desc
+        assert "ep_" in desc

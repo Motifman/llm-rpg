@@ -347,6 +347,11 @@ class WorldRuntime:
     # 回避のため lazy import + ``Any`` 注釈にしている (= 既存の lazy executor
     # 配線と同じパターン)。
     _memory_recall_tool_executor: Optional[Any] = field(default=None, repr=False)
+    # PR-D: afterglow handle から本文を引き戻す ``memory_recall_by_handle``
+    # tool の executor。slot / afterglow / episode_store + 現 tick provider を
+    # 統合する必要があるため、``_wire_auxiliary_tool_stack`` で構築。
+    # 構築されなければ tool 定義もリストに出さず、handler も未対応扱い。
+    _memory_recall_by_handle_tool_executor: Optional[Any] = field(default=None, repr=False)
     # シナリオ実行 trace の recorder。未設定なら NullTraceRecorder にフォールバック
     # (Phase 1d 配線)。
     _trace_recorder: Any = field(default=None, repr=False)
@@ -736,11 +741,15 @@ class WorldRuntime:
         if self._episodic_stack is not None:
             self._wire_auxiliary_tool_stack()
         episodic_recall_enabled = self._memory_recall_tool_executor is not None
+        recall_by_handle_enabled = (
+            self._memory_recall_by_handle_tool_executor is not None
+        )
         memo = [
             defn
             for defn, _ in get_memory_specs(
                 todo_enabled=True,
                 episodic_recall_enabled=episodic_recall_enabled,
+                recall_by_handle_enabled=recall_by_handle_enabled,
             )
         ]
         return spot + memo
@@ -970,6 +979,29 @@ class WorldRuntime:
             time_provider=utc_now,
         )
 
+        # PR-D: memory_recall_by_handle (afterglow handle → 本文 + slot 再注入)。
+        # afterglow_store + slot_store が両方揃っていなければ意味がないので
+        # 構築をスキップ (= LLM にも見せず handler も登録しない、graceful fallback)。
+        afterglow_store = getattr(self._episodic_stack, "afterglow_store", None)
+        slot_store = getattr(self._episodic_stack, "recall_slot_store", None)
+        if afterglow_store is not None and slot_store is not None:
+            from ai_rpg_world.application.llm.services.executors.episodic_memory_recall_by_handle_tool_executor import (
+                EpisodicMemoryRecallByHandleToolExecutor,
+            )
+            self._memory_recall_by_handle_tool_executor = (
+                EpisodicMemoryRecallByHandleToolExecutor(
+                    episode_store=self._episodic_stack.episode_store,
+                    afterglow_store=afterglow_store,
+                    slot_store=slot_store,
+                    slot_capacity=getattr(
+                        self._episodic_stack, "recall_slot_capacity", 4
+                    ),
+                    being_attachment_resolver=self._aux_being_resolver,
+                    default_world_id=self._aux_being_default_world_id,
+                    current_tick_provider=lambda: self.current_tick(),
+                )
+            )
+
     @property
     def aux_being_resolver(self):
         """Phase 3 Step 3a-3: presentation 層から MemoCompletionHintService 等に
@@ -1011,6 +1043,17 @@ class WorldRuntime:
                     f"tool handler name collision in aux stack: {sorted(overlap)}"
                 )
             handlers.update(recall_handlers)
+        # PR-D: recall_by_handle も同じ aux 経路で動かす。
+        if self._memory_recall_by_handle_tool_executor is not None:
+            by_handle_handlers = (
+                self._memory_recall_by_handle_tool_executor.get_handlers()
+            )
+            overlap = handlers.keys() & by_handle_handlers.keys()
+            if overlap:
+                raise RuntimeError(
+                    f"tool handler name collision in aux stack: {sorted(overlap)}"
+                )
+            handlers.update(by_handle_handlers)
         handler = handlers.get(name)
         if handler is None:
             return LlmCommandResultDto(

@@ -128,6 +128,28 @@ def apply_afterglow_policy(
 
 
 _HANDLE_PREFIX_LEN = 6
+_HANDLE_NAMESPACE = "ep_"
+
+
+def resolve_episode_id_prefix_from_handle(handle: str) -> str:
+    """LLM が tool 引数として渡してきた handle (``ep_3f2a7b``) を、
+    afterglow / episode_store の prefix 検索に使える形 (``3f2a7b``) に戻す。
+
+    ``make_afterglow_handle`` の逆操作 (= PR-D の能動想起ツール用)。
+    形式違反 / 空 / prefix 部分が空の handle は ValueError で弾く
+    (= LLM が prompt 上の handle 以外を入れたら明示的に止める)。
+    """
+    if not isinstance(handle, str):
+        raise TypeError("handle must be str")
+    s = handle.strip()
+    if not s.startswith(_HANDLE_NAMESPACE):
+        raise ValueError(
+            f"handle must start with {_HANDLE_NAMESPACE!r} (got {handle!r})"
+        )
+    prefix = s[len(_HANDLE_NAMESPACE) :]
+    if not prefix:
+        raise ValueError("handle must contain an episode_id prefix after 'ep_'")
+    return prefix
 
 
 def make_afterglow_handle(episode_id: str) -> str:
@@ -145,7 +167,7 @@ def make_afterglow_handle(episode_id: str) -> str:
     s = episode_id.strip()
     if not s:
         raise ValueError("episode_id must be non-empty")
-    return f"ep_{s[:_HANDLE_PREFIX_LEN]}"
+    return f"{_HANDLE_NAMESPACE}{s[:_HANDLE_PREFIX_LEN]}"
 
 
 @runtime_checkable
@@ -162,6 +184,27 @@ class IAfterglowStore(Protocol):
         new_index: Sequence[AfterglowEntry],
     ) -> None:
         """``apply_afterglow_policy`` の結果を反映する。"""
+        ...
+
+    def find_by_handle(
+        self, being_id: BeingId, handle: str
+    ) -> Optional[AfterglowEntry]:
+        """LLM が tool 引数として渡してきた handle から entry を引く。
+
+        handle は ``ep_<episode_id 先頭 N 文字>`` 形式。store の index 内で
+        その prefix に **完全に一致** する entry を返す。複数該当があれば
+        最も新しい entered_tick の entry を返す (= 最近思い出した側を優先)。
+        該当が無ければ ``None`` (= 「もう忘れた」をツール側に伝える)。
+        """
+        ...
+
+    def remove(self, being_id: BeingId, episode_id: str) -> None:
+        """指定 episode_id の entry を index から取り除く。
+
+        recall_by_handle で slot に再注入された episode を「鮮明な記憶」に
+        格上げしたあと、afterglow からは取り除いて重複を防ぐ用途。
+        該当が無くても crash しない idempotent な操作。
+        """
         ...
 
 
@@ -188,12 +231,46 @@ class InMemoryAfterglowStore(IAfterglowStore):
             raise TypeError("being_id must be BeingId")
         self._by_being[being_id] = tuple(new_index)
 
+    def find_by_handle(
+        self, being_id: BeingId, handle: str
+    ) -> Optional[AfterglowEntry]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        try:
+            prefix = resolve_episode_id_prefix_from_handle(handle)
+        except (TypeError, ValueError):
+            return None
+        candidates = [
+            e
+            for e in self._by_being.get(being_id, ())
+            if e.episode_id.startswith(prefix)
+        ]
+        if not candidates:
+            return None
+        # 同 prefix の複数 entry があれば最新 (= entered_tick 最大) を優先
+        candidates.sort(key=lambda e: e.entered_tick, reverse=True)
+        return candidates[0]
+
+    def remove(self, being_id: BeingId, episode_id: str) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(episode_id, str):
+            raise TypeError("episode_id must be str")
+        current = self._by_being.get(being_id)
+        if not current:
+            return
+        filtered = tuple(e for e in current if e.episode_id != episode_id)
+        if len(filtered) == len(current):
+            return  # idempotent: 該当が無ければ何もしない
+        self._by_being[being_id] = filtered
+
 
 __all__ = [
     "AfterglowSource",
     "AfterglowEntry",
     "apply_afterglow_policy",
     "make_afterglow_handle",
+    "resolve_episode_id_prefix_from_handle",
     "IAfterglowStore",
     "InMemoryAfterglowStore",
 ]

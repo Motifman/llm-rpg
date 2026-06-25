@@ -151,6 +151,12 @@ TOOL_NAME_MEMORY_SEARCH_SEMANTIC = TOOL_NAME_PREFIX_MEMORY + "search_semantic"
 # 自動で走るが、この tool は LLM が ``about`` + ``time_range`` を渡して
 # 能動的に過去を呼び戻す。
 TOOL_NAME_MEMORY_RECALL_EPISODES = TOOL_NAME_PREFIX_MEMORY + "recall_episodes"
+# Issue #526 後続 PR-D: afterglow index (= ぼんやり覚えてる見出し) から、
+# 「これ詳しく思い出したい」と handle を指定して本文を引き戻す経路。
+# memory_recall_episodes が自由文検索なのに対し、これは prompt 上の handle
+# (``ep_<6 文字>``) を直接指定して 1 件取り出す。slot に再注入されるため
+# 「もう一度鮮明に浮かんだ」状態を構造で実現する。
+TOOL_NAME_MEMORY_RECALL_BY_HANDLE = TOOL_NAME_PREFIX_MEMORY + "recall_by_handle"
 TOOL_NAME_SPOT_GRAPH_TRAVEL_TO = TOOL_NAME_PREFIX_SPOT_GRAPH + "travel_to"
 TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION = TOOL_NAME_PREFIX_SPOT_GRAPH + "set_sub_location"
 TOOL_NAME_SPOT_GRAPH_EXPLORE = TOOL_NAME_PREFIX_SPOT_GRAPH + "explore"

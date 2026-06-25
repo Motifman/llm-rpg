@@ -214,3 +214,93 @@ class TestFormatAfterglowSection:
         # handle 形式と heading が同じ行に並ぶ
         assert "[ep_3f2a7b" in section
         assert "司書の手記" in section
+
+
+class TestResolveEpisodeIdFromHandle:
+    """LLM が prompt 上の handle (例: ``ep_3f2a7b``) を tool 引数として
+    渡してきたとき、それを episode_id の prefix に戻す関数の挙動を保証する。
+
+    handle と episode_id 全長は別物 (handle は prefix のみ) なので、
+    後段の store 検索は「prefix 一致」で行う。
+    """
+
+    def test_strips_ep_prefix_and_returns_id_prefix(self) -> None:
+        """``ep_3f2a7b`` → ``3f2a7b`` (= afterglow_store が検索に使う prefix)。"""
+        from ai_rpg_world.application.llm.services.afterglow_store import (
+            resolve_episode_id_prefix_from_handle,
+        )
+
+        assert resolve_episode_id_prefix_from_handle("ep_3f2a7b") == "3f2a7b"
+
+    def test_invalid_handle_raises_value_error(self) -> None:
+        """``ep_`` で始まらない / 空 / None は ValueError。
+        LLM が prompt 上の handle 以外を入れてきたら明示的に弾く。"""
+        import pytest as _pytest
+        from ai_rpg_world.application.llm.services.afterglow_store import (
+            resolve_episode_id_prefix_from_handle,
+        )
+
+        with _pytest.raises(ValueError):
+            resolve_episode_id_prefix_from_handle("xyz")
+        with _pytest.raises(ValueError):
+            resolve_episode_id_prefix_from_handle("")
+        with _pytest.raises(ValueError):
+            resolve_episode_id_prefix_from_handle("ep_")
+
+
+class TestAfterglowStoreLookupAndRemoval:
+    """PR-D 用の追加操作: handle から entry を探す / 取り除く。
+
+    recall_by_handle ツールが afterglow から本文を引き戻すときに使う。
+    handle は episode_id の prefix 形式なので、store 側で prefix 一致
+    検索を提供する。
+    """
+
+    def test_find_by_handle_returns_matching_entry(self) -> None:
+        """``ep_3f2a7b`` 形式の handle から、その prefix に一致する
+        afterglow entry を返す (= 完全一致は不要、prefix 一致でよい)。"""
+        store = InMemoryAfterglowStore()
+        being = _being()
+        entry = AfterglowEntry(
+            episode_id="3f2a7b8c-9d0e-4f1a-aaaa",
+            heading="司書の手記",
+            entered_tick=0,
+            source=AfterglowSource.WEAK_RECALL,
+        )
+        store.apply_decision(being, (entry,))
+        from ai_rpg_world.application.llm.services.afterglow_store import (
+            make_afterglow_handle,
+        )
+        handle = make_afterglow_handle(entry.episode_id)
+        found = store.find_by_handle(being, handle)
+        assert found is not None
+        assert found.episode_id == entry.episode_id
+        assert found.heading == "司書の手記"
+
+    def test_find_by_handle_returns_none_when_no_match(self) -> None:
+        """ぼんやり覚えてた見出しがもう退去したあとは None を返す
+        (= 「もう忘れた」を ツール側でユーザに伝える材料にする)。"""
+        store = InMemoryAfterglowStore()
+        being = _being()
+        assert store.find_by_handle(being, "ep_deadbe") is None
+
+    def test_remove_drops_entry_from_index(self) -> None:
+        """slot 再注入で afterglow からは取り除く運用 (= 「鮮明 → ぼんやり」
+        の逆遷移)。remove 後に get_index に出てこない。"""
+        store = InMemoryAfterglowStore()
+        being = _being()
+        entry = AfterglowEntry(
+            episode_id="abcd1234-zz", heading="h", entered_tick=0,
+            source=AfterglowSource.WEAK_RECALL,
+        )
+        store.apply_decision(being, (entry,))
+        store.remove(being, entry.episode_id)
+        assert store.get_index(being) == ()
+
+    def test_remove_unknown_episode_id_is_noop(self) -> None:
+        """removing a never-stored id should silently do nothing
+        (= store の不変条件を保つ idempotent な remove)。"""
+        store = InMemoryAfterglowStore()
+        being = _being()
+        store.remove(being, "never-existed")  # crash なし
+        assert store.get_index(being) == ()

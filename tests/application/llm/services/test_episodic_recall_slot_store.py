@@ -296,3 +296,47 @@ class TestApplySlotPolicyScoreThreshold:
         )
         assert decision.inserted == ()
         assert [e.episode_id for e in decision.new_slot] == ["kept"]
+
+
+class TestSlotStoreForceInsert:
+    """recall_by_handle ツール経由で「能動的に思い出した」episode を slot に
+    格上げする操作 (= リハーサル)。通常の apply_decision とは別経路で、
+    score 閾値や K_insert 上限を無視して 1 件だけ slot に押し込む。
+    capacity 超過時は最古の retained を 1 件 LRU 退去させる。
+    """
+
+    def test_force_insert_into_empty_slot(self) -> None:
+        """slot が空のときは普通に 1 件追加されるだけ。"""
+        store = InMemoryEpisodicRecallSlotStore()
+        being = _being()
+        store.force_insert(
+            being,
+            RecallSlotEntry(episode_id="e1", entered_tick=5),
+            capacity=4,
+        )
+        assert [e.episode_id for e in store.get_slot(being)] == ["e1"]
+
+    def test_force_insert_evicts_oldest_when_capacity_exceeded(self) -> None:
+        """slot が満杯のとき、最古 (= entered_tick 最小) を退去させ、
+        新規エントリを末尾に置く。これで「鮮明な記憶」の総数は capacity を
+        超えない。退去された episode_id は内部 cooldown には積まない
+        (= ユーザが意識的に呼んだ手動操作なので慣化扱いしない)。"""
+        store = InMemoryEpisodicRecallSlotStore()
+        being = _being()
+        # 既存 4 件 (= capacity いっぱい) を仕込む
+        for i in range(4):
+            store._slot_by_being.setdefault(being, ())
+        store._slot_by_being[being] = tuple(
+            RecallSlotEntry(episode_id=f"e{i}", entered_tick=i)
+            for i in range(4)
+        )
+        store.force_insert(
+            being,
+            RecallSlotEntry(episode_id="forced", entered_tick=10),
+            capacity=4,
+        )
+        ids = [e.episode_id for e in store.get_slot(being)]
+        # 最古 (e0, entered_tick=0) が押し出され、forced が末尾に並ぶ
+        assert "e0" not in ids
+        assert ids[-1] == "forced"
+        assert len(ids) == 4
