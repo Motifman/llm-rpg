@@ -959,9 +959,15 @@ class WorldRuntime:
         できないため、その場合は executor を作らない (= tool は LLM 側
         に出さない)。``_aux_being_resolver`` / ``_aux_being_default_world_id``
         は ``_wire_auxiliary_tool_stack`` 内で先に初期化される前提。
+
+        PR-D fix: 旧実装は冒頭で ``_memory_recall_tool_executor`` の有無で
+        早期 return していたが、それだと PR-D で追加した
+        ``_memory_recall_by_handle_tool_executor`` の build が
+        ``recall_episodes`` 既存時にスキップされ、tool は spec に出るのに
+        handler が登録されないため LLM が呼ぶと「未対応のツールです」が
+        返る silent failure になっていた。早期 return を外し、各 executor の
+        個別 idempotent ガードに任せる形に変える。
         """
-        if self._memory_recall_tool_executor is not None:
-            return
         if self._episodic_stack is None:
             return
         if not hasattr(self, "_aux_being_resolver"):
@@ -971,20 +977,26 @@ class WorldRuntime:
         )
         from ai_rpg_world.application.llm.services.subjective_time import utc_now
 
-        self._memory_recall_tool_executor = EpisodicMemoryRecallToolExecutor(
-            episode_store=self._episodic_stack.episode_store,
-            being_attachment_resolver=self._aux_being_resolver,
-            default_world_id=self._aux_being_default_world_id,
-            noun_matcher=self._episodic_stack.noun_matcher,
-            time_provider=utc_now,
-        )
+        # idempotent ガード: 既に build 済なら再構築しない (= 既存挙動を保つ)
+        if self._memory_recall_tool_executor is None:
+            self._memory_recall_tool_executor = EpisodicMemoryRecallToolExecutor(
+                episode_store=self._episodic_stack.episode_store,
+                being_attachment_resolver=self._aux_being_resolver,
+                default_world_id=self._aux_being_default_world_id,
+                noun_matcher=self._episodic_stack.noun_matcher,
+                time_provider=utc_now,
+            )
 
         # PR-D: memory_recall_by_handle (afterglow handle → 本文 + slot 再注入)。
         # afterglow_store + slot_store が両方揃っていなければ意味がないので
         # 構築をスキップ (= LLM にも見せず handler も登録しない、graceful fallback)。
         afterglow_store = getattr(self._episodic_stack, "afterglow_store", None)
         slot_store = getattr(self._episodic_stack, "recall_slot_store", None)
-        if afterglow_store is not None and slot_store is not None:
+        if (
+            self._memory_recall_by_handle_tool_executor is None
+            and afterglow_store is not None
+            and slot_store is not None
+        ):
             from ai_rpg_world.application.llm.services.executors.episodic_memory_recall_by_handle_tool_executor import (
                 EpisodicMemoryRecallByHandleToolExecutor,
             )
