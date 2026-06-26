@@ -973,3 +973,39 @@ class TestTraceRecorderNullObjectNormalization:
         # rec には record されないが、本体は動く
         assert len([e for e in rec.events if e["kind"] == "short_term_summary_generated"]) == 0
         assert len(mem._mid_generations(_PID.value)) == 1
+
+
+class TestGetOldestEntryDatetimeMixedTimezones:
+    """raw queue に naive と aware の datetime が混在しても crash しない。
+
+    本来 ObservationEntry の occurred_at は upstream で aware に揃えられる
+    建前だが、シナリオファイル由来の observation や snapshot 再生経路で
+    naive な datetime が混入してくることがある。ここで min() が
+    ``TypeError: can't compare offset-naive and offset-aware datetimes`` で
+    落ちると、その tick 以降の prompt 構築が全て失敗し、実験が落ちる。
+    そのため raw 内で混在していても UTC として揃えて比較する。
+    """
+
+    def _obs_at(self, prose: str, occurred_at: datetime) -> ObservationEntry:
+        return ObservationEntry(
+            occurred_at=occurred_at,
+            output=ObservationOutput(prose=prose, structured={}),
+        )
+
+    def test_returns_oldest_when_naive_and_aware_entries_are_mixed(self) -> None:
+        """naive datetime と aware datetime が混在しても crash せず、
+        UTC として比較した最古を返す。"""
+        mem = RollingSummaryShortTermMemory(summary_service=None)
+        # naive (= 古い): 2026-06-01 00:00 (UTC 相当)
+        mem.append(_PID, self._obs_at("old_naive", datetime(2026, 6, 1)))
+        # aware (= 新しい): 2026-06-01 12:00 UTC
+        mem.append(
+            _PID,
+            self._obs_at(
+                "newer_aware", datetime(2026, 6, 1, 12, tzinfo=timezone.utc)
+            ),
+        )
+        oldest = mem.get_oldest_entry_datetime(_PID)
+        assert oldest is not None
+        # UTC として比較した最古 (= naive 側を UTC 扱いした 06-01 00:00)
+        assert oldest.replace(tzinfo=None) == datetime(2026, 6, 1)

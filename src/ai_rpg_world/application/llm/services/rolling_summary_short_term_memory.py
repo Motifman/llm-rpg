@@ -240,7 +240,17 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         raw = self._raw.get(pid)
         if not raw:
             return None
-        return min(entry.occurred_at for entry in raw)
+        # raw queue には naive な datetime (= シナリオファイル由来) と aware な
+        # datetime (= LLM 呼び出し後に dataset から組まれた直近観測) が混在しうる。
+        # そのまま min() で比較すると ``TypeError: can't compare offset-naive
+        # and offset-aware datetimes`` で実験が落ちるため、UTC 相当として
+        # 正規化してから比較する。本体の occurred_at は書き換えない。
+        def _as_utc(dt: datetime) -> datetime:
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+
+        return min(_as_utc(entry.occurred_at) for entry in raw)
 
     def get_long_summary_text(self, player_id: PlayerId) -> str:
         """Phase 3: L5 long summary を prompt 用テキストに整形する。
