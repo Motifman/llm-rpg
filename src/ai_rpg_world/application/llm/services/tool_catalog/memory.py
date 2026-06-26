@@ -16,6 +16,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResol
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.application.llm.services.availability_resolvers import (
     MemoryExploreRelatedAvailabilityResolver,
+    MemoryRecallByHandleAvailabilityResolver,
     MemoryRecallEpisodesAvailabilityResolver,
     MemorySearchSemanticAvailabilityResolver,
     TodoAddAvailabilityResolver,
@@ -27,6 +28,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMO_DONE,
     TOOL_NAME_MEMO_LIST,
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
+    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
     TOOL_NAME_MEMORY_RECALL_EPISODES,
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
 )
@@ -243,6 +245,55 @@ MEMORY_RECALL_EPISODES_DEFINITION = ToolDefinitionDto(
 )
 
 
+# Issue #526 後続 PR-D: afterglow index (= prompt の「さっき思い出した記憶の
+# 見出し」section) から、handle (``ep_<6 文字>``) を指定して本文を引き戻すツール。
+# memory_recall_episodes が自由文検索なのに対し、これは prompt 上の handle を
+# 直接受け取って「今ぼんやり覚えてる中のこれを詳しく」と取り出す経路。
+# 取り出した episode は slot に再注入されるため、しばらく鮮明に浮かぶ状態が続く。
+MEMORY_RECALL_BY_HANDLE_DESCRIPTION = (
+    "prompt の「【さっき思い出した記憶の見出し】」section に並んでいる handle "
+    "(例: ``ep_3f2a7b``) を指定して、その出来事の本文 (recall_text) を引き戻すツール。"
+    "\n\n"
+    "# 使えるタイミング (例)\n"
+    "- 「さっき思い出した記憶の見出し」に気になる項目があり、詳しく思い出したいとき\n"
+    "- 過去の出来事を語る前に、見出しからその本文を引き出して確認したいとき\n"
+    "\n"
+    "# 引数\n"
+    "- handle: prompt 上に表示された ``ep_`` で始まる handle 文字列。\n"
+    "\n"
+    "# 結果\n"
+    "該当する episode の本文 (recall_text) を 1 件返す。引き戻した episode は "
+    "しばらく「鮮明な記憶」として手元に残る (= slot に再注入される)。\n"
+    "該当する見出しが既に消えていた場合は「もう忘れました」と返る。\n"
+    "\n"
+    "# 注意\n"
+    "- 自由文での検索は ``memory_recall_episodes`` を使う。本ツールは prompt 上に "
+    "見えている handle 専用。\n"
+    "- 世界状態は変えない (= 思い出すだけ)。"
+)
+
+MEMORY_RECALL_BY_HANDLE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "handle": {
+            "type": "string",
+            "description": (
+                "prompt 上の「【さっき思い出した記憶の見出し】」に並んでいる "
+                "``ep_`` で始まる handle 文字列をそのまま渡す (例: ``ep_3f2a7b``)。"
+            ),
+        },
+    },
+    "required": ["handle"],
+}
+
+MEMORY_RECALL_BY_HANDLE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
+    description=MEMORY_RECALL_BY_HANDLE_DESCRIPTION,
+    parameters=MEMORY_RECALL_BY_HANDLE_PARAMETERS,
+    category=ToolCategory.META_COGNITIVE,
+)
+
+
 def get_memo_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """memo 系ツールの (definition, resolver) 一覧を返す。"""
     return [
@@ -263,6 +314,7 @@ def get_memory_specs(
     semantic_search_enabled: bool = False,
     memo_enabled: Optional[bool] = None,
     episodic_recall_enabled: bool = False,
+    recall_by_handle_enabled: bool = False,
 ) -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """memo および任意で memory_explore_related / memory_search_semantic /
     memory_recall_episodes を返す。
@@ -293,6 +345,13 @@ def get_memory_specs(
     if episodic_recall_enabled:
         specs.append(
             (MEMORY_RECALL_EPISODES_DEFINITION, MemoryRecallEpisodesAvailabilityResolver())
+        )
+    if recall_by_handle_enabled:
+        specs.append(
+            (
+                MEMORY_RECALL_BY_HANDLE_DEFINITION,
+                MemoryRecallByHandleAvailabilityResolver(),
+            )
         )
     return specs
 

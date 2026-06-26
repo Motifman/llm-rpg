@@ -79,6 +79,20 @@ class MemoryRecallEpisodesAvailabilityResolver(IAvailabilityResolver):
         return True
 
 
+class MemoryRecallByHandleAvailabilityResolver(IAvailabilityResolver):
+    """afterglow index の handle から本文を引き戻す能動想起 (#526 PR-D)。
+
+    afterglow が空でも tool 自体は呼び出し可能 (= LLM が誤って空の状態で
+    呼んだら「該当する見出しがありません」と返す)。state に依存せず常時 True。
+    """
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        return True
+
+
 class SetDestinationAvailabilityResolver(IAvailabilityResolver):
     """目的地設定ツールは、現在地があり利用可能な移動先（スポット・ロケーション）が1件以上あるときに利用可能。"""
 

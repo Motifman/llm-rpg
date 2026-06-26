@@ -217,7 +217,10 @@ def _format_afterglow_section(
         make_afterglow_handle,
     )
 
-    lines = ["【さっき思い出した記憶の見出し】(鮮明には浮かばないが、ヒントとして残っている)"]
+    lines = [
+        "【さっき思い出した記憶の見出し】(鮮明には浮かばないが、ヒントとして残っている)",
+        "気になる見出しがあれば memory_recall_by_handle にその handle を渡して本文を引き戻せる。",
+    ]
     for entry in afterglow_index:
         handle = make_afterglow_handle(entry.episode_id)
         lines.append(f"- [{handle}] {entry.heading}")

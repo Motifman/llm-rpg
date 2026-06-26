@@ -284,6 +284,49 @@ class InMemoryEpisodicRecallSlotStore(IEpisodicRecallSlotStore):
                 # 同 episode が再 evict されたら最新 cooldown で上書き
                 cd_map[eid] = until
 
+    def force_insert(
+        self,
+        being_id: BeingId,
+        entry: RecallSlotEntry,
+        *,
+        capacity: int,
+    ) -> None:
+        """recall_by_handle ツール経由で「能動的に思い出した」episode を
+        slot に格上げする (= リハーサル経路)。
+
+        通常の ``apply_decision`` は score 閾値 / K_insert / cooldown を
+        尊重するが、本メソッドはそれらを全て無視して 1 件だけ slot に
+        押し込む。LLM が見出しから本文を引き戻したいときに使う想定。
+
+        capacity 超過時は **最古 (= entered_tick 最小) の retained を 1 件
+        LRU 退去** させる。退去 episode は cooldown には積まない
+        (= ユーザが意識的に呼んだ手動操作で慣化扱いしない)。
+        既に同 episode が slot に居る場合は entered_tick を更新するだけ
+        (= 重複追加せず、リハーサル相当)。
+        """
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(entry, RecallSlotEntry):
+            raise TypeError("entry must be RecallSlotEntry")
+        if not isinstance(capacity, int) or isinstance(capacity, bool):
+            raise TypeError("capacity must be int")
+        if capacity <= 0:
+            raise ValueError("capacity must be greater than 0")
+
+        current = list(self._slot_by_being.get(being_id, ()))
+        # 既存があれば差し替え (entered_tick 更新)
+        for i, existing in enumerate(current):
+            if existing.episode_id == entry.episode_id:
+                current[i] = entry
+                self._slot_by_being[being_id] = tuple(current)
+                return
+        current.append(entry)
+        if len(current) > capacity:
+            # 最古を退去 (= LRU)。順序は entered_tick 昇順で並べてから先頭削除。
+            current.sort(key=lambda e: (e.entered_tick, e.episode_id))
+            current = current[1:]
+        self._slot_by_being[being_id] = tuple(current)
+
 
 __all__ = [
     "RecallSlotEntry",
