@@ -71,12 +71,18 @@ MEMO_LIST_DEFINITION = ToolDefinitionDto(
 
 
 MEMO_DONE_DESCRIPTION = (
-    "指定 ID 群の memo を記録から外します。"
+    "指定 ID 群の memo を完了として記録します。達成・撤回・無効化どれでも、もう参照"
+    "不要になった memo は閉じてください。同じ目的を構成する複数 memo を一括で閉じる"
+    "と context が軽くなります。"
+    "\n\n"
     "**memo_done はメモを片付ける操作であり、目標達成にも世界の変化にも繋がりません**。"
-    "目標を達成するには物理ツール (travel_to / interact / pickup_item / speech / "
+    "目標達成には物理ツール (travel_to / interact / pickup_item / speech / "
     "use_item 等) を呼んでください。想起しただけで反射的に閉じないこと。"
     "\n\n"
-    "memo_id は短縮形 (例: 'a3b9f1') でも full UUID でも可。1 件でも配列で渡す。"
+    "memo_id は短縮形 (例: 'a3b9f1') でも full UUID でも可。短縮形が複数の memo に"
+    "一致すると曖昧エラーになるので、その時だけより長い prefix を指定してください。"
+    "1 件でも memo_ids=['<id>'] のように配列で渡す。存在しない ID は個別に not_found"
+    "として報告され、残りは正常完了 (部分成功)。"
 )
 MEMO_DONE_PARAMETERS = {
     "type": "object",
