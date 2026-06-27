@@ -54,8 +54,11 @@ class TestPlayers:
     def test_全プレイヤーに_persona_prompt_が_ある(self, loaded) -> None:
         for p in loaded.player_spawns:
             assert p.persona_prompt is not None, f"{p.string_id} に persona_prompt が無い"
-            # 生存最優先の決まり文句が必ず冒頭にあること (§0 設計原則)
-            assert "最優先" in p.persona_prompt or "生き残る" in p.persona_prompt
+            # PR-S: 旧 §0 設計原則「生存最優先の決まり文句」は「全員生存ファースト
+            # ロボット化」の原因だったため、persona の冒頭は「生存と人間関係の
+            # トレードオフ」を含む表現に変えた。最低条件として「生き残る」「生き延びる」
+            # のいずれかは含まれていることを保証する (= 生存への意識は失わない)。
+            assert "生き残る" in p.persona_prompt or "生き延びる" in p.persona_prompt
 
     def test_秘密の動機を裏付けるフレーバーが_initial_items_にある(self, loaded) -> None:
         """設計 §4 の対応: 各人の秘密と物的証拠を関連付ける。"""
