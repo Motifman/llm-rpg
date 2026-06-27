@@ -195,19 +195,31 @@ WORKERS ?= 1
 # 1 回起こす」。0 / 未指定 = 既定 (6) を使う。沈黙を強めたい実験では 12 / 24
 # に上げる。
 IDLE_TICKS ?=
+# 実 LLM 実験のデフォルト model / provider。run 同士の prompt prefix cache を
+# 共有させるため、未指定なら必ず同じ model + provider に固定する。openrouter
+# は同じ model 名でも複数 provider (DeepSeek 本家 / DeepInfra / Parasail /
+# 他) にルーティングし、provider が変わると cache が共有されない。default を
+# 明示することで「あの run と同じ条件か」を疑う必要をなくす。
+# 別 provider で実験したい場合は呼び出し側で LLM_MODEL=... PROVIDER=... を
+# 上書きする。0 byte の cache hit に悩んだら、まず stdout の
+# `[run] openrouter routing: provider=...` を確認すること。
+LLM_MODEL ?= openrouter/deepseek/deepseek-v4-flash
+PROVIDER ?= DeepSeek
 experiment:
 	@if [ -z "$(SCENARIO)" ]; then \
 		echo "SCENARIO is required. e.g. make experiment SCENARIO=data/scenarios/survival_island_v2.json"; \
 		exit 2; \
 	fi
 	@mkdir -p var/runs
+	@echo "[experiment] LLM_MODEL=$(LLM_MODEL) PROVIDER=$(PROVIDER) (default; 上書きは LLM_MODEL=... PROVIDER=...)"
+	LLM_MODEL=$(LLM_MODEL) \
 	LLM_TURN_PARALLEL_WORKERS=$(WORKERS) \
 	$(if $(EPISODIC),LLM_EPISODIC_ENABLED=1,) \
 	$(if $(IDLE_TICKS),LLM_IDLE_TIMEOUT_TICKS=$(IDLE_TICKS),) \
 	$(if $(SECTION_ORDER),PROMPT_SECTION_ORDER=$(SECTION_ORDER),) \
 	$(if $(MEMORY_KIND),SHORT_TERM_MEMORY_KIND=$(MEMORY_KIND),) \
 	$(if $(SCHEDULER_MODE),SHORT_TERM_MEMORY_SCHEDULER_MODE=$(SCHEDULER_MODE),) \
-	$(if $(PROVIDER),OPENROUTER_PROVIDER=$(PROVIDER),) \
+	OPENROUTER_PROVIDER=$(PROVIDER) \
 	$(if $(QUANTIZATION),OPENROUTER_QUANTIZATION=$(QUANTIZATION),) \
 	$(if $(REQUIRE_PARAMS),OPENROUTER_REQUIRE_PARAMS=true,) \
 	$(PYTHON) scripts/run_scenario_experiment.py \
