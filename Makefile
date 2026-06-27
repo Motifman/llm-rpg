@@ -195,6 +195,16 @@ WORKERS ?= 1
 # 1 回起こす」。0 / 未指定 = 既定 (6) を使う。沈黙を強めたい実験では 12 / 24
 # に上げる。
 IDLE_TICKS ?=
+# 実 LLM 実験のデフォルト model / provider。run 同士の prompt prefix cache を
+# 共有させるため、未指定なら必ず同じ model + provider に固定する。openrouter
+# は同じ model 名でも複数 provider (DeepSeek 本家 / DeepInfra / Parasail /
+# 他) にルーティングし、provider が変わると cache が共有されない。default を
+# 明示することで「あの run と同じ条件か」を疑う必要をなくす。
+# 別 provider で実験したい場合は呼び出し側で LLM_MODEL=... PROVIDER=... を
+# 上書きする。0 byte の cache hit に悩んだら、まず stdout の
+# `[run] openrouter routing: provider=...` を確認すること。
+LLM_MODEL ?= openrouter/deepseek/deepseek-v4-flash
+PROVIDER ?= DeepSeek
 # 受動 episodic recall の「賢く使う」拡張をデフォルト ON にする (Issue #526
 # 段階 2-3 / PR-C)。EPISODIC=1 で受動 recall そのものを有効化したときに、
 # 以下 3 機構も併せて動く。受動 recall が OFF なら何も影響しない。
@@ -214,6 +224,8 @@ experiment:
 		exit 2; \
 	fi
 	@mkdir -p var/runs
+	@echo "[experiment] LLM_MODEL=$(LLM_MODEL) PROVIDER=$(PROVIDER) (default; 上書きは LLM_MODEL=... PROVIDER=...)"
+	LLM_MODEL=$(LLM_MODEL) \
 	LLM_TURN_PARALLEL_WORKERS=$(WORKERS) \
 	$(if $(EPISODIC),LLM_EPISODIC_ENABLED=1,) \
 	LLM_EPISODIC_RECALL_HABITUATION_ENABLED=$(RECALL_HABITUATION) \
@@ -223,7 +235,7 @@ experiment:
 	$(if $(SECTION_ORDER),PROMPT_SECTION_ORDER=$(SECTION_ORDER),) \
 	$(if $(MEMORY_KIND),SHORT_TERM_MEMORY_KIND=$(MEMORY_KIND),) \
 	$(if $(SCHEDULER_MODE),SHORT_TERM_MEMORY_SCHEDULER_MODE=$(SCHEDULER_MODE),) \
-	$(if $(PROVIDER),OPENROUTER_PROVIDER=$(PROVIDER),) \
+	OPENROUTER_PROVIDER=$(PROVIDER) \
 	$(if $(QUANTIZATION),OPENROUTER_QUANTIZATION=$(QUANTIZATION),) \
 	$(if $(REQUIRE_PARAMS),OPENROUTER_REQUIRE_PARAMS=true,) \
 	$(PYTHON) scripts/run_scenario_experiment.py \
