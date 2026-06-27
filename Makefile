@@ -205,6 +205,19 @@ IDLE_TICKS ?=
 # `[run] openrouter routing: provider=...` を確認すること。
 LLM_MODEL ?= openrouter/deepseek/deepseek-v4-flash
 PROVIDER ?= DeepSeek
+# 受動 episodic recall の「賢く使う」拡張をデフォルト ON にする (Issue #526
+# 段階 2-3 / PR-C)。EPISODIC=1 で受動 recall そのものを有効化したときに、
+# 以下 3 機構も併せて動く。受動 recall が OFF なら何も影響しない。
+#   - RECALL_HABITUATION: 直近 N tick 採用した episode の score を一時的に
+#     下げる慣化 (= 同じ記憶が連続して上に出続けるのを防ぐ)
+#   - RECALL_SLOT: working memory スロット (= 想起した記憶を数 tick 保持)
+#   - AFTERGLOW: 採用されなかった候補の「ぼんやり覚えてる」インデックス
+# これらは Y_recall_layer (= 旧 cache hit 63.7% 取れていた run) のときも
+# 全部 ON だった。EPISODIC と一緒にこれら 3 つを忘れないようデフォルト 1。
+# 個別に OFF にしたい場合は RECALL_HABITUATION=0 のように 0 を渡す。
+RECALL_HABITUATION ?= 1
+RECALL_SLOT ?= 1
+AFTERGLOW ?= 1
 experiment:
 	@if [ -z "$(SCENARIO)" ]; then \
 		echo "SCENARIO is required. e.g. make experiment SCENARIO=data/scenarios/survival_island_v2.json"; \
@@ -215,6 +228,9 @@ experiment:
 	LLM_MODEL=$(LLM_MODEL) \
 	LLM_TURN_PARALLEL_WORKERS=$(WORKERS) \
 	$(if $(EPISODIC),LLM_EPISODIC_ENABLED=1,) \
+	LLM_EPISODIC_RECALL_HABITUATION_ENABLED=$(RECALL_HABITUATION) \
+	LLM_EPISODIC_RECALL_SLOT_ENABLED=$(RECALL_SLOT) \
+	LLM_AFTERGLOW_ENABLED=$(AFTERGLOW) \
 	$(if $(IDLE_TICKS),LLM_IDLE_TIMEOUT_TICKS=$(IDLE_TICKS),) \
 	$(if $(SECTION_ORDER),PROMPT_SECTION_ORDER=$(SECTION_ORDER),) \
 	$(if $(MEMORY_KIND),SHORT_TERM_MEMORY_KIND=$(MEMORY_KIND),) \
