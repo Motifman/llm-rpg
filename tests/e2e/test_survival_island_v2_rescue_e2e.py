@@ -258,10 +258,10 @@ class TestSurvivalIslandV2RescueE2E:
         state.llm_wiring.llm_client = stub
         state.llm_wiring.run_turn(ada)
         assert "signal_fire_lit" in runtime._world_flag_state.as_frozen_set()
-        # ada の light_signal は (max_turns reschedule の影響で) 1 回以上
-        # 呼ばれる可能性がある (success=True なので次 tick への reschedule あり)。
-        # 重要なのは「呼ばれた」ことと、信号が点いた後は別 action に切り替わる
-        # ことなので、最低 1 回呼ばれたことを assert する。
+        # ada の light_signal は self-reschedule chain (= 旧 max_turns) の影響で
+        # 1 回以上呼ばれる可能性がある (success=True なら次 tick への reschedule
+        # あり)。重要なのは「呼ばれた」ことと、信号が点いた後は別 action に
+        # 切り替わることなので、最低 1 回呼ばれたことを assert する。
         assert light_signal_calls["n"] >= 1
 
         # 以降は全 player を spot_graph_wait に切り替えて tick を進める。
