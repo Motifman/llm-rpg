@@ -889,6 +889,13 @@ class _WorldLlmWiring:
                 else None
             ),
         )
+        # 同じ instance を prompt_builder にも共有させる。record_and_check で
+        # 進めた streak を peek_streak で読んで、instruction 末尾に「同じ手
+        # 連続中」warning prefix を載せる。 recent_events に並ぶ既存の警告は
+        # 埋もれやすいので、recency bias が効く instruction 直前にも同じ意図
+        # の prompt を流して二重に attention を取りに行く。
+        if hasattr(self.runtime, "set_tool_call_loop_guard"):
+            self.runtime.set_tool_call_loop_guard(self.tool_call_loop_guard)
         # PR 5 (#227): memo 完了 hint。LLM が memo_done を呼ばずに memo を
         # 放置するケースを救済するため、action_summary / result_summary と
         # 未完了 memo の content を SequenceMatcher で比較し、類似度が高ければ

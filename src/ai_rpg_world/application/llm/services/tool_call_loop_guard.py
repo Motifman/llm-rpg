@@ -264,6 +264,25 @@ class ToolCallLoopGuardService:
                 # trace 失敗は loop guard 本来の責務を止めない
                 pass
 
+    def peek_streak(self, player_id: PlayerId) -> Optional[tuple[str, int]]:
+        """現在連続している ``(tool_name, count)`` を非破壊で覗き見る。
+
+        ``record_and_check`` で進めた streak を prompt_builder が参照して、
+        instruction 末尾に「直前 N 回連続で同じ手」警告を載せるために使う。
+        副作用なし。連続回数 < 2 (= 直前に同じ手を取っていない) なら ``None``。
+        prompt 上の attention に対する追加ヒントなので閾値は loop_guard 本体の
+        thresholds とは独立 (本体は warning 観測注入用、こちらは即時 prefix 用)。
+        """
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        streak = self._streak.get(player_id.value)
+        if streak is None:
+            return None
+        record, count = streak
+        if count < 2:
+            return None
+        return (record.tool_name, count)
+
     def _build_warning_entry(
         self,
         *,
