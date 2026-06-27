@@ -552,6 +552,19 @@ class WorldRuntime:
         except Exception:
             logger.exception("episodic subjective scheduler shutdown failed")
 
+    def set_tool_call_loop_guard(self, guard: Any) -> None:
+        """``ToolCallLoopGuardService`` を後から注入する。
+
+        presentation 層の wiring (= runtime_manager) で先に loop_guard を
+        作って record_and_check を呼んでいる。同じ instance を prompt_builder
+        にも渡して、instruction 末尾に「同じ手の繰り返し」prefix を載せる
+        ために peek_streak される。``None`` を渡すと prefix は出ない。
+        既に prompt_builder が組まれていた場合は cache を破棄して次回
+        build 時に新 guard で組み直す。
+        """
+        self._injected_tool_call_loop_guard = guard
+        self._cached_default_prompt_builder = None
+
     def set_simulation_llm_turn_trigger(
         self, trigger: Optional[ILlmTurnTrigger]
     ) -> None:
@@ -1284,6 +1297,12 @@ class WorldRuntime:
             ),
             default_world_id=getattr(
                 self, "_aux_being_default_world_id", None
+            ),
+            # presentation 層で先に組まれている loop_guard (record_and_check の
+            # 呼び出し主) を peek_streak 用にも共有する。``None`` のままなら
+            # instruction 末尾の警告 prefix は出ない。
+            tool_call_loop_guard=getattr(
+                self, "_injected_tool_call_loop_guard", None
             ),
         )
         self._cached_default_prompt_builder = builder

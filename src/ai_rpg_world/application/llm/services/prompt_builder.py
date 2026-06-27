@@ -11,6 +11,9 @@ if TYPE_CHECKING:
     )
     from ai_rpg_world.domain.being.value_object.being_id import BeingId
     from ai_rpg_world.domain.world.value_object.world_id import WorldId
+    from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
+        ToolCallLoopGuardService,
+    )
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -293,6 +296,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         ] = None,
         being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
         default_world_id: Optional["WorldId"] = None,
+        tool_call_loop_guard: Optional["ToolCallLoopGuardService"] = None,
     ) -> None:
         """Config dataclass ベースの API (Issue #227 後続 HIGH-1)。
 
@@ -485,6 +489,21 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("default_world_id must be WorldId")
         self._being_attachment_resolver = being_attachment_resolver
         self._default_world_id = default_world_id
+        # 直前ターンで同じ tool + 同じ引数を選ぼうとしているとき、その状態を
+        # peek して instruction の先頭に専用警告を挟む (= attention 補強)。
+        # loop_guard 本体の observation 注入は recent_events に並ぶので
+        # 埋もれやすい。recency bias が効きやすい instruction の冒頭に
+        # prepend して、LLM が「直前と同じ手」を選ぶ直前にもう一度気付く
+        # きっかけを作る。None なら警告 prefix は出ない (= 既存挙動)。
+        if tool_call_loop_guard is not None:
+            from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
+                ToolCallLoopGuardService as _TCLGS,
+            )
+            if not isinstance(tool_call_loop_guard, _TCLGS):
+                raise TypeError(
+                    "tool_call_loop_guard must be ToolCallLoopGuardService or None"
+                )
+        self._tool_call_loop_guard = tool_call_loop_guard
         self._objective_text_provider = objective_text_provider
         self._inventory_text_provider = inventory_text_provider
         self._current_tick_provider = current_tick_provider
@@ -789,6 +808,30 @@ class DefaultPromptBuilder(IPromptBuilder):
                 exc_info=True,
             )
 
+    def _build_loop_warning_prefix(self, player_id: PlayerId) -> str:
+        """instruction の前に挟む「同じ手の繰り返し」警告 prefix を返す。
+
+        ``tool_call_loop_guard.peek_streak`` が連続 2 回以上を返したときだけ
+        prefix を作る。それ以外は空文字。文面は recent_events に流れる
+        loop_guard 警告と意図的に重ねて、両方の attention 経路を踏む。
+        """
+        if self._tool_call_loop_guard is None:
+            return ""
+        try:
+            streak = self._tool_call_loop_guard.peek_streak(player_id)
+        except Exception:
+            return ""
+        if streak is None:
+            return ""
+        tool_name, count = streak
+        return (
+            f"⚠ 直前のあなたは `{tool_name}` を同じ引数で {count} ターン連続"
+            f"実行しました。同じ手を取れば同じ結果しか返りません。"
+            f"「直近の出来事」のエラーメッセージや状況のヒントを読み返し、"
+            f"別の選択肢 (引数を変える / 別のツールを使う / 周囲に尋ねる等) "
+            f"を選んでください。"
+        )
+
     def build(
         self,
         player_id: PlayerId,
@@ -951,6 +994,14 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 7. システムプロンプト・ユーザーメッセージ
         system_content = self._system_prompt_builder.build(player_info)
         instruction = action_instruction or self._default_action_instruction
+        # 7b. loop_guard 警告 prefix:
+        # 直前ターンで同じ (tool, 引数) を選んでいた場合、instruction の
+        # 直前に短い警告を挟む。recent_events に埋もれる loop_guard 観測と
+        # 違い、instruction 末尾は LLM の attention が乗りやすい位置のため、
+        # 「同じ手をもう一度選ぼうとしている」瞬間に気付かせやすい。
+        loop_warning = self._build_loop_warning_prefix(player_id)
+        if loop_warning:
+            instruction = loop_warning + "\n\n" + instruction
         user_content = user_context_body + "\n\n" + instruction
 
         result: Dict[str, Any] = {

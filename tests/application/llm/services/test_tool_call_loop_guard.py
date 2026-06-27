@@ -453,3 +453,56 @@ class TestToolCallLoopGuardServiceTraceRecorderProvider:
         # provider 側が呼ばれる
         assert provider_recorder.count == 1
         assert fixed.count == 0
+
+
+class TestToolCallLoopGuardServicePeekStreak:
+    """peek_streak が現在の連続記録を非破壊で覗ける挙動を保証する。"""
+
+    def test_record_前_は_None_を返す(self) -> None:
+        """まだ何も record されていなければ None。"""
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        assert svc.peek_streak(_pid(1)) is None
+
+    def test_1回だけ_record_だと_None(self) -> None:
+        """連続 1 回 (= 直前と同じ手を取っていない) は peek_streak の対象外で None。"""
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        pid = _pid(1)
+        svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
+        assert svc.peek_streak(pid) is None
+
+    def test_2回連続で_tool名と回数を返す(self) -> None:
+        """同じ tool + 同じ引数を 2 回連続 record すると (tool_name, 2) が返る。"""
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        pid = _pid(1)
+        svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
+        svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
+        assert svc.peek_streak(pid) == (TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, 2)
+
+    def test_引数が変わったら_None_に戻る(self) -> None:
+        """同じ tool でも引数が違えば連続扱いにならず None。"""
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        pid = _pid(1)
+        svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
+        svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "Y"})
+        assert svc.peek_streak(pid) is None
+
+    def test_peek_は副作用がない(self) -> None:
+        """peek_streak を何度呼んでも streak / history は変わらない。"""
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        pid = _pid(1)
+        svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
+        svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
+        first = svc.peek_streak(pid)
+        for _ in range(5):
+            assert svc.peek_streak(pid) == first
+
+    def test_player_id_が_PlayerId_でないと_TypeError(self) -> None:
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        with pytest.raises(TypeError):
+            svc.peek_streak(1)  # type: ignore[arg-type]
