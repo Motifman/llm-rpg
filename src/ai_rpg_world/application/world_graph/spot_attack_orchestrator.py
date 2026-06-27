@@ -123,6 +123,7 @@ class SpotAttackOrchestrator:
         visibility_service: Optional[MonsterVisibilityService] = None,
         attack_status_effect_provider: Optional[Any] = None,
         random_source: Optional[Any] = None,
+        event_publisher: Optional[Any] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._monster_repository = monster_repository
@@ -149,6 +150,12 @@ class SpotAttackOrchestrator:
         # 評価を流せる。default は module-level random (実走用)。
         import random as _random
         self._random = random_source or _random.random
+        # PR-K: 攻撃で player aggregate に積まれる PlayerDownedEvent 等を
+        # 世界に流すための publisher。未注入時は publish しない (後方互換)。
+        # 注入時は player save 直前に events を回収 → publish_all して
+        # observation 配信 + outcome 遷移 (PlayerDownedOutcomeHandler) を
+        # トリガする。詳細は execute_monster_attack の docstring 参照。
+        self._event_publisher = event_publisher
 
     # ------------------------------------------------------------------
     # モンスター → プレイヤー攻撃
@@ -212,9 +219,30 @@ class SpotAttackOrchestrator:
                 current_tick=current_tick,
             )
         self._monster_repository.save(attacker_monster)
+        # PR-K: aggregate に積まれた PlayerDownedEvent 等を save 前に回収 +
+        # publish する。これが無いと「致命攻撃で is_down=True になったが
+        # 世界には伝わらない」silent failure になる (Y 実走で発覚)。
+        self._flush_player_events(target_player)
         self._player_status_repository.save(target_player)
         self._spot_graph_repository.save(graph)
         return outcome
+
+    def set_event_publisher(self, event_publisher: Any) -> None:
+        """PR-K: runtime 構築の二段階パターン (= aggregate を作ってから publisher
+        を後付け bind) のための setter。``needs_decay_stage`` /
+        ``status_effects_stage`` と同じ pattern。"""
+        self._event_publisher = event_publisher
+
+    def _flush_player_events(self, player: PlayerStatusAggregate) -> None:
+        """PR-K: aggregate に積まれた domain events を回収 + publish_all し、
+        aggregate 側を clear する。``status_effects_tick_stage_service.py:94-101``
+        と同 pattern。publisher 未注入時は no-op (= 後方互換)。"""
+        if self._event_publisher is None:
+            return
+        events = list(player.get_events())
+        player.clear_events()
+        if events:
+            self._event_publisher.publish_all(events)
 
     def _apply_attack_status_effects(
         self,
@@ -322,6 +350,10 @@ class SpotAttackOrchestrator:
             )
         )
         self._monster_repository.save(target_monster)
+        # PR-K: attacker_player 側にも (将来) events が積まれる可能性に備えて
+        # 同様に flush する。現状の player→monster 経路では何も積まれないので
+        # 実質 no-op だが、対称性のために必須。
+        self._flush_player_events(attacker_player)
         self._player_status_repository.save(attacker_player)
         self._spot_graph_repository.save(graph)
         return outcome
