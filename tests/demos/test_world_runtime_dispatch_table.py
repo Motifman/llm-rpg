@@ -162,50 +162,53 @@ class TestWorldRuntimeDispatchTable:
             assert callable(handler), f"{tool_name} の handler が callable でない"
 
 
-class TestWorldRuntimeTurnCountNotResetOnSchedule:
-    """`_WorldLlmTurnTrigger.schedule_turn` が turn count を 0 リセットしない。
+class TestWorldRuntimeScheduleTurnDoesNotTouchSelfRescheduleStreak:
+    """``_WorldLlmTurnTrigger.schedule_turn`` が self-reschedule streak に
+    干渉しない。
 
-    PR 7 (#227 review HIGH 2): 旧 schedule_turn は呼び出しのたびに
-    `_turn_counts[pid] = 0` していたため、PR 2 で speech 経由の再スケジュール
-    が入ると turn loop 中に max_turns 制限が無効化されるリスクがあった。
-    setdefault で「未登録なら 0、既登録なら維持」に変更したことを保証する。
+    旧名: ``_turn_counts``。PR 7 (#227) で「既存 count を保持」設計に変更したが、
+    PR-I で「外部起床 (= schedule_turn) は streak に一切触らない」設計に
+    さらに整理した。これにより ping-pong (= 他者発話で起こし合う相互作用)
+    は streak の影響を受けず、self-loop (= reschedule=True 連続) だけが
+    streak で打ち切られる。
     """
 
-    def test_schedule_turn_preserves_existing_count(
+    def test_schedule_turn_preserves_existing_streak(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """既に count が積まれているプレイヤーへの schedule_turn 再呼出は
-        count を維持する (リセットしない)。"""
+        """既に streak が積まれているプレイヤーへの schedule_turn は
+        streak に触らない (既存値を維持する)。"""
         state = _create_session(monkeypatch, tmp_path)
         trigger = state.llm_wiring.llm_turn_trigger
         pid = state.runtime.get_player_ids()[0]
 
-        # turn count を 3 まで進める
-        trigger._turn_counts[pid.value] = 3
+        # self-reschedule streak を 3 まで進めた状況を再現
+        trigger._self_reschedule_streak[pid.value] = 3
 
-        # schedule_turn 呼出
+        # 外部起床 (= schedule_turn) を呼ぶ
         trigger.schedule_turn(pid)
 
-        # count が 3 のまま (0 にリセットされていない)
-        assert trigger._turn_counts[pid.value] == 3, (
-            "BUG: schedule_turn が既存の turn count を 0 リセットしている。"
-            "PR 2 の speech-driven 再スケジュールと組み合わせて max_turns 制限が"
-            "事実上無効化される。"
+        # streak が 3 のまま (= 外部起床は触らない)
+        assert trigger._self_reschedule_streak[pid.value] == 3, (
+            "BUG: schedule_turn が既存の self-reschedule streak を変更している。"
+            "外部起床は self-loop chain の連続性に介入してはいけない。"
         )
 
-    def test_schedule_turn_initializes_count_for_new_player(
+    def test_schedule_turn_does_not_initialize_streak_for_new_player(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """初回 schedule_turn (count 未登録) の場合は 0 で初期化する。"""
+        """未登録 player への schedule_turn は streak を初期化しない
+        (= 次回 self-reschedule での get(default=0) で扱えば十分)。"""
         state = _create_session(monkeypatch, tmp_path)
         trigger = state.llm_wiring.llm_turn_trigger
         pid = state.runtime.get_player_ids()[0]
 
-        # count を delete してから schedule_turn
-        trigger._turn_counts.pop(pid.value, None)
+        trigger._self_reschedule_streak.pop(pid.value, None)
         trigger.schedule_turn(pid)
 
-        assert trigger._turn_counts.get(pid.value) == 0
+        # PR-I: streak には登録しない。pending には乗る。
+        assert pid.value not in trigger._self_reschedule_streak
+        assert pid.value in trigger.pending_player_ids
 
 
 class TestReinterpretationAfterTurnTrigger:

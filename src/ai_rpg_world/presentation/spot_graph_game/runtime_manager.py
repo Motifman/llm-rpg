@@ -409,23 +409,82 @@ class _LlmPhaseAResult:
 
 @dataclass
 class _WorldLlmTurnTrigger:
-    """Queues escape-game LLM turns and runs them against the session runtime."""
+    """Queues LLM turns and runs them against the session runtime.
+
+    ## 「turn」「ターン」という言葉について
+
+    本クラスの ``run_scheduled_turns`` / ``schedule_turn`` の "turn" は
+    **TRPG の順番待ち** の意味では **無い**。実体は event 駆動の wave
+    実行: 1 world tick = 1 wave、 wave 内で ``pending_player_ids`` の
+    全員を並列に LLM 呼び出しする。
+
+    ## ``_self_reschedule_streak`` の責務 (= 旧名 ``_turn_counts``)
+
+    **「自分の ``result.should_reschedule=True`` で繰り返し起床する
+    self-loop チェイン」の連続数を ``max_self_reschedule_streak`` で
+    打ち切る** ためのカウンタ。**他者観測 / 失敗通知 / arrival callback
+    等の外部起床 (= schedule_turn 経由) は streak を触らない** ので、
+    ping-pong (= A↔B が互いに発話で起こし合う相互作用) は無限に許容する
+    (= 自然な振る舞いなので止めない)。
+
+    chain を終了させる条件:
+    - ``was_no_op=True`` (= LLM が tool を返さなかった)
+    - ``should_reschedule=False`` (= 通常成功 or reschedule 不要な失敗)
+    - streak が ``max_self_reschedule_streak`` に到達 (= self-loop の強制 stop)
+
+    旧名 ``max_turns`` / ``_turn_counts`` は「TRPG ターン上限」を連想させて
+    誤読を招いていたため、PR-I で意味を反映した名前に変更した。
+
+    ## PR-I の挙動変化 (意図的)
+
+    1. ``schedule_turn`` が ``_self_reschedule_streak`` を一切触らない
+       (旧: ``setdefault(pid, 0)`` で「未登録なら 0 を入れる」をしていたが、
+       外部起床経路は self-loop chain と独立であるべきという原則に合わせて
+       撤廃)
+    2. 旧 ``_account_result`` の ``elif should_reschedule or current_count < max_turns``
+       が含意していた「**should_reschedule に関わらず max ターンまで auto-stay**」
+       挙動を撤廃。新コードは ``should_reschedule=True`` の時だけ streak を
+       積んで pending に再追加する。``should_reschedule=False`` (= 通常成功 or
+       reschedule 不要な失敗) は即 chain 終了 = streak pop。
+
+    ## 1. の影響範囲
+
+    ``schedule_turn`` は他者観測 / arrival callback / idle timer が呼ぶ経路で、
+    self-loop chain (= 同一 agent 自走) とは独立。streak を触らないことで
+    ping-pong (= A↔B の発話で起こし合う相互作用) が永続的に成立する。
+
+    ## 2. の影響範囲
+
+    調査済み: ``should_reschedule=True`` を実際に返す経路は
+    ``_RESCHEDULE_ERROR_CODES`` (= ``NO_TOOL_CALL`` / ``LLM_API_CALL_FAILED`` /
+    ``LLM_RATE_LIMIT`` / ``INVALID_DESTINATION_LABEL``) に該当する失敗のみ。
+    通常成功は ``should_reschedule=False`` がデフォルト。よって「auto-stay 5
+    turns に暗黙的に依存するコード」は事実上存在せず、本変更は実走の挙動を
+    変えない。Y 実走で観測された「**player 1 が 75 wave 連続活動**」は
+    auto-stay の副産物ではなく **外部観測連鎖**による正当な活動だったので、
+    新コードでも同じパターンが再現する。
+    """
 
     wiring: "_WorldLlmWiring"
-    max_turns: int = 5
+    # 自己 reschedule チェインの連続上限。これに達したら pending から外す。
+    # 他者観測経由の起床は影響を受けないので、ping-pong は影響なし。
+    max_self_reschedule_streak: int = 5
     pending_player_ids: set[int] = field(default_factory=set)
-    _turn_counts: dict[int, int] = field(default_factory=dict)
+    # 旧名 _turn_counts。pid → 自己 reschedule の連続回数。
+    _self_reschedule_streak: dict[int, int] = field(default_factory=dict)
 
     def schedule_turn(self, player_id: PlayerId) -> None:
+        """外部要因 (他者観測 / arrival / idle timer 等) による起床。
+
+        **``_self_reschedule_streak`` には触らない**。これにより:
+        - ping-pong (= 他者発話で起こし合う) は streak を 0 リセットせず、
+          かつ streak を増やしもしないので、永続的に成立する
+        - self-loop の streak (= 既に積まれていた値) も保持される。次の
+          turn で should_reschedule=True なら +1 して累積する
+        - pop 済 pid に対しては未登録扱い、次の self-reschedule で 1 から
+          数え直す (= ``_self_reschedule_streak.get(pid, 0)`` の default 経由)
+        """
         self.pending_player_ids.add(player_id.value)
-        # PR 7 (#227 review HIGH 2): カウントを 0 リセットせずに保持する。
-        # 旧コードは schedule_turn のたびに `_turn_counts[pid] = 0` でリセット
-        # していたため、PR 2 で speech が ObservationTurnScheduler 経由で再
-        # スケジュールされるようになった後は、turn loop 中に他者発話が来ると
-        # max_turns 制限が事実上無効化される (2 プレイヤー間で交互に発話が
-        # 続くと無限ループの可能性)。setdefault で「未登録なら 0、既登録なら
-        # 維持」に変更。
-        self._turn_counts.setdefault(player_id.value, 0)
 
     def run_scheduled_turns(self) -> None:
         # #363 Fix 1a: ゲーム既終了なら一切 LLM を回さない。実験 #25 ON_FULL で
@@ -438,7 +497,7 @@ class _WorldLlmTurnTrigger:
             try:
                 if check_game_end().is_ended:
                     self.pending_player_ids.clear()
-                    self._turn_counts.clear()
+                    self._self_reschedule_streak.clear()
                     return
             except Exception:
                 # check_game_end 自体が落ちても turn 実行を続ける fail-safe
@@ -507,15 +566,40 @@ class _WorldLlmTurnTrigger:
     def _account_result(
         self, player_id_value: int, result: LlmCommandResultDto
     ) -> None:
-        """ターン後の reschedule / turn count 管理を 1 か所に集約する。"""
-        current_count = self._turn_counts.get(player_id_value, 0) + 1
+        """turn 完了後の self-reschedule streak 管理を 1 か所に集約する。
+
+        chain を終わらせる条件:
+        - ``result.was_no_op``: LLM が tool を返さなかった (= chain 中断)
+        - ``result.should_reschedule=False``: 通常成功 or reschedule 不要な
+          失敗 (= self-loop ではない)
+        - streak が ``max_self_reschedule_streak`` に到達: self-loop の
+          強制 stop
+
+        chain を継続する条件:
+        - ``result.should_reschedule=True`` かつ streak が未到達 → streak +1
+          して pending に再追加
+        """
+        current_streak = self._self_reschedule_streak.get(player_id_value, 0) + 1
         if result.was_no_op:
-            self._turn_counts.pop(player_id_value, None)
-        elif result.should_reschedule or current_count < self.max_turns:
-            self.pending_player_ids.add(player_id_value)
-            self._turn_counts[player_id_value] = current_count
+            # tool を返さなかった = chain 中断
+            self._self_reschedule_streak.pop(player_id_value, None)
+        elif not result.should_reschedule:
+            # 通常成功 or reschedule 不要な失敗 = chain 終了
+            self._self_reschedule_streak.pop(player_id_value, None)
+        elif current_streak >= self.max_self_reschedule_streak:
+            # 上限到達: chain を強制終了して streak を pop (= 次回 fresh start)。
+            # **pending には触らない**: 同 wave で他者観測経由で
+            # schedule_turn された外部起床を消さないため。
+            # 結果として:
+            #   - 同 wave で外部観測があれば次 wave で走る (= 外部起床は妨げない)
+            #   - 外部観測が無ければ次 wave で走らない (= 自走 chain は止まる)
+            #   - 次回 should_reschedule=True を返した時は streak=1 からの新しい
+            #     chain として数え直す (= soft cap)
+            self._self_reschedule_streak.pop(player_id_value, None)
         else:
-            self._turn_counts.pop(player_id_value, None)
+            # should_reschedule=True かつ未到達 → streak を累積して chain 継続
+            self._self_reschedule_streak[player_id_value] = current_streak
+            self.pending_player_ids.add(player_id_value)
         # #346 Step 3 / #404: per-agent idle timer の last 更新。turn が走った
         # = 「いま活動した」なので heartbeat の沈黙タイマーをリセットする。
         # event 駆動で頻繁に動く player には heartbeat が出なくなり、
@@ -654,7 +738,10 @@ class _WorldLlmWiring:
     runtime: Any
     observation_buffer: Any
     llm_client: Any = field(default_factory=create_llm_client_from_env)
-    max_turns: int = 5
+    # 旧名 max_turns。trigger に passthrough する。意味は「自己 reschedule
+    # チェインの連続上限」(= TRPG のターン数ではない)。詳細は
+    # ``_WorldLlmTurnTrigger`` の docstring を参照。
+    max_self_reschedule_streak: int = 5
     # 失敗 DTO を ActionFailed 観測に変換する emitter (Optional)。
     # ``attach_action_failed_wiring`` で配線される。None の場合は失敗観測を
     # 発行しない (後方互換 / テスト用ショートカット)。
@@ -667,7 +754,7 @@ class _WorldLlmWiring:
         self.observation_appender = ObservationAppender(self.observation_buffer)
         self.llm_turn_trigger = _WorldLlmTurnTrigger(
             wiring=self,
-            max_turns=self.max_turns,
+            max_self_reschedule_streak=self.max_self_reschedule_streak,
         )
         # PR 4 (#227): 同一ツール連打を engine 側で検知し、警告を観測として
         # 注入する loop guard。PR #230 で LlmAgentOrchestrator 経由で配線
