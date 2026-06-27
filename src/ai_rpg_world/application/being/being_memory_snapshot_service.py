@@ -126,12 +126,65 @@ class BeingMemoryPayloadFormatError(Exception):
     """payload JSON が壊れている / 期待する key が欠けているとき。"""
 
 
+class SnapshotCoverageError(Exception):
+    """snapshot payload が ``EXPECTED_PAYLOAD_KEYS`` を網羅していないとき。
+
+    新しい per-Being store を追加したのに ``capture()`` の dict 生成や
+    ``restore()`` の payload 検証を更新し忘れた場合に、起動時 (= 初回 capture)
+    に投げて silent failure を構造的に止める。"""
+
+
+def _validate_snapshot_payload_coverage(
+    *,
+    emitted_keys: set[str] | frozenset[str],
+    expected_keys: set[str] | frozenset[str],
+) -> None:
+    """emitted_keys が expected_keys を網羅しているか確認する。
+
+    expected_keys にあるのに emitted_keys に無いキーがあれば
+    ``SnapshotCoverageError`` を投げる。emitted_keys が expected_keys の
+    超集合 (= schema_version など追加キー) であることは許容する。
+    """
+    missing = expected_keys - emitted_keys
+    if missing:
+        missing_list = ", ".join(sorted(missing))
+        raise SnapshotCoverageError(
+            "Snapshot payload misses required keys: "
+            f"[{missing_list}]. "
+            "新しい per-Being store を追加した場合は EXPECTED_PAYLOAD_KEYS と "
+            "capture() / restore() を同時に更新してください。"
+        )
+
+
 class BeingMemorySnapshotService:
-    """5 memory store の状態を Being 単位で JSON 1 本に save / restore する。
+    """6 memory store の状態を Being 単位で JSON 1 本に save / restore する。
 
     ステートレス: 全 store を constructor で受け取り、``capture`` / ``restore``
     のみが副作用を持つ。
+
+    ``EXPECTED_PAYLOAD_KEYS`` は本 service が capture / restore 両方で扱う
+    キーの SSOT。新しい per-Being store を追加するときは:
+
+    1. ``EXPECTED_PAYLOAD_KEYS`` に新 key を足す
+    2. ``__init__`` に新 store の引数を追加
+    3. ``capture()`` の payload dict に新 key の生成ロジックを追加
+    4. ``restore()`` のデコード / 書き戻しに新 key を追加
+
+    1 だけ足して 3 を忘れると、初回 capture() で ``SnapshotCoverageError``
+    が起動時に投げられ silent failure を構造的に防ぐ。
     """
+
+    # PR-F: 本 service が emit / accept する payload key の SSOT。
+    # 新 store を足す PR は、ここに 1 行追加 + capture/restore 更新で揃える。
+    EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset({
+        "memo",
+        "semantic_entries",
+        "semantic_cluster_signatures",
+        "memory_links",
+        "recall_buffer_pending",
+        "reinterpretation_journal",
+        "episodic_episodes",
+    })
 
     def __init__(
         self,
@@ -204,6 +257,13 @@ class BeingMemorySnapshotService:
                 for ep in self._episodic_episode.list_all_by_being(being_id)
             ],
         }
+        # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
+        # しているか起動時に確認する。新 store を追加して EXPECTED に key を
+        # 足したが capture() の dict 生成を忘れた状態を即時に止める。
+        _validate_snapshot_payload_coverage(
+            emitted_keys=set(payload.keys()),
+            expected_keys=self.EXPECTED_PAYLOAD_KEYS,
+        )
         return json.dumps(payload, ensure_ascii=False)
 
     def restore(self, being_id: BeingId, payload_json: str) -> None:
@@ -243,16 +303,11 @@ class BeingMemorySnapshotService:
                 f"(supported: {sorted(SUPPORTED_PAYLOAD_SCHEMA_VERSIONS)})"
             )
 
-        required = (
-            "memo",
-            "semantic_entries",
-            "semantic_cluster_signatures",
-            "memory_links",
-            "recall_buffer_pending",
-            "reinterpretation_journal",
-            "episodic_episodes",
-        )
-        for key in required:
+        # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を一括 validate。
+        # 新 store を追加して EXPECTED に key を足したが restore() の検証を
+        # 忘れた場合に備え、欠落キーは SnapshotCoverageError ではなく従来通り
+        # BeingMemoryPayloadFormatError で報告する (= 形式エラーの一種)。
+        for key in sorted(self.EXPECTED_PAYLOAD_KEYS):
             if key not in payload:
                 raise BeingMemoryPayloadFormatError(
                     f"payload missing required key: {key!r}"
@@ -316,6 +371,7 @@ __all__ = [
     "BeingMemorySnapshotService",
     "BeingMemoryPayloadSchemaError",
     "BeingMemoryPayloadFormatError",
+    "SnapshotCoverageError",
     "CURRENT_PAYLOAD_SCHEMA_VERSION",
     "SUPPORTED_PAYLOAD_SCHEMA_VERSIONS",
 ]
