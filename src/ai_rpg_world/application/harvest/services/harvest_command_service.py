@@ -49,7 +49,9 @@ class HarvestCommandService:
         player_inventory_repository: PlayerInventoryRepository,
         player_status_repository: PlayerStatusRepository,
         harvest_domain_service: HarvestDomainService,
-        unit_of_work: UnitOfWork
+        unit_of_work: UnitOfWork,
+        *,
+        event_publisher: Optional[Any] = None,
     ):
         self._physical_map_repository = physical_map_repository
         self._loot_table_repository = loot_table_repository
@@ -60,6 +62,21 @@ class HarvestCommandService:
         self._harvest_domain_service = harvest_domain_service
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
+        # PR-M (task #30): physical_map.add_event(ResourceHarvestedEvent) を
+        # 観測経路 (= PipelineEventPublisher) に直接届けるための publisher。
+        # production では UoW.commit と PipelineEventPublisher は bridge されて
+        # いないため (Y 実走で PlayerDownedEvent が同型の理由で漏れていた)、
+        # 観測 broadcast を成立させるには明示的に publish_all を呼ぶ必要がある。
+        # 未注入時は no-op (= 後方互換、UoW 経路で events は UoW pending に
+        # 積まれるが PipelineEventPublisher には届かない silent failure を
+        # 残したまま)。本フィールドが production wiring されてから真に届く。
+        self._event_publisher = event_publisher
+
+    def set_event_publisher(self, event_publisher: Any) -> None:
+        """PR-M: 二段階構築 pattern (= aggregate を作ってから publisher を後付け
+        bind) のための setter。SpotAttackOrchestrator.set_event_publisher と
+        同型。"""
+        self._event_publisher = event_publisher
 
     def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
         """共通の例外処理を実行"""
@@ -257,6 +274,19 @@ class HarvestCommandService:
         self._player_inventory_repository.save(inventory)
         if item_aggregate:
             self._item_repository.save(item_aggregate)
+
+        # PR-M (task #30): physical_map.save の前に events を回収して
+        # publisher に流す。これが無いと UoW pending には積まれても
+        # PipelineEventPublisher 経由の観測 broadcast に届かない silent
+        # failure になる (PR-K の PlayerDownedEvent と同型)。
+        # 順序: save の前に events を回収しないと、save 内部の
+        # _register_aggregate が UoW に events を回して aggregate を空に
+        # する可能性がある。事前回収で両経路 (= UoW + Pipeline) に確実に
+        # 流す。publisher 未注入時は no-op (後方互換)。
+        if self._event_publisher is not None:
+            events = list(physical_map.get_events())
+            if events:
+                self._event_publisher.publish_all(events)
 
         self._physical_map_repository.save(physical_map)
 
