@@ -1,14 +1,18 @@
-"""BeingMemorySnapshotService — Being 単位で 5 memory store を JSON 1 本に save / restore する。
+"""BeingMemorySnapshotService — Being 単位で 9 memory store を JSON 1 本に save / restore する。
 
 Phase 4 Step 4-2b (Issue #470): run 途中再開 (mid-run resume) を実現するため、
 Phase 4-1 で導入した ``BeingSnapshot.memory_payload_json`` (オペーク JSON)
 の **中身を作る・読む application service** を提供する。
 
+PR-G で対象 store が 6 → 9 に増えた (= 想起階層 slot / afterglow /
+habituation を追加)。新 store を足すときの手順は ``EXPECTED_PAYLOAD_KEYS``
+近くの docstring を参照。
+
 責務:
 
-- ``capture(being_id) -> str``: 5 store の状態を読み出し、内部 schema v1 の
+- ``capture(being_id) -> str``: 9 store の状態を読み出し、内部 schema v1 の
   JSON 文字列にシリアライズ
-- ``restore(being_id, payload_json) -> None``: JSON 文字列を 5 store に
+- ``restore(being_id, payload_json) -> None``: JSON 文字列を 9 store に
   bulk overwrite で書き戻す。**best-effort: store ごとに順番に書き戻す
   (cross-store atomicity なし)**。各 store 内では Phase 4-2a の
   ``replace_all_*_by_being`` が single-transaction を保証する
@@ -24,7 +28,11 @@ Phase 4-1 で導入した ``BeingSnapshot.memory_payload_json`` (オペーク JS
   "memory_links": [...],
   "recall_buffer_pending": [...],
   "reinterpretation_journal": [...],
-  "episodic_episodes": [...]
+  "episodic_episodes": [...],
+  "recall_slot_entries": [...],
+  "recall_slot_cooldown": [...],
+  "afterglow_entries": [...],
+  "recall_habituation_last_recalled": [...]
 }
 ```
 
@@ -37,7 +45,7 @@ Phase 4-1 で導入した ``BeingSnapshot.memory_payload_json`` (オペーク JS
 各 store の ``replace_all_*_by_being`` は単一 transaction (sqlite) または
 原子的 dict 操作 (in-memory) で **store 内 atomicity を保証する**。一方
 本 service は **複数 store に跨る atomicity は保証しない** (= 設計判断、
-5 store は独立したリソースで 2-phase commit を導入するコストに見合わない)。
+9 store は独立したリソースで 2-phase commit を導入するコストに見合わない)。
 代わりに:
 
 1. 全 store を順序を決めて書き換える (失敗順序が予測可能)
@@ -59,18 +67,31 @@ import json
 from typing import Any
 
 from ai_rpg_world.application.being._memory_payload_codecs import (
+    afterglow_entry_to_dict,
+    dict_to_afterglow_entry,
+    dict_to_episode_tick_pair,
     dict_to_memo_entry,
     dict_to_memory_link,
     dict_to_recall_observation,
+    dict_to_recall_slot_entry,
     dict_to_reinterpretation_entry,
     dict_to_semantic_entry,
     dict_to_subjective_episode,
+    episode_tick_pair_to_dict,
     memo_entry_to_dict,
     memory_link_to_dict,
     recall_observation_to_dict,
+    recall_slot_entry_to_dict,
     reinterpretation_entry_to_dict,
     semantic_entry_to_dict,
     subjective_episode_to_dict,
+)
+from ai_rpg_world.application.llm.services.afterglow_store import IAfterglowStore
+from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+    IEpisodicRecallHabituationStore,
+)
+from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+    IEpisodicRecallSlotStore,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
@@ -157,7 +178,7 @@ def _validate_snapshot_payload_coverage(
 
 
 class BeingMemorySnapshotService:
-    """6 memory store の状態を Being 単位で JSON 1 本に save / restore する。
+    """9 memory store の状態を Being 単位で JSON 1 本に save / restore する。
 
     ステートレス: 全 store を constructor で受け取り、``capture`` / ``restore``
     のみが副作用を持つ。
@@ -176,6 +197,9 @@ class BeingMemorySnapshotService:
 
     # PR-F: 本 service が emit / accept する payload key の SSOT。
     # 新 store を足す PR は、ここに 1 行追加 + capture/restore 更新で揃える。
+    # PR-G: 想起階層 (slot / afterglow / habituation) 3 store ぶん 4 key を追加。
+    # slot は entries と cooldown を別 key に split (= 既存 restore() の
+    # ``isinstance(list)`` 検証規約に合わせるため)。
     EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset({
         "memo",
         "semantic_entries",
@@ -184,6 +208,10 @@ class BeingMemorySnapshotService:
         "recall_buffer_pending",
         "reinterpretation_journal",
         "episodic_episodes",
+        "recall_slot_entries",
+        "recall_slot_cooldown",
+        "afterglow_entries",
+        "recall_habituation_last_recalled",
     })
 
     def __init__(
@@ -195,6 +223,9 @@ class BeingMemorySnapshotService:
         recall_buffer_store: EpisodicRecallBufferRepository,
         reinterpretation_journal_store: EpisodicReinterpretationJournalRepository,
         episodic_episode_store: EpisodicEpisodeRepository,
+        recall_slot_store: IEpisodicRecallSlotStore,
+        afterglow_store: IAfterglowStore,
+        recall_habituation_store: IEpisodicRecallHabituationStore,
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository")
@@ -216,15 +247,33 @@ class BeingMemorySnapshotService:
             raise TypeError(
                 "episodic_episode_store must be EpisodicEpisodeRepository"
             )
+        # PR-G: 想起階層 3 store は Protocol 一致を isinstance() で確認する
+        # (runtime_checkable Protocol)。
+        if not isinstance(recall_slot_store, IEpisodicRecallSlotStore):
+            raise TypeError(
+                "recall_slot_store must implement IEpisodicRecallSlotStore"
+            )
+        if not isinstance(afterglow_store, IAfterglowStore):
+            raise TypeError("afterglow_store must implement IAfterglowStore")
+        if not isinstance(
+            recall_habituation_store, IEpisodicRecallHabituationStore
+        ):
+            raise TypeError(
+                "recall_habituation_store must implement "
+                "IEpisodicRecallHabituationStore"
+            )
         self._memo = memo_store
         self._semantic = semantic_store
         self._memory_link = memory_link_store
         self._recall_buffer = recall_buffer_store
         self._reinterpretation_journal = reinterpretation_journal_store
         self._episodic_episode = episodic_episode_store
+        self._recall_slot = recall_slot_store
+        self._afterglow = afterglow_store
+        self._recall_habituation = recall_habituation_store
 
     def capture(self, being_id: BeingId) -> str:
-        """5 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
+        """9 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         payload: dict[str, Any] = {
@@ -256,6 +305,25 @@ class BeingMemorySnapshotService:
                 subjective_episode_to_dict(ep)
                 for ep in self._episodic_episode.list_all_by_being(being_id)
             ],
+            # PR-G: 想起階層の per-Being state を snapshot に乗せる。
+            "recall_slot_entries": [
+                recall_slot_entry_to_dict(e)
+                for e in self._recall_slot.get_slot(being_id)
+            ],
+            "recall_slot_cooldown": [
+                episode_tick_pair_to_dict(eid, tick)
+                for eid, tick in self._recall_slot.get_cooldown_until(being_id).items()
+            ],
+            "afterglow_entries": [
+                afterglow_entry_to_dict(e)
+                for e in self._afterglow.get_index(being_id)
+            ],
+            "recall_habituation_last_recalled": [
+                episode_tick_pair_to_dict(eid, tick)
+                for eid, tick in self._recall_habituation.list_all_by_being(
+                    being_id
+                ).items()
+            ],
         }
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
         # しているか起動時に確認する。新 store を追加して EXPECTED に key を
@@ -267,7 +335,7 @@ class BeingMemorySnapshotService:
         return json.dumps(payload, ensure_ascii=False)
 
     def restore(self, being_id: BeingId, payload_json: str) -> None:
-        """payload JSON を 5 store に bulk overwrite で書き戻す。
+        """payload JSON を 9 store に bulk overwrite で書き戻す。
 
         **store ごとに順番に書き戻す best-effort 動作**。各 store 内では
         ``replace_all_*_by_being`` が single transaction で atomic だが、
@@ -349,6 +417,28 @@ class BeingMemorySnapshotService:
             dict_to_subjective_episode,
             "episodic_episodes",
         )
+        # PR-G: 想起階層のデコード。slot は entries と cooldown を別 list で
+        # 受け取り、cooldown と habituation は (episode_id, tick) ペアの list。
+        slot_entries = _decode_list(
+            payload["recall_slot_entries"],
+            dict_to_recall_slot_entry,
+            "recall_slot_entries",
+        )
+        cooldown_pairs = _decode_list(
+            payload["recall_slot_cooldown"],
+            dict_to_episode_tick_pair,
+            "recall_slot_cooldown",
+        )
+        afterglow_entries = _decode_list(
+            payload["afterglow_entries"],
+            dict_to_afterglow_entry,
+            "afterglow_entries",
+        )
+        habituation_pairs = _decode_list(
+            payload["recall_habituation_last_recalled"],
+            dict_to_episode_tick_pair,
+            "recall_habituation_last_recalled",
+        )
 
         # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない、
         # memory_link / reinterpretation_journal / recall_buffer は episode に
@@ -365,6 +455,14 @@ class BeingMemorySnapshotService:
             being_id, journal_entries
         )
         self._episodic_episode.replace_all_by_being(being_id, episodes)
+        # PR-G: 想起階層の bulk overwrite。
+        self._recall_slot.replace_all_by_being(
+            being_id, slot_entries, dict(cooldown_pairs)
+        )
+        self._afterglow.replace_all_by_being(being_id, afterglow_entries)
+        self._recall_habituation.replace_all_by_being(
+            being_id, dict(habituation_pairs)
+        )
 
 
 __all__ = [

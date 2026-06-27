@@ -23,7 +23,20 @@ service の構築のみ)。
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # PR-G: codec が触る per-Being store の VO を型注釈のみ用途で前方参照。
+    # 実体は dict_to_* の関数内で遅延 import する (= 本 module は
+    # application/being/ 層、参照先 VO は application/llm/services/ 配下なので
+    # 単純な top-level import でも 循環は起きないが、他の codec 群と書式を
+    # 揃え + dataclass の構築コストを呼び出し時に閉じ込めるためこの形を取る)。
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        AfterglowEntry,
+    )
+    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+        RecallSlotEntry,
+    )
 
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (
     EpisodeAction,
@@ -356,3 +369,64 @@ def dict_to_subjective_episode(data: dict[str, Any]) -> SubjectiveEpisode:
         recall_count=int(data.get("recall_count", 0)),
         last_recalled_at=_iso_to_dt(str(last_recalled)) if last_recalled else None,
     )
+
+
+# ── PR-G: Recall Layer (Slot / Afterglow / Habituation) codec ──
+# 想起階層 (PR #580 / #588 / #526 段階 2) の per-Being 状態を snapshot に乗せる
+# ための VO ↔ dict 変換。slot cooldown と habituation は (episode_id, tick) の
+# ペアなので共通の codec を使う。
+
+
+def recall_slot_entry_to_dict(entry: RecallSlotEntry) -> dict[str, Any]:
+    """RecallSlotEntry → dict。"""
+    return {
+        "episode_id": entry.episode_id,
+        "entered_tick": entry.entered_tick,
+    }
+
+
+def dict_to_recall_slot_entry(data: dict[str, Any]) -> RecallSlotEntry:
+    """dict → RecallSlotEntry。"""
+    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+        RecallSlotEntry,
+    )
+    return RecallSlotEntry(
+        episode_id=str(data["episode_id"]),
+        entered_tick=int(data["entered_tick"]),
+    )
+
+
+def afterglow_entry_to_dict(entry: AfterglowEntry) -> dict[str, Any]:
+    """AfterglowEntry → dict。``source`` は AfterglowSource.value (= 文字列)。"""
+    return {
+        "episode_id": entry.episode_id,
+        "heading": entry.heading,
+        "entered_tick": entry.entered_tick,
+        "source": entry.source.value,
+    }
+
+
+def dict_to_afterglow_entry(data: dict[str, Any]) -> AfterglowEntry:
+    """dict → AfterglowEntry。未知の source は AfterglowSource(...) が
+    ValueError を投げる (= _decode_list で BeingMemoryPayloadFormatError に
+    wrap される)。"""
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        AfterglowEntry,
+        AfterglowSource,
+    )
+    return AfterglowEntry(
+        episode_id=str(data["episode_id"]),
+        heading=str(data["heading"]),
+        entered_tick=int(data["entered_tick"]),
+        source=AfterglowSource(str(data["source"])),
+    )
+
+
+def episode_tick_pair_to_dict(episode_id: str, tick: int) -> dict[str, Any]:
+    """(episode_id, tick) → dict。cooldown / habituation で共有する shape。"""
+    return {"episode_id": episode_id, "tick": int(tick)}
+
+
+def dict_to_episode_tick_pair(data: dict[str, Any]) -> tuple[str, int]:
+    """dict → (episode_id, tick)。"""
+    return (str(data["episode_id"]), int(data["tick"]))

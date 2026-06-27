@@ -118,6 +118,18 @@ def _build_stack(
     )
     episode_store = SqliteSubjectiveEpisodeStore.connect(str(episode_db))
 
+    # PR-G: 想起階層 (slot / afterglow / habituation) は CLI 経由の単発 dump で
+    # 使う場面が無いので、空の in-memory store を渡すだけで足る。
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        InMemoryAfterglowStore,
+    )
+    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+        InMemoryEpisodicRecallHabituationStore,
+    )
+    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+        InMemoryEpisodicRecallSlotStore,
+    )
+
     memory_snapshot = BeingMemorySnapshotService(
         memo_store=InMemoryMemoStore(),
         semantic_store=semantic_store,
@@ -125,6 +137,9 @@ def _build_stack(
         recall_buffer_store=reinterpretation_store,
         reinterpretation_journal_store=reinterpretation_store,
         episodic_episode_store=episode_store,
+        recall_slot_store=InMemoryEpisodicRecallSlotStore(),
+        afterglow_store=InMemoryAfterglowStore(),
+        recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
     )
     return being_repo, memory_snapshot, BeingSnapshotFileGateway()
 
@@ -173,6 +188,14 @@ def cmd_save(args: argparse.Namespace) -> int:
         memory_db=args.memory_db,
         episode_db=args.episode_db,
         reinterpretation_db=args.reinterpretation_db,
+    )
+    # PR-G: CLI 経由の dump は RAM 上の sidecar (slot / afterglow / habituation)
+    # に到達できないので、これらは常に空のまま保存される。実験 run 中の想起
+    # 状態を取りこぼしていることがユーザに伝わるよう、明示的に warning を残す。
+    logger.warning(
+        "recall_slot / afterglow / habituation are in-memory sidecars and "
+        "are NOT captured via this CLI. The resulting snapshot will have "
+        "those layers empty."
     )
     use_case = CaptureBeingSnapshotToFileUseCase(
         being_repository=being_repo,

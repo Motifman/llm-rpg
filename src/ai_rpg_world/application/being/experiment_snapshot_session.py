@@ -140,6 +140,33 @@ def _empty_episode_store() -> Any:
     return InMemorySubjectiveEpisodeStore()
 
 
+def _empty_recall_slot_store() -> Any:
+    """PR-G: snapshot 配線時に slot が未配線なら空 in-memory store で代用する。"""
+    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+        InMemoryEpisodicRecallSlotStore,
+    )
+
+    return InMemoryEpisodicRecallSlotStore()
+
+
+def _empty_afterglow_store() -> Any:
+    """PR-G: snapshot 配線時に afterglow が未配線なら空 in-memory store で代用する。"""
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        InMemoryAfterglowStore,
+    )
+
+    return InMemoryAfterglowStore()
+
+
+def _empty_recall_habituation_store() -> Any:
+    """PR-G: snapshot 配線時に habituation が未配線なら空 in-memory store で代用する。"""
+    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+        InMemoryEpisodicRecallHabituationStore,
+    )
+
+    return InMemoryEpisodicRecallHabituationStore()
+
+
 @dataclass(frozen=True)
 class _PlayerSnapshotMapping:
     """1 player ↔ 1 file のマッピング。"""
@@ -273,6 +300,21 @@ class ExperimentSnapshotSession:
         episode_store = (
             wiring_result.episodic_episode_store or _empty_episode_store()
         )
+        # PR-G: 想起階層 (slot / afterglow / habituation) は wiring_result が
+        # 露出していないことが多い (= episodic_stack が enable のときだけ wire
+        # される) ので、未配線なら空 in-memory store にフォールバックする。
+        recall_slot_store = (
+            getattr(wiring_result, "recall_slot_store", None)
+            or _empty_recall_slot_store()
+        )
+        afterglow_store = (
+            getattr(wiring_result, "afterglow_store", None)
+            or _empty_afterglow_store()
+        )
+        recall_habituation_store = (
+            getattr(wiring_result, "recall_habituation_store", None)
+            or _empty_recall_habituation_store()
+        )
 
         # どの store が空 fallback で稼働しているかを 1 度だけ info ログに残す
         # = 「snapshot 取ったけど semantic は空だった」のデバッグ材料。
@@ -285,6 +327,11 @@ class ExperimentSnapshotSession:
                 "episodic_recall_buffer_store",
                 "episodic_reinterpretation_journal_store",
                 "episodic_episode_store",
+                # PR-G: 想起階層 3 store も fallback 監視対象に入れる。配線漏れで
+                # 空 store にフォールバックしたことを後追いできるようにする。
+                "recall_slot_store",
+                "afterglow_store",
+                "recall_habituation_store",
             )
             if getattr(wiring_result, name, None) is None
         ]
@@ -302,6 +349,9 @@ class ExperimentSnapshotSession:
             recall_buffer_store=recall_buffer_store,
             reinterpretation_journal_store=journal_store,
             episodic_episode_store=episode_store,
+            recall_slot_store=recall_slot_store,
+            afterglow_store=afterglow_store,
+            recall_habituation_store=recall_habituation_store,
         )
         self._gateway = BeingSnapshotFileGateway()
         self._capture_use_case = CaptureBeingSnapshotToFileUseCase(
