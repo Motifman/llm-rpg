@@ -88,8 +88,10 @@ class TestWorldRuntimeUsesSharedFormatStrategy:
         idx_events = user.index("【直近の出来事】")
         idx_state = user.index("【現在地と周囲】")
 
-        # stable_to_volatile: 目的 → 物証 (mid) → 出来事 (volatile) → 現在地 (最 volatile)
-        assert idx_obj < idx_inventory < idx_events < idx_state
+        # stable_to_volatile: 目的 → 出来事 (head 安定 append) → 物証 (mid) → 現在地 (最 volatile)
+        # Y_after_pr612 実測で inventory も memos も volatile と判明したため、
+        # recent_events の head 安定 cache を守るために events を inventory より前に置く。
+        assert idx_obj < idx_events < idx_inventory < idx_state
 
     def test_action_instruction_appears_at_tail(self) -> None:
         """指示文が末尾に来る (現在地より後ろ)。"""
