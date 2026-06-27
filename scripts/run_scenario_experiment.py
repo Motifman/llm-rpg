@@ -1077,6 +1077,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     report_path.write_text(report, encoding="utf-8")
 
+    # シナリオ JSON は run dir に必ずコピーしておく。
+    # viewer.html の地図 (spot graph topology) は scenario.json から組み立てる
+    # ため、ここに無いと「あとで手動 publish した run」で地図が空表示になる。
+    # 以前は publish 時のみコピーしていたが、--publish-gist 無しで走らせた run を
+    # 後追いで build_trace_viewer / publish にかけると地図が欠ける silent failure
+    # になっていた。再現性担保 (シナリオ差分) の観点でも常にコピーしてよい。
+    scenario_copy = out_dir / "scenario.json"
+    try:
+        scenario_copy.write_bytes(args.scenario.read_bytes())
+    except OSError as e:
+        logger.warning("failed to copy scenario JSON into run dir: %s", e)
+
     if not args.no_html:
         _emit_html(trace_path, html_path, title=f"{args.scenario.stem} run")
         print(f"[html] {html_path}", flush=True)
@@ -1088,14 +1100,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         f"elapsed={summary['elapsed_sec']:.1f}s",
         flush=True,
     )
-
-    if args.publish_gist:
-        # シナリオ JSON も gist に同梱して再現性を担保 (差分が見えるように)
-        scenario_copy = out_dir / "scenario.json"
-        try:
-            scenario_copy.write_bytes(args.scenario.read_bytes())
-        except OSError as e:
-            logger.warning("failed to copy scenario JSON into run dir: %s", e)
 
         from scripts.publish_experiment_gist import (  # noqa: WPS433
             GistPublishError,

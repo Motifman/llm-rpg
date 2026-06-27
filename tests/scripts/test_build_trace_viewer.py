@@ -716,3 +716,31 @@ class TestRenderViewerHtmlSpeech:
         assert "inner thought" in out  # チェックボックスラベル
         assert ".bubble.speech" in out
         assert ".bubble.thought" in out
+
+
+class TestRenderViewerHtmlSiblingLinks:
+    """episodic / timeline への遷移リンクが htmlpreview 経由でも壊れない仕掛けを確認する。"""
+
+    def test_episodic_timeline_リンクは_data_sibling_属性で兄弟ファイル名を持つ(self) -> None:
+        """相対 href だけだと htmlpreview 経由で raw gist (text/plain) に解決され
+        ソース表示になるため、JS 書き換えの起点として data-sibling を持たせる。"""
+        out = render_viewer_html(
+            title="t",
+            events=_sample_events(),
+            scenario_topology={"spots": [], "connections": []},
+            cytoscape_js_src="/* fake */",
+        )
+        assert 'data-sibling="episodic.html"' in out
+        assert 'data-sibling="timeline.html"' in out
+
+    def test_htmlpreview_経由で兄弟リンクを_htmlpreview_url_に書き換える_JS_が埋め込まれる(self) -> None:
+        """viewer 自身が htmlpreview.github.io 経由で配信されている場合、兄弟
+        リンクも htmlpreview でラップした URL に書き換える JS が含まれる。"""
+        out = render_viewer_html(
+            title="t",
+            events=_sample_events(),
+            scenario_topology={"spots": [], "connections": []},
+            cytoscape_js_src="/* fake */",
+        )
+        assert "htmlpreview.github.io" in out
+        assert "data-sibling" in out

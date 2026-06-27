@@ -566,8 +566,8 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     <span>events <strong>{total_events}</strong></span>
     <span>players <strong>{player_summary}</strong></span>
     <span class="viewer-links">
-      <a href="episodic.html" title="episodic memory viewer" class="vlink">📖 episodic</a>
-      <a href="timeline.html" title="player × tick timeline" class="vlink">📊 timeline</a>
+      <a href="episodic.html" data-sibling="episodic.html" title="episodic memory viewer" class="vlink">📖 episodic</a>
+      <a href="timeline.html" data-sibling="timeline.html" title="player × tick timeline" class="vlink">📊 timeline</a>
     </span>
   </div>
   <div class="playback">
@@ -1091,6 +1091,24 @@ section h2, #right-section > div > h2 {
 
 _VIEWER_JS_TEMPLATE = """
 (function() {{
+  // 兄弟ファイル (episodic.html / timeline.html) への遷移リンク補正。
+  // 相対 href のままだと htmlpreview.github.io 経由で開いたとき raw gist URL
+  // (text/plain) に解決され、HTML がソースコードとして表示されてしまう。
+  // viewer 自身が htmlpreview 経由で配信されている場合は、兄弟リンクも
+  // htmlpreview でラップした URL に書き換える。ローカル / 直接配信なら
+  // 相対 href のまま動くので何もしない。
+  (function fixSiblingLinks() {{
+    if (window.location.hostname !== 'htmlpreview.github.io') return;
+    // htmlpreview の URL 形式: https://htmlpreview.github.io/?<raw url of this html>
+    const raw = window.location.search.slice(1);  // 先頭の '?' を落とす
+    if (!raw) return;
+    const base = raw.replace(/\\/[^/]+$/, '/');  // 末尾のファイル名を剥がす
+    document.querySelectorAll('a[data-sibling]').forEach(function(a) {{
+      const file = a.getAttribute('data-sibling');
+      a.href = 'https://htmlpreview.github.io/?' + base + file;
+    }});
+  }})();
+
   const scenarioData = {scenario_data_json};
   const players = {players_json};
   const positionTimeline = {position_timeline_json};  // {{tick: {{player_id: spot_id}}}}
