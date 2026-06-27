@@ -37,6 +37,7 @@ from typing import Any, Sequence
 
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
     BeingMemorySnapshotService,
+    SnapshotCoverageError,
 )
 from ai_rpg_world.application.being.being_snapshot_file_gateway import (
     BeingSnapshotFileGateway,
@@ -466,6 +467,12 @@ class ExperimentSnapshotSession:
                     exc,
                 )
                 failed.append((m.being_id, str(exc)))
+            except SnapshotCoverageError:
+                # PR-F: 「新 store を追加して capture() を更新し忘れた」状態
+                # を表す programming error。実験 run を続行させると 全 Being の
+                # snapshot が壊れたまま完走してしまう (= 起動時 fail-fast の
+                # 意図を裏切る) ので、warning に丸めずそのまま伝播させる。
+                raise
             except Exception as exc:  # noqa: BLE001 - 実験 run の生命を最優先
                 logger.warning(
                     "snapshot capture failed for being_id=%s: %s",
