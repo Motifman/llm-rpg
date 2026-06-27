@@ -386,24 +386,26 @@ class TestPromptSectionsE2E:
         assert "【直近の出来事】" in text
         assert "【現在地と周囲】" in text
 
-        # stable_to_volatile 順序 (= 関連する記憶 は cue 全再計算で volatile なので
-        # append 中心 head 安定の 直近の出来事 より下に置く):
-        # objective → L5 → learned → L4 → memos → inventory → events → memories → current
+        # stable_to_volatile 順序: memos は Y_after_pr612 実測で agent の
+        # memo_add/done 頻度次第で volatile になることが判明したため、
+        # recent_events の head 安定 cache を守るために recent_events の下へ
+        # 移動した。順序は:
+        # objective → L5 → learned → L4 → inventory → events → memos → memories → current
         idx = {
             "obj": text.index("【現在の目的】"),
             "l5": text.index("【自己像と世界観】"),
             "learned": text.index("【関連する学び】"),
             "l4": text.index("【最近の流れ】"),
-            "memos": text.index("【進行中のメモ】"),
             "inv": text.index("【所持・判明した物証】"),
-            "mem": text.index("【関連する記憶】"),
             "events": text.index("【直近の出来事】"),
+            "memos": text.index("【進行中のメモ】"),
+            "mem": text.index("【関連する記憶】"),
             "current": text.index("【現在地と周囲】"),
         }
         # 「最も安定」→「最も volatile」の順
         assert (
             idx["obj"] < idx["l5"] < idx["learned"] < idx["l4"]
-            < idx["memos"] < idx["inv"] < idx["events"] < idx["mem"] < idx["current"]
+            < idx["inv"] < idx["events"] < idx["memos"] < idx["mem"] < idx["current"]
         )
 
     def test_L5_あり_L4_あり_で_両_section_が_見える(self) -> None:

@@ -313,22 +313,28 @@ def _format_stable_to_volatile(
 ) -> str:
     """Phase 0 default: 更新頻度の低い section から並べる。
 
-    順序: objective → self_image (L5, Phase 3) → learned → mid_summary (L4) →
-    memos → inventory → memories → recent_events → current_state。
+    順序: objective → self_image (L5) → learned → mid_summary (L4) →
+    inventory → recent_events → memos → memories → current_state。
 
     section 寿命 (cache 寿命の根拠):
     - L5 self_image: ~45 ターンに 1 回 (最も安定)
     - learned: cluster 昇格時のみ更新 (10+ ターン安定)
     - L4 mid_summary: 15 ターンに 1 世代追加・内容は確定後不変
-    - memos: memo_add/done 時のみ
-    - ... 末尾 current_state は毎ターン更新
+    - inventory: pickup/use/drop 時のみ更新
+    - recent_events: 末尾 append 中心で head 安定
+    - memos: 「semi-static のはず」だったが、Y_after_pr612 実測で agent の
+      memo_add/done 頻度次第で大きく上下することが判明 (memos_chars 変動率
+      旧 12% → 新 38%)。recent_events より上に置くと memo 操作 1 回で
+      recent_events の cache が以降ずっと miss する。recent_events を
+      守る方が優先度が高いので、memos は recent_events の下に下げる
+    - 末尾 current_state は毎ターン更新
     """
     sections: list[str] = []
 
     # 1. 現在の目的 (静的、空なら省略)
     _emit_objective(sections, objective_text)
 
-    # 2. 自己像と世界観 (L5 long summary、空なら省略) ★ Phase 3
+    # 2. 自己像と世界観 (L5 long summary、空なら省略)
     # 最も更新頻度が低い (= prefix cache 寿命最長) ので objective の直後
     if long_summary_text.strip():
         sections.extend([
@@ -337,7 +343,7 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 3. 関連する学び (semantic top-K、空なら省略) ★ Phase 1c
+    # 3. 関連する学び (semantic top-K、空なら省略)
     if learned_text.strip():
         sections.extend([
             "【関連する学び】",
@@ -345,7 +351,7 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 4. 最近の流れ (L4 mid summary、空なら省略) ★ Phase 2
+    # 4. 最近の流れ (L4 mid summary、空なら省略)
     if mid_summary_text.strip():
         sections.extend([
             "【最近の流れ】",
@@ -353,17 +359,9 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 4. 進行中のメモ (semi-static、空なら省略)
-    if active_memos_text.strip():
-        # objective が出た直後だと改行が二重になるので、ここでは先頭の空行を
-        # 入れない。_emit_active_memos は先頭に "" を入れる前提なので使えない。
-        sections.extend([
-            "【進行中のメモ】",
-            active_memos_text.strip(),
-            "",
-        ])
-
-    # 4. 所持・判明した物証 (mid-volatile、空なら省略)
+    # 5. 所持・判明した物証 (mid-volatile、空なら省略)
+    # pickup/use/drop 時のみ更新。memos より変動頻度が低いので recent_events
+    # の手前に置く。
     if inventory_text.strip():
         sections.extend([
             "【所持・判明した物証】",
@@ -371,9 +369,9 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 5. 直近の出来事 (常に出す。空なら「（なし）」)
-    # 末尾 append 中心で head は安定 (= prefix cache hit する) ため、
-    # cue 再計算で全変動しうる「関連する記憶」より上に置く。
+    # 6. 直近の出来事 (常に出す。空なら「（なし）」)
+    # 末尾 append 中心で head は安定 (= prefix cache hit する)。memos の
+    # 変動から守るためここまでで stable prefix を確保する。
     sections.extend([
         "【直近の出来事】",
         _RECENT_EVENTS_PREAMBLE,
@@ -381,8 +379,23 @@ def _format_stable_to_volatile(
         "",
     ])
 
-    # 6. 前回の予測と実際 (空なら省略)
-    # 毎ターン直前 action 依存で volatile なので直近の出来事より下に。
+    # 7. 進行中のメモ (実は volatile、空なら省略)
+    # 旧設計では「memo 操作時のみ」と semi-static 扱いで上位 (memos →
+    # inventory → recent_events の順) に置いていたが、Y_after_pr612 実測で
+    # agent が頻繁に memo_add/done を呼ぶと memos_chars が tick 単位で
+    # 大きく上下することが判明 (139→289→140→283→0→123)。memos を上位に
+    # 置くと memo 操作 1 回で以降の inventory / recent_events / 全部が
+    # cache miss する。recent_events より下に置くことで recent_events の
+    # head 安定 cache を守る。
+    if active_memos_text.strip():
+        sections.extend([
+            "【進行中のメモ】",
+            active_memos_text.strip(),
+            "",
+        ])
+
+    # 8. 前回の予測と実際 (空なら省略)
+    # 毎ターン直前 action 依存で volatile なので memos より下。
     if prediction_feedback_text.strip():
         sections.extend([
             "【前回の予測と実際】",
@@ -390,7 +403,7 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 7. 関連する記憶 (volatile、cue 再計算)
+    # 9. 関連する記憶 (volatile、cue 再計算)
     # 受動想起 service が未注入なら空文字 → section ごと省略。
     # 注入されていれば最低でも「(受動想起では何も浮かばなかった)」が来る。
     if relevant_memories_text.strip():
@@ -400,7 +413,7 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 8. 現在地と周囲 (必須、最 volatile なので末尾)
+    # 10. 現在地と周囲 (必須、最 volatile なので末尾)
     sections.extend([
         "【現在地と周囲】",
         current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
