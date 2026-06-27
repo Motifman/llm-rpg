@@ -7,7 +7,7 @@ PlayerStatusAggregate に保持される。
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Dict, Mapping, Optional, Tuple
 
 from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
 
@@ -61,6 +61,21 @@ class AgentNeeds:
     def describe_all(self) -> Tuple[str, ...]:
         """全欲求の状態テキストをタプルで返す。"""
         return tuple(n.describe() for n in self._needs)
+
+    def describe_all_with_deltas(
+        self, deltas: "Mapping[NeedType, int]"
+    ) -> Tuple[str, ...]:
+        """PR-T: 各 need の状態テキストに「前 turn からの delta」を併記したタプル
+        を返す。``deltas`` に該当 need が無いか 0 のときは従来の describe と
+        同じ表現になる。
+
+        delta は ``PlayerStatusAggregate.compute_need_deltas()`` で計算した値を
+        想定。LLM が trajectory (= 改善中 / 悪化中) を能動的に追えるようにする
+        ための表示。
+        """
+        return tuple(
+            n.describe(delta=deltas.get(n.need_type, 0)) for n in self._needs
+        )
 
     @property
     def has_critical(self) -> bool:
