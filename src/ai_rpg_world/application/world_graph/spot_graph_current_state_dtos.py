@@ -191,7 +191,15 @@ class SpotGraphAgentStatusEntry:
 
 @dataclass(frozen=True)
 class SpotGraphPlayerSnapshotDto:
-    """スポットグラフ上のプレイヤー周辺の読み取り専用スナップショット。"""
+    """スポットグラフ上のプレイヤー周辺の読み取り専用スナップショット。
+
+    ``own_fatigue_level`` は行動者本人の疲労 tier。``ok`` / ``tired`` /
+    ``fatigued`` / ``severe`` / ``exhausted`` の 5 段階で、ui_context_builder が
+    身体の状態 section に「重い行動が block されている」等の hint を出すために
+    参照する。仲間用の ``SpotGraphNearbyEntityDto.fatigue_level`` の自分版。
+    旧構造では ``player_state`` dict に ``fatigue_level`` を入れる構造だったが、
+    実際には ``dict(player.state)`` (= 自由 state) しか乗らず、hint が常に空に
+    なる silent failure があった。専用 field として明示する。"""
 
     current_spot_id: int
     current_spot_name: str
@@ -226,6 +234,13 @@ class SpotGraphPlayerSnapshotDto:
     agent_status: SpotGraphAgentStatusEntry = field(
         default_factory=SpotGraphAgentStatusEntry
     )
+
+    # 本人の疲労 tier。`ok` / `tired` / `fatigued` / `severe` / `exhausted`。
+    # ui_context_builder が「身体の状態」section に
+    # 「→ 疲労が限界。travel / attack / interact は実行できない。…」
+    # のような操作可能性 hint を出すために参照する。
+    # default `ok` は player aggregate が無い経路 (= テスト等) の fallback。
+    own_fatigue_level: str = "ok"
 
     # Phase 4-E: 行動者本人の自由 state (HIDDEN を含む全項目)。
     # 自分自身の内面なので毒・呪い・隠しフラグも本人プロンプトには載せる。

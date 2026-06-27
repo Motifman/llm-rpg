@@ -499,6 +499,14 @@ class SpotGraphCurrentStateBuilder:
         player_state_snapshot: dict = (
             dict(player.state) if player is not None else {}
         )
+        # 本人の疲労 tier を専用 field に lift。ui_context_builder が「身体の
+        # 状態」section の hint (= exhausted で重い tool が block されている等)
+        # を出すために参照する。旧構造では ``player_state["fatigue_level"]``
+        # で取ろうとしていたが ``player_state`` は ``dict(player.state)`` (=
+        # 自由 state) しか乗らず常に None になっていた silent failure を解消。
+        own_fatigue_level: str = (
+            getattr(player, "fatigue_level", "ok") if player is not None else "ok"
+        )
 
         return SpotGraphPlayerSnapshotDto(
             current_spot_id=spot_id.value,
@@ -523,6 +531,7 @@ class SpotGraphCurrentStateBuilder:
             player_state=player_state_snapshot,
             active_effect_lines=active_effect_lines,
             agent_status=agent_status,
+            own_fatigue_level=own_fatigue_level,
         )
 
     def _build_active_effect_lines(self, active_effects) -> tuple[str, ...]:
