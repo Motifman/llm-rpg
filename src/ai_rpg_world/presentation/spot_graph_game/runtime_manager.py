@@ -719,6 +719,33 @@ class _WorldLlmTurnTrigger:
         # 通知し、interval 到達時に pending recall batch を LLM 再解釈する。
         # reinterpretation OFF (coordinator 未構築) では no-op。
         self._note_turn_for_reinterpretation(player_id_value)
+        # PR-T: 次回 prompt の「身体の状態」差分表示用に need 値を snapshot する。
+        # 「前回の自分のターン終了時 → 次回 prompt」までの変化が delta として
+        # 表示される (= 自然 decay + 他者観測の影響 + own action 結果)。
+        self._snapshot_needs_after_turn(player_id_value)
+
+    def _snapshot_needs_after_turn(self, player_id_value: int) -> None:
+        """PR-T: turn 終了時に当該 player の現在 need 値を「前回」として保存する
+        fail-safe ヘルパ。次回 turn の prompt build で diff 表示に使われる。
+        """
+        runtime = self.wiring.runtime
+        repo = getattr(runtime, "_player_status_repo", None)
+        if repo is None:
+            return
+        try:
+            player_status = repo.find_by_id(PlayerId(player_id_value))
+            if player_status is not None and hasattr(
+                player_status, "snapshot_needs_for_delta"
+            ):
+                player_status.snapshot_needs_for_delta()
+                repo.save(player_status)
+        except Exception:
+            # snapshot 精度低下は致命ではない (差分が 0 になるだけ)
+            logger.warning(
+                "snapshot_needs_for_delta failed for player_id=%s",
+                player_id_value,
+                exc_info=True,
+            )
 
     def _note_turn_for_reinterpretation(self, player_id_value: int) -> None:
         """reinterpretation coordinator に turn 完了を通知する fail-safe ヘルパ。

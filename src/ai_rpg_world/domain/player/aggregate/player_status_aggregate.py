@@ -1,4 +1,4 @@
-from typing import Any, List, Literal, Mapping, Optional
+from typing import Any, Dict, List, Literal, Mapping, Optional
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -144,6 +144,12 @@ class PlayerStatusAggregate(AggregateRoot):
         )
         self._spot_navigation_state = spot_navigation_state
         self._needs = needs if needs is not None else AgentNeeds.default()
+        # PR-T: 「前回 turn の need 値」を保持する snapshot。初期は空 dict で、
+        # ``snapshot_needs_for_delta()`` を呼んだ時点の各 need 値を入れる。
+        # ``compute_need_deltas()`` がこの値と現在値を比較して delta を返す。
+        # snapshot 系には乗せない (= 長走再開で 1 turn 分だけ差分が空になる
+        # だけで実害なし。連続性は失われない)。
+        self._previous_need_values: Dict[NeedType, int] = {}
         # Phase 4-D-2: プレイヤー個別の自由 state。status effect / disguise /
         # persistent flag / per-player branching 等、型固定フィールドが拾わない
         # 任意のキー/値を保持する。SpotObject.state / ItemInstance.state と
@@ -229,6 +235,34 @@ class PlayerStatusAggregate(AggregateRoot):
         need = self._needs.get(need_type)
         if need is not None:
             self._needs = self._needs.with_updated(need.satisfy(amount))
+
+    def compute_need_deltas(self) -> Dict[NeedType, int]:
+        """PR-T: 前回 ``snapshot_needs_for_delta()`` を呼んだ時点からの need 変化分
+        を ``NeedType → int`` で返す。``+`` は悪化 (= 疲労が増えた等)、``-`` は
+        改善 (= 疲労が減った等)。
+
+        snapshot がまだ無い (= 初回 turn) の場合は、各 need で 0 を返す。
+        副作用なし: 何度呼んでも同じ結果。
+
+        prompt builder が「身体の状態」section に「疲労: 高い（68/100、前回 -2）」
+        のような差分表示を出すための基盤。LLM が trajectory (= 改善中 / 悪化中)
+        を能動的に追えるようにする狙い。
+        """
+        deltas: Dict[NeedType, int] = {}
+        for need in self._needs:
+            prev = self._previous_need_values.get(need.need_type, need.value)
+            deltas[need.need_type] = need.value - prev
+        return deltas
+
+    def snapshot_needs_for_delta(self) -> None:
+        """PR-T: 現在の各 need 値を「前回値」として保存する。次回
+        ``compute_need_deltas()`` で参照される。
+
+        想定タイミング: prompt build の完了直前 (= 表示で diff を取得した
+        後に現在値を次回の baseline として記録する) に呼ぶ。これにより
+        各 turn で「前 turn の自分から見た差分」が表示される。
+        """
+        self._previous_need_values = {n.need_type: n.value for n in self._needs}
 
     @property
     def state(self) -> Mapping[str, Any]:
