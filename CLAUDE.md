@@ -47,6 +47,26 @@ make experiment-resume SCENARIO=data/scenarios/decay_demo.json \
 - 保存失敗は警告のみで実験は成功扱い (実験データを守る)。読み込み失敗は開始前に即終了 (壊れた状態で始めない)
 - 詳細は `docs/design_decisions.md` の #15-#18
 
+### 新しい per-Being store を追加するとき
+
+per-Being scope の state を持つ store (= `BeingId` をキーに保持する store) を
+追加する PR は、その時点で `BeingMemorySnapshotService` への配線まで含めて
+1 PR にまとめる。「あとで足す」と後回しにすると、長走実験の終了 → 再開で
+連続性が静かに壊れる silent failure になる (PR #594 で 3 store ぶんの追従漏れ
+を一度に解消した直接の動機)。
+
+手順は `docs/design_decisions.md` の **#27** を参照。要点だけ:
+
+1. `BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS` に新 key を追加
+2. `BeingMemorySnapshotService.__init__` に新 store の引数を追加
+3. `capture()` の payload dict に新 key の生成ロジックを追加
+4. `restore()` のデコード + 書き戻しを追加 (= store interface に
+   `replace_all_by_being` を生やす)
+
+1 だけ足して 3 / 4 を忘れた状態は PR-F (#593) で導入した起動時 fail-fast が
+止めてくれる。1 を含めて完全に忘れた場合は構造で検出できないので、本
+checklist が最後の砦になる。
+
 ## アーキテクチャ
 
 `src/ai_rpg_world/` 配下にドメイン駆動設計 (DDD) のレイヤードアーキテクチャを採用しています。
