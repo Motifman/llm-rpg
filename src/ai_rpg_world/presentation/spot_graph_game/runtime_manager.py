@@ -143,6 +143,37 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class ToolHandlerConsistencyError(RuntimeError):
+    """tool spec が expose する tool 名集合と、_tool_handlers の dispatch SSOT
+    キー集合の間に欠落があるときに投げられる。
+
+    過去 PR #589 / #590 で「LLM に tool spec を見せているのに dispatch 側に
+    handler が無く UNSUPPORTED_TOOL に化ける」silent failure が発生したため、
+    本例外で起動時に fail-fast させる。"""
+
+
+def validate_tool_handler_consistency(
+    exposed_tool_names: Iterable[str],
+    handler_keys: Iterable[str],
+) -> None:
+    """tool spec の集合が dispatch handler の集合に含まれていることを保証する。
+
+    spec に出ているのに handler が無い tool を見つけたら
+    ``ToolHandlerConsistencyError`` を投げる。handler だけ存在し spec に居ない
+    ケース (= feature flag OFF や aux executor 常駐) は許容する。
+    """
+    exposed = set(exposed_tool_names)
+    registered = set(handler_keys)
+    missing = exposed - registered
+    if missing:
+        missing_list = ", ".join(sorted(missing))
+        raise ToolHandlerConsistencyError(
+            "Tool spec exposes tools without dispatch handlers: "
+            f"[{missing_list}]. "
+            "_tool_handlers (= dispatch SSOT) にエントリを追加してください。"
+        )
+
+
 @dataclass
 class _WorldSpawnAllPlayersLlmResolver(ILLMPlayerResolver):
     """スポーンした全員をプレゼン層脱出セッションでは LLM ターン対象とみなす。"""
@@ -804,6 +835,7 @@ class _WorldLlmWiring:
             TOOL_NAME_SPOT_GRAPH_USE_ITEM,
             TOOL_NAME_SPOT_GRAPH_ATTACK,
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
             TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
@@ -847,10 +879,15 @@ class _WorldLlmWiring:
         # executor は (player_id_int, args) -> result の signature。
         # _tool_handlers は (PlayerId, args, runtime_context) -> result なので
         # ラップして adapt する。runtime_context は executor 側で使わない。
+        # PR-E で fail-fast チェックが発見: tool catalog は give_items
+        # (batch 版) を spec として expose し executor 側にも handler があるのに、
+        # 本 targets タプルから漏れていた。結果 LLM が batch を選んでも
+        # UNSUPPORTED_TOOL に化ける silent failure になっていた。
         targets = (
             TOOL_NAME_SPOT_GRAPH_USE_ITEM,
             TOOL_NAME_SPOT_GRAPH_ATTACK,
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
             TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
@@ -868,6 +905,7 @@ class _WorldLlmWiring:
         resolver_targets = frozenset({
             TOOL_NAME_SPOT_GRAPH_USE_ITEM,
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
         })
@@ -900,6 +938,36 @@ class _WorldLlmWiring:
                 "lazy initialization will fall back, but Phase A 並列化時に race の "
                 "可能性が残る"
             )
+        # PR-E: tool spec (= LLM に見せる) と _tool_handlers (= dispatch SSOT) の
+        # 不整合は起動時に止める。pre-warm が aux executor を完成させた直後に
+        # 一度だけ実行するため、ここに置く。get_tool_definitions に失敗しても
+        # それ自体は通常運用で起きるべきでないが、検証ロジックの破綻で実験を
+        # 止めるのは過剰なので例外なら警告だけ残す。
+        self._validate_tool_handler_consistency()
+
+    def _validate_tool_handler_consistency(self) -> None:
+        """runtime が expose する tool 定義集合と _tool_handlers のキー集合が
+        矛盾していないか確認する。expose されているのに handler 未登録の tool
+        があれば ``ToolHandlerConsistencyError`` を投げて起動を止める。
+
+        過去 PR #589 / #590 で「LLM には tool を見せているのに dispatch 側で
+        UNSUPPORTED_TOOL になる」silent failure を 30 tick 走らせてから気付いた
+        ことが直接の動機。
+        """
+        try:
+            definitions = self.runtime.get_tool_definitions()
+        except Exception:
+            logger.warning(
+                "_validate_tool_handler_consistency: get_tool_definitions が "
+                "失敗したため整合性検証をスキップする",
+                exc_info=True,
+            )
+            return
+        exposed_names = [d.name for d in definitions]
+        validate_tool_handler_consistency(
+            exposed_tool_names=exposed_names,
+            handler_keys=self._tool_handlers.keys(),
+        )
 
     @staticmethod
     def _adapt_executor_handler(
