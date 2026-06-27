@@ -472,14 +472,16 @@ class SpotGraphCurrentStateBuilder:
                 )
 
         # エージェントの欲求状態
-        # PR-T: 前 turn からの delta を併記する。compute_need_deltas() は
-        # 副作用なし (= snapshot は別経路で取る)。snapshot は
-        # ``snapshot_needs_for_delta_after_prompt_build`` で本 build の末尾に
-        # 呼ぶ (= 「prompt build 完了直前」を次回 baseline にする)。
+        # PR-T で delta 併記 (「疲労: 高い(68/100、前回 -2)」) を入れたが、
+        # current_state は prompt の中盤 section にあるため、delta が毎 tick
+        # 変動すると以降の prefix cache が全 miss になる (Y_after_pr607 計測:
+        # cache hit 63.7% → 16.9%, latency +364%)。current_state は素の値
+        # だけに戻し (= tier 越境時のみ文字列が変わる程度)、delta は別 PR で
+        # prompt 末尾の独立 section として再導入する。それまで needs API は
+        # delta なしの ``describe_all`` を使う。
         need_lines: tuple[str, ...] = ()
         if player is not None:
-            deltas = player.compute_need_deltas()
-            need_lines = player.needs.describe_all_with_deltas(deltas)
+            need_lines = player.needs.describe_all()
 
         # PR #2 状態異常 surface: active_effects を「出血 (残り 9 tick)」のような
         # 表記に変換して snapshot に載せる。current_tick_provider が未注入なら
