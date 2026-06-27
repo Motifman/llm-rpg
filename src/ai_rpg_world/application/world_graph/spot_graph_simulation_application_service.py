@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, Protocol, TYPE_CHECKING
+from typing import Callable, Optional, Protocol, TYPE_CHECKING
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -45,6 +45,7 @@ class SpotGraphSimulationApplicationService:
         status_effects_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
         heartbeat_emitter: Optional["HeartbeatObservationEmitter"] = None,
+        graph_event_flusher: Optional[Callable[[], None]] = None,
     ) -> None:
         self._time_provider = time_provider
         self._unit_of_work = unit_of_work
@@ -63,6 +64,12 @@ class SpotGraphSimulationApplicationService:
         self._status_effects_stage = status_effects_stage
         self._llm_turn_trigger = llm_turn_trigger
         self._heartbeat_emitter = heartbeat_emitter
+        # PR-N (task #30): tick stage で graph.add_event された events を
+        # observation pipeline 経由で flush するための hook。interaction /
+        # speech 経路でしか _process_graph_events() が呼ばれない silent
+        # failure を heartbeat tick でも止める。world_runtime 構築時に
+        # ``self._process_graph_events`` が渡される想定。
+        self._graph_event_flusher = graph_event_flusher
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
@@ -160,10 +167,20 @@ class SpotGraphSimulationApplicationService:
 
     def _run_post_tick_hooks(self, current_tick: WorldTick) -> None:
         failures: list[tuple[str, Exception]] = []
-        # 順序が重要: heartbeat → llm_turn_trigger。heartbeat が
-        # ``schedules_turn=True`` の観測を enqueue した直後に turn trigger が
-        # それを実行することで「idle tick でも NPC が動く」状態が成立する。
+        # 順序が重要:
+        #   graph_event_flusher → heartbeat → llm_turn_trigger。
+        # PR-N: graph_event_flusher を heartbeat より先に走らせる。tick stage
+        # (= monster_behavior / status_effects / needs_decay) で graph に
+        # 積まれた events を flush して観測 pipeline に流すと、その観測の
+        # schedules_turn=True が heartbeat より先に turn を積む → turn_trigger
+        # が拾える。逆順だと heartbeat 後の turn 実行までに events が
+        # 観測 buffer に届かない silent failure になる。
         hooks = (
+            (
+                "graph_event_flusher",
+                self._graph_event_flusher,
+                lambda hook: hook(),
+            ),
             (
                 "heartbeat_emitter",
                 self._heartbeat_emitter,

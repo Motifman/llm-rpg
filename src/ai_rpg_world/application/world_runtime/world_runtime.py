@@ -3130,6 +3130,15 @@ def create_world_runtime(
         status_effects_stage=status_effects_stage,
         outcome_resolution_stage=outcome_resolution_stage,
         llm_turn_trigger=sim_llm_trigger,
+        # PR-N: tick stage で graph に積まれた events を heartbeat tick でも
+        # observation pipeline 経由で flush する。これが無いと monster_behavior
+        # 系の MonsterAteGroundItemEvent / MonsterFeltTemperatureDiscomfort 等
+        # が「次に interaction/speech が来るまで遅延」または「永遠に届かない」
+        # silent failure になる。
+        # runtime はまだ未代入なので lambda で lazy bind する (= 呼出時に
+        # 名前解決される)。runtime = WorldRuntime(...) が直後で実行される
+        # 順序になっており、tick 開始までには確実に bound される。
+        graph_event_flusher=lambda: runtime._process_graph_events(),
     )
 
     runtime = WorldRuntime(
