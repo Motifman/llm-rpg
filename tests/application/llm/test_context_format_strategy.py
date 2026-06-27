@@ -95,11 +95,12 @@ class TestSectionBasedContextFormatStrategyDefault:
             )
 
     def test_stable_to_volatile_順序が正しい(self, strategy):
-        """objective → inventory → recent_events → memos → memories → current_state。
+        """objective → recent_events → inventory → memos → memories → current_state。
 
-        memos は Y_after_pr612 実測で agent の memo_add/done 頻度次第で大きく
-        上下することが判明 (= 「semi-static」前提が崩れた) ため、recent_events
-        の head 安定 cache を守るために recent_events の下へ移動した。
+        Y_after_pr612 実測で memos (23-43%) も inventory (11-19%) も volatile
+        と判明。recent_events は head 安定 (= append-only) なので、静的群の
+        直後に置いて head 安定 prefix を最大化し、inventory / memos は
+        その下に集約する。
         """
         text = strategy.format(
             current_state_text="現在地",
@@ -111,13 +112,13 @@ class TestSectionBasedContextFormatStrategyDefault:
         )
         idx = {
             "obj":      text.index("【現在の目的】"),
-            "inv":      text.index("【所持・判明した物証】"),
             "events":   text.index("【直近の出来事】"),
+            "inv":      text.index("【所持・判明した物証】"),
             "memos":    text.index("【進行中のメモ】"),
             "mem":      text.index("【関連する記憶】"),
             "current":  text.index("【現在地と周囲】"),
         }
-        assert idx["obj"] < idx["inv"] < idx["events"] < idx["memos"] < idx["mem"] < idx["current"]
+        assert idx["obj"] < idx["events"] < idx["inv"] < idx["memos"] < idx["mem"] < idx["current"]
 
     def test_prediction_feedback_は_recent_events_と_memories_の間に出る(self, strategy):
         """【前回の予測と実際】は直近出来事の直後、関連する記憶の直前に置く (prefix cache 順)。"""
