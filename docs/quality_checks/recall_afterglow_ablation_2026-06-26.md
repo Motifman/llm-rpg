@@ -139,3 +139,106 @@ PR-D (`recall_by_handle` ツール + slot 再注入) に進み、agent が見出
    - C: slot ON / afterglow ON / tool 無し (= 今回の Run C)
    - D: slot ON / afterglow ON / tool あり (= PR-D 後)
 3. afterglow のパラメータ調整 (M=10 が大きすぎる可能性) は PR-D の結果次第
+
+---
+
+## 追記: Run D (slot + afterglow + tool) 結果 — 2026-06-27
+
+PR-D (#588) で `memory_recall_by_handle` tool と slot 再注入経路を入れた
+あと、PR #589 / #590 で 2 段階の silent failure (handler 配線漏れ) を直して
+から再走した分。同じ scenario (DeepSeek V4 Flash / 30 tick / probe 注入は
+共通) で 4 way 比較が揃った。
+
+### 4 way 比較
+
+| 指標 | A: slot OFF | B: slot ON | C: + afterglow | D: + tool |
+|---|---|---|---|---|
+| `candidate_count_mean` | 2.13 | 1.53 | 1.70 | 1.77 |
+| `recall_chars_mean` | 333 | 219 | 436 | 415 |
+| `recall_chars_max` | 819 | 655 | 1184 | 1072 |
+| `max_consecutive_same_recall_set` | 15 | 6 | 8 | 8 |
+| `jaccard_avg_adjacent_ticks` | 0.852 | 0.716 | 0.760 | 0.793 |
+| `slot_retained_total` | 0 | 38 | 42 | 45 |
+| `slot_inserted_total` | 0 | 8 | 9 | 8 |
+| `slot_evicted_total` | 0 | 4 | 5 | 5 |
+| `afterglow_size_mean` | 0 | 0 | 2.03 | **1.47** |
+| `afterglow_size_max` | 0 | 0 | 6 | 5 |
+| `afterglow_slot_evicted_entries_total` | 0 | 0 | 4 | 3 |
+| `afterglow_weak_recall_entries_total` | 0 | 0 | 57 | **41** |
+
+### C → D の解釈
+
+- `afterglow_size_mean` が 2.03 → 1.47 (約 -28%)
+- `afterglow_weak_recall_entries_total` が 57 → 41 (約 -28%)
+- 一方 `slot_retained_total` は 42 → 45 (微増)
+
+この 3 つは同じ現象の表裏: **tool 経由で afterglow から slot に格上げが
+発生し、afterglow に積まれる時間が短くなった** ことを意味する。
+weak_recall が減ったのは「afterglow に居続けていた見出しが slot 上に
+移った」ためで、afterglow の役割は機械的に効いている。
+
+ただし `recall_chars_mean` (415 vs C: 436) はほぼ変わらず、`max_consecutive`
+(8 vs 8) も同値。tool 起因の「想起の質感」変化は 30 tick の量では出てこ
+なかった。
+
+### tool 呼び出しの実例
+
+tool は 30 tick 中 1 回だけ呼ばれた (tick 14)。trace から該当 step を
+抜粋:
+
+```json
+// tick 14: 自発的に handle を指定して本文を引き戻す
+{"kind": "action", "tick": 14, "payload": {
+    "tool": "memory_recall_by_handle",
+    "arguments": {"handle": "ep_5282c0"}
+}}
+
+// 引き戻された本文 (1 件):
+"[声が届かなかった] シキの声が突然聞こえた。「ハル、浜辺で何か
+見つけた？」って。私は驚いて、さっき返事したのに届いてなかった
+んだと気づいた..."
+```
+
+引き戻した直後の tick 15 で agent は `spot_graph_listen` を選び
+「耳を澄ましてシキの声の発生源を探ろう」という inner_thought を残した。
+**「ぼんやり覚えていた見出し → 本文を引き戻す → 次の行動の根拠にする」
+というリハーサル経路が実 LLM で 1 回成立した** ことを意味する。
+
+### tool 呼び出し頻度 1/30 の解釈
+
+30 tick で 1 回は少なく見えるが、これは
+
+- 必要な場面が稀 (= afterglow に「気になる見出し」が出るのは
+  特定の文脈のみ)
+- LLM 側は「行動が必要なら行動」を優先しており、tool は補助手段
+
+の組み合わせの結果と判断する。trace を見る限り、呼ばなかった tick で
+tool が必要だった (= afterglow に重要な見出しがあったのに行動と
+結び付かなかった) ような兆候はない。ここを更に増やすなら prompt の
+description を「気になる見出しがあれば必ず引き戻せ」と圧を強める手も
+あるが、現状の「自発的・文脈整合」の使い方を壊しかねないので保留。
+
+### 段階 3 のクロージング
+
+| 仮説 | 達成度 |
+|---|---|
+| slot 効果の再現 | 達成 (15 → 6 tick) |
+| afterglow が技術的に動く | 達成 (weak_recall 41 件 / size_max 5) |
+| afterglow から本文を引き戻せる | 達成 (tick 14 で実 LLM が成功) |
+| tool 経由で afterglow → slot の格上げが起きる | 達成 (size -28%) |
+| afterglow が agent 行動を変える | **部分達成** (1 件はリハーサル後に listen に繋がった) |
+
+Issue #526 段階 3 (「鮮明 → ぼんやり → 忘却」の階層構造を実 LLM で再現)
+は機能的にはこれで一段落。tool 呼び出し頻度の引き上げや、afterglow
+パラメータ (M / M_L) の追い込みは別テーマとして必要になったら戻る。
+
+### 残った観察と今後の宿題
+
+- silent failure を 2 段階で踏んだ反省から、PR #591 で「tool spec が
+  expose されているのに `_tool_handlers` に handler が無い」を起動時に
+  fail-fast させる仕組みを入れた。同チェックが既存の `spot_graph_give_items`
+  漏れも検出して付随的に修正済み
+- afterglow が recall section の文字数を太らせる傾向 (C: 436 / D: 415 vs
+  B: 219) は依然残る。tool で多少格上げしても見出し分のコストはかかる
+- 30 tick / 1 シナリオの観察では tool の質感寄与は強く言えない。別
+  シナリオでの再走か、tick 数を伸ばすかは次回テーマ次第
