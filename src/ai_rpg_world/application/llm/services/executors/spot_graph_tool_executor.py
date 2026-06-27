@@ -163,7 +163,11 @@ class SpotGraphToolExecutor:
     FATIGUE_COST_INTERACT_DEFAULT = 2
 
     # wait 1 tick あたりの回復量。
-    FATIGUE_RECOVERY_WAIT = 2
+    # needs_decay の自然増加 (+1/tick) と相殺すると純減 -3/tick。
+    # 疲労 100 → 0 まで 34 tick (= ~17 hour of game time / 30 min per tick)。
+    # 旧 2 (= 純減 -1) では 100→0 に 100 tick かかりフィードバックが弱く、
+    # exhausted で動けない時間が支配的になっていた (Y_after_pr607 観察)。
+    FATIGUE_RECOVERY_WAIT = 4
 
     def _get_status(self, player_id: int):
         """疲労チェック / 蓄積 / 回復用に PlayerStatusAggregate を取得する。
