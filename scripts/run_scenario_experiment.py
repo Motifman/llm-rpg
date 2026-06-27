@@ -1101,6 +1101,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         flush=True,
     )
 
+    if args.publish_gist:
         from scripts.publish_experiment_gist import (  # noqa: WPS433
             GistPublishError,
             publish,
