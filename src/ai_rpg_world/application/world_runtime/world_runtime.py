@@ -2950,6 +2950,10 @@ def create_world_runtime(
             monster_repository=monster_repo,
             player_status_repository=player_status_repo,
             attack_status_effect_provider=_monster_attack_status_provider,
+            # PR-K: event_publisher は runtime 構築後に pipeline_event_publisher
+            # が用意されてから setter で後付け注入する (= needs_decay_stage
+            # 等と同じ pattern)。bind 前は致命攻撃で events が積まれても publish
+            # されない (= 旧挙動互換)。
         )
         monster_behavior_service = SpotMonsterBehaviorTickService(
             spot_graph_repository=spot_graph_repo,
@@ -3370,6 +3374,13 @@ def create_world_runtime(
     needs_decay_stage.set_event_publisher(pipeline_event_publisher)
     # PR #2: 状態異常 tick stage も同様に HP 0 → PlayerDownedEvent を流す。
     status_effects_stage.set_event_publisher(pipeline_event_publisher)
+    # PR-K: monster 攻撃で apply_damage が積む PlayerDownedEvent を流す。
+    # これが無いと致命攻撃で outcome=DEAD への遷移も observation broadcast も
+    # 起きない silent failure になる (Y 実走で発覚)。
+    # monster_attack_orchestrator は monster 不在シナリオで None になり得る
+    # ので、None チェックを噛ませる。
+    if monster_attack_orchestrator is not None:
+        monster_attack_orchestrator.set_event_publisher(pipeline_event_publisher)
     # 昼夜サイクル: フェーズが変わったら TimeOfDayChangedEvent を流す。
     # シナリオが announce_changes=false にしている場合は callback を登録せず
     # silent な phase transition にする。
