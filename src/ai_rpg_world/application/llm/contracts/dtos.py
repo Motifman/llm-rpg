@@ -15,6 +15,14 @@ _RESCHEDULE_ERROR_CODES = frozenset({
     "LLM_API_CALL_FAILED",    # 一時的 API 失敗
     "LLM_RATE_LIMIT",         # レート制限
     "INVALID_DESTINATION_LABEL",  # ラベル未解決（次 tick で解消の可能性）
+    # PR-J: LLM の tool 名 typo (e.g. speech_speech / spot_graph_gather) を救済
+    # する。エラーメッセージに fuzzy suggestion + valid 一覧を載せて agent に
+    # 修正させるため、次 tick での起床が必須。5 連続 typo すれば PR-I の
+    # self-reschedule streak が soft cap として効いて chain は終わる。
+    # ※ PR-I で schedule_turn は streak を一切触らない設計なので、他者観測
+    #   経由の ping-pong が混ざっても streak はリセットされず、典型 typo loop
+    #   は確実に 5 wave で止まる。
+    "UNSUPPORTED_TOOL",
 })
 
 

@@ -40,6 +40,7 @@ from ai_rpg_world.application.observation.services.heartbeat_observation_emitter
 from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
     ToolRuntimeTargetDto,
+    is_reschedulable_error_code,
 )
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     with_inner_thought_empty_warning,
@@ -141,6 +142,115 @@ def _character_to_prompt_input(
 
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# PR-J: LLM tool 名 typo の救済ヘルパ。
+#
+# 単純な ``difflib.get_close_matches`` は ``spot_graph_*`` のように長い共通
+# prefix を持つ tool 群で false positive が出る (例: ``spot_graph_gather`` →
+# ``spot_graph_wait`` が ratio 0.81 で match してしまう)。
+#
+# 代わりに **"prefix segment 一致 + suffix 比較"** を使う:
+#   1. ``_`` 区切りの単語列にする
+#   2. ``requested`` と各 candidate で先頭から一致する segment 数を数える
+#   3. 1 segment 以上一致した candidate のみ残し、その suffix (= 残り部分)
+#      同士で fuzzy match する
+#
+# これにより:
+# - ``speech_speech`` → ``speech_speak`` (= 同 prefix で suffix 類似)  ✅
+# - ``spot_graph_pickup`` → ``spot_graph_pickup_item`` (= 短縮形)       ✅
+# - ``spot_graph_gather`` / ``spot_graph_harvest`` → None (想像由来は救わない) ✅
+# - ``say`` → None (= 共通 prefix segment 0)                           ✅
+_SUFFIX_RATIO_CUTOFF: float = 0.5
+_SHORTENED_NAME_SCORE: float = 0.95
+
+
+def suggest_closest_tool_name(
+    requested: str, valid_tools: Iterable[str]
+) -> Optional[str]:
+    """typo っぽい tool 名から、最も近い valid tool 名 1 件を返す。
+
+    共通 prefix segment が 1 つも無い候補は除外し、残った候補のうち suffix の
+    類似度 (cutoff = ``_SUFFIX_RATIO_CUTOFF`` = 0.5) が最も高いものを返す。
+    短縮形 (= requested の suffix が空) は ``_SHORTENED_NAME_SCORE`` 固定で
+    常に救う。
+
+    cutoff 0.5 は ``speech_speech → speech_speak`` の suffix 比較 ratio が
+    0.545 になる事実から決定した境界値。これ未満にすると想像由来 typo
+    (= ``gather`` / ``harvest``) の false positive が増える。
+
+    候補が無ければ ``None``。「想像由来」(= ``gather`` / ``harvest`` のような
+    独立した語) は本関数では救わず、``valid_tools`` 一覧の併記で agent に
+    再選択させる設計。
+    """
+    from difflib import SequenceMatcher
+
+    if not isinstance(requested, str) or not requested:
+        return None
+    valid_list = [v for v in valid_tools if isinstance(v, str) and v]
+    if not valid_list:
+        return None
+
+    req_parts = requested.split("_")
+    best: Optional[str] = None
+    best_score: float = 0.0
+    for cand in valid_list:
+        cand_parts = cand.split("_")
+        common = 0
+        for r, c in zip(req_parts, cand_parts):
+            if r == c:
+                common += 1
+            else:
+                break
+        if common == 0:
+            continue  # 全く異なるカテゴリ
+        req_suffix = "_".join(req_parts[common:])
+        cand_suffix = "_".join(cand_parts[common:])
+        if not req_suffix and cand_suffix:
+            # 短縮形 (e.g. spot_graph_pickup → spot_graph_pickup_item)
+            score = _SHORTENED_NAME_SCORE
+        elif not cand_suffix and req_suffix:
+            # 逆短縮 (= candidate がより短い)。これは LLM が「サフィックス付
+            # きの方を呼びたかった」と推定するには弱いので 0.0 扱い
+            score = 0.0
+        elif not req_suffix and not cand_suffix:
+            # 完全一致 (= requested == cand。この経路は handler が見つかって
+            # いるはずなので来ない、念のため)
+            score = 1.0
+        else:
+            score = SequenceMatcher(None, req_suffix, cand_suffix).ratio()
+        if score > best_score:
+            best_score = score
+            best = cand
+
+    # strict `>` を使う: `harvest` vs `travel_to` が ratio=0.5 で false positive
+    # にならないように、cutoff と等しい match は救わない。`speech_speak`
+    # (= ratio 0.545) は通る。
+    if best_score > _SUFFIX_RATIO_CUTOFF:
+        return best
+    return None
+
+
+def build_unsupported_tool_message(
+    *, requested: str, valid_tools: Iterable[str]
+) -> str:
+    """UNSUPPORTED_TOOL 用のエラーメッセージを組み立てる。
+
+    含む情報:
+    1. typoed name (= LLM が何を呼ぼうとしたか)
+    2. fuzzy suggestion (= 「もしかして 'X' ですか?」、近い候補がある時のみ)
+    3. valid tool 一覧 (= 想像由来 typo を救うため常時併記)
+    """
+    valid_sorted = sorted(v for v in valid_tools if isinstance(v, str) and v)
+    suggestion = suggest_closest_tool_name(requested, valid_sorted)
+
+    head = f"未対応のツールです: {requested}"
+    if suggestion:
+        head += f"。もしかして '{suggestion}' ですか?"
+    else:
+        head += "。"
+    tail = f" 現在使える tool: [{', '.join(valid_sorted)}]"
+    return head + tail
 
 
 class ToolHandlerConsistencyError(RuntimeError):
@@ -1600,10 +1710,23 @@ class _WorldLlmWiring:
         """
         handler = self._tool_handlers.get(name)
         if handler is None:
+            # PR-J: LLM の tool 名 typo を救済する 3 層:
+            # 1. fuzzy suggestion で近い候補を message に追記
+            # 2. valid tool 一覧を併記 (想像由来 typo の救済)
+            # 3. should_reschedule=True で次 tick の起床を確保 (= 配信)
+            # 1/2 が無くても 3 (= message を agent に届ける) が無いと意味が
+            # ないので、3 が最重要。
+            message = build_unsupported_tool_message(
+                requested=name,
+                valid_tools=self._tool_handlers.keys(),
+            )
+            # PR-J: should_reschedule は _RESCHEDULE_ERROR_CODES SSOT 経由で
+            # 決定する。ハードコードすると将来 policy を変えた時に乖離する。
             return LlmCommandResultDto(
                 success=False,
-                message=f"未対応のツールです: {name}",
+                message=message,
                 error_code="UNSUPPORTED_TOOL",
+                should_reschedule=is_reschedulable_error_code("UNSUPPORTED_TOOL"),
             )
         return handler(player_id, arguments, runtime_context)
 
@@ -1662,6 +1785,12 @@ class _WorldLlmWiring:
             target = resolve_destination_target(label, runtime_context)
         except ToolArgumentResolutionException as e:
             valid_destinations = _list_destination_labels(targets)
+            # PR-J: _RESCHEDULE_ERROR_CODES に INVALID_DESTINATION_LABEL が
+            # 含まれているのに、本ハンドラの DTO 構築では should_reschedule
+            # を立て忘れていた。結果として「ラベル未解決失敗 → 次 tick で
+            # 起こされない → 状況が変わるまで silent に沈黙」する Player 3 沈黙
+            # の副次原因になっていた。is_reschedulable_error_code() を経由して
+            # policy 側の SSOT を尊重する。
             return LlmCommandResultDto(
                 success=False,
                 message=(
@@ -1674,6 +1803,7 @@ class _WorldLlmWiring:
                     "destination_label には現在の状況に表示された S1, S2 等の "
                     "ラベル、またはスポット名 (例: 閲覧室) を指定してください。"
                 ),
+                should_reschedule=is_reschedulable_error_code(e.error_code),
             )
         destination_id = self.runtime.id_mapper.get_str("spot", target.spot_id)
         self.runtime.do_move(
@@ -1978,10 +2108,16 @@ class _WorldLlmWiring:
         runtime_context: Any,
     ) -> LlmCommandResultDto:
         del player_id, arguments, runtime_context
+        # PR-J: ``UNSUPPORTED_TOOL`` を ``_RESCHEDULE_ERROR_CODES`` に追加した
+        # ため、デフォルトのままだと「永続的に無効な機能」も reschedule され
+        # てしまう。本ハンドラは「脱出ランタイムでは恒久的に未対応」を表す
+        # 経路なので、明示的に ``should_reschedule=False`` を立てて agent を
+        # 即時 chain 終了させる (= 同じ無駄を 5 回繰り返さない)。
         return LlmCommandResultDto(
             success=False,
             message="サブロケーション変更は脱出ランタイムでは未対応です。",
             error_code="UNSUPPORTED_TOOL",
+            should_reschedule=False,
         )
 
     def _make_auxiliary_tool_handler(
