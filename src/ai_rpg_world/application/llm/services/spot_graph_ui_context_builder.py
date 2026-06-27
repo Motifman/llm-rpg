@@ -585,8 +585,14 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         # block されている / 動きが鈍くなる」のような操作可能性に直結する
         # 情報を 1 行足す。system prompt は変えず state section にだけ載せる
         # 設計 (docs/design_decisions.md #1 / #8)。
-        fatigue_level = snap.player_state.get("fatigue_level") if snap.player_state else None
-        hint = _FATIGUE_OWN_HINT.get(fatigue_level or "ok")
+        # 旧実装は ``snap.player_state.get("fatigue_level")`` を読んでいたが
+        # ``player_state`` は ``dict(player.state)`` (自由 state) しか乗らず、
+        # ``fatigue_level`` は常に None で hint が一度も出ない silent failure に
+        # なっていた (Y_after_pr607 観察)。専用 field ``own_fatigue_level`` から
+        # 読むことで「exhausted で travel / attack / interact が block される」
+        # 等の情報が agent の prompt に到達するようにする。
+        fatigue_level = getattr(snap, "own_fatigue_level", "ok") or "ok"
+        hint = _FATIGUE_OWN_HINT.get(fatigue_level)
         if hint:
             lines.append(f"  → {hint}")
 
