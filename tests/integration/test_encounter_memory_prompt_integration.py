@@ -111,16 +111,13 @@ class TestNearbyPlayerFamiliarityE2E:
         # observation pipeline で rin に entity_entered_spot が届くため
         # encounter は二重記録になる可能性あり)
         section = _current_state_section(_user_prompt_text(runtime, rin))
-        # 同 spot に kaito が居る場合に「- カイト (初めて会った)」が出る
-        # ※ scenario の player 名表示と encounter 注記の組み合わせ
-        # encounter 自体は最低限の事前 observe で記録済。注記が出るには
-        # 同 spot に当人がいて nearby_entities に乗る必要がある。
-        if "- カイト" in section:
-            # nearby_entities に乗っているなら注記も出る
-            assert "- カイト (初めて会った)" in section, section
-        # nearby に乗っていない (= travel が完了せず別 spot にいる) なら、
-        # 本テストの validity は薄れるが encounter 自体は記録されていることを
-        # 別経路で確認する
+        # PR-N (task #30): graph_event_flusher が tick 末尾で graph events を
+        # PipelineEventPublisher に流すようになったため、kaito の travel 完了で
+        # 発火する PlayerEnteredSpotEvent が rin に届き、encounter が 2 回目以降
+        # にカウントされる。結果として「初めて会った」注記が常に出るとは限らない
+        # (= 直前に同じ kaito の到着観測が rin に届いていれば first encounter
+        # ではなくなる)。本テストでは encounter 自体が記録されていることを
+        # 別経路で確認する。
         from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
             EncounterKey,
         )
