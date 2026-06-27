@@ -73,12 +73,25 @@ _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     """新しい in-memory store 群を構築し、service と store ハンドルを返す。"""
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        InMemoryAfterglowStore,
+    )
+    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+        InMemoryEpisodicRecallHabituationStore,
+    )
+    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+        InMemoryEpisodicRecallSlotStore,
+    )
+
     memo = InMemoryMemoStore()
     semantic = InMemorySemanticMemoryStore()
     link = InMemoryMemoryLinkStore()
     recall = InMemoryEpisodicRecallBufferStore()
     journal = InMemoryEpisodicReinterpretationJournalStore()
     episode = InMemorySubjectiveEpisodeStore()
+    slot = InMemoryEpisodicRecallSlotStore()
+    afterglow = InMemoryAfterglowStore()
+    habituation = InMemoryEpisodicRecallHabituationStore()
     svc = BeingMemorySnapshotService(
         memo_store=memo,
         semantic_store=semantic,
@@ -86,6 +99,9 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
         recall_buffer_store=recall,
         reinterpretation_journal_store=journal,
         episodic_episode_store=episode,
+        recall_slot_store=slot,
+        afterglow_store=afterglow,
+        recall_habituation_store=habituation,
     )
     return svc, {
         "memo": memo,
@@ -334,6 +350,10 @@ class TestRestoreValidation:
                 "recall_buffer_pending": [],
                 "reinterpretation_journal": [],
                 "episodic_episodes": [],
+                "recall_slot_entries": [],
+                "recall_slot_cooldown": [],
+                "afterglow_entries": [],
+                "recall_habituation_last_recalled": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="memo"):
@@ -365,6 +385,10 @@ class TestRestoreValidation:
                 "recall_buffer_pending": [],
                 "reinterpretation_journal": [],
                 "episodic_episodes": [],
+                "recall_slot_entries": [],
+                "recall_slot_cooldown": [],
+                "afterglow_entries": [],
+                "recall_habituation_last_recalled": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="memory_links"):
@@ -382,6 +406,12 @@ class TestRestoreValidation:
                 "recall_buffer_pending": [],
                 "reinterpretation_journal": [],
                 "episodic_episodes": [],
+                # PR-G で追加した key 群も list で渡す (= 「memo が list でない」
+                # 検証の手前で fail-fast に化けないよう揃える)。
+                "recall_slot_entries": [],
+                "recall_slot_cooldown": [],
+                "afterglow_entries": [],
+                "recall_habituation_last_recalled": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="must be list"):
@@ -392,6 +422,16 @@ class TestConstructor:
     """constructor の型ガード。"""
 
     def test_memo_store_型違反(self) -> None:
+        from ai_rpg_world.application.llm.services.afterglow_store import (
+            InMemoryAfterglowStore,
+        )
+        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+            InMemoryEpisodicRecallHabituationStore,
+        )
+        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+            InMemoryEpisodicRecallSlotStore,
+        )
+
         with pytest.raises(TypeError, match="memo_store"):
             BeingMemorySnapshotService(
                 memo_store="bad",  # type: ignore[arg-type]
@@ -400,4 +440,7 @@ class TestConstructor:
                 recall_buffer_store=InMemoryEpisodicRecallBufferStore(),
                 reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(),
                 episodic_episode_store=InMemorySubjectiveEpisodeStore(),
+                recall_slot_store=InMemoryEpisodicRecallSlotStore(),
+                afterglow_store=InMemoryAfterglowStore(),
+                recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
             )

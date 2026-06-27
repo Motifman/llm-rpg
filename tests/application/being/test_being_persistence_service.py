@@ -57,6 +57,16 @@ _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 def _build_persistence_service(
     being_repo,
 ) -> tuple[BeingPersistenceService, dict[str, object]]:
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        InMemoryAfterglowStore,
+    )
+    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+        InMemoryEpisodicRecallHabituationStore,
+    )
+    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+        InMemoryEpisodicRecallSlotStore,
+    )
+
     memo = InMemoryMemoStore()
     semantic = InMemorySemanticMemoryStore()
     link = InMemoryMemoryLinkStore()
@@ -70,6 +80,9 @@ def _build_persistence_service(
         recall_buffer_store=recall,
         reinterpretation_journal_store=journal,
         episodic_episode_store=episode,
+        recall_slot_store=InMemoryEpisodicRecallSlotStore(),
+        afterglow_store=InMemoryAfterglowStore(),
+        recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
     )
     svc = BeingPersistenceService(
         being_repository=being_repo,
@@ -199,6 +212,16 @@ class TestSaveLoadRoundTripSqlite:
 
 class TestConstructorTypeGuards:
     def test_being_repository_型違反(self) -> None:
+        from ai_rpg_world.application.llm.services.afterglow_store import (
+            InMemoryAfterglowStore,
+        )
+        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+            InMemoryEpisodicRecallHabituationStore,
+        )
+        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+            InMemoryEpisodicRecallSlotStore,
+        )
+
         memo = InMemoryMemoStore()
         semantic = InMemorySemanticMemoryStore()
         link = InMemoryMemoryLinkStore()
@@ -212,6 +235,9 @@ class TestConstructorTypeGuards:
             recall_buffer_store=recall,
             reinterpretation_journal_store=journal,
             episodic_episode_store=episode,
+            recall_slot_store=InMemoryEpisodicRecallSlotStore(),
+            afterglow_store=InMemoryAfterglowStore(),
+            recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
         )
         with pytest.raises(TypeError, match="being_repository"):
             BeingPersistenceService(

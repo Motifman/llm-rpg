@@ -57,6 +57,16 @@ _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 def _make_environment():
     """新規 store 群 + 2 use case + gateway を組んで返す。"""
     repo = InMemoryBeingRepository()
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        InMemoryAfterglowStore,
+    )
+    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+        InMemoryEpisodicRecallHabituationStore,
+    )
+    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+        InMemoryEpisodicRecallSlotStore,
+    )
+
     memo = InMemoryMemoStore()
     semantic = InMemorySemanticMemoryStore()
     link = InMemoryMemoryLinkStore()
@@ -70,6 +80,9 @@ def _make_environment():
         recall_buffer_store=recall,
         reinterpretation_journal_store=journal,
         episodic_episode_store=episode,
+        recall_slot_store=InMemoryEpisodicRecallSlotStore(),
+        afterglow_store=InMemoryAfterglowStore(),
+        recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
     )
     gateway = BeingSnapshotFileGateway()
     capture = CaptureBeingSnapshotToFileUseCase(

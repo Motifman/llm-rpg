@@ -207,6 +207,15 @@ class IAfterglowStore(Protocol):
         """
         ...
 
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        entries: Sequence[AfterglowEntry],
+    ) -> None:
+        """PR-G: snapshot 復元用の bulk overwrite。``entries`` が空なら
+        being_id の state を完全に削除する (= capture 時の空状態と同一)。"""
+        ...
+
 
 class InMemoryAfterglowStore(IAfterglowStore):
     """プロセスメモリ常駐の sidecar 実装。experiment run の単位で破棄。
@@ -263,6 +272,23 @@ class InMemoryAfterglowStore(IAfterglowStore):
         if len(filtered) == len(current):
             return  # idempotent: 該当が無ければ何もしない
         self._by_being[being_id] = filtered
+
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        entries: Sequence[AfterglowEntry],
+    ) -> None:
+        """PR-G: snapshot 復元用の bulk overwrite。"""
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        entries_tuple = tuple(entries)
+        for e in entries_tuple:
+            if not isinstance(e, AfterglowEntry):
+                raise TypeError("entries must be AfterglowEntry")
+        if entries_tuple:
+            self._by_being[being_id] = entries_tuple
+        else:
+            self._by_being.pop(being_id, None)
 
 
 __all__ = [

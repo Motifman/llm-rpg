@@ -65,6 +65,15 @@ def _make_service():
     from ai_rpg_world.application.being.being_memory_snapshot_service import (
         BeingMemorySnapshotService,
     )
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        InMemoryAfterglowStore,
+    )
+    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+        InMemoryEpisodicRecallHabituationStore,
+    )
+    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+        InMemoryEpisodicRecallSlotStore,
+    )
     from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
         InMemoryMemoryLinkStore,
     )
@@ -89,6 +98,9 @@ def _make_service():
         recall_buffer_store=InMemoryEpisodicRecallBufferStore(),
         reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(),
         episodic_episode_store=InMemorySubjectiveEpisodeStore(),
+        recall_slot_store=InMemoryEpisodicRecallSlotStore(),
+        afterglow_store=InMemoryAfterglowStore(),
+        recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
     )
 
 
@@ -155,6 +167,11 @@ class TestBeingMemorySnapshotServiceCoverage:
             "memo": [], "semantic_entries": [], "semantic_cluster_signatures": [],
             "memory_links": [], "recall_buffer_pending": [],
             "reinterpretation_journal": [], "episodic_episodes": [],
+            # PR-G: 実 store の 4 key は揃えておき、fictional_new_store だけが
+            # 欠けている状況を作る (= 「EXPECTED に追加したが restore() の検証が
+            # 漏れた」シナリオを最小再現する)。
+            "recall_slot_entries": [], "recall_slot_cooldown": [],
+            "afterglow_entries": [], "recall_habituation_last_recalled": [],
         }
         with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
             service.restore(BeingId("being-test"), json.dumps(payload_without_new_key))

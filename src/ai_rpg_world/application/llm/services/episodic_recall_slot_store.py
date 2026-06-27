@@ -236,6 +236,20 @@ class IEpisodicRecallSlotStore(Protocol):
         """
         ...
 
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        slot: Sequence[RecallSlotEntry],
+        cooldown_until: Mapping[str, int],
+    ) -> None:
+        """snapshot 復元用: 既存 state を空にしてから ``slot`` と ``cooldown_until``
+        を一括で書き込む。中身が空なら being_id の state を削除する (= 完全初期化)。
+
+        snapshot 取得時の状態をそのまま戻すので、tick / cooldown_ticks のような
+        副計算は行わない (= ``apply_decision`` ではなく低レベル書き込み)。
+        """
+        ...
+
 
 class InMemoryEpisodicRecallSlotStore(IEpisodicRecallSlotStore):
     """プロセスメモリ常駐の sidecar 実装。experiment run の単位で破棄される。
@@ -283,6 +297,33 @@ class InMemoryEpisodicRecallSlotStore(IEpisodicRecallSlotStore):
             for eid in decision.evicted_ids:
                 # 同 episode が再 evict されたら最新 cooldown で上書き
                 cd_map[eid] = until
+
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        slot: Sequence[RecallSlotEntry],
+        cooldown_until: Mapping[str, int],
+    ) -> None:
+        """PR-G: snapshot 復元用の bulk overwrite。既存 state を一切残さず
+        ``slot`` / ``cooldown_until`` で完全置換する。"""
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        slot_tuple = tuple(slot)
+        for e in slot_tuple:
+            if not isinstance(e, RecallSlotEntry):
+                raise TypeError("slot entries must be RecallSlotEntry")
+        # 中身が空なら being の state を完全に消す = capture が空だった状態と
+        # の bit identity を保つ。
+        if slot_tuple:
+            self._slot_by_being[being_id] = slot_tuple
+        else:
+            self._slot_by_being.pop(being_id, None)
+        if cooldown_until:
+            self._cooldown_by_being[being_id] = {
+                str(k): int(v) for k, v in cooldown_until.items()
+            }
+        else:
+            self._cooldown_by_being.pop(being_id, None)
 
     def force_insert(
         self,

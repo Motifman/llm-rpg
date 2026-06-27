@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Dict, Iterable, Optional, Protocol, runtime_checkable
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -73,6 +74,19 @@ class IEpisodicRecallHabituationStore(Protocol):
         """
         ...
 
+    def list_all_by_being(self, being_id: BeingId) -> Mapping[str, int]:
+        """PR-G: snapshot capture 用に「episode_id → last_recalled_tick」の
+        全エントリを返す。未記録なら空 dict。"""
+        ...
+
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        mapping: Mapping[str, int],
+    ) -> None:
+        """PR-G: snapshot 復元用の bulk overwrite。"""
+        ...
+
 
 class InMemoryEpisodicRecallHabituationStore(IEpisodicRecallHabituationStore):
     """プロセスメモリ常駐の sidecar 実装。experiment run の単位で破棄される。
@@ -112,6 +126,29 @@ class InMemoryEpisodicRecallHabituationStore(IEpisodicRecallHabituationStore):
         inner = self._by_being.setdefault(being_id, {})
         for eid in ids:
             inner[eid] = tick
+
+    def list_all_by_being(self, being_id: BeingId) -> Mapping[str, int]:
+        """PR-G: snapshot capture 用に「episode_id → last_recalled_tick」の
+        全エントリを copy で返す (= 呼出側変更で内部 state を壊さない)。"""
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        return dict(self._by_being.get(being_id, {}))
+
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        mapping: Mapping[str, int],
+    ) -> None:
+        """PR-G: snapshot 復元用の bulk overwrite。中身が空なら being_id の
+        state を完全に削除する (= capture 時の空状態と bit identity を保つ)。"""
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if mapping:
+            self._by_being[being_id] = {
+                str(k): int(v) for k, v in mapping.items()
+            }
+        else:
+            self._by_being.pop(being_id, None)
 
 
 __all__ = [
