@@ -1,14 +1,17 @@
-"""``spot_graph_wait`` の疲労回復量を保証する (PR-D / Y_after_issue621 後続)。
+"""``spot_graph_wait`` の疲労回復量を保証する (PR-D → 本 PR で追加 buff)。
 
-Y_after_issue621 trace では wait による疲労回復が体感できず、復帰機構として
-機能していなかった。実測:
-- 23 wait 前後の fatigue 平均 Δ = +0.9 (= 効いていない、むしろ増)
-- P3 は wait 6 回でも fatigue 100 のままロック
-- P2 inner_thought (t122): 「**空腹も疲労も100のままだ**」
+Y_after_issue621 → PR-D (#629) で wait recovery を 4 → 10 に上げた。
+Y_after_pr634 で再走したところ、行動数は +55% に伸びたが、後半に wait の
+3 連発 (loop_guard 6 件中 4 件が wait) が観測された。
 
-原因は balance: 1 wait の純減が ``-4 + (+1 passive decay) = -3`` で、他 action
-の +1〜5 と相殺すると 100 から脱出できない。本 PR で wait recovery を 10 に
-引き上げ、純減 -9/tick で 100 → 70 を 4 連 wait で達成できる強度にする。
+原因は「自然増加 +1/tick + 行動増加」の合算で wait 1 回 (-10) では 1 ターンの
+行動コストすら吸収できないこと。本 PR で:
+
+1. ``DEFAULT_NEED_RATES[FATIGUE] = 1 → 0`` (= 行動以外で増えない)
+2. wait recovery 10 → 20 (= 重い行動 attack +5 の 4 回分を一度に回収)
+
+の 2 点をセットで導入し、「待機したい欲求は増えるかもしれないが、連続待機の
+回数は減る」状態を作る。
 """
 
 from __future__ import annotations
@@ -19,12 +22,13 @@ from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor im
 
 
 class TestFatigueRecoveryWaitValue:
-    def test_wait_の_疲労回復量は_10(self) -> None:
-        """passive decay +1/tick との差分で純減 -9/tick になり、4 連 wait で
-        ``exhausted`` (100) から ``severe`` (84) 域に戻れる強度。"""
-        assert SpotGraphToolExecutor.FATIGUE_RECOVERY_WAIT == 10
+    def test_wait_の_疲労回復量は_20(self) -> None:
+        """重い行動 ``attack`` (+5) の 4 回分を一度に賄える強度。
+        ``DEFAULT_NEED_RATES[FATIGUE] = 0`` と組み合わせて連続待機を不要にする。"""
+        assert SpotGraphToolExecutor.FATIGUE_RECOVERY_WAIT == 20
 
     def test_過去の弱い値_4_に_戻っていない_regression_check(self) -> None:
-        """PR-D で 4 → 10 に上げた。回帰で 4 に戻ってしまうと Y_after_issue621
-        の「疲労が解消されない」体験に逆戻りするので明示的に弾く。"""
-        assert SpotGraphToolExecutor.FATIGUE_RECOVERY_WAIT > 4
+        """PR-D で 4 → 10、本 PR で 10 → 20 に上げた。回帰で弱い値に
+        戻ってしまうと Y_after_issue621 / Y_after_pr634 の「wait spam」体験
+        に逆戻りするので明示的に弾く。"""
+        assert SpotGraphToolExecutor.FATIGUE_RECOVERY_WAIT > 10

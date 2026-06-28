@@ -21,7 +21,10 @@ from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 # デフォルトの増加レート（tick あたり）
 DEFAULT_NEED_RATES: Dict[NeedType, int] = {
     NeedType.HUNGER: 1,   # 100tick で空腹が限界に達する
-    NeedType.FATIGUE: 1,  # 100tick で疲労が限界に達する
+    NeedType.FATIGUE: 0,  # 疲労は行動 (interact/travel/attack) でのみ増える
+                          # — 「何もしなくても 100tick で詰む」構造を解消する
+                          # ため自然増加を切る (Y_after_pr634 後続)。
+                          # シナリオ側で必要なら rates 引数で上書きできる。
 }
 
 

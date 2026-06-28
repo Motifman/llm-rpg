@@ -171,9 +171,12 @@ class SpotGraphToolExecutor:
     # - 旧 2 (= 純減 -1): 100→0 に 100 tick、フィードバック弱で動けない時間が支配的 (Y_after_pr607)
     # - 中間 4 (= 純減 -3): 改善するも Y_after_issue621 で fatigue 100 ロックが多発、
     #   23 wait 前後の平均 Δ が +0.9 (= 効いていない) と観測された
-    # - 現行 10 (= 純減 -9): 4 連 wait で 100 → 64 程度まで戻り、行動再開可能。
-    #   「割に合わない wait」体験を解消する強度。
-    FATIGUE_RECOVERY_WAIT = 10
+    # - 中間 10 (= 純減 -9): 4 連 wait で 100 → 64 まで戻る。
+    #   Y_after_pr634 で「行動が増えた一方 wait 3 連発が頻発」(loop_guard 6 件中 4 件)。
+    # - 現行 20 (= 重い行動 attack +5 の 4 回分を一度に回収):
+    #   passive decay も同時に 0 にしたので、1 wait で「重い 1 ターン分の蓄積」を
+    #   完全に消せる強度。連続待機の必要が消える。
+    FATIGUE_RECOVERY_WAIT = 20
 
     def _get_status(self, player_id: int):
         """疲労チェック / 蓄積 / 回復用に PlayerStatusAggregate を取得する。
