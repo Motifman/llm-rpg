@@ -243,7 +243,7 @@ experiment:
 		--max-world-ticks $(MAX_WORLD_TICKS) \
 		$(if $(OUT),--out $(OUT),) \
 		$(if $(PUBLISH),--publish-gist,) \
-		$(if $(SNAPSHOT_SAVE_DIR),--snapshot-save-dir $(SNAPSHOT_SAVE_DIR),) \
+		$(if $(SNAPSHOT_SAVE_DIR),--snapshot-save-dir $(SNAPSHOT_SAVE_DIR),$(if $(OUT),--snapshot-save-dir $(OUT)/snapshots,)) \
 		$(if $(SNAPSHOT_LOAD_DIR),--snapshot-load-dir $(SNAPSHOT_LOAD_DIR),)
 
 # Phase 6 (Issue #470): 実験 run の Being snapshot を OUT 配下の snapshots/ に
