@@ -13,6 +13,7 @@ import pytest
 from ai_rpg_world.domain.item.value_object.item_effect import (
     CompositeItemEffect,
     HealEffect,
+    ReviveEffect,
     SatisfyNeedEffect,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
@@ -114,5 +115,58 @@ class TestConsumeEffectValidation:
                 {
                     "id": "x", "name": "x", "description": "x", "category": "FOOD",
                     "consume_effect": {"amount": 5},
+                }
+            ))
+
+
+class TestReviveEffectParsing:
+    """Issue #621 Phase 3a: `revive` type の consume_effect parse。"""
+
+    def test_revive_単一_dict_で_ReviveEffect_に_解決される(self) -> None:
+        item_def = _load_first_item(_scenario_with_item(
+            {
+                "id": "first_aid", "name": "救急用品",
+                "description": "蘇生薬", "category": "CONSUMABLE",
+                "consume_effect": {"type": "revive", "hp_rate": 0.4},
+            }
+        ))
+        assert isinstance(item_def.consume_effect, ReviveEffect)
+        assert item_def.consume_effect.hp_rate == 0.4
+
+    def test_revive_と_heal_の_合成も_可能(self) -> None:
+        """蘇生 + 追加 HP 回復のような composite。"""
+        item_def = _load_first_item(_scenario_with_item(
+            {
+                "id": "high_aid", "name": "高級救急用品",
+                "description": "蘇生+HP回復", "category": "CONSUMABLE",
+                "consume_effect": [
+                    {"type": "revive", "hp_rate": 0.4},
+                    {"type": "heal_hp", "amount": 20},
+                ],
+            }
+        ))
+        eff = item_def.consume_effect
+        assert isinstance(eff, CompositeItemEffect)
+        assert isinstance(eff.effects[0], ReviveEffect)
+        assert eff.effects[0].hp_rate == 0.4
+        assert isinstance(eff.effects[1], HealEffect)
+
+    def test_revive_の_hp_rate_未指定で_ValueError(self) -> None:
+        with pytest.raises((KeyError, ValueError)):
+            _load_first_item(_scenario_with_item(
+                {
+                    "id": "x", "name": "x", "description": "x", "category": "CONSUMABLE",
+                    "consume_effect": {"type": "revive"},
+                }
+            ))
+
+    def test_revive_の_hp_rate_範囲外で_例外(self) -> None:
+        """ReviveEffect の __post_init__ が ItemEffectValidationException を投げる。"""
+        from ai_rpg_world.domain.item.exception import ItemEffectValidationException
+        with pytest.raises(ItemEffectValidationException):
+            _load_first_item(_scenario_with_item(
+                {
+                    "id": "x", "name": "x", "description": "x", "category": "CONSUMABLE",
+                    "consume_effect": {"type": "revive", "hp_rate": 1.5},
                 }
             ))

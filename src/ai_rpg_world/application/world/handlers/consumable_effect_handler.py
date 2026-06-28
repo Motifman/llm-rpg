@@ -24,6 +24,7 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     RecoverMpEffect,
     GoldEffect,
     ExpEffect,
+    ReviveEffect,
     SatisfyNeedEffect,
     CompositeItemEffect,
     ItemEffect,
@@ -107,6 +108,17 @@ class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
             player_status.earn_gold(effect.amount)
         elif isinstance(effect, ExpEffect):
             player_status.gain_exp(effect.amount)
+        elif isinstance(effect, ReviveEffect):
+            # Issue #621 Phase 3a: ダウン中の player を蘇生する。
+            # 元気な player に revive() を呼ぶと PlayerNotDownedException を
+            # 投げる仕様なので、is_down=True のときだけ適用 (= no-op fallback)。
+            if player_status.is_down:
+                player_status.revive(effect.hp_rate)
+            else:
+                self._logger.debug(
+                    "ReviveEffect applied to non-down player_id=%s (no-op)",
+                    player_status.player_id,
+                )
         elif isinstance(effect, SatisfyNeedEffect):
             try:
                 need_type = NeedType(effect.need_type_name)

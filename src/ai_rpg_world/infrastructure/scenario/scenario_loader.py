@@ -18,6 +18,7 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     HealEffect,
     ItemEffect,
     RecoverMpEffect,
+    ReviveEffect,
     SatisfyNeedEffect,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -600,9 +601,18 @@ class ScenarioLoader:
             return SatisfyNeedEffect(
                 need_type_name=str(need), amount=int(entry["amount"]),
             )
+        if etype == "revive":
+            # Issue #621 Phase 3a: ダウン player を蘇生する効果。
+            # hp_rate は max_hp に対する比率 (0.0-1.0)。範囲 validation は
+            # ReviveEffect.__post_init__ が ItemEffectValidationException で行う。
+            if "hp_rate" not in entry:
+                raise ValueError(
+                    f"item '{sid}': revive requires 'hp_rate' (e.g. 0.4)"
+                )
+            return ReviveEffect(hp_rate=float(entry["hp_rate"]))
         raise ValueError(
             f"item '{sid}': unknown consume_effect type '{etype}' "
-            "(expected: heal_hp / damage_hp / recover_mp / gold / exp / satisfy_need)"
+            "(expected: heal_hp / damage_hp / recover_mp / gold / exp / satisfy_need / revive)"
         )
 
     def _parse_item_specs(

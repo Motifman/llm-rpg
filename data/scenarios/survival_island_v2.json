@@ -214,12 +214,18 @@
     {
       "id": "first_aid",
       "name": "救急用品",
-      "description": "墜落機の残骸から見つけた古い包帯と薬。HPを大きく回復する (1回限り)。箱の内側にメモ書きで『使用は患者1名のみ、再使用厳禁』とある。",
+      "description": "墜落機の残骸から見つけた古い包帯と薬。倒れている者を起こし、HPを大きく回復する (1回限り)。箱の内側にメモ書きで『使用は患者1名のみ、再使用厳禁』とある。",
       "category": "KEY_ITEM",
-      "consume_effect": {
-        "type": "heal_hp",
-        "amount": 50
-      }
+      "consume_effect": [
+        {
+          "type": "revive",
+          "hp_rate": 0.4
+        },
+        {
+          "type": "heal_hp",
+          "amount": 30
+        }
+      ]
     },
     {
       "id": "journal_first_half",

@@ -95,6 +95,29 @@ class SatisfyNeedEffect(ItemEffect):
 
 
 @dataclass(frozen=True)
+class ReviveEffect(ItemEffect):
+    """ダウンしたプレイヤーを蘇生させる効果 (Issue #621 Phase 3a)。
+
+    ``hp_rate`` は復帰時の HP 比率 (0.0 〜 1.0)、``max_hp * hp_rate`` で
+    HP が復帰し ``is_down`` が解除される。実際の蘇生処理は
+    ``ConsumableEffectHandler`` が ``player.revive(hp_rate)`` を呼んで行う。
+
+    domain 上は ``hp_rate=0.0`` も許容する (= 「意識は戻ったが HP は戻らない」
+    のような演出余地)。ダウンしていない player への適用は handler 側で
+    no-op として扱う (= 既に元気なのに「revive される」ことはあり得るが
+    害は無い)。
+    """
+
+    hp_rate: float
+
+    def __post_init__(self) -> None:
+        if self.hp_rate < 0.0 or self.hp_rate > 1.0:
+            raise ItemEffectValidationException(
+                f"Revive effect: hp_rate must be in [0.0, 1.0], got {self.hp_rate}"
+            )
+
+
+@dataclass(frozen=True)
 class CompositeItemEffect(ItemEffect):
     """複数効果をまとめたデータ"""
 
