@@ -262,6 +262,27 @@ class ToolHandlerConsistencyError(RuntimeError):
     本例外で起動時に fail-fast させる。"""
 
 
+# PR-A (Issue #621 後続): 脱出ランタイムでは恒久的に未対応な tool。
+# ``_handle_set_sub_location`` が常に ``UNSUPPORTED_TOOL`` を返すため LLM に
+# 見せる意味が無い。Y_after_issue621 trace で実際に 3 回叩かれて全部失敗した
+# ので、tools_payload の構築時にここで定義された名前を弾く。handler 自体は
+# 防御として残し、何らかの経路で呼ばれても安全に UNSUPPORTED_TOOL を返す。
+#
+# 別ランタイム (= 通常 SpotGraph) で set_sub_location が必要になった場合は
+# このフィルタを呼ばないことで通せる (= ToolDefinitionDto 側に変更不要)。
+ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS: frozenset[str] = frozenset({
+    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
+})
+
+
+def filter_definitions_for_escape_llm(definitions):
+    """``ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS`` に含まれる tool definition を除外する。
+
+    入力順を保ったまま、name 属性が除外対象に該当するものだけを取り除く。
+    """
+    return [d for d in definitions if d.name not in ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS]
+
+
 def validate_tool_handler_consistency(
     exposed_tool_names: Iterable[str],
     handler_keys: Iterable[str],
@@ -1207,6 +1228,10 @@ class _WorldLlmWiring:
                 exc_info=True,
             )
             return
+        # PR-A: LLM に実際に expose する tool 集合と handler 集合を突合する。
+        # 脱出ランタイムで永続的に UNSUPPORTED_TOOL になる tool は除外して比較
+        # (= 「expose されているのに handler が無い」検出だけは引き続き機能する)。
+        definitions = filter_definitions_for_escape_llm(definitions)
         exposed_names = [d.name for d in definitions]
         validate_tool_handler_consistency(
             exposed_tool_names=exposed_names,
@@ -1321,6 +1346,9 @@ class _WorldLlmWiring:
         - 例外は捕まえて結果に詰める (Phase B 側で LlmCommandResultDto 化)
         """
         prompt = self.runtime.build_full_prompt(player_id)
+        # PR-A: 脱出ランタイムで恒久的に UNSUPPORTED_TOOL になる tool は LLM に
+        # 見せない。Y_after_issue621 trace で set_sub_location が 3 回叩かれて
+        # 全部失敗していた問題を入口で塞ぐ。
         tools_payload = [
             {
                 "type": "function",
@@ -1330,7 +1358,9 @@ class _WorldLlmWiring:
                     "parameters": definition.parameters,
                 },
             }
-            for definition in self.runtime.get_tool_definitions()
+            for definition in filter_definitions_for_escape_llm(
+                self.runtime.get_tool_definitions()
+            )
         ]
         # 実験 #356 対応: LLM 1 呼び出しごとに metrics (wall_latency / tokens / TPS)
         # を trace に流す。Phase A の中で player_id / tick の context を sink に閉
