@@ -234,6 +234,7 @@ class EpisodicPassiveRecallRetrievalService:
         default_world_id: Optional[WorldId] = None,
         habituation_store: Optional[IEpisodicRecallHabituationStore] = None,
         habituation_decay_window_ticks: int = 5,
+        habituation_strength: int = 2,
         slot_store: Optional[IEpisodicRecallSlotStore] = None,
         slot_policy: Optional[RecallSlotPolicy] = None,
         afterglow_store: Optional[IAfterglowStore] = None,
@@ -259,6 +260,16 @@ class EpisodicPassiveRecallRetrievalService:
             raise ValueError(
                 "habituation_decay_window_ticks must be 0 or greater"
             )
+        # PR-I (Y_after_issue621 後続): 罰則の倍率。Y 観察で「penalty 3 が
+        # multi_cue_score 4 を打ち消せず、同 episode が 8 tick 連続採用」
+        # された。倍率を 2 にして score 0 まで下げられるように既定強化。
+        # ``strength=0`` は罰則 off の経路 (= #526 段階 2 直後の挙動を再現)。
+        if not isinstance(habituation_strength, int) or isinstance(
+            habituation_strength, bool
+        ):
+            raise TypeError("habituation_strength must be int")
+        if habituation_strength < 0:
+            raise ValueError("habituation_strength must be 0 or greater")
         self._store = store
         self._link_store = link_store
         self._spreading_max_hops = spreading_max_hops
@@ -268,6 +279,7 @@ class EpisodicPassiveRecallRetrievalService:
         # (= default off で既存挙動と完全同一)。
         self._habituation_store = habituation_store
         self._habituation_decay_window_ticks = habituation_decay_window_ticks
+        self._habituation_strength = habituation_strength
         # #526 段階 3: 想起スロット (working memory)。store + policy が両方
         # 揃ったときだけ動く。default off で既存挙動と完全同一。
         if slot_store is not None and slot_policy is None:
@@ -430,7 +442,13 @@ class EpisodicPassiveRecallRetrievalService:
                 # debug 用に記録 (penalty=0 は記録しない)。同 episode が複数
                 # arm で評価されても結果は同じなので dict で上書き OK。
                 habituation_penalty_records[ep.episode_id] = penalty
-            return multi_cue_score(ep.episode_id) - penalty
+            # PR-I: penalty に倍率を掛けてスコアを下げる。倍率 2 なら 4 cue
+            # 一致の episode (= score 4) に penalty 3 を引いても score -2 まで
+            # 沈み、他の penalty=0 / score 2-3 の候補に確実に席を譲る。
+            return (
+                multi_cue_score(ep.episode_id)
+                - penalty * self._habituation_strength
+            )
 
         cue_arms = [
             (label, sorted(rows, key=_arm_score_key, reverse=True), granular, cue_keys)
