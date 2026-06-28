@@ -29,6 +29,7 @@ import pytest
 from ai_rpg_world.application.llm.contracts.dtos import (
     InventoryToolRuntimeTargetDto,
     LlmCommandResultDto,
+    MonsterToolRuntimeTargetDto,
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
@@ -38,6 +39,7 @@ from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
@@ -232,3 +234,151 @@ class TestDispatchTableUsesResolver:
                 f"{tool_name}: resolver を経由していない (error_code="
                 f"{result.error_code})。executor 直叩きの古い経路に戻った可能性。"
             )
+
+
+def _monster_target(
+    label: str = "M1",
+    monster_id: int = 10001,
+    display_name: str = "大型カニ",
+) -> MonsterToolRuntimeTargetDto:
+    return MonsterToolRuntimeTargetDto(
+        label=label,
+        kind="spot_graph_monster",
+        display_name=display_name,
+        monster_id=monster_id,
+    )
+
+
+class TestResolveAttack:
+    """`SpotGraphArgumentResolver._resolve_attack` が target_label → monster_id 変換できる。
+
+    Issue #618 で発覚した致命的 silent failure の回帰テスト:
+    agent が `spot_graph_attack(target_label='大型カニ')` を呼ぶと毎回
+    `INVALID_TARGET_LABEL: monster_id が解決されていません` で reject されていた。
+    結果として survival_island_v2 で 1 player では大型カニと戦えず、リオ
+    (player 3) が tick 32 で攻撃中に死亡、エイダ (player 1) が tick 59 で
+    救援中に同じカニに殺害される連鎖死亡が起きた。
+    真因: runtime_manager の resolver_targets set に
+    TOOL_NAME_SPOT_GRAPH_ATTACK が含まれておらず、attack tool が resolver
+    を hook せずに executor 直叩きで起動 → target_label が monster_id に
+    変換されない。
+    """
+
+    def test_display_name_直指定で_monster_id_に_解決できる(self) -> None:
+        """target_label='大型カニ' (= prompt 表示の display_name) で attack 解決。"""
+        resolver = SpotGraphArgumentResolver()
+        ctx = _runtime_context({"M1": _monster_target(monster_id=10001)})
+        out = resolver.resolve_args(
+            TOOL_NAME_SPOT_GRAPH_ATTACK,
+            {"target_label": "大型カニ", "inner_thought": "倒すしかない"},
+            ctx,
+        )
+        assert out is not None
+        assert out["monster_id"] == 10001
+        assert out["target_display_name"] == "大型カニ"
+        assert out["inner_thought"] == "倒すしかない"
+
+    def test_短縮ラベル_M1_直指定でも_解決できる(self) -> None:
+        """target_label='M1' でも引ける (= 旧プロンプト経路の後方互換)。"""
+        resolver = SpotGraphArgumentResolver()
+        ctx = _runtime_context({"M1": _monster_target(monster_id=10001)})
+        out = resolver.resolve_args(
+            TOOL_NAME_SPOT_GRAPH_ATTACK,
+            {"target_label": "M1", "inner_thought": "t"},
+            ctx,
+        )
+        assert out is not None
+        assert out["monster_id"] == 10001
+
+    def test_存在しない_label_は_例外(self) -> None:
+        resolver = SpotGraphArgumentResolver()
+        ctx = _runtime_context({"M1": _monster_target()})
+        with pytest.raises(ToolArgumentResolutionException) as ei:
+            resolver.resolve_args(
+                TOOL_NAME_SPOT_GRAPH_ATTACK,
+                {"target_label": "竜", "inner_thought": "t"},
+                ctx,
+            )
+        assert ei.value.error_code == "INVALID_TARGET_LABEL"
+
+    def test_inventory_ラベル_直指定で_attack_対象は_INVALID_TARGET_KIND(self) -> None:
+        """monster でなく item の短縮ラベルを直渡すと型違いで弾かれる (= silent success 防止)。
+
+        `target_label='I1'` だと targets dict に直接 hit するが kind が
+        inventory_item で attack の期待型 (MonsterToolRuntimeTargetDto) と違う
+        → INVALID_TARGET_KIND。`display_name='椰子の実'` での fallback 経路は
+        `kind='spot_graph_monster'` で filter されるので、そちらは
+        INVALID_TARGET_LABEL を返す (別ケース)。
+        """
+        resolver = SpotGraphArgumentResolver()
+        ctx = _runtime_context({
+            "I1": _inventory_target(label="I1", display_name="椰子の実"),
+        })
+        with pytest.raises(ToolArgumentResolutionException) as ei:
+            resolver.resolve_args(
+                TOOL_NAME_SPOT_GRAPH_ATTACK,
+                {"target_label": "I1", "inner_thought": "t"},
+                ctx,
+            )
+        assert ei.value.error_code == "INVALID_TARGET_KIND"
+
+
+class TestAttackDispatchUsesResolver:
+    """dispatch table 上 attack tool が resolver-aware handler で登録されている。
+
+    Issue #618 真因の regression test。resolver_targets set から
+    TOOL_NAME_SPOT_GRAPH_ATTACK が漏れていると attack は executor 直叩きに
+    なり、agent が monster 名を渡しても毎回失敗する (= モンスターと戦えない
+    致命的バグ)。本テストが落ちる = resolver_targets から attack が消えた。
+    """
+
+    def test_attack_handler_が_resolver_を_経由する(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        """不正 label で attack を呼ぶと INVALID_TARGET_LABEL が返る (= resolver を通った証拠)。
+
+        旧コード (resolver 漏れ) では executor 直叩きで `monster_id が解決
+        されていません` (= executor 側のメッセージ) が返るが、resolver 経由
+        なら resolver_helpers の例外メッセージ「指定された対象ラベルは現在の
+        候補にありません」が返る。本テストは error_code を確認する。
+        """
+        from tests.demos._world_runtime_helpers import create_world_runtime_session
+
+        state = create_world_runtime_session(monkeypatch, tmp_path)
+        wiring = state.llm_wiring
+        handler = wiring._tool_handlers.get(TOOL_NAME_SPOT_GRAPH_ATTACK)
+        assert handler is not None, "attack が dispatch table に無い"
+        result = handler(
+            PlayerId(1),
+            {"target_label": "M99", "inner_thought": "t"},
+            _runtime_context({}),
+        )
+        assert result.success is False
+        assert result.error_code in (
+            "INVALID_TARGET_LABEL",
+            "INVALID_TARGET_KIND",
+        ), (
+            "attack が resolver を経由していない (error_code="
+            f"{result.error_code})。runtime_manager.py の resolver_targets "
+            "set から TOOL_NAME_SPOT_GRAPH_ATTACK が抜けた可能性。"
+        )
+
+    def test_resolver_targets_set_に_attack_が_含まれる(self) -> None:
+        """runtime_manager の resolver_targets ハードコード set に attack が含まれる。
+
+        実装ファイルを文字列検索する形式。`resolver_targets = frozenset({...
+        TOOL_NAME_SPOT_GRAPH_ATTACK, ...})` のブロックを担保する。
+        """
+        path = (
+            "src/ai_rpg_world/presentation/spot_graph_game/runtime_manager.py"
+        )
+        content = open(path).read()
+        # resolver_targets ブロック内に TOOL_NAME_SPOT_GRAPH_ATTACK が必須
+        start = content.find("resolver_targets = frozenset")
+        assert start != -1, "resolver_targets 定義が見つからない"
+        end = content.find("})", start)
+        block = content[start:end]
+        assert "TOOL_NAME_SPOT_GRAPH_ATTACK" in block, (
+            "resolver_targets に TOOL_NAME_SPOT_GRAPH_ATTACK が無い。"
+            "attack は target_label → monster_id 解決が必須なので resolver を hook する必要がある。"
+        )

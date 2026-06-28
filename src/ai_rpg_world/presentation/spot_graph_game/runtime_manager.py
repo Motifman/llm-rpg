@@ -1139,6 +1139,13 @@ class _WorldLlmWiring:
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+            # attack も resolver 経由で `target_label='大型カニ'` を
+            # `monster_id` に解決する必要がある。Issue #618 で発覚した
+            # silent failure: resolver に hook されていなかったため、
+            # agent が attack を呼ぶと毎回 `INVALID_TARGET_LABEL: monster_id
+            # が解決されていません` で reject されていた (= scenario で
+            # モンスターと戦えない致命的 bug)。
+            TOOL_NAME_SPOT_GRAPH_ATTACK,
         })
         argument_resolver = SpotGraphArgumentResolver()
         for tool_name in targets:
