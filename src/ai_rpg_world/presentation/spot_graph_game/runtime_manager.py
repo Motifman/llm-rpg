@@ -87,6 +87,9 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
     InteractionNotFoundException,
 )
+from ai_rpg_world.domain.world_graph.value_object.spot_object_id import (
+    SpotObjectId,
+)
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 from ai_rpg_world.presentation.spot_graph_game.schemas import (
@@ -361,23 +364,34 @@ def _interact_remediation_for_reason(reason: str) -> str:
     )
 
 
-def _list_object_interactions(runtime: Any, object_id: Any) -> list[str]:
-    """`object_id` が所属する spot の interior から available action 名を列挙。
+def _list_object_interactions(runtime: Any, world_object_id: int) -> list[str]:
+    """`world_object_id` が所属する spot の interior から available action 名を列挙。
 
     実験 #26 で LLM が "search" / "examine" 等の ad-hoc action_name を発明して
     InteractionNotFoundException が generic error に化けていた問題を直すため、
     handler が remediation で正規の action 一覧を返せるようにするヘルパ。
     解決経路で例外が出たら空 list を返す (= remediation 文面が "(なし)" になる)。
+
+    PR-B (Y_after_issue621 後続): 旧版は ``id_mapper.get_str(...)`` で変換した
+    str を受け取って ``interior.get_object(SpotObjectId)`` に渡していたため、
+    型不一致で常に None → 空 list を返していた。LLM は「利用可能な操作: (なし)」
+    を毎回受け取り、定義されている action_name を学習できなかった。
+    引数を ``world_object_id: int`` に統一し、内部で SpotObjectId に包む。
     """
     try:
+        # SpotObjectId.create は int / str どちらでも受け付け、不正値は例外を
+        # 投げる。本関数は best-effort で「分からないなら空 list」を返すため、
+        # 例外は外側 except で握る。
+        target_object_id = SpotObjectId.create(world_object_id)
         graph = runtime._spot_graph_repo.find_graph()
-        spot_id = None
-        # object_id (SpotObjectId) から所属 spot を探す
+        # SpotObjectId から所属 spot を探す。spot interior repository に
+        # 直接の逆引きが無いので spot を全列挙する (= O(N) だが失敗時のみ
+        # 走るので許容)。
         for node in graph.iter_spot_nodes():
             interior = runtime._spot_interior_repo.find_by_spot_id(node.spot_id)
             if interior is None:
                 continue
-            obj = interior.get_object(object_id)
+            obj = interior.get_object(target_object_id)
             if obj is not None:
                 return [i.action_name for i in obj.interactions]
         return []
@@ -1954,8 +1968,13 @@ class _WorldLlmWiring:
             # に化けていた (reason が "search on 2" のような ID 表示で意味不明)。
             # 当該 object で実際に使える action 一覧を提示して LLM を正規の
             # action_name に誘導する。
+            # PR-B: world_object_id (int) を直接渡す。旧コードは
+            # id_mapper.get_str() で変換した str を渡しており、内部の
+            # ``interior.get_object(SpotObjectId)`` と型不一致で常に空 list
+            # に化けていた = LLM が「利用可能な操作: (なし)」だけを受け取り
+            # 学習できなかった。
             available = _list_object_interactions(
-                self.runtime, object_id,
+                self.runtime, target.world_object_id,
             )
             avail_str = ", ".join(available) if available else "(なし)"
             return LlmCommandResultDto(
