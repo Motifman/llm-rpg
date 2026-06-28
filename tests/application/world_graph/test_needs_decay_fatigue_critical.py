@@ -65,12 +65,18 @@ class TestFatigueCriticalDamageEnabled:
     """``fatigue_critical_damage_per_tick=1`` で threshold 超過時に HP-1/tick。"""
 
     def test_FATIGUE_threshold_以上で_HP_減る(self) -> None:
-        """fatigue 95 (default threshold) を超えていれば毎 tick HP-1。"""
+        """fatigue 95 (default threshold) を超えていれば毎 tick HP-1。
+
+        Y_after_pr634 後続で ``DEFAULT_NEED_RATES[FATIGUE]`` が 0 になったため、
+        本テストは passive decay を test 側で明示的に注入し、critical damage
+        機構そのもの (= threshold 越え判定 + HP 減少) のみを検証する。"""
         status = _build_status(fatigue_value=94, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
         stage = SpotGraphNeedsDecayStageService(
-            repo, fatigue_critical_damage_per_tick=1
+            repo,
+            rates={NeedType.FATIGUE: 1, NeedType.HUNGER: 0},
+            fatigue_critical_damage_per_tick=1,
         )
 
         # 1 tick で FATIGUE 94→95 (threshold 到達) → damage 1
@@ -85,7 +91,9 @@ class TestFatigueCriticalDamageEnabled:
         repo = MagicMock()
         repo.find_all.return_value = [status]
         stage = SpotGraphNeedsDecayStageService(
-            repo, fatigue_critical_damage_per_tick=1
+            repo,
+            rates={NeedType.FATIGUE: 1, NeedType.HUNGER: 0},
+            fatigue_critical_damage_per_tick=1,
         )
 
         stage.run(WorldTick(1))
@@ -100,6 +108,7 @@ class TestFatigueCriticalDamageEnabled:
         repo.find_all.return_value = [status]
         stage = SpotGraphNeedsDecayStageService(
             repo,
+            rates={NeedType.FATIGUE: 1, NeedType.HUNGER: 0},
             fatigue_critical_damage_per_tick=2,
             fatigue_critical_threshold=90,
         )
