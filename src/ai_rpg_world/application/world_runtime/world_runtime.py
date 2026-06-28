@@ -3111,6 +3111,25 @@ def create_world_runtime(
         [PlayerId(spawn.player_id) for spawn in scenario.player_spawns]
     )
 
+    # Issue #621: ダウン → DEAD の 30 tick 猶予機構。
+    # grace_timer は PlayerDownedEvent handler (= pending 登録) と
+    # PlayerRevivedEvent handler (= pending 削除) の両方から触られる。
+    # death_grace_stage は tick 毎に grace_ticks 経過判定して DEAD 確定する。
+    # outcome_registry 直後に作って、simulation_service にも handler にも
+    # 同じ instance を共有させる。
+    from ai_rpg_world.application.player.services.player_death_grace_timer import (
+        PlayerDeathGraceTimer,
+    )
+    from ai_rpg_world.application.player.services.player_death_grace_tick_stage import (
+        PlayerDeathGraceTickStage,
+    )
+    death_grace_timer = PlayerDeathGraceTimer()
+    death_grace_stage = PlayerDeathGraceTickStage(
+        outcome_registry=outcome_registry,
+        grace_timer=death_grace_timer,
+        grace_ticks=30,
+    )
+
     # ── Phase E-3b: outcome_resolution_stage ──
     # scenario.outcome_resolution_config が宣言されている場合のみ stage を作る。
     # 宣言が無い (例: 既存 v1 / abandoned_hospital) シナリオでは個別 outcome を
@@ -3148,6 +3167,7 @@ def create_world_runtime(
         food_spoilage_stage=food_spoilage_stage,
         status_effects_stage=status_effects_stage,
         outcome_resolution_stage=outcome_resolution_stage,
+        death_grace_stage=death_grace_stage,
         llm_turn_trigger=sim_llm_trigger,
         # PR-N: tick stage で graph に積まれた events を heartbeat tick でも
         # observation pipeline 経由で flush する。これが無いと monster_behavior
@@ -3303,9 +3323,26 @@ def create_world_runtime(
             runtime._emit_observation_directly(pid, output)
 
     outcome_registry.register_callback(_broadcast_outcome_change)
+    # Issue #621: ダウン → DEAD 即時確定をやめ、30 tick の猶予を設ける。
+    # grace_timer / grace_stage は simulation_service 構築時 (上の方) で
+    # 既に作られているので、ここでは handler だけ pipeline に subscribe する。
+    # PlayerDownedEvent → grace_timer.register、PlayerRevivedEvent →
+    # grace_timer.cancel、tick stage が grace_ticks 経過後に DEAD 確定。
+    from ai_rpg_world.application.player.handlers.player_revived_outcome_handler import (
+        PlayerRevivedOutcomeHandler,
+    )
+    from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
     pipeline_event_publisher.register_handler(
         PlayerDownedEvent,
-        PlayerDownedOutcomeHandler(outcome_registry),
+        PlayerDownedOutcomeHandler(
+            outcome_registry=outcome_registry,
+            grace_timer=death_grace_timer,
+            current_tick_provider=lambda: int(runtime.current_tick().value),
+        ),
+    )
+    pipeline_event_publisher.register_handler(
+        PlayerRevivedEvent,
+        PlayerRevivedOutcomeHandler(grace_timer=death_grace_timer),
     )
     # #344 後続: spot_graph_use_item で発火する ConsumableUsedEvent を捌くため、
     # ConsumableEffectHandler を pipeline 経由で subscribe する。これがないと
