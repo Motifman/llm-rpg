@@ -1181,7 +1181,13 @@ class SpotGraphToolExecutor:
                     error_code="INTERACTION_PRECONDITION_FAILED",
                 )
 
-            target.revive(hp_recovery_rate=self.TEND_REVIVE_HP_RATE)
+            # Phase 5: caregiver_player_id を渡すことで PlayerRevivedEvent に
+            # 「誰に介抱されたか」を載せる。post hoc observation handler が
+            # 「〇〇に介抱されて意識が戻った」を組み立てる。
+            target.revive(
+                hp_recovery_rate=self.TEND_REVIVE_HP_RATE,
+                caregiver_player_id=PlayerId(player_id),
+            )
             self._player_status_repository.save(target)
             # PlayerRevivedEvent を pipeline に流す。これにより
             # PlayerRevivedOutcomeHandler が grace_timer.cancel して

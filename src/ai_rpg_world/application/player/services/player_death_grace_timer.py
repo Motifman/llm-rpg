@@ -60,6 +60,16 @@ class PlayerDeathGraceTimer:
             raise TypeError("player_id must be PlayerId")
         return int(player_id) in self._downed_at
 
+    def get_downed_at_tick(self, player_id: PlayerId) -> "int | None":
+        """``player_id`` が pending なら downed_at_tick を返し、無ければ None。
+
+        Phase 5: revive 時の post hoc observation 構築で ``current_tick -
+        downed_at_tick`` を求めるのに使う。cancel される前に handler が読む。
+        """
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        return self._downed_at.get(int(player_id))
+
     def overdue_players(
         self, current_tick: int, grace_ticks: int
     ) -> List[PlayerId]:
