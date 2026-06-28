@@ -8,6 +8,7 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     HealEffect,
     ItemEffect,
     RecoverMpEffect,
+    ReviveEffect,
 )
 
 
@@ -152,3 +153,38 @@ class TestItemEffectAbstract:
         # 直接インスタンス化できない
         with pytest.raises(TypeError):
             ItemEffect()
+
+
+class TestReviveEffect:
+    """ReviveEffect (= ダウン player を蘇生する効果) のテスト (Issue #621 Phase 3a)。"""
+
+    def test_create_valid_revive_effect(self) -> None:
+        """0.4 で蘇生 = max_hp の 40% で復帰を表現する。"""
+        effect = ReviveEffect(hp_rate=0.4)
+        assert effect.hp_rate == 0.4
+
+    def test_create_with_minimum_rate(self) -> None:
+        """hp_rate=0.0 は domain 上は許容 (= 「気を取り戻すだけで HP は戻らない」演出余地)。"""
+        effect = ReviveEffect(hp_rate=0.0)
+        assert effect.hp_rate == 0.0
+
+    def test_create_with_full_rate(self) -> None:
+        """hp_rate=1.0 (= 完全回復) も許容。"""
+        effect = ReviveEffect(hp_rate=1.0)
+        assert effect.hp_rate == 1.0
+
+    def test_negative_rate_は_例外(self) -> None:
+        with pytest.raises(ItemEffectValidationException) as ei:
+            ReviveEffect(hp_rate=-0.1)
+        assert "hp_rate" in str(ei.value)
+
+    def test_one_を_超える_rate_は_例外(self) -> None:
+        """1.0 超 (= max_hp 以上) は revive の意味を超える。"""
+        with pytest.raises(ItemEffectValidationException) as ei:
+            ReviveEffect(hp_rate=1.5)
+        assert "hp_rate" in str(ei.value)
+
+    def test_frozen_dataclass_で_immutable(self) -> None:
+        effect = ReviveEffect(hp_rate=0.4)
+        with pytest.raises(Exception):
+            effect.hp_rate = 0.5  # type: ignore[misc]

@@ -20,6 +20,7 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     RecoverMpEffect,
     GoldEffect,
     ExpEffect,
+    ReviveEffect,
     SatisfyNeedEffect,
     CompositeItemEffect,
     ItemEffect,
@@ -490,3 +491,113 @@ class TestConsumableEffectHandler:
         )
         with pytest.raises(SystemErrorException, match="Unknown consumable effect type"):
             handler.handle(event)
+
+
+class TestReviveEffect:
+    """ReviveEffect 適用時の挙動 (Issue #621 Phase 3a)。
+
+    consume_effect が ReviveEffect のとき、ダウン中の player を
+    player.revive(hp_rate) で蘇生する。ダウンしていない player への
+    適用は no-op として扱う (= 既に元気なのに revive される無害ケース)。
+    """
+
+    def test_ダウン中の_player_を_ReviveEffect_で_蘇生する(self) -> None:
+        handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
+        player_id = PlayerId(1)
+        item_spec_id = ItemSpecId(921)
+        spec_rm = ItemSpecReadModel(
+            item_spec_id=item_spec_id,
+            name="救急用品",
+            item_type=ItemType.CONSUMABLE,
+            rarity=Rarity.COMMON,
+            description="ダウンしている者を蘇生する",
+            max_stack_size=MaxStackSize(1),
+            consume_effect=ReviveEffect(hp_rate=0.4),
+        )
+        item_spec_repo.find_by_id.return_value = spec_rm
+        # HP 0 でダウン状態の player
+        # 注: _create_player_status は base_stats.max_hp=10 で作る (= ヘルパ
+        # default)。revive(0.4) は base_stats.max_hp × 0.4 = 10 × 0.4 = 4 で
+        # 復帰する。max_hp=100 でテストしたい場合はヘルパ拡張が必要。
+        player_status = _create_player_status(hp_current=0, hp_max=100)
+        player_status._is_down = True
+        player_status_repo.find_by_id.return_value = player_status
+
+        event = ConsumableUsedEvent.create(
+            aggregate_id=player_id,
+            aggregate_type="PlayerStatusAggregate",
+            item_spec_id=item_spec_id,
+        )
+        handler.handle(event)
+
+        assert player_status.is_down is False
+        # base_stats.max_hp=10 × hp_rate=0.4 = 4 で復帰
+        assert player_status.hp.value == 4
+        player_status_repo.save.assert_called_once()
+
+    def test_ダウンしていない_player_への_ReviveEffect_は_no_op(self) -> None:
+        """is_down=False に revive を呼ぶと PlayerNotDownedException が出るので、
+        handler は事前 check して no-op にする。"""
+        handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
+        player_id = PlayerId(1)
+        item_spec_id = ItemSpecId(922)
+        spec_rm = ItemSpecReadModel(
+            item_spec_id=item_spec_id,
+            name="救急用品",
+            item_type=ItemType.CONSUMABLE,
+            rarity=Rarity.COMMON,
+            description="蘇生薬",
+            max_stack_size=MaxStackSize(1),
+            consume_effect=ReviveEffect(hp_rate=0.4),
+        )
+        item_spec_repo.find_by_id.return_value = spec_rm
+        # 元気な player に対する revive
+        player_status = _create_player_status(hp_current=80, hp_max=100)
+        assert player_status.is_down is False
+        player_status_repo.find_by_id.return_value = player_status
+
+        event = ConsumableUsedEvent.create(
+            aggregate_id=player_id,
+            aggregate_type="PlayerStatusAggregate",
+            item_spec_id=item_spec_id,
+        )
+        # 例外なく完了 (= no-op)
+        handler.handle(event)
+
+        # HP は元のまま
+        assert player_status.hp.value == 80
+        assert player_status.is_down is False
+
+    def test_composite_に_含まれる_ReviveEffect_も_適用される(self) -> None:
+        """救急用品が ReviveEffect + HealEffect の合成だったケース。"""
+        handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
+        player_id = PlayerId(1)
+        item_spec_id = ItemSpecId(923)
+        composite = CompositeItemEffect(
+            effects=(ReviveEffect(hp_rate=0.4), HealEffect(amount=20))
+        )
+        spec_rm = ItemSpecReadModel(
+            item_spec_id=item_spec_id,
+            name="高級救急用品",
+            item_type=ItemType.CONSUMABLE,
+            rarity=Rarity.RARE,
+            description="蘇生+追加 HP 回復",
+            max_stack_size=MaxStackSize(1),
+            consume_effect=composite,
+        )
+        item_spec_repo.find_by_id.return_value = spec_rm
+        player_status = _create_player_status(hp_current=0, hp_max=100)
+        player_status._is_down = True
+        player_status_repo.find_by_id.return_value = player_status
+
+        event = ConsumableUsedEvent.create(
+            aggregate_id=player_id,
+            aggregate_type="PlayerStatusAggregate",
+            item_spec_id=item_spec_id,
+        )
+        handler.handle(event)
+
+        # base_stats.max_hp=10 × 0.4 = 4 で復帰、その後 heal +20 で +20
+        # ただし Hp.heal は max_hp で cap される (= 10 で頭打ち)
+        assert player_status.is_down is False
+        assert player_status.hp.value == 10
