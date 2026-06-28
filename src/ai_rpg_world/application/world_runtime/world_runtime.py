@@ -3340,6 +3340,28 @@ def create_world_runtime(
             current_tick_provider=lambda: int(runtime.current_tick().value),
         ),
     )
+    # Issue #621 Phase 5: revive 時の post hoc summary 注入。
+    # **PlayerRevivedOutcomeHandler より先に登録する** こと。先に cancel される
+    # と grace_timer の downed_at_tick が消えて「N tick の間意識を失っていた」
+    # の N が分からなくなる (fail-safe で「数 tick」になるが、正確な値を残す
+    # ため順序を守る)。
+    from ai_rpg_world.application.player.handlers.player_revived_post_hoc_observation_handler import (
+        PlayerRevivedPostHocObservationHandler,
+    )
+    _caregiver_name_by_pid = {
+        int(spawn.player_id): spawn.name for spawn in scenario.player_spawns
+    }
+    pipeline_event_publisher.register_handler(
+        PlayerRevivedEvent,
+        PlayerRevivedPostHocObservationHandler(
+            grace_timer=death_grace_timer,
+            observation_appender=observation_appender,
+            current_tick_provider=lambda: int(runtime.current_tick().value),
+            caregiver_name_resolver=lambda pid, _d=_caregiver_name_by_pid: (
+                _d.get(int(pid))
+            ),
+        ),
+    )
     pipeline_event_publisher.register_handler(
         PlayerRevivedEvent,
         PlayerRevivedOutcomeHandler(grace_timer=death_grace_timer),

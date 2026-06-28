@@ -23,9 +23,17 @@ class PlayerEvadedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
 
 @dataclass(frozen=True)
 class PlayerRevivedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
-    """プレイヤー復帰イベント"""
+    """プレイヤー復帰イベント。
+
+    Issue #621 Phase 5: ``caregiver_player_id`` は介抱した相手 (= revive を
+    引き起こした player)。tend_to_player ツール経由の revive では actor を
+    渡す。自然回復・scenario_event 等 caregiver 不明の経路では None。
+    post hoc observation handler が「〇〇に介抱されて意識が戻った」テキストを
+    組み立てるのに使う。
+    """
     hp_recovered: int
     total_hp: int
+    caregiver_player_id: Optional[PlayerId] = None
 
 
 @dataclass(frozen=True)

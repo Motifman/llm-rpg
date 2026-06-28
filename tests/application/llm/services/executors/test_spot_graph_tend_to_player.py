@@ -130,6 +130,26 @@ class TestTendToPlayerSuccess:
         # PlayerRevivedEvent が pipeline に流れる
         publisher.publish_all.assert_called_once()
 
+    def test_pipeline_に_流れる_PlayerRevivedEvent_に_caregiver_player_id_actor_が_乗る(self) -> None:
+        """Phase 5: post hoc observation handler が「誰に介抱されたか」を読むために
+        actor の PlayerId が PlayerRevivedEvent.caregiver_player_id に乗る必要がある。"""
+        from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
+        exec, status_repo, publisher = _build_executor()
+        actor = _build_player(player_id=1, is_down=False, spot_id=10)
+        target = _build_player(
+            player_id=2, is_down=True, spot_id=10, hp_current=0, hp_max=100
+        )
+        status_repo.find_by_id.side_effect = lambda pid: {
+            PlayerId(1): actor, PlayerId(2): target,
+        }.get(pid)
+
+        exec._tend_to_player(player_id=1, args=_args(2))
+
+        events = publisher.publish_all.call_args.args[0]
+        revived = [e for e in events if isinstance(e, PlayerRevivedEvent)]
+        assert len(revived) == 1
+        assert revived[0].caregiver_player_id == PlayerId(1)
+
     def test_成功メッセージに_HP_と_対象名が含まれる(self) -> None:
         exec, status_repo, publisher = _build_executor()
         actor = _build_player(player_id=1, is_down=False, spot_id=10)

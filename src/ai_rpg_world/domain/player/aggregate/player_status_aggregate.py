@@ -942,11 +942,19 @@ class PlayerStatusAggregate(AggregateRoot):
             total_stamina=self._stamina.value,
         ))
 
-    def revive(self, hp_recovery_rate: float) -> None:
+    def revive(
+        self,
+        hp_recovery_rate: float,
+        caregiver_player_id: "PlayerId | None" = None,
+    ) -> None:
         """戦闘不能状態から復帰する
 
         Args:
             hp_recovery_rate: 復帰時のHP回復率（0.0〜1.0）。アプリ層で設定から取得して渡す。
+            caregiver_player_id: 介抱した相手の PlayerId。tend_to_player ツール
+                経由では actor を渡す。自然回復・scenario_event 等 caregiver 不明
+                の経路では None。PlayerRevivedEvent に伝えて post hoc observation
+                handler が「〇〇に介抱されて意識が戻った」テキストを組み立てる。
 
         Raises:
             ValueError: 既にダウン状態でない場合
@@ -969,6 +977,7 @@ class PlayerStatusAggregate(AggregateRoot):
             aggregate_type="PlayerStatusAggregate",
             hp_recovered=self._hp.value - old_hp,
             total_hp=self._hp.value,
+            caregiver_player_id=caregiver_player_id,
         ))
 
     def speak(

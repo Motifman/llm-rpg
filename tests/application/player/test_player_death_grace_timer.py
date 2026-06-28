@@ -125,3 +125,31 @@ class TestValidation:
         timer = PlayerDeathGraceTimer()
         with pytest.raises(TypeError):
             timer.register(1, downed_at_tick=0)  # type: ignore[arg-type]
+
+
+class TestGetDownedAtTick:
+    """Issue #621 Phase 5: post hoc 観測 (= 「N tick 意識を失っていた」) を組み立てる
+    のに ``downed_at_tick`` を読み出すための getter。cancel される前に handler
+    から参照する用途。"""
+
+    def test_register_された_player_の_tick_を_返す(self) -> None:
+        timer = PlayerDeathGraceTimer()
+        pid = PlayerId(1)
+        timer.register(pid, downed_at_tick=7)
+        assert timer.get_downed_at_tick(pid) == 7
+
+    def test_register_していない_player_は_None_を_返す(self) -> None:
+        timer = PlayerDeathGraceTimer()
+        assert timer.get_downed_at_tick(PlayerId(99)) is None
+
+    def test_cancel_後は_None_を_返す(self) -> None:
+        timer = PlayerDeathGraceTimer()
+        pid = PlayerId(1)
+        timer.register(pid, downed_at_tick=7)
+        timer.cancel(pid)
+        assert timer.get_downed_at_tick(pid) is None
+
+    def test_player_id_は_PlayerId(self) -> None:
+        timer = PlayerDeathGraceTimer()
+        with pytest.raises(TypeError):
+            timer.get_downed_at_tick(1)  # type: ignore[arg-type]
