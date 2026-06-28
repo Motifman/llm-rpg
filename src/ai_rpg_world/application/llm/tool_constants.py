@@ -172,3 +172,6 @@ TOOL_NAME_SPOT_GRAPH_GIVE_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "give_item"
 # PR 5b: 同 tick 内で複数 give を 1 tool call にまとめるための batch 版。
 # 単発 give_item は受け渡しが 1 対 1 のとき / 引数を最小化したいとき向けに残す。
 TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS = TOOL_NAME_PREFIX_SPOT_GRAPH + "give_items"
+# Issue #621 Phase 3b: 同 spot に倒れた仲間を介抱して revive する tool。
+# アイテム (= first_aid) を持っていなくても物理的に起こす経路。
+TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER = TOOL_NAME_PREFIX_SPOT_GRAPH + "tend_to_player"
