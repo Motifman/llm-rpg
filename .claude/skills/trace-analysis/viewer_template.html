@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<title>{{RUN_NAME}} — 多軸分析レポート</title>
+<style>
+:root {
+  --bg: #faf7f1;
+  --paper: #ffffff;
+  --ink: #1c1a14;
+  --muted: #6c655a;
+  --line: #d8d0bf;
+  --line-soft: #ecebe5;
+  --accent: #b8541a;
+  --accent-soft: #f8e9d8;
+  --good: #357a4e;
+  --good-soft: #e6f1ea;
+  --bad: #b03028;
+  --bad-soft: #f6e0dd;
+  --neutral: #6b5c8a;
+  --neutral-soft: #ece8f3;
+  --code-bg: #f1ede2;
+  --font-ui: "Hiragino Maru Gothic ProN", "Yu Gothic", "Avenir Next", system-ui, sans-serif;
+  --font-mono: "SFMono-Regular", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-ui); line-height: 1.65; font-size: 15px; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 56px 32px 96px; }
+header.hero { border-bottom: 2px solid var(--line); padding-bottom: 28px; margin-bottom: 48px; }
+header.hero h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: 0.5px; }
+header.hero .sub { color: var(--muted); font-size: 14px; }
+.meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 28px; }
+.meta .box { background: var(--paper); border: 1px solid var(--line); padding: 14px 16px; border-radius: 4px; }
+.meta .box .k { font-size: 12px; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; }
+.meta .box .v { font-size: 20px; font-weight: 600; margin-top: 4px; }
+.meta .box .d { font-size: 12px; color: var(--muted); margin-top: 2px; }
+nav.toc { background: var(--paper); border: 1px solid var(--line); padding: 18px 22px; border-radius: 4px; margin-bottom: 48px; }
+nav.toc h3 { font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+nav.toc ul { list-style: none; padding: 0; margin: 0; columns: 2; column-gap: 24px; }
+nav.toc li { margin-bottom: 6px; font-size: 14px; }
+nav.toc a { color: var(--ink); text-decoration: none; border-bottom: 1px dotted var(--line); }
+nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+section.axis { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 28px 32px; margin-bottom: 24px; }
+section.axis h2 { font-size: 22px; margin: 0 0 6px; }
+section.axis .axis-tag { display: inline-block; font-size: 11px; letter-spacing: 1.5px; color: var(--accent); background: var(--accent-soft); padding: 2px 10px; border-radius: 12px; margin-bottom: 12px; text-transform: uppercase; font-weight: 600; }
+section.axis h3 { font-size: 16px; margin: 24px 0 8px; padding-top: 14px; border-top: 1px solid var(--line-soft); color: var(--ink); }
+section.axis h3:first-of-type { padding-top: 0; border-top: none; }
+section.axis p { margin: 8px 0; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; }
+table th, table td { border-bottom: 1px solid var(--line-soft); padding: 6px 10px; text-align: left; }
+table th { background: var(--code-bg); font-weight: 600; }
+table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.chip-good { background: var(--good-soft); color: var(--good); }
+.chip-bad { background: var(--bad-soft); color: var(--bad); }
+.chip-neutral { background: var(--neutral-soft); color: var(--neutral); }
+blockquote { background: var(--code-bg); border-left: 3px solid var(--accent); margin: 12px 0; padding: 10px 14px; font-size: 13px; color: #4a4538; }
+blockquote .src { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; letter-spacing: 0.3px; }
+code { font-family: var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+.callout { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 14px 18px; margin: 16px 0; border-radius: 0 4px 4px 0; }
+.callout.bad { border-color: var(--bad); background: var(--bad-soft); }
+.callout.good { border-color: var(--good); background: var(--good-soft); }
+.callout h4 { margin: 0 0 6px; font-size: 14px; }
+.kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 16px; font-size: 13px; margin: 8px 0; }
+.kv dt { color: var(--muted); }
+ul, ol { padding-left: 22px; }
+li { margin-bottom: 4px; }
+.footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.footer a { color: var(--accent); }
+.summary-final { background: linear-gradient(135deg, #fdf7ec 0%, #f7eedd 100%); border: 1px solid var(--accent); padding: 28px 32px; border-radius: 6px; margin-top: 32px; }
+.summary-final h2 { color: var(--accent); margin-top: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+<h1>{{RUN_NAME}} — 多軸分析レポート</h1>
+<div class="sub">{{SUBTITLE}}</div>
+<div class="meta">
+{{HERO_BOXES}}
+</div>
+</header>
+
+<nav class="toc">
+<h3>目次 (6 軸)</h3>
+<ul>
+  <li><a href="#A">A. 効率・コスト・レイテンシ</a></li>
+  <li><a href="#B">B. 物語・ドラマ</a></li>
+  <li><a href="#C">C. エージェント別深掘り</a></li>
+  <li><a href="#D">D. 記憶システム</a></li>
+  <li><a href="#E">E. 失敗・loop_guard・異常</a></li>
+  <li><a href="#F">F. システム検証</a></li>
+  <li><a href="#final">総合所感</a></li>
+</ul>
+</nav>
+
+<section class="axis" id="A">
+<div class="axis-tag">Axis A</div>
+<h2>A. 効率・コスト・レイテンシ</h2>
+{{SECTION_A}}
+</section>
+
+<section class="axis" id="B">
+<div class="axis-tag">Axis B</div>
+<h2>B. 物語・ドラマ</h2>
+{{SECTION_B}}
+</section>
+
+<section class="axis" id="C">
+<div class="axis-tag">Axis C</div>
+<h2>C. エージェント別深掘り</h2>
+{{SECTION_C}}
+</section>
+
+<section class="axis" id="D">
+<div class="axis-tag">Axis D</div>
+<h2>D. 記憶システム</h2>
+{{SECTION_D}}
+</section>
+
+<section class="axis" id="E">
+<div class="axis-tag">Axis E</div>
+<h2>E. 失敗・loop_guard・異常</h2>
+{{SECTION_E}}
+</section>
+
+<section class="axis" id="F">
+<div class="axis-tag">Axis F</div>
+<h2>F. システム検証</h2>
+{{SECTION_F}}
+</section>
+
+<section class="axis summary-final" id="final">
+<h2>総合所感</h2>
+{{FINAL_SUMMARY}}
+</section>
+
+<div class="footer">
+<p>{{FOOTER}}</p>
+</div>
+
+</div>
+</body>
+</html>

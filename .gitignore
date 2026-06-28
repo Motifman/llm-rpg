@@ -101,4 +101,10 @@ local_experiments/*
 
 # ローカル git worktree 用（誤コミット防止・memory_feature_workflow.md §4.3）
 worktrees/
-.claude/
+# .claude/ は基本的に個人 config (settings.local.json) なので無視。ただし
+# project-local skill (= チーム共有の知識) は ``.claude/skills/`` 配下に置く
+# 運用にしたため、ディレクトリ全体ではなく個別の untracked 領域を ignore する。
+.claude/settings.local.json
+.claude/worktrees/
+.claude/__pycache__/
+.claude/**/__pycache__/
