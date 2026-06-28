@@ -8,6 +8,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     MonsterToolRuntimeTargetDto,
+    PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
@@ -362,6 +363,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
+    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
@@ -379,6 +381,7 @@ _SPOT_GRAPH_TOOLS = frozenset({
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
 })
 
 
@@ -430,6 +433,8 @@ class SpotGraphArgumentResolver:
             return self._resolve_give_item(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS:
             return self._resolve_give_items(args, runtime_context)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER:
+            return self._resolve_tend_to_player(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
             return self._resolve_use_item(args, runtime_context)
         return None
@@ -684,6 +689,47 @@ class SpotGraphArgumentResolver:
                 "item_instance_id": target.real_item_instance_id,
                 "target_display_name": target.display_name,
                 "stealth": bool(args.get("stealth", False)),
+            },
+            args,
+        )
+
+    def _resolve_tend_to_player(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """`spot_graph_tend_to_player` の target_player_label を player_id に解決する。
+
+        Issue #621 Phase 3b: 同 spot に倒れた仲間を介抱して revive する。
+        runtime_context.targets に PlayerToolRuntimeTargetDto として登録されて
+        いる相手の display_name / 短縮ラベル (P1, P2, ...) で指定可能。
+        monster (kind=spot_graph_monster) や inventory を渡すと
+        INVALID_TARGET_KIND で弾く。
+        """
+        label = args.get("target_player_label")
+        if not isinstance(label, str) or not label.strip():
+            raise ToolArgumentResolutionException(
+                "介抱する相手のラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = _resolve_target_with_display_name_fallback(
+            label,
+            runtime_context,
+            kind="spot_graph_player",
+            expected_types=(PlayerToolRuntimeTargetDto,),
+            label_name="介抱対象のラベル",
+            invalid_label_code="INVALID_TARGET_LABEL",
+            invalid_kind_code="INVALID_TARGET_KIND",
+        )
+        if target.player_id is None:
+            raise ToolArgumentResolutionException(
+                f"このラベルから player_id を解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return _with_inner_thought(
+            {
+                "target_player_id": target.player_id,
+                "target_display_name": target.display_name,
             },
             args,
         )

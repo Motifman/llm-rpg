@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
+    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
@@ -437,6 +438,32 @@ ATTACK_DEFINITION = ToolDefinitionDto(
 )
 
 
+TEND_TO_PLAYER_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+    description=(
+        "同じ場所に倒れている仲間を介抱して意識を取り戻させる。"
+        "アイテム (救急用品) を持っていなくても、物理的に揺さぶり起こす形で"
+        "蘇生できる。HP は ``max_hp`` の 40% で復帰する。"
+        "前提: 介抱対象が同じ場所にいて、戦闘不能状態であること。"
+        "自分自身を介抱することはできない。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "target_player_label": {
+                "type": "string",
+                "description": (
+                    "介抱する相手の名前 (例: \"エイダ\")。同名衝突時は"
+                    "``#N`` ordinal を含めて指定。"
+                ),
+            },
+            "inner_thought": inner_thought_property(),
+        },
+        "required": ["target_player_label", "inner_thought"],
+    },
+)
+
+
 def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (TRAVEL_TO_DEFINITION, _RESOLVER),
@@ -452,6 +479,7 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (ATTACK_DEFINITION, _RESOLVER),
         (LISTEN_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
+        (TEND_TO_PLAYER_DEFINITION, _RESOLVER),
         (SPEECH_DEFINITION, _RESOLVER),
     ]
 
@@ -471,6 +499,7 @@ __all__ = [
     "ATTACK_DEFINITION",
     "LISTEN_DEFINITION",
     "WAIT_DEFINITION",
+    "TEND_TO_PLAYER_DEFINITION",
     "SPEECH_DEFINITION",
     "SPEECH_CHANNEL_WHISPER",
     "SPEECH_CHANNEL_SAY",

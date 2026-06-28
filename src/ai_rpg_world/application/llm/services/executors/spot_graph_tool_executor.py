@@ -25,6 +25,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
+    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
@@ -254,6 +255,7 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_ATTACK: self._attack,
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
+            TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER: self._tend_to_player,
         }
 
     def _travel_to(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
@@ -1077,6 +1079,122 @@ class SpotGraphToolExecutor:
                 base = f"今ターンは行動を控えた: tick={tick_value}{suffix}"
             else:
                 base = f"今ターンは行動を控えた{suffix}"
+            return LlmCommandResultDto(
+                success=True,
+                message=append_inner_thought_to_message(base, args),
+            )
+        except Exception as e:
+            return exception_result(e)
+
+    # Issue #621 Phase 3b: 同 spot に倒れた仲間を介抱して revive する。
+    # アイテム (= first_aid) を持っていなくても物理的に起こす経路。
+    # HP 復帰率は Issue #621 spec で 40% に確定。constant として置く
+    # ことで PlayerConfigService への wiring 依存を避ける。
+    TEND_REVIVE_HP_RATE = 0.4
+
+    def _tend_to_player(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        """`spot_graph_tend_to_player` の handler (Issue #621 Phase 3b)。
+
+        resolver で `target_player_id` / `target_display_name` まで解決済み。
+        前提条件:
+          1. wiring (= player_status_repository) が揃っている
+          2. 自分自身を対象にできない (= 倒れている本人は LLM call が
+             止まっているはずなので呼ばれないが、防御的に弾く)
+          3. 対象が同じ spot にいる (= 物理介抱は隣にいないとできない)
+          4. 対象が is_down=True (= 元気な相手を介抱しても意味なし)
+          5. 介抱者本人が is_down=False (= 倒れた人は他人を介抱できない)
+          ※ DEAD 確定後の player は PlayerDeathGraceTickStage が
+             `_is_down=True` のまま outcome=DEAD にするので、is_down=True で
+             revive を試行できてしまう。outcome 確定は別レイヤ (registry)
+             で持っているので、ここでは is_down だけ見れば足りる
+             (= revive が成功しても registry は冪等で DEAD のまま)。
+             ただし「もう手遅れだった」感を出すため、別途 outcome registry
+             をチェックする設計余地はある (将来 PR)。
+
+        成功時: `target.revive(hp_rate=0.4)` を呼ぶ。PlayerRevivedEvent が
+        積まれ、ConsumableEffectHandler 経路と同じく PlayerRevivedOutcomeHandler
+        が grace_timer.cancel する。
+        """
+        if self._player_status_repository is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="tend_to_player は現在のワイヤリングでは未対応です。",
+                error_code="UNSUPPORTED_TOOL",
+            )
+
+        target_player_id_raw = args.get("target_player_id")
+        if not isinstance(target_player_id_raw, int):
+            return LlmCommandResultDto(
+                success=False,
+                message="target_player_id が解決されていません。",
+                error_code="INVALID_TARGET_LABEL",
+            )
+        if target_player_id_raw == player_id:
+            return LlmCommandResultDto(
+                success=False,
+                message="自分自身を介抱することはできません。",
+                error_code="INVALID_TARGET_KIND",
+            )
+        display_name = (
+            str(args.get("target_display_name", "")).strip() or "仲間"
+        )
+
+        try:
+            attacker_id = PlayerId(player_id)
+            target_id = PlayerId(target_player_id_raw)
+            actor = self._player_status_repository.find_by_id(attacker_id)
+            target = self._player_status_repository.find_by_id(target_id)
+            if actor is None or target is None:
+                return LlmCommandResultDto(
+                    success=False,
+                    message=f"対象のプレイヤーが見つかりません: {display_name}",
+                    error_code="TARGET_NOT_FOUND",
+                )
+            if actor.is_down:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="自分も倒れているので他人を介抱できない。",
+                    error_code="EXHAUSTED",
+                )
+            if not target.is_down:
+                return LlmCommandResultDto(
+                    success=False,
+                    message=f"{display_name} は倒れていない。介抱の必要はない。",
+                    error_code="INTERACTION_PRECONDITION_FAILED",
+                )
+            # 同 spot 制約: 介抱は物理的接触が必要なので spot_id が一致するか確認
+            actor_spot = actor.current_spot_id
+            target_spot = target.current_spot_id
+            if (
+                actor_spot is None
+                or target_spot is None
+                or actor_spot != target_spot
+            ):
+                return LlmCommandResultDto(
+                    success=False,
+                    message=(
+                        f"{display_name} は同じ場所にいない。"
+                        "介抱するにはまず相手のいる場所へ向かう必要がある。"
+                    ),
+                    error_code="INTERACTION_PRECONDITION_FAILED",
+                )
+
+            target.revive(hp_recovery_rate=self.TEND_REVIVE_HP_RATE)
+            self._player_status_repository.save(target)
+            # PlayerRevivedEvent を pipeline に流す。これにより
+            # PlayerRevivedOutcomeHandler が grace_timer.cancel して
+            # DEAD 確定を回避する。
+            if self._event_publisher is not None:
+                events = list(target.get_events())
+                target.clear_events()
+                if events:
+                    self._event_publisher.publish_all(events)
+            base = (
+                f"{display_name} を介抱して意識を取り戻させた。"
+                f"（HP {target.hp.value}/{target.base_stats.max_hp}）"
+            )
             return LlmCommandResultDto(
                 success=True,
                 message=append_inner_thought_to_message(base, args),

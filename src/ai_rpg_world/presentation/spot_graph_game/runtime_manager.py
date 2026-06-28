@@ -1070,6 +1070,7 @@ class _WorldLlmWiring:
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
             TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
+            TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
         )
         from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
             GameEndConditionEvaluator,
@@ -1122,6 +1123,7 @@ class _WorldLlmWiring:
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
             TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
+            TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
         )
         # #356 実験 #25 OFF で発覚: use_item / drop_item / give_item /
         # pickup_item は tool catalog 上 ``item_label`` (= I1, I2 など) を
@@ -1146,6 +1148,10 @@ class _WorldLlmWiring:
             # が解決されていません` で reject されていた (= scenario で
             # モンスターと戦えない致命的 bug)。
             TOOL_NAME_SPOT_GRAPH_ATTACK,
+            # Issue #621 Phase 3b: 新 tool `tend_to_player`。
+            # `target_player_label='エイダ'` を `target_player_id` に解決して
+            # executor に渡す必要があるため resolver hook が必須。
+            TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
         })
         argument_resolver = SpotGraphArgumentResolver()
         for tool_name in targets:
