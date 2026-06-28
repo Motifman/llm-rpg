@@ -712,15 +712,30 @@ class DefaultPromptBuilder(IPromptBuilder):
             cue_keys = [c.to_canonical() for c in situation_cues]
         except Exception:
             cue_keys = []
+        # PR-E (Y_after_issue621 後続): habituation_penalty を per-candidate に
+        # 埋め込み、recall ランキングの動きを 1 つの candidate だけで読めるよう
+        # にする。retrieval_debug が無い (= 旧経路) ときは全候補 penalty=0。
+        penalty_by_ep: dict[str, int] = {}
+        if retrieval_debug is not None:
+            try:
+                penalty_by_ep = {
+                    eid: penalty
+                    for eid, penalty in retrieval_debug.habituation_penalty_by_episode
+                }
+            except Exception:
+                penalty_by_ep = {}
         cand_payload: list[dict] = []
         for cand in candidates:
             try:
                 ep = cand.episode
+                ep_id = getattr(ep, "episode_id", "")
                 cand_payload.append(
                     {
-                        "episode_id": getattr(ep, "episode_id", ""),
+                        "episode_id": ep_id,
                         "source_axes": list(cand.source_axes),
                         "recall_text_snippet": (getattr(ep, "recall_text", "") or "")[:120],
+                        # PR-E: dict に未登録なら罰則なし扱い (= 0)。
+                        "habituation_penalty": penalty_by_ep.get(ep_id, 0),
                     }
                 )
             except Exception:

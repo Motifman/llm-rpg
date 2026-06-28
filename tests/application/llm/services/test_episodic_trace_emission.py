@@ -610,6 +610,94 @@ class TestPromptBuilderRecallTraceEmission:
         p = events[0].payload
         assert p["habituation_penalty_by_episode"] == {"ep-x": 3, "ep-y": 1}
 
+    def test_候補ごとに_habituation_penalty_が_紐付く(self) -> None:
+        """PR-E: 各 candidate に ``habituation_penalty`` を直接埋め込む。
+
+        Y_after_issue621 trace 分析で「habituation の罰則が trace に出ているか
+        後から判別しづらい」問題があった (= candidate と
+        habituation_penalty_by_episode の dict を cross-reference する必要
+        がある)。各 candidate dict に penalty を直接書くことで、recall ランキング
+        の動きを 1 つの candidate を見るだけで判断できる。
+
+        ペナルティ未適用の候補は ``habituation_penalty=0`` で埋める (= 既存
+        dict キーが無いケースを default 0 として扱う)。
+        """
+        from ai_rpg_world.application.llm.services.prompt_builder import (
+            DefaultPromptBuilder,
+        )
+        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+            EpisodicPassiveRecallCandidate,
+            EpisodicPassiveRecallRetrievalDebug,
+        )
+
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+        builder = object.__new__(DefaultPromptBuilder)
+        builder._trace_recorder = recorder
+        builder._trace_recorder_provider = None
+        builder._current_tick_provider = lambda: 5
+
+        ep_a = _make_episode(episode_id="ep-a", recall_text="A")
+        ep_b = _make_episode(episode_id="ep-b", recall_text="B")
+        cands = [
+            EpisodicPassiveRecallCandidate(episode=ep_a, source_axes=("temporal",)),
+            EpisodicPassiveRecallCandidate(episode=ep_b, source_axes=("temporal",)),
+        ]
+        debug = EpisodicPassiveRecallRetrievalDebug(
+            raw_row_count_by_axis=(("temporal", 2),),
+            union_episode_count_before_max_cap=2,
+            candidate_episode_sources=(
+                ("ep-a", ("temporal",)), ("ep-b", ("temporal",)),
+            ),
+            final_episode_count_by_source_axis=(("temporal", 2),),
+            # ep-a だけ penalty=4、ep-b は dict 未登録 → 0 扱い
+            habituation_penalty_by_episode=(("ep-a", 4),),
+        )
+
+        builder._emit_episodic_recall_trace(
+            player_id=PlayerId(1),
+            situation_cues=(),
+            candidates=cands,
+            retrieval_debug=debug,
+        )
+
+        events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_RECALL]
+        assert len(events) == 1
+        cands_payload = events[0].payload["candidates"]
+        assert {c["episode_id"]: c["habituation_penalty"] for c in cands_payload} == {
+            "ep-a": 4,
+            "ep-b": 0,
+        }
+
+    def test_retrieval_debug_未指定でも_candidate_に_habituation_penalty_0_が_出る(self) -> None:
+        """PR-E 後方互換: ``retrieval_debug`` 無し (= 旧経路) でも各 candidate
+        に ``habituation_penalty=0`` が一律で乗る。集計側が常に同じ shape を
+        前提にできるようにする。"""
+        from ai_rpg_world.application.llm.services.prompt_builder import (
+            DefaultPromptBuilder,
+        )
+        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+            EpisodicPassiveRecallCandidate,
+        )
+
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+        builder = object.__new__(DefaultPromptBuilder)
+        builder._trace_recorder = recorder
+        builder._trace_recorder_provider = None
+        builder._current_tick_provider = lambda: 1
+
+        ep = _make_episode(episode_id="ep-1", recall_text="x")
+        cand = EpisodicPassiveRecallCandidate(episode=ep, source_axes=("temporal",))
+        builder._emit_episodic_recall_trace(
+            player_id=PlayerId(1),
+            situation_cues=(),
+            candidates=[cand],
+        )
+
+        events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_RECALL]
+        assert events[0].payload["candidates"][0]["habituation_penalty"] == 0
+
     def test_retrieval_debug_未指定なら_既存_payload_と互換(self) -> None:
         """``retrieval_debug`` を渡さない呼び出しは既存形式 (追加キー無し) を
         維持する (= 後方互換)。"""
