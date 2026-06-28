@@ -117,15 +117,24 @@ _build_ordinal_disambiguator = build_ordinal_disambiguator
 # 実験 #29 後続: ItemType.value → LLM プロンプト向け日本語タグ。
 # 「食料/道具」程度の粒度で区別できれば use_item の誤判断 (ITEM_NOT_CONSUMABLE)
 # は減る想定。未知 type は空文字を返して何も表示しない (= silent fallback)。
+# PR-C (Y_after_issue621 後続): consumable 以外は ``use_item`` ツールで
+# 使えないため、種別タグに **「使用不可」** を明示する。Y_after_issue621 では
+# 流木 (material) に対して LLM が ``use_item`` を 7 回連続試行して全部失敗した。
+# 既存の ``(素材)`` だけのタグでは「これは use_item できないアイテム」だと
+# LLM が判断できなかった (= 飢餓で錯乱した時に「素材でも食えるかも」と試した)。
+#
+# 内部 error_code は ``ITEM_NOT_CONSUMABLE`` のまま (= 用語 grep 互換)、プレイヤー
+# 露出文言だけ「使用不可」(= use_item できない、の直接表現) に統一する。
+# 「消費不可」は player 視点で不自然なので避けた。
 _ITEM_TYPE_DISPLAY = {
     "consumable": " (食料)",
-    "equipment": " (装備)",
-    "material": " (素材)",
-    "tool": " (道具)",
-    "key_item": " (重要)",
-    "quest": " (任務品)",
-    "cosmetic": " (装飾)",
-    "other": "",
+    "equipment": " (装備・使用不可)",
+    "material": " (素材・使用不可)",
+    "tool": " (道具・使用不可)",
+    "key_item": " (重要・使用不可)",
+    "quest": " (任務品・使用不可)",
+    "cosmetic": " (装飾・使用不可)",
+    "other": " (使用不可)",
 }
 
 

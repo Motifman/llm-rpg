@@ -169,29 +169,30 @@ class TestInventoryItemTypeTag:
         )
         assert "(食料)" in line
 
-    def test_material_は_素材_タグ(self) -> None:
+    def test_material_は_素材_使用不可_タグ(self) -> None:
+        """PR-C: ``material`` は use_item できないため「使用不可」を明示する。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=2, name="流木", quantity=3, item_type="material",
             )
         )
-        assert "(素材)" in line
+        assert "(素材・使用不可)" in line
 
-    def test_tool_は_道具_タグ(self) -> None:
+    def test_tool_は_道具_使用不可_タグ(self) -> None:
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=3, name="火打ち石", quantity=1, item_type="tool",
             )
         )
-        assert "(道具)" in line
+        assert "(道具・使用不可)" in line
 
-    def test_key_item_は_重要_タグ(self) -> None:
+    def test_key_item_は_重要_使用不可_タグ(self) -> None:
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=4, name="骨のナイフ", quantity=1, item_type="key_item",
             )
         )
-        assert "(重要)" in line
+        assert "(重要・使用不可)" in line
 
     def test_未知_type_はタグなし(self) -> None:
         """fallback 動作: 未知文字列でもクラッシュせずタグ非表示。"""
@@ -201,17 +202,21 @@ class TestInventoryItemTypeTag:
             )
         )
         # 「(食料)」「(素材)」等のいずれも出ない
-        for tag in ("(食料)", "(素材)", "(道具)", "(重要)", "(装備)"):
+        for tag in ("(食料)", "(素材", "(道具", "(重要", "(装備"):
             assert tag not in line
 
-    def test_other_type_はタグなし(self) -> None:
-        """item_type='other' は意図的にタグを出さない (分類不可なものをフラットに)。"""
+    def test_other_type_は_使用不可_のみ(self) -> None:
+        """PR-C: ``other`` は日本語 type 名は無いが、use_item できないことだけ
+        明示する。Y_after_issue621 で「分類不能で使用不可」のフィードバックが
+        足りず、LLM が試行に走った例を防ぐ。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=6, name="布切れ", quantity=1, item_type="other",
             )
         )
-        for tag in ("(食料)", "(素材)", "(道具)", "(重要)"):
+        assert "(使用不可)" in line
+        # 種別名は付かない
+        for tag in ("(食料)", "(素材", "(道具", "(重要"):
             assert tag not in line
 
     def test_type_と_腐敗_の両方が表示される(self) -> None:
