@@ -102,7 +102,15 @@ EXPLORE_DEFINITION = ToolDefinitionDto(
 
 INTERACT_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_INTERACT,
-    description="現在のスポット内のオブジェクトに対し、指定した操作名で相互作用する。パズル操作の場合はparametersに入力値を指定する。",
+    description=(
+        "現在のスポット内のオブジェクトに対し、指定した操作名で相互作用する。"
+        "各 action には前提条件 (object の状態など) があり、満たさない場合は "
+        "``INTERACTION_PRECONDITION_FAILED`` で失敗する "
+        "(例: 一度取り尽くした場所をもう一度漁る / 既に開けた箱をまた開ける)。"
+        "利用可能な action_name と現在の object 状態は『現在の状況』section の"
+        "各オブジェクト行に出ているので、そこから読み取って渡すこと。"
+        "パズル操作の場合は parameters に入力値を指定する。"
+    ),
     parameters={
         "type": "object",
         "properties": {
@@ -115,7 +123,13 @@ INTERACT_DEFINITION = ToolDefinitionDto(
             },
             "action_name": {
                 "type": "string",
-                "description": "操作名（オブジェクトに定義された action_name）。",
+                "description": (
+                    "オブジェクトに定義された action_name "
+                    "(例: \"gather\", \"search\", \"examine\")。"
+                    "日本語や敬体ではなく、英語の動詞形を渡す。"
+                    "思いつきで推測せず、必ず『現在の状況』section に表示された"
+                    "値をそのまま渡すこと。"
+                ),
             },
             "parameters": {
                 "type": "object",
