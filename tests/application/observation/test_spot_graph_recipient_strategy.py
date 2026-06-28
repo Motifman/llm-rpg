@@ -50,8 +50,19 @@ OBJECT_1 = SpotObjectId.create(100)
 CONN_1 = ConnectionId.create(200)
 
 
-def _make_strategy(entity_spot_mapping: dict) -> SpotGraphRecipientStrategy:
-    """テスト用の Strategy を構築する。"""
+def _make_strategy(
+    entity_spot_mapping: dict,
+    down_player_ids: set[int] | None = None,
+) -> SpotGraphRecipientStrategy:
+    """テスト用の Strategy を構築する。
+
+    Args:
+        entity_spot_mapping: {player_id: spot_id}
+        down_player_ids: 倒れている (is_down=True) player_id の集合。
+            Issue #621 Phase 4: down 状態の player は recipient から除外される
+            ことを検証するテストで使う。
+    """
+    down_ids: set[int] = down_player_ids or set()
     registry_map = {}
     for evt in (
         EntityEnteredSpotEvent,
@@ -86,6 +97,10 @@ def _make_strategy(entity_spot_mapping: dict) -> SpotGraphRecipientStrategy:
     for pid in all_player_ids:
         status = MagicMock()
         status.player_id = PlayerId(pid)
+        # 既存テストは down 状態を渡さない前提なので bool False をデフォルト
+        # にする。MagicMock の自動属性 (truthy) のまま放置すると本番フィルタが
+        # 全員を down 扱いしてしまうため、明示的に False をセットする。
+        status.is_down = pid in down_ids
         statuses.append(status)
         by_id[pid] = status
     player_status_repo.find_all.return_value = statuses
@@ -575,6 +590,62 @@ class TestSpotSoundHeardRecipientResolution:
         recipients = strategy.resolve(event)
         ids = {p.value for p in recipients}
         assert ids == {1}
+
+
+class TestDownPlayerExcluded:
+    """Issue #621 Phase 4: 倒れている (is_down=True) player は recipient から除外する。
+
+    観測を届けてもダウン中の player は LLM ターンを回さないので消化されず、
+    revive 時に observation_buffer を clear する仕様 (= 復活直前の他者発話を
+    引きずらない) と整合させるため、最初から届けないのが最も静かな実装。
+    """
+
+    def test_同_spot_の_down_player_は_actor_除外イベントの_配信先から外れる(self):
+        """drop 観測: 同 spot にいる元気な P2 と倒れた P3 がいるとき、
+        recipient は P2 のみ。倒れた P3 は除外される。"""
+        strategy = _make_strategy({1: 1, 2: 1, 3: 1}, down_player_ids={3})
+        event = PlayerDroppedItemEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            item_instance_id=ItemInstanceId.create(7),
+            item_spec_id=ItemSpecId.create(100),
+            item_name="流木",
+        )
+        ids = {r.value for r in strategy.resolve(event)}
+        assert ids == {2}
+
+    def test_全員配信イベントでも_down_player_は_除外される(self):
+        """SpotObjectStateChangedEvent (actor_entity_id=None) は同 spot 全員に
+        届く _resolve_all_at_spot 経路。倒れた player はここでも除外する。"""
+        strategy = _make_strategy({1: 1, 2: 1, 3: 1}, down_player_ids={2})
+        event = SpotObjectStateChangedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            object_id=OBJECT_1,
+            spot_id=SPOT_A,
+            old_state={"available": True},
+            new_state={"available": False},
+            actor_entity_id=None,
+        )
+        ids = {r.value for r in strategy.resolve(event)}
+        assert ids == {1, 3}
+
+    def test_down_player_が_actor_の_event_は_他者だけが_受信する(self):
+        """down 中に actor になることは無い前提だが、防御的に: actor 自身は
+        actor-exclude で除かれ、他者のうち down している人も除外される。"""
+        strategy = _make_strategy({1: 1, 2: 1, 3: 1}, down_player_ids={3})
+        event = SpotExploredEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            discoveries=("item",),
+        )
+        ids = {r.value for r in strategy.resolve(event)}
+        # P1 = actor 除外, P3 = down 除外 → P2 のみ残る
+        assert ids == {2}
 
 
 class TestSupports:
