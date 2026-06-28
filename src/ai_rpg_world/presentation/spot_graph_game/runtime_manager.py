@@ -495,10 +495,18 @@ class _LlmMetricsTraceSink:
         trace_recorder: Any,
         runtime: Any,
         player_id: PlayerId,
+        tool_names: Optional[list[str]] = None,
     ) -> None:
         self._trace_recorder = trace_recorder
         self._runtime = runtime
         self._player_id_value = int(player_id.value)
+        # PR-F: LLM がその tick の prompt で実際に見たツール名集合。trace に
+        # 残すことで「tend_to_player が本当に prompt に流れたか」「tool catalog
+        # の wiring が壊れていないか」「prompt の tool 集合が tick ごとに
+        # 安定しているか (= cache key 安定性)」が後から検証できる。
+        # 未指定 (= 既存 caller) は空 list として記録する (= 「明示的に
+        # 渡さなかった」を「不在」と区別しないシンプル運用)。
+        self._tool_names: list[str] = list(tool_names) if tool_names else []
 
     def record(self, metrics: Any) -> None:
         try:
@@ -523,6 +531,8 @@ class _LlmMetricsTraceSink:
                 # OpenRouter 経由のとき usage.cost (USD) が乗る。直結 / vLLM では 0.0。
                 # 実験 trace を見れば cost 合計が事後計算できる。
                 cost_usd=getattr(metrics, "cost_usd", 0.0),
+                # PR-F: LLM 視点での「見えていた tool 一覧」。
+                tool_names=list(self._tool_names),
             )
             # #404 P2: progress.jsonl 用 LLM 呼び出しカウンタを bump。
             # runtime 側に counter が無いランタイム (presentation 単体テスト等)
@@ -1380,7 +1390,15 @@ class _WorldLlmWiring:
         # を trace に流す。Phase A の中で player_id / tick の context を sink に閉
         # じ込めて、後で集計スクリプトが per-agent / per-model 分布を出せるよう
         # にする。
-        metrics_sink = self._build_llm_metrics_sink(player_id)
+        # PR-F: LLM がその tick で実際に prompt 経由で見た tool 名集合も渡す。
+        # tools_payload から function name を抽出する (= OpenAI function calling
+        # 形式の "type":"function" 構造から function.name を読む)。
+        tool_names = [
+            t.get("function", {}).get("name")
+            for t in tools_payload
+            if t.get("function", {}).get("name")
+        ]
+        metrics_sink = self._build_llm_metrics_sink(player_id, tool_names=tool_names)
         try:
             tool_call = self.llm_client.invoke(
                 prompt["messages"], tools_payload, "required",
@@ -1662,7 +1680,7 @@ class _WorldLlmWiring:
             )
 
     def _build_llm_metrics_sink(
-        self, player_id: PlayerId
+        self, player_id: PlayerId, tool_names: Optional[list[str]] = None,
     ) -> Optional[Any]:
         """Phase A の LLM 呼び出し metrics を trace に流す sink を構築する。
 
@@ -1682,6 +1700,7 @@ class _WorldLlmWiring:
             trace_recorder=trace_recorder,
             runtime=self.runtime,
             player_id=player_id,
+            tool_names=tool_names,
         )
 
     # busy 中に "free" 扱いして中断を発火しない tool 群。
