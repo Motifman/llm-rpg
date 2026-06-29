@@ -51,6 +51,18 @@ def _normalize_label_candidates(label: str) -> List[str]:
         return []
     out: List[str] = [s]
 
+    # PR Y_after_pr_all_200tick 後続: prompt 表記が ``"拠点"`` のように
+    # ``""`` で囲んだ値を「渡すべき値」と明示する規約になったため、
+    # LLM が quote ごと渡してきても resolver が中身を取り出せるようにする。
+    # 対称な ``"..."`` または ``'...'`` のみを剥がす (片側だけは触らない)。
+    if len(s) >= 2 and (
+        (s[0] == '"' and s[-1] == '"')
+        or (s[0] == "'" and s[-1] == "'")
+    ):
+        inner = s[1:-1].strip()
+        if inner:
+            out.append(inner)
+
     m = _LEADING_LABEL_RE.match(s)
     if m:
         out.append(m.group(1))

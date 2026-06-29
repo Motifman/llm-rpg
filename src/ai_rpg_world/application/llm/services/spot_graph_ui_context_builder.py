@@ -390,7 +390,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             else:
                 status = "通行不可"
             lines.append(
-                f"  - {entry.connection_name} → {disambiguated_name}（{status}）"
+                f"  - {entry.connection_name} → \"{disambiguated_name}\"（{status}）"
             )
             collector.add(
                 label,
@@ -398,6 +398,21 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     label=label,
                     kind="spot_graph_destination",
                     display_name=disambiguated_name,
+                    spot_id=entry.destination_spot_id,
+                    destination_type="spot",
+                ),
+            )
+            # shadow entry: edge 名 (connection_name) でも引けるよう同 spot を
+            # 別 label で登録する。LLM が誤って edge 名を渡しても resolver が
+            # destination spot に飛ばす silent rescue。``list_destination_labels``
+            # は ``__edge_`` prefix で除外するのでユーザ向け候補列挙には出ない。
+            shadow_label = f"__edge_{label}"
+            collector.add(
+                shadow_label,
+                DestinationToolRuntimeTargetDto(
+                    label=shadow_label,
+                    kind="spot_graph_destination",
+                    display_name=entry.connection_name,
                     spot_id=entry.destination_spot_id,
                     destination_type="spot",
                 ),
