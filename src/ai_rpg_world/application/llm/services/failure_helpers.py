@@ -55,6 +55,12 @@ def list_targets_of_kind(
     for label, target in targets.items():
         if target.kind != kind:
             continue
+        # ``__edge_*`` などの内部 shadow entry はユーザ向け候補列挙から除外。
+        # (travel_to の destination shadow が代表例: edge 名 fallback 用に
+        # 同 spot を二重登録しているが、エラー時の候補一覧では本来の spot 名
+        # だけを見せたい。Y_after_pr_all_200tick 後続。)
+        if label.startswith("__"):
+            continue
         display = target.display_name or ""
         items.append(f"{label} ({display})" if display else label)
     return " / ".join(items)
