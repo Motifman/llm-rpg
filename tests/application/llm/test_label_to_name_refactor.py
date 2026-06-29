@@ -142,7 +142,8 @@ class TestSectionRenderingHasNoLabelPrefix:
             ),
         )
         text = _build(snap)
-        assert "- 流木" in text
+        # PR (use_item quoted): item 名は ``""`` で囲んで表示する規約
+        assert '- "流木"' in text
         assert "I1:" not in text
         assert "I1 " not in text  # 安全側でスペースも検査
 
@@ -153,7 +154,8 @@ class TestSectionRenderingHasNoLabelPrefix:
             ),
         )
         text = _build(snap)
-        assert "- 流木" in text
+        # PR (use_item quoted): ground item 名は ``""`` で囲んで表示する
+        assert '- "流木"' in text
         assert "G1:" not in text
 
 
