@@ -688,7 +688,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # にする。ITEM_NOT_CONSUMABLE (= 食料じゃないものを食べようとする
             # ミス) を減らす目的。
             type_mark = _format_item_type_tag(entry.item_type)
-            lines.append(f"  - {disambiguated_name}{qty}{type_mark}{spoiled_mark}")
+            # ``""`` 規約 (PR #639 後続): item 名のみ ``""`` で囲み、
+            # x{量} / 種別タグ / 腐敗 タグは囲まない。LLM は「``""`` 内の
+            # 値が item_label に渡すべき値」と読み取れる。
+            lines.append(
+                f"  - \"{disambiguated_name}\"{qty}{type_mark}{spoiled_mark}"
+            )
             # 後方互換: 既存 use_item は target.item_instance_id に item_spec_id を
             # 入れる慣習 (名前と内容が乖離しているが、リスクを取らないため触らない)。
             # 新しい drop_item / pickup_item は専用フィールド (real_item_instance_id /
@@ -730,7 +735,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             label = allocator.next(PREFIX_GROUND_ITEM)
             disambiguated_name = disamb[i]
             spoiled_mark = " (腐敗)" if entry.is_spoiled else ""
-            lines.append(f"  - {disambiguated_name}{spoiled_mark}")
+            # ``""`` 規約 (PR #639 後続): ground item 名のみ ``""`` で囲む。
+            lines.append(f"  - \"{disambiguated_name}\"{spoiled_mark}")
             collector.add(
                 label,
                 InventoryToolRuntimeTargetDto(
