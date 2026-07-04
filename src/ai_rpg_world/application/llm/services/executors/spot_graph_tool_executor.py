@@ -1231,46 +1231,42 @@ class SpotGraphToolExecutor:
         )
 
     def _listen(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
-        """`spot_graph_listen`: 自 spot + 隣接 spot (1 hop 減衰) の環境音を観測する。
+        """`spot_graph_listen`: 自 spot + 隣接 spot (1 hop 減衰) の環境音観測。
 
-        Phase 5 PR-2。`SpotGraphAggregate.emit_listen_carefully` に
-        集約された 1 hop 伝搬モデルで `SpotSoundHeardEvent` を発火し、
-        recipient strategy 経由で本人にだけ届ける (observer pipeline で
-        formatter が prose を組み立てる)。
+        PR-θ4 (経路統合): 旧 runtime_manager._handle_listen と統合。
+        `runtime.do_listen` が `SpotGraphAggregate.emit_listen_carefully` +
+        `_process_graph_events` (= event 差分カウント + observation pipeline
+        投入) を面倒見るので、executor 側は event_count に応じた LLM 向け
+        prose を組み立てるだけの薄い wrapper。
 
-        本ハンドラは state を変更しないため `save(graph)` は呼ばない。
-        event は graph aggregate に積まれるので `get_events()` で抜き、
-        `event_publisher.publish_all` で publish する。
+        state 変更なし。observation は formatter が prose を構築し本人にだけ
+        配信される (recipient strategy で filter)。
         """
-        if self._spot_graph_repository is None or self._event_publisher is None:
+        if self._runtime is None:
             return LlmCommandResultDto(
                 success=False,
-                message="listen は現在のワイヤリングでは未対応です。",
-                error_code="UNSUPPORTED_TOOL",
-                remediation=get_remediation("UNSUPPORTED_TOOL"),
+                message="listen は本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
             )
         try:
-            graph = self._spot_graph_repository.find_graph()
-            entity_id = EntityId.create(player_id)
-            graph.emit_listen_carefully(entity_id)
-            events = list(graph.get_events())
-            graph.clear_events()
-            if events:
-                self._event_publisher.publish_all(events)
-                base = (
-                    "耳を澄ました。周囲の音が観測として届いた。"
-                    if len(events) == 1
-                    else f"耳を澄ました。{len(events)} 箇所からの音が観測として届いた。"
-                )
-            else:
-                # 全 spot が SILENT、または減衰しきって聞こえない場合
-                base = "耳を澄ましたが、何も聞こえなかった。"
-            return LlmCommandResultDto(
-                success=True,
-                message=append_inner_thought_to_message(base, args),
-            )
+            event_count = self._runtime.do_listen(PlayerId(player_id))
         except Exception as e:
             return exception_result(e)
+        if event_count == 0:
+            base = "耳を澄ましたが、何も聞こえなかった。"
+        elif event_count == 1:
+            base = "耳を澄ました。周囲の音が観測として届いた。"
+        else:
+            base = f"耳を澄ました。{event_count} 箇所からの音が観測として届いた。"
+        return with_inner_thought_empty_warning(
+            TOOL_NAME_SPOT_GRAPH_LISTEN,
+            args,
+            LlmCommandResultDto(
+                success=True,
+                message=append_inner_thought_to_message(base, args),
+            ),
+        )
 
     def _wait(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         # PR β: wait は exhausted でも実行可 (= 回復の主経路)。block しない。
