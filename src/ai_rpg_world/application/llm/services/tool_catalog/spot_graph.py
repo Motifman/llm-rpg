@@ -429,13 +429,13 @@ ATTACK_DEFINITION = ToolDefinitionDto(
 TEND_TO_PLAYER_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
     description=(
-        "同じ場所に倒れている (= status_effect: down、HP 0) 仲間を蘇生させる。"
+        "同じ場所でダウン状態 (HP 0 で倒れている) の仲間を蘇生させる。"
         "アイテム (救急用品) を持っていなくても、物理的に揺さぶり起こす形で"
-        "蘇生でき、HP は ``max_hp`` の 40% で復帰する。"
-        "前提: 対象が同じ場所にいて、HP 0 で倒れていること。"
-        "**疲労や空腹が高い (= まだ立って動ける状態) の相手には使えない。**"
+        "蘇生でき、HP は最大値の 40% で復帰する。"
+        "前提: 対象が同じ場所にいて、HP 0 でダウン状態であること。"
+        "**疲労や空腹が高いだけ (= まだ立って動ける状態) の相手には使えない。**"
         "「顔色が悪い」「疲れて見える」「介抱したい」と感じても、HP 0 でない限り"
-        "この tool は INTERACTION_PRECONDITION_FAILED で失敗する。"
+        "この tool は失敗する。"
         "そうした相手にはまず ``speech_speak`` で話しかけるか食料を与えること。"
         "自分自身を蘇生することはできない。"
     ),

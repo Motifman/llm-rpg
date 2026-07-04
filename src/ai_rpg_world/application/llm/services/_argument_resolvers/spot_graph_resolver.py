@@ -392,6 +392,12 @@ _SPOT_GRAPH_TOOLS = frozenset({
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+    # Y_after_pr639_640_200tick で観測された silent dispatch 抜けを塞ぐ。
+    # resolve_args の後段には ``TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS`` の分岐と
+    # ``_resolve_give_items`` メソッドが実装済だが、入口 gate に無いと
+    # ``None`` が返り、runtime_manager 側で RESOLVER_DISPATCH_MISSING に
+    # 化ける。P4 カイの tick=124/147 で 2 回連続失敗した。
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
 })
 
@@ -650,18 +656,37 @@ class SpotGraphArgumentResolver:
         label = args.get("target_player_label")
         if not isinstance(label, str) or not label.strip():
             raise ToolArgumentResolutionException(
-                "介抱する相手のラベルが指定されていません。",
+                "蘇生する相手のラベルが指定されていません。",
                 "INVALID_TARGET_LABEL",
             )
-        target = _resolve_target_with_display_name_fallback(
-            label,
-            runtime_context,
-            kind="spot_graph_player",
-            expected_types=(PlayerToolRuntimeTargetDto,),
-            label_name="介抱対象のラベル",
-            invalid_label_code="INVALID_TARGET_LABEL",
-            invalid_kind_code="INVALID_TARGET_KIND",
-        )
+        try:
+            target = _resolve_target_with_display_name_fallback(
+                label,
+                runtime_context,
+                kind="spot_graph_player",
+                expected_types=(PlayerToolRuntimeTargetDto,),
+                label_name="蘇生対象のラベル",
+                invalid_label_code="INVALID_TARGET_LABEL",
+                invalid_kind_code="INVALID_TARGET_KIND",
+            )
+        except ToolArgumentResolutionException as e:
+            # Y_after_pr639_640_200tick 後続: 「候補にない」だけの message は
+            # LLM を混乱させる (別 spot にいるプレイヤー / 倒れていない
+            # プレイヤーの区別がつかない)。tend の同 spot + ダウン 制約を
+            # message で明示する。error_code は既存を保持して LLM 側の
+            # 学習パス (remediation mapping) を壊さない。
+            if e.error_code == "INVALID_TARGET_LABEL":
+                raise ToolArgumentResolutionException(
+                    (
+                        f"'{label}' は現在の場所にいる候補ではありません。"
+                        "蘇生 tool は 同じ場所で倒れているプレイヤー のみに"
+                        "使えます。相手が別の場所にいるなら travel_to で"
+                        "移動してから、まだ倒れていないなら speech_speak "
+                        "などを検討してください。"
+                    ),
+                    "INVALID_TARGET_LABEL",
+                )
+            raise
         if target.player_id is None:
             raise ToolArgumentResolutionException(
                 f"このラベルから player_id を解決できません: {label}",
