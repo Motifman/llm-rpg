@@ -83,13 +83,9 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
     PlayerSpotNavigationState,
 )
-from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
-    InteractionNotAllowedException,
-    InteractionNotFoundException,
-)
-from ai_rpg_world.domain.world_graph.value_object.spot_object_id import (
-    SpotObjectId,
-)
+# PR-θ3 (経路統合): 旧 _handle_interact 削除に伴い
+# InteractionNotAllowedException / InteractionNotFoundException / SpotObjectId
+# の import は不要になった (SpotGraphToolExecutor._interact に移動)。
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 from ai_rpg_world.presentation.spot_graph_game.schemas import (
@@ -368,67 +364,10 @@ from ai_rpg_world.application.llm.services.failure_helpers import (  # noqa: E40
 )
 
 
-# N2: 「枯渇 / 同じ tick 内に再採取できない」系の失敗 reason を検知する
-# キーワード集。マッチしたら「同じ object に同 action_name を retry しない」
-# 旨の remediation に切り替える (= LLM が同じ枯渇 resource を回し続ける
-# 無限 retry の抑制)。
-_INTERACTION_EXHAUST_HINTS = (
-    "採り尽く",
-    "枯渇",
-    "もう空",
-    "もう開い",
-    "すでに",
-    "今は",
-    "燃え上が",
-)
-
-
-def _interact_remediation_for_reason(reason: str) -> str:
-    if any(k in reason for k in _INTERACTION_EXHAUST_HINTS):
-        return (
-            "同じ object に同 action_name を再試行しても結果は変わらない。"
-            "別の場所・別 object・別 action を選ぶか、必要な前提アイテムを"
-            "先に揃えてから戻ること。"
-        )
-    return (
-        "前提条件 (必要アイテム / 体力 / 天候 / フラグ) を満たしてから再試行する。"
-        "失敗 reason に名指しされたアイテムや状態を確認すること。"
-    )
-
-
-def _list_object_interactions(runtime: Any, world_object_id: int) -> list[str]:
-    """`world_object_id` が所属する spot の interior から available action 名を列挙。
-
-    実験 #26 で LLM が "search" / "examine" 等の ad-hoc action_name を発明して
-    InteractionNotFoundException が generic error に化けていた問題を直すため、
-    handler が remediation で正規の action 一覧を返せるようにするヘルパ。
-    解決経路で例外が出たら空 list を返す (= remediation 文面が "(なし)" になる)。
-
-    PR-B (Y_after_issue621 後続): 旧版は ``id_mapper.get_str(...)`` で変換した
-    str を受け取って ``interior.get_object(SpotObjectId)`` に渡していたため、
-    型不一致で常に None → 空 list を返していた。LLM は「利用可能な操作: (なし)」
-    を毎回受け取り、定義されている action_name を学習できなかった。
-    引数を ``world_object_id: int`` に統一し、内部で SpotObjectId に包む。
-    """
-    try:
-        # SpotObjectId.create は int / str どちらでも受け付け、不正値は例外を
-        # 投げる。本関数は best-effort で「分からないなら空 list」を返すため、
-        # 例外は外側 except で握る。
-        target_object_id = SpotObjectId.create(world_object_id)
-        graph = runtime._spot_graph_repo.find_graph()
-        # SpotObjectId から所属 spot を探す。spot interior repository に
-        # 直接の逆引きが無いので spot を全列挙する (= O(N) だが失敗時のみ
-        # 走るので許容)。
-        for node in graph.iter_spot_nodes():
-            interior = runtime._spot_interior_repo.find_by_spot_id(node.spot_id)
-            if interior is None:
-                continue
-            obj = interior.get_object(target_object_id)
-            if obj is not None:
-                return [i.action_name for i in obj.interactions]
-        return []
-    except Exception:
-        return []
+# PR-θ3 (経路統合): 旧 module-level 関数 `_interact_remediation_for_reason` /
+# `_list_object_interactions` / `_INTERACTION_EXHAUST_HINTS` は application 層
+# (application/llm/services/executors/interact_helpers.py) に移動した。
+# 参照は SpotGraphToolExecutor._interact が持ち、旧 handler は削除された。
 
 
 def _safe_get_str(mapper: Any, namespace: str, numeric_id: int) -> str:
@@ -1062,11 +1001,10 @@ class _WorldLlmWiring:
             str,
             Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto],
         ] = {
-            # PR-θ1/θ2 (経路統合): TOOL_NAME_SPOT_GRAPH_TRAVEL_TO / EXPLORE の
-            # 登録は削除した。代わりに _wire_missing_spot_graph_tools が
-            # SpotGraphToolExecutor._travel_to / _explore を上書き wire する。
-            # 旧 self._handle_travel_to / _handle_explore は削除された。
-            TOOL_NAME_SPOT_GRAPH_INTERACT: self._handle_interact,
+            # PR-θ1/θ2/θ3 (経路統合): TOOL_NAME_SPOT_GRAPH_TRAVEL_TO / EXPLORE /
+            # INTERACT の登録は削除した。代わりに _wire_missing_spot_graph_tools
+            # が SpotGraphToolExecutor._travel_to / _explore / _interact を
+            # 上書き wire する。旧 handlers は削除された。
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._handle_listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._handle_wait,
             TOOL_NAME_SPEECH: self._handle_speech,
@@ -1227,6 +1165,12 @@ class _WorldLlmWiring:
             # 「発見なし時に可視 object 併記」も新経路で保持 (runtime_context
             # 経由で targets を参照)。
             TOOL_NAME_SPOT_GRAPH_EXPLORE,
+            # PR-θ3 (経路統合): interact を旧 _handle_interact から新経路
+            # SpotGraphToolExecutor._interact に統合。旧 handler 相当の
+            # InteractionNotAllowedException / InteractionNotFoundException
+            # ハンドリング (LLM 向け remediation + 利用可能操作列挙) も新経路で
+            # 保持。resolver エラー時の invalid_label_failure_builder も設定。
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
         )
         # #356 実験 #25 OFF で発覚: use_item / drop_item / give_item /
         # pickup_item は tool catalog 上 ``item_label`` (= I1, I2 など) を
@@ -1260,6 +1204,11 @@ class _WorldLlmWiring:
             # resolver stage で SpotGraphArgumentResolver._resolve_travel_to
             # (`resolve_destination_target` 同一関数を再利用) が変換する。
             TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            # PR-θ3 (経路統合): interact も resolver 経由で
+            # `object_label='OBJ1'` を `object_id` に解決する。旧 handler と
+            # 同じく resolver 例外時の「有効な object_label 一覧」 message は
+            # invalid_label_failure_builder で構築する。
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
         })
         argument_resolver = SpotGraphArgumentResolver()
         for tool_name in targets:
@@ -1267,25 +1216,23 @@ class _WorldLlmWiring:
             if raw is None:
                 continue
             if tool_name in resolver_targets:
-                # PR-θ1 (経路統合): travel_to は resolver 例外時に「有効な
-                # destination_label 一覧 + should_reschedule」を含む
-                # tool-specific 失敗を組み立てる (旧 _handle_travel_to 相当)。
-                # 他 tool は従来通り generic message で処理。
-                if tool_name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO:
-                    self._tool_handlers[tool_name] = (
-                        self._adapt_executor_handler_with_resolver(
-                            raw, tool_name, argument_resolver,
-                            invalid_label_failure_builder=(
-                                self._build_travel_to_invalid_label_failure
-                            ),
-                        )
+                # PR-θ1/θ3 (経路統合): travel_to / interact は resolver 例外時に
+                # 「有効な label 一覧 + should_reschedule」を含む tool-specific
+                # 失敗を組み立てる (旧 handler 相当)。他 tool は従来通り generic
+                # message で処理。
+                tool_specific_builder = (
+                    self._build_travel_to_invalid_label_failure
+                    if tool_name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO
+                    else self._build_interact_invalid_label_failure
+                    if tool_name == TOOL_NAME_SPOT_GRAPH_INTERACT
+                    else None
+                )
+                self._tool_handlers[tool_name] = (
+                    self._adapt_executor_handler_with_resolver(
+                        raw, tool_name, argument_resolver,
+                        invalid_label_failure_builder=tool_specific_builder,
                     )
-                else:
-                    self._tool_handlers[tool_name] = (
-                        self._adapt_executor_handler_with_resolver(
-                            raw, tool_name, argument_resolver,
-                        )
-                    )
+                )
             else:
                 self._tool_handlers[tool_name] = self._adapt_executor_handler(raw)
         # Step 1 並列化 review HIGH 1: build_full_prompt が内部で lazy-init する
@@ -1337,6 +1284,37 @@ class _WorldLlmWiring:
         validate_tool_handler_consistency(
             exposed_tool_names=exposed_names,
             handler_keys=self._tool_handlers.keys(),
+        )
+
+    @staticmethod
+    def _build_interact_invalid_label_failure(
+        runtime_context: Any,
+        arguments: Dict[str, Any],
+        exc: Exception,
+    ) -> LlmCommandResultDto:
+        """PR-θ3 (経路統合): interact の resolver 例外を旧 _handle_interact
+        相当の tool-specific 失敗 dto に変換する。
+
+        旧 handler は resolver 例外時に「有効な object_label 一覧を含む
+        message + object_label 用の remediation」を組み立てていた。
+        """
+        targets = getattr(runtime_context, "targets", {}) or {}
+        label = str(arguments.get("object_label", ""))
+        valid_objects = _list_object_labels(targets)
+        error_code = getattr(exc, "error_code", "INVALID_TARGET_LABEL")
+        return LlmCommandResultDto(
+            success=False,
+            message=(
+                f"オブジェクトラベルが見つかりません: {label}。"
+                f"有効な object_label: "
+                f"{valid_objects or '(この場所に interactable なオブジェクトなし)'}"
+            ),
+            error_code=error_code,
+            remediation=(
+                "object_label には現在の状況に表示された OBJ1, OBJ2 等の "
+                "ラベル (display name ではなく) を指定してください。"
+            ),
+            should_reschedule=is_reschedulable_error_code(error_code),
         )
 
     @staticmethod
@@ -2000,96 +1978,22 @@ class _WorldLlmWiring:
     # resolver stage で destination_label → destination_spot_id に解決する
     # (resolver_targets に含まれる)。
 
-    def _handle_interact(
-        self,
-        player_id: PlayerId,
-        arguments: dict[str, Any],
-        runtime_context: Any,
-    ) -> LlmCommandResultDto:
-        # Issue #276 経路二重化解消: 本家 resolver と同じ
-        # ``resolve_object_target`` で label を解決。
-        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
-            resolve_object_target,
-        )
-        from ai_rpg_world.application.llm.services._resolver_helpers import (
-            ToolArgumentResolutionException,
-        )
-
-        targets = getattr(runtime_context, "targets", {})
-        label = str(arguments.get("object_label", ""))
-        action_name = str(arguments.get("action_name", ""))
-        try:
-            target = resolve_object_target(label, runtime_context)
-        except ToolArgumentResolutionException as e:
-            valid_objects = _list_object_labels(targets)
-            return LlmCommandResultDto(
-                success=False,
-                message=(
-                    f"オブジェクトラベルが見つかりません: {label}。"
-                    f"有効な object_label: "
-                    f"{valid_objects or '(この場所に interactable なオブジェクトなし)'}"
-                ),
-                error_code=e.error_code,
-                remediation=(
-                    "object_label には現在の状況に表示された OBJ1, OBJ2 等の "
-                    "ラベル (display name ではなく) を指定してください。"
-                ),
-            )
-        object_id = self.runtime.id_mapper.get_str("object", target.world_object_id)
-        # N2: precondition 失敗 (= scenario JSON の failure_message) を generic
-        # "LLM ツール実行に失敗しました" に潰さず、failure_message そのものを
-        # surface する。さらに「枯渇」っぽい文言なら retry を抑える remediation
-        # を添える (= 同じ object に再度同 action_name を投げない指示)。
-        try:
-            result = self.runtime.do_interact(
-                player_id, object_id, action_name,
-                **extract_subjective_action_fields(arguments),
-            )
-        except InteractionNotAllowedException as exc:
-            reason = str(exc) or "前提条件を満たさない"
-            return LlmCommandResultDto(
-                success=False,
-                message=f"行動が拒否された: {reason}",
-                error_code="INTERACTION_PRECONDITION_FAILED",
-                remediation=_interact_remediation_for_reason(reason),
-            )
-        except InteractionNotFoundException:
-            # 実験 #26 で発覚: LLM が ad-hoc に "search" / "examine" / "interact"
-            # 等の action_name を発明して呼び、generic LLM_TOOL_EXECUTION_FAILED
-            # に化けていた (reason が "search on 2" のような ID 表示で意味不明)。
-            # 当該 object で実際に使える action 一覧を提示して LLM を正規の
-            # action_name に誘導する。
-            # PR-B: world_object_id (int) を直接渡す。旧コードは
-            # id_mapper.get_str() で変換した str を渡しており、内部の
-            # ``interior.get_object(SpotObjectId)`` と型不一致で常に空 list
-            # に化けていた = LLM が「利用可能な操作: (なし)」だけを受け取り
-            # 学習できなかった。
-            available = _list_object_interactions(
-                self.runtime, target.world_object_id,
-            )
-            avail_str = ", ".join(available) if available else "(なし)"
-            return LlmCommandResultDto(
-                success=False,
-                message=(
-                    f"このオブジェクトには '{action_name}' という操作がありません。"
-                    f"利用可能な操作: {avail_str}"
-                ),
-                error_code="INTERACTION_ACTION_NOT_FOUND",
-                remediation=(
-                    "action_name には現在の状況に表示されたオブジェクトの "
-                    "「使える操作」(例: gather / examine 等の定義済 action) を"
-                    "そのまま指定してください。汎用名 (search / interact) は"
-                    "通常 scenario に存在しません。"
-                ),
-            )
-        return with_inner_thought_empty_warning(
-            TOOL_NAME_SPOT_GRAPH_INTERACT,
-            arguments,
-            LlmCommandResultDto(
-                success=True,
-                message="; ".join(result.messages) if result.messages else "完了",
-            ),
-        )
+    # PR-θ3 (経路統合): _handle_interact は削除。SpotGraphToolExecutor._interact
+    # に統合され、runtime.do_interact を呼ぶ薄い wrapper として単一の
+    # interact 実装になった。旧 handler の副作用 (label→object_id resolve /
+    # SpotObjectInteractedEvent / _process_graph_events / _record_action_result /
+    # InteractionNotAllowedException 用の reason-based remediation /
+    # InteractionNotFoundException 用の 利用可能操作列挙 / inner_thought
+    # 空警告) は全部保持している。
+    #
+    # label→object_id resolve は SpotGraphArgumentResolver._resolve_interact
+    # が resolver stage で行い、新経路には object_id (int) が届く。
+    # resolver_targets に TOOL_NAME_SPOT_GRAPH_INTERACT を含めた。resolver
+    # 例外時の「有効な object_label 一覧」message は
+    # _build_interact_invalid_label_failure が組み立てる。
+    # LLM 向け remediation helper (interact_remediation_for_reason /
+    # list_object_interactions) は application 層 (interact_helpers.py) に
+    # 移動した。
 
     def _handle_listen(
         self,

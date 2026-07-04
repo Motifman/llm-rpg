@@ -11,6 +11,14 @@ from ai_rpg_world.application.llm.services.failure_helpers import (
     build_sanitized_exception_failure,
     list_object_labels,
 )
+from ai_rpg_world.application.llm.services.executors.interact_helpers import (
+    interact_remediation_for_reason,
+    list_object_interactions,
+)
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
+    InteractionNotFoundException,
+)
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     append_inner_thought_to_message,
     exception_result,
@@ -513,6 +521,30 @@ class SpotGraphToolExecutor:
             return exception_result(e)
 
     def _interact(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        """``interact`` の実行 (PR-θ3: 経路統合後)。
+
+        旧 runtime_manager._handle_interact と新 SpotGraphToolExecutor._interact
+        の 2 経路を統合。**この経路が唯一の interact 実装** で、旧 handler は
+        削除された。
+
+        統合方針 (PR-θ1/θ2 と同じ Option B): 既に正しい副作用を持つ
+        ``runtime.do_interact`` を単一の真実源として再利用する:
+        - `_interaction_service.execute_interaction` の呼び出し
+        - `SpotObjectInteractedEvent` の発火
+        - `_process_graph_events`
+        - `_record_action_result` (subjective 記録)
+
+        処理順:
+        1. 疲労 100 block (新経路の価値)
+        2. object_id / action_name validation (resolver 済み前提)
+        3. runtime.do_interact
+        4. `InteractionNotAllowedException` (前提条件失敗) → LLM 向け
+           "行動が拒否された: {reason}" + reason 依存の remediation
+        5. `InteractionNotFoundException` (action_name typo) → 利用可能操作
+           一覧 + LLM 向け remediation
+        6. 疲労 +2 蓄積 (新経路の価値)
+        7. inner_thought 空警告 (旧 handler と揃える)
+        """
         # PR β: 疲労 limit (100) で interact は block。
         blocked = self._is_exhausted_and_block(player_id, TOOL_NAME_SPOT_GRAPH_INTERACT)
         if blocked is not None:
@@ -530,22 +562,68 @@ class SpotGraphToolExecutor:
                 arg_name="object_id / action_name",
                 detail="object_id (正の整数) と action_name (非空文字列) を必ず指定してください",
             )
-        interaction_parameters = args.get("parameters")
-        try:
-            out = self._svc.interaction.execute_interaction(
-                PlayerId(player_id),
-                SpotObjectId.create(oid),
-                action,
-                interaction_parameters=interaction_parameters,
-                current_tick=self._time_provider.get_current_tick(),
-            )
-            msg = "\n".join(out.messages) if out.messages else "操作を実行しました。"
-            # PR β: interact は heavy 行動。Phase 1 では fatigue_cost を
-            # 一律 default 値 (2) で蓄積。将来 scenario JSON で各 interaction
-            # に fatigue_cost を持たせるなら、out.fatigue_cost を読む形に拡張。
-            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_INTERACT_DEFAULT)
+        if self._runtime is None:
             return LlmCommandResultDto(
-                success=True, message=append_inner_thought_to_message(msg, args)
+                success=False,
+                message="interact は本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
+        try:
+            object_str_id = self._runtime.id_mapper.get_str("object", oid)
+            subjective = extract_subjective_action_fields(args)
+            # do_interact が execute_interaction + SpotObjectInteractedEvent +
+            # _process_graph_events + _record_action_result を面倒見る。
+            result = self._runtime.do_interact(
+                PlayerId(player_id),
+                object_str_id,
+                action,
+                **subjective,
+            )
+            # PR β: interact は heavy 行動 (default fatigue_cost = 2)。
+            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_INTERACT_DEFAULT)
+            msg = "; ".join(result.messages) if result.messages else "完了"
+            return with_inner_thought_empty_warning(
+                TOOL_NAME_SPOT_GRAPH_INTERACT,
+                args,
+                LlmCommandResultDto(
+                    success=True,
+                    message=append_inner_thought_to_message(msg, args),
+                ),
+            )
+        except InteractionNotAllowedException as exc:
+            # N2: precondition 失敗 (= scenario JSON の failure_message) を
+            # generic "LLM ツール実行に失敗しました" に潰さず、failure_message
+            # そのものを surface する。「枯渇」っぽい文言なら retry を抑える
+            # remediation を添える (= 同じ object に再度同 action_name を
+            # 投げない指示)。
+            reason = str(exc) or "前提条件を満たさない"
+            return LlmCommandResultDto(
+                success=False,
+                message=f"行動が拒否された: {reason}",
+                error_code="INTERACTION_PRECONDITION_FAILED",
+                remediation=interact_remediation_for_reason(reason),
+            )
+        except InteractionNotFoundException:
+            # 実験 #26 で発覚: LLM が ad-hoc に "search" / "examine" / "interact"
+            # 等の action_name を発明して呼び、generic LLM_TOOL_EXECUTION_FAILED
+            # に化けていた。当該 object で実際に使える action 一覧を提示して
+            # LLM を正規の action_name に誘導する。
+            available = list_object_interactions(self._runtime, oid)
+            avail_str = ", ".join(available) if available else "(なし)"
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"このオブジェクトには '{action}' という操作がありません。"
+                    f"利用可能な操作: {avail_str}"
+                ),
+                error_code="INTERACTION_ACTION_NOT_FOUND",
+                remediation=(
+                    "action_name には現在の状況に表示されたオブジェクトの "
+                    "「使える操作」(例: gather / examine 等の定義済 action) を"
+                    "そのまま指定してください。汎用名 (search / interact) は"
+                    "通常 scenario に存在しません。"
+                ),
             )
         except Exception as e:
             return exception_result(e)
