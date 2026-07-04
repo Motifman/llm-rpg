@@ -146,11 +146,18 @@ class TestSpotGraphItemTransferServiceDrop:
         assert result.spot_id == SPOT_ID
         assert any("流木" in m for m in result.messages)
 
-    def test_drop_は空のスロットでは_ItemNotInSlotException_を投げる(self, transfer_service):
-        """空スロットを drop しようとするとドメイン例外。"""
+    def test_drop_は空のスロットでは_SlotIsEmptyError_を投げる(self, transfer_service):
+        """PR-ε: 空スロット drop は LLM 頻発ミス。専用 SlotIsEmptyError
+        (ItemTransferException の subclass) に更新され、LLM 向け日本語
+        message + error_code を持つ。"""
+        from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
+            SlotIsEmptyError,
+        )
         deps = transfer_service
-        with pytest.raises(ItemNotInSlotException):
+        with pytest.raises(SlotIsEmptyError) as excinfo:
             deps["service"].drop_item(PLAYER_ID, SlotId(5))  # 5 番スロットは空
+        # slot_id が message に埋まっている
+        assert "5" in str(excinfo.value)
 
     def test_drop_はグラフに居ないプレイヤーで_ItemTransferException_を投げる(self, transfer_service):
         """SpotGraphAggregate に place_entity されてないプレイヤーで drop すると境界例外。
@@ -211,12 +218,56 @@ class TestSpotGraphItemTransferServicePickup:
         assert a_inv.get_item_instance_id_by_slot(SlotId(0)) is None
         assert b_inv.get_item_instance_id_by_slot(SlotId(0)) == deps["instance_id"]
 
-    def test_pickup_は地面にないアイテムで_ItemTransferException_を投げる(self, transfer_service):
-        """ground_items に無い instance_id を拾おうとすると境界例外。"""
+    def test_pickup_は地面にないアイテムで_GroundItemGoneError_を投げる(self, transfer_service):
+        """PR-ε: ground_items に無い instance_id (先取り済み / 観測ラグ) は
+        LLM 頻発ケース。専用 GroundItemGoneError に区別され、LLM 向け
+        「他プレイヤー先取りかも」の日本語 message が届く。"""
+        from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
+            GroundItemGoneError,
+        )
         deps = transfer_service
         nowhere = ItemInstanceId.create(999)
-        with pytest.raises(ItemTransferException):
+        with pytest.raises(GroundItemGoneError):
             deps["service"].pickup_item(PLAYER_ID, nowhere)
+
+    def test_pickup_で自分のインベントリ満杯なら_PickupSelfInventoryFullError_を投げる(
+        self, transfer_service
+    ):
+        """PR-ε: silent overflow を防ぐ事前ガード。地面 item がある状態で
+        自分のインベントリを満杯にして pickup を呼ぶと、
+        PickupSelfInventoryFullError が raise され、地面 item と自インベントリの
+        状態は変化しない (中途半端な状態遷移が残らない)。"""
+        from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
+            PickupSelfInventoryFullError,
+        )
+        deps = transfer_service
+        # まず A が持っている 1 個を地面に落とす → 地面には 1 item
+        deps["service"].drop_item(PLAYER_ID, SlotId(0))
+        interior_before = deps["spot_interior_repo"].find_by_spot_id(SPOT_ID)
+        assert len(interior_before.ground_items) == 1
+        # 次に A のインベントリを満杯にする (残り全 slot に別 item を作って詰める)
+        inv = deps["inventory_repo"].find_by_id(PLAYER_ID)
+        while not inv.is_inventory_full():
+            new_iid = deps["item_repo"].generate_item_instance_id()
+            deps["item_repo"].save(
+                ItemAggregate.create(
+                    item_instance_id=new_iid,
+                    item_spec=_make_item_spec(),
+                    quantity=1,
+                )
+            )
+            inv.acquire_item(new_iid, item_spec_id_value=ITEM_SPEC_ID.value)
+        deps["inventory_repo"].save(inv)
+        assert inv.is_inventory_full()
+        # 地面の item を pickup しようとして失敗する
+        with pytest.raises(PickupSelfInventoryFullError):
+            deps["service"].pickup_item(PLAYER_ID, deps["instance_id"])
+        # 地面 item と自インベントリは何も変化していない
+        interior_after = deps["spot_interior_repo"].find_by_spot_id(SPOT_ID)
+        assert len(interior_after.ground_items) == 1
+        assert interior_after.ground_items[0].item_instance_id == deps["instance_id"]
+        inv_after = deps["inventory_repo"].find_by_id(PLAYER_ID)
+        assert inv_after.is_inventory_full()  # 中途半端な追加は無い
 
     def test_list_ground_items_at_player_spot_は現在地の地面一覧を返す(self, transfer_service):
         """ランナー/将来の LLM tool が「拾える物」を列挙するヘルパ。"""
@@ -297,11 +348,15 @@ class TestSpotGraphItemTransferServiceGive:
         with pytest.raises(ItemTransferException):
             deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(0))
 
-    def test_空スロットを渡そうとすると_ItemNotInSlotException(self, transfer_service):
-        """A のスロット 5 は空。"""
+    def test_空スロットを渡そうとすると_SlotIsEmptyError(self, transfer_service):
+        """PR-ε: give_item も drop_item と同じ SlotIsEmptyError に統一する。
+        A のスロット 5 は空。"""
+        from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
+            SlotIsEmptyError,
+        )
         deps = transfer_service
         self._add_other_player_to_spot(deps, OTHER_PLAYER_ID)
-        with pytest.raises(ItemNotInSlotException):
+        with pytest.raises(SlotIsEmptyError):
             deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(5))
 
     def test_受け手のインベントリ満杯時は弾かれ送り手側にアイテムが残る(self, transfer_service):

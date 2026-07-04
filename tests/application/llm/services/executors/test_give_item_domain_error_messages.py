@@ -144,6 +144,41 @@ class TestGiveItemTargetInventoryFull:
         )
 
 
+class TestGiveItemSlotIsEmpty:
+    """PR-ε: give_item で送り手の空スロットを指定した場合、SlotIsEmptyError が
+    executor 側で error_code / message / remediation にきちんと反映される。
+
+    Code review HIGH #1 で「_give_item の except ItemTransferException が
+    error_code を無条件で ITEM_TRANSFER_FAILED に丸めていた」抜けをカバーする。"""
+
+    def test_空スロット_give_で_ITEM_TRANSFER_SLOT_IS_EMPTY_が_LLM_に届く(self) -> None:
+        from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
+            SlotIsEmptyError,
+        )
+        stub = MagicMock()
+        stub.give_item.side_effect = SlotIsEmptyError(slot_id=5)
+        executor = _make_executor(stub)
+
+        result = executor._give_item(
+            1,
+            {
+                "gives_resolved": [
+                    _resolved_entry(
+                        target_display_name="ノア",
+                        item_display_name="野いちご",
+                    ),
+                ],
+                "inner_thought": "test",
+            },
+        )
+        assert result.success is False
+        # 汎用 ITEM_TRANSFER_FAILED ではなく、専用 error_code が届く
+        assert result.error_code == "ITEM_TRANSFER_SLOT_IS_EMPTY"
+        # remediation も専用文言 (「指定したスロットに何も入っていません」等)
+        assert result.remediation is not None
+        assert "スロット" in result.remediation
+
+
 class TestGiveItemPartialSuccess:
     """batch 内 1 件失敗 + 他成功 → success=True + partial 集約 message。"""
 

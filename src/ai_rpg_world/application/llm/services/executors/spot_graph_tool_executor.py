@@ -736,11 +736,15 @@ class SpotGraphToolExecutor:
                 success=True, message=append_inner_thought_to_message(msg, args)
             )
         except ItemTransferException as e:
+            # PR-ε: subclass (SlotIsEmptyError 等) の error_code / message を
+            # そのまま LLM に返す。base の ItemTransferException では従来通り
+            # ITEM_TRANSFER_FAILED に落ちる。
+            error_code = getattr(e, "error_code", "ITEM_TRANSFER_FAILED")
             return LlmCommandResultDto(
                 success=False,
-                message=f"アイテムを落とせません: {e}",
-                error_code="ITEM_TRANSFER_FAILED",
-                remediation=get_remediation("ITEM_TRANSFER_FAILED"),
+                message=str(e),
+                error_code=error_code,
+                remediation=get_remediation(error_code),
             )
         except Exception as e:
             return exception_result(e)
@@ -787,11 +791,16 @@ class SpotGraphToolExecutor:
                 success=True, message=append_inner_thought_to_message(msg, args)
             )
         except ItemTransferException as e:
+            # PR-ε: subclass (GroundItemGoneError / PickupSelfInventoryFullError)
+            # の error_code / message をそのまま LLM に返す。domain 側で
+            # 「先取り可能性」「drop で空き作成」等の次アクションを message
+            # に含めているので prefix は不要。
+            error_code = getattr(e, "error_code", "ITEM_TRANSFER_FAILED")
             return LlmCommandResultDto(
                 success=False,
-                message=f"アイテムを拾えません: {e}",
-                error_code="ITEM_TRANSFER_FAILED",
-                remediation=get_remediation("ITEM_TRANSFER_FAILED"),
+                message=str(e),
+                error_code=error_code,
+                remediation=get_remediation(error_code),
             )
         except Exception as e:
             return exception_result(e)
@@ -902,11 +911,15 @@ class SpotGraphToolExecutor:
                 if first_ng_code is None:
                     first_ng_code = "GIVE_ITEM_TARGET_INVENTORY_FULL"
             except ItemTransferException as e:
-                # 未分類の domain error (稀な整合性違反)。ITEM_TRANSFER_FAILED
-                # にフォールバック。
+                # PR-ε: SlotIsEmptyError などの新設 subclass は
+                # error_code class attribute を持つので、それを LLM に返す。
+                # base の ItemTransferException (稀な整合性違反) は
+                # ITEM_TRANSFER_FAILED にフォールバック。
                 ng_lines.append(f"{item_disp} → {target_disp}: NG ({e})")
                 if first_ng_code is None:
-                    first_ng_code = "ITEM_TRANSFER_FAILED"
+                    first_ng_code = getattr(
+                        e, "error_code", "ITEM_TRANSFER_FAILED"
+                    )
             except Exception as e:  # noqa: BLE001
                 ng_lines.append(f"{item_disp} → {target_disp}: NG (内部例外: {e})")
                 if first_ng_code is None:
