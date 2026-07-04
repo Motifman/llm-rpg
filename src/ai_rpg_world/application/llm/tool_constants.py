@@ -73,10 +73,13 @@ TOOL_NAME_MOVE_TO_DESTINATION = TOOL_NAME_PREFIX_MOVE + "to_destination"
 TOOL_NAME_MOVE_ONE_STEP = TOOL_NAME_PREFIX_MOVE + "one_step"
 TOOL_NAME_CANCEL_MOVEMENT = TOOL_NAME_PREFIX_MOVE + "cancel"
 # Issue #264 後続: 旧 SAY/WHISPER の 2 tool を廃止し、``channel`` 引数を持つ
-# 単一 ``speech_speak`` tool に統合した (SHOUT も同時に LLM へ公開)。
+# 単一 ``speak`` tool に統合した (SHOUT も同時に LLM へ公開)。
 # ``channel`` は arguments で "whisper" / "say" / "shout" のいずれかを指定する。
 # 詳細は tool_catalog/spot_graph.py の SPEECH_DEFINITION を参照。
-TOOL_NAME_SPEECH = TOOL_NAME_PREFIX_SPEECH + "speak"
+# PR-DD (Y_after_pr639_640 後続): tool 名を ``speech_speak`` → ``speak`` に
+# 短縮。``speech`` と ``speak`` の意味重複を解消し、RPG UI 慣習にも合わせる。
+# Python 側の定数名 ``TOOL_NAME_SPEECH`` は grep 継続性のため据え置く。
+TOOL_NAME_SPEECH = "speak"
 TOOL_NAME_HARVEST_START = TOOL_NAME_PREFIX_HARVEST + "start"
 TOOL_NAME_HARVEST_CANCEL = TOOL_NAME_PREFIX_HARVEST + "cancel"
 TOOL_NAME_CONVERSATION_ADVANCE = TOOL_NAME_PREFIX_CONVERSATION + "advance"
