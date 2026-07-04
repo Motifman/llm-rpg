@@ -1001,11 +1001,20 @@ def test_direct_travel_carries_subjective_fields_when_passed(
 def test_explore_handler_threads_subjective_args_into_record(
     clean_runtime_env: None,
 ) -> None:
-    """U2: runtime_manager._handle_explore が arguments の subjective を do_* 経由で記録する。
+    """U2: explore handler が arguments の subjective を do_* 経由で記録する。
+
+    PR-θ2 (経路統合) 後: 旧 ``_handle_explore`` は削除、新経路は
+    ``_tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE]`` (=
+    SpotGraphToolExecutor._explore を wire adapter でラップしたもの) 経由。
+    subjective 記録経路は同じ ``runtime.do_explore`` に委譲するので、record 内容
+    のアサーションは変わらない。
 
     露出スキーマが OFF でも、handler は arguments dict から直接読むため、
     arguments に値が入れば記録に届く (= スキーマ露出 PR が入った瞬間に流れる配線)。
     """
+    from ai_rpg_world.application.llm.tool_constants import (
+        TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    )
     runtime = _create_runtime()
     player_id = runtime.get_player_ids()[0]
     wiring = _WorldLlmWiring(
@@ -1014,7 +1023,8 @@ def test_explore_handler_threads_subjective_args_into_record(
         llm_client=StubLlmClient(None),
     )
 
-    result = wiring._handle_explore(
+    handler = wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE]
+    result = handler(
         player_id,
         {
             "inner_thought": "周囲を見る",
@@ -1035,7 +1045,13 @@ def test_explore_handler_threads_subjective_args_into_record(
 def test_explore_handler_records_none_subjective_when_args_absent(
     clean_runtime_env: None,
 ) -> None:
-    """U2: 露出 OFF の現状 (arguments に subjective キー無し) では全 None で記録され挙動不変。"""
+    """U2: 露出 OFF の現状 (arguments に subjective キー無し) では全 None で記録され挙動不変。
+
+    PR-θ2 (経路統合) 後: handler は ``_tool_handlers`` から取得する。
+    """
+    from ai_rpg_world.application.llm.tool_constants import (
+        TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    )
     runtime = _create_runtime()
     player_id = runtime.get_player_ids()[0]
     wiring = _WorldLlmWiring(
@@ -1044,7 +1060,8 @@ def test_explore_handler_records_none_subjective_when_args_absent(
         llm_client=StubLlmClient(None),
     )
 
-    wiring._handle_explore(
+    handler = wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE]
+    handler(
         player_id,
         {"inner_thought": "周囲を見る"},
         ToolRuntimeContextDto.empty(),

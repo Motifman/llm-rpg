@@ -119,7 +119,7 @@ class TestAdapterWithResolver:
     def test_resolver_の_出力が_executor_に_渡る(self) -> None:
         seen_args: Dict[str, Any] = {}
 
-        def fake_executor(pid_int: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        def fake_executor(pid_int: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
             seen_args.update(args)
             return LlmCommandResultDto(success=True, message="ok")
 
@@ -137,7 +137,7 @@ class TestAdapterWithResolver:
         assert "item_label" not in seen_args
 
     def test_resolver_例外は_LlmCommandResultDto_に_変換(self) -> None:
-        def fake_executor(pid_int: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        def fake_executor(pid_int: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
             pytest.fail("resolver 失敗時に executor が呼ばれてはいけない")
 
         resolver = MagicMock()
@@ -164,7 +164,7 @@ class TestAdapterWithResolver:
         化けて発生源が分かりにくくなる。"""
         called = {"n": 0}
 
-        def fake_executor(pid_int: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        def fake_executor(pid_int: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
             called["n"] += 1
             return LlmCommandResultDto(success=False, message="raw")
 

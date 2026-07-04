@@ -1062,11 +1062,10 @@ class _WorldLlmWiring:
             str,
             Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto],
         ] = {
-            TOOL_NAME_SPOT_GRAPH_EXPLORE: self._handle_explore,
-            # PR-θ1 (経路統合): TOOL_NAME_SPOT_GRAPH_TRAVEL_TO の登録は削除
-            # した。代わりに _wire_missing_spot_graph_tools が
-            # SpotGraphToolExecutor._travel_to をここに上書き wire する。
-            # 旧 self._handle_travel_to (下方) も削除した。
+            # PR-θ1/θ2 (経路統合): TOOL_NAME_SPOT_GRAPH_TRAVEL_TO / EXPLORE の
+            # 登録は削除した。代わりに _wire_missing_spot_graph_tools が
+            # SpotGraphToolExecutor._travel_to / _explore を上書き wire する。
+            # 旧 self._handle_travel_to / _handle_explore は削除された。
             TOOL_NAME_SPOT_GRAPH_INTERACT: self._handle_interact,
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._handle_listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._handle_wait,
@@ -1223,6 +1222,11 @@ class _WorldLlmWiring:
             # SpotGraphToolExecutor._travel_to に統合。以前は 2 経路に分裂して
             # おり travel_to の say_inline が 100% silent failure していた。
             TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            # PR-θ2 (経路統合): explore を旧 _handle_explore から新経路
+            # SpotGraphToolExecutor._explore に統合。旧 handler 相当の
+            # 「発見なし時に可視 object 併記」も新経路で保持 (runtime_context
+            # 経由で targets を参照)。
+            TOOL_NAME_SPOT_GRAPH_EXPLORE,
         )
         # #356 実験 #25 OFF で発覚: use_item / drop_item / give_item /
         # pickup_item は tool catalog 上 ``item_label`` (= I1, I2 など) を
@@ -1373,15 +1377,24 @@ class _WorldLlmWiring:
 
     @staticmethod
     def _adapt_executor_handler(
-        raw_handler: Callable[[int, Dict[str, Any]], LlmCommandResultDto],
+        raw_handler: Callable[..., LlmCommandResultDto],
     ) -> Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto]:
-        """executor signature (int, args) → wiring signature (PlayerId, args, ctx)。"""
+        """executor signature (int, args[, runtime_context]) → wiring signature
+        (PlayerId, args, ctx)。
+
+        PR-θ2 (経路統合): executor が runtime_context を必要とする tool (explore
+        の可視 object 併記など、旧 handler が targets を参照していたもの) に
+        対応するため、raw_handler 呼び出し時に位置引数として runtime_context
+        を渡すよう拡張した。executor 側では第3引数を optional (default None)
+        で受ければ、runtime_context を使わない handler は従来と同じシグネチャ
+        で動く。
+        """
         def _handler(
             player_id: PlayerId,
             arguments: Dict[str, Any],
             runtime_context: Any,
         ) -> LlmCommandResultDto:
-            return raw_handler(int(player_id.value), arguments)
+            return raw_handler(int(player_id.value), arguments, runtime_context)
         return _handler
 
     @staticmethod
@@ -1459,7 +1472,7 @@ class _WorldLlmWiring:
                         "解決しません (フレームワーク側の修正が必要)。"
                     ),
                 )
-            return raw_handler(int(player_id.value), resolved)
+            return raw_handler(int(player_id.value), resolved, runtime_context)
 
         return _handler
 
@@ -1973,47 +1986,19 @@ class _WorldLlmWiring:
 
     # ── per-tool handlers (PR 7) ──
 
-    def _handle_explore(
-        self,
-        player_id: PlayerId,
-        arguments: dict[str, Any],
-        runtime_context: Any,
-    ) -> LlmCommandResultDto:
-        targets = getattr(runtime_context, "targets", {})
-        result = self.runtime.do_explore(
-            player_id, **extract_subjective_action_fields(arguments)
-        )
-        if result.discovery_descriptions:
-            message = "発見: " + " / ".join(result.discovery_descriptions)
-        else:
-            # F2: 「新しい発見はなかった」だけだと LLM が「部屋に何もない」と
-            # 誤解し interact しなくなる癖がある。spot view に既に表示されて
-            # いる可視オブジェクトを併記して、LLM の "見えない" 誤認を防ぐ。
-            visible_objects = _list_object_labels(targets)
-            if visible_objects:
-                message = (
-                    "新しい発見はなかった。"
-                    f"既に見えているオブジェクト: {visible_objects}"
-                    " (interact するにはこのオブジェクトの名前を object_label に指定する)"
-                )
-            else:
-                message = "新しい発見はなかった (この場所に interactable なオブジェクトは無い)"
-        return with_inner_thought_empty_warning(
-            TOOL_NAME_SPOT_GRAPH_EXPLORE,
-            arguments,
-            LlmCommandResultDto(success=True, message=message),
-        )
-
-    # PR-θ1 (経路統合): _handle_travel_to は削除。SpotGraphToolExecutor._travel_to
-    # に統合され、そちらが runtime.do_move を呼ぶ薄い wrapper として単一の
-    # travel_to 実装になった。旧 handler の副作用 (label→spot_id resolve /
-    # scene_boundary / subjective / _process_graph_events / display_name
-    # ベースの message / inner_thought 空警告) は全部保持している。
+    # PR-θ1/θ2 (経路統合): _handle_travel_to / _handle_explore は削除。
+    # SpotGraphToolExecutor._travel_to / _explore に統合され、それぞれ
+    # runtime.do_move / runtime.do_explore を呼ぶ薄い wrapper として単一の
+    # 実装になった。旧 handler の副作用 (scene_boundary / subjective /
+    # _process_graph_events / display_name / 発見なし時の可視 object 併記 /
+    # inner_thought 空警告) は全部保持している。
     #
-    # label→spot_id resolve は SpotGraphArgumentResolver._resolve_travel_to
-    # (旧 handler と同じ ``resolve_destination_target`` 関数を再利用) が
-    # resolver stage で事前に行い、新経路には destination_spot_id (int) が
-    # 届く。resolver_targets に TOOL_NAME_SPOT_GRAPH_TRAVEL_TO を含めた。
+    # 可視 object 併記は executor が runtime_context.targets を受け取れる
+    # よう SpotGraphToolExecutor handlers の signature を
+    # ``(int, args, runtime_context=None)`` に拡張して対応した。
+    # travel_to は SpotGraphArgumentResolver._resolve_travel_to が
+    # resolver stage で destination_label → destination_spot_id に解決する
+    # (resolver_targets に含まれる)。
 
     def _handle_interact(
         self,

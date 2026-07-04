@@ -9,6 +9,7 @@ from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.failure_helpers import (
     build_invalid_arg_failure,
     build_sanitized_exception_failure,
+    list_object_labels,
 )
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     append_inner_thought_to_message,
@@ -283,7 +284,7 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER: self._tend_to_player,
         }
 
-    def _travel_to(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+    def _travel_to(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``travel_to`` の実行 (PR-θ1: 経路統合後)。
 
         旧 runtime_manager._handle_travel_to と新 SpotGraphToolExecutor._travel_to
@@ -431,7 +432,7 @@ class SpotGraphToolExecutor:
                 exc_info=True,
             )
 
-    def _set_sub_location(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+    def _set_sub_location(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         raw = args.get("sub_location_id")
         sub: SubLocationId | None
         try:
@@ -455,20 +456,63 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _explore(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
-        try:
-            result = self._svc.exploration.explore_once(PlayerId(player_id))
-            parts = list(result.discovery_descriptions)
-            if result.item_spec_ids_granted:
-                parts.append(f"アイテム付与: {len(result.item_spec_ids_granted)} 種")
-            msg = "\n".join(parts) if parts else "特に新しい発見はありませんでした。"
+    def _explore(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        """``explore`` の実行 (PR-θ2: 経路統合後)。
+
+        旧 runtime_manager._handle_explore と新 SpotGraphToolExecutor._explore
+        の 2 経路を統合。**この経路が唯一の explore 実装** で、旧 handler は
+        削除された。
+
+        統合方針 (PR-θ1 と同じ Option B): 既に正しい副作用 (SpotExploredEvent
+        発火 + _process_graph_events + _record_action_result + subjective 記録)
+        を持つ ``runtime.do_explore`` を単一の真実源として再利用する。
+
+        処理順:
+        1. runtime.do_explore — 探索実行 + graph event + action_result 記録
+        2. discovery_descriptions を組み立て
+        3. 発見なしの場合、可視 object 一覧を併記 (F2: LLM が「部屋に何もない」
+           と誤解して interact しなくなる癖の対策)
+        4. inner_thought 空警告 (旧 handler と揃える)
+        """
+        if self._runtime is None:
             return LlmCommandResultDto(
-                success=True, message=append_inner_thought_to_message(msg, args)
+                success=False,
+                message="explore は本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
+        try:
+            subjective = extract_subjective_action_fields(args)
+            result = self._runtime.do_explore(PlayerId(player_id), **subjective)
+            if result.discovery_descriptions:
+                message = "発見: " + " / ".join(result.discovery_descriptions)
+            else:
+                # F2: 「新しい発見はなかった」だけだと LLM が「部屋に何もない」と
+                # 誤解し interact しなくなる癖がある。runtime_context.targets
+                # から可視 object を併記する。
+                targets = (
+                    getattr(runtime_context, "targets", {}) or {}
+                    if runtime_context is not None
+                    else {}
+                )
+                visible_objects = list_object_labels(targets) if targets else ""
+                if visible_objects:
+                    message = (
+                        "新しい発見はなかった。"
+                        f"既に見えているオブジェクト: {visible_objects}"
+                        " (interact するにはこのオブジェクトの名前を object_label に指定する)"
+                    )
+                else:
+                    message = "新しい発見はなかった (この場所に interactable なオブジェクトは無い)"
+            return with_inner_thought_empty_warning(
+                TOOL_NAME_SPOT_GRAPH_EXPLORE,
+                args,
+                LlmCommandResultDto(success=True, message=message),
             )
         except Exception as e:
             return exception_result(e)
 
-    def _interact(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+    def _interact(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         # PR β: 疲労 limit (100) で interact は block。
         blocked = self._is_exhausted_and_block(player_id, TOOL_NAME_SPOT_GRAPH_INTERACT)
         if blocked is not None:
@@ -506,7 +550,7 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _use_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+    def _use_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         item_spec_id = args.get("item_spec_id")
         if item_spec_id is None:
             return build_invalid_arg_failure(
@@ -658,7 +702,7 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _prepare_action(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+    def _prepare_action(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         action_id = str(args.get("action_id", "")).strip()
         if not action_id:
             return build_invalid_arg_failure(
@@ -747,7 +791,7 @@ class SpotGraphToolExecutor:
         if events:
             self._event_publisher.publish_all(events)
 
-    def _drop_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+    def _drop_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_drop_item`: 所持アイテムを現在地の地面に置く。
 
         resolver で slot_id / item_instance_id / target_display_name まで解決済み。
@@ -804,7 +848,7 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _pickup_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+    def _pickup_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_pickup_item`: 現在地の地面アイテムを拾う。
 
         resolver で item_instance_id / target_display_name まで解決済み。
@@ -860,7 +904,7 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _give_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+    def _give_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``give_item`` (batch-always): 同 tick に複数 give を集約実行する。
 
         PR-α (Y_after_pr639_640 後続): 旧 give_item (単発) と旧 give_items
@@ -1000,7 +1044,7 @@ class SpotGraphToolExecutor:
             message=append_inner_thought_to_message(msg, args),
         )
 
-    def _attack(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+    def _attack(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_attack`: 同スポットのモンスターを攻撃する。
 
         resolver で `monster_id` / `target_display_name` まで解決済み。
@@ -1108,7 +1152,7 @@ class SpotGraphToolExecutor:
             player_status_repository=self._player_status_repository,
         )
 
-    def _listen(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+    def _listen(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_listen`: 自 spot + 隣接 spot (1 hop 減衰) の環境音を観測する。
 
         Phase 5 PR-2。`SpotGraphAggregate.emit_listen_carefully` に
@@ -1150,7 +1194,7 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _wait(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+    def _wait(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         # PR β: wait は exhausted でも実行可 (= 回復の主経路)。block しない。
         # #471 fix: ここで ``self._svc.simulation.tick()`` を呼んで world tick を
         # 進めていたが、これは tool 実行中に nested tick advance を起こし
@@ -1183,7 +1227,7 @@ class SpotGraphToolExecutor:
     TEND_REVIVE_HP_RATE = 0.4
 
     def _tend_to_player(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None
     ) -> LlmCommandResultDto:
         """`spot_graph_tend_to_player` の handler (Issue #621 Phase 3b)。
 
