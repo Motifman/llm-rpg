@@ -15,8 +15,10 @@ resource に何度も retry を続けていた。
 
 from __future__ import annotations
 
-from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
-    _interact_remediation_for_reason,
+# PR-θ3 (経路統合): _interact_remediation_for_reason は
+# application/llm/services/executors/interact_helpers.py に移動した。
+from ai_rpg_world.application.llm.services.executors.interact_helpers import (
+    interact_remediation_for_reason as _interact_remediation_for_reason,
 )
 
 
