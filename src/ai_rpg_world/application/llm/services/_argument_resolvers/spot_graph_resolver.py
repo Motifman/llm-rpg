@@ -271,28 +271,35 @@ def resolve_sub_location_target(
     runtime_context: ToolRuntimeContextDto,
 ) -> Optional[ToolRuntimeTargetDto]:
     """set_sub_location 用のラベル解決。label が空なら None を返す
-    (sub_location クリア指示)。"""
+    (sub_location クリア指示)。
+
+    PR-EE/FF/X (Y_after_pr639_640 後続): prompt 表示で
+    ``- "祭壇前"（現在ここ）`` のように quote されるようになったため、
+    LLM が quote ごと渡してきても解決できる必要がある。他 4 resolver
+    (object/player/attack/tend) と同じく ``_normalize_label_candidates``
+    経由で崩れ表現を分解する。
+    """
     if not label:
         return None
-    if label in runtime_context.targets:
-        target = require_target(
-            label,
-            runtime_context,
-            "サブロケーションラベル",
-            invalid_label_code="INVALID_TARGET_LABEL",
-        )
-    else:
+    target: Optional[ToolRuntimeTargetDto] = None
+    for c in _normalize_label_candidates(label):
+        if c in runtime_context.targets:
+            hit = runtime_context.targets[c]
+            target = hit
+            break
         found = _find_target_by_display_name(
             runtime_context,
             kind="spot_graph_sub_location",
-            display_name=label,
+            display_name=c,
         )
-        if found is None:
-            raise ToolArgumentResolutionException(
-                f"指定された対象ラベルは現在の候補にありません: {label}",
-                "INVALID_TARGET_LABEL",
-            )
-        target = found
+        if found is not None:
+            target = found
+            break
+    if target is None:
+        raise ToolArgumentResolutionException(
+            f"指定された対象ラベルは現在の候補にありません: {label}",
+            "INVALID_TARGET_LABEL",
+        )
     if target.sub_location_id is None:
         raise ToolArgumentResolutionException(
             f"サブロケーションとして解決できないラベルです: {label}",

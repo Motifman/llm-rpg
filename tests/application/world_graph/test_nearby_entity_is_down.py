@@ -62,7 +62,7 @@ class TestNearbyEntityIsDown:
         )
         builder = SpotGraphUiContextBuilder()
         dto = builder.build(current_state_text="(base)\n", current_state=_wrap(snap))
-        assert "エイダ (倒れて動かない)" in dto.current_state_text
+        assert '"エイダ" (倒れて動かない)' in dto.current_state_text
 
     def test_is_down_False_は_通常表記(self) -> None:
         snap = _snap(
@@ -93,6 +93,7 @@ class TestNearbyEntityIsDown:
         dto = builder.build(current_state_text="(base)\n", current_state=_wrap(snap))
         text = dto.current_state_text
         # エイダだけ接尾辞、ノアは無し
-        assert "エイダ (倒れて動かない)" in text
+        assert '"エイダ" (倒れて動かない)' in text
         # ノアの行は "ノア" で終わって "倒れて" が続かない
-        assert "ノア\n" in text or text.endswith("ノア")
+        # PR-FF (Y_after_pr639_640): entity 名は ``""`` で囲まれる
+        assert '"ノア"\n' in text or text.endswith('"ノア"')

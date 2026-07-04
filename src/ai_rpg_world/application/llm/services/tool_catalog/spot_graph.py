@@ -121,7 +121,12 @@ INTERACT_DEFINITION = ToolDefinitionDto(
             "object_label": {
                 "type": "string",
                 "description": (
-                    "オブジェクトの名前 (例: \"焚き火跡\")。"
+                    "オブジェクトの名前 (例: 焚き火跡)。"
+                    "『現在の状況』のオブジェクト section では "
+                    "``- \"焚き火跡\" (available=true) — 説明 [gather, examine]`` "
+                    "のように、渡すべき object 名のみが ``\"\"`` で囲まれて表示される。"
+                    "**``\"\"`` 内の値をそのまま渡すこと** (quote 記号は剥がして"
+                    "中身だけ、または quote ごとどちらでも resolver が解釈する)。"
                     "同名衝突時は ``#N`` ordinal を含めて指定。"
                 ),
             },
@@ -129,10 +134,11 @@ INTERACT_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": (
                     "オブジェクトに定義された action_name "
-                    "(例: \"gather\", \"search\", \"examine\")。"
+                    "(例: gather / search / examine)。"
+                    "『現在の状況』のオブジェクト行末尾 ``[gather, examine]`` "
+                    "のカンマ区切り配列から、そのまま 1 つを選んで渡す。"
                     "日本語や敬体ではなく、英語の動詞形を渡す。"
-                    "思いつきで推測せず、必ず『現在の状況』section に表示された"
-                    "値をそのまま渡すこと。"
+                    "思いつきで推測せず、必ず表示された値のいずれかを使うこと。"
                 ),
             },
             "parameters": {

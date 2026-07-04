@@ -81,8 +81,8 @@ class TestMonsterLabeling:
 
         # PR 6 (#404 後続): 同名衝突は ``#N`` で区別。
         # 旧 ``M1: 灰色のオオカミ`` → ``- 灰色のオオカミ #1`` に変更。
-        assert "- 灰色のオオカミ #1" in result.current_state_text
-        assert "- 灰色のオオカミ #2" in result.current_state_text
+        assert '- "灰色のオオカミ #1"' in result.current_state_text
+        assert '- "灰色のオオカミ #2"' in result.current_state_text
         # 旧 M-prefix は prompt 上は出さない
         assert "M1:" not in result.current_state_text
         assert "M2:" not in result.current_state_text
@@ -130,7 +130,7 @@ class TestMonsterLabeling:
         )
         result = SpotGraphUiContextBuilder().build("base", dto)
 
-        assert "- 灰色のオオカミ（死骸）" in result.current_state_text
+        assert '- "灰色のオオカミ"（死骸）' in result.current_state_text
         assert "M1:" not in result.current_state_text
         target = result.tool_runtime_context.targets["M1"]
         assert isinstance(target, MonsterToolRuntimeTargetDto)
