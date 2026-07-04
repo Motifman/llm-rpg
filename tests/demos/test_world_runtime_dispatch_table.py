@@ -59,6 +59,11 @@ class TestWorldRuntimeDispatchTable:
         """
         state = _create_session(monkeypatch, tmp_path)
         handlers = state.llm_wiring._tool_handlers
+        # PR-θ6 (経路統合): TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION は脱出
+        # ランタイムでは意図的に未対応 (ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS で
+        # LLM 露出も除外) なので dispatch table には登録しない設計に変更した。
+        # 万が一 LLM が呼んだ場合は `_execute_tool` の default 経路が
+        # UNSUPPORTED_TOOL を返す。よって required から除外する。
         required = {
             TOOL_NAME_SPOT_GRAPH_EXPLORE,
             TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
@@ -66,7 +71,6 @@ class TestWorldRuntimeDispatchTable:
             TOOL_NAME_SPOT_GRAPH_LISTEN,
             TOOL_NAME_SPOT_GRAPH_WAIT,
             TOOL_NAME_SPEECH,
-            TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
             TOOL_NAME_TODO_ADD,
             TOOL_NAME_TODO_LIST,
             TOOL_NAME_TODO_COMPLETE,
