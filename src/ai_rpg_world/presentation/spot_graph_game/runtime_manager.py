@@ -1001,11 +1001,10 @@ class _WorldLlmWiring:
             str,
             Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto],
         ] = {
-            # PR-θ1/θ2/θ3/θ4 (経路統合): TRAVEL_TO / EXPLORE / INTERACT /
-            # LISTEN の登録は削除した。代わりに _wire_missing_spot_graph_tools
-            # が SpotGraphToolExecutor._travel_to / _explore / _interact /
-            # _listen を上書き wire する。旧 handlers は削除された。
-            TOOL_NAME_SPOT_GRAPH_WAIT: self._handle_wait,
+            # PR-θ1/θ2/θ3/θ4/θ5 (経路統合): TRAVEL_TO / EXPLORE / INTERACT /
+            # LISTEN / WAIT の登録は削除した。代わりに
+            # _wire_missing_spot_graph_tools が SpotGraphToolExecutor 側の
+            # 対応 handler を上書き wire する。旧 handlers は削除された。
             TOOL_NAME_SPEECH: self._handle_speech,
             TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION: self._handle_set_sub_location,
             TOOL_NAME_TODO_ADD: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_ADD),
@@ -1174,6 +1173,11 @@ class _WorldLlmWiring:
             # SpotGraphToolExecutor._listen に統合。runtime.do_listen 経由で
             # 副作用 (_process_graph_events / event 差分カウント) は保持。
             TOOL_NAME_SPOT_GRAPH_LISTEN,
+            # PR-θ5 (経路統合): wait を旧 _handle_wait から新経路
+            # SpotGraphToolExecutor._wait に統合。runtime.do_wait 経由で
+            # 副作用 (_record_action_result + subjective 記録) を保持しつつ、
+            # 新経路の付加価値 (疲労回復 = FATIGUE_RECOVERY_WAIT) も引き継ぐ。
+            TOOL_NAME_SPOT_GRAPH_WAIT,
         )
         # #356 実験 #25 OFF で発覚: use_item / drop_item / give_item /
         # pickup_item は tool catalog 上 ``item_label`` (= I1, I2 など) を
@@ -2003,29 +2007,10 @@ class _WorldLlmWiring:
     # なった。旧 handler の副作用 (event 差分カウント / _process_graph_events /
     # inner_thought 空警告) は保持している。
 
-    def _handle_wait(
-        self,
-        player_id: PlayerId,
-        arguments: dict[str, Any],
-        runtime_context: Any,
-    ) -> LlmCommandResultDto:
-        del runtime_context  # unused — wait は targets を見ない
-        reason = str(arguments.get("reason", "")).strip()
-        # #471 fix: do_wait は world tick を進めなくなった。返り値は現在 tick。
-        # message も「時間が進んだ」ではなく「今ターンは行動を控えた」に変更し、
-        # LLM に対しても「wait は時間進行のショートカットではない」ことを示す。
-        tick = self.runtime.do_wait(
-            player_id, reason=reason, **extract_subjective_action_fields(arguments)
-        )
-        suffix = f"（理由: {reason}）" if reason else ""
-        return with_inner_thought_empty_warning(
-            TOOL_NAME_SPOT_GRAPH_WAIT,
-            arguments,
-            LlmCommandResultDto(
-                success=True,
-                message=f"今ターンは行動を控えた: tick={tick}{suffix}",
-            ),
-        )
+    # PR-θ5 (経路統合): _handle_wait は削除。SpotGraphToolExecutor._wait
+    # に統合され、runtime.do_wait を呼ぶ薄い wrapper として単一の実装に
+    # なった。旧 handler の副作用 (_record_action_result / subjective 記録 /
+    # inner_thought 空警告) は保持し、新経路の付加価値 (疲労回復) も引き継ぐ。
 
     def _handle_speech(
         self,
