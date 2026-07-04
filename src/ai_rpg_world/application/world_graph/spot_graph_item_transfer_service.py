@@ -49,7 +49,89 @@ _logger = logging.getLogger(__name__)
 
 
 class ItemTransferException(Exception):
-    """drop/pickup の境界条件違反 (プレイヤー未配置・地面に存在しない 等)。"""
+    """drop/pickup/give の境界条件違反 (プレイヤー未配置・地面に存在しない 等)。
+
+    LLM 面向けに error_code + 日本語 message を持つ子 class に分岐すべきだが、
+    まだ子 class が用意されていない「稀な整合性違反」 (repository lookup 失敗
+    など) は base のまま raise される。executor 側で fallback として
+    ``ITEM_TRANSFER_FAILED`` にマップする。
+    """
+
+    #: LLM が受け取る error_code。子 class で override する。
+    error_code: str = "ITEM_TRANSFER_FAILED"
+
+
+class TargetIsSelfError(ItemTransferException):
+    """give_item で自分自身を対象に指定した。
+
+    LLM 向けの日本語 message を default で持つ (引数無しで raise 可)。
+    """
+
+    error_code = "GIVE_ITEM_TARGET_IS_SELF"
+
+    def __init__(self, message: str = "自分自身にアイテムを渡すことはできません。別の相手を指定してください。") -> None:
+        super().__init__(message)
+
+
+class TargetNotInSameSpotError(ItemTransferException):
+    """give_item の相手が別 spot にいる。
+
+    ## message 二重管理の設計判断 (PR-α review MEDIUM 2)
+
+    - **domain 層 (本 class)**: 汎用日本語 default message を持つ。名前を
+      lookup する dependency を持たないため相手名/現在地名は default
+      ("相手" / "現在地") のまま raise される
+    - **executor 層 (spot_graph_tool_executor._give_item)**: catch 時に
+      resolver が args に埋めた ``target_display_name`` を使って
+      LLM-facing message を再構築する
+
+    「exception の kwargs が使われず default 固定」だと duplication だが、
+    domain 層で raise-site から名前を渡す経路が現状無いための割り切り。
+    将来 transfer_service が player_name_resolver を注入されるようになれば、
+    kwargs 経路が実 message 生成に使われるようになり duplication が解消する
+    (LLM-facing の "最終形" は常に executor 側が作る前提)。
+    """
+
+    error_code = "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT"
+
+    def __init__(
+        self,
+        *,
+        target_name: str = "相手",
+        sender_spot_name: str = "現在地",
+    ) -> None:
+        msg = (
+            f"{target_name} は同じ場所にいません (あなたの現在地: {sender_spot_name})。"
+            f"travel_to で移動してから再度渡してください。"
+        )
+        super().__init__(msg)
+        self.target_name = target_name
+        self.sender_spot_name = sender_spot_name
+
+
+class TargetInventoryFullError(ItemTransferException):
+    """give_item の相手のインベントリが満杯で受け取れない。
+
+    message 二重管理の設計は ``TargetNotInSameSpotError`` と同方針
+    (domain 層 default + executor 層で名前を差し込んで再構築)。
+    """
+
+    error_code = "GIVE_ITEM_TARGET_INVENTORY_FULL"
+
+    def __init__(
+        self,
+        *,
+        target_name: str = "相手",
+        item_name: str = "そのアイテム",
+    ) -> None:
+        msg = (
+            f"{target_name} のインベントリが満杯で {item_name} を受け取れません。"
+            f"{target_name} が別のアイテムを drop するのを待つか、"
+            f"別の相手に渡してください。"
+        )
+        super().__init__(msg)
+        self.target_name = target_name
+        self.item_name = item_name
 
 
 @dataclass(frozen=True)
@@ -266,9 +348,10 @@ class SpotGraphItemTransferService:
         本イベントの recipient strategy で別途配信される (送り手は除外)。
         """
         if from_player_id.value == to_player_id.value:
-            raise ItemTransferException(
-                "自分自身にアイテムを渡すことはできません。"
-            )
+            # PR-α (Y_after_pr639_640 後続): domain-specific exception を投げる
+            # ことで executor 側で error_code + LLM 向け日本語 message を
+            # 適切にマップできる。
+            raise TargetIsSelfError()
 
         from_inv = self._player_inventory_repository.find_by_id(from_player_id)
         if from_inv is None:
@@ -291,10 +374,13 @@ class SpotGraphItemTransferService:
         from_spot = self._resolve_current_spot(from_player_id)
         to_spot = self._resolve_current_spot(to_player_id)
         if from_spot != to_spot:
-            raise ItemTransferException(
-                f"recipient {to_player_id.value} is not in the same spot as "
-                f"sender {from_player_id.value}"
-            )
+            # PR-α: 相手が別 spot にいる → LLM 向けに travel_to を示唆する
+            # message を持つ domain exception。target_name / sender_spot_name
+            # は transfer_service では引けないので、executor 側で catch して
+            # 再構築するのが本筋。ここでは exception クラスの default
+            # (「相手」「現在地」) で raise しておき、executor が args から
+            # 実名で置換する。
+            raise TargetNotInSameSpotError()
 
         item_aggregate = self._item_repository.find_by_id(item_instance_id)
         if item_aggregate is None:
@@ -310,10 +396,10 @@ class SpotGraphItemTransferService:
         # orphan 状態 (item_repository には残るが、誰も所持しない) になる。
         # この silent failure を防ぐためのガード。
         if to_inv.is_inventory_full():
-            raise ItemTransferException(
-                f"recipient {to_player_id.value} のインベントリが満杯のため "
-                f"{item_name} を渡せません。"
-            )
+            # PR-α: item_name は取れる (逆に target_name は取れない)。ここで
+            # default 相手名で raise し、executor が args["target_display_name"]
+            # で置換する。
+            raise TargetInventoryFullError(item_name=item_name)
 
         # 送り手のインベントリから抜く。tile-map 用 event は発火させたくない
         # ので remove_item_for_storage を使う (drop と同じ理由)。

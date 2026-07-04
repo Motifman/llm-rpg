@@ -15,7 +15,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-    TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
@@ -327,52 +326,23 @@ DROP_ITEM_DEFINITION = ToolDefinitionDto(
 )
 
 
+# PR-α (Y_after_pr639_640 後続): give_item を batch-always に統合し、
+# 旧 give_items (別 tool) は削除。単発でも複数でも同じ tool で表現できるため
+# LLM の認知負荷が減り、「give 系が 2 つある」混乱も解消する。
+# 1 件だけ渡したいときは gives 配列の length を 1 にする (union 型は避けた)。
 GIVE_ITEM_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     description=(
-        "同じスポットに居る別のプレイヤーへ所持アイテムを直接渡す。drop して "
-        "pickup させる手間を省くが、その場に居る第三者にも「Xが流木をYに渡した」"
-        "と観測される。受取り側のインベントリが満杯だと受け取れない。"
-        "受け渡し際に一言かけたい場合は say_inline を書ける。"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "item_label": {
-                "type": "string",
-                "description": (
-                    "渡すアイテムの名前 (例: 流木)。"
-                    "『現在の状況』の「所持アイテム」で ``\"\"`` で囲まれて"
-                    "表示された値をそのまま渡す。"
-                    "同 spec で複数所持の場合は代表 instance が 1 つ渡される。"
-                    "同名衝突時は ``#N`` ordinal を含めて指定。"
-                ),
-            },
-            "target_player_label": {
-                "type": "string",
-                "description": (
-                    "渡す相手の名前 (例: \"トマ\")。同名衝突時は ``#N`` "
-                    "ordinal を含めて指定。自分自身は指定不可。"
-                ),
-            },
-            "say_inline": _SAY,
-            "inner_thought": _IT,
-        },
-        "required": ["item_label", "target_player_label", "inner_thought"],
-    },
-)
-
-
-GIVE_ITEMS_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
-    description=(
-        "**複数の** give_item を同 tick にまとめて実行する。``gives`` 配列の各 "
-        "entry は ``give_item`` 単発と同じセマンティクスで処理される。各 entry "
-        "は **partial success**: 一部が失敗 (受け手満杯・自分自身指定など) しても、"
-        "他は実行され、結果メッセージに「OK / NG とその理由」が集約される。\n"
-        "「複数の仲間に物を配り終えて移動する」のような協調行動を 1 turn で"
-        "片付けたいときに使う。1 件だけ渡したい場合は ``give_item`` を使うのが"
-        "簡潔。"
+        "同じスポットに居る別のプレイヤーへ所持アイテムを直接渡す。"
+        "**1 tick で複数のペア (アイテム × 相手) をまとめて処理できる** "
+        "(単発でも複数配布でも同じ tool を使う)。1 つだけ渡したいときも "
+        "``gives`` 配列の要素数を 1 にして渡す "
+        "(単発でも配列で渡すルールを崩さない)。"
+        "drop→pickup の手間を省くが、その場の第三者に「Xが流木をYに渡した」と観測される。"
+        "受取り側のインベントリが満杯だと受け取れない (相手が drop するのを待つか、"
+        "別の相手を指定する)。**partial success**: 1 件失敗しても他の "
+        "entry は独立に実行され、結果メッセージに OK / NG がまとめて返る。"
+        "受け渡し際に一言かけたい場合は say_inline を書ける (全 give 完了後に 1 度だけ発火)。"
     ),
     parameters={
         "type": "object",
@@ -380,8 +350,8 @@ GIVE_ITEMS_DEFINITION = ToolDefinitionDto(
             "gives": {
                 "type": "array",
                 "description": (
-                    "渡すアイテム × 渡し先のペア配列。各 entry は item_label と "
-                    "target_player_label を持つ。順序通りに処理される。"
+                    "渡すアイテム × 相手のペア配列。1 件でも複数件でも "
+                    "同じ形で渡す。順序どおりに処理される。"
                 ),
                 "minItems": 1,
                 "maxItems": 8,
@@ -400,8 +370,9 @@ GIVE_ITEMS_DEFINITION = ToolDefinitionDto(
                         "target_player_label": {
                             "type": "string",
                             "description": (
-                                "渡す相手の名前 (例: \"トマ\")。同名衝突時は "
-                                "``#N`` ordinal を含めて指定。自分自身は指定不可。"
+                                "渡す相手の名前 (例: トマ)。"
+                                "同名衝突時は ``#N`` を含めて指定。"
+                                "自分自身は指定不可。"
                             ),
                         },
                     },
@@ -526,7 +497,6 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (DROP_ITEM_DEFINITION, _RESOLVER),
         (PICKUP_ITEM_DEFINITION, _RESOLVER),
         (GIVE_ITEM_DEFINITION, _RESOLVER),
-        (GIVE_ITEMS_DEFINITION, _RESOLVER),
         (ATTACK_DEFINITION, _RESOLVER),
         (LISTEN_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
@@ -546,7 +516,6 @@ __all__ = [
     "DROP_ITEM_DEFINITION",
     "PICKUP_ITEM_DEFINITION",
     "GIVE_ITEM_DEFINITION",
-    "GIVE_ITEMS_DEFINITION",
     "ATTACK_DEFINITION",
     "LISTEN_DEFINITION",
     "WAIT_DEFINITION",

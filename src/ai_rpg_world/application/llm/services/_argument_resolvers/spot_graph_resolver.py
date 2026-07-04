@@ -377,7 +377,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-    TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
@@ -400,12 +399,8 @@ _SPOT_GRAPH_TOOLS = frozenset({
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-    # Y_after_pr639_640_200tick で観測された silent dispatch 抜けを塞ぐ。
-    # resolve_args の後段には ``TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS`` の分岐と
-    # ``_resolve_give_items`` メソッドが実装済だが、入口 gate に無いと
-    # ``None`` が返り、runtime_manager 側で RESOLVER_DISPATCH_MISSING に
-    # 化ける。P4 カイの tick=124/147 で 2 回連続失敗した。
-    TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
+    # PR-α (Y_after_pr639_640 後続): 旧 GIVE_ITEMS は削除、GIVE_ITEM が
+    # batch-always で吸収した。
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
 })
 
@@ -456,8 +451,6 @@ class SpotGraphArgumentResolver:
             return self._resolve_pickup_item(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM:
             return self._resolve_give_item(args, runtime_context)
-        if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS:
-            return self._resolve_give_items(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER:
             return self._resolve_tend_to_player(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
@@ -508,12 +501,14 @@ class SpotGraphArgumentResolver:
             args,
         )
 
-    def _resolve_give_item(
+    def _resolve_single_give_entry(
         self,
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
-        """所持アイテムラベル + 相手プレイヤーラベルを解決して give 引数を返す。
+        """1 件の give entry (item_label + target_player_label) を解決する
+        内部 helper。``_resolve_give_item`` (batch-always) が gives 配列の
+        各 entry に対して呼び出す。
 
         - item_label (I1 等): drop と同じく InventoryToolRuntimeTargetDto (kind="inventory_item")
         - target_player_label (P1 等 / 名前): resolve_player_target で player_id を取り出す
@@ -563,15 +558,16 @@ class SpotGraphArgumentResolver:
             args,
         )
 
-    def _resolve_give_items(
+    def _resolve_give_item(
         self,
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
-        """``spot_graph_give_items`` の batch 引数を解決する (PR 5b)。
+        """``give_item`` (batch-always) の gives 配列を各 entry ごとに解決する。
 
-        単発 give_item と同じ解決ロジックを ``gives`` 配列の各 entry に適用し、
-        ``gives_resolved: [{slot_id, target_player_id, ...}, ...]`` に変換する。
+        PR-α (Y_after_pr639_640 後続): 旧 give_item (単発) と give_items (batch)
+        を統合。``give_item`` は常に ``gives: [...]`` を受け取り、単発でも配列で
+        表現される (len=1)。
 
         Partial success 方針: resolve 段階で 1 件失敗しても他は通す。失敗 entry
         は ``{"error_code": "...", "message": "..."}`` で埋めて executor 側に
@@ -584,7 +580,9 @@ class SpotGraphArgumentResolver:
         gives = args.get("gives")
         if not isinstance(gives, list) or not gives:
             raise ToolArgumentResolutionException(
-                "gives は非空の配列で指定してください。",
+                "gives は非空の配列で指定してください。1 件だけ渡す場合も"
+                "配列で包む必要があります (例: gives=[{item_label: ..., "
+                "target_player_label: ...}])。",
                 "INVALID_ARGUMENT",
             )
 
@@ -598,13 +596,10 @@ class SpotGraphArgumentResolver:
                 })
                 continue
             try:
-                # 単発 give_item と同じロジックを使い回すが、entry の値で
-                # 走らせるため一時 args を組み立てる
-                resolved_entry = self._resolve_give_item(
+                resolved_entry = self._resolve_single_give_entry(
                     {
                         "item_label": entry.get("item_label"),
                         "target_player_label": entry.get("target_player_label"),
-                        # inner_thought は give_items 全体で 1 つ持つので空でも問題ない
                         "inner_thought": "",
                     },
                     runtime_context,

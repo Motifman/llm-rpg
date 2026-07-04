@@ -1143,7 +1143,6 @@ class _WorldLlmWiring:
             TOOL_NAME_SPOT_GRAPH_USE_ITEM,
             TOOL_NAME_SPOT_GRAPH_ATTACK,
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-            TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
             TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
@@ -1188,15 +1187,13 @@ class _WorldLlmWiring:
         # executor は (player_id_int, args) -> result の signature。
         # _tool_handlers は (PlayerId, args, runtime_context) -> result なので
         # ラップして adapt する。runtime_context は executor 側で使わない。
-        # PR-E で fail-fast チェックが発見: tool catalog は give_items
-        # (batch 版) を spec として expose し executor 側にも handler があるのに、
-        # 本 targets タプルから漏れていた。結果 LLM が batch を選んでも
-        # UNSUPPORTED_TOOL に化ける silent failure になっていた。
+        # PR-α (Y_after_pr639_640 後続): 旧 give_items は削除、give_item に
+        # batch-always で統合された。旧 PR-E のコメントで触れていた
+        # 「give_items が漏れる silent failure」問題は本 refactor で不要になった。
         targets = (
             TOOL_NAME_SPOT_GRAPH_USE_ITEM,
             TOOL_NAME_SPOT_GRAPH_ATTACK,
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-            TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
             TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
@@ -1215,7 +1212,6 @@ class _WorldLlmWiring:
         resolver_targets = frozenset({
             TOOL_NAME_SPOT_GRAPH_USE_ITEM,
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-            TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
             # attack も resolver 経由で `target_label='大型カニ'` を

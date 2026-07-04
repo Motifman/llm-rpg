@@ -19,7 +19,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-    TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
@@ -61,6 +60,9 @@ logger = logging.getLogger(__name__)
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     ItemTransferException,
     SpotGraphItemTransferService,
+    TargetInventoryFullError,
+    TargetIsSelfError,
+    TargetNotInSameSpotError,
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
@@ -259,7 +261,6 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM: self._drop_item,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM: self._pickup_item,
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM: self._give_item,
-            TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS: self._give_items,
             TOOL_NAME_SPOT_GRAPH_ATTACK: self._attack,
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
@@ -796,9 +797,27 @@ class SpotGraphToolExecutor:
             return exception_result(e)
 
     def _give_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
-        """`spot_graph_give_item`: 同室の別プレイヤーへアイテムを渡す。
+        """``give_item`` (batch-always): 同 tick に複数 give を集約実行する。
 
-        resolver で slot_id / target_player_id まで解決済み。
+        PR-α (Y_after_pr639_640 後続): 旧 give_item (単発) と旧 give_items
+        (batch) を統合。resolver は常に ``gives_resolved: [...]`` を埋めて
+        渡してくる (単発でも length=1 の配列)。
+
+        ``gives_resolved`` の各 entry を順に処理し、結果を 1 行 1 entry の
+        サマリ message に集約する。**partial success**: 一部失敗しても残りは
+        進行し、success フラグは「1 件でも成功したか」で立つ。
+
+        say_inline は **全 give が終わった後** に 1 度だけ発火する
+        (もし一部成功なら整合性のため発火する)。
+
+        エラー処理は domain-specific exception ごとに error_code を分けて
+        LLM が次アクションを取れる形にする (PR-α):
+        - ``TargetIsSelfError`` → GIVE_ITEM_TARGET_IS_SELF
+        - ``TargetNotInSameSpotError`` → GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT
+          (executor 側で相手名 / 現在地名を埋め直す)
+        - ``TargetInventoryFullError`` → GIVE_ITEM_TARGET_INVENTORY_FULL
+        - その他 ``ItemTransferException`` → ITEM_TRANSFER_FAILED
+        バッチのため各 entry の失敗は個別に message に集約する。
         """
         if self._item_transfer_service is None:
             return LlmCommandResultDto(
@@ -807,69 +826,24 @@ class SpotGraphToolExecutor:
                 error_code="NOT_WIRED",
                 remediation=get_remediation("NOT_WIRED"),
             )
-        slot_raw = args.get("slot_id")
-        to_raw = args.get("target_player_id")
-        if slot_raw is None or to_raw is None:
-            return build_invalid_arg_failure(
-                arg_name="slot_id / target_player_id",
-                detail="resolver が引数を埋めませんでした (label 解決失敗の可能性)",
-            )
-        try:
-            slot_int = int(slot_raw)
-            to_int = int(to_raw)
-        except (TypeError, ValueError):
-            return build_invalid_arg_failure(
-                arg_name="slot_id / target_player_id",
-                detail="整数で指定してください",
-            )
-        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-        try:
-            result = self._item_transfer_service.give_item(
-                PlayerId(player_id), PlayerId(to_int), SlotId(slot_int),
-            )
-            self._maybe_emit_say_inline(player_id, args)
-            msg = "; ".join(result.messages) if result.messages else "渡した。"
-            return LlmCommandResultDto(
-                success=True, message=append_inner_thought_to_message(msg, args)
-            )
-        except ItemTransferException as e:
-            return LlmCommandResultDto(
-                success=False,
-                message=f"アイテムを渡せません: {e}",
-                error_code="ITEM_TRANSFER_FAILED",
-                remediation=get_remediation("ITEM_TRANSFER_FAILED"),
-            )
-        except Exception as e:
-            return exception_result(e)
-
-    def _give_items(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
-        """`spot_graph_give_items`: 同 tick に複数 give を集約実行する (PR 5b)。
-
-        ``gives_resolved`` の各 entry を順に処理し、結果を 1 行 1 entry の
-        サマリ message に集約する。partial success: 一部失敗しても残りは
-        進行し、success フラグは「1 件でも成功したか」で立つ。
-
-        say_inline は **全 give が終わった後** に 1 度だけ発火する
-        (もし一部成功なら整合性のため発火する)。
-        """
-        if self._item_transfer_service is None:
-            return LlmCommandResultDto(
-                success=False,
-                message="give_items は本構成で未配線です。",
-                error_code="NOT_WIRED",
-                remediation=get_remediation("NOT_WIRED"),
-            )
         gives_resolved = args.get("gives_resolved")
         if not isinstance(gives_resolved, list) or not gives_resolved:
             return build_invalid_arg_failure(
                 arg_name="gives",
-                detail="resolver が gives_resolved を埋めませんでした (gives 配列が空 / 不正?)",
+                detail="resolver が gives_resolved を埋めませんでした "
+                "(gives 配列が空 / 不正?)。1 件だけの場合も "
+                "gives=[{item_label:..., target_player_label:...}] のように "
+                "配列で渡してください。",
             )
 
         from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
         ok_lines: list[str] = []
         ng_lines: list[str] = []
+        # partial success で最も深刻な (LLM に伝えたい) 失敗 error_code を残す。
+        # 全失敗のとき、success=False の DTO に立てる error_code に使う。
+        first_ng_code: str | None = None
+
         for entry in gives_resolved:
             item_disp = entry.get("item_display_name") or entry.get("item_label") or "?"
             target_disp = (
@@ -880,8 +854,11 @@ class SpotGraphToolExecutor:
             # resolve 段階で失敗していた entry は error_code が埋まっている
             if entry.get("error_code"):
                 ng_lines.append(
-                    f"{item_disp} → {target_disp}: NG ({entry.get('message', '解決失敗')})"
+                    f"{item_disp} → {target_disp}: NG "
+                    f"({entry.get('message', '解決失敗')})"
                 )
+                if first_ng_code is None:
+                    first_ng_code = str(entry.get("error_code"))
                 continue
             try:
                 slot_int = int(entry["slot_id"])
@@ -890,31 +867,66 @@ class SpotGraphToolExecutor:
                 ng_lines.append(
                     f"{item_disp} → {target_disp}: NG (resolver 出力が不正)"
                 )
+                if first_ng_code is None:
+                    first_ng_code = "INVALID_ARGUMENT"
                 continue
             try:
                 self._item_transfer_service.give_item(
                     PlayerId(player_id), PlayerId(to_int), SlotId(slot_int),
                 )
                 ok_lines.append(f"{item_disp} → {target_disp}: OK")
+            except TargetIsSelfError as e:
+                ng_lines.append(
+                    f"{item_disp} → {target_disp}: NG ({e})"
+                )
+                if first_ng_code is None:
+                    first_ng_code = e.error_code
+            except TargetNotInSameSpotError:
+                # domain 層は relative 名前を持たないので、ここで target_disp
+                # を差し込んだ message を組み立て直す (現在地名は wiring 未設定
+                # なので相手名だけ具体化)。
+                msg = (
+                    f"{target_disp} は同じ場所にいません。"
+                    f"travel_to で移動してから再度渡してください。"
+                )
+                ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
+                if first_ng_code is None:
+                    first_ng_code = "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT"
+            except TargetInventoryFullError:
+                msg = (
+                    f"{target_disp} のインベントリが満杯で {item_disp} を"
+                    f"受け取れません。{target_disp} が別のアイテムを drop する"
+                    f"のを待つか、別の相手に渡してください。"
+                )
+                ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
+                if first_ng_code is None:
+                    first_ng_code = "GIVE_ITEM_TARGET_INVENTORY_FULL"
             except ItemTransferException as e:
+                # 未分類の domain error (稀な整合性違反)。ITEM_TRANSFER_FAILED
+                # にフォールバック。
                 ng_lines.append(f"{item_disp} → {target_disp}: NG ({e})")
+                if first_ng_code is None:
+                    first_ng_code = "ITEM_TRANSFER_FAILED"
             except Exception as e:  # noqa: BLE001
                 ng_lines.append(f"{item_disp} → {target_disp}: NG (内部例外: {e})")
+                if first_ng_code is None:
+                    first_ng_code = "ITEM_TRANSFER_FAILED"
 
         # 全失敗の場合は success=False で返し、LLM に「何 1 つ渡せなかった」を明示
         if not ok_lines:
+            code = first_ng_code or "ITEM_TRANSFER_FAILED"
             return LlmCommandResultDto(
                 success=False,
-                message="give_items: 全て失敗\n" + "\n".join(ng_lines),
-                error_code="ITEM_TRANSFER_FAILED",
-                remediation=get_remediation("ITEM_TRANSFER_FAILED"),
+                message="give_item: 全て失敗\n" + "\n".join(ng_lines),
+                error_code=code,
+                remediation=get_remediation(code),
             )
 
         # 1 件でも成功したら success=True とし、say_inline を発火する
         # (受け渡しが少なくとも 1 件成立したので、立ち去り際の一言は自然)
         self._maybe_emit_say_inline(player_id, args)
         parts = ok_lines + ng_lines
-        msg = "give_items 結果:\n" + "\n".join(parts)
+        msg = "give_item 結果:\n" + "\n".join(parts)
         return LlmCommandResultDto(
             success=True,
             message=append_inner_thought_to_message(msg, args),

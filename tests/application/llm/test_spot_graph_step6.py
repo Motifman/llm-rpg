@@ -46,7 +46,7 @@ def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     )
 
 
-def test_get_spot_graph_specs_has_fifteen_tools() -> None:
+def test_get_spot_graph_specs_has_fourteen_tools() -> None:
     """spot_graph 系ツールの数を検証する。
 
     変遷:
@@ -56,12 +56,15 @@ def test_get_spot_graph_specs_has_fifteen_tools() -> None:
     - give 導入: spot_graph_give_item が 1 つ増えて 13
     - PR 5b: spot_graph_give_items (batch) が 1 つ増えて 14
     - Issue #621 Phase 3b: spot_graph_tend_to_player (= 介抱) が 1 つ増えて 15
+    - PR-α (Y_after_pr639_640 後続): give_items を廃止し give_item を
+      batch-always (gives 配列常時) に統合 → 14 に戻る
     """
     specs = get_spot_graph_specs()
-    assert len(specs) == 15
+    assert len(specs) == 14
     names = {s[0].name for s in specs}
     # PR-CC: spot_graph_ prefix 廃止 → bare 名
     # PR-DD: speech_speak → speak
+    # PR-α: give_items 廃止 (give_item に batch 統合)
     assert "travel_to" in names
     assert "set_sub_location" in names
     assert "explore" in names
@@ -71,7 +74,6 @@ def test_get_spot_graph_specs_has_fifteen_tools() -> None:
     assert "drop_item" in names
     assert "pickup_item" in names
     assert "give_item" in names
-    assert "give_items" in names
     assert "wait" in names
     assert "attack" in names
     assert "listen" in names
@@ -80,6 +82,8 @@ def test_get_spot_graph_specs_has_fifteen_tools() -> None:
     # 旧 say / whisper は廃止
     assert "speech_say" not in names
     assert "speech_whisper" not in names
+    # PR-α: give_items は削除
+    assert "give_items" not in names
 
 
 def test_listen_description_excludes_other_player_speech() -> None:

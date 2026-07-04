@@ -48,7 +48,8 @@ _EXPLICIT_TOOL_PHASE: dict[str, IntentPhase] = {
     "drop_item": IntentPhase.INTERACTION,
     "pickup_item": IntentPhase.INTERACTION,
     "give_item": IntentPhase.SOCIAL,
-    "give_items": IntentPhase.SOCIAL,
+    # PR-α (Y_after_pr639_640 後続): 旧 give_items は give_item に統合
+    # (batch-always)。dict の dead entry は残さない。
     "tend_to_player": IntentPhase.SOCIAL,
     "prepare_action": IntentPhase.INTERACTION,
 }

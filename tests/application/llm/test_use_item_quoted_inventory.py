@@ -36,7 +36,6 @@ from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import 
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     DROP_ITEM_DEFINITION,
     GIVE_ITEM_DEFINITION,
-    GIVE_ITEMS_DEFINITION,
     PICKUP_ITEM_DEFINITION,
     USE_ITEM_DEFINITION,
 )
@@ -169,10 +168,10 @@ class TestUseItemDescriptionExplainsQuoteConvention:
         assert "\"" in desc
         assert "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
 
-    def test_give_item_の_item_label_に_クオート規約が含まれる(self) -> None:
-        desc = self._item_label_desc(GIVE_ITEM_DEFINITION)
-        assert "\"" in desc
-        assert "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
+    # PR-α (Y_after_pr639_640 後続): give_item は top-level item_label を
+    # 持たなくなった (gives 配列常時)。「give_item の item_label 規約」は
+    # gives entry の item_label description 側でカバーされる
+    # (test_give_item_の_gives_entry_の_item_label_にも_クオート規約が含まれる)。
 
     def test_pickup_item_の_ground_item_label_に_クオート規約が含まれる(self) -> None:
         desc = PICKUP_ITEM_DEFINITION.parameters["properties"]["ground_item_label"][
@@ -181,8 +180,11 @@ class TestUseItemDescriptionExplainsQuoteConvention:
         assert "\"" in desc
         assert "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
 
-    def test_give_items_の_item_label_要素にも_クオート規約が含まれる(self) -> None:
-        item_label_desc = GIVE_ITEMS_DEFINITION.parameters["properties"]["gives"][
+    def test_give_item_の_gives_entry_の_item_label_にも_クオート規約が含まれる(self) -> None:
+        """PR-α (Y_after_pr639_640 後続): give_item は batch-always
+        (gives: [...]) に統合された。gives 配列内の item_label description
+        にも quote 規約が伝達される。"""
+        item_label_desc = GIVE_ITEM_DEFINITION.parameters["properties"]["gives"][
             "items"
         ]["properties"]["item_label"]["description"]
         assert "\"" in item_label_desc
@@ -201,7 +203,10 @@ class TestDescriptionsAreStatic:
         [
             (USE_ITEM_DEFINITION, "item_label"),
             (DROP_ITEM_DEFINITION, "item_label"),
-            (GIVE_ITEM_DEFINITION, "item_label"),
+            # PR-α: GIVE_ITEM は gives 配列常時になったため top-level に
+            # item_label は無い。gives 配列内の item_label description は
+            # 別テストで static 性を確認する必要は薄い (親 description が
+            # static なら子も追随する構造)
             (PICKUP_ITEM_DEFINITION, "ground_item_label"),
         ],
     )
