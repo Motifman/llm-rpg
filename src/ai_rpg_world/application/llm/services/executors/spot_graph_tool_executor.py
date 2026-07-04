@@ -1269,27 +1269,42 @@ class SpotGraphToolExecutor:
         )
 
     def _wait(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
-        # PR β: wait は exhausted でも実行可 (= 回復の主経路)。block しない。
-        # #471 fix: ここで ``self._svc.simulation.tick()`` を呼んで world tick を
-        # 進めていたが、これは tool 実行中に nested tick advance を起こし
-        # ``_run_post_tick_hooks`` → ``run_scheduled_turns`` → 他プレイヤー LLM
-        # ターン → さらに ``spot_graph_wait`` … の再帰カスケードを生んでいた
-        # (= MAX_WORLD_TICKS 上限を黙ってバイパス)。``do_move`` (#404) と同型
-        # の bug。wait は「今ターンは何もしない」記録だけ残し、tick の進行は
-        # 外側 driver loop に任せる。
+        """``wait`` の実行 (PR-θ5: 経路統合後)。
+
+        旧 runtime_manager._handle_wait と統合。**この経路が唯一の wait 実装**。
+
+        統合方針 (Option B): ``runtime.do_wait`` を呼ぶ薄い wrapper 化。
+        do_wait が `_record_action_result` (subjective 含む) を面倒見る。
+        疲労回復は新経路の付加価値として wrapper 側で残す。
+
+        wait は exhausted でも実行可 (= 回復の主経路)、疲労 block しない。
+        #471 fix: 旧経路が誤って world tick を進めていた再帰カスケード bug は
+        do_wait 実装で解消済み。
+        """
+        if self._runtime is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="wait は本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
         reason = str(args.get("reason", "")).strip()
         try:
+            subjective = extract_subjective_action_fields(args)
+            tick = self._runtime.do_wait(
+                PlayerId(player_id), reason=reason, **subjective
+            )
             # PR β: wait は微回復 (専用 rest tool は作らない設計)。
             self._recover_fatigue_safe(player_id, self.FATIGUE_RECOVERY_WAIT)
             suffix = f"（理由: {reason}）" if reason else ""
-            if self._time_provider is not None:
-                tick_value = self._time_provider.get_current_tick().value
-                base = f"今ターンは行動を控えた: tick={tick_value}{suffix}"
-            else:
-                base = f"今ターンは行動を控えた{suffix}"
-            return LlmCommandResultDto(
-                success=True,
-                message=append_inner_thought_to_message(base, args),
+            base = f"今ターンは行動を控えた: tick={tick}{suffix}"
+            return with_inner_thought_empty_warning(
+                TOOL_NAME_SPOT_GRAPH_WAIT,
+                args,
+                LlmCommandResultDto(
+                    success=True,
+                    message=append_inner_thought_to_message(base, args),
+                ),
             )
         except Exception as e:
             return exception_result(e)
