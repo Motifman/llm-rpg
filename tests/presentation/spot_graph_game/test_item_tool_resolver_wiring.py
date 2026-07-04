@@ -213,15 +213,23 @@ class TestDispatchTableUsesResolver:
             # INVALID_TARGET_LABEL 系の result_dto が返るはず。
             # 旧コードでは INVALID_ARGUMENT (= resolver を skip して executor が
             # 引数欠落で落ちる) になっていた。
-            args = (
-                {"ground_item_label": "G99", "inner_thought": "t"}
-                if tool_name == TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM
-                else {
+            # PR-α (Y_after_pr639_640 後続): give_item は batch-always
+            # (gives: [...]) に統合。単発形式でも配列で渡す。
+            if tool_name == TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM:
+                args = {"ground_item_label": "G99", "inner_thought": "t"}
+            elif tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM:
+                args = {
+                    "gives": [
+                        {"item_label": "I99", "target_player_label": "P99"}
+                    ],
+                    "inner_thought": "t",
+                }
+            else:
+                args = {
                     "item_label": "I99",
                     "target_player_label": "P99",
                     "inner_thought": "t",
                 }
-            )
             ctx = _runtime_context({})
             result = handler(PlayerId(1), args, ctx)
             assert result.success is False

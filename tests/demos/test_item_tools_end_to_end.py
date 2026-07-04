@@ -224,11 +224,17 @@ class TestGiveItemEndToEnd:
             "noah の player label が ada の context に見つからない"
         )
 
+        # PR-α (Y_after_pr639_640 後続): give_item は batch-always に統合。
+        # 単発でも ``gives: [...]`` 配列で渡す (要素数 1)。
         stub = StubLlmClient(tool_call_to_return={
             "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
             "arguments": {
-                "item_label": item_label,
-                "target_player_label": target_player_label,
+                "gives": [
+                    {
+                        "item_label": item_label,
+                        "target_player_label": target_player_label,
+                    },
+                ],
                 "inner_thought": "渡す",
             },
         })

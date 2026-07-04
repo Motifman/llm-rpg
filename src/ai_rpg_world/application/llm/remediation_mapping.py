@@ -63,7 +63,13 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "PURSUIT_START_FAILED": "追跡対象を確認してください (視界内か / 同じスポットか)。",
     "PURSUIT_CANCEL_FAILED": "追跡中の状態を確認してください。既に中断済みの可能性があります。",
     "NOT_WIRED": "本ツールはこの構成では有効になっていません。別の方法を試してください。",
-    "ITEM_TRANSFER_FAILED": "アイテムの drop / pickup に失敗しました。インベントリ・現在地・対象 instance を確認してください。",
+    "ITEM_TRANSFER_FAILED": "アイテムの drop / pickup / give に失敗しました。インベントリ・現在地・対象 instance を確認してください。",
+    # PR-α (Y_after_pr639_640 後続): give_item の domain-specific error に
+    # 対する remediation。LLM が result_summary の「対処:」欄を読んで
+    # 次アクションを選べるよう、具体的な行動を書く。
+    "GIVE_ITEM_TARGET_IS_SELF": "自分自身は指定できません。gives 配列の target_player_label に別のプレイヤー名を指定してください。",
+    "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT": "渡したい相手が同じ場所にいません。travel_to で相手のいる spot へ移動してから、または同じ場所にいる別の相手を選んでから再度渡してください。",
+    "GIVE_ITEM_TARGET_INVENTORY_FULL": "相手のインベントリが満杯で受け取れません。相手が別アイテムを drop するのを待つか、別の相手に渡してください。",
 }
 
 
