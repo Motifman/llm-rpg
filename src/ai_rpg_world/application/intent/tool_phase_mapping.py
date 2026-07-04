@@ -38,6 +38,9 @@ _EXPLICIT_TOOL_PHASE: dict[str, IntentPhase] = {
     "listen": IntentPhase.INTERACTION,
     "say": IntentPhase.SOCIAL,
     "whisper": IntentPhase.SOCIAL,
+    # PR-DD (Y_after_pr639_640): speech_speak → speak にリネームされた
+    # 統合発話 tool。channel 引数で whisper/say/shout を選ぶ。
+    "speak": IntentPhase.SOCIAL,
     # PR-CC: 旧 spot_graph_ prefix 廃止に伴い、spot_graph 系 tool の
     # phase を個別に明示する (prefix loop に依存できないため)。
     "attack": IntentPhase.ATTACK,

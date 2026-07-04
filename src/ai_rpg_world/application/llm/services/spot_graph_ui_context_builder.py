@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ai_rpg_world.application.encounter.contracts.interfaces import (
     IEncounterMemory,
@@ -28,6 +28,9 @@ from ai_rpg_world.application.llm.services._runtime_target_collector import Runt
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphPlayerSnapshotDto,
+)
+from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
+    _render_value,
 )
 from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
     HEALTH_BUCKET_JP,
@@ -169,6 +172,33 @@ def _format_item_type_tag(item_type: str) -> str:
     if not item_type:
         return ""
     return _ITEM_TYPE_DISPLAY.get(item_type, "")
+
+
+def _format_object_state(state: Dict[str, Any]) -> str:
+    """SpotGraphObjectEntry.visible_state を prompt 表示用の tag に整形。
+
+    PR-X (Y_after_pr639_640 後続): 空 dict → 空文字。1 個以上のエントリ
+    があれば `` (key=value, key2=value2)`` の形式で prepend する。
+
+    値の変換は ``spot_graph_current_state_formatter._render_value`` に
+    委譲する (bool→lowercase、None→"null"、その他 primitive→str)。
+    formatter 側の旧 "スポット内オブジェクトの状態:" block と同じ
+    convention を保つことで、LLM が「どちらの format が正しいか」で
+    迷うのを避ける (旧 block は本 PR で削除、この inline 形式に一本化)。
+
+    key の順序: 挿入順 (dict の insertion order)。同一 tick 内では domain
+    側の visible_state() 出力順に依存するため、実質的に安定している。
+
+    例:
+      {}                             → ""
+      {"available": False}           → " (available=false)"
+      {"opened": True, "count": 0}   → " (opened=true, count=0)"
+      {"latch": None}                → " (latch=null)"
+    """
+    if not state:
+        return ""
+    parts: List[str] = [f"{k}={_render_value(v)}" for k, v in state.items()]
+    return f" ({', '.join(parts)})"
 
 
 class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
@@ -435,16 +465,22 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         for i, entry in enumerate(snap.objects):
             label = allocator.next(PREFIX_OBJECT)
             disambiguated_name = disamb[i]
-            interaction_parts: list[str] = []
-            action_names: list[str] = []
-            for inter in entry.interactions:
-                interaction_parts.append(
-                    f"{inter.display_label}(action_name=\"{inter.action_name}\")"
-                )
-                action_names.append(inter.action_name)
-            act_str = " / ".join(interaction_parts) if interaction_parts else "—"
+            # PR-EE (Y_after_pr639_640 後続): action 表示は action_name の
+            # カンマ区切りに簡略化。旧
+            # ``[gather(action_name="gather") / examine(action_name="examine")]``
+            # は冗長で認知負荷が高く、LLM の action 誤発明を招いていた。
+            action_names: list[str] = [inter.action_name for inter in entry.interactions]
+            act_str = f" [{', '.join(action_names)}]" if action_names else ""
             desc_part = f" — {entry.description}" if entry.description else ""
-            lines.append(f"  - {disambiguated_name}{desc_part} [{act_str}]")
+            # PR-X (Y_after_pr639_640 後続): visible state を prompt に露出。
+            # {'available': False} のような state が「使用不可」タグとして
+            # LLM に見え、PRECONDITION_FAILED ループを avoid できる。
+            state_part = _format_object_state(entry.state)
+            # PR-FF (Y_after_pr639_640 後続): object 名を ``""`` で囲む
+            # (PR #639/#640 で導入した quote 規約を全 section に拡張)。
+            lines.append(
+                f"  - \"{disambiguated_name}\"{state_part}{desc_part}{act_str}"
+            )
             collector.add(
                 label,
                 ToolRuntimeTargetDto(
@@ -474,7 +510,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             label = allocator.next(PREFIX_SUB_LOCATION)
             disambiguated_name = disamb[i]
             here = "（現在ここ）" if entry.is_current else ""
-            lines.append(f"  - {disambiguated_name}{here}")
+            # PR-FF: sub_location 名を ``""`` で囲む (quote 規約の拡張)
+            lines.append(f"  - \"{disambiguated_name}\"{here}")
             collector.add(
                 label,
                 ToolRuntimeTargetDto(
@@ -533,7 +570,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 viewer_player_id, entry.display_name or ""
             )
             familiarity_suffix = f" {familiarity}" if familiarity else ""
-            lines.append(f"  - {disambiguated_name}{suffix}{familiarity_suffix}")
+            # PR-FF: 他プレイヤー名を ``""`` で囲む (quote 規約の拡張)。
+            # whisper / give_item / tend_to_player の target_label 系で
+            # 「``""`` 内が渡すべき値」規約を満たす。
+            lines.append(
+                f"  - \"{disambiguated_name}\"{suffix}{familiarity_suffix}"
+            )
             collector.add(
                 label,
                 PlayerToolRuntimeTargetDto(
@@ -583,7 +625,9 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     entry.health_bucket, entry.health_bucket
                 )
                 desc = f"{entry.behavior_label}・{health_label}"
-            lines.append(f"  - {disambiguated_name}（{desc}）")
+            # PR-FF: モンスター名を ``""`` で囲む (attack target_label が
+            # 「``""`` 内が渡すべき値」規約を満たす)。
+            lines.append(f"  - \"{disambiguated_name}\"（{desc}）")
             collector.add(
                 label,
                 MonsterToolRuntimeTargetDto(

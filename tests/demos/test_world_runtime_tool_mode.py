@@ -73,8 +73,9 @@ class TestWorldRuntimeToolMode:
         monkeypatch.setenv("LLM_TOOL_MODE", "pure_spot_graph")
         rt = create_world_runtime(_SCENARIO_PATH)
         names = _tool_names(rt)
-        # Issue #264 後続: SAY/WHISPER を統合した speech_speak に置き換わった。
-        assert "speech_speak" in names
+        # Issue #264: SAY/WHISPER を統合、PR-DD (Y_after_pr639_640 後続) で
+        # speech_speak → speak にリネーム。
+        assert "speak" in names
 
     def test_pure_spot_graph_mode_keeps_core_spot_tools(
         self, monkeypatch: pytest.MonkeyPatch

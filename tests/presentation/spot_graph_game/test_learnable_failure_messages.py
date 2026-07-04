@@ -218,7 +218,7 @@ class TestInvalidWhisperMessage:
         """content 空のとき INVALID_SPEECH_CONTENT を返す (Issue #264 後続: SAY/WHISPER を統合)。"""
         stub_empty = StubLlmClient(
             tool_call_to_return={
-                "name": "speech_speak",
+                "name": "speak",
                 "arguments": {
                     "channel": "whisper",
                     "content": "",
@@ -241,7 +241,7 @@ class TestInvalidWhisperMessage:
         """target_label が解決できないとき、有効な player ラベル候補を提示する。"""
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "speech_speak",
+                "name": "speak",
                 "arguments": {
                     "channel": "whisper",
                     "content": "テストメッセージ",

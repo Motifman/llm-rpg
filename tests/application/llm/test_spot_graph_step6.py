@@ -60,6 +60,8 @@ def test_get_spot_graph_specs_has_fifteen_tools() -> None:
     specs = get_spot_graph_specs()
     assert len(specs) == 15
     names = {s[0].name for s in specs}
+    # PR-CC: spot_graph_ prefix 廃止 → bare 名
+    # PR-DD: speech_speak → speak
     assert "travel_to" in names
     assert "set_sub_location" in names
     assert "explore" in names
@@ -70,12 +72,11 @@ def test_get_spot_graph_specs_has_fifteen_tools() -> None:
     assert "pickup_item" in names
     assert "give_item" in names
     assert "give_items" in names
-    assert "give_item" in names
     assert "wait" in names
     assert "attack" in names
     assert "listen" in names
     assert "tend_to_player" in names
-    assert "speech_speak" in names
+    assert "speak" in names
     # 旧 say / whisper は廃止
     assert "speech_say" not in names
     assert "speech_whisper" not in names
@@ -90,8 +91,8 @@ def test_listen_description_excludes_other_player_speech() -> None:
     desc = listen_def.description
     # 環境音観測である旨を明示
     assert "環境音" in desc
-    # 他プレイヤーの発話 (speech_speak) は対象外
-    assert "speech_speak" in desc
+    # 他プレイヤーの発話 (speak) は対象外
+    assert "speak" in desc
     assert "他プレイヤー" in desc
     assert "聞こえない" in desc
     # 後追いで聞き直すことはできない
@@ -180,11 +181,13 @@ def test_spot_graph_ui_context_builder_adds_labels() -> None:
     base_text = "現在地: 地下室"
     result = SpotGraphUiContextBuilder().build(base_text, dto)
 
-    # PR 6: prompt 上は name 直書き (旧 S1:/OBJ1:/SL1: prefix なし)
-    assert "玄関" in result.current_state_text
-    assert "箱" in result.current_state_text
-    assert "開ける" in result.current_state_text
-    assert "北" in result.current_state_text
+    # PR 6: prompt 上は name 直書き (旧 S1:/OBJ1:/SL1: prefix なし)。
+    # PR-FF / PR-EE (Y_after_pr639_640 後続): 名前は ``""`` で囲み、action は
+    # action_name のカンマ区切り簡略表記 (display_label は非表示) に統一。
+    assert '"玄関"' in result.current_state_text
+    assert '"箱"' in result.current_state_text
+    assert "[open]" in result.current_state_text  # action_name の直接列
+    assert '"北"' in result.current_state_text
     # 旧 label prefix は出さない
     for prefix in ("S1:", "OBJ1:", "SL1:"):
         assert prefix not in result.current_state_text

@@ -65,8 +65,8 @@ class TestNearbyEntityLabeling:
         )
         result = SpotGraphUiContextBuilder().build("base", dto)
         assert "同じ場所にいるプレイヤー:" in result.current_state_text
-        assert "- リン" in result.current_state_text
-        assert "- カイト" in result.current_state_text
+        assert '- "リン"' in result.current_state_text
+        assert '- "カイト"' in result.current_state_text
         # 旧ラベル prefix は出さない
         assert "P1:" not in result.current_state_text
         assert "P2:" not in result.current_state_text
@@ -82,7 +82,7 @@ class TestNearbyEntityLabeling:
         )
         result = SpotGraphUiContextBuilder().build("base", dto)
         # PR 6: ``- プレイヤー(2)`` 形式
-        assert "- プレイヤー(2)" in result.current_state_text
+        assert '- "プレイヤー(2)"' in result.current_state_text
         assert "P1:" not in result.current_state_text
 
 
