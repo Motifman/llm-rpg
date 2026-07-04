@@ -68,10 +68,16 @@ class TestToolNames:
         assert TOOL_NAME_MOVE_TO_DESTINATION.startswith(TOOL_NAME_PREFIX_MOVE)
         assert TOOL_NAME_MOVE_TO_DESTINATION == "move_to_destination"
 
-    def test_speech_has_speech_prefix(self):
-        """Issue #264 後続: 統合された speech tool は speech_ プレフィックス付き。"""
-        assert TOOL_NAME_SPEECH.startswith(TOOL_NAME_PREFIX_SPEECH)
-        assert TOOL_NAME_SPEECH == "speech_speak"
+    def test_speech_tool_name_is_speak(self):
+        """PR-DD (Y_after_pr639_640 後続): 発話 tool 名は ``speak`` に短縮。
+        歴史的経緯:
+        - Issue #264: 旧 SAY / WHISPER 2 tool を統合、``speech_speak`` 命名
+        - PR-DD: ``speech`` と ``speak`` の意味重複を解消し ``speak`` に短縮
+        """
+        assert TOOL_NAME_SPEECH == "speak"
+        # Python 側の PREFIX 定数は歴史的名残 (テーブル入りしていない他所で
+        # 参照される可能性を否定できないため据え置く)
+        assert TOOL_NAME_PREFIX_SPEECH == "speech_"
 
     def test_interact_has_world_prefix(self):
         assert TOOL_NAME_INTERACT_WORLD_OBJECT.startswith(TOOL_NAME_PREFIX_WORLD)

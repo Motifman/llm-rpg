@@ -34,7 +34,7 @@ SAY_INLINE_MAX_LENGTH = 80
 SAY_INLINE_DEFAULT_DESCRIPTION = (
     "立ち去り際 / 受け渡し際に同 spot へ向けて発する短い一言 (任意、80 字以内)。"
     "「ありがとう」「先に行く」のような付随発話用。空文字 / 未指定なら発話しない。"
-    "長い speech が必要な場合は speech_speak を別途使う。"
+    "長い speech が必要な場合は speak tool を別途使う。"
 )
 
 

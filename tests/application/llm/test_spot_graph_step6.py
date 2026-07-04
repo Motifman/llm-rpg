@@ -75,7 +75,7 @@ def test_get_spot_graph_specs_has_fifteen_tools() -> None:
     assert "spot_graph_attack" in names
     assert "spot_graph_listen" in names
     assert "spot_graph_tend_to_player" in names
-    assert "speech_speak" in names
+    assert "speak" in names
     # 旧 say / whisper は廃止
     assert "speech_say" not in names
     assert "speech_whisper" not in names
@@ -90,8 +90,8 @@ def test_listen_description_excludes_other_player_speech() -> None:
     desc = listen_def.description
     # 環境音観測である旨を明示
     assert "環境音" in desc
-    # 他プレイヤーの発話 (speech_speak) は対象外
-    assert "speech_speak" in desc
+    # 他プレイヤーの発話 (speak) は対象外
+    assert "speak" in desc
     assert "他プレイヤー" in desc
     assert "聞こえない" in desc
     # 後追いで聞き直すことはできない

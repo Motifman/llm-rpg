@@ -26,8 +26,14 @@ class TestSuggestClosestToolName:
 
     def test_minor_typo_returns_close_match(self):
         """1-2 文字違いの typo は正しい候補を返す。"""
-        valid = ["speech_speak", "speech_whisper", "spot_graph_travel_to"]
-        assert suggest_closest_tool_name("speech_speech", valid) == "speech_speak"
+        # PR-DD で speech_speak → speak にリネームしたので、fuzzy 対象を
+        # 別 tool の typo に変える。実際に PR #638 直後の run で LLM が
+        # `spot_graph_travrl_to` (l → r 誤打) を発明する可能性を模する。
+        valid = ["spot_graph_travel_to", "spot_graph_explore", "speak"]
+        assert (
+            suggest_closest_tool_name("spot_graph_travrl_to", valid)
+            == "spot_graph_travel_to"
+        )
 
     def test_shortened_name_returns_full_name(self):
         """短縮形 (e.g. ``spot_graph_pickup``) は ``spot_graph_pickup_item`` を返す。"""
@@ -47,12 +53,12 @@ class TestSuggestClosestToolName:
 
     def test_very_short_input_returns_none(self):
         """極端に短い入力 (e.g. ``say``) は cutoff を超える match が無く None。"""
-        valid = ["speech_speak", "speech_whisper"]
+        valid = ["spot_graph_travel_to", "spot_graph_explore"]
         assert suggest_closest_tool_name("say", valid) is None
 
     def test_empty_valid_returns_none(self):
         """valid 一覧が空なら何も提案しない。"""
-        assert suggest_closest_tool_name("speech_speak", []) is None
+        assert suggest_closest_tool_name("speak", []) is None
 
 
 class TestBuildUnsupportedToolMessage:
@@ -60,18 +66,18 @@ class TestBuildUnsupportedToolMessage:
 
     def test_message_contains_typoed_name(self):
         msg = build_unsupported_tool_message(
-            requested="speech_speech",
-            valid_tools=["speech_speak"],
+            requested="spot_graph_travrl_to",
+            valid_tools=["spot_graph_travel_to"],
         )
-        assert "speech_speech" in msg
+        assert "spot_graph_travrl_to" in msg
 
     def test_message_contains_fuzzy_suggestion_when_close(self):
         """近い候補がある時、「もしかして」風のヒントを含む。"""
         msg = build_unsupported_tool_message(
-            requested="speech_speech",
-            valid_tools=["speech_speak", "speech_whisper"],
+            requested="spot_graph_travrl_to",
+            valid_tools=["spot_graph_travel_to", "spot_graph_explore"],
         )
-        assert "speech_speak" in msg
+        assert "spot_graph_travel_to" in msg
         # 日本語の修正ヒントが含まれる
         assert "もしかして" in msg or "did you mean" in msg.lower()
 
@@ -110,7 +116,7 @@ class TestExecuteToolReturnsReschedulableDto:
         pid = state.runtime.get_player_ids()[0]
 
         result = wiring._execute_tool(
-            pid, "speech_speech", {"channel": "say", "content": "test"}, None
+            pid, "spot_graph_travrl_to", {"destination_label": "拠点"}, None
         )
         assert result.success is False
         assert result.error_code == "UNSUPPORTED_TOOL"
@@ -126,12 +132,12 @@ class TestExecuteToolReturnsReschedulableDto:
         pid = state.runtime.get_player_ids()[0]
 
         result = wiring._execute_tool(
-            pid, "speech_speech", {"channel": "say", "content": "test"}, None
+            pid, "spot_graph_travrl_to", {"destination_label": "拠点"}, None
         )
         # message に typoed name は含まれる
-        assert "speech_speech" in result.message
-        # 近い候補 speech_speak がメッセージに含まれる (= fuzzy suggestion)
-        assert "speech_speak" in result.message
+        assert "spot_graph_travrl_to" in result.message
+        # 近い候補 spot_graph_travel_to がメッセージに含まれる (= fuzzy suggestion)
+        assert "spot_graph_travel_to" in result.message
         # valid 一覧も含まれる (= memo_add などが含まれているか確認)
         assert "memo_add" in result.message
 
