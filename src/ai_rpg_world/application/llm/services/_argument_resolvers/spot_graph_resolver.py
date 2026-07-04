@@ -392,12 +392,9 @@ _SPOT_GRAPH_TOOLS = frozenset({
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-    # Y_after_pr639_640_200tick で観測された silent dispatch 抜けを塞ぐ。
-    # resolve_args の後段には ``TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS`` の分岐と
-    # ``_resolve_give_items`` メソッドが実装済だが、入口 gate に無いと
-    # ``None`` が返り、runtime_manager 側で RESOLVER_DISPATCH_MISSING に
-    # 化ける。P4 カイの tick=124/147 で 2 回連続失敗した。
-    TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
+    # PR-BB (Y_after_pr639_640 後続): TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS は
+    # 削除された。PR-W の dispatch bug 修正はもう対象 tool が無いので
+    # 意味を失っているが、gate 網羅性の regression test は残す。
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
 })
 
