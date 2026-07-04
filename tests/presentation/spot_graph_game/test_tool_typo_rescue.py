@@ -198,25 +198,37 @@ class TestExecuteToolReturnsReschedulableDto:
 
 
 class TestInvalidDestinationLabelIsReschedulable:
-    """Player 3 沈黙の副次原因: `_handle_travel_to` で
+    """Player 3 沈黙の副次原因: `travel_to` handler で
     `INVALID_DESTINATION_LABEL` を返すとき、DTO の `should_reschedule` が
     立っていなかった (= `_RESCHEDULE_ERROR_CODES` に enum が居るのに ハンドラ
-    側が `should_reschedule_for_next_tick()` を呼んでいない)。"""
+    側が `should_reschedule_for_next_tick()` を呼んでいない)。
+
+    PR-θ1 (経路統合) 後: 旧 `_handle_travel_to` は削除され、
+    ``_wire_missing_spot_graph_tools`` が SpotGraphToolExecutor._travel_to を
+    resolver adapter (+ tool-specific failure builder) 経由で
+    ``_tool_handlers`` に登録している。resolver 例外時の
+    ``should_reschedule=True`` は ``_build_travel_to_invalid_label_failure``
+    で組み立てられる。"""
 
     def test_invalid_destination_label_dto_has_should_reschedule_true(
         self, monkeypatch, tmp_path
     ):
         from tests.demos.test_world_runtime_dispatch_table import _create_session
         from types import SimpleNamespace
+        from ai_rpg_world.application.llm.tool_constants import (
+            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+        )
 
         state = _create_session(monkeypatch, tmp_path)
         wiring = state.llm_wiring
         pid = state.runtime.get_player_ids()[0]
 
+        # PR-θ1: 統合後は _tool_handlers[travel_to] を呼ぶ。
+        handler = wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_TRAVEL_TO]
         # runtime_context の targets は空。実在しないラベルを送ると
         # ToolArgumentResolutionException → INVALID_DESTINATION_LABEL に化ける。
         runtime_context = SimpleNamespace(targets={})
-        result = wiring._handle_travel_to(
+        result = handler(
             pid, {"destination_label": "存在しない場所"}, runtime_context
         )
         assert result.success is False

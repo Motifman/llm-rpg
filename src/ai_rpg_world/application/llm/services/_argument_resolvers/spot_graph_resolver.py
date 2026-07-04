@@ -413,8 +413,37 @@ def _inner_thought_value(args: Dict[str, Any]) -> str:
 
 
 def _with_inner_thought(base: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
+    """resolver が返す canonical args に、raw args の「保持すべき passthrough
+    キー」を merge する。
+
+    PR-θ1 (経路統合) 修正: 旧 _with_inner_thought は ``inner_thought`` だけを
+    transparent に通していたが、``say_inline`` (立ち去り際の一言) が resolver
+    通過後の args から抜け落ちて執行 executor に届かず 100% silent failure して
+    いた (t=18 の P1 travel_to say_inline が誰にも届かない = 前実験で observation
+    ゼロ)。
+
+    ``give_item`` 経路だけ動いていたのは ``_resolve_give_item`` が明示的に
+    ``"say_inline": args.get(...)`` を追加していたため。全 resolver で
+    重複記述するのは書き漏れリスクが大きいので、共通 helper で自動 passthrough
+    に格上げする。base 側で明示指定されていれば上書きしない (give_item 経路と
+    互換)。
+
+    Note: subjective fields (expected_result / intention / emotion_hint) は
+    現状 tool catalog schema に露出していないので raw args にも含まれない。
+    露出 ON になっても executor 側で ``extract_subjective_action_fields(args)``
+    が raw args から読む契約なので、resolver 通過後の args にも透過する必要が
+    ある。今回同時に passthrough する。
+    """
     out = dict(base)
     out["inner_thought"] = _inner_thought_value(args)
+    for passthrough_key in (
+        "say_inline",
+        "expected_result",
+        "intention",
+        "emotion_hint",
+    ):
+        if passthrough_key in args and passthrough_key not in out:
+            out[passthrough_key] = args[passthrough_key]
     return out
 
 

@@ -172,10 +172,8 @@ class TestInventoryNotFound:
         result = executor._use_item(player_id=1, args={"item_spec_id": 1})
         _assert_learnable_failure(result, "PLAYER_NOT_FOUND")
 
-    def test_travel_to_returns_learnable_on_missing_inventory(self) -> None:
-        executor = _build_executor()
-        executor._player_inventory_repository.find_by_id.return_value = None
-        result = executor._travel_to(
-            player_id=1, args={"destination_spot_id": 5}
-        )
-        _assert_learnable_failure(result, "PLAYER_NOT_FOUND")
+    # PR-θ1 (経路統合) で削除: 旧 test は _travel_to 内の inventory check を
+    # 前提としていたが、統合後の _travel_to は inventory check を持たず
+    # runtime.do_move に委譲する (旧 _handle_travel_to も持っていなかった)。
+    # inventory None は runtime.do_move が空 owned で silent に扱うので、
+    # LLM 向け PLAYER_NOT_FOUND は返らない。この挙動は仕様。
