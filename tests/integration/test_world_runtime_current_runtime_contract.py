@@ -179,15 +179,22 @@ class _LoopGuardSpy:
     def __init__(self, events: list[str]) -> None:
         self.events = events
         self.calls: list[tuple[PlayerId, str, dict]] = []
+        self.last_kwargs: dict = {}
 
     def record_and_check(
         self,
         player_id: PlayerId,
         tool_name: str,
         arguments: dict,
+        **kwargs,
     ) -> None:
+        # PR-AA (Y_after_pr639_640 後続): 新 kwargs (success / error_code /
+        # game_time_label) を受け入れる。spy は kwargs もキャプチャする
+        # (配線テスト: runtime_manager が success/error_code を正しく
+        # 転送しているかの検証用)。
         self.events.append("loop_guard")
         self.calls.append((player_id, tool_name, arguments))
+        self.last_kwargs = kwargs
 
 
 class _ContractRuntime:

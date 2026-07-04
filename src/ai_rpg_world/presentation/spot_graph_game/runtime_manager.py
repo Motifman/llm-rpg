@@ -1622,10 +1622,15 @@ class _WorldLlmWiring:
         # から drain されて LLM に警告が届く。
         if name:
             try:
+                # PR-AA (Y_after_pr639_640 後続): success / error_code を渡して
+                # 「離れた tick に散らばる同一失敗の反復」も検出できるように
+                # する。既存の連続 streak 検出とは独立に動作。
                 self.tool_call_loop_guard.record_and_check(
                     player_id,
                     name,
                     arguments,
+                    success=result.success,
+                    error_code=result.error_code,
                 )
             except Exception:
                 logger.exception("tool_call_loop_guard.record_and_check failed")
