@@ -37,7 +37,7 @@ class TestWorldRuntimeLoopGuardWiring:
         """spot_graph_wait は threshold=3。3 回目で警告が出る。"""
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_wait",
+                "name": "wait",
                 "arguments": {"reason": "考え中"},
             }
         )
@@ -58,7 +58,7 @@ class TestWorldRuntimeLoopGuardWiring:
             f"3 回目の wait で loop_guard 警告が 1 件出るはず. got={warnings}"
         )
         warning = warnings[0]
-        assert warning.output.structured["tool_name"] == "spot_graph_wait"
+        assert warning.output.structured["tool_name"] == "wait"
         assert warning.output.structured["consecutive_count"] == 3
         # observation_category は self_only (該当プレイヤーだけに届く)
         assert warning.output.observation_category == "self_only"
@@ -72,9 +72,9 @@ class TestWorldRuntimeLoopGuardWiring:
         """
         # ターンごとに違う destination を返す stub
         calls = iter([
-            {"name": "spot_graph_travel_to", "arguments": {"destination_label": "閲覧室"}},
-            {"name": "spot_graph_travel_to", "arguments": {"destination_label": "入口広間"}},
-            {"name": "spot_graph_travel_to", "arguments": {"destination_label": "カード目録室"}},
+            {"name": "travel_to", "arguments": {"destination_label": "閲覧室"}},
+            {"name": "travel_to", "arguments": {"destination_label": "入口広間"}},
+            {"name": "travel_to", "arguments": {"destination_label": "カード目録室"}},
         ])
 
         class _MultiCallStub:
@@ -97,7 +97,7 @@ class TestWorldRuntimeLoopGuardWiring:
         """
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_travel_to",
+                "name": "travel_to",
                 "arguments": {"destination_label": "S1"},
             }
         )
@@ -109,7 +109,7 @@ class TestWorldRuntimeLoopGuardWiring:
         assert len(warnings) == 1, (
             f"同一引数の travel_to を 2 回で警告が出るはず. got={warnings}"
         )
-        assert warnings[0].output.structured["tool_name"] == "spot_graph_travel_to"
+        assert warnings[0].output.structured["tool_name"] == "travel_to"
         assert warnings[0].output.structured["consecutive_count"] == 2
 
     def test_loop_guard_warning_is_self_only_and_does_not_leak_to_others(
@@ -119,7 +119,7 @@ class TestWorldRuntimeLoopGuardWiring:
         2 プレイヤー)。"""
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_wait",
+                "name": "wait",
                 "arguments": {"reason": "待機"},
             }
         )

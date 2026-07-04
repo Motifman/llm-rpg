@@ -143,7 +143,7 @@ class TestSystemPromptPastTense:
             occurred_at=t,
             action_summary="待機した",
             result_summary="ok",
-            tool_name="spot_graph_wait",
+            tool_name="wait",
         )
         return build_chunk_encoding_input(PlayerId(1), (), (act,))
 

@@ -22,8 +22,8 @@ class TestValidateToolHandlerConsistency:
         ToolHandlerConsistencyError を投げる。"""
         with pytest.raises(ToolHandlerConsistencyError):
             validate_tool_handler_consistency(
-                exposed_tool_names=["spot_graph_travel_to", "memory_recall_by_handle"],
-                handler_keys=["spot_graph_travel_to"],
+                exposed_tool_names=["travel_to", "memory_recall_by_handle"],
+                handler_keys=["travel_to"],
             )
 
     def test_error_message_lists_missing_tool_names(self):
@@ -32,7 +32,7 @@ class TestValidateToolHandlerConsistency:
         with pytest.raises(ToolHandlerConsistencyError) as exc_info:
             validate_tool_handler_consistency(
                 exposed_tool_names=["memory_recall_by_handle", "fictional_tool"],
-                handler_keys=["spot_graph_travel_to"],
+                handler_keys=["travel_to"],
             )
         message = str(exc_info.value)
         assert "memory_recall_by_handle" in message
@@ -41,11 +41,11 @@ class TestValidateToolHandlerConsistency:
     def test_passes_when_all_exposed_tools_have_handlers(self):
         """spec が handler の部分集合になっていれば例外を投げず返る。"""
         validate_tool_handler_consistency(
-            exposed_tool_names=["spot_graph_travel_to", "memory_recall_by_handle"],
+            exposed_tool_names=["travel_to", "memory_recall_by_handle"],
             handler_keys=[
-                "spot_graph_travel_to",
+                "travel_to",
                 "memory_recall_by_handle",
-                "spot_graph_interact",
+                "interact",
             ],
         )
 
@@ -53,8 +53,8 @@ class TestValidateToolHandlerConsistency:
         """handler だけが存在し spec に出ていない tool は許容する。
         feature flag OFF や aux executor 常駐パターンを潰さないため。"""
         validate_tool_handler_consistency(
-            exposed_tool_names=["spot_graph_travel_to"],
-            handler_keys=["spot_graph_travel_to", "memory_recall_by_handle"],
+            exposed_tool_names=["travel_to"],
+            handler_keys=["travel_to", "memory_recall_by_handle"],
         )
 
     def test_empty_inputs_are_safe(self):
@@ -104,10 +104,10 @@ class TestWorldLlmWiringConsistencyHook:
         無いと ToolHandlerConsistencyError を投げる。"""
         wiring = _StubWiring(
             definitions=[
-                _StubToolDefinition("spot_graph_travel_to"),
+                _StubToolDefinition("travel_to"),
                 _StubToolDefinition("memory_recall_by_handle"),
             ],
-            handlers=["spot_graph_travel_to"],
+            handlers=["travel_to"],
         )
         with pytest.raises(ToolHandlerConsistencyError):
             wiring._validate_tool_handler_consistency()
@@ -116,8 +116,8 @@ class TestWorldLlmWiringConsistencyHook:
         """runtime が見せる tool が全て handler 集合に含まれていれば例外を
         投げない。"""
         wiring = _StubWiring(
-            definitions=[_StubToolDefinition("spot_graph_travel_to")],
-            handlers=["spot_graph_travel_to", "memory_recall_by_handle"],
+            definitions=[_StubToolDefinition("travel_to")],
+            handlers=["travel_to", "memory_recall_by_handle"],
         )
         wiring._validate_tool_handler_consistency()
 

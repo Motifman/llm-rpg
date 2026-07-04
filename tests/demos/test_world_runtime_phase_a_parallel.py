@@ -78,7 +78,7 @@ class TestPhaseAParallelExecution:
 
             def invoke(self, messages, tools, choice, *, metrics_sink=None) -> dict:
                 time.sleep(0.1)
-                return {"name": "spot_graph_wait", "arguments": {"reason": "test"}}
+                return {"name": "wait", "arguments": {"reason": "test"}}
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
         state.llm_wiring.llm_client = _SlowStubLlmClient()

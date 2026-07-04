@@ -268,7 +268,7 @@ class TestSurvivalIslandV2RescueE2E:
         # advance_tick が他 player の heartbeat ターンを schedule することがあるため、
         # 安全な no-op を返す stub に差し替えて crash しないようにする。
         stub.set_tool_call_to_return({
-            "name": "spot_graph_wait",
+            "name": "wait",
             "arguments": {"reason": "待機", "inner_thought": "待つ"},
         })
 

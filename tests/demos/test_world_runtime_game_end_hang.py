@@ -93,7 +93,7 @@ class TestSkipDeadPlayerTurn:
             # messages 内に player_id を含む system prompt があるとは限らないので、
             # 単純に呼び出し回数だけ確認する
             called_pids.append(len(called_pids))
-            return {"name": "spot_graph_wait", "arguments": {"reason": "test"}}
+            return {"name": "wait", "arguments": {"reason": "test"}}
 
         wiring.llm_client = MagicMock()
         wiring.llm_client.invoke.side_effect = _stub_invoke

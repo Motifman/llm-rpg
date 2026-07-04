@@ -109,7 +109,7 @@ def _make_visit_episode(
         game_time_label=None,
         source=EpisodeSource(event_ids=(f"evt-{episode_id}",)),
         location=EpisodeLocation(spot_id=spot_id),
-        action=EpisodeAction(tool_name="spot_graph_travel_to"),
+        action=EpisodeAction(tool_name="travel_to"),
         who=(f"player_{player_id}",),
         what=what,
         why=None,

@@ -47,7 +47,7 @@ class _FakeLlmClient:
                 success=True,
                 error_code=None,
             ))
-        return {"name": "spot_graph_wait", "arguments": {"reason": "test"}}
+        return {"name": "wait", "arguments": {"reason": "test"}}
 
 
 class TestPhaseAMetricsSink:
@@ -111,7 +111,7 @@ class TestPhaseAMetricsSink:
                         prompt_tokens=10, completion_tokens=5,
                         tps=50.0, success=True, error_code=None,
                     ))
-                return {"name": "spot_graph_wait", "arguments": {"reason": "test"}}
+                return {"name": "wait", "arguments": {"reason": "test"}}
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
         state.llm_wiring.llm_client = _TickAdvancingClient(state.runtime)

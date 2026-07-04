@@ -24,32 +24,75 @@ from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
 class TestSuggestClosestToolName:
     """fuzzy match で typo → 正しい tool 名候補を出す。"""
 
-    def test_minor_typo_returns_close_match(self):
-        """1-2 文字違いの typo は正しい候補を返す。"""
-        # PR-DD で speech_speak → speak にリネームしたので、fuzzy 対象を
-        # 別 tool の typo に変える。実際に PR #638 直後の run で LLM が
-        # `spot_graph_travrl_to` (l → r 誤打) を発明する可能性を模する。
-        valid = ["spot_graph_travel_to", "spot_graph_explore", "speak"]
-        assert (
-            suggest_closest_tool_name("spot_graph_travrl_to", valid)
-            == "spot_graph_travel_to"
-        )
+    def test_minor_typo_on_2_segment_bare_names_returns_none(self):
+        """PR-CC + PR-DD 後の bare 2-segment 名では、fuzzy matcher の
+        「first segment 完全一致 + suffix ratio」ゲートを通れないため、
+        1 文字違いの typo は救えない (= None が返る)。
+
+        歴史的経緯: 旧 ``spot_graph_travrl_to`` → ``spot_graph_travel_to``
+        は 4-segment (spot / graph / travrl / to) で先頭 2 segment が
+        共通 → suffix ratio で救えた。bare 化した現在は 2-segment のみで
+        head segment が違えば即除外される。
+
+        重要な typo は
+        ``test_shortened_name_returns_full_name`` (短縮形) と
+        ``test_legacy_prefix_habit_is_rescued`` (旧 prefix 剥がし) で
+        カバーしているため、character-level typo の救済は現状の割り切り。
+        """
+        valid = ["travel_to", "explore", "speak"]
+        # travrl_to → travel_to: first segment (travrl != travel) が一致しないので None
+        assert suggest_closest_tool_name("travrl_to", valid) is None
 
     def test_shortened_name_returns_full_name(self):
-        """短縮形 (e.g. ``spot_graph_pickup``) は ``spot_graph_pickup_item`` を返す。"""
-        valid = ["spot_graph_pickup_item", "spot_graph_drop_item"]
-        assert suggest_closest_tool_name("spot_graph_pickup", valid) == "spot_graph_pickup_item"
+        """短縮形 (e.g. ``pickup``) は ``pickup_item`` を返す。
+
+        PR-CC (Y_after_pr639_640 後続): 旧例は ``spot_graph_pickup`` →
+        ``spot_graph_pickup_item`` だったが、``spot_graph_`` prefix 廃止に
+        伴い bare 短縮形に更新。
+        """
+        valid = ["pickup_item", "drop_item"]
+        assert suggest_closest_tool_name("pickup", valid) == "pickup_item"
+
+    def test_legacy_prefix_habit_is_rescued(self):
+        """PR-CC (Y_after_pr639_640 後続、code-review HIGH 反映): LLM が数 tick
+        の間 旧 ``spot_graph_`` prefix 付きで tool を呼んでくる可能性が高い。
+        prefix を剥がした版でも fuzzy match を試み、bare 名の valid tool
+        に救済する経路を保証する。
+
+        ``suggest_closest_tool_name`` の実装が prefix strip を候補として
+        追加する経路をここで固定する (retrograde regression 対策)。
+        """
+        valid = ["pickup_item", "drop_item", "travel_to"]
+        # LLM の旧習慣 typo → bare 版 pickup_item に救済
+        assert (
+            suggest_closest_tool_name("spot_graph_pickup", valid) == "pickup_item"
+        )
+        # 完全 legacy 名 (spot_graph_interact) も interact に救済される
+        assert (
+            suggest_closest_tool_name("spot_graph_travel_to", valid + ["travel_to"])
+            == "travel_to"
+        )
+
+    def test_legacy_prefix_habit_still_rejects_imaginary_tools(self):
+        """旧 prefix + 存在しない tool 名 (= 想像) は依然として None。
+        rescue 経路は valid にある名前へのみ働く安全網。"""
+        valid = ["explore", "travel_to", "wait"]
+        assert suggest_closest_tool_name("spot_graph_gather", valid) is None
+        assert suggest_closest_tool_name("spot_graph_harvest", valid) is None
 
     def test_imaginary_tool_returns_none(self):
         """LLM が想像で作った tool 名 (近い候補なし) は None を返す。
         prefix segment 一致 + suffix ratio cutoff=0.5 で `gather` / `harvest`
-        のような独立した語は救わない。"""
-        valid = ["spot_graph_explore", "spot_graph_travel_to", "spot_graph_wait"]
-        # spot_graph_gather: prefix `spot_graph` は一致するが suffix
-        # `gather` vs (`explore` / `travel_to` / `wait`) の ratio は全て
-        # 0.5 未満なので None になる (= 想像由来 typo を fuzzy で救わない)。
+        のような独立した語は救わない。
+
+        PR-CC 後: 旧 prefix 剥がし経路が入っても、``spot_graph_gather`` →
+        ``gather`` に剥がした後、valid の bare 名 (explore / travel_to /
+        wait) と 1 segment 目が一致しないため ``common=0`` で候補除外され、
+        None になる (=「想像由来 typo は救わない」性質を維持)。
+        """
+        valid = ["explore", "travel_to", "wait"]
         assert suggest_closest_tool_name("spot_graph_gather", valid) is None
-        assert suggest_closest_tool_name("spot_graph_harvest", valid) is None
+        assert suggest_closest_tool_name("harvest", valid) is None
 
     def test_very_short_input_returns_none(self):
         """極端に短い入力 (e.g. ``say``) は cutoff を超える match が無く None。"""
@@ -86,9 +129,9 @@ class TestBuildUnsupportedToolMessage:
         正しい tool を選び直せるようにする。"""
         msg = build_unsupported_tool_message(
             requested="spot_graph_gather",
-            valid_tools=["spot_graph_explore", "spot_graph_wait", "memo_add"],
+            valid_tools=["explore", "wait", "memo_add"],
         )
-        for valid_name in ("spot_graph_explore", "spot_graph_wait", "memo_add"):
+        for valid_name in ("explore", "wait", "memo_add"):
             assert valid_name in msg
 
 
@@ -115,8 +158,14 @@ class TestExecuteToolReturnsReschedulableDto:
         wiring = state.llm_wiring
         pid = state.runtime.get_player_ids()[0]
 
+        # PR-CC (bare 名化) 後: `spot_graph_travrl_to` は先頭 2 segment
+        # (spot / graph) を PR-CC の legacy prefix strip で剥がしても
+        # `travrl_to` になり、bare `travel_to` とは first segment (travrl
+        # != travel) が一致せず fuzzy match が効かない。代わりに、旧
+        # prefix 剥がしで短縮形 (pickup → pickup_item) にヒットする典型
+        # ケース (LLM の旧習慣) をシミュレートする。
         result = wiring._execute_tool(
-            pid, "spot_graph_travrl_to", {"destination_label": "拠点"}, None
+            pid, "spot_graph_pickup", {"item_label": "野いちご"}, None
         )
         assert result.success is False
         assert result.error_code == "UNSUPPORTED_TOOL"
@@ -131,13 +180,19 @@ class TestExecuteToolReturnsReschedulableDto:
         wiring = state.llm_wiring
         pid = state.runtime.get_player_ids()[0]
 
+        # PR-CC (bare 名化) 後: `spot_graph_travrl_to` は先頭 2 segment
+        # (spot / graph) を PR-CC の legacy prefix strip で剥がしても
+        # `travrl_to` になり、bare `travel_to` とは first segment (travrl
+        # != travel) が一致せず fuzzy match が効かない。代わりに、旧
+        # prefix 剥がしで短縮形 (pickup → pickup_item) にヒットする典型
+        # ケース (LLM の旧習慣) をシミュレートする。
         result = wiring._execute_tool(
-            pid, "spot_graph_travrl_to", {"destination_label": "拠点"}, None
+            pid, "spot_graph_pickup", {"item_label": "野いちご"}, None
         )
         # message に typoed name は含まれる
-        assert "spot_graph_travrl_to" in result.message
-        # 近い候補 spot_graph_travel_to がメッセージに含まれる (= fuzzy suggestion)
-        assert "spot_graph_travel_to" in result.message
+        assert "spot_graph_pickup" in result.message
+        # 旧 prefix 剥がしで pickup_item に fuzzy 救済されている
+        assert "pickup_item" in result.message
         # valid 一覧も含まれる (= memo_add などが含まれているか確認)
         assert "memo_add" in result.message
 

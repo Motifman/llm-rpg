@@ -22,7 +22,7 @@ def _action(
     result_summary: str = "扉は開かなかった",
     success: bool = True,
     error_code: str | None = None,
-    tool_name: str = "spot_graph_interact",
+    tool_name: str = "interact",
 ) -> ActionResultEntry:
     return ActionResultEntry(
         occurred_at=_T0 + timedelta(minutes=minutes),
@@ -75,7 +75,7 @@ class TestBuildPredictionFeedbackText:
         )
         assert "願望ではなく世界への仮説" in text
         assert "- 予測: 扉の仕掛けが分かる" in text
-        assert "tool=spot_graph_interact" in text
+        assert "tool=interact" in text
         assert "success=True" in text
         assert "result=扉は開かなかった" in text
         assert "鍵穴に青い光が見えた" in text

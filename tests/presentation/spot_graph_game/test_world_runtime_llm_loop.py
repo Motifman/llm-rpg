@@ -32,7 +32,7 @@ class _FakeRuntime:
     def get_tool_definitions(self) -> list[ToolDefinitionDto]:
         return [
             ToolDefinitionDto(
-                name="spot_graph_explore",
+                name="explore",
                 description="explore",
                 parameters={"type": "object", "properties": {}, "required": []},
             )
@@ -87,7 +87,7 @@ def test_world_runtime_llm_turn_executes_returned_tool() -> None:
         observation_buffer=runtime._obs_buffer,
         llm_client=StubLlmClient(
             {
-                "name": "spot_graph_explore",
+                "name": "explore",
                 "arguments": {"inner_thought": "足元の砂埃に気をつけながら、部屋の隅々まで見回す。"},
             }
         ),

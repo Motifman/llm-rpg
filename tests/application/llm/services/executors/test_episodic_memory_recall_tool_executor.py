@@ -98,7 +98,7 @@ def _episode(
         game_time_label=None,
         source=EpisodeSource(event_ids=(f"evt-{episode_id}",)),
         location=EpisodeLocation(spot_id=spot_id),
-        action=EpisodeAction(tool_name="spot_graph_travel_to"),
+        action=EpisodeAction(tool_name="travel_to"),
         who=("player_lin",),
         what=what,
         why=None,

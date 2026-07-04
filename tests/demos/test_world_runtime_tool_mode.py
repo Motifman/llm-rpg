@@ -85,11 +85,11 @@ class TestWorldRuntimeToolMode:
         rt = create_world_runtime(_SCENARIO_PATH)
         names = _tool_names(rt)
         for required in (
-            "spot_graph_explore",
-            "spot_graph_travel_to",
-            "spot_graph_interact",
-            "spot_graph_wait",
-            "spot_graph_listen",
+            "explore",
+            "travel_to",
+            "interact",
+            "wait",
+            "listen",
         ):
             assert required in names, f"{required} should be present in pure mode"
 

@@ -192,4 +192,4 @@ class TestListenCarefullyHandlerRegistration:
             item_repository=MagicMock(),
         )
         handlers = executor.get_handlers()
-        assert "spot_graph_listen" in handlers
+        assert "listen" in handlers

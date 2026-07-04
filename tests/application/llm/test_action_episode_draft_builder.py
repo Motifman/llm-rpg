@@ -42,7 +42,7 @@ class TestActionEpisodeDraftBuilderHappyPath:
         res = builder.build(
             player_id=1,
             occurred_at=_utc(2026, 5, 3, 14, 0),
-            tool_name="spot_graph_interact",
+            tool_name="interact",
             canonical_arguments={
                 "intention": "箱の中身を確かめる",
                 "emotion_hint": "caution",
@@ -66,7 +66,7 @@ class TestActionEpisodeDraftBuilderHappyPath:
         ep = builder.build(
             player_id=2,
             occurred_at=_utc(2026, 5, 3, 15, 0),
-            tool_name="spot_graph_interact",
+            tool_name="interact",
             canonical_arguments=None,
             runtime_context=ToolRuntimeContextDto.empty(),
             command_result=LlmCommandResultDto(

@@ -28,7 +28,7 @@ def _make_events() -> list:
             "candidates": [{"episode_id": "ep-1", "recall_text_snippet": "snip"}],
         }},
         {"kind": "action", "tick": 1, "player_id": 1, "payload": {
-            "tool": "spot_graph_explore", "arguments": {"inner_thought": "see around"},
+            "tool": "explore", "arguments": {"inner_thought": "see around"},
         }},
         {"kind": "observation", "tick": 2, "player_id": 1, "payload": {"prose": "hi"}},
         {"kind": "position_change", "tick": 0, "player_id": 1, "payload": {
@@ -138,7 +138,7 @@ class TestTimelineRender:
         """spot_graph_explore action の tool 名が直接 HTML に出る (hover 不要)。"""
         html_text = render_timeline(_make_events(), "test-run")
         # _make_events() の action は tool=spot_graph_explore, inner=see around
-        assert "spot_graph_explore" in html_text
+        assert "explore" in html_text
 
     def test_observation_の_prose_が_セルに直書きされる(self) -> None:
         """OBS の prose 文字列がセル内に表示される。"""

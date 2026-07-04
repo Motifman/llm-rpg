@@ -131,7 +131,7 @@ class TestInvalidTargetLabelMessage:
         """
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_interact",
+                "name": "interact",
                 "arguments": {"object_label": "存在しない架空のオブジェクト_X", "action_name": "電源を入れる"},
             }
         )
@@ -167,7 +167,7 @@ class TestInvalidDestinationLabelMessage:
         """
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_travel_to",
+                "name": "travel_to",
                 "arguments": {"destination_label": "中央廊下"},
             }
         )
@@ -187,7 +187,7 @@ class TestInvalidDestinationLabelMessage:
         列挙する (F1: 学習可能な失敗メッセージ)。"""
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_travel_to",
+                "name": "travel_to",
                 "arguments": {"destination_label": "未定義の謎のスポット"},
             }
         )
@@ -272,7 +272,7 @@ class TestExploreEmptyMessageAugmented:
         """relay_puzzle_demo の制御室 (操作盤あり) で explore → "OBJ1 (操作盤)" を併記。"""
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_explore",
+                "name": "explore",
                 "arguments": {"inner_thought": "周囲を探す"},
             }
         )

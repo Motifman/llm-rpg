@@ -86,16 +86,16 @@ class TestPerPlayer:
     def test_player_別_tool_histogram_と_失敗_error_code_集計(self, em, tmp_path) -> None:
         events = [
             {"kind": "action", "tick": 1, "player_id": 1, "payload": {
-                "tool": "spot_graph_explore", "arguments": {},
+                "tool": "explore", "arguments": {},
             }},
             {"kind": "action_result", "payload": {
-                "tool": "spot_graph_explore", "success": True,
+                "tool": "explore", "success": True,
             }},
             {"kind": "action", "tick": 2, "player_id": 1, "payload": {
-                "tool": "spot_graph_travel_to", "arguments": {},
+                "tool": "travel_to", "arguments": {},
             }},
             {"kind": "action_result", "payload": {
-                "tool": "spot_graph_travel_to", "success": False,
+                "tool": "travel_to", "success": False,
                 "error_code": "INVALID_DESTINATION_LABEL",
             }},
             {"kind": "llm_call", "tick": 1, "player_id": 1, "payload": {}},
@@ -103,7 +103,7 @@ class TestPerPlayer:
         ]
         m = em.compute_metrics(_write_trace(tmp_path, events))
         assert m["per_player"]["P1"]["tool_histogram"] == {
-            "spot_graph_explore": 1, "spot_graph_travel_to": 1,
+            "explore": 1, "travel_to": 1,
         }
         assert m["per_player"]["P1"]["error_code_distribution"] == {
             "INVALID_DESTINATION_LABEL": 1,

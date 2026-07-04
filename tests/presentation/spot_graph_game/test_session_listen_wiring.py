@@ -71,7 +71,7 @@ class TestSessionListenWiring:
         """
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_listen",
+                "name": "listen",
                 "arguments": {"inner_thought": "耳を澄ます"},
             }
         )
@@ -105,7 +105,7 @@ class TestSessionListenWiring:
         """
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_listen",
+                "name": "listen",
                 "arguments": {"inner_thought": "耳を澄ます"},
             }
         )
@@ -129,7 +129,7 @@ class TestSessionListenWiring:
         """
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_listen",
+                "name": "listen",
                 "arguments": {"inner_thought": "耳を澄ます"},
             }
         )
@@ -172,7 +172,7 @@ class TestSessionListenWiring:
         """成功 listen は action_failed 観測を生成しない (success path の確認)。"""
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_listen",
+                "name": "listen",
                 "arguments": {"inner_thought": "耳を澄ます"},
             }
         )

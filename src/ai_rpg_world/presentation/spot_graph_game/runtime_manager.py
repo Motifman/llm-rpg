@@ -167,6 +167,14 @@ def _utcnow_iso() -> str:
 _SUFFIX_RATIO_CUTOFF: float = 0.5
 _SHORTENED_NAME_SCORE: float = 0.95
 
+# PR-CC (Y_after_pr639_640 後続): 旧 ``spot_graph_`` prefix を廃止した後も、
+# LLM は数 tick / 数 turn の間は「習慣」で ``spot_graph_pickup`` のような旧
+# prefix 付き名を投げてくる可能性が高い。fuzzy match は「共通 prefix segment
+# が 1 つ以上」を要求するため、旧 prefix 付き入力は valid (= bare 名) に対して
+# 一切マッチしない。この差を吸収するため、requested の先頭が旧 prefix なら
+# 剥がしたバージョンでも比較を試みる。
+_LEGACY_TOOL_PREFIXES: tuple[str, ...] = ("spot_graph_",)
+
 
 def suggest_closest_tool_name(
     requested: str, valid_tools: Iterable[str]
@@ -194,6 +202,36 @@ def suggest_closest_tool_name(
     if not valid_list:
         return None
 
+    # PR-CC 追加: 旧 prefix 剥がしを試す (bare 名との fuzzy 比較を可能にする)。
+    # 「spot_graph_pickup → pickup_item」のような救済経路。
+    # 元の requested と剥がした版の両方を候補にして、スコアが高い方を選ぶ。
+    candidates_to_try: list[str] = [requested]
+    for legacy in _LEGACY_TOOL_PREFIXES:
+        if requested.startswith(legacy) and len(requested) > len(legacy):
+            candidates_to_try.append(requested[len(legacy):])
+            break
+
+    best: Optional[str] = None
+    best_score: float = 0.0
+    for req_variant in candidates_to_try:
+        variant_best, variant_score = _fuzzy_score_variant(req_variant, valid_list, SequenceMatcher)
+        if variant_score > best_score:
+            best_score = variant_score
+            best = variant_best
+
+    # strict `>` を使う: `harvest` vs `travel_to` が ratio=0.5 で false positive
+    # にならないように、cutoff と等しい match は救わない。`speech_speak`
+    # (= ratio 0.545) は通る。
+    if best_score > _SUFFIX_RATIO_CUTOFF:
+        return best
+    return None
+
+
+def _fuzzy_score_variant(
+    requested: str, valid_list: list[str], SequenceMatcher
+) -> tuple[Optional[str], float]:
+    """1 つの ``requested`` variant について、valid 側から最高スコアを持つ
+    候補を返す。``suggest_closest_tool_name`` の内部ヘルパー。"""
     req_parts = requested.split("_")
     best: Optional[str] = None
     best_score: float = 0.0
@@ -225,13 +263,7 @@ def suggest_closest_tool_name(
         if score > best_score:
             best_score = score
             best = cand
-
-    # strict `>` を使う: `harvest` vs `travel_to` が ratio=0.5 で false positive
-    # にならないように、cutoff と等しい match は救わない。`speech_speak`
-    # (= ratio 0.545) は通る。
-    if best_score > _SUFFIX_RATIO_CUTOFF:
-        return best
-    return None
+    return best, best_score
 
 
 def build_unsupported_tool_message(
