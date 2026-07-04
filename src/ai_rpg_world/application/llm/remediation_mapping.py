@@ -70,6 +70,14 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "GIVE_ITEM_TARGET_IS_SELF": "自分自身は指定できません。gives 配列の target_player_label に別のプレイヤー名を指定してください。",
     "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT": "渡したい相手が同じ場所にいません。travel_to で相手のいる spot へ移動してから、または同じ場所にいる別の相手を選んでから再度渡してください。",
     "GIVE_ITEM_TARGET_INVENTORY_FULL": "相手のインベントリが満杯で受け取れません。相手が別アイテムを drop するのを待つか、別の相手に渡してください。",
+    # PR-γ (Y_after_pr639_640 後続): audit で未登録が発覚した 5 code に
+    # 具体的 remediation を追加。汎用フォールバック文言では LLM が
+    # 次アクションを取れない。
+    "INVALID_STATE": "システムの一時的な整合性違反です。少し tick を進めてから再試行するか、別の tool を選んでください。",
+    "UNSUPPORTED_TOOL": "このツール名は現在の状況では使えません (存在しない / 未配線 / 権限なし)。「利用可能な tool」一覧を確認して別のツールを選んでください。",
+    "ATTACK_FAILED": "攻撃が失敗しました。対象モンスターの状態 (瀕死 / 既に死骸 / 逃走) や自分の HP・武器の有無を再確認してください。逃走 (travel_to) も選択肢です。",
+    "EXHAUSTED": "疲労が限界で、travel_to / attack / interact のような重い行動は実行できません。wait で回復するか、use_item で食事をしてから再挑戦してください。",
+    "INTERACTION_PRECONDITION_FAILED": "対象オブジェクトの現在の状態が action の前提条件を満たしていません (例: 既に取り尽くした / 既に開けた)。『現在の状況』のオブジェクト行にある state タグを確認し、別の対象・別の action_name を検討してください。",
 }
 
 
