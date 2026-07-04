@@ -13,6 +13,10 @@ from ai_rpg_world.application.llm.services.failure_helpers import (
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     append_inner_thought_to_message,
     exception_result,
+    with_inner_thought_empty_warning,
+)
+from ai_rpg_world.application.llm.services.subjective_args import (
+    extract_subjective_action_fields,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
@@ -110,6 +114,16 @@ class SpotGraphToolExecutor:
         attack_orchestrator: Optional[SpotAttackOrchestrator] = None,
         item_transfer_service: Optional["SpotGraphItemTransferService"] = None,
         speech_service: Optional["PlayerSpeechApplicationService"] = None,
+        # PR-θ1 (経路統合): tool 実装が 2 経路に分裂していた問題の解消。
+        # SpotGraphToolExecutor._travel_to を `runtime.do_move` を呼ぶ薄い
+        # wrapper 化することで、既に正しく副作用 (start_travel_to_spot +
+        # _process_graph_events + 同一 spot 短絡 + _record_action_result
+        # の scene_boundary + subjective 記録) が実装されている do_move
+        # を単一の真実源として再利用する。
+        #
+        # 別レイヤーへの依存ではなく application 層内 (WorldRuntime も
+        # application 層) の再利用。runtime 未注入時は NOT_WIRED を返す。
+        runtime: Optional[Any] = None,
     ) -> None:
         if spot_graph_world_services.movement is None:
             raise TypeError("SpotGraphWorldServices.movement が必要です")
@@ -146,6 +160,8 @@ class SpotGraphToolExecutor:
         # ``say_inline`` パラメータ用に speech_service を保持。未注入なら
         # say_inline が指定されても silent (= 短発話だけ無視) で本処理は走る。
         self._speech_service = speech_service
+        # PR-θ1: travel_to 統合用の WorldRuntime 参照。
+        self._runtime = runtime
 
     # PR β (実験 #29 後続): 疲労 ≥100 (exhausted) で実行を block する重い tool 群。
     # tool list を動的に変えると prefix cache を破壊するため、executor 冒頭で
@@ -268,6 +284,27 @@ class SpotGraphToolExecutor:
         }
 
     def _travel_to(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        """``travel_to`` の実行 (PR-θ1: 経路統合後)。
+
+        旧 runtime_manager._handle_travel_to と新 SpotGraphToolExecutor._travel_to
+        の 2 経路に分裂していた実装を統合した。**この経路が唯一の travel_to
+        実装** で、runtime_manager 側の旧 handler は削除された。
+
+        統合方針 (Option B): 既に正しい副作用を全部持っている ``runtime.do_move``
+        (start_travel_to_spot + _process_graph_events + 同一 spot 短絡 +
+        _record_action_result の scene_boundary + subjective 記録) を単一の
+        真実源として再利用し、新経路が付加した価値 (say_inline / 疲労) だけを
+        上乗せする。
+
+        処理順:
+        1. 疲労 100 block (新経路の価値)
+        2. destination_spot_id validation (resolver 後の canonical int)
+        3. runtime.do_move — 移動開始 + graph events + record_action_result
+        4. say_inline emit (新経路の価値、旧経路には無かった)
+        5. 疲労 +1 蓄積 (新経路の価値)
+        6. display_name で成功 message 組立 (旧経路と揃える)
+        7. inner_thought 空警告 (旧経路と揃える)
+        """
         # PR β: 疲労 limit (100) で重い tool は block。
         blocked = self._is_exhausted_and_block(player_id, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO)
         if blocked is not None:
@@ -287,34 +324,52 @@ class SpotGraphToolExecutor:
                 arg_name="destination_spot_id",
                 detail="正の整数を指定してください",
             )
-        try:
-            inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
-            if inv is None:
-                return LlmCommandResultDto(
-                    success=False,
-                    message="インベントリが見つかりません。",
-                    error_code="PLAYER_NOT_FOUND",
-                    remediation=get_remediation("PLAYER_NOT_FOUND"),
-                )
-            owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repository)
-            flags = self._svc.world_flags.as_frozen_set()
-            self._svc.movement.start_travel_to_spot(
-                PlayerId(player_id),
-                SpotId.create(dest),
-                owned,
-                flags,
-            )
-            # 実験 #29 後続: 立ち去り際の一言 (say_inline) を short SAY として
-            # 発火する。失敗しても travel 結果は変えない (silent fail-safe)。
-            self._maybe_emit_say_inline(player_id, args)
-            # PR β: travel は 1 leg = 1 fatigue。実装上ここで合計を厳密に
-            # 計算するのは route の leg 数を取り直す手間があるため、travel
-            # 開始時に +1 だけ蓄積する暫定実装にする。残りは travel_stage が
-            # 各 tick で進める時に補足蓄積するのが理想だが、Phase 1 では簡素化。
-            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_TRAVEL_LEG)
-            base = f"スポット {dest} への移動を開始しました。"
+        # runtime 未注入時 (テスト構成 / minimal wiring) は NOT_WIRED を返す。
+        # 実験 / production 経路は必ず runtime を注入するので実害は無い。
+        if self._runtime is None:
             return LlmCommandResultDto(
-                success=True, message=append_inner_thought_to_message(base, args)
+                success=False,
+                message="travel_to は本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
+        try:
+            destination_str_id = self._runtime.id_mapper.get_str("spot", dest)
+            subjective = extract_subjective_action_fields(args)
+            # do_move が: start_travel_to_spot + _process_graph_events +
+            # 同一 spot 短絡 + _record_action_result (scene_boundary=True) を
+            # 面倒見る。失敗は例外で返り exception_result で LLM 向け error に。
+            self._runtime.do_move(
+                PlayerId(player_id), destination_str_id, **subjective
+            )
+            # 新経路の付加価値: 立ち去り際の一言 (say_inline)。失敗しても
+            # travel 結果は変えない (silent fail-safe)。
+            self._maybe_emit_say_inline(player_id, args)
+            # PR β: travel は 1 leg = 1 fatigue。
+            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_TRAVEL_LEG)
+            # 出力 message は旧 handler と揃えて display_name を使う (LLM /
+            # 観戦者が数字 spot_id より名前で認識できるよう)。runtime.
+            # _spot_graph_repo は既に SpotGraphToolExecutor が
+            # ``self._spot_graph_repository`` として持っている同一 instance
+            # なので、他オブジェクトの private 属性を触らず自分の依存で
+            # 参照する (レビュー指摘 HIGH #1)。
+            display_name: str
+            try:
+                if self._spot_graph_repository is not None:
+                    graph = self._spot_graph_repository.find_graph()
+                    display_name = graph.get_spot(SpotId.create(dest)).name
+                else:
+                    display_name = f"スポット {dest}"
+            except Exception:
+                display_name = f"スポット {dest}"
+            base = f"{display_name}へ移動しました。"
+            return with_inner_thought_empty_warning(
+                TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+                args,
+                LlmCommandResultDto(
+                    success=True,
+                    message=append_inner_thought_to_message(base, args),
+                ),
             )
         except Exception as e:
             return exception_result(e)

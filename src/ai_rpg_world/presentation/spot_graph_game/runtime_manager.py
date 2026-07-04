@@ -1063,7 +1063,10 @@ class _WorldLlmWiring:
             Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto],
         ] = {
             TOOL_NAME_SPOT_GRAPH_EXPLORE: self._handle_explore,
-            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO: self._handle_travel_to,
+            # PR-θ1 (経路統合): TOOL_NAME_SPOT_GRAPH_TRAVEL_TO の登録は削除
+            # した。代わりに _wire_missing_spot_graph_tools が
+            # SpotGraphToolExecutor._travel_to をここに上書き wire する。
+            # 旧 self._handle_travel_to (下方) も削除した。
             TOOL_NAME_SPOT_GRAPH_INTERACT: self._handle_interact,
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._handle_listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._handle_wait,
@@ -1125,10 +1128,21 @@ class _WorldLlmWiring:
         )
         for attr in needed:
             if not hasattr(runtime, attr) or getattr(runtime, attr) is None:
+                # PR-θ1 (経路統合) レビュー HIGH #2: travel_to は本来
+                # runtime.do_move + runtime.id_mapper + runtime._spot_graph_repo
+                # しか要らないが、経路統合で他 tool と同じ needed check の下に
+                # 組み込まれた。従って interaction_service / exploration_service
+                # 等が欠けた test wiring では travel_to まで UNSUPPORTED_TOOL に
+                # 化ける。production wiring (world_runtime.py) では needed が
+                # 必ず全部揃うので顕在化しないが、将来的な軽量 wiring / mock
+                # 構成で travel_to だけが理由不明に消える silent failure リスク
+                # がある。travel_to 独立 wire は経路が再び分裂するので却下、
+                # 本コメントで risk を明示するに留める。
                 logger.warning(
                     "_wire_missing_spot_graph_tools: runtime is missing %s; "
                     "use_item / attack / give_item / pickup_item / drop_item / "
-                    "prepare_action will remain UNSUPPORTED_TOOL.",
+                    "prepare_action / tend_to_player / travel_to will remain "
+                    "UNSUPPORTED_TOOL.",
                     attr,
                 )
                 return
@@ -1181,6 +1195,13 @@ class _WorldLlmWiring:
             time_provider=getattr(runtime, "_time_provider", None),
             # 実験 #29 後続: travel/give/drop/pickup の say_inline 短発話用。
             speech_service=getattr(runtime, "_speech_service", None),
+            # PR-θ1 (経路統合): travel_to を旧 _handle_travel_to から新経路
+            # SpotGraphToolExecutor._travel_to に統合するため runtime を注入。
+            # _travel_to 内部で runtime.do_move を呼んで単一の副作用実装を
+            # 共有する。runtime.do_move は既に start_travel_to_spot +
+            # _process_graph_events + 同一 spot 短絡 + _record_action_result
+            # (scene_boundary + subjective) を面倒見ている。
+            runtime=runtime,
         )
         self._spot_graph_executor = executor
         raw_handlers = executor.get_handlers()
@@ -1198,6 +1219,10 @@ class _WorldLlmWiring:
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
             TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
             TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+            # PR-θ1 (経路統合): travel_to を旧 _handle_travel_to から新経路
+            # SpotGraphToolExecutor._travel_to に統合。以前は 2 経路に分裂して
+            # おり travel_to の say_inline が 100% silent failure していた。
+            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
         )
         # #356 実験 #25 OFF で発覚: use_item / drop_item / give_item /
         # pickup_item は tool catalog 上 ``item_label`` (= I1, I2 など) を
@@ -1225,6 +1250,12 @@ class _WorldLlmWiring:
             # `target_player_label='エイダ'` を `target_player_id` に解決して
             # executor に渡す必要があるため resolver hook が必須。
             TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+            # PR-θ1 (経路統合): travel_to も resolver 経由で
+            # `destination_label='森の広場'` を `destination_spot_id` に解決
+            # する。旧 handler は handler 内で resolve していたが、新経路は
+            # resolver stage で SpotGraphArgumentResolver._resolve_travel_to
+            # (`resolve_destination_target` 同一関数を再利用) が変換する。
+            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
         })
         argument_resolver = SpotGraphArgumentResolver()
         for tool_name in targets:
@@ -1232,11 +1263,25 @@ class _WorldLlmWiring:
             if raw is None:
                 continue
             if tool_name in resolver_targets:
-                self._tool_handlers[tool_name] = (
-                    self._adapt_executor_handler_with_resolver(
-                        raw, tool_name, argument_resolver,
+                # PR-θ1 (経路統合): travel_to は resolver 例外時に「有効な
+                # destination_label 一覧 + should_reschedule」を含む
+                # tool-specific 失敗を組み立てる (旧 _handle_travel_to 相当)。
+                # 他 tool は従来通り generic message で処理。
+                if tool_name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO:
+                    self._tool_handlers[tool_name] = (
+                        self._adapt_executor_handler_with_resolver(
+                            raw, tool_name, argument_resolver,
+                            invalid_label_failure_builder=(
+                                self._build_travel_to_invalid_label_failure
+                            ),
+                        )
                     )
-                )
+                else:
+                    self._tool_handlers[tool_name] = (
+                        self._adapt_executor_handler_with_resolver(
+                            raw, tool_name, argument_resolver,
+                        )
+                    )
             else:
                 self._tool_handlers[tool_name] = self._adapt_executor_handler(raw)
         # Step 1 並列化 review HIGH 1: build_full_prompt が内部で lazy-init する
@@ -1291,6 +1336,42 @@ class _WorldLlmWiring:
         )
 
     @staticmethod
+    def _build_travel_to_invalid_label_failure(
+        runtime_context: Any,
+        arguments: Dict[str, Any],
+        exc: Exception,
+    ) -> LlmCommandResultDto:
+        """PR-θ1 (経路統合): travel_to の resolver 例外を旧 _handle_travel_to
+        相当の tool-specific 失敗 dto に変換する。
+
+        旧 handler は resolver 例外時に:
+        1. 有効な destination_label 一覧 (S1, S2, ...) を含む message
+        2. destination_label 用の remediation
+        3. INVALID_DESTINATION_LABEL 用の reschedule policy を尊重
+
+        の 3 点をやっていた。新経路の resolver adapter は generic message を
+        返すため、これらを再現するために tool-specific builder を用意する。
+        """
+        targets = getattr(runtime_context, "targets", {}) or {}
+        label = str(arguments.get("destination_label", ""))
+        valid_destinations = _list_destination_labels(targets)
+        error_code = getattr(exc, "error_code", "INVALID_DESTINATION_LABEL")
+        return LlmCommandResultDto(
+            success=False,
+            message=(
+                f"移動先が見つかりません: {label}。"
+                f"有効な destination_label: "
+                f"{valid_destinations or '(この場所からの移動先なし)'}"
+            ),
+            error_code=error_code,
+            remediation=(
+                "destination_label には現在の状況に表示された S1, S2 等の "
+                "ラベル、またはスポット名 (例: 閲覧室) を指定してください。"
+            ),
+            should_reschedule=is_reschedulable_error_code(error_code),
+        )
+
+    @staticmethod
     def _adapt_executor_handler(
         raw_handler: Callable[[int, Dict[str, Any]], LlmCommandResultDto],
     ) -> Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto]:
@@ -1308,6 +1389,14 @@ class _WorldLlmWiring:
         raw_handler: Callable[[int, Dict[str, Any]], LlmCommandResultDto],
         tool_name: str,
         argument_resolver: Any,
+        *,
+        # PR-θ1 (経路統合): travel_to の resolver エラー時に旧 handler と同じ
+        # 「有効な destination_label 一覧を含む」 message を組み立てるための
+        # optional builder。渡されない場合は従来通り generic message を使う。
+        # 他 tool (interact / attack 等) 統合時も同じ pattern を再利用できる。
+        invalid_label_failure_builder: Optional[
+            Callable[[Any, Dict[str, Any], Exception], LlmCommandResultDto]
+        ] = None,
     ) -> Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto]:
         """resolver を噛ませた adapter (#356 fix)。
 
@@ -1315,6 +1404,11 @@ class _WorldLlmWiring:
         ``item_spec_id`` / ``slot_id`` / ``item_instance_id`` に変換する。
         resolver が例外 (label 見つからない 等) を投げたら ``LlmCommandResultDto``
         に変換して返す (= LLM に「このラベルは存在しない」と surface する)。
+
+        PR-θ1: ``invalid_label_failure_builder`` が渡された場合、resolver 例外
+        時にそちらを呼び出して tool-specific な失敗 dto を作れる (旧
+        ``_handle_travel_to`` が「有効候補列挙 + should_reschedule」を組み立て
+        ていた挙動を新経路でも再現するための拡張点)。
         """
         from ai_rpg_world.application.llm.services._resolver_helpers import (
             ToolArgumentResolutionException,
@@ -1330,6 +1424,10 @@ class _WorldLlmWiring:
                     tool_name, arguments, runtime_context,
                 )
             except ToolArgumentResolutionException as e:
+                if invalid_label_failure_builder is not None:
+                    return invalid_label_failure_builder(
+                        runtime_context, arguments, e,
+                    )
                 return LlmCommandResultDto(
                     success=False,
                     message=str(e),
@@ -1906,60 +2004,16 @@ class _WorldLlmWiring:
             LlmCommandResultDto(success=True, message=message),
         )
 
-    def _handle_travel_to(
-        self,
-        player_id: PlayerId,
-        arguments: dict[str, Any],
-        runtime_context: Any,
-    ) -> LlmCommandResultDto:
-        # Issue #276 経路二重化解消: 本家 resolver と同じ
-        # ``resolve_destination_target`` で label を解決する。崩れ表現
-        # (連結文字列 / 括弧 / 矢印) の吸収もここに集約される。
-        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
-            resolve_destination_target,
-        )
-        from ai_rpg_world.application.llm.services._resolver_helpers import (
-            ToolArgumentResolutionException,
-        )
-
-        targets = getattr(runtime_context, "targets", {})
-        label = str(arguments.get("destination_label", ""))
-        try:
-            target = resolve_destination_target(label, runtime_context)
-        except ToolArgumentResolutionException as e:
-            valid_destinations = _list_destination_labels(targets)
-            # PR-J: _RESCHEDULE_ERROR_CODES に INVALID_DESTINATION_LABEL が
-            # 含まれているのに、本ハンドラの DTO 構築では should_reschedule
-            # を立て忘れていた。結果として「ラベル未解決失敗 → 次 tick で
-            # 起こされない → 状況が変わるまで silent に沈黙」する Player 3 沈黙
-            # の副次原因になっていた。is_reschedulable_error_code() を経由して
-            # policy 側の SSOT を尊重する。
-            return LlmCommandResultDto(
-                success=False,
-                message=(
-                    f"移動先が見つかりません: {label}。"
-                    f"有効な destination_label: "
-                    f"{valid_destinations or '(この場所からの移動先なし)'}"
-                ),
-                error_code=e.error_code,
-                remediation=(
-                    "destination_label には現在の状況に表示された S1, S2 等の "
-                    "ラベル、またはスポット名 (例: 閲覧室) を指定してください。"
-                ),
-                should_reschedule=is_reschedulable_error_code(e.error_code),
-            )
-        destination_id = self.runtime.id_mapper.get_str("spot", target.spot_id)
-        self.runtime.do_move(
-            player_id, destination_id, **extract_subjective_action_fields(arguments)
-        )
-        return with_inner_thought_empty_warning(
-            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-            arguments,
-            LlmCommandResultDto(
-                success=True,
-                message=f"{target.display_name}へ移動しました。",
-            ),
-        )
+    # PR-θ1 (経路統合): _handle_travel_to は削除。SpotGraphToolExecutor._travel_to
+    # に統合され、そちらが runtime.do_move を呼ぶ薄い wrapper として単一の
+    # travel_to 実装になった。旧 handler の副作用 (label→spot_id resolve /
+    # scene_boundary / subjective / _process_graph_events / display_name
+    # ベースの message / inner_thought 空警告) は全部保持している。
+    #
+    # label→spot_id resolve は SpotGraphArgumentResolver._resolve_travel_to
+    # (旧 handler と同じ ``resolve_destination_target`` 関数を再利用) が
+    # resolver stage で事前に行い、新経路には destination_spot_id (int) が
+    # 届く。resolver_targets に TOOL_NAME_SPOT_GRAPH_TRAVEL_TO を含めた。
 
     def _handle_interact(
         self,
