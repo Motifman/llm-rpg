@@ -1311,9 +1311,19 @@ class SpotGraphToolExecutor:
 
     # Issue #621 Phase 3b: 同 spot に倒れた仲間を介抱して revive する。
     # アイテム (= first_aid) を持っていなくても物理的に起こす経路。
-    # HP 復帰率は Issue #621 spec で 40% に確定。constant として置く
-    # ことで PlayerConfigService への wiring 依存を避ける。
-    TEND_REVIVE_HP_RATE = 0.4
+    #
+    # PR-κ (Y_after_pr651_652 分析後続): 旧値 0.4 (= HP 40/100) だと野犬
+    # 15 ダメ x 3 発で確実に再ダウンし、実 trace で「復帰 → 2 tick 後に再
+    # ダウン」のループが観測された (エイダの t=180-192 で 4 回連続の
+    # revive→再down)。復帰 → LLM の action turn (travel_to など) が挟まる
+    # 前に攻撃で潰される設計不良。
+    #
+    # 対処: HP 回復率を 0.4 → 0.6 に引き上げ。60 HP なら野犬 4 発耐えられ
+    # るので、LLM が 2 tick 以内に travel_to 判断できれば逃げ切れる。加え
+    # て post_hoc observation の prose を強化 (下記 handler 参照) して
+    # 「travel_to で退避せよ」を LLM に届ける。無敵時間 (grace period) の
+    # 本格実装 (StatusEffect 経由の monster attack skip) は別 PR で行う。
+    TEND_REVIVE_HP_RATE = 0.6
 
     def _tend_to_player(
         self, player_id: int, args: Dict[str, Any], runtime_context: Any = None
