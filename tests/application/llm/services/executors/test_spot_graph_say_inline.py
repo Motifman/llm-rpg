@@ -140,3 +140,40 @@ class TestSayInlineToolDef:
         props = PICKUP_ITEM_DEFINITION.parameters["properties"]
         assert "say_inline" in props
         assert "say_inline" not in PICKUP_ITEM_DEFINITION.parameters["required"]
+
+    # PR-ι (say_inline 拡張): interact / attack / use_item / tend_to_player
+    # にも say_inline を追加。物語のコミュニケーションを豊かにするため。
+
+    def test_interact_definition_に_say_inline_が_optional_で含まれる(self) -> None:
+        from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+            INTERACT_DEFINITION,
+        )
+        props = INTERACT_DEFINITION.parameters["properties"]
+        assert "say_inline" in props
+        assert "say_inline" not in INTERACT_DEFINITION.parameters["required"]
+
+    def test_attack_definition_に_say_inline_が_optional_で含まれる(self) -> None:
+        from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+            ATTACK_DEFINITION,
+        )
+        props = ATTACK_DEFINITION.parameters["properties"]
+        assert "say_inline" in props
+        assert "say_inline" not in ATTACK_DEFINITION.parameters["required"]
+
+    def test_use_item_definition_に_say_inline_が_optional_で含まれる(self) -> None:
+        from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+            USE_ITEM_DEFINITION,
+        )
+        props = USE_ITEM_DEFINITION.parameters["properties"]
+        assert "say_inline" in props
+        assert "say_inline" not in USE_ITEM_DEFINITION.parameters["required"]
+
+    def test_tend_to_player_definition_に_say_inline_が_optional_で含まれる(self) -> None:
+        from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+            TEND_TO_PLAYER_DEFINITION,
+        )
+        props = TEND_TO_PLAYER_DEFINITION.parameters["properties"]
+        assert "say_inline" in props
+        assert (
+            "say_inline" not in TEND_TO_PLAYER_DEFINITION.parameters["required"]
+        )
