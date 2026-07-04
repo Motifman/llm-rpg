@@ -113,6 +113,8 @@ INTERACT_DEFINITION = ToolDefinitionDto(
         "利用可能な action_name と現在の object 状態は『現在の状況』section の"
         "各オブジェクト行に出ているので、そこから読み取って渡すこと。"
         "パズル操作の場合は parameters に入力値を指定する。"
+        "物を触りながら同 spot の他者へ短く声をかけたい場合は say_inline に"
+        "一言を書ける。"
     ),
     parameters={
         "type": "object",
@@ -144,6 +146,7 @@ INTERACT_DEFINITION = ToolDefinitionDto(
                 "type": "object",
                 "description": "パズル入力等の追加パラメータ（例: {\"code\": \"1234\"}）。パズルでない操作では省略可。",
             },
+            "say_inline": _SAY,
             "inner_thought": _IT,
         },
         "required": ["object_label", "action_name", "inner_thought"],
@@ -235,7 +238,12 @@ PREPARE_ACTION_DEFINITION = ToolDefinitionDto(
 
 USE_ITEM_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_USE_ITEM,
-    description="所持アイテムを使用する（消耗品のみ）。例: パンを食べて空腹を回復、ポーションを飲んでHP回復。",
+    description=(
+        "所持アイテムを使用する（消耗品のみ）。例: パンを食べて空腹を回復、"
+        "ポーションを飲んでHP回復。"
+        "アイテムを使いながら同 spot の他者へ短く声をかけたい場合は"
+        " say_inline に一言を書ける (例: 「これで少しは持つ」)。"
+    ),
     parameters={
         "type": "object",
         "properties": {
@@ -253,6 +261,7 @@ USE_ITEM_DEFINITION = ToolDefinitionDto(
                     "``#N`` ordinal を含めて指定。"
                 ),
             },
+            "say_inline": _SAY,
             "inner_thought": _IT,
         },
         "required": ["item_label", "inner_thought"],
@@ -437,6 +446,8 @@ ATTACK_DEFINITION = ToolDefinitionDto(
         "攻撃は 1 tick で 1 発 (相手も反撃してくる)。連続被弾で HP を"
         "失うより、``travel_to`` で別の spot へ **逃走** する方が"
         "安全なこともあり、状況で選ぶこと。"
+        "戦闘中に同 spot の仲間へ短く声をかけたい場合は say_inline に"
+        "一言を書ける (例: 「離れろ！」「援護頼む」)。"
     ),
     parameters={
         "type": "object",
@@ -449,6 +460,7 @@ ATTACK_DEFINITION = ToolDefinitionDto(
                     "(例: \"灰色のオオカミ #2\")。"
                 ),
             },
+            "say_inline": _SAY,
             "inner_thought": _IT,
         },
         "required": ["target_label", "inner_thought"],
@@ -461,13 +473,16 @@ TEND_TO_PLAYER_DEFINITION = ToolDefinitionDto(
     description=(
         "同じ場所でダウン状態 (HP 0 で倒れている) の仲間を蘇生させる。"
         "アイテム (救急用品) を持っていなくても、物理的に揺さぶり起こす形で"
-        "蘇生でき、HP は最大値の 40% で復帰する。"
+        "蘇生でき、HP は最大値の 60% で復帰する。"
         "前提: 対象が同じ場所にいて、HP 0 でダウン状態であること。"
         "**疲労や空腹が高いだけ (= まだ立って動ける状態) の相手には使えない。**"
         "「顔色が悪い」「疲れて見える」「介抱したい」と感じても、HP 0 でない限り"
         "この tool は失敗する。"
         "そうした相手にはまず ``speak`` で話しかけるか食料を与えること。"
         "自分自身を蘇生することはできない。"
+        "介抱しながら短く声をかけたい場合は say_inline に一言を書ける "
+        "(例: 「大丈夫か！」「起きろ！」)。同 spot の第三者にも介抱している"
+        "様子が SAY として届くので、他プレイヤーが状況を把握できる。"
     ),
     parameters={
         "type": "object",
@@ -479,6 +494,7 @@ TEND_TO_PLAYER_DEFINITION = ToolDefinitionDto(
                     "``#N`` ordinal を含めて指定。"
                 ),
             },
+            "say_inline": _SAY,
             "inner_thought": inner_thought_property(),
         },
         "required": ["target_player_label", "inner_thought"],

@@ -580,6 +580,9 @@ class SpotGraphToolExecutor:
                 action,
                 **subjective,
             )
+            # PR-ι: interact しながらの一言 (say_inline)。失敗しても親 action
+            # は success 維持 (silent fail-safe)。
+            self._maybe_emit_say_inline(player_id, args)
             # PR β: interact は heavy 行動 (default fatigue_cost = 2)。
             self._apply_fatigue_safe(player_id, self.FATIGUE_COST_INTERACT_DEFAULT)
             msg = "; ".join(result.messages) if result.messages else "完了"
@@ -747,6 +750,8 @@ class SpotGraphToolExecutor:
                     f"{name}を食べてしまった。腐っていた——胃の奥が灼ける。"
                     f"（{damage} ダメージ）"
                 )
+                # PR-ι: 使いながらの一言 (silent fail-safe)
+                self._maybe_emit_say_inline(player_id, args)
                 return LlmCommandResultDto(
                     success=True,
                     message=append_inner_thought_to_message(base, args),
@@ -773,6 +778,8 @@ class SpotGraphToolExecutor:
             base = f"{name}を使用した。"
             if item_instance.item_spec.consume_effect is not None:
                 base += f"（効果が適用された）"
+            # PR-ι: 使いながらの一言 (silent fail-safe)
+            self._maybe_emit_say_inline(player_id, args)
             return LlmCommandResultDto(
                 success=True,
                 message=append_inner_thought_to_message(base, args),
@@ -1199,6 +1206,8 @@ class SpotGraphToolExecutor:
             base = f"{display_name}に {outcome.damage} のダメージを与えた。"
             if outcome.target_incapacitated:
                 base += " 致命傷で倒した。"
+            # PR-ι: 戦闘中の一言 (silent fail-safe)。「離れろ！」等を仲間に伝える。
+            self._maybe_emit_say_inline(player_id, args)
             # PR β: 戦闘は激しい消耗。executed のみ蓄積 (空振り cooldown は除外)。
             self._apply_fatigue_safe(player_id, self.FATIGUE_COST_ATTACK)
             return LlmCommandResultDto(
@@ -1435,6 +1444,11 @@ class SpotGraphToolExecutor:
                 f"{display_name} を介抱して意識を取り戻させた。"
                 f"（HP {target.hp.value}/{target.base_stats.max_hp}）"
             )
+            # PR-ι: 介抱しながらの一言 (「大丈夫か！」「起きろ！」など)。
+            # 同 spot の第三者にも SAY として届くので、他プレイヤーが
+            # 「誰かが介抱している」を耳で認識できる (Q3 の直接解消)。
+            # silent fail-safe: speak が例外を投げても親 action は success 維持。
+            self._maybe_emit_say_inline(player_id, args)
             return LlmCommandResultDto(
                 success=True,
                 message=append_inner_thought_to_message(base, args),
