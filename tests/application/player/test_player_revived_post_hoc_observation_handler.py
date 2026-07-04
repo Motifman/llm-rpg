@@ -129,6 +129,52 @@ class TestMissingDownedAt:
         assert "意識" in output.prose
 
 
+class TestReviveProsePRKappa:
+    """PR-κ: prose に HP 情報と travel_to 誘導が含まれる。
+
+    Y_after_pr651_652 trace で「復帰 → 2 tick 後に再ダウン」ループが観測
+    された対策として、post_hoc observation に (1) 復帰後 HP、(2) 明示的な
+    travel_to 誘導を追記した。復帰した LLM は次 tick でこの prose を読み、
+    危険地帯なら travel_to で退避する判断を促される。
+    """
+
+    def test_prose_に_HP_情報が含まれる(self) -> None:
+        timer = PlayerDeathGraceTimer()
+        timer.register(PlayerId(2), downed_at_tick=10)
+        appender = MagicMock()
+        handler = PlayerRevivedPostHocObservationHandler(
+            grace_timer=timer,
+            observation_appender=appender,
+            current_tick_provider=lambda: 15,
+            caregiver_name_resolver=lambda pid: {1: "ハル"}.get(int(pid)),
+        )
+        handler.handle(
+            _make_event(
+                aggregate_id=2, caregiver_player_id=PlayerId(1),
+                hp_recovered=60, total_hp=60,
+            )
+        )
+        output = appender.append.call_args.kwargs.get("output") or appender.append.call_args.args[1]
+        # HP 60 が prose に含まれる
+        assert "60" in output.prose
+
+    def test_prose_に_travel_to_誘導が含まれる(self) -> None:
+        timer = PlayerDeathGraceTimer()
+        timer.register(PlayerId(2), downed_at_tick=10)
+        appender = MagicMock()
+        handler = PlayerRevivedPostHocObservationHandler(
+            grace_timer=timer,
+            observation_appender=appender,
+            current_tick_provider=lambda: 15,
+            caregiver_name_resolver=lambda pid: "ハル",
+        )
+        handler.handle(_make_event(aggregate_id=2, caregiver_player_id=PlayerId(1)))
+        output = appender.append.call_args.kwargs.get("output") or appender.append.call_args.args[1]
+        # LLM が travel_to を選ぶ動線を明示的に提供する
+        assert "travel_to" in output.prose
+        assert "移動" in output.prose
+
+
 class TestConstructorValidation:
     def test_grace_timer_型_check(self) -> None:
         with pytest.raises(TypeError):
