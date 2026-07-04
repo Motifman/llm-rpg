@@ -962,6 +962,7 @@ class SpotGraphToolExecutor:
                 success=False,
                 message="attack は現在のワイヤリングでは未対応です。",
                 error_code="UNSUPPORTED_TOOL",
+                remediation=get_remediation("UNSUPPORTED_TOOL"),
             )
 
         monster_id_int = args.get("monster_id")
@@ -1056,6 +1057,7 @@ class SpotGraphToolExecutor:
                 success=False,
                 message="listen は現在のワイヤリングでは未対応です。",
                 error_code="UNSUPPORTED_TOOL",
+                remediation=get_remediation("UNSUPPORTED_TOOL"),
             )
         try:
             graph = self._spot_graph_repository.find_graph()
@@ -1142,6 +1144,7 @@ class SpotGraphToolExecutor:
                 success=False,
                 message="tend_to_player は現在のワイヤリングでは未対応です。",
                 error_code="UNSUPPORTED_TOOL",
+                remediation=get_remediation("UNSUPPORTED_TOOL"),
             )
 
         target_player_id_raw = args.get("target_player_id")
