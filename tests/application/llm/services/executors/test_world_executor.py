@@ -238,6 +238,10 @@ class TestWorldToolExecutorAwakened:
         executor_with_skill_tool_service,
         skill_tool_service,
     ):
+        """PR-δ (Y_after_pr639_640 audit) 反映: 英語 exception message は
+        LLM 向け sanitizer で日本語 fallback に置換される。ドメイン層で
+        Japanese な error_code + message を持たせるのが本筋 (future work)、
+        現状は generic SYSTEM_ERROR fallback にする。"""
         skill_tool_service.activate_awakened_mode.side_effect = SkillCommandException(
             "awakened mode is already active"
         )
@@ -248,4 +252,8 @@ class TestWorldToolExecutorAwakened:
         )
 
         assert result.success is False
-        assert "already active" in result.message
+        # PR-δ 後: 英語 "already active" は LLM に漏れず、日本語 fallback
+        # (「システムエラーが発生しました。少し tick を進めて...」) に置換される
+        assert "already active" not in result.message
+        assert "システム" in result.message or "エラー" in result.message
+        assert result.error_code == "SYSTEM_ERROR"

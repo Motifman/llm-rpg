@@ -26,10 +26,15 @@ class TestExceptionResult:
     """exception_result() の振る舞い"""
 
     def test_generic_exception_returns_system_error(self):
+        """PR-δ (Y_after_pr639_640 audit): 純英語 exception は LLM 向け
+        日本語 fallback に置換される (旧: str(e) 直渡し)。error_code は
+        SYSTEM_ERROR に落ちる。"""
         exc = ValueError("invalid value")
         result = exception_result(exc)
         assert result.success is False
-        assert result.message == "invalid value"
+        # PR-δ: 英語 message は LLM に漏らさず日本語 fallback
+        assert "invalid value" not in result.message
+        assert "システム" in result.message or "エラー" in result.message
         assert result.error_code == "SYSTEM_ERROR"
         assert result.remediation is not None
 
