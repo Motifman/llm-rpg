@@ -312,7 +312,7 @@ class TestChunkEpisodeDraftBuilderNounMatcher:
             occurred_at=t0 + timedelta(minutes=1),
             action_summary="examine",
             result_summary="ok",
-            tool_name="spot_graph_interact",
+            tool_name="interact",
         )
         inp = build_chunk_encoding_input(PlayerId(1), (obs,), (act,))
         ep = ChunkEpisodeDraftBuilder().build(inp)
@@ -338,7 +338,7 @@ class TestChunkEpisodeDraftBuilderNounMatcher:
             occurred_at=t0 + timedelta(minutes=1),
             action_summary="examine",
             result_summary="ok",
-            tool_name="spot_graph_interact",
+            tool_name="interact",
         )
         inp = build_chunk_encoding_input(PlayerId(1), (obs,), (act,))
         matcher = _FakeNounMatcher(

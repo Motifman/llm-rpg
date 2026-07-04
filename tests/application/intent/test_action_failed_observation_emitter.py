@@ -47,7 +47,7 @@ class _RecordingTrigger(ILlmTurnTrigger):
 def _make_intent(
     intent_id: int = 1,
     player_id: int = 42,
-    tool_name: str = "spot_graph_travel_to",
+    tool_name: str = "travel_to",
 ) -> Intent:
     return Intent(
         intent_id=IntentId(intent_id),
@@ -97,7 +97,7 @@ class TestActionFailedObservationEmitter:
         """should_reschedule=True の失敗は observation 投入 + turn schedule。"""
         emitter, buffer, trigger = _build_emitter()
         emitter.on_resolution_failure(
-            _make_intent(player_id=7, tool_name="spot_graph_travel_to"),
+            _make_intent(player_id=7, tool_name="travel_to"),
             LlmCommandResultDto(
                 success=False,
                 message="移動先が見つかりません",
@@ -110,7 +110,7 @@ class TestActionFailedObservationEmitter:
         assert len(observations) == 1
         structured = observations[0].output.structured
         assert structured["type"] == "action_failed"
-        assert structured["tool_name"] == "spot_graph_travel_to"
+        assert structured["tool_name"] == "travel_to"
         assert structured["error_code"] == "INVALID_DESTINATION_LABEL"
         assert observations[0].output.schedules_turn is True
         assert trigger.scheduled == [7]

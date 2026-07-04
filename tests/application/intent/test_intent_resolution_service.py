@@ -52,10 +52,10 @@ class TestSubmitAndResolveImmediately:
             captured["args"] = dict(args)
             return LlmCommandResultDto(success=True, message="ok")
 
-        service, queue, _ = _build({"spot_graph_travel_to": handler})
+        service, queue, _ = _build({"travel_to": handler})
         result = service.submit_and_resolve_immediately(
             player_id=42,
-            tool_name="spot_graph_travel_to",
+            tool_name="travel_to",
             arguments={"destination_label": "B"},
         )
 

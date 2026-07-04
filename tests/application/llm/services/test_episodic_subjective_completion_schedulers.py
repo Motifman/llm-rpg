@@ -88,7 +88,7 @@ def _build_encoding_and_draft(*, player_id: int = 7) -> tuple:
         occurred_at=t,
         action_summary="待機した",
         result_summary="時間が進んだ",
-        tool_name="spot_graph_wait",
+        tool_name="wait",
         success=True,
     )
     enc = build_chunk_encoding_input(PlayerId(player_id), (), (act,))
@@ -443,7 +443,7 @@ class TestThreadPoolScheduler:
                 occurred_at=t,
                 action_summary=f"act_{i}",
                 result_summary="r",
-                tool_name="spot_graph_wait",
+                tool_name="wait",
                 success=True,
             )
             enc_i = build_chunk_encoding_input(PlayerId(99), (), (act,))

@@ -45,7 +45,7 @@ def _make_runtime(tick: int = 5) -> MagicMock:
 class TestToolNamesRecorded:
     def test_tool_names_を_渡すと_trace_event_に_乗る(self) -> None:
         recorder = MagicMock()
-        tool_names = ["spot_graph_explore", "speech_speak", "spot_graph_tend_to_player"]
+        tool_names = ["explore", "speech_speak", "tend_to_player"]
         sink = _LlmMetricsTraceSink(
             trace_recorder=recorder,
             runtime=_make_runtime(),

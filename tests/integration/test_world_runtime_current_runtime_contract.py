@@ -297,7 +297,7 @@ def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
     assert "【関連する学び】" not in user
     assert "visible_tile_map" not in user
     assert "current_terrain_type" not in user
-    assert "spot_graph_travel_to" in tool_names
+    assert "travel_to" in tool_names
     assert "memory_recall_episodes" not in tool_names
     assert runtime._episodic_stack is None
 

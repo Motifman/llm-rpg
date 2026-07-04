@@ -21,7 +21,7 @@ def _build_intent(
     *,
     intent_id: int = 1,
     player_id: int = 100,
-    tool_name: str = "spot_graph_travel_to",
+    tool_name: str = "travel_to",
     arguments: dict | None = None,
     phase: IntentPhase = IntentPhase.MOVEMENT,
     submitted_tick: int = 5,

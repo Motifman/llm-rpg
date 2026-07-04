@@ -20,7 +20,7 @@ def _minimal_episode(**overrides):
         game_time_label="Day 3 · noon",
         source=EpisodeSource(event_ids=("action_evt_42",)),
         location=EpisodeLocation(spot_id=12, tile_area_ids=(3, 4), sub_location_id=9),
-        action=EpisodeAction(tool_name="spot_graph_interact", canonical_arguments_text='{"target": 1}'),
+        action=EpisodeAction(tool_name="interact", canonical_arguments_text='{"target": 1}'),
         who=("entity:alice", "player:self"),
         what="古い箱を調べた",
         why="罠の有無を確認するため",

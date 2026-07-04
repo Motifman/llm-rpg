@@ -61,7 +61,7 @@ class TestWorldRuntimeTravelBySpotName:
         # 隣接スポットの 1 つ。
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_travel_to",
+                "name": "travel_to",
                 "arguments": {"destination_label": "閲覧室"},
             }
         )
@@ -81,7 +81,7 @@ class TestWorldRuntimeTravelBySpotName:
         # 入口広間からの隣接スポットの先頭 (S1) を指定する
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_travel_to",
+                "name": "travel_to",
                 "arguments": {"destination_label": "S1"},
             }
         )
@@ -100,7 +100,7 @@ class TestWorldRuntimeTravelBySpotName:
         を返し、有効候補を message に列挙する (F1 学習可能性)。"""
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_travel_to",
+                "name": "travel_to",
                 "arguments": {"destination_label": "存在しない神秘の部屋"},
             }
         )

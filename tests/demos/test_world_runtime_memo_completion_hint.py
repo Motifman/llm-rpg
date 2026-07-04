@@ -51,7 +51,7 @@ class TestWorldRuntimeMemoCompletionHint:
         # 次に閲覧室 (spawn の隣接スポット) へ travel_to する
         state.llm_wiring.llm_client = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_travel_to",
+                "name": "travel_to",
                 "arguments": {"destination_label": "閲覧室"},
             }
         )
@@ -98,7 +98,7 @@ class TestWorldRuntimeMemoCompletionHint:
         # 全く別のスポットへ移動
         state.llm_wiring.llm_client = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_travel_to",
+                "name": "travel_to",
                 "arguments": {"destination_label": "閲覧室"},
             }
         )

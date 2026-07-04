@@ -201,7 +201,7 @@ class TestJsonlTraceRecorderCloseRaceWithAsyncScheduler:
             occurred_at=datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc),
             action_summary="待機",
             result_summary="ok",
-            tool_name="spot_graph_wait",
+            tool_name="wait",
         )
         enc = build_chunk_encoding_input(PlayerId(1), (), (act,))
         draft = ChunkEpisodeDraftBuilder().build(enc)

@@ -57,7 +57,7 @@ class TestWithSubjectiveActionSchema:
 
     def _world_tool(self) -> ToolDefinitionDto:
         return ToolDefinitionDto(
-            name="spot_graph_interact",
+            name="interact",
             description="何かに作用する",
             parameters={"type": "object", "properties": {}, "required": []},
             category=ToolCategory.WORLD_ACTION,
@@ -82,7 +82,7 @@ class TestWithExpectedResultSchema:
 
     def _world_tool(self) -> ToolDefinitionDto:
         return ToolDefinitionDto(
-            name="spot_graph_interact",
+            name="interact",
             description="何かに作用する",
             parameters={
                 "type": "object",

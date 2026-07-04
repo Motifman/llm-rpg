@@ -36,14 +36,14 @@ class TestEpisodicCueDeterminism:
         res_ok = LlmCommandResultDto(success=True, message="ok")
 
         a = build_episodic_cues_for_tool_turn(
-            tool_name="spot_graph_interact",
+            tool_name="interact",
             canonical_arguments=args,
             runtime_context=rt,
             command_result=res_ok,
             observation_structured=obs,
         )
         b = build_episodic_cues_for_tool_turn(
-            tool_name="spot_graph_interact",
+            tool_name="interact",
             canonical_arguments=args,
             runtime_context=rt,
             command_result=res_ok,
@@ -185,7 +185,7 @@ class TestUnknownAndNoneIgnored:
         の手がかりに値するので両方 cue 化する (dedupe は呼出側で行われる)。
         """
         cues = build_episodic_cues_for_tool_turn(
-            tool_name="spot_graph_travel_to",
+            tool_name="travel_to",
             canonical_arguments=None,
             runtime_context=ToolRuntimeContextDto.empty(),
             command_result=LlmCommandResultDto(success=True, message=""),

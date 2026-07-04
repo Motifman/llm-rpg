@@ -60,21 +60,21 @@ def test_get_spot_graph_specs_has_fifteen_tools() -> None:
     specs = get_spot_graph_specs()
     assert len(specs) == 15
     names = {s[0].name for s in specs}
-    assert "spot_graph_travel_to" in names
-    assert "spot_graph_set_sub_location" in names
-    assert "spot_graph_explore" in names
-    assert "spot_graph_interact" in names
-    assert "spot_graph_prepare_action" in names
-    assert "spot_graph_use_item" in names
-    assert "spot_graph_drop_item" in names
-    assert "spot_graph_pickup_item" in names
-    assert "spot_graph_give_item" in names
-    assert "spot_graph_give_items" in names
-    assert "spot_graph_give_item" in names
-    assert "spot_graph_wait" in names
-    assert "spot_graph_attack" in names
-    assert "spot_graph_listen" in names
-    assert "spot_graph_tend_to_player" in names
+    assert "travel_to" in names
+    assert "set_sub_location" in names
+    assert "explore" in names
+    assert "interact" in names
+    assert "prepare_action" in names
+    assert "use_item" in names
+    assert "drop_item" in names
+    assert "pickup_item" in names
+    assert "give_item" in names
+    assert "give_items" in names
+    assert "give_item" in names
+    assert "wait" in names
+    assert "attack" in names
+    assert "listen" in names
+    assert "tend_to_player" in names
     assert "speech_speak" in names
     # 旧 say / whisper は廃止
     assert "speech_say" not in names
@@ -86,7 +86,7 @@ def test_listen_description_excludes_other_player_speech() -> None:
     していたため、description に『他プレイヤーの発話は対象外』と『聞き直しは
     できない』を明示する。"""
     specs = get_spot_graph_specs()
-    listen_def = next(d for d, _ in specs if d.name == "spot_graph_listen")
+    listen_def = next(d for d, _ in specs if d.name == "listen")
     desc = listen_def.description
     # 環境音観測である旨を明示
     assert "環境音" in desc

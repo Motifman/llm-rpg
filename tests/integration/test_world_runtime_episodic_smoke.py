@@ -176,9 +176,13 @@ class TestSmokeWriteSide:
         assert "action:unknown_tool" not in all_cues_canonical, (
             f"episode cue に unknown_tool が混入: {all_cues_canonical}"
         )
-        # 期待: spot_graph_wait などの実 tool 名が action 軸に乗っている
+        # 期待: wait / travel_to などの実 tool 名が action 軸に乗っている。
+        # PR-CC (Y_after_pr639_640 後続): spot_graph_ prefix 廃止で、
+        # cue は ``action:wait`` / ``action:travel_to`` の形式になる。
+        expected_tools = {"wait", "travel_to", "interact", "explore", "listen"}
         assert any(
-            c.startswith("action:spot_graph_") for c in all_cues_canonical
+            c.startswith("action:") and c.split(":", 1)[1] in expected_tools
+            for c in all_cues_canonical
         ), f"action: 軸の tool name cue が立っていない: {all_cues_canonical}"
 
 
@@ -259,7 +263,7 @@ class TestSmokeRecallSide:
             game_time_label=None,
             source=EpisodeSource(event_ids=("evt-smoke",)),
             location=EpisodeLocation(spot_id=shelf_a_spot_id),
-            action=EpisodeAction(tool_name="spot_graph_travel_to"),
+            action=EpisodeAction(tool_name="travel_to"),
             who=("player_lin",),
             what="書架 A で『水』の断片語を見つけた",
             why=None,
@@ -405,7 +409,7 @@ class TestSmokeMemoryRecallTool:
                 game_time_label=None,
                 source=EpisodeSource(event_ids=("evt-recall-tool",)),
                 location=EpisodeLocation(spot_id=shelf_a_spot_id),
-                action=EpisodeAction(tool_name="spot_graph_travel_to"),
+                action=EpisodeAction(tool_name="travel_to"),
                 who=("player_lin",),
                 what="書架Aで断片語を見つけた",
                 why=None,

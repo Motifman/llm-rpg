@@ -23,7 +23,17 @@ TOOL_NAME_PREFIX_SNS = "sns_"
 TOOL_NAME_PREFIX_TODO = "todo_"
 TOOL_NAME_PREFIX_MEMO = "memo_"
 TOOL_NAME_PREFIX_MEMORY = "memory_"
-TOOL_NAME_PREFIX_SPOT_GRAPH = "spot_graph_"
+# PR-CC (Y_after_pr639_640 後続): spot_graph_ prefix を廃止し、bare 名で
+# 露出する。理由:
+# - LLM は spot_graph mode / tile_map mode 排他なので、mode ごとに露出する
+#   tool set が既に決まっている。prefix で「これは spot_graph 系」と分ける
+#   必要がない
+# - LLM prompt に 13 tools × ~10 char prefix = ~130 char/prompt を毎回
+#   注ぎ込んでいた無駄を削減 (勘定は tool_names 配列文字列)
+# - "harvest" のような hallucinate 誤発明も抑制できる
+# Python の定数名 (TOOL_NAME_SPOT_GRAPH_* / TOOL_NAME_PREFIX_SPOT_GRAPH)
+# は grep 継続性のため据え置く。値だけ空文字にする。
+TOOL_NAME_PREFIX_SPOT_GRAPH = ""
 
 # プレフィックス一覧（ドキュメント・バリデーション用）。順序は表示に影響しない。
 TOOL_NAME_PREFIXES: List[str] = [

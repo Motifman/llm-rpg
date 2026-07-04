@@ -69,7 +69,7 @@ class TestFailureObserverHook:
             )
 
         service = IntentResolutionService(
-            handler_map={"spot_graph_travel_to": handler},
+            handler_map={"travel_to": handler},
             intent_queue=IntentQueue(),
             intent_id_generator=IntentIdGenerator(),
             tick_provider=lambda: WorldTick(1),
@@ -77,12 +77,12 @@ class TestFailureObserverHook:
         )
 
         service.submit_and_resolve_immediately(
-            player_id=5, tool_name="spot_graph_travel_to", arguments={}
+            player_id=5, tool_name="travel_to", arguments={}
         )
 
         assert len(captured) == 1
         intent, dto = captured[0]
-        assert intent.tool_name == "spot_graph_travel_to"
+        assert intent.tool_name == "travel_to"
         assert dto.error_code == "INVALID_DESTINATION_LABEL"
 
     def test_observer_not_called_on_success(self) -> None:
@@ -168,7 +168,7 @@ class TestEndToEndWithActionFailedEmitter:
             )
 
         service = IntentResolutionService(
-            handler_map={"spot_graph_interact": handler},
+            handler_map={"interact": handler},
             intent_queue=IntentQueue(),
             intent_id_generator=IntentIdGenerator(),
             tick_provider=lambda: WorldTick(1),
@@ -177,7 +177,7 @@ class TestEndToEndWithActionFailedEmitter:
 
         service.submit_and_resolve_immediately(
             player_id=11,
-            tool_name="spot_graph_interact",
+            tool_name="interact",
             arguments={"object_label": "ghost"},
         )
 

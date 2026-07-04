@@ -93,7 +93,7 @@ class TestSessionActionFailedWiring:
         """spot_graph_travel_to に未知ラベルを指定した失敗が観測になる。"""
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_travel_to",
+                "name": "travel_to",
                 "arguments": {"destination_label": "存在しない扉"},
             }
         )
@@ -113,7 +113,7 @@ class TestSessionActionFailedWiring:
         assert len(observed) == 1
         structured = observed[0].output.structured
         assert structured["error_code"] == "INVALID_DESTINATION_LABEL"
-        assert structured["tool_name"] == "spot_graph_travel_to"
+        assert structured["tool_name"] == "travel_to"
         assert "intent_id" in structured
 
     def test_other_player_does_not_receive_action_failed_observation(
@@ -136,7 +136,7 @@ class TestSessionActionFailedWiring:
 
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_travel_to",
+                "name": "travel_to",
                 "arguments": {"destination_label": "存在しない扉"},
             }
         )
@@ -207,7 +207,7 @@ class TestSessionActionFailedWiring:
         # success=True、message="新しい発見はなかった")
         stub = StubLlmClient(
             tool_call_to_return={
-                "name": "spot_graph_explore",
+                "name": "explore",
                 "arguments": {},
             }
         )

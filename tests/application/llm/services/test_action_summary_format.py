@@ -30,7 +30,7 @@ class TestFormatActionSummaryForDisplay:
 
     def test_hides_subjective_noise_keeps_inner_thought_and_outcome_args(self) -> None:
         """intention/expected_result/emotion_hint は出ず、inner_thought と outcome は残る。"""
-        out = format_action_summary_for_display("spot_graph_interact", _FULL_ARGS)
+        out = format_action_summary_for_display("interact", _FULL_ARGS)
         assert "object_label" in out
         assert "OBJ1" in out
         assert "action_name" in out
@@ -58,14 +58,14 @@ class TestFormatActionSummaryForDisplay:
         wait の result_summary 側に「理由: ...」が残るので情報は消えにくい。
         将来 outcome-affecting な reason が出たら再検討する。
         """
-        out = format_action_summary_for_display("spot_graph_wait", {"reason": "様子を見る"})
-        assert out == "spot_graph_wait を実行しました。"
+        out = format_action_summary_for_display("wait", {"reason": "様子を見る"})
+        assert out == "wait を実行しました。"
 
     def test_no_args_returns_bare_summary(self) -> None:
         """args が空なら tool 名だけ。"""
         assert (
-            format_action_summary_for_display("spot_graph_wait", None)
-            == "spot_graph_wait を実行しました。"
+            format_action_summary_for_display("wait", None)
+            == "wait を実行しました。"
         )
 
     def test_only_subjective_args_collapses_to_bare_summary(self) -> None:
@@ -78,7 +78,7 @@ class TestFormatActionSummaryForDisplay:
     def test_does_not_mutate_input_args(self) -> None:
         """入力 args を破壊しない (sanitizer は新 dict を作る / immutable)。"""
         args = dict(_FULL_ARGS)
-        format_action_summary_for_display("spot_graph_interact", args)
+        format_action_summary_for_display("interact", args)
         assert args == _FULL_ARGS
 
     def test_fingerprint_is_independent_of_display(self) -> None:
