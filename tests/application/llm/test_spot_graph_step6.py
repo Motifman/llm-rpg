@@ -180,11 +180,13 @@ def test_spot_graph_ui_context_builder_adds_labels() -> None:
     base_text = "現在地: 地下室"
     result = SpotGraphUiContextBuilder().build(base_text, dto)
 
-    # PR 6: prompt 上は name 直書き (旧 S1:/OBJ1:/SL1: prefix なし)
-    assert "玄関" in result.current_state_text
-    assert "箱" in result.current_state_text
-    assert "開ける" in result.current_state_text
-    assert "北" in result.current_state_text
+    # PR 6: prompt 上は name 直書き (旧 S1:/OBJ1:/SL1: prefix なし)。
+    # PR-FF / PR-EE (Y_after_pr639_640 後続): 名前は ``""`` で囲み、action は
+    # action_name のカンマ区切り簡略表記 (display_label は非表示) に統一。
+    assert '"玄関"' in result.current_state_text
+    assert '"箱"' in result.current_state_text
+    assert "[open]" in result.current_state_text  # action_name の直接列
+    assert '"北"' in result.current_state_text
     # 旧 label prefix は出さない
     for prefix in ("S1:", "OBJ1:", "SL1:"):
         assert prefix not in result.current_state_text

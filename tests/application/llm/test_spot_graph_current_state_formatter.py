@@ -88,8 +88,12 @@ class TestPlayerStateSection:
 class TestObjectStateSection:
     """スポット内オブジェクトの state セクションの表示。"""
 
-    def test_renders_object_state_when_present(self) -> None:
-        """obj.state がある object は「スポット内オブジェクトの状態」セクションに出る。"""
+    def test_旧_スポット内オブジェクトの状態_block_は_出力されない(self) -> None:
+        """PR-X (Y_after_pr639_640 後続): object の state は
+        SpotGraphUiContextBuilder._build_object_section が「オブジェクト:」
+        section 内 inline (``(key=value)``) で表示する方針に統一。
+        formatter の旧 block は削除された (重複と format 揺れを避けるため)。
+        """
         snap = _empty_snap(
             objects=(
                 SpotGraphObjectEntry(
@@ -102,13 +106,13 @@ class TestObjectStateSection:
             ),
         )
         text = SpotGraphCurrentStateFormatter().format(_make_dto(snap))
-        assert "スポット内オブジェクトの状態:" in text
-        assert "燭台" in text
-        assert "lit=true" in text
-        assert "fuel=5" in text
+        # 旧 block は出さない。inline 版 (UiContextBuilder 経由) で表示する
+        assert "スポット内オブジェクトの状態:" not in text
 
     def test_skips_objects_without_state(self) -> None:
-        """state が空のオブジェクトはこのセクションには出ない。"""
+        """state が空のオブジェクトは (旧仕様と同じく) このセクションに出ない。
+        旧 block そのものが削除されたので trivially pass するが、期待動作
+        として残す。"""
         snap = _empty_snap(
             objects=(
                 SpotGraphObjectEntry(

@@ -75,18 +75,15 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
             else:
                 lines.append(f"残り行動可能 tick: {remaining}")
 
-        # Phase 4-E: スポット内のオブジェクトに動的 state があれば表示。
-        # 「燭台: lit=True」のように LLM が読める形にする。
-        object_state_lines = []
-        for entry in snap.objects:
-            if entry.state:
-                rendered = ", ".join(
-                    f"{k}={_render_value(v)}" for k, v in sorted(entry.state.items())
-                )
-                object_state_lines.append(f"- {entry.name}: {rendered}")
-        if object_state_lines:
-            lines.append("スポット内オブジェクトの状態:")
-            lines.extend(object_state_lines)
+        # Phase 4-E: スポット内オブジェクトの動的 state は、
+        # UiContextBuilder._build_object_section が「オブジェクト:」section
+        # の各行 inline に ``(key=value)`` として表示する
+        # (PR-X, Y_after_pr639_640 後続)。この formatter で別 section
+        # として重複出力すると:
+        # - 同じ事実が 2 箇所に出る (LLM 混乱・token 無駄遣い)
+        # - 2 種類の異なる format (sorted vs 挿入順) で LLM が「どちらが
+        #   authoritative か」を判断できない
+        # よってここでは何も出さない。UiContextBuilder 側の 1 本化に任せる。
 
         # 同スポットに居るモンスター個体。ラベルは UiContextBuilder 側で付与
         # するため、ここでは概要だけ載せる（M1/M2 等のラベル付き行は
