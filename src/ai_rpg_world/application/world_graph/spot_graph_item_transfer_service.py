@@ -109,6 +109,77 @@ class TargetNotInSameSpotError(ItemTransferException):
         self.sender_spot_name = sender_spot_name
 
 
+class SlotIsEmptyError(ItemTransferException):
+    """drop_item / give_item で指定した inventory スロットが空だった。
+
+    LLM が「持っていないアイテムのスロット番号」を指定した典型ケース。
+    resolver の label→slot 変換が古い状態を参照した場合や、LLM が hallucinate
+    した slot 番号でも起きる。message で inspect_target による inventory 再確認
+    を促す。
+
+    ``slot_id`` を kwargs で受けて message に埋めるので、executor 側で
+    再構築しなくても LLM が「どの slot が空だったか」を読める。
+    """
+
+    error_code = "ITEM_TRANSFER_SLOT_IS_EMPTY"
+
+    def __init__(self, *, slot_id: int) -> None:
+        msg = (
+            f"スロット {slot_id} には何も入っていません。"
+            f"inspect_target で自分のインベントリを確認してから、"
+            f"アイテムが実際に入っているスロット番号を指定してください。"
+        )
+        super().__init__(msg)
+        self.slot_id = slot_id
+
+
+class GroundItemGoneError(ItemTransferException):
+    """pickup_item で拾おうとした地面アイテムが既に無かった。
+
+    同 tick で複数プレイヤーが同じ地面アイテムに手を伸ばして片方が先に成功
+    した場合や、observation が古くて既に他者が拾い終えている場合に起きる。
+    LLM が同じ pickup を繰り返さないよう、他プレイヤーによる先取りの可能性と
+    別行動 (explore で周囲を見直す / 目的を切り替える) を message で示唆する。
+    """
+
+    error_code = "PICKUP_ITEM_GROUND_ITEM_GONE"
+
+    def __init__(self, *, item_name: str = "そのアイテム") -> None:
+        msg = (
+            f"{item_name} はもう地面にありません。"
+            f"他のプレイヤーが先に拾ったか、あなたの観測が古い可能性があります。"
+            f"explore で周囲を見直すか、別の目的に切り替えてください。"
+        )
+        super().__init__(msg)
+        self.item_name = item_name
+
+
+class PickupSelfInventoryFullError(ItemTransferException):
+    """pickup_item で自分のインベントリが満杯だった。
+
+    もともと ``PlayerInventoryAggregate.acquire_item`` は満杯時に silent に
+    overflow event を出すだけで raise しない設計だったが、その結果
+    「pickup した気になっているが実際は取れていない」silent failure が
+    残っていた (地面からも消えて手元にも無い状態は防げているが、LLM は
+    成功と誤認する)。PR-ε で service 側に事前ガードを追加し、明示的に
+    この exception を raise する。
+
+    LLM に対しては「先に何か drop して空きを作ってから再度 pickup」の
+    次アクションを message で示唆する。
+    """
+
+    error_code = "PICKUP_ITEM_SELF_INVENTORY_FULL"
+
+    def __init__(self, *, item_name: str = "そのアイテム") -> None:
+        msg = (
+            f"自分のインベントリが満杯で {item_name} を拾えません。"
+            f"drop_item で不要なアイテムを 1 つ手放して空きを作ってから、"
+            f"再度 pickup してください。"
+        )
+        super().__init__(msg)
+        self.item_name = item_name
+
+
 class TargetInventoryFullError(ItemTransferException):
     """give_item の相手のインベントリが満杯で受け取れない。
 
@@ -207,9 +278,11 @@ class SpotGraphItemTransferService:
 
         item_instance_id = inventory.get_item_instance_id_by_slot(slot_id)
         if item_instance_id is None:
-            raise ItemNotInSlotException(
-                f"No item in slot {slot_id.value}"
-            )
+            # PR-ε: 空スロット指定は LLM 側の頻発ミス。汎用
+            # ItemNotInSlotException では error_code / message が LLM に
+            # 届かないので、drop / pickup 用の日本語 message + error_code
+            # を持つ SlotIsEmptyError に差し替える。
+            raise SlotIsEmptyError(slot_id=slot_id.value)
 
         spot_id = self._resolve_current_spot(player_id)
         interior = self._spot_interior_repository.find_by_spot_id(spot_id)
@@ -284,11 +357,13 @@ class SpotGraphItemTransferService:
             )
 
         ground_item = interior.find_ground_item(item_instance_id)
+        # 満杯チェック / 失敗 message で使うため、item_name を 1 度だけ引く。
+        item_name = self._item_name_or_id(item_instance_id)
         if ground_item is None:
-            raise ItemTransferException(
-                f"ground item {item_instance_id.value} not found at spot "
-                f"{spot_id.value}"
-            )
+            # PR-ε: 「他プレイヤーが同 tick で先に拾った」「observation が
+            # 古くて既に消えている」の典型ケース。LLM 向けに「先取り可能性」
+            # と「別行動への切替」を message で伝える専用 exception。
+            raise GroundItemGoneError(item_name=item_name)
 
         inventory = self._player_inventory_repository.find_by_id(player_id)
         if inventory is None:
@@ -296,8 +371,15 @@ class SpotGraphItemTransferService:
                 f"inventory not found for player {player_id.value}"
             )
 
-        # acquire_item は overflow event を発火する可能性があるが、
-        # それは正しい (インベントリ満杯は LLM が知りたい状態)。
+        # PR-ε: 事前ガードで pickup 時のインベントリ満杯を surface する。
+        # ``acquire_item`` は満杯だと overflow event を出すだけで silent に
+        # 成功扱いになる (地面のアイテムは残るが LLM は「拾った」と誤認
+        # しうる)。専用 exception で「drop で空きを作る」次アクションを促す。
+        if inventory.is_inventory_full():
+            raise PickupSelfInventoryFullError(item_name=item_name)
+
+        # 事前ガードで満杯を弾いたので、ここに来た時点で必ず空きスロットが
+        # ある。acquire_item は overflow event を発火しない。
         inventory.acquire_item(
             item_instance_id,
             item_spec_id_value=ground_item.item_spec_id.value,
@@ -307,7 +389,7 @@ class SpotGraphItemTransferService:
         new_interior = interior.without_ground_item(item_instance_id)
         self._spot_interior_repository.save(spot_id, new_interior)
 
-        item_name = self._item_name_or_id(item_instance_id)
+        # item_name は事前ガード用に既に引いてある (このメソッド頭で lookup 済み)。
 
         # witness 最小版: 同室の他プレイヤーに観測として届ける。
         self._publish_event(
@@ -366,7 +448,9 @@ class SpotGraphItemTransferService:
 
         item_instance_id = from_inv.get_item_instance_id_by_slot(slot_id)
         if item_instance_id is None:
-            raise ItemNotInSlotException(f"No item in slot {slot_id.value}")
+            # PR-ε: drop_item と同じ空スロット errror。LLM 向け error_code +
+            # 日本語 message を持つ SlotIsEmptyError に統一する。
+            raise SlotIsEmptyError(slot_id=slot_id.value)
 
         # 両者が同スポットに居ることを確認する。spot_graph_repository は spot
         # の本人位置を解決する単一の真実源 (status.current_spot_id は tile-map

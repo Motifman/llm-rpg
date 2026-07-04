@@ -70,6 +70,11 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "GIVE_ITEM_TARGET_IS_SELF": "自分自身は指定できません。gives 配列の target_player_label に別のプレイヤー名を指定してください。",
     "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT": "渡したい相手が同じ場所にいません。travel_to で相手のいる spot へ移動してから、または同じ場所にいる別の相手を選んでから再度渡してください。",
     "GIVE_ITEM_TARGET_INVENTORY_FULL": "相手のインベントリが満杯で受け取れません。相手が別アイテムを drop するのを待つか、別の相手に渡してください。",
+    # PR-ε (Y_after_pr639_640 audit 後続): drop / pickup 系の頻発失敗を汎用
+    # ITEM_TRANSFER_FAILED から分離し、LLM が次アクションを判断できる粒度に
+    "ITEM_TRANSFER_SLOT_IS_EMPTY": "指定したスロットに何も入っていません。inspect_target で自分のインベントリを確認し、実際にアイテムが入っているスロットを指定してください。",
+    "PICKUP_ITEM_GROUND_ITEM_GONE": "そのアイテムはもう地面にありません。他のプレイヤーが先に拾ったか、あなたの観測が古い可能性があります。explore で周囲を見直すか、別の目的に切り替えてください。",
+    "PICKUP_ITEM_SELF_INVENTORY_FULL": "自分のインベントリが満杯です。drop_item で不要なアイテムを 1 つ手放して空きを作ってから、再度 pickup してください。",
     # PR-γ (Y_after_pr639_640 後続): audit で未登録が発覚した 5 code に
     # 具体的 remediation を追加。汎用フォールバック文言では LLM が
     # 次アクションを取れない。
