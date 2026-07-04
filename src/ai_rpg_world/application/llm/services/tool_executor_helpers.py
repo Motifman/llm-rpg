@@ -110,30 +110,33 @@ def exception_result(e: Exception) -> LlmCommandResultDto:
     """例外を捕捉した際の失敗結果を返す。error_code と remediation を付与。
 
     PR-δ (Y_after_pr639_640 audit): LLM に届く message から英語 + 内部 ID
-    を排除するため、以下の分岐で sanitize する:
+    を排除するため、str(e) を「日本語文字を含むか」で判定して sanitize する:
 
-    1. exception が ``error_code`` 属性を持つ (= domain exception): 従来通り
-       str(e) を尊重 (domain 層で LLM 向け日本語 message が組まれている前提)
-    2. str(e) に日本語文字が 1 文字でも含まれる: そのまま尊重
-       (application 層の日本語 ApplicationException 等の後方互換)
-    3. str(e) が空 or 純 ASCII: 汎用日本語 fallback に置換
-       (Python 組み込み ``KeyError``/``ValueError``/``RuntimeError`` 等)
+    - **str(e) に日本語文字が 1 文字でも含まれる**: そのまま尊重
+      (domain 層 / application 層で日本語 message を組んで raise した exception)
+    - **str(e) が空 or 純 ASCII**: 汎用日本語 fallback に置換
+      (Python 組み込み ``KeyError``/``ValueError`` や、domain 例外だが message
+       が英語のまま整備されていないケース ``ItemNotInSlotException("No item ...")``)
 
-    domain exception が既に日本語 message を持っている場合、``error_code``
-    属性の存在によって pass-through する。error_code 無しでも日本語なら
-    2 の経路で救う。
+    ``error_code`` 属性は message 判定と独立に採用する — ドメイン例外が英語
+    message で raise されるケースでも、error_code / remediation で LLM に
+    「何をすべきか」の日本語 hint は届く。message 本文は英語漏れを防ぐため
+    fallback に置換される。
+
+    ## なぜ「error_code の有無」で pass-through 判定しないか
+
+    v0 案では「error_code 属性あり = 日本語 message 整備済み」と仮定していた
+    が、実際には ``ItemNotInSlotException("No item in slot 3")`` のように
+    error_code は付いているが message は英語 + 内部 ID (slot 番号) という
+    domain exception が多数存在する。この場合、v0 では英語 message が LLM
+    に漏れる。error_code の有無に関係なく「message が日本語か」で最終判定
+    することで、この抜け穴を塞ぐ。
     """
     error_code = getattr(e, "error_code", "SYSTEM_ERROR")
-    has_domain_error_code = hasattr(e, "error_code")
     raw_message = str(e)
-    if has_domain_error_code:
-        # domain exception。message は既に LLM 向けに整備されている
-        message = raw_message
-    elif raw_message and _has_japanese_char(raw_message):
-        # 日本語 (混じり含む) message。application 層の意図的な日本語 raise
+    if raw_message and _has_japanese_char(raw_message):
         message = raw_message
     else:
-        # 純 ASCII の Python 組み込み exception 等 → 汎用日本語 fallback
         message = _SANITIZED_SYSTEM_ERROR_MESSAGE
     return LlmCommandResultDto(
         success=False,

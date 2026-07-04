@@ -37,7 +37,8 @@ from ai_rpg_world.application.llm.services.tool_executor_helpers import (
 
 
 class TestExceptionResultDomainException:
-    """``error_code`` 属性を持つ domain exception は従来通り尊重。"""
+    """``error_code`` 属性を持つ domain exception。error_code は保持されるが
+    message は「日本語判定」に基づいて sanitize される (下記 English case 参照)。"""
 
     def test_error_code_付きの_domain_exception_は_message_と_code_を_使う(self) -> None:
         class MyDomainError(Exception):
@@ -48,6 +49,23 @@ class TestExceptionResultDomainException:
         assert result.success is False
         assert result.error_code == "GIVE_ITEM_TARGET_IS_SELF"
         assert result.message == "自分自身にアイテムを渡すことはできません。"
+
+    def test_error_code_付きだが_message_が英語の_domain_exception_も_message_は_fallback(self) -> None:
+        """PR-δ v1 抜け穴修正: ``ItemNotInSlotException("No item in slot 3")``
+        のように「error_code は日本語じゃないカテゴリだが message 側が
+        整備されていない」ケースを塞ぐ。error_code / remediation は保持し、
+        message は英語漏れを防ぐため fallback に置換。"""
+        class MyDomainError(Exception):
+            error_code = "PLAYER.ITEM_NOT_IN_SLOT"
+
+        exc = MyDomainError("No item in slot 3")
+        result = exception_result(exc)
+        assert result.error_code == "PLAYER.ITEM_NOT_IN_SLOT"
+        # 英語 message は漏れない
+        assert "No item" not in result.message
+        assert "slot 3" not in result.message
+        # 汎用日本語 fallback
+        assert "システム" in result.message or "エラー" in result.message
 
 
 class TestExceptionResultEnglishFallback:
