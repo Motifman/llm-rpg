@@ -456,7 +456,17 @@ PICKUP_ITEM_DEFINITION = ToolDefinitionDto(
 
 ATTACK_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_ATTACK,
-    description="同じスポットに居るモンスターを攻撃する。",
+    description=(
+        "同じスポットに居るモンスターを攻撃する。"
+        "**素手のダメージは小さく、装備している武器があればそれで威力が変わる。**"
+        "相手の HP は正確な数値では見えず、モンスター section の "
+        "``（〜・健康）`` / ``（〜・弱っている）`` / ``（〜・瀕死）`` の "
+        "3 段階だけ観測できる。「健康」の相手を素手で倒すのは危険で、"
+        "反対に「瀕死」なら止めを刺せる可能性がある。"
+        "攻撃は 1 tick で 1 発 (相手も反撃してくる)。連続被弾で HP を"
+        "失うより、``travel_to`` で別の spot へ **逃走** する方が"
+        "安全なこともあり、状況で選ぶこと。"
+    ),
     parameters={
         "type": "object",
         "properties": {
