@@ -1001,11 +1001,10 @@ class _WorldLlmWiring:
             str,
             Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto],
         ] = {
-            # PR-θ1/θ2/θ3 (経路統合): TOOL_NAME_SPOT_GRAPH_TRAVEL_TO / EXPLORE /
-            # INTERACT の登録は削除した。代わりに _wire_missing_spot_graph_tools
-            # が SpotGraphToolExecutor._travel_to / _explore / _interact を
-            # 上書き wire する。旧 handlers は削除された。
-            TOOL_NAME_SPOT_GRAPH_LISTEN: self._handle_listen,
+            # PR-θ1/θ2/θ3/θ4 (経路統合): TRAVEL_TO / EXPLORE / INTERACT /
+            # LISTEN の登録は削除した。代わりに _wire_missing_spot_graph_tools
+            # が SpotGraphToolExecutor._travel_to / _explore / _interact /
+            # _listen を上書き wire する。旧 handlers は削除された。
             TOOL_NAME_SPOT_GRAPH_WAIT: self._handle_wait,
             TOOL_NAME_SPEECH: self._handle_speech,
             TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION: self._handle_set_sub_location,
@@ -1171,6 +1170,10 @@ class _WorldLlmWiring:
             # ハンドリング (LLM 向け remediation + 利用可能操作列挙) も新経路で
             # 保持。resolver エラー時の invalid_label_failure_builder も設定。
             TOOL_NAME_SPOT_GRAPH_INTERACT,
+            # PR-θ4 (経路統合): listen を旧 _handle_listen から新経路
+            # SpotGraphToolExecutor._listen に統合。runtime.do_listen 経由で
+            # 副作用 (_process_graph_events / event 差分カウント) は保持。
+            TOOL_NAME_SPOT_GRAPH_LISTEN,
         )
         # #356 実験 #25 OFF で発覚: use_item / drop_item / give_item /
         # pickup_item は tool catalog 上 ``item_label`` (= I1, I2 など) を
@@ -1995,42 +1998,10 @@ class _WorldLlmWiring:
     # list_object_interactions) は application 層 (interact_helpers.py) に
     # 移動した。
 
-    def _handle_listen(
-        self,
-        player_id: PlayerId,
-        arguments: dict[str, Any],
-        runtime_context: Any,
-    ) -> LlmCommandResultDto:
-        # tool catalog に LISTEN_DEFINITION があるのに dispatch が無く
-        # UNSUPPORTED_TOOL に化けていた配線漏れ (Issue #154 デモ) を修正。
-        # runtime.do_listen が SpotSoundHeardEvent を発火し、observation
-        # pipeline で本人にだけ観測が届く (formatter が prose を構築するので、
-        # ここでは件数ベースのサマリだけ返す)。
-        try:
-            event_count = self.runtime.do_listen(player_id)
-        except Exception:
-            logger.exception(
-                "do_listen failed for player=%s", player_id.value
-            )
-            return LlmCommandResultDto(
-                success=False,
-                message="耳を澄ますに失敗しました。",
-                error_code="LLM_TOOL_EXECUTION_FAILED",
-                remediation="やり直すか別のツールを使ってください。",
-            )
-        if event_count == 0:
-            base_message = "耳を澄ましたが、何も聞こえなかった。"
-        elif event_count == 1:
-            base_message = "耳を澄ました。周囲の音が観測として届いた。"
-        else:
-            base_message = (
-                f"耳を澄ました。{event_count} 箇所からの音が観測として届いた。"
-            )
-        return with_inner_thought_empty_warning(
-            TOOL_NAME_SPOT_GRAPH_LISTEN,
-            arguments,
-            LlmCommandResultDto(success=True, message=base_message),
-        )
+    # PR-θ4 (経路統合): _handle_listen は削除。SpotGraphToolExecutor._listen
+    # に統合され、runtime.do_listen を呼ぶ薄い wrapper として単一の実装に
+    # なった。旧 handler の副作用 (event 差分カウント / _process_graph_events /
+    # inner_thought 空警告) は保持している。
 
     def _handle_wait(
         self,
