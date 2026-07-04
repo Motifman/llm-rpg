@@ -46,7 +46,7 @@ def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     )
 
 
-def test_get_spot_graph_specs_has_fifteen_tools() -> None:
+def test_get_spot_graph_specs_has_fourteen_tools() -> None:
     """spot_graph 系ツールの数を検証する。
 
     変遷:
@@ -56,9 +56,12 @@ def test_get_spot_graph_specs_has_fifteen_tools() -> None:
     - give 導入: spot_graph_give_item が 1 つ増えて 13
     - PR 5b: spot_graph_give_items (batch) が 1 つ増えて 14
     - Issue #621 Phase 3b: spot_graph_tend_to_player (= 介抱) が 1 つ増えて 15
+    - PR-BB (Y_after_pr639_640 後続): spot_graph_give_items を削除し 14 に戻す。
+      LLM 露出 tool の surface reduction 目的。将来 batch が必要になれば
+      give_item の union 型として実装する (別 tool を増やさない)。
     """
     specs = get_spot_graph_specs()
-    assert len(specs) == 15
+    assert len(specs) == 14
     names = {s[0].name for s in specs}
     assert "spot_graph_travel_to" in names
     assert "spot_graph_set_sub_location" in names
@@ -69,8 +72,6 @@ def test_get_spot_graph_specs_has_fifteen_tools() -> None:
     assert "spot_graph_drop_item" in names
     assert "spot_graph_pickup_item" in names
     assert "spot_graph_give_item" in names
-    assert "spot_graph_give_items" in names
-    assert "spot_graph_give_item" in names
     assert "spot_graph_wait" in names
     assert "spot_graph_attack" in names
     assert "spot_graph_listen" in names
@@ -79,6 +80,8 @@ def test_get_spot_graph_specs_has_fifteen_tools() -> None:
     # 旧 say / whisper は廃止
     assert "speech_say" not in names
     assert "speech_whisper" not in names
+    # PR-BB: give_items は廃止 (give_item に集約)
+    assert "spot_graph_give_items" not in names
 
 
 def test_listen_description_excludes_other_player_speech() -> None:

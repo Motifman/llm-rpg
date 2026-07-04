@@ -15,7 +15,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-    TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
@@ -357,57 +356,15 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
 )
 
 
-GIVE_ITEMS_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
-    description=(
-        "**複数の** give_item を同 tick にまとめて実行する。``gives`` 配列の各 "
-        "entry は ``give_item`` 単発と同じセマンティクスで処理される。各 entry "
-        "は **partial success**: 一部が失敗 (受け手満杯・自分自身指定など) しても、"
-        "他は実行され、結果メッセージに「OK / NG とその理由」が集約される。\n"
-        "「複数の仲間に物を配り終えて移動する」のような協調行動を 1 turn で"
-        "片付けたいときに使う。1 件だけ渡したい場合は ``give_item`` を使うのが"
-        "簡潔。"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "gives": {
-                "type": "array",
-                "description": (
-                    "渡すアイテム × 渡し先のペア配列。各 entry は item_label と "
-                    "target_player_label を持つ。順序通りに処理される。"
-                ),
-                "minItems": 1,
-                "maxItems": 8,
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "item_label": {
-                            "type": "string",
-                            "description": (
-                                "渡すアイテムの名前 (例: 流木)。"
-                                "「所持アイテム」で ``\"\"`` で囲まれた値を"
-                                "そのまま渡す。同名衝突時は "
-                                "``#N`` ordinal を含めて指定。"
-                            ),
-                        },
-                        "target_player_label": {
-                            "type": "string",
-                            "description": (
-                                "渡す相手の名前 (例: \"トマ\")。同名衝突時は "
-                                "``#N`` ordinal を含めて指定。自分自身は指定不可。"
-                            ),
-                        },
-                    },
-                    "required": ["item_label", "target_player_label"],
-                },
-            },
-            "say_inline": _SAY,
-            "inner_thought": _IT,
-        },
-        "required": ["gives", "inner_thought"],
-    },
-)
+# PR-BB (Y_after_pr639_640 後続): 旧 ``spot_graph_give_items`` (batch 配布)
+# は廃止 (2026-07 時点)。理由:
+# - LLM 露出 tool を減らして「give 系が 2 つある」混乱を除去
+# - Y_after_pr639_640 の実測で give_items 呼び出しは 2 件のみ (かつ両方
+#   PR-W 修正前は RESOLVER_DISPATCH_MISSING で silent 失敗、修正後も
+#   実効的な batch 使用ではなかった)
+# - batch 配布は ``give_item`` を複数 tick に分割して実現できる
+# 将来 batch を戻すときは ``give_item`` に ``gives`` array を追加する union
+# 型で単一 tool のまま拡張する (別 tool を増やさない)。
 
 
 PICKUP_ITEM_DEFINITION = ToolDefinitionDto(
@@ -510,7 +467,6 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (DROP_ITEM_DEFINITION, _RESOLVER),
         (PICKUP_ITEM_DEFINITION, _RESOLVER),
         (GIVE_ITEM_DEFINITION, _RESOLVER),
-        (GIVE_ITEMS_DEFINITION, _RESOLVER),
         (ATTACK_DEFINITION, _RESOLVER),
         (LISTEN_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
@@ -530,7 +486,6 @@ __all__ = [
     "DROP_ITEM_DEFINITION",
     "PICKUP_ITEM_DEFINITION",
     "GIVE_ITEM_DEFINITION",
-    "GIVE_ITEMS_DEFINITION",
     "ATTACK_DEFINITION",
     "LISTEN_DEFINITION",
     "WAIT_DEFINITION",

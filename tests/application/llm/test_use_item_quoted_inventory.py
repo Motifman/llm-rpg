@@ -36,7 +36,6 @@ from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import 
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     DROP_ITEM_DEFINITION,
     GIVE_ITEM_DEFINITION,
-    GIVE_ITEMS_DEFINITION,
     PICKUP_ITEM_DEFINITION,
     USE_ITEM_DEFINITION,
 )
@@ -181,16 +180,9 @@ class TestUseItemDescriptionExplainsQuoteConvention:
         assert "\"" in desc
         assert "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
 
-    def test_give_items_の_item_label_要素にも_クオート規約が含まれる(self) -> None:
-        item_label_desc = GIVE_ITEMS_DEFINITION.parameters["properties"]["gives"][
-            "items"
-        ]["properties"]["item_label"]["description"]
-        assert "\"" in item_label_desc
-        assert (
-            "囲ま" in item_label_desc
-            or "クオート" in item_label_desc
-            or "ダブルクォート" in item_label_desc
-        )
+    # PR-BB (Y_after_pr639_640 後続): give_items tool は削除されたので
+    # 対応する quote 規約テストも撤去。give_item (単発) の quote テストで
+    # 「item_label 系 tool の quote 規約」自体は担保される。
 
 
 class TestDescriptionsAreStatic:

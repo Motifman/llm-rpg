@@ -169,9 +169,10 @@ TOOL_NAME_SPOT_GRAPH_LISTEN = TOOL_NAME_PREFIX_SPOT_GRAPH + "listen"
 TOOL_NAME_SPOT_GRAPH_DROP_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "drop_item"
 TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "pickup_item"
 TOOL_NAME_SPOT_GRAPH_GIVE_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "give_item"
-# PR 5b: 同 tick 内で複数 give を 1 tool call にまとめるための batch 版。
-# 単発 give_item は受け渡しが 1 対 1 のとき / 引数を最小化したいとき向けに残す。
-TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS = TOOL_NAME_PREFIX_SPOT_GRAPH + "give_items"
+# PR-BB (Y_after_pr639_640 後続): 旧 ``give_items`` (batch 版) は削除。
+# LLM 露出 tool を減らす surface reduction 目的 + 実測でほぼ未使用だった
+# ため。将来 batch が必要になれば ``give_item`` の union 型拡張として
+# 実装する (別 tool を増やさない方針)。
 # Issue #621 Phase 3b: 同 spot に倒れた仲間を介抱して revive する tool。
 # アイテム (= first_aid) を持っていなくても物理的に起こす経路。
 TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER = TOOL_NAME_PREFIX_SPOT_GRAPH + "tend_to_player"

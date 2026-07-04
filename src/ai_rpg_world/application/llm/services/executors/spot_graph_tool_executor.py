@@ -19,7 +19,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-    TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
@@ -259,7 +258,6 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM: self._drop_item,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM: self._pickup_item,
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM: self._give_item,
-            TOOL_NAME_SPOT_GRAPH_GIVE_ITEMS: self._give_items,
             TOOL_NAME_SPOT_GRAPH_ATTACK: self._attack,
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
@@ -842,83 +840,9 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _give_items(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
-        """`spot_graph_give_items`: 同 tick に複数 give を集約実行する (PR 5b)。
-
-        ``gives_resolved`` の各 entry を順に処理し、結果を 1 行 1 entry の
-        サマリ message に集約する。partial success: 一部失敗しても残りは
-        進行し、success フラグは「1 件でも成功したか」で立つ。
-
-        say_inline は **全 give が終わった後** に 1 度だけ発火する
-        (もし一部成功なら整合性のため発火する)。
-        """
-        if self._item_transfer_service is None:
-            return LlmCommandResultDto(
-                success=False,
-                message="give_items は本構成で未配線です。",
-                error_code="NOT_WIRED",
-                remediation=get_remediation("NOT_WIRED"),
-            )
-        gives_resolved = args.get("gives_resolved")
-        if not isinstance(gives_resolved, list) or not gives_resolved:
-            return build_invalid_arg_failure(
-                arg_name="gives",
-                detail="resolver が gives_resolved を埋めませんでした (gives 配列が空 / 不正?)",
-            )
-
-        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-
-        ok_lines: list[str] = []
-        ng_lines: list[str] = []
-        for entry in gives_resolved:
-            item_disp = entry.get("item_display_name") or entry.get("item_label") or "?"
-            target_disp = (
-                entry.get("target_display_name")
-                or entry.get("target_player_label")
-                or "?"
-            )
-            # resolve 段階で失敗していた entry は error_code が埋まっている
-            if entry.get("error_code"):
-                ng_lines.append(
-                    f"{item_disp} → {target_disp}: NG ({entry.get('message', '解決失敗')})"
-                )
-                continue
-            try:
-                slot_int = int(entry["slot_id"])
-                to_int = int(entry["target_player_id"])
-            except (KeyError, TypeError, ValueError):
-                ng_lines.append(
-                    f"{item_disp} → {target_disp}: NG (resolver 出力が不正)"
-                )
-                continue
-            try:
-                self._item_transfer_service.give_item(
-                    PlayerId(player_id), PlayerId(to_int), SlotId(slot_int),
-                )
-                ok_lines.append(f"{item_disp} → {target_disp}: OK")
-            except ItemTransferException as e:
-                ng_lines.append(f"{item_disp} → {target_disp}: NG ({e})")
-            except Exception as e:  # noqa: BLE001
-                ng_lines.append(f"{item_disp} → {target_disp}: NG (内部例外: {e})")
-
-        # 全失敗の場合は success=False で返し、LLM に「何 1 つ渡せなかった」を明示
-        if not ok_lines:
-            return LlmCommandResultDto(
-                success=False,
-                message="give_items: 全て失敗\n" + "\n".join(ng_lines),
-                error_code="ITEM_TRANSFER_FAILED",
-                remediation=get_remediation("ITEM_TRANSFER_FAILED"),
-            )
-
-        # 1 件でも成功したら success=True とし、say_inline を発火する
-        # (受け渡しが少なくとも 1 件成立したので、立ち去り際の一言は自然)
-        self._maybe_emit_say_inline(player_id, args)
-        parts = ok_lines + ng_lines
-        msg = "give_items 結果:\n" + "\n".join(parts)
-        return LlmCommandResultDto(
-            success=True,
-            message=append_inner_thought_to_message(msg, args),
-        )
+    # PR-BB (Y_after_pr639_640 後続): 旧 ``_give_items`` (batch handler) は
+    # 削除。give_items tool 自体を廃止 (give_item のみ残す)。将来 batch を
+    # 戻すときは ``_give_item`` を union 型対応に拡張する。
 
     def _attack(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         """`spot_graph_attack`: 同スポットのモンスターを攻撃する。
