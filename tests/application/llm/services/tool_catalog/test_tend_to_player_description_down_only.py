@@ -30,13 +30,22 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
 class TestTendToPlayerDescriptionIsExplicitAboutDownOnly:
     """description が「down 状態の相手だけ」という制約を明示的に伝えるか。"""
 
-    def test_status_effect_down_を_明示する(self) -> None:
+    def test_ダウン状態_を_明示する(self) -> None:
         """旧文言「戦闘不能状態」だけでは LLM が疲労 100 と混同したので、
-        ``status_effect`` か ``down`` という機械的なキーワードを少なくとも 1 つ含める。"""
+        「ダウン状態」または「ダウン」という明示的な状態タグを含める。
+
+        Y_after_pr639_640_200tick 後続 (PR-Y): 内部技術用語 ``status_effect: down``
+        は LLM に露出する意味が無いため日本語 (「ダウン状態」) に置換。LLM は
+        重みの学習をしていないので生の内部フィールド名を見せる必要はない。
+        """
         desc = TEND_TO_PLAYER_DEFINITION.description
-        assert "status_effect" in desc or "down" in desc, (
-            "description に内部状態キー (status_effect / down) を含めないと "
-            "「倒れている」が抽象的すぎて疲労や空腹と混同される"
+        assert "ダウン" in desc, (
+            "description に「ダウン」の状態表現を含めないと「倒れている」が"
+            "抽象的すぎて疲労や空腹と混同される"
+        )
+        # 逆に内部技術用語はもう漏らさないこと
+        assert "status_effect" not in desc, (
+            "内部フィールド名 status_effect は LLM 露出テキストには不要"
         )
 
     def test_HP_0_を_明示する(self) -> None:
