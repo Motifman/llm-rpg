@@ -1001,12 +1001,17 @@ class _WorldLlmWiring:
             str,
             Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto],
         ] = {
-            # PR-θ1/θ2/θ3/θ4/θ5 (経路統合): TRAVEL_TO / EXPLORE / INTERACT /
-            # LISTEN / WAIT の登録は削除した。代わりに
-            # _wire_missing_spot_graph_tools が SpotGraphToolExecutor 側の
-            # 対応 handler を上書き wire する。旧 handlers は削除された。
+            # PR-θ1/θ2/θ3/θ4/θ5/θ6 (経路統合): TRAVEL_TO / EXPLORE / INTERACT /
+            # LISTEN / WAIT / SET_SUB_LOCATION の登録は削除した。
+            # - travel_to / explore / interact / listen / wait は
+            #   _wire_missing_spot_graph_tools が SpotGraphToolExecutor 側
+            #   handler を上書き wire する
+            # - set_sub_location は脱出ランタイムでは意図的に未対応
+            #   (ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS で LLM 露出も除外)
+            #   なので wire しない。SpotGraphToolExecutor._set_sub_location
+            #   は将来の別ランタイム用に残す。仮に何らかの経路で呼ばれても、
+            #   default `_execute_tool` の UNSUPPORTED_TOOL 経路で正しく弾く。
             TOOL_NAME_SPEECH: self._handle_speech,
-            TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION: self._handle_set_sub_location,
             TOOL_NAME_TODO_ADD: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_ADD),
             TOOL_NAME_TODO_LIST: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_LIST),
             TOOL_NAME_TODO_COMPLETE: self._make_auxiliary_tool_handler(
@@ -2148,24 +2153,13 @@ class _WorldLlmWiring:
             return ""
         return f"（{audience_summary_text(channel, members)}）"
 
-    def _handle_set_sub_location(
-        self,
-        player_id: PlayerId,
-        arguments: dict[str, Any],
-        runtime_context: Any,
-    ) -> LlmCommandResultDto:
-        del player_id, arguments, runtime_context
-        # PR-J: ``UNSUPPORTED_TOOL`` を ``_RESCHEDULE_ERROR_CODES`` に追加した
-        # ため、デフォルトのままだと「永続的に無効な機能」も reschedule され
-        # てしまう。本ハンドラは「脱出ランタイムでは恒久的に未対応」を表す
-        # 経路なので、明示的に ``should_reschedule=False`` を立てて agent を
-        # 即時 chain 終了させる (= 同じ無駄を 5 回繰り返さない)。
-        return LlmCommandResultDto(
-            success=False,
-            message="サブロケーション変更は脱出ランタイムでは未対応です。",
-            error_code="UNSUPPORTED_TOOL",
-            should_reschedule=False,
-        )
+    # PR-θ6 (経路統合): _handle_set_sub_location は削除。脱出ランタイムでは
+    # set_sub_location は意図的に未対応 (ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS
+    # で LLM 露出も除外されている)。SpotGraphToolExecutor._set_sub_location
+    # は完全実装を持つが、脱出ランタイムでは wire されない (将来の別ランタイム用)。
+    # 仮に LLM が set_sub_location を呼んだ場合 (エッジケース) は
+    # `_execute_tool` の default 経路が UNSUPPORTED_TOOL を返す。旧 handler は
+    # 防御 UNSUPPORTED_TOOL を返すだけの dead code だったので削除する。
 
     def _make_auxiliary_tool_handler(
         self, tool_name: str
