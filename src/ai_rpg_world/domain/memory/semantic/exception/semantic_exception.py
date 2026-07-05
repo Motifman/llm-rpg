@@ -32,8 +32,23 @@ class BeliefEvidenceRuleException(SemanticDomainException, BusinessRuleException
     error_code = "SEMANTIC.BELIEF_EVIDENCE_RULE"
 
 
+class SemanticMemoryEntryValidationException(
+    SemanticDomainException, ValidationException
+):
+    """``SemanticMemoryEntry`` の belief journal 拡張フィールド (U3a) の
+
+    バリデーション例外 (status の未知値・belief_id / supersedes / 証拠 id 群の
+    型・空文字違反)。既存フィールドのバリデーションは ``ValueError`` /
+    ``TypeError`` のまま現状維持しているため、本例外は U3a で追加した
+    フィールドにのみ用いる。
+    """
+
+    error_code = "SEMANTIC.MEMORY_ENTRY_VALIDATION"
+
+
 __all__ = [
     "SemanticDomainException",
     "BeliefEvidenceValidationException",
     "BeliefEvidenceRuleException",
+    "SemanticMemoryEntryValidationException",
 ]
