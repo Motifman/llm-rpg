@@ -109,6 +109,7 @@ class IActionResultStore(ABC):
         expected_result: Optional[str] = None,
         intention: Optional[str] = None,
         emotion_hint: Optional[str] = None,
+        prediction_context_id: Optional[str] = None,
     ) -> None:
         """行動結果を 1 件追加する。"""
         pass

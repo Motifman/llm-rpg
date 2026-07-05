@@ -142,6 +142,14 @@ class ActionResultEntry:
     # ``decide_chunk_boundary`` の TEMPORAL_GAP 判定で bucket 内 actions の
     # tick 差を見るのに使う (wall-clock では LLM レイテンシで歪むため)。
     occurred_tick: Optional[int] = None
+    # U1 (予測誤差統一設計 部品1): この行動が発生した turn の prompt build 時に
+    # 発行された prediction_context_id。「どのプロンプト (何が in-context
+    # だったか) で立てた予測が、どう外れたか」を後から辿るための紐付けキー。
+    # ``PredictionContextLedger`` が発行し、``ActionResultRecorder.record`` が
+    # consume してここに焼き込む。id が consume されないまま次の build が来た
+    # 場合や、この entry の生成元が prompt build を経由しない場合は None
+    # (= 既定値なので旧 snapshot / 非 LLM caller とも後方互換)。
+    prediction_context_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.occurred_at, datetime):
@@ -181,6 +189,10 @@ class ActionResultEntry:
         if isinstance(self.occurred_tick, bool):
             # bool は int の subclass。tick として誤注入されないよう弾く
             raise TypeError("occurred_tick must not be bool")
+        if self.prediction_context_id is not None and not isinstance(
+            self.prediction_context_id, str
+        ):
+            raise TypeError("prediction_context_id must be str or None")
 
 
 EMOTION_HINT_VALUES: Tuple[str, ...] = (

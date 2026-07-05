@@ -39,6 +39,7 @@ class DefaultActionResultStore(IActionResultStore):
         emotion_hint: Optional[str] = None,
         scene_boundary: bool = False,
         occurred_tick: Optional[int] = None,
+        prediction_context_id: Optional[str] = None,
     ) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -76,6 +77,10 @@ class DefaultActionResultStore(IActionResultStore):
             not isinstance(occurred_tick, int) or isinstance(occurred_tick, bool)
         ):
             raise TypeError("occurred_tick must be int or None")
+        if prediction_context_id is not None and not isinstance(
+            prediction_context_id, str
+        ):
+            raise TypeError("prediction_context_id must be str or None")
         # Issue #311 後続: フォールバックを tz-aware UTC に統一。
         # world_runtime は明示的に渡すが、それ以外の caller の取りこぼし防止。
         at = occurred_at if occurred_at is not None else datetime.now(timezone.utc)
@@ -95,6 +100,7 @@ class DefaultActionResultStore(IActionResultStore):
             emotion_hint=emotion_hint,
             scene_boundary=scene_boundary,
             occurred_tick=occurred_tick,
+            prediction_context_id=prediction_context_id,
         )
         key = self._key(player_id)
         if key not in self._store:
