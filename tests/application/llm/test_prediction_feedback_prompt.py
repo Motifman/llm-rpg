@@ -72,8 +72,8 @@ class TestBuildPredictionFeedbackText:
         )
         assert text == ""
 
-    def test_直近3件が新しい順に台帳として並ぶ(self) -> None:
-        """予測付き action が 4 件あっても、直近 3 件だけが新しい順に載る。"""
+    def test_直近3件が古い順に台帳として並ぶ(self) -> None:
+        """予測付き action が 4 件あっても、直近 3 件だけが古い順 (時系列) に載る。"""
         text = build_prediction_feedback_text(
             [
                 _action(minutes=0, expected_result="予測1 (最古)"),
@@ -92,8 +92,8 @@ class TestBuildPredictionFeedbackText:
         assert "予測2" in text
         assert "予測3" in text
         assert "予測4 (最新)" in text
-        # 新しい順に並ぶこと
-        assert text.index("予測4 (最新)") < text.index("予測3") < text.index("予測2")
+        # 古い順 (時系列昇順) に並ぶこと。【直近の出来事】と向きを揃える。
+        assert text.index("予測2") < text.index("予測3") < text.index("予測4 (最新)")
 
     def test_cap超過時は古いentryから切り詰められる(self) -> None:
         """総文字数が cap を超える場合、新しい entry を優先し古い entry を落とす。"""
@@ -164,6 +164,28 @@ class TestBuildPredictionFeedbackText:
         assert "結果待ち" not in text
         assert "- 実際:" in text
         assert "result=扉が静かに開いた" in text
+
+    def test_結果待ちは古い順表示で最後の行に来る(self) -> None:
+        """古い解決済み entry と最新の結果待ち entry が混在する場合、古い順表示
+        では解決済みが上・結果待ちが最後の行に来る。"""
+        text = build_prediction_feedback_text(
+            [
+                _action(
+                    minutes=0,
+                    expected_result="古い予測",
+                    result_summary="古い結果が出た",
+                ),
+                _action(
+                    minutes=10,
+                    expected_result="最新はまだ結果待ち",
+                    result_summary="",
+                ),
+            ],
+            [],
+        )
+        lines = text.splitlines()
+        assert lines[-1] == "- 予測 (結果待ち): 最新はまだ結果待ち"
+        assert text.index("古い予測") < text.index("最新はまだ結果待ち")
 
     def test_最新entryに後続観測があれば結果待ちにならない(self) -> None:
         """最新 entry でも後続観測があれば通常どおり予測/実際/後続観測を出す。"""

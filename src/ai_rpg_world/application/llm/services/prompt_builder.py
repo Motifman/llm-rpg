@@ -198,10 +198,16 @@ def build_prediction_feedback_text(
     """直近 N 件の予測付き action を、実際の結果と並べる prompt section 本文にする。
 
     U0 (段0 台帳の N 件化): 従来は最新 1 件だけだった台帳を直近
-    ``_PREDICTION_FEEDBACK_LEDGER_LIMIT`` 件に広げ、新しい順に並べる。
-    総文字数が ``_PREDICTION_FEEDBACK_TOTAL_CHAR_CAP`` を超える場合は
-    古い entry から切り詰める。もっとも新しい entry に後続観測が
-    1 件も無ければ「結果待ち」として予測だけを出す。
+    ``_PREDICTION_FEEDBACK_LEDGER_LIMIT`` 件に広げる。
+
+    選ぶ対象は最新側 N 件で、総文字数が
+    ``_PREDICTION_FEEDBACK_TOTAL_CHAR_CAP`` を超える場合は古い方から
+    切り詰める (= 最新側を優先して残す)。表示は選んだ分を古い順
+    (時系列昇順、古い予測が上・最新が下) に並べる。同じプロンプト内の
+    【直近の出来事】(recent_events_formatter) が時系列昇順で並ぶため、
+    読み手の一貫性のために向きを揃える。もっとも新しい entry の帰結が
+    まだ未確定なら「結果待ち」として予測だけを出す (古い順表示では
+    最後の行に来る)。
     """
 
     if not isinstance(action_results, list):
@@ -250,17 +256,19 @@ def build_prediction_feedback_text(
         )
 
     header = "前回の予測を、願望ではなく世界への仮説として読み直してください。"
-    lines = [header]
+    # entry_blocks は最新順 (ledger と同じ)。cap は最新側を優先して残し、
+    # 収まらなくなったら以降 (= より古い entry) を諦める。
     total_chars = len(header)
+    selected_blocks: list[str] = []
     for block in entry_blocks:
         block_text = "\n".join(block)
-        # 総文字数 cap: 最初の 1 件は必ず載せ、以降は cap を超える手前で
-        # 打ち切る (古い entry から切り詰められる、というのは「新しい順に
-        # 積んでいき、収まらなくなったら以降 = より古い entry を諦める」の意)。
-        if lines != [header] and total_chars + len(block_text) + 1 > _PREDICTION_FEEDBACK_TOTAL_CHAR_CAP:
+        if selected_blocks and total_chars + len(block_text) + 1 > _PREDICTION_FEEDBACK_TOTAL_CHAR_CAP:
             break
-        lines.append(block_text)
+        selected_blocks.append(block_text)
         total_chars += len(block_text) + 1
+    # 表示は古い順 (時系列昇順)。【直近の出来事】と向きを揃えるため、
+    # 最新順に選んだ blocks を反転してから並べる。
+    lines = [header, *reversed(selected_blocks)]
     return "\n".join(lines)
 
 
