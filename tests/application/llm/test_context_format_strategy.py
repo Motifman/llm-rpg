@@ -134,6 +134,34 @@ class TestSectionBasedContextFormatStrategyDefault:
         idx_mem = text.index("【関連する記憶】")
         assert idx_events < idx_feedback < idx_mem
 
+    def test_pending_predictions_は_prediction_feedback_の隣に出る(self, strategy):
+        """U10a (予測誤差統一設計 部品6): 【保留中の予測】は【前回の予測と実際】
+
+        の隣 (直後) に置く (計画書の配置指定)。"""
+        text = strategy.format(
+            current_state_text="現在地",
+            recent_events_text="出来事",
+            relevant_memories_text="記憶",
+            prediction_feedback_text="- 予測: 扉が開く\n- 実際: 開かなかった",
+            pending_predictions_text="・夕方に木の下でカイトと会う",
+        )
+        assert "【保留中の予測】" in text
+        idx_feedback = text.index("【前回の予測と実際】")
+        idx_pending = text.index("【保留中の予測】")
+        idx_mem = text.index("【関連する記憶】")
+        assert idx_feedback < idx_pending < idx_mem
+
+    def test_pending_predictions_が空なら_section_ごと省略される(self, strategy):
+        """再浮上する pending prediction が無ければ (空文字)、【保留中の予測】
+
+        section 自体が出ない (= 導入前と byte 一致)。"""
+        text = strategy.format(
+            current_state_text="現在地",
+            recent_events_text="出来事",
+            prediction_feedback_text="- 予測: 扉が開く\n- 実際: 開かなかった",
+        )
+        assert "【保留中の予測】" not in text
+
     def test_inventory_セクションが出ても順序が崩れない(self, strategy):
         """inventory は memories の前。"""
         text = strategy.format(
@@ -311,6 +339,29 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
         idx_feedback = text.index("【前回の予測と実際】")
         idx_events = text.index("【直近の出来事】")
         assert idx_memos < idx_feedback < idx_events
+
+    def test_legacy_でも_pending_predictions_は_prediction_feedback_の隣(self, strategy):
+        """legacy 順序でも【保留中の予測】は【前回の予測と実際】の隣
+
+        (直後・直近の出来事の直前) に置く。"""
+        text = strategy.format(
+            current_state_text="現在地",
+            recent_events_text="出来事",
+            prediction_feedback_text="- 予測: 音がする\n- 実際: 静かだった",
+            pending_predictions_text="・夕方に木の下でカイトと会う",
+        )
+        idx_feedback = text.index("【前回の予測と実際】")
+        idx_pending = text.index("【保留中の予測】")
+        idx_events = text.index("【直近の出来事】")
+        assert idx_feedback < idx_pending < idx_events
+
+    def test_legacy_でも_pending_predictions_が空なら省略される(self, strategy):
+        text = strategy.format(
+            current_state_text="現在地",
+            recent_events_text="出来事",
+            prediction_feedback_text="- 予測: 音がする\n- 実際: 静かだった",
+        )
+        assert "【保留中の予測】" not in text
 
 
 class TestSectionBasedContextFormatStrategyValidation:
