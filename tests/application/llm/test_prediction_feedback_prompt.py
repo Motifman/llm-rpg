@@ -113,14 +113,57 @@ class TestBuildPredictionFeedbackText:
         assert "最新_" in text
         assert "最古_" not in text
 
-    def test_最新entryに後続観測が無ければ結果待ち行になる(self) -> None:
-        """後続観測がまだ無い最新 entry は「結果待ち」として予測だけを出す。"""
+    def test_成功かつresult_summaryも後続観測も無ければ結果待ち行になる(self) -> None:
+        """成功したが result_summary も後続観測も無い entry (帰結が本当に
+        未確定) だけが「結果待ち」になり、予測だけを出す。"""
         text = build_prediction_feedback_text(
-            [_action(minutes=0, expected_result="扉の仕掛けが分かる")],
+            [
+                _action(
+                    minutes=0,
+                    expected_result="扉の仕掛けが分かる",
+                    result_summary="",
+                )
+            ],
             [],
         )
         assert "- 予測 (結果待ち): 扉の仕掛けが分かる" in text
         assert "- 実際:" not in text
+
+    def test_失敗action_は後続観測が無くても実際にerror_codeが出る(self) -> None:
+        """失敗 action (success=False) は予測誤差が確定しているので、後続観測が
+        無くても「結果待ち」に隠さず success=False / error_code を出す。"""
+        text = build_prediction_feedback_text(
+            [
+                _action(
+                    minutes=0,
+                    expected_result="扉が開く",
+                    result_summary="鍵が足りない",
+                    success=False,
+                    error_code="LOCKED",
+                )
+            ],
+            [],
+        )
+        assert "結果待ち" not in text
+        assert "success=False" in text
+        assert "error_code=LOCKED" in text
+
+    def test_result_summary付き成功_は後続観測が無くても実際が出る(self) -> None:
+        """result_summary を持つ成功 action は結果が出ているので、後続観測が
+        無くても「結果待ち」にならず「実際」を出す。"""
+        text = build_prediction_feedback_text(
+            [
+                _action(
+                    minutes=0,
+                    expected_result="扉が開く",
+                    result_summary="扉が静かに開いた",
+                )
+            ],
+            [],
+        )
+        assert "結果待ち" not in text
+        assert "- 実際:" in text
+        assert "result=扉が静かに開いた" in text
 
     def test_最新entryに後続観測があれば結果待ちにならない(self) -> None:
         """最新 entry でも後続観測があれば通常どおり予測/実際/後続観測を出す。"""
@@ -161,7 +204,7 @@ class TestBuildPredictionFeedbackText:
         assert "古い予測への観測" in text
 
     def test_failed_action_では_error_code_も実際に含める(self) -> None:
-        """失敗 action の実際には success=False と error_code を出す。"""
+        """失敗 action の実際には success=False と error_code を出す (後続観測なし)。"""
         text = build_prediction_feedback_text(
             [
                 _action(
@@ -172,7 +215,7 @@ class TestBuildPredictionFeedbackText:
                     error_code="LOCKED",
                 )
             ],
-            [_obs(1, "扉は開かなかった")],
+            [],
         )
         assert "success=False" in text
         assert "error_code=LOCKED" in text

@@ -165,10 +165,9 @@ def _format_prediction_entry(
 ) -> list[str]:
     """台帳 1 件分を section の行リストにする。
 
-    ``is_pending`` (= 台帳中もっとも新しい entry かつ後続観測が 1 件も
-    無い) のときは、結果がまだ判定できないとみなし予測行だけを出す
-    (器を増やさず表示ロジックだけで「結果待ち」を表現する — 実装計画
-    §2 U0)。
+    ``is_pending`` のときは結果がまだ判定できないとみなし予測行だけを
+    出す (器を増やさず表示ロジックだけで「結果待ち」を表現する — 実装計画
+    §2 U0)。「結果待ち」の判定は呼び出し側で行う (下記 build 参照)。
     """
     if is_pending:
         return [f"- 予測 (結果待ち): {expected}"]
@@ -227,7 +226,19 @@ def build_prediction_feedback_text(
         after = _as_utc(entry.occurred_at)
         before = _as_utc(ledger[index - 1].occurred_at) if index > 0 else None
         followups = _followups_for_prediction(observations, after=after, before=before)
-        is_pending = index == 0 and not followups
+        # 「結果待ち」= 本当にまだ結果が判明していない entry に限定する。
+        # このワールドでは実行済み action は即座に success / error_code /
+        # result_summary を持つため、それらは「結果が出た」とみなす。特に
+        # 失敗 action (success=False) はその時点で予測が外れたことが確定した
+        # 予測誤差そのものなので、後続観測が無くても隠さず「実際」を出す。
+        # pending になるのは「最新 entry」かつ「後続観測が無い」かつ
+        # 「成功したが result_summary も無い (= 帰結が本当に未確定)」場合のみ。
+        is_pending = (
+            index == 0
+            and not followups
+            and entry.success
+            and _nonempty_text(entry.result_summary) is None
+        )
         entry_blocks.append(
             _format_prediction_entry(entry, expected, followups, is_pending=is_pending)
         )
