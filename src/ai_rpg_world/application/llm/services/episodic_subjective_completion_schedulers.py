@@ -367,6 +367,25 @@ class InlineEpisodicSubjectiveScheduler:
                 },
             )
 
+    def set_recall_buffer_store(
+        self, recall_buffer_store: Optional[EpisodicRecallBufferRepository]
+    ) -> None:
+        """U9a: recall_buffer を構築後に差し込むための setter。
+
+        wiring の都合上、scheduler は ``build_episodic_stack`` (= recall_buffer
+        を構築する箇所) より先に組み立てる必要がある (world_runtime.py 参照)。
+        コンストラクタ引数だけでは配線順序が回らないため、build_episodic_stack
+        完了後にこの setter で後から差し込む (U7 の semantic recall service
+        holder と同じ「後から差し込む」パターン)。
+        """
+        if recall_buffer_store is not None and not isinstance(
+            recall_buffer_store, EpisodicRecallBufferRepository
+        ):
+            raise TypeError(
+                "recall_buffer_store must be EpisodicRecallBufferRepository or None"
+            )
+        self._recall_buffer_store = recall_buffer_store
+
     def shutdown(self, timeout: Optional[float] = None) -> None:
         # 同期実装はキュー無し。何もしない。
         del timeout
@@ -720,6 +739,27 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                     "prediction_context_ids": prediction_context_ids,
                 },
             )
+
+    def set_recall_buffer_store(
+        self, recall_buffer_store: Optional[EpisodicRecallBufferRepository]
+    ) -> None:
+        """U9a: recall_buffer を構築後に差し込むための setter。
+
+        wiring の都合上、scheduler は ``build_episodic_stack`` (= recall_buffer
+        を構築する箇所) より先に組み立てる必要がある (world_runtime.py 参照)。
+        コンストラクタ引数だけでは配線順序が回らないため、build_episodic_stack
+        完了後にこの setter で後から差し込む (U7 の semantic recall service
+        holder と同じ「後から差し込む」パターン)。ワーカー thread から読まれる
+        値だが、代入自体は単純な参照差し替えなので追加の同期は不要
+        (belief_evidence_transcriber 等、既存の他フィールドと同じ前提)。
+        """
+        if recall_buffer_store is not None and not isinstance(
+            recall_buffer_store, EpisodicRecallBufferRepository
+        ):
+            raise TypeError(
+                "recall_buffer_store must be EpisodicRecallBufferRepository or None"
+            )
+        self._recall_buffer_store = recall_buffer_store
 
     def shutdown(self, timeout: Optional[float] = None) -> None:
         """進行中ジョブを drain しつつ executor を閉じる。
