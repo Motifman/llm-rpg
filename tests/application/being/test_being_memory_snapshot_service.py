@@ -326,6 +326,68 @@ class TestRestoreRoundTrip:
         assert len(restored) == 1
         assert restored[0] == evidence
 
+    def test_belief_evidence_の_in_context_belief_ids_も_round_trip_する(self) -> None:
+        """U4 (予測誤差統一設計 部品3): attribution 用の in_context_belief_ids も
+        evidence buffer の capture → restore を経て失われないことを保証する。
+        新規 per-Being store は作らず既存 belief_evidence_buffer の codec を
+        拡張しただけなので、EXPECTED_PAYLOAD_KEYS の変更は不要 (U4 の設計判断)。
+        """
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
+            BELIEF_EVIDENCE_SALIENCE_LOW,
+            BeliefEvidence,
+        )
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
+            BeliefEvidenceSourceKind,
+        )
+
+        src_svc, src_stores = _make_service()
+        being = BeingId("ada")
+        evidence = BeliefEvidence(
+            evidence_id="belief-evidence-attr-1",
+            source_kind=BeliefEvidenceSourceKind.CONFIRMATION,
+            episode_ids=("ep-1",),
+            cue_signature="tool:explore|spot:3",
+            text="予測が当たった: 何か見つかるはず",
+            salience=BELIEF_EVIDENCE_SALIENCE_LOW,
+            occurred_at=_NOW,
+            tick=7,
+            in_context_belief_ids=("sem-belief-1", "sem-belief-2"),
+        )
+        src_stores["belief_evidence"].append_by_being(being, evidence)
+        payload_json = src_svc.capture(being)
+
+        dst_svc, dst_stores = _make_service()
+        dst_svc.restore(being, payload_json)
+
+        restored = dst_stores["belief_evidence"].list_all_by_being(being)
+        assert len(restored) == 1
+        assert restored[0].in_context_belief_ids == ("sem-belief-1", "sem-belief-2")
+
+    def test_belief_evidence_の_in_context_belief_ids_欠損の旧データは空タプルに倒れる(
+        self,
+    ) -> None:
+        """U4 導入前 (キー自体が無い) payload を decode しても例外にならず
+        空タプルになる (旧データとの後方互換)。"""
+        from ai_rpg_world.application.being._memory_payload_codecs import (
+            dict_to_belief_evidence,
+        )
+
+        data = {
+            "evidence_id": "belief-evidence-legacy-1",
+            "source_kind": "prediction_error",
+            "episode_ids": ["ep-1"],
+            "cue_signature": "tool:explore",
+            "text": "何もなかった",
+            "salience": "low",
+            "occurred_at": _NOW.isoformat(),
+            "tick": 3,
+            # in_context_belief_ids キー自体を欠落させる
+        }
+
+        evidence = dict_to_belief_evidence(data)
+
+        assert evidence.in_context_belief_ids == ()
+
     def test_他_being_は影響しない(self) -> None:
         src_svc, src_stores = _make_service()
         ada = BeingId("ada")
