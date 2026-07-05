@@ -1,0 +1,75 @@
+# belief_consolidation_v1
+# このファイルは tests/quality/test_belief_consolidation_v1.py から
+# 再生成される。手で編集しないこと。
+
+=== LLM に渡した messages ===
+--- messages[0] role=system ---
+あなたはある RPG キャラクターの内面で動く「記憶を学びに固着させる機能」です。
+直近たまった「学習の素材 (evidence)」群と、すでに持っている「学び (belief)」の候補一覧 (shortlist) を読み、各 evidence についてどう扱うかを決めてください。
+
+【入力の意味】
+- evidence: 予測が外れた経験・繰り返し検出された親密度クラスタ等、学習の素材 1 件。cue_signature はその状況を表す決定論キー (例 "tool:explore|spot:浜辺")。text は素材の内容。
+- shortlist: 既に固着済みの belief (学び) の候補。belief_id / text / confidence / tags / 支持件数 / 反証件数を持つ。evidence と関連しそうな belief だけを渡している。
+
+【あなたの仕事】
+evidence 群を読み、以下のいずれかの決定を **全ての evidence が最終的にどこかの決定でカバーされるように** 宣言してください:
+
+- create: 新しい belief を作る。同じ趣旨の evidence が複数あれば 1 つの create にまとめてよい (畳み込み)。
+- strengthen: 既存 belief (shortlist にある) を、この evidence 群が裏付けている。belief_id と対象 evidence_ids を書く。
+- revise: 既存 belief の内容を訂正する (belief_id / 新しい text / reason)。「学びを信じて行動したら外れた」ような反例が来たとき。
+- contradict: 既存 belief に対する反証を記録する (belief_id / 対象 evidence_ids)。訂正までは要らないが確信度を下げるべきとき。
+- discard: ノイズ・一時的なタスク情報など、学びに値しない evidence を捨てる (evidence_ids / reason)。
+
+【絶対のルール】
+- 命題 (create.text / revise.text) は 50 字以内、命題形式 (例: 「タカシは信頼できる」「北の洞窟は危険」)
+- 個別シーンの再話ではなく、一般化された認識を書く
+- 確信度に応じて修飾を変える: 確信 → 言い切り / 仮説 → 「〜かもしれない」
+- プレイヤー・スポット・オブジェクトは必ず固有名詞で書く。P1, OBJ3 のような短縮ラベルは絶対に使わない
+- memo 由来の evidence は「一時的なタスクか、持続する知識か」をあなたが判定する。タスクなら discard、知識なら create/strengthen
+
+【予測との食い違い (予測誤差) を重視する】
+同じ食い違いが繰り返されている / 食い違いが大きいほど、その学びは重要です。strengthen と create を迷ったら、shortlist に近い belief が無いか確認してから create してください。
+
+【importance の付け方】(create のときのみ)
+- 10: 命や根本的目標に関わる学び
+- 7-9: 信頼/裏切り、重大な世界ルール、予測が繰り返し大きく外れた経験からの学び
+- 4-6: 中程度の関係性・行動指針
+- 1-3: 軽い嗜好・観察
+
+【出力形式】
+JSON オブジェクトのみ（説明文・コードフェンス禁止）。キーは decisions のみ。
+decisions は次のいずれかの形の要素からなる配列:
+{"action": "create", "text": "<50字命題>", "importance": <1-10>, "tags": ["..."], "evidence_ids": ["..."]}
+{"action": "strengthen", "belief_id": "...", "evidence_ids": ["..."]}
+{"action": "revise", "belief_id": "...", "text": "<50字命題>", "reason": "..."}
+{"action": "contradict", "belief_id": "...", "evidence_ids": ["..."]}
+{"action": "discard", "evidence_ids": ["..."], "reason": "..."}
+
+--- messages[1] role=user ---
+以下の evidence / shortlist を読み、decisions を JSON だけで返してください。
+{"evidence": [{"evidence_id": "e1", "source_kind": "prediction_error", "cue_signature": "tool:explore|spot:浜辺", "text": "探索したが何も見つからなかった (0 回目)", "salience": "low", "episode_ids": ["ep-0"]}, {"evidence_id": "e2", "source_kind": "prediction_error", "cue_signature": "tool:explore|spot:浜辺", "text": "探索したが何も見つからなかった (1 回目)", "salience": "low", "episode_ids": ["ep-1"]}, {"evidence_id": "e3", "source_kind": "prediction_error", "cue_signature": "tool:explore|spot:浜辺", "text": "探索したが何も見つからなかった (2 回目)", "salience": "low", "episode_ids": ["ep-2"]}], "shortlist": [{"belief_id": "sem-existing", "text": "この島は資源が乏しい", "confidence": 0.5, "tags": ["explore"], "support_count": 1, "contradict_count": 0}]}
+
+=== BELIEF_CONSOLIDATION trace events ===
+--- event[0] tick=30 ---
+  being_id: being_w1_p1
+  batch_evidence_ids: ['e1', 'e2', 'e3']
+  shortlist_belief_ids: ['sem-existing']
+  decisions: [{'action': 'create', 'text': 'この島の探索は空振りが多い', 'importance': 6, 'tags': ['探索', '浜辺'], 'evidence_ids': ['e1', 'e2', 'e3']}]
+
+=== belief journal (list_for_being) ===
+--- entry[0] ---
+  entry_id: sem-9191695abe7d415a8e4f54055944115b
+  belief_id: sem-9191695abe7d415a8e4f54055944115b
+  status: active
+  text: この島の探索は空振りが多い
+  confidence: 0.4
+  support_evidence_ids: ('e1', 'e2', 'e3')
+  contradict_evidence_ids: ()
+--- entry[1] ---
+  entry_id: sem-existing
+  belief_id: sem-existing
+  status: active
+  text: この島は資源が乏しい
+  confidence: 0.5
+  support_evidence_ids: ('old-e',)
+  contradict_evidence_ids: ()
