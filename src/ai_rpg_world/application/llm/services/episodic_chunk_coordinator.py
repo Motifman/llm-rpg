@@ -301,6 +301,54 @@ class EpisodicChunkCoordinator:
                 exc_info=True,
             )
 
+    def _emit_prediction_outcome_trace(
+        self,
+        *,
+        player_id: PlayerId,
+        episode: SubjectiveEpisode,
+        chunk_actions: "tuple[ActionResultEntry, ...]",
+    ) -> None:
+        """``PREDICTION_OUTCOME`` を trace に記録する (失敗は握りつぶす)。
+
+        prediction_error は None (予測どおり) でも「判定は走った」事実を
+        残すため、chunk 主観補完が一度でも実行された chunk では必ず 1 件 emit
+        する。prediction_context_ids は chunk を構成する action 群のうち id が
+        付いていたものの重複排除リスト (U1 では「紐付けの土台」だけを残し、
+        「どの belief/episode が in-context だったか」の意味づけは U4 の
+        attribution ledger に委ねる)。
+        """
+        recorder = self._resolve_trace_recorder()
+        if recorder is None:
+            return
+        tick: Optional[int] = None
+        if self._current_tick_provider is not None:
+            try:
+                tick = self._current_tick_provider()
+            except Exception:
+                tick = None
+        prediction_context_ids: list[str] = []
+        try:
+            for action in chunk_actions:
+                pid = getattr(action, "prediction_context_id", None)
+                if pid and pid not in prediction_context_ids:
+                    prediction_context_ids.append(pid)
+        except Exception:
+            prediction_context_ids = []
+        try:
+            recorder.record(
+                TraceEventKind.PREDICTION_OUTCOME,
+                tick=tick,
+                player_id=int(player_id.value),
+                episode_id=getattr(episode, "episode_id", ""),
+                prediction_error=getattr(episode, "prediction_error", None),
+                prediction_context_ids=prediction_context_ids,
+            )
+        except Exception:
+            _logger.debug(
+                "trace recorder.record raised for PREDICTION_OUTCOME; skipping",
+                exc_info=True,
+            )
+
     def after_action_recorded(
         self,
         player_id: PlayerId,
@@ -402,6 +450,13 @@ class EpisodicChunkCoordinator:
                 episode,
                 persona_text=persona_block,
                 encoding_input=encoding_input,
+            )
+            # U1: prediction_error が同期経路で確定した瞬間に PREDICTION_OUTCOME
+            # を emit する (非同期 scheduler 経路は完了時に別途 emit する)。
+            self._emit_prediction_outcome_trace(
+                player_id=player_id,
+                episode=episode,
+                chunk_actions=encoding_input.action_results,
             )
         # draft (もしくは inline merge 済み) を必ず先に store に書く。
         # scheduler 経路 (新規): draft = PR #305 でテンプレ既定値が埋まった状態

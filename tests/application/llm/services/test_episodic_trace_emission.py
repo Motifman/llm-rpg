@@ -124,7 +124,9 @@ def _make_episode(
 class TestChunkCoordinatorTraceEmission:
     """chunk 書き込み時に EPISODIC_CHUNK_WRITTEN が記録される。"""
 
-    def _build_coord(self, *, recorder=None, tick: int = 5):
+    def _build_coord(
+        self, *, recorder=None, tick: int = 5, chunk_subjective_fields_service=None
+    ):
         # Phase 3 Step 3e-3: ChunkCoordinator は episode_store を being_id 経路で
         # 触るため、Resolver+WorldId 注入 + Being provision が必要。
         from ai_rpg_world.application.being.being_provisioning_service import (
@@ -153,6 +155,7 @@ class TestChunkCoordinatorTraceEmission:
             action_result_store=action_store,
             episodic_episode_store=episode_store,
             chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),
+            chunk_subjective_fields_service=chunk_subjective_fields_service,
             trace_recorder=recorder,
             current_tick_provider=lambda: tick,
             being_attachment_resolver=resolver,
@@ -376,6 +379,113 @@ class TestChunkCoordinatorTraceEmission:
         self._trigger_chunk_close(coord, buffer, action_store, pid)
         # trace 失敗でも episode は書かれている
         assert len(episode_store.list_recent_by_being(being_id, 10)) > 0
+
+
+class TestChunkCoordinatorPredictionOutcomeTraceEmission:
+    """U1: 同期 merge 経路 (chunk_subjective_fields_service 注入時) で
+    prediction_error 確定時に PREDICTION_OUTCOME が emit される。"""
+
+    def _build_service_with_prediction_error(self, prediction_error):
+        from typing import Any
+
+        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+            IEpisodicChunkSubjectiveCompletionPort,
+        )
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+            EpisodicChunkSubjectiveFieldsService,
+        )
+
+        class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
+            def complete_episode_subjective_json(
+                self, messages: list
+            ) -> dict:
+                return {
+                    "interpreted": "I",
+                    "recall_text": "R",
+                    "prediction_error": prediction_error,
+                }
+
+        return EpisodicChunkSubjectiveFieldsService(_StubPort())
+
+    def test_prediction_error_が確定した瞬間に_id_付きで_PREDICTION_OUTCOME_が出る(
+        self,
+    ) -> None:
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+        service = self._build_service_with_prediction_error("鍵がかかっていた")
+        coord, buffer, action_store, episode_store = self._build_coord(
+            recorder=recorder, chunk_subjective_fields_service=service
+        )
+        pid = PlayerId(1)
+        t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+        action_store.append(
+            pid,
+            action_summary="wait1",
+            result_summary="ok",
+            occurred_at=t0,
+            prediction_context_id="predctx-xyz",
+        )
+        coord.after_action_recorded(pid)
+        buffer.append(
+            pid,
+            ObservationEntry(
+                occurred_at=datetime(2026, 5, 1, 12, 0, 30, tzinfo=timezone.utc),
+                output=ObservationOutput(
+                    prose="salient event",
+                    structured={"type": "x"},
+                    observation_category="social",
+                    breaks_movement=True,
+                ),
+                game_time_label=None,
+            ),
+        )
+        action_store.append(
+            pid,
+            action_summary="wait2",
+            result_summary="ok",
+            occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
+            prediction_context_id="predctx-xyz",
+        )
+        coord.after_action_recorded(pid)
+        action_store.append(
+            pid,
+            action_summary="move",
+            result_summary="ok",
+            occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc),
+            scene_boundary=True,
+        )
+        coord.after_action_recorded(pid)
+
+        outcomes = [
+            e for e in captured if e.kind == TraceEventKind.PREDICTION_OUTCOME
+        ]
+        assert len(outcomes) == 1
+        ev = outcomes[0]
+        assert ev.player_id == 1
+        assert ev.payload["prediction_error"] == "鍵がかかっていた"
+        assert ev.payload["prediction_context_ids"] == ["predctx-xyz"]
+        assert ev.payload["episode_id"]
+
+    def test_chunk_subjective_fields_service_未注入なら_PREDICTION_OUTCOME_は出ない(
+        self,
+    ) -> None:
+        """同期 merge 自体が走らない (= scheduler 経路のみ使う構成) なら
+        sync 側からは emit しない。非同期 scheduler 側が別途担当する。"""
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+        coord, buffer, action_store, episode_store = self._build_coord(
+            recorder=recorder, chunk_subjective_fields_service=None
+        )
+        pid = PlayerId(1)
+        self._trigger_chunk_close(coord, buffer, action_store, pid)
+        outcomes = [
+            e for e in captured if e.kind == TraceEventKind.PREDICTION_OUTCOME
+        ]
+        assert outcomes == []
+
+    # _build_coord / _trigger_chunk_close は同名クラスの実装を再利用する
+    _build_coord = TestChunkCoordinatorTraceEmission._build_coord
+    _trigger_chunk_close = TestChunkCoordinatorTraceEmission._trigger_chunk_close
 
 
 # ──────────────────────────────────────────────────────────────────

@@ -55,6 +55,23 @@ from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 _logger = logging.getLogger(__name__)
 
 
+def _prediction_context_ids_from_encoding(encoding_input: ChunkEncodingInput) -> list:
+    """U1: chunk を構成する action 群から prediction_context_id を重複排除して集める。
+
+    紐付けの土台のみ (どの belief/episode が in-context だったかの意味づけは
+    U4 の attribution ledger に委ねる)。
+    """
+    ids: list = []
+    try:
+        for action in encoding_input.action_results:
+            pid = getattr(action, "prediction_context_id", None)
+            if pid and pid not in ids:
+                ids.append(pid)
+    except Exception:
+        return []
+    return ids
+
+
 def _emit_trace(
     recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]],
     tick_provider: Optional[Callable[[], Optional[int]]],
@@ -231,6 +248,21 @@ class InlineEpisodicSubjectiveScheduler:
                 "episode_id": merged.episode_id,
                 "latency_ms": latency_ms,
                 "recall_text_snippet": recall_snippet,
+            },
+        )
+        # U1: 非同期経路でも prediction_error 確定の瞬間に PREDICTION_OUTCOME
+        # を emit する (同期経路は EpisodicChunkCoordinator 側で emit 済み)。
+        _emit_trace(
+            self._trace_recorder_provider,
+            self._current_tick_provider,
+            kind=TraceEventKind.PREDICTION_OUTCOME,
+            player_id=int(merged.player_id),
+            payload={
+                "episode_id": merged.episode_id,
+                "prediction_error": merged.prediction_error,
+                "prediction_context_ids": _prediction_context_ids_from_encoding(
+                    encoding_input
+                ),
             },
         )
 
@@ -493,6 +525,21 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 "episode_id": merged.episode_id,
                 "latency_ms": latency_ms,
                 "recall_text_snippet": recall_snippet,
+            },
+        )
+        # U1: 非同期経路でも prediction_error 確定の瞬間に PREDICTION_OUTCOME
+        # を emit する (同期経路は EpisodicChunkCoordinator 側で emit 済み)。
+        _emit_trace(
+            self._trace_recorder_provider,
+            self._current_tick_provider,
+            kind=TraceEventKind.PREDICTION_OUTCOME,
+            player_id=int(merged.player_id),
+            payload={
+                "episode_id": merged.episode_id,
+                "prediction_error": merged.prediction_error,
+                "prediction_context_ids": _prediction_context_ids_from_encoding(
+                    encoding_input
+                ),
             },
         )
 
