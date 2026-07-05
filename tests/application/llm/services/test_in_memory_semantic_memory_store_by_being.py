@@ -228,3 +228,79 @@ class TestReplaceAllByBeing:
 # 旧/新 API の独立性を検証していたテストクラス
 # ``TestIndependenceFromPlayerIdApi`` は削除された。新 API のみが残り、
 # being_id を一次キーとして扱う設計に統一されている。
+
+
+class TestSupersedeByBeing:
+    """supersede_by_being の挙動 (U3a: belief journal の revise 操作)。"""
+
+    def test_old_が_superseded_に_new_が_active_で追加される(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        b = BeingId("ada")
+        old = _make_entry("old", text="拠点に資源はない")
+        store.add_by_being(b, old)
+        new = SemanticMemoryEntry(
+            entry_id="new",
+            player_id=1,
+            text="拠点に資源が見つかることがある",
+            evidence_episode_ids=("ep-3",),
+            confidence=0.7,
+            created_at=datetime.now(timezone.utc),
+            belief_id=old.belief_id,
+            supersedes="old",
+        )
+        store.supersede_by_being(b, old_entry_id="old", new_entry=new)
+
+        entries = {e.entry_id: e for e in store.list_for_being(b)}
+        assert entries["old"].status == "superseded"
+        assert entries["new"].status == "active"
+        assert entries["new"].supersedes == "old"
+        assert entries["new"].belief_id == old.belief_id
+
+    def test_old_entry_id_が存在しなくても_new_entry_は追加される(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        b = BeingId("ada")
+        new = _make_entry("new")
+        store.supersede_by_being(b, old_entry_id="does-not-exist", new_entry=new)
+        assert [e.entry_id for e in store.list_for_being(b)] == ["new"]
+
+    def test_型違反は_TypeError(self, store: InMemorySemanticMemoryStore) -> None:
+        with pytest.raises(TypeError, match="being_id"):
+            store.supersede_by_being(
+                "ada", old_entry_id="old", new_entry=_make_entry()  # type: ignore[arg-type]
+            )
+        with pytest.raises(TypeError, match="new_entry"):
+            store.supersede_by_being(
+                BeingId("ada"), old_entry_id="old", new_entry="not-an-entry"  # type: ignore[arg-type]
+            )
+
+
+class TestUpdateStatusByBeing:
+    """update_status_by_being の挙動 (U3a: 反証による inactive 化等)。"""
+
+    def test_指定_entry_の_status_が更新される(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        b = BeingId("ada")
+        store.add_by_being(b, _make_entry("e1"))
+        store.update_status_by_being(b, "e1", "inactive")
+        assert store.list_for_being(b)[0].status == "inactive"
+
+    def test_存在しない_entry_id_は無視される(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        b = BeingId("ada")
+        store.add_by_being(b, _make_entry("e1"))
+        store.update_status_by_being(b, "does-not-exist", "inactive")
+        assert store.list_for_being(b)[0].status == "active"
+
+    def test_他_entry_は影響を受けない(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        b = BeingId("ada")
+        store.add_by_being(b, _make_entry("e1"))
+        store.add_by_being(b, _make_entry("e2"))
+        store.update_status_by_being(b, "e1", "inactive")
+        entries = {e.entry_id: e.status for e in store.list_for_being(b)}
+        assert entries == {"e1": "inactive", "e2": "active"}

@@ -6,6 +6,8 @@ Phase 3 Step 3b-3 (Issue #470): legacy player_id 版を撤去し、being_id 版�
 
 from __future__ import annotations
 
+import dataclasses
+
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import SemanticMemoryRepository
@@ -91,3 +93,47 @@ class InMemorySemanticMemoryStore(SemanticMemoryRepository):
             return False
         self._being_cluster_sigs.add(key)
         return True
+
+    def supersede_by_being(
+        self,
+        being_id: BeingId,
+        *,
+        old_entry_id: str,
+        new_entry: SemanticMemoryEntry,
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(old_entry_id, str) or not old_entry_id.strip():
+            raise TypeError("old_entry_id must be non-empty str")
+        if not isinstance(new_entry, SemanticMemoryEntry):
+            raise TypeError("new_entry must be SemanticMemoryEntry")
+        existing_bucket = self._being_rows.get(being_id, [])
+        new_bucket: list[SemanticMemoryEntry] = []
+        for e in existing_bucket:
+            if e.entry_id == old_entry_id:
+                new_bucket.append(
+                    dataclasses.replace(
+                        e, status="superseded"
+                    )
+                )
+            else:
+                new_bucket.append(e)
+        self._being_rows[being_id] = new_bucket
+        # new_entry の upsert は既存 add_by_being と同じ処理を再利用する。
+        self.add_by_being(being_id, new_entry)
+
+    def update_status_by_being(
+        self, being_id: BeingId, entry_id: str, status: str
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(entry_id, str) or not entry_id.strip():
+            raise TypeError("entry_id must be non-empty str")
+        if not isinstance(status, str):
+            raise TypeError("status must be str")
+        existing_bucket = self._being_rows.get(being_id, [])
+        new_bucket: list[SemanticMemoryEntry] = [
+            dataclasses.replace(e, status=status) if e.entry_id == entry_id else e
+            for e in existing_bucket
+        ]
+        self._being_rows[being_id] = new_bucket

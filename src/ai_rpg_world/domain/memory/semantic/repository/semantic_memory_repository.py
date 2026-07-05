@@ -68,5 +68,33 @@ class SemanticMemoryRepository(ABC):
         以外からの呼び出しは想定しない。
         """
 
+    @abstractmethod
+    def supersede_by_being(
+        self,
+        being_id: BeingId,
+        *,
+        old_entry_id: str,
+        new_entry: SemanticMemoryEntry,
+    ) -> None:
+        """belief journal の revise 操作 (U3a)。
+
+        ``old_entry_id`` の entry を ``status=superseded`` に更新し、
+        ``new_entry`` (``status=active`` / ``supersedes=old_entry_id`` /
+        旧 entry と同じ ``belief_id`` を持つ想定) を upsert する。1 操作として
+        アトミックに行う (片方だけ反映される状態を構造的に防ぐ)。
+
+        ``old_entry_id`` が存在しない場合は old 側の更新をスキップし、
+        ``new_entry`` の追加のみ行う (無条件失敗にしない)。
+        """
+
+    @abstractmethod
+    def update_status_by_being(
+        self, being_id: BeingId, entry_id: str, status: str
+    ) -> None:
+        """belief journal の状態更新操作 (U3a)。反証で inactive 化する等に使う。
+
+        ``entry_id`` が存在しない場合は何もしない (無条件失敗にしない)。
+        """
+
 
 __all__ = ["SemanticMemoryRepository"]
