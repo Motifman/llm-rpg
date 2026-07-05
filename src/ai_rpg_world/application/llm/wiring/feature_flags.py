@@ -576,3 +576,49 @@ def log_belief_attribution_enabled_state(enabled: bool) -> None:
         ENV_BELIEF_ATTRIBUTION_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# 無意識コンテキスト → chunk 主観補完 (U7)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_UNCONSCIOUS_CONTEXT_ENABLED = "UNCONSCIOUS_CONTEXT_ENABLED"
+
+
+def resolve_unconscious_context_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """chunk 主観補完 LLM に「無意識コンテキスト」(信念 top-K + L5 自己像/世界観) を
+    渡すか。
+
+    ``UNCONSCIOUS_CONTEXT_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    OFF (既定) のとき:
+    - ``EpisodicChunkSubjectiveFieldsService`` の system prompt / user message は
+      導入前と byte 一致 (無意識コンテキスト節が一切出ない)
+    - belief top-K を取得する ``SemanticPassiveRecallService`` 追加インスタンスは
+      構築されない (= 想起挙動・§learned section など既存の semantic 経路には
+      一切影響しない)
+
+    ON にすると、``prediction_error`` / ``salience`` の判定材料として cue 一致の
+    active belief top-5 (確信度付き) + (RollingSummary 使用時のみ) L5
+    self_image / world_view が system prompt の指示と共に user message に載る。
+    これにより「誰にとっても同じ驚き」の判定から「このキャラにとっての驚き」の
+    判定に変わる (確証バイアスは仕様。事実フィールドの改変禁止ガードは
+    ``_assert_rule_fields_unchanged`` が既に担保している)。
+
+    詳細は docs/memory_system/prediction_error_unified_memory_design.md §4、
+    docs/memory_system/prediction_error_unified_implementation_plan.md の
+    U7 節。
+    """
+    return _parse_bool_env(ENV_UNCONSCIOUS_CONTEXT_ENABLED, env=env, default=False)
+
+
+def log_unconscious_context_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_UNCONSCIOUS_CONTEXT_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )

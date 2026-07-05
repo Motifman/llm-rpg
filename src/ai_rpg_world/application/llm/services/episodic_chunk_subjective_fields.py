@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable, Optional, Sequence
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -18,6 +18,7 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingI
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 
@@ -71,19 +72,40 @@ salience は "low" または "high" のいずれか。high は「このキャラ
 軽い驚きは low にする。判断に迷ったら low にする。"""
 
 
-def _build_system_prompt(*, salience_enabled: bool) -> str:
-    """salience 節を条件付きで足した system prompt を組み立てる。
+# U7 (予測誤差統一設計 / 無意識コンテキスト): UNCONSCIOUS_CONTEXT_ENABLED が
+# OFF のときは system prompt を byte 不変に保つため、salience と同じ「文字列
+# 追記」方式で組み立てる。新しい JSON キーは増やさない (interpreted /
+# recall_text / prediction_error の判定基準を変えるだけの指示追記)。
+_UNCONSCIOUS_CONTEXT_INSTRUCTION = """
 
-    flag OFF のときは ``_SYSTEM_EPISODE_SUBJECTIVE_JSON`` をそのまま返す
+ユーザメッセージに「## いまの自分（信念と自己像）」という節があれば、そこに
+書かれた本人の信念・自己像に照らして interpreted / prediction_error /
+salience を判定すること。信念に強く合致する出来事は想定内、信念に反する
+出来事は想定外として重みづけてよい（これは人間らしい思い込みの表現であり、
+むしろ望ましい）。ただし信念はあくまで解釈の材料であり、事実
+（ルール草案の observed / cues / what / outcome）を信念に合わせて改変しては
+ならない。当該節が無い場合はこの指示を無視してよい。"""
+
+
+def _build_system_prompt(
+    *, salience_enabled: bool, unconscious_context_enabled: bool = False
+) -> str:
+    """salience 節 / 無意識コンテキスト節を条件付きで足した system prompt を組み立てる。
+
+    両 flag が OFF のときは ``_SYSTEM_EPISODE_SUBJECTIVE_JSON`` をそのまま返す
     (= 既定 prompt が byte 不変であることをここで保証する)。
     """
     if not salience_enabled:
-        return _SYSTEM_EPISODE_SUBJECTIVE_JSON
-    assert _SALIENCE_KEY_LIST_OLD in _SYSTEM_EPISODE_SUBJECTIVE_JSON
-    with_new_keys = _SYSTEM_EPISODE_SUBJECTIVE_JSON.replace(
-        _SALIENCE_KEY_LIST_OLD, _SALIENCE_KEY_LIST_NEW
-    )
-    return with_new_keys + _SALIENCE_INSTRUCTION
+        base = _SYSTEM_EPISODE_SUBJECTIVE_JSON
+    else:
+        assert _SALIENCE_KEY_LIST_OLD in _SYSTEM_EPISODE_SUBJECTIVE_JSON
+        with_new_keys = _SYSTEM_EPISODE_SUBJECTIVE_JSON.replace(
+            _SALIENCE_KEY_LIST_OLD, _SALIENCE_KEY_LIST_NEW
+        )
+        base = with_new_keys + _SALIENCE_INSTRUCTION
+    if unconscious_context_enabled:
+        return base + _UNCONSCIOUS_CONTEXT_INSTRUCTION
+    return base
 
 
 _MAX_SUBJECTIVE_FIELD_CHARS = 700
@@ -274,13 +296,29 @@ class EpisodicChunkSubjectiveFieldsService:
         completion: IEpisodicChunkSubjectiveCompletionPort,
         *,
         salience_enabled: bool = False,
+        unconscious_context_provider: Optional[
+            Callable[[int, Sequence[EpisodicCue]], str]
+        ] = None,
+        unconscious_context_enabled: bool = False,
     ) -> None:
         if not isinstance(completion, IEpisodicChunkSubjectiveCompletionPort):
             raise TypeError("completion must implement IEpisodicChunkSubjectiveCompletionPort")
         if not isinstance(salience_enabled, bool):
             raise TypeError("salience_enabled must be bool")
+        if unconscious_context_provider is not None and not callable(
+            unconscious_context_provider
+        ):
+            raise TypeError("unconscious_context_provider must be callable or None")
+        if not isinstance(unconscious_context_enabled, bool):
+            raise TypeError("unconscious_context_enabled must be bool")
         self._completion = completion
         self._salience_enabled = salience_enabled
+        # U7 (予測誤差統一設計 / 無意識コンテキスト): 「配線 (wire) と有効化
+        # (enable) の分離」規約に従い、provider は常に受け取れるが
+        # unconscious_context_enabled が False の間は一切呼び出さない
+        # (= 未注入時と完全に同一の挙動)。
+        self._unconscious_context_provider = unconscious_context_provider
+        self._unconscious_context_enabled = unconscious_context_enabled
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def merge_llm_subjective_fields(
@@ -312,9 +350,21 @@ class EpisodicChunkSubjectiveFieldsService:
             if self._salience_enabled
             else '{"interpreted": "...", "recall_text": "...", "prediction_error": "...", "heading": "..."}'
         )
+        unconscious_context_text = self._resolve_unconscious_context_text(draft)
         user_sections = [
             "## 人物像（ペルソナ断片）",
             persona_text.strip() if persona_text.strip() else "(なし)",
+        ]
+        # U7 (予測誤差統一設計 / 無意識コンテキスト): flag ON かつ provider が
+        # 非空テキストを返したときだけ section を足す。flag OFF はもちろん、
+        # ON でも provider 未注入・例外・空文字なら user_sections は導入前と
+        # 完全一致する (= 後方互換)。
+        if self._unconscious_context_enabled and unconscious_context_text:
+            user_sections += [
+                "## いまの自分（信念と自己像）",
+                unconscious_context_text,
+            ]
+        user_sections += [
             "## ルール草案（事実・索引はここに依存。改変禁止）",
             _format_draft_facts(draft),
             "## ソース事実（検証用メタ。新事実の根拠にしない）",
@@ -325,7 +375,10 @@ class EpisodicChunkSubjectiveFieldsService:
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",
-                "content": _build_system_prompt(salience_enabled=self._salience_enabled),
+                "content": _build_system_prompt(
+                    salience_enabled=self._salience_enabled,
+                    unconscious_context_enabled=self._unconscious_context_enabled,
+                ),
             },
             {"role": "user", "content": "\n\n".join(user_sections)},
         ]
@@ -382,6 +435,28 @@ class EpisodicChunkSubjectiveFieldsService:
         )
         self._assert_rule_fields_unchanged(draft, merged)
         return merged
+
+    def _resolve_unconscious_context_text(self, draft: SubjectiveEpisode) -> str:
+        """U7: provider を呼んで「## いまの自分」section の本文を取得する。
+
+        flag OFF・provider 未注入・provider の例外・非 str 戻り値・空文字は
+        すべて空文字に縮退させる (= chunk 補完を止めない / 後方互換を保つ)。
+        """
+        if not self._unconscious_context_enabled or self._unconscious_context_provider is None:
+            return ""
+        try:
+            raw_text = self._unconscious_context_provider(draft.player_id, draft.cues)
+        except Exception as e:
+            self._logger.warning(
+                "unconscious_context_provider failed for player_id=%s; "
+                "degrading to empty context: %s",
+                draft.player_id,
+                e,
+            )
+            return ""
+        if not isinstance(raw_text, str):
+            return ""
+        return raw_text.strip()
 
     def _assert_rule_fields_unchanged(self, draft: SubjectiveEpisode, merged: SubjectiveEpisode) -> None:
         if merged.observed != draft.observed:
