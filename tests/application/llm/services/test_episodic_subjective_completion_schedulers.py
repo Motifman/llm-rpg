@@ -501,3 +501,153 @@ class TestSchedulerValidation:
         store = InMemorySubjectiveEpisodeStore()
         with pytest.raises(ValueError):
             ThreadPoolEpisodicSubjectiveScheduler(svc, store, max_queue_size=0)
+
+
+# ─────────────────────────────────────────────
+# U2 (証拠台帳統一設計): 非同期経路での BeliefEvidence 転記
+# ─────────────────────────────────────────────
+
+
+class TestInlineSchedulerBeliefEvidenceTranscription:
+    """InlineEpisodicSubjectiveScheduler が完了点で transcriber を呼ぶ挙動。"""
+
+    def test_prediction_error_ありなら_evidence_が_1件積まれる(self) -> None:
+        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+            BeliefEvidenceTranscriber,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
+
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "待っても何も起きなかった",
+            }
+        )
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            belief_evidence_transcriber=transcriber,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].text == "待っても何も起きなかった"
+
+    def test_prediction_error_なしなら_evidence_は_積まれない(self) -> None:
+        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+            BeliefEvidenceTranscriber,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
+
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        port = _StubPort(returns={"interpreted": "I", "recall_text": "R"})
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            belief_evidence_transcriber=transcriber,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+
+        assert buffer_store.list_all_by_being(being_id) == []
+
+    def test_transcriber_未注入なら_flag_OFF_相当で何も積まない(self) -> None:
+        """belief_evidence_transcriber=None (既定) は既存動作と完全互換。"""
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "外れた",
+            }
+        )
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+        )
+        # 例外を投げず従来通り完了することだけを確認する。
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        ep_after = store.get_by_being(being_id, draft.episode_id)
+        assert ep_after is not None
+        assert ep_after.prediction_error == "外れた"
+
+    def test_belief_evidence_transcriber_型違反は_TypeError(self) -> None:
+        port = _StubPort()
+        store = InMemorySubjectiveEpisodeStore()
+        with pytest.raises(TypeError):
+            InlineEpisodicSubjectiveScheduler(
+                EpisodicChunkSubjectiveFieldsService(port),
+                store,
+                belief_evidence_transcriber="not_a_transcriber",  # type: ignore[arg-type]
+            )
+
+
+class TestThreadPoolSchedulerBeliefEvidenceTranscription:
+    """ThreadPoolEpisodicSubjectiveScheduler (ワーカー thread 経路) も同じ完了点で
+    transcriber を呼ぶことを保証する。"""
+
+    def test_prediction_error_ありなら_evidence_が_1件積まれる(self) -> None:
+        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+            BeliefEvidenceTranscriber,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
+
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "見つからなかった",
+            }
+        )
+        scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            belief_evidence_transcriber=transcriber,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.shutdown(timeout=5.0)
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].text == "見つからなかった"
+
+    def test_belief_evidence_transcriber_型違反は_TypeError(self) -> None:
+        port = _StubPort()
+        store = InMemorySubjectiveEpisodeStore()
+        with pytest.raises(TypeError):
+            ThreadPoolEpisodicSubjectiveScheduler(
+                EpisodicChunkSubjectiveFieldsService(port),
+                store,
+                belief_evidence_transcriber="not_a_transcriber",  # type: ignore[arg-type]
+            )
