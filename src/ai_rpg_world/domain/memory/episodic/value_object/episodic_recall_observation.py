@@ -12,6 +12,7 @@ from typing import Optional
 
 from ai_rpg_world.domain.memory.episodic.value_object._validators import (
     normalize_optional_text,
+    optional_non_blank,
     reject_blank,
     validate_str_tuple,
 )
@@ -39,6 +40,16 @@ class EpisodicRecallObservation:
     # (PREDICTION_CONTEXT_ID_ENABLED 未設定) のとき・旧 snapshot 由来のときは
     # None (既定値で後方互換)。
     prediction_context_id: Optional[str] = None
+    # U9a (予測誤差統一設計 部品5・誤差駆動再解釈): この recall observation を
+    # in-context にして立てた予測 (= prediction_context_id で特定される) が
+    # 外れたときの誤差文。chunk 補完で prediction_error が確定した瞬間、
+    # recall buffer 側の該当 observation にこの値が刻まれる
+    # (`EpisodicRecallBufferRepository.stamp_prediction_outcome_by_being`)。
+    # 「思い出したのに外れた」を再解釈 coordinator が誤差専用 framing で扱う
+    # ための入力になる (的中側の ranking boost は U9b で別途扱う、本 VO
+    # フィールドはその対象外)。ERROR_DRIVEN_REINTERPRETATION_ENABLED が
+    # OFF (既定) のときは常に None (後方互換・旧 snapshot 由来も None)。
+    prediction_outcome_error: Optional[str] = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "recall_id", reject_blank("recall_id", self.recall_id))
@@ -78,6 +89,13 @@ class EpisodicRecallObservation:
             self.prediction_context_id, str
         ):
             raise TypeError("prediction_context_id must be str or None")
+        object.__setattr__(
+            self,
+            "prediction_outcome_error",
+            optional_non_blank(
+                "prediction_outcome_error", self.prediction_outcome_error
+            ),
+        )
 
 
 __all__ = ["EpisodicRecallObservation"]

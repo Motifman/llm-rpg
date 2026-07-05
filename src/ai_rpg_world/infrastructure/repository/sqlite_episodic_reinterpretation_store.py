@@ -59,6 +59,7 @@ def _recall_to_payload(row: EpisodicRecallObservation) -> dict[str, Any]:
         "situation_cues": list(row.situation_cues),
         "turn_index": row.turn_index,
         "prediction_context_id": row.prediction_context_id,
+        "prediction_outcome_error": row.prediction_outcome_error,
     }
 
 
@@ -76,6 +77,8 @@ def _payload_to_recall(data: dict[str, Any]) -> EpisodicRecallObservation:
         turn_index=int(data.get("turn_index", 0)),
         # U1: 旧 payload にはキー自体が無いので None に倒す (後方互換)。
         prediction_context_id=data.get("prediction_context_id"),
+        # U9a: 旧 payload にはキー自体が無いので None に倒す (後方互換)。
+        prediction_outcome_error=data.get("prediction_outcome_error"),
     )
 
 
@@ -495,6 +498,55 @@ class SqliteEpisodicReinterpretationStore(
             (being_id.value,),
         )
         return [_payload_to_entry(json.loads(str(r[0]))) for r in cur.fetchall()]
+
+    def stamp_prediction_outcome_by_being(
+        self,
+        being_id: BeingId,
+        prediction_context_id: str,
+        prediction_error: str,
+    ) -> None:
+        """U9a: 対象 recall observation の payload を書き換えて誤差を刻む。
+
+        ``payload_json`` の中身が一次情報なので、専用列は持たず JSON を
+        読み直して書き戻す (件数はターン単位の pending recall 数に限られる
+        ため性能上の懸念は小さい。他メソッドと同じ read-modify-write 方針)。
+        """
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(prediction_context_id, str) or not prediction_context_id.strip():
+            raise ValueError("prediction_context_id must be a non-empty str")
+        if not isinstance(prediction_error, str) or not prediction_error.strip():
+            raise ValueError("prediction_error must be a non-empty str")
+        cur = self._conn.execute(
+            """
+            SELECT recall_id, payload_json
+            FROM episodic_recall_observations_by_being
+            WHERE being_id_value = ?
+            """,
+            (being_id.value,),
+        )
+        rows = cur.fetchall()
+        for recall_id, payload_raw in rows:
+            data = json.loads(str(payload_raw))
+            if (
+                data.get("prediction_context_id") != prediction_context_id
+                or data.get("prediction_outcome_error") is not None
+            ):
+                continue
+            data["prediction_outcome_error"] = prediction_error
+            self._conn.execute(
+                """
+                UPDATE episodic_recall_observations_by_being
+                SET payload_json = ?
+                WHERE being_id_value = ? AND recall_id = ?
+                """,
+                (
+                    json.dumps(data, ensure_ascii=False),
+                    being_id.value,
+                    recall_id,
+                ),
+            )
+        self._conn.commit()
 
     def replace_all_by_being(
         self,

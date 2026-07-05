@@ -37,6 +37,8 @@ def _obs(
     episode_id: str,
     player_id: int = 1,
     recalled_at: datetime = _NOW,
+    prediction_context_id: str | None = None,
+    prediction_outcome_error: str | None = None,
 ) -> EpisodicRecallObservation:
     return EpisodicRecallObservation(
         recall_id=recall_id,
@@ -49,6 +51,8 @@ def _obs(
         persona_snapshot="persona",
         situation_cues=("cue",),
         turn_index=1,
+        prediction_context_id=prediction_context_id,
+        prediction_outcome_error=prediction_outcome_error,
     )
 
 
@@ -163,6 +167,69 @@ class TestRecallBufferByBeing:
 # Phase 3 Step 3d-3 (Issue #470): legacy player_id 版 API が撤去されたため、
 # 旧/新 API の独立性を検証していたテストクラス ``TestRecallBufferIsolation``
 # は削除された。新 API のみが残り、being_id を一次キーとして扱う設計に統一。
+
+
+class TestRecallBufferStampPredictionOutcome:
+    """U9a: ``stamp_prediction_outcome_by_being`` の挙動。"""
+
+    def test_一致する_prediction_context_id_の未処理_obs_に誤差が載る(
+        self, being: BeingId
+    ) -> None:
+        store = InMemoryEpisodicRecallBufferStore()
+        store.append_by_being(
+            being,
+            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
+        )
+        store.stamp_prediction_outcome_by_being(being, "pc-1", "外れた: 実際は雨だった")
+        got = store.list_pending_by_being(being)[0]
+        assert got.prediction_outcome_error == "外れた: 実際は雨だった"
+
+    def test_別の_prediction_context_id_の_obs_には載らない(
+        self, being: BeingId
+    ) -> None:
+        store = InMemoryEpisodicRecallBufferStore()
+        store.append_by_being(
+            being,
+            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
+        )
+        store.append_by_being(
+            being,
+            _obs(recall_id="r2", episode_id="e2", prediction_context_id="pc-2"),
+        )
+        store.stamp_prediction_outcome_by_being(being, "pc-1", "外れた")
+        rows = {o.recall_id: o for o in store.list_pending_by_being(being)}
+        assert rows["r1"].prediction_outcome_error == "外れた"
+        assert rows["r2"].prediction_outcome_error is None
+
+    def test_既に誤差が刻まれた_obs_は上書きしない(self, being: BeingId) -> None:
+        store = InMemoryEpisodicRecallBufferStore()
+        store.append_by_being(
+            being,
+            _obs(
+                recall_id="r1",
+                episode_id="e1",
+                prediction_context_id="pc-1",
+                prediction_outcome_error="最初の誤差",
+            ),
+        )
+        store.stamp_prediction_outcome_by_being(being, "pc-1", "二度目の誤差")
+        got = store.list_pending_by_being(being)[0]
+        assert got.prediction_outcome_error == "最初の誤差"
+
+    def test_一致するものが無ければ何もしない(self, being: BeingId) -> None:
+        store = InMemoryEpisodicRecallBufferStore()
+        store.append_by_being(
+            being,
+            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
+        )
+        store.stamp_prediction_outcome_by_being(being, "pc-nonexistent", "誤差")
+        got = store.list_pending_by_being(being)[0]
+        assert got.prediction_outcome_error is None
+
+    def test_型違反は_TypeError(self, being: BeingId) -> None:
+        store = InMemoryEpisodicRecallBufferStore()
+        with pytest.raises(TypeError, match="being_id"):
+            store.stamp_prediction_outcome_by_being("not-being", "pc-1", "誤差")  # type: ignore[arg-type]
 
 
 class TestJournalByBeing:

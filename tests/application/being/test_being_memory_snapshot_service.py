@@ -169,6 +169,10 @@ def _populate(stores: dict[str, object], being_id: BeingId) -> None:
             persona_snapshot="persona",
             situation_cues=("cue-a",),
             turn_index=1,
+            # U9a: 誤差駆動再解釈用フィールドも round trip 対象に含める
+            # (snapshot 追従 checklist #27)。
+            prediction_context_id="pc-1",
+            prediction_outcome_error="外れた: 実際は雨だった",
         ),
     )
 
@@ -387,6 +391,34 @@ class TestRestoreRoundTrip:
         evidence = dict_to_belief_evidence(data)
 
         assert evidence.in_context_belief_ids == ()
+
+    def test_recall_observation_の_prediction_outcome_error_欠損の旧データは_None_に倒れる(
+        self,
+    ) -> None:
+        """U9a 導入前 (キー自体が無い) payload を decode しても例外にならず
+        None になる (旧データとの後方互換)。"""
+        from ai_rpg_world.application.being._memory_payload_codecs import (
+            dict_to_recall_observation,
+        )
+
+        data = {
+            "recall_id": "r-legacy-1",
+            "player_id": 1,
+            "episode_id": "ep-1",
+            "recalled_at": _NOW.isoformat(),
+            "source_axes": ["temporal"],
+            "current_state_snapshot": "state",
+            "recent_events_snapshot": "events",
+            "persona_snapshot": "persona",
+            "situation_cues": ["cue-a"],
+            "turn_index": 1,
+            # prediction_context_id / prediction_outcome_error キー自体を欠落させる
+        }
+
+        obs = dict_to_recall_observation(data)
+
+        assert obs.prediction_context_id is None
+        assert obs.prediction_outcome_error is None
 
     def test_他_being_は影響しない(self) -> None:
         src_svc, src_stores = _make_service()

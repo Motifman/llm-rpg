@@ -36,6 +36,8 @@ def _obs(
     episode_id: str,
     player_id: int = 1,
     recalled_at: datetime = _NOW,
+    prediction_context_id: str | None = None,
+    prediction_outcome_error: str | None = None,
 ) -> EpisodicRecallObservation:
     return EpisodicRecallObservation(
         recall_id=recall_id,
@@ -48,6 +50,8 @@ def _obs(
         persona_snapshot="persona",
         situation_cues=("cue",),
         turn_index=1,
+        prediction_context_id=prediction_context_id,
+        prediction_outcome_error=prediction_outcome_error,
     )
 
 
@@ -144,6 +148,53 @@ class TestSqliteRecallBufferByBeing:
             )
             == ()
         )
+
+
+class TestSqliteRecallBufferStampPredictionOutcome:
+    """U9a: SQLite 版 ``stamp_prediction_outcome_by_being``。"""
+
+    def test_一致する_prediction_context_id_の未処理_obs_に誤差が載る(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        store.append_by_being(
+            being,
+            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
+        )
+        store.stamp_prediction_outcome_by_being(being, "pc-1", "外れた")
+        got = store.list_pending_by_being(being)[0]
+        assert got.prediction_outcome_error == "外れた"
+
+    def test_別の_prediction_context_id_の_obs_には載らない(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        store.append_by_being(
+            being,
+            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
+        )
+        store.append_by_being(
+            being,
+            _obs(recall_id="r2", episode_id="e2", prediction_context_id="pc-2"),
+        )
+        store.stamp_prediction_outcome_by_being(being, "pc-1", "外れた")
+        rows = {o.recall_id: o for o in store.list_pending_by_being(being)}
+        assert rows["r1"].prediction_outcome_error == "外れた"
+        assert rows["r2"].prediction_outcome_error is None
+
+    def test_既に誤差が刻まれた_obs_は上書きしない(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        store.append_by_being(
+            being,
+            _obs(
+                recall_id="r1",
+                episode_id="e1",
+                prediction_context_id="pc-1",
+                prediction_outcome_error="最初の誤差",
+            ),
+        )
+        store.stamp_prediction_outcome_by_being(being, "pc-1", "二度目の誤差")
+        got = store.list_pending_by_being(being)[0]
+        assert got.prediction_outcome_error == "最初の誤差"
 
 
 class TestSqliteJournalByBeing:
