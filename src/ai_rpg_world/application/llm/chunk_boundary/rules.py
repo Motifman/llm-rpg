@@ -134,6 +134,10 @@ class ChunkBoundaryReason(str, Enum):
     TEMPORAL_GAP = "temporal_gap"                     # bucket 内 actions の tick 差が閾値超
     MAX_ACTIONS_REACHED = "max_actions_reached"       # working memory 上限 (= 強制クローズ)
     MIN_ACTIONS_NOT_MET = "min_actions_not_met"       # 単発 action は HOLD (HOLD 理由内訳)
+    # U8 (予測誤差統一設計 部品2a): bucket 内に「成功を予測していたのに失敗」
+    # または「error_code 付き失敗」があれば境界候補にする (誤差ゲート付き符号化)。
+    # error_gated_boundary_enabled=True のときのみ評価される (default OFF)。
+    PREDICTION_ERROR_SALIENT = "prediction_error_salient"
     HOLD_ACCUMULATING = "hold_accumulating"
 
 
@@ -157,6 +161,7 @@ def decide_chunk_boundary(
     *,
     hints: ObservationBoundaryHints | None = None,
     explicit_segment_close: bool = False,
+    error_gated_boundary_enabled: bool = False,
 ) -> ChunkBoundaryDecision:
     """
     チャンクを閉じてエピソード生成へ進むべきかを返す。
@@ -175,6 +180,10 @@ def decide_chunk_boundary(
        - observation の category_shift / structured_keys_change
        - ``breaks_movement`` 観測 (顕著な「進行を遮る」イベント — schedules_turn は
          過剰発火するため除外)
+    5d. **誤差ゲート付き境界 (U8 部品2a、``error_gated_boundary_enabled=True`` のときのみ)**:
+       bucket 内 action に「成功を予測していたのに失敗」(``expected_result`` が
+       非空 かつ ``success=False``) または「error_code 付き失敗」があれば境界候補。
+       この時点で n_actions は 4 で ``MIN_ACTIONS_FOR_CLOSE`` をクリア済み。
     6. **観測件数閾値** → クローズ (件数で scene 級到達と見なす)
     7. 何も該当なし → HOLD (材料は蓄積継続)
     """
@@ -184,6 +193,8 @@ def decide_chunk_boundary(
         raise TypeError("hints must be ObservationBoundaryHints or None")
     if not isinstance(explicit_segment_close, bool):
         raise TypeError("explicit_segment_close must be bool")
+    if not isinstance(error_gated_boundary_enabled, bool):
+        raise TypeError("error_gated_boundary_enabled must be bool")
 
     encoding_ok = chunk_encoding_episode_generation_allowed(inp)
     if not encoding_ok:
@@ -263,6 +274,14 @@ def decide_chunk_boundary(
             reason=ChunkBoundaryReason.OBSERVATION_SALIENT,
         )
 
+    # 5d. 誤差ゲート付き境界 (U8 部品2a: 予測誤差が跳ねた所で場面を切る)
+    if error_gated_boundary_enabled and _has_salient_prediction_error(actions):
+        return ChunkBoundaryDecision(
+            should_close_chunk=True,
+            episode_generation_allowed_if_closed=True,
+            reason=ChunkBoundaryReason.PREDICTION_ERROR_SALIENT,
+        )
+
     # 6. 観測件数閾値
     if hints_eff.observation_count >= OBSERVATION_COUNT_CLOSE_THRESHOLD:
         return ChunkBoundaryDecision(
@@ -276,6 +295,26 @@ def decide_chunk_boundary(
         episode_generation_allowed_if_closed=True,
         reason=ChunkBoundaryReason.HOLD_ACCUMULATING,
     )
+
+
+def _has_salient_prediction_error(actions: Sequence[Any]) -> bool:
+    """U8 (予測誤差統一設計 部品2a): bucket 内 action に構造的な予測ミスがあるか。
+
+    「成功を予測していたのに失敗」(``expected_result`` が非空文字列 かつ
+    ``success=False``) または「error_code 付き失敗」(``error_code`` が非空文字列
+    かつ ``success=False``) のいずれかに該当する action が 1 件でもあれば True。
+    どちらの条件も ``success=False`` を前提とする (成功した action は対象外)。
+    """
+    for a in actions:
+        if getattr(a, "success", True):
+            continue
+        expected_result = getattr(a, "expected_result", None)
+        error_code = getattr(a, "error_code", None)
+        if isinstance(expected_result, str) and expected_result.strip():
+            return True
+        if isinstance(error_code, str) and error_code.strip():
+            return True
+    return False
 
 
 def _action_tick_span(actions: Sequence[Any]) -> int:
