@@ -150,6 +150,14 @@ class ActionResultEntry:
     # 場合や、この entry の生成元が prompt build を経由しない場合は None
     # (= 既定値なので旧 snapshot / 非 LLM caller とも後方互換)。
     prediction_context_id: Optional[str] = None
+    # U4 (予測誤差統一設計 部品3): この行動の prompt build 時に【関連する学び】
+    # として in-context だった belief_id 群。``PredictionContextLedger.consume``
+    # が返す ``PredictionContext.belief_ids`` を ``ActionResultRecorder.record``
+    # がここへ焼き込む。新規 per-Being store は作らず、この entry に載せたまま
+    # chunk 転記点 (encoding_input.action_results) まで運ぶ設計 (U1 のパターンを
+    # 延長)。ledger 未注入 (U1 flag OFF) や consume 失敗時は空タプル
+    # (= 既定値なので旧 snapshot / 非 LLM caller とも後方互換)。
+    in_context_belief_ids: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.occurred_at, datetime):
@@ -193,6 +201,11 @@ class ActionResultEntry:
             self.prediction_context_id, str
         ):
             raise TypeError("prediction_context_id must be str or None")
+        if not isinstance(self.in_context_belief_ids, tuple):
+            raise TypeError("in_context_belief_ids must be tuple[str, ...]")
+        for idx, bid in enumerate(self.in_context_belief_ids):
+            if not isinstance(bid, str) or not bid:
+                raise TypeError(f"in_context_belief_ids[{idx}] must be non-empty str")
 
 
 EMOTION_HINT_VALUES: Tuple[str, ...] = (

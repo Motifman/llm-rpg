@@ -109,6 +109,7 @@ class EpisodicChunkCoordinator:
         being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
         default_world_id: Optional["WorldId"] = None,
         belief_evidence_transcriber: Optional["BeliefEvidenceTranscriber"] = None,
+        belief_attribution_enabled: bool = False,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -192,7 +193,14 @@ class EpisodicChunkCoordinator:
                 raise TypeError(
                     "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
                 )
+        if not isinstance(belief_attribution_enabled, bool):
+            raise TypeError("belief_attribution_enabled must be bool")
         self._belief_evidence_transcriber = belief_evidence_transcriber
+        # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のときだけ
+        # in_context_belief_ids / had_expected_result を実際に計算して transcriber
+        # へ渡す。False (既定) では常に空/False を渡すため、transcriber の挙動は
+        # U4 導入前 (U2/U3 のみ) と完全に一致する。
+        self._belief_attribution_enabled = belief_attribution_enabled
 
         self._observation_buffer = observation_buffer
         self._sliding_window_memory = sliding_window_memory
@@ -284,7 +292,9 @@ class EpisodicChunkCoordinator:
         self._episodic_episode_store.put_by_being(being_id, episode)
 
     def _record_belief_evidence_if_applicable(
-        self, episode: SubjectiveEpisode
+        self,
+        episode: SubjectiveEpisode,
+        chunk_actions: "tuple[ActionResultEntry, ...]" = (),
     ) -> None:
         """U2 (証拠台帳統一設計): 同期 LLM 補完直後に prediction_error を
         evidence 化する。transcriber 未注入 (flag OFF) なら何もしない。
@@ -293,13 +303,35 @@ class EpisodicChunkCoordinator:
         積まない。``_put_episode`` が同じ episode を silent skip する
         状況と揃える (= episode 自体が保存されないのに evidence だけ
         別 being に残る、という不整合を避ける)。
+
+        U4 (予測誤差統一設計 部品3): ``belief_attribution_enabled`` が True の
+        ときだけ ``chunk_actions`` (= ``encoding_input.action_results``) から
+        in_context_belief_ids / had_expected_result を計算して transcriber に
+        渡す。False (既定) では常に空/False を渡すため PREDICTION_ERROR evidence
+        への attribution 添付も CONFIRMATION の生成も起きない (= U4 導入前と
+        一致)。
         """
         if self._belief_evidence_transcriber is None:
             return
         being_id = self._resolve_being_id_for_episode(episode)
         if being_id is None:
             return
-        self._belief_evidence_transcriber.record_if_applicable(being_id, episode)
+        in_context_belief_ids: tuple[str, ...] = ()
+        had_expected_result = False
+        if self._belief_attribution_enabled:
+            from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+                compute_chunk_attribution,
+            )
+
+            in_context_belief_ids, had_expected_result = compute_chunk_attribution(
+                chunk_actions
+            )
+        self._belief_evidence_transcriber.record_if_applicable(
+            being_id,
+            episode,
+            in_context_belief_ids=in_context_belief_ids,
+            had_expected_result=had_expected_result,
+        )
 
     def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
         if self._trace_recorder_provider is not None:
@@ -533,7 +565,9 @@ class EpisodicChunkCoordinator:
             # ここ (merge 直後)。episode.prediction_error が確定した直後に
             # 転記する。非同期経路の対応箇所は
             # episodic_subjective_completion_schedulers.py。
-            self._record_belief_evidence_if_applicable(episode)
+            self._record_belief_evidence_if_applicable(
+                episode, encoding_input.action_results
+            )
         # draft (もしくは inline merge 済み) を必ず先に store に書く。
         # scheduler 経路 (新規): draft = PR #305 でテンプレ既定値が埋まった状態
         # なので「LLM 完了前でも recall_text が空にならない」が保証される。

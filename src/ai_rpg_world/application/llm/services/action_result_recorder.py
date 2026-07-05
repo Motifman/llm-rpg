@@ -88,10 +88,17 @@ class ActionResultRecorder:
     ) -> None:
         """action を store に積み、episodic_stack があれば chunk → promotion を回す。"""
         prediction_context_id: Optional[str] = None
+        in_context_belief_ids: tuple[str, ...] = ()
         if self._prediction_context_ledger is not None:
             consumed = self._prediction_context_ledger.consume(player_id)
             if consumed is not None:
                 prediction_context_id = consumed.prediction_context_id
+                # U4 (予測誤差統一設計 部品3): consume した PredictionContext が
+                # 持つ belief_ids (= このターンの prompt build 時に【関連する
+                # 学び】として in-context だった belief 群) も一緒に entry へ
+                # 焼き込む。新規 per-Being store は作らず、entry に載せたまま
+                # chunk 転記点まで運ぶ (U1 の prediction_context_id と同じ経路)。
+                in_context_belief_ids = consumed.belief_ids
         self._store.append(
             player_id,
             action_summary=action_summary,
@@ -105,6 +112,7 @@ class ActionResultRecorder:
             game_time_label=game_time_label,
             omit_result_in_prompt=omit_result_in_prompt,
             prediction_context_id=prediction_context_id,
+            in_context_belief_ids=in_context_belief_ids,
             expected_result=expected_result,
             intention=intention,
             emotion_hint=emotion_hint,

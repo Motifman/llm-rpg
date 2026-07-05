@@ -146,6 +146,33 @@ decisions は次のいずれかの形の要素からなる配列:
 {"action": "discard", "evidence_ids": ["..."], "reason": "..."}
 """
 
+# U4 (予測誤差統一設計 部品3 / attribution + CONFIRMATION): BELIEF_ATTRIBUTION_ENABLED
+# が OFF のときは CONFIRMATION evidence が一切生成されないため、この追記は
+# 死んだ指示 (無意味なトークン増) になる。U6 salience 節と同じ作法で、flag ON の
+# ときだけ文字列追記(置換)して足す。OFF のときは pre-U4 の system prompt と
+# byte 一致することを保証する (U1 で確立した flag 規律)。
+_CONFIRMATION_ANCHOR = "- evidence: 予測が外れた経験・繰り返し検出された親密度クラスタ等、学習の素材 1 件。cue_signature はその状況を表す決定論キー (例 \"tool:explore|spot:浜辺\")。text は素材の内容。"
+_CONFIRMATION_INSTRUCTION = (
+    _CONFIRMATION_ANCHOR
+    + "\n"
+    + '  - source_kind が "confirmation" の evidence は「その belief を信じて行動し、予測が当たった」という支持の証拠です。反証ではなく support として扱い、strengthen の有力な根拠にしてください。'
+)
+
+
+def _build_belief_consolidation_system_prompt(*, attribution_enabled: bool) -> str:
+    """CONFIRMATION 節を条件付きで足した system prompt を組み立てる。
+
+    flag OFF のときは ``_SYSTEM_BELIEF_CONSOLIDATION_JSON`` をそのまま返す
+    (= 既定 prompt が byte 不変であることをここで保証する)。
+    """
+    if not attribution_enabled:
+        return _SYSTEM_BELIEF_CONSOLIDATION_JSON
+    assert _CONFIRMATION_ANCHOR in _SYSTEM_BELIEF_CONSOLIDATION_JSON
+    return _SYSTEM_BELIEF_CONSOLIDATION_JSON.replace(
+        _CONFIRMATION_ANCHOR, _CONFIRMATION_INSTRUCTION
+    )
+
+
 _logger = logging.getLogger(__name__)
 
 
@@ -184,6 +211,7 @@ class BeliefConsolidationCoordinator:
         default_world_id: Optional[WorldId] = None,
         trace_recorder_provider: Optional[Any] = None,
         current_tick_provider: Optional[Any] = None,
+        belief_attribution_enabled: bool = False,
     ) -> None:
         if not isinstance(evidence_buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -217,6 +245,8 @@ class BeliefConsolidationCoordinator:
             )
         if default_world_id is not None and not isinstance(default_world_id, WorldId):
             raise TypeError("default_world_id must be WorldId")
+        if not isinstance(belief_attribution_enabled, bool):
+            raise TypeError("belief_attribution_enabled must be bool")
         self._evidence_buffer_store = evidence_buffer_store
         self._semantic_store = semantic_store
         self._completion = completion
@@ -230,6 +260,11 @@ class BeliefConsolidationCoordinator:
         self._default_world_id = default_world_id
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
+        # U4: ON のときだけ CONFIRMATION 節を system prompt に足す
+        # (OFF = pre-U4 と byte 一致)。
+        self._system_prompt = _build_belief_consolidation_system_prompt(
+            attribution_enabled=belief_attribution_enabled
+        )
         self._turn_counts: dict[int, int] = defaultdict(int)
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -361,7 +396,22 @@ class BeliefConsolidationCoordinator:
         batch: tuple[BeliefEvidence, ...],
     ) -> tuple[SemanticMemoryEntry, ...]:
         """evidence の cue_signature 由来トークンと belief の tags/text の一致で
-        top-K を決定論選択する。"""
+        top-K を決定論選択する。
+
+        U4 (予測誤差統一設計 部品3): batch 内 evidence の
+        ``in_context_belief_ids`` が指す active belief は、cue スコアが 0
+        (= cue_signature からは無関係に見える) でも **必ず** shortlist に
+        含める。「信じて行動して外れた/当たった」の attribution を見逃すと
+        LLM が contradict/revise/CONFIRMATION による strengthen を判断する
+        機会を丸ごと失う (=固着パス外の書き込み経路が無い設計では致命的)
+        ため、cue スコアより優先する。
+
+        top_k との関係: in-context 由来 (forced) の belief は top_k の
+        cap を **超えても全件残す**。cue スコアだけの追加候補 (extra) は
+        forced 分を差し引いた残り枠だけ選ぶ。U4 flag OFF (または batch の
+        evidence が in-context belief を持たない) なら forced は常に空になり、
+        本メソッドの挙動は導入前と完全に一致する。
+        """
         active_beliefs = [
             e
             for e in self._semantic_store.list_for_being(being_id)
@@ -369,23 +419,39 @@ class BeliefConsolidationCoordinator:
         ]
         if not active_beliefs:
             return ()
+        beliefs_by_id = {b.belief_id: b for b in active_beliefs}
+        forced_ids: set[str] = set()
+        for evidence in batch:
+            forced_ids.update(getattr(evidence, "in_context_belief_ids", ()) or ())
+        forced_beliefs = sorted(
+            (beliefs_by_id[bid] for bid in forced_ids if bid in beliefs_by_id),
+            key=lambda b: b.belief_id,
+        )
+        forced_belief_ids = {b.belief_id for b in forced_beliefs}
+
         cue_tokens: set[str] = set()
         for evidence in batch:
             cue_tokens.update(_cue_tokens(evidence.cue_signature))
-        if not cue_tokens:
-            return ()
         scored: list[tuple[int, SemanticMemoryEntry]] = []
-        for belief in active_beliefs:
-            tag_set = {t.lower() for t in belief.tags}
-            text_lower = belief.text.lower()
-            score = 0
-            for token in cue_tokens:
-                if token in tag_set or token in text_lower:
-                    score += 1
-            if score > 0:
-                scored.append((score, belief))
-        scored.sort(key=lambda pair: (-pair[0], pair[1].belief_id))
-        return tuple(belief for _, belief in scored[: self._shortlist_top_k])
+        if cue_tokens:
+            for belief in active_beliefs:
+                tag_set = {t.lower() for t in belief.tags}
+                text_lower = belief.text.lower()
+                score = 0
+                for token in cue_tokens:
+                    if token in tag_set or token in text_lower:
+                        score += 1
+                if score > 0:
+                    scored.append((score, belief))
+            scored.sort(key=lambda pair: (-pair[0], pair[1].belief_id))
+
+        remaining_slots = max(0, self._shortlist_top_k - len(forced_beliefs))
+        extra = [
+            belief
+            for _, belief in scored
+            if belief.belief_id not in forced_belief_ids
+        ][:remaining_slots]
+        return tuple(forced_beliefs) + tuple(extra)
 
     def _build_messages(
         self,
@@ -419,7 +485,7 @@ class BeliefConsolidationCoordinator:
             "shortlist": shortlist_payload,
         }
         return [
-            {"role": "system", "content": _SYSTEM_BELIEF_CONSOLIDATION_JSON},
+            {"role": "system", "content": self._system_prompt},
             {
                 "role": "user",
                 "content": (

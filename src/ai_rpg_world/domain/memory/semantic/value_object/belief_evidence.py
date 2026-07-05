@@ -48,6 +48,13 @@ class BeliefEvidence:
     salience: str
     occurred_at: datetime
     tick: int | None = None
+    # U4 (予測誤差統一設計 部品3): この evidence が発生したターンで【関連する
+    # 学び】として in-context だった belief_id 群。attribution ledger を
+    # per-Being store 化する代わりに、``ActionResultEntry.in_context_belief_ids``
+    # から chunk 転記点 (``BeliefEvidenceTranscriber``) まで運ばれてきた値を
+    # そのまま添付する (新規 store は作らない設計判断)。既定は空タプル
+    # (= attribution 機構 OFF、または in-context belief が無かったとき)。
+    in_context_belief_ids: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.evidence_id, str) or not self.evidence_id.strip():
@@ -121,6 +128,20 @@ class BeliefEvidence:
                 field="tick",
                 value=self.tick,
             )
+
+        if not isinstance(self.in_context_belief_ids, tuple):
+            raise BeliefEvidenceValidationException(
+                "in_context_belief_ids must be tuple[str, ...]",
+                field="in_context_belief_ids",
+                value=self.in_context_belief_ids,
+            )
+        for idx, bid in enumerate(self.in_context_belief_ids):
+            if not isinstance(bid, str) or not bid.strip():
+                raise BeliefEvidenceValidationException(
+                    f"in_context_belief_ids[{idx}] must be non-empty str",
+                    field="in_context_belief_ids",
+                    index=idx,
+                )
 
 
 __all__ = [

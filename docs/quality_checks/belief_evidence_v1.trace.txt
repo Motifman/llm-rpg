@@ -5,16 +5,17 @@
 === BELIEF_EVIDENCE trace events ===
 --- event[0] tick=12 ---
   being_id: being_w1_p1
-  evidence_id: belief-evidence-3ee83ebc2d0246baa1f27d556c6d7f1f
+  evidence_id: belief-evidence-50c135a2f06049c7b84ee8587f59d934
   source_kind: prediction_error
   episode_ids: ['c4d308e7-1492-5f29-b251-9c7214e77fe5']
   cue_signature: tool:explore,unknown_tool
   text_snippet: QUALITY_MARKER_PREDICTION_ERROR: 何か見つかるはずと期待したが何も無かった
   salience: low
+  in_context_belief_ids: []
 
 === evidence buffer (list_all_by_being) ===
 --- evidence[0] ---
-  evidence_id: belief-evidence-3ee83ebc2d0246baa1f27d556c6d7f1f
+  evidence_id: belief-evidence-50c135a2f06049c7b84ee8587f59d934
   source_kind: prediction_error
   episode_ids: ('c4d308e7-1492-5f29-b251-9c7214e77fe5',)
   cue_signature: tool:explore,unknown_tool

@@ -476,6 +476,8 @@ def belief_evidence_to_dict(evidence: "BeliefEvidence") -> dict[str, Any]:
         "salience": evidence.salience,
         "occurred_at": _dt_to_iso(evidence.occurred_at),
         "tick": evidence.tick,
+        # U4 (予測誤差統一設計 部品3): in-context だった belief_id 群。
+        "in_context_belief_ids": list(evidence.in_context_belief_ids),
     }
 
 
@@ -512,6 +514,11 @@ def dict_to_belief_evidence(data: dict[str, Any]) -> "BeliefEvidence":
             salience=str(data["salience"]),
             occurred_at=_iso_to_dt(str(data["occurred_at"])),
             tick=int(data["tick"]) if data.get("tick") is not None else None,
+            # U4: 旧データ (U4 導入前) には無いキーなので .get で空タプルに倒す
+            # (= 後方互換。attribution 機構 OFF 時の evidence とも同じ形になる)。
+            in_context_belief_ids=tuple(
+                str(x) for x in data.get("in_context_belief_ids", ())
+            ),
         )
     except BeliefEvidenceValidationException as exc:
         raise ValueError(f"invalid BeliefEvidence payload: {exc}") from exc

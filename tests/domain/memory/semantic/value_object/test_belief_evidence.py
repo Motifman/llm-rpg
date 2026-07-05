@@ -74,6 +74,16 @@ class TestBeliefEvidenceConstruction:
         evidence = _evidence(salience=BELIEF_EVIDENCE_SALIENCE_HIGH)
         assert evidence.salience == BELIEF_EVIDENCE_SALIENCE_HIGH
 
+    def test_in_context_belief_ids_defaults_to_empty_tuple(self) -> None:
+        """U4 (予測誤差統一設計 部品3): 既定は空タプル (= attribution 機構 OFF
+        と同じ形。旧データとの後方互換にもなる)。"""
+        evidence = _evidence()
+        assert evidence.in_context_belief_ids == ()
+
+    def test_in_context_belief_ids_can_be_set(self) -> None:
+        evidence = _evidence(in_context_belief_ids=("sem-1", "sem-2"))
+        assert evidence.in_context_belief_ids == ("sem-1", "sem-2")
+
 
 class TestBeliefEvidenceValidation:
     """不変条件違反はすべて BeliefEvidenceValidationException になる。"""
@@ -114,3 +124,11 @@ class TestBeliefEvidenceValidation:
     def test_non_int_tick_raises(self) -> None:
         with pytest.raises(BeliefEvidenceValidationException):
             _evidence(tick="10")
+
+    def test_non_tuple_in_context_belief_ids_raises(self) -> None:
+        with pytest.raises(BeliefEvidenceValidationException):
+            _evidence(in_context_belief_ids=["sem-1"])
+
+    def test_blank_in_context_belief_id_in_tuple_raises(self) -> None:
+        with pytest.raises(BeliefEvidenceValidationException):
+            _evidence(in_context_belief_ids=("sem-1", "  "))

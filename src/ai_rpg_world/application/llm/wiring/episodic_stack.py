@@ -378,6 +378,12 @@ def build_episodic_stack(
     belief_consolidation_completion: Optional[
         "IBeliefConsolidationCompletionPort"
     ] = None,
+    # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のときだけ
+    # chunk_coordinator が in_context_belief_ids / had_expected_result を計算して
+    # belief_evidence_transcriber に渡す。非同期 scheduler 経路への配線は
+    # build_episodic_stack がスケジューラを構築しないため呼び出し側 (world_runtime.py)
+    # の責務 (belief_evidence_transcriber と同じ分担)。
+    belief_attribution_enabled: bool = False,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
@@ -472,6 +478,9 @@ def build_episodic_stack(
                 default_world_id=default_world_id,
                 trace_recorder_provider=trace_recorder_provider,
                 current_tick_provider=current_tick_provider,
+                # U4: ON のときだけ固着 prompt に CONFIRMATION 節を足す
+                # (OFF = pre-U4 と byte 一致)。
+                belief_attribution_enabled=belief_attribution_enabled,
             )
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
@@ -505,6 +514,7 @@ def build_episodic_stack(
         being_attachment_resolver=being_attachment_resolver,
         default_world_id=default_world_id,
         belief_evidence_transcriber=belief_evidence_transcriber,
+        belief_attribution_enabled=belief_attribution_enabled,
     )
     # #526 段階 2: 慣化 sidecar (default off)。enable 時のみ store を作り、
     # passive_recall に注入する。prompt_builder 側にも同 store を渡して

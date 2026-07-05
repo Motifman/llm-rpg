@@ -1,5 +1,5 @@
-# belief_consolidation_v1
-# このファイルは tests/quality/test_belief_consolidation_v1.py から
+# belief_attribution_v1
+# このファイルは tests/quality/test_belief_attribution_v1.py から
 # 再生成される。手で編集しないこと。
 
 === LLM に渡した messages ===
@@ -48,29 +48,21 @@ decisions は次のいずれかの形の要素からなる配列:
 
 --- messages[1] role=user ---
 以下の evidence / shortlist を読み、decisions を JSON だけで返してください。
-{"evidence": [{"evidence_id": "e1", "source_kind": "prediction_error", "cue_signature": "tool:explore|spot:浜辺", "text": "探索したが何も見つからなかった (0 回目)", "salience": "low", "episode_ids": ["ep-0"]}, {"evidence_id": "e2", "source_kind": "prediction_error", "cue_signature": "tool:explore|spot:浜辺", "text": "探索したが何も見つからなかった (1 回目)", "salience": "low", "episode_ids": ["ep-1"]}, {"evidence_id": "e3", "source_kind": "prediction_error", "cue_signature": "tool:explore|spot:浜辺", "text": "探索したが何も見つからなかった (2 回目)", "salience": "low", "episode_ids": ["ep-2"]}], "shortlist": [{"belief_id": "sem-existing", "text": "この島は資源が乏しい", "confidence": 0.5, "tags": ["explore"], "support_count": 1, "contradict_count": 0}]}
+{"evidence": [{"evidence_id": "e-error", "source_kind": "prediction_error", "cue_signature": "tool:search|spot:洞窟", "text": "拠点で資源を探したが、実は見つかった", "salience": "low", "episode_ids": ["ep-1"]}, {"evidence_id": "e-confirm", "source_kind": "confirmation", "cue_signature": "tool:search|spot:洞窟", "text": "予測が当たった: 拠点には何もないはず", "salience": "low", "episode_ids": ["ep-2"]}], "shortlist": [{"belief_id": "sem-no-resources", "text": "拠点に資源はない", "confidence": 0.6000000000000001, "tags": ["拠点"], "support_count": 2, "contradict_count": 0}]}
 
 === BELIEF_CONSOLIDATION trace events ===
---- event[0] tick=30 ---
+--- event[0] tick=40 ---
   being_id: being_w1_p1
-  batch_evidence_ids: ['e1', 'e2', 'e3']
-  shortlist_belief_ids: ['sem-existing']
-  decisions: [{'action': 'create', 'text': 'この島の探索は空振りが多い', 'importance': 6, 'tags': ['探索', '浜辺'], 'evidence_ids': ['e1', 'e2', 'e3']}]
+  batch_evidence_ids: ['e-error', 'e-confirm']
+  shortlist_belief_ids: ['sem-no-resources']
+  decisions: [{'action': 'contradict', 'belief_id': 'sem-no-resources', 'evidence_ids': ['e-error']}, {'action': 'strengthen', 'belief_id': 'sem-no-resources', 'evidence_ids': ['e-confirm']}]
 
 === belief journal (list_for_being) ===
 --- entry[0] ---
-  entry_id: sem-63a41600f6ca4f7fabc4aedda12d5e47
-  belief_id: sem-63a41600f6ca4f7fabc4aedda12d5e47
+  entry_id: sem-no-resources
+  belief_id: sem-no-resources
   status: active
-  text: この島の探索は空振りが多い
-  confidence: 0.7000000000000001
-  support_evidence_ids: ('e1', 'e2', 'e3')
-  contradict_evidence_ids: ()
---- entry[1] ---
-  entry_id: sem-existing
-  belief_id: sem-existing
-  status: active
-  text: この島は資源が乏しい
-  confidence: 0.5
-  support_evidence_ids: ('old-e',)
-  contradict_evidence_ids: ()
+  text: 拠点に資源はない
+  confidence: 0.55
+  support_evidence_ids: ('e-confirm', 'old-e1', 'old-e2')
+  contradict_evidence_ids: ('e-error',)

@@ -3613,10 +3613,12 @@ def create_world_runtime(
         # (enable) の分離」規約に従い、OFF なら None のまま扱う (= 転記コード
         # パス自体は通るが不活性)。
         from ai_rpg_world.application.llm.wiring.feature_flags import (
+            log_belief_attribution_enabled_state,
             log_belief_consolidation_enabled_state,
             log_belief_evidence_enabled_state,
             log_memo_distill_enabled_state,
             log_salience_structured_failure_enabled_state,
+            resolve_belief_attribution_enabled,
             resolve_belief_consolidation_enabled,
             resolve_belief_evidence_enabled,
             resolve_memo_distill_enabled,
@@ -3625,6 +3627,13 @@ def create_world_runtime(
 
         _belief_evidence_enabled = resolve_belief_evidence_enabled()
         log_belief_evidence_enabled_state(_belief_evidence_enabled)
+        # U4 (予測誤差統一設計 部品3 / default OFF): attribution + CONFIRMATION。
+        # 実効的には U1 (PREDICTION_CONTEXT_ID_ENABLED) が ON でないと belief_ids
+        # が流れてこないが、ここでは独立に flag を解決するだけに留める
+        # (U1 flag OFF のまま本 flag だけ ON でも in_context_belief_ids は常に
+        # 空になり安全に縮退する)。
+        _belief_attribution_enabled = resolve_belief_attribution_enabled()
+        log_belief_attribution_enabled_state(_belief_attribution_enabled)
         # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
         # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
         # どちらか一方でも ON なら buffer store 自体は作る。
@@ -3720,6 +3729,10 @@ def create_world_runtime(
                     # U2: 非同期経路 (worker thread) の完了点。flag OFF なら
                     # None のまま (= 従来動作と完全互換)。
                     belief_evidence_transcriber=belief_evidence_transcriber,
+                    # U4: default False。attribution + CONFIRMATION の計算自体を
+                    # 行うかどうか (transcriber が None なら本来無関係だが、
+                    # 明示的に flag を伝播しておく)。
+                    belief_attribution_enabled=_belief_attribution_enabled,
                 )
                 # 各 player の persona_block を player_id 引きで返す provider。
                 # world_character (= 操作対象) は rich persona、その他は spawn 名
@@ -3918,6 +3931,9 @@ def create_world_runtime(
             # 構築される。
             belief_consolidation_enabled=_belief_consolidation_enabled,
             belief_consolidation_completion=_belief_consolidation_completion,
+            # U4 (予測誤差統一設計 部品3): 同期経路 (chunk_coordinator) 用。
+            # 非同期経路 (scheduler) には上で個別に渡し済み。
+            belief_attribution_enabled=_belief_attribution_enabled,
         )
 
         # U6 (STRUCTURED_FAILURE): flag ON のときだけ transcriber を作り
