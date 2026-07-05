@@ -1,0 +1,64 @@
+"""PendingPrediction 用の in-memory ストア実装。
+
+U10a (予測誤差統一設計 部品6)。``InMemoryBeliefEvidenceBufferStore`` と同型の
+Being ごとの list 保持 + 容量上限 evict。
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
+    PENDING_PREDICTION_DEFAULT_CAP,
+    PendingPredictionRepository,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+    PendingPrediction,
+)
+
+
+class InMemoryPendingPredictionStore(PendingPredictionRepository):
+    """Being ごとに ``PendingPrediction`` の list を保持する。"""
+
+    def __init__(self, *, capacity: int = PENDING_PREDICTION_DEFAULT_CAP) -> None:
+        if not isinstance(capacity, int) or capacity <= 0:
+            raise ValueError("capacity must be a positive int")
+        self._capacity = capacity
+        self._predictions: dict[BeingId, list[PendingPrediction]] = defaultdict(list)
+
+    def add_by_being(self, being_id: BeingId, pending: PendingPrediction) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(pending, PendingPrediction):
+            raise TypeError("pending must be PendingPrediction")
+        bucket = self._predictions[being_id]
+        if len(bucket) >= self._capacity:
+            # 最も古い (= created_tick 最小、同値なら追加順が先の) 1 件を evict。
+            # list は追加順を保っているので、created_tick で安定 sort した先頭が
+            # 「最古」。sorted() は安定ソートなので同値は追加順のまま残る。
+            oldest = min(range(len(bucket)), key=lambda i: bucket[i].created_tick)
+            bucket.pop(oldest)
+        bucket.append(pending)
+
+    def list_all_by_being(self, being_id: BeingId) -> list[PendingPrediction]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        return list(self._predictions.get(being_id, ()))
+
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        predictions: list[PendingPrediction],
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(predictions, list):
+            raise TypeError("predictions must be list")
+        for p in predictions:
+            if not isinstance(p, PendingPrediction):
+                raise TypeError("predictions elements must be PendingPrediction")
+        self._predictions[being_id] = list(predictions)
+
+
+__all__ = ["InMemoryPendingPredictionStore"]
