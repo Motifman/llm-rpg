@@ -391,6 +391,12 @@ def build_episodic_stack(
     # recall_buffer 自体が構築されないため、本 flag だけ True にしても
     # 安全に縮退する (実害なし)。
     error_driven_reinterpretation_enabled: bool = False,
+    # U8 (予測誤差統一設計 部品2a・誤差ゲート付き境界 / default False =
+    # flag OFF): True のとき chunk_coordinator が decide_chunk_boundary に
+    # この flag を伝播し、構造的な予測ミス (成功予測→失敗 / error_code 付き
+    # 失敗) を境界候補にする。False (既定) では境界挙動は U8 導入前と完全
+    # 一致する。
+    error_gated_boundary_enabled: bool = False,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
@@ -573,6 +579,7 @@ def build_episodic_stack(
         # 「積まれない store に stamp を試みる」無駄な経路になるので避ける。
         recall_buffer_store=prompt_recall_buffer,
         error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
+        error_gated_boundary_enabled=error_gated_boundary_enabled,
     )
     # #526 段階 2: 慣化 sidecar (default off)。enable 時のみ store を作り、
     # passive_recall に注入する。prompt_builder 側にも同 store を渡して

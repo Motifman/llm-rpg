@@ -118,6 +118,7 @@ class EpisodicChunkCoordinator:
         belief_attribution_enabled: bool = False,
         recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
         error_driven_reinterpretation_enabled: bool = False,
+        error_gated_boundary_enabled: bool = False,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -213,6 +214,12 @@ class EpisodicChunkCoordinator:
             )
         if not isinstance(error_driven_reinterpretation_enabled, bool):
             raise TypeError("error_driven_reinterpretation_enabled must be bool")
+        if not isinstance(error_gated_boundary_enabled, bool):
+            raise TypeError("error_gated_boundary_enabled must be bool")
+        # U8 (予測誤差統一設計 部品2a / default False = flag OFF): True のとき
+        # だけ decide_chunk_boundary に誤差ゲート境界条項を評価させる。False
+        # (既定) では境界挙動は U8 導入前と完全一致する。
+        self._error_gated_boundary_enabled = error_gated_boundary_enabled
         self._recall_buffer_store = recall_buffer_store
         self._error_driven_reinterpretation_enabled = (
             error_driven_reinterpretation_enabled
@@ -545,6 +552,7 @@ class EpisodicChunkCoordinator:
             encoding_input,
             hints=hints,
             explicit_segment_close=explicit_segment_close,
+            error_gated_boundary_enabled=self._error_gated_boundary_enabled,
         )
         # ハードキャップ: 長走で境界判定が常時 False を返し続けると bucket が
         # 無制限に肥える silent failure になる。bucket が hard_cap を超えたら、

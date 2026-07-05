@@ -63,6 +63,9 @@ def _action(
     *,
     scene_boundary: bool = False,
     occurred_tick: int | None = None,
+    success: bool = True,
+    expected_result: str | None = None,
+    error_code: str | None = None,
 ) -> ActionResultEntry:
     ts = at or datetime(2026, 5, 4, 12, 1, 0, tzinfo=timezone.utc)
     return ActionResultEntry(
@@ -71,6 +74,9 @@ def _action(
         result_summary="ok",
         scene_boundary=scene_boundary,
         occurred_tick=occurred_tick,
+        success=success,
+        expected_result=expected_result,
+        error_code=error_code,
     )
 
 
@@ -349,3 +355,136 @@ class TestDecideChunkBoundary:
         inp = build_chunk_encoding_input(pid, [], [_action()])
         with pytest.raises(TypeError, match="ObservationBoundaryHints"):
             decide_chunk_boundary(inp, hints="x")  # type: ignore[arg-type]
+
+    def test_error_gated_boundary_enabled_type_error(self):
+        pid = PlayerId(1)
+        inp = build_chunk_encoding_input(pid, [], [_action()])
+        with pytest.raises(TypeError, match="error_gated_boundary_enabled"):
+            decide_chunk_boundary(inp, error_gated_boundary_enabled="yes")  # type: ignore[arg-type]
+
+
+class TestPredictionErrorGatedBoundary:
+    """U8 (予測誤差統一設計 部品2a): 誤差ゲート付き境界。
+
+    ``error_gated_boundary_enabled=True`` のときだけ、bucket 内に
+    「成功を予測していたのに失敗」または「error_code 付き失敗」があれば
+    境界候補になる (優先度は scene 境界系の後、観測件数閾値の前)。
+    flag OFF (既定) では境界挙動は導入前と完全一致する。
+    """
+
+    def _bucket_with_prediction_miss(
+        self, *, expected_result: str | None, error_code: str | None, success: bool = False
+    ) -> list[ActionResultEntry]:
+        return [
+            _action(occurred_tick=0),
+            _action(occurred_tick=1),
+            _action(
+                occurred_tick=2,
+                success=success,
+                expected_result=expected_result,
+                error_code=error_code,
+            ),
+        ]
+
+    def test_flag_off_prediction_miss_does_not_close_and_holds(self):
+        """flag OFF では「成功予測→失敗」があっても境界挙動が変わらず HOLD のまま
+        (= 導入前と byte 一致することの構造的な担保)。"""
+        pid = PlayerId(1)
+        actions = self._bucket_with_prediction_miss(
+            expected_result="開くはずだった", error_code=None
+        )
+        inp = build_chunk_encoding_input(pid, [], actions)
+        d = decide_chunk_boundary(inp, error_gated_boundary_enabled=False)
+        assert d.should_close_chunk is False
+        assert d.reason is ChunkBoundaryReason.HOLD_ACCUMULATING
+
+    def test_flag_on_expected_result_present_and_failure_closes(self):
+        """flag ON かつ「成功を予測 (expected_result 非空) していたのに
+        success=False」があれば PREDICTION_ERROR_SALIENT で閉じる。"""
+        pid = PlayerId(1)
+        actions = self._bucket_with_prediction_miss(
+            expected_result="開くはずだった", error_code=None
+        )
+        inp = build_chunk_encoding_input(pid, [], actions)
+        d = decide_chunk_boundary(inp, error_gated_boundary_enabled=True)
+        assert d.should_close_chunk is True
+        assert d.reason is ChunkBoundaryReason.PREDICTION_ERROR_SALIENT
+
+    def test_flag_on_error_code_failure_closes(self):
+        """flag ON かつ「error_code 付き失敗」があれば PREDICTION_ERROR_SALIENT
+        で閉じる (expected_result が無くても発火する)。"""
+        pid = PlayerId(1)
+        actions = self._bucket_with_prediction_miss(
+            expected_result=None, error_code="TARGET_NOT_FOUND"
+        )
+        inp = build_chunk_encoding_input(pid, [], actions)
+        d = decide_chunk_boundary(inp, error_gated_boundary_enabled=True)
+        assert d.should_close_chunk is True
+        assert d.reason is ChunkBoundaryReason.PREDICTION_ERROR_SALIENT
+
+    def test_flag_on_success_true_does_not_close_even_with_expected_result(self):
+        """成功した action は expected_result があっても対象外 (success=False が
+        前提条件)。"""
+        pid = PlayerId(1)
+        actions = self._bucket_with_prediction_miss(
+            expected_result="開くはずだった", error_code=None, success=True
+        )
+        inp = build_chunk_encoding_input(pid, [], actions)
+        d = decide_chunk_boundary(inp, error_gated_boundary_enabled=True)
+        assert d.should_close_chunk is False
+        assert d.reason is ChunkBoundaryReason.HOLD_ACCUMULATING
+
+    def test_flag_on_failure_without_expected_result_or_error_code_does_not_close(self):
+        """失敗しても expected_result も error_code も無ければ構造的な予測ミスと
+        認めず発火しない (誤った驚きを捏造しない)。"""
+        pid = PlayerId(1)
+        actions = self._bucket_with_prediction_miss(
+            expected_result=None, error_code=None, success=False
+        )
+        inp = build_chunk_encoding_input(pid, [], actions)
+        d = decide_chunk_boundary(inp, error_gated_boundary_enabled=True)
+        assert d.should_close_chunk is False
+        assert d.reason is ChunkBoundaryReason.HOLD_ACCUMULATING
+
+    def test_scene_boundary_still_takes_priority_over_prediction_error(self):
+        """優先度: scene 境界系 (5a-5c) が先に評価されるため、scene_boundary=True
+        の action が同じ bucket にあれば SCENE_BOUNDARY_ACTION が勝つ。"""
+        pid = PlayerId(1)
+        actions = [
+            _action(occurred_tick=0, scene_boundary=True),
+            _action(occurred_tick=1),
+            _action(
+                occurred_tick=2,
+                success=False,
+                expected_result="開くはずだった",
+            ),
+        ]
+        inp = build_chunk_encoding_input(pid, [], actions)
+        d = decide_chunk_boundary(inp, error_gated_boundary_enabled=True)
+        assert d.should_close_chunk is True
+        assert d.reason is ChunkBoundaryReason.SCENE_BOUNDARY_ACTION
+
+    def test_prediction_error_takes_priority_over_observation_count_threshold(self):
+        """優先度: 誤差ゲート境界は観測件数閾値 (6) より先に評価される。観測が
+        閾値未満でも予測ミスがあれば閉じる。"""
+        pid = PlayerId(1)
+        obs = [_make_obs()]  # 1 件 (OBSERVATION_COUNT_CLOSE_THRESHOLD 未満)
+        actions = self._bucket_with_prediction_miss(
+            expected_result="開くはずだった", error_code=None
+        )
+        inp = build_chunk_encoding_input(pid, obs, actions)
+        d = decide_chunk_boundary(inp, error_gated_boundary_enabled=True)
+        assert d.should_close_chunk is True
+        assert d.reason is ChunkBoundaryReason.PREDICTION_ERROR_SALIENT
+
+    def test_flag_on_below_min_actions_still_holds(self):
+        """MIN_ACTIONS_FOR_CLOSE 未満なら誤差ゲート境界より先に MIN 未達 HOLD が
+        優先する (単発 action は境界候補にしない)。"""
+        pid = PlayerId(1)
+        actions = [
+            _action(occurred_tick=0, success=False, expected_result="開くはずだった"),
+        ]
+        inp = build_chunk_encoding_input(pid, [], actions)
+        d = decide_chunk_boundary(inp, error_gated_boundary_enabled=True)
+        assert d.should_close_chunk is False
+        assert d.reason is ChunkBoundaryReason.MIN_ACTIONS_NOT_MET
