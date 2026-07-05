@@ -109,7 +109,6 @@ _SYSTEM_BELIEF_CONSOLIDATION_JSON = """あなたはある RPG キャラクター
 
 【入力の意味】
 - evidence: 予測が外れた経験・繰り返し検出された親密度クラスタ等、学習の素材 1 件。cue_signature はその状況を表す決定論キー (例 "tool:explore|spot:浜辺")。text は素材の内容。
-  - source_kind が "confirmation" の evidence は「その belief を信じて行動し、予測が当たった」という支持の証拠です。反証ではなく support として扱い、strengthen の有力な根拠にしてください。
 - shortlist: 既に固着済みの belief (学び) の候補。belief_id / text / confidence / tags / 支持件数 / 反証件数を持つ。evidence と関連しそうな belief だけを渡している。
 
 【あなたの仕事】
@@ -146,6 +145,33 @@ decisions は次のいずれかの形の要素からなる配列:
 {"action": "contradict", "belief_id": "...", "evidence_ids": ["..."]}
 {"action": "discard", "evidence_ids": ["..."], "reason": "..."}
 """
+
+# U4 (予測誤差統一設計 部品3 / attribution + CONFIRMATION): BELIEF_ATTRIBUTION_ENABLED
+# が OFF のときは CONFIRMATION evidence が一切生成されないため、この追記は
+# 死んだ指示 (無意味なトークン増) になる。U6 salience 節と同じ作法で、flag ON の
+# ときだけ文字列追記(置換)して足す。OFF のときは pre-U4 の system prompt と
+# byte 一致することを保証する (U1 で確立した flag 規律)。
+_CONFIRMATION_ANCHOR = "- evidence: 予測が外れた経験・繰り返し検出された親密度クラスタ等、学習の素材 1 件。cue_signature はその状況を表す決定論キー (例 \"tool:explore|spot:浜辺\")。text は素材の内容。"
+_CONFIRMATION_INSTRUCTION = (
+    _CONFIRMATION_ANCHOR
+    + "\n"
+    + '  - source_kind が "confirmation" の evidence は「その belief を信じて行動し、予測が当たった」という支持の証拠です。反証ではなく support として扱い、strengthen の有力な根拠にしてください。'
+)
+
+
+def _build_belief_consolidation_system_prompt(*, attribution_enabled: bool) -> str:
+    """CONFIRMATION 節を条件付きで足した system prompt を組み立てる。
+
+    flag OFF のときは ``_SYSTEM_BELIEF_CONSOLIDATION_JSON`` をそのまま返す
+    (= 既定 prompt が byte 不変であることをここで保証する)。
+    """
+    if not attribution_enabled:
+        return _SYSTEM_BELIEF_CONSOLIDATION_JSON
+    assert _CONFIRMATION_ANCHOR in _SYSTEM_BELIEF_CONSOLIDATION_JSON
+    return _SYSTEM_BELIEF_CONSOLIDATION_JSON.replace(
+        _CONFIRMATION_ANCHOR, _CONFIRMATION_INSTRUCTION
+    )
+
 
 _logger = logging.getLogger(__name__)
 
@@ -185,6 +211,7 @@ class BeliefConsolidationCoordinator:
         default_world_id: Optional[WorldId] = None,
         trace_recorder_provider: Optional[Any] = None,
         current_tick_provider: Optional[Any] = None,
+        belief_attribution_enabled: bool = False,
     ) -> None:
         if not isinstance(evidence_buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -218,6 +245,8 @@ class BeliefConsolidationCoordinator:
             )
         if default_world_id is not None and not isinstance(default_world_id, WorldId):
             raise TypeError("default_world_id must be WorldId")
+        if not isinstance(belief_attribution_enabled, bool):
+            raise TypeError("belief_attribution_enabled must be bool")
         self._evidence_buffer_store = evidence_buffer_store
         self._semantic_store = semantic_store
         self._completion = completion
@@ -231,6 +260,11 @@ class BeliefConsolidationCoordinator:
         self._default_world_id = default_world_id
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
+        # U4: ON のときだけ CONFIRMATION 節を system prompt に足す
+        # (OFF = pre-U4 と byte 一致)。
+        self._system_prompt = _build_belief_consolidation_system_prompt(
+            attribution_enabled=belief_attribution_enabled
+        )
         self._turn_counts: dict[int, int] = defaultdict(int)
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -451,7 +485,7 @@ class BeliefConsolidationCoordinator:
             "shortlist": shortlist_payload,
         }
         return [
-            {"role": "system", "content": _SYSTEM_BELIEF_CONSOLIDATION_JSON},
+            {"role": "system", "content": self._system_prompt},
             {
                 "role": "user",
                 "content": (

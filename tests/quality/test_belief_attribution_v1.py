@@ -217,6 +217,8 @@ class TestBeliefAttributionV1:
             default_world_id=DEFAULT_SINGLE_WORLD_ID,
             trace_recorder_provider=lambda: recorder,
             current_tick_provider=lambda: 40,
+            # U4: attribution ON でこそ CONFIRMATION 節が prompt に出る。
+            belief_attribution_enabled=True,
         )
 
         processed = coordinator.flush_player(PlayerId(1))

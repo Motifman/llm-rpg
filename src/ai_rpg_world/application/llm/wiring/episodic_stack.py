@@ -478,6 +478,9 @@ def build_episodic_stack(
                 default_world_id=default_world_id,
                 trace_recorder_provider=trace_recorder_provider,
                 current_tick_provider=current_tick_provider,
+                # U4: ON のときだけ固着 prompt に CONFIRMATION 節を足す
+                # (OFF = pre-U4 と byte 一致)。
+                belief_attribution_enabled=belief_attribution_enabled,
             )
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()

@@ -93,6 +93,7 @@ def _build_setup(
     contradict_inactive_threshold: float = 0.2,
     high_salience_batch_cap: int = 3,
     completion: Any = _UNSET,
+    belief_attribution_enabled: bool = False,
 ) -> _Setup:
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
@@ -115,6 +116,7 @@ def _build_setup(
         high_salience_batch_cap=high_salience_batch_cap,
         being_attachment_resolver=resolver,
         default_world_id=_WORLD_ID,
+        belief_attribution_enabled=belief_attribution_enabled,
     )
     return _Setup(
         coordinator=coordinator,
@@ -798,6 +800,50 @@ class TestShortlistAttribution:
         )
 
         assert [b.belief_id for b in shortlist] == ["sem-match"]
+
+
+class TestSystemPromptConfirmationGating:
+    """U4: CONFIRMATION 節の system prompt 追記が
+    belief_attribution_enabled に連動すること (OFF なら pre-U4 と byte 一致)。"""
+
+    def test_flag_OFF_なら_confirmation_節が_prompt_に無い(self) -> None:
+        setup = _build_setup(
+            outcome={"decisions": []}, belief_attribution_enabled=False
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        system_message = setup.port.calls[0][0]["content"]
+        assert "confirmation" not in system_message
+
+    def test_flag_ON_なら_confirmation_節が_prompt_に有る(self) -> None:
+        setup = _build_setup(
+            outcome={"decisions": []}, belief_attribution_enabled=True
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        system_message = setup.port.calls[0][0]["content"]
+        assert "confirmation" in system_message
+
+    def test_flag_OFF_の_system_prompt_は_pre_U4_定数と_byte_一致(self) -> None:
+        """OFF のとき組み立てる system prompt が既定定数そのものであること
+        (U1 で確立した flag 規律: OFF なら導入前とプロンプト byte 一致)。"""
+        from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
+            _SYSTEM_BELIEF_CONSOLIDATION_JSON,
+        )
+
+        setup = _build_setup(
+            outcome={"decisions": []}, belief_attribution_enabled=False
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        system_message = setup.port.calls[0][0]["content"]
+        assert system_message == _SYSTEM_BELIEF_CONSOLIDATION_JSON
 
 
 class TestTracePayload:
