@@ -74,3 +74,32 @@ class TestInMemoryBeliefEvidenceBufferStore:
         store.replace_all_by_being(being_id, [])
 
         assert store.list_all_by_being(being_id) == []
+
+    def test_remove_by_being_removes_only_specified_ids(self) -> None:
+        """指定した evidence_id だけが除去され、他は残る (固着パスの batch drain 用)。"""
+        store = InMemoryBeliefEvidenceBufferStore()
+        being_id = BeingId("being-1")
+        base = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        store.append_by_being(being_id, _evidence("e1", base))
+        store.append_by_being(being_id, _evidence("e2", base + timedelta(minutes=1)))
+        store.append_by_being(being_id, _evidence("e3", base + timedelta(minutes=2)))
+
+        store.remove_by_being(being_id, ["e1", "e3"])
+
+        rows = store.list_all_by_being(being_id)
+        assert [e.evidence_id for e in rows] == ["e2"]
+
+    def test_remove_by_being_ignores_unknown_ids(self) -> None:
+        """存在しない evidence_id を渡しても例外にならない (無条件失敗にしない)。"""
+        store = InMemoryBeliefEvidenceBufferStore()
+        being_id = BeingId("being-1")
+        store.append_by_being(being_id, _evidence("e1", datetime(2026, 7, 1, tzinfo=timezone.utc)))
+
+        store.remove_by_being(being_id, ["unknown-id"])
+
+        assert [e.evidence_id for e in store.list_all_by_being(being_id)] == ["e1"]
+
+    def test_remove_by_being_on_unknown_being_is_noop(self) -> None:
+        """未登録の being_id への remove も例外にならない。"""
+        store = InMemoryBeliefEvidenceBufferStore()
+        store.remove_by_being(BeingId("unknown"), ["e1"])

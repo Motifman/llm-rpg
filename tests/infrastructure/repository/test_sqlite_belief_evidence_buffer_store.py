@@ -114,3 +114,33 @@ class TestSqliteBeliefEvidenceBufferStore:
 
             assert store.list_all_by_being(being_b) == []
             assert len(store.list_all_by_being(being_a)) == 1
+
+    def test_remove_by_being_removes_only_specified_ids_and_persists(self) -> None:
+        """指定 evidence_id だけが削除され、reconnect 後も反映が残る。"""
+        being_id = BeingId("being_w1_p1")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "belief_evidence.db")
+            store = SqliteBeliefEvidenceBufferStore.connect(path)
+            store.append_by_being(being_id, _evidence("e1"))
+            store.append_by_being(being_id, _evidence("e2"))
+            store.append_by_being(being_id, _evidence("e3"))
+
+            store.remove_by_being(being_id, ["e1", "e3"])
+            del store
+
+            reopened = SqliteBeliefEvidenceBufferStore.connect(path)
+            ids = [e.evidence_id for e in reopened.list_all_by_being(being_id)]
+            assert ids == ["e2"]
+
+    def test_remove_by_being_ignores_unknown_ids(self) -> None:
+        """存在しない evidence_id を渡しても例外にならない。"""
+        being_id = BeingId("being_w1_p1")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "belief_evidence.db")
+            store = SqliteBeliefEvidenceBufferStore.connect(path)
+            store.append_by_being(being_id, _evidence("e1"))
+
+            store.remove_by_being(being_id, ["unknown-id"])
+
+            ids = [e.evidence_id for e in store.list_all_by_being(being_id)]
+            assert ids == ["e1"]
