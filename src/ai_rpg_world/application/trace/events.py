@@ -177,6 +177,24 @@ class TraceEventKind:
     #   - shortlist_belief_ids: list[str] (LLM に提示した既存 belief の belief_id)
     #   - decisions: list[dict] (LLM 応答の decisions をそのまま)
     BELIEF_CONSOLIDATION = "belief_consolidation"
+    # U10a (予測誤差統一設計 部品6・pending prediction): chunk 主観補完が
+    # pending_prediction を非 null で抽出し、PendingPrediction 化して
+    # per-Being store に積んだ瞬間。抽出品質 (乱発していないか) を後から
+    # trace で数えられるようにするための観測点。
+    # payload:
+    #   - pending_id: str
+    #   - being_id: str
+    #   - origin_episode_id: str
+    #   - resolution_cues: list[str]
+    #   - tick_from: int / tick_to: int
+    PENDING_PREDICTION_CREATED = "pending_prediction_created"
+    # U10a: prompt build 時に pending prediction が再浮上し、【保留中の予測】
+    # section に載った瞬間。cue 一致・tick 範囲判定が正しく動いているかを
+    # trace から検証するための観測点。
+    # payload:
+    #   - pending_ids: list[str] (= 再浮上した pending の id 群。cap 適用後)
+    #   - being_id: str
+    PENDING_PREDICTION_RESURFACED = "pending_prediction_resurfaced"
 
 
 @dataclass(frozen=True)

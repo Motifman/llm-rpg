@@ -62,12 +62,36 @@ from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping i
     record_recall_hits_if_applicable,
     stamp_recall_prediction_outcome_if_applicable,
 )
+from ai_rpg_world.application.llm.services._pending_prediction_recording import (
+    record_pending_prediction_if_applicable,
+)
+from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
+    PendingPredictionRepository,
+)
 from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
     IEpisodicRecallSuccessStore,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 
 _logger = logging.getLogger(__name__)
+
+
+def _resolve_recorder_from_provider(
+    recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]],
+) -> Optional[ITraceRecorder]:
+    """U10a: trace_recorder_provider を安全に解決する小さな helper。
+
+    ``_emit_trace`` 内の同等ロジックと重複するが、``record_pending_prediction_if_applicable``
+    は provider ではなく解決済み recorder を受け取る契約 (同期経路
+    ``EpisodicChunkCoordinator._resolve_trace_recorder`` と揃える) なので、
+    scheduler 側で 1 度だけ解決してから渡す。
+    """
+    if recorder_provider is None:
+        return None
+    try:
+        return recorder_provider()
+    except Exception:
+        return None
 
 
 def _prediction_context_ids_from_encoding(encoding_input: ChunkEncodingInput) -> list:
@@ -146,6 +170,8 @@ class InlineEpisodicSubjectiveScheduler:
         error_driven_reinterpretation_enabled: bool = False,
         recall_success_store: Optional[IEpisodicRecallSuccessStore] = None,
         recall_hit_boost_enabled: bool = False,
+        pending_prediction_store: Optional[PendingPredictionRepository] = None,
+        pending_prediction_enabled: bool = False,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
@@ -201,6 +227,16 @@ class InlineEpisodicSubjectiveScheduler:
             )
         if not isinstance(recall_hit_boost_enabled, bool):
             raise TypeError("recall_hit_boost_enabled must be bool")
+        # U10a (予測誤差統一設計 部品6・pending prediction): flag OFF (= None)
+        # なら従来通り何もしない。
+        if pending_prediction_store is not None and not isinstance(
+            pending_prediction_store, PendingPredictionRepository
+        ):
+            raise TypeError(
+                "pending_prediction_store must be PendingPredictionRepository or None"
+            )
+        if not isinstance(pending_prediction_enabled, bool):
+            raise TypeError("pending_prediction_enabled must be bool")
 
         self._service = service
         self._store = episode_store
@@ -216,6 +252,8 @@ class InlineEpisodicSubjectiveScheduler:
         )
         self._recall_success_store = recall_success_store
         self._recall_hit_boost_enabled = recall_hit_boost_enabled
+        self._pending_prediction_store = pending_prediction_store
+        self._pending_prediction_enabled = pending_prediction_enabled
 
     def _resolve_being_id_for_episode(self, episode: SubjectiveEpisode):
         """episode.player_id から being_id を解決する (None なら未解決)。
@@ -346,6 +384,19 @@ class InlineEpisodicSubjectiveScheduler:
                 episode=merged,
                 chunk_actions=encoding_input.action_results,
             )
+            # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
+            # 抽出された約束・見込みを PendingPrediction 化して per-Being
+            # store に積む (flag OFF / store 未配線 / 抽出なしなら no-op)。
+            record_pending_prediction_if_applicable(
+                pending_prediction_store=self._pending_prediction_store,
+                pending_prediction_enabled=self._pending_prediction_enabled,
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                current_tick_provider=self._current_tick_provider,
+                trace_recorder=_resolve_recorder_from_provider(
+                    self._trace_recorder_provider
+                ),
+            )
         except Exception as exc:
             _logger.warning(
                 "InlineEpisodicSubjectiveScheduler: LLM 補完が失敗 (%s)。"
@@ -432,6 +483,22 @@ class InlineEpisodicSubjectiveScheduler:
             )
         self._recall_success_store = recall_success_store
 
+    def set_pending_prediction_store(
+        self, pending_prediction_store: Optional[PendingPredictionRepository]
+    ) -> None:
+        """U10a: pending prediction store を構築後に差し込むための setter。
+
+        ``set_recall_buffer_store`` / ``set_recall_success_store`` と同じ
+        「後から差し込む」パターン。
+        """
+        if pending_prediction_store is not None and not isinstance(
+            pending_prediction_store, PendingPredictionRepository
+        ):
+            raise TypeError(
+                "pending_prediction_store must be PendingPredictionRepository or None"
+            )
+        self._pending_prediction_store = pending_prediction_store
+
     def shutdown(self, timeout: Optional[float] = None) -> None:
         # 同期実装はキュー無し。何もしない。
         del timeout
@@ -471,6 +538,8 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         error_driven_reinterpretation_enabled: bool = False,
         recall_success_store: Optional[IEpisodicRecallSuccessStore] = None,
         recall_hit_boost_enabled: bool = False,
+        pending_prediction_store: Optional[PendingPredictionRepository] = None,
+        pending_prediction_enabled: bool = False,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
@@ -529,6 +598,16 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             )
         if not isinstance(recall_hit_boost_enabled, bool):
             raise TypeError("recall_hit_boost_enabled must be bool")
+        # U10a (予測誤差統一設計 部品6・pending prediction): flag OFF (= None)
+        # なら従来通り何もしない。
+        if pending_prediction_store is not None and not isinstance(
+            pending_prediction_store, PendingPredictionRepository
+        ):
+            raise TypeError(
+                "pending_prediction_store must be PendingPredictionRepository or None"
+            )
+        if not isinstance(pending_prediction_enabled, bool):
+            raise TypeError("pending_prediction_enabled must be bool")
 
         self._service = service
         self._store = episode_store
@@ -545,6 +624,8 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         )
         self._recall_success_store = recall_success_store
         self._recall_hit_boost_enabled = recall_hit_boost_enabled
+        self._pending_prediction_store = pending_prediction_store
+        self._pending_prediction_enabled = pending_prediction_enabled
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="episodic_subj",
@@ -759,6 +840,19 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 episode=merged,
                 chunk_actions=encoding_input.action_results,
             )
+            # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
+            # 抽出された約束・見込みを PendingPrediction 化して per-Being
+            # store に積む (flag OFF / store 未配線 / 抽出なしなら no-op)。
+            record_pending_prediction_if_applicable(
+                pending_prediction_store=self._pending_prediction_store,
+                pending_prediction_enabled=self._pending_prediction_enabled,
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                current_tick_provider=self._current_tick_provider,
+                trace_recorder=_resolve_recorder_from_provider(
+                    self._trace_recorder_provider
+                ),
+            )
         except Exception as exc:
             _logger.warning(
                 "ThreadPoolEpisodicSubjectiveScheduler worker failed (%s)。"
@@ -848,6 +942,23 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 "recall_success_store must implement IEpisodicRecallSuccessStore or None"
             )
         self._recall_success_store = recall_success_store
+
+    def set_pending_prediction_store(
+        self, pending_prediction_store: Optional[PendingPredictionRepository]
+    ) -> None:
+        """U10a: pending prediction store を構築後に差し込むための setter。
+
+        ``set_recall_buffer_store`` / ``set_recall_success_store`` と同じ
+        「後から差し込む」パターン。ワーカー thread から読まれる値だが、代入
+        自体は単純な参照差し替えなので追加の同期は不要。
+        """
+        if pending_prediction_store is not None and not isinstance(
+            pending_prediction_store, PendingPredictionRepository
+        ):
+            raise TypeError(
+                "pending_prediction_store must be PendingPredictionRepository or None"
+            )
+        self._pending_prediction_store = pending_prediction_store
 
     def shutdown(self, timeout: Optional[float] = None) -> None:
         """進行中ジョブを drain しつつ executor を閉じる。

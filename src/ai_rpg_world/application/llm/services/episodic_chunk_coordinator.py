@@ -58,8 +58,14 @@ from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping i
     record_recall_hits_if_applicable,
     stamp_recall_prediction_outcome_if_applicable,
 )
+from ai_rpg_world.application.llm.services._pending_prediction_recording import (
+    record_pending_prediction_if_applicable,
+)
 from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
     EpisodicRecallBufferRepository,
+)
+from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
+    PendingPredictionRepository,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
@@ -125,6 +131,8 @@ class EpisodicChunkCoordinator:
         error_gated_boundary_enabled: bool = False,
         recall_success_store: Optional["IEpisodicRecallSuccessStore"] = None,
         recall_hit_boost_enabled: bool = False,
+        pending_prediction_store: Optional[PendingPredictionRepository] = None,
+        pending_prediction_enabled: bool = False,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -235,6 +243,17 @@ class EpisodicChunkCoordinator:
                 )
         if not isinstance(recall_hit_boost_enabled, bool):
             raise TypeError("recall_hit_boost_enabled must be bool")
+        # U10a (予測誤差統一設計 部品6・pending prediction / default None =
+        # flag OFF 相当): flag OFF なら従来通り何もしない (「配線と有効化の
+        # 分離」)。
+        if pending_prediction_store is not None and not isinstance(
+            pending_prediction_store, PendingPredictionRepository
+        ):
+            raise TypeError(
+                "pending_prediction_store must be PendingPredictionRepository or None"
+            )
+        if not isinstance(pending_prediction_enabled, bool):
+            raise TypeError("pending_prediction_enabled must be bool")
         # U8 (予測誤差統一設計 部品2a / default False = flag OFF): True のとき
         # だけ decide_chunk_boundary に誤差ゲート境界条項を評価させる。False
         # (既定) では境界挙動は U8 導入前と完全一致する。
@@ -245,6 +264,8 @@ class EpisodicChunkCoordinator:
         )
         self._recall_success_store = recall_success_store
         self._recall_hit_boost_enabled = recall_hit_boost_enabled
+        self._pending_prediction_store = pending_prediction_store
+        self._pending_prediction_enabled = pending_prediction_enabled
         self._belief_evidence_transcriber = belief_evidence_transcriber
         # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のときだけ
         # in_context_belief_ids / had_expected_result を実際に計算して transcriber
@@ -381,6 +402,25 @@ class EpisodicChunkCoordinator:
             episode,
             in_context_belief_ids=in_context_belief_ids,
             had_expected_result=had_expected_result,
+        )
+
+    def _record_pending_prediction_if_applicable(
+        self,
+        episode: SubjectiveEpisode,
+    ) -> None:
+        """U10a (予測誤差統一設計 部品6): 抽出された約束・見込みを
+
+        ``PendingPrediction`` 化して per-Being store に積む (共通ロジックは
+        ``_pending_prediction_recording.record_pending_prediction_if_applicable``
+        に集約。非同期 scheduler 経路の対応箇所も同じ関数を呼ぶ)。
+        """
+        record_pending_prediction_if_applicable(
+            pending_prediction_store=self._pending_prediction_store,
+            pending_prediction_enabled=self._pending_prediction_enabled,
+            being_id=self._resolve_being_id_for_episode(episode),
+            episode=episode,
+            current_tick_provider=self._current_tick_provider,
+            trace_recorder=self._resolve_trace_recorder(),
         )
 
     def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
@@ -642,6 +682,11 @@ class EpisodicChunkCoordinator:
                 episode=episode,
                 chunk_actions=encoding_input.action_results,
             )
+            # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
+            # 抽出された約束・見込みを PendingPrediction 化して per-Being
+            # store に積む。flag OFF / 抽出なし / store 未配線なら no-op
+            # (導入前と完全に一致)。
+            self._record_pending_prediction_if_applicable(episode)
         # draft (もしくは inline merge 済み) を必ず先に store に書く。
         # scheduler 経路 (新規): draft = PR #305 でテンプレ既定値が埋まった状態
         # なので「LLM 完了前でも recall_text が空にならない」が保証される。
