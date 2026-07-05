@@ -856,18 +856,35 @@ class WorldRuntime:
         if scheduler is not None:
             scheduler.maybe_schedule(player_id, output)
 
-    def _get_prediction_context_ledger(self) -> PredictionContextLedger:
+    def _get_prediction_context_ledger(self) -> Optional[PredictionContextLedger]:
         """予測誤差統一設計 U1 の ``PredictionContextLedger`` を lazy 構築・共有する。
 
         ``DefaultPromptBuilder`` (発行元) と ``ActionResultRecorder``
         (消費元) が同じ instance を参照する必要があるため、
         ``_cached_default_prompt_builder`` と同じ lazy キャッシュパターンで
         world_runtime が唯一の owner になる。
+
+        ``PREDICTION_CONTEXT_ID_ENABLED`` env で default OFF
+        (共通規約 §0: 新機構は明示的に有効化しない限り動かさない)。OFF の間は
+        None を返し、builder / recorder 側は ledger 未注入と同じ経路
+        (= prediction_context_id は常に None) を通る。
         """
-        ledger = getattr(self, "_prediction_context_ledger_instance", None)
-        if ledger is None:
-            ledger = PredictionContextLedger()
-            self._prediction_context_ledger_instance = ledger
+        sentinel_computed = getattr(
+            self, "_prediction_context_ledger_computed", False
+        )
+        if sentinel_computed:
+            return getattr(self, "_prediction_context_ledger_instance", None)
+
+        from ai_rpg_world.application.llm.wiring.feature_flags import (
+            log_prediction_context_id_state,
+            resolve_prediction_context_id_enabled,
+        )
+
+        enabled = resolve_prediction_context_id_enabled()
+        log_prediction_context_id_state(enabled)
+        ledger = PredictionContextLedger() if enabled else None
+        self._prediction_context_ledger_instance = ledger
+        self._prediction_context_ledger_computed = True
         return ledger
 
     def _record_action_result(

@@ -5,11 +5,17 @@ DefaultPromptBuilder (build_full_prompt) と ActionResultRecorder
 (_record_action_result 経由の do_*) が同じ PredictionContextLedger を
 共有していることを、実際の runtime 呼び出し順で検証する。LLM は呼ばない
 (build_full_prompt はプロンプト組み立てのみ、do_wait は tool 実行のみ)。
+
+id 機構は ``PREDICTION_CONTEXT_ID_ENABLED`` env で default OFF (共通規約
+§0) なので、各テストで明示的に ON にする。OFF 時の後方互換は
+``test_id_機構_OFF_なら_prediction_context_id_は常に_None`` で別途確認する。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+
+import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
@@ -19,6 +25,11 @@ _SCENARIO_PATH = (
     / "scenarios"
     / "forbidden_library_demo.json"
 )
+
+
+@pytest.fixture(autouse=True)
+def _enable_prediction_context_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PREDICTION_CONTEXT_ID_ENABLED", "1")
 
 
 class TestWorldRuntimePredictionContextIdWiring:
@@ -69,3 +80,21 @@ class TestWorldRuntimePredictionContextIdWiring:
         assert first != second
         ledger = runtime._get_prediction_context_ledger()
         assert ledger.peek(player_id).prediction_context_id == second
+
+
+class TestPredictionContextIdDisabledByDefault:
+    def test_env_未設定なら_ledger_は_None_で_prediction_context_id_は常に_None(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """共通規約 §0: 新機構は明示的に有効化しない限り動かさない。"""
+        monkeypatch.delenv("PREDICTION_CONTEXT_ID_ENABLED", raising=False)
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        player_id = runtime.get_player_ids()[0]
+
+        assert runtime._get_prediction_context_ledger() is None
+        prompt = runtime.build_full_prompt(player_id)
+        assert prompt["prediction_context_id"] is None
+
+        runtime.do_wait(player_id)
+        entries = runtime._action_result_store.get_recent(player_id, limit=1)
+        assert entries[0].prediction_context_id is None
