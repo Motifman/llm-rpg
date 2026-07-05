@@ -3615,8 +3615,10 @@ def create_world_runtime(
         from ai_rpg_world.application.llm.wiring.feature_flags import (
             log_belief_consolidation_enabled_state,
             log_belief_evidence_enabled_state,
+            log_salience_structured_failure_enabled_state,
             resolve_belief_consolidation_enabled,
             resolve_belief_evidence_enabled,
+            resolve_salience_structured_failure_enabled,
         )
 
         _belief_evidence_enabled = resolve_belief_evidence_enabled()
@@ -3626,9 +3628,22 @@ def create_world_runtime(
         # どちらか一方でも ON なら buffer store 自体は作る。
         _belief_consolidation_enabled = resolve_belief_consolidation_enabled()
         log_belief_consolidation_enabled_state(_belief_consolidation_enabled)
+        # U6: salience 判定 + STRUCTURED_FAILURE 転記 (default OFF)。他 2 flag
+        # 同様、同じ evidence buffer を共有するので ON なら buffer store を作る
+        # 条件に加える。
+        _salience_structured_failure_enabled = (
+            resolve_salience_structured_failure_enabled()
+        )
+        log_salience_structured_failure_enabled_state(
+            _salience_structured_failure_enabled
+        )
         belief_evidence_buffer_store = None
         belief_evidence_transcriber = None
-        if _belief_evidence_enabled or _belief_consolidation_enabled:
+        if (
+            _belief_evidence_enabled
+            or _belief_consolidation_enabled
+            or _salience_structured_failure_enabled
+        ):
             from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
                 InMemoryBeliefEvidenceBufferStore,
             )
@@ -3675,7 +3690,11 @@ def create_world_runtime(
                 )
 
                 shared_episode_store = InMemorySubjectiveEpisodeStore()
-                _subjective_service = EpisodicChunkSubjectiveFieldsService(_client)
+                # U6: flag OFF なら salience_enabled=False (= system prompt が
+                # 導入前と byte 同一)。
+                _subjective_service = EpisodicChunkSubjectiveFieldsService(
+                    _client, salience_enabled=_salience_structured_failure_enabled
+                )
                 # scheduler と chunk_coordinator (= stack) が同じ store を
                 # 共有することで、worker が書き込んだ merged episode を
                 # passive_recall が読める ( = Pattern A の整合性条件)。
@@ -3893,6 +3912,28 @@ def create_world_runtime(
             belief_consolidation_enabled=_belief_consolidation_enabled,
             belief_consolidation_completion=_belief_consolidation_completion,
         )
+
+        # U6 (STRUCTURED_FAILURE): flag ON のときだけ transcriber を作り
+        # runtime に公開する。runtime_manager (presentation 層) が
+        # tool_call_loop_guard.record_and_check() の戻り値
+        # (CrossTickFailureTrigger) を見て being_id を解決し、本 transcriber
+        # を呼ぶ (= loop_guard 自身は being 解決ロジックを持たない設計)。
+        # episode_store は build_episodic_stack が確定させた共有 store
+        # (subjective 未配線時も内部で新規生成されるため必ず非 None)。
+        runtime._structured_failure_transcriber = None
+        if _salience_structured_failure_enabled and belief_evidence_buffer_store is not None:
+            from ai_rpg_world.application.llm.services.structured_failure_evidence_transcriber import (
+                StructuredFailureEvidenceTranscriber,
+            )
+
+            runtime._structured_failure_transcriber = (
+                StructuredFailureEvidenceTranscriber(
+                    belief_evidence_buffer_store,
+                    runtime._episodic_stack.episode_store,
+                    trace_recorder_provider=lambda: runtime._trace_recorder,
+                    current_tick_provider=runtime.current_tick,
+                )
+            )
 
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
     # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止

@@ -1778,11 +1778,16 @@ class _WorldLlmWiring:
         # に入る。閾値超過時は次ターンの prompt 構築時に observation buffer
         # から drain されて LLM に警告が届く。
         if name:
+            cross_tick_trigger = None
             try:
                 # PR-AA (Y_after_pr639_640 後続): success / error_code を渡して
                 # 「離れた tick に散らばる同一失敗の反復」も検出できるように
                 # する。既存の連続 streak 検出とは独立に動作。
-                self.tool_call_loop_guard.record_and_check(
+                # U6 (STRUCTURED_FAILURE): 閾値到達した回だけ
+                # CrossTickFailureTrigger が返る (flag OFF でも戻り値自体は
+                # 返るが、_record_structured_failure_evidence が transcriber
+                # 未配線を見て no-op にする)。
+                cross_tick_trigger = self.tool_call_loop_guard.record_and_check(
                     player_id,
                     name,
                     arguments,
@@ -1791,6 +1796,8 @@ class _WorldLlmWiring:
                 )
             except Exception:
                 logger.exception("tool_call_loop_guard.record_and_check failed")
+            if cross_tick_trigger is not None:
+                self._record_structured_failure_evidence(player_id, cross_tick_trigger)
         # 失敗 DTO のとき ActionFailed 観測を該当プレイヤーへ投入する。
         # post-hoc に Intent VO を構築し observer に渡す (intent queue 経由は
         # しない — 即時 path で意味のある最小 wire-in)。LLM API レベルや
@@ -1798,6 +1805,44 @@ class _WorldLlmWiring:
         if not result.success:
             self._emit_action_failed_observation(player_id, name, arguments, result)
         return result
+
+    def _record_structured_failure_evidence(
+        self, player_id: PlayerId, trigger: Any
+    ) -> None:
+        """U6 (STRUCTURED_FAILURE + salience): loop_guard の cross_tick_failure
+        閾値到達を ``BeliefEvidence`` に転記する。
+
+        loop_guard 自身は being_id を解決できない (Being 文脈を持たない
+        service のため) ので、being 解決ができる本 presentation 層で
+        transcriber を呼ぶ。transcriber 未配線 (SALIENCE_STRUCTURED_FAILURE_ENABLED
+        が OFF) のときは no-op。失敗しても turn 自体は止めない
+        (loop_guard 本体の警告注入は既に成功しているため)。
+        """
+        transcriber = getattr(self.runtime, "_structured_failure_transcriber", None)
+        if transcriber is None:
+            return
+        aux_resolver = getattr(self.runtime, "aux_being_resolver", None)
+        aux_world_id = getattr(self.runtime, "aux_being_default_world_id", None)
+        if aux_resolver is None or aux_world_id is None:
+            return
+        try:
+            being_id = aux_resolver.resolve_being_id(aux_world_id, player_id)
+        except Exception:
+            logger.exception("structured_failure evidence: being resolution failed")
+            return
+        if being_id is None:
+            return
+        try:
+            transcriber.record_if_triggered(
+                being_id,
+                tool_name=trigger.tool_name,
+                error_code=trigger.error_code,
+                count=trigger.count,
+            )
+        except Exception:
+            logger.exception(
+                "structured_failure_transcriber.record_if_triggered failed"
+            )
 
     def _emit_action_failed_observation(
         self,
