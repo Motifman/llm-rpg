@@ -250,9 +250,22 @@ class TestInlineScheduler:
         assert ev.payload["prediction_error"] == "開くと思ったら鍵がかかっていた"
         assert ev.payload["prediction_context_ids"] == ["predctx-aaa"]
 
-    def test_U1_prediction_error_が_None_でも_PREDICTION_OUTCOME_は出る(self) -> None:
-        """予測どおり (None) でも「判定は走った」事実を必ず残す (的中判定の土台)。"""
-        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
+    def test_U1_prediction_error_が_None_でも_in_context_id_があれば_PREDICTION_OUTCOME_は出る(
+        self,
+    ) -> None:
+        """予測どおり (None) でも in-context id があれば「判定は走った」事実を
+        残す (的中を後段 U4 の CONFIRMATION 転記が拾えるようにするため)。"""
+        t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t,
+            action_summary="待機した",
+            result_summary="時間が進んだ",
+            tool_name="wait",
+            prediction_context_id="predctx-bbb",
+        )
+        enc = build_chunk_encoding_input(PlayerId(7), (), (act,))
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        being_id, resolver, world_id = _provision_scheduler(7)
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
         port = _StubPort(returns={"interpreted": "I", "recall_text": "R"})
@@ -271,7 +284,29 @@ class TestInlineScheduler:
         ]
         assert len(outcomes) == 1
         assert outcomes[0].payload["prediction_error"] is None
-        assert outcomes[0].payload["prediction_context_ids"] == []
+        assert outcomes[0].payload["prediction_context_ids"] == ["predctx-bbb"]
+
+    def test_U1_id_機構_OFF_相当_id無しなら_PREDICTION_OUTCOME_は出ない(self) -> None:
+        """PREDICTION_CONTEXT_ID_ENABLED=OFF (default) では action に id が付かない。
+        その場合 PREDICTION_OUTCOME を emit せず、trace が U1 導入前と一致する。"""
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        port = _StubPort(returns={"interpreted": "I", "recall_text": "R"})
+        recorder = NullTraceRecorder()
+        events = _capture(recorder)
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            trace_recorder_provider=lambda: recorder,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        outcomes = [
+            e for e in events if e.kind == TraceEventKind.PREDICTION_OUTCOME
+        ]
+        assert outcomes == []
 
     def test_shutdown_は_noop(self) -> None:
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()

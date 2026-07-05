@@ -310,13 +310,28 @@ class EpisodicChunkCoordinator:
     ) -> None:
         """``PREDICTION_OUTCOME`` を trace に記録する (失敗は握りつぶす)。
 
-        prediction_error は None (予測どおり) でも「判定は走った」事実を
-        残すため、chunk 主観補完が一度でも実行された chunk では必ず 1 件 emit
-        する。prediction_context_ids は chunk を構成する action 群のうち id が
-        付いていたものの重複排除リスト (U1 では「紐付けの土台」だけを残し、
-        「どの belief/episode が in-context だったか」の意味づけは U4 の
-        attribution ledger に委ねる)。
+        prediction_context_ids は chunk を構成する action 群のうち id が付いて
+        いたものの重複排除リスト (U1 では「紐付けの土台」だけを残し、「どの
+        belief/episode が in-context だったか」の意味づけは U4 の attribution
+        ledger に委ねる)。
+
+        **id 機構が OFF (= 発行された id が 1 つも無い) のときは emit しない**。
+        PREDICTION_CONTEXT_ID_ENABLED=OFF (default) では action に id が付かない
+        ので、この条件により default run の trace は U1 導入前と完全に一致する
+        (共通規約 §0 / §4 の「flag を戻せば挙動が導入前と一致する」規律)。
+        prediction_error=None (予測どおり) でも in-context id があれば emit する
+        (的中を後段 U4 の CONFIRMATION 転記が拾えるようにするため)。
         """
+        prediction_context_ids: list[str] = []
+        try:
+            for action in chunk_actions:
+                pid = getattr(action, "prediction_context_id", None)
+                if pid and pid not in prediction_context_ids:
+                    prediction_context_ids.append(pid)
+        except Exception:
+            prediction_context_ids = []
+        if not prediction_context_ids:
+            return
         recorder = self._resolve_trace_recorder()
         if recorder is None:
             return
@@ -326,14 +341,6 @@ class EpisodicChunkCoordinator:
                 tick = self._current_tick_provider()
             except Exception:
                 tick = None
-        prediction_context_ids: list[str] = []
-        try:
-            for action in chunk_actions:
-                pid = getattr(action, "prediction_context_id", None)
-                if pid and pid not in prediction_context_ids:
-                    prediction_context_ids.append(pid)
-        except Exception:
-            prediction_context_ids = []
         try:
             recorder.record(
                 TraceEventKind.PREDICTION_OUTCOME,

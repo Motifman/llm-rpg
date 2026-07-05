@@ -252,19 +252,23 @@ class InlineEpisodicSubjectiveScheduler:
         )
         # U1: 非同期経路でも prediction_error 確定の瞬間に PREDICTION_OUTCOME
         # を emit する (同期経路は EpisodicChunkCoordinator 側で emit 済み)。
-        _emit_trace(
-            self._trace_recorder_provider,
-            self._current_tick_provider,
-            kind=TraceEventKind.PREDICTION_OUTCOME,
-            player_id=int(merged.player_id),
-            payload={
-                "episode_id": merged.episode_id,
-                "prediction_error": merged.prediction_error,
-                "prediction_context_ids": _prediction_context_ids_from_encoding(
-                    encoding_input
-                ),
-            },
-        )
+        # id 機構が OFF (= 発行された id が 1 つも無い) のときは emit しない。
+        # PREDICTION_CONTEXT_ID_ENABLED=OFF (default) では action に id が付かない
+        # ので、default run の trace は U1 導入前と完全に一致する
+        # (共通規約 §0 / §4「flag を戻せば挙動が導入前と一致する」規律)。
+        prediction_context_ids = _prediction_context_ids_from_encoding(encoding_input)
+        if prediction_context_ids:
+            _emit_trace(
+                self._trace_recorder_provider,
+                self._current_tick_provider,
+                kind=TraceEventKind.PREDICTION_OUTCOME,
+                player_id=int(merged.player_id),
+                payload={
+                    "episode_id": merged.episode_id,
+                    "prediction_error": merged.prediction_error,
+                    "prediction_context_ids": prediction_context_ids,
+                },
+            )
 
     def shutdown(self, timeout: Optional[float] = None) -> None:
         # 同期実装はキュー無し。何もしない。
@@ -529,19 +533,23 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         )
         # U1: 非同期経路でも prediction_error 確定の瞬間に PREDICTION_OUTCOME
         # を emit する (同期経路は EpisodicChunkCoordinator 側で emit 済み)。
-        _emit_trace(
-            self._trace_recorder_provider,
-            self._current_tick_provider,
-            kind=TraceEventKind.PREDICTION_OUTCOME,
-            player_id=int(merged.player_id),
-            payload={
-                "episode_id": merged.episode_id,
-                "prediction_error": merged.prediction_error,
-                "prediction_context_ids": _prediction_context_ids_from_encoding(
-                    encoding_input
-                ),
-            },
-        )
+        # id 機構が OFF (= 発行された id が 1 つも無い) のときは emit しない。
+        # PREDICTION_CONTEXT_ID_ENABLED=OFF (default) では action に id が付かない
+        # ので、default run の trace は U1 導入前と完全に一致する
+        # (共通規約 §0 / §4「flag を戻せば挙動が導入前と一致する」規律)。
+        prediction_context_ids = _prediction_context_ids_from_encoding(encoding_input)
+        if prediction_context_ids:
+            _emit_trace(
+                self._trace_recorder_provider,
+                self._current_tick_provider,
+                kind=TraceEventKind.PREDICTION_OUTCOME,
+                player_id=int(merged.player_id),
+                payload={
+                    "episode_id": merged.episode_id,
+                    "prediction_error": merged.prediction_error,
+                    "prediction_context_ids": prediction_context_ids,
+                },
+            )
 
     def shutdown(self, timeout: Optional[float] = None) -> None:
         """進行中ジョブを drain しつつ executor を閉じる。

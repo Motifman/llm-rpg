@@ -483,6 +483,27 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
         ]
         assert outcomes == []
 
+    def test_id機構_OFF相当_id無しの_chunk_では_PREDICTION_OUTCOME_は出ない(
+        self,
+    ) -> None:
+        """PREDICTION_CONTEXT_ID_ENABLED=OFF (default) では action に id が付かない。
+        merge が走って prediction_error が確定しても、id が 1 つも無ければ
+        PREDICTION_OUTCOME を emit せず、default run の trace は U1 導入前と一致する。
+        """
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+        service = self._build_service_with_prediction_error("鍵がかかっていた")
+        coord, buffer, action_store, episode_store = self._build_coord(
+            recorder=recorder, chunk_subjective_fields_service=service
+        )
+        pid = PlayerId(1)
+        # _trigger_chunk_close の action には prediction_context_id を渡さない
+        self._trigger_chunk_close(coord, buffer, action_store, pid)
+        outcomes = [
+            e for e in captured if e.kind == TraceEventKind.PREDICTION_OUTCOME
+        ]
+        assert outcomes == []
+
     # _build_coord / _trigger_chunk_close は同名クラスの実装を再利用する
     _build_coord = TestChunkCoordinatorTraceEmission._build_coord
     _trigger_chunk_close = TestChunkCoordinatorTraceEmission._trigger_chunk_close
