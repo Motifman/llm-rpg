@@ -220,6 +220,11 @@ class EpisodicStack:
     afterglow_store: Optional["IAfterglowStore"] = None
     afterglow_capacity: int = 10
     afterglow_max_residence: int = 10
+    # U2 (証拠台帳統一設計 / default OFF): belief evidence buffer は呼び出し側
+    # (world_runtime.py) が flag を見て構築し、transcriber として
+    # chunk_coordinator / 非同期 scheduler の両方に注入する。stack はここに
+    # store の参照だけ公開する (snapshot 用。実体は呼び出し側が保持)。
+    belief_evidence_buffer_store: Optional[Any] = None
 
 
 def build_scenario_noun_matcher(
@@ -338,6 +343,14 @@ def build_episodic_stack(
     # #526 後続 C2: chunk write 時に player の現在の runtime_context を返す
     # provider。注入時のみ動く (= default None で挙動不変)。
     runtime_context_provider: Optional[Callable[..., Any]] = None,
+    # U2 (証拠台帳統一設計 / default None = flag OFF 相当): 呼び出し側が
+    # BELIEF_EVIDENCE_ENABLED を見て構築した transcriber / store を渡す。
+    # transcriber は同期経路 (chunk_subjective_fields_service) の
+    # chunk_coordinator に配線する。非同期経路 (scheduler) は呼び出し側が
+    # 自分で scheduler へ注入する (build_episodic_stack は scheduler を
+    # 構築しないため)。store は snapshot 用に stack へそのまま公開する。
+    belief_evidence_transcriber: Optional[Any] = None,
+    belief_evidence_buffer_store: Optional[Any] = None,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
@@ -442,6 +455,7 @@ def build_episodic_stack(
         episodic_memory_link_service=link_service,
         being_attachment_resolver=being_attachment_resolver,
         default_world_id=default_world_id,
+        belief_evidence_transcriber=belief_evidence_transcriber,
     )
     # #526 段階 2: 慣化 sidecar (default off)。enable 時のみ store を作り、
     # passive_recall に注入する。prompt_builder 側にも同 store を渡して
@@ -564,6 +578,7 @@ def build_episodic_stack(
         afterglow_store=afterglow_store,
         afterglow_capacity=afterglow_capacity,
         afterglow_max_residence=afterglow_max_residence,
+        belief_evidence_buffer_store=belief_evidence_buffer_store,
     )
 
 

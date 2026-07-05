@@ -44,11 +44,34 @@ class TestWiringStub:
         assert stub.being_repository == "repo-handle"
         assert stub.being_attachment_resolver == "resolver-handle"
         assert stub.episodic_episode_store is episode_store
-        # 他 4 store は world_runtime 経路では拾えないので None
+        # 他 5 store は world_runtime 経路では拾えないので None
         assert stub.semantic_memory_store is None
         assert stub.memory_link_store is None
         assert stub.episodic_recall_buffer_store is None
         assert stub.episodic_reinterpretation_journal_store is None
+        # U2: episodic_stack が belief_evidence_buffer_store を持たない
+        # (= BELIEF_EVIDENCE_ENABLED OFF) なら None。
+        assert stub.belief_evidence_buffer_store is None
+
+    def test_belief_evidence_buffer_store_が_episodic_stack_にあれば拾う(
+        self,
+    ) -> None:
+        """U2 (証拠台帳統一設計): BELIEF_EVIDENCE_ENABLED ON のとき
+        episodic_stack が持つ belief_evidence_buffer_store を stub が拾う。
+        拾い忘れると flag ON でも evidence が snapshot に乗らず、save/load で
+        silent に失われる (checklist #27 の教訓)。"""
+        belief_evidence_buffer_store = object()
+        runtime = SimpleNamespace(
+            _todo_store="memo-handle",
+            _aux_being_repository="repo-handle",
+            aux_being_resolver="resolver-handle",
+            _episodic_stack=SimpleNamespace(
+                episode_store=object(),
+                belief_evidence_buffer_store=belief_evidence_buffer_store,
+            ),
+        )
+        stub = _wiring_stub_from_world_runtime(runtime)
+        assert stub.belief_evidence_buffer_store is belief_evidence_buffer_store
 
     def test_episodic_stack_が_None_なら_episode_store_も_None(self) -> None:
         runtime = SimpleNamespace(

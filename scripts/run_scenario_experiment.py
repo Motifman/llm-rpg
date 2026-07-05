@@ -260,6 +260,16 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         if episodic_stack is not None
         else None
     )
+    # U2 (証拠台帳統一設計): BELIEF_EVIDENCE_ENABLED ON のとき episodic_stack が
+    # belief evidence buffer store を持つ。checklist #27 (memory_full_003 で
+    # stub 追従漏れが実際に起きた教訓) に従い、ここで拾わないと flag ON でも
+    # evidence が save/load で silent に失われる。OFF なら None = 従来どおり
+    # 空 in-memory fallback。
+    belief_evidence_buffer_store = (
+        getattr(episodic_stack, "belief_evidence_buffer_store", None)
+        if episodic_stack is not None
+        else None
+    )
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
         semantic_memory_store=semantic_store,
@@ -269,6 +279,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         episodic_episode_store=episode_store,
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,
+        belief_evidence_buffer_store=belief_evidence_buffer_store,
     )
 
 
