@@ -64,6 +64,15 @@ episode_updates は { episode_id, current_interpretation, current_recall_text } 
 - 入力に無い人物・場所・アイテム・結果・動機・会話を創作しない。
 - recall_contexts に明示されていない「いまの様子」を勝手に作らない（書かれていない物の有無を断定しない）。"""
 
+# U9a (予測誤差統一設計 部品5・誤差駆動再解釈): flag ON のときだけ system
+# prompt に追記する節。recall_contexts の prediction_outcome_error は
+# 「この記憶を in-context にして立てた予測が外れたときの誤差文」であり、
+# episode 本体の事実 (observed 等) とは別レイヤーの情報だと明示する。
+_ERROR_DRIVEN_REINTERPRETATION_INSTRUCTION = """
+
+【誤差駆動の再解釈】
+recall_contexts のいずれかに prediction_outcome_error が含まれる場合、それは「この記憶を思い出して行動した直後に立てた予測が、実際にはそのとおりにならなかった」という誤差の記録です。その回の current_interpretation / current_recall_text では、この誤差を踏まえて「この記憶をどう思い出すべきだったか」に触れてください（例: 記憶していた通りに事が運ばなかった驚きや、教訓としての気づき）。誤差が無い recall_context は通常どおり再解釈してください。"""
+
 
 def _truncate(raw: str, *, max_chars: int) -> str:
     text = raw.strip()
@@ -103,6 +112,7 @@ class EpisodicReinterpretationCoordinator:
         max_contexts_per_episode: int = DEFAULT_REINTERPRETATION_MAX_CONTEXTS_PER_EPISODE,
         being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
         default_world_id: Optional[WorldId] = None,
+        error_driven_reinterpretation_enabled: bool = False,
     ) -> None:
         if not isinstance(episode_store, EpisodicEpisodeRepository):
             raise TypeError("episode_store must be EpisodicEpisodeRepository")
@@ -133,6 +143,11 @@ class EpisodicReinterpretationCoordinator:
             )
         if default_world_id is not None and not isinstance(default_world_id, WorldId):
             raise TypeError("default_world_id must be WorldId")
+        if not isinstance(error_driven_reinterpretation_enabled, bool):
+            raise TypeError("error_driven_reinterpretation_enabled must be bool")
+        self._error_driven_reinterpretation_enabled = (
+            error_driven_reinterpretation_enabled
+        )
         self._episode_store = episode_store
         self._recall_buffer_store = recall_buffer_store
         self._journal_store = journal_store
@@ -251,6 +266,28 @@ class EpisodicReinterpretationCoordinator:
             )
         return tuple(items)
 
+    def _build_recall_context_payload(
+        self, r: EpisodicRecallObservation
+    ) -> dict[str, Any]:
+        entry: dict[str, Any] = {
+            "recall_id": r.recall_id,
+            "turn_index": r.turn_index,
+            "source_axes": list(r.source_axes),
+            "current_state": r.current_state_snapshot,
+            "recent_events": r.recent_events_snapshot,
+            "persona": r.persona_snapshot,
+            "situation_cues": list(r.situation_cues),
+        }
+        # U9a (誤差駆動再解釈): flag OFF のときはキー自体を足さない
+        # (= OFF の payload は導入前と byte 一致する)。ON でも誤差が
+        # 刻まれていない recall はキー無しのまま (ノイズを増やさない)。
+        if (
+            self._error_driven_reinterpretation_enabled
+            and r.prediction_outcome_error is not None
+        ):
+            entry["prediction_outcome_error"] = r.prediction_outcome_error
+        return entry
+
     def _build_messages(self, items: tuple[_EpisodeBatchItem, ...]) -> list[dict[str, Any]]:
         payload = []
         for item in items:
@@ -271,21 +308,19 @@ class EpisodicReinterpretationCoordinator:
                     },
                     "latest_active_recall_text": item.active_recall_text,
                     "recall_contexts": [
-                        {
-                            "recall_id": r.recall_id,
-                            "turn_index": r.turn_index,
-                            "source_axes": list(r.source_axes),
-                            "current_state": r.current_state_snapshot,
-                            "recent_events": r.recent_events_snapshot,
-                            "persona": r.persona_snapshot,
-                            "situation_cues": list(r.situation_cues),
-                        }
-                        for r in item.recalls
+                        self._build_recall_context_payload(r) for r in item.recalls
                     ],
                 }
             )
+        system_content = _SYSTEM_REINTERPRETATION_JSON
+        # U9a: flag ON のときだけ system prompt に誤差駆動の節を足す
+        # (OFF は導入前と byte 一致する規律を U6/U7 と同じ形で守る)。
+        if self._error_driven_reinterpretation_enabled:
+            system_content = (
+                system_content + _ERROR_DRIVEN_REINTERPRETATION_INSTRUCTION
+            )
         return [
-            {"role": "system", "content": _SYSTEM_REINTERPRETATION_JSON},
+            {"role": "system", "content": system_content},
             {
                 "role": "user",
                 "content": (

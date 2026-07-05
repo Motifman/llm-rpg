@@ -103,6 +103,15 @@ class _BrokenRecallBufferStore(EpisodicRecallBufferRepository):
         """常に RuntimeError。"""
         raise RuntimeError("broken")
 
+    def stamp_prediction_outcome_by_being(
+        self,
+        being_id: BeingId,
+        prediction_context_id: str,
+        prediction_error: str,
+    ) -> None:
+        """常に RuntimeError。"""
+        raise RuntimeError("broken")
+
 
 def _episode(
     *,
@@ -145,6 +154,8 @@ def _recall(
     at: datetime,
     turn_index: int,
     player_id: int = 7,
+    prediction_context_id: str | None = None,
+    prediction_outcome_error: str | None = None,
 ) -> EpisodicRecallObservation:
     return EpisodicRecallObservation(
         recall_id=recall_id,
@@ -157,6 +168,8 @@ def _recall(
         persona_snapshot="一人称: 私",
         situation_cues=("place_spot:10",),
         turn_index=turn_index,
+        prediction_context_id=prediction_context_id,
+        prediction_outcome_error=prediction_outcome_error,
     )
 
 
@@ -427,3 +440,125 @@ class TestEpisodicReinterpretationCoordinator:
             default_world_id=setup.world_id,
         )
         coord.after_turn_completed(PlayerId(7))
+
+
+class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
+    """U9a (予測誤差統一設計 部品5・誤差駆動再解釈): flag 連動の system prompt /
+    recall_context payload の切り替え。
+
+    LLM は呼ばず (``_FakeReinterpretationPort`` が固定 JSON を返すだけ)、
+    ``flush_player`` が組み立てる messages の中身を検査する質感テスト。
+    """
+
+    def _stores(self):
+        from tests.application.llm._reinterpretation_being_test_helpers import (
+            make_reinterpretation_being_setup,
+        )
+
+        episodes = InMemorySubjectiveEpisodeStore()
+        setup = make_reinterpretation_being_setup()
+        being_id = setup.provision(7)
+        episodes.put_by_being(being_id, _episode(episode_id="ep-a"))
+        return episodes, setup, being_id
+
+    def test_flag_ON_で誤差付き_recall_は_prediction_outcome_error_を含む(
+        self,
+    ) -> None:
+        episodes, setup, being_id = self._stores()
+        buffer = setup.recall_buffer
+        buffer.append_by_being(
+            being_id,
+            _recall(
+                recall_id="r1",
+                episode_id="ep-a",
+                at=datetime(2026, 5, 4, tzinfo=timezone.utc),
+                turn_index=0,
+                prediction_context_id="pc-1",
+                prediction_outcome_error="実際には扉は開いていた",
+            ),
+        )
+        port = _FakeReinterpretationPort({"episode_updates": []})
+        coord = EpisodicReinterpretationCoordinator(
+            episode_store=episodes,
+            recall_buffer_store=buffer,
+            journal_store=setup.journal,
+            completion=port,
+            turn_interval=1,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
+            error_driven_reinterpretation_enabled=True,
+        )
+        coord.flush_player(PlayerId(7))
+
+        assert len(port.calls) == 1
+        messages = port.calls[0]
+        system_content = messages[0]["content"]
+        assert "誤差駆動の再解釈" in system_content
+        user_content = messages[1]["content"]
+        assert "実際には扉は開いていた" in user_content
+        assert '"prediction_outcome_error"' in user_content
+
+    def test_flag_ON_でも誤差の無い_recall_には_キーが付かない(self) -> None:
+        episodes, setup, being_id = self._stores()
+        buffer = setup.recall_buffer
+        buffer.append_by_being(
+            being_id,
+            _recall(
+                recall_id="r1",
+                episode_id="ep-a",
+                at=datetime(2026, 5, 4, tzinfo=timezone.utc),
+                turn_index=0,
+            ),
+        )
+        port = _FakeReinterpretationPort({"episode_updates": []})
+        coord = EpisodicReinterpretationCoordinator(
+            episode_store=episodes,
+            recall_buffer_store=buffer,
+            journal_store=setup.journal,
+            completion=port,
+            turn_interval=1,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
+            error_driven_reinterpretation_enabled=True,
+        )
+        coord.flush_player(PlayerId(7))
+
+        user_content = port.calls[0][1]["content"]
+        assert '"prediction_outcome_error"' not in user_content
+
+    def test_flag_OFF_既定なら誤差があっても_system_prompt_と_payload_が導入前と_byte一致(
+        self,
+    ) -> None:
+        """flag OFF (既定) は U9a 導入前と完全に一致する。"""
+        episodes_off, setup_off, being_id_off = self._stores()
+        buffer_off = setup_off.recall_buffer
+        buffer_off.append_by_being(
+            being_id_off,
+            _recall(
+                recall_id="r1",
+                episode_id="ep-a",
+                at=datetime(2026, 5, 4, tzinfo=timezone.utc),
+                turn_index=0,
+                prediction_context_id="pc-1",
+                prediction_outcome_error="実際には扉は開いていた",
+            ),
+        )
+        port_off = _FakeReinterpretationPort({"episode_updates": []})
+        coord_off = EpisodicReinterpretationCoordinator(
+            episode_store=episodes_off,
+            recall_buffer_store=buffer_off,
+            journal_store=setup_off.journal,
+            completion=port_off,
+            turn_interval=1,
+            being_attachment_resolver=setup_off.resolver,
+            default_world_id=setup_off.world_id,
+            error_driven_reinterpretation_enabled=False,
+        )
+        coord_off.flush_player(PlayerId(7))
+
+        # 誤差がまだ刻まれている recall があっても、flag OFF なら system
+        # prompt に誤差駆動節が乗らず、payload にも prediction_outcome_error
+        # キーが乗らない (= U9a 導入前と一致する安全な縮退)。
+        messages = port_off.calls[0]
+        assert "誤差駆動の再解釈" not in messages[0]["content"]
+        assert '"prediction_outcome_error"' not in messages[1]["content"]
