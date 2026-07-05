@@ -28,6 +28,9 @@ from litellm import ServiceUnavailableError as LitellmServiceUnavailableError
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
+from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port import (
+    IBeliefConsolidationCompletionPort,
+)
 from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
 )
@@ -297,6 +300,7 @@ class LiteLLMClient(
     IEpisodicChunkSubjectiveCompletionPort,
     IEpisodicReinterpretationCompletionPort,
     ISemanticGistCompletionPort,
+    IBeliefConsolidationCompletionPort,
     IShortTermMemorySummaryCompletionPort,
     IShortTermMemoryLongSummaryCompletionPort,
 ):
@@ -855,6 +859,17 @@ class LiteLLMClient(
         messages: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """tools 無しで semantic gist JSON object を返す (Phase 1b)。
+
+        ``complete_episode_subjective_json`` と同じ json_object 強制完了を
+        使う (LLM 側から見れば同じ呼び出し)。失敗ハンドリングも共通。
+        """
+        return self.complete_episode_subjective_json(messages)
+
+    def complete_belief_consolidation_json(
+        self,
+        messages: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """tools 無しで固着パス (belief journal 統合) の decisions JSON を返す (U3b)。
 
         ``complete_episode_subjective_json`` と同じ json_object 強制完了を
         使う (LLM 側から見れば同じ呼び出し)。失敗ハンドリングも共通。

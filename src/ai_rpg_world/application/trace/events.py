@@ -167,6 +167,16 @@ class TraceEventKind:
     # payload: evidence_id / source_kind / episode_ids / cue_signature /
     # text_snippet / salience
     BELIEF_EVIDENCE = "belief_evidence"
+    # U3b (固着パス): BeliefConsolidationCoordinator が evidence batch を
+    # LLM に処理させ、belief journal への decisions (create / strengthen /
+    # revise / contradict / discard) を確定させた瞬間。実験で「学びがいつ・
+    # なぜ生まれた/直されたか」を trace から追えるようにする。
+    # payload:
+    #   - being_id: str
+    #   - batch_evidence_ids: list[str] (処理対象だった evidence_id 群)
+    #   - shortlist_belief_ids: list[str] (LLM に提示した既存 belief の belief_id)
+    #   - decisions: list[dict] (LLM 応答の decisions をそのまま)
+    BELIEF_CONSOLIDATION = "belief_consolidation"
 
 
 @dataclass(frozen=True)
