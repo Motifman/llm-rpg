@@ -222,7 +222,13 @@ def build_prediction_feedback_text(
     entry_blocks: list[list[str]] = []
     for index, entry in enumerate(ledger):
         expected = _nonempty_text(entry.expected_result)
-        assert expected is not None  # _collect_prediction_ledger_entries が保証する
+        # _collect_prediction_ledger_entries が非 None を保証するが、契約が
+        # 将来壊れたとき assert では -O で無効化され「予測: None」が静かに
+        # 出力される。静かな失敗を避けるため明示的に例外にする。
+        if expected is None:
+            raise ValueError(
+                "prediction ledger entry lost its expected_result unexpectedly"
+            )
         after = _as_utc(entry.occurred_at)
         before = _as_utc(ledger[index - 1].occurred_at) if index > 0 else None
         followups = _followups_for_prediction(observations, after=after, before=before)
