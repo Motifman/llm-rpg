@@ -114,6 +114,7 @@ def _action_result_entry_to_dict(entry: Any) -> dict[str, Any]:
         "scene_boundary": bool(entry.scene_boundary),
         "occurred_tick": entry.occurred_tick,
         "prediction_context_id": entry.prediction_context_id,
+        "in_context_belief_ids": list(entry.in_context_belief_ids),
     }
 
 
@@ -141,6 +142,10 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         # 後方互換は data.get レベルで担保しつつ、schema_version 自体は
         # 意味変更を明示するため bump する)。
         prediction_context_id=data.get("prediction_context_id"),
+        # U4: 旧スキーマ (v4 以前) には無いキーなので .get で空タプルに倒す
+        # (= 「in-context belief は無い」として扱う。attribution 機構 OFF や
+        # 旧 snapshot との後方互換)。
+        in_context_belief_ids=tuple(data.get("in_context_belief_ids", [])),
     )
 
 
@@ -488,10 +493,10 @@ class ObservationBufferSubsystemCodec(WorldSubsystemCodec):
 # ----------------------------------------------------------------------------
 _AR_SUBSYSTEM_KEY = "action_result_store"
 # v2: expected_result 追加 (PR1)。v3: intention / emotion_hint 追加 (PR2a)。
-# v4: prediction_context_id 追加 (U1)。
-# 旧 snapshot 互換は不要 (ユーザー判断)。restore は data.get で欠損を None に倒すため
-# 実害は出ないが、schema の意味変更を明示するため version を上げる。
-_AR_SCHEMA_VERSION = 4
+# v4: prediction_context_id 追加 (U1)。v5: in_context_belief_ids 追加 (U4)。
+# 旧 snapshot 互換は不要 (ユーザー判断)。restore は data.get で欠損を None/() に倒す
+# ため実害は出ないが、schema の意味変更を明示するため version を上げる。
+_AR_SCHEMA_VERSION = 5
 
 
 class ActionResultStoreSubsystemCodec(WorldSubsystemCodec):

@@ -183,3 +183,33 @@ class TestPredictionContextIdConsumption:
             ActionResultRecorder(
                 _StoreSpy([]), prediction_context_ledger=object()  # type: ignore[arg-type]
             )
+
+
+class TestInContextBeliefIdsConsumption:
+    """U4 (予測誤差統一設計 部品3): consume した PredictionContext.belief_ids が
+    そのまま store.append の in_context_belief_ids に焼き込まれること。"""
+
+    def test_ledger_未注入なら_in_context_belief_ids_は常に空タプル(self) -> None:
+        store = _StoreSpy([])
+        ActionResultRecorder(store).record(
+            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+        )
+        assert store.last_kwargs["in_context_belief_ids"] == ()
+
+    def test_consume_した_belief_ids_が_store_に渡る(self) -> None:
+        ledger = PredictionContextLedger()
+        ledger.issue(PlayerId(1), belief_ids=("sem-1", "sem-2"))
+        store = _StoreSpy([])
+        ActionResultRecorder(store, prediction_context_ledger=ledger).record(
+            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+        )
+        assert store.last_kwargs["in_context_belief_ids"] == ("sem-1", "sem-2")
+
+    def test_pending_context_が無ければ_belief_ids_も空タプル(self) -> None:
+        """no-tool ターンの反対 (record だけ呼ばれて build を経ていない) でも壊れない。"""
+        ledger = PredictionContextLedger()
+        store = _StoreSpy([])
+        ActionResultRecorder(store, prediction_context_ledger=ledger).record(
+            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+        )
+        assert store.last_kwargs["in_context_belief_ids"] == ()

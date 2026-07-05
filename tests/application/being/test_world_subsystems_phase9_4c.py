@@ -60,6 +60,7 @@ def _action_entry(action: str = "walk") -> ActionResultEntry:
         emotion_hint="determination",
         occurred_tick=42,
         prediction_context_id="predctx-abc123",
+        in_context_belief_ids=("sem-belief-1", "sem-belief-2"),
     )
 
 
@@ -117,13 +118,17 @@ class TestActionResultStoreCodec:
         src._store[1] = [_action_entry("walk"), _action_entry("attack")]
         src_runtime = SimpleNamespace(_action_result_store=src)
         captured = ActionResultStoreSubsystemCodec().capture(src_runtime)
-        assert captured["schema_version"] == 4
+        assert captured["schema_version"] == 5
         assert len(captured["entries"][0]["entries"]) == 2
         first_captured = captured["entries"][0]["entries"][0]
         assert first_captured["expected_result"] == "walk で道が開ける"
         assert first_captured["intention"] == "walk で先へ進む"
         assert first_captured["emotion_hint"] == "determination"
         assert first_captured["prediction_context_id"] == "predctx-abc123"
+        assert first_captured["in_context_belief_ids"] == [
+            "sem-belief-1",
+            "sem-belief-2",
+        ]
 
         dst = DefaultActionResultStore()
         dst_runtime = SimpleNamespace(_action_result_store=dst)
@@ -138,6 +143,7 @@ class TestActionResultStoreCodec:
         assert results[0].emotion_hint == "determination"
         assert results[0].occurred_tick == 42
         assert results[0].prediction_context_id == "predctx-abc123"
+        assert results[0].in_context_belief_ids == ("sem-belief-1", "sem-belief-2")
 
     def test_action_result_store_が_None_でも_no_op(self) -> None:
         runtime = SimpleNamespace(_action_result_store=None)
@@ -154,7 +160,7 @@ class TestActionResultStoreCodec:
         dst = DefaultActionResultStore()
         dst_runtime = SimpleNamespace(_action_result_store=dst)
         payload = {
-            "schema_version": 4,
+            "schema_version": 5,
             "entries": [
                 {
                     "player_id": 1,
@@ -172,6 +178,34 @@ class TestActionResultStoreCodec:
         ActionResultStoreSubsystemCodec().restore(dst_runtime, payload)
         results = dst.get_recent(PlayerId(1), limit=10)
         assert results[0].prediction_context_id is None
+
+    def test_in_context_belief_ids_欠損の旧スキーマ相当データは空タプルに倒れる(self) -> None:
+        """v5 導入前 (= キー自体が無い) payload を decode しても例外にならず空タプルになる。
+
+        U4 で追加した ``in_context_belief_ids`` の後方互換を、
+        prediction_context_id と同じ形で独立に確認する。
+        """
+        dst = DefaultActionResultStore()
+        dst_runtime = SimpleNamespace(_action_result_store=dst)
+        payload = {
+            "schema_version": 5,
+            "entries": [
+                {
+                    "player_id": 1,
+                    "entries": [
+                        {
+                            "occurred_at": "2026-06-14T12:00:00+00:00",
+                            "action_summary": "walk_summary",
+                            "result_summary": "ok",
+                            # in_context_belief_ids キー自体を欠落させる
+                        }
+                    ],
+                }
+            ],
+        }
+        ActionResultStoreSubsystemCodec().restore(dst_runtime, payload)
+        results = dst.get_recent(PlayerId(1), limit=10)
+        assert results[0].in_context_belief_ids == ()
 
 
 class TestSlidingWindowCodecRollingSummaryBackend:

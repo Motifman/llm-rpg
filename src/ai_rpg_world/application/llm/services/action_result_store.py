@@ -1,7 +1,7 @@
 """行動結果ストアのデフォルト実装（in-memory）"""
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.contracts.interfaces import IActionResultStore
@@ -40,6 +40,7 @@ class DefaultActionResultStore(IActionResultStore):
         scene_boundary: bool = False,
         occurred_tick: Optional[int] = None,
         prediction_context_id: Optional[str] = None,
+        in_context_belief_ids: Tuple[str, ...] = (),
     ) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -81,6 +82,8 @@ class DefaultActionResultStore(IActionResultStore):
             prediction_context_id, str
         ):
             raise TypeError("prediction_context_id must be str or None")
+        if not isinstance(in_context_belief_ids, tuple):
+            raise TypeError("in_context_belief_ids must be tuple[str, ...]")
         # Issue #311 後続: フォールバックを tz-aware UTC に統一。
         # world_runtime は明示的に渡すが、それ以外の caller の取りこぼし防止。
         at = occurred_at if occurred_at is not None else datetime.now(timezone.utc)
@@ -101,6 +104,7 @@ class DefaultActionResultStore(IActionResultStore):
             scene_boundary=scene_boundary,
             occurred_tick=occurred_tick,
             prediction_context_id=prediction_context_id,
+            in_context_belief_ids=in_context_belief_ids,
         )
         key = self._key(player_id)
         if key not in self._store:

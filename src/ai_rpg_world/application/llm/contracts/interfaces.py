@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
@@ -110,6 +110,7 @@ class IActionResultStore(ABC):
         intention: Optional[str] = None,
         emotion_hint: Optional[str] = None,
         prediction_context_id: Optional[str] = None,
+        in_context_belief_ids: Tuple[str, ...] = (),
     ) -> None:
         """行動結果を 1 件追加する。"""
         pass

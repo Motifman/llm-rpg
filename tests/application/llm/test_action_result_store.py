@@ -153,6 +153,33 @@ class TestDefaultActionResultStore:
                 expected_result=123,  # type: ignore[arg-type]
             )
 
+    def test_append_with_in_context_belief_ids(self, store):
+        """U4 (予測誤差統一設計 部品3): in_context_belief_ids を append し
+        get_recent で取り出せる。"""
+        store.append(
+            PlayerId(1),
+            "調べる",
+            "扉は固く閉まっていた",
+            in_context_belief_ids=("sem-1", "sem-2"),
+        )
+        got = store.get_recent(PlayerId(1), 1)
+        assert got[0].in_context_belief_ids == ("sem-1", "sem-2")
+
+    def test_append_default_in_context_belief_ids_is_empty_tuple(self, store):
+        """未指定なら空タプル (= attribution 機構 OFF と同じ形)。"""
+        store.append(PlayerId(1), "a", "b")
+        got = store.get_recent(PlayerId(1), 1)
+        assert got[0].in_context_belief_ids == ()
+
+    def test_append_in_context_belief_ids_not_tuple_raises_type_error(self, store):
+        with pytest.raises(TypeError, match="in_context_belief_ids must be tuple"):
+            store.append(
+                PlayerId(1),
+                "a",
+                "b",
+                in_context_belief_ids=["sem-1"],  # type: ignore[arg-type]
+            )
+
     def test_get_recent_negative_limit_raises_value_error(self, store):
         """get_recent の limit が負で ValueError"""
         with pytest.raises(ValueError, match="limit must be 0 or greater"):
