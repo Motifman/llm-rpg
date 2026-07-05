@@ -280,6 +280,16 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         if episodic_stack is not None
         else None
     )
+    # U10a (予測誤差統一設計 部品6・pending prediction): PENDING_PREDICTION_ENABLED
+    # ON のとき episodic_stack が pending prediction store を持つ。checklist #27
+    # (memory_full_003 で stub 追従漏れが実際に起きた教訓) に従い、ここで拾わ
+    # ないと flag ON でも保留中の予測 (約束) が save/load で silent に失われる。
+    # OFF なら None = 空 in-memory fallback。
+    pending_prediction_store = (
+        getattr(episodic_stack, "pending_prediction_store", None)
+        if episodic_stack is not None
+        else None
+    )
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
         semantic_memory_store=semantic_store,
@@ -291,6 +301,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         being_attachment_resolver=aux_resolver,
         belief_evidence_buffer_store=belief_evidence_buffer_store,
         recall_success_store=recall_success_store,
+        pending_prediction_store=pending_prediction_store,
     )
 
 

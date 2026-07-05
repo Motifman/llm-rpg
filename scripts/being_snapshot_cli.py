@@ -136,6 +136,9 @@ def _build_stack(
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+        InMemoryPendingPredictionStore,
+    )
 
     memory_snapshot = BeingMemorySnapshotService(
         memo_store=InMemoryMemoStore(),
@@ -151,6 +154,9 @@ def _build_stack(
         # U9b: CLI 経由の単発 dump では的中側 sidecar も in-memory で足りる
         # (PR-G の想起階層 3 store と同じ扱い)。
         recall_success_store=InMemoryEpisodicRecallSuccessStore(),
+        # U10a: CLI 経由の単発 dump では pending prediction も in-memory で
+        # 足りる (的中側 sidecar と同じ扱い)。
+        pending_prediction_store=InMemoryPendingPredictionStore(),
     )
     return being_repo, memory_snapshot, BeingSnapshotFileGateway()
 
