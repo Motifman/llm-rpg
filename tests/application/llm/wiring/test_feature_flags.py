@@ -18,6 +18,7 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     ENV_BELIEF_EVIDENCE_ENABLED,
     ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
     ENV_PREDICTION_CONTEXT_ID_ENABLED,
+    ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED,
     ENV_SEMANTIC_PASSIVE_TOP_K,
     ENV_SEMANTIC_SEARCH_ENABLED,
     ENV_SHORT_TERM_MEMORY_KIND,
@@ -36,6 +37,7 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     resolve_belief_evidence_enabled,
     resolve_episodic_explore_related_enabled,
     resolve_prediction_context_id_enabled,
+    resolve_salience_structured_failure_enabled,
     resolve_semantic_passive_top_k,
     resolve_semantic_search_enabled,
     resolve_short_term_memory_kind,
@@ -420,3 +422,28 @@ class TestLogBeliefEvidenceEnabledState:
         messages = [rec.message for rec in caplog.records]
         assert any("ENABLED" in m for m in messages)
         assert any("DISABLED" in m for m in messages)
+
+
+class TestResolveSalienceStructuredFailureEnabled:
+    """U6: ``SALIENCE_STRUCTURED_FAILURE_ENABLED`` の env パース。"""
+
+    def test_env_未設定なら_default_OFF(self) -> None:
+        assert resolve_salience_structured_failure_enabled(env={}) is False
+
+    @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
+    def test_truthy_な値は_ON(self, raw: str) -> None:
+        assert resolve_salience_structured_failure_enabled(
+            env={ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED: raw}
+        ) is True
+
+    @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
+    def test_falsy_な値は_OFF(self, raw: str) -> None:
+        assert resolve_salience_structured_failure_enabled(
+            env={ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED: raw}
+        ) is False
+
+    def test_未知の値は_ValueError(self) -> None:
+        with pytest.raises(ValueError):
+            resolve_salience_structured_failure_enabled(
+                env={ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED: "yesplz"}
+            )
