@@ -148,6 +148,28 @@ class TestDefaultSlidingWindowMemory:
         stamps = tuple(e.occurred_at.timestamp() for e in recent)
         assert stamps == tuple(sorted(stamps, reverse=True))
 
+    def test_get_oldest_entry_datetime_mixed_naive_and_tz_without_type_error(
+        self, memory
+    ) -> None:
+        """occurred_at が naive / aware 混在でも get_oldest_entry_datetime が TypeError を投げず、timestamp 最小の occurred_at を返す。"""
+        player_id = PlayerId(11)
+        naive_old = ObservationEntry(
+            occurred_at=datetime(2025, 3, 1, 18, 0, 0),
+            output=ObservationOutput(
+                prose="n", structured={}, observation_category="self_only"
+            ),
+        )
+        utc_new = ObservationEntry(
+            occurred_at=datetime(2025, 3, 2, 12, 0, 0, tzinfo=timezone.utc),
+            output=ObservationOutput(
+                prose="u", structured={}, observation_category="self_only"
+            ),
+        )
+        memory.append(player_id, utc_new)
+        memory.append(player_id, naive_old)
+        oldest = memory.get_oldest_entry_datetime(player_id)
+        assert oldest == naive_old.occurred_at
+
     def test_init_max_entries_zero_raises_value_error(self):
         """max_entries_per_player が 0 以下で ValueError"""
         with pytest.raises(ValueError, match="max_entries_per_player must be greater than 0"):

@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from ai_rpg_world.application.llm.llm_argument_fingerprint import (
@@ -207,7 +207,11 @@ class ToolCallLoopGuardService:
             raise ValueError("cross_tick_failure_threshold must be int >= 2")
 
         self._observation_buffer = observation_buffer
-        self._clock: Callable[[], datetime] = clock or datetime.utcnow
+        # datetime.utcnow は naive を返し、sliding window 内で aware な観測との
+        # 時刻比較が TypeError になるため、既定 clock は aware (UTC) を返す
+        self._clock: Callable[[], datetime] = clock or (
+            lambda: datetime.now(timezone.utc)
+        )
         self._thresholds: Dict[str, int] = dict(thresholds) if thresholds else dict(
             DEFAULT_LOOP_THRESHOLDS
         )
