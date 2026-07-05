@@ -15,6 +15,7 @@ import pytest
 
 from ai_rpg_world.application.llm.wiring.feature_flags import (
     DEFAULT_SEMANTIC_PASSIVE_TOP_K,
+    ENV_BELIEF_EVIDENCE_ENABLED,
     ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
     ENV_SEMANTIC_PASSIVE_TOP_K,
     ENV_SEMANTIC_SEARCH_ENABLED,
@@ -24,11 +25,13 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     SCHEDULER_MODE_THREAD_POOL,
     SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
     SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW,
+    log_belief_evidence_enabled_state,
     log_episodic_explore_related_state,
     log_semantic_passive_top_k_state,
     log_semantic_search_state,
     log_short_term_memory_kind_state,
     log_short_term_memory_scheduler_mode_state,
+    resolve_belief_evidence_enabled,
     resolve_episodic_explore_related_enabled,
     resolve_semantic_passive_top_k,
     resolve_semantic_search_enabled,
@@ -325,3 +328,49 @@ class TestLogShortTermMemorySchedulerModeState:
         messages = [rec.message for rec in caplog.records]
         assert any("inline" in m for m in messages)
         assert any("thread_pool" in m for m in messages)
+
+
+class TestResolveBeliefEvidenceEnabled:
+    """U2 (証拠台帳統一設計): ``BELIEF_EVIDENCE_ENABLED`` の env パース。"""
+
+    def test_env_未設定なら_default_OFF(self) -> None:
+        assert resolve_belief_evidence_enabled(env={}) is False
+
+    def test_env_空文字なら_default_OFF(self) -> None:
+        assert resolve_belief_evidence_enabled(
+            env={ENV_BELIEF_EVIDENCE_ENABLED: ""}
+        ) is False
+
+    @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
+    def test_truthy_な値は_ON(self, raw: str) -> None:
+        assert resolve_belief_evidence_enabled(
+            env={ENV_BELIEF_EVIDENCE_ENABLED: raw}
+        ) is True
+
+    @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
+    def test_falsy_な値は_OFF(self, raw: str) -> None:
+        assert resolve_belief_evidence_enabled(
+            env={ENV_BELIEF_EVIDENCE_ENABLED: raw}
+        ) is False
+
+    def test_未知の値は_ValueError(self) -> None:
+        """typo による silent fallback を防ぐ (PR #433 経緯と同じ規約)。"""
+        with pytest.raises(ValueError):
+            resolve_belief_evidence_enabled(
+                env={ENV_BELIEF_EVIDENCE_ENABLED: "yesplz"}
+            )
+
+
+class TestLogBeliefEvidenceEnabledState:
+    def test_log_に_ENABLED_DISABLED_が出る(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(
+            logging.INFO,
+            logger="ai_rpg_world.application.llm.wiring.feature_flags",
+        ):
+            log_belief_evidence_enabled_state(True)
+            log_belief_evidence_enabled_state(False)
+        messages = [rec.message for rec in caplog.records]
+        assert any("ENABLED" in m for m in messages)
+        assert any("DISABLED" in m for m in messages)
