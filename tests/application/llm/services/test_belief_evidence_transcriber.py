@@ -18,6 +18,9 @@ from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_stor
 )
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
+    BeliefEvidenceSourceKind,
+)
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
@@ -221,6 +224,139 @@ class TestBeliefEvidenceTranscriberTrace:
 
         events = [e for e in captured if e.kind == TraceEventKind.BELIEF_EVIDENCE]
         assert events == []
+
+
+class TestBeliefEvidenceTranscriberAttribution:
+    """U4 (予測誤差統一設計 部品3): in_context_belief_ids の添付と CONFIRMATION 転記。"""
+
+    def test_prediction_error_evidence_に_in_context_belief_ids_が添付される(
+        self,
+    ) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+
+        transcriber.record_if_applicable(
+            being_id,
+            _episode(prediction_error="外れた"),
+            in_context_belief_ids=("sem-1", "sem-2"),
+            had_expected_result=True,
+        )
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].source_kind == BeliefEvidenceSourceKind.PREDICTION_ERROR
+        assert rows[0].in_context_belief_ids == ("sem-1", "sem-2")
+
+    def test_prediction_error_None_かつ_in_context_belief_あり_かつ_expected_result_ありなら_CONFIRMATION(
+        self,
+    ) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+
+        result = transcriber.record_if_applicable(
+            being_id,
+            _episode(prediction_error=None, expected="何か見つかるはず"),
+            in_context_belief_ids=("sem-1",),
+            had_expected_result=True,
+        )
+
+        assert result is not None
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].source_kind == BeliefEvidenceSourceKind.CONFIRMATION
+        assert rows[0].in_context_belief_ids == ("sem-1",)
+        assert rows[0].text == "予測が当たった: 何か見つかるはず"
+
+    def test_prediction_error_None_かつ_in_context_belief_無しなら何も積まない(
+        self,
+    ) -> None:
+        """水増しガード: in-context belief が無いターンでは CONFIRMATION を作らない。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+
+        result = transcriber.record_if_applicable(
+            being_id,
+            _episode(prediction_error=None),
+            in_context_belief_ids=(),
+            had_expected_result=True,
+        )
+
+        assert result is None
+        assert buffer_store.list_all_by_being(being_id) == []
+
+    def test_prediction_error_None_かつ_expected_result_無しターンなら何も積まない(
+        self,
+    ) -> None:
+        """水増しガード: 何も予測せず行動しただけのターンでは CONFIRMATION を作らない。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+
+        result = transcriber.record_if_applicable(
+            being_id,
+            _episode(prediction_error=None),
+            in_context_belief_ids=("sem-1",),
+            had_expected_result=False,
+        )
+
+        assert result is None
+        assert buffer_store.list_all_by_being(being_id) == []
+
+    def test_flag_OFF相当_呼び出し側が空を渡せば導入前と一致する(self) -> None:
+        """呼び出し側 (coordinator/scheduler) が flag OFF のとき常に空/False を
+        渡す設計 (= transcriber 自身は flag を知らない) の安全性を確認する。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+
+        # prediction_error あり: in_context_belief_ids は空のまま添付される。
+        transcriber.record_if_applicable(
+            being_id, _episode(prediction_error="外れた")
+        )
+        # prediction_error 無し: CONFIRMATION も生まれない。
+        transcriber.record_if_applicable(being_id, _episode(prediction_error=None))
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].source_kind == BeliefEvidenceSourceKind.PREDICTION_ERROR
+        assert rows[0].in_context_belief_ids == ()
+
+
+class TestComputeChunkAttribution:
+    """U4: chunk を構成する action 群から attribution 用の値を計算する純関数。"""
+
+    def test_複数_action_の_in_context_belief_ids_を重複排除して和集合する(self) -> None:
+        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+            compute_chunk_attribution,
+        )
+
+        class _Action:
+            def __init__(self, in_context_belief_ids=(), expected_result=None):
+                self.in_context_belief_ids = in_context_belief_ids
+                self.expected_result = expected_result
+
+        actions = [
+            _Action(in_context_belief_ids=("sem-1", "sem-2")),
+            _Action(in_context_belief_ids=("sem-2", "sem-3"), expected_result="X"),
+        ]
+
+        belief_ids, had_expected_result = compute_chunk_attribution(actions)
+
+        assert belief_ids == ("sem-1", "sem-2", "sem-3")
+        assert had_expected_result is True
+
+    def test_action群が空なら空タプルとFalseを返す(self) -> None:
+        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+            compute_chunk_attribution,
+        )
+
+        belief_ids, had_expected_result = compute_chunk_attribution([])
+
+        assert belief_ids == ()
+        assert had_expected_result is False
 
 
 class TestBeliefEvidenceTranscriberTypeGuards:
