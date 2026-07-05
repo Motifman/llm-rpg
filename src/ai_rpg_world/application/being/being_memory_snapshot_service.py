@@ -71,6 +71,7 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     belief_evidence_to_dict,
     dict_to_afterglow_entry,
     dict_to_belief_evidence,
+    dict_to_episode_hit_count_pair,
     dict_to_episode_tick_pair,
     dict_to_memo_entry,
     dict_to_memory_link,
@@ -79,6 +80,7 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_reinterpretation_entry,
     dict_to_semantic_entry,
     dict_to_subjective_episode,
+    episode_hit_count_pair_to_dict,
     episode_tick_pair_to_dict,
     memo_entry_to_dict,
     memory_link_to_dict,
@@ -94,6 +96,9 @@ from ai_rpg_world.application.llm.services.episodic_recall_habituation_store imp
 )
 from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
     IEpisodicRecallSlotStore,
+)
+from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+    IEpisodicRecallSuccessStore,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
@@ -206,6 +211,8 @@ class BeingMemorySnapshotService:
     # slot は entries と cooldown を別 key に split (= 既存 restore() の
     # ``isinstance(list)`` 検証規約に合わせるため)。
     # U2 (証拠台帳統一設計): belief_evidence_buffer store 1 key を追加。
+    # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar
+    # (recall_success_hit_count) 1 key を追加。
     EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset({
         "memo",
         "semantic_entries",
@@ -219,6 +226,7 @@ class BeingMemorySnapshotService:
         "afterglow_entries",
         "recall_habituation_last_recalled",
         "belief_evidence_buffer",
+        "recall_success_hit_count",
     })
 
     def __init__(
@@ -234,6 +242,7 @@ class BeingMemorySnapshotService:
         afterglow_store: IAfterglowStore,
         recall_habituation_store: IEpisodicRecallHabituationStore,
         belief_evidence_buffer_store: BeliefEvidenceBufferRepository,
+        recall_success_store: IEpisodicRecallSuccessStore,
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository")
@@ -276,6 +285,10 @@ class BeingMemorySnapshotService:
             raise TypeError(
                 "belief_evidence_buffer_store must be BeliefEvidenceBufferRepository"
             )
+        if not isinstance(recall_success_store, IEpisodicRecallSuccessStore):
+            raise TypeError(
+                "recall_success_store must implement IEpisodicRecallSuccessStore"
+            )
         self._memo = memo_store
         self._semantic = semantic_store
         self._memory_link = memory_link_store
@@ -286,6 +299,7 @@ class BeingMemorySnapshotService:
         self._afterglow = afterglow_store
         self._recall_habituation = recall_habituation_store
         self._belief_evidence_buffer = belief_evidence_buffer_store
+        self._recall_success = recall_success_store
 
     def capture(self, being_id: BeingId) -> str:
         """10 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
@@ -343,6 +357,14 @@ class BeingMemorySnapshotService:
             "belief_evidence_buffer": [
                 belief_evidence_to_dict(e)
                 for e in self._belief_evidence_buffer.list_all_by_being(being_id)
+            ],
+            # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar
+            # の per-Being state。
+            "recall_success_hit_count": [
+                episode_hit_count_pair_to_dict(eid, hit_count)
+                for eid, hit_count in self._recall_success.list_all_by_being(
+                    being_id
+                ).items()
             ],
         }
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
@@ -465,6 +487,13 @@ class BeingMemorySnapshotService:
             dict_to_belief_evidence,
             "belief_evidence_buffer",
         )
+        # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar の
+        # デコード。(episode_id, hit_count) ペアの list。
+        recall_success_pairs = _decode_list(
+            payload["recall_success_hit_count"],
+            dict_to_episode_hit_count_pair,
+            "recall_success_hit_count",
+        )
 
         # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない、
         # memory_link / reinterpretation_journal / recall_buffer は episode に
@@ -492,6 +521,11 @@ class BeingMemorySnapshotService:
         # U2 (証拠台帳統一設計): evidence buffer の bulk overwrite。
         self._belief_evidence_buffer.replace_all_by_being(
             being_id, belief_evidences
+        )
+        # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar の
+        # bulk overwrite。
+        self._recall_success.replace_all_by_being(
+            being_id, dict(recall_success_pairs)
         )
 
 

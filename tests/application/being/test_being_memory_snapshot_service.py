@@ -82,6 +82,9 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         InMemoryEpisodicRecallSlotStore,
     )
+    from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+        InMemoryEpisodicRecallSuccessStore,
+    )
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
@@ -96,6 +99,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     afterglow = InMemoryAfterglowStore()
     habituation = InMemoryEpisodicRecallHabituationStore()
     belief_evidence = InMemoryBeliefEvidenceBufferStore()
+    success = InMemoryEpisodicRecallSuccessStore()
     svc = BeingMemorySnapshotService(
         memo_store=memo,
         semantic_store=semantic,
@@ -107,6 +111,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
         afterglow_store=afterglow,
         recall_habituation_store=habituation,
         belief_evidence_buffer_store=belief_evidence,
+        recall_success_store=success,
     )
     return svc, {
         "memo": memo,
@@ -116,6 +121,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
         "journal": journal,
         "episode": episode,
         "belief_evidence": belief_evidence,
+        "success": success,
     }
 
 
@@ -330,6 +336,24 @@ class TestRestoreRoundTrip:
         assert len(restored) == 1
         assert restored[0] == evidence
 
+    def test_recall_success_hit_count_の_round_trip(self) -> None:
+        """U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar の
+
+        capture → restore で中身が一致することを保証する
+        (snapshot 追従 checklist #27)。"""
+        src_svc, src_stores = _make_service()
+        being = BeingId("ada")
+        src_stores["success"].record_hit_by_being(being, "ep-1")
+        src_stores["success"].record_hit_by_being(being, "ep-1")
+        src_stores["success"].record_hit_by_being(being, "ep-2")
+        payload_json = src_svc.capture(being)
+
+        dst_svc, dst_stores = _make_service()
+        dst_svc.restore(being, payload_json)
+
+        restored = dst_stores["success"].list_all_by_being(being)
+        assert restored == {"ep-1": 2, "ep-2": 1}
+
     def test_belief_evidence_の_in_context_belief_ids_も_round_trip_する(self) -> None:
         """U4 (予測誤差統一設計 部品3): attribution 用の in_context_belief_ids も
         evidence buffer の capture → restore を経て失われないことを保証する。
@@ -489,6 +513,8 @@ class TestRestoreValidation:
                 "recall_habituation_last_recalled": [],
                 # U2: belief_evidence_buffer も実 store の key として揃えておく。
                 "belief_evidence_buffer": [],
+                # U9b: recall_success_hit_count も実 store の key として揃えておく。
+                "recall_success_hit_count": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="memo"):
@@ -526,6 +552,8 @@ class TestRestoreValidation:
                 "recall_habituation_last_recalled": [],
                 # U2: belief_evidence_buffer も実 store の key として揃えておく。
                 "belief_evidence_buffer": [],
+                # U9b: recall_success_hit_count も実 store の key として揃えておく。
+                "recall_success_hit_count": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="memory_links"):
@@ -551,6 +579,8 @@ class TestRestoreValidation:
                 "recall_habituation_last_recalled": [],
                 # U2: belief_evidence_buffer も実 store の key として揃えておく。
                 "belief_evidence_buffer": [],
+                # U9b: recall_success_hit_count も実 store の key として揃えておく。
+                "recall_success_hit_count": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="must be list"):
@@ -570,6 +600,9 @@ class TestConstructor:
         from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
             InMemoryEpisodicRecallSlotStore,
         )
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
 
         from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
             InMemoryBeliefEvidenceBufferStore,
@@ -587,4 +620,5 @@ class TestConstructor:
                 afterglow_store=InMemoryAfterglowStore(),
                 recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
                 belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
+                recall_success_store=InMemoryEpisodicRecallSuccessStore(),
             )
