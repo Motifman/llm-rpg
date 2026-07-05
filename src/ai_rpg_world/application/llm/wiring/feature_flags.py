@@ -410,3 +410,40 @@ def log_belief_evidence_enabled_state(enabled: bool) -> None:
         ENV_BELIEF_EVIDENCE_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Semantic memory: 固着パス BeliefConsolidationCoordinator (U3b)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_BELIEF_CONSOLIDATION_ENABLED = "BELIEF_CONSOLIDATION_ENABLED"
+
+
+def resolve_belief_consolidation_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """``BeliefConsolidationCoordinator`` を配線し belief journal への
+    唯一の書き込み経路として動かすか。
+
+    ``BELIEF_CONSOLIDATION_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    OFF (既定) のときは、``EpisodicSemanticClusterPromotionService`` が
+    現行どおり semantic store に直接書き込む (recall_count>=3 ゲート込み)。
+    ON にすると、その直書きが FAMILIARITY ``BeliefEvidence`` の emit
+    (ゲート無し) に切り替わり、belief journal への書き込みは
+    ``BeliefConsolidationCoordinator`` の固着パス経由に一本化される。
+
+    詳細は docs/memory_system/semantic_learning_consolidation_design.md
+    「固着パス: BeliefConsolidationCoordinator」節。
+    """
+    return _parse_bool_env(ENV_BELIEF_CONSOLIDATION_ENABLED, env=env, default=False)
+
+
+def log_belief_consolidation_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_BELIEF_CONSOLIDATION_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )

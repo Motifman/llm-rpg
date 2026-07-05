@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
+from typing import Iterable
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
@@ -45,6 +46,21 @@ class InMemoryBeliefEvidenceBufferStore(BeliefEvidenceBufferRepository):
         return sorted(
             rows, key=lambda e: (_dt_key(e.occurred_at), e.evidence_id)
         )
+
+    def remove_by_being(
+        self, being_id: BeingId, evidence_ids: Iterable[str]
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        ids_to_remove = {str(eid) for eid in evidence_ids}
+        if not ids_to_remove:
+            return
+        remaining = [
+            e
+            for e in self._evidences.get(being_id, ())
+            if e.evidence_id not in ids_to_remove
+        ]
+        self._evidences[being_id] = remaining
 
     def replace_all_by_being(
         self,

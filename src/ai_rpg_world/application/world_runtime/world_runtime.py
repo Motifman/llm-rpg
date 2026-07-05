@@ -3613,28 +3613,37 @@ def create_world_runtime(
         # (enable) の分離」規約に従い、OFF なら None のまま扱う (= 転記コード
         # パス自体は通るが不活性)。
         from ai_rpg_world.application.llm.wiring.feature_flags import (
+            log_belief_consolidation_enabled_state,
             log_belief_evidence_enabled_state,
+            resolve_belief_consolidation_enabled,
             resolve_belief_evidence_enabled,
         )
 
         _belief_evidence_enabled = resolve_belief_evidence_enabled()
         log_belief_evidence_enabled_state(_belief_evidence_enabled)
+        # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
+        # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
+        # どちらか一方でも ON なら buffer store 自体は作る。
+        _belief_consolidation_enabled = resolve_belief_consolidation_enabled()
+        log_belief_consolidation_enabled_state(_belief_consolidation_enabled)
         belief_evidence_buffer_store = None
         belief_evidence_transcriber = None
-        if _belief_evidence_enabled:
-            from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
-                BeliefEvidenceTranscriber,
-            )
+        if _belief_evidence_enabled or _belief_consolidation_enabled:
             from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
                 InMemoryBeliefEvidenceBufferStore,
             )
 
             belief_evidence_buffer_store = InMemoryBeliefEvidenceBufferStore()
-            belief_evidence_transcriber = BeliefEvidenceTranscriber(
-                belief_evidence_buffer_store,
-                trace_recorder_provider=lambda: runtime._trace_recorder,
-                current_tick_provider=runtime.current_tick,
-            )
+            if _belief_evidence_enabled:
+                from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+                    BeliefEvidenceTranscriber,
+                )
+
+                belief_evidence_transcriber = BeliefEvidenceTranscriber(
+                    belief_evidence_buffer_store,
+                    trace_recorder_provider=lambda: runtime._trace_recorder,
+                    current_tick_provider=runtime.current_tick,
+                )
         if is_episodic_subjective_enabled():
             from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
                 EpisodicChunkSubjectiveFieldsService,
@@ -3723,7 +3732,12 @@ def create_world_runtime(
         # semantic だけ無視され、短期記憶など他設定との config 契約が崩れる。
         _semantic_top_k = config.semantic_passive_top_k
         _semantic_gist_enabled = config.semantic_llm_gist_enabled
-        _semantic_enabled = _semantic_top_k > 0 or _semantic_gist_enabled
+        # U3b: 固着パスは belief journal (semantic_memory_store) への書き込みを
+        # 前提とするため、他の semantic 系フラグが OFF でも semantic スタック
+        # 自体は組む必要がある。
+        _semantic_enabled = (
+            _semantic_top_k > 0 or _semantic_gist_enabled or _belief_consolidation_enabled
+        )
         _semantic_gist_service = None
         _semantic_persona_resolver = None
         if _semantic_enabled:
@@ -3793,6 +3807,27 @@ def create_world_runtime(
                         _reinterp_client, None
                     )
                 )
+        # U3b: 固着パスの completion port。BELIEF_CONSOLIDATION_ENABLED かつ
+        # litellm client が取れるときだけ実 LLM を配線する。client が stub
+        # (llm_client_kind != "litellm") のときは coordinator 自体は構築される
+        # が completion=None のまま (= flush が no-op、evidence は buffer に
+        # 溜まり続けるだけの安全な縮退)。
+        _belief_consolidation_completion = None
+        if _belief_consolidation_enabled and config.llm_client_kind == "litellm":
+            from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+                create_llm_client_from_env,
+            )
+            from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
+
+            try:
+                _belief_consolidation_client = create_llm_client_from_env()
+            except Exception:
+                logger.exception(
+                    "LLM client factory failed; belief consolidation disabled"
+                )
+                _belief_consolidation_client = None
+            if isinstance(_belief_consolidation_client, LiteLLMClient):
+                _belief_consolidation_completion = _belief_consolidation_client
         runtime._episodic_stack = build_episodic_stack(
             scenario=scenario,
             graph=spot_graph_repo.find_graph(),
@@ -3852,6 +3887,11 @@ def create_world_runtime(
             # 自体は snapshot 用に stack へ公開する。
             belief_evidence_transcriber=belief_evidence_transcriber,
             belief_evidence_buffer_store=belief_evidence_buffer_store,
+            # U3b (固着パス): default OFF。ON のときのみクラスタ昇格が
+            # FAMILIARITY 転用モードになり、BeliefConsolidationCoordinator が
+            # 構築される。
+            belief_consolidation_enabled=_belief_consolidation_enabled,
+            belief_consolidation_completion=_belief_consolidation_completion,
         )
 
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で

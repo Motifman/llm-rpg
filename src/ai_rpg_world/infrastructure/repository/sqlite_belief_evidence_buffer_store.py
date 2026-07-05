@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterable
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
@@ -141,6 +141,24 @@ class SqliteBeliefEvidenceBufferStore(BeliefEvidenceBufferRepository):
             (being_id.value,),
         )
         return [_payload_to_evidence(json.loads(str(r[0]))) for r in cur.fetchall()]
+
+    def remove_by_being(
+        self, being_id: BeingId, evidence_ids: Iterable[str]
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        ids = [str(eid) for eid in evidence_ids]
+        if not ids:
+            return
+        placeholders = ",".join("?" for _ in ids)
+        self._conn.execute(
+            f"""
+            DELETE FROM belief_evidence_buffer_by_being
+            WHERE being_id_value = ? AND evidence_id IN ({placeholders})
+            """,
+            (being_id.value, *ids),
+        )
+        self._conn.commit()
 
     def replace_all_by_being(
         self,

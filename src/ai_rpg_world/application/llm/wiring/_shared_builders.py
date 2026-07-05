@@ -88,6 +88,7 @@ def build_episodic_memory_stack(
     semantic_persona_resolver: Optional[Any] = None,
     being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
     default_world_id: Optional["WorldId"] = None,
+    belief_evidence_buffer_store: Optional[Any] = None,
 ) -> EpisodicMemoryStack:
     """共有 episode store と link / semantic / promotion を組み立てる。
 
@@ -100,6 +101,13 @@ def build_episodic_memory_stack(
     - ``semantic_persona_resolver`` は ``Callable[[int], tuple[str, str]]``。
       LLM gist の prompt に persona を載せるために必要。gist service を
       渡したら基本的に併せて渡す
+
+    U3b (固着パス):
+    - ``belief_evidence_buffer_store`` を渡すと ``episodic_semantic_promotion``
+      が FAMILIARITY 転用モードになる (store 直書き・recall_count ゲートを
+      やめ、evidence buffer に emit する)。呼び出し側 (``episodic_stack.py``)
+      が ``BELIEF_CONSOLIDATION_ENABLED`` を見て渡すかどうかを決める
+      (「配線と有効化の分離」既存パターン)。
     """
     shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
     link_store, semantic_memory_store = default_link_and_semantic_stores_for_episode_store(
@@ -122,6 +130,7 @@ def build_episodic_memory_stack(
         persona_resolver=semantic_persona_resolver,
         being_attachment_resolver=being_attachment_resolver,
         default_world_id=default_world_id,
+        belief_evidence_buffer_store=belief_evidence_buffer_store,
     )
     return EpisodicMemoryStack(
         shared_episode_store=shared_episode_store,
