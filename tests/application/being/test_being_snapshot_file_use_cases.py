@@ -66,6 +66,9 @@ def _make_environment():
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         InMemoryEpisodicRecallSlotStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+        InMemoryBeliefEvidenceBufferStore,
+    )
 
     memo = InMemoryMemoStore()
     semantic = InMemorySemanticMemoryStore()
@@ -83,6 +86,7 @@ def _make_environment():
         recall_slot_store=InMemoryEpisodicRecallSlotStore(),
         afterglow_store=InMemoryAfterglowStore(),
         recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
+        belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
     )
     gateway = BeingSnapshotFileGateway()
     capture = CaptureBeingSnapshotToFileUseCase(

@@ -68,7 +68,9 @@ from typing import Any
 
 from ai_rpg_world.application.being._memory_payload_codecs import (
     afterglow_entry_to_dict,
+    belief_evidence_to_dict,
     dict_to_afterglow_entry,
+    dict_to_belief_evidence,
     dict_to_episode_tick_pair,
     dict_to_memo_entry,
     dict_to_memory_link,
@@ -107,6 +109,9 @@ from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository impor
     MemoryLinkRepository,
 )
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
+from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
+    BeliefEvidenceBufferRepository,
+)
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     SemanticMemoryRepository,
 )
@@ -200,6 +205,7 @@ class BeingMemorySnapshotService:
     # PR-G: 想起階層 (slot / afterglow / habituation) 3 store ぶん 4 key を追加。
     # slot は entries と cooldown を別 key に split (= 既存 restore() の
     # ``isinstance(list)`` 検証規約に合わせるため)。
+    # U2 (証拠台帳統一設計): belief_evidence_buffer store 1 key を追加。
     EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset({
         "memo",
         "semantic_entries",
@@ -212,6 +218,7 @@ class BeingMemorySnapshotService:
         "recall_slot_cooldown",
         "afterglow_entries",
         "recall_habituation_last_recalled",
+        "belief_evidence_buffer",
     })
 
     def __init__(
@@ -226,6 +233,7 @@ class BeingMemorySnapshotService:
         recall_slot_store: IEpisodicRecallSlotStore,
         afterglow_store: IAfterglowStore,
         recall_habituation_store: IEpisodicRecallHabituationStore,
+        belief_evidence_buffer_store: BeliefEvidenceBufferRepository,
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository")
@@ -262,6 +270,12 @@ class BeingMemorySnapshotService:
                 "recall_habituation_store must implement "
                 "IEpisodicRecallHabituationStore"
             )
+        if not isinstance(
+            belief_evidence_buffer_store, BeliefEvidenceBufferRepository
+        ):
+            raise TypeError(
+                "belief_evidence_buffer_store must be BeliefEvidenceBufferRepository"
+            )
         self._memo = memo_store
         self._semantic = semantic_store
         self._memory_link = memory_link_store
@@ -271,6 +285,7 @@ class BeingMemorySnapshotService:
         self._recall_slot = recall_slot_store
         self._afterglow = afterglow_store
         self._recall_habituation = recall_habituation_store
+        self._belief_evidence_buffer = belief_evidence_buffer_store
 
     def capture(self, being_id: BeingId) -> str:
         """9 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
@@ -323,6 +338,11 @@ class BeingMemorySnapshotService:
                 for eid, tick in self._recall_habituation.list_all_by_being(
                     being_id
                 ).items()
+            ],
+            # U2 (証拠台帳統一設計): evidence buffer の per-Being state。
+            "belief_evidence_buffer": [
+                belief_evidence_to_dict(e)
+                for e in self._belief_evidence_buffer.list_all_by_being(being_id)
             ],
         }
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
@@ -439,6 +459,12 @@ class BeingMemorySnapshotService:
             dict_to_episode_tick_pair,
             "recall_habituation_last_recalled",
         )
+        # U2 (証拠台帳統一設計): evidence buffer のデコード。
+        belief_evidences = _decode_list(
+            payload["belief_evidence_buffer"],
+            dict_to_belief_evidence,
+            "belief_evidence_buffer",
+        )
 
         # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない、
         # memory_link / reinterpretation_journal / recall_buffer は episode に
@@ -462,6 +488,10 @@ class BeingMemorySnapshotService:
         self._afterglow.replace_all_by_being(being_id, afterglow_entries)
         self._recall_habituation.replace_all_by_being(
             being_id, dict(habituation_pairs)
+        )
+        # U2 (証拠台帳統一設計): evidence buffer の bulk overwrite。
+        self._belief_evidence_buffer.replace_all_by_being(
+            being_id, belief_evidences
         )
 
 

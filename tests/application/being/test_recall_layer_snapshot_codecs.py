@@ -105,6 +105,9 @@ class TestBeingMemorySnapshotRecallLayerRoundTrip:
         from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
             InMemorySubjectiveEpisodeStore,
         )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
 
         slot = InMemoryEpisodicRecallSlotStore()
         afterglow = InMemoryAfterglowStore()
@@ -119,6 +122,7 @@ class TestBeingMemorySnapshotRecallLayerRoundTrip:
             recall_slot_store=slot,
             afterglow_store=afterglow,
             recall_habituation_store=habituation,
+            belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
         )
         return service, slot, afterglow, habituation
 

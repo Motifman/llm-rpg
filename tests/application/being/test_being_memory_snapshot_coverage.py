@@ -90,6 +90,9 @@ def _make_service():
     from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
         InMemorySubjectiveEpisodeStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+        InMemoryBeliefEvidenceBufferStore,
+    )
 
     return BeingMemorySnapshotService(
         memo_store=InMemoryMemoStore(),
@@ -101,6 +104,7 @@ def _make_service():
         recall_slot_store=InMemoryEpisodicRecallSlotStore(),
         afterglow_store=InMemoryAfterglowStore(),
         recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
+        belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
     )
 
 
@@ -172,6 +176,8 @@ class TestBeingMemorySnapshotServiceCoverage:
             # 漏れた」シナリオを最小再現する)。
             "recall_slot_entries": [], "recall_slot_cooldown": [],
             "afterglow_entries": [], "recall_habituation_last_recalled": [],
+            # U2: belief_evidence_buffer も実 store の key として揃えておく。
+            "belief_evidence_buffer": [],
         }
         with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
             service.restore(BeingId("being-test"), json.dumps(payload_without_new_key))
