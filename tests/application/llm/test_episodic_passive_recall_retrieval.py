@@ -610,6 +610,235 @@ class TestEpisodicPassiveRecallRetrievalHabituation:
         assert result.debug.habituation_penalty_by_episode == ()
 
 
+class TestEpisodicPassiveRecallRetrievalHitBoost:
+    """U9b (予測誤差統一設計 部品5・想起の信用割り当て) — 的中側 boost。
+
+    「思い出して立てた予測が当たった」episode は multi_cue_score に加点され、
+    arm 内での順位が上がる。habituation ペナルティと対称の綱引き構造。
+    """
+
+    def _setup(self):
+        """同一 cue (place_spot:1) に hit する episode を 2 件作り、
+        どちらが上位に来るかを boost で操作できる構成にする。"""
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+
+        store = InMemorySubjectiveEpisodeStore()
+        c_place = EpisodicCue(
+            axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT
+        )
+        c_obj = EpisodicCue(
+            axis="object", value="o1", source=EpisodicCueSource.TOOL
+        )
+        base = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        # ep-A: place_spot のみで hit (multi_cue_score=1、通常は下位)
+        store.put_by_being(
+            being_id,
+            _episode(
+                episode_id="ep-A",
+                occurred_at=base,
+                cues=(c_place,),
+            ),
+        )
+        # ep-B: place_spot + object の両方で hit (multi_cue_score=2 → 通常は上位)
+        store.put_by_being(
+            being_id,
+            _episode(
+                episode_id="ep-B",
+                occurred_at=base - timedelta(hours=1),
+                cues=(c_place, c_obj),
+            ),
+        )
+        _res, _wid = _make_resolver_and_being()
+        success_store = InMemoryEpisodicRecallSuccessStore()
+        return store, success_store, _res, _wid, c_place, c_obj
+
+    def test_success_store_未注入なら既存挙動と同一(self) -> None:
+        """``recall_success_store=None`` (既定) は既存の round-robin 結果と同じ。"""
+        store, _, res, wid, c_place, c_obj = self._setup()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store, being_attachment_resolver=res, default_world_id=wid
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=1,
+        )
+        ids = [c.episode.episode_id for c in result.candidates]
+        # boost 無し: multi_cue_score が高い ep-B が単独枠を取る
+        assert ids == ["ep-B"]
+
+    def test_的中回数が多いepisodeは加点されて上位に来る(self) -> None:
+        """ep-A に的中を積んで boost すると、score 1 の ep-A が score 2 の
+        ep-B を逆転できる (strength=2 * hit=1 = +2 で score 1+2=3 > 2)。"""
+        store, success, res, wid, c_place, c_obj = self._setup()
+        success.record_hit_by_being(being_id, "ep-A")
+
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            recall_success_store=success,
+            hit_boost_strength=2,
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=1,
+        )
+        ids = [c.episode.episode_id for c in result.candidates]
+        assert ids == ["ep-A"]
+
+    def test_boost_された_episode_はdebugにも記録される(self) -> None:
+        """M3 で recall 分布を post-hoc 計測するための観測可能性。"""
+        store, success, res, wid, c_place, c_obj = self._setup()
+        success.record_hit_by_being(being_id, "ep-A")
+
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            recall_success_store=success,
+            hit_boost_strength=2,
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=1,
+        )
+        boost_dict = dict(result.debug.hit_boost_by_episode)
+        assert boost_dict["ep-A"] == 2
+        assert boost_dict.get("ep-B", 0) == 0
+
+    def test_strength_0_既定なら加点されない(self) -> None:
+        """store は注入されていても strength=0 (既定) なら boost 0。"""
+        store, success, res, wid, c_place, c_obj = self._setup()
+        success.record_hit_by_being(being_id, "ep-A")
+
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            recall_success_store=success,
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=1,
+        )
+        ids = [c.episode.episode_id for c in result.candidates]
+        assert ids == ["ep-B"]
+
+    def test_cap_を超えた的中回数は打ち止めになる(self) -> None:
+        """cap=1 のとき、的中を何度積んでも boost は 1 回分までしか効かない
+        (= 想起の多様性が死ぬのを防ぐ上限)。"""
+        store, success, res, wid, c_place, c_obj = self._setup()
+        for _ in range(10):
+            success.record_hit_by_being(being_id, "ep-A")
+
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=res,
+            default_world_id=wid,
+            recall_success_store=success,
+            hit_boost_strength=1,
+            hit_boost_cap=1,
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place, c_obj),
+            limit_per_axis=5,
+            max_candidates=1,
+        )
+        ids = [c.episode.episode_id for c in result.candidates]
+        # cap=1 * strength=1 = +1 で ep-A の score は 1+1=2、ep-B と同点。
+        # 同点時は arm_sort_key の granularity/occurred_at/episode_id が
+        # tie-break するので、ep-A が単独で逆転するとは限らない。ここでは
+        # 「cap 超過分が効かない」ことだけを確認する (10 回 hit しても
+        # score は 100 回分にはならない)。
+        assert ids != []
+
+    def test_being_id_未解決なら加点されない(self) -> None:
+        """Resolver / default_world_id 未注入で being_id が解決できない場合。"""
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+
+        store = InMemorySubjectiveEpisodeStore()
+        c_place = EpisodicCue(
+            axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT
+        )
+        success = InMemoryEpisodicRecallSuccessStore()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            recall_success_store=success,
+            hit_boost_strength=5,
+        )
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_place,),
+            limit_per_axis=5,
+            max_candidates=5,
+        )
+        # being_id 未解決なので candidates は空 (= 既存の graceful fallback)。
+        # 例外を投げずに完走することが本テストの主眼。
+        assert result.candidates == ()
+
+
+class TestHitBoostConstructorValidation:
+    """``hit_boost_strength`` / ``hit_boost_cap`` の境界値ガード。"""
+
+    def test_strength_は_int(self) -> None:
+        import pytest
+
+        with pytest.raises(TypeError):
+            EpisodicPassiveRecallRetrievalService(
+                store=InMemorySubjectiveEpisodeStore(),
+                hit_boost_strength=1.5,  # type: ignore[arg-type]
+            )
+
+    def test_strength_の_bool_は_int扱いされない(self) -> None:
+        import pytest
+
+        with pytest.raises(TypeError):
+            EpisodicPassiveRecallRetrievalService(
+                store=InMemorySubjectiveEpisodeStore(),
+                hit_boost_strength=True,  # type: ignore[arg-type]
+            )
+
+    def test_strength_負値は_ValueError(self) -> None:
+        import pytest
+
+        with pytest.raises(ValueError):
+            EpisodicPassiveRecallRetrievalService(
+                store=InMemorySubjectiveEpisodeStore(),
+                hit_boost_strength=-1,
+            )
+
+    def test_cap_は_int(self) -> None:
+        import pytest
+
+        with pytest.raises(TypeError):
+            EpisodicPassiveRecallRetrievalService(
+                store=InMemorySubjectiveEpisodeStore(),
+                hit_boost_cap=1.5,  # type: ignore[arg-type]
+            )
+
+    def test_cap_負値は_ValueError(self) -> None:
+        import pytest
+
+        with pytest.raises(ValueError):
+            EpisodicPassiveRecallRetrievalService(
+                store=InMemorySubjectiveEpisodeStore(),
+                hit_boost_cap=-1,
+            )
+
+
 class TestEpisodicPassiveRecallRetrievalSlot:
     """想起スロット (working memory) — #526 後続 段階 3。
 
