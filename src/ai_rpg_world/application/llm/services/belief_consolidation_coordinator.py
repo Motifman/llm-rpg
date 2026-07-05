@@ -89,6 +89,11 @@ DEFAULT_CUE_SIGNATURE_REPEAT_THRESHOLD = 3
 # contradict で confidence がこの値を割ったら inactive 化する (想起から消える。
 # 削除はしない)。
 DEFAULT_CONTRADICT_INACTIVE_THRESHOLD = 0.2
+# U6 (予測誤差統一設計 / salience 乱発対策): 1 batch に採用する
+# salience=high evidence の上限。salience=high は件数閾値なしで早期 flush
+# されるため (S2 一撃学習)、乱発すると prompt が high だらけになる懸念が
+# design 段階から指摘されていた (「不確実性 (中)」節)。まず 3 件から始める。
+DEFAULT_HIGH_SALIENCE_BATCH_CAP = 3
 MAX_BELIEF_TEXT_CHARS = 50
 MAX_TAG_CHARS = 30
 MAX_TAGS = 8
@@ -174,6 +179,7 @@ class BeliefConsolidationCoordinator:
         shortlist_top_k: int = DEFAULT_BELIEF_CONSOLIDATION_SHORTLIST_TOP_K,
         cue_signature_repeat_threshold: int = DEFAULT_CUE_SIGNATURE_REPEAT_THRESHOLD,
         contradict_inactive_threshold: float = DEFAULT_CONTRADICT_INACTIVE_THRESHOLD,
+        high_salience_batch_cap: int = DEFAULT_HIGH_SALIENCE_BATCH_CAP,
         being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
         default_world_id: Optional[WorldId] = None,
         trace_recorder_provider: Optional[Any] = None,
@@ -201,6 +207,8 @@ class BeliefConsolidationCoordinator:
             raise ValueError("cue_signature_repeat_threshold must be positive")
         if not (0.0 <= contradict_inactive_threshold <= 1.0):
             raise ValueError("contradict_inactive_threshold must be in [0, 1]")
+        if high_salience_batch_cap < 1:
+            raise ValueError("high_salience_batch_cap must be positive")
         if being_attachment_resolver is not None and not isinstance(
             being_attachment_resolver, BeingAttachmentResolver
         ):
@@ -217,6 +225,7 @@ class BeliefConsolidationCoordinator:
         self._shortlist_top_k = shortlist_top_k
         self._cue_signature_repeat_threshold = cue_signature_repeat_threshold
         self._contradict_inactive_threshold = contradict_inactive_threshold
+        self._high_salience_batch_cap = high_salience_batch_cap
         self._resolver = being_attachment_resolver
         self._default_world_id = default_world_id
         self._trace_recorder_provider = trace_recorder_provider
@@ -268,6 +277,30 @@ class BeliefConsolidationCoordinator:
         counts = Counter(e.cue_signature for e in evidences)
         return any(c >= self._cue_signature_repeat_threshold for c in counts.values())
 
+    def _select_batch(
+        self, all_evidence: list[BeliefEvidence]
+    ) -> tuple[BeliefEvidence, ...]:
+        """batch_size を上限に、salience=high の件数を
+        ``high_salience_batch_cap`` (U6) までに絞って batch を組む。
+
+        salience=high は件数閾値なしで早期 flush される (``_has_early_trigger``)
+        ため、乱発すると 1 batch の prompt が high だらけになり得る (design
+        の「乱発対策」)。上限を超えた high evidence は選ばず buffer に残し、
+        次周期以降で拾う (捨てない)。順序は ``list_all_by_being`` の
+        occurred_at 昇順を維持する (古いものを優先)。
+        """
+        selected: list[BeliefEvidence] = []
+        high_count = 0
+        for evidence in all_evidence:
+            if len(selected) >= self._batch_size:
+                break
+            if evidence.salience == BELIEF_EVIDENCE_SALIENCE_HIGH:
+                if high_count >= self._high_salience_batch_cap:
+                    continue
+                high_count += 1
+            selected.append(evidence)
+        return tuple(selected)
+
     def flush_player(self, player_id: PlayerId) -> int:
         """pending evidence を 1 batch 処理する。処理した evidence 件数を返す。
 
@@ -284,7 +317,7 @@ class BeliefConsolidationCoordinator:
         all_evidence = self._evidence_buffer_store.list_all_by_being(being_id)
         if not all_evidence:
             return 0
-        batch = tuple(all_evidence[: self._batch_size])
+        batch = self._select_batch(all_evidence)
         shortlist = self._build_shortlist(being_id, batch)
         messages = self._build_messages(batch, shortlist)
         try:
