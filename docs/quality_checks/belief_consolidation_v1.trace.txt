@@ -58,11 +58,11 @@ decisions は次のいずれかの形の要素からなる配列:
 
 === belief journal (list_for_being) ===
 --- entry[0] ---
-  entry_id: sem-9191695abe7d415a8e4f54055944115b
-  belief_id: sem-9191695abe7d415a8e4f54055944115b
+  entry_id: sem-e0bcfcda15bf4cd9a0b28c58600b5730
+  belief_id: sem-e0bcfcda15bf4cd9a0b28c58600b5730
   status: active
   text: この島の探索は空振りが多い
-  confidence: 0.4
+  confidence: 0.7000000000000001
   support_evidence_ids: ('e1', 'e2', 'e3')
   contradict_evidence_ids: ()
 --- entry[1] ---

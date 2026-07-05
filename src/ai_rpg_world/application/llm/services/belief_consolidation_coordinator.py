@@ -467,15 +467,39 @@ class BeliefConsolidationCoordinator:
         except (TypeError, ValueError):
             importance = 5
         importance = max(1, min(10, importance))
-        tags_raw = raw.get("tags", [])
+        evidence_ids = self._resolve_evidence_ids(raw, evidence_by_id, batch_ids)
+        # LLM 生成タグに加えて、根拠 evidence の cue_signature 由来トークン
+        # (英語の tool token を含む) を tags に混ぜて索引を自己一貫させる。
+        # こうしないと tool 軸の cue token (例: "explore") は日本語 belief の
+        # tags/text と永久に一致せず、次回の同 cue evidence が既存 belief を
+        # shortlist に載せられないため、strengthen できず重複 create を生む
+        # (shortlist の tool 軸言語ミスマッチの構造的修復)。
         tags: list[str] = []
+        seen: set[str] = set()
+
+        def _add_tag(candidate: str) -> None:
+            if len(tags) >= MAX_TAGS:
+                return
+            trimmed = candidate.strip()[:MAX_TAG_CHARS]
+            if not trimmed:
+                return
+            key = trimmed.lower()
+            if key in seen:
+                return
+            seen.add(key)
+            tags.append(trimmed)
+
+        tags_raw = raw.get("tags", [])
         if isinstance(tags_raw, list):
             for t in tags_raw:
-                if isinstance(t, str) and t.strip():
-                    tags.append(t.strip()[:MAX_TAG_CHARS])
-                if len(tags) >= MAX_TAGS:
-                    break
-        evidence_ids = self._resolve_evidence_ids(raw, evidence_by_id, batch_ids)
+                if isinstance(t, str):
+                    _add_tag(t)
+        for eid in evidence_ids:
+            evidence = evidence_by_id.get(eid)
+            if evidence is None:
+                continue
+            for token in _cue_tokens(evidence.cue_signature):
+                _add_tag(token)
         episode_ids: list[str] = []
         for eid in evidence_ids:
             evidence = evidence_by_id.get(eid)
@@ -487,7 +511,9 @@ class BeliefConsolidationCoordinator:
             player_id=player_id,
             text=text,
             evidence_episode_ids=tuple(sorted(set(episode_ids))),
-            confidence=compute_belief_confidence(0, 0),
+            # founding evidence 件数を初期 confidence に反映
+            # (support_evidence_ids を数えているので base 固定は不整合)。
+            confidence=compute_belief_confidence(len(evidence_ids), 0),
             created_at=now,
             importance_score=importance,
             tags=tuple(tags),

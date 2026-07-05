@@ -351,6 +351,65 @@ class TestDecisionApplication:
         assert len(entries) == 1
         assert set(entries[0].support_evidence_ids) == {"e1", "e2", "e3"}
 
+    def test_create_initial_confidence_reflects_founding_evidence_count(self) -> None:
+        """create した belief の初期 confidence は founding evidence 件数を反映する
+        (support_evidence_ids を数えているのに base 固定なのは不整合)。"""
+        setup = _build_setup(
+            outcome={
+                "decisions": [
+                    {
+                        "action": "create",
+                        "text": "この島の探索は空振りが多い",
+                        "importance": 6,
+                        "tags": ["探索"],
+                        "evidence_ids": ["e1", "e2"],
+                    }
+                ]
+            }
+        )
+        for i in range(2):
+            setup.evidence_buffer.append_by_being(setup.being_id, _evidence(f"e{i+1}"))
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        entries = setup.semantic_store.list_for_being(setup.being_id)
+        assert len(entries) == 1
+        assert entries[0].confidence == compute_belief_confidence(2, 0)
+
+    def test_create_mixes_cue_tokens_into_tags_for_self_consistent_shortlist(self) -> None:
+        """日本語タグだけの create で作った belief でも、根拠 evidence の cue token
+        (英語 tool token "explore") が tags に混ざるため、後続の別 tool:explore
+        evidence が同じ belief を shortlist に載せられる (tool 軸の索引自己修復)。"""
+        setup = _build_setup(
+            outcome={
+                "decisions": [
+                    {
+                        "action": "create",
+                        "text": "この島の探索は空振りが多い",
+                        "importance": 6,
+                        "tags": ["探索"],  # 日本語タグのみ (LLM 出力想定)
+                        "evidence_ids": ["e1"],
+                    }
+                ]
+            }
+        )
+        setup.evidence_buffer.append_by_being(
+            setup.being_id, _evidence("e1", cue_signature="tool:explore")
+        )
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        created = setup.semantic_store.list_for_being(setup.being_id)[0]
+        # cue token "explore" が tags に混ざっている
+        assert "explore" in {t.lower() for t in created.tags}
+
+        # 後続の別 tool:explore evidence の batch でこの belief が shortlist に載る
+        shortlist = setup.coordinator._build_shortlist(
+            setup.being_id,
+            (_evidence("e2", cue_signature="tool:explore"),),
+        )
+        assert created.belief_id in {b.belief_id for b in shortlist}
+
     def test_strengthen_appends_support_and_recomputes_confidence(self) -> None:
         """strengthen decision で既存 belief の support_evidence_ids が増え、
         confidence がルール関数で再計算される。"""
