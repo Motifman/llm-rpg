@@ -529,3 +529,50 @@ def log_memo_distill_enabled_state(enabled: bool) -> None:
         ENV_MEMO_DISTILL_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Semantic memory: attribution + CONFIRMATION (U4)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_BELIEF_ATTRIBUTION_ENABLED = "BELIEF_ATTRIBUTION_ENABLED"
+
+
+def resolve_belief_attribution_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """「信じて行動した」の attribution (S3) + CONFIRMATION (的中の支持) を
+    動かすか。
+
+    ``BELIEF_ATTRIBUTION_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    OFF (既定) のとき:
+    - ``ActionResultEntry.in_context_belief_ids`` は常に空 (= chunk_coordinator /
+      scheduler が計算自体を行わない)
+    - PREDICTION_ERROR evidence に in-context belief が添付されない
+    - CONFIRMATION evidence が生成されない
+    - 固着パスの shortlist に in-context belief を強制搭載する経路が働かない
+      (``BeliefEvidence.in_context_belief_ids`` が常に空のため)
+
+    ON にするには prompt build 時に belief_id が in-context として記録されて
+    いる必要がある (= 実質的に ``PREDICTION_CONTEXT_ID_ENABLED`` (U1) が ON で
+    ないと belief_ids が流れてこない)。U1 flag が OFF のまま本 flag だけ ON に
+    しても、``PredictionContextLedger`` 自体が配線されず
+    ``in_context_belief_ids`` は常に空になるため安全に縮退する (= 実害なし)。
+
+    詳細は docs/memory_system/semantic_learning_consolidation_design.md
+    「信用割り当て: attribution ledger」節、
+    docs/memory_system/prediction_error_unified_implementation_plan.md の
+    U4 節。
+    """
+    return _parse_bool_env(ENV_BELIEF_ATTRIBUTION_ENABLED, env=env, default=False)
+
+
+def log_belief_attribution_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_BELIEF_ATTRIBUTION_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )
