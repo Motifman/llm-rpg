@@ -282,6 +282,221 @@ class TestPromptBuilderPassiveRecall:
         assert expected_joined in user
         assert out["current_beliefs_snapshot"] == expected_joined
 
+    def test_U1_prediction_context_id_に想起episode紐づき_recall_observationにも_stamp_される(
+        self,
+    ) -> None:
+        """build() が発行する prediction_context_id に、その build で
+        【関連する記憶】に載せた episode_id 群が ledger 経由で紐づき (2 段目 attach)、
+        かつ生成された EpisodicRecallObservation にも同じ id が stamp されること
+        (部品5 想起の信用割り当ての実配線。id が死んだフィールドにならないこと)。"""
+        from ai_rpg_world.application.llm.services.prediction_context_ledger import (
+            PredictionContextLedger,
+        )
+        from tests.application.llm._reinterpretation_being_test_helpers import (
+            make_reinterpretation_being_setup,
+        )
+
+        player_num = 5
+        setup = make_reinterpretation_being_setup()
+        being_id_5 = setup.provision(player_num)
+        place_c = EpisodicCue(axis="place_spot", value="77", source=EpisodicCueSource.RUNTIME_CONTEXT)
+        base = datetime(2026, 5, 2, 8, 0, tzinfo=timezone.utc)
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(
+            being_id_5,
+            _episode(
+                episode_id="e_for_ledger",
+                player_id=player_num,
+                occurred_at=base,
+                recall_text="ledger 紐付け確認用",
+                cues=(place_c,),
+            ),
+        )
+        recall_svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
+        )
+
+        buffer = MagicMock(spec=IObservationContextBuffer)
+        buffer.drain = MagicMock(return_value=[])
+        sliding = MagicMock(spec=ISlidingWindowMemory)
+        sliding.append_all = MagicMock(return_value=[])
+        sliding.get_recent = MagicMock(
+            return_value=[
+                ObservationEntry(
+                    occurred_at=base + timedelta(hours=1),
+                    output=ObservationOutput(
+                        prose="look",
+                        structured={"spot_id_value": 77},
+                        observation_category="environment",
+                    ),
+                    game_time_label=None,
+                )
+            ]
+        )
+        actions = MagicMock(spec=IActionResultStore)
+        actions.get_recent = MagicMock(return_value=[])
+        world = _world_query_stub(state=None)
+        current_fmt = MagicMock(spec=ICurrentStateFormatter)
+        current_fmt.format = MagicMock(return_value="fmt")
+        recent_fmt = MagicMock(spec=IRecentEventsFormatter)
+        recent_fmt.format = MagicMock(return_value="recent")
+        sys_builder = MagicMock(spec=ISystemPromptBuilder)
+        sys_builder.build = MagicMock(return_value="sys")
+        tools_p = MagicMock(spec=IAvailableToolsProvider)
+        tools_p.get_available_tools = MagicMock(return_value=[])
+
+        rt = ToolRuntimeContextDto(targets={}, current_spot_id=77)
+        ui_builder = MagicMock(spec=ILlmUiContextBuilder)
+        ui_builder.build = MagicMock(
+            return_value=LlmUiContextDto(current_state_text="ui", tool_runtime_context=rt)
+        )
+
+        ledger = PredictionContextLedger()
+        builder = DefaultPromptBuilder(
+            PromptBuilderCoreServices(
+                observation_buffer=buffer,
+                sliding_window_memory=sliding,
+                action_result_store=actions,
+                world_query_service=world,
+                player_profile_repository=_profile_repo(player_id=player_num),
+                current_state_formatter=current_fmt,
+                recent_events_formatter=recent_fmt,
+                context_format_strategy=SectionBasedContextFormatStrategy(),
+                system_prompt_builder=sys_builder,
+                available_tools_provider=tools_p,
+            ),
+            ui_context_builder=ui_builder,
+            episodic=EpisodicRecallConfig(
+                passive_recall=recall_svc,
+                passive_recall_limit_per_axis=_TEST_PASSIVE_RECALL_LIMIT_PER_AXIS,
+                passive_recall_max_candidates=_TEST_PASSIVE_RECALL_MAX_CANDIDATES,
+                recall_buffer_store=setup.recall_buffer,
+                turn_index_provider=lambda _pid: 12,
+            ),
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
+            prediction_context_ledger=ledger,
+        )
+        out = builder.build(PlayerId(player_num))
+        issued_id = out["prediction_context_id"]
+        assert issued_id is not None
+        assert issued_id.startswith("predctx-")
+
+        # 2 段目 attach: ledger に in-context episode 群が紐づく
+        pending = ledger.peek(PlayerId(player_num))
+        assert pending is not None
+        assert pending.prediction_context_id == issued_id
+        assert "e_for_ledger" in pending.episode_ids
+
+        # 1 段目 stamp: 生成された recall observation に同じ id が載る (死んでいない)
+        observations = setup.recall_buffer.peek_batch_by_being(
+            being_id_5, batch_size=8, max_contexts_per_episode=3
+        )
+        assert len(observations) == 1
+        assert observations[0].episode_id == "e_for_ledger"
+        assert observations[0].prediction_context_id == issued_id
+
+    def test_U1_flag_OFF_相当_ledger未注入なら_recall_observationの_id_は_None(
+        self,
+    ) -> None:
+        """id 機構 OFF (ledger 未注入) では recall observation の
+        prediction_context_id は None (後方互換)。"""
+        from tests.application.llm._reinterpretation_being_test_helpers import (
+            make_reinterpretation_being_setup,
+        )
+
+        player_num = 6
+        setup = make_reinterpretation_being_setup()
+        being_id_6 = setup.provision(player_num)
+        place_c = EpisodicCue(axis="place_spot", value="77", source=EpisodicCueSource.RUNTIME_CONTEXT)
+        base = datetime(2026, 5, 2, 8, 0, tzinfo=timezone.utc)
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(
+            being_id_6,
+            _episode(
+                episode_id="e_no_id",
+                player_id=player_num,
+                occurred_at=base,
+                recall_text="id 無し確認用",
+                cues=(place_c,),
+            ),
+        )
+        recall_svc = EpisodicPassiveRecallRetrievalService(
+            store,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
+        )
+
+        buffer = MagicMock(spec=IObservationContextBuffer)
+        buffer.drain = MagicMock(return_value=[])
+        sliding = MagicMock(spec=ISlidingWindowMemory)
+        sliding.append_all = MagicMock(return_value=[])
+        sliding.get_recent = MagicMock(
+            return_value=[
+                ObservationEntry(
+                    occurred_at=base + timedelta(hours=1),
+                    output=ObservationOutput(
+                        prose="look",
+                        structured={"spot_id_value": 77},
+                        observation_category="environment",
+                    ),
+                    game_time_label=None,
+                )
+            ]
+        )
+        actions = MagicMock(spec=IActionResultStore)
+        actions.get_recent = MagicMock(return_value=[])
+        world = _world_query_stub(state=None)
+        current_fmt = MagicMock(spec=ICurrentStateFormatter)
+        current_fmt.format = MagicMock(return_value="fmt")
+        recent_fmt = MagicMock(spec=IRecentEventsFormatter)
+        recent_fmt.format = MagicMock(return_value="recent")
+        sys_builder = MagicMock(spec=ISystemPromptBuilder)
+        sys_builder.build = MagicMock(return_value="sys")
+        tools_p = MagicMock(spec=IAvailableToolsProvider)
+        tools_p.get_available_tools = MagicMock(return_value=[])
+
+        rt = ToolRuntimeContextDto(targets={}, current_spot_id=77)
+        ui_builder = MagicMock(spec=ILlmUiContextBuilder)
+        ui_builder.build = MagicMock(
+            return_value=LlmUiContextDto(current_state_text="ui", tool_runtime_context=rt)
+        )
+
+        builder = DefaultPromptBuilder(
+            PromptBuilderCoreServices(
+                observation_buffer=buffer,
+                sliding_window_memory=sliding,
+                action_result_store=actions,
+                world_query_service=world,
+                player_profile_repository=_profile_repo(player_id=player_num),
+                current_state_formatter=current_fmt,
+                recent_events_formatter=recent_fmt,
+                context_format_strategy=SectionBasedContextFormatStrategy(),
+                system_prompt_builder=sys_builder,
+                available_tools_provider=tools_p,
+            ),
+            ui_context_builder=ui_builder,
+            episodic=EpisodicRecallConfig(
+                passive_recall=recall_svc,
+                passive_recall_limit_per_axis=_TEST_PASSIVE_RECALL_LIMIT_PER_AXIS,
+                passive_recall_max_candidates=_TEST_PASSIVE_RECALL_MAX_CANDIDATES,
+                recall_buffer_store=setup.recall_buffer,
+                turn_index_provider=lambda _pid: 12,
+            ),
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
+            # prediction_context_ledger は注入しない (= 機構 OFF)
+        )
+        out = builder.build(PlayerId(player_num))
+        assert out["prediction_context_id"] is None
+        observations = setup.recall_buffer.peek_batch_by_being(
+            being_id_6, batch_size=8, max_contexts_per_episode=3
+        )
+        assert len(observations) == 1
+        assert observations[0].prediction_context_id is None
+
     def test_active_reinterpretation_overrides_episode_recall_and_records_observation(self) -> None:
         """
         active な再解釈がある episode は current_recall_text を prompt に使い、

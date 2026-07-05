@@ -8,6 +8,9 @@ import pytest
 from ai_rpg_world.application.llm.services.action_result_recorder import (
     ActionResultRecorder,
 )
+from ai_rpg_world.application.llm.services.prediction_context_ledger import (
+    PredictionContextLedger,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -130,3 +133,53 @@ class TestActionResultRecorder:
         """store が None なら TypeError。"""
         with pytest.raises(TypeError, match="action_result_store must not be None"):
             ActionResultRecorder(None)  # type: ignore[arg-type]
+
+
+class TestPredictionContextIdConsumption:
+    """U1: prediction_context_ledger からの consume → store.append への焼き込み。"""
+
+    def test_ledger_未注入なら_prediction_context_id_は常に_None(self) -> None:
+        store = _StoreSpy([])
+        ActionResultRecorder(store).record(
+            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+        )
+        assert store.last_kwargs["prediction_context_id"] is None
+
+    def test_pending_id_が_consume_されて_store_に渡る(self) -> None:
+        ledger = PredictionContextLedger()
+        issued = ledger.issue(PlayerId(1))
+        store = _StoreSpy([])
+        ActionResultRecorder(store, prediction_context_ledger=ledger).record(
+            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+        )
+        assert store.last_kwargs["prediction_context_id"] == issued.prediction_context_id
+        # consume 済みなので ledger 側からは消えている
+        assert ledger.peek(PlayerId(1)) is None
+
+    def test_pending_id_が無ければ_None_が渡る(self) -> None:
+        """no-tool ターンの反対 (record だけ呼ばれて build を経ていない) でも壊れない。"""
+        ledger = PredictionContextLedger()
+        store = _StoreSpy([])
+        ActionResultRecorder(store, prediction_context_ledger=ledger).record(
+            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+        )
+        assert store.last_kwargs["prediction_context_id"] is None
+
+    def test_他プレイヤーの_pending_id_は消費されない(self) -> None:
+        """player をまたいだ混線防止。"""
+        ledger = PredictionContextLedger()
+        issued_p2 = ledger.issue(PlayerId(2))
+        store = _StoreSpy([])
+        ActionResultRecorder(store, prediction_context_ledger=ledger).record(
+            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+        )
+        assert store.last_kwargs["prediction_context_id"] is None
+        assert ledger.peek(PlayerId(2)).prediction_context_id == (
+            issued_p2.prediction_context_id
+        )
+
+    def test_不正な_ledger_型は_TypeError(self) -> None:
+        with pytest.raises(TypeError, match="prediction_context_ledger"):
+            ActionResultRecorder(
+                _StoreSpy([]), prediction_context_ledger=object()  # type: ignore[arg-type]
+            )

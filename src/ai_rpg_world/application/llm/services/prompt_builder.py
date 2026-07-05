@@ -50,6 +50,9 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
 )
+from ai_rpg_world.application.llm.services.prediction_context_ledger import (
+    PredictionContextLedger,
+)
 from ai_rpg_world.application.llm.services.prompt_builder_config import (
     DEFAULT_ACTION_INSTRUCTION as _CFG_DEFAULT_ACTION_INSTRUCTION,
     DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
@@ -404,6 +407,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
         default_world_id: Optional["WorldId"] = None,
         tool_call_loop_guard: Optional["ToolCallLoopGuardService"] = None,
+        prediction_context_ledger: Optional[PredictionContextLedger] = None,
     ) -> None:
         """Config dataclass ベースの API (Issue #227 後続 HIGH-1)。
 
@@ -611,6 +615,15 @@ class DefaultPromptBuilder(IPromptBuilder):
                     "tool_call_loop_guard must be ToolCallLoopGuardService or None"
                 )
         self._tool_call_loop_guard = tool_call_loop_guard
+        # U1: prediction_context_id を発行する ledger (任意)。None なら id 機構
+        # 自体が OFF (= 既存挙動、result["prediction_context_id"] は常に None)。
+        if prediction_context_ledger is not None and not isinstance(
+            prediction_context_ledger, PredictionContextLedger
+        ):
+            raise TypeError(
+                "prediction_context_ledger must be PredictionContextLedger or None"
+            )
+        self._prediction_context_ledger = prediction_context_ledger
         self._objective_text_provider = objective_text_provider
         self._inventory_text_provider = inventory_text_provider
         self._current_tick_provider = current_tick_provider
@@ -1022,22 +1035,32 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 5. 利用可能ツール取得
         tools = self._available_tools_provider.get_available_tools(current_state_dto)
 
+        # U1 (二段階発行の 1 段目): passive recall より前に id を確保する。
+        # こうすることで recall observation の生成時にこの id を stamp でき、
+        # 「この episode を想起した prompt build で立てた予測」の紐付けが実在化
+        # する (部品5 想起の信用割り当ての前提)。in-context 集合は recall 後に
+        # 2 段目 (_attach_prediction_context) で確定する。ledger 未注入なら None。
+        prediction_context_id = self._begin_prediction_context(player_id)
+
         # 6. 受動想起（任意注入）: runtime + 直近観測 structured から situation_cues → recall_text を連結
-        relevant_memories_text, _passive_candidate_count = self._run_passive_recall(
-            player_id=player_id,
-            observations=observations,
-            action_results=action_results,
-            ui_context=ui_context,
-            current_state_text=current_state_text,
-            recent_events_text=recent_events_text,
-            player_info=player_info,
+        relevant_memories_text, _passive_candidate_count, recalled_episode_ids = (
+            self._run_passive_recall(
+                player_id=player_id,
+                observations=observations,
+                action_results=action_results,
+                ui_context=ui_context,
+                current_state_text=current_state_text,
+                recent_events_text=recent_events_text,
+                player_info=player_info,
+                prediction_context_id=prediction_context_id,
+            )
         )
 
         # 6b. Phase 1c: semantic memory の passive top-K (任意)。
         # service=None または top_k=0 なら空文字を返し prompt §「【関連する学び】」
         # は出ない。状況連想キューは episodic 受動想起と同じ situation_cues を
         # 使う (関連 episodes と関連 semantic facts を同じ「いま」基準で集める)。
-        learned_text = self._run_semantic_passive_recall(
+        learned_text, recalled_belief_ids = self._run_semantic_passive_recall(
             player_id=player_id,
             observations=observations,
             action_results=action_results,
@@ -1140,6 +1163,18 @@ class DefaultPromptBuilder(IPromptBuilder):
         result["current_beliefs_snapshot"] = relevant_memories_text
         result["persona_snapshot"] = player_info.persona_block
 
+        # U1 (二段階発行の 2 段目): 上で先に発行済みの prediction_context_id に、
+        # この build で in-context だった episode_id / belief_id 群を後付けする。
+        # ledger 未注入 (= id 機構 OFF) なら prediction_context_id は None で
+        # attach も no-op (既存挙動)。
+        self._attach_prediction_context(
+            player_id=player_id,
+            prediction_context_id=prediction_context_id,
+            episode_ids=recalled_episode_ids,
+            belief_ids=recalled_belief_ids,
+        )
+        result["prediction_context_id"] = prediction_context_id
+
         # 実験 #356 後続: prefix cache 分析用の section 別 char 内訳を trace に
         # 1 件記録する。token ではなく char で吐く理由はモジュール docstring 参照。
         self._emit_prompt_section_breakdown_trace(
@@ -1158,6 +1193,73 @@ class DefaultPromptBuilder(IPromptBuilder):
         )
         return result
 
+    def _begin_prediction_context(self, player_id: PlayerId) -> Optional[str]:
+        """U1 (二段階発行の 1 段目): passive recall より前に id を発行する。
+
+        ledger 未注入なら常に None を返す (= id 機構 OFF の既存ランタイムと
+        後方互換)。未消費の前回分があれば破棄され (= no-tool ターン / 例外で
+        record に届かなかった / 途中で再スケジュールされた 等の想定内動作)、
+        ERROR ではなく trace NOTE を残す。in-context 集合はまだ空で、この build
+        の passive recall 完了後に ``_attach_prediction_context`` で確定する。
+        """
+        if self._prediction_context_ledger is None:
+            return None
+        result = self._prediction_context_ledger.issue(player_id)
+        if result.discarded is not None:
+            self._emit_prediction_context_discarded_note(
+                player_id=player_id, discarded_id=result.discarded.prediction_context_id
+            )
+        return result.prediction_context_id
+
+    def _attach_prediction_context(
+        self,
+        *,
+        player_id: PlayerId,
+        prediction_context_id: Optional[str],
+        episode_ids: tuple[str, ...],
+        belief_ids: tuple[str, ...],
+    ) -> None:
+        """U1 (二段階発行の 2 段目): 発行済み id に in-context 集合を後付けする。
+
+        ledger 未注入 / id 未発行 (= 機構 OFF) なら no-op。
+        """
+        if self._prediction_context_ledger is None or prediction_context_id is None:
+            return
+        self._prediction_context_ledger.attach(
+            player_id,
+            prediction_context_id,
+            episode_ids=episode_ids,
+            belief_ids=belief_ids,
+        )
+
+    def _emit_prediction_context_discarded_note(
+        self, *, player_id: PlayerId, discarded_id: str
+    ) -> None:
+        """未消費のまま次の build に上書きされた prediction_context_id を
+        ``TraceEventKind.NOTE`` に残す (失敗は握りつぶす)。"""
+        recorder = self._resolve_trace_recorder()
+        if recorder is None:
+            return
+        tick: Optional[int] = None
+        if self._current_tick_provider is not None:
+            try:
+                tick = self._current_tick_provider()
+            except Exception:
+                tick = None
+        try:
+            recorder.record(
+                TraceEventKind.NOTE,
+                tick=tick,
+                player_id=int(player_id.value),
+                message="prediction_context_id discarded unconsumed before next build",
+                discarded_prediction_context_id=discarded_id,
+            )
+        except Exception:
+            self._logger.debug(
+                "trace recorder.record raised for NOTE (prediction_context_id discard); skipping",
+                exc_info=True,
+            )
+
     def _run_passive_recall(
         self,
         *,
@@ -1168,8 +1270,14 @@ class DefaultPromptBuilder(IPromptBuilder):
         current_state_text: str,
         recent_events_text: str,
         player_info: SystemPromptPlayerInfoDto,
-    ) -> tuple[str, Optional[int]]:
-        """受動想起ブロックを実行し、(関連する記憶テキスト, 候補件数) を返す。
+        prediction_context_id: Optional[str] = None,
+    ) -> tuple[str, Optional[int], tuple[str, ...]]:
+        """受動想起ブロックを実行し、(関連する記憶テキスト, 候補件数, episode_id 群) を返す。
+
+        ``prediction_context_id`` が渡されたとき、生成する各
+        ``EpisodicRecallObservation`` にその id を stamp する (U1 部品5: この
+        episode を想起した prompt build で立てた予測をあとで辿るため)。None なら
+        stamp しない (= id 機構 OFF)。
 
         Issue #227 後続レビュー (Prompt MEDIUM-5) で build() 本体から抽出。
         responsibilities:
@@ -1184,7 +1292,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         を表す。 sentinel int を避けて Optional で区別する。
         """
         if self._episodic_passive_recall is None:
-            return "", None
+            return "", None, ()
 
         observation_structured = None
         observation_prose: str | None = None
@@ -1393,6 +1501,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                         persona_snapshot=player_info.persona_block,
                         situation_cues=situation_cue_keys,
                         turn_index=turn_index,
+                        prediction_context_id=prediction_context_id,
                     )
                     self._append_recall_observation(being_id, observation)
                 except Exception as e:
@@ -1409,7 +1518,10 @@ class DefaultPromptBuilder(IPromptBuilder):
         if not relevant_memories_text.strip():
             relevant_memories_text = "(受動想起では何も浮かばなかった)"
 
-        return relevant_memories_text, candidate_count
+        # U1 (部品5 想起の信用割り当ての土台): この build で in-context だった
+        # episode_id 群を prediction_context_id に紐づけるため呼び出し元へ返す。
+        episode_ids = tuple(c.episode.episode_id for c in recall_result.candidates)
+        return relevant_memories_text, candidate_count, episode_ids
 
     def _run_semantic_passive_recall(
         self,
@@ -1418,15 +1530,19 @@ class DefaultPromptBuilder(IPromptBuilder):
         observations: List[ObservationEntry],
         action_results: List[Any],
         ui_context: Any,
-    ) -> str:
+    ) -> tuple[str, tuple[str, ...]]:
         """Phase 1c: semantic memory の状況連想 top-K を §「【関連する学び】」用に整形する。
 
         service 未注入 または top_k=0 なら空文字 (= section ごと省略)。
         situation_cues は episodic 受動想起と同じ build_situation_episodic_cues
         を使う (関連 episodes と関連 semantic facts を同じ「いま」基準で集める)。
+
+        戻り値は (整形テキスト, belief entry_id 群)。後者は U1 の
+        prediction_context_id に「その build で in-context だった belief」
+        として紐づけるため。
         """
         if self._semantic_passive_recall is None or self._semantic_passive_top_k <= 0:
-            return ""
+            return "", ()
 
         observation_structured = None
         observation_prose: Optional[str] = None
@@ -1477,7 +1593,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
             format_semantic_recall_section,
         )
-        return format_semantic_recall_section(candidates)
+        belief_ids = tuple(c.entry.entry_id for c in candidates)
+        return format_semantic_recall_section(candidates), belief_ids
 
     def _emit_semantic_passive_recall_trace(
         self,

@@ -342,3 +342,37 @@ def log_short_term_memory_scheduler_mode_state(mode: str) -> None:
         ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE,
         mode,
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# 予測誤差統一設計 U1: prediction_context_id / PredictionOutcome
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_PREDICTION_CONTEXT_ID_ENABLED = "PREDICTION_CONTEXT_ID_ENABLED"
+
+
+def resolve_prediction_context_id_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """``PredictionContextLedger`` (id の発行・消費) を動かすか。
+
+    ``PREDICTION_CONTEXT_ID_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    id 自体は prompt 本文にも LLM 応答にも一切現れない (trace / snapshot
+    のみに残るメタデータ) ため挙動への影響はほぼ無いが、新機構は default OFF
+    で入れる本計画の共通規約 (docs/memory_system/
+    prediction_error_unified_implementation_plan.md §0) に従う。OFF のときは
+    ``DefaultPromptBuilder`` / ``ActionResultRecorder`` に ledger が渡らず、
+    ``prediction_context_id`` は常に None (= 導入前と同じ挙動)。
+    """
+    return _parse_bool_env(ENV_PREDICTION_CONTEXT_ID_ENABLED, env=env, default=False)
+
+
+def log_prediction_context_id_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_PREDICTION_CONTEXT_ID_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )
