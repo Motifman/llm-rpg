@@ -3619,6 +3619,7 @@ def create_world_runtime(
             log_error_driven_reinterpretation_enabled_state,
             log_error_gated_encoding_enabled_state,
             log_memo_distill_enabled_state,
+            log_recall_hit_boost_enabled_state,
             log_salience_structured_failure_enabled_state,
             log_unconscious_context_enabled_state,
             resolve_belief_attribution_enabled,
@@ -3627,6 +3628,7 @@ def create_world_runtime(
             resolve_error_driven_reinterpretation_enabled,
             resolve_error_gated_encoding_enabled,
             resolve_memo_distill_enabled,
+            resolve_recall_hit_boost_enabled,
             resolve_salience_structured_failure_enabled,
             resolve_unconscious_context_enabled,
         )
@@ -3642,6 +3644,17 @@ def create_world_runtime(
         log_error_driven_reinterpretation_enabled_state(
             _error_driven_reinterpretation_enabled
         )
+        # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default OFF): U9a と
+        # 対称に、的中側 (思い出したから当たった) を recall ranking boost に
+        # 還流する。実効的には reinterpretation_enabled (段1) と
+        # PREDICTION_CONTEXT_ID_ENABLED (U1) の両方が ON でないと record_hit
+        # 対象の recall observation が無く安全に縮退する。
+        # 強さ (strength=1) と cap (RECALL_HIT_BOOST_DEFAULT_CAP) は小さく
+        # 始める前提の定数 (habituation_strength と同じく env 非公開。
+        # 「当たる記憶」の固定化を防ぐための上限)。
+        _recall_hit_boost_enabled = resolve_recall_hit_boost_enabled()
+        log_recall_hit_boost_enabled_state(_recall_hit_boost_enabled)
+        _recall_hit_boost_strength = 1
         # U4 (予測誤差統一設計 部品3 / default OFF): attribution + CONFIRMATION。
         # 実効的には U1 (PREDICTION_CONTEXT_ID_ENABLED) が ON でないと belief_ids
         # が流れてこないが、ここでは独立に flag を解決するだけに留める
@@ -3817,6 +3830,13 @@ def create_world_runtime(
                     error_driven_reinterpretation_enabled=(
                         _error_driven_reinterpretation_enabled
                     ),
+                    # U9b: default False。recall_success_store 自体は
+                    # build_episodic_stack がこの後で構築するため、この時点では
+                    # 未確定 (= None のまま)。build_episodic_stack 完了後に
+                    # set_recall_success_store で差し込む (下の「U9b:
+                    # recall_success_store を scheduler に後から差し込む」
+                    # ブロックを参照)。
+                    recall_hit_boost_enabled=_recall_hit_boost_enabled,
                 )
                 # 各 player の persona_block を player_id 引きで返す provider。
                 # world_character (= 操作対象) は rich persona、その他は spawn 名
@@ -4034,6 +4054,12 @@ def create_world_runtime(
             # U8 (部品2a): chunk_coordinator (同期・非同期共通の境界判定) に
             # decide_chunk_boundary への flag 伝播を頼む。
             error_gated_boundary_enabled=_error_gated_encoding_enabled,
+            # U9b (想起の信用割り当て・的中側): 同期経路 (chunk_coordinator) と
+            # passive_recall 両方に的中側 sidecar を配線する。非同期経路
+            # (scheduler) は recall_success_store 確定後に下で
+            # set_recall_success_store を呼んで差し込む。
+            recall_hit_boost_enabled=_recall_hit_boost_enabled,
+            recall_hit_boost_strength=_recall_hit_boost_strength,
         )
 
         # U9a: recall_buffer を scheduler に後から差し込む。
@@ -4046,6 +4072,10 @@ def create_world_runtime(
         if subjective_scheduler is not None:
             subjective_scheduler.set_recall_buffer_store(
                 runtime._episodic_stack.recall_buffer_store
+            )
+            # U9b: recall_success_store も同じ理由で後から差し込む。
+            subjective_scheduler.set_recall_success_store(
+                runtime._episodic_stack.recall_success_store
             )
 
         # U7: 無意識コンテキスト用 semantic recall service を確定させる。

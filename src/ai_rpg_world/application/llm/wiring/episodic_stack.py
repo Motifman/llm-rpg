@@ -78,6 +78,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.afterglow_store import (
         IAfterglowStore,
     )
+    from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+        IEpisodicRecallSuccessStore,
+    )
 
 from ai_rpg_world.application.llm.scheduler import (
     IEpisodicSubjectiveCompletionScheduler,
@@ -96,6 +99,7 @@ from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields impo
     EpisodicChunkSubjectiveFieldsService,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+    RECALL_HIT_BOOST_DEFAULT_CAP,
     EpisodicPassiveRecallRetrievalService,
 )
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
@@ -242,6 +246,14 @@ class EpisodicStack:
     # 唯一の書き込み経路として動く。未注入時は evidence buffer に証拠だけが
     # 溜まり続ける (= U2 までの挙動)。
     belief_consolidation_coordinator: Optional["BeliefConsolidationCoordinator"] = None
+    # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default off): 的中側
+    # sidecar (default None = flag OFF 相当)。enable 時に in-memory store を
+    # 構築し、chunk_coordinator / passive_recall / prompt_builder (書込みは
+    # コーディネータ / scheduler 側なので prompt_builder への配線は不要) に
+    # 同一インスタンスを渡す。
+    recall_success_store: Optional["IEpisodicRecallSuccessStore"] = None
+    recall_hit_boost_strength: int = 0
+    recall_hit_boost_cap: int = RECALL_HIT_BOOST_DEFAULT_CAP
 
 
 def build_scenario_noun_matcher(
@@ -391,6 +403,15 @@ def build_episodic_stack(
     # recall_buffer 自体が構築されないため、本 flag だけ True にしても
     # 安全に縮退する (実害なし)。
     error_driven_reinterpretation_enabled: bool = False,
+    # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default False =
+    # flag OFF): True のとき的中側 sidecar store を構築し、chunk_coordinator
+    # の完了点 (同期) が record_hit を書き込み、passive_recall の
+    # multi_cue_score に boost を加算する。reinterpretation_enabled が False
+    # なら recall_buffer 自体が構築されないため、本 flag だけ True にしても
+    # 安全に縮退する (record_hit 対象の recall observation が無い)。
+    recall_hit_boost_enabled: bool = False,
+    recall_hit_boost_strength: int = 0,
+    recall_hit_boost_cap: int = RECALL_HIT_BOOST_DEFAULT_CAP,
     # U8 (予測誤差統一設計 部品2a・誤差ゲート付き境界 / default False =
     # flag OFF): True のとき chunk_coordinator が decide_chunk_boundary に
     # この flag を伝播し、構造的な予測ミス (成功予測→失敗 / error_code 付き
@@ -541,6 +562,17 @@ def build_episodic_stack(
             recall_buffer if reinterpretation_completion is not None else None
         )
 
+    # U9b (想起の信用割り当て・的中側 / default off): enable 時のみ的中側
+    # sidecar を構築する。U9a の habituation store と同じ「flag ON のときだけ
+    # 実体を作る」パターン。SQLite 永続経路は無い (慣化 sidecar と同型)。
+    recall_success_store: Optional[Any] = None
+    if recall_hit_boost_enabled:
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+
+        recall_success_store = InMemoryEpisodicRecallSuccessStore()
+
     # #526 後続 Fix A: noun_matcher を chunk_coordinator より先に作り、
     # ChunkEpisodeDraftBuilder と passive_recall の両方に同じ matcher を
     # 渡すことで write/read 経路の cue 生成を対称化する。
@@ -580,6 +612,11 @@ def build_episodic_stack(
         recall_buffer_store=prompt_recall_buffer,
         error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
         error_gated_boundary_enabled=error_gated_boundary_enabled,
+        # U9b: 同期経路 (chunk_coordinator) 用。recall_buffer_store は
+        # prompt_recall_buffer (U9a と同じ「実際に observation が積まれる
+        # store」) を共有する。
+        recall_success_store=recall_success_store,
+        recall_hit_boost_enabled=recall_hit_boost_enabled,
     )
     # #526 段階 2: 慣化 sidecar (default off)。enable 時のみ store を作り、
     # passive_recall に注入する。prompt_builder 側にも同 store を渡して
@@ -621,6 +658,9 @@ def build_episodic_stack(
         default_world_id=default_world_id,
         habituation_store=recall_habituation_store,
         habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
+        recall_success_store=recall_success_store,
+        hit_boost_strength=recall_hit_boost_strength,
+        hit_boost_cap=recall_hit_boost_cap,
         slot_store=recall_slot_store,
         slot_policy=recall_slot_policy_obj,
         afterglow_store=afterglow_store,
@@ -669,6 +709,9 @@ def build_episodic_stack(
         afterglow_max_residence=afterglow_max_residence,
         belief_evidence_buffer_store=belief_evidence_buffer_store,
         belief_consolidation_coordinator=belief_consolidation_coordinator,
+        recall_success_store=recall_success_store,
+        recall_hit_boost_strength=recall_hit_boost_strength,
+        recall_hit_boost_cap=recall_hit_boost_cap,
     )
 
 

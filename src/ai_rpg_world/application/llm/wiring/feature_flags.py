@@ -673,6 +673,53 @@ def log_error_driven_reinterpretation_enabled_state(enabled: bool) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────
+# 想起の信用割り当て・ranking boost (U9b)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_RECALL_HIT_BOOST_ENABLED = "RECALL_HIT_BOOST_ENABLED"
+
+
+def resolve_recall_hit_boost_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """「この記憶を思い出したから予測が当たった」を recall ranking の boost に
+    還流するか (予測誤差統一設計 部品5 の的中側 = U9b。外れ側は U9a)。
+
+    ``RECALL_HIT_BOOST_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    OFF (既定) のとき:
+    - chunk 主観補完の完了点 (同期 chunk_coordinator / 非同期 scheduler の
+      いずれも) で的中側 sidecar (``IEpisodicRecallSuccessStore``) への
+      record_hit が一切行われない
+    - ``EpisodicPassiveRecallRetrievalService`` の ranking (``multi_cue_score``)
+      への boost 加算は常に 0 (= 導入前と byte 一致)
+
+    ON にするには実質的に ``PREDICTION_CONTEXT_ID_ENABLED`` (U1) と
+    episodic reinterpretation (段1、recall_buffer 構築のため) の両方が ON
+    である必要がある。どちらかが欠けていても本 flag だけ ON にして構わない:
+    prediction_context_id が action に乗らない / recall buffer 自体が組まれ
+    ないため、record_hit 対象の recall observation が存在せず安全に縮退する
+    (実害なし)。
+
+    詳細は docs/memory_system/prediction_error_unified_memory_design.md
+    「部品 5: 想起の信用割り当て」節、
+    docs/memory_system/prediction_error_unified_implementation_plan.md の
+    U9 節。
+    """
+    return _parse_bool_env(ENV_RECALL_HIT_BOOST_ENABLED, env=env, default=False)
+
+
+def log_recall_hit_boost_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_RECALL_HIT_BOOST_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────
 # 誤差ゲート付き符号化: 境界 (2a) + 解像度 (2b) (U8)
 # ──────────────────────────────────────────────────────────────────
 
