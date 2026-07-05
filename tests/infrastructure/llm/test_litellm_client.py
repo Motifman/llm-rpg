@@ -546,6 +546,20 @@ class TestLiteLLMClientJsonCompletion:
             )
         assert result["episode_updates"][0]["episode_id"] == "ep-a"
 
+    def test_belief_consolidation_json_completion_delegates_and_returns_dict(self, client):
+        """complete_belief_consolidation_json は messages を litellm に渡し、
+        返り値の JSON を decisions を含む dict として返す。"""
+        content = (
+            '{"decisions": [{"action": "create", "text": "探索は空振りが多い", '
+            '"importance": 6, "tags": ["探索"]}]}'
+        )
+        messages = [{"role": "user", "content": "json"}]
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_json_content_response(content)
+            result = client.complete_belief_consolidation_json(messages)
+        assert m_litellm.completion.call_args.kwargs["messages"] == messages
+        assert result["decisions"][0]["action"] == "create"
+
 
 class TestLiteLLMClientInit:
     """コンストラクタのバリデーション"""

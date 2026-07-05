@@ -307,6 +307,17 @@ class BeliefConsolidationCoordinator:
             raw_obj,
         )
         batch_ids = tuple(e.evidence_id for e in batch)
+        # LLM 呼び出しは成功したが有効な decisions が 0 件だったのに batch を
+        # drain するケースを warning で可視化する。プロンプト/LLM 側の不具合で
+        # decisions が空を返し続けると evidence が静かに失われ続けるため
+        # (本プロジェクトが最も嫌う silent failure)。drain 自体は温存しない
+        # 現行仕様のまま (温存するとリトライ地獄になる)。
+        if not decisions:
+            self._logger.warning(
+                "Belief consolidation: batch %d件を drain したが適用された decision は "
+                "0 件。LLM 応答に有効な decisions が無い可能性",
+                len(batch_ids),
+            )
         self._evidence_buffer_store.remove_by_being(being_id, batch_ids)
         self._emit_trace(being_id, batch, shortlist, decisions)
         return len(batch_ids)
