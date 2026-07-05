@@ -735,6 +735,11 @@ class _WorldLlmTurnTrigger:
         # 通知し、interval 到達時に pending recall batch を LLM 再解釈する。
         # reinterpretation OFF (coordinator 未構築) では no-op。
         self._note_turn_for_reinterpretation(player_id_value)
+        # U3b: 固着パス。turn 完了を coordinator に通知し、発火条件
+        # (interval 到達 / cue_signature 反復 / salience=high) を満たした
+        # ときだけ evidence batch を belief journal に統合する。
+        # BELIEF_CONSOLIDATION_ENABLED OFF (coordinator 未構築) では no-op。
+        self._note_turn_for_belief_consolidation(player_id_value)
         # PR-T: 次回 prompt の「身体の状態」差分表示用に need 値を snapshot する。
         # 「前回の自分のターン終了時 → 次回 prompt」までの変化が delta として
         # 表示される (= 自然 decay + 他者観測の影響 + own action 結果)。
@@ -781,6 +786,29 @@ class _WorldLlmTurnTrigger:
             # 再解釈の失敗は致命ではない (worst case: 再解釈が進まないだけ)。
             logger.warning(
                 "reinterpretation after_turn_completed failed for player=%s",
+                player_id_value,
+                exc_info=True,
+            )
+
+    def _note_turn_for_belief_consolidation(self, player_id_value: int) -> None:
+        """固着パス coordinator に turn 完了を通知する fail-safe ヘルパ。
+
+        coordinator 未配線 (BELIEF_CONSOLIDATION_ENABLED OFF) / 異常系では
+        何もしない (turn 実行自体は壊さない)。
+        ``_note_turn_for_reinterpretation`` と同じ方式。
+        """
+        stack = getattr(self.wiring.runtime, "_episodic_stack", None)
+        coordinator = (
+            getattr(stack, "belief_consolidation_coordinator", None) if stack else None
+        )
+        if coordinator is None:
+            return
+        try:
+            coordinator.after_turn_completed(PlayerId(player_id_value))
+        except Exception:
+            # 固着の失敗は致命ではない (worst case: 学びが固着しないだけ)。
+            logger.warning(
+                "belief consolidation after_turn_completed failed for player=%s",
                 player_id_value,
                 exc_info=True,
             )
