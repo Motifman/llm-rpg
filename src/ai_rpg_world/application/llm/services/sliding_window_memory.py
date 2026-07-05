@@ -80,4 +80,6 @@ class DefaultSlidingWindowMemory(ISlidingWindowMemory):
         entries = self._store.get(self._key(player_id))
         if not entries:
             return None
-        return min(entry.occurred_at for entry in entries)
+        # naive / aware が混在しても直接比較で TypeError にしない。
+        # get_recent と同じく timestamp() を比較キーにする
+        return min(entries, key=lambda e: e.occurred_at.timestamp()).occurred_at

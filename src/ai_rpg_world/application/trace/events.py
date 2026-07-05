@@ -145,6 +145,20 @@ class TraceEventKind:
     #   - captured_subsystems: list[str]
     WORLD_SNAPSHOT_LOAD = "world_snapshot_load"
     WORLD_SNAPSHOT_SAVE = "world_snapshot_save"
+    # U1 (予測誤差統一設計 部品1): chunk 主観補完 (``merge_llm_subjective_fields``)
+    # が prediction_error (str = 予測が外れた内容 / None = 予測どおり) を確定
+    # させた瞬間。「どのプロンプト文脈 (in-context だった episode/belief) で
+    # 立てた予測がどう外れたか」を後から辿るための土台の 1 件。
+    # prediction_error が None (予測どおり) のときも「判定は走った」事実を
+    # 残すため必ず emit する (的中/外れ両方を後段 U4 の CONFIRMATION /
+    # 反証転記が拾えるようにするため)。
+    # payload:
+    #   - episode_id: str
+    #   - prediction_error: str | None
+    #   - prediction_context_ids: list[str] (= chunk に含まれる action 群のうち
+    #     prediction_context_id が付いていたものの重複排除リスト。1 chunk が
+    #     複数 action から成る場合は複数件になりうる)
+    PREDICTION_OUTCOME = "prediction_outcome"
     # U2 (証拠台帳統一設計): chunk 主観補完が prediction_error を非 None で
     # 埋めた瞬間、ルールベースの転記で BeliefEvidence 1 件を evidence buffer
     # に積んだタイミング。学習の素材がどれだけ流れているかを観測するための

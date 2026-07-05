@@ -60,6 +60,26 @@ class TestToolCallLoopGuardServiceInitialization:
             ToolCallLoopGuardService(observation_buffer="not a buffer")  # type: ignore[arg-type]
 
 
+class TestToolCallLoopGuardServiceDefaultClock:
+    """既定 clock が注入する警告観測の occurred_at の時刻型を保証する。"""
+
+    def test_default_clock_emits_timezone_aware_occurred_at(self) -> None:
+        """clock 未注入のとき、注入される警告観測の occurred_at が timezone-aware になる。
+
+        naive な occurred_at が sliding window に混入すると、aware な観測との
+        時刻比較が TypeError になり prompt 構築ごと落ちる (全機能 ON 実験の
+        run を tick 62 で停止させた実障害) ため、既定 clock は aware を返す。
+        """
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(buf)
+        pid = _pid(1)
+        for _ in range(3):
+            svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
+        entries = buf.get_observations(pid)
+        assert len(entries) == 1
+        assert entries[0].occurred_at.tzinfo is not None
+
+
 class TestToolCallLoopGuardServiceWaitDetection:
     """spot_graph_wait の閾値 3 連続での発火挙動。"""
 

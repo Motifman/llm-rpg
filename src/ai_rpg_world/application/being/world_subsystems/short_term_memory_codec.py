@@ -113,6 +113,7 @@ def _action_result_entry_to_dict(entry: Any) -> dict[str, Any]:
         "emotion_hint": entry.emotion_hint,
         "scene_boundary": bool(entry.scene_boundary),
         "occurred_tick": entry.occurred_tick,
+        "prediction_context_id": entry.prediction_context_id,
     }
 
 
@@ -135,6 +136,11 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         emotion_hint=data.get("emotion_hint"),
         scene_boundary=bool(data.get("scene_boundary", False)),
         occurred_tick=data.get("occurred_tick"),
+        # U1: 旧スキーマ (v3 以前) には無いキーなので .get で None に倒す
+        # (= 「この行動はどの prompt build に紐づくか不明」として扱う。
+        # 後方互換は data.get レベルで担保しつつ、schema_version 自体は
+        # 意味変更を明示するため bump する)。
+        prediction_context_id=data.get("prediction_context_id"),
     )
 
 
@@ -482,9 +488,10 @@ class ObservationBufferSubsystemCodec(WorldSubsystemCodec):
 # ----------------------------------------------------------------------------
 _AR_SUBSYSTEM_KEY = "action_result_store"
 # v2: expected_result 追加 (PR1)。v3: intention / emotion_hint 追加 (PR2a)。
+# v4: prediction_context_id 追加 (U1)。
 # 旧 snapshot 互換は不要 (ユーザー判断)。restore は data.get で欠損を None に倒すため
 # 実害は出ないが、schema の意味変更を明示するため version を上げる。
-_AR_SCHEMA_VERSION = 3
+_AR_SCHEMA_VERSION = 4
 
 
 class ActionResultStoreSubsystemCodec(WorldSubsystemCodec):

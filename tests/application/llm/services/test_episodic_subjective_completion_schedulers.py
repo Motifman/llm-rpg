@@ -199,6 +199,115 @@ class TestInlineScheduler:
         assert len(filled) == 1
         assert len(filled[0].payload["recall_text_snippet"]) <= 120
 
+    def test_U1_prediction_error_確定時に_PREDICTION_OUTCOME_が_id_付きで出る(
+        self,
+    ) -> None:
+        """chunk を構成する action の prediction_context_id が重複排除で乗り、
+        LLM が書いた prediction_error 文字列がそのまま payload に乗る。"""
+        t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
+        act1 = ActionResultEntry(
+            occurred_at=t,
+            action_summary="扉を開けた",
+            result_summary="鍵がかかっていた",
+            tool_name="interact",
+            prediction_context_id="predctx-aaa",
+        )
+        act2 = ActionResultEntry(
+            occurred_at=t,
+            action_summary="別の扉を開けた",
+            result_summary="開いた",
+            tool_name="interact",
+            prediction_context_id="predctx-aaa",  # 重複 (同じ id が 2 action に乗る想定)
+        )
+        enc = build_chunk_encoding_input(PlayerId(7), (), (act1, act2))
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        being_id, resolver, world_id = _provision_scheduler(7)
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "開くと思ったら鍵がかかっていた",
+            }
+        )
+        recorder = NullTraceRecorder()
+        events = _capture(recorder)
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            trace_recorder_provider=lambda: recorder,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        outcomes = [
+            e for e in events if e.kind == TraceEventKind.PREDICTION_OUTCOME
+        ]
+        assert len(outcomes) == 1
+        ev = outcomes[0]
+        assert ev.payload["episode_id"] == draft.episode_id
+        assert ev.payload["prediction_error"] == "開くと思ったら鍵がかかっていた"
+        assert ev.payload["prediction_context_ids"] == ["predctx-aaa"]
+
+    def test_U1_prediction_error_が_None_でも_in_context_id_があれば_PREDICTION_OUTCOME_は出る(
+        self,
+    ) -> None:
+        """予測どおり (None) でも in-context id があれば「判定は走った」事実を
+        残す (的中を後段 U4 の CONFIRMATION 転記が拾えるようにするため)。"""
+        t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t,
+            action_summary="待機した",
+            result_summary="時間が進んだ",
+            tool_name="wait",
+            prediction_context_id="predctx-bbb",
+        )
+        enc = build_chunk_encoding_input(PlayerId(7), (), (act,))
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        being_id, resolver, world_id = _provision_scheduler(7)
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        port = _StubPort(returns={"interpreted": "I", "recall_text": "R"})
+        recorder = NullTraceRecorder()
+        events = _capture(recorder)
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            trace_recorder_provider=lambda: recorder,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        outcomes = [
+            e for e in events if e.kind == TraceEventKind.PREDICTION_OUTCOME
+        ]
+        assert len(outcomes) == 1
+        assert outcomes[0].payload["prediction_error"] is None
+        assert outcomes[0].payload["prediction_context_ids"] == ["predctx-bbb"]
+
+    def test_U1_id_機構_OFF_相当_id無しなら_PREDICTION_OUTCOME_は出ない(self) -> None:
+        """PREDICTION_CONTEXT_ID_ENABLED=OFF (default) では action に id が付かない。
+        その場合 PREDICTION_OUTCOME を emit せず、trace が U1 導入前と一致する。"""
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        port = _StubPort(returns={"interpreted": "I", "recall_text": "R"})
+        recorder = NullTraceRecorder()
+        events = _capture(recorder)
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            trace_recorder_provider=lambda: recorder,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        outcomes = [
+            e for e in events if e.kind == TraceEventKind.PREDICTION_OUTCOME
+        ]
+        assert outcomes == []
+
     def test_shutdown_は_noop(self) -> None:
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
@@ -243,6 +352,72 @@ class TestThreadPoolScheduler:
         assert ep_after is not None
         assert ep_after.recall_text == "ASYNC_R"
         assert ep_after.interpreted == "ASYNC_I"
+
+    def test_U1_in_context_id_があれば_PREDICTION_OUTCOME_が_id_付きで出る(self) -> None:
+        """非同期経路でも in-context id 付き chunk では PREDICTION_OUTCOME を emit。"""
+        t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t,
+            action_summary="待機した",
+            result_summary="時間が進んだ",
+            tool_name="wait",
+            prediction_context_id="predctx-async",
+        )
+        enc = build_chunk_encoding_input(PlayerId(7), (), (act,))
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        being_id, resolver, world_id = _provision_scheduler(7)
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        port = _StubPort(returns={"interpreted": "I", "recall_text": "R"})
+        recorder = NullTraceRecorder()
+        events = _capture(recorder)
+        scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            max_workers=1,
+            trace_recorder_provider=lambda: recorder,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+        )
+        try:
+            scheduler.submit(draft, persona_text="", encoding_input=enc)
+            scheduler.shutdown()
+        except Exception:
+            scheduler.shutdown(timeout=2.0)
+            raise
+        outcomes = [
+            e for e in events if e.kind == TraceEventKind.PREDICTION_OUTCOME
+        ]
+        assert len(outcomes) == 1
+        assert outcomes[0].payload["prediction_context_ids"] == ["predctx-async"]
+
+    def test_U1_id_機構_OFF_相当_id無しなら_PREDICTION_OUTCOME_は出ない(self) -> None:
+        """非同期経路でも PREDICTION_CONTEXT_ID_ENABLED=OFF (= id 無し) では
+        PREDICTION_OUTCOME を emit しない (default run の trace が導入前と一致)。"""
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        port = _StubPort(returns={"interpreted": "I", "recall_text": "R"})
+        recorder = NullTraceRecorder()
+        events = _capture(recorder)
+        scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            max_workers=1,
+            trace_recorder_provider=lambda: recorder,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+        )
+        try:
+            scheduler.submit(draft, persona_text="", encoding_input=enc)
+            scheduler.shutdown()
+        except Exception:
+            scheduler.shutdown(timeout=2.0)
+            raise
+        outcomes = [
+            e for e in events if e.kind == TraceEventKind.PREDICTION_OUTCOME
+        ]
+        assert outcomes == []
 
     def test_submit_は_非ブロッキング(self) -> None:
         """重い LLM (1 秒 sleep) を投げても submit は瞬時に返る。"""

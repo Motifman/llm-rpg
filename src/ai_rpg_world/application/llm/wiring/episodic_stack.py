@@ -185,6 +185,12 @@ class EpisodicStack:
     # store は上流 EpisodicMemoryStack が Any 扱いのため合わせる (repo 実装差を許容)。
     semantic_memory_store: Optional[Any] = None
     memory_link_store: Optional[Any] = None
+    # 想起→強化 (recall_count 加算 / CO_RECALL リンク / ヘブ則強化) を担う
+    # link service。chunk_coordinator (TEMPORAL リンク) だけでなく prompt builder
+    # の passive recall 経路にも同一インスタンスを配線しないと、recall_count が
+    # 永遠に 0 のままで昇格ゲート (recall_count>=3) を誰も超えられない
+    # (memory_full_002 実験で発覚した静かな失敗)。
+    link_service: Optional[Any] = None
     # reinterpretation 拡張 (段1 / default OFF)。``reinterpretation_enabled`` のとき
     # build_episodic_stack が recall_buffer + journal + coordinator を構築する。
     # OFF のときは全て None で、prompt builder の guard で覗かない = 従来動作。
@@ -567,6 +573,7 @@ def build_episodic_stack(
         episodic_semantic_promotion=episodic_semantic_promotion,
         semantic_memory_store=semantic_memory_store,
         memory_link_store=memory_link_store,
+        link_service=link_service,
         reinterpretation_coordinator=reinterpretation_coordinator,
         reinterpretation_journal=reinterpretation_journal,
         recall_buffer_store=prompt_recall_buffer,

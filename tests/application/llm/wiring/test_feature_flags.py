@@ -17,6 +17,7 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     DEFAULT_SEMANTIC_PASSIVE_TOP_K,
     ENV_BELIEF_EVIDENCE_ENABLED,
     ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
+    ENV_PREDICTION_CONTEXT_ID_ENABLED,
     ENV_SEMANTIC_PASSIVE_TOP_K,
     ENV_SEMANTIC_SEARCH_ENABLED,
     ENV_SHORT_TERM_MEMORY_KIND,
@@ -27,12 +28,14 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW,
     log_belief_evidence_enabled_state,
     log_episodic_explore_related_state,
+    log_prediction_context_id_state,
     log_semantic_passive_top_k_state,
     log_semantic_search_state,
     log_short_term_memory_kind_state,
     log_short_term_memory_scheduler_mode_state,
     resolve_belief_evidence_enabled,
     resolve_episodic_explore_related_enabled,
+    resolve_prediction_context_id_enabled,
     resolve_semantic_passive_top_k,
     resolve_semantic_search_enabled,
     resolve_short_term_memory_kind,
@@ -198,6 +201,49 @@ class TestLogSemanticSearchState:
         ):
             log_semantic_search_state(True)
             log_semantic_search_state(False)
+        messages = [rec.message for rec in caplog.records]
+        assert any("ENABLED" in m for m in messages)
+        assert any("DISABLED" in m for m in messages)
+
+
+class TestResolvePredictionContextIdEnabled:
+    """``PREDICTION_CONTEXT_ID_ENABLED`` env パース (予測誤差統一設計 U1)。"""
+
+    def test_default_は_OFF(self) -> None:
+        assert resolve_prediction_context_id_enabled(env={}) is False
+
+    @pytest.mark.parametrize("raw", ["1", "true", "yes", "on", "ON", "True"])
+    def test_truthy_は_ON(self, raw: str) -> None:
+        assert resolve_prediction_context_id_enabled(
+            env={ENV_PREDICTION_CONTEXT_ID_ENABLED: raw}
+        ) is True
+
+    @pytest.mark.parametrize("raw", ["0", "false", "no", "off", ""])
+    def test_falsy_リテラルまたは空文字は_OFF(self, raw: str) -> None:
+        assert resolve_prediction_context_id_enabled(
+            env={ENV_PREDICTION_CONTEXT_ID_ENABLED: raw}
+        ) is False
+
+    @pytest.mark.parametrize("raw", ["random", "yeah", "tru", "2"])
+    def test_未知の値は_ValueError(self, raw: str) -> None:
+        with pytest.raises(ValueError):
+            resolve_prediction_context_id_enabled(
+                env={ENV_PREDICTION_CONTEXT_ID_ENABLED: raw}
+            )
+
+
+class TestLogPredictionContextIdState:
+    """解決結果を INFO ログ 1 件で残す (予測誤差統一設計 U1)。"""
+
+    def test_ENABLED_でも_DISABLED_でも_log_に_出る(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(
+            logging.INFO,
+            logger="ai_rpg_world.application.llm.wiring.feature_flags",
+        ):
+            log_prediction_context_id_state(True)
+            log_prediction_context_id_state(False)
         messages = [rec.message for rec in caplog.records]
         assert any("ENABLED" in m for m in messages)
         assert any("DISABLED" in m for m in messages)

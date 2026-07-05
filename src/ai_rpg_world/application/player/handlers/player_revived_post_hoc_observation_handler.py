@@ -71,7 +71,7 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
 
     def handle(self, event: PlayerRevivedEvent) -> None:
         revived_pid = event.aggregate_id
-        prose = self._build_prose(revived_pid, event.caregiver_player_id)
+        prose = self._build_prose(revived_pid, event)
         structured = {
             "kind": "player_revived_post_hoc",
             "caregiver_player_id": (
@@ -105,11 +105,36 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
             )
 
     def _build_prose(
-        self, revived_pid: PlayerId, caregiver_player_id: Optional[PlayerId]
+        self, revived_pid: PlayerId, event: PlayerRevivedEvent,
     ) -> str:
+        """post_hoc observation の prose を組み立てる。
+
+        PR-κ (Y_after_pr651_652 分析後続): 復帰した LLM が「travel_to で
+        安全な場所へ退避する」判断を下せるよう、event の hp 情報と明示的
+        な退避誘導を prose に含める。
+
+        旧 prose: 「{N} tick の間、意識を失っていた。{介抱者} に介抱されて
+                   意識が戻った。」
+
+        新 prose: 「... 意識が戻った。（HP {total_hp} まで回復）まだ体は
+                   弱っている。ここに脅威が残っているなら travel_to で
+                   安全な場所へ移動を検討すること。」
+
+        実 trace (Y_after_pr651_652) で「復帰 → 2 tick 後に再ダウン」のループ
+        が観測された。LLM は復帰直後の tick で action turn を得るが、この
+        prose を読むだけで「travel_to で逃げるべき」を明示的に認識できる。
+        """
         duration_phrase = self._build_duration_phrase(revived_pid)
-        caregiver_phrase = self._build_caregiver_phrase(caregiver_player_id)
-        return f"{duration_phrase}{caregiver_phrase}意識が戻った。"
+        caregiver_phrase = self._build_caregiver_phrase(event.caregiver_player_id)
+        hp_phrase = f"（HP {event.total_hp} まで回復）"
+        warning_phrase = (
+            "まだ体は弱っている。ここに脅威 (敵 / 危険地形 / 空腹 100 等) "
+            "が残っているなら、travel_to で安全な場所へ移動を検討すること。"
+        )
+        return (
+            f"{duration_phrase}{caregiver_phrase}意識が戻った。"
+            f"{hp_phrase} {warning_phrase}"
+        )
 
     def _build_duration_phrase(self, revived_pid: PlayerId) -> str:
         downed_at = self._grace_timer.get_downed_at_tick(revived_pid)

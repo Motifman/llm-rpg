@@ -580,6 +580,9 @@ class SpotGraphToolExecutor:
                 action,
                 **subjective,
             )
+            # PR-ι: interact しながらの一言 (say_inline)。失敗しても親 action
+            # は success 維持 (silent fail-safe)。
+            self._maybe_emit_say_inline(player_id, args)
             # PR β: interact は heavy 行動 (default fatigue_cost = 2)。
             self._apply_fatigue_safe(player_id, self.FATIGUE_COST_INTERACT_DEFAULT)
             msg = "; ".join(result.messages) if result.messages else "完了"
@@ -747,6 +750,8 @@ class SpotGraphToolExecutor:
                     f"{name}を食べてしまった。腐っていた——胃の奥が灼ける。"
                     f"（{damage} ダメージ）"
                 )
+                # PR-ι: 使いながらの一言 (silent fail-safe)
+                self._maybe_emit_say_inline(player_id, args)
                 return LlmCommandResultDto(
                     success=True,
                     message=append_inner_thought_to_message(base, args),
@@ -773,6 +778,8 @@ class SpotGraphToolExecutor:
             base = f"{name}を使用した。"
             if item_instance.item_spec.consume_effect is not None:
                 base += f"（効果が適用された）"
+            # PR-ι: 使いながらの一言 (silent fail-safe)
+            self._maybe_emit_say_inline(player_id, args)
             return LlmCommandResultDto(
                 success=True,
                 message=append_inner_thought_to_message(base, args),
@@ -1199,6 +1206,8 @@ class SpotGraphToolExecutor:
             base = f"{display_name}に {outcome.damage} のダメージを与えた。"
             if outcome.target_incapacitated:
                 base += " 致命傷で倒した。"
+            # PR-ι: 戦闘中の一言 (silent fail-safe)。「離れろ！」等を仲間に伝える。
+            self._maybe_emit_say_inline(player_id, args)
             # PR β: 戦闘は激しい消耗。executed のみ蓄積 (空振り cooldown は除外)。
             self._apply_fatigue_safe(player_id, self.FATIGUE_COST_ATTACK)
             return LlmCommandResultDto(
@@ -1311,9 +1320,19 @@ class SpotGraphToolExecutor:
 
     # Issue #621 Phase 3b: 同 spot に倒れた仲間を介抱して revive する。
     # アイテム (= first_aid) を持っていなくても物理的に起こす経路。
-    # HP 復帰率は Issue #621 spec で 40% に確定。constant として置く
-    # ことで PlayerConfigService への wiring 依存を避ける。
-    TEND_REVIVE_HP_RATE = 0.4
+    #
+    # PR-κ (Y_after_pr651_652 分析後続): 旧値 0.4 (= HP 40/100) だと野犬
+    # 15 ダメ x 3 発で確実に再ダウンし、実 trace で「復帰 → 2 tick 後に再
+    # ダウン」のループが観測された (エイダの t=180-192 で 4 回連続の
+    # revive→再down)。復帰 → LLM の action turn (travel_to など) が挟まる
+    # 前に攻撃で潰される設計不良。
+    #
+    # 対処: HP 回復率を 0.4 → 0.6 に引き上げ。60 HP なら野犬 4 発耐えられ
+    # るので、LLM が 2 tick 以内に travel_to 判断できれば逃げ切れる。加え
+    # て post_hoc observation の prose を強化 (下記 handler 参照) して
+    # 「travel_to で退避せよ」を LLM に届ける。無敵時間 (grace period) の
+    # 本格実装 (StatusEffect 経由の monster attack skip) は別 PR で行う。
+    TEND_REVIVE_HP_RATE = 0.6
 
     def _tend_to_player(
         self, player_id: int, args: Dict[str, Any], runtime_context: Any = None
@@ -1425,6 +1444,11 @@ class SpotGraphToolExecutor:
                 f"{display_name} を介抱して意識を取り戻させた。"
                 f"（HP {target.hp.value}/{target.base_stats.max_hp}）"
             )
+            # PR-ι: 介抱しながらの一言 (「大丈夫か！」「起きろ！」など)。
+            # 同 spot の第三者にも SAY として届くので、他プレイヤーが
+            # 「誰かが介抱している」を耳で認識できる (Q3 の直接解消)。
+            # silent fail-safe: speak が例外を投げても親 action は success 維持。
+            self._maybe_emit_say_inline(player_id, args)
             return LlmCommandResultDto(
                 success=True,
                 message=append_inner_thought_to_message(base, args),

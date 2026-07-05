@@ -58,6 +58,7 @@ def _recall_to_payload(row: EpisodicRecallObservation) -> dict[str, Any]:
         "persona_snapshot": row.persona_snapshot,
         "situation_cues": list(row.situation_cues),
         "turn_index": row.turn_index,
+        "prediction_context_id": row.prediction_context_id,
     }
 
 
@@ -73,6 +74,8 @@ def _payload_to_recall(data: dict[str, Any]) -> EpisodicRecallObservation:
         persona_snapshot=str(data.get("persona_snapshot", "")),
         situation_cues=tuple(str(x) for x in data.get("situation_cues", ())),
         turn_index=int(data.get("turn_index", 0)),
+        # U1: 旧 payload にはキー自体が無いので None に倒す (後方互換)。
+        prediction_context_id=data.get("prediction_context_id"),
     )
 
 

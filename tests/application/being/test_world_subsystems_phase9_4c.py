@@ -59,6 +59,7 @@ def _action_entry(action: str = "walk") -> ActionResultEntry:
         intention=f"{action} で先へ進む",
         emotion_hint="determination",
         occurred_tick=42,
+        prediction_context_id="predctx-abc123",
     )
 
 
@@ -116,12 +117,13 @@ class TestActionResultStoreCodec:
         src._store[1] = [_action_entry("walk"), _action_entry("attack")]
         src_runtime = SimpleNamespace(_action_result_store=src)
         captured = ActionResultStoreSubsystemCodec().capture(src_runtime)
-        assert captured["schema_version"] == 3
+        assert captured["schema_version"] == 4
         assert len(captured["entries"][0]["entries"]) == 2
         first_captured = captured["entries"][0]["entries"][0]
         assert first_captured["expected_result"] == "walk で道が開ける"
         assert first_captured["intention"] == "walk で先へ進む"
         assert first_captured["emotion_hint"] == "determination"
+        assert first_captured["prediction_context_id"] == "predctx-abc123"
 
         dst = DefaultActionResultStore()
         dst_runtime = SimpleNamespace(_action_result_store=dst)
@@ -135,11 +137,41 @@ class TestActionResultStoreCodec:
         assert results[0].intention == "walk で先へ進む"
         assert results[0].emotion_hint == "determination"
         assert results[0].occurred_tick == 42
+        assert results[0].prediction_context_id == "predctx-abc123"
 
     def test_action_result_store_が_None_でも_no_op(self) -> None:
         runtime = SimpleNamespace(_action_result_store=None)
         captured = ActionResultStoreSubsystemCodec().capture(runtime)
         assert captured["entries"] == []
+
+    def test_prediction_context_id_欠損の旧スキーマ相当データは_None_に倒れる(self) -> None:
+        """v4 導入前 (= キー自体が無い) payload を decode しても例外にならず None になる。
+
+        schema_version チェック自体は旧 snapshot を弾く仕様 (バージョン不一致で
+        ValueError) だが、dict 単体の decode 経路 (_dict_to_action_result_entry)
+        は data.get ベースなので、欠損キーに対する robustness を独立に確認する。
+        """
+        dst = DefaultActionResultStore()
+        dst_runtime = SimpleNamespace(_action_result_store=dst)
+        payload = {
+            "schema_version": 4,
+            "entries": [
+                {
+                    "player_id": 1,
+                    "entries": [
+                        {
+                            "occurred_at": "2026-06-14T12:00:00+00:00",
+                            "action_summary": "walk_summary",
+                            "result_summary": "ok",
+                            # prediction_context_id キー自体を欠落させる
+                        }
+                    ],
+                }
+            ],
+        }
+        ActionResultStoreSubsystemCodec().restore(dst_runtime, payload)
+        results = dst.get_recent(PlayerId(1), limit=10)
+        assert results[0].prediction_context_id is None
 
 
 class TestSlidingWindowCodecRollingSummaryBackend:

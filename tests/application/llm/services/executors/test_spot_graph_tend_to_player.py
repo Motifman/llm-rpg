@@ -110,7 +110,11 @@ def _args(target_player_id: int, **extra) -> dict:
 class TestTendToPlayerSuccess:
     """同 spot にいる倒れた仲間を介抱して revive する。"""
 
-    def test_倒れた仲間を_revive_して_HP_40_で_復帰させる(self) -> None:
+    def test_倒れた仲間を_revive_して_HP_60_で_復帰させる(self) -> None:
+        """PR-κ: TEND_REVIVE_HP_RATE を 0.4 → 0.6 に引き上げ。理由は
+        Y_after_pr651_652 trace で「復帰 → 2 tick 後に再ダウン」ループが
+        観測されたため。60 HP なら野犬 (15 ダメ/tick) 4 発耐えられるので、
+        LLM が travel_to で退避する時間が確保できる。"""
         exec, status_repo, publisher = _build_executor()
         actor = _build_player(player_id=1, is_down=False, spot_id=10)
         target = _build_player(
@@ -124,8 +128,8 @@ class TestTendToPlayerSuccess:
 
         assert result.success is True
         assert target.is_down is False
-        # TEND_REVIVE_HP_RATE=0.4 × max_hp 100 = 40
-        assert target.hp.value == 40
+        # TEND_REVIVE_HP_RATE=0.6 × max_hp 100 = 60
+        assert target.hp.value == 60
         status_repo.save.assert_called_with(target)
         # PlayerRevivedEvent が pipeline に流れる
         publisher.publish_all.assert_called_once()
@@ -163,7 +167,8 @@ class TestTendToPlayerSuccess:
         result = exec._tend_to_player(player_id=1, args=_args(2))
 
         assert "エイダ" in result.message
-        assert "40" in result.message
+        # PR-κ: HP rate 0.4 → 0.6 引き上げ後
+        assert "60" in result.message
         assert "100" in result.message  # max_hp
 
 

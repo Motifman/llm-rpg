@@ -145,6 +145,9 @@ from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultS
 from ai_rpg_world.application.llm.contracts.interfaces import ISlidingWindowMemory
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.action_result_recorder import ActionResultRecorder
+from ai_rpg_world.application.llm.services.prediction_context_ledger import (
+    PredictionContextLedger,
+)
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
 )
@@ -853,6 +856,37 @@ class WorldRuntime:
         if scheduler is not None:
             scheduler.maybe_schedule(player_id, output)
 
+    def _get_prediction_context_ledger(self) -> Optional[PredictionContextLedger]:
+        """予測誤差統一設計 U1 の ``PredictionContextLedger`` を lazy 構築・共有する。
+
+        ``DefaultPromptBuilder`` (発行元) と ``ActionResultRecorder``
+        (消費元) が同じ instance を参照する必要があるため、
+        ``_cached_default_prompt_builder`` と同じ lazy キャッシュパターンで
+        world_runtime が唯一の owner になる。
+
+        ``PREDICTION_CONTEXT_ID_ENABLED`` env で default OFF
+        (共通規約 §0: 新機構は明示的に有効化しない限り動かさない)。OFF の間は
+        None を返し、builder / recorder 側は ledger 未注入と同じ経路
+        (= prediction_context_id は常に None) を通る。
+        """
+        sentinel_computed = getattr(
+            self, "_prediction_context_ledger_computed", False
+        )
+        if sentinel_computed:
+            return getattr(self, "_prediction_context_ledger_instance", None)
+
+        from ai_rpg_world.application.llm.wiring.feature_flags import (
+            log_prediction_context_id_state,
+            resolve_prediction_context_id_enabled,
+        )
+
+        enabled = resolve_prediction_context_id_enabled()
+        log_prediction_context_id_state(enabled)
+        ledger = PredictionContextLedger() if enabled else None
+        self._prediction_context_ledger_instance = ledger
+        self._prediction_context_ledger_computed = True
+        return ledger
+
     def _record_action_result(
         self,
         player_id: PlayerId,
@@ -889,7 +923,14 @@ class WorldRuntime:
         # #553 で contract 化済みで不変。subjective fields (expected_result 等) は
         # U2 で do_* → ここ → recorder と配線した (露出 OFF の間は None)。
         # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)。
-        recorder = ActionResultRecorder(self._action_result_store, logger=logger)
+        # 予測誤差統一設計 U1: prompt_builder.build() が発行した
+        # prediction_context_id をこの record() が consume できるよう、
+        # builder と同じ ledger instance を共有する。
+        recorder = ActionResultRecorder(
+            self._action_result_store,
+            logger=logger,
+            prediction_context_ledger=self._get_prediction_context_ledger(),
+        )
         recorder.record(
             player_id,
             action_summary=action_summary,
@@ -1247,6 +1288,11 @@ class WorldRuntime:
             episodic_config = EpisodicRecallConfig(
                 passive_recall=self._episodic_stack.passive_recall,
                 noun_matcher=self._episodic_stack.noun_matcher,
+                # 想起→強化 (recall_count 加算 / CO_RECALL / ヘブ則) の配線。
+                # これが無いと想起されても recall_count が 0 のままで、semantic
+                # 昇格ゲート (recall_count>=3) を永遠に超えられない
+                # (memory_full_002 実験で発覚)。
+                memory_link_service=self._episodic_stack.link_service,
                 semantic_passive_recall=self._episodic_stack.semantic_passive_recall,
                 semantic_passive_top_k=self._episodic_stack.semantic_passive_top_k,
                 recall_buffer_store=self._episodic_stack.recall_buffer_store,
@@ -1304,6 +1350,10 @@ class WorldRuntime:
             tool_call_loop_guard=getattr(
                 self, "_injected_tool_call_loop_guard", None
             ),
+            # 予測誤差統一設計 U1: _record_action_result の ActionResultRecorder
+            # と同じ ledger instance を共有し、この builder が発行した
+            # prediction_context_id を consume できるようにする。
+            prediction_context_ledger=self._get_prediction_context_ledger(),
         )
         self._cached_default_prompt_builder = builder
         return builder
@@ -1347,6 +1397,11 @@ class WorldRuntime:
             "messages": result["messages"],
             "tools": [d.name for d in self.get_tool_definitions()],
             "tool_runtime_context": ctx.tool_runtime_context,
+            # U1: このターンに発行された prediction_context_id をそのまま
+            # 露出する (実際の consume は _record_action_result → ledger 経由
+            # で player_id をキーに行われるため、呼び出し側がこの値を渡す
+            # 必要は無いが、後続 PR のデバッグ・trace 突き合わせ用に残す)。
+            "prediction_context_id": result.get("prediction_context_id"),
         }
 
     # ── アクション実行 ──
