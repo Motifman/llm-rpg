@@ -35,6 +35,9 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import (
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import (
     EpisodicCue,
 )
+from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+    PendingPredictionDraft,
+)
 
 
 @dataclass(frozen=True)
@@ -76,6 +79,16 @@ class SubjectiveEpisode:
     # 「値が無い」状態は表現しない (常に low/high のどちらか) ため、Optional
     # ではなく既定値 "low" を持つ必須フィールドにする。
     salience: str = "low"
+    # U10a (予測誤差統一設計 部品6・pending prediction): chunk 主観補完 LLM が
+    # 「この chunk に将来の約束・見込みが含まれるか」を判定した抽出結果。
+    # heading / salience と同じく既存の主観文付与 pass に相乗りさせ、新規
+    # LLM コールは増やさない。**一時的なスクラッチフィールド**であり、chunk
+    # 完了点 (EpisodicChunkCoordinator 等) で PendingPrediction 化して
+    # per-Being store に書き込んだ後は用済みになる。そのため
+    # ``_memory_payload_codecs.subjective_episode_to_dict`` / snapshot には
+    # 含めない (= episode の snapshot 復元では常に None に戻る。既に消費済の
+    # 抽出結果を再現する必要が無いため)。
+    pending_prediction_draft: PendingPredictionDraft | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.episode_id, str):
@@ -137,6 +150,11 @@ class SubjectiveEpisode:
 
         if self.salience not in ("low", "high"):
             raise ValueError('salience must be "low" or "high"')
+
+        if self.pending_prediction_draft is not None and not isinstance(
+            self.pending_prediction_draft, PendingPredictionDraft
+        ):
+            raise TypeError("pending_prediction_draft must be PendingPredictionDraft or None")
 
 
 __all__ = ["SubjectiveEpisode"]
