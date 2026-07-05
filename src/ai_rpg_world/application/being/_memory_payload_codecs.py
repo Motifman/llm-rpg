@@ -452,9 +452,21 @@ def belief_evidence_to_dict(evidence: "BeliefEvidence") -> dict[str, Any]:
 
 
 def dict_to_belief_evidence(data: dict[str, Any]) -> "BeliefEvidence":
-    """dict → BeliefEvidence。未知の source_kind は
-    ``BeliefEvidenceSourceKind(...)`` が ValueError を投げる (= _decode_list
-    で BeingMemoryPayloadFormatError に wrap される)。"""
+    """dict → BeliefEvidence。
+
+    未知の source_kind は ``BeliefEvidenceSourceKind(...)`` が ValueError を
+    投げる。それ以外の不変条件違反 (salience 不正値など) は BeliefEvidence VO
+    が **ドメイン例外** ``BeliefEvidenceValidationException`` を投げるが、
+    これは組み込み例外を継承しないため、呼び出し元 ``_decode_list`` の
+    ``except (KeyError, ValueError, TypeError)`` に捕まらず契約
+    (一律 ``BeingMemoryPayloadFormatError`` に wrap する) を静かに破る。
+    そこで本 codec 側でドメイン例外を捕えて ``ValueError`` に翻訳し、
+    generic な ``_decode_list`` を semantic ドメイン例外に結合させずに
+    既存の except 契約へ自然に収める (U2 レビュー MEDIUM 指摘対応)。
+    """
+    from ai_rpg_world.domain.memory.semantic.exception.semantic_exception import (
+        BeliefEvidenceValidationException,
+    )
     from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
         BeliefEvidence,
     )
@@ -462,13 +474,16 @@ def dict_to_belief_evidence(data: dict[str, Any]) -> "BeliefEvidence":
         BeliefEvidenceSourceKind,
     )
 
-    return BeliefEvidence(
-        evidence_id=str(data["evidence_id"]),
-        source_kind=BeliefEvidenceSourceKind(str(data["source_kind"])),
-        episode_ids=tuple(str(x) for x in data.get("episode_ids", ())),
-        cue_signature=str(data["cue_signature"]),
-        text=str(data["text"]),
-        salience=str(data["salience"]),
-        occurred_at=_iso_to_dt(str(data["occurred_at"])),
-        tick=int(data["tick"]) if data.get("tick") is not None else None,
-    )
+    try:
+        return BeliefEvidence(
+            evidence_id=str(data["evidence_id"]),
+            source_kind=BeliefEvidenceSourceKind(str(data["source_kind"])),
+            episode_ids=tuple(str(x) for x in data.get("episode_ids", ())),
+            cue_signature=str(data["cue_signature"]),
+            text=str(data["text"]),
+            salience=str(data["salience"]),
+            occurred_at=_iso_to_dt(str(data["occurred_at"])),
+            tick=int(data["tick"]) if data.get("tick") is not None else None,
+        )
+    except BeliefEvidenceValidationException as exc:
+        raise ValueError(f"invalid BeliefEvidence payload: {exc}") from exc

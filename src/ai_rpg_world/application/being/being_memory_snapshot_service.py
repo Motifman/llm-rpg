@@ -288,7 +288,7 @@ class BeingMemorySnapshotService:
         self._belief_evidence_buffer = belief_evidence_buffer_store
 
     def capture(self, being_id: BeingId) -> str:
-        """9 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
+        """10 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         payload: dict[str, Any] = {
