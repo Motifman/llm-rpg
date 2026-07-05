@@ -157,10 +157,20 @@ def semantic_entry_to_dict(entry: SemanticMemoryEntry) -> dict[str, Any]:
         "created_at": _dt_to_iso(entry.created_at),
         "importance_score": entry.importance_score,
         "tags": list(entry.tags),
+        # U3a (belief journal 化)。
+        "belief_id": entry.belief_id,
+        "status": entry.status,
+        "supersedes": entry.supersedes,
+        "support_evidence_ids": list(entry.support_evidence_ids),
+        "contradict_evidence_ids": list(entry.contradict_evidence_ids),
     }
 
 
 def dict_to_semantic_entry(data: dict[str, Any]) -> SemanticMemoryEntry:
+    # U3a: 旧 snapshot (belief journal キー無し) は default に倒す。
+    # belief_id は空文字→ SemanticMemoryEntry.__post_init__ が entry_id に
+    # フォールバックする。
+    supersedes = data.get("supersedes")
     return SemanticMemoryEntry(
         entry_id=str(data["entry_id"]),
         player_id=int(data["player_id"]),
@@ -172,6 +182,15 @@ def dict_to_semantic_entry(data: dict[str, Any]) -> SemanticMemoryEntry:
         created_at=_iso_to_dt(str(data["created_at"])),
         importance_score=int(data.get("importance_score", 5)),
         tags=tuple(str(x) for x in data.get("tags", ())),
+        belief_id=str(data.get("belief_id") or ""),
+        status=str(data.get("status", "active")),
+        supersedes=str(supersedes) if supersedes else None,
+        support_evidence_ids=tuple(
+            str(x) for x in data.get("support_evidence_ids", ())
+        ),
+        contradict_evidence_ids=tuple(
+            str(x) for x in data.get("contradict_evidence_ids", ())
+        ),
     )
 
 
