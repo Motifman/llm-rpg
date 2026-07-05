@@ -18,6 +18,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
         BeliefEvidenceTranscriber,
     )
+    from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+        IEpisodicRecallSuccessStore,
+    )
     from ai_rpg_world.domain.being.service.being_attachment_resolver import (
         BeingAttachmentResolver,
     )
@@ -52,6 +55,7 @@ from ai_rpg_world.application.llm.services.episodic_memory_link_application_serv
     EpisodicMemoryLinkApplicationService,
 )
 from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
+    record_recall_hits_if_applicable,
     stamp_recall_prediction_outcome_if_applicable,
 )
 from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
@@ -119,6 +123,8 @@ class EpisodicChunkCoordinator:
         recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
         error_driven_reinterpretation_enabled: bool = False,
         error_gated_boundary_enabled: bool = False,
+        recall_success_store: Optional["IEpisodicRecallSuccessStore"] = None,
+        recall_hit_boost_enabled: bool = False,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -216,6 +222,19 @@ class EpisodicChunkCoordinator:
             raise TypeError("error_driven_reinterpretation_enabled must be bool")
         if not isinstance(error_gated_boundary_enabled, bool):
             raise TypeError("error_gated_boundary_enabled must be bool")
+        # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default None = flag
+        # OFF 相当): flag OFF なら従来通り何もしない (「配線と有効化の分離」)。
+        if recall_success_store is not None:
+            from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+                IEpisodicRecallSuccessStore as _IERSS,
+            )
+
+            if not isinstance(recall_success_store, _IERSS):
+                raise TypeError(
+                    "recall_success_store must implement IEpisodicRecallSuccessStore or None"
+                )
+        if not isinstance(recall_hit_boost_enabled, bool):
+            raise TypeError("recall_hit_boost_enabled must be bool")
         # U8 (予測誤差統一設計 部品2a / default False = flag OFF): True のとき
         # だけ decide_chunk_boundary に誤差ゲート境界条項を評価させる。False
         # (既定) では境界挙動は U8 導入前と完全一致する。
@@ -224,6 +243,8 @@ class EpisodicChunkCoordinator:
         self._error_driven_reinterpretation_enabled = (
             error_driven_reinterpretation_enabled
         )
+        self._recall_success_store = recall_success_store
+        self._recall_hit_boost_enabled = recall_hit_boost_enabled
         self._belief_evidence_transcriber = belief_evidence_transcriber
         # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のときだけ
         # in_context_belief_ids / had_expected_result を実際に計算して transcriber
@@ -606,6 +627,17 @@ class EpisodicChunkCoordinator:
                 error_driven_reinterpretation_enabled=(
                     self._error_driven_reinterpretation_enabled
                 ),
+                being_id=self._resolve_being_id_for_episode(episode),
+                episode=episode,
+                chunk_actions=encoding_input.action_results,
+            )
+            # U9b (想起の信用割り当て・的中側): 同じ完了点で「思い出したから
+            # 当たった」を的中側 sidecar に還流する。flag OFF / store 未配線
+            # なら no-op (導入前と完全に一致)。
+            record_recall_hits_if_applicable(
+                recall_buffer_store=self._recall_buffer_store,
+                recall_success_store=self._recall_success_store,
+                recall_hit_boost_enabled=self._recall_hit_boost_enabled,
                 being_id=self._resolve_being_id_for_episode(episode),
                 episode=episode,
                 chunk_actions=encoding_input.action_results,

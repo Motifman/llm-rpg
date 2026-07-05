@@ -59,7 +59,11 @@ from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields impo
 )
 from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
     prediction_context_ids_from_actions,
+    record_recall_hits_if_applicable,
     stamp_recall_prediction_outcome_if_applicable,
+)
+from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+    IEpisodicRecallSuccessStore,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 
@@ -140,6 +144,8 @@ class InlineEpisodicSubjectiveScheduler:
         belief_attribution_enabled: bool = False,
         recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
         error_driven_reinterpretation_enabled: bool = False,
+        recall_success_store: Optional[IEpisodicRecallSuccessStore] = None,
+        recall_hit_boost_enabled: bool = False,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
@@ -185,6 +191,16 @@ class InlineEpisodicSubjectiveScheduler:
             )
         if not isinstance(error_driven_reinterpretation_enabled, bool):
             raise TypeError("error_driven_reinterpretation_enabled must be bool")
+        # U9b (想起の信用割り当て・的中側): flag OFF (= None) なら従来通り
+        # 何もしない。
+        if recall_success_store is not None and not isinstance(
+            recall_success_store, IEpisodicRecallSuccessStore
+        ):
+            raise TypeError(
+                "recall_success_store must implement IEpisodicRecallSuccessStore or None"
+            )
+        if not isinstance(recall_hit_boost_enabled, bool):
+            raise TypeError("recall_hit_boost_enabled must be bool")
 
         self._service = service
         self._store = episode_store
@@ -198,6 +214,8 @@ class InlineEpisodicSubjectiveScheduler:
         self._error_driven_reinterpretation_enabled = (
             error_driven_reinterpretation_enabled
         )
+        self._recall_success_store = recall_success_store
+        self._recall_hit_boost_enabled = recall_hit_boost_enabled
 
     def _resolve_being_id_for_episode(self, episode: SubjectiveEpisode):
         """episode.player_id から being_id を解決する (None なら未解決)。
@@ -317,6 +335,17 @@ class InlineEpisodicSubjectiveScheduler:
                 episode=merged,
                 chunk_actions=encoding_input.action_results,
             )
+            # U9b (想起の信用割り当て・的中側): 同じ完了点で「思い出したから
+            # 当たった」を的中側 sidecar に還流する (flag OFF / store 未配線
+            # なら no-op)。
+            record_recall_hits_if_applicable(
+                recall_buffer_store=self._recall_buffer_store,
+                recall_success_store=self._recall_success_store,
+                recall_hit_boost_enabled=self._recall_hit_boost_enabled,
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                chunk_actions=encoding_input.action_results,
+            )
         except Exception as exc:
             _logger.warning(
                 "InlineEpisodicSubjectiveScheduler: LLM 補完が失敗 (%s)。"
@@ -386,6 +415,23 @@ class InlineEpisodicSubjectiveScheduler:
             )
         self._recall_buffer_store = recall_buffer_store
 
+    def set_recall_success_store(
+        self, recall_success_store: Optional[IEpisodicRecallSuccessStore]
+    ) -> None:
+        """U9b: 的中側 sidecar を構築後に差し込むための setter。
+
+        ``set_recall_buffer_store`` と同じ「後から差し込む」パターン
+        (wiring の都合上 scheduler は build_episodic_stack より先に組み立てる
+        必要がある)。
+        """
+        if recall_success_store is not None and not isinstance(
+            recall_success_store, IEpisodicRecallSuccessStore
+        ):
+            raise TypeError(
+                "recall_success_store must implement IEpisodicRecallSuccessStore or None"
+            )
+        self._recall_success_store = recall_success_store
+
     def shutdown(self, timeout: Optional[float] = None) -> None:
         # 同期実装はキュー無し。何もしない。
         del timeout
@@ -423,6 +469,8 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         belief_attribution_enabled: bool = False,
         recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
         error_driven_reinterpretation_enabled: bool = False,
+        recall_success_store: Optional[IEpisodicRecallSuccessStore] = None,
+        recall_hit_boost_enabled: bool = False,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
@@ -471,6 +519,16 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             )
         if not isinstance(error_driven_reinterpretation_enabled, bool):
             raise TypeError("error_driven_reinterpretation_enabled must be bool")
+        # U9b (想起の信用割り当て・的中側): flag OFF (= None) なら従来通り
+        # 何もしない。
+        if recall_success_store is not None and not isinstance(
+            recall_success_store, IEpisodicRecallSuccessStore
+        ):
+            raise TypeError(
+                "recall_success_store must implement IEpisodicRecallSuccessStore or None"
+            )
+        if not isinstance(recall_hit_boost_enabled, bool):
+            raise TypeError("recall_hit_boost_enabled must be bool")
 
         self._service = service
         self._store = episode_store
@@ -485,6 +543,8 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         self._error_driven_reinterpretation_enabled = (
             error_driven_reinterpretation_enabled
         )
+        self._recall_success_store = recall_success_store
+        self._recall_hit_boost_enabled = recall_hit_boost_enabled
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="episodic_subj",
@@ -688,6 +748,17 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 episode=merged,
                 chunk_actions=encoding_input.action_results,
             )
+            # U9b (想起の信用割り当て・的中側): 同じ完了点で「思い出したから
+            # 当たった」を的中側 sidecar に還流する (flag OFF / store 未配線
+            # なら no-op)。
+            record_recall_hits_if_applicable(
+                recall_buffer_store=self._recall_buffer_store,
+                recall_success_store=self._recall_success_store,
+                recall_hit_boost_enabled=self._recall_hit_boost_enabled,
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                chunk_actions=encoding_input.action_results,
+            )
         except Exception as exc:
             _logger.warning(
                 "ThreadPoolEpisodicSubjectiveScheduler worker failed (%s)。"
@@ -760,6 +831,23 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 "recall_buffer_store must be EpisodicRecallBufferRepository or None"
             )
         self._recall_buffer_store = recall_buffer_store
+
+    def set_recall_success_store(
+        self, recall_success_store: Optional[IEpisodicRecallSuccessStore]
+    ) -> None:
+        """U9b: 的中側 sidecar を構築後に差し込むための setter。
+
+        ``set_recall_buffer_store`` と同じ「後から差し込む」パターン。ワーカー
+        thread から読まれる値だが、代入自体は単純な参照差し替えなので追加の
+        同期は不要 (``recall_buffer_store`` 等、既存の他フィールドと同じ前提)。
+        """
+        if recall_success_store is not None and not isinstance(
+            recall_success_store, IEpisodicRecallSuccessStore
+        ):
+            raise TypeError(
+                "recall_success_store must implement IEpisodicRecallSuccessStore or None"
+            )
+        self._recall_success_store = recall_success_store
 
     def shutdown(self, timeout: Optional[float] = None) -> None:
         """進行中ジョブを drain しつつ executor を閉じる。
