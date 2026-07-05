@@ -79,6 +79,37 @@ class PredictionContextLedger:
         )
         return PredictionContextIssueResult(prediction_context_id=new_id, discarded=discarded)
 
+    def attach(
+        self,
+        player_id: PlayerId,
+        prediction_context_id: str,
+        *,
+        episode_ids: Tuple[str, ...] = (),
+        belief_ids: Tuple[str, ...] = (),
+    ) -> None:
+        """発行済みの id に in-context 集合 (episode_ids / belief_ids) を後付けする。
+
+        二段階発行の 2 段目。``issue()`` で先に id だけ発行し、そのターンの
+        passive recall が「何を想起したか」を確定させてから呼ぶ。これにより
+        recall observation の生成 (id stamp) を issue と recall の間に挟める
+        (id 発行 → recall stamp → in-context 集合の確定、の順)。
+
+        ``prediction_context_id`` が現在 pending の id と一致しないときは何も
+        しない (= 途中で再発行された等の想定外状態では静かに諦める。混線を
+        防ぐための防御)。
+        """
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        key = player_id.value
+        pending = self._pending.get(key)
+        if pending is None or pending.prediction_context_id != prediction_context_id:
+            return
+        self._pending[key] = PredictionContext(
+            prediction_context_id=prediction_context_id,
+            episode_ids=tuple(episode_ids),
+            belief_ids=tuple(belief_ids),
+        )
+
     def consume(self, player_id: PlayerId) -> Optional[PredictionContext]:
         """未消費の pending context を取り出して ledger から消す (無ければ None)。"""
         if not isinstance(player_id, PlayerId):

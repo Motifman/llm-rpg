@@ -928,6 +928,13 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 5. 利用可能ツール取得
         tools = self._available_tools_provider.get_available_tools(current_state_dto)
 
+        # U1 (二段階発行の 1 段目): passive recall より前に id を確保する。
+        # こうすることで recall observation の生成時にこの id を stamp でき、
+        # 「この episode を想起した prompt build で立てた予測」の紐付けが実在化
+        # する (部品5 想起の信用割り当ての前提)。in-context 集合は recall 後に
+        # 2 段目 (_attach_prediction_context) で確定する。ledger 未注入なら None。
+        prediction_context_id = self._begin_prediction_context(player_id)
+
         # 6. 受動想起（任意注入）: runtime + 直近観測 structured から situation_cues → recall_text を連結
         relevant_memories_text, _passive_candidate_count, recalled_episode_ids = (
             self._run_passive_recall(
@@ -938,6 +945,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 current_state_text=current_state_text,
                 recent_events_text=recent_events_text,
                 player_info=player_info,
+                prediction_context_id=prediction_context_id,
             )
         )
 
@@ -1048,14 +1056,17 @@ class DefaultPromptBuilder(IPromptBuilder):
         result["current_beliefs_snapshot"] = relevant_memories_text
         result["persona_snapshot"] = player_info.persona_block
 
-        # U1 (予測誤差統一設計 部品1): この build で in-context だった
-        # episode_id / belief_id 群を添えて prediction_context_id を発行する。
-        # ledger 未注入 (= id 機構 OFF) なら None のまま (既存挙動)。
-        result["prediction_context_id"] = self._issue_prediction_context_id(
+        # U1 (二段階発行の 2 段目): 上で先に発行済みの prediction_context_id に、
+        # この build で in-context だった episode_id / belief_id 群を後付けする。
+        # ledger 未注入 (= id 機構 OFF) なら prediction_context_id は None で
+        # attach も no-op (既存挙動)。
+        self._attach_prediction_context(
             player_id=player_id,
+            prediction_context_id=prediction_context_id,
             episode_ids=recalled_episode_ids,
             belief_ids=recalled_belief_ids,
         )
+        result["prediction_context_id"] = prediction_context_id
 
         # 実験 #356 後続: prefix cache 分析用の section 別 char 内訳を trace に
         # 1 件記録する。token ではなく char で吐く理由はモジュール docstring 参照。
@@ -1075,31 +1086,44 @@ class DefaultPromptBuilder(IPromptBuilder):
         )
         return result
 
-    def _issue_prediction_context_id(
-        self,
-        *,
-        player_id: PlayerId,
-        episode_ids: tuple[str, ...],
-        belief_ids: tuple[str, ...],
-    ) -> Optional[str]:
-        """U1: prediction_context_ledger へ発行を委譲し、未消費の前回分を
-        破棄した場合は trace NOTE を残す。
+    def _begin_prediction_context(self, player_id: PlayerId) -> Optional[str]:
+        """U1 (二段階発行の 1 段目): passive recall より前に id を発行する。
 
         ledger 未注入なら常に None を返す (= id 機構 OFF の既存ランタイムと
-        後方互換)。「破棄」は不変条件どおりの想定内動作 (no-tool ターン /
-        例外で record に届かなかった / 途中で再スケジュールされた 等) なので
-        ERROR ではなく NOTE で記録する。
+        後方互換)。未消費の前回分があれば破棄され (= no-tool ターン / 例外で
+        record に届かなかった / 途中で再スケジュールされた 等の想定内動作)、
+        ERROR ではなく trace NOTE を残す。in-context 集合はまだ空で、この build
+        の passive recall 完了後に ``_attach_prediction_context`` で確定する。
         """
         if self._prediction_context_ledger is None:
             return None
-        result = self._prediction_context_ledger.issue(
-            player_id, episode_ids=episode_ids, belief_ids=belief_ids
-        )
+        result = self._prediction_context_ledger.issue(player_id)
         if result.discarded is not None:
             self._emit_prediction_context_discarded_note(
                 player_id=player_id, discarded_id=result.discarded.prediction_context_id
             )
         return result.prediction_context_id
+
+    def _attach_prediction_context(
+        self,
+        *,
+        player_id: PlayerId,
+        prediction_context_id: Optional[str],
+        episode_ids: tuple[str, ...],
+        belief_ids: tuple[str, ...],
+    ) -> None:
+        """U1 (二段階発行の 2 段目): 発行済み id に in-context 集合を後付けする。
+
+        ledger 未注入 / id 未発行 (= 機構 OFF) なら no-op。
+        """
+        if self._prediction_context_ledger is None or prediction_context_id is None:
+            return
+        self._prediction_context_ledger.attach(
+            player_id,
+            prediction_context_id,
+            episode_ids=episode_ids,
+            belief_ids=belief_ids,
+        )
 
     def _emit_prediction_context_discarded_note(
         self, *, player_id: PlayerId, discarded_id: str
@@ -1139,8 +1163,14 @@ class DefaultPromptBuilder(IPromptBuilder):
         current_state_text: str,
         recent_events_text: str,
         player_info: SystemPromptPlayerInfoDto,
+        prediction_context_id: Optional[str] = None,
     ) -> tuple[str, Optional[int], tuple[str, ...]]:
         """受動想起ブロックを実行し、(関連する記憶テキスト, 候補件数, episode_id 群) を返す。
+
+        ``prediction_context_id`` が渡されたとき、生成する各
+        ``EpisodicRecallObservation`` にその id を stamp する (U1 部品5: この
+        episode を想起した prompt build で立てた予測をあとで辿るため)。None なら
+        stamp しない (= id 機構 OFF)。
 
         Issue #227 後続レビュー (Prompt MEDIUM-5) で build() 本体から抽出。
         responsibilities:
@@ -1364,6 +1394,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                         persona_snapshot=player_info.persona_block,
                         situation_cues=situation_cue_keys,
                         turn_index=turn_index,
+                        prediction_context_id=prediction_context_id,
                     )
                     self._append_recall_observation(being_id, observation)
                 except Exception as e:

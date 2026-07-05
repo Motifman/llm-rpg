@@ -34,7 +34,10 @@ class EpisodicRecallObservation:
     # U1 (予測誤差統一設計 部品1・部品5): この episode を想起した prompt build
     # 時点で発行された prediction_context_id。「この記憶を思い出して立てた予測が
     # どう外れた/当たったか」を後から辿るための紐付けキー (U9 の想起信用割り当て
-    # の土台)。既定 None で後方互換 (= 旧 snapshot / id 未発行の recall)。
+    # の土台)。prompt_builder が二段階発行 (id 発行 → recall stamp → in-context
+    # 集合の確定) で recall observation 生成時に stamp する。id 機構が OFF
+    # (PREDICTION_CONTEXT_ID_ENABLED 未設定) のとき・旧 snapshot 由来のときは
+    # None (既定値で後方互換)。
     prediction_context_id: Optional[str] = None
 
     def __post_init__(self) -> None:
