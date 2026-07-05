@@ -83,5 +83,25 @@ class EpisodicRecallBufferRepository(ABC):
         呼び出しは想定しない。
         """
 
+    @abstractmethod
+    def stamp_prediction_outcome_by_being(
+        self,
+        being_id: BeingId,
+        prediction_context_id: str,
+        prediction_error: str,
+    ) -> None:
+        """U9a (予測誤差統一設計 部品5・誤差駆動再解釈): ``prediction_context_id``
+
+        (= この記憶を思い出して立てた予測を特定する id) を持つ pending
+        observation 群に ``prediction_error`` を刻む。
+
+        pending 集合 (= まだ再解釈で処理されていない観測) だけが対象。
+        既に ``prediction_outcome_error`` が刻まれている observation は
+        上書きしない (1 つの recall observation は 1 つの予測文脈にしか
+        紐付かない前提だが、誤って複数回呼ばれても最初の刻みを保つ)。
+        一致する observation が無ければ何もしない (呼び出し側は
+        prediction_context_id が実在するか事前に検証しない)。
+        """
+
 
 __all__ = ["EpisodicRecallBufferRepository"]

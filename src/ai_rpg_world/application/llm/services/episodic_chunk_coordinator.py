@@ -51,6 +51,12 @@ from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields impo
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
 )
+from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
+    stamp_recall_prediction_outcome_if_applicable,
+)
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
+    EpisodicRecallBufferRepository,
+)
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -110,6 +116,8 @@ class EpisodicChunkCoordinator:
         default_world_id: Optional["WorldId"] = None,
         belief_evidence_transcriber: Optional["BeliefEvidenceTranscriber"] = None,
         belief_attribution_enabled: bool = False,
+        recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
+        error_driven_reinterpretation_enabled: bool = False,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -195,6 +203,20 @@ class EpisodicChunkCoordinator:
                 )
         if not isinstance(belief_attribution_enabled, bool):
             raise TypeError("belief_attribution_enabled must be bool")
+        # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default None = flag OFF
+        # 相当): flag OFF なら従来通り何もしない (「配線と有効化の分離」規約)。
+        if recall_buffer_store is not None and not isinstance(
+            recall_buffer_store, EpisodicRecallBufferRepository
+        ):
+            raise TypeError(
+                "recall_buffer_store must be EpisodicRecallBufferRepository or None"
+            )
+        if not isinstance(error_driven_reinterpretation_enabled, bool):
+            raise TypeError("error_driven_reinterpretation_enabled must be bool")
+        self._recall_buffer_store = recall_buffer_store
+        self._error_driven_reinterpretation_enabled = (
+            error_driven_reinterpretation_enabled
+        )
         self._belief_evidence_transcriber = belief_evidence_transcriber
         # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のときだけ
         # in_context_belief_ids / had_expected_result を実際に計算して transcriber
@@ -567,6 +589,18 @@ class EpisodicChunkCoordinator:
             # episodic_subjective_completion_schedulers.py。
             self._record_belief_evidence_if_applicable(
                 episode, encoding_input.action_results
+            )
+            # U9a (誤差駆動再解釈): 同期経路の完了点 (= 上の merge 直後) で
+            # in-context recall observation 群に prediction_error を刻む。
+            # flag OFF / store 未配線なら no-op (導入前と完全に一致)。
+            stamp_recall_prediction_outcome_if_applicable(
+                recall_buffer_store=self._recall_buffer_store,
+                error_driven_reinterpretation_enabled=(
+                    self._error_driven_reinterpretation_enabled
+                ),
+                being_id=self._resolve_being_id_for_episode(episode),
+                episode=episode,
+                chunk_actions=encoding_input.action_results,
             )
         # draft (もしくは inline merge 済み) を必ず先に store に書く。
         # scheduler 経路 (新規): draft = PR #305 でテンプレ既定値が埋まった状態

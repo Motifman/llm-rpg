@@ -46,6 +46,9 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingI
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
+    EpisodicRecallBufferRepository,
+)
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
     BeliefEvidenceTranscriber,
@@ -53,6 +56,10 @@ from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
 )
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
+)
+from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
+    prediction_context_ids_from_actions,
+    stamp_recall_prediction_outcome_if_applicable,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 
@@ -65,15 +72,7 @@ def _prediction_context_ids_from_encoding(encoding_input: ChunkEncodingInput) ->
     紐付けの土台のみ (どの belief/episode が in-context だったかの意味づけは
     U4 の attribution ledger に委ねる)。
     """
-    ids: list = []
-    try:
-        for action in encoding_input.action_results:
-            pid = getattr(action, "prediction_context_id", None)
-            if pid and pid not in ids:
-                ids.append(pid)
-    except Exception:
-        return []
-    return ids
+    return prediction_context_ids_from_actions(encoding_input.action_results)
 
 
 def _emit_trace(
@@ -139,6 +138,8 @@ class InlineEpisodicSubjectiveScheduler:
         default_world_id: Optional[Any] = None,
         belief_evidence_transcriber: Optional[BeliefEvidenceTranscriber] = None,
         belief_attribution_enabled: bool = False,
+        recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
+        error_driven_reinterpretation_enabled: bool = False,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
@@ -175,6 +176,15 @@ class InlineEpisodicSubjectiveScheduler:
             raise TypeError(
                 "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
             )
+        # U9a (誤差駆動再解釈): flag OFF (= None) なら従来通り何もしない。
+        if recall_buffer_store is not None and not isinstance(
+            recall_buffer_store, EpisodicRecallBufferRepository
+        ):
+            raise TypeError(
+                "recall_buffer_store must be EpisodicRecallBufferRepository or None"
+            )
+        if not isinstance(error_driven_reinterpretation_enabled, bool):
+            raise TypeError("error_driven_reinterpretation_enabled must be bool")
 
         self._service = service
         self._store = episode_store
@@ -184,6 +194,10 @@ class InlineEpisodicSubjectiveScheduler:
         self._belief_evidence_transcriber = belief_evidence_transcriber
         self._belief_attribution_enabled = belief_attribution_enabled
         self._default_world_id = default_world_id
+        self._recall_buffer_store = recall_buffer_store
+        self._error_driven_reinterpretation_enabled = (
+            error_driven_reinterpretation_enabled
+        )
 
     def _resolve_being_id_for_episode(self, episode: SubjectiveEpisode):
         """episode.player_id から being_id を解決する (None なら未解決)。
@@ -292,6 +306,17 @@ class InlineEpisodicSubjectiveScheduler:
             self._put_episode(merged)
             # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
             self._record_belief_evidence_if_applicable(merged, encoding_input)
+            # U9a: 誤差駆動再解釈。同じ完了点で in-context recall observation
+            # 群に prediction_error を刻む (flag OFF / store 未配線なら no-op)。
+            stamp_recall_prediction_outcome_if_applicable(
+                recall_buffer_store=self._recall_buffer_store,
+                error_driven_reinterpretation_enabled=(
+                    self._error_driven_reinterpretation_enabled
+                ),
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                chunk_actions=encoding_input.action_results,
+            )
         except Exception as exc:
             _logger.warning(
                 "InlineEpisodicSubjectiveScheduler: LLM 補完が失敗 (%s)。"
@@ -342,6 +367,25 @@ class InlineEpisodicSubjectiveScheduler:
                 },
             )
 
+    def set_recall_buffer_store(
+        self, recall_buffer_store: Optional[EpisodicRecallBufferRepository]
+    ) -> None:
+        """U9a: recall_buffer を構築後に差し込むための setter。
+
+        wiring の都合上、scheduler は ``build_episodic_stack`` (= recall_buffer
+        を構築する箇所) より先に組み立てる必要がある (world_runtime.py 参照)。
+        コンストラクタ引数だけでは配線順序が回らないため、build_episodic_stack
+        完了後にこの setter で後から差し込む (U7 の semantic recall service
+        holder と同じ「後から差し込む」パターン)。
+        """
+        if recall_buffer_store is not None and not isinstance(
+            recall_buffer_store, EpisodicRecallBufferRepository
+        ):
+            raise TypeError(
+                "recall_buffer_store must be EpisodicRecallBufferRepository or None"
+            )
+        self._recall_buffer_store = recall_buffer_store
+
     def shutdown(self, timeout: Optional[float] = None) -> None:
         # 同期実装はキュー無し。何もしない。
         del timeout
@@ -377,6 +421,8 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         default_world_id: Optional[Any] = None,
         belief_evidence_transcriber: Optional[BeliefEvidenceTranscriber] = None,
         belief_attribution_enabled: bool = False,
+        recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
+        error_driven_reinterpretation_enabled: bool = False,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
@@ -416,6 +462,15 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             raise TypeError(
                 "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
             )
+        # U9a (誤差駆動再解釈): flag OFF (= None) なら従来通り何もしない。
+        if recall_buffer_store is not None and not isinstance(
+            recall_buffer_store, EpisodicRecallBufferRepository
+        ):
+            raise TypeError(
+                "recall_buffer_store must be EpisodicRecallBufferRepository or None"
+            )
+        if not isinstance(error_driven_reinterpretation_enabled, bool):
+            raise TypeError("error_driven_reinterpretation_enabled must be bool")
 
         self._service = service
         self._store = episode_store
@@ -426,6 +481,10 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         self._default_world_id = default_world_id
         self._belief_evidence_transcriber = belief_evidence_transcriber
         self._belief_attribution_enabled = belief_attribution_enabled
+        self._recall_buffer_store = recall_buffer_store
+        self._error_driven_reinterpretation_enabled = (
+            error_driven_reinterpretation_enabled
+        )
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="episodic_subj",
@@ -618,6 +677,17 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             self._put_episode(merged)
             # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
             self._record_belief_evidence_if_applicable(merged, encoding_input)
+            # U9a: 誤差駆動再解釈。同じ完了点で in-context recall observation
+            # 群に prediction_error を刻む (flag OFF / store 未配線なら no-op)。
+            stamp_recall_prediction_outcome_if_applicable(
+                recall_buffer_store=self._recall_buffer_store,
+                error_driven_reinterpretation_enabled=(
+                    self._error_driven_reinterpretation_enabled
+                ),
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                chunk_actions=encoding_input.action_results,
+            )
         except Exception as exc:
             _logger.warning(
                 "ThreadPoolEpisodicSubjectiveScheduler worker failed (%s)。"
@@ -669,6 +739,27 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                     "prediction_context_ids": prediction_context_ids,
                 },
             )
+
+    def set_recall_buffer_store(
+        self, recall_buffer_store: Optional[EpisodicRecallBufferRepository]
+    ) -> None:
+        """U9a: recall_buffer を構築後に差し込むための setter。
+
+        wiring の都合上、scheduler は ``build_episodic_stack`` (= recall_buffer
+        を構築する箇所) より先に組み立てる必要がある (world_runtime.py 参照)。
+        コンストラクタ引数だけでは配線順序が回らないため、build_episodic_stack
+        完了後にこの setter で後から差し込む (U7 の semantic recall service
+        holder と同じ「後から差し込む」パターン)。ワーカー thread から読まれる
+        値だが、代入自体は単純な参照差し替えなので追加の同期は不要
+        (belief_evidence_transcriber 等、既存の他フィールドと同じ前提)。
+        """
+        if recall_buffer_store is not None and not isinstance(
+            recall_buffer_store, EpisodicRecallBufferRepository
+        ):
+            raise TypeError(
+                "recall_buffer_store must be EpisodicRecallBufferRepository or None"
+            )
+        self._recall_buffer_store = recall_buffer_store
 
     def shutdown(self, timeout: Optional[float] = None) -> None:
         """進行中ジョブを drain しつつ executor を閉じる。

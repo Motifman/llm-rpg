@@ -384,6 +384,13 @@ def build_episodic_stack(
     # build_episodic_stack がスケジューラを構築しないため呼び出し側 (world_runtime.py)
     # の責務 (belief_evidence_transcriber と同じ分担)。
     belief_attribution_enabled: bool = False,
+    # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default False = flag OFF):
+    # True のとき chunk_coordinator が完了点で recall_buffer に
+    # prediction_error を刻み、reinterpretation_coordinator が誤差専用
+    # framing で再解釈する。reinterpretation_enabled が False なら
+    # recall_buffer 自体が構築されないため、本 flag だけ True にしても
+    # 安全に縮退する (実害なし)。
+    error_driven_reinterpretation_enabled: bool = False,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
@@ -484,6 +491,50 @@ def build_episodic_stack(
             )
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
+
+    # reinterpretation 拡張 (段1 / default OFF)。ON のとき recall_buffer + journal +
+    # coordinator を直接構築する。escape は chunk_coordinator を既に上で持つので、
+    # chunk_coordinator も束ねる汎用 stack builder は使わず、再解釈に必要な 3 点だけを
+    # 組む (semantic とは独立 = mem_bundle 不要)。
+    # U9a (誤差駆動再解釈): chunk_coordinator が完了点で recall_buffer に
+    # prediction_error を刻めるよう、chunk_coordinator 構築より先にここで
+    # recall_buffer を確定させる (旧配置は chunk_coordinator の後だった)。
+    reinterpretation_coordinator: Optional[Any] = None
+    reinterpretation_journal: Optional[Any] = None
+    prompt_recall_buffer: Optional[Any] = None
+    recall_buffer: Optional[Any] = None
+    if reinterpretation_enabled:
+        from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
+            EpisodicReinterpretationCoordinator,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+            InMemoryEpisodicReinterpretationJournalStore,
+        )
+
+        # escape は in-memory baseline なので具象 in-memory store を直接使う
+        # (full wiring の SQLite 永続経路は実験 runtime では使わない)。
+        recall_buffer = InMemoryEpisodicRecallBufferStore()
+        reinterpretation_journal = InMemoryEpisodicReinterpretationJournalStore()
+        reinterpretation_coordinator = EpisodicReinterpretationCoordinator(
+            episode_store=episode_store,
+            recall_buffer_store=recall_buffer,
+            journal_store=reinterpretation_journal,
+            completion=reinterpretation_completion,
+            being_attachment_resolver=being_attachment_resolver,
+            default_world_id=default_world_id,
+            # U9a: flag OFF (既定) なら system prompt / payload は導入前と
+            # byte 一致 (coordinator 側で保証)。
+            error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
+        )
+        # prompt が recall buffer を覗くのは completion が有効なときだけ。completion が
+        # None だと再解釈 LLM が走らず buffer が pending を溜め続けるだけなので、
+        # prompt builder には None を渡して無駄な query を防ぐ (full wiring と同じ
+        # graceful fallback: _shared_builders.py の prompt_recall_buffer None 化)。
+        prompt_recall_buffer = (
+            recall_buffer if reinterpretation_completion is not None else None
+        )
+
     # #526 後続 Fix A: noun_matcher を chunk_coordinator より先に作り、
     # ChunkEpisodeDraftBuilder と passive_recall の両方に同じ matcher を
     # 渡すことで write/read 経路の cue 生成を対称化する。
@@ -515,6 +566,13 @@ def build_episodic_stack(
         default_world_id=default_world_id,
         belief_evidence_transcriber=belief_evidence_transcriber,
         belief_attribution_enabled=belief_attribution_enabled,
+        # U9a (誤差駆動再解釈): ``prompt_recall_buffer`` を使う (= prompt_builder が
+        # 実際に想起 observation を append する先と同じ store)。completion が
+        # 無く prompt_recall_buffer が None のときは、そもそも observation が
+        # 積まれないため stamp 対象も無い。raw ``recall_buffer`` を渡すと
+        # 「積まれない store に stamp を試みる」無駄な経路になるので避ける。
+        recall_buffer_store=prompt_recall_buffer,
+        error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
     )
     # #526 段階 2: 慣化 sidecar (default off)。enable 時のみ store を作り、
     # passive_recall に注入する。prompt_builder 側にも同 store を渡して
@@ -577,42 +635,6 @@ def build_episodic_stack(
             semantic_memory_store,
             being_attachment_resolver=being_attachment_resolver,
             default_world_id=default_world_id,
-        )
-
-    # reinterpretation 拡張 (段1 / default OFF)。ON のとき recall_buffer + journal +
-    # coordinator を直接構築する。escape は chunk_coordinator を既に上で持つので、
-    # chunk_coordinator も束ねる汎用 stack builder は使わず、再解釈に必要な 3 点だけを
-    # 組む (semantic とは独立 = mem_bundle 不要)。
-    reinterpretation_coordinator: Optional[Any] = None
-    reinterpretation_journal: Optional[Any] = None
-    prompt_recall_buffer: Optional[Any] = None
-    if reinterpretation_enabled:
-        from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
-            EpisodicReinterpretationCoordinator,
-        )
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-            InMemoryEpisodicRecallBufferStore,
-            InMemoryEpisodicReinterpretationJournalStore,
-        )
-
-        # escape は in-memory baseline なので具象 in-memory store を直接使う
-        # (full wiring の SQLite 永続経路は実験 runtime では使わない)。
-        recall_buffer = InMemoryEpisodicRecallBufferStore()
-        reinterpretation_journal = InMemoryEpisodicReinterpretationJournalStore()
-        reinterpretation_coordinator = EpisodicReinterpretationCoordinator(
-            episode_store=episode_store,
-            recall_buffer_store=recall_buffer,
-            journal_store=reinterpretation_journal,
-            completion=reinterpretation_completion,
-            being_attachment_resolver=being_attachment_resolver,
-            default_world_id=default_world_id,
-        )
-        # prompt が recall buffer を覗くのは completion が有効なときだけ。completion が
-        # None だと再解釈 LLM が走らず buffer が pending を溜め続けるだけなので、
-        # prompt builder には None を渡して無駄な query を防ぐ (full wiring と同じ
-        # graceful fallback: _shared_builders.py の prompt_recall_buffer None 化)。
-        prompt_recall_buffer = (
-            recall_buffer if reinterpretation_completion is not None else None
         )
 
     return EpisodicStack(

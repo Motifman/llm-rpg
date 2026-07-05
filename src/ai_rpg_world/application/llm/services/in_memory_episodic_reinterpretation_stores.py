@@ -101,6 +101,32 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
                 )
         self._pending[being_id] = list(observations)
 
+    def stamp_prediction_outcome_by_being(
+        self,
+        being_id: BeingId,
+        prediction_context_id: str,
+        prediction_error: str,
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(prediction_context_id, str) or not prediction_context_id.strip():
+            raise ValueError("prediction_context_id must be a non-empty str")
+        if not isinstance(prediction_error, str) or not prediction_error.strip():
+            raise ValueError("prediction_error must be a non-empty str")
+        rows = self._pending.get(being_id, [])
+        updated: list[EpisodicRecallObservation] = []
+        for row in rows:
+            if (
+                row.prediction_context_id == prediction_context_id
+                and row.prediction_outcome_error is None
+            ):
+                updated.append(
+                    replace(row, prediction_outcome_error=prediction_error)
+                )
+            else:
+                updated.append(row)
+        self._pending[being_id] = updated
+
 
 class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJournalRepository):
     """Being ごとに再解釈履歴と active pointer を保持する。"""

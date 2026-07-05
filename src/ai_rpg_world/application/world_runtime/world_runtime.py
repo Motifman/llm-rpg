@@ -3616,12 +3616,14 @@ def create_world_runtime(
             log_belief_attribution_enabled_state,
             log_belief_consolidation_enabled_state,
             log_belief_evidence_enabled_state,
+            log_error_driven_reinterpretation_enabled_state,
             log_memo_distill_enabled_state,
             log_salience_structured_failure_enabled_state,
             log_unconscious_context_enabled_state,
             resolve_belief_attribution_enabled,
             resolve_belief_consolidation_enabled,
             resolve_belief_evidence_enabled,
+            resolve_error_driven_reinterpretation_enabled,
             resolve_memo_distill_enabled,
             resolve_salience_structured_failure_enabled,
             resolve_unconscious_context_enabled,
@@ -3629,6 +3631,15 @@ def create_world_runtime(
 
         _belief_evidence_enabled = resolve_belief_evidence_enabled()
         log_belief_evidence_enabled_state(_belief_evidence_enabled)
+        # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default OFF): 実効的には
+        # reinterpretation_enabled (段1) と PREDICTION_CONTEXT_ID_ENABLED (U1) の
+        # 両方が ON でないと stamp 対象の recall observation が無く安全に縮退する。
+        _error_driven_reinterpretation_enabled = (
+            resolve_error_driven_reinterpretation_enabled()
+        )
+        log_error_driven_reinterpretation_enabled_state(
+            _error_driven_reinterpretation_enabled
+        )
         # U4 (予測誤差統一設計 部品3 / default OFF): attribution + CONFIRMATION。
         # 実効的には U1 (PREDICTION_CONTEXT_ID_ENABLED) が ON でないと belief_ids
         # が流れてこないが、ここでは独立に flag を解決するだけに留める
@@ -3785,6 +3796,14 @@ def create_world_runtime(
                     # 行うかどうか (transcriber が None なら本来無関係だが、
                     # 明示的に flag を伝播しておく)。
                     belief_attribution_enabled=_belief_attribution_enabled,
+                    # U9a: default False。recall_buffer_store 自体は
+                    # build_episodic_stack がこの後で構築するため、この時点では
+                    # 未確定 (= None のまま)。build_episodic_stack 完了後に
+                    # set_recall_buffer_store で差し込む (下の「U9a: recall_buffer
+                    # を scheduler に後から差し込む」ブロックを参照)。
+                    error_driven_reinterpretation_enabled=(
+                        _error_driven_reinterpretation_enabled
+                    ),
                 )
                 # 各 player の persona_block を player_id 引きで返す provider。
                 # world_character (= 操作対象) は rich persona、その他は spawn 名
@@ -3992,7 +4011,26 @@ def create_world_runtime(
             # U4 (予測誤差統一設計 部品3): 同期経路 (chunk_coordinator) 用。
             # 非同期経路 (scheduler) には上で個別に渡し済み。
             belief_attribution_enabled=_belief_attribution_enabled,
+            # U9a (誤差駆動再解釈): 同期経路 (chunk_coordinator) 用。非同期経路
+            # (scheduler) は recall_buffer 確定後に下で set_recall_buffer_store
+            # を呼んで差し込む (scheduler 自体は build_episodic_stack より先に
+            # 構築済のため、コンストラクタでは渡せない)。
+            error_driven_reinterpretation_enabled=(
+                _error_driven_reinterpretation_enabled
+            ),
         )
+
+        # U9a: recall_buffer を scheduler に後から差し込む。
+        # subjective_scheduler は build_episodic_stack より先に構築されている
+        # ため (Pattern A の episode_store 共有と同じ理由)、recall_buffer が
+        # 確定するこの時点で set_recall_buffer_store により差し込む。
+        # ``recall_buffer_store`` は reinterpretation_completion が無いと None
+        # のまま (= 再解釈 LLM が走らず stamp しても意味が無いので同じ条件で
+        # 縮退させる)。
+        if subjective_scheduler is not None:
+            subjective_scheduler.set_recall_buffer_store(
+                runtime._episodic_stack.recall_buffer_store
+            )
 
         # U7: 無意識コンテキスト用 semantic recall service を確定させる。
         # build_episodic_stack が semantic_enabled=True のときに初めて

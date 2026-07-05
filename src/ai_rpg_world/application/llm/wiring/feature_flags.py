@@ -622,3 +622,51 @@ def log_unconscious_context_enabled_state(enabled: bool) -> None:
         ENV_UNCONSCIOUS_CONTEXT_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# 想起の信用割り当て・誤差駆動再解釈 (U9a)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_ERROR_DRIVEN_REINTERPRETATION_ENABLED = "ERROR_DRIVEN_REINTERPRETATION_ENABLED"
+
+
+def resolve_error_driven_reinterpretation_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """「この記憶を思い出したのに予測が外れた」を再解釈に還流させるか
+    (予測誤差統一設計 部品5 の外れ側 = U9a。的中側の ranking boost は別 PR)。
+
+    ``ERROR_DRIVEN_REINTERPRETATION_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    OFF (既定) のとき:
+    - chunk 主観補完の完了点 (同期 chunk_coordinator / 非同期 scheduler の
+      いずれも) で recall buffer への stamp が一切行われない
+      (``EpisodicRecallObservation.prediction_outcome_error`` は常に None)
+    - ``EpisodicReinterpretationCoordinator`` の system prompt / recall_context
+      payload は導入前と byte 一致 (誤差駆動節が一切出ない)
+
+    ON にするには実質的に ``PREDICTION_CONTEXT_ID_ENABLED`` (U1) と
+    episodic reinterpretation (段1) の両方が ON である必要がある。どちらか
+    が欠けていても本 flag だけ ON にして構わない: prediction_context_id が
+    action に乗らない/recall buffer 自体が組まれないため、stamp 対象の
+    recall observation が存在せず安全に縮退する (実害なし)。
+
+    詳細は docs/memory_system/prediction_error_unified_memory_design.md
+    「部品 5: 想起の信用割り当て」節、
+    docs/memory_system/prediction_error_unified_implementation_plan.md の
+    U9 節。
+    """
+    return _parse_bool_env(
+        ENV_ERROR_DRIVEN_REINTERPRETATION_ENABLED, env=env, default=False
+    )
+
+
+def log_error_driven_reinterpretation_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_ERROR_DRIVEN_REINTERPRETATION_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )

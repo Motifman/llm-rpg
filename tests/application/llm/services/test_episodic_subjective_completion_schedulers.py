@@ -121,6 +121,52 @@ def _build_encoding_and_draft_with_attribution(
     return enc, draft, being_id, resolver, world_id
 
 
+def _build_encoding_and_draft_with_prediction_context_id(
+    *,
+    player_id: int = 7,
+    prediction_context_id: str | None = None,
+) -> tuple:
+    """U9a: 誤差駆動再解釈の刻み対象を特定する ``prediction_context_id`` を
+    乗せた ChunkEncodingInput + draft を作る。"""
+    t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
+    act = ActionResultEntry(
+        occurred_at=t,
+        action_summary="待機した",
+        result_summary="時間が進んだ",
+        tool_name="wait",
+        success=True,
+        prediction_context_id=prediction_context_id,
+    )
+    enc = build_chunk_encoding_input(PlayerId(player_id), (), (act,))
+    draft = ChunkEpisodeDraftBuilder().build(enc)
+    being_id, resolver, world_id = _provision_scheduler(player_id)
+    return enc, draft, being_id, resolver, world_id
+
+
+def _seed_recall_observation(store, being_id, *, prediction_context_id: str) -> None:
+    """U9a テスト用: 刻み対象となる pending recall observation を 1 件仕込む。"""
+    from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
+        EpisodicRecallObservation,
+    )
+
+    store.append_by_being(
+        being_id,
+        EpisodicRecallObservation(
+            recall_id="r-1",
+            player_id=1,
+            episode_id="ep-source",
+            recalled_at=datetime(2026, 6, 1, 8, 0, tzinfo=timezone.utc),
+            source_axes=("temporal",),
+            current_state_snapshot="state",
+            recent_events_snapshot="events",
+            persona_snapshot="persona",
+            situation_cues=("cue",),
+            turn_index=1,
+            prediction_context_id=prediction_context_id,
+        ),
+    )
+
+
 def _provision_scheduler(player_id: int):
     """Phase 3 Step 3e-3: 各テストで scheduler に Resolver を inject するための
     Being+Resolver+WorldId 一式を組み立てる helper。
@@ -1044,3 +1090,206 @@ class TestThreadPoolSchedulerBeliefAttribution:
         rows = buffer_store.list_all_by_being(being_id)
         assert len(rows) == 1
         assert rows[0].in_context_belief_ids == ()
+
+
+class TestInlineSchedulerRecallPredictionOutcomeStamping:
+    """U9a (誤差駆動再解釈): InlineEpisodicSubjectiveScheduler の完了点での刻み。"""
+
+    def test_flag_ON_で_prediction_error_ありなら_recall_observation_に誤差が刻まれる(
+        self,
+    ) -> None:
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
+
+        enc, draft, being_id, resolver, world_id = (
+            _build_encoding_and_draft_with_prediction_context_id(
+                prediction_context_id="pc-1"
+            )
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        recall_buffer = InMemoryEpisodicRecallBufferStore()
+        _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "待っても何も起きなかった",
+            }
+        )
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            recall_buffer_store=recall_buffer,
+            error_driven_reinterpretation_enabled=True,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+
+        obs = recall_buffer.list_pending_by_being(being_id)[0]
+        assert obs.prediction_outcome_error == "待っても何も起きなかった"
+
+    def test_flag_OFF_既定なら誤差は刻まれない(self) -> None:
+        """error_driven_reinterpretation_enabled=False (既定) は導入前と一致。"""
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
+
+        enc, draft, being_id, resolver, world_id = (
+            _build_encoding_and_draft_with_prediction_context_id(
+                prediction_context_id="pc-1"
+            )
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        recall_buffer = InMemoryEpisodicRecallBufferStore()
+        _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "待っても何も起きなかった",
+            }
+        )
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            recall_buffer_store=recall_buffer,
+            error_driven_reinterpretation_enabled=False,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+
+        obs = recall_buffer.list_pending_by_being(being_id)[0]
+        assert obs.prediction_outcome_error is None
+
+    def test_recall_buffer_store_未配線_既定なら例外を投げず完了する(self) -> None:
+        """recall_buffer_store=None (既定) は既存動作と完全互換。"""
+        enc, draft, being_id, resolver, world_id = (
+            _build_encoding_and_draft_with_prediction_context_id(
+                prediction_context_id="pc-1"
+            )
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "外れた",
+            }
+        )
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            error_driven_reinterpretation_enabled=True,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        ep_after = store.get_by_being(being_id, draft.episode_id)
+        assert ep_after is not None
+        assert ep_after.prediction_error == "外れた"
+
+    def test_recall_buffer_store_型違反は_TypeError(self) -> None:
+        port = _StubPort()
+        store = InMemorySubjectiveEpisodeStore()
+        with pytest.raises(TypeError):
+            InlineEpisodicSubjectiveScheduler(
+                EpisodicChunkSubjectiveFieldsService(port),
+                store,
+                recall_buffer_store="not_a_store",  # type: ignore[arg-type]
+            )
+
+
+class TestThreadPoolSchedulerRecallPredictionOutcomeStamping:
+    """U9a (誤差駆動再解釈): ThreadPoolEpisodicSubjectiveScheduler の完了点での刻み。"""
+
+    def test_flag_ON_で_prediction_error_ありなら_recall_observation_に誤差が刻まれる(
+        self,
+    ) -> None:
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
+
+        enc, draft, being_id, resolver, world_id = (
+            _build_encoding_and_draft_with_prediction_context_id(
+                prediction_context_id="pc-async"
+            )
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        recall_buffer = InMemoryEpisodicRecallBufferStore()
+        _seed_recall_observation(
+            recall_buffer, being_id, prediction_context_id="pc-async"
+        )
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "外れた",
+            }
+        )
+        scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            recall_buffer_store=recall_buffer,
+            error_driven_reinterpretation_enabled=True,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.shutdown(timeout=5.0)
+
+        obs = recall_buffer.list_pending_by_being(being_id)[0]
+        assert obs.prediction_outcome_error == "外れた"
+
+    def test_flag_OFF_既定なら誤差は刻まれない(self) -> None:
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
+
+        enc, draft, being_id, resolver, world_id = (
+            _build_encoding_and_draft_with_prediction_context_id(
+                prediction_context_id="pc-async"
+            )
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        recall_buffer = InMemoryEpisodicRecallBufferStore()
+        _seed_recall_observation(
+            recall_buffer, being_id, prediction_context_id="pc-async"
+        )
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "外れた",
+            }
+        )
+        scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            recall_buffer_store=recall_buffer,
+            error_driven_reinterpretation_enabled=False,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.shutdown(timeout=5.0)
+
+        obs = recall_buffer.list_pending_by_being(being_id)[0]
+        assert obs.prediction_outcome_error is None
+
+    def test_recall_buffer_store_型違反は_TypeError(self) -> None:
+        port = _StubPort()
+        store = InMemorySubjectiveEpisodeStore()
+        with pytest.raises(TypeError):
+            ThreadPoolEpisodicSubjectiveScheduler(
+                EpisodicChunkSubjectiveFieldsService(port),
+                store,
+                recall_buffer_store="not_a_store",  # type: ignore[arg-type]
+            )

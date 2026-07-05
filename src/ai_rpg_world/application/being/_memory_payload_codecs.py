@@ -241,6 +241,7 @@ def recall_observation_to_dict(obs: EpisodicRecallObservation) -> dict[str, Any]
         "situation_cues": list(obs.situation_cues),
         "turn_index": obs.turn_index,
         "prediction_context_id": obs.prediction_context_id,
+        "prediction_outcome_error": obs.prediction_outcome_error,
     }
 
 
@@ -258,6 +259,8 @@ def dict_to_recall_observation(data: dict[str, Any]) -> EpisodicRecallObservatio
         turn_index=int(data.get("turn_index", 0)),
         # U1: 旧 snapshot にはキー自体が無いので None に倒す (後方互換)。
         prediction_context_id=data.get("prediction_context_id"),
+        # U9a: 旧 snapshot にはキー自体が無いので None に倒す (後方互換)。
+        prediction_outcome_error=data.get("prediction_outcome_error"),
     )
 
 
