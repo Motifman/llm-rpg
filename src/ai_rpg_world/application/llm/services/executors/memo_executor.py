@@ -9,6 +9,7 @@ Issue #188 Phase 1a で ``TodoToolExecutor`` から改名・拡張。
 - 旧 ``TodoToolExecutor`` は本クラスのエイリアスとして残す (後方互換)
 """
 
+import logging
 from typing import Any, Callable, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -28,6 +29,9 @@ from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepos
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
+from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import (
+    MemoDistillEvidenceTranscriber,
+)
 from ai_rpg_world.application.llm.services.memo_id_display import (
     resolve_memo_id_prefix,
     short_memo_id,
@@ -44,6 +48,7 @@ from ai_rpg_world.application.llm.tool_constants import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from datetime import datetime
 
+_logger = logging.getLogger(__name__)
 
 # memo_done の fulfillment_context に格納する直近観測 / 行動結果の件数。
 # 多すぎると entry が肥大化し episodic cue で扱いにくいので少数で抑える。
@@ -73,6 +78,7 @@ class MemoToolExecutor:
         trace_recorder: Optional[ITraceRecorder] = None,
         being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
         default_world_id: Optional[WorldId] = None,
+        memo_distill_transcriber: Optional[MemoDistillEvidenceTranscriber] = None,
     ) -> None:
         # 後方互換: 旧 kwarg ``todo_store`` を受け付ける (Issue #188 リネーム)。
         # 両方指定なら memo_store を優先。
@@ -90,6 +96,12 @@ class MemoToolExecutor:
             )
         if default_world_id is not None and not isinstance(default_world_id, WorldId):
             raise TypeError("default_world_id must be WorldId")
+        if memo_distill_transcriber is not None and not isinstance(
+            memo_distill_transcriber, MemoDistillEvidenceTranscriber
+        ):
+            raise TypeError(
+                "memo_distill_transcriber must be MemoDistillEvidenceTranscriber"
+            )
         self._memo_store = memo_store
         self._sliding_window = sliding_window
         self._action_result_store = action_result_store
@@ -97,6 +109,31 @@ class MemoToolExecutor:
         self._trace_recorder: ITraceRecorder = trace_recorder or NullTraceRecorder()
         self._resolver = being_attachment_resolver
         self._default_world_id = default_world_id
+        # U5 (MEMO_DISTILL): wiring 時点では episodic_stack がまだ構築されて
+        # いないことがあるため (world_runtime.create_world_runtime の構築順序
+        # 上、本 executor は belief_evidence_buffer_store より先に作られる)、
+        # constructor 注入に加えて post-hoc の setter (set_memo_distill_transcriber)
+        # でも差し込めるようにする。flag OFF なら None のまま (= 転記コード
+        # パスは通るが不活性)。
+        self._memo_distill_transcriber = memo_distill_transcriber
+
+    def set_memo_distill_transcriber(
+        self, transcriber: Optional[MemoDistillEvidenceTranscriber]
+    ) -> None:
+        """wiring 完了後に MEMO_DISTILL transcriber を差し込む (post-hoc 注入)。
+
+        ``create_world_runtime`` は belief_evidence_buffer_store /
+        episode_store を本 executor の構築後に確定させるため、constructor
+        注入だけでは間に合わない。既存の ``set_trace_recorder`` 等と同じ
+        post-hoc setter パターンに揃える。
+        """
+        if transcriber is not None and not isinstance(
+            transcriber, MemoDistillEvidenceTranscriber
+        ):
+            raise TypeError(
+                "transcriber must be MemoDistillEvidenceTranscriber or None"
+            )
+        self._memo_distill_transcriber = transcriber
 
     def _require_being_id(self, player_id: PlayerId) -> BeingId:
         """Phase 3 Step 3a-3: handler 呼び出し時点で Resolver/WorldId 必須。
@@ -149,6 +186,40 @@ class MemoToolExecutor:
         return store.complete_by_being(
             being_id, memo_id, fulfillment_context=fulfillment_context
         )
+
+    def _record_memo_distill_if_wired(
+        self,
+        player_id: PlayerId,
+        *,
+        memo_content: str,
+        fulfillment_context: Optional[MemoFulfillmentContext],
+    ) -> None:
+        """U5 (MEMO_DISTILL): memo 完了を無条件で BeliefEvidence に転記する。
+
+        transcriber 未注入 (flag OFF) なら何もしない。memo_content が空
+        (通常は memo_add 側のバリデーションで発生しないはずだが、念のため)
+        なら transcriber 側の型ガードに任せず static に skip する。転記が
+        例外を投げても memo_done 本体の成功を巻き込まない (silent failure
+        より「本体は成功、転記だけ諦めて warning ログ」を選ぶ既存方針)。
+        """
+        if self._memo_distill_transcriber is None:
+            return
+        if not memo_content.strip():
+            return
+        being_id = self._require_being_id(player_id)
+        try:
+            self._memo_distill_transcriber.record_from_memo(
+                being_id,
+                memo_content=memo_content,
+                fulfillment_context=fulfillment_context,
+            )
+        except Exception:
+            _logger.warning(
+                "MemoToolExecutor: memo_distill_transcriber.record_from_memo "
+                "failed for being_id=%s; skipping",
+                being_id.value,
+                exc_info=True,
+            )
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。memo_store が None の場合は空辞書。"""
@@ -267,7 +338,12 @@ class MemoToolExecutor:
             # Issue #276: memo_id は short prefix (例: "a3b9f1") でも full UUID
             # でも受け付ける。uncompleted memo の ID 集合に対して prefix match で
             # 解決し、ambiguous なら個別に失敗扱いにする。
-            uncompleted_ids = [e.id for e in self._list_uncompleted(pid)]
+            uncompleted_entries = self._list_uncompleted(pid)
+            uncompleted_ids = [e.id for e in uncompleted_entries]
+            # U5 (MEMO_DISTILL): 転記に memo 本文が要るが、完了後は memo_store
+            # から取得できなくなる (completed 済 entry は uncompleted 一覧に
+            # 出ない) ため、完了前にここで id → content を控えておく。
+            content_by_id = {e.id: e.content for e in uncompleted_entries}
             completed: list[str] = []  # full UUID
             not_found: list[str] = []  # 入力のまま (短縮形 or 入力 ID)
             ambiguous: list[tuple[str, list[str]]] = []  # (入力, candidates)
@@ -299,6 +375,11 @@ class MemoToolExecutor:
                         tick=self._current_tick(),
                         player_id=player_id,
                         memo_id=resolved,  # trace には full UUID を残す (grep 性)
+                    )
+                    self._record_memo_distill_if_wired(
+                        pid,
+                        memo_content=content_by_id.get(resolved, ""),
+                        fulfillment_context=fulfillment_context,
                     )
                 else:
                     not_found.append(raw_id)

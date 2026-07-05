@@ -17,6 +17,7 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     DEFAULT_SEMANTIC_PASSIVE_TOP_K,
     ENV_BELIEF_EVIDENCE_ENABLED,
     ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
+    ENV_MEMO_DISTILL_ENABLED,
     ENV_PREDICTION_CONTEXT_ID_ENABLED,
     ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED,
     ENV_SEMANTIC_PASSIVE_TOP_K,
@@ -29,6 +30,7 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW,
     log_belief_evidence_enabled_state,
     log_episodic_explore_related_state,
+    log_memo_distill_enabled_state,
     log_prediction_context_id_state,
     log_semantic_passive_top_k_state,
     log_semantic_search_state,
@@ -36,6 +38,7 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     log_short_term_memory_scheduler_mode_state,
     resolve_belief_evidence_enabled,
     resolve_episodic_explore_related_enabled,
+    resolve_memo_distill_enabled,
     resolve_prediction_context_id_enabled,
     resolve_salience_structured_failure_enabled,
     resolve_semantic_passive_top_k,
@@ -447,3 +450,36 @@ class TestResolveSalienceStructuredFailureEnabled:
             resolve_salience_structured_failure_enabled(
                 env={ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED: "yesplz"}
             )
+
+
+class TestResolveMemoDistillEnabled:
+    """U5: ``MEMO_DISTILL_ENABLED`` の env パース。"""
+
+    def test_env_未設定なら_default_OFF(self) -> None:
+        assert resolve_memo_distill_enabled(env={}) is False
+
+    @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
+    def test_truthy_な値は_ON(self, raw: str) -> None:
+        assert resolve_memo_distill_enabled(
+            env={ENV_MEMO_DISTILL_ENABLED: raw}
+        ) is True
+
+    @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
+    def test_falsy_な値は_OFF(self, raw: str) -> None:
+        assert resolve_memo_distill_enabled(
+            env={ENV_MEMO_DISTILL_ENABLED: raw}
+        ) is False
+
+    def test_未知の値は_ValueError(self) -> None:
+        with pytest.raises(ValueError):
+            resolve_memo_distill_enabled(
+                env={ENV_MEMO_DISTILL_ENABLED: "yesplz"}
+            )
+
+    def test_log_state_はレベル情報でログを出す(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.INFO):
+            log_memo_distill_enabled_state(True)
+            log_memo_distill_enabled_state(False)
+        messages = [rec.message for rec in caplog.records]
+        assert any("ENABLED" in m for m in messages)
+        assert any("DISABLED" in m for m in messages)

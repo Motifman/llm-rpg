@@ -493,3 +493,39 @@ def log_salience_structured_failure_enabled_state(enabled: bool) -> None:
         ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Semantic memory: MEMO_DISTILL 転記 (U5)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_MEMO_DISTILL_ENABLED = "MEMO_DISTILL_ENABLED"
+
+
+def resolve_memo_distill_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """memo_done 完了時に MEMO_DISTILL ``BeliefEvidence`` 転記を行うか。
+
+    ``MEMO_DISTILL_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    ON でも memo / memo_done の応答文言や既存挙動は一切変わらない。完了した
+    memo 本文 + fulfillment_context を無条件で evidence buffer に積むだけ
+    (ノイズかどうかの判定はしない)。固着パス (discard / create の意味判定)
+    は U3b で実装済みの ``BeliefConsolidationCoordinator`` の仕事で、本 flag
+    のスコープ外。
+
+    詳細は docs/memory_system/semantic_learning_consolidation_design.md
+    「証拠の入口」表の MEMO_DISTILL 行。
+    """
+    return _parse_bool_env(ENV_MEMO_DISTILL_ENABLED, env=env, default=False)
+
+
+def log_memo_distill_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_MEMO_DISTILL_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )
