@@ -157,6 +157,34 @@ def _init_memory_graph_v5_drop_legacy_memory_links(connection: sqlite3.Connectio
     )
 
 
+def _init_memory_graph_v6_semantic_belief_journal(connection: sqlite3.Connection) -> None:
+    """U3a: belief journal 用フィールドを ``semantic_memory_entries_by_being`` に追加。
+
+    既存 DB (このマイグレーション未適用) を開いても ``apply_migrations`` が
+    version を見て一度だけ ``ALTER TABLE`` を実行するので、後方互換は
+    マイグレーション機構そのものが保証する (壊れた状態で始めない)。
+
+    - ``belief_id``: 空文字 default。読み出し側 (``SemanticMemoryEntry``) が
+      空文字を entry_id にフォールバックするので、旧行もそのまま読める
+    - ``status``: 全旧行は "active" 相当として読める
+    - ``supersedes`` / 証拠 id 群: 旧行には存在しないので NULL / 空配列 default
+    """
+    connection.executescript(
+        """
+        ALTER TABLE semantic_memory_entries_by_being
+            ADD COLUMN belief_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE semantic_memory_entries_by_being
+            ADD COLUMN status TEXT NOT NULL DEFAULT 'active';
+        ALTER TABLE semantic_memory_entries_by_being
+            ADD COLUMN supersedes TEXT;
+        ALTER TABLE semantic_memory_entries_by_being
+            ADD COLUMN support_evidence_ids_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE semantic_memory_entries_by_being
+            ADD COLUMN contradict_evidence_ids_json TEXT NOT NULL DEFAULT '[]';
+        """
+    )
+
+
 def apply_memory_graph_migrations(connection: sqlite3.Connection) -> int:
     """リンク・セマンティック表を同一 DB に作成する。namespace はエピソード本体と独立。"""
     return apply_migrations(
@@ -168,6 +196,7 @@ def apply_memory_graph_migrations(connection: sqlite3.Connection) -> int:
             SqliteMigration(3, _init_memory_graph_v3_drop_legacy_semantic),
             SqliteMigration(4, _init_memory_graph_v4_memory_link_by_being),
             SqliteMigration(5, _init_memory_graph_v5_drop_legacy_memory_links),
+            SqliteMigration(6, _init_memory_graph_v6_semantic_belief_journal),
         ],
     )
 
