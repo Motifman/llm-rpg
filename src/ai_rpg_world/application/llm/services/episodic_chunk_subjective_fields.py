@@ -57,6 +57,35 @@ prediction_error は「行動前の予測 (expected) と実際の結果 (observe
 
 入力に無い人物・場所・アイテム・結果・成否を新たに創作しない。
 キューや observed の事実と矛盾しない表現にする。"""
+
+# U6 (予測誤差統一設計 / salience): SALIENCE_STRUCTURED_FAILURE_ENABLED が
+# OFF のときは既定 prompt を byte 不変に保つため、salience 節は文字列
+# 追記(置換)で組み立てる。既存定数 _SYSTEM_EPISODE_SUBJECTIVE_JSON はテスト
+# 資産 (past-tense regression test 等) が直接参照しているため変更しない。
+_SALIENCE_KEY_LIST_OLD = "キーは次の 4 つ: interpreted, recall_text, prediction_error, heading。"
+_SALIENCE_KEY_LIST_NEW = "キーは次の 5 つ: interpreted, recall_text, prediction_error, heading, salience。"
+_SALIENCE_INSTRUCTION = """
+
+salience は "low" または "high" のいずれか。high は「このキャラにとって
+予測が大きく外れた / 初めての重大事」だけに使う判定で、日常的な出来事や
+軽い驚きは low にする。判断に迷ったら low にする。"""
+
+
+def _build_system_prompt(*, salience_enabled: bool) -> str:
+    """salience 節を条件付きで足した system prompt を組み立てる。
+
+    flag OFF のときは ``_SYSTEM_EPISODE_SUBJECTIVE_JSON`` をそのまま返す
+    (= 既定 prompt が byte 不変であることをここで保証する)。
+    """
+    if not salience_enabled:
+        return _SYSTEM_EPISODE_SUBJECTIVE_JSON
+    assert _SALIENCE_KEY_LIST_OLD in _SYSTEM_EPISODE_SUBJECTIVE_JSON
+    with_new_keys = _SYSTEM_EPISODE_SUBJECTIVE_JSON.replace(
+        _SALIENCE_KEY_LIST_OLD, _SALIENCE_KEY_LIST_NEW
+    )
+    return with_new_keys + _SALIENCE_INSTRUCTION
+
+
 _MAX_SUBJECTIVE_FIELD_CHARS = 700
 # heading は afterglow index で並べる 1 行見出し。長すぎると視認性を損ね、
 # prompt も嵩むため切り詰める。30 文字は「行動 + 印象的な 1 要素」を入れる
@@ -196,6 +225,23 @@ def _merge_picks(
     return llm_value if llm_value is not None else fallback
 
 
+_VALID_SALIENCE_VALUES = ("low", "high")
+
+
+def _normalize_salience(raw: Any) -> str:
+    """LLM 出力の salience を "low"/"high" に正規化する。
+
+    欠損・非 str・不正な値 (typo 等) は全て "low" に倒す (parse 失敗時は
+    「一撃学習を起動しない」= 安全側に倒れる方針)。
+    """
+    if not isinstance(raw, str):
+        return "low"
+    normalized = raw.strip().lower()
+    if normalized in _VALID_SALIENCE_VALUES:
+        return normalized
+    return "low"
+
+
 def _structured_prediction_error_fallback(
     draft: SubjectiveEpisode,
     encoding_input: ChunkEncodingInput,
@@ -223,10 +269,18 @@ class EpisodicChunkSubjectiveFieldsService:
     LLM 値が無いときは構造的失敗のみの保守 fallback (それも無ければ None)。
     """
 
-    def __init__(self, completion: IEpisodicChunkSubjectiveCompletionPort) -> None:
+    def __init__(
+        self,
+        completion: IEpisodicChunkSubjectiveCompletionPort,
+        *,
+        salience_enabled: bool = False,
+    ) -> None:
         if not isinstance(completion, IEpisodicChunkSubjectiveCompletionPort):
             raise TypeError("completion must implement IEpisodicChunkSubjectiveCompletionPort")
+        if not isinstance(salience_enabled, bool):
+            raise TypeError("salience_enabled must be bool")
         self._completion = completion
+        self._salience_enabled = salience_enabled
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def merge_llm_subjective_fields(
@@ -252,6 +306,12 @@ class EpisodicChunkSubjectiveFieldsService:
 
         fallback_i = _template_interpreted(draft)
         fallback_r = _template_recall(draft)
+        response_format = (
+            '{"interpreted": "...", "recall_text": "...", "prediction_error": "...", '
+            '"heading": "...", "salience": "low"}'
+            if self._salience_enabled
+            else '{"interpreted": "...", "recall_text": "...", "prediction_error": "...", "heading": "..."}'
+        )
         user_sections = [
             "## 人物像（ペルソナ断片）",
             persona_text.strip() if persona_text.strip() else "(なし)",
@@ -260,16 +320,20 @@ class EpisodicChunkSubjectiveFieldsService:
             "## ソース事実（検証用メタ。新事実の根拠にしない）",
             _format_source_facts(encoding_input),
             "## 応答形式",
-            '{"interpreted": "...", "recall_text": "...", "prediction_error": "...", "heading": "..."}',
+            response_format,
         ]
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": _SYSTEM_EPISODE_SUBJECTIVE_JSON},
+            {
+                "role": "system",
+                "content": _build_system_prompt(salience_enabled=self._salience_enabled),
+            },
             {"role": "user", "content": "\n\n".join(user_sections)},
         ]
         interp_llm: str | None = None
         recall_llm: str | None = None
         pred_err_llm: str | None = None
         heading_llm: str | None = None
+        salience: str = "low"
         try:
             raw_obj = self._completion.complete_episode_subjective_json(messages)
             if not isinstance(raw_obj, dict):
@@ -284,6 +348,11 @@ class EpisodicChunkSubjectiveFieldsService:
                 # 失敗時 / 欠落時は None に倒し、SubjectiveEpisode に渡る前に
                 # 30 文字へ切り詰める (後続テストで保証)。
                 heading_llm = _normalize_heading(raw_obj.get("heading"))
+                # U6: flag OFF のときは LLM が誤って salience を返しても無視
+                # し、episode.salience は常に "low" のまま (= 導入前と同一
+                # 挙動を保証する)。
+                if self._salience_enabled:
+                    salience = _normalize_salience(raw_obj.get("salience"))
         except LlmApiCallException as e:
             self._logger.warning(
                 "Episode subjective LLM failed (%s); using template fallback",
@@ -309,6 +378,7 @@ class EpisodicChunkSubjectiveFieldsService:
             recall_text=recall_text,
             prediction_error=prediction_error,
             heading=heading_llm,
+            salience=salience,
         )
         self._assert_rule_fields_unchanged(draft, merged)
         return merged

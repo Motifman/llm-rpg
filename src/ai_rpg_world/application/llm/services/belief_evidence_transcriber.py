@@ -38,7 +38,6 @@ from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repos
     BeliefEvidenceBufferRepository,
 )
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
-    BELIEF_EVIDENCE_SALIENCE_LOW,
     BeliefEvidence,
 )
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
@@ -98,7 +97,12 @@ class BeliefEvidenceTranscriber:
             episode_ids=(episode.episode_id,),
             cue_signature=build_belief_evidence_cue_signature(episode),
             text=episode.prediction_error,
-            salience=BELIEF_EVIDENCE_SALIENCE_LOW,
+            # U6 (予測誤差統一設計 / salience): chunk 主観補完 LLM が付けた
+            # episode.salience ("low"/"high") をそのまま転記する。
+            # SALIENCE_STRUCTURED_FAILURE_ENABLED が OFF のときは
+            # episode.salience が常に "low" のままなので、本行の挙動は
+            # 導入前 (BELIEF_EVIDENCE_SALIENCE_LOW 固定) と一致する。
+            salience=episode.salience,
             occurred_at=episode.occurred_at,
             tick=self._resolve_tick(),
         )

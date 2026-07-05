@@ -447,3 +447,49 @@ def log_belief_consolidation_enabled_state(enabled: bool) -> None:
         ENV_BELIEF_CONSOLIDATION_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Semantic memory: salience + STRUCTURED_FAILURE (U6)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED = "SALIENCE_STRUCTURED_FAILURE_ENABLED"
+
+
+def resolve_salience_structured_failure_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """salience 判定 + STRUCTURED_FAILURE 転記 + high salience cap を動かすか。
+
+    ``SALIENCE_STRUCTURED_FAILURE_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    OFF (既定) のとき:
+    - chunk 主観補完 LLM の system prompt に salience 節は出ず、
+      ``episode.salience`` は常に ``"low"`` (= 導入前と byte 同一の prompt)
+    - loop_guard の cross_tick_failure 閾値到達は
+      ``BeliefEvidence(source_kind=STRUCTURED_FAILURE)`` に転記されない
+      (``record_and_check`` 自体は ``CrossTickFailureTrigger`` を返すが、
+      呼び出し側で transcriber が None のため no-op になる)
+
+    ON のとき、chunk 主観補完 LLM が salience を判定し、salience=high の
+    evidence が件数閾値なしで次回固着パスに載る (S2 一撃学習)。加えて
+    STRUCTURED_FAILURE evidence の転記も有効になる (S5 手続き学習)。
+
+    詳細は docs/memory_system/semantic_learning_consolidation_design.md
+    「salience (一撃学習の経路)」節、
+    docs/memory_system/prediction_error_unified_implementation_plan.md の
+    U6 節。
+    """
+    return _parse_bool_env(
+        ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED, env=env, default=False
+    )
+
+
+def log_salience_structured_failure_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )

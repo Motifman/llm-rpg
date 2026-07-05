@@ -343,6 +343,10 @@ def subjective_episode_to_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
         "last_recalled_at": _dt_to_iso(ep.last_recalled_at)
         if ep.last_recalled_at
         else None,
+        # U6 (予測誤差統一設計 / salience): 常に "low"/"high" のどちらかを
+        # 持つ必須フィールド。旧 snapshot には無いので decode 側は
+        # data.get("salience", "low") で後方互換する。
+        "salience": ep.salience,
     }
 
 
@@ -393,6 +397,8 @@ def dict_to_subjective_episode(data: dict[str, Any]) -> SubjectiveEpisode:
         recall_text=data.get("recall_text"),
         recall_count=int(data.get("recall_count", 0)),
         last_recalled_at=_iso_to_dt(str(last_recalled)) if last_recalled else None,
+        # U6: 旧 snapshot (salience キー無し) は "low" に倒す。
+        salience=str(data.get("salience", "low")),
     )
 
 

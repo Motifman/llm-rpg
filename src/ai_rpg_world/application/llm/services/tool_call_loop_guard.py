@@ -126,6 +126,23 @@ class _ToolCallRecord:
 
 
 @dataclass(frozen=True)
+class CrossTickFailureTrigger:
+    """``record_and_check`` が cross_tick_failure 閾値到達を検知したときに
+    呼び出し側へ返す通知 (U6: STRUCTURED_FAILURE + salience)。
+
+    loop_guard 自身は being_id や episode 文脈を持たない (= 本 service は
+    ``observation_buffer`` への警告注入だけに責務を絞っている) ため、
+    ``BeliefEvidence`` への転記は being 解決ができる呼び出し側に委ねる。
+    本 dataclass はその委譲に必要な最小限の情報だけを公開する。
+    """
+
+    tool_name: str
+    error_code: str
+    count: int
+    window: int
+
+
+@dataclass(frozen=True)
 class _FailureRecord:
     """1 回の失敗記録 (cross_tick_failure 検出用、PR-AA)。
 
@@ -265,7 +282,7 @@ class ToolCallLoopGuardService:
         game_time_label: Optional[str] = None,
         success: Optional[bool] = None,
         error_code: Optional[str] = None,
-    ) -> None:
+    ) -> Optional[CrossTickFailureTrigger]:
         """tool 呼出を記録し、連続性しきい値超過なら警告観測を注入する。
 
         呼出側 (orchestrator) は成功・失敗どちらでも record する。連打は失敗
@@ -276,6 +293,13 @@ class ToolCallLoopGuardService:
         streak (旧挙動) とは独立の判定経路で、tick 幅の window 内で同じ
         (tool, fingerprint, error_code) が閾値回数出現したときに警告する。
 
+        U6 (予測誤差統一設計 / STRUCTURED_FAILURE): cross_tick_failure が
+        今回の呼び出しで閾値到達した場合、``CrossTickFailureTrigger`` を
+        返す (未到達 / 旧 API 呼び出しは None)。呼び出し側が being_id を
+        解決して ``BeliefEvidence`` へ転記するかどうかを決める (本 service
+        自身は being 解決ロジックを持たない)。既存呼び出し側は戻り値を
+        無視しても壊れない (= 後方互換)。
+
         Args:
             success: 成否 (True/False/None)。None は「旧 API 呼び出し =
                 成否不明」扱いで cross_tick 側には記録しない。
@@ -285,15 +309,16 @@ class ToolCallLoopGuardService:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(tool_name, str) or not tool_name:
-            return
+            return None
         fingerprint = build_argument_fingerprint(arguments)
         record = _ToolCallRecord(tool_name=tool_name, fingerprint=fingerprint)
 
         # PR-AA: 失敗ケースは cross_tick_failure トラッカーにも積む。
         # 既存 streak 処理より先に走らせて、警告注入順序も cross_tick が
         # 先になるよう明示的に配置する。
+        cross_tick_trigger: Optional[CrossTickFailureTrigger] = None
         if success is False and isinstance(error_code, str) and error_code:
-            self._record_and_check_cross_tick_failure(
+            cross_tick_trigger = self._record_and_check_cross_tick_failure(
                 player_id=player_id,
                 tool_name=tool_name,
                 fingerprint=fingerprint,
@@ -321,7 +346,7 @@ class ToolCallLoopGuardService:
         # 例: threshold=3 のとき streak 3, 6, 9... で発火 (旧 once-only ではなく、
         # LLM が警告を無視し続けても何度でも気付かせる)。
         if streak_count < threshold or streak_count % threshold != 0:
-            return
+            return cross_tick_trigger
 
         # warn_count を進めて文面選択に使う (deterministic だが variety あり)。
         warn_index = self._warn_count.get(key, 0)
@@ -361,6 +386,7 @@ class ToolCallLoopGuardService:
             except Exception:
                 # trace 失敗は loop guard 本来の責務を止めない
                 pass
+        return cross_tick_trigger
 
     def peek_streak(self, player_id: PlayerId) -> Optional[tuple[str, int]]:
         """現在連続している ``(tool_name, count)`` を非破壊で覗き見る。
@@ -389,7 +415,7 @@ class ToolCallLoopGuardService:
         fingerprint: str,
         error_code: str,
         game_time_label: Optional[str],
-    ) -> None:
+    ) -> Optional[CrossTickFailureTrigger]:
         """PR-AA (Y_after_pr639_640 後続): 連続していない同一失敗の反復を検出。
 
         tick 幅 (default 20) の window 内で同じ (tool, fingerprint, error_code)
@@ -398,12 +424,17 @@ class ToolCallLoopGuardService:
 
         window 外のエントリは drop するので、状況が変わって同 failure を
         しばらく出さなければ counter は自然にリセットされる。
+
+        U6: 警告を実際に発火させた (= 閾値到達 かつ 再発火抑制に引っかから
+        なかった) ときだけ ``CrossTickFailureTrigger`` を返す。それ以外は
+        None (呼び出し側の STRUCTURED_FAILURE 転記は「新規に発火した警告」
+        にだけ紐付ける = 抑制中の重複転記を防ぐ)。
         """
         current_tick = self._get_current_tick_or_none()
         if current_tick is None:
             # tick provider が無い / 例外 → cross_tick 検出は skip
             # (連続 streak 側は既に record 済みなので silent OK)
-            return
+            return None
         key = player_id.value
         history = self._failure_history.setdefault(key, [])
         history.append(
@@ -427,7 +458,7 @@ class ToolCallLoopGuardService:
             if (r.tool_name, r.fingerprint, r.error_code) == pattern
         )
         if count < self._cross_tick_failure_threshold:
-            return
+            return None
         # 再発火抑制: 直前の警告発火が window 内なら silent (連打で毎回鳴ら
         # ないようにする)。抑制 window は failure window と同じ幅で十分。
         last_warns = self._cross_tick_last_warn.setdefault(key, {})
@@ -441,7 +472,7 @@ class ToolCallLoopGuardService:
             del last_warns[p]
         last_tick = last_warns.get(pattern)
         if last_tick is not None and (current_tick - last_tick) < window:
-            return
+            return None
         last_warns[pattern] = current_tick
 
         warn_index = self._cross_tick_warn_count.get(key, 0)
@@ -481,6 +512,12 @@ class ToolCallLoopGuardService:
                 )
             except Exception:
                 pass
+        return CrossTickFailureTrigger(
+            tool_name=tool_name,
+            error_code=error_code,
+            count=count,
+            window=window,
+        )
 
     def _get_current_tick_or_none(self) -> Optional[int]:
         """current_tick_provider を安全に呼び出して int を返す。"""

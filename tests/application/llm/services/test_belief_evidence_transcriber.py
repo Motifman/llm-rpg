@@ -108,6 +108,35 @@ class TestBeliefEvidenceTranscriberRecordCondition:
         assert buffer_store.list_all_by_being(being_b) == []
 
 
+class TestBeliefEvidenceTranscriberSalience:
+    """U6 (予測誤差統一設計 / salience): episode.salience がそのまま
+    evidence.salience に転記されること。SALIENCE_STRUCTURED_FAILURE_ENABLED
+    が OFF のとき episode.salience は常に "low" (chunk 主観補完 service 側の
+    保証) なので、本テストの "low" 系は導入前の固定挙動と一致する。"""
+
+    def test_episode_low_salience_becomes_evidence_low_salience(self) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+
+        transcriber.record_if_applicable(
+            being_id, _episode(prediction_error="外れた", salience="low")
+        )
+
+        assert buffer_store.list_all_by_being(being_id)[0].salience == "low"
+
+    def test_episode_high_salience_becomes_evidence_high_salience(self) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+
+        transcriber.record_if_applicable(
+            being_id, _episode(prediction_error="大ダメージを受けた", salience="high")
+        )
+
+        assert buffer_store.list_all_by_being(being_id)[0].salience == "high"
+
+
 class TestBeliefEvidenceTranscriberTick:
     def test_tick_comes_from_current_tick_provider(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()

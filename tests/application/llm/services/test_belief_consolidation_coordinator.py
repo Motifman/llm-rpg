@@ -91,6 +91,7 @@ def _build_setup(
     shortlist_top_k: int = 5,
     cue_signature_repeat_threshold: int = DEFAULT_CUE_SIGNATURE_REPEAT_THRESHOLD,
     contradict_inactive_threshold: float = 0.2,
+    high_salience_batch_cap: int = 3,
     completion: Any = _UNSET,
 ) -> _Setup:
     repo = InMemoryBeingRepository()
@@ -111,6 +112,7 @@ def _build_setup(
         shortlist_top_k=shortlist_top_k,
         cue_signature_repeat_threshold=cue_signature_repeat_threshold,
         contradict_inactive_threshold=contradict_inactive_threshold,
+        high_salience_batch_cap=high_salience_batch_cap,
         being_attachment_resolver=resolver,
         default_world_id=_WORLD_ID,
     )
@@ -314,6 +316,76 @@ class TestFlushPlayerBatchAndFailure:
 
         assert processed == 0
         assert setup.port.calls == []
+
+
+class TestHighSalienceBatchCap:
+    """U6 (乱発対策): 1 batch に採用する salience=high evidence の上限。"""
+
+    def test_high_salience_evidence_is_capped_per_batch(self) -> None:
+        """high_salience_batch_cap を超える high evidence は次周期に残る。
+        batch_size 自体には余裕を持たせ、cap が効いていることを見る。"""
+        setup = _build_setup(
+            outcome={"decisions": []},
+            batch_size=8,
+            high_salience_batch_cap=2,
+        )
+        base = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        for i in range(4):
+            setup.evidence_buffer.append_by_being(
+                setup.being_id,
+                _evidence(
+                    f"high-{i}",
+                    salience=BELIEF_EVIDENCE_SALIENCE_HIGH,
+                    occurred_at=base + timedelta(minutes=i),
+                ),
+            )
+
+        processed = setup.coordinator.flush_player(setup.player_id)
+
+        assert processed == 2
+        remaining = [
+            e.evidence_id for e in setup.evidence_buffer.list_all_by_being(setup.being_id)
+        ]
+        assert remaining == ["high-2", "high-3"]
+
+    def test_low_salience_evidence_fills_remaining_batch_slots(self) -> None:
+        """high が cap で絞られても、low evidence は batch_size まで通常通り採る。"""
+        setup = _build_setup(
+            outcome={"decisions": []},
+            batch_size=3,
+            high_salience_batch_cap=1,
+        )
+        base = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        setup.evidence_buffer.append_by_being(
+            setup.being_id,
+            _evidence("high-1", salience=BELIEF_EVIDENCE_SALIENCE_HIGH, occurred_at=base),
+        )
+        setup.evidence_buffer.append_by_being(
+            setup.being_id,
+            _evidence(
+                "high-2",
+                salience=BELIEF_EVIDENCE_SALIENCE_HIGH,
+                occurred_at=base + timedelta(minutes=1),
+            ),
+        )
+        for i in range(2):
+            setup.evidence_buffer.append_by_being(
+                setup.being_id,
+                _evidence(
+                    f"low-{i}",
+                    salience=BELIEF_EVIDENCE_SALIENCE_LOW,
+                    occurred_at=base + timedelta(minutes=2 + i),
+                ),
+            )
+
+        processed = setup.coordinator.flush_player(setup.player_id)
+
+        # high-1 (cap 内) + low-0 + low-1 の 3 件が採用され、high-2 は残る。
+        assert processed == 3
+        remaining = [
+            e.evidence_id for e in setup.evidence_buffer.list_all_by_being(setup.being_id)
+        ]
+        assert remaining == ["high-2"]
 
 
 class TestDecisionApplication:
