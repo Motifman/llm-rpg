@@ -23,7 +23,10 @@ from ai_rpg_world.domain.being.service.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
+from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
+    SEMANTIC_MEMORY_STATUS_ACTIVE,
+    SemanticMemoryEntry,
+)
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     SemanticMemoryRepository,
 )
@@ -130,7 +133,15 @@ class SemanticPassiveRecallService:
         )
         if being_id is None:
             return []
-        return list(self._store.list_for_being(being_id))
+        # U3a: belief journal 化により superseded / inactive な entry が
+        # store に残るようになったため、想起には active のみを返す。
+        # 既存 entry は全て status="active" (フォールバック) なので、
+        # この filter による既存の想起結果・件数は変わらない。
+        return [
+            entry
+            for entry in self._store.list_for_being(being_id)
+            if entry.status == SEMANTIC_MEMORY_STATUS_ACTIVE
+        ]
 
     def retrieve(
         self,

@@ -56,6 +56,7 @@ def _entry(
     created_at: datetime = _NOW,
     confidence: float = 0.6,
     evidence: tuple = ("ep-1",),
+    status: str = "active",
 ) -> SemanticMemoryEntry:
     return SemanticMemoryEntry(
         entry_id=entry_id,
@@ -66,6 +67,7 @@ def _entry(
         created_at=created_at,
         importance_score=importance_score,
         tags=tags,
+        status=status,
     )
 
 
@@ -170,6 +172,32 @@ class TestSemanticPassiveRecallScoring:
 # ──────────────────────────────────────────────────────────────────
 # Trace payload + section formatting
 # ──────────────────────────────────────────────────────────────────
+
+
+class TestSemanticPassiveRecallActiveOnlyFilter:
+    """U3a: belief journal 化により superseded / inactive な entry は想起に出ない。"""
+
+    def test_superseded_な_entry_は候補に出ない(self) -> None:
+        setup, svc = _make_setup_and_svc()
+        setup.populate(1, _entry(entry_id="s1", status="superseded"))
+        setup.populate(1, _entry(entry_id="s2"))
+        result = svc.retrieve(player_id=1, situation_cues=(), top_k=10, now=_NOW)
+        assert [c.entry.entry_id for c in result] == ["s2"]
+
+    def test_inactive_な_entry_は候補に出ない(self) -> None:
+        setup, svc = _make_setup_and_svc()
+        setup.populate(1, _entry(entry_id="s1", status="inactive"))
+        setup.populate(1, _entry(entry_id="s2"))
+        result = svc.retrieve(player_id=1, situation_cues=(), top_k=10, now=_NOW)
+        assert [c.entry.entry_id for c in result] == ["s2"]
+
+    def test_全件_active_なら既存挙動と件数が変わらない(self) -> None:
+        """既存 entry は全て status=active (フォールバック) なので想起件数は不変。"""
+        setup, svc = _make_setup_and_svc()
+        for i in range(3):
+            setup.populate(1, _entry(entry_id=f"s{i}", text=f"t{i}"))
+        result = svc.retrieve(player_id=1, situation_cues=(), top_k=10, now=_NOW)
+        assert len(result) == 3
 
 
 class TestSemanticRecallCandidateTracePayload:
