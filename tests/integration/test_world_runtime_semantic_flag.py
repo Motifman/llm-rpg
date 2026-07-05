@@ -117,6 +117,24 @@ class TestWorldRuntimeSemanticFlagOn:
         assert "【関連する学び】" in user
         assert "SEMANTIC_FLAG_MARKER" in user
 
+    def test_link_service_wired_to_prompt_builder_for_recall_strengthening(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """semantic ON のとき、想起→強化 (recall_count 加算 / CO_RECALL リンク /
+        ヘブ則強化) を担う link service が prompt builder まで配線される。
+
+        これが欠けると想起は成立しても recall_count が永遠に 0 のままになり、
+        昇格ゲート (recall_count>=3) を誰も超えられず、学びが 1 件も生まれない
+        (全機能 ON 実験 memory_full_002 で発覚した静かな失敗)。
+        """
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        monkeypatch.setenv("SEMANTIC_PASSIVE_TOP_K", "3")
+        runtime = _build_runtime(monkeypatch)
+        stack = runtime._episodic_stack
+        assert stack.link_service is not None
+        builder = runtime._get_or_build_default_prompt_builder()
+        assert builder._episodic_memory_link_service is stack.link_service
+
     def test_semantic_on_exposes_memory_link_store(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

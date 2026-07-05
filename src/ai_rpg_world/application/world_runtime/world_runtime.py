@@ -1247,6 +1247,11 @@ class WorldRuntime:
             episodic_config = EpisodicRecallConfig(
                 passive_recall=self._episodic_stack.passive_recall,
                 noun_matcher=self._episodic_stack.noun_matcher,
+                # 想起→強化 (recall_count 加算 / CO_RECALL / ヘブ則) の配線。
+                # これが無いと想起されても recall_count が 0 のままで、semantic
+                # 昇格ゲート (recall_count>=3) を永遠に超えられない
+                # (memory_full_002 実験で発覚)。
+                memory_link_service=self._episodic_stack.link_service,
                 semantic_passive_recall=self._episodic_stack.semantic_passive_recall,
                 semantic_passive_top_k=self._episodic_stack.semantic_passive_top_k,
                 recall_buffer_store=self._episodic_stack.recall_buffer_store,
