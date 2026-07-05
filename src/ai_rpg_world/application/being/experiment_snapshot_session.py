@@ -177,6 +177,17 @@ def _empty_belief_evidence_buffer_store() -> Any:
     return InMemoryBeliefEvidenceBufferStore()
 
 
+def _empty_recall_success_store() -> Any:
+    """U9b (予測誤差統一設計 部品5・想起の信用割り当て): snapshot 配線時に
+
+    的中側 sidecar が未配線 (= flag OFF) なら空 in-memory store で代用する。"""
+    from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+        InMemoryEpisodicRecallSuccessStore,
+    )
+
+    return InMemoryEpisodicRecallSuccessStore()
+
+
 @dataclass(frozen=True)
 class _PlayerSnapshotMapping:
     """1 player ↔ 1 file のマッピング。"""
@@ -332,6 +343,12 @@ class ExperimentSnapshotSession:
             getattr(wiring_result, "belief_evidence_buffer_store", None)
             or _empty_belief_evidence_buffer_store()
         )
+        # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar も
+        # 未配線なら空 in-memory store にフォールバックする (checklist #27)。
+        recall_success_store = (
+            getattr(wiring_result, "recall_success_store", None)
+            or _empty_recall_success_store()
+        )
 
         # どの store が空 fallback で稼働しているかを 1 度だけ info ログに残す
         # = 「snapshot 取ったけど semantic は空だった」のデバッグ材料。
@@ -351,6 +368,8 @@ class ExperimentSnapshotSession:
                 "recall_habituation_store",
                 # U2: belief evidence buffer も同じ監視対象に入れる。
                 "belief_evidence_buffer_store",
+                # U9b: 的中側 sidecar も同じ監視対象に入れる。
+                "recall_success_store",
             )
             if getattr(wiring_result, name, None) is None
         ]
@@ -372,6 +391,7 @@ class ExperimentSnapshotSession:
             afterglow_store=afterglow_store,
             recall_habituation_store=recall_habituation_store,
             belief_evidence_buffer_store=belief_evidence_buffer_store,
+            recall_success_store=recall_success_store,
         )
         self._gateway = BeingSnapshotFileGateway()
         self._capture_use_case = CaptureBeingSnapshotToFileUseCase(

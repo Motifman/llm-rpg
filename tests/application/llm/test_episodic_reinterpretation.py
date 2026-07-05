@@ -112,6 +112,14 @@ class _BrokenRecallBufferStore(EpisodicRecallBufferRepository):
         """常に RuntimeError。"""
         raise RuntimeError("broken")
 
+    def list_episode_ids_by_prediction_context_by_being(
+        self,
+        being_id: BeingId,
+        prediction_context_id: str,
+    ) -> tuple[str, ...]:
+        """常に RuntimeError。"""
+        raise RuntimeError("broken")
+
 
 def _episode(
     *,

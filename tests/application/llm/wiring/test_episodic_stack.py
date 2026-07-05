@@ -307,6 +307,67 @@ class TestReinterpretationOptIn:
         assert stack.reinterpretation_coordinator.current_turn_index(PlayerId(1)) == 0
 
 
+class TestRecallHitBoostOptIn:
+    """U9b (想起の信用割り当て・的中側): build_episodic_stack の opt-in 配線。"""
+
+    def _io(self):
+        return (
+            DefaultObservationContextBuffer(),
+            DefaultSlidingWindowMemory(),
+            DefaultActionResultStore(),
+        )
+
+    def test_default_off_では_recall_success_store_は_None(self) -> None:
+        """recall_hit_boost_enabled 未指定なら的中側 sidecar は None (従来挙動)。"""
+        obs_buf, sliding, action_store = self._io()
+        stack = build_episodic_stack(
+            scenario=_stub_scenario(players=[(1, "t")]),
+            graph=_stub_graph(spots={1: "x"}),
+            observation_buffer=obs_buf,
+            sliding_window_memory=sliding,
+            action_result_store=action_store,
+        )
+        assert stack.recall_success_store is None
+
+    def test_enabled_なら_recall_success_store_が構築され_chunk_coordinator_に渡る(
+        self,
+    ) -> None:
+        """flag ON で的中側 sidecar が構築され、stack が公開する。"""
+        obs_buf, sliding, action_store = self._io()
+        stack = build_episodic_stack(
+            scenario=_stub_scenario(players=[(1, "t")]),
+            graph=_stub_graph(spots={1: "x"}),
+            observation_buffer=obs_buf,
+            sliding_window_memory=sliding,
+            action_result_store=action_store,
+            recall_hit_boost_enabled=True,
+            recall_hit_boost_strength=2,
+        )
+        assert stack.recall_success_store is not None
+        assert stack.recall_hit_boost_strength == 2
+        # chunk_coordinator にも同一インスタンスが配線されている。
+        assert stack.chunk_coordinator._recall_success_store is stack.recall_success_store  # noqa: SLF001
+        assert stack.chunk_coordinator._recall_hit_boost_enabled is True  # noqa: SLF001
+
+    def test_enabled_なら_passive_recall_にも_同一store_と_strength_が配線される(
+        self,
+    ) -> None:
+        obs_buf, sliding, action_store = self._io()
+        stack = build_episodic_stack(
+            scenario=_stub_scenario(players=[(1, "t")]),
+            graph=_stub_graph(spots={1: "x"}),
+            observation_buffer=obs_buf,
+            sliding_window_memory=sliding,
+            action_result_store=action_store,
+            recall_hit_boost_enabled=True,
+            recall_hit_boost_strength=3,
+            recall_hit_boost_cap=1,
+        )
+        assert stack.passive_recall._recall_success_store is stack.recall_success_store  # noqa: SLF001
+        assert stack.passive_recall._hit_boost_strength == 3  # noqa: SLF001
+        assert stack.passive_recall._hit_boost_cap == 1  # noqa: SLF001
+
+
 class TestBackwardCompatAlias:
     """``world_episodic_wiring`` の旧名 alias が引き続き動く。
 

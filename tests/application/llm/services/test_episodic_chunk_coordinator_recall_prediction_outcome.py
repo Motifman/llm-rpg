@@ -77,6 +77,8 @@ def _build_coord(
     returns: dict[str, Any],
     recall_buffer_store=None,
     error_driven_reinterpretation_enabled: bool = False,
+    recall_success_store=None,
+    recall_hit_boost_enabled: bool = False,
 ):
     buffer = DefaultObservationContextBuffer()
     sliding = DefaultSlidingWindowMemory()
@@ -98,6 +100,8 @@ def _build_coord(
         default_world_id=DEFAULT_SINGLE_WORLD_ID,
         recall_buffer_store=recall_buffer_store,
         error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
+        recall_success_store=recall_success_store,
+        recall_hit_boost_enabled=recall_hit_boost_enabled,
     )
     return coord, buffer, action_store, being_id
 
@@ -109,11 +113,12 @@ def _trigger_chunk_close(
     player_id: PlayerId,
     *,
     last_action_prediction_context_id: str | None = None,
+    last_action_expected_result: str | None = None,
 ) -> None:
     """境界を踏んで chunk を確実に close する (MIN=3 ゲート + scene_boundary)。
 
-    最後の action にだけ ``prediction_context_id`` を乗せられるようにして
-    いる (既定は None で従来テストと完全互換)。
+    最後の action にだけ ``prediction_context_id`` / ``expected_result`` を
+    乗せられるようにしている (既定は None で従来テストと完全互換)。
     """
     t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
     action_store.append(
@@ -147,6 +152,7 @@ def _trigger_chunk_close(
         occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc),
         scene_boundary=True,
         prediction_context_id=last_action_prediction_context_id,
+        expected_result=last_action_expected_result,
     )
     coord.after_action_recorded(player_id)
 
@@ -263,4 +269,152 @@ class TestEpisodicChunkCoordinatorRecallPredictionOutcomeSyncPath:
             action_store,
             PlayerId(1),
             last_action_prediction_context_id="pc-1",
+        )
+
+
+class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
+    """U9b (想起の信用割り当て・的中側): 同期経路での的中側 sidecar への還流。
+
+    ``EpisodicChunkCoordinator`` の完了点 (= chunk 主観補完 LLM が episode を
+    merge し終えた直後) で、prediction_error が None (的中) かつ
+    expected_result を伴う行動があったときに、その予測を立てた in-context
+    episode の hit_count が加算されることを保証する。
+    """
+
+    def test_flag_ON_で的中かつexpected_resultありなら的中回数が加算される(
+        self,
+    ) -> None:
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+
+        recall_buffer = InMemoryEpisodicRecallBufferStore()
+        recall_success = InMemoryEpisodicRecallSuccessStore()
+        coord, buffer, action_store, being_id = _build_coord(
+            returns={"interpreted": "I", "recall_text": "R"},
+            recall_buffer_store=recall_buffer,
+            error_driven_reinterpretation_enabled=True,
+            recall_success_store=recall_success,
+            recall_hit_boost_enabled=True,
+        )
+        _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
+
+        _trigger_chunk_close(
+            coord,
+            buffer,
+            action_store,
+            PlayerId(1),
+            last_action_prediction_context_id="pc-1",
+            last_action_expected_result="何か見つかるはず",
+        )
+
+        assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 1
+
+    def test_prediction_error_ありなら加算されない(self) -> None:
+        """外れたときは U9a の対象であり、的中側には加算しない。"""
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+
+        recall_buffer = InMemoryEpisodicRecallBufferStore()
+        recall_success = InMemoryEpisodicRecallSuccessStore()
+        coord, buffer, action_store, being_id = _build_coord(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "外れた",
+            },
+            recall_buffer_store=recall_buffer,
+            error_driven_reinterpretation_enabled=True,
+            recall_success_store=recall_success,
+            recall_hit_boost_enabled=True,
+        )
+        _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
+
+        _trigger_chunk_close(
+            coord,
+            buffer,
+            action_store,
+            PlayerId(1),
+            last_action_prediction_context_id="pc-1",
+            last_action_expected_result="何か見つかるはず",
+        )
+
+        assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 0
+
+    def test_expected_result_を伴う行動が無ければ加算されない(self) -> None:
+        """何もしなかっただけの的中で hit を水増ししない (U4 CONFIRMATION と同型)。"""
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+
+        recall_buffer = InMemoryEpisodicRecallBufferStore()
+        recall_success = InMemoryEpisodicRecallSuccessStore()
+        coord, buffer, action_store, being_id = _build_coord(
+            returns={"interpreted": "I", "recall_text": "R"},
+            recall_buffer_store=recall_buffer,
+            error_driven_reinterpretation_enabled=True,
+            recall_success_store=recall_success,
+            recall_hit_boost_enabled=True,
+        )
+        _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
+
+        _trigger_chunk_close(
+            coord,
+            buffer,
+            action_store,
+            PlayerId(1),
+            last_action_prediction_context_id="pc-1",
+            last_action_expected_result=None,
+        )
+
+        assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 0
+
+    def test_flag_OFF_既定なら的中でも加算されない(self) -> None:
+        """recall_hit_boost_enabled=False (既定) は導入前と一致。"""
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+
+        recall_buffer = InMemoryEpisodicRecallBufferStore()
+        recall_success = InMemoryEpisodicRecallSuccessStore()
+        coord, buffer, action_store, being_id = _build_coord(
+            returns={"interpreted": "I", "recall_text": "R"},
+            recall_buffer_store=recall_buffer,
+            error_driven_reinterpretation_enabled=True,
+            recall_success_store=recall_success,
+            recall_hit_boost_enabled=False,
+        )
+        _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
+
+        _trigger_chunk_close(
+            coord,
+            buffer,
+            action_store,
+            PlayerId(1),
+            last_action_prediction_context_id="pc-1",
+            last_action_expected_result="何か見つかるはず",
+        )
+
+        assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 0
+
+    def test_recall_success_store_未配線なら例外を投げず完了する(self) -> None:
+        """recall_success_store=None (既定) は既存動作と完全互換。"""
+        recall_buffer = InMemoryEpisodicRecallBufferStore()
+        coord, buffer, action_store, being_id = _build_coord(
+            returns={"interpreted": "I", "recall_text": "R"},
+            recall_buffer_store=recall_buffer,
+            error_driven_reinterpretation_enabled=True,
+            recall_success_store=None,
+            recall_hit_boost_enabled=True,
+        )
+        _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
+
+        _trigger_chunk_close(
+            coord,
+            buffer,
+            action_store,
+            PlayerId(1),
+            last_action_prediction_context_id="pc-1",
+            last_action_expected_result="何か見つかるはず",
         )

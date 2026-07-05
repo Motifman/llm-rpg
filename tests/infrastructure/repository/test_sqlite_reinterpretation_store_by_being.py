@@ -197,6 +197,60 @@ class TestSqliteRecallBufferStampPredictionOutcome:
         assert got.prediction_outcome_error == "最初の誤差"
 
 
+class TestSqliteListEpisodeIdsByPredictionContext:
+    """U9b: SQLite 版 ``list_episode_ids_by_prediction_context_by_being``。"""
+
+    def test_一致する_prediction_context_id_の_episode_id_を返す(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        store.append_by_being(
+            being,
+            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
+        )
+        got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
+        assert got == ("e1",)
+
+    def test_複数_episode_が_同じ_prediction_context_id_に紐づく場合は全件返す(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        store.append_by_being(
+            being,
+            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
+        )
+        store.append_by_being(
+            being,
+            _obs(recall_id="r2", episode_id="e2", prediction_context_id="pc-1"),
+        )
+        got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
+        assert set(got) == {"e1", "e2"}
+
+    def test_同じ_episode_を複数_recall_しても重複排除される(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        store.append_by_being(
+            being,
+            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
+        )
+        store.append_by_being(
+            being,
+            _obs(recall_id="r2", episode_id="e1", prediction_context_id="pc-1"),
+        )
+        got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
+        assert got == ("e1",)
+
+    def test_一致するものが無ければ空tuple(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        store.append_by_being(
+            being,
+            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
+        )
+        got = store.list_episode_ids_by_prediction_context_by_being(
+            being, "pc-nonexistent"
+        )
+        assert got == ()
+
+
 class TestSqliteJournalByBeing:
     """SQLite journal の by_being API。"""
 

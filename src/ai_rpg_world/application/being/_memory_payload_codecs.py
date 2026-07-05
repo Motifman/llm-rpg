@@ -466,6 +466,19 @@ def dict_to_episode_tick_pair(data: dict[str, Any]) -> tuple[str, int]:
     return (str(data["episode_id"]), int(data["tick"]))
 
 
+def episode_hit_count_pair_to_dict(episode_id: str, hit_count: int) -> dict[str, Any]:
+    """U9b (予測誤差統一設計 部品5・想起の信用割り当て): (episode_id, hit_count)
+
+    → dict。``episode_tick_pair_to_dict`` と構造は同じだが、hit_count を
+    tick フィールド名で表現すると意味を誤読しやすいので専用 key にする。"""
+    return {"episode_id": episode_id, "hit_count": int(hit_count)}
+
+
+def dict_to_episode_hit_count_pair(data: dict[str, Any]) -> tuple[str, int]:
+    """dict → (episode_id, hit_count)。"""
+    return (str(data["episode_id"]), int(data["hit_count"]))
+
+
 # ---- belief_evidence (U2: 証拠台帳統一設計) ------------------------------------
 
 

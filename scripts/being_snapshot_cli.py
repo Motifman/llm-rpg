@@ -130,6 +130,9 @@ def _build_stack(
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         InMemoryEpisodicRecallSlotStore,
     )
+    from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+        InMemoryEpisodicRecallSuccessStore,
+    )
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
@@ -145,6 +148,9 @@ def _build_stack(
         afterglow_store=InMemoryAfterglowStore(),
         recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
         belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
+        # U9b: CLI 経由の単発 dump では的中側 sidecar も in-memory で足りる
+        # (PR-G の想起階層 3 store と同じ扱い)。
+        recall_success_store=InMemoryEpisodicRecallSuccessStore(),
     )
     return being_repo, memory_snapshot, BeingSnapshotFileGateway()
 
