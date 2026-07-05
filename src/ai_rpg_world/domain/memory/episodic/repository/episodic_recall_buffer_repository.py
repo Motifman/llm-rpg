@@ -103,5 +103,23 @@ class EpisodicRecallBufferRepository(ABC):
         prediction_context_id が実在するか事前に検証しない)。
         """
 
+    @abstractmethod
+    def list_episode_ids_by_prediction_context_by_being(
+        self,
+        being_id: BeingId,
+        prediction_context_id: str,
+    ) -> tuple[str, ...]:
+        """U9b (予測誤差統一設計 部品5・想起の信用割り当て): ``prediction_context_id``
+
+        (= この記憶を思い出して立てた予測を特定する id) を持つ pending
+        observation 群の ``episode_id`` を重複排除して返す。
+
+        「思い出したから当たった」を的中側 (recall success store) に
+        書き込む際、どの episode を想起して立てた予測だったかを特定する
+        読み出し専用クエリ。``stamp_prediction_outcome_by_being`` (外れ側)
+        と対称の読み出し版で、pending 集合 (= まだ再解釈で処理されていない
+        観測) だけが対象。一致する observation が無ければ空 tuple を返す。
+        """
+
 
 __all__ = ["EpisodicRecallBufferRepository"]

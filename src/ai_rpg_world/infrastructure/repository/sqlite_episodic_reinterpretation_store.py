@@ -548,6 +548,43 @@ class SqliteEpisodicReinterpretationStore(
             )
         self._conn.commit()
 
+    def list_episode_ids_by_prediction_context_by_being(
+        self,
+        being_id: BeingId,
+        prediction_context_id: str,
+    ) -> tuple[str, ...]:
+        """U9b: 対象 recall observation の payload を読み、episode_id を集める。
+
+        stamp_prediction_outcome_by_being (外れ側) と同じ read-modify-write
+        方針: payload_json が一次情報なので専用列は持たず、pending 全件を
+        読んで JSON 内の prediction_context_id を照合する。
+        """
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if (
+            not isinstance(prediction_context_id, str)
+            or not prediction_context_id.strip()
+        ):
+            raise ValueError("prediction_context_id must be a non-empty str")
+        cur = self._conn.execute(
+            """
+            SELECT payload_json
+            FROM episodic_recall_observations_by_being
+            WHERE being_id_value = ?
+            ORDER BY recalled_at_key ASC, recall_id ASC
+            """,
+            (being_id.value,),
+        )
+        seen: list[str] = []
+        for (payload_raw,) in cur.fetchall():
+            data = json.loads(str(payload_raw))
+            if data.get("prediction_context_id") != prediction_context_id:
+                continue
+            episode_id = str(data.get("episode_id"))
+            if episode_id not in seen:
+                seen.append(episode_id)
+        return tuple(seen)
+
     def replace_all_by_being(
         self,
         being_id: BeingId,
