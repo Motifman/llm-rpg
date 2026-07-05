@@ -25,6 +25,7 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     ENV_SEMANTIC_SEARCH_ENABLED,
     ENV_SHORT_TERM_MEMORY_KIND,
     ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE,
+    ENV_UNCONSCIOUS_CONTEXT_ENABLED,
     SCHEDULER_MODE_INLINE,
     SCHEDULER_MODE_THREAD_POOL,
     SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
@@ -38,6 +39,7 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     log_semantic_search_state,
     log_short_term_memory_kind_state,
     log_short_term_memory_scheduler_mode_state,
+    log_unconscious_context_enabled_state,
     resolve_belief_attribution_enabled,
     resolve_belief_evidence_enabled,
     resolve_episodic_explore_related_enabled,
@@ -48,6 +50,7 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     resolve_semantic_search_enabled,
     resolve_short_term_memory_kind,
     resolve_short_term_memory_scheduler_mode,
+    resolve_unconscious_context_enabled,
 )
 
 
@@ -515,6 +518,39 @@ class TestResolveBeliefAttributionEnabled:
         with caplog.at_level(logging.INFO):
             log_belief_attribution_enabled_state(True)
             log_belief_attribution_enabled_state(False)
+        messages = [rec.message for rec in caplog.records]
+        assert any("ENABLED" in m for m in messages)
+        assert any("DISABLED" in m for m in messages)
+
+
+class TestResolveUnconsciousContextEnabled:
+    """U7: ``UNCONSCIOUS_CONTEXT_ENABLED`` の env パース。"""
+
+    def test_env_未設定なら_default_OFF(self) -> None:
+        assert resolve_unconscious_context_enabled(env={}) is False
+
+    @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
+    def test_truthy_な値は_ON(self, raw: str) -> None:
+        assert resolve_unconscious_context_enabled(
+            env={ENV_UNCONSCIOUS_CONTEXT_ENABLED: raw}
+        ) is True
+
+    @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
+    def test_falsy_な値は_OFF(self, raw: str) -> None:
+        assert resolve_unconscious_context_enabled(
+            env={ENV_UNCONSCIOUS_CONTEXT_ENABLED: raw}
+        ) is False
+
+    def test_未知の値は_ValueError(self) -> None:
+        with pytest.raises(ValueError):
+            resolve_unconscious_context_enabled(
+                env={ENV_UNCONSCIOUS_CONTEXT_ENABLED: "yesplz"}
+            )
+
+    def test_log_state_はレベル情報でログを出す(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.INFO):
+            log_unconscious_context_enabled_state(True)
+            log_unconscious_context_enabled_state(False)
         messages = [rec.message for rec in caplog.records]
         assert any("ENABLED" in m for m in messages)
         assert any("DISABLED" in m for m in messages)
