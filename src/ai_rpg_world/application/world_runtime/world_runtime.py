@@ -3617,6 +3617,7 @@ def create_world_runtime(
             log_belief_consolidation_enabled_state,
             log_belief_evidence_enabled_state,
             log_error_driven_reinterpretation_enabled_state,
+            log_error_gated_encoding_enabled_state,
             log_memo_distill_enabled_state,
             log_salience_structured_failure_enabled_state,
             log_unconscious_context_enabled_state,
@@ -3624,6 +3625,7 @@ def create_world_runtime(
             resolve_belief_consolidation_enabled,
             resolve_belief_evidence_enabled,
             resolve_error_driven_reinterpretation_enabled,
+            resolve_error_gated_encoding_enabled,
             resolve_memo_distill_enabled,
             resolve_salience_structured_failure_enabled,
             resolve_unconscious_context_enabled,
@@ -3661,6 +3663,13 @@ def create_world_runtime(
         log_salience_structured_failure_enabled_state(
             _salience_structured_failure_enabled
         )
+        # U8 (予測誤差統一設計 部品2・誤差ゲート付き符号化 / default OFF):
+        # 境界 (2a, chunk_coordinator へ伝播) + 解像度 (2b, 下の subjective
+        # service 構築時に salience_enabled と合わせて評価) を一括ゲートする。
+        # evidence buffer とは無関係な独立 flag なので buffer store 条件には
+        # 加えない。
+        _error_gated_encoding_enabled = resolve_error_gated_encoding_enabled()
+        log_error_gated_encoding_enabled_state(_error_gated_encoding_enabled)
         # U5: MEMO_DISTILL 転記 (default OFF)。他 3 flag 同様、同じ evidence
         # buffer を共有するので ON なら buffer store を作る条件に加える。
         _memo_distill_enabled = resolve_memo_distill_enabled()
@@ -3768,11 +3777,15 @@ def create_world_runtime(
                     )
                 # U6: flag OFF なら salience_enabled=False (= system prompt が
                 # 導入前と byte 同一)。
+                # U8 (部品2b): error_gated_encoding_enabled は
+                # salience_enabled が False のときは無効化される (連動先の
+                # salience が存在しないため。_build_system_prompt 側で保証)。
                 _subjective_service = EpisodicChunkSubjectiveFieldsService(
                     _client,
                     salience_enabled=_salience_structured_failure_enabled,
                     unconscious_context_provider=_unconscious_context_provider,
                     unconscious_context_enabled=_unconscious_context_enabled,
+                    error_gated_encoding_enabled=_error_gated_encoding_enabled,
                 )
                 # scheduler と chunk_coordinator (= stack) が同じ store を
                 # 共有することで、worker が書き込んだ merged episode を
@@ -4018,6 +4031,9 @@ def create_world_runtime(
             error_driven_reinterpretation_enabled=(
                 _error_driven_reinterpretation_enabled
             ),
+            # U8 (部品2a): chunk_coordinator (同期・非同期共通の境界判定) に
+            # decide_chunk_boundary への flag 伝播を頼む。
+            error_gated_boundary_enabled=_error_gated_encoding_enabled,
         )
 
         # U9a: recall_buffer を scheduler に後から差し込む。
