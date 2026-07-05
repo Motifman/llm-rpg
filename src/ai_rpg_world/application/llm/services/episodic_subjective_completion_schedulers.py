@@ -49,6 +49,7 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository 
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
     BeliefEvidenceTranscriber,
+    compute_chunk_attribution,
 )
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
@@ -137,6 +138,7 @@ class InlineEpisodicSubjectiveScheduler:
         being_attachment_resolver: Optional[Any] = None,
         default_world_id: Optional[Any] = None,
         belief_evidence_transcriber: Optional[BeliefEvidenceTranscriber] = None,
+        belief_attribution_enabled: bool = False,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
@@ -146,6 +148,8 @@ class InlineEpisodicSubjectiveScheduler:
             raise TypeError("trace_recorder_provider must be callable or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
+        if not isinstance(belief_attribution_enabled, bool):
+            raise TypeError("belief_attribution_enabled must be bool")
         # Phase 3 Step 3e-2: episode_store も dual-path 化。Resolver+WorldId が
         # 注入されていれば being_id 経路で put、未注入なら legacy。
         # ctor で fail-fast に型ガード (= EpisodicChunkCoordinator と同 pattern)。
@@ -178,6 +182,7 @@ class InlineEpisodicSubjectiveScheduler:
         self._current_tick_provider = current_tick_provider
         self._being_attachment_resolver = being_attachment_resolver
         self._belief_evidence_transcriber = belief_evidence_transcriber
+        self._belief_attribution_enabled = belief_attribution_enabled
         self._default_world_id = default_world_id
 
     def _resolve_being_id_for_episode(self, episode: SubjectiveEpisode):
@@ -234,18 +239,35 @@ class InlineEpisodicSubjectiveScheduler:
         self._store.put_by_being(being_id, episode)
 
     def _record_belief_evidence_if_applicable(
-        self, episode: SubjectiveEpisode
+        self,
+        episode: SubjectiveEpisode,
+        encoding_input: ChunkEncodingInput,
     ) -> None:
         """U2 (証拠台帳統一設計): 非同期経路 (Inline 実装) の完了点。
 
         transcriber 未注入 (flag OFF) や being 未解決なら何もしない。
+
+        U4 (予測誤差統一設計 部品3): ``belief_attribution_enabled`` が True の
+        ときだけ ``encoding_input.action_results`` から attribution を計算する
+        (False 既定では常に空/False を渡し U4 導入前と一致させる)。
         """
         if self._belief_evidence_transcriber is None:
             return
         being_id = self._resolve_being_id_for_episode(episode)
         if being_id is None:
             return
-        self._belief_evidence_transcriber.record_if_applicable(being_id, episode)
+        in_context_belief_ids: tuple[str, ...] = ()
+        had_expected_result = False
+        if self._belief_attribution_enabled:
+            in_context_belief_ids, had_expected_result = compute_chunk_attribution(
+                encoding_input.action_results
+            )
+        self._belief_evidence_transcriber.record_if_applicable(
+            being_id,
+            episode,
+            in_context_belief_ids=in_context_belief_ids,
+            had_expected_result=had_expected_result,
+        )
 
     def submit(
         self,
@@ -269,7 +291,7 @@ class InlineEpisodicSubjectiveScheduler:
             )
             self._put_episode(merged)
             # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
-            self._record_belief_evidence_if_applicable(merged)
+            self._record_belief_evidence_if_applicable(merged, encoding_input)
         except Exception as exc:
             _logger.warning(
                 "InlineEpisodicSubjectiveScheduler: LLM 補完が失敗 (%s)。"
@@ -354,6 +376,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         being_attachment_resolver: Optional[Any] = None,
         default_world_id: Optional[Any] = None,
         belief_evidence_transcriber: Optional[BeliefEvidenceTranscriber] = None,
+        belief_attribution_enabled: bool = False,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
@@ -367,6 +390,8 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             raise TypeError("trace_recorder_provider must be callable or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
+        if not isinstance(belief_attribution_enabled, bool):
+            raise TypeError("belief_attribution_enabled must be bool")
 
         # Phase 3 Step 3e-2: episode_store も dual-path 化。ctor fail-fast 型ガード
         from ai_rpg_world.domain.being.service.being_attachment_resolver import (
@@ -400,6 +425,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         self._being_attachment_resolver = being_attachment_resolver
         self._default_world_id = default_world_id
         self._belief_evidence_transcriber = belief_evidence_transcriber
+        self._belief_attribution_enabled = belief_attribution_enabled
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="episodic_subj",
@@ -544,19 +570,36 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         self._store.put_by_being(being_id, episode)
 
     def _record_belief_evidence_if_applicable(
-        self, episode: SubjectiveEpisode
+        self,
+        episode: SubjectiveEpisode,
+        encoding_input: ChunkEncodingInput,
     ) -> None:
         """U2 (証拠台帳統一設計): 非同期経路 (ThreadPool 実装) の完了点。
 
         ワーカー thread から呼ばれる。transcriber 未注入 (flag OFF) や
         being 未解決なら何もしない。
+
+        U4 (予測誤差統一設計 部品3): ``belief_attribution_enabled`` が True の
+        ときだけ ``encoding_input.action_results`` から attribution を計算する
+        (False 既定では常に空/False を渡し U4 導入前と一致させる)。
         """
         if self._belief_evidence_transcriber is None:
             return
         being_id = self._resolve_being_id_for_episode(episode)
         if being_id is None:
             return
-        self._belief_evidence_transcriber.record_if_applicable(being_id, episode)
+        in_context_belief_ids: tuple[str, ...] = ()
+        had_expected_result = False
+        if self._belief_attribution_enabled:
+            in_context_belief_ids, had_expected_result = compute_chunk_attribution(
+                encoding_input.action_results
+            )
+        self._belief_evidence_transcriber.record_if_applicable(
+            being_id,
+            episode,
+            in_context_belief_ids=in_context_belief_ids,
+            had_expected_result=had_expected_result,
+        )
 
     def _worker(
         self,
@@ -574,7 +617,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             )
             self._put_episode(merged)
             # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
-            self._record_belief_evidence_if_applicable(merged)
+            self._record_belief_evidence_if_applicable(merged, encoding_input)
         except Exception as exc:
             _logger.warning(
                 "ThreadPoolEpisodicSubjectiveScheduler worker failed (%s)。"

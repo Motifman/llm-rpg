@@ -75,7 +75,10 @@ class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
 
 
 def _build_coord(
-    *, returns: dict[str, Any], belief_evidence_transcriber=None
+    *,
+    returns: dict[str, Any],
+    belief_evidence_transcriber=None,
+    belief_attribution_enabled: bool = False,
 ):
     buffer = DefaultObservationContextBuffer()
     sliding = DefaultSlidingWindowMemory()
@@ -96,12 +99,26 @@ def _build_coord(
         being_attachment_resolver=resolver,
         default_world_id=DEFAULT_SINGLE_WORLD_ID,
         belief_evidence_transcriber=belief_evidence_transcriber,
+        belief_attribution_enabled=belief_attribution_enabled,
     )
     return coord, buffer, action_store, being_id
 
 
-def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> None:
-    """境界を踏んで chunk を確実に close する (MIN=3 ゲート + scene_boundary)。"""
+def _trigger_chunk_close(
+    coord,
+    buffer,
+    action_store,
+    player_id: PlayerId,
+    *,
+    last_action_in_context_belief_ids: tuple[str, ...] = (),
+    last_action_expected_result: str | None = None,
+) -> None:
+    """境界を踏んで chunk を確実に close する (MIN=3 ゲート + scene_boundary)。
+
+    U4 のテスト用に、chunk 内最後の action へ ``in_context_belief_ids`` /
+    ``expected_result`` を乗せられるようにしている (既定は空/None で
+    従来テストと完全互換)。
+    """
     t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
     action_store.append(
         player_id, action_summary="wait1", result_summary="ok", occurred_at=t0
@@ -133,6 +150,8 @@ def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> No
         result_summary="ok",
         occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc),
         scene_boundary=True,
+        in_context_belief_ids=last_action_in_context_belief_ids,
+        expected_result=last_action_expected_result,
     )
     coord.after_action_recorded(player_id)
 
@@ -181,3 +200,88 @@ class TestEpisodicChunkCoordinatorBeliefEvidenceSyncPath:
         # 例外を投げず従来通り完了することだけを確認する (evidence 用の
         # store をそもそも持たないので、成功していれば OK)。
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1))
+
+
+class TestEpisodicChunkCoordinatorBeliefAttributionSyncPath:
+    """U4 (予測誤差統一設計 部品3): 同期経路での attribution + CONFIRMATION。"""
+
+    def test_belief_attribution_enabled_で_prediction_error_evidence_に_in_context_belief_ids_が添付される(
+        self,
+    ) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        coord, buffer, action_store, being_id = _build_coord(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "何も見つからなかった",
+            },
+            belief_evidence_transcriber=transcriber,
+            belief_attribution_enabled=True,
+        )
+        _trigger_chunk_close(
+            coord,
+            buffer,
+            action_store,
+            PlayerId(1),
+            last_action_in_context_belief_ids=("sem-1",),
+            last_action_expected_result="何か見つかるはず",
+        )
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].in_context_belief_ids == ("sem-1",)
+
+    def test_belief_attribution_enabled_で_prediction_error_None_かつ_in_context_belief_あり_かつ_expected_result_ありなら_CONFIRMATION(
+        self,
+    ) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        coord, buffer, action_store, being_id = _build_coord(
+            returns={"interpreted": "I", "recall_text": "R"},
+            belief_evidence_transcriber=transcriber,
+            belief_attribution_enabled=True,
+        )
+        _trigger_chunk_close(
+            coord,
+            buffer,
+            action_store,
+            PlayerId(1),
+            last_action_in_context_belief_ids=("sem-1",),
+            last_action_expected_result="何か見つかるはず",
+        )
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].source_kind.value == "confirmation"
+        assert rows[0].in_context_belief_ids == ("sem-1",)
+
+    def test_belief_attribution_enabled_が_False_既定なら_in_context_belief_ids_を計算せず添付しない(
+        self,
+    ) -> None:
+        """flag OFF (既定) では chunk_coordinator が attribution 自体を計算
+        しないため、action に in_context_belief_ids が乗っていても evidence
+        には添付されない (= U4 導入前と一致)。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        coord, buffer, action_store, being_id = _build_coord(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "何も見つからなかった",
+            },
+            belief_evidence_transcriber=transcriber,
+            belief_attribution_enabled=False,
+        )
+        _trigger_chunk_close(
+            coord,
+            buffer,
+            action_store,
+            PlayerId(1),
+            last_action_in_context_belief_ids=("sem-1",),
+            last_action_expected_result="何か見つかるはず",
+        )
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].in_context_belief_ids == ()

@@ -97,6 +97,30 @@ def _build_encoding_and_draft(*, player_id: int = 7) -> tuple:
     return enc, draft, being_id, resolver, world_id
 
 
+def _build_encoding_and_draft_with_attribution(
+    *,
+    player_id: int = 7,
+    in_context_belief_ids: tuple[str, ...] = (),
+    expected_result: str | None = None,
+) -> tuple:
+    """U4: attribution 計算対象の action に in_context_belief_ids /
+    expected_result を乗せた ChunkEncodingInput + draft を作る。"""
+    t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
+    act = ActionResultEntry(
+        occurred_at=t,
+        action_summary="待機した",
+        result_summary="時間が進んだ",
+        tool_name="wait",
+        success=True,
+        in_context_belief_ids=in_context_belief_ids,
+        expected_result=expected_result,
+    )
+    enc = build_chunk_encoding_input(PlayerId(player_id), (), (act,))
+    draft = ChunkEpisodeDraftBuilder().build(enc)
+    being_id, resolver, world_id = _provision_scheduler(player_id)
+    return enc, draft, being_id, resolver, world_id
+
+
 def _provision_scheduler(player_id: int):
     """Phase 3 Step 3e-3: 各テストで scheduler に Resolver を inject するための
     Being+Resolver+WorldId 一式を組み立てる helper。
@@ -779,6 +803,118 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
             )
 
 
+class TestInlineSchedulerBeliefAttribution:
+    """U4 (予測誤差統一設計 部品3): 非同期経路 (Inline 実装) の attribution + CONFIRMATION。"""
+
+    def test_belief_attribution_enabled_で_prediction_error_evidence_に_in_context_belief_ids_が添付される(
+        self,
+    ) -> None:
+        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+            BeliefEvidenceTranscriber,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
+
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft_with_attribution(
+            in_context_belief_ids=("sem-1",), expected_result="何か見つかるはず"
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "何も見つからなかった",
+            }
+        )
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            belief_evidence_transcriber=transcriber,
+            belief_attribution_enabled=True,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].in_context_belief_ids == ("sem-1",)
+
+    def test_belief_attribution_enabled_で_prediction_error_None_かつ_in_context_belief_あり_expected_result_ありなら_CONFIRMATION(
+        self,
+    ) -> None:
+        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+            BeliefEvidenceTranscriber,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
+
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft_with_attribution(
+            in_context_belief_ids=("sem-1",), expected_result="何か見つかるはず"
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        port = _StubPort(returns={"interpreted": "I", "recall_text": "R"})
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            belief_evidence_transcriber=transcriber,
+            belief_attribution_enabled=True,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].source_kind.value == "confirmation"
+
+    def test_belief_attribution_enabled_False_既定なら_in_context_belief_ids_を添付しない(
+        self,
+    ) -> None:
+        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+            BeliefEvidenceTranscriber,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
+
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft_with_attribution(
+            in_context_belief_ids=("sem-1",), expected_result="何か見つかるはず"
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "何も見つからなかった",
+            }
+        )
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            belief_evidence_transcriber=transcriber,
+            belief_attribution_enabled=False,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].in_context_belief_ids == ()
+
+
 class TestThreadPoolSchedulerBeliefEvidenceTranscription:
     """ThreadPoolEpisodicSubjectiveScheduler (ワーカー thread 経路) も同じ完了点で
     transcriber を呼ぶことを保証する。"""
@@ -826,3 +962,85 @@ class TestThreadPoolSchedulerBeliefEvidenceTranscription:
                 store,
                 belief_evidence_transcriber="not_a_transcriber",  # type: ignore[arg-type]
             )
+
+
+class TestThreadPoolSchedulerBeliefAttribution:
+    """U4 (予測誤差統一設計 部品3): 非同期経路 (ThreadPool 実装) の attribution。"""
+
+    def test_belief_attribution_enabled_で_prediction_error_evidence_に_in_context_belief_ids_が添付される(
+        self,
+    ) -> None:
+        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+            BeliefEvidenceTranscriber,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
+
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft_with_attribution(
+            in_context_belief_ids=("sem-1",), expected_result="何か見つかるはず"
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "見つからなかった",
+            }
+        )
+        scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            belief_evidence_transcriber=transcriber,
+            belief_attribution_enabled=True,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.shutdown(timeout=5.0)
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].in_context_belief_ids == ("sem-1",)
+
+    def test_belief_attribution_enabled_False_既定なら_in_context_belief_ids_を添付しない(
+        self,
+    ) -> None:
+        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+            BeliefEvidenceTranscriber,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
+
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft_with_attribution(
+            in_context_belief_ids=("sem-1",), expected_result="何か見つかるはず"
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        port = _StubPort(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "prediction_error": "見つからなかった",
+            }
+        )
+        scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+            EpisodicChunkSubjectiveFieldsService(port),
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            belief_evidence_transcriber=transcriber,
+            belief_attribution_enabled=False,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.shutdown(timeout=5.0)
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].in_context_belief_ids == ()
