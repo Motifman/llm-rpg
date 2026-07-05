@@ -3618,11 +3618,13 @@ def create_world_runtime(
             log_belief_evidence_enabled_state,
             log_memo_distill_enabled_state,
             log_salience_structured_failure_enabled_state,
+            log_unconscious_context_enabled_state,
             resolve_belief_attribution_enabled,
             resolve_belief_consolidation_enabled,
             resolve_belief_evidence_enabled,
             resolve_memo_distill_enabled,
             resolve_salience_structured_failure_enabled,
+            resolve_unconscious_context_enabled,
         )
 
         _belief_evidence_enabled = resolve_belief_evidence_enabled()
@@ -3652,6 +3654,20 @@ def create_world_runtime(
         # buffer を共有するので ON なら buffer store を作る条件に加える。
         _memo_distill_enabled = resolve_memo_distill_enabled()
         log_memo_distill_enabled_state(_memo_distill_enabled)
+        # U7 (予測誤差統一設計 / 無意識コンテキスト / default OFF): belief top-K +
+        # L5 を chunk 主観補完 LLM に渡すか。他 flag と独立 (evidence buffer は
+        # 使わない = 読み取り専用の追加コンテキストなので buffer store 条件には
+        # 加えない)。
+        _unconscious_context_enabled = resolve_unconscious_context_enabled()
+        log_unconscious_context_enabled_state(_unconscious_context_enabled)
+        # U7: subjective service の構築 (この少し下) は semantic スタック構築
+        # (build_episodic_stack 呼び出し、この関数のずっと下) より先に走るため、
+        # belief 取得に使う SemanticPassiveRecallService をこの時点ではまだ
+        # 作れない (semantic_memory_store が未確定)。provider は「呼ばれた瞬間に
+        # このリストの中身を見る」遅延解決にし、build_episodic_stack が返した
+        # semantic_memory_store で後から埋める (下の「U7: 無意識コンテキスト用
+        # semantic recall service を確定させる」ブロックを参照)。
+        _unconscious_context_semantic_recall_holder: list[Any] = [None]
         belief_evidence_buffer_store = None
         belief_evidence_transcriber = None
         if (
@@ -3706,10 +3722,46 @@ def create_world_runtime(
                 )
 
                 shared_episode_store = InMemorySubjectiveEpisodeStore()
+                # U7: provider 自体は _unconscious_context_enabled が False でも
+                # 常に None のまま渡して構わない (service 側で「配線と有効化の
+                # 分離」を担保済み)。ON のときだけ実体を組む。belief を読む
+                # SemanticPassiveRecallService はこの時点でまだ確定していない
+                # (semantic_memory_store は build_episodic_stack がこの後で
+                # 構築する) ため、holder 経由の遅延解決にする。L5 (self_image /
+                # world_view) は RollingSummary 使用時のみ sliding_window が
+                # get_long_summary_text を実装するので、無ければ渡さない
+                # (= 従来通り省略される)。
+                _unconscious_context_provider = None
+                if _unconscious_context_enabled:
+                    from ai_rpg_world.application.llm.wiring.unconscious_context_provider import (
+                        build_unconscious_context_provider,
+                    )
+
+                    _get_long_summary_text = getattr(
+                        sliding_window, "get_long_summary_text", None
+                    )
+                    _long_summary_text_provider = (
+                        (
+                            lambda pid, _f=_get_long_summary_text: _f(
+                                PlayerId(pid)
+                            )
+                        )
+                        if callable(_get_long_summary_text)
+                        else None
+                    )
+                    _unconscious_context_provider = build_unconscious_context_provider(
+                        semantic_recall_service_provider=(
+                            lambda: _unconscious_context_semantic_recall_holder[0]
+                        ),
+                        long_summary_text_provider=_long_summary_text_provider,
+                    )
                 # U6: flag OFF なら salience_enabled=False (= system prompt が
                 # 導入前と byte 同一)。
                 _subjective_service = EpisodicChunkSubjectiveFieldsService(
-                    _client, salience_enabled=_salience_structured_failure_enabled
+                    _client,
+                    salience_enabled=_salience_structured_failure_enabled,
+                    unconscious_context_provider=_unconscious_context_provider,
+                    unconscious_context_enabled=_unconscious_context_enabled,
                 )
                 # scheduler と chunk_coordinator (= stack) が同じ store を
                 # 共有することで、worker が書き込んだ merged episode を
@@ -3773,9 +3825,15 @@ def create_world_runtime(
         _semantic_gist_enabled = config.semantic_llm_gist_enabled
         # U3b: 固着パスは belief journal (semantic_memory_store) への書き込みを
         # 前提とするため、他の semantic 系フラグが OFF でも semantic スタック
-        # 自体は組む必要がある。
+        # 自体は組む必要がある。U7 (無意識コンテキスト) も同じ理由で強制する:
+        # belief top-K を読むには semantic_memory_store が要るため、
+        # SEMANTIC_PASSIVE_TOP_K=0 のまま UNCONSCIOUS_CONTEXT_ENABLED だけ ON
+        # にしても semantic スタックが組まれないと belief が一切取れない。
         _semantic_enabled = (
-            _semantic_top_k > 0 or _semantic_gist_enabled or _belief_consolidation_enabled
+            _semantic_top_k > 0
+            or _semantic_gist_enabled
+            or _belief_consolidation_enabled
+            or _unconscious_context_enabled
         )
         _semantic_gist_service = None
         _semantic_persona_resolver = None
@@ -3935,6 +3993,29 @@ def create_world_runtime(
             # 非同期経路 (scheduler) には上で個別に渡し済み。
             belief_attribution_enabled=_belief_attribution_enabled,
         )
+
+        # U7: 無意識コンテキスト用 semantic recall service を確定させる。
+        # build_episodic_stack が semantic_enabled=True のときに初めて
+        # semantic_memory_store を構築するため (この関数のずっと上、subjective
+        # service 構築時点ではまだ存在しない)、ここで holder に実体を積む。
+        # provider (build_unconscious_context_provider が返す closure) は
+        # 呼ばれる瞬間にこの holder を見るので、以降の chunk 補完から belief が
+        # 引けるようになる。semantic_memory_store が None (= 何らかの理由で
+        # semantic スタックが組まれなかった) なら holder は None のままで、
+        # provider は belief 無し (空文字) に安全に縮退する。
+        if (
+            _unconscious_context_enabled
+            and runtime._episodic_stack.semantic_memory_store is not None
+        ):
+            from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+                SemanticPassiveRecallService,
+            )
+
+            _unconscious_context_semantic_recall_holder[0] = SemanticPassiveRecallService(
+                runtime._episodic_stack.semantic_memory_store,
+                being_attachment_resolver=runtime._aux_being_resolver,
+                default_world_id=runtime._aux_being_default_world_id,
+            )
 
         # U6 (STRUCTURED_FAILURE): flag ON のときだけ transcriber を作り
         # runtime に公開する。runtime_manager (presentation 層) が
