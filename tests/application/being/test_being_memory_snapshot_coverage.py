@@ -90,6 +90,9 @@ def _make_service():
     from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
         InMemorySubjectiveEpisodeStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+        InMemoryBeliefEvidenceBufferStore,
+    )
 
     return BeingMemorySnapshotService(
         memo_store=InMemoryMemoStore(),
@@ -101,6 +104,7 @@ def _make_service():
         recall_slot_store=InMemoryEpisodicRecallSlotStore(),
         afterglow_store=InMemoryAfterglowStore(),
         recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
+        belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
     )
 
 
@@ -172,10 +176,52 @@ class TestBeingMemorySnapshotServiceCoverage:
             # 漏れた」シナリオを最小再現する)。
             "recall_slot_entries": [], "recall_slot_cooldown": [],
             "afterglow_entries": [], "recall_habituation_last_recalled": [],
+            # U2: belief_evidence_buffer も実 store の key として揃えておく。
+            "belief_evidence_buffer": [],
         }
         with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
             service.restore(BeingId("being-test"), json.dumps(payload_without_new_key))
         assert "fictional_new_store" in str(exc_info.value)
+
+    def test_restore_wraps_belief_evidence_domain_exception_as_format_error(self):
+        """U2 レビュー MEDIUM 対応: BeliefEvidence VO はドメイン例外
+        (BeliefEvidenceValidationException、組み込み例外を継承しない) を
+        投げるが、破損 payload (不正 salience) を restore すると生の
+        ドメイン例外ではなく BeingMemoryPayloadFormatError に wrap されて
+        伝播することを保証する (= _decode_list の except 契約を守る)。"""
+        import json
+
+        from ai_rpg_world.application.being.being_memory_snapshot_service import (
+            BeingMemoryPayloadFormatError,
+        )
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
+        service = _make_service()
+        # salience は low | high のみ許容。medium は VO 構築で
+        # BeliefEvidenceValidationException になる。
+        broken_payload = {
+            "schema_version": 1,
+            "memo": [], "semantic_entries": [], "semantic_cluster_signatures": [],
+            "memory_links": [], "recall_buffer_pending": [],
+            "reinterpretation_journal": [], "episodic_episodes": [],
+            "recall_slot_entries": [], "recall_slot_cooldown": [],
+            "afterglow_entries": [], "recall_habituation_last_recalled": [],
+            "belief_evidence_buffer": [
+                {
+                    "evidence_id": "e1",
+                    "source_kind": "prediction_error",
+                    "episode_ids": ["ep-1"],
+                    "cue_signature": "tool:explore",
+                    "text": "探索は空振りだった",
+                    "salience": "medium",  # 不正値
+                    "occurred_at": "2026-07-05T09:00:00+00:00",
+                    "tick": 7,
+                }
+            ],
+        }
+        with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
+            service.restore(BeingId("being-test"), json.dumps(broken_payload))
+        assert "belief_evidence_buffer" in str(exc_info.value)
 
 
 class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:

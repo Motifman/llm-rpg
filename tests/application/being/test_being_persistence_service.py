@@ -66,6 +66,9 @@ def _build_persistence_service(
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         InMemoryEpisodicRecallSlotStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+        InMemoryBeliefEvidenceBufferStore,
+    )
 
     memo = InMemoryMemoStore()
     semantic = InMemorySemanticMemoryStore()
@@ -83,6 +86,7 @@ def _build_persistence_service(
         recall_slot_store=InMemoryEpisodicRecallSlotStore(),
         afterglow_store=InMemoryAfterglowStore(),
         recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
+        belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
     )
     svc = BeingPersistenceService(
         being_repository=being_repo,
@@ -221,6 +225,9 @@ class TestConstructorTypeGuards:
         from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
             InMemoryEpisodicRecallSlotStore,
         )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
 
         memo = InMemoryMemoStore()
         semantic = InMemorySemanticMemoryStore()
@@ -238,6 +245,7 @@ class TestConstructorTypeGuards:
             recall_slot_store=InMemoryEpisodicRecallSlotStore(),
             afterglow_store=InMemoryAfterglowStore(),
             recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
+            belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
         )
         with pytest.raises(TypeError, match="being_repository"):
             BeingPersistenceService(

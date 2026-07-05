@@ -159,6 +159,14 @@ class TraceEventKind:
     #     prediction_context_id が付いていたものの重複排除リスト。1 chunk が
     #     複数 action から成る場合は複数件になりうる)
     PREDICTION_OUTCOME = "prediction_outcome"
+    # U2 (証拠台帳統一設計): chunk 主観補完が prediction_error を非 None で
+    # 埋めた瞬間、ルールベースの転記で BeliefEvidence 1 件を evidence buffer
+    # に積んだタイミング。学習の素材がどれだけ流れているかを観測するための
+    # trace (M1 マイルストーンで流量を確認する)。semantic の想起挙動は
+    # 変えない (buffer に積むだけ)。
+    # payload: evidence_id / source_kind / episode_ids / cue_signature /
+    # text_snippet / salience
+    BELIEF_EVIDENCE = "belief_evidence"
 
 
 @dataclass(frozen=True)

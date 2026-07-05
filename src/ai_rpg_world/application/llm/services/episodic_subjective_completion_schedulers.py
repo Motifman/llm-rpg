@@ -40,13 +40,16 @@ import logging
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+    BeliefEvidenceTranscriber,
+)
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
 )
@@ -133,6 +136,7 @@ class InlineEpisodicSubjectiveScheduler:
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
         being_attachment_resolver: Optional[Any] = None,
         default_world_id: Optional[Any] = None,
+        belief_evidence_transcriber: Optional[BeliefEvidenceTranscriber] = None,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
@@ -160,13 +164,43 @@ class InlineEpisodicSubjectiveScheduler:
             )
         if default_world_id is not None and not isinstance(default_world_id, _WID):
             raise TypeError("default_world_id must be WorldId")
+        # U2 (証拠台帳統一設計): flag OFF (= None) なら従来通り何もしない。
+        if belief_evidence_transcriber is not None and not isinstance(
+            belief_evidence_transcriber, BeliefEvidenceTranscriber
+        ):
+            raise TypeError(
+                "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
+            )
 
         self._service = service
         self._store = episode_store
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
         self._being_attachment_resolver = being_attachment_resolver
+        self._belief_evidence_transcriber = belief_evidence_transcriber
         self._default_world_id = default_world_id
+
+    def _resolve_being_id_for_episode(self, episode: SubjectiveEpisode):
+        """episode.player_id から being_id を解決する (None なら未解決)。
+
+        U2 の evidence 転記だけがこの helper を使う。``_put_episode`` は
+        既存テスト (``test_episode_store_caller_being_id_path.py``) が
+        unbound 呼び出しで直接検証しているため、あえて解決ロジックを
+        重複させたまま残す (helper 共有に統一すると mock 越しの呼び出し
+        経路が変わってテストが壊れる)。
+        """
+        if (
+            self._being_attachment_resolver is None
+            or self._default_world_id is None
+        ):
+            return None
+        from ai_rpg_world.domain.player.value_object.player_id import (
+            PlayerId as _PID,
+        )
+
+        return self._being_attachment_resolver.resolve_being_id(
+            self._default_world_id, _PID(int(episode.player_id))
+        )
 
     def _put_episode(self, episode: SubjectiveEpisode) -> None:
         """being_id 経路で put。Resolver 未注入 / Being 未 provision なら
@@ -199,6 +233,20 @@ class InlineEpisodicSubjectiveScheduler:
             return
         self._store.put_by_being(being_id, episode)
 
+    def _record_belief_evidence_if_applicable(
+        self, episode: SubjectiveEpisode
+    ) -> None:
+        """U2 (証拠台帳統一設計): 非同期経路 (Inline 実装) の完了点。
+
+        transcriber 未注入 (flag OFF) や being 未解決なら何もしない。
+        """
+        if self._belief_evidence_transcriber is None:
+            return
+        being_id = self._resolve_being_id_for_episode(episode)
+        if being_id is None:
+            return
+        self._belief_evidence_transcriber.record_if_applicable(being_id, episode)
+
     def submit(
         self,
         draft: SubjectiveEpisode,
@@ -220,6 +268,8 @@ class InlineEpisodicSubjectiveScheduler:
                 encoding_input=encoding_input,
             )
             self._put_episode(merged)
+            # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
+            self._record_belief_evidence_if_applicable(merged)
         except Exception as exc:
             _logger.warning(
                 "InlineEpisodicSubjectiveScheduler: LLM 補完が失敗 (%s)。"
@@ -303,6 +353,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
         being_attachment_resolver: Optional[Any] = None,
         default_world_id: Optional[Any] = None,
+        belief_evidence_transcriber: Optional[BeliefEvidenceTranscriber] = None,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
@@ -333,6 +384,13 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             )
         if default_world_id is not None and not isinstance(default_world_id, _WID):
             raise TypeError("default_world_id must be WorldId")
+        # U2 (証拠台帳統一設計): flag OFF (= None) なら従来通り何もしない。
+        if belief_evidence_transcriber is not None and not isinstance(
+            belief_evidence_transcriber, BeliefEvidenceTranscriber
+        ):
+            raise TypeError(
+                "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
+            )
 
         self._service = service
         self._store = episode_store
@@ -341,6 +399,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         self._current_tick_provider = current_tick_provider
         self._being_attachment_resolver = being_attachment_resolver
         self._default_world_id = default_world_id
+        self._belief_evidence_transcriber = belief_evidence_transcriber
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="episodic_subj",
@@ -449,40 +508,55 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         with self._inflight_lock:
             self._inflight.pop(episode_id, None)
 
-    def _put_episode(self, episode: SubjectiveEpisode) -> None:
-        """being_id 経路で put。Resolver 未注入 / Being 未 provision なら
-        silent skip + warning ログ (Phase 3 Step 3e-3)。
+    def _resolve_being_id_for_episode(self, episode: SubjectiveEpisode):
+        """episode.player_id から being_id を解決する (None なら未解決)。
 
         ワーカー thread から呼ばれるため Resolver は thread-safe 前提
         (= InMemoryBeingRepository は構造的に read-only 相当)。
+        ``_put_episode`` と U2 の evidence 転記が同じ解決結果を共有する。
         """
         if (
             self._being_attachment_resolver is None
             or self._default_world_id is None
         ):
-            _logger.warning(
-                "ThreadPool scheduler skipped episode put: Resolver / WorldId "
-                "unresolved (episode_id=%s, player_id=%s)。",
-                episode.episode_id,
-                episode.player_id,
-            )
-            return
+            return None
         from ai_rpg_world.domain.player.value_object.player_id import (
             PlayerId as _PID,
         )
 
-        being_id = self._being_attachment_resolver.resolve_being_id(
+        return self._being_attachment_resolver.resolve_being_id(
             self._default_world_id, _PID(int(episode.player_id))
         )
+
+    def _put_episode(self, episode: SubjectiveEpisode) -> None:
+        """being_id 経路で put。Resolver 未注入 / Being 未 provision なら
+        silent skip + warning ログ (Phase 3 Step 3e-3)。"""
+        being_id = self._resolve_being_id_for_episode(episode)
         if being_id is None:
             _logger.warning(
-                "ThreadPool scheduler skipped episode put: Being not "
-                "provisioned (episode_id=%s, player_id=%s)。",
+                "ThreadPool scheduler skipped episode put: Resolver / WorldId "
+                "unresolved or Being not provisioned (episode_id=%s, "
+                "player_id=%s)。",
                 episode.episode_id,
                 episode.player_id,
             )
             return
         self._store.put_by_being(being_id, episode)
+
+    def _record_belief_evidence_if_applicable(
+        self, episode: SubjectiveEpisode
+    ) -> None:
+        """U2 (証拠台帳統一設計): 非同期経路 (ThreadPool 実装) の完了点。
+
+        ワーカー thread から呼ばれる。transcriber 未注入 (flag OFF) や
+        being 未解決なら何もしない。
+        """
+        if self._belief_evidence_transcriber is None:
+            return
+        being_id = self._resolve_being_id_for_episode(episode)
+        if being_id is None:
+            return
+        self._belief_evidence_transcriber.record_if_applicable(being_id, episode)
 
     def _worker(
         self,
@@ -499,6 +573,8 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 encoding_input=encoding_input,
             )
             self._put_episode(merged)
+            # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
+            self._record_belief_evidence_if_applicable(merged)
         except Exception as exc:
             _logger.warning(
                 "ThreadPoolEpisodicSubjectiveScheduler worker failed (%s)。"

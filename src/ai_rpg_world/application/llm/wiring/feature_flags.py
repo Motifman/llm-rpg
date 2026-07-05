@@ -376,3 +376,37 @@ def log_prediction_context_id_state(enabled: bool) -> None:
         ENV_PREDICTION_CONTEXT_ID_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Semantic memory: belief evidence buffer 転記 (U2, 証拠台帳統一設計)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_BELIEF_EVIDENCE_ENABLED = "BELIEF_EVIDENCE_ENABLED"
+
+
+def resolve_belief_evidence_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """chunk 主観補完完了時に ``BeliefEvidence`` 転記を行うか。
+
+    ``BELIEF_EVIDENCE_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    ON でも semantic の想起挙動 (§learned section 等) は一切変わらない。
+    prediction_error が非 None のときだけ evidence buffer に 1 件積む
+    (= 学習の素材が観測可能になるだけ)。固着パス (belief journal への
+    統合) は別 PR (U3) のスコープ。
+
+    詳細は docs/memory_system/semantic_learning_consolidation_design.md。
+    """
+    return _parse_bool_env(ENV_BELIEF_EVIDENCE_ENABLED, env=env, default=False)
+
+
+def log_belief_evidence_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_BELIEF_EVIDENCE_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )

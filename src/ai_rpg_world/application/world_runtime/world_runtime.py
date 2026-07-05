@@ -3608,6 +3608,33 @@ def create_world_runtime(
         subjective_scheduler = None
         persona_provider: Optional[Callable[[PlayerId], str]] = None
         shared_episode_store = None  # scheduler が wire されたときだけ事前生成
+        # U2 (証拠台帳統一設計 / default OFF): BELIEF_EVIDENCE_ENABLED のときだけ
+        # evidence buffer + transcriber を構築する。「配線 (wire) と有効化
+        # (enable) の分離」規約に従い、OFF なら None のまま扱う (= 転記コード
+        # パス自体は通るが不活性)。
+        from ai_rpg_world.application.llm.wiring.feature_flags import (
+            log_belief_evidence_enabled_state,
+            resolve_belief_evidence_enabled,
+        )
+
+        _belief_evidence_enabled = resolve_belief_evidence_enabled()
+        log_belief_evidence_enabled_state(_belief_evidence_enabled)
+        belief_evidence_buffer_store = None
+        belief_evidence_transcriber = None
+        if _belief_evidence_enabled:
+            from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+                BeliefEvidenceTranscriber,
+            )
+            from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+                InMemoryBeliefEvidenceBufferStore,
+            )
+
+            belief_evidence_buffer_store = InMemoryBeliefEvidenceBufferStore()
+            belief_evidence_transcriber = BeliefEvidenceTranscriber(
+                belief_evidence_buffer_store,
+                trace_recorder_provider=lambda: runtime._trace_recorder,
+                current_tick_provider=runtime.current_tick,
+            )
         if is_episodic_subjective_enabled():
             from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
                 EpisodicChunkSubjectiveFieldsService,
@@ -3655,6 +3682,9 @@ def create_world_runtime(
                     current_tick_provider=runtime.current_tick,
                     being_attachment_resolver=runtime._aux_being_resolver,
                     default_world_id=runtime._aux_being_default_world_id,
+                    # U2: 非同期経路 (worker thread) の完了点。flag OFF なら
+                    # None のまま (= 従来動作と完全互換)。
+                    belief_evidence_transcriber=belief_evidence_transcriber,
                 )
                 # 各 player の persona_block を player_id 引きで返す provider。
                 # world_character (= 操作対象) は rich persona、その他は spawn 名
@@ -3816,6 +3846,12 @@ def create_world_runtime(
             runtime_context_provider=lambda pid: runtime.build_llm_context(
                 pid
             ).tool_runtime_context,
+            # U2 (証拠台帳統一設計): 同期経路用に transcriber を渡す (実際に
+            # 発火するのは chunk_subjective_fields_service 注入時のみ。本
+            # runtime の既定経路は非同期 scheduler なので通常は素通り)。store
+            # 自体は snapshot 用に stack へ公開する。
+            belief_evidence_transcriber=belief_evidence_transcriber,
+            belief_evidence_buffer_store=belief_evidence_buffer_store,
         )
 
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で

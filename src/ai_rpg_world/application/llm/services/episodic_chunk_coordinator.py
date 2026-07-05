@@ -15,6 +15,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.scheduler import (
         IEpisodicSubjectiveCompletionScheduler,
     )
+    from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+        BeliefEvidenceTranscriber,
+    )
     from ai_rpg_world.domain.being.service.being_attachment_resolver import (
         BeingAttachmentResolver,
     )
@@ -105,6 +108,7 @@ class EpisodicChunkCoordinator:
         ] = None,
         being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
         default_world_id: Optional["WorldId"] = None,
+        belief_evidence_transcriber: Optional["BeliefEvidenceTranscriber"] = None,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -177,6 +181,19 @@ class EpisodicChunkCoordinator:
         if default_world_id is not None and not isinstance(default_world_id, _WID):
             raise TypeError("default_world_id must be WorldId")
 
+        # U2 (証拠台帳統一設計): 転記は wiring 層が flag を見て注入するかどうか
+        # 決める (「配線」と「有効化」の分離)。None なら従来通り何もしない。
+        if belief_evidence_transcriber is not None:
+            from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
+                BeliefEvidenceTranscriber as _BET,
+            )
+
+            if not isinstance(belief_evidence_transcriber, _BET):
+                raise TypeError(
+                    "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
+                )
+        self._belief_evidence_transcriber = belief_evidence_transcriber
+
         self._observation_buffer = observation_buffer
         self._sliding_window_memory = sliding_window_memory
         self._action_result_store = action_result_store
@@ -201,12 +218,41 @@ class EpisodicChunkCoordinator:
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
 
+    def _resolve_being_id_for_episode(self, episode: SubjectiveEpisode):
+        """episode.player_id から being_id を解決する。
+
+        Resolver+WorldId が未注入 / Being 未 provision なら None を返す
+        (silent skip は呼び出し側の責務。デバッグ可視性のため warning ログは
+        呼び出し側で出す)。``_put_episode`` と evidence 転記 (U2) の両方が
+        同じ解決結果を使う。
+        """
+        if (
+            self._being_attachment_resolver is None
+            or self._default_world_id is None
+        ):
+            return None
+        from ai_rpg_world.domain.player.value_object.player_id import (
+            PlayerId as _PID,
+        )
+
+        return self._being_attachment_resolver.resolve_being_id(
+            self._default_world_id, _PID(int(episode.player_id))
+        )
+
     def _put_episode(self, episode: SubjectiveEpisode) -> None:
         """episode_store への put を being_id 経路で発行する。
 
         Phase 3 Step 3e-3: legacy player_id 経路は撤去済。Resolver+WorldId が
         未注入 / Being 未 provision なら silent skip (= turn 副作用なので
         次回 turn で再試行)。デバッグ可視性のため warning ログを 1 回出す。
+
+        U2 レビュー対応: 既存テスト (``test_episode_store_caller_being_id_path.py``)
+        が本メソッドを ``ClassName._put_episode(mock_self, ep)`` の形で unbound
+        呼び出しし、``mock_self._being_attachment_resolver.resolve_being_id`` を
+        直接検証している。共通 helper へ抽出すると mock 越しの呼び出し経路が
+        変わってテストが壊れるため、あえて ``_resolve_being_id_for_episode`` とは
+        別に解決ロジックをそのまま残す (evidence 転記用の解決は
+        ``_resolve_being_id_for_episode`` 側で行う)。
         """
         if (
             self._being_attachment_resolver is None
@@ -236,6 +282,24 @@ class EpisodicChunkCoordinator:
             )
             return
         self._episodic_episode_store.put_by_being(being_id, episode)
+
+    def _record_belief_evidence_if_applicable(
+        self, episode: SubjectiveEpisode
+    ) -> None:
+        """U2 (証拠台帳統一設計): 同期 LLM 補完直後に prediction_error を
+        evidence 化する。transcriber 未注入 (flag OFF) なら何もしない。
+
+        being_id が解決できないとき (未 provision 等) は evidence も
+        積まない。``_put_episode`` が同じ episode を silent skip する
+        状況と揃える (= episode 自体が保存されないのに evidence だけ
+        別 being に残る、という不整合を避ける)。
+        """
+        if self._belief_evidence_transcriber is None:
+            return
+        being_id = self._resolve_being_id_for_episode(episode)
+        if being_id is None:
+            return
+        self._belief_evidence_transcriber.record_if_applicable(being_id, episode)
 
     def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
         if self._trace_recorder_provider is not None:
@@ -465,6 +529,11 @@ class EpisodicChunkCoordinator:
                 episode=episode,
                 chunk_actions=encoding_input.action_results,
             )
+            # U2 (証拠台帳統一設計): 同期経路の「chunk 主観補完の完了点」は
+            # ここ (merge 直後)。episode.prediction_error が確定した直後に
+            # 転記する。非同期経路の対応箇所は
+            # episodic_subjective_completion_schedulers.py。
+            self._record_belief_evidence_if_applicable(episode)
         # draft (もしくは inline merge 済み) を必ず先に store に書く。
         # scheduler 経路 (新規): draft = PR #305 でテンプレ既定値が埋まった状態
         # なので「LLM 完了前でも recall_text が空にならない」が保証される。

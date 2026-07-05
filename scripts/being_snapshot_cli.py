@@ -120,6 +120,7 @@ def _build_stack(
 
     # PR-G: 想起階層 (slot / afterglow / habituation) は CLI 経由の単発 dump で
     # 使う場面が無いので、空の in-memory store を渡すだけで足る。
+    # U2: belief evidence buffer も同様に CLI では in-memory で足りる。
     from ai_rpg_world.application.llm.services.afterglow_store import (
         InMemoryAfterglowStore,
     )
@@ -128,6 +129,9 @@ def _build_stack(
     )
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         InMemoryEpisodicRecallSlotStore,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+        InMemoryBeliefEvidenceBufferStore,
     )
 
     memory_snapshot = BeingMemorySnapshotService(
@@ -140,6 +144,7 @@ def _build_stack(
         recall_slot_store=InMemoryEpisodicRecallSlotStore(),
         afterglow_store=InMemoryAfterglowStore(),
         recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
+        belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
     )
     return being_repo, memory_snapshot, BeingSnapshotFileGateway()
 
