@@ -135,6 +135,7 @@ def _evidence(
     occurred_at: datetime | None = None,
     episode_ids: tuple[str, ...] = ("ep-1",),
     source_kind: BeliefEvidenceSourceKind = BeliefEvidenceSourceKind.PREDICTION_ERROR,
+    in_context_belief_ids: tuple[str, ...] = (),
 ) -> BeliefEvidence:
     return BeliefEvidence(
         evidence_id=evidence_id,
@@ -142,6 +143,7 @@ def _evidence(
         episode_ids=episode_ids,
         cue_signature=cue_signature,
         text=text,
+        in_context_belief_ids=in_context_belief_ids,
         salience=salience,
         occurred_at=occurred_at or datetime(2026, 7, 1, tzinfo=timezone.utc),
     )
@@ -712,6 +714,90 @@ class TestShortlistDeterminism:
         )
 
         assert shortlist == ()
+
+
+class TestShortlistAttribution:
+    """U4 (予測誤差統一設計 部品3): in_context_belief_ids が指す belief は
+    cue スコアに関わらず必ず shortlist に含まれること。"""
+
+    def test_cue_スコアが0でも_in_context_belief_は必ず載る(self) -> None:
+        """cue_signature がノアと無関係な belief でも、evidence の
+        in_context_belief_ids に含まれていれば shortlist に強制搭載される。"""
+        unrelated_but_in_context = _belief_entry(
+            entry_id="sem-unrelated-in-context",
+            text="ノアは機嫌が悪いと無視する",
+            tags=("ノア",),
+        )
+        setup = _build_setup(outcome={"decisions": []})
+        setup.semantic_store.add_by_being(setup.being_id, unrelated_but_in_context)
+        setup.evidence_buffer.append_by_being(
+            setup.being_id,
+            _evidence(
+                "e1",
+                cue_signature="tool:explore",
+                in_context_belief_ids=("sem-unrelated-in-context",),
+            ),
+        )
+
+        shortlist = setup.coordinator._build_shortlist(
+            setup.being_id, tuple(setup.evidence_buffer.list_all_by_being(setup.being_id))
+        )
+
+        assert [b.belief_id for b in shortlist] == ["sem-unrelated-in-context"]
+
+    def test_in_context_belief_は_top_k_の_cap_を超えても全件残る(self) -> None:
+        """forced (in-context) belief は top_k を超過しても全て残す。
+        cue スコアベースの追加候補だけが残り枠に絞られる。"""
+        forced_beliefs = [
+            _belief_entry(entry_id=f"sem-forced-{i}", text=f"信念{i}", tags=("x",))
+            for i in range(3)
+        ]
+        scored_belief = _belief_entry(
+            entry_id="sem-scored", text="探索は空振りが多い", tags=("explore",)
+        )
+        setup = _build_setup(outcome={"decisions": []}, shortlist_top_k=2)
+        for b in forced_beliefs:
+            setup.semantic_store.add_by_being(setup.being_id, b)
+        setup.semantic_store.add_by_being(setup.being_id, scored_belief)
+        setup.evidence_buffer.append_by_being(
+            setup.being_id,
+            _evidence(
+                "e1",
+                cue_signature="tool:explore",
+                in_context_belief_ids=tuple(b.belief_id for b in forced_beliefs),
+            ),
+        )
+
+        shortlist = setup.coordinator._build_shortlist(
+            setup.being_id, tuple(setup.evidence_buffer.list_all_by_being(setup.being_id))
+        )
+
+        shortlist_ids = {b.belief_id for b in shortlist}
+        assert shortlist_ids >= {b.belief_id for b in forced_beliefs}
+        # top_k=2 を forced 3 件が既に超えているので、cue スコアの追加候補は
+        # 残り枠 0 件で採用されない。
+        assert "sem-scored" not in shortlist_ids
+
+    def test_flag_OFF相当_in_context_belief_ids_が空なら従来どおりcueスコアのみ(
+        self,
+    ) -> None:
+        """evidence.in_context_belief_ids が常に空 (U4 flag OFF) のときは
+        forced belief が存在しないため、導入前と同じ cue スコアのみの
+        shortlist になる。"""
+        matching = _belief_entry(
+            entry_id="sem-match", text="探索は空振りが多い", tags=("explore",)
+        )
+        setup = _build_setup(outcome={"decisions": []})
+        setup.semantic_store.add_by_being(setup.being_id, matching)
+        setup.evidence_buffer.append_by_being(
+            setup.being_id, _evidence("e1", cue_signature="tool:explore")
+        )
+
+        shortlist = setup.coordinator._build_shortlist(
+            setup.being_id, tuple(setup.evidence_buffer.list_all_by_being(setup.being_id))
+        )
+
+        assert [b.belief_id for b in shortlist] == ["sem-match"]
 
 
 class TestTracePayload:

@@ -9,6 +9,7 @@
 
 【入力の意味】
 - evidence: 予測が外れた経験・繰り返し検出された親密度クラスタ等、学習の素材 1 件。cue_signature はその状況を表す決定論キー (例 "tool:explore|spot:浜辺")。text は素材の内容。
+  - source_kind が "confirmation" の evidence は「その belief を信じて行動し、予測が当たった」という支持の証拠です。反証ではなく support として扱い、strengthen の有力な根拠にしてください。
 - shortlist: 既に固着済みの belief (学び) の候補。belief_id / text / confidence / tags / 支持件数 / 反証件数を持つ。evidence と関連しそうな belief だけを渡している。
 
 【あなたの仕事】
@@ -58,8 +59,8 @@ decisions は次のいずれかの形の要素からなる配列:
 
 === belief journal (list_for_being) ===
 --- entry[0] ---
-  entry_id: sem-e0bcfcda15bf4cd9a0b28c58600b5730
-  belief_id: sem-e0bcfcda15bf4cd9a0b28c58600b5730
+  entry_id: sem-63a41600f6ca4f7fabc4aedda12d5e47
+  belief_id: sem-63a41600f6ca4f7fabc4aedda12d5e47
   status: active
   text: この島の探索は空振りが多い
   confidence: 0.7000000000000001
