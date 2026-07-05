@@ -768,3 +768,52 @@ def log_error_gated_encoding_enabled_state(enabled: bool) -> None:
         ENV_ERROR_GATED_ENCODING_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# pending prediction (約束・遅延予測) (U10a)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_PENDING_PREDICTION_ENABLED = "PENDING_PREDICTION_ENABLED"
+
+
+def resolve_pending_prediction_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """chunk 主観補完に pending_prediction (約束・見込み) の抽出・保持・
+
+    再浮上を一括で足すか (予測誤差統一設計 部品6、U10a)。
+
+    ``PENDING_PREDICTION_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    OFF (既定) のとき:
+    - chunk 主観補完 LLM の system prompt に ``pending_prediction`` キーは
+      一切出ない (byte 不変)
+    - pending prediction store は構築されない (snapshot は空 in-memory
+      fallback)
+    - prompt の【保留中の予測】section は出ない (byte 不変)
+
+    ON にすると:
+    - chunk 主観補完が「将来の特定の時・場所・相手についての約束や見込み」を
+      1 chunk につき最大 1 件抽出し、``PendingPrediction`` として per-Being
+      store (容量上限 8 件) に積む
+    - prompt build 時、解決 cue (spot / player) が現在の状況と一致し、かつ
+      tick 範囲が到来しているものを最大 2 件、【保留中の予測】section に出す
+    - 清算 (履行/破棄判定・期限失効) は本 flag のスコープ外 (U10b)
+
+    詳細は docs/memory_system/prediction_error_unified_memory_design.md
+    「部品 6: 保留中の予測」節、
+    docs/memory_system/prediction_error_unified_implementation_plan.md の
+    U10 節。
+    """
+    return _parse_bool_env(ENV_PENDING_PREDICTION_ENABLED, env=env, default=False)
+
+
+def log_pending_prediction_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_PENDING_PREDICTION_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )
