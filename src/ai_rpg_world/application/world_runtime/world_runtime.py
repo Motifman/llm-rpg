@@ -3615,9 +3615,11 @@ def create_world_runtime(
         from ai_rpg_world.application.llm.wiring.feature_flags import (
             log_belief_consolidation_enabled_state,
             log_belief_evidence_enabled_state,
+            log_memo_distill_enabled_state,
             log_salience_structured_failure_enabled_state,
             resolve_belief_consolidation_enabled,
             resolve_belief_evidence_enabled,
+            resolve_memo_distill_enabled,
             resolve_salience_structured_failure_enabled,
         )
 
@@ -3637,12 +3639,17 @@ def create_world_runtime(
         log_salience_structured_failure_enabled_state(
             _salience_structured_failure_enabled
         )
+        # U5: MEMO_DISTILL 転記 (default OFF)。他 3 flag 同様、同じ evidence
+        # buffer を共有するので ON なら buffer store を作る条件に加える。
+        _memo_distill_enabled = resolve_memo_distill_enabled()
+        log_memo_distill_enabled_state(_memo_distill_enabled)
         belief_evidence_buffer_store = None
         belief_evidence_transcriber = None
         if (
             _belief_evidence_enabled
             or _belief_consolidation_enabled
             or _salience_structured_failure_enabled
+            or _memo_distill_enabled
         ):
             from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
                 InMemoryBeliefEvidenceBufferStore,
@@ -3934,6 +3941,29 @@ def create_world_runtime(
                     current_tick_provider=runtime.current_tick,
                 )
             )
+
+        # U5 (MEMO_DISTILL): flag ON のときだけ transcriber を作り、既に
+        # 構築済の _todo_tool_executor (= _wire_auxiliary_tool_stack() が本
+        # ブロックより前で呼ばれるため belief_evidence_buffer_store 確定前に
+        # 作られている) へ post-hoc に差し込む。executor 自身が memo_done
+        # 成功時に record_from_memo を呼ぶ (loop_guard 経由の STRUCTURED_FAILURE
+        # と異なり presentation 層の仲介は不要)。episode_store は
+        # build_episodic_stack が確定させた共有 store。
+        if _memo_distill_enabled and belief_evidence_buffer_store is not None:
+            from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import (
+                MemoDistillEvidenceTranscriber,
+            )
+
+            memo_distill_transcriber = MemoDistillEvidenceTranscriber(
+                belief_evidence_buffer_store,
+                runtime._episodic_stack.episode_store,
+                trace_recorder_provider=lambda: runtime._trace_recorder,
+                current_tick_provider=runtime.current_tick,
+            )
+            if runtime._todo_tool_executor is not None:
+                runtime._todo_tool_executor.set_memo_distill_transcriber(
+                    memo_distill_transcriber
+                )
 
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
     # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止

@@ -712,3 +712,37 @@ class TestSmokeBeliefEvidenceWiring:
             runtime._episodic_stack.belief_evidence_buffer_store,
             InMemoryBeliefEvidenceBufferStore,
         )
+
+
+class TestSmokeMemoDistillWiring:
+    """U5 (MEMO_DISTILL): ``MEMO_DISTILL_ENABLED`` の配線が
+    ``create_world_runtime`` 経路で生きていることの smoke。
+
+    ``_wire_auxiliary_tool_stack()`` が belief_evidence_buffer_store の
+    構築より前に ``_todo_tool_executor`` を作ってしまうため、post-hoc
+    setter (``set_memo_distill_transcriber``) 経由の差し込みが実際に効いて
+    いることを保証する。転記自体の単体挙動は
+    ``test_memo_distill_evidence_transcriber.py`` /
+    ``test_memo_executor_memo_distill.py`` で担保済み。
+    """
+
+    def test_flag_OFF_なら_todo_tool_executor_に_transcriber_が注入されない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("MEMO_DISTILL_ENABLED", raising=False)
+        runtime = _build_runtime(monkeypatch, enabled=True)
+        assert runtime._todo_tool_executor._memo_distill_transcriber is None
+
+    def test_flag_ON_なら_todo_tool_executor_に_transcriber_が注入される(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import (
+            MemoDistillEvidenceTranscriber,
+        )
+
+        monkeypatch.setenv("MEMO_DISTILL_ENABLED", "1")
+        runtime = _build_runtime(monkeypatch, enabled=True)
+        assert isinstance(
+            runtime._todo_tool_executor._memo_distill_transcriber,
+            MemoDistillEvidenceTranscriber,
+        )
