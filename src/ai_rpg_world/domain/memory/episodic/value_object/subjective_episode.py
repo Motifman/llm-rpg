@@ -69,6 +69,13 @@ class SubjectiveEpisode:
     # 増やさず、既存の主観文付与で interpreted / recall_text と同じ pass で
     # 書かせる方針のため、未指定や空文字も None として畳み込む Optional に保つ。
     heading: str | None = None
+    # U6 (予測誤差統一設計 / salience + STRUCTURED_FAILURE): 「このキャラに
+    # とって予測が大きく外れた / 初めての重大事」かどうかを chunk 主観補完
+    # LLM が一度だけ判定するフィールド。heading と同じく既存の主観文付与
+    # pass に相乗りさせ、新規 LLM コールは増やさない。heading と違って
+    # 「値が無い」状態は表現しない (常に low/high のどちらか) ため、Optional
+    # ではなく既定値 "low" を持つ必須フィールドにする。
+    salience: str = "low"
 
     def __post_init__(self) -> None:
         if not isinstance(self.episode_id, str):
@@ -127,6 +134,9 @@ class SubjectiveEpisode:
             raise ValueError("recall_count must be int >= 0")
         if self.last_recalled_at is not None and not isinstance(self.last_recalled_at, datetime):
             raise TypeError("last_recalled_at must be datetime or None")
+
+        if self.salience not in ("low", "high"):
+            raise ValueError('salience must be "low" or "high"')
 
 
 __all__ = ["SubjectiveEpisode"]

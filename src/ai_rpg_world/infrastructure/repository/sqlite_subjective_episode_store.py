@@ -94,6 +94,10 @@ def _episode_to_payload_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
         "last_recalled_at": ep.last_recalled_at.isoformat()
         if ep.last_recalled_at is not None
         else None,
+        # U6 (予測誤差統一設計 / salience): payload は JSON blob (payload_json
+        # 列) なので ALTER TABLE 不要。旧行は "salience" キーを持たないため
+        # decode 側の data.get("salience", "low") だけで後方互換が成立する。
+        "salience": ep.salience,
     }
 
 
@@ -154,6 +158,8 @@ def _payload_dict_to_episode(data: dict[str, Any]) -> SubjectiveEpisode:
             if (last_raw := data.get("last_recalled_at")) not in (None, "")
             else None
         ),
+        # U6: 旧行 (salience キー無し) は "low" に倒す。
+        salience=str(data.get("salience", "low")),
     )
 
 
