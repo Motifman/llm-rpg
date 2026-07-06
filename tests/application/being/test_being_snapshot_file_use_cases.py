@@ -69,6 +69,9 @@ def _make_environment():
     from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
         InMemoryEpisodicRecallSuccessStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+        InMemoryPendingPredictionStore,
+    )
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
@@ -91,6 +94,7 @@ def _make_environment():
         recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
         belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
         recall_success_store=InMemoryEpisodicRecallSuccessStore(),
+        pending_prediction_store=InMemoryPendingPredictionStore(),
     )
     gateway = BeingSnapshotFileGateway()
     capture = CaptureBeingSnapshotToFileUseCase(

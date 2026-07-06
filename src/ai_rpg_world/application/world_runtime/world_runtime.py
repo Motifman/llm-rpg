@@ -1316,6 +1316,10 @@ class WorldRuntime:
                 # #526 段階 3 PR-C: afterglow store。stack で enable された
                 # 時のみ非 None。retrieve 側にも同一 store が注入されている。
                 afterglow_store=self._episodic_stack.afterglow_store,
+                # U10a (予測誤差統一設計 部品6・pending prediction): stack で
+                # enable された時のみ非 None。書込みは chunk_coordinator /
+                # scheduler 側 (build_episodic_stack / 上の wiring 参照)。
+                pending_prediction_store=self._episodic_stack.pending_prediction_store,
             )
         builder = DefaultPromptBuilder(
             core,
@@ -3619,6 +3623,7 @@ def create_world_runtime(
             log_error_driven_reinterpretation_enabled_state,
             log_error_gated_encoding_enabled_state,
             log_memo_distill_enabled_state,
+            log_pending_prediction_enabled_state,
             log_recall_hit_boost_enabled_state,
             log_salience_structured_failure_enabled_state,
             log_unconscious_context_enabled_state,
@@ -3628,6 +3633,7 @@ def create_world_runtime(
             resolve_error_driven_reinterpretation_enabled,
             resolve_error_gated_encoding_enabled,
             resolve_memo_distill_enabled,
+            resolve_pending_prediction_enabled,
             resolve_recall_hit_boost_enabled,
             resolve_salience_structured_failure_enabled,
             resolve_unconscious_context_enabled,
@@ -3693,6 +3699,12 @@ def create_world_runtime(
         # 加えない)。
         _unconscious_context_enabled = resolve_unconscious_context_enabled()
         log_unconscious_context_enabled_state(_unconscious_context_enabled)
+        # U10a (予測誤差統一設計 部品6・pending prediction / default OFF):
+        # 抽出・保持・再浮上を一括ゲートする。evidence buffer とは無関係な
+        # 独立 flag (別の per-Being store を使う) なので buffer store 条件には
+        # 加えない。
+        _pending_prediction_enabled = resolve_pending_prediction_enabled()
+        log_pending_prediction_enabled_state(_pending_prediction_enabled)
         # U7: subjective service の構築 (この少し下) は semantic スタック構築
         # (build_episodic_stack 呼び出し、この関数のずっと下) より先に走るため、
         # belief 取得に使う SemanticPassiveRecallService をこの時点ではまだ
@@ -3799,6 +3811,7 @@ def create_world_runtime(
                     unconscious_context_provider=_unconscious_context_provider,
                     unconscious_context_enabled=_unconscious_context_enabled,
                     error_gated_encoding_enabled=_error_gated_encoding_enabled,
+                    pending_prediction_enabled=_pending_prediction_enabled,
                 )
                 # scheduler と chunk_coordinator (= stack) が同じ store を
                 # 共有することで、worker が書き込んだ merged episode を
@@ -3837,6 +3850,11 @@ def create_world_runtime(
                     # recall_success_store を scheduler に後から差し込む」
                     # ブロックを参照)。
                     recall_hit_boost_enabled=_recall_hit_boost_enabled,
+                    # U10a: default False。pending_prediction_store 自体は
+                    # build_episodic_stack がこの後で構築するため、この時点
+                    # では未確定 (= None のまま)。build_episodic_stack 完了後に
+                    # set_pending_prediction_store で差し込む。
+                    pending_prediction_enabled=_pending_prediction_enabled,
                 )
                 # 各 player の persona_block を player_id 引きで返す provider。
                 # world_character (= 操作対象) は rich persona、その他は spawn 名
@@ -4060,6 +4078,10 @@ def create_world_runtime(
             # set_recall_success_store を呼んで差し込む。
             recall_hit_boost_enabled=_recall_hit_boost_enabled,
             recall_hit_boost_strength=_recall_hit_boost_strength,
+            # U10a (pending prediction): 同期経路 (chunk_coordinator) と
+            # store 自体の構築を build_episodic_stack に任せる。非同期経路
+            # (scheduler) は下で set_pending_prediction_store により差し込む。
+            pending_prediction_enabled=_pending_prediction_enabled,
         )
 
         # U9a: recall_buffer を scheduler に後から差し込む。
@@ -4076,6 +4098,10 @@ def create_world_runtime(
             # U9b: recall_success_store も同じ理由で後から差し込む。
             subjective_scheduler.set_recall_success_store(
                 runtime._episodic_stack.recall_success_store
+            )
+            # U10a: pending_prediction_store も同じ理由で後から差し込む。
+            subjective_scheduler.set_pending_prediction_store(
+                runtime._episodic_stack.pending_prediction_store
             )
 
         # U7: 無意識コンテキスト用 semantic recall service を確定させる。

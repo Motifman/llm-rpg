@@ -479,6 +479,10 @@ class DefaultPromptBuilder(IPromptBuilder):
         # PR8 (R5): encounter memory を recall cue 源にする。注入時のみ動く。
         encounter_memory_for_recall = episodic.encounter_memory
         encounter_recent_window_ticks = episodic.encounter_recent_window_ticks
+        # U10a (予測誤差統一設計 部品6・pending prediction): store が None なら
+        # 機構自体が無効 (= 他の sidecar store と同じ「store の有無で判定」規約)。
+        pending_prediction_store = episodic.pending_prediction_store
+        pending_prediction_resurface_cap = episodic.pending_prediction_resurface_cap
 
         recent_observations_limit = limits.recent_observations_limit
         recent_actions_limit = limits.recent_actions_limit
@@ -678,6 +682,10 @@ class DefaultPromptBuilder(IPromptBuilder):
         # ``debug.afterglow_index`` に乗ってくるので、ここでは store.apply_decision
         # (書込) のためにだけ参照する。retrieve は read-only。
         self._afterglow_store = episodic.afterglow_store
+        # U10a (予測誤差統一設計 部品6・pending prediction): 再浮上用 sidecar
+        # (任意)。default off。store が None なら機構自体が無効。
+        self._pending_prediction_store = pending_prediction_store
+        self._pending_prediction_resurface_cap = pending_prediction_resurface_cap
         self._noun_matcher = noun_matcher
         # Phase 1c
         self._semantic_passive_recall = semantic_passive_recall
@@ -1031,6 +1039,12 @@ class DefaultPromptBuilder(IPromptBuilder):
         prediction_feedback_text = build_prediction_feedback_text(
             action_results, observations
         )
+        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
+        # 再浮上。store 未配線 (flag OFF) なら常に空文字 (= section 省略)。
+        pending_predictions_text = self._build_pending_predictions_text(
+            player_id=player_id,
+            current_state_dto=current_state_dto,
+        )
 
         # 5. 利用可能ツール取得
         tools = self._available_tools_provider.get_available_tools(current_state_dto)
@@ -1123,6 +1137,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             mid_summary_text=mid_summary_text,
             long_summary_text=long_summary_text,
             prediction_feedback_text=prediction_feedback_text,
+            pending_predictions_text=pending_predictions_text,
         )
 
         # Issue #227 chore β: failure_block (直前ターン失敗時の補正セクション)
@@ -1642,6 +1657,124 @@ class DefaultPromptBuilder(IPromptBuilder):
                 "trace recorder.record raised for SEMANTIC_PASSIVE_RECALL; skipping",
                 exc_info=True,
             )
+
+    def _build_pending_predictions_text(
+        self,
+        *,
+        player_id: PlayerId,
+        current_state_dto: Optional[Any],
+    ) -> str:
+        """U10a (予測誤差統一設計 部品6): pending prediction store から
+
+        解決 cue が現在の状況と一致するものを再浮上させ、【保留中の予測】
+        section 本体を組み立てる。
+
+        以下のいずれかに該当すれば空文字を返す (= section ごと省略、flag OFF
+        や機構未配線時は導入前と byte 一致する):
+        - ``pending_prediction_store`` が未配線 (機構 OFF)
+        - being_id が未解決
+        - ``current_tick_provider`` が未注入 / 例外 / 非 int を返す
+        - 一致する pending prediction が 0 件
+
+        マッチング規則 (設計判断。詳細は PR 本文の不確実性欄を参照):
+        - ``"spot:<id>"`` は現在の ``current_spot_id`` と一致するときだけ成立
+        - ``"player:<name>"`` は現在同じ spot にいる (自分以外の) player の
+          プロフィール名と完全一致するときだけ成立。episodic 受動想起の
+          ``entity`` cue (内部 player_id ベース) とは独立の、pending
+          prediction 専用の軽量マッチング (LLM が抽出時に書く名前は人間可読な
+          表示名であり、内部 id 形式と直接比較できないため)
+        - 1 件の pending の ``resolution_cues`` は **全件** 成立して初めて
+          再浮上する (AND)。tick_from <= 現在 tick <= tick_to も必須
+        - 決定論的な順序 (tick_from 昇順 → pending_id 昇順) で cap 件まで採用
+        """
+        if self._pending_prediction_store is None:
+            return ""
+        being_id = self._resolve_being_id(player_id)
+        if being_id is None:
+            return ""
+        if self._current_tick_provider is None:
+            return ""
+        try:
+            current_tick = self._current_tick_provider()
+        except Exception:
+            self._logger.debug(
+                "current_tick_provider raised while resurfacing pending "
+                "predictions; skipping",
+                exc_info=True,
+            )
+            return ""
+        if not isinstance(current_tick, int) or isinstance(current_tick, bool):
+            return ""
+
+        current_spot_id = (
+            getattr(current_state_dto, "current_spot_id", None)
+            if current_state_dto is not None
+            else None
+        )
+        nearby_names: set[str] = set()
+        other_player_ids = (
+            getattr(current_state_dto, "current_player_ids", None) or ()
+            if current_state_dto is not None
+            else ()
+        )
+        for pid in other_player_ids:
+            if int(pid) == int(player_id.value):
+                continue
+            try:
+                other_profile = self._profile_repository.find_by_id(PlayerId(int(pid)))
+            except Exception:
+                other_profile = None
+            if other_profile is not None:
+                nearby_names.add(other_profile.name.value)
+
+        try:
+            candidates = self._pending_prediction_store.list_all_by_being(being_id)
+        except Exception:
+            self._logger.warning(
+                "pending_prediction_store.list_all_by_being failed; "
+                "skipping resurfacing",
+                exc_info=True,
+            )
+            return ""
+        if not candidates:
+            return ""
+
+        def _cue_matches(cue: str) -> bool:
+            if cue.startswith("spot:"):
+                return current_spot_id is not None and cue[len("spot:"):] == str(
+                    current_spot_id
+                )
+            if cue.startswith("player:"):
+                return cue[len("player:"):] in nearby_names
+            return False
+
+        matched = [
+            p
+            for p in candidates
+            if p.tick_from <= current_tick <= p.tick_to
+            and all(_cue_matches(c) for c in p.resolution_cues)
+        ]
+        if not matched:
+            return ""
+        matched.sort(key=lambda p: (p.tick_from, p.pending_id))
+        selected = matched[: self._pending_prediction_resurface_cap]
+
+        recorder = self._resolve_trace_recorder()
+        if recorder is not None:
+            try:
+                recorder.record(
+                    TraceEventKind.PENDING_PREDICTION_RESURFACED,
+                    tick=current_tick,
+                    being_id=str(being_id.value),
+                    pending_ids=[p.pending_id for p in selected],
+                )
+            except Exception:
+                self._logger.debug(
+                    "trace recorder.record raised for "
+                    "PENDING_PREDICTION_RESURFACED; skipping",
+                    exc_info=True,
+                )
+        return "\n".join(f"・{p.text}" for p in selected)
 
     def _append_recall_observation(
         self,

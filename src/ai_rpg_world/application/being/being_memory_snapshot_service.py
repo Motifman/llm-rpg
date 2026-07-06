@@ -75,6 +75,7 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_episode_tick_pair,
     dict_to_memo_entry,
     dict_to_memory_link,
+    dict_to_pending_prediction,
     dict_to_recall_observation,
     dict_to_recall_slot_entry,
     dict_to_reinterpretation_entry,
@@ -84,6 +85,7 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     episode_tick_pair_to_dict,
     memo_entry_to_dict,
     memory_link_to_dict,
+    pending_prediction_to_dict,
     recall_observation_to_dict,
     recall_slot_entry_to_dict,
     reinterpretation_entry_to_dict,
@@ -114,6 +116,9 @@ from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository impor
     MemoryLinkRepository,
 )
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
+from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
+    PendingPredictionRepository,
+)
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
     BeliefEvidenceBufferRepository,
 )
@@ -227,6 +232,9 @@ class BeingMemorySnapshotService:
         "recall_habituation_last_recalled",
         "belief_evidence_buffer",
         "recall_success_hit_count",
+        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測
+        # (約束) の per-Being state。
+        "pending_predictions",
     })
 
     def __init__(
@@ -243,6 +251,7 @@ class BeingMemorySnapshotService:
         recall_habituation_store: IEpisodicRecallHabituationStore,
         belief_evidence_buffer_store: BeliefEvidenceBufferRepository,
         recall_success_store: IEpisodicRecallSuccessStore,
+        pending_prediction_store: PendingPredictionRepository,
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository")
@@ -289,6 +298,10 @@ class BeingMemorySnapshotService:
             raise TypeError(
                 "recall_success_store must implement IEpisodicRecallSuccessStore"
             )
+        if not isinstance(pending_prediction_store, PendingPredictionRepository):
+            raise TypeError(
+                "pending_prediction_store must be PendingPredictionRepository"
+            )
         self._memo = memo_store
         self._semantic = semantic_store
         self._memory_link = memory_link_store
@@ -300,6 +313,7 @@ class BeingMemorySnapshotService:
         self._recall_habituation = recall_habituation_store
         self._belief_evidence_buffer = belief_evidence_buffer_store
         self._recall_success = recall_success_store
+        self._pending_prediction = pending_prediction_store
 
     def capture(self, being_id: BeingId) -> str:
         """10 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
@@ -365,6 +379,12 @@ class BeingMemorySnapshotService:
                 for eid, hit_count in self._recall_success.list_all_by_being(
                     being_id
                 ).items()
+            ],
+            # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の
+            # 予測 (約束) の per-Being state。
+            "pending_predictions": [
+                pending_prediction_to_dict(p)
+                for p in self._pending_prediction.list_all_by_being(being_id)
             ],
         }
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
@@ -494,6 +514,13 @@ class BeingMemorySnapshotService:
             dict_to_episode_hit_count_pair,
             "recall_success_hit_count",
         )
+        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
+        # デコード。
+        pending_predictions = _decode_list(
+            payload["pending_predictions"],
+            dict_to_pending_prediction,
+            "pending_predictions",
+        )
 
         # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない、
         # memory_link / reinterpretation_journal / recall_buffer は episode に
@@ -526,6 +553,11 @@ class BeingMemorySnapshotService:
         # bulk overwrite。
         self._recall_success.replace_all_by_being(
             being_id, dict(recall_success_pairs)
+        )
+        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
+        # bulk overwrite。
+        self._pending_prediction.replace_all_by_being(
+            being_id, pending_predictions
         )
 
 

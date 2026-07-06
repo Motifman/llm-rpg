@@ -92,6 +92,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         mid_summary_text: str = "",
         long_summary_text: str = "",
         prediction_feedback_text: str = "",
+        pending_predictions_text: str = "",
     ) -> str:
         for name, value in (
             ("current_state_text", current_state_text),
@@ -104,6 +105,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             ("mid_summary_text", mid_summary_text),
             ("long_summary_text", long_summary_text),
             ("prediction_feedback_text", prediction_feedback_text),
+            ("pending_predictions_text", pending_predictions_text),
         ):
             if not isinstance(value, str):
                 raise TypeError(f"{name} must be str")
@@ -120,6 +122,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
                 mid_summary_text=mid_summary_text,
                 long_summary_text=long_summary_text,
                 prediction_feedback_text=prediction_feedback_text,
+                pending_predictions_text=pending_predictions_text,
             )
         return _format_stable_to_volatile(
             current_state_text=current_state_text,
@@ -132,6 +135,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             mid_summary_text=mid_summary_text,
             long_summary_text=long_summary_text,
             prediction_feedback_text=prediction_feedback_text,
+            pending_predictions_text=pending_predictions_text,
         )
 
 
@@ -232,6 +236,20 @@ def _emit_prediction_feedback(sections: list, prediction_feedback_text: str) -> 
         ])
 
 
+def _emit_pending_predictions(sections: list, pending_predictions_text: str) -> None:
+    """U10a (予測誤差統一設計 部品6): 【保留中の予測】section を emit する。
+
+    【前回の予測と実際】の隣に置く (計画書の配置指定)。再浮上した pending が
+    無ければ ``pending_predictions_text`` は空文字 (= section ごと省略)。
+    """
+    if pending_predictions_text.strip():
+        sections.extend([
+            "",
+            "【保留中の予測】",
+            pending_predictions_text.strip(),
+        ])
+
+
 def _emit_relevant_memories(sections: list, relevant_memories_text: str) -> None:
     """【関連する記憶】 section を emit する。
 
@@ -310,6 +328,7 @@ def _format_stable_to_volatile(
     mid_summary_text: str,
     long_summary_text: str,
     prediction_feedback_text: str,
+    pending_predictions_text: str = "",
 ) -> str:
     """Phase 0 default: 更新頻度の低い section から並べる。
 
@@ -425,6 +444,16 @@ def _format_stable_to_volatile(
             "",
         ])
 
+    # 8b. 保留中の予測 (U10a / 部品6、空なら省略)
+    # 【前回の予測と実際】の隣に置く (計画書の配置指定)。再浮上しなければ
+    # flag ON でも常に空 (= section ごと省略)。
+    if pending_predictions_text.strip():
+        sections.extend([
+            "【保留中の予測】",
+            pending_predictions_text.strip(),
+            "",
+        ])
+
     # 9. 関連する記憶 (volatile、cue 再計算で 19-32% 変動)
     # 受動想起 service が未注入なら空文字 → section ごと省略。
     # 末尾近くに置くことで「今ここで関連する記憶」への attention を強める
@@ -457,6 +486,7 @@ def _format_legacy(
     mid_summary_text: str,
     long_summary_text: str,
     prediction_feedback_text: str,
+    pending_predictions_text: str = "",
 ) -> str:
     """Issue #227 chore β 時代の旧順序。A/B 検証用に保持。
 
@@ -473,6 +503,7 @@ def _format_legacy(
     _emit_current_state(sections, current_state_text)
     _emit_active_memos(sections, active_memos_text)
     _emit_prediction_feedback(sections, prediction_feedback_text)
+    _emit_pending_predictions(sections, pending_predictions_text)
     _emit_recent_events(sections, recent_events_text)
     _emit_relevant_memories(sections, relevant_memories_text)
     _emit_inventory(sections, inventory_text)

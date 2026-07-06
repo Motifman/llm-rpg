@@ -85,6 +85,9 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
         InMemoryEpisodicRecallSuccessStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+        InMemoryPendingPredictionStore,
+    )
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
@@ -100,6 +103,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     habituation = InMemoryEpisodicRecallHabituationStore()
     belief_evidence = InMemoryBeliefEvidenceBufferStore()
     success = InMemoryEpisodicRecallSuccessStore()
+    pending_prediction = InMemoryPendingPredictionStore()
     svc = BeingMemorySnapshotService(
         memo_store=memo,
         semantic_store=semantic,
@@ -112,6 +116,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
         recall_habituation_store=habituation,
         belief_evidence_buffer_store=belief_evidence,
         recall_success_store=success,
+        pending_prediction_store=pending_prediction,
     )
     return svc, {
         "memo": memo,
@@ -122,6 +127,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
         "episode": episode,
         "belief_evidence": belief_evidence,
         "success": success,
+        "pending_prediction": pending_prediction,
     }
 
 
@@ -354,6 +360,35 @@ class TestRestoreRoundTrip:
         restored = dst_stores["success"].list_all_by_being(being)
         assert restored == {"ep-1": 2, "ep-2": 1}
 
+    def test_pending_predictions_の_round_trip(self) -> None:
+        """U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
+
+        capture → restore で中身が一致することを保証する
+        (snapshot 追従 checklist #27)。"""
+        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+            PendingPrediction,
+        )
+
+        src_svc, src_stores = _make_service()
+        being = BeingId("ada")
+        pending = PendingPrediction(
+            pending_id="pending-1",
+            text="夕方に木の下でカイトと会う",
+            resolution_cues=("spot:12", "player:カイト"),
+            tick_from=20,
+            tick_to=25,
+            origin_episode_id="ep-1",
+            created_tick=15,
+        )
+        src_stores["pending_prediction"].add_by_being(being, pending)
+        payload_json = src_svc.capture(being)
+
+        dst_svc, dst_stores = _make_service()
+        dst_svc.restore(being, payload_json)
+
+        restored = dst_stores["pending_prediction"].list_all_by_being(being)
+        assert restored == [pending]
+
     def test_belief_evidence_の_in_context_belief_ids_も_round_trip_する(self) -> None:
         """U4 (予測誤差統一設計 部品3): attribution 用の in_context_belief_ids も
         evidence buffer の capture → restore を経て失われないことを保証する。
@@ -515,6 +550,7 @@ class TestRestoreValidation:
                 "belief_evidence_buffer": [],
                 # U9b: recall_success_hit_count も実 store の key として揃えておく。
                 "recall_success_hit_count": [],
+                "pending_predictions": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="memo"):
@@ -554,6 +590,7 @@ class TestRestoreValidation:
                 "belief_evidence_buffer": [],
                 # U9b: recall_success_hit_count も実 store の key として揃えておく。
                 "recall_success_hit_count": [],
+                "pending_predictions": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="memory_links"):
@@ -581,6 +618,7 @@ class TestRestoreValidation:
                 "belief_evidence_buffer": [],
                 # U9b: recall_success_hit_count も実 store の key として揃えておく。
                 "recall_success_hit_count": [],
+                "pending_predictions": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="must be list"):
@@ -603,7 +641,9 @@ class TestConstructor:
         from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
             InMemoryEpisodicRecallSuccessStore,
         )
-
+        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+            InMemoryPendingPredictionStore,
+        )
         from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
             InMemoryBeliefEvidenceBufferStore,
         )
@@ -621,4 +661,5 @@ class TestConstructor:
                 recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
                 belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
                 recall_success_store=InMemoryEpisodicRecallSuccessStore(),
+                pending_prediction_store=InMemoryPendingPredictionStore(),
             )

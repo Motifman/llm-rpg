@@ -81,6 +81,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
         IEpisodicRecallSuccessStore,
     )
+    from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
+        PendingPredictionRepository,
+    )
 
 from ai_rpg_world.application.llm.scheduler import (
     IEpisodicSubjectiveCompletionScheduler,
@@ -254,6 +257,11 @@ class EpisodicStack:
     recall_success_store: Optional["IEpisodicRecallSuccessStore"] = None
     recall_hit_boost_strength: int = 0
     recall_hit_boost_cap: int = RECALL_HIT_BOOST_DEFAULT_CAP
+    # U10a (予測誤差統一設計 部品6・pending prediction / default off): 抽出
+    # された約束・見込みを保持する per-Being store。enable 時に in-memory
+    # store を構築し、chunk_coordinator (書込み) と prompt_builder (再浮上の
+    # 読み出し) の両方に同一インスタンスを渡す。snapshot 用にも公開する。
+    pending_prediction_store: Optional["PendingPredictionRepository"] = None
 
 
 def build_scenario_noun_matcher(
@@ -418,6 +426,12 @@ def build_episodic_stack(
     # 失敗) を境界候補にする。False (既定) では境界挙動は U8 導入前と完全
     # 一致する。
     error_gated_boundary_enabled: bool = False,
+    # U10a (予測誤差統一設計 部品6・pending prediction / default False =
+    # flag OFF): True のとき pending prediction store (in-memory) を構築し、
+    # chunk_coordinator (同期経路の書込み) に配線する。非同期 scheduler 経路
+    # への配線は build_episodic_stack がスケジューラを構築しないため呼び出し
+    # 側 (world_runtime.py) の責務 (belief_evidence_transcriber と同じ分担)。
+    pending_prediction_enabled: bool = False,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
@@ -573,6 +587,16 @@ def build_episodic_stack(
 
         recall_success_store = InMemoryEpisodicRecallSuccessStore()
 
+    # U10a (pending prediction / default off): enable 時のみ store を構築する。
+    # U9b の的中側 sidecar と同じ「flag ON のときだけ実体を作る」パターン。
+    pending_prediction_store: Optional[Any] = None
+    if pending_prediction_enabled:
+        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+            InMemoryPendingPredictionStore,
+        )
+
+        pending_prediction_store = InMemoryPendingPredictionStore()
+
     # #526 後続 Fix A: noun_matcher を chunk_coordinator より先に作り、
     # ChunkEpisodeDraftBuilder と passive_recall の両方に同じ matcher を
     # 渡すことで write/read 経路の cue 生成を対称化する。
@@ -617,6 +641,11 @@ def build_episodic_stack(
         # store」) を共有する。
         recall_success_store=recall_success_store,
         recall_hit_boost_enabled=recall_hit_boost_enabled,
+        # U10a (pending prediction): 同期経路用。非同期経路 (scheduler) は
+        # pending_prediction_store 確定後に呼び出し側 (world_runtime.py) が
+        # set_pending_prediction_store で差し込む。
+        pending_prediction_store=pending_prediction_store,
+        pending_prediction_enabled=pending_prediction_enabled,
     )
     # #526 段階 2: 慣化 sidecar (default off)。enable 時のみ store を作り、
     # passive_recall に注入する。prompt_builder 側にも同 store を渡して
@@ -712,6 +741,7 @@ def build_episodic_stack(
         recall_success_store=recall_success_store,
         recall_hit_boost_strength=recall_hit_boost_strength,
         recall_hit_boost_cap=recall_hit_boost_cap,
+        pending_prediction_store=pending_prediction_store,
     )
 
 
