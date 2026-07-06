@@ -239,3 +239,85 @@ class TestPendingPredictionFlagOn:
             draft, persona_text="", encoding_input=enc
         )
         assert merged.pending_prediction_draft is None
+
+
+# tick offset クランプ (LLM が tick 尺度を誤って巨大値を返す問題への防御)
+from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+    _PENDING_TICK_OFFSET_MAX,
+    _PENDING_TICK_WINDOW_MIN,
+    _normalize_pending_prediction,
+)
+
+
+class TestPendingTickOffsetClamp:
+    """LLM の巨大な tick offset (「夕方」を分=1440 等) を妥当範囲へ丸める。"""
+
+    def test_huge_tick_offset_to_is_clamped_to_max(self) -> None:
+        """tick_offset_to=1440 のような巨大値は上限に丸め、窓が永遠に開いた
+
+        ままになる (= tick 失効が効かない) 退化を防ぐ。"""
+        draft = _normalize_pending_prediction(
+            {
+                "text": "夕方に木の下でカイトと会う",
+                "resolution_cues": ["spot:12", "player:カイト"],
+                "tick_offset_from": 0,
+                "tick_offset_to": 1440,
+            }
+        )
+        assert draft is not None
+        assert draft.tick_offset_from == 0
+        assert draft.tick_offset_to == _PENDING_TICK_OFFSET_MAX
+
+    def test_zero_width_window_is_widened_to_min(self) -> None:
+        """from==to の狭すぎる窓は「再浮上する前に過ぎ去る」ため最小幅を確保。"""
+        draft = _normalize_pending_prediction(
+            {
+                "text": "すぐにカイトと会う",
+                "resolution_cues": ["player:カイト"],
+                "tick_offset_from": 0,
+                "tick_offset_to": 0,
+            }
+        )
+        assert draft is not None
+        assert draft.tick_offset_to - draft.tick_offset_from == _PENDING_TICK_WINDOW_MIN
+
+    def test_reasonable_offsets_are_left_unchanged(self) -> None:
+        draft = _normalize_pending_prediction(
+            {
+                "text": "数tick後にカイトと会う",
+                "resolution_cues": ["player:カイト"],
+                "tick_offset_from": 5,
+                "tick_offset_to": 12,
+            }
+        )
+        assert draft is not None
+        assert draft.tick_offset_from == 5
+        assert draft.tick_offset_to == 12
+
+    def test_both_offsets_above_max_are_clamped_and_window_kept(self) -> None:
+        draft = _normalize_pending_prediction(
+            {
+                "text": "遠い未来にカイトと会う",
+                "resolution_cues": ["player:カイト"],
+                "tick_offset_from": 500,
+                "tick_offset_to": 900,
+            }
+        )
+        assert draft is not None
+        # 両方上限に丸められた結果 from==to==MAX になるので、最小窓を確保する
+        assert draft.tick_offset_from == _PENDING_TICK_OFFSET_MAX
+        assert draft.tick_offset_to == _PENDING_TICK_OFFSET_MAX + _PENDING_TICK_WINDOW_MIN
+
+    def test_reversed_range_still_dropped_after_clamp(self) -> None:
+        """反転 (from>to) はクランプで補正せず従来どおり None に落とす
+
+        (壊れた出力をもっともらしい約束に化けさせない)。"""
+        draft = _normalize_pending_prediction(
+            {
+                "text": "壊れた約束",
+                "resolution_cues": ["player:カイト"],
+                "tick_offset_from": 20,
+                "tick_offset_to": 5,
+            }
+        )
+        assert draft is None
