@@ -34,6 +34,14 @@ from ai_rpg_world.domain.memory.episodic.exception.episodic_exception import (
 
 _VALID_CUE_PREFIXES = ("spot:", "player:")
 
+# U10b: pending prediction (約束) の清算判定。chunk 主観補完 LLM が
+# 再浮上中の約束について「果たされた / 破られた」のいずれかを返す。
+# 判定がつかないものは verdict を返さない (= 何も書かない) 契約なので、
+# "unknown" のような第 3 の値は持たせない (曖昧なら黙って保留のまま)。
+PENDING_VERDICT_FULFILLED = "fulfilled"
+PENDING_VERDICT_BROKEN = "broken"
+_VALID_VERDICTS = (PENDING_VERDICT_FULFILLED, PENDING_VERDICT_BROKEN)
+
 
 def _validate_resolution_cues(cues: Tuple[str, ...]) -> Tuple[str, ...]:
     """resolution_cues の形式を検証し、正規化した tuple を返す。
@@ -186,4 +194,40 @@ class PendingPrediction:
         )
 
 
-__all__ = ["PendingPrediction", "PendingPredictionDraft"]
+@dataclass(frozen=True)
+class PendingResolutionVerdict:
+    """chunk 主観補完 LLM が再浮上中の約束 1 件について下した清算判定 (U10b)。
+
+    ``pending_id`` は再浮上時に prompt へ載せた約束の id、``verdict`` は
+    ``"fulfilled"`` (果たされた) か ``"broken"`` (破られた) のいずれか。
+    ``SubjectiveEpisode.pending_resolution_verdicts`` に一時的に載せて chunk
+    完了点まで運ぶ (``pending_prediction_draft`` と同じ「同じ pass に相乗り
+    させる」設計で、store へは永続化しない)。
+    """
+
+    pending_id: str
+    verdict: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.pending_id, str) or not self.pending_id.strip():
+            raise PendingPredictionValidationException(
+                "pending_id must be non-empty str",
+                field="pending_id",
+                value=self.pending_id,
+            )
+        object.__setattr__(self, "pending_id", self.pending_id.strip())
+        if self.verdict not in _VALID_VERDICTS:
+            raise PendingPredictionValidationException(
+                f"verdict must be one of {_VALID_VERDICTS}, got {self.verdict!r}",
+                field="verdict",
+                value=self.verdict,
+            )
+
+
+__all__ = [
+    "PendingPrediction",
+    "PendingPredictionDraft",
+    "PendingResolutionVerdict",
+    "PENDING_VERDICT_FULFILLED",
+    "PENDING_VERDICT_BROKEN",
+]

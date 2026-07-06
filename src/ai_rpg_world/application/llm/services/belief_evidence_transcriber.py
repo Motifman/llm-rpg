@@ -54,7 +54,13 @@ from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import 
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
     BeliefEvidenceBufferRepository,
 )
+from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+    PENDING_VERDICT_BROKEN,
+    PENDING_VERDICT_FULFILLED,
+    PendingPrediction,
+)
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
+    BELIEF_EVIDENCE_SALIENCE_HIGH,
     BELIEF_EVIDENCE_SALIENCE_LOW,
     BeliefEvidence,
 )
@@ -91,6 +97,26 @@ def compute_chunk_attribution(
         if getattr(action, "expected_result", None):
             had_expected_result = True
     return tuple(belief_ids), had_expected_result
+
+
+def _pending_cue_signature(
+    pending: PendingPrediction, episode: SubjectiveEpisode
+) -> str:
+    """約束の清算 evidence の cue_signature を決める (U10b)。
+
+    人物 (``player:``) の約束は対象 player belief に寄せたいので player cue を
+    優先。無ければ最初の resolution cue、それも無ければ episode 由来の
+    署名にフォールバックする (resolution_cues は VO 制約で必ず 1 件以上ある
+    ため通常は最初の cue が採られる)。
+    """
+    player_cue = next(
+        (c for c in pending.resolution_cues if c.startswith("player:")), None
+    )
+    if player_cue is not None:
+        return player_cue
+    if pending.resolution_cues:
+        return pending.resolution_cues[0]
+    return build_belief_evidence_cue_signature(episode)
 
 
 class BeliefEvidenceTranscriber:
@@ -194,6 +220,64 @@ class BeliefEvidenceTranscriber:
             return evidence
 
         return None
+
+    def record_pending_resolution(
+        self,
+        being_id: BeingId,
+        episode: SubjectiveEpisode,
+        pending: PendingPrediction,
+        *,
+        verdict: str,
+    ) -> Optional[BeliefEvidence]:
+        """再浮上していた約束の清算を ``PENDING_RESOLUTION`` evidence に転記する (U10b)。
+
+        - ``verdict == "fulfilled"``: 「約束が果たされた」= 相手への信頼の支持。
+          的中と同じく反復してこそ意味があるため salience=low。
+        - ``verdict == "broken"``: 「約束が破られた」= 反証。裏切りは一撃で
+          印象に残る出来事なので salience=high (即時固着候補) にする。
+
+        ``cue_signature`` は約束の ``resolution_cues`` のうち人物 (``player:``)
+        を優先して採る (清算は「対象 player belief への支持/反証」なので、
+        人物の belief クラスタに寄せる)。人物 cue が無ければ最初の cue を使う。
+        判定 (fulfilled/broken) は既に chunk 主観補完 LLM が下しており、本
+        メソッドは新しい判定基準を作らない (U2 以来の「証拠の入口は転記のみ」)。
+        """
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(episode, SubjectiveEpisode):
+            raise TypeError("episode must be SubjectiveEpisode")
+        if not isinstance(pending, PendingPrediction):
+            raise TypeError("pending must be PendingPrediction")
+        if verdict not in (PENDING_VERDICT_FULFILLED, PENDING_VERDICT_BROKEN):
+            raise ValueError(
+                f"verdict must be one of "
+                f"({PENDING_VERDICT_FULFILLED!r}, {PENDING_VERDICT_BROKEN!r}), "
+                f"got {verdict!r}"
+            )
+
+        fulfilled = verdict == PENDING_VERDICT_FULFILLED
+        text = (
+            f"約束「{pending.text}」は果たされた。"
+            if fulfilled
+            else f"約束「{pending.text}」は破られた。"
+        )
+        evidence = BeliefEvidence(
+            evidence_id=f"belief-evidence-{uuid4().hex}",
+            source_kind=BeliefEvidenceSourceKind.PENDING_RESOLUTION,
+            episode_ids=(episode.episode_id,),
+            cue_signature=_pending_cue_signature(pending, episode),
+            text=text,
+            salience=(
+                BELIEF_EVIDENCE_SALIENCE_LOW
+                if fulfilled
+                else BELIEF_EVIDENCE_SALIENCE_HIGH
+            ),
+            occurred_at=episode.occurred_at,
+            tick=self._resolve_tick(),
+        )
+        self._buffer_store.append_by_being(being_id, evidence)
+        self._emit_trace(being_id, evidence)
+        return evidence
 
     def _resolve_tick(self) -> Optional[int]:
         if self._current_tick_provider is None:

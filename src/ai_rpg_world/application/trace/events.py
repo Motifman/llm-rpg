@@ -195,6 +195,23 @@ class TraceEventKind:
     #   - pending_ids: list[str] (= 再浮上した pending の id 群。cap 適用後)
     #   - being_id: str
     PENDING_PREDICTION_RESURFACED = "pending_prediction_resurfaced"
+    # U10b: 再浮上していた pending prediction (約束) が次の chunk 補完で
+    # 「果たされた / 破られた」と判定され、PENDING_RESOLUTION evidence に
+    # 転記されて store から除かれた瞬間。約束ループが閉じたことの観測点。
+    # payload:
+    #   - pending_id: str
+    #   - being_id: str
+    #   - verdict: str ("fulfilled" | "broken")
+    #   - evidence_id: str | None (= 転記された evidence。transcriber 未配線なら None)
+    #   - origin_episode_id: str
+    PENDING_PREDICTION_RESOLVED = "pending_prediction_resolved"
+    # U10b: tick_to を過ぎても果たされも破られもしなかった pending prediction
+    # が静かに失効し store から除かれた瞬間 (= 人間でも忘れられた約束は消える)。
+    # payload:
+    #   - pending_ids: list[str] (= 失効した pending の id 群)
+    #   - being_id: str
+    #   - tick: int | None
+    PENDING_PREDICTION_EXPIRED = "pending_prediction_expired"
 
 
 @dataclass(frozen=True)

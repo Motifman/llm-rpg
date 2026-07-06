@@ -65,6 +65,9 @@ from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping i
 from ai_rpg_world.application.llm.services._pending_prediction_recording import (
     record_pending_prediction_if_applicable,
 )
+from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
+    resolve_pending_predictions_if_applicable,
+)
 from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
     PendingPredictionRepository,
 )
@@ -392,6 +395,20 @@ class InlineEpisodicSubjectiveScheduler:
                 pending_prediction_enabled=self._pending_prediction_enabled,
                 being_id=self._resolve_being_id_for_episode(merged),
                 episode=merged,
+                current_tick_provider=self._current_tick_provider,
+                trace_recorder=_resolve_recorder_from_provider(
+                    self._trace_recorder_provider
+                ),
+            )
+            # U10b (予測誤差統一設計 部品6・清算): 同じ完了点で、再浮上して
+            # いた約束の履行/破棄判定を evidence に転記し、決着分と期限切れ分を
+            # store から除く (flag OFF / store 未配線なら no-op)。
+            resolve_pending_predictions_if_applicable(
+                pending_prediction_store=self._pending_prediction_store,
+                pending_prediction_enabled=self._pending_prediction_enabled,
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                belief_evidence_transcriber=self._belief_evidence_transcriber,
                 current_tick_provider=self._current_tick_provider,
                 trace_recorder=_resolve_recorder_from_provider(
                     self._trace_recorder_provider
@@ -848,6 +865,20 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 pending_prediction_enabled=self._pending_prediction_enabled,
                 being_id=self._resolve_being_id_for_episode(merged),
                 episode=merged,
+                current_tick_provider=self._current_tick_provider,
+                trace_recorder=_resolve_recorder_from_provider(
+                    self._trace_recorder_provider
+                ),
+            )
+            # U10b (予測誤差統一設計 部品6・清算): 同じ完了点で、再浮上して
+            # いた約束の履行/破棄判定を evidence に転記し、決着分と期限切れ分を
+            # store から除く (flag OFF / store 未配線なら no-op)。
+            resolve_pending_predictions_if_applicable(
+                pending_prediction_store=self._pending_prediction_store,
+                pending_prediction_enabled=self._pending_prediction_enabled,
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                belief_evidence_transcriber=self._belief_evidence_transcriber,
                 current_tick_provider=self._current_tick_provider,
                 trace_recorder=_resolve_recorder_from_provider(
                     self._trace_recorder_provider

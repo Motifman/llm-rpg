@@ -239,3 +239,136 @@ class TestPendingPredictionFlagOn:
             draft, persona_text="", encoding_input=enc
         )
         assert merged.pending_prediction_draft is None
+
+
+# U10b: 清算判定 (pending_resolutions) の抽出とプロンプト差し込み
+from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+    PendingPrediction,
+)
+
+
+def _active_pending(pending_id: str = "pending-1") -> PendingPrediction:
+    return PendingPrediction(
+        pending_id=pending_id,
+        text="夕方に木の下でカイトと会う",
+        resolution_cues=("spot:12", "player:カイト"),
+        tick_from=10,
+        tick_to=20,
+        origin_episode_id="ep-origin",
+        created_tick=10,
+    )
+
+
+def _make_encoding_with_pendings(*pendings: PendingPrediction) -> Any:
+    t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
+    act = ActionResultEntry(
+        occurred_at=t,
+        action_summary="待機した",
+        result_summary="ok",
+        tool_name="world_no_op",
+        success=True,
+    )
+    return build_chunk_encoding_input(
+        PlayerId(1), (), (act,), active_pending_predictions=pendings
+    )
+
+
+class TestPendingResolutionExtraction:
+    """再浮上中の約束の清算判定 (pending_resolutions) を保証する (U10b)。"""
+
+    def test_active_pendings_appear_in_user_prompt_when_enabled(self) -> None:
+        enc = _make_encoding_with_pendings(_active_pending("pending-1"))
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
+        svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
+        svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+
+        user_content = next(
+            (m["content"] for m in port.last_messages if m.get("role") == "user"), ""
+        )
+        assert "保留中の約束" in user_content
+        assert "[pending-1]" in user_content
+
+    def test_active_pendings_absent_from_prompt_when_disabled(self) -> None:
+        """flag OFF なら約束が渡っても【保留中の約束】節は出ない。"""
+        enc = _make_encoding_with_pendings(_active_pending("pending-1"))
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
+        svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=False)
+        svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+
+        user_content = next(
+            (m["content"] for m in port.last_messages if m.get("role") == "user"), ""
+        )
+        assert "保留中の約束" not in user_content
+
+    def test_valid_verdict_parsed_into_episode(self) -> None:
+        enc = _make_encoding_with_pendings(_active_pending("pending-1"))
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        port = _StubSubjectivePort(
+            {
+                "interpreted": "i",
+                "recall_text": "r",
+                "pending_resolutions": [
+                    {"pending_id": "pending-1", "verdict": "broken"}
+                ],
+            }
+        )
+        svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
+        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+
+        assert len(merged.pending_resolution_verdicts) == 1
+        assert merged.pending_resolution_verdicts[0].pending_id == "pending-1"
+        assert merged.pending_resolution_verdicts[0].verdict == "broken"
+
+    def test_verdict_for_unlisted_pending_is_dropped(self) -> None:
+        """prompt に載せていない約束の判定は捨てる (創作された清算を防ぐ)。"""
+        enc = _make_encoding_with_pendings(_active_pending("pending-1"))
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        port = _StubSubjectivePort(
+            {
+                "interpreted": "i",
+                "recall_text": "r",
+                "pending_resolutions": [
+                    {"pending_id": "ghost", "verdict": "fulfilled"}
+                ],
+            }
+        )
+        svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
+        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+
+        assert merged.pending_resolution_verdicts == ()
+
+    def test_invalid_verdict_value_is_dropped(self) -> None:
+        enc = _make_encoding_with_pendings(_active_pending("pending-1"))
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        port = _StubSubjectivePort(
+            {
+                "interpreted": "i",
+                "recall_text": "r",
+                "pending_resolutions": [
+                    {"pending_id": "pending-1", "verdict": "maybe"}
+                ],
+            }
+        )
+        svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
+        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+
+        assert merged.pending_resolution_verdicts == ()
+
+    def test_verdicts_always_empty_when_disabled(self) -> None:
+        enc = _make_encoding_with_pendings(_active_pending("pending-1"))
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        port = _StubSubjectivePort(
+            {
+                "interpreted": "i",
+                "recall_text": "r",
+                "pending_resolutions": [
+                    {"pending_id": "pending-1", "verdict": "broken"}
+                ],
+            }
+        )
+        svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=False)
+        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+
+        assert merged.pending_resolution_verdicts == ()

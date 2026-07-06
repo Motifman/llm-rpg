@@ -373,3 +373,76 @@ class TestBeliefEvidenceTranscriberTypeGuards:
     def test_rejects_non_repository_buffer_store(self) -> None:
         with pytest.raises(TypeError):
             BeliefEvidenceTranscriber(object())
+
+
+# U10b: 約束の清算転記 (record_pending_resolution)
+from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+    PendingPrediction,
+)
+
+
+def _pending_for_resolution(cues=("spot:3", "player:カイト")) -> PendingPrediction:
+    return PendingPrediction(
+        pending_id="pending-1",
+        text="夕方に木の下でカイトと会う",
+        resolution_cues=tuple(cues),
+        tick_from=10,
+        tick_to=20,
+        origin_episode_id="ep-origin",
+        created_tick=10,
+    )
+
+
+class TestBeliefEvidenceTranscriberPendingResolution:
+    """record_pending_resolution が履行/破棄を PENDING_RESOLUTION に転記する (U10b)。"""
+
+    def test_fulfilled_records_low_support(self) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+
+        ev = transcriber.record_pending_resolution(
+            being_id, _episode(), _pending_for_resolution(), verdict="fulfilled"
+        )
+
+        assert ev is not None
+        assert ev.source_kind is BeliefEvidenceSourceKind.PENDING_RESOLUTION
+        assert ev.salience == "low"
+        assert "果たされた" in ev.text
+        # 人物 cue を優先して寄せる
+        assert ev.cue_signature == "player:カイト"
+        assert buffer_store.list_all_by_being(being_id) == [ev]
+
+    def test_broken_records_high_contradiction(self) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+
+        ev = transcriber.record_pending_resolution(
+            being_id, _episode(), _pending_for_resolution(), verdict="broken"
+        )
+
+        assert ev.salience == "high"
+        assert "破られた" in ev.text
+
+    def test_cue_signature_falls_back_to_first_cue_without_player(self) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+
+        ev = transcriber.record_pending_resolution(
+            being_id,
+            _episode(),
+            _pending_for_resolution(cues=("spot:9",)),
+            verdict="fulfilled",
+        )
+
+        assert ev.cue_signature == "spot:9"
+
+    def test_invalid_verdict_raises(self) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        with pytest.raises(ValueError):
+            transcriber.record_pending_resolution(
+                BeingId("being-1"), _episode(), _pending_for_resolution(), verdict="maybe"
+            )

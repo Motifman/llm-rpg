@@ -61,6 +61,9 @@ from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping i
 from ai_rpg_world.application.llm.services._pending_prediction_recording import (
     record_pending_prediction_if_applicable,
 )
+from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
+    resolve_pending_predictions_if_applicable,
+)
 from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
     EpisodicRecallBufferRepository,
 )
@@ -423,6 +426,60 @@ class EpisodicChunkCoordinator:
             trace_recorder=self._resolve_trace_recorder(),
         )
 
+    def _resolve_pending_predictions_if_applicable(
+        self,
+        episode: SubjectiveEpisode,
+    ) -> None:
+        """U10b (予測誤差統一設計 部品6・清算): 再浮上していた約束の履行/破棄
+
+        判定を evidence に転記し、決着分と期限切れ分を store から除く (共通
+        ロジックは ``_pending_prediction_resolution`` に集約。非同期 scheduler
+        経路も同じ関数を呼ぶ)。
+        """
+        resolve_pending_predictions_if_applicable(
+            pending_prediction_store=self._pending_prediction_store,
+            pending_prediction_enabled=self._pending_prediction_enabled,
+            being_id=self._resolve_being_id_for_episode(episode),
+            episode=episode,
+            belief_evidence_transcriber=self._belief_evidence_transcriber,
+            current_tick_provider=self._current_tick_provider,
+            trace_recorder=self._resolve_trace_recorder(),
+        )
+
+    def _active_pending_predictions_for(
+        self, player_id: PlayerId
+    ) -> tuple:
+        """U10b: この chunk の補完時点で「窓が開いた」約束 (tick_from に達した
+
+        もの) を返す。chunk 主観補完 LLM に「果たされたか」を判定させるため
+        ``ChunkEncodingInput.active_pending_predictions`` に載せる。
+
+        flag OFF / store 未配線 / being 未解決 / current_tick 不明のときは
+        空タプル (= プロンプトに【保留中の約束】節が出ず、導入前と一致)。
+        """
+        if not self._pending_prediction_enabled or self._pending_prediction_store is None:
+            return ()
+        if self._being_attachment_resolver is None or self._default_world_id is None:
+            return ()
+        being_id = self._being_attachment_resolver.resolve_being_id(
+            self._default_world_id, player_id
+        )
+        if being_id is None:
+            return ()
+        if self._current_tick_provider is None:
+            return ()
+        try:
+            current_tick = self._current_tick_provider()
+        except Exception:
+            return ()
+        if not isinstance(current_tick, int) or isinstance(current_tick, bool):
+            return ()
+        try:
+            live = self._pending_prediction_store.list_all_by_being(being_id)
+        except Exception:
+            return ()
+        return tuple(p for p in live if p.tick_from <= current_tick)
+
     def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
         if self._trace_recorder_provider is not None:
             try:
@@ -607,6 +664,9 @@ class EpisodicChunkCoordinator:
             obs_slice_sorted,
             chunk_actions_sorted,
             observation_overflow_from_window=tuple(overflow),
+            # U10b: 窓が開いた約束を補完プロンプトに載せて「果たされたか」を
+            # 判定させる。flag OFF / 該当なしのときは空 (= 導入前と一致)。
+            active_pending_predictions=self._active_pending_predictions_for(player_id),
         )
         hints = summarize_observation_boundary_hints(encoding_input.observations)
         decision = decide_chunk_boundary(
@@ -687,6 +747,13 @@ class EpisodicChunkCoordinator:
             # store に積む。flag OFF / 抽出なし / store 未配線なら no-op
             # (導入前と完全に一致)。
             self._record_pending_prediction_if_applicable(episode)
+            # U10b (予測誤差統一設計 部品6・清算): 同じ完了点で、再浮上して
+            # いた約束の履行/破棄判定を evidence に転記し、決着分と期限切れ分を
+            # store から除く。flag OFF / store 未配線なら no-op。抽出 (U10a) の
+            # 後に呼ぶことで「今回の chunk で作られた約束」を同じ完了で
+            # 誤って清算しないよう順序を保つ (新規約束は tick_from が未来なので
+            # active に載らないが、順序も明示しておく)。
+            self._resolve_pending_predictions_if_applicable(episode)
         # draft (もしくは inline merge 済み) を必ず先に store に書く。
         # scheduler 経路 (新規): draft = PR #305 でテンプレ既定値が埋まった状態
         # なので「LLM 完了前でも recall_text が空にならない」が保証される。
