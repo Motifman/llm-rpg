@@ -338,13 +338,45 @@ def _normalize_salience(raw: Any) -> str:
     return "low"
 
 
+# LLM が返す tick offset の妥当上限と最小窓幅。chunk 主観補完 LLM には
+# 「今から何 tick 後か」だけを書かせているが、LLM は tick の尺度を知らず、
+# 「夕方」を分 (1440) のような巨大値で返すことがある (L2 replay で観測)。
+# 巨大な tick_offset_to は「窓が永遠に開いたまま = tick 失効が効かない」
+# 退化を招き、逆に極端に狭い窓 (from==to) は「再浮上する前に窓が過ぎ去る」
+# を招く。そこで抽出時に窓の起点・終点を近い将来の上限へクランプし、
+# 最小幅を確保して両極を防ぐ。上限値は 140 tick 級の run で「果たされな
+# かった約束が run 内に失効する」ことを担保する経験則で、M-run で調整可。
+_PENDING_TICK_OFFSET_MAX = 30
+_PENDING_TICK_WINDOW_MIN = 3
+
+
+def _clamp_pending_tick_offsets(tick_offset_from: int, tick_offset_to: int) -> tuple[int, int]:
+    """tick offset を妥当範囲へクランプする。
+
+    - 上限 ``_PENDING_TICK_OFFSET_MAX`` を超える値は上限に丸める
+    - クランプ後に窓が ``_PENDING_TICK_WINDOW_MIN`` 未満なら終点を広げる
+
+    クランプは「有効な (from<=to かつ from>=0 の) 範囲を狭める / 最小幅を
+    確保する」だけに留める。反転 (from>to) や負値はここで補正せず、そのまま
+    後段の VO バリデーションに委ねて従来どおり None に落とす (壊れた出力を
+    黙って「もっともらしい約束」に化けさせない)。
+    """
+    from_c = min(tick_offset_from, _PENDING_TICK_OFFSET_MAX)
+    to_c = min(tick_offset_to, _PENDING_TICK_OFFSET_MAX)
+    if from_c <= to_c and to_c - from_c < _PENDING_TICK_WINDOW_MIN:
+        to_c = from_c + _PENDING_TICK_WINDOW_MIN
+    return from_c, to_c
+
+
 def _normalize_pending_prediction(raw: Any) -> PendingPredictionDraft | None:
     """LLM 出力の ``pending_prediction`` object を ``PendingPredictionDraft`` に
 
     正規化する。null / 非 object / 必須キー欠落 / 型不正 / VO のバリデーション
     違反 (resolution_cues の形式不正・tick 範囲逆転など) は全て None に倒す
     (= 「約束なし」と同じ扱い。乱発防止の指示を無視した壊れた出力を安全側で
-    捨てる)。
+    捨てる)。tick offset は ``_clamp_pending_tick_offsets`` で妥当範囲へ
+    クランプしてから VO に渡す (LLM が tick 尺度を誤って巨大値を返す問題への
+    防御。詳細は同関数の docstring)。
     """
     if not isinstance(raw, dict):
         return None
@@ -365,6 +397,9 @@ def _normalize_pending_prediction(raw: Any) -> PendingPredictionDraft | None:
         return None
     if not isinstance(tick_offset_from, int) or not isinstance(tick_offset_to, int):
         return None
+    tick_offset_from, tick_offset_to = _clamp_pending_tick_offsets(
+        tick_offset_from, tick_offset_to
+    )
     try:
         return PendingPredictionDraft(
             text=text,
