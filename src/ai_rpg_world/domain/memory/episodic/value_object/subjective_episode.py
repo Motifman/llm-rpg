@@ -37,6 +37,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import (
 )
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PendingPredictionDraft,
+    PendingResolutionVerdict,
 )
 
 
@@ -89,6 +90,12 @@ class SubjectiveEpisode:
     # 含めない (= episode の snapshot 復元では常に None に戻る。既に消費済の
     # 抽出結果を再現する必要が無いため)。
     pending_prediction_draft: PendingPredictionDraft | None = None
+    # U10b (予測誤差統一設計 部品6・pending prediction 清算): chunk 主観補完 LLM
+    # が「再浮上中の約束のうち果たされた / 破られたもの」を判定した結果。
+    # pending_prediction_draft と同じく **一時的なスクラッチフィールド** で、
+    # chunk 完了点で PENDING_RESOLUTION evidence に転記し store から除いた後は
+    # 用済みになる。snapshot / codec には含めない (復元時は常に空タプル)。
+    pending_resolution_verdicts: Tuple[PendingResolutionVerdict, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.episode_id, str):
@@ -155,6 +162,14 @@ class SubjectiveEpisode:
             self.pending_prediction_draft, PendingPredictionDraft
         ):
             raise TypeError("pending_prediction_draft must be PendingPredictionDraft or None")
+
+        if not isinstance(self.pending_resolution_verdicts, tuple):
+            raise TypeError("pending_resolution_verdicts must be tuple[PendingResolutionVerdict, ...]")
+        for idx, v in enumerate(self.pending_resolution_verdicts):
+            if not isinstance(v, PendingResolutionVerdict):
+                raise TypeError(
+                    f"pending_resolution_verdicts[{idx}] must be PendingResolutionVerdict"
+                )
 
 
 __all__ = ["SubjectiveEpisode"]

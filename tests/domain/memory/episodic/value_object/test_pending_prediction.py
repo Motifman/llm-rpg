@@ -13,6 +13,7 @@ from ai_rpg_world.domain.memory.episodic.exception.episodic_exception import (
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PendingPrediction,
     PendingPredictionDraft,
+    PendingResolutionVerdict,
 )
 
 
@@ -120,3 +121,29 @@ class TestPendingPrediction:
         )
         assert pending.pending_id == "pending-1"
         assert pending.text == "会う"
+
+
+class TestPendingResolutionVerdict:
+    """PendingResolutionVerdict (U10b 清算判定 VO) の不変条件を保証する。"""
+
+    def test_fulfilled_verdict_is_accepted(self) -> None:
+        v = PendingResolutionVerdict(pending_id="pending-1", verdict="fulfilled")
+        assert v.pending_id == "pending-1"
+        assert v.verdict == "fulfilled"
+
+    def test_broken_verdict_is_accepted(self) -> None:
+        v = PendingResolutionVerdict(pending_id="pending-1", verdict="broken")
+        assert v.verdict == "broken"
+
+    def test_pending_id_is_stripped(self) -> None:
+        v = PendingResolutionVerdict(pending_id="  pending-1  ", verdict="broken")
+        assert v.pending_id == "pending-1"
+
+    def test_empty_pending_id_raises(self) -> None:
+        with pytest.raises(PendingPredictionValidationException):
+            PendingResolutionVerdict(pending_id="   ", verdict="fulfilled")
+
+    def test_unknown_verdict_raises(self) -> None:
+        """fulfilled / broken 以外の verdict は受け付けない (曖昧語を排除)。"""
+        with pytest.raises(PendingPredictionValidationException):
+            PendingResolutionVerdict(pending_id="pending-1", verdict="maybe")
