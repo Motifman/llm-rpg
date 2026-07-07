@@ -342,6 +342,13 @@ class WorldRuntime:
     )
     _todo_store: InMemoryTodoStore = field(default_factory=InMemoryTodoStore, repr=False)
     _todo_tool_executor: Optional[TodoToolExecutor] = field(default=None, repr=False)
+    # U5 (MEMO_DISTILL): memo_done → BeliefEvidence 転記の transcriber。
+    # ``_todo_tool_executor`` は ``set_trace_recorder`` 等で作り直される
+    # (lazy 再構築) ため、transcriber を setter で 1 度差し込むだけだと
+    # 作り直しで静かに失われる (実験 run で MEMO_DISTILL evidence が 0 件に
+    # なる silent failure の原因)。runtime 側に保持し、``_wire_auxiliary_tool_stack``
+    # が executor を作り直すたびに再適用する。型は circular import 回避で Any。
+    _memo_distill_transcriber: Optional[Any] = field(default=None, repr=False)
     # Issue #526 後続: LLM が「思い出そう」と意志して過去 episode を呼び戻す
     # ``memory_recall_episodes`` tool の executor。``_wire_auxiliary_tool_stack``
     # 時に episodic_stack が wire されていれば構築。OFF (= 構築されない) なら
@@ -1004,6 +1011,16 @@ class WorldRuntime:
             being_attachment_resolver=self._aux_being_resolver,
             default_world_id=self._aux_being_default_world_id,
         )
+        # U5 (MEMO_DISTILL): executor を作り直したら memo_distill transcriber を
+        # 再適用する。これがないと set_trace_recorder 等の作り直し経路で
+        # transcriber が静かに失われる (実験 run で memo→evidence 蒸留が
+        # 0 件になっていた原因)。create_world_runtime が transcriber を
+        # 構築して runtime._memo_distill_transcriber に格納した後の作り直しで
+        # 効く (初回 wire 時点では None なので no-op)。
+        if self._memo_distill_transcriber is not None:
+            self._todo_tool_executor.set_memo_distill_transcriber(
+                self._memo_distill_transcriber
+            )
         self._wire_memory_recall_executor_if_possible()
 
     def _wire_memory_recall_executor_if_possible(self) -> None:
@@ -4167,6 +4184,11 @@ def create_world_runtime(
                 trace_recorder_provider=lambda: runtime._trace_recorder,
                 current_tick_provider=runtime.current_tick,
             )
+            # runtime に保持し、以後 _wire_auxiliary_tool_stack が executor を
+            # 作り直しても (set_trace_recorder 等) 再適用されるようにする。
+            # これがないと build 後の set_trace_recorder で transcriber が
+            # 静かに失われていた (memo_done 28 件に対し evidence 0 件)。
+            runtime._memo_distill_transcriber = memo_distill_transcriber
             if runtime._todo_tool_executor is not None:
                 runtime._todo_tool_executor.set_memo_distill_transcriber(
                     memo_distill_transcriber
