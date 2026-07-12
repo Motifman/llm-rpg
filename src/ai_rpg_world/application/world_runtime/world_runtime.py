@@ -3883,9 +3883,23 @@ def create_world_runtime(
             resolve_goal_revision_enabled,
         )
 
-        runtime._goal_revision_enabled = resolve_goal_revision_enabled()
+        _goal_revision_requested = resolve_goal_revision_enabled()
+        # revision は goal store が前提。GOAL_REVISION_ENABLED だけ ON で
+        # GOAL_STORE_ENABLED が OFF だと、goal_update を schema に露出しつつ
+        # applier が無く「誘うのに黙って捨てる」= 静かな失敗 (本 PR が撤回した
+        # まさにその挙動を config ミスで再現) になる。両者を畳んで、store が
+        # 無ければ revision も実効 OFF にし、schema 露出も起きないようにする。
+        if _goal_revision_requested and runtime._goal_journal_store is None:
+            logger.warning(
+                "GOAL_REVISION_ENABLED=1 だが GOAL_STORE_ENABLED が OFF のため "
+                "目的の改訂は無効化される (goal store が前提)。GOAL_STORE_ENABLED=1 "
+                "も設定してください。"
+            )
+        runtime._goal_revision_enabled = (
+            _goal_revision_requested and runtime._goal_journal_store is not None
+        )
         log_goal_revision_enabled_state(runtime._goal_revision_enabled)
-        if runtime._goal_revision_enabled and runtime._goal_journal_store is not None:
+        if runtime._goal_revision_enabled:
             from ai_rpg_world.application.llm.services.goal_revision_applier import (
                 GoalRevisionApplier,
             )

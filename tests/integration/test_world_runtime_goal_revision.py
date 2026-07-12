@@ -67,6 +67,23 @@ class TestGoalRevisionSchemaWiring:
         assert runtime._goal_revision_applier is None
         assert not _goal_update_in_defs(runtime)
 
+    def test_revision_on_but_store_off_does_not_expose_goal_update(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """config ミス (REVISION ON / STORE OFF) でも goal_update を schema に
+
+        露出しない = 「誘うのに黙って捨てる」静かな失敗を作らない。revision は
+        store を前提に実効 OFF へ畳まれる。"""
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        monkeypatch.delenv("GOAL_STORE_ENABLED", raising=False)
+        monkeypatch.setenv("GOAL_REVISION_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        assert runtime._goal_journal_store is None
+        assert runtime._goal_revision_enabled is False
+        assert runtime._goal_revision_applier is None
+        # schema に goal_update が出ない (applier が無いのに誘わない)。
+        assert not _goal_update_in_defs(runtime)
+
 
 class TestGoalRevisionWrite:
     def test_apply_supersedes_unlocked_active_goal(

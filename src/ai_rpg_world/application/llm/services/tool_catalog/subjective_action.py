@@ -62,10 +62,13 @@ SUBJECTIVE_ACTION_FIELD_PROPERTIES: Dict[str, Dict[str, Any]] = {
 }
 
 
-# P6 (目的の見直し / G2): 見直しターンにだけ subjective action tool へ足す
-# optional フィールド。null (または省略) なら「目的は変えない」。非 null なら
-# orchestrator が goal store を supersede 更新する。inner_thought 等と違い
-# required にはしない (毎ターン必須にすると目的が揺れる誘惑を作る)。
+# P6 (目的の見直し / G2): world-action tool へ足す optional フィールド。
+# **GOAL_REVISION_ENABLED が ON の run では全ターンで常時露出する** (ターン
+# 非依存 = tick 間で schema byte 不変。設計判断 #1 遵守。旧案の「見直しターン
+# だけ露出」は prefix cache を壊すため撤回済み)。null (または省略) なら
+# 「目的は変えない」。非 null なら orchestrator が goal store を supersede
+# 更新する。inner_thought 等と違い required にはしない (毎ターン必須にすると
+# 目的が揺れる誘惑を作る)。
 GOAL_UPDATE_FIELD_NAME = "goal_update"
 GOAL_UPDATE_FIELD_PROPERTY: Dict[str, Any] = {
     "type": ["string", "null"],
@@ -82,7 +85,8 @@ GOAL_UPDATE_FIELD_PROPERTY: Dict[str, Any] = {
 def with_goal_update_schema(definition: ToolDefinitionDto) -> ToolDefinitionDto:
     """対象 tool の JSON Schema に optional な ``goal_update`` を足した定義を返す。
 
-    見直しターンにだけ ``available_tools_provider`` が呼ぶ。subjective action
+    GOAL_REVISION_ENABLED が ON の run で ``get_tool_definitions`` が全 tool に
+    対し常時適用する (ターン非依存。tick 間で schema 不変)。subjective action
     tool 以外には足さない。required には入れない (optional / nullable)。
     """
     if not isinstance(definition, ToolDefinitionDto):
