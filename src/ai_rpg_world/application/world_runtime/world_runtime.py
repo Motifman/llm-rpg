@@ -131,6 +131,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     with_expected_result_schema,
+    with_goal_update_schema,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
@@ -353,6 +354,10 @@ class WorldRuntime:
     # OFF なら None (【現在の目的】は従来の静的シナリオ文字列で描画)。
     # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
     _goal_journal_store: Optional[Any] = field(default=None, repr=False)
+    # P6 (目的の見直し): GOAL_REVISION_ENABLED の解決結果と、goal_update を
+    # 反映する applier。flag OFF / goal store 無しなら applier は None。
+    _goal_revision_enabled: bool = field(default=False, repr=False)
+    _goal_revision_applier: Optional[Any] = field(default=None, repr=False)
     # Issue #526 後続: LLM が「思い出そう」と意志して過去 episode を呼び戻す
     # ``memory_recall_episodes`` tool の executor。``_wire_auxiliary_tool_stack``
     # 時に episodic_stack が wire されていれば構築。OFF (= 構築されない) なら
@@ -757,7 +762,9 @@ class WorldRuntime:
         パイプラインが無い実験 run と区別する)。
         """
         spot = [
-            self._with_expected_result_if_enabled(defn)
+            self._with_goal_update_if_enabled(
+                self._with_expected_result_if_enabled(defn)
+            )
             for defn, _ in get_spot_graph_specs()
         ]
         if not self._include_todo_tools:
@@ -809,6 +816,18 @@ class WorldRuntime:
         return with_expected_result_schema(
             definition, required=self._expected_result_policy == "required"
         )
+
+    def _with_goal_update_if_enabled(
+        self, definition: ToolDefinitionDto
+    ) -> ToolDefinitionDto:
+        """P6: GOAL_REVISION_ENABLED ON なら world-action tool に optional な
+
+        ``goal_update`` を足す。**run 全体で常時**適用するので tick 間で schema は
+        byte 不変 (設計判断 #1 遵守)。OFF (既定) では definition をそのまま返す。
+        """
+        if not self._goal_revision_enabled:
+            return definition
+        return with_goal_update_schema(definition)
 
     # ── 観測パイプライン: イベントを処理して各プレイヤーに配信 ──
 
@@ -1242,10 +1261,16 @@ class WorldRuntime:
         being_id = resolver.resolve_being_id(world_id, player_id)
         if being_id is None:
             return fallback_text
+        from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
+            render_current_goal,
+        )
+
         active = store.get_active_by_being(being_id)
         if active is not None:
-            return active.text
-        # 未 seed: シナリオ目的を locked で 1 度だけ積む。
+            return render_current_goal(active)
+        # 未 seed: シナリオ目的があれば locked で 1 度だけ積む (P5)。fallback_text は
+        # シナリオ目的文なので、seed 後の描画は従来の静的文字列と同一 (挙動不変)。
+        # P6: seed する目的が無い (open world) 場合は未定表示になる。
         from uuid import uuid4
 
         from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
@@ -1254,6 +1279,8 @@ class WorldRuntime:
             GoalEntry,
         )
 
+        if not fallback_text.strip():
+            return render_current_goal(None)
         try:
             tick = self.current_tick()
         except Exception:
@@ -1271,7 +1298,54 @@ class WorldRuntime:
                 created_at=datetime.now(timezone.utc),
             ),
         )
-        return fallback_text
+        return render_current_goal(store.get_active_by_being(being_id))
+
+    def _emit_goal_observation(self, player_id: PlayerId, message: str) -> None:
+        """P6: 目的まわりの観測 (locked 拒否など) を本人に 1 件届ける。
+
+        goal_update が locked で拒否されたことを silent にせず意識に返すための
+        経路 (§4 G2)。food/weather 観測と同じ ``_emit_observation_directly``。
+        """
+        output = ObservationOutput(
+            prose=message,
+            structured={"type": "goal_revision"},
+            observation_category="self",
+            schedules_turn=False,
+            breaks_movement=False,
+        )
+        self._emit_observation_directly(player_id, output)
+
+    def apply_goal_update_if_present(
+        self, player_id: PlayerId, arguments: Dict[str, Any]
+    ) -> None:
+        """P6: world-action tool の引数に非 null の goal_update があれば反映する。
+
+        orchestrator (runtime_manager の run_phase_b) が tool 実行後に呼ぶ。
+        GOAL_REVISION_ENABLED OFF / goal store 無し / goal_update 空なら no-op
+        (= 導入前と挙動一致)。being 未解決も no-op。
+        """
+        applier = self._goal_revision_applier
+        if applier is None:
+            return
+        if not isinstance(arguments, dict):
+            return
+        goal_update = arguments.get("goal_update")
+        if not isinstance(goal_update, str) or not goal_update.strip():
+            return
+        resolver = getattr(self, "_aux_being_resolver", None)
+        world_id = getattr(self, "_aux_being_default_world_id", None)
+        if resolver is None or world_id is None:
+            return
+        being_id = resolver.resolve_being_id(world_id, player_id)
+        if being_id is None:
+            return
+        try:
+            applier.apply(being_id, player_id, goal_update)
+        except Exception:
+            logger.exception(
+                "apply_goal_update_if_present failed for player_id=%s",
+                player_id.value,
+            )
 
     # Issue #227 後続 HIGH-3 改善: stateless formatter / strategy を class-level
     # に持ち、build_full_prompt の毎回 new を避ける + 本家 DefaultPromptBuilder と
@@ -3801,6 +3875,27 @@ def create_world_runtime(
             )
 
             runtime._goal_journal_store = InMemoryGoalJournalStore()
+        # P6 (目的の見直し / G2): GOAL_REVISION_ENABLED ON かつ goal store が
+        # あるとき、goal_update を反映する applier を構築する。goal store が
+        # 無ければ改訂しようがないので何もしない (revision は store が前提)。
+        from ai_rpg_world.application.llm.wiring.feature_flags import (
+            log_goal_revision_enabled_state,
+            resolve_goal_revision_enabled,
+        )
+
+        runtime._goal_revision_enabled = resolve_goal_revision_enabled()
+        log_goal_revision_enabled_state(runtime._goal_revision_enabled)
+        if runtime._goal_revision_enabled and runtime._goal_journal_store is not None:
+            from ai_rpg_world.application.llm.services.goal_revision_applier import (
+                GoalRevisionApplier,
+            )
+
+            runtime._goal_revision_applier = GoalRevisionApplier(
+                runtime._goal_journal_store,
+                observation_sink=runtime._emit_goal_observation,
+                current_tick_provider=runtime.current_tick,
+                now_provider=lambda: datetime.now(timezone.utc),
+            )
         # U7: subjective service の構築 (この少し下) は semantic スタック構築
         # (build_episodic_stack 呼び出し、この関数のずっと下) より先に走るため、
         # belief 取得に使う SemanticPassiveRecallService をこの時点ではまだ

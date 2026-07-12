@@ -127,3 +127,54 @@ class TestWithExpectedResultSchema:
         with_expected_result_schema(original, required=True)
         assert "expected_result" not in original.parameters["properties"]
         assert "expected_result" not in original.parameters["required"]
+
+
+class TestWithGoalUpdateSchema:
+    """P6: with_goal_update_schema が goal_update を optional で足すこと。"""
+
+    def _world_tool(self) -> ToolDefinitionDto:
+        return ToolDefinitionDto(
+            name="interact",
+            description="何かに作用する",
+            parameters={"type": "object", "properties": {}, "required": []},
+            category=ToolCategory.WORLD_ACTION,
+        )
+
+    def _todo_tool(self) -> ToolDefinitionDto:
+        return ToolDefinitionDto(
+            name="todo_add",
+            description="メモ追加",
+            parameters={"type": "object", "properties": {}, "required": []},
+            category=ToolCategory.WORLD_ACTION,
+        )
+
+    def test_goal_update_added_to_properties_not_required(self) -> None:
+        from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+            with_goal_update_schema,
+        )
+
+        decorated = with_goal_update_schema(self._world_tool())
+        assert "goal_update" in decorated.parameters["properties"]
+        # optional: required には入れない (毎ターン必須にすると目的が揺れる)。
+        assert "goal_update" not in decorated.parameters["required"]
+
+    def test_description_contrasts_with_intention(self) -> None:
+        """高度の防衛は説明文。intention (次の 1 手) との対比が載る。"""
+        from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+            with_goal_update_schema,
+        )
+
+        decorated = with_goal_update_schema(self._world_tool())
+        desc = decorated.parameters["properties"]["goal_update"]["description"]
+        assert "intention" in desc
+        assert "数日スケール" in desc
+        assert "続けるなら書かない" in desc
+
+    def test_not_added_to_non_subjective_tool(self) -> None:
+        """todo 系 (非 subjective action) には足さない。"""
+        from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+            with_goal_update_schema,
+        )
+
+        decorated = with_goal_update_schema(self._todo_tool())
+        assert "goal_update" not in decorated.parameters.get("properties", {})

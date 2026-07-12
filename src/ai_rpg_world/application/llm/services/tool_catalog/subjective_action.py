@@ -62,6 +62,46 @@ SUBJECTIVE_ACTION_FIELD_PROPERTIES: Dict[str, Dict[str, Any]] = {
 }
 
 
+# P6 (目的の見直し / G2): 見直しターンにだけ subjective action tool へ足す
+# optional フィールド。null (または省略) なら「目的は変えない」。非 null なら
+# orchestrator が goal store を supersede 更新する。inner_thought 等と違い
+# required にはしない (毎ターン必須にすると目的が揺れる誘惑を作る)。
+GOAL_UPDATE_FIELD_NAME = "goal_update"
+GOAL_UPDATE_FIELD_PROPERTY: Dict[str, Any] = {
+    "type": ["string", "null"],
+    "description": (
+        "数日スケールの方針を捨てて立て直すときにだけ書く。"
+        "次の 1 手の意図は intention に書くこと (それはここではない)。"
+        "目的を変えることは、これまでの自分の方針を捨てることでもある。"
+        "続けるなら書かない (null)。"
+    ),
+    "maxLength": 200,
+}
+
+
+def with_goal_update_schema(definition: ToolDefinitionDto) -> ToolDefinitionDto:
+    """対象 tool の JSON Schema に optional な ``goal_update`` を足した定義を返す。
+
+    見直しターンにだけ ``available_tools_provider`` が呼ぶ。subjective action
+    tool 以外には足さない。required には入れない (optional / nullable)。
+    """
+    if not isinstance(definition, ToolDefinitionDto):
+        raise TypeError("definition must be ToolDefinitionDto")
+    if not is_subjective_action_tool(definition.name):
+        return definition
+    parameters = deepcopy(definition.parameters)
+    properties = dict(parameters.get("properties") or {})
+    properties[GOAL_UPDATE_FIELD_NAME] = deepcopy(GOAL_UPDATE_FIELD_PROPERTY)
+    parameters["properties"] = properties
+    # required には足さない (optional)。
+    return ToolDefinitionDto(
+        name=definition.name,
+        description=definition.description,
+        parameters=parameters,
+        category=definition.category,
+    )
+
+
 def is_subjective_action_tool(tool_name: str) -> bool:
     """世界へ作用する主観入力付き tool かどうか。"""
 

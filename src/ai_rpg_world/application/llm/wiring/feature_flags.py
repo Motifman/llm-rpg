@@ -853,3 +853,35 @@ def log_goal_store_enabled_state(enabled: bool) -> None:
         ENV_GOAL_STORE_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ---- P6 (goal revision / 目的の見直し) ---------------------------------------
+
+ENV_GOAL_REVISION_ENABLED = "GOAL_REVISION_ENABLED"
+
+
+def resolve_goal_revision_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """目的の見直しターン (goal_layer_design_active_inference.md G2、P6) を
+
+    有効化するか。``GOAL_REVISION_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    goal store (GOAL_STORE_ENABLED) が前提。OFF (既定) のとき、見直し section も
+    goal_update schema も一切出ない (プロンプト byte 不変)。ON のときだけ、
+    トリガターン (active 目的が unlocked / 無し、かつ発火条件成立) に限り
+    【目的の見直し】section と optional な ``goal_update`` フィールドを露出し、
+    非 null なら goal store を supersede 更新する。**locked 目的 (シナリオ初期
+    目的) ではトリガを発火させない** ため、勝利条件付きシナリオの run は
+    プロンプト不変 (案A)。
+    """
+    return _parse_bool_env(ENV_GOAL_REVISION_ENABLED, env=env, default=False)
+
+
+def log_goal_revision_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_GOAL_REVISION_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )
