@@ -161,6 +161,7 @@ def _belief_entry(
     tags: tuple[str, ...] = ("explore",),
     support: tuple[str, ...] = (),
     contradict: tuple[str, ...] = (),
+    confirmation_support_count: int = 0,
     status: str = SEMANTIC_MEMORY_STATUS_ACTIVE,
     created_at: datetime | None = None,
 ) -> SemanticMemoryEntry:
@@ -169,13 +170,16 @@ def _belief_entry(
         player_id=7,
         text=text,
         evidence_episode_ids=("ep-0",),
-        confidence=compute_belief_confidence(len(support), len(contradict)),
+        confidence=compute_belief_confidence(
+            len(support), len(contradict), confirmation_support_count
+        ),
         created_at=created_at or datetime(2026, 6, 1, tzinfo=timezone.utc),
         tags=tags,
         belief_id=belief_id or entry_id,
         status=status,
         support_evidence_ids=support,
         contradict_evidence_ids=contradict,
+        confirmation_support_count=confirmation_support_count,
     )
 
 
@@ -1050,3 +1054,75 @@ class TestConfirmationSupportWeightApplication:
         assert updated.confidence == pytest.approx(
             compute_belief_confidence(2, 0, 1)
         )
+
+
+class TestConfirmationWeightPreservedOnReviseContradict:
+    """P3b 回帰: revise / contradict が confirmation_support_count を confidence
+
+    再計算に渡し続けること。渡さないと 0.5 割引が消えて belief が再膨張する。
+    confirmation_support_count>0 の target で検証する (0 値だと偶然一致して
+    退行を見逃すため)。"""
+
+    def _active(self, setup):
+        return [
+            e
+            for e in setup.semantic_store.list_for_being(setup.being_id)
+            if e.status == SEMANTIC_MEMORY_STATUS_ACTIVE
+        ]
+
+    def test_revise_preserves_confirmation_weight(self) -> None:
+        # 支持4件すべて CONFIRMATION の belief (confidence は f(4,0,4)=0.6)。
+        existing = _belief_entry(
+            entry_id="sem-c",
+            text="浜辺は安全かもしれない",
+            support=("s1", "s2", "s3", "s4"),
+            confirmation_support_count=4,
+        )
+        setup = _build_setup(
+            outcome={
+                "decisions": [
+                    {
+                        "action": "revise",
+                        "belief_id": "sem-c",
+                        "text": "浜辺はおおむね安全だ",
+                        "reason": "言い直し",
+                    }
+                ]
+            }
+        )
+        setup.semantic_store.add_by_being(setup.being_id, existing)
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        new = [e for e in self._active(setup) if e.text == "浜辺はおおむね安全だ"][0]
+        assert new.confirmation_support_count == 4
+        # 重みが効いたまま (f(4,0,4)=0.6)。割引が消えると f(4,0,0)=0.8 になる。
+        assert new.confidence == pytest.approx(compute_belief_confidence(4, 0, 4))
+        assert new.confidence < compute_belief_confidence(4, 0, 0)
+
+    def test_contradict_preserves_confirmation_weight(self) -> None:
+        existing = _belief_entry(
+            entry_id="sem-d",
+            text="浜辺は安全かもしれない",
+            support=("s1", "s2", "s3", "s4"),
+            confirmation_support_count=4,
+        )
+        setup = _build_setup(
+            outcome={
+                "decisions": [
+                    {"action": "contradict", "belief_id": "sem-d", "evidence_ids": ["e1"]}
+                ]
+            }
+        )
+        setup.semantic_store.add_by_being(setup.being_id, existing)
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        updated = self._active(setup)[0]
+        assert updated.confirmation_support_count == 4
+        # 反証1を足し、かつ CONFIRMATION 重みを保つ (f(4,1,4))。
+        assert updated.confidence == pytest.approx(compute_belief_confidence(4, 1, 4))
+        # 割引が消えると f(4,1,0) になり高くなってしまう。
+        assert updated.confidence < compute_belief_confidence(4, 1, 0)
