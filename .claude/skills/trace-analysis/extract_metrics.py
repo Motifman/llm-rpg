@@ -320,6 +320,91 @@ def _extract_fatigue_trajectory(events: list[dict]) -> dict[str, list[dict]]:
     return out
 
 
+# P1 (実験評価の中間指標): survival 系シナリオの進捗を trace から拾う。
+# クリア可否 (救助) だけでは「どこまで迫れたか」が見えないため、山頂到達 /
+# 狼煙点火 / スポット初訪問の時系列 / 探索の広さ / 注目ランドマークの到達を足す。
+_SUMMIT_KEYWORDS = ("山頂", "summit")
+# 狼煙点火の検出: signal_fire_lit フラグは trace イベントを持たないため、点火
+# interaction の成功メッセージ (survival_island_v2 の狼煙台成功文
+# 「…流木に火が回った。狼煙台から白い煙が…」) を目印にする。成功文が変わったら
+# ここを直す (analysis 側のヒューリスティックであり、実験挙動には影響しない)。
+_SIGNAL_FIRE_KEYWORDS = ("白い煙", "火が回っ")
+# 探索の深さを測る名前付きランドマーク (spot_name の部分一致)。spot グラフが
+# trace に無く「spawn からのホップ数」は算出できないため、到達 distinct 数と
+# これら landmark 到達で深さ/広さを代替する (グラフ距離が要る指標は run_dir だけ
+# では出せない — 近似であることを明示)。
+_LANDMARK_SPOT_KEYWORDS = ("山頂", "大樫", "見張り台", "廃屋")
+
+
+def _extract_survival_progress(events: list[dict]) -> dict[str, Any]:
+    """survival 系 run の中間到達指標を position_change / action_result から拾う。
+
+    - summit_reached: 山頂スポットに初到達した player とその tick
+    - signal_fire_lit_tick: 狼煙点火 (成功メッセージ検出) の最初の tick
+    - spot_first_visits: 各スポットへの (誰かの) 初訪問時系列
+    - distinct_spots_visited / spots_visited: 探索の広さ
+    - landmark_first_visit_tick: 注目ランドマークの初到達 tick (未到達は None)
+    """
+    scenario = None
+    summit_reached: dict[Any, dict[str, Any]] = {}
+    signal_fire_tick: int | None = None
+    first_visit: dict[str, dict[str, Any]] = {}
+    for e in events:
+        k = e.get("kind")
+        if k == "run_start":
+            scenario = e.get("payload", {}).get("scenario")
+        elif k == "position_change":
+            p = e.get("payload", {})
+            spot = p.get("spot_name")
+            if not spot:
+                continue
+            tick = e.get("tick")
+            pid = e.get("player_id")
+            if spot not in first_visit:
+                first_visit[spot] = {"tick": tick, "player_id": pid}
+            if any(kw in spot for kw in _SUMMIT_KEYWORDS) and pid not in summit_reached:
+                summit_reached[pid] = {"tick": tick, "player_name": p.get("player_name")}
+        elif k == "action_result":
+            p = e.get("payload", {})
+            rs = p.get("result_summary") or ""
+            if (
+                signal_fire_tick is None
+                and p.get("success")
+                and any(kw in rs for kw in _SIGNAL_FIRE_KEYWORDS)
+            ):
+                signal_fire_tick = e.get("tick")
+
+    def _tick_key(t: Any) -> tuple[int, Any]:
+        return (1, 0) if t is None else (0, t)
+
+    landmark = {
+        kw: next(
+            (v["tick"] for s, v in first_visit.items() if kw in s), None
+        )
+        for kw in _LANDMARK_SPOT_KEYWORDS
+    }
+    return {
+        "scenario": scenario,
+        "summit_reached": {
+            f"P{pid}": v
+            for pid, v in sorted(
+                summit_reached.items(), key=lambda kv: _tick_key(kv[0])
+            )
+        },
+        "signal_fire_lit_tick": signal_fire_tick,
+        "distinct_spots_visited": len(first_visit),
+        "spots_visited": sorted(first_visit.keys()),
+        "spot_first_visits": sorted(
+            (
+                {"tick": v["tick"], "spot_name": s, "player_id": v["player_id"]}
+                for s, v in first_visit.items()
+            ),
+            key=lambda r: _tick_key(r["tick"]),
+        ),
+        "landmark_first_visit_tick": landmark,
+    }
+
+
 def compute_metrics(run_dir: Path) -> dict[str, Any]:
     events = _load_events(run_dir)
     return {
@@ -333,6 +418,7 @@ def compute_metrics(run_dir: Path) -> dict[str, Any]:
         "observation_categories": _extract_obs_categories(events),
         "issue621_chain": _extract_issue621_chain(events),
         "fatigue_trajectory_10tick": _extract_fatigue_trajectory(events),
+        "survival_progress": _extract_survival_progress(events),
         "total_events": len(events),
     }
 
