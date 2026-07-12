@@ -606,3 +606,93 @@ class TestBeliefEvidenceTranscriberGoalResolution:
                 BeingId("being-1"), _goal(), outcome="superseded",
                 occurred_at=datetime(2026, 7, 2, tzinfo=timezone.utc),
             )
+
+
+# ── P9 (伝聞): record_heard_claims ──
+
+from dataclasses import dataclass as _dataclass
+
+from ai_rpg_world.domain.memory.episodic.value_object.heard_claim import HeardClaim
+
+
+@_dataclass
+class _FakeMatch:
+    axis: str
+    value: str
+    start: int
+
+
+class _FakeMatcher:
+    def __init__(self, matches):
+        self._matches = matches
+
+    def find_in_text(self, text):  # noqa: ARG002
+        return tuple(self._matches)
+
+
+class TestBeliefEvidenceTranscriberHeardClaims:
+    """P9: heard_claims を HEARSAY evidence に転記する (話者と対象を分離)。"""
+
+    def test_empty_heard_claims_records_nothing(self) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+        result = transcriber.record_heard_claims(being_id, _episode(heard_claims=()))
+        assert result == []
+        assert buffer_store.list_all_by_being(being_id) == []
+
+    def test_speaker_and_cue_are_separated(self) -> None:
+        """話者は source_speaker、主張の対象は cue に分離される (混ぜない)。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        matcher = _FakeMatcher(
+            [_FakeMatch(axis="entity", value="spot_graph_player_5", start=0)]
+        )
+        transcriber = BeliefEvidenceTranscriber(buffer_store, noun_matcher=matcher)
+        being_id = BeingId("being-1")
+        episode = _episode(
+            heard_claims=(HeardClaim(speaker="リオ", claim="エイダは頼りになる"),)
+        )
+
+        transcriber.record_heard_claims(being_id, episode)
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].source_kind == BeliefEvidenceSourceKind.HEARSAY
+        assert rows[0].text == "エイダは頼りになる"
+        assert rows[0].source_speaker == "リオ"  # 誰から来た情報か
+        assert rows[0].cue_signature == "player:spot_graph_player_5"  # 何についてか
+
+    def test_self_reference_uses_self_axis(self) -> None:
+        """他者が自分について語ったら self: 軸 (episode.player_id で判定)。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        matcher = _FakeMatcher(
+            [_FakeMatch(axis="entity", value="spot_graph_player_1", start=0)]
+        )
+        transcriber = BeliefEvidenceTranscriber(buffer_store, noun_matcher=matcher)
+        being_id = BeingId("being-1")
+        episode = _episode(
+            player_id=1,
+            heard_claims=(HeardClaim(speaker="リオ", claim="カイは話を聞かない"),),
+        )
+
+        transcriber.record_heard_claims(being_id, episode)
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert rows[0].cue_signature == "self:spot_graph_player_1"
+        assert rows[0].source_speaker == "リオ"
+
+    def test_multiple_claims_all_recorded(self) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store, noun_matcher=_FakeMatcher([]))
+        being_id = BeingId("being-1")
+        episode = _episode(
+            heard_claims=(
+                HeardClaim(speaker="リオ", claim="主張1"),
+                HeardClaim(speaker="エイダ", claim="主張2"),
+            )
+        )
+        result = transcriber.record_heard_claims(being_id, episode)
+        assert len(result) == 2
+        # cue を特定できなくても捨てず積む (対象不明 = sentinel cue)。
+        assert all(r.cue_signature == "hearsay:unattributed" for r in result)
+        assert {r.source_speaker for r in result} == {"リオ", "エイダ"}

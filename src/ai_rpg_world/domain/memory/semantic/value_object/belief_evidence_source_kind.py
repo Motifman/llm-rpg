@@ -28,6 +28,10 @@ class BeliefEvidenceSourceKind(str, Enum):
     FAMILIARITY = "familiarity"
     CONFIRMATION = "confirmation"
     PENDING_RESOLUTION = "pending_resolution"
+    # P9 (伝聞): 他者が「世界や人がどうであるか」を語った主張の転記。text は
+    # claim、cue は claim の対象 (spot/player)、話者は source_speaker に分離して
+    # 保持する (belief_hearsay_design.md §2)。自分の体験より弱い証拠として扱う。
+    HEARSAY = "hearsay"
 
 
 __all__ = ["BeliefEvidenceSourceKind"]

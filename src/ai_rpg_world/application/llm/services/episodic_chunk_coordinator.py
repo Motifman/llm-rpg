@@ -406,6 +406,10 @@ class EpisodicChunkCoordinator:
             in_context_belief_ids=in_context_belief_ids,
             had_expected_result=had_expected_result,
         )
+        # P9 (伝聞): 抽出された heard_claims を HEARSAY evidence に転記する。
+        # HEARSAY_ENABLED OFF のときは episode.heard_claims が常に空なので no-op
+        # (= 導入前と一致)。フラグは chunk 補完側だけが知っていればよい。
+        self._belief_evidence_transcriber.record_heard_claims(being_id, episode)
 
     def _record_pending_prediction_if_applicable(
         self,

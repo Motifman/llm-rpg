@@ -55,6 +55,8 @@ def _evidence_to_payload(evidence: BeliefEvidence) -> dict[str, Any]:
         "salience": evidence.salience,
         "occurred_at": _dt_to_text(evidence.occurred_at),
         "tick": evidence.tick,
+        # P9 (伝聞): HEARSAY evidence の話者 (payload JSON 内なので schema 変更不要)。
+        "source_speaker": evidence.source_speaker,
     }
 
 
@@ -68,6 +70,11 @@ def _payload_to_evidence(data: dict[str, Any]) -> BeliefEvidence:
         salience=str(data["salience"]),
         occurred_at=_text_to_dt(str(data["occurred_at"])),
         tick=int(data["tick"]) if data.get("tick") is not None else None,
+        source_speaker=(
+            str(data["source_speaker"])
+            if data.get("source_speaker") is not None
+            else None
+        ),
     )
 
 

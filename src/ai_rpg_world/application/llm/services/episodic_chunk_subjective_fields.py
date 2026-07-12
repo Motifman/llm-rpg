@@ -19,6 +19,9 @@ from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_por
     IEpisodicChunkSubjectiveCompletionPort,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.heard_claim import (
+    HeardClaim,
+)
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PendingPredictionDraft,
     PendingResolutionVerdict,
@@ -147,12 +150,65 @@ pending_resolutions は、ユーザメッセージに【保留中の約束】節
   ままにする）"""
 
 
+# P9 (伝聞): HEARSAY_ENABLED が ON のときだけ append する節。key list の数字は
+# 変えず「さらにキー heard_claims を加える」と明示する (pending との組み合わせで
+# key list 定数が組合せ爆発するのを避ける追記方式)。flag OFF では一切出ない
+# (byte 不変)。
+_HEARD_CLAIMS_INSTRUCTION = """
+
+さらに、JSON にキー heard_claims を加える。heard_claims は、この期間に他者が
+「世界や人がどうであるか」(場所・物事・人物) について語った主張の配列。その場に
+いない人についての話 (噂話) も含む。挨拶・依頼・感想は含めない。誰の発言か
+具体的な名前で特定できるものだけを入れ、無ければ null。各要素は次の 2 キー:
+- speaker: 主張を語った人物の**具体的な名前**。「不明」「誰か」「声」のような
+  プレースホルダは禁止。名前が特定できない発言はこの配列に入れない
+- claim: その人が語った「世界や人がどうであるか」の主張 1 文"""
+
+
+# P9: 話者が特定できないときに LLM が入れがちなプレースホルダ。プロンプトでも
+# 禁じるが、指示を無視して入れてきた場合の決定論的な最後の砦としてここで弾く
+# (「話者が特定できる伝聞だけを積む」を構造で保証する)。casefold 済みで比較。
+_HEARSAY_PLACEHOLDER_SPEAKERS = frozenset(
+    {"不明", "誰か", "だれか", "声", "someone", "unknown", "?", "？", "n/a", "none"}
+)
+
+
+def _normalize_heard_claims(raw: Any) -> tuple[HeardClaim, ...]:
+    """LLM 出力の ``heard_claims`` 配列を ``HeardClaim`` のタプルに正規化する (P9)。
+
+    null / 非配列 → 空タプル。各要素は dict で speaker / claim が非空 str の
+    ものだけ採る (speaker 欠落は捨てる = 話者を特定できない主張は伝聞にしない)。
+    speaker が「不明」等のプレースホルダのものも捨てる (話者不明の主張を伝聞に
+    しない = 誰から来た情報か分からない証拠を台帳に残さない)。
+    """
+    if not isinstance(raw, list):
+        return ()
+    out: list[HeardClaim] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        speaker = item.get("speaker")
+        claim = item.get("claim")
+        if not isinstance(speaker, str) or not speaker.strip():
+            continue
+        if speaker.strip().casefold() in _HEARSAY_PLACEHOLDER_SPEAKERS:
+            continue
+        if not isinstance(claim, str) or not claim.strip():
+            continue
+        try:
+            out.append(HeardClaim(speaker=speaker, claim=claim))
+        except Exception:
+            continue
+    return tuple(out)
+
+
 def _build_system_prompt(
     *,
     salience_enabled: bool,
     unconscious_context_enabled: bool = False,
     error_gated_encoding_enabled: bool = False,
     pending_prediction_enabled: bool = False,
+    hearsay_enabled: bool = False,
 ) -> str:
     """salience 節 / 無意識コンテキスト節 / 誤差ゲート付き解像度指示 /
     pending prediction 節を条件付きで足した system prompt を組み立てる。
@@ -187,6 +243,8 @@ def _build_system_prompt(
         )
         assert key_list_old in base
         base = base.replace(key_list_old, key_list_new) + _PENDING_PREDICTION_INSTRUCTION
+    if hearsay_enabled:
+        base = base + _HEARD_CLAIMS_INSTRUCTION
     if unconscious_context_enabled:
         return base + _UNCONSCIOUS_CONTEXT_INSTRUCTION
     return base
@@ -498,6 +556,7 @@ class EpisodicChunkSubjectiveFieldsService:
         unconscious_context_enabled: bool = False,
         error_gated_encoding_enabled: bool = False,
         pending_prediction_enabled: bool = False,
+        hearsay_enabled: bool = False,
     ) -> None:
         if not isinstance(completion, IEpisodicChunkSubjectiveCompletionPort):
             raise TypeError("completion must implement IEpisodicChunkSubjectiveCompletionPort")
@@ -513,6 +572,8 @@ class EpisodicChunkSubjectiveFieldsService:
             raise TypeError("error_gated_encoding_enabled must be bool")
         if not isinstance(pending_prediction_enabled, bool):
             raise TypeError("pending_prediction_enabled must be bool")
+        if not isinstance(hearsay_enabled, bool):
+            raise TypeError("hearsay_enabled must be bool")
         self._completion = completion
         self._salience_enabled = salience_enabled
         # U7 (予測誤差統一設計 / 無意識コンテキスト): 「配線 (wire) と有効化
@@ -530,6 +591,10 @@ class EpisodicChunkSubjectiveFieldsService:
         # 足し、応答を PendingPredictionDraft として episode に載せる。False
         # (既定) では pending_prediction_draft は常に None (= 導入前と byte 一致)。
         self._pending_prediction_enabled = pending_prediction_enabled
+        # P9 (伝聞 / default False = flag OFF): True のときだけ heard_claims キーを
+        # system prompt に足し、応答を HeardClaim として episode に載せる。False
+        # (既定) では heard_claims は常に空タプル (= 導入前と byte 一致)。
+        self._hearsay_enabled = hearsay_enabled
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def merge_llm_subjective_fields(
@@ -563,15 +628,21 @@ class EpisodicChunkSubjectiveFieldsService:
             if self._pending_prediction_enabled
             else ""
         )
+        _hearsay_sample = (
+            ', "heard_claims": [{"speaker": "...", "claim": "..."}]'
+            if self._hearsay_enabled
+            else ""
+        )
+        _extra_sample = _pending_sample + _hearsay_sample
         response_format = (
             (
                 '{"interpreted": "...", "recall_text": "...", "prediction_error": "...", '
-                f'"heading": "...", "salience": "low"{_pending_sample}}}'
+                f'"heading": "...", "salience": "low"{_extra_sample}}}'
             )
             if self._salience_enabled
             else (
                 '{"interpreted": "...", "recall_text": "...", "prediction_error": "...", '
-                f'"heading": "..."{_pending_sample}}}'
+                f'"heading": "..."{_extra_sample}}}'
             )
         )
         unconscious_context_text = self._resolve_unconscious_context_text(draft)
@@ -620,6 +691,7 @@ class EpisodicChunkSubjectiveFieldsService:
                     unconscious_context_enabled=self._unconscious_context_enabled,
                     error_gated_encoding_enabled=self._error_gated_encoding_enabled,
                     pending_prediction_enabled=self._pending_prediction_enabled,
+                    hearsay_enabled=self._hearsay_enabled,
                 ),
             },
             {"role": "user", "content": "\n\n".join(user_sections)},
@@ -631,6 +703,7 @@ class EpisodicChunkSubjectiveFieldsService:
         salience: str = "low"
         pending_prediction_draft: PendingPredictionDraft | None = None
         pending_resolution_verdicts: tuple[PendingResolutionVerdict, ...] = ()
+        heard_claims: tuple[HeardClaim, ...] = ()
         try:
             raw_obj = self._completion.complete_episode_subjective_json(messages)
             if not isinstance(raw_obj, dict):
@@ -664,6 +737,12 @@ class EpisodicChunkSubjectiveFieldsService:
                     pending_resolution_verdicts = _normalize_pending_resolutions(
                         raw_obj.get("pending_resolutions"), valid_pending_ids
                     )
+                # P9: flag OFF のときは LLM が誤って heard_claims を返しても無視
+                # し、episode.heard_claims は常に空タプルのまま (= 導入前と同一)。
+                if self._hearsay_enabled:
+                    heard_claims = _normalize_heard_claims(
+                        raw_obj.get("heard_claims")
+                    )
         except LlmApiCallException as e:
             self._logger.warning(
                 "Episode subjective LLM failed (%s); using template fallback",
@@ -692,6 +771,7 @@ class EpisodicChunkSubjectiveFieldsService:
             salience=salience,
             pending_prediction_draft=pending_prediction_draft,
             pending_resolution_verdicts=pending_resolution_verdicts,
+            heard_claims=heard_claims,
         )
         self._assert_rule_fields_unchanged(draft, merged)
         return merged

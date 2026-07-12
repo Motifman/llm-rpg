@@ -95,3 +95,81 @@ class TestBuildBeliefEvidenceCueSignature:
     def test_rejects_non_episode_argument(self) -> None:
         with pytest.raises(TypeError):
             build_belief_evidence_cue_signature("not-an-episode")
+
+
+# ── P9 (伝聞): build_hearsay_cue_signature ──
+
+from dataclasses import dataclass
+
+from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
+    build_hearsay_cue_signature,
+)
+
+
+@dataclass
+class _FakeMatch:
+    axis: str
+    value: str
+    start: int
+
+
+class _FakeMatcher:
+    """find_in_text が固定の NounMatch もどきを返す fake。"""
+
+    def __init__(self, matches):
+        self._matches = matches
+
+    def find_in_text(self, text):  # noqa: ARG002
+        return tuple(self._matches)
+
+
+class TestBuildHearsayCueSignature:
+    """P9: 伝聞の主張から対象を拾って cue を決める (話者は混ぜない)。"""
+
+    def test_spot_target_gives_spot_axis(self) -> None:
+        """主張の対象が場所なら spot: 軸。"""
+        matcher = _FakeMatcher([_FakeMatch(axis="place_spot", value="12", start=3)])
+        assert build_hearsay_cue_signature("岩礁海岸は危ない", matcher) == "spot:12"
+
+    def test_person_target_gives_player_axis(self) -> None:
+        """主張の対象が他者なら player: 軸。"""
+        matcher = _FakeMatcher(
+            [_FakeMatch(axis="entity", value="spot_graph_player_5", start=0)]
+        )
+        assert (
+            build_hearsay_cue_signature("エイダは頼りになる", matcher)
+            == "player:spot_graph_player_5"
+        )
+
+    def test_self_reference_gives_self_axis(self) -> None:
+        """対象が聞き手本人なら self: 軸 (その人物についての belief と別枠)。"""
+        matcher = _FakeMatcher(
+            [_FakeMatch(axis="entity", value="spot_graph_player_7", start=0)]
+        )
+        cue = build_hearsay_cue_signature(
+            "カイは人の話を聞かない", matcher, self_player_id=7
+        )
+        assert cue == "self:spot_graph_player_7"
+
+    def test_other_person_not_confused_with_self(self) -> None:
+        matcher = _FakeMatcher(
+            [_FakeMatch(axis="entity", value="spot_graph_player_5", start=0)]
+        )
+        cue = build_hearsay_cue_signature("リオは詳しい", matcher, self_player_id=7)
+        assert cue == "player:spot_graph_player_5"
+
+    def test_earliest_match_wins(self) -> None:
+        matcher = _FakeMatcher(
+            [
+                _FakeMatch(axis="entity", value="spot_graph_player_5", start=10),
+                _FakeMatch(axis="place_spot", value="3", start=2),
+            ]
+        )
+        assert build_hearsay_cue_signature("北の森でリオが", matcher) == "spot:3"
+
+    def test_no_target_gives_empty_cue(self) -> None:
+        """対象を特定できない主張は cue なし (固着の discard に委ねる)。"""
+        assert build_hearsay_cue_signature("よく分からない話", _FakeMatcher([])) == ""
+
+    def test_no_matcher_gives_empty_cue(self) -> None:
+        assert build_hearsay_cue_signature("何か", None) == ""

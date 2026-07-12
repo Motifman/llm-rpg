@@ -28,7 +28,14 @@ class PendingPredictionValidationException(
     error_code = "EPISODIC.PENDING_PREDICTION_VALIDATION"
 
 
+class HeardClaimValidationException(EpisodicDomainException, ValidationException):
+    """``HeardClaim`` (伝聞) のバリデーション例外 (speaker / claim の空文字等)。"""
+
+    error_code = "EPISODIC.HEARD_CLAIM_VALIDATION"
+
+
 __all__ = [
     "EpisodicDomainException",
     "PendingPredictionValidationException",
+    "HeardClaimValidationException",
 ]

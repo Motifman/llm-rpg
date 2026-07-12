@@ -819,6 +819,39 @@ def log_pending_prediction_enabled_state(enabled: bool) -> None:
     )
 
 
+# ---- P9 (伝聞 / HEARSAY) -----------------------------------------------------
+
+ENV_HEARSAY_ENABLED = "HEARSAY_ENABLED"
+
+
+def resolve_hearsay_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
+    """chunk 主観補完に heard_claims (他者が語った世界・人についての主張) の
+
+    抽出を足し、HEARSAY evidence に転記するか (belief_hearsay_design.md、P9)。
+
+    ``HEARSAY_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    OFF (既定) のとき:
+    - chunk 主観補完 LLM の system prompt に heard_claims キーは一切出ない
+      (byte 不変)。episode.heard_claims は常に空 → 転記も起きない
+
+    ON にすると:
+    - chunk 主観補完が「他者が世界や人について語った主張」を抽出し、話者を
+      ``source_speaker`` に、主張の対象を cue に分離した HEARSAY evidence を積む
+      (自分の体験より弱い証拠。固着パスが discard に委ねる)
+    """
+    return _parse_bool_env(ENV_HEARSAY_ENABLED, env=env, default=False)
+
+
+def log_hearsay_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_HEARSAY_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )
+
+
 # ---- P5 (goal store) ---------------------------------------------------------
 
 ENV_GOAL_STORE_ENABLED = "GOAL_STORE_ENABLED"
