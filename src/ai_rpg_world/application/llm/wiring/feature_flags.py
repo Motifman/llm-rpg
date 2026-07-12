@@ -817,3 +817,39 @@ def log_pending_prediction_enabled_state(enabled: bool) -> None:
         ENV_PENDING_PREDICTION_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ---- P5 (goal store) ---------------------------------------------------------
+
+ENV_GOAL_STORE_ENABLED = "GOAL_STORE_ENABLED"
+
+
+def resolve_goal_store_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """【現在の目的】の描画を静的シナリオ文字列から goal store 駆動へ
+
+    切り替えるか (目的層 goal_layer_design_active_inference.md G1、P5)。
+
+    ``GOAL_STORE_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    OFF (既定) のとき: 従来どおり ``objective_text_provider`` は
+    ``scenario.metadata.llm_objective_text`` の固定文字列を返す (goal store は
+    構築されず snapshot は空 in-memory fallback)。
+
+    ON にすると: run 開始時にシナリオ目的文を ``locked=True, origin="scenario"``
+    で goal store に seed し、``objective_text_provider`` は store の active 目的を
+    描画する。**locked 初期値なら描画結果は従来の静的テキストと同一** なので、
+    既存シナリオの挙動は不変 (質感テストで固定)。目的の見直し・清算 (G2/G4) は
+    本 flag のスコープ外。
+    """
+    return _parse_bool_env(ENV_GOAL_STORE_ENABLED, env=env, default=False)
+
+
+def log_goal_store_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_GOAL_STORE_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )

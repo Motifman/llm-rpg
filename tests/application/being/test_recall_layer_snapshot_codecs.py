@@ -170,6 +170,9 @@ class TestBeingMemorySnapshotRecallLayerRoundTrip:
         from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
             InMemoryPendingPredictionStore,
         )
+        from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
+            InMemoryGoalJournalStore,
+        )
         from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
             InMemoryBeliefEvidenceBufferStore,
         )
@@ -190,6 +193,7 @@ class TestBeingMemorySnapshotRecallLayerRoundTrip:
             belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
             recall_success_store=InMemoryEpisodicRecallSuccessStore(),
             pending_prediction_store=InMemoryPendingPredictionStore(),
+            goal_journal_store=InMemoryGoalJournalStore(),
         )
         return service, slot, afterglow, habituation
 
@@ -287,3 +291,30 @@ class TestBeingMemorySnapshotRecallLayerRoundTrip:
         # 復元先も空のまま
         assert slot.get_slot(BeingId("being-restored")) == ()
         assert afterglow.get_index(BeingId("being-restored")) == ()
+
+
+class TestGoalEntryCodec:
+    """P5: GoalEntry の snapshot codec round-trip。"""
+
+    def test_round_trip_preserves_goal_fields(self):
+        from datetime import datetime, timezone
+
+        from ai_rpg_world.application.being._memory_payload_codecs import (
+            dict_to_goal_entry,
+            goal_entry_to_dict,
+        )
+        from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
+
+        original = GoalEntry(
+            goal_id="goal-1",
+            player_id=1,
+            text="山頂で狼煙を上げて救助される",
+            status="superseded",
+            locked=True,
+            origin="scenario",
+            created_tick=12,
+            created_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            supersedes="goal-0",
+        )
+        restored = dict_to_goal_entry(goal_entry_to_dict(original))
+        assert restored == original

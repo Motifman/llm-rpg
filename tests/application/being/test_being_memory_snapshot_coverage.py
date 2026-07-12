@@ -96,6 +96,9 @@ def _make_service():
     from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
         InMemoryPendingPredictionStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
+        InMemoryGoalJournalStore,
+    )
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
@@ -113,6 +116,7 @@ def _make_service():
         belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
         recall_success_store=InMemoryEpisodicRecallSuccessStore(),
         pending_prediction_store=InMemoryPendingPredictionStore(),
+        goal_journal_store=InMemoryGoalJournalStore(),
     )
 
 
@@ -189,6 +193,7 @@ class TestBeingMemorySnapshotServiceCoverage:
             # U9b: recall_success_hit_count も実 store の key として揃えておく。
             "recall_success_hit_count": [],
             "pending_predictions": [],
+            "goal_journal": [],
         }
         with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
             service.restore(BeingId("being-test"), json.dumps(payload_without_new_key))
@@ -219,6 +224,7 @@ class TestBeingMemorySnapshotServiceCoverage:
             "afterglow_entries": [], "recall_habituation_last_recalled": [],
             "recall_success_hit_count": [],
             "pending_predictions": [],
+            "goal_journal": [],
             "belief_evidence_buffer": [
                 {
                     "evidence_id": "e1",
