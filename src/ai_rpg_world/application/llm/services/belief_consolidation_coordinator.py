@@ -286,6 +286,21 @@ class BeliefConsolidationCoordinator:
             raise TypeError("objective_text_provider must be callable or None")
         if reflect_observation_sink is not None and not callable(reflect_observation_sink):
             raise TypeError("reflect_observation_sink must be callable or None")
+        # P4 fail-fast: goal_reflect を ON にするなら「監査対象の目的 provider」と
+        # 「内省観測 sink」の両方が要る。片方でも欠けると reflect 節を prompt に
+        # 出しておきながら発火した reflect を黙って捨てる / 目的が渡らず節が死んで
+        # token だけ食う、という静かな失敗になる。起動時に構造で弾く (CLAUDE.md
+        # 「起動時 fail-fast が最後の砦」)。
+        if goal_reflect_enabled and objective_text_provider is None:
+            raise ValueError(
+                "goal_reflect_enabled requires objective_text_provider "
+                "(reflect の監査対象となる目的が渡らないと節が死ぬ)"
+            )
+        if goal_reflect_enabled and reflect_observation_sink is None:
+            raise ValueError(
+                "goal_reflect_enabled requires reflect_observation_sink "
+                "(発火した reflect を注入できず黙って捨てることになる)"
+            )
         if stall_min_interval_turns < 1:
             raise ValueError("stall_min_interval_turns must be positive")
         self._evidence_buffer_store = evidence_buffer_store
@@ -363,15 +378,18 @@ class BeliefConsolidationCoordinator:
         last = self._last_stall_turn.get(player_id)
         if last is not None and (turn - last) < self._stall_min_interval_turns:
             return False
-        self._last_stall_turn[player_id] = turn
         try:
             self._reflect_observation_sink(PlayerId(player_id), statement.strip())
         except Exception:
+            # cap は注入に成功したときだけ消費する。sink が一時的に失敗した局面で
+            # cap を進めてしまうと、注入していないのに次の停滞内省が
+            # stall_min_interval_turns ぶん抑制され、気づきの取りこぼしが長引く。
             self._logger.warning(
                 "reflect_observation_sink raised for player_id=%s", player_id,
                 exc_info=True,
             )
             return False
+        self._last_stall_turn[player_id] = turn
         return True
 
     def current_turn_index(self, player_id: PlayerId) -> int:
