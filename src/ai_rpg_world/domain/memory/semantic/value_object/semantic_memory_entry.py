@@ -67,6 +67,13 @@ class SemanticMemoryEntry:
     supersedes: Optional[str] = None
     support_evidence_ids: Tuple[str, ...] = ()
     contradict_evidence_ids: Tuple[str, ...] = ()
+    # P3b (CONFIRMATION 重み): support_evidence_ids のうち CONFIRMATION 由来の
+    # 件数。confidence 計算で CONFIRMATION 支持を通常支持の半分に軽く数えるため
+    # に持つ (「信じて当たった」の追認は、予測が外れて得た学びより証拠として
+    # 軽い)。support 総数の内数なので 0 <= この値 <= len(support_evidence_ids)。
+    # 他の journal フィールド同様、この値は snapshot codec には載せない
+    # (in-run のみ。第2期計画 P3 の snapshot × 方針)。
+    confirmation_support_count: int = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.entry_id, str) or not self.entry_id.strip():
@@ -154,6 +161,23 @@ class SemanticMemoryEntry:
                     field="contradict_evidence_ids",
                     index=i,
                 )
+
+        if (
+            not isinstance(self.confirmation_support_count, int)
+            or isinstance(self.confirmation_support_count, bool)
+        ):
+            raise SemanticMemoryEntryValidationException(
+                "confirmation_support_count must be int",
+                field="confirmation_support_count",
+                value=self.confirmation_support_count,
+            )
+        if not (0 <= self.confirmation_support_count <= len(self.support_evidence_ids)):
+            raise SemanticMemoryEntryValidationException(
+                "confirmation_support_count must be in "
+                "[0, len(support_evidence_ids)]",
+                field="confirmation_support_count",
+                value=self.confirmation_support_count,
+            )
 
 
 __all__ = [

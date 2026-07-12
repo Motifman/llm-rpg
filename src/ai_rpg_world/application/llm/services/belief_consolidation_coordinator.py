@@ -75,6 +75,9 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
     BELIEF_EVIDENCE_SALIENCE_HIGH,
     BeliefEvidence,
 )
+from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
+    BeliefEvidenceSourceKind,
+)
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SEMANTIC_MEMORY_STATUS_ACTIVE,
     SEMANTIC_MEMORY_STATUS_INACTIVE,
@@ -537,6 +540,23 @@ class BeliefConsolidationCoordinator:
             applied.append(raw)
         return applied
 
+    @staticmethod
+    def _count_confirmation(
+        evidence_ids: tuple[str, ...],
+        evidence_by_id: dict[str, BeliefEvidence],
+    ) -> int:
+        """P3b: evidence_ids のうち CONFIRMATION 由来の件数を数える。
+
+        batch に無い id (既に drain 済みの過去 support 等) は数えられないので
+        除く。よって「今回の batch で足された CONFIRMATION 支持」の件数になる。
+        """
+        return sum(
+            1
+            for eid in evidence_ids
+            if (e := evidence_by_id.get(eid)) is not None
+            and e.source_kind == BeliefEvidenceSourceKind.CONFIRMATION
+        )
+
     def _resolve_evidence_ids(
         self,
         raw: dict[str, Any],
@@ -612,6 +632,9 @@ class BeliefConsolidationCoordinator:
             if evidence is not None:
                 episode_ids.extend(evidence.episode_ids)
         entry_id = f"sem-{uuid4().hex}"
+        # P3b: founding evidence のうち CONFIRMATION 由来は confidence を半分に
+        # 数える (追認は予測誤差の学びより軽い証拠)。
+        confirmation_count = self._count_confirmation(evidence_ids, evidence_by_id)
         entry = SemanticMemoryEntry(
             entry_id=entry_id,
             player_id=player_id,
@@ -619,13 +642,16 @@ class BeliefConsolidationCoordinator:
             evidence_episode_ids=tuple(sorted(set(episode_ids))),
             # founding evidence 件数を初期 confidence に反映
             # (support_evidence_ids を数えているので base 固定は不整合)。
-            confidence=compute_belief_confidence(len(evidence_ids), 0),
+            confidence=compute_belief_confidence(
+                len(evidence_ids), 0, confirmation_count
+            ),
             created_at=now,
             importance_score=importance,
             tags=tuple(tags),
             belief_id=entry_id,
             status=SEMANTIC_MEMORY_STATUS_ACTIVE,
             support_evidence_ids=evidence_ids,
+            confirmation_support_count=confirmation_count,
         )
         self._semantic_store.add_by_being(being_id, entry)
 
@@ -652,14 +678,25 @@ class BeliefConsolidationCoordinator:
         if target is None:
             return
         evidence_ids = self._resolve_evidence_ids(raw, evidence_by_id, batch_ids)
-        new_support = tuple(sorted(set(target.support_evidence_ids) | set(evidence_ids)))
+        existing_support = set(target.support_evidence_ids)
+        new_support = tuple(sorted(existing_support | set(evidence_ids)))
+        # P3b: 今回 **新規に** 足された support のうち CONFIRMATION 由来だけを
+        # 既存カウントに加える (既に support 済みの id は二重計上しない)。
+        newly_added = tuple(eid for eid in evidence_ids if eid not in existing_support)
+        new_confirmation_count = (
+            target.confirmation_support_count
+            + self._count_confirmation(newly_added, evidence_by_id)
+        )
         new_confidence = compute_belief_confidence(
-            len(new_support), len(target.contradict_evidence_ids)
+            len(new_support),
+            len(target.contradict_evidence_ids),
+            new_confirmation_count,
         )
         updated = replace(
             target,
             support_evidence_ids=new_support,
             confidence=new_confidence,
+            confirmation_support_count=new_confirmation_count,
             created_at=now,
         )
         self._semantic_store.add_by_being(being_id, updated)
@@ -687,8 +724,12 @@ class BeliefConsolidationCoordinator:
             player_id=player_id,
             text=new_text,
             evidence_episode_ids=target.evidence_episode_ids,
+            # P3b: 命題を言い直すだけなので support/反証/CONFIRMATION 内数は
+            # そのまま引き継ぐ (confidence 計算も同じ重み付けを保つ)。
             confidence=compute_belief_confidence(
-                len(target.support_evidence_ids), len(target.contradict_evidence_ids)
+                len(target.support_evidence_ids),
+                len(target.contradict_evidence_ids),
+                target.confirmation_support_count,
             ),
             created_at=now,
             importance_score=target.importance_score,
@@ -698,6 +739,7 @@ class BeliefConsolidationCoordinator:
             supersedes=target.entry_id,
             support_evidence_ids=target.support_evidence_ids,
             contradict_evidence_ids=target.contradict_evidence_ids,
+            confirmation_support_count=target.confirmation_support_count,
         )
         self._semantic_store.supersede_by_being(
             being_id, old_entry_id=target.entry_id, new_entry=new_entry
@@ -721,8 +763,12 @@ class BeliefConsolidationCoordinator:
         new_contradict = tuple(
             sorted(set(target.contradict_evidence_ids) | set(evidence_ids))
         )
+        # P3b: 反証を足すだけなので CONFIRMATION 支持の内数は不変。confidence
+        # 計算に渡して重み付けを保つ (渡さないと 0.5 割引が消えて再膨張する)。
         new_confidence = compute_belief_confidence(
-            len(target.support_evidence_ids), len(new_contradict)
+            len(target.support_evidence_ids),
+            len(new_contradict),
+            target.confirmation_support_count,
         )
         updated = replace(
             target,

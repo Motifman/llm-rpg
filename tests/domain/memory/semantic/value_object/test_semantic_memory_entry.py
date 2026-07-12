@@ -127,3 +127,30 @@ class TestExistingFieldsUnaffected:
         entry = _entry()
         assert entry.entry_id == "entry-1"
         assert entry.confidence == 0.6
+
+
+class TestConfirmationSupportCount:
+    """P3b: confirmation_support_count (support の CONFIRMATION 内数) の不変条件。"""
+
+    def test_default_is_zero(self) -> None:
+        entry = _entry()
+        assert entry.confirmation_support_count == 0
+
+    def test_within_support_bounds_ok(self) -> None:
+        entry = _entry(
+            support_evidence_ids=("e1", "e2", "e3"),
+            confirmation_support_count=2,
+        )
+        assert entry.confirmation_support_count == 2
+
+    def test_exceeding_support_count_raises(self) -> None:
+        """support 総数を超える CONFIRMATION 内数は不正 (内数なので <= 総数)。"""
+        with pytest.raises(SemanticMemoryEntryValidationException):
+            _entry(
+                support_evidence_ids=("e1",),
+                confirmation_support_count=2,
+            )
+
+    def test_negative_raises(self) -> None:
+        with pytest.raises(SemanticMemoryEntryValidationException):
+            _entry(confirmation_support_count=-1)
