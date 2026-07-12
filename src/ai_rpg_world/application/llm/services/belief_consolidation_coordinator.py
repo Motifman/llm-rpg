@@ -57,6 +57,9 @@ from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port imp
 from ai_rpg_world.application.llm.services.belief_confidence import (
     compute_belief_confidence,
 )
+from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
+    cue_tokens as _shared_cue_tokens,
+)
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.service.being_attachment_resolver import (
     BeingAttachmentResolver,
@@ -180,19 +183,9 @@ _logger = logging.getLogger(__name__)
 
 
 def _cue_tokens(cue_signature: str) -> tuple[str, ...]:
-    tokens: list[str] = []
-    for part in cue_signature.split("|"):
-        part = part.strip()
-        if not part:
-            continue
-        if ":" in part:
-            _, _, value = part.partition(":")
-            value = value.strip().lower()
-        else:
-            value = part.lower()
-        if value:
-            tokens.append(value)
-    return tuple(tokens)
+    # P3: shortlist 照合と CONFIRMATION ゲートで同じトークン化を使うため、
+    # 実装は belief_evidence_cue_signature.cue_tokens に集約した (挙動は不変)。
+    return _shared_cue_tokens(cue_signature)
 
 
 class BeliefConsolidationCoordinator:

@@ -325,6 +325,104 @@ class TestBeliefEvidenceTranscriberAttribution:
         assert rows[0].in_context_belief_ids == ()
 
 
+class TestConfirmationRelevanceGate:
+    """P3: belief_axis_provider 注入時、CONFIRMATION は今ターンの行動 cue と
+
+    軸一致する in-context belief にだけ支持を積む (routine 成功への乱発を抑える)。
+    ``_episode()`` の cue は tool:explore|spot:3 (action=explore, spot_id=3)。
+    """
+
+    @staticmethod
+    def _provider(mapping):
+        def lookup(being_id, belief_id):
+            return mapping.get(belief_id)
+
+        return lookup
+
+    def test_no_axis_match_does_not_record(self) -> None:
+        """cue (explore/3) と一致しない belief のみなら CONFIRMATION を積まない。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        provider = self._provider({"b1": (("信頼",), "タカシは信頼できる")})
+        transcriber = BeliefEvidenceTranscriber(
+            buffer_store, belief_axis_provider=provider
+        )
+        being_id = BeingId("being-1")
+
+        result = transcriber.record_if_applicable(
+            being_id,
+            _episode(prediction_error=None, expected="何か見つかるはず"),
+            in_context_belief_ids=("b1",),
+            had_expected_result=True,
+        )
+
+        assert result is None
+        assert buffer_store.list_all_by_being(being_id) == []
+
+    def test_axis_match_records_with_matched_subset_only(self) -> None:
+        """一致する belief だけが attribution に残り、非一致は落ちる。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        provider = self._provider(
+            {
+                "b1": (("explore",), "この島の探索は空振りが多い"),  # tool:explore と一致
+                "b2": (("信頼",), "タカシは信頼できる"),  # 非一致
+            }
+        )
+        transcriber = BeliefEvidenceTranscriber(
+            buffer_store, belief_axis_provider=provider
+        )
+        being_id = BeingId("being-1")
+
+        result = transcriber.record_if_applicable(
+            being_id,
+            _episode(prediction_error=None, expected="何か見つかるはず"),
+            in_context_belief_ids=("b1", "b2"),
+            had_expected_result=True,
+        )
+
+        assert result is not None
+        assert result.source_kind == BeliefEvidenceSourceKind.CONFIRMATION
+        assert result.in_context_belief_ids == ("b1",)
+
+    def test_canary_beach_explore_belief_survives(self) -> None:
+        """妥当性カナリア: 「浜辺では目立った発見はない」型 (tag に explore) が
+
+        探索行動で生き残る (over-gating で正当な CONFIRMATION を殺さない)。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        provider = self._provider(
+            {"b-beach": (("浜辺", "explore"), "浜辺では目立った発見はない")}
+        )
+        transcriber = BeliefEvidenceTranscriber(
+            buffer_store, belief_axis_provider=provider
+        )
+        being_id = BeingId("being-1")
+
+        result = transcriber.record_if_applicable(
+            being_id,
+            _episode(prediction_error=None, expected="何か見つかるはず"),
+            in_context_belief_ids=("b-beach",),
+            had_expected_result=True,
+        )
+
+        assert result is not None
+        assert result.in_context_belief_ids == ("b-beach",)
+
+    def test_provider_none_keeps_all_beliefs_backward_compat(self) -> None:
+        """provider 未注入なら従来どおり in-context belief 全件に積む。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+
+        result = transcriber.record_if_applicable(
+            being_id,
+            _episode(prediction_error=None, expected="何か見つかるはず"),
+            in_context_belief_ids=("b1", "b2"),
+            had_expected_result=True,
+        )
+
+        assert result is not None
+        assert result.in_context_belief_ids == ("b1", "b2")
+
+
 class TestComputeChunkAttribution:
     """U4: chunk を構成する action 群から attribution 用の値を計算する純関数。"""
 

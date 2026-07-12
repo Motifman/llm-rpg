@@ -44,7 +44,9 @@ from typing import Callable, Optional, Sequence, Tuple
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
+    belief_matches_cue_tokens,
     build_belief_evidence_cue_signature,
+    cue_tokens,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -130,6 +132,9 @@ class BeliefEvidenceTranscriber:
             Callable[[], Optional[ITraceRecorder]]
         ] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        belief_axis_provider: Optional[
+            Callable[[BeingId, str], Optional[Tuple[Tuple[str, ...], str]]]
+        ] = None,
     ) -> None:
         if not isinstance(buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -143,9 +148,16 @@ class BeliefEvidenceTranscriber:
             current_tick_provider
         ):
             raise TypeError("current_tick_provider must be callable or None")
+        if belief_axis_provider is not None and not callable(belief_axis_provider):
+            raise TypeError("belief_axis_provider must be callable or None")
         self._buffer_store = buffer_store
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
+        # P3 (CONFIRMATION 関連性ゲート): belief_id → (tags, text) を返す
+        # ルックアップ。注入されているときだけ、CONFIRMATION は「そのターンの
+        # 行動 context (cue) と軸一致する in-context belief」に絞って支持を積む。
+        # 未注入 (None) なら従来どおり in-context belief 全件に積む (後方互換)。
+        self._belief_axis_provider = belief_axis_provider
 
     def record_if_applicable(
         self,
@@ -200,12 +212,22 @@ class BeliefEvidenceTranscriber:
             return evidence
 
         if in_context_belief_ids and had_expected_result:
+            episode_cue = build_belief_evidence_cue_signature(episode)
+            # P3: 関連性ゲート。provider が注入されているときは、in-context
+            # belief のうち「今ターンの行動 cue と軸一致するもの」に絞る。
+            # 一致が 0 件なら CONFIRMATION を積まない (routine な成功への乱発を
+            # 抑える)。provider 未注入なら従来どおり全 in-context belief を対象。
+            confirmed_belief_ids = self._filter_relevant_beliefs(
+                being_id, in_context_belief_ids, episode_cue
+            )
+            if not confirmed_belief_ids:
+                return None
             confirmed_text = episode.expected or "行動の予測が当たった"
             evidence = BeliefEvidence(
                 evidence_id=f"belief-evidence-{uuid4().hex}",
                 source_kind=BeliefEvidenceSourceKind.CONFIRMATION,
                 episode_ids=(episode.episode_id,),
-                cue_signature=build_belief_evidence_cue_signature(episode),
+                cue_signature=episode_cue,
                 text=f"予測が当たった: {confirmed_text}",
                 # CONFIRMATION は「一撃学習」の対象ではない (的中は反復して
                 # こそ意味がある) ため常に low 固定。salience=high は
@@ -213,13 +235,42 @@ class BeliefEvidenceTranscriber:
                 salience=BELIEF_EVIDENCE_SALIENCE_LOW,
                 occurred_at=episode.occurred_at,
                 tick=self._resolve_tick(),
-                in_context_belief_ids=in_context_belief_ids,
+                # ゲート後の (関連する) belief だけを attribution に残す。
+                in_context_belief_ids=confirmed_belief_ids,
             )
             self._buffer_store.append_by_being(being_id, evidence)
             self._emit_trace(being_id, evidence)
             return evidence
 
         return None
+
+    def _filter_relevant_beliefs(
+        self,
+        being_id: BeingId,
+        in_context_belief_ids: Tuple[str, ...],
+        episode_cue: str,
+    ) -> Tuple[str, ...]:
+        """P3: in-context belief を「今ターンの行動 cue と軸一致するもの」に絞る。
+
+        ``belief_axis_provider`` 未注入なら絞り込まず全件返す (後方互換)。
+        provider が belief の (tags, text) を返せないもの (既に消えた等) は
+        除外する。cue トークンが空 (行動情報なし) のときは一致しようがないので
+        空を返す = CONFIRMATION を積まない。
+        """
+        if self._belief_axis_provider is None:
+            return in_context_belief_ids
+        tokens = cue_tokens(episode_cue)
+        if not tokens:
+            return ()
+        relevant: list[str] = []
+        for belief_id in in_context_belief_ids:
+            axes = self._belief_axis_provider(being_id, belief_id)
+            if axes is None:
+                continue
+            tags, text = axes
+            if belief_matches_cue_tokens(tuple(tags), text, tokens):
+                relevant.append(belief_id)
+        return tuple(relevant)
 
     def record_pending_resolution(
         self,

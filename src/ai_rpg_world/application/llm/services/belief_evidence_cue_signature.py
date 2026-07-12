@@ -45,4 +45,49 @@ def build_belief_evidence_cue_signature(episode: SubjectiveEpisode) -> str:
     return "|".join(parts)
 
 
-__all__ = ["build_belief_evidence_cue_signature"]
+def cue_tokens(cue_signature: str) -> tuple[str, ...]:
+    """cue_signature を照合用トークン (軸の値部分、小文字化) に分解する。
+
+    ``"tool:explore|spot:12|player:カイ"`` → ``("explore", "12", "カイ")``。
+    ``:`` の後ろ (軸の値) だけを取り、軸名 (tool/spot/player) は落とす。
+    固着パス (``belief_consolidation_coordinator._cue_tokens``) の shortlist
+    照合と同じ規則を単一の実装に集約したもの (P3: CONFIRMATION 関連性ゲートが
+    同じ照合を再利用するため)。
+    """
+    tokens: list[str] = []
+    for part in cue_signature.split("|"):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" in part:
+            _, _, value = part.partition(":")
+            value = value.strip().lower()
+        else:
+            value = part.lower()
+        if value:
+            tokens.append(value)
+    return tuple(tokens)
+
+
+def belief_matches_cue_tokens(
+    tags: tuple[str, ...], text: str, tokens: tuple[str, ...]
+) -> bool:
+    """belief の tags / text が cue トークンのいずれかと一致するか。
+
+    固着 shortlist のスコアリングと同じ規則 (トークンが tag 集合に含まれる、
+    または text に部分文字列として現れる) で「1 つでも一致すれば True」。
+    P3 の CONFIRMATION ゲートはこれで「行動 context と関係する belief にだけ
+    支持を積む」を判定する。tokens が空なら常に False (照合材料が無い)。
+    """
+    if not tokens:
+        return False
+    tag_set = {t.lower() for t in tags}
+    text_lower = text.lower()
+    return any(tok in tag_set or tok in text_lower for tok in tokens)
+
+
+__all__ = [
+    "build_belief_evidence_cue_signature",
+    "cue_tokens",
+    "belief_matches_cue_tokens",
+]
