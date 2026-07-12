@@ -49,6 +49,20 @@ class GoalJournalRepository(ABC):
         """
 
     @abstractmethod
+    def settle_by_being(
+        self, being_id: BeingId, *, goal_id: str, outcome_status: str
+    ) -> Optional[GoalEntry]:
+        """``goal_id`` の active 目的を ``outcome_status`` (achieved / abandoned)
+
+        で閉じる (P8 目的の清算)。閉じた entry を返す。対象が active でない /
+        存在しないときは何もせず None を返す (安全な no-op)。supersede と違い
+        新しい目的は足さない — 「本人が目的を成し遂げた / 見切った」宣言に対応し、
+        履歴は残す (status だけ変える)。``outcome_status`` は ACHIEVED /
+        ABANDONED のみ許容する。
+        """
+
+
+    @abstractmethod
     def replace_all_by_being(
         self, being_id: BeingId, entries: list[GoalEntry]
     ) -> None:

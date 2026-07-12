@@ -178,3 +178,54 @@ class TestWithGoalUpdateSchema:
 
         decorated = with_goal_update_schema(self._todo_tool())
         assert "goal_update" not in decorated.parameters.get("properties", {})
+
+
+class TestWithGoalOutcomeSchema:
+    """P8: with_goal_outcome_schema が goal_outcome を nullable enum で足すこと。"""
+
+    def _world_tool(self) -> ToolDefinitionDto:
+        return ToolDefinitionDto(
+            name="interact",
+            description="何かに作用する",
+            parameters={"type": "object", "properties": {}, "required": []},
+            category=ToolCategory.WORLD_ACTION,
+        )
+
+    def _todo_tool(self) -> ToolDefinitionDto:
+        return ToolDefinitionDto(
+            name="todo_add",
+            description="メモ追加",
+            parameters={"type": "object", "properties": {}, "required": []},
+            category=ToolCategory.WORLD_ACTION,
+        )
+
+    def test_goal_outcome_added_as_nullable_enum_not_required(self) -> None:
+        from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+            with_goal_outcome_schema,
+        )
+
+        decorated = with_goal_outcome_schema(self._world_tool())
+        prop = decorated.parameters["properties"]["goal_outcome"]
+        assert prop["enum"] == ["achieved", "abandoned", None]
+        assert "null" in prop["type"]
+        assert "goal_outcome" not in decorated.parameters["required"]
+
+    def test_description_distinguishes_close_from_rephrase(self) -> None:
+        """説明文が「閉じる (清算)」と「言い直し (書かない)」を区別する。"""
+        from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+            with_goal_outcome_schema,
+        )
+
+        desc = with_goal_outcome_schema(self._world_tool()).parameters[
+            "properties"
+        ]["goal_outcome"]["description"]
+        assert "achieved" in desc and "abandoned" in desc
+        assert "言い直し" in desc
+
+    def test_not_added_to_non_subjective_tool(self) -> None:
+        from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+            with_goal_outcome_schema,
+        )
+
+        decorated = with_goal_outcome_schema(self._todo_tool())
+        assert "goal_outcome" not in decorated.parameters.get("properties", {})

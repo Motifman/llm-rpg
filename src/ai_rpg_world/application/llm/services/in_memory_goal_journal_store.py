@@ -14,11 +14,15 @@ from ai_rpg_world.domain.memory.goal.repository.goal_journal_repository import (
     GoalJournalRepository,
 )
 from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
+    GOAL_STATUS_ACHIEVED,
+    GOAL_STATUS_ABANDONED,
     GOAL_STATUS_ACTIVE,
     GOAL_STATUS_SUPERSEDED,
     GoalEntry,
 )
 from dataclasses import replace
+
+_SETTLE_STATUSES = frozenset({GOAL_STATUS_ACHIEVED, GOAL_STATUS_ABANDONED})
 
 
 class InMemoryGoalJournalStore(GoalJournalRepository):
@@ -64,6 +68,24 @@ class InMemoryGoalJournalStore(GoalJournalRepository):
                 bucket[i] = replace(e, status=GOAL_STATUS_SUPERSEDED)
                 break
         bucket.append(new_entry)
+
+    def settle_by_being(
+        self, being_id: BeingId, *, goal_id: str, outcome_status: str
+    ) -> Optional[GoalEntry]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if outcome_status not in _SETTLE_STATUSES:
+            raise ValueError(
+                "outcome_status must be one of "
+                f"{sorted(_SETTLE_STATUSES)}, got {outcome_status!r}"
+            )
+        bucket = self._entries[being_id]
+        for i, e in enumerate(bucket):
+            if e.goal_id == goal_id and e.status == GOAL_STATUS_ACTIVE:
+                settled = replace(e, status=outcome_status)
+                bucket[i] = settled
+                return settled
+        return None
 
     def replace_all_by_being(
         self, being_id: BeingId, entries: list[GoalEntry]

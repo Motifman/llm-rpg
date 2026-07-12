@@ -38,11 +38,30 @@ def _enable(monkeypatch, revision: bool) -> None:
         monkeypatch.delenv("GOAL_REVISION_ENABLED", raising=False)
 
 
-def _goal_update_in_defs(runtime) -> bool:
+def _field_in_defs(runtime, field: str) -> bool:
     for d in runtime.get_tool_definitions():
-        if "goal_update" in (d.parameters.get("properties") or {}):
+        if field in (d.parameters.get("properties") or {}):
             return True
     return False
+
+
+def _goal_update_in_defs(runtime) -> bool:
+    return _field_in_defs(runtime, "goal_update")
+
+
+def _seed_active_self_goal(runtime, player_id, goal_id, text):
+    being_id = runtime.aux_being_resolver.resolve_being_id(
+        runtime.aux_being_default_world_id, player_id
+    )
+    runtime._goal_journal_store.add_by_being(
+        being_id,
+        GoalEntry(
+            goal_id=goal_id, player_id=int(player_id.value), text=text,
+            status=GOAL_STATUS_ACTIVE, locked=False, origin=GOAL_ORIGIN_SELF,
+            created_tick=0, created_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        ),
+    )
+    return being_id
 
 
 class TestGoalRevisionSchemaWiring:
@@ -159,3 +178,68 @@ class TestGoalRevisionWrite:
         active = runtime._goal_journal_store.get_active_by_being(being_id)
         assert active.goal_id == "g-locked"  # locked は書き換わらない
         assert active.text == "禁書を封印する"
+
+
+class TestGoalOutcomeWiring:
+    """P8: goal_outcome の schema 露出と清算・転記の end-to-end 配線。"""
+
+    def test_goal_outcome_exposed_on_and_byte_invariant(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """flag ON で goal_outcome が露出し、tool 定義は tick 間 byte 不変 (設計判断 #1)。"""
+        _enable(monkeypatch, revision=True)
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        assert _field_in_defs(runtime, "goal_outcome")
+        assert runtime.get_tool_definitions() == runtime.get_tool_definitions()
+
+    def test_goal_outcome_absent_when_revision_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable(monkeypatch, revision=False)
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        assert not _field_in_defs(runtime, "goal_outcome")
+
+    def test_achieved_settles_goal_and_transcribes_evidence(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """goal_outcome=achieved → 目的が ACHIEVED で閉じ、支持 evidence が積まれる。
+
+        applier → 実 transcriber → evidence buffer の end-to-end 配線を通す
+        (遅延 holder が正しく埋まっているかの防波堤)。
+        """
+        _enable(monkeypatch, revision=True)
+        monkeypatch.setenv("BELIEF_EVIDENCE_ENABLED", "1")
+        monkeypatch.setenv("SEMANTIC_SEARCH_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        player_id = PlayerId(1)
+        being_id = _seed_active_self_goal(runtime, player_id, "g1", "古い地図を手に入れる")
+
+        runtime.apply_goal_update_if_present(player_id, {"goal_outcome": "achieved"})
+
+        # 目的は ACHIEVED で閉じ、active が無くなる (無目的)。
+        assert runtime._goal_journal_store.get_active_by_being(being_id) is None
+        entries = {
+            e.goal_id: e
+            for e in runtime._goal_journal_store.list_all_by_being(being_id)
+        }
+        assert entries["g1"].status == "achieved"
+        # 支持 evidence が buffer に積まれている (実 transcriber 経由)。
+        transcriber = runtime._goal_revision_applier._settlement_transcriber_provider()
+        assert transcriber is not None
+        rows = transcriber._buffer_store.list_all_by_being(being_id)
+        assert any("成し遂げた" in r.text for r in rows)
+
+    def test_outcome_only_returns_to_no_goal_render(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """goal_outcome のみで閉じた後、【現在の目的】が未定描画に戻る。"""
+        _enable(monkeypatch, revision=True)
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        player_id = PlayerId(1)
+        _seed_active_self_goal(runtime, player_id, "g1", "山頂で狼煙を上げる")
+
+        runtime.apply_goal_update_if_present(player_id, {"goal_outcome": "abandoned"})
+
+        # fallback を空にして seed を誘発させず、無目的の描画を確認する。
+        rendered = runtime._resolve_objective_via_goal_store(player_id, "")
+        assert "まだ定まっていない" in rendered

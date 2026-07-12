@@ -69,6 +69,11 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
     BeliefEvidenceSourceKind,
 )
+from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
+    GOAL_STATUS_ABANDONED,
+    GOAL_STATUS_ACHIEVED,
+    GoalEntry,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -324,6 +329,62 @@ class BeliefEvidenceTranscriber:
                 else BELIEF_EVIDENCE_SALIENCE_HIGH
             ),
             occurred_at=episode.occurred_at,
+            tick=self._resolve_tick(),
+        )
+        self._buffer_store.append_by_being(being_id, evidence)
+        self._emit_trace(being_id, evidence)
+        return evidence
+
+    def record_goal_resolution(
+        self,
+        being_id: BeingId,
+        goal: GoalEntry,
+        *,
+        outcome: str,
+        occurred_at,
+    ) -> Optional[BeliefEvidence]:
+        """本人が閉じた目的 (achieved / abandoned) を belief evidence に転記する (P8)。
+
+        目的を「選好的な予測」とみなし、その清算を U10b の約束清算と同型に
+        転記する (= ``PENDING_RESOLUTION``。goal は自分自身への長期予測、約束は
+        他者への予測、という違いだけ)。
+
+        - ``outcome == achieved``: 「目的を成し遂げた」= 支持側の素材
+        - ``outcome == abandoned``: 「目的を見切って諦めた」= 誤差側の素材
+          (「この島で救助を待つのは現実的でない」型の belief に育つ)
+
+        判定 (achieved / abandoned) は本人が ``goal_outcome`` で宣言済みで、本
+        メソッドは新しい判定基準を作らない (U2 以来の「証拠の入口は転記のみ」)。
+        目的の達成/断念はどちらも生活の節目として印象に残るため salience=high
+        (即時固着候補)。``cue_signature`` は ``goal:<outcome>`` 軸にし、達成の
+        反復・断念の反復がそれぞれクラスタを作れるようにする。目的の清算は
+        episode に紐づかないので ``episode_ids`` には目的の ``goal_id`` を入れて
+        追跡可能にする (evidence を辿ると閉じた目的に行き着く)。
+        """
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(goal, GoalEntry):
+            raise TypeError("goal must be GoalEntry")
+        if outcome not in (GOAL_STATUS_ACHIEVED, GOAL_STATUS_ABANDONED):
+            raise ValueError(
+                f"outcome must be one of "
+                f"({GOAL_STATUS_ACHIEVED!r}, {GOAL_STATUS_ABANDONED!r}), "
+                f"got {outcome!r}"
+            )
+        achieved = outcome == GOAL_STATUS_ACHIEVED
+        text = (
+            f"目的「{goal.text}」を成し遂げた。"
+            if achieved
+            else f"目的「{goal.text}」は見切って諦めた。"
+        )
+        evidence = BeliefEvidence(
+            evidence_id=f"belief-evidence-{uuid4().hex}",
+            source_kind=BeliefEvidenceSourceKind.PENDING_RESOLUTION,
+            episode_ids=(goal.goal_id,),
+            cue_signature=f"goal:{outcome}",
+            text=text,
+            salience=BELIEF_EVIDENCE_SALIENCE_HIGH,
+            occurred_at=occurred_at,
             tick=self._resolve_tick(),
         )
         self._buffer_store.append_by_being(being_id, evidence)
