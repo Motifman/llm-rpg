@@ -44,7 +44,9 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kin
 _BEING = BeingId("being-1")
 
 
-def _pending(pending_id: str, *, tick_from: int, tick_to: int, cues=("player:カイト",)) -> PendingPrediction:
+def _pending(
+    pending_id: str, *, tick_from: int, tick_to: int, cues=("player:カイト",), kind="promise"
+) -> PendingPrediction:
     return PendingPrediction(
         pending_id=pending_id,
         text=f"約束-{pending_id}",
@@ -53,6 +55,7 @@ def _pending(pending_id: str, *, tick_from: int, tick_to: int, cues=("player:カ
         tick_to=tick_to,
         origin_episode_id="ep-origin",
         created_tick=tick_from,
+        kind=kind,
     )
 
 
@@ -173,6 +176,32 @@ class TestResolutionTranscription:
         kinds = [ev.kind for ev in captured]
         assert TraceEventKind.PENDING_PREDICTION_RESOLVED in kinds
 
+    def test_resolved_trace_carries_pending_kind(self) -> None:
+        """P11: RESOLVED trace の payload に種別 (pending_kind) が載る。"""
+        store = InMemoryPendingPredictionStore()
+        store.add_by_being(
+            _BEING, _pending("p1", tick_from=10, tick_to=25, cues=("spot:3",), kind="plan")
+        )
+        buffer = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer)
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+        episode = _episode([PendingResolutionVerdict("p1", "broken")])
+
+        _resolve(
+            store=store,
+            episode=episode,
+            transcriber=transcriber,
+            current_tick=20,
+            recorder=recorder,
+        )
+
+        resolved = [
+            ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_RESOLVED
+        ]
+        assert len(resolved) == 1
+        assert resolved[0].payload["pending_kind"] == "plan"
+
 
 class TestExpiry:
     """tick_to を過ぎた未決着の約束は黙って失効する。"""
@@ -209,6 +238,26 @@ class TestExpiry:
 
         kinds = [ev.kind for ev in captured]
         assert TraceEventKind.PENDING_PREDICTION_EXPIRED in kinds
+
+    def test_expired_trace_carries_pending_kinds(self) -> None:
+        """P11: EXPIRED trace の payload に id→種別 (pending_kinds) が載る
+
+        (CREATED / RESOLVED と揃え、方針予測の失効を約束の失効と区別する)。"""
+        store = InMemoryPendingPredictionStore()
+        store.add_by_being(
+            _BEING, _pending("plan1", tick_from=1, tick_to=5, cues=("spot:3",), kind="plan")
+        )
+        store.add_by_being(_BEING, _pending("prom1", tick_from=1, tick_to=5))
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+
+        _resolve(store=store, episode=_episode(), current_tick=20, recorder=recorder)
+
+        expired = [
+            ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_EXPIRED
+        ]
+        assert len(expired) == 1
+        assert expired[0].payload["pending_kinds"] == {"plan1": "plan", "prom1": "promise"}
 
 
 class TestSafeDegradation:

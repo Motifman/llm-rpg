@@ -58,6 +58,7 @@ from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repos
     BeliefEvidenceBufferRepository,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+    PENDING_KIND_PLAN,
     PENDING_VERDICT_BROKEN,
     PENDING_VERDICT_FULFILLED,
     PendingPrediction,
@@ -308,6 +309,12 @@ class BeliefEvidenceTranscriber:
         - ``verdict == "broken"``: 「約束が破られた」= 反証。裏切りは一撃で
           印象に残る出来事なので salience=high (即時固着候補) にする。
 
+        P11: ``pending.kind`` が ``plan`` (自分の方針への見込み) のときは文面を
+        「見込み『…』は当たった/外れた」に変える。破れは「方針レベルの予測誤差」
+        として反証に流れ、有害な belief (「この探索は手がかりになる」型) を訂正
+        できるようにするのが plan 予測化の狙い。salience は verdict 由来なので
+        種別に依らず同じ (fulfilled=low / broken=high)。
+
         ``cue_signature`` は約束の ``resolution_cues`` のうち人物 (``player:``)
         を優先して採る (清算は「対象 player belief への支持/反証」なので、
         人物の belief クラスタに寄せる)。人物 cue が無ければ最初の cue を使う。
@@ -328,11 +335,18 @@ class BeliefEvidenceTranscriber:
             )
 
         fulfilled = verdict == PENDING_VERDICT_FULFILLED
-        text = (
-            f"約束「{pending.text}」は果たされた。"
-            if fulfilled
-            else f"約束「{pending.text}」は破られた。"
-        )
+        if pending.kind == PENDING_KIND_PLAN:
+            text = (
+                f"見込み「{pending.text}」は当たった。"
+                if fulfilled
+                else f"見込み「{pending.text}」は外れた。"
+            )
+        else:
+            text = (
+                f"約束「{pending.text}」は果たされた。"
+                if fulfilled
+                else f"約束「{pending.text}」は破られた。"
+            )
         evidence = BeliefEvidence(
             evidence_id=f"belief-evidence-{uuid4().hex}",
             source_kind=BeliefEvidenceSourceKind.PENDING_RESOLUTION,

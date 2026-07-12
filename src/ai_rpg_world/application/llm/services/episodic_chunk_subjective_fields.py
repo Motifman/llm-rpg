@@ -23,6 +23,8 @@ from ai_rpg_world.domain.memory.episodic.value_object.heard_claim import (
     HeardClaim,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+    PENDING_KIND_PLAN,
+    PENDING_KIND_PROMISE,
     PendingPredictionDraft,
     PendingResolutionVerdict,
 )
@@ -128,9 +130,15 @@ _PENDING_PREDICTION_INSTRUCTION = """
 pending_prediction は、この chunk に将来の特定の時・場所・相手についての
 約束や見込みが含まれるときだけ書くオブジェクト。**相手か場所か時刻の
 いずれかが特定できないものは書かない**（乱発防止）。何も無ければ null にする。
-オブジェクトのキーは次の 4 つ:
+オブジェクトのキーは次の 5 つ:
+- kind: 次のどちらか。
+  - "promise": 相手との約束（例:「夕方に木の下でカイトと交換する」）
+  - "plan": 自分の方針への見込み。「この進め方を続ければ N tick 以内に X が
+    得られるはず」という、期限つきの方針レベルの見通し
+    （例:「浜を探索し続ければ山頂への道の手がかりが見つかるはず」）。
+    **次の 1 手の結果予測（すぐ結果が出るもの）は plan にしない**。数 tick
+    単位の方針の見通しだけを plan にする（乱発防止）
 - text: 約束・見込みの内容を表す日本語 1 文
-  （例: 「夕方に木の下でカイトとアイテムを交換する」）
 - resolution_cues: 解決条件を表す文字列の配列（1 件以上）。各要素は
   "spot:<場所のspot_id>" または "player:<相手の名前>" のいずれかの形式
   （例: ["spot:12", "player:カイト"]）。入力の location.spot_id や who に
@@ -468,12 +476,21 @@ def _normalize_pending_prediction(raw: Any) -> PendingPredictionDraft | None:
     tick_offset_from, tick_offset_to = _clamp_pending_tick_offsets(
         tick_offset_from, tick_offset_to
     )
+    # P11: kind は "plan" と明示されたときだけ plan、それ以外 (欠落・"promise"・
+    # 未知の値) は promise に倒す。壊れた kind 値のために予測全体を捨てず、
+    # 既定の promise 扱いで拾う (種別の取りこぼしはあっても予測は残す)。
+    kind = (
+        PENDING_KIND_PLAN
+        if raw.get("kind") == PENDING_KIND_PLAN
+        else PENDING_KIND_PROMISE
+    )
     try:
         return PendingPredictionDraft(
             text=text,
             resolution_cues=tuple(cues),
             tick_offset_from=tick_offset_from,
             tick_offset_to=tick_offset_to,
+            kind=kind,
         )
     except PendingPredictionValidationException:
         return None

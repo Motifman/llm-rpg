@@ -479,15 +479,18 @@ from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import 
 )
 
 
-def _pending_for_resolution(cues=("spot:3", "player:カイト")) -> PendingPrediction:
+def _pending_for_resolution(
+    cues=("spot:3", "player:カイト"), *, kind="promise", text="夕方に木の下でカイトと会う"
+) -> PendingPrediction:
     return PendingPrediction(
         pending_id="pending-1",
-        text="夕方に木の下でカイトと会う",
+        text=text,
         resolution_cues=tuple(cues),
         tick_from=10,
         tick_to=20,
         origin_episode_id="ep-origin",
         created_tick=10,
+        kind=kind,
     )
 
 
@@ -544,6 +547,43 @@ class TestBeliefEvidenceTranscriberPendingResolution:
             transcriber.record_pending_resolution(
                 BeingId("being-1"), _episode(), _pending_for_resolution(), verdict="maybe"
             )
+
+    def test_plan_kind_fulfilled_uses_mikomi_wording(self) -> None:
+        """P11: plan (方針の見込み) の履行は「見込み『…』は当たった」文面。
+
+        salience は verdict 由来で promise と同じ (fulfilled=low)。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        plan = _pending_for_resolution(
+            cues=("spot:3",), kind="plan", text="浜を探索すれば山頂への道が分かるはず"
+        )
+
+        ev = transcriber.record_pending_resolution(
+            BeingId("being-1"), _episode(), plan, verdict="fulfilled"
+        )
+
+        assert "見込み" in ev.text
+        assert "当たった" in ev.text
+        assert "約束" not in ev.text
+        assert ev.salience == "low"
+
+    def test_plan_kind_broken_uses_mikomi_wording_high_salience(self) -> None:
+        """P11: plan の破れは「見込み『…』は外れた」= 方針レベルの予測誤差。
+
+        破れは salience=high (即時固着候補)。有害 belief の反証に流れるのが狙い。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        plan = _pending_for_resolution(
+            cues=("spot:3",), kind="plan", text="浜を探索すれば山頂への道が分かるはず"
+        )
+
+        ev = transcriber.record_pending_resolution(
+            BeingId("being-1"), _episode(), plan, verdict="broken"
+        )
+
+        assert "見込み" in ev.text
+        assert "外れた" in ev.text
+        assert ev.salience == "high"
 
 
 def _goal(goal_id="g1", text="古い地図を手に入れる") -> "GoalEntry":

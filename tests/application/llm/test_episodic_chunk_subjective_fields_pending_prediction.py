@@ -454,3 +454,67 @@ class TestPendingTickOffsetClamp:
             }
         )
         assert draft is None
+
+
+class TestPendingPredictionKindP11:
+    """P11: pending prediction の種別 (promise / plan) の抽出・プロンプト。"""
+
+    def test_system_prompt_describes_plan_kind_and_kind_key(self) -> None:
+        """flag ON の system prompt に plan (方針の見込み) と kind キーの説明が出る。"""
+        enc = _make_encoding()
+        draft = ChunkEpisodeDraftBuilder().build(enc)
+        port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
+        svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
+        svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
+
+        sys_content = next(
+            (m["content"] for m in port.last_messages if m.get("role") == "system"),
+            "",
+        )
+        assert "kind" in sys_content
+        assert "plan" in sys_content
+        assert "方針" in sys_content
+
+    def test_default_kind_is_promise_when_key_absent(self) -> None:
+        """kind キーの無い pending_prediction は promise 扱い (後方互換)。"""
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+            _normalize_pending_prediction,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+            PENDING_KIND_PROMISE,
+        )
+
+        draft = _normalize_pending_prediction(dict(_VALID_PENDING_JSON))
+        assert draft is not None
+        assert draft.kind == PENDING_KIND_PROMISE
+
+    def test_plan_kind_is_parsed(self) -> None:
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+            _normalize_pending_prediction,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+            PENDING_KIND_PLAN,
+        )
+
+        raw = dict(_VALID_PENDING_JSON)
+        raw["kind"] = "plan"
+        draft = _normalize_pending_prediction(raw)
+        assert draft is not None
+        assert draft.kind == PENDING_KIND_PLAN
+
+    def test_unknown_kind_falls_back_to_promise_without_dropping(self) -> None:
+        """未知の kind 値は promise に倒し、予測自体は捨てない (種別の取りこぼしは
+
+        あっても予測は残す)。"""
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+            _normalize_pending_prediction,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+            PENDING_KIND_PROMISE,
+        )
+
+        raw = dict(_VALID_PENDING_JSON)
+        raw["kind"] = "hunch"
+        draft = _normalize_pending_prediction(raw)
+        assert draft is not None
+        assert draft.kind == PENDING_KIND_PROMISE

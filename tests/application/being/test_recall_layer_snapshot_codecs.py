@@ -324,3 +324,54 @@ class TestGoalEntryCodec:
         )
         restored = dict_to_goal_entry(goal_entry_to_dict(original))
         assert restored == original
+
+
+class TestPendingPredictionKindCodec:
+    """P11: PendingPrediction の kind (promise / plan) の codec round-trip。"""
+
+    def test_plan_kind_round_trips(self) -> None:
+        from datetime import datetime, timezone  # noqa: F401
+
+        from ai_rpg_world.application.being._memory_payload_codecs import (
+            dict_to_pending_prediction,
+            pending_prediction_to_dict,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+            PENDING_KIND_PLAN,
+            PendingPrediction,
+        )
+
+        original = PendingPrediction(
+            pending_id="pending-1",
+            text="浜を探索し続ければ山頂への道が分かるはず",
+            resolution_cues=("spot:12",),
+            tick_from=20,
+            tick_to=25,
+            origin_episode_id="ep-1",
+            created_tick=15,
+            kind=PENDING_KIND_PLAN,
+        )
+        restored = dict_to_pending_prediction(pending_prediction_to_dict(original))
+        assert restored == original
+        assert restored.kind == PENDING_KIND_PLAN
+
+    def test_legacy_dict_without_kind_falls_back_to_promise(self) -> None:
+        """kind キーの無い旧 snapshot は promise に倒れる (後方互換)。"""
+        from ai_rpg_world.application.being._memory_payload_codecs import (
+            dict_to_pending_prediction,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+            PENDING_KIND_PROMISE,
+        )
+
+        legacy = {
+            "pending_id": "pending-1",
+            "text": "夕方に木の下でカイトと会う",
+            "resolution_cues": ["spot:12", "player:カイト"],
+            "tick_from": 10,
+            "tick_to": 15,
+            "origin_episode_id": "ep-1",
+            "created_tick": 10,
+        }
+        restored = dict_to_pending_prediction(legacy)
+        assert restored.kind == PENDING_KIND_PROMISE
