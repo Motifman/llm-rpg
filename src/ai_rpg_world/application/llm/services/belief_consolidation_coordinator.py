@@ -797,11 +797,24 @@ class BeliefConsolidationCoordinator:
     ) -> tuple[str, ...]:
         raw_ids = raw.get("evidence_ids")
         if isinstance(raw_ids, list):
-            valid = tuple(
-                str(x) for x in raw_ids if isinstance(x, str) and x.strip() in evidence_by_id
-            )
+            # 重複除去 + strip して順序を保つ。重複を残すと strengthen で
+            # support は set 統合で 1 件しか増えないのに CONFIRMATION / HEARSAY
+            # 内数 (_count_*) は重複分だけ多く数え、confidence が汚染される /
+            # 内数が support 総数を超えて SemanticMemoryEntry の不変条件違反で
+            # strengthen が黙って捨てられる (P3b/P10 で内数不変条件が入って以降、
+            # 重複が無害でなくなった)。id 判定と採用値を strip 済みに揃える
+            # (evidence_by_id のキーと文字列一致させる)。
+            valid: list[str] = []
+            seen: set[str] = set()
+            for x in raw_ids:
+                if not isinstance(x, str):
+                    continue
+                stripped = x.strip()
+                if stripped in evidence_by_id and stripped not in seen:
+                    seen.add(stripped)
+                    valid.append(stripped)
             if valid:
-                return valid
+                return tuple(valid)
         # 未指定 / 無効なら batch 全体を根拠とみなす (create がどの evidence を
         # 使ったか明示しない decisions スキーマへの対応)。
         return batch_ids
