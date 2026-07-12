@@ -90,10 +90,13 @@ class TestSemanticEntryCodecBeliefJournal:
             # P3b: CONFIRMATION 内数も round-trip する (siblings が persist する
             # 以上これも persist しないと resume 後に confidence が再膨張する)。
             confirmation_support_count=1,
+            # P10: HEARSAY 内数も同じ理由で round-trip する。
+            hearsay_support_count=1,
         )
         restored = dict_to_semantic_entry(semantic_entry_to_dict(original))
         assert restored == original
         assert restored.confirmation_support_count == 1
+        assert restored.hearsay_support_count == 1
 
     def test_旧_snapshot_dict_new_key_無しは_default_に倒れる(self):
         """belief journal キーが無い旧 snapshot dict → status=active / belief_id
@@ -118,6 +121,9 @@ class TestSemanticEntryCodecBeliefJournal:
         assert restored.supersedes is None
         assert restored.support_evidence_ids == ()
         assert restored.contradict_evidence_ids == ()
+        # P3b / P10: 内数キーの無い旧 snapshot は 0 に倒れる。
+        assert restored.confirmation_support_count == 0
+        assert restored.hearsay_support_count == 0
 
 
 class TestEpisodeTickPairCodec:

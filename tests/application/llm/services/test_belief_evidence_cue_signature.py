@@ -132,14 +132,39 @@ class TestBuildHearsayCueSignature:
         assert build_hearsay_cue_signature("岩礁海岸は危ない", matcher) == "spot:12"
 
     def test_person_target_gives_player_axis(self) -> None:
-        """主張の対象が他者なら player: 軸。"""
+        """主張の対象が他者なら player: 軸。値は直接体験と揃えた entity:actor:{id} 形式 (P10)。"""
         matcher = _FakeMatcher(
             [_FakeMatch(axis="entity", value="spot_graph_player_5", start=0)]
         )
         assert (
             build_hearsay_cue_signature("エイダは頼りになる", matcher)
-            == "player:spot_graph_player_5"
+            == "player:entity:actor:5"
         )
+
+    def test_person_target_clusters_with_direct_experience_cue(self) -> None:
+        """P10: 同一人物の伝聞 cue と直接体験 cue が同じ cue トークンを生む。
+
+        直接体験側の cue は手書きせず、実際の ``build_belief_evidence_cue_signature``
+        に chunk episode 相当 (who = ``entity:actor:5`` = chunk の
+        ``_who_from_observations`` が観測 actor から生成する形式) を通して導出する。
+        こうすることで、揃え先が「実際に belief evidence になる直接体験 cue」で
+        あることを固定し、片方の生成規則が変わったらテストが割れるようにする
+        (揃っていないと同じ人物の伝聞と体験が別クラスタになり strengthen/contradict
+        できず重複 create を生む)。
+        """
+        from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
+            cue_tokens,
+        )
+
+        matcher = _FakeMatcher(
+            [_FakeMatch(axis="entity", value="spot_graph_player_5", start=0)]
+        )
+        hearsay_cue = build_hearsay_cue_signature("エイダは頼りになる", matcher)
+        # 直接体験: エイダ (player 5) が観測 actor として現れた chunk episode。
+        direct_episode = _episode(who=("entity:actor:5",))
+        direct_cue = build_belief_evidence_cue_signature(direct_episode)
+        common = set(cue_tokens(hearsay_cue)) & set(cue_tokens(direct_cue))
+        assert "entity:actor:5" in common
 
     def test_self_reference_gives_self_axis(self) -> None:
         """対象が聞き手本人なら self: 軸 (その人物についての belief と別枠)。"""
@@ -149,14 +174,14 @@ class TestBuildHearsayCueSignature:
         cue = build_hearsay_cue_signature(
             "カイは人の話を聞かない", matcher, self_player_id=7
         )
-        assert cue == "self:spot_graph_player_7"
+        assert cue == "self:entity:actor:7"
 
     def test_other_person_not_confused_with_self(self) -> None:
         matcher = _FakeMatcher(
             [_FakeMatch(axis="entity", value="spot_graph_player_5", start=0)]
         )
         cue = build_hearsay_cue_signature("リオは詳しい", matcher, self_player_id=7)
-        assert cue == "player:spot_graph_player_5"
+        assert cue == "player:entity:actor:5"
 
     def test_earliest_match_wins(self) -> None:
         matcher = _FakeMatcher(

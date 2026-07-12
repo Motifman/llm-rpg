@@ -4385,6 +4385,11 @@ def create_world_runtime(
             goal_reflect_enabled=_goal_reflect_enabled,
             objective_text_provider=runtime._reflect_objective_provider,
             reflect_observation_sink=runtime._emit_reflect_observation,
+            # P10 (伝聞の固着判断): ON のとき固着 LLM に伝聞節を足し、shortlist に
+            # 話者 belief を載せ、HEARSAY 支持を confidence 半分に数える。抽出側
+            # (P9) と同じ HEARSAY_ENABLED で連動させる (抽出だけ ON で固着側が
+            # 素通しになる中途半端な状態を作らない)。
+            hearsay_enabled=_hearsay_enabled,
             # U9a (誤差駆動再解釈): 同期経路 (chunk_coordinator) 用。非同期経路
             # (scheduler) は recall_buffer 確定後に下で set_recall_buffer_store
             # を呼んで差し込む (scheduler 自体は build_episodic_stack より先に
