@@ -1315,6 +1315,43 @@ class WorldRuntime:
         )
         self._emit_observation_directly(player_id, output)
 
+    def _emit_reflect_observation(self, player_id: PlayerId, message: str) -> None:
+        """P4: 固着パスの reflect (停滞判断) を「ふと振り返ると…」の内省観測
+
+        として本人に届ける。無意識が感覚を上げ、意識が (P6 の goal_update で)
+        決断する分担。loop_guard 警告と同じ observation buffer 経路。
+        """
+        output = ObservationOutput(
+            prose=message,
+            structured={"type": "goal_reflect"},
+            observation_category="self",
+            schedules_turn=False,
+            breaks_movement=False,
+        )
+        self._emit_observation_directly(player_id, output)
+
+    def _reflect_objective_provider(self, player_id: PlayerId) -> Optional[str]:
+        """P4: reflect の監査対象となる現在の目的文を返す (best-effort、読み取り
+
+        のみ)。goal store に active があればその文、無ければシナリオ目的文。
+        解決できなければ None (reflect は目的が無ければ判断しない)。P7 で goal
+        store 一本化する。副作用 (seed) は起こさない。
+        """
+        store = self._goal_journal_store
+        if store is not None:
+            resolver = getattr(self, "_aux_being_resolver", None)
+            world_id = getattr(self, "_aux_being_default_world_id", None)
+            if resolver is not None and world_id is not None:
+                being_id = resolver.resolve_being_id(world_id, player_id)
+                if being_id is not None:
+                    active = store.get_active_by_being(being_id)
+                    if active is not None:
+                        return active.text
+        try:
+            return self._resolve_scenario_llm_objective_text()
+        except Exception:
+            return None
+
     def apply_goal_update_if_present(
         self, player_id: PlayerId, arguments: Dict[str, Any]
     ) -> None:
@@ -3822,6 +3859,14 @@ def create_world_runtime(
         # 空になり安全に縮退する)。
         _belief_attribution_enabled = resolve_belief_attribution_enabled()
         log_belief_attribution_enabled_state(_belief_attribution_enabled)
+        # P4 (reflect): 固着パスに目的への前進評価を足すか。
+        from ai_rpg_world.application.llm.wiring.feature_flags import (
+            log_goal_reflect_enabled_state,
+            resolve_goal_reflect_enabled,
+        )
+
+        _goal_reflect_enabled = resolve_goal_reflect_enabled()
+        log_goal_reflect_enabled_state(_goal_reflect_enabled)
         # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
         # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
         # どちらか一方でも ON なら buffer store 自体は作る。
@@ -4298,6 +4343,11 @@ def create_world_runtime(
             # U4 (予測誤差統一設計 部品3): 同期経路 (chunk_coordinator) 用。
             # 非同期経路 (scheduler) には上で個別に渡し済み。
             belief_attribution_enabled=_belief_attribution_enabled,
+            # P4 (reflect): 固着 LLM に目的への前進評価を足す。監査対象の目的文と
+            # 内省観測 sink を provider で渡す (goal store 差し替えは P7)。
+            goal_reflect_enabled=_goal_reflect_enabled,
+            objective_text_provider=runtime._reflect_objective_provider,
+            reflect_observation_sink=runtime._emit_reflect_observation,
             # U9a (誤差駆動再解釈): 同期経路 (chunk_coordinator) 用。非同期経路
             # (scheduler) は recall_buffer 確定後に下で set_recall_buffer_store
             # を呼んで差し込む (scheduler 自体は build_episodic_stack より先に

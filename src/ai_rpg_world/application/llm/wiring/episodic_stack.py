@@ -404,6 +404,12 @@ def build_episodic_stack(
     # build_episodic_stack がスケジューラを構築しないため呼び出し側 (world_runtime.py)
     # の責務 (belief_evidence_transcriber と同じ分担)。
     belief_attribution_enabled: bool = False,
+    # P4 (reflect / 目的への前進評価 / default False = flag OFF): True のとき
+    # 固着 LLM に reflect 節を出し、停滞宣言を内省観測として本人に注入する。
+    # 監査対象の目的文と観測 sink は呼び出し側 (world_runtime) が provider で渡す。
+    goal_reflect_enabled: bool = False,
+    objective_text_provider: Optional[Any] = None,
+    reflect_observation_sink: Optional[Any] = None,
     # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default False = flag OFF):
     # True のとき chunk_coordinator が完了点で recall_buffer に
     # prediction_error を刻み、reinterpretation_coordinator が誤差専用
@@ -529,6 +535,10 @@ def build_episodic_stack(
                 # U4: ON のときだけ固着 prompt に CONFIRMATION 節を足す
                 # (OFF = pre-U4 と byte 一致)。
                 belief_attribution_enabled=belief_attribution_enabled,
+                # P4: reflect (目的への前進評価)。flag OFF なら reflect 節も出ない。
+                goal_reflect_enabled=goal_reflect_enabled,
+                objective_text_provider=objective_text_provider,
+                reflect_observation_sink=reflect_observation_sink,
             )
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
