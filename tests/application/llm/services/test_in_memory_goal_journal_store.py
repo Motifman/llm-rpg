@@ -11,10 +11,14 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
     GOAL_ORIGIN_SCENARIO,
     GOAL_ORIGIN_SELF,
+    GOAL_STATUS_ABANDONED,
+    GOAL_STATUS_ACHIEVED,
     GOAL_STATUS_ACTIVE,
     GOAL_STATUS_SUPERSEDED,
     GoalEntry,
 )
+
+import pytest
 
 _BEING = BeingId("being-1")
 
@@ -67,3 +71,53 @@ class TestInMemoryGoalJournalStore:
         store.replace_all_by_being(_BEING, entries)
         assert [e.goal_id for e in store.list_all_by_being(_BEING)] == ["g1", "g2"]
         assert store.get_active_by_being(_BEING).goal_id == "g2"
+
+    def test_settle_marks_active_goal_achieved_and_keeps_history(self) -> None:
+        """settle_by_being(achieved) は active 目的を ACHIEVED にし履歴を残す。"""
+        store = InMemoryGoalJournalStore()
+        store.add_by_being(_BEING, _goal("g1", "地図を手に入れる"))
+        settled = store.settle_by_being(
+            _BEING, goal_id="g1", outcome_status=GOAL_STATUS_ACHIEVED
+        )
+        assert settled is not None and settled.status == GOAL_STATUS_ACHIEVED
+        # active は無くなる (無目的) が、履歴には残る。
+        assert store.get_active_by_being(_BEING) is None
+        assert store.list_all_by_being(_BEING)[0].status == GOAL_STATUS_ACHIEVED
+
+    def test_settle_marks_active_goal_abandoned(self) -> None:
+        store = InMemoryGoalJournalStore()
+        store.add_by_being(_BEING, _goal("g1", "山頂を目指す"))
+        settled = store.settle_by_being(
+            _BEING, goal_id="g1", outcome_status=GOAL_STATUS_ABANDONED
+        )
+        assert settled is not None and settled.status == GOAL_STATUS_ABANDONED
+
+    def test_settle_missing_or_inactive_goal_is_noop(self) -> None:
+        """存在しない / 既に active でない目的の清算は None を返し何もしない。"""
+        store = InMemoryGoalJournalStore()
+        store.add_by_being(
+            _BEING, _goal("g1", "済んだ目的", status=GOAL_STATUS_SUPERSEDED)
+        )
+        assert (
+            store.settle_by_being(
+                _BEING, goal_id="does-not-exist", outcome_status=GOAL_STATUS_ACHIEVED
+            )
+            is None
+        )
+        assert (
+            store.settle_by_being(
+                _BEING, goal_id="g1", outcome_status=GOAL_STATUS_ACHIEVED
+            )
+            is None
+        )
+        # 既存 entry の status は変わらない。
+        assert store.list_all_by_being(_BEING)[0].status == GOAL_STATUS_SUPERSEDED
+
+    def test_settle_rejects_non_settlement_status(self) -> None:
+        """outcome_status に achieved / abandoned 以外を渡すと ValueError。"""
+        store = InMemoryGoalJournalStore()
+        store.add_by_being(_BEING, _goal("g1", "x"))
+        with pytest.raises(ValueError):
+            store.settle_by_being(
+                _BEING, goal_id="g1", outcome_status=GOAL_STATUS_SUPERSEDED
+            )

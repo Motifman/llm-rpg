@@ -544,3 +544,65 @@ class TestBeliefEvidenceTranscriberPendingResolution:
             transcriber.record_pending_resolution(
                 BeingId("being-1"), _episode(), _pending_for_resolution(), verdict="maybe"
             )
+
+
+def _goal(goal_id="g1", text="古い地図を手に入れる") -> "GoalEntry":
+    from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
+        GOAL_ORIGIN_SELF,
+        GOAL_STATUS_ACTIVE,
+        GoalEntry,
+    )
+
+    return GoalEntry(
+        goal_id=goal_id, player_id=1, text=text, status=GOAL_STATUS_ACTIVE,
+        locked=False, origin=GOAL_ORIGIN_SELF, created_tick=0,
+        created_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+    )
+
+
+class TestBeliefEvidenceTranscriberGoalResolution:
+    """P8: 目的の清算 (achieved / abandoned) を belief evidence に転記する。"""
+
+    def test_achieved_records_support_evidence(self) -> None:
+        """achieved は「成し遂げた」= 支持側の素材を PENDING_RESOLUTION に転記する。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+        now = datetime(2026, 7, 2, tzinfo=timezone.utc)
+
+        ev = transcriber.record_goal_resolution(
+            being_id, _goal(text="古い地図を手に入れる"), outcome="achieved", occurred_at=now
+        )
+
+        assert ev is not None
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].source_kind == BeliefEvidenceSourceKind.PENDING_RESOLUTION
+        assert "成し遂げた" in rows[0].text
+        assert "古い地図を手に入れる" in rows[0].text
+        assert rows[0].cue_signature == "goal:achieved"
+        assert rows[0].episode_ids == ("g1",)  # 閉じた目的に辿れる
+
+    def test_abandoned_records_error_evidence(self) -> None:
+        """abandoned は「見切って諦めた」= 誤差側の素材を転記する。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        being_id = BeingId("being-1")
+
+        transcriber.record_goal_resolution(
+            being_id, _goal(text="山頂で救助を待つ"), outcome="abandoned",
+            occurred_at=datetime(2026, 7, 2, tzinfo=timezone.utc),
+        )
+
+        rows = buffer_store.list_all_by_being(being_id)
+        assert "見切って諦めた" in rows[0].text
+        assert rows[0].cue_signature == "goal:abandoned"
+
+    def test_invalid_outcome_raises(self) -> None:
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        with pytest.raises(ValueError):
+            transcriber.record_goal_resolution(
+                BeingId("being-1"), _goal(), outcome="superseded",
+                occurred_at=datetime(2026, 7, 2, tzinfo=timezone.utc),
+            )

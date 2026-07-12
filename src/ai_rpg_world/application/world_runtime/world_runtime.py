@@ -131,6 +131,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     with_expected_result_schema,
+    GOAL_OUTCOME_ABANDONED,
+    GOAL_OUTCOME_ACHIEVED,
+    with_goal_outcome_schema,
     with_goal_update_schema,
 )
 from ai_rpg_world.application.llm.tool_constants import (
@@ -820,14 +823,15 @@ class WorldRuntime:
     def _with_goal_update_if_enabled(
         self, definition: ToolDefinitionDto
     ) -> ToolDefinitionDto:
-        """P6: GOAL_REVISION_ENABLED ON なら world-action tool に optional な
+        """P6/P8: GOAL_REVISION_ENABLED ON なら world-action tool に optional な
 
-        ``goal_update`` を足す。**run 全体で常時**適用するので tick 間で schema は
-        byte 不変 (設計判断 #1 遵守)。OFF (既定) では definition をそのまま返す。
+        ``goal_update`` (立て直し) と ``goal_outcome`` (清算) を足す。**run 全体で
+        常時**適用するので tick 間で schema は byte 不変 (設計判断 #1 遵守)。
+        OFF (既定) では definition をそのまま返す。
         """
         if not self._goal_revision_enabled:
             return definition
-        return with_goal_update_schema(definition)
+        return with_goal_outcome_schema(with_goal_update_schema(definition))
 
     # ── 観測パイプライン: イベントを処理して各プレイヤーに配信 ──
 
@@ -1362,11 +1366,12 @@ class WorldRuntime:
     def apply_goal_update_if_present(
         self, player_id: PlayerId, arguments: Dict[str, Any]
     ) -> None:
-        """P6: world-action tool の引数に非 null の goal_update があれば反映する。
+        """P6/P8: world-action tool の引数の goal_update / goal_outcome を反映する。
 
         orchestrator (runtime_manager の run_phase_b) が tool 実行後に呼ぶ。
-        GOAL_REVISION_ENABLED OFF / goal store 無し / goal_update 空なら no-op
-        (= 導入前と挙動一致)。being 未解決も no-op。
+        GOAL_REVISION_ENABLED OFF / goal store 無し / どちらも空なら no-op
+        (= 導入前と挙動一致)。being 未解決も no-op。goal_update は立て直し、
+        goal_outcome (achieved / abandoned) は清算 (P8)。
         """
         applier = self._goal_revision_applier
         if applier is None:
@@ -1374,7 +1379,10 @@ class WorldRuntime:
         if not isinstance(arguments, dict):
             return
         goal_update = arguments.get("goal_update")
-        if not isinstance(goal_update, str) or not goal_update.strip():
+        goal_outcome = arguments.get("goal_outcome")
+        has_update = isinstance(goal_update, str) and bool(goal_update.strip())
+        has_outcome = goal_outcome in (GOAL_OUTCOME_ACHIEVED, GOAL_OUTCOME_ABANDONED)
+        if not has_update and not has_outcome:
             return
         resolver = getattr(self, "_aux_being_resolver", None)
         world_id = getattr(self, "_aux_being_default_world_id", None)
@@ -1384,7 +1392,12 @@ class WorldRuntime:
         if being_id is None:
             return
         try:
-            applier.apply(being_id, player_id, goal_update)
+            applier.apply(
+                being_id,
+                player_id,
+                goal_update_text=goal_update if has_update else None,
+                goal_outcome=goal_outcome if has_outcome else None,
+            )
         except Exception:
             logger.exception(
                 "apply_goal_update_if_present failed for player_id=%s",
@@ -3951,6 +3964,11 @@ def create_world_runtime(
             _goal_revision_requested and runtime._goal_journal_store is not None
         )
         log_goal_revision_enabled_state(runtime._goal_revision_enabled)
+        # P8: 目的の清算 (goal_outcome) が起きたとき belief evidence へ転記する
+        # transcriber は、この下で BELIEF 系 flag 依存で後から構築される。U7 と
+        # 同じ遅延 holder で applier に渡し、transcriber 確定後に中身を埋める
+        # (belief 経路が OFF のときは None のまま = 転記なしで清算だけ行う)。
+        _goal_settlement_transcriber_holder: list[Any] = [None]
         if runtime._goal_revision_enabled:
             from ai_rpg_world.application.llm.services.goal_revision_applier import (
                 GoalRevisionApplier,
@@ -3961,6 +3979,10 @@ def create_world_runtime(
                 observation_sink=runtime._emit_goal_observation,
                 current_tick_provider=runtime.current_tick,
                 now_provider=lambda: datetime.now(timezone.utc),
+                settlement_transcriber_provider=(
+                    lambda: _goal_settlement_transcriber_holder[0]
+                ),
+                trace_recorder_provider=lambda: runtime._trace_recorder,
             )
         # U7: subjective service の構築 (この少し下) は semantic スタック構築
         # (build_episodic_stack 呼び出し、この関数のずっと下) より先に走るため、
@@ -4024,6 +4046,9 @@ def create_world_runtime(
                     current_tick_provider=runtime.current_tick,
                     belief_axis_provider=_belief_axis_lookup,
                 )
+                # P8: goal 清算の転記も同じ transcriber が担う。上で先に構築した
+                # GoalRevisionApplier の遅延 holder をここで埋める。
+                _goal_settlement_transcriber_holder[0] = belief_evidence_transcriber
         if is_episodic_subjective_enabled():
             from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
                 EpisodicChunkSubjectiveFieldsService,

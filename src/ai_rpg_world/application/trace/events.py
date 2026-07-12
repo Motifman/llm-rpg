@@ -212,6 +212,17 @@ class TraceEventKind:
     #   - being_id: str
     #   - tick: int | None
     PENDING_PREDICTION_EXPIRED = "pending_prediction_expired"
+    # P8 (目的の清算 / goal_outcome 自己申告): 本人が goal_outcome を宣言し、
+    # active 目的が achieved / abandoned で閉じられた瞬間。目的の一生 (立てる →
+    # 見直す → 閉じる) の終端で、次の目的が立つまでの「無目的」区間の入口。
+    # payload:
+    #   - being_id: str
+    #   - goal_id: str (= 閉じられた目的の id)
+    #   - outcome: str ("achieved" | "abandoned")
+    #   - goal_text: str (= 閉じられた目的の文)
+    #   - evidence_id: str | None (= 転記された belief evidence。転記未配線なら None)
+    #   - tick: int | None
+    GOAL_RESOLUTION = "goal_resolution"
 
 
 @dataclass(frozen=True)

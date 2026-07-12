@@ -82,6 +82,50 @@ GOAL_UPDATE_FIELD_PROPERTY: Dict[str, Any] = {
 }
 
 
+# P8 (目的の清算 / goal_outcome 自己申告): goal_update と同じ同乗フィールド機構・
+# 同じ GOAL_REVISION_ENABLED で常時露出する optional / nullable な enum。
+# 「達成したのか、見切ったのか」を知っているのは本人だけなので、ルールや reflect
+# ではなく本人に宣言させる (reflect は助言のまま = P7 不変条件維持)。組み合わせの
+# 意味論: goal_update のみ = 言い直し (SUPERSEDED) / goal_outcome + goal_update =
+# 旧目的を清算して次へ / goal_outcome のみ = 閉じて無目的に戻る。null なら「まだ
+# 閉じない」。required にはしない (毎ターン必須にすると目的を急いで閉じる誘惑になる)。
+GOAL_OUTCOME_FIELD_NAME = "goal_outcome"
+GOAL_OUTCOME_ACHIEVED = "achieved"
+GOAL_OUTCOME_ABANDONED = "abandoned"
+GOAL_OUTCOME_FIELD_PROPERTY: Dict[str, Any] = {
+    "type": ["string", "null"],
+    "enum": [GOAL_OUTCOME_ACHIEVED, GOAL_OUTCOME_ABANDONED, None],
+    "description": (
+        "直前の目的を閉じるときだけ書く。成し遂げて閉じるなら achieved、"
+        "見切って捨てるなら abandoned。ただの言い直し (目的は同じで表現を"
+        "変えるだけ) なら書かない (null)。続けるなら書かない。"
+    ),
+}
+
+
+def with_goal_outcome_schema(definition: ToolDefinitionDto) -> ToolDefinitionDto:
+    """対象 tool の JSON Schema に optional な ``goal_outcome`` を足した定義を返す。
+
+    ``with_goal_update_schema`` と同じく GOAL_REVISION_ENABLED が ON の run で
+    全 subjective action tool に常時適用する (ターン非依存。tick 間 byte 不変)。
+    required には入れない (optional / nullable)。
+    """
+    if not isinstance(definition, ToolDefinitionDto):
+        raise TypeError("definition must be ToolDefinitionDto")
+    if not is_subjective_action_tool(definition.name):
+        return definition
+    parameters = deepcopy(definition.parameters)
+    properties = dict(parameters.get("properties") or {})
+    properties[GOAL_OUTCOME_FIELD_NAME] = deepcopy(GOAL_OUTCOME_FIELD_PROPERTY)
+    parameters["properties"] = properties
+    return ToolDefinitionDto(
+        name=definition.name,
+        description=definition.description,
+        parameters=parameters,
+        category=definition.category,
+    )
+
+
 def with_goal_update_schema(definition: ToolDefinitionDto) -> ToolDefinitionDto:
     """対象 tool の JSON Schema に optional な ``goal_update`` を足した定義を返す。
 
