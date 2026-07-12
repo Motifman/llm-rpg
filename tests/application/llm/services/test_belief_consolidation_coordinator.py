@@ -846,6 +846,77 @@ class TestSystemPromptConfirmationGating:
         assert system_message == _SYSTEM_BELIEF_CONSOLIDATION_JSON
 
 
+class TestReviseOnStrengthenBehavior:
+    """P2: 支持が積み上がったヘッジ文面の belief に対し、固着 LLM が
+
+    strengthen ではなく revise を返したとき、旧ヘッジ文面が superseded に
+    なり、新 entry が証拠に見合う強い文面 + 同一 belief_id を引き継ぐこと
+    (= 本 PR が狙う「ヘッジ凍結の解除」の振る舞い)。stub が LLM 判断を代役
+    する (revise-on-strengthen を選ぶのは実 LLM の仕事で、その適用結果を固定)。
+    """
+
+    def test_hedged_supported_belief_is_reworded_stronger_via_revise(self) -> None:
+        # ヘッジ文面 + 支持 4 件の well-supported な既存 belief。
+        existing = _belief_entry(
+            entry_id="sem-hedge",
+            text="干潟は危険かもしれない",
+            tags=("干潟",),
+            support=("s1", "s2", "s3", "s4"),
+        )
+        setup = _build_setup(
+            outcome={
+                "decisions": [
+                    {
+                        "action": "revise",
+                        "belief_id": "sem-hedge",
+                        "text": "干潟はしばしば危険だ",
+                        "reason": "支持が積み上がったのでヘッジを外して言い直す",
+                    }
+                ]
+            }
+        )
+        setup.semantic_store.add_by_being(setup.being_id, existing)
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        entries = {
+            e.entry_id: e
+            for e in setup.semantic_store.list_for_being(setup.being_id)
+        }
+        # 旧ヘッジ文面は superseded (原本は消えず想起からのみ外れる)。
+        assert entries["sem-hedge"].status == SEMANTIC_MEMORY_STATUS_SUPERSEDED
+        assert entries["sem-hedge"].text == "干潟は危険かもしれない"
+        # 新 entry は同一 belief_id を継ぎ、強い文面になっている。
+        new_entries = [
+            e
+            for e in entries.values()
+            if e.entry_id != "sem-hedge" and e.belief_id == "sem-hedge"
+        ]
+        assert len(new_entries) == 1
+        new = new_entries[0]
+        assert new.status == SEMANTIC_MEMORY_STATUS_ACTIVE
+        assert new.text == "干潟はしばしば危険だ"
+        # ヘッジ語 (かもしれない) が消えている。
+        assert "かもしれない" not in new.text
+
+    def test_prompt_carries_revise_on_strengthen_guidance(self) -> None:
+        """振る舞いを引き出す前提として、指示文が固着プロンプトに載っている
+
+        ことを配線ガードとして固定する (実 LLM がこの指示を読む)。"""
+        setup = _build_setup(outcome={"decisions": []})
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        system_message = setup.port.calls[0][0]["content"]
+        assert "文面の強さを証拠に合わせる" in system_message
+        assert "revise を選び" in system_message
+        assert "支持が 3 件以上" in system_message
+        # sup1-2 はヘッジを保つ、の較正指示も載っている。
+        assert "ヘッジを保つ" in system_message
+
+
 class TestTracePayload:
     """BELIEF_CONSOLIDATION trace の payload を検証する。"""
 
