@@ -1760,6 +1760,14 @@ class _WorldLlmWiring:
                 error_code=result.error_code,
                 **extract_subjective_action_fields(arguments),
             )
+        # P6 (目的の見直し): world-action tool の引数に非 null の goal_update が
+        # あれば goal store に反映する (GOAL_REVISION_ENABLED OFF / goal store 無し
+        # なら no-op)。書き込みゲート (トリガターン限定) は無い。
+        apply_goal_update = getattr(
+            self.runtime, "apply_goal_update_if_present", None
+        )
+        if callable(apply_goal_update):
+            apply_goal_update(player_id, arguments)
         if trace_recorder is not None:
             try:
                 trace_recorder.record(

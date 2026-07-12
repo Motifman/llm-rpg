@@ -44,6 +44,15 @@ _VALID_GOAL_ORIGIN_VALUES = frozenset({GOAL_ORIGIN_SCENARIO, GOAL_ORIGIN_SELF})
 # 命題 (50字) より長めだが青天井にはしない。
 MAX_GOAL_TEXT_CHARS = 200
 
+# P6: active 目的が無いとき (open world 等) の【現在の目的】描画。毎ターン見える
+# 欠落自体が「目的を立てる」需要信号になる (goal 設計 §4 G2 / P6)。
+GOAL_UNSET_DISPLAY = "(まだ定まっていない)"
+
+
+def render_current_goal(active_goal: "Optional[GoalEntry]") -> str:
+    """【現在の目的】section の本文を返す。active が無ければ未定表示 (P6)。"""
+    return active_goal.text if active_goal is not None else GOAL_UNSET_DISPLAY
+
 
 @dataclass(frozen=True)
 class GoalEntry:
