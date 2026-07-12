@@ -96,6 +96,10 @@ def _build_setup(
     high_salience_batch_cap: int = 3,
     completion: Any = _UNSET,
     belief_attribution_enabled: bool = False,
+    goal_reflect_enabled: bool = False,
+    objective_text_provider: Any = None,
+    reflect_observation_sink: Any = None,
+    stall_min_interval_turns: int = 15,
 ) -> _Setup:
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
@@ -119,6 +123,10 @@ def _build_setup(
         being_attachment_resolver=resolver,
         default_world_id=_WORLD_ID,
         belief_attribution_enabled=belief_attribution_enabled,
+        goal_reflect_enabled=goal_reflect_enabled,
+        objective_text_provider=objective_text_provider,
+        reflect_observation_sink=reflect_observation_sink,
+        stall_min_interval_turns=stall_min_interval_turns,
     )
     return _Setup(
         coordinator=coordinator,
@@ -1126,3 +1134,141 @@ class TestConfirmationWeightPreservedOnReviseContradict:
         assert updated.confidence == pytest.approx(compute_belief_confidence(4, 1, 4))
         # 割引が消えると f(4,1,0) になり高くなってしまう。
         assert updated.confidence < compute_belief_confidence(4, 1, 0)
+
+
+class TestGoalReflect:
+    """P4: reflect (目的への前進評価) の prompt 露出・停滞観測注入・cap・OFF 不変。"""
+
+    def test_reflect_section_present_only_when_enabled(self) -> None:
+        on = _build_setup(
+            outcome={"decisions": []},
+            goal_reflect_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg: None,
+        )
+        on.evidence_buffer.append_by_being(on.being_id, _evidence("e1"))
+        on.coordinator.flush_player(on.player_id)
+        assert "reflect" in on.port.calls[0][0]["content"]
+
+        off = _build_setup(outcome={"decisions": []}, goal_reflect_enabled=False)
+        off.evidence_buffer.append_by_being(off.being_id, _evidence("e1"))
+        off.coordinator.flush_player(off.player_id)
+        # OFF は reflect 節が出ない (byte 不変)。
+        assert "目的への前進評価" not in off.port.calls[0][0]["content"]
+
+    def test_objective_text_in_prompt_when_provider_set(self) -> None:
+        setup = _build_setup(
+            outcome={"decisions": []},
+            goal_reflect_enabled=True,
+            objective_text_provider=lambda pid: "山頂で狼煙を上げて救助される",
+            reflect_observation_sink=lambda pid, msg: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        user = setup.port.calls[0][0 + 1]["content"]  # [system, user]
+        assert "山頂で狼煙を上げて救助される" in user
+
+    def test_stalled_reflect_injects_observation(self) -> None:
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled",
+                 "statement": "ふと振り返ると、この数日 山頂に一歩も近づいていない気がする"}
+            ]},
+            goal_reflect_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg: obs.append((pid, msg)),
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert len(obs) == 1
+        assert obs[0][0] == setup.player_id
+        assert "山頂に一歩も近づいていない" in obs[0][1]
+
+    def test_progressing_reflect_injects_nothing(self) -> None:
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "progressing", "statement": "順調だ"}
+            ]},
+            goal_reflect_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg: obs.append((pid, msg)),
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert obs == []
+
+    def test_reflect_ignored_when_flag_off(self) -> None:
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "停滞"}
+            ]},
+            goal_reflect_enabled=False,
+            reflect_observation_sink=lambda pid, msg: obs.append((pid, msg)),
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert obs == []
+
+    def test_stall_observation_capped_by_min_interval(self) -> None:
+        """同一 player への停滞観測は min_interval turn 以内なら再注入しない。"""
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
+            ]},
+            goal_reflect_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg: obs.append((pid, msg)),
+            stall_min_interval_turns=15,
+        )
+        # 1 回目: 注入される (turn 0)。
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        # 2 回目: turn を進めずに即 flush → cap で抑制。
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert len(obs) == 1
+
+    def test_stall_observation_refires_after_min_interval(self) -> None:
+        """cap の逆方向: min_interval turn を跨いだら停滞観測が再び注入される。"""
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "また空回りしている"}
+            ]},
+            # auto-flush を止め、flush を手動で駆動する (turn 進行と分離)。
+            turn_interval=10_000,
+            goal_reflect_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg: obs.append((pid, msg)),
+            stall_min_interval_turns=15,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)  # turn 0 で注入
+        # 15 turn 経過させる (cap を跨ぐ)。
+        for _ in range(15):
+            setup.coordinator.after_turn_completed(setup.player_id)
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
+        setup.coordinator.flush_player(setup.player_id)  # turn 15 で再注入
+        assert len(obs) == 2
+
+    def test_goal_reflect_enabled_requires_provider_and_sink(self) -> None:
+        """fail-fast: goal_reflect ON なのに provider / sink が欠けると構築時に落ちる。
+
+        「reflect 節を出しておいて発火した reflect を黙って捨てる」静かな失敗を
+        起動時に構造で弾く。"""
+        with pytest.raises(ValueError, match="objective_text_provider"):
+            _build_setup(
+                outcome={"decisions": []},
+                goal_reflect_enabled=True,
+                reflect_observation_sink=lambda pid, msg: None,
+            )
+        with pytest.raises(ValueError, match="reflect_observation_sink"):
+            _build_setup(
+                outcome={"decisions": []},
+                goal_reflect_enabled=True,
+                objective_text_provider=lambda pid: "山頂へ行く",
+            )

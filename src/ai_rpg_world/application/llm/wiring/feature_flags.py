@@ -885,3 +885,32 @@ def log_goal_revision_enabled_state(enabled: bool) -> None:
         ENV_GOAL_REVISION_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ---- P4 (goal reflect / 目的への前進評価) ------------------------------------
+
+ENV_GOAL_REFLECT_ENABLED = "GOAL_REFLECT_ENABLED"
+
+
+def resolve_goal_reflect_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """固着パスに reflect (目的への前進評価) を足すか (goal_layer G3 前身、P4)。
+
+    ``GOAL_REFLECT_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    OFF (既定) のとき固着 system prompt に reflect 節は一切出ない (byte 不変)。
+    ON のとき、固着 LLM が evidence 群と現在の目的を照らして停滞を判断でき、
+    停滞宣言は内省観測として本人に注入される (belief journal には書かない)。
+    監査対象の目的文と観測 sink は呼び出し側 (world_runtime) が渡す。
+    """
+    return _parse_bool_env(ENV_GOAL_REFLECT_ENABLED, env=env, default=False)
+
+
+def log_goal_reflect_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_GOAL_REFLECT_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )

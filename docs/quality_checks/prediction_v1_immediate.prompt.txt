@@ -33,7 +33,7 @@
 
 【行動ルール（全キャラクター共通）】
 - 世界と相互作用する唯一の手段は、LLM への tool calling（関数呼び出し）である。
-- 各ツール呼び出しでは `inner_thought` に、上記【ペルソナ】の口調に揃えた短い文を必ず含める。観測者向け表示用。未発見の事実を知った体で書かない（厳密な定義は各ツールの `inner_thought` 引数の説明に従う）。
+- 各ツール呼び出しでは `inner_thought` に、上記【ペルソナ】の口調に揃えた **あなた自身の頭の中の独白** を短い一文で必ず含める。読者・観測者に見せるための演技や情景描写ではなく、いま頭の中で実際に考えている言葉そのものを書く。未発見の事実を知った体で書かない（厳密な定義は各ツールの `inner_thought` 引数の説明に従う）。
 - 1回の応答で選べるのは 1 つのツールだけとする（サーバーは先頭の tool_call だけを実行しうる。必ず 1 つに絞る）。
 - ラベル（接続先・オブジェクト・相手プレイヤー等）は、続きの文面内の「現在地と周囲」等に表示されたものだけを使う。
 - 未発見の事実を、すでに知っているかのように断言しない。
@@ -53,13 +53,13 @@
 - 書庫にはノイズ (似て非なる本・古い索引・幽霊の偽情報) が混じる。真偽の判定には複数の手がかりを照合する。
 - 灯りは時間と共に弱まる。誤入力は時間を消費する。memo で手がかりを整理しつつ進む。
 
-【所持・判明した物証】
-（なし）
-
 【直近の出来事】
 観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。
 - [数分前] [行動] speech_say(target=ノア) を実行しました。 [予測: QUALITY_MARKER_PREDICTION: ノアに声をかければ、今の目的を聞ける] → [結果] 発言しました。
 - [数分前] QUALITY_MARKER_ACTUAL: ノアは答えず、視線を外して立ち去った。
+
+【所持・判明した物証】
+（なし）
 
 【前回の予測と実際】
 前回の予測を、願望ではなく世界への仮説として読み直してください。
@@ -78,10 +78,10 @@
 現在時刻: 深夜 0:00
 残り行動可能 tick: 80
 接続先:
-  - 閲覧室の扉 → 入口広間（通行可）
+  - 閲覧室の扉 → "入口広間"（通行可）
 オブジェクト:
-  - 見習い司書の覚書 — 机の上に置かれた、見習い司書が持ち込んだ覚書。 [覚書を読む(action_name="examine")]
-  - 司書幽霊 — 薄く透けた女性の幽霊。穏やかな笑みを浮かべ、こちらを見ている。聞き方によって違うことを話す気配がある。 [印について尋ねる(action_name="ask_about_seal") / 読む順序について尋ねる(action_name="ask_about_order") / この書庫の歴史を尋ねる(action_name="ask_about_history") / 外の天気を尋ねる(action_name="ask_about_weather") / 索引カードについて尋ねる(action_name="ask_about_index") / 近道はないか尋ねる(action_name="ask_about_shortcut")]
+  - "見習い司書の覚書" — 机の上に置かれた、見習い司書が持ち込んだ覚書。 [examine]
+  - "司書幽霊" — 薄く透けた女性の幽霊。穏やかな笑みを浮かべ、こちらを見ている。聞き方によって違うことを話す気配がある。 [ask_about_seal, ask_about_order, ask_about_history, ask_about_weather, ask_about_index, ask_about_shortcut]
 同じ場所にいるプレイヤー: (他のプレイヤーはこのスポットにいない)
 同じ場所に居るモンスター: (このスポットにモンスターはいない)
 身体の状態:
@@ -91,20 +91,20 @@
 利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。
 
 === tools ===
-- spot_graph_travel_to
-- spot_graph_set_sub_location
-- spot_graph_explore
-- spot_graph_interact
-- spot_graph_prepare_action
-- spot_graph_use_item
-- spot_graph_drop_item
-- spot_graph_pickup_item
-- spot_graph_give_item
-- spot_graph_give_items
-- spot_graph_attack
-- spot_graph_listen
-- spot_graph_wait
-- speech_speak
+- travel_to
+- set_sub_location
+- explore
+- interact
+- prepare_action
+- use_item
+- drop_item
+- pickup_item
+- give_item
+- attack
+- listen
+- wait
+- tend_to_player
+- speak
 - memo_add
 - memo_list
 - memo_done
