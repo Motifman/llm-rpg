@@ -1347,7 +1347,11 @@ class TestGoalReflect:
 
         reflect が達成と判断しても goal store の status を変えられない ——
         参照が無いこと自体で「無意識は書かない、意識が決断する」を構造保証する。
-        属性・引数のどこにも goal / journal を名乗るものが無いことを確認する。
+        本テストは属性名の照合による補助的な早期検知にすぎない (別名を付ければ
+        すり抜けられる)。不変条件の実効的な保証は「書き込み経路が配線上存在しない
+        こと」であり、それは integration test
+        ``test_reflect_observation_does_not_mutate_goal_store`` が達成観測を実経路で
+        注入しても goal が active のまま変わらないことで固定している。
         """
         setup = _build_setup(
             outcome={"decisions": [
