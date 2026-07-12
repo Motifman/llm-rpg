@@ -395,6 +395,34 @@ class TestRestoreRoundTrip:
         restored = dst_stores["pending_prediction"].list_all_by_being(being)
         assert restored == [pending]
 
+    def test_goal_journal_の_round_trip(self) -> None:
+        """P5 (目的層): goal journal の capture → restore で中身が一致する
+
+        (snapshot 追従 checklist #27。codec 単体でなく restore 経路
+        replace_all_by_being まで通す)。"""
+        from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
+
+        src_svc, src_stores = _make_service()
+        being = BeingId("ada")
+        goal = GoalEntry(
+            goal_id="goal-1",
+            player_id=1,
+            text="山頂で狼煙を上げて救助される",
+            status="active",
+            locked=True,
+            origin="scenario",
+            created_tick=0,
+            created_at=_NOW,
+        )
+        src_stores["goal_journal"].add_by_being(being, goal)
+        payload_json = src_svc.capture(being)
+
+        dst_svc, dst_stores = _make_service()
+        dst_svc.restore(being, payload_json)
+
+        restored = dst_stores["goal_journal"].list_all_by_being(being)
+        assert restored == [goal]
+
     def test_belief_evidence_の_in_context_belief_ids_も_round_trip_する(self) -> None:
         """U4 (予測誤差統一設計 部品3): attribution 用の in_context_belief_ids も
         evidence buffer の capture → restore を経て失われないことを保証する。
