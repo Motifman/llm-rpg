@@ -161,3 +161,92 @@ class TestComparison:
         assert any(r["label"] == "LLM 呼び出し数" for r in rows)
         llm_row = next(r for r in rows if r["label"] == "LLM 呼び出し数")
         assert llm_row["current"] == 1 and llm_row["baseline"] == 1
+
+
+class TestSurvivalProgress:
+    """P1: survival 系 run の中間到達指標を trace から拾う。"""
+
+    def _pos(self, tick, pid, spot, name="?"):
+        return {
+            "kind": "position_change",
+            "tick": tick,
+            "player_id": pid,
+            "payload": {"to_spot_id": str(tick), "spot_name": spot, "player_name": name},
+        }
+
+    def test_summit_reached_records_first_arrival_per_player(self, em) -> None:
+        events = [
+            self._pos(10, 1, "難破船の浜"),
+            self._pos(50, 1, "山頂"),
+            self._pos(60, 1, "山頂"),  # 2 度目は無視
+            self._pos(80, 2, "山頂"),
+        ]
+        out = em._extract_survival_progress(events)
+        assert out["summit_reached"]["P1"]["tick"] == 50
+        assert out["summit_reached"]["P2"]["tick"] == 80
+
+    def test_no_summit_when_never_reached(self, em) -> None:
+        out = em._extract_survival_progress([self._pos(10, 1, "難破船の浜")])
+        assert out["summit_reached"] == {}
+
+    def test_signal_fire_detected_from_success_message(self, em) -> None:
+        """狼煙点火は点火 interaction の成功メッセージで検出する (失敗は無視)。"""
+        events = [
+            {
+                "kind": "action_result", "tick": 40,
+                "payload": {"tool": "spot_graph_interact", "success": False,
+                            "result_summary": "火種の枯れ葉が必要だ。"},
+            },
+            {
+                "kind": "action_result", "tick": 70,
+                "payload": {"tool": "spot_graph_interact", "success": True,
+                            "result_summary": "流木に火が回った。狼煙台から白い煙が立ち上る。"},
+            },
+        ]
+        out = em._extract_survival_progress(events)
+        assert out["signal_fire_lit_tick"] == 70
+
+    def test_signal_fire_none_when_not_lit(self, em) -> None:
+        events = [
+            {"kind": "action_result", "tick": 10,
+             "payload": {"tool": "spot_graph_interact", "success": True,
+                         "result_summary": "乾いた流木を拾い上げた。"}},
+        ]
+        assert em._extract_survival_progress(events)["signal_fire_lit_tick"] is None
+
+    def test_first_visit_timeline_is_global_first_per_spot(self, em) -> None:
+        events = [
+            self._pos(10, 1, "難破船の浜"),
+            self._pos(20, 2, "難破船の浜"),  # 2 人目の同スポットは初訪問に数えない
+            self._pos(30, 2, "森の奥"),
+        ]
+        out = em._extract_survival_progress(events)
+        assert out["distinct_spots_visited"] == 2
+        assert out["spots_visited"] == ["森の奥", "難破船の浜"]
+        visits = {r["spot_name"]: r["tick"] for r in out["spot_first_visits"]}
+        assert visits == {"難破船の浜": 10, "森の奥": 30}
+        # 時系列は tick 昇順。
+        assert [r["tick"] for r in out["spot_first_visits"]] == [10, 30]
+
+    def test_landmark_first_visit_tick(self, em) -> None:
+        events = [
+            self._pos(15, 1, "大樫の樹"),
+            self._pos(25, 1, "崖の見張り台"),
+        ]
+        out = em._extract_survival_progress(events)
+        assert out["landmark_first_visit_tick"]["大樫"] == 15
+        assert out["landmark_first_visit_tick"]["見張り台"] == 25
+        assert out["landmark_first_visit_tick"]["山頂"] is None
+
+    def test_scenario_name_from_run_start(self, em) -> None:
+        events = [
+            {"kind": "run_start", "payload": {"scenario": "survival_island_v2_short"}},
+            self._pos(10, 1, "難破船の浜"),
+        ]
+        assert em._extract_survival_progress(events)["scenario"] == "survival_island_v2_short"
+
+    def test_included_in_compute_metrics(self, em, tmp_path) -> None:
+        run = _write_trace(tmp_path, [self._pos(50, 1, "山頂")])
+        metrics = em.compute_metrics(run)
+        assert "survival_progress" in metrics
+        assert metrics["survival_progress"]["summit_reached"]["P1"]["tick"] == 50
