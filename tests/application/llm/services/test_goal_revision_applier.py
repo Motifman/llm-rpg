@@ -230,3 +230,33 @@ class TestGoalOutcomeSettlement:
         assert result is None
         assert transcriber.calls == []
         assert store.list_all_by_being(_BEING) == []
+
+    def test_invalid_new_goal_text_aborts_before_settling(self) -> None:
+        """新目的の text が不正なら、清算前に例外で止まり部分コミットにならない。
+
+        新目的の GoalEntry 構築 (検証) を store 変更より先に置くことで、
+        「旧目的を閉じて達成 evidence まで残したのに次の目的が立たない」
+        部分コミット (silent failure) を防ぐ。旧目的は active のまま・転記も無し。
+        """
+        store = InMemoryGoalJournalStore()
+        store.add_by_being(
+            _BEING, _goal("g1", "古い地図を手に入れる", locked=False, origin=GOAL_ORIGIN_SELF)
+        )
+        transcriber = _FakeSettlementTranscriber()
+        applier, store, obs = _make(store=store, transcriber=transcriber)
+
+        # GoalEntry の text 上限を超える長文で構築を失敗させる。
+        too_long = "あ" * 500
+        try:
+            applier.apply(
+                _BEING, _PLAYER, goal_update_text=too_long, goal_outcome="achieved"
+            )
+            raised = False
+        except Exception:
+            raised = True
+
+        assert raised  # 例外で止まる (world_runtime 側で握られる)
+        # 旧目的は閉じられていない (active のまま)、転記も起きていない。
+        assert store.get_active_by_being(_BEING).goal_id == "g1"
+        assert store.get_active_by_being(_BEING).status == GOAL_STATUS_ACTIVE
+        assert transcriber.calls == []

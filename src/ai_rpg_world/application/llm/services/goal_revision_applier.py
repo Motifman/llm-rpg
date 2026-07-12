@@ -123,6 +123,26 @@ class GoalRevisionApplier:
             self._observation_sink(player_id, GOAL_LOCKED_REJECTION_OBSERVATION)
             return None
 
+        # 新目的があるなら **store を変更する前に** 構築して検証を済ませる。
+        # 清算 (settle + 転記 + trace) を先に走らせてから GoalEntry 構築が例外を
+        # 投げると、「旧目的は閉じたのに次の目的が立たない」部分コミットになる
+        # (達成 evidence だけ残り本人の意図した後継目的が消える silent failure)。
+        # 構築を先頭に置けば、不正な text はここで例外になり store は無傷 =
+        # 何もしなかった no-op に畳まれる (P6 と同じ無害な挙動)。
+        new_entry: Optional[GoalEntry] = None
+        if text:
+            new_entry = GoalEntry(
+                goal_id=f"goal-{uuid4().hex}",
+                player_id=int(player_id.value),
+                text=text,
+                status=GOAL_STATUS_ACTIVE,
+                locked=False,
+                origin=GOAL_ORIGIN_SELF,
+                created_tick=self._resolve_tick(),
+                created_at=self._now_provider(),
+                supersedes=active.goal_id if active is not None else None,
+            )
+
         settled = False
         if outcome_status is not None and active is not None:
             closed = self._goal_store.settle_by_being(
@@ -132,21 +152,9 @@ class GoalRevisionApplier:
                 settled = True
                 self._settle_side_effects(being_id, closed, outcome_status)
 
-        if not text:
+        if new_entry is None:
             # goal_outcome のみ (清算だけ) → 無目的に戻る。
             return None
-
-        new_entry = GoalEntry(
-            goal_id=f"goal-{uuid4().hex}",
-            player_id=int(player_id.value),
-            text=text,
-            status=GOAL_STATUS_ACTIVE,
-            locked=False,
-            origin=GOAL_ORIGIN_SELF,
-            created_tick=self._resolve_tick(),
-            created_at=self._now_provider(),
-            supersedes=active.goal_id if active is not None else None,
-        )
         if active is not None and not settled:
             # 言い直し (清算なし) → 旧目的は SUPERSEDED。
             self._goal_store.supersede_by_being(

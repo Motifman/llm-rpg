@@ -131,6 +131,8 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     with_expected_result_schema,
+    GOAL_OUTCOME_ABANDONED,
+    GOAL_OUTCOME_ACHIEVED,
     with_goal_outcome_schema,
     with_goal_update_schema,
 )
@@ -1379,7 +1381,7 @@ class WorldRuntime:
         goal_update = arguments.get("goal_update")
         goal_outcome = arguments.get("goal_outcome")
         has_update = isinstance(goal_update, str) and bool(goal_update.strip())
-        has_outcome = goal_outcome in ("achieved", "abandoned")
+        has_outcome = goal_outcome in (GOAL_OUTCOME_ACHIEVED, GOAL_OUTCOME_ABANDONED)
         if not has_update and not has_outcome:
             return
         resolver = getattr(self, "_aux_being_resolver", None)
