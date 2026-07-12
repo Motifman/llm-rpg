@@ -910,8 +910,11 @@ class TestReviseOnStrengthenBehavior:
         setup.coordinator.flush_player(setup.player_id)
 
         system_message = setup.port.calls[0][0]["content"]
-        assert "証拠に見合う強さに言い直して" in system_message
-        assert "新しい主張を混ぜない" in system_message
+        assert "文面の強さを証拠に合わせる" in system_message
+        assert "revise を選び" in system_message
+        assert "支持が 3 件以上" in system_message
+        # sup1-2 はヘッジを保つ、の較正指示も載っている。
+        assert "ヘッジを保つ" in system_message
 
 
 class TestTracePayload:
