@@ -1070,6 +1070,77 @@ class TestConfirmationSupportWeightApplication:
             compute_belief_confidence(2, 0, 1)
         )
 
+    def test_strengthen_with_duplicate_evidence_ids_does_not_break_invariant(
+        self,
+    ) -> None:
+        """LLM が同一 evidence_id を重複列挙しても strengthen が握りつぶされない。
+
+        support は set 統合で 1 件しか増えないので、内数 (CONFIRMATION 件数) も
+        1 に揃えないと ``confirmation + hearsay <= len(support)`` 不変条件を破り、
+        SemanticMemoryEntry が例外を投げて strengthen が黙って捨てられる
+        (evidence は drain されて失われる = 静かな失敗)。重複除去でこれを防ぐ。
+        """
+        existing = _belief_entry(
+            entry_id="sem-dup",
+            text="浜辺では発見が少ない",
+            tags=("浜辺",),
+            support=("s-old",),
+        )
+        setup = _build_setup(
+            outcome={
+                "decisions": [
+                    {
+                        "action": "strengthen",
+                        "belief_id": "sem-dup",
+                        # 同じ id を重複させた壊れ気味の LLM 出力。
+                        "evidence_ids": ["e1", "e1"],
+                    }
+                ]
+            }
+        )
+        setup.semantic_store.add_by_being(setup.being_id, existing)
+        setup.evidence_buffer.append_by_being(
+            setup.being_id,
+            _evidence("e1", source_kind=BeliefEvidenceSourceKind.CONFIRMATION),
+        )
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        updated = self._active(setup)[0]
+        # 重複は 1 件に畳まれ、support は s-old + e1 の 2 件、CONFIRMATION 内数 1。
+        assert len(updated.support_evidence_ids) == 2
+        assert updated.confirmation_support_count == 1
+        assert updated.confidence == pytest.approx(compute_belief_confidence(2, 0, 1))
+
+    def test_strengthen_resolves_whitespace_padded_evidence_id(self) -> None:
+        """前後に空白のある evidence_id も strip して実在 evidence に解決する。
+
+        strip 前の生 id を support に積むと、以後の内数カウントが
+        ``evidence_by_id`` のキーと文字列一致せず過小評価される (軽微な不整合)。
+        strip 済みの id を採用して buffer 上の evidence と一致させる。
+        """
+        existing = _belief_entry(
+            entry_id="sem-ws", text="浜辺では発見が少ない", tags=("浜辺",), support=(),
+        )
+        setup = _build_setup(
+            outcome={
+                "decisions": [
+                    {"action": "strengthen", "belief_id": "sem-ws", "evidence_ids": ["  e1  "]}
+                ]
+            }
+        )
+        setup.semantic_store.add_by_being(setup.being_id, existing)
+        setup.evidence_buffer.append_by_being(
+            setup.being_id,
+            _evidence("e1", source_kind=BeliefEvidenceSourceKind.CONFIRMATION),
+        )
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        updated = self._active(setup)[0]
+        assert updated.support_evidence_ids == ("e1",)
+        assert updated.confirmation_support_count == 1
+
 
 class TestConfirmationWeightPreservedOnReviseContradict:
     """P3b 回帰: revise / contradict が confirmation_support_count を confidence
