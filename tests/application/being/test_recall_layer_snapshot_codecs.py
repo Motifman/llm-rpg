@@ -87,9 +87,13 @@ class TestSemanticEntryCodecBeliefJournal:
             supersedes="e0",
             support_evidence_ids=("ev-1", "ev-2"),
             contradict_evidence_ids=("ev-3",),
+            # P3b: CONFIRMATION 内数も round-trip する (siblings が persist する
+            # 以上これも persist しないと resume 後に confidence が再膨張する)。
+            confirmation_support_count=1,
         )
         restored = dict_to_semantic_entry(semantic_entry_to_dict(original))
         assert restored == original
+        assert restored.confirmation_support_count == 1
 
     def test_旧_snapshot_dict_new_key_無しは_default_に倒れる(self):
         """belief journal キーが無い旧 snapshot dict → status=active / belief_id

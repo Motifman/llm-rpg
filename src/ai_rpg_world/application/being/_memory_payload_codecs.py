@@ -166,6 +166,11 @@ def semantic_entry_to_dict(entry: SemanticMemoryEntry) -> dict[str, Any]:
         "supersedes": entry.supersedes,
         "support_evidence_ids": list(entry.support_evidence_ids),
         "contradict_evidence_ids": list(entry.contradict_evidence_ids),
+        # P3b: CONFIRMATION 支持の内数。siblings (support/contradict) が
+        # snapshot round-trip される以上、これも round-trip しないと resume 後に
+        # 0 に戻り、以後の strengthen/contradict で CONFIRMATION 支持を通常支持
+        # として過大評価してしまう (confidence の再膨張)。
+        "confirmation_support_count": entry.confirmation_support_count,
     }
 
 
@@ -194,6 +199,8 @@ def dict_to_semantic_entry(data: dict[str, Any]) -> SemanticMemoryEntry:
         contradict_evidence_ids=tuple(
             str(x) for x in data.get("contradict_evidence_ids", ())
         ),
+        # P3b: 旧 snapshot (このキー無し) は 0 に倒す (VO 既定と一致)。
+        confirmation_support_count=int(data.get("confirmation_support_count", 0)),
     )
 
 

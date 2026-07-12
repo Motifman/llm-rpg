@@ -25,24 +25,49 @@ CONTRADICT_WEIGHT = 0.15
 MIN_CONFIDENCE = 0.0
 MAX_CONFIDENCE = 1.0
 
+# P3b: CONFIRMATION (信じて行動して当たった) 由来の支持は、予測が外れて得た
+# 学び (PREDICTION_ERROR) より証拠として軽い。通常支持の半分に数える。
+CONFIRMATION_SUPPORT_WEIGHT = 0.5
 
-def compute_belief_confidence(support_count: int, contradict_count: int) -> float:
+
+def compute_belief_confidence(
+    support_count: int,
+    contradict_count: int,
+    confirmation_support_count: int = 0,
+) -> float:
     """支持件数・反証件数から belief の confidence を [0, 1] で計算する。
 
-    ``support_count`` / ``contradict_count`` に負数を渡すと ``ValueError``。
+    ``confirmation_support_count`` は ``support_count`` の内数で、CONFIRMATION
+    由来の支持件数。この分は通常支持の ``CONFIRMATION_SUPPORT_WEIGHT`` 倍
+    (0.5) に軽く数える (P3b)。既定 0 のとき挙動は導入前と完全一致。
+
+    負数、または ``confirmation_support_count > support_count`` は ``ValueError``。
     """
     if not isinstance(support_count, int) or isinstance(support_count, bool):
         raise TypeError("support_count must be int")
     if not isinstance(contradict_count, int) or isinstance(contradict_count, bool):
         raise TypeError("contradict_count must be int")
+    if (
+        not isinstance(confirmation_support_count, int)
+        or isinstance(confirmation_support_count, bool)
+    ):
+        raise TypeError("confirmation_support_count must be int")
     if support_count < 0:
         raise ValueError("support_count must be >= 0")
     if contradict_count < 0:
         raise ValueError("contradict_count must be >= 0")
+    if confirmation_support_count < 0:
+        raise ValueError("confirmation_support_count must be >= 0")
+    if confirmation_support_count > support_count:
+        raise ValueError("confirmation_support_count must be <= support_count")
 
+    # CONFIRMATION 支持を 0.5 掛けで数えた実効支持件数。
+    effective_support = support_count - (
+        1.0 - CONFIRMATION_SUPPORT_WEIGHT
+    ) * confirmation_support_count
     raw = (
         BASE_CONFIDENCE
-        + SUPPORT_WEIGHT * support_count
+        + SUPPORT_WEIGHT * effective_support
         - CONTRADICT_WEIGHT * contradict_count
     )
     return max(MIN_CONFIDENCE, min(MAX_CONFIDENCE, raw))
@@ -53,4 +78,5 @@ __all__ = [
     "BASE_CONFIDENCE",
     "SUPPORT_WEIGHT",
     "CONTRADICT_WEIGHT",
+    "CONFIRMATION_SUPPORT_WEIGHT",
 ]

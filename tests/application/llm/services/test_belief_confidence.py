@@ -43,3 +43,32 @@ class TestComputeBeliefConfidence:
         """contradict_count に負数を渡すと ValueError になる。"""
         with pytest.raises(ValueError):
             compute_belief_confidence(0, -1)
+
+
+class TestConfirmationSupportWeight:
+    """P3b: CONFIRMATION 由来の支持を通常支持の半分 (0.5) に軽く数える。"""
+
+    def test_default_zero_is_backward_compatible(self) -> None:
+        """confirmation_support_count 未指定なら導入前と完全一致。"""
+        assert compute_belief_confidence(4, 1, 0) == compute_belief_confidence(4, 1)
+
+    def test_confirmation_support_counts_half(self) -> None:
+        """全支持が CONFIRMATION なら実効支持は半分 (支持4→実効2)。"""
+        all_confirmation = compute_belief_confidence(4, 0, 4)
+        half_support = compute_belief_confidence(2, 0, 0)
+        assert all_confirmation == pytest.approx(half_support)
+        # 通常支持4件より確実に低い。
+        assert all_confirmation < compute_belief_confidence(4, 0, 0)
+
+    def test_partial_confirmation(self) -> None:
+        """支持4のうち2件が CONFIRMATION → 実効3件 (2*1.0 + 2*0.5)。"""
+        partial = compute_belief_confidence(4, 0, 2)
+        assert partial == pytest.approx(compute_belief_confidence(3, 0, 0))
+
+    def test_confirmation_exceeding_support_raises(self) -> None:
+        with pytest.raises(ValueError):
+            compute_belief_confidence(2, 0, 3)
+
+    def test_negative_confirmation_raises(self) -> None:
+        with pytest.raises(ValueError):
+            compute_belief_confidence(3, 0, -1)
