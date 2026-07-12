@@ -85,6 +85,12 @@ def build_hearsay_cue_signature(
         return ""
     if best_axis == "entity" and self_value is not None and best_value == self_value:
         return f"self:{best_value}"
+    # NOTE (P10 で対処): 人物 cue の値は noun matcher の entity 形式
+    # (spot_graph_player_{id})。直接体験側の cue (build_belief_evidence_cue_signature
+    # は episode.who = entity:actor:{id} 形式) と token が揃っておらず、同一人物の
+    # 伝聞と直接体験がまだ同じクラスタに寄らない。固着側で「話者/対象の人物
+    # belief を shortlist に載せる」照合を実装する P10 で、人物 cue の正規化を
+    # 揃えて解消する (場所 spot: 軸は両者一致済み)。
     return f"{_HEARSAY_AXIS_TO_CUE_PREFIX[best_axis]}:{best_value}"
 
 
