@@ -92,3 +92,41 @@ class TestWorldRuntimeConfirmationGateWiring:
         assert text == "浜辺では目立った発見はない"
         # 存在しない belief_id は None。
         assert transcriber._belief_axis_provider(being_id, "ghost") is None
+
+    def test_provider_resolves_revised_belief_by_entry_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """revise 済み belief (entry_id != belief_id) を、recall が渡す
+
+        現在の entry_id で解決できる。passive recall は entry_id を
+        in_context_belief_ids に流すため、belief_id で照合すると revise 済み
+        belief が永久にゲートに一致しなくなる回帰を防ぐ。"""
+        _enable_flags(monkeypatch)
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        transcriber = _transcriber(runtime)
+        store = runtime._episodic_stack.semantic_memory_store
+        being_id = runtime._aux_being_resolver.resolve_being_id(
+            runtime._aux_being_default_world_id, PlayerId(1)
+        )
+        # revise 後の状態を模す: 新 entry は別 entry_id を持ち、belief_id は
+        # 元の lineage id を継ぐ。recall はこの新 entry の entry_id を流す。
+        store.add_by_being(
+            being_id,
+            SemanticMemoryEntry(
+                entry_id="sem-new-after-revise",
+                player_id=1,
+                text="干潟へ行く道は危険",
+                evidence_episode_ids=("ep-0",),
+                confidence=0.8,
+                created_at=datetime(2026, 7, 2, tzinfo=timezone.utc),
+                tags=("干潟", "travel_to"),
+                belief_id="sem-orig",
+                supersedes="sem-orig",
+            ),
+        )
+        # recall が流すのは現在の entry_id。これで解決できること。
+        axes = transcriber._belief_axis_provider(being_id, "sem-new-after-revise")
+        assert axes is not None
+        assert axes[1] == "干潟へ行く道は危険"
+        # 旧 lineage id (belief_id) では解決しない (もう active entry ではない)。
+        assert transcriber._belief_axis_provider(being_id, "sem-orig") is None

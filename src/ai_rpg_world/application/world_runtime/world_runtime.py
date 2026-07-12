@@ -3753,7 +3753,13 @@ def create_world_runtime(
                 # 転記時 (run 中) には episodic_stack / semantic store が確定して
                 # いるので、参照を lambda で遅延評価する。store 未構築 / belief
                 # 不在なら None を返し、ゲートは安全側 (積まない) に倒れる。
-                def _belief_axis_lookup(being_id, belief_id):
+                # 注: in_context_belief_ids に流れる id は passive recall 時点の
+                # entry_id (prompt_builder が c.entry.entry_id で採る) であり、
+                # lineage の belief_id ではない。revise 済み belief は
+                # entry_id != belief_id になる (新 entry が別 entry_id を持ち
+                # belief_id だけ継ぐ) ため、必ず entry_id で照合する
+                # (belief_id で照合すると revise 済み belief が永久に一致しなくなる)。
+                def _belief_axis_lookup(being_id, recalled_entry_id):
                     stack = runtime._episodic_stack
                     store = getattr(stack, "semantic_memory_store", None) if stack else None
                     if store is None:
@@ -3761,9 +3767,14 @@ def create_world_runtime(
                     try:
                         entries = store.list_for_being(being_id)
                     except Exception:
+                        logger.warning(
+                            "belief_axis_lookup: semantic_store.list_for_being "
+                            "failed; CONFIRMATION ゲートは安全側 (None) に倒れる",
+                            exc_info=True,
+                        )
                         return None
                     for entry in entries:
-                        if entry.belief_id == belief_id:
+                        if entry.entry_id == recalled_entry_id:
                             return (tuple(entry.tags), entry.text)
                     return None
 
