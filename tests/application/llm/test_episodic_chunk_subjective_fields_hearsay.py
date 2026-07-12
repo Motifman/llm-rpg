@@ -89,6 +89,20 @@ class TestNormalizeHeardClaims:
         assert len(out) == 1
         assert out[0].speaker == "カイ"
 
+    def test_placeholder_speakers_are_dropped(self) -> None:
+        """『不明』『誰か』等のプレースホルダ話者は捨てる (誰から来たか不明な
+
+        情報を台帳に残さない。プロンプト無視への決定論的な最後の砦)。"""
+        out = _normalize_heard_claims(
+            [
+                {"speaker": "不明", "claim": "水場は東にある"},
+                {"speaker": "誰か", "claim": "北は危ない"},
+                {"speaker": "Unknown", "claim": "x"},
+                {"speaker": "リオ", "claim": "有効な伝聞"},
+            ]
+        )
+        assert [c.speaker for c in out] == ["リオ"]
+
 
 class TestHearsayFlagOff:
     def test_system_prompt_byte_identical_when_disabled(self) -> None:

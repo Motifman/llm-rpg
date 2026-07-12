@@ -159,9 +159,18 @@ _HEARD_CLAIMS_INSTRUCTION = """
 さらに、JSON にキー heard_claims を加える。heard_claims は、この期間に他者が
 「世界や人がどうであるか」(場所・物事・人物) について語った主張の配列。その場に
 いない人についての話 (噂話) も含む。挨拶・依頼・感想は含めない。誰の発言か
-特定できるものだけを入れ、無ければ null。各要素は次の 2 キー:
-- speaker: 主張を語った人物の名前 (誰の発言か特定できないものは入れない)
+具体的な名前で特定できるものだけを入れ、無ければ null。各要素は次の 2 キー:
+- speaker: 主張を語った人物の**具体的な名前**。「不明」「誰か」「声」のような
+  プレースホルダは禁止。名前が特定できない発言はこの配列に入れない
 - claim: その人が語った「世界や人がどうであるか」の主張 1 文"""
+
+
+# P9: 話者が特定できないときに LLM が入れがちなプレースホルダ。プロンプトでも
+# 禁じるが、指示を無視して入れてきた場合の決定論的な最後の砦としてここで弾く
+# (「話者が特定できる伝聞だけを積む」を構造で保証する)。casefold 済みで比較。
+_HEARSAY_PLACEHOLDER_SPEAKERS = frozenset(
+    {"不明", "誰か", "だれか", "声", "someone", "unknown", "?", "？", "n/a", "none"}
+)
 
 
 def _normalize_heard_claims(raw: Any) -> tuple[HeardClaim, ...]:
@@ -169,6 +178,8 @@ def _normalize_heard_claims(raw: Any) -> tuple[HeardClaim, ...]:
 
     null / 非配列 → 空タプル。各要素は dict で speaker / claim が非空 str の
     ものだけ採る (speaker 欠落は捨てる = 話者を特定できない主張は伝聞にしない)。
+    speaker が「不明」等のプレースホルダのものも捨てる (話者不明の主張を伝聞に
+    しない = 誰から来た情報か分からない証拠を台帳に残さない)。
     """
     if not isinstance(raw, list):
         return ()
@@ -179,6 +190,8 @@ def _normalize_heard_claims(raw: Any) -> tuple[HeardClaim, ...]:
         speaker = item.get("speaker")
         claim = item.get("claim")
         if not isinstance(speaker, str) or not speaker.strip():
+            continue
+        if speaker.strip().casefold() in _HEARSAY_PLACEHOLDER_SPEAKERS:
             continue
         if not isinstance(claim, str) or not claim.strip():
             continue
