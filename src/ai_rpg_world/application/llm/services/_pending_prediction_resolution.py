@@ -146,6 +146,12 @@ def resolve_pending_predictions_if_applicable(
             trace_recorder,
             being_id=being_id,
             expired_ids=expired_ids,
+            # P11: 失効した約束の種別 (promise / plan)。CREATED / RESOLVED と
+            # 揃え、M-run 分析で「方針予測が期限切れで失効した」を「約束が
+            # 失効した」と区別できるようにする。
+            expired_kinds={
+                p.pending_id: p.kind for p in live if p.pending_id in expired_ids
+            },
             tick=current_tick,
         )
 
@@ -184,6 +190,9 @@ def _emit_resolved_trace(
             verdict=verdict,
             evidence_id=evidence_id,
             origin_episode_id=pending.origin_episode_id,
+            # P11: 種別 (promise / plan) の区別。payload キーは pending_kind に
+            # する (record の第 1 引数 kind = event 種別と衝突するため)。
+            pending_kind=pending.kind,
         )
     except Exception:
         _logger.debug(
@@ -197,6 +206,7 @@ def _emit_expired_trace(
     *,
     being_id: BeingId,
     expired_ids: set[str],
+    expired_kinds: dict[str, str],
     tick: Optional[int],
 ) -> None:
     if trace_recorder is None:
@@ -207,6 +217,9 @@ def _emit_expired_trace(
             tick=tick,
             being_id=str(being_id.value),
             pending_ids=sorted(expired_ids),
+            # P11: id → 種別 (promise / plan)。payload キーは event 種別引数
+            # kind との衝突を避けるため pending_kinds にする。
+            pending_kinds={pid: expired_kinds[pid] for pid in sorted(expired_ids)},
         )
     except Exception:
         _logger.debug(

@@ -11,6 +11,8 @@ from ai_rpg_world.domain.memory.episodic.exception.episodic_exception import (
     PendingPredictionValidationException,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+    PENDING_KIND_PLAN,
+    PENDING_KIND_PROMISE,
     PendingPrediction,
     PendingPredictionDraft,
     PendingResolutionVerdict,
@@ -121,6 +123,31 @@ class TestPendingPrediction:
         )
         assert pending.pending_id == "pending-1"
         assert pending.text == "会う"
+
+
+class TestPendingKind:
+    """P11: pending prediction の種別 (promise / plan) の不変条件。"""
+
+    def test_draft_kind_defaults_to_promise(self) -> None:
+        """kind 未指定の draft は promise (導入前の pending は全て約束扱い)。"""
+        assert PendingPredictionDraft(**_draft()).kind == PENDING_KIND_PROMISE
+
+    def test_pending_kind_defaults_to_promise(self) -> None:
+        assert PendingPrediction(**_pending()).kind == PENDING_KIND_PROMISE
+
+    def test_draft_accepts_plan_kind(self) -> None:
+        assert PendingPredictionDraft(**_draft(kind="plan")).kind == PENDING_KIND_PLAN
+
+    def test_pending_accepts_plan_kind(self) -> None:
+        assert PendingPrediction(**_pending(kind="plan")).kind == PENDING_KIND_PLAN
+
+    def test_draft_invalid_kind_raises(self) -> None:
+        with pytest.raises(PendingPredictionValidationException):
+            PendingPredictionDraft(**_draft(kind="hunch"))
+
+    def test_pending_invalid_kind_raises(self) -> None:
+        with pytest.raises(PendingPredictionValidationException):
+            PendingPrediction(**_pending(kind="hunch"))
 
 
 class TestPendingResolutionVerdict:

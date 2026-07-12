@@ -90,6 +90,7 @@ def record_pending_prediction_if_applicable(
         tick_to=created_tick + draft.tick_offset_to,
         origin_episode_id=episode.episode_id,
         created_tick=created_tick,
+        kind=draft.kind,  # P11: 種別 (promise / plan) を draft から引き継ぐ
     )
     pending_prediction_store.add_by_being(being_id, pending)
 
@@ -104,6 +105,9 @@ def record_pending_prediction_if_applicable(
                 resolution_cues=list(pending.resolution_cues),
                 tick_from=pending.tick_from,
                 tick_to=pending.tick_to,
+                # P11: 種別 (promise / plan) の区別。payload キーは pending_kind に
+                # する (record の第 1 引数 kind = event 種別と衝突するため)。
+                pending_kind=pending.kind,
             )
         except Exception:
             _logger.debug(

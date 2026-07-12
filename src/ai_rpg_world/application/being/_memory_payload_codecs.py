@@ -602,6 +602,9 @@ def pending_prediction_to_dict(pending: "PendingPrediction") -> dict[str, Any]:
         "tick_to": pending.tick_to,
         "origin_episode_id": pending.origin_episode_id,
         "created_tick": pending.created_tick,
+        # P11: 種別 (promise / plan)。清算文面と trace の区別に使うので resume 後も
+        # 保つ必要がある。旧 snapshot (このキー無し) は promise に倒す (VO 既定と一致)。
+        "kind": pending.kind,
     }
 
 
@@ -617,6 +620,7 @@ def dict_to_pending_prediction(data: dict[str, Any]) -> "PendingPrediction":
         PendingPredictionValidationException,
     )
     from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+        PENDING_KIND_PROMISE,
         PendingPrediction,
     )
 
@@ -629,6 +633,8 @@ def dict_to_pending_prediction(data: dict[str, Any]) -> "PendingPrediction":
             tick_to=int(data["tick_to"]),
             origin_episode_id=str(data["origin_episode_id"]),
             created_tick=int(data["created_tick"]),
+            # P11: 旧 snapshot (kind キー無し) は promise に倒す (VO 既定と一致)。
+            kind=str(data.get("kind", PENDING_KIND_PROMISE)),
         )
     except PendingPredictionValidationException as exc:
         raise ValueError(f"invalid PendingPrediction payload: {exc}") from exc

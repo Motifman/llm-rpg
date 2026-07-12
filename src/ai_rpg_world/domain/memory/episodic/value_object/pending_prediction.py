@@ -42,6 +42,28 @@ PENDING_VERDICT_FULFILLED = "fulfilled"
 PENDING_VERDICT_BROKEN = "broken"
 _VALID_VERDICTS = (PENDING_VERDICT_FULFILLED, PENDING_VERDICT_BROKEN)
 
+# P11 (方針の予測化 R6-b): pending prediction の種別。
+# - promise: 対人の約束 (「夕方に木の下でカイトと交換する」)。U10a 以来の既定。
+# - plan: 自分の方針への見込み (「この進め方で N tick 内に山頂への道が分かる
+#   はず」)。破れが「方針レベルの予測誤差」として反証に流れ、有害な belief
+#   (「浜の探索は手がかりになる conf0.9」型) を訂正できるようにするのが狙い。
+# 種別は清算時の evidence 文面と trace の区別にだけ使う (清算機構自体は U10b が
+# そのまま動く)。既定を promise にすることで、導入前の pending は全て promise
+# として扱われ挙動が変わらない。
+PENDING_KIND_PROMISE = "promise"
+PENDING_KIND_PLAN = "plan"
+_VALID_PENDING_KINDS = (PENDING_KIND_PROMISE, PENDING_KIND_PLAN)
+
+
+def _validate_pending_kind(kind: str) -> str:
+    if kind not in _VALID_PENDING_KINDS:
+        raise PendingPredictionValidationException(
+            f"kind must be one of {_VALID_PENDING_KINDS}, got {kind!r}",
+            field="kind",
+            value=kind,
+        )
+    return kind
+
 
 def _validate_resolution_cues(cues: Tuple[str, ...]) -> Tuple[str, ...]:
     """resolution_cues の形式を検証し、正規化した tuple を返す。
@@ -116,6 +138,7 @@ class PendingPredictionDraft:
     resolution_cues: Tuple[str, ...]
     tick_offset_from: int
     tick_offset_to: int
+    kind: str = PENDING_KIND_PROMISE
 
     def __post_init__(self) -> None:
         if not isinstance(self.text, str) or not self.text.strip():
@@ -132,6 +155,7 @@ class PendingPredictionDraft:
             from_field="tick_offset_from",
             to_field="tick_offset_to",
         )
+        _validate_pending_kind(self.kind)
 
 
 @dataclass(frozen=True)
@@ -145,6 +169,7 @@ class PendingPrediction:
     tick_to: int
     origin_episode_id: str
     created_tick: int
+    kind: str = PENDING_KIND_PROMISE
 
     def __post_init__(self) -> None:
         if not isinstance(self.pending_id, str) or not self.pending_id.strip():
@@ -192,6 +217,7 @@ class PendingPrediction:
             from_field="tick_from",
             to_field="tick_to",
         )
+        _validate_pending_kind(self.kind)
 
 
 @dataclass(frozen=True)
@@ -230,4 +256,6 @@ __all__ = [
     "PendingResolutionVerdict",
     "PENDING_VERDICT_FULFILLED",
     "PENDING_VERDICT_BROKEN",
+    "PENDING_KIND_PROMISE",
+    "PENDING_KIND_PLAN",
 ]
