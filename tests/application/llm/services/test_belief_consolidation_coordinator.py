@@ -846,6 +846,28 @@ class TestSystemPromptConfirmationGating:
         assert system_message == _SYSTEM_BELIEF_CONSOLIDATION_JSON
 
 
+class TestReviseOnStrengthenGuidance:
+    """P2: strengthen 時に文面が証拠より弱いヘッジのままなら revise で
+
+    言い直してよい、という指示が固着プロンプトに載っていること。
+    ルール側は無変更なので revise→supersede の既存回帰
+    (test_revise_supersedes_old_entry_and_keeps_belief_id) で担保する。
+    """
+
+    def test_revise_on_strengthen_guidance_present_in_prompt(self) -> None:
+        setup = _build_setup(outcome={"decisions": []})
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        system_message = setup.port.calls[0][0]["content"]
+        # ヘッジ言い直しの指示が revise の説明に含まれる。
+        assert "証拠に見合う強さに言い直して" in system_message
+        assert "〜ことが多い" in system_message
+        # 新しい主張を混ぜない、の歯止めも明示されている。
+        assert "新しい主張を混ぜない" in system_message
+
+
 class TestTracePayload:
     """BELIEF_CONSOLIDATION trace の payload を検証する。"""
 
