@@ -88,6 +88,9 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
         InMemoryPendingPredictionStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
+        InMemoryGoalJournalStore,
+    )
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
@@ -104,6 +107,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     belief_evidence = InMemoryBeliefEvidenceBufferStore()
     success = InMemoryEpisodicRecallSuccessStore()
     pending_prediction = InMemoryPendingPredictionStore()
+    goal_journal = InMemoryGoalJournalStore()
     svc = BeingMemorySnapshotService(
         memo_store=memo,
         semantic_store=semantic,
@@ -117,6 +121,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
         belief_evidence_buffer_store=belief_evidence,
         recall_success_store=success,
         pending_prediction_store=pending_prediction,
+        goal_journal_store=goal_journal,
     )
     return svc, {
         "memo": memo,
@@ -128,6 +133,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
         "belief_evidence": belief_evidence,
         "success": success,
         "pending_prediction": pending_prediction,
+        "goal_journal": goal_journal,
     }
 
 
@@ -551,6 +557,7 @@ class TestRestoreValidation:
                 # U9b: recall_success_hit_count も実 store の key として揃えておく。
                 "recall_success_hit_count": [],
                 "pending_predictions": [],
+                "goal_journal": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="memo"):
@@ -591,6 +598,7 @@ class TestRestoreValidation:
                 # U9b: recall_success_hit_count も実 store の key として揃えておく。
                 "recall_success_hit_count": [],
                 "pending_predictions": [],
+                "goal_journal": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="memory_links"):
@@ -619,6 +627,7 @@ class TestRestoreValidation:
                 # U9b: recall_success_hit_count も実 store の key として揃えておく。
                 "recall_success_hit_count": [],
                 "pending_predictions": [],
+                "goal_journal": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="must be list"):
@@ -644,6 +653,9 @@ class TestConstructor:
         from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
             InMemoryPendingPredictionStore,
         )
+        from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
+            InMemoryGoalJournalStore,
+        )
         from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
             InMemoryBeliefEvidenceBufferStore,
         )
@@ -662,4 +674,5 @@ class TestConstructor:
                 belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
                 recall_success_store=InMemoryEpisodicRecallSuccessStore(),
                 pending_prediction_store=InMemoryPendingPredictionStore(),
+                goal_journal_store=InMemoryGoalJournalStore(),
             )

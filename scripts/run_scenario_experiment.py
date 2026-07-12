@@ -290,6 +290,10 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         if episodic_stack is not None
         else None
     )
+    # P5 (目的層): GOAL_STORE_ENABLED ON のとき world_runtime が goal store を
+    # 構築し ``_goal_journal_store`` に保持する。checklist #27 に従い拾う。
+    # OFF なら None = 空 in-memory fallback。
+    goal_journal_store = getattr(runtime, "_goal_journal_store", None)
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
         semantic_memory_store=semantic_store,
@@ -302,6 +306,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         belief_evidence_buffer_store=belief_evidence_buffer_store,
         recall_success_store=recall_success_store,
         pending_prediction_store=pending_prediction_store,
+        goal_journal_store=goal_journal_store,
     )
 
 
