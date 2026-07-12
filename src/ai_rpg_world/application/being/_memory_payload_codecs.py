@@ -536,6 +536,8 @@ def belief_evidence_to_dict(evidence: "BeliefEvidence") -> dict[str, Any]:
         "tick": evidence.tick,
         # U4 (予測誤差統一設計 部品3): in-context だった belief_id 群。
         "in_context_belief_ids": list(evidence.in_context_belief_ids),
+        # P9 (伝聞): HEARSAY evidence の話者。HEARSAY 以外は None。
+        "source_speaker": evidence.source_speaker,
     }
 
 
@@ -576,6 +578,12 @@ def dict_to_belief_evidence(data: dict[str, Any]) -> "BeliefEvidence":
             # (= 後方互換。attribution 機構 OFF 時の evidence とも同じ形になる)。
             in_context_belief_ids=tuple(
                 str(x) for x in data.get("in_context_belief_ids", ())
+            ),
+            # P9: 旧データ (P9 導入前) には無いキーなので .get で None に倒す。
+            source_speaker=(
+                str(data["source_speaker"])
+                if data.get("source_speaker") is not None
+                else None
             ),
         )
     except BeliefEvidenceValidationException as exc:

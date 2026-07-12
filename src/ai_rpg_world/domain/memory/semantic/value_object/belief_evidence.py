@@ -55,6 +55,12 @@ class BeliefEvidence:
     # そのまま添付する (新規 store は作らない設計判断)。既定は空タプル
     # (= attribution 機構 OFF、または in-context belief が無かったとき)。
     in_context_belief_ids: Tuple[str, ...] = ()
+    # P9 (伝聞): HEARSAY evidence の話者 (誰から来た情報か)。cue_signature (何に
+    # ついての知識か) とは**分離して**保持する — 混ぜると「話者についての
+    # belief」に化ける (belief_hearsay_design.md §2 ステップ 2)。HEARSAY 以外の
+    # evidence では None。固着パスが「話者について知っていることを踏まえて信じるか
+    # 捨てるか」を判断する材料になる (P10)。
+    source_speaker: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.evidence_id, str) or not self.evidence_id.strip():
@@ -142,6 +148,15 @@ class BeliefEvidence:
                     field="in_context_belief_ids",
                     index=idx,
                 )
+
+        if self.source_speaker is not None:
+            if not isinstance(self.source_speaker, str) or not self.source_speaker.strip():
+                raise BeliefEvidenceValidationException(
+                    "source_speaker must be non-empty str or None",
+                    field="source_speaker",
+                    value=self.source_speaker,
+                )
+            object.__setattr__(self, "source_speaker", self.source_speaker.strip())
 
 
 __all__ = [

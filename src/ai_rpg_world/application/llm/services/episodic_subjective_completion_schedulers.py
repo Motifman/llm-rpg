@@ -341,6 +341,9 @@ class InlineEpisodicSubjectiveScheduler:
             in_context_belief_ids=in_context_belief_ids,
             had_expected_result=had_expected_result,
         )
+        # P9 (伝聞): heard_claims を HEARSAY evidence に転記 (OFF なら episode.
+        # heard_claims が空なので no-op)。
+        self._belief_evidence_transcriber.record_heard_claims(being_id, episode)
 
     def submit(
         self,
@@ -817,6 +820,9 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             in_context_belief_ids=in_context_belief_ids,
             had_expected_result=had_expected_result,
         )
+        # P9 (伝聞): heard_claims を HEARSAY evidence に転記 (OFF なら episode.
+        # heard_claims が空なので no-op)。
+        self._belief_evidence_transcriber.record_heard_claims(being_id, episode)
 
     def _worker(
         self,

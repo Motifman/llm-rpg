@@ -42,7 +42,7 @@ def _evidence(**overrides) -> BeliefEvidence:
 class TestBeliefEvidenceSourceKindEnum:
     """U2 の DoD: 後続 PR ぶんの source_kind を最初から全て予約する。"""
 
-    def test_all_six_source_kinds_are_reserved(self) -> None:
+    def test_all_source_kinds_are_reserved(self) -> None:
         expected = {
             "prediction_error",
             "structured_failure",
@@ -50,6 +50,7 @@ class TestBeliefEvidenceSourceKindEnum:
             "familiarity",
             "confirmation",
             "pending_resolution",
+            "hearsay",  # P9 (伝聞)
         }
         actual = {member.value for member in BeliefEvidenceSourceKind}
         assert actual == expected

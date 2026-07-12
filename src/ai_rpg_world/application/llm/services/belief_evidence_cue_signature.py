@@ -15,11 +15,77 @@ U2 (証拠台帳統一設計 §2 U2): 「新しい抽出ロジックを発明し
 
 from __future__ import annotations
 
+from typing import Any, Optional
+
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
 
 _TOOL_NAME_UNKNOWN = "none"
+
+# P9 (伝聞): noun matcher の axis → cue_signature の軸名。伝聞の cue は
+# 「その主張が何についてか」= 対象で決めるので、場所と人物だけを拾う。
+_HEARSAY_AXIS_TO_CUE_PREFIX = {
+    "place_spot": "spot",
+    "entity": "player",
+}
+
+# noun matcher の entity 値形式 (world_noun_matcher._format_entity_value と一致)。
+# 聞き手本人を指す entity マッチを self: 軸に振り分けるのに使う。
+_SELF_ENTITY_VALUE_FMT = "spot_graph_player_{}"
+
+
+def build_hearsay_cue_signature(
+    claim_text: str,
+    noun_matcher: Optional[Any],
+    *,
+    self_player_id: Optional[int] = None,
+) -> str:
+    """伝聞の主張文から cue_signature を決める (P9)。
+
+    claim の**対象** (何についての知識か) を noun matcher で拾い、場所なら
+    ``spot:<id>``、人物なら ``player:<kind_id>`` にする。話者 (誰が言ったか) は
+    ここに混ぜない — それは ``BeliefEvidence.source_speaker`` に分離して持つ
+    (混ぜると「話者についての belief」に化ける。belief_hearsay_design.md §2)。
+
+    対象が **自分自身** (聞き手本人) の場合は ``self:`` 軸にする — 「他者が自分に
+    ついて語ったこと」を「その人物についての belief」と別クラスタに保つため
+    (unified_full_001 のカイ「リオは自分の話を聞かない」型の自己認識)。
+    ``self_player_id`` に聞き手の player_id を渡すと、その player を指す entity
+    マッチを self として扱う。
+
+    テキスト中で最初に現れた spot / player を対象とみなす。対象を特定できない
+    (matcher 未配線 / 固有名詞なし) ときは空文字を返す — 固着パスが cue なし
+    evidence として扱い、discard に委ねる (曖昧な対象を silent に捨てない)。
+    """
+    if noun_matcher is None or not isinstance(claim_text, str) or not claim_text:
+        return ""
+    try:
+        matches = noun_matcher.find_in_text(claim_text)
+    except Exception:
+        return ""
+    self_value = (
+        _SELF_ENTITY_VALUE_FMT.format(self_player_id)
+        if self_player_id is not None
+        else None
+    )
+    best_start: Optional[int] = None
+    best_axis: Optional[str] = None
+    best_value: Optional[str] = None
+    for m in matches:
+        axis = getattr(m, "axis", "")
+        if axis not in _HEARSAY_AXIS_TO_CUE_PREFIX:
+            continue
+        start = getattr(m, "start", 0)
+        if best_start is None or start < best_start:
+            best_start = start
+            best_axis = axis
+            best_value = getattr(m, "value", None)
+    if best_axis is None or not best_value:
+        return ""
+    if best_axis == "entity" and self_value is not None and best_value == self_value:
+        return f"self:{best_value}"
+    return f"{_HEARSAY_AXIS_TO_CUE_PREFIX[best_axis]}:{best_value}"
 
 
 def build_belief_evidence_cue_signature(episode: SubjectiveEpisode) -> str:
@@ -88,6 +154,7 @@ def belief_matches_cue_tokens(
 
 __all__ = [
     "build_belief_evidence_cue_signature",
+    "build_hearsay_cue_signature",
     "cue_tokens",
     "belief_matches_cue_tokens",
 ]

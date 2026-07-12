@@ -485,6 +485,66 @@ class TestRestoreRoundTrip:
 
         assert evidence.in_context_belief_ids == ()
 
+    def test_belief_evidence_の_source_speaker_も_round_trip_する(self) -> None:
+        """P9 (伝聞): HEARSAY evidence の source_speaker (話者) が capture →
+        restore を経て失われないことを保証する。source_kind 拡張と同じく既存
+        codec の拡張なので EXPECTED_PAYLOAD_KEYS の変更は不要。"""
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
+            BELIEF_EVIDENCE_SALIENCE_LOW,
+            BeliefEvidence,
+        )
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
+            BeliefEvidenceSourceKind,
+        )
+
+        src_svc, src_stores = _make_service()
+        being = BeingId("ada")
+        evidence = BeliefEvidence(
+            evidence_id="belief-evidence-hearsay-1",
+            source_kind=BeliefEvidenceSourceKind.HEARSAY,
+            episode_ids=("ep-1",),
+            cue_signature="player:spot_graph_player_5",
+            text="エイダは頼りになる",
+            salience=BELIEF_EVIDENCE_SALIENCE_LOW,
+            occurred_at=_NOW,
+            tick=7,
+            source_speaker="リオ",
+        )
+        src_stores["belief_evidence"].append_by_being(being, evidence)
+        payload_json = src_svc.capture(being)
+
+        dst_svc, dst_stores = _make_service()
+        dst_svc.restore(being, payload_json)
+
+        restored = dst_stores["belief_evidence"].list_all_by_being(being)
+        assert len(restored) == 1
+        assert restored[0].source_kind == BeliefEvidenceSourceKind.HEARSAY
+        assert restored[0].source_speaker == "リオ"
+
+    def test_belief_evidence_の_source_speaker_欠損の旧データは_None_に倒れる(
+        self,
+    ) -> None:
+        """P9 導入前 (キー自体が無い) payload を decode しても例外にならず None。"""
+        from ai_rpg_world.application.being._memory_payload_codecs import (
+            dict_to_belief_evidence,
+        )
+
+        data = {
+            "evidence_id": "belief-evidence-legacy-2",
+            "source_kind": "prediction_error",
+            "episode_ids": ["ep-1"],
+            "cue_signature": "tool:explore",
+            "text": "何もなかった",
+            "salience": "low",
+            "occurred_at": _NOW.isoformat(),
+            "tick": 3,
+            # source_speaker キー自体を欠落させる
+        }
+
+        evidence = dict_to_belief_evidence(data)
+
+        assert evidence.source_speaker is None
+
     def test_recall_observation_の_prediction_outcome_error_欠損の旧データは_None_に倒れる(
         self,
     ) -> None:

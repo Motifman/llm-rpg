@@ -615,6 +615,14 @@ def build_episodic_stack(
     noun_matcher = build_scenario_noun_matcher(
         scenario=scenario, graph=graph, spot_interior_repo=spot_interior_repo
     )
+    # P9 (伝聞): heard_claim の対象を拾う noun matcher は scenario からここで
+    # 構築される。transcriber は world_runtime 側で先に組まれるため、後から
+    # 注入する (未注入だと伝聞 cue が常に空になる)。attach は冪等で害がないので
+    # HEARSAY_ENABLED の有無に関わらず行う (OFF なら heard_claims 自体が空)。
+    if belief_evidence_transcriber is not None and hasattr(
+        belief_evidence_transcriber, "attach_noun_matcher"
+    ):
+        belief_evidence_transcriber.attach_noun_matcher(noun_matcher)
     chunk_coordinator = EpisodicChunkCoordinator(
         observation_buffer=observation_buffer,
         sliding_window_memory=sliding_window_memory,

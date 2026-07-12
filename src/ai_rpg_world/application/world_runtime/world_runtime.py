@@ -3833,6 +3833,7 @@ def create_world_runtime(
             log_belief_evidence_enabled_state,
             log_error_driven_reinterpretation_enabled_state,
             log_error_gated_encoding_enabled_state,
+            log_hearsay_enabled_state,
             log_memo_distill_enabled_state,
             log_pending_prediction_enabled_state,
             log_recall_hit_boost_enabled_state,
@@ -3843,6 +3844,7 @@ def create_world_runtime(
             resolve_belief_evidence_enabled,
             resolve_error_driven_reinterpretation_enabled,
             resolve_error_gated_encoding_enabled,
+            resolve_hearsay_enabled,
             resolve_memo_distill_enabled,
             resolve_pending_prediction_enabled,
             resolve_recall_hit_boost_enabled,
@@ -3924,6 +3926,8 @@ def create_world_runtime(
         # 加えない。
         _pending_prediction_enabled = resolve_pending_prediction_enabled()
         log_pending_prediction_enabled_state(_pending_prediction_enabled)
+        _hearsay_enabled = resolve_hearsay_enabled()
+        log_hearsay_enabled_state(_hearsay_enabled)
         # P5 (目的層 G1): GOAL_STORE_ENABLED ON のとき goal store を構築し
         # runtime に保持する。【現在の目的】provider (prompt builder 側) と実験
         # snapshot stub がここから拾う。OFF なら None のまま (静的シナリオ文字列)。
@@ -4125,6 +4129,7 @@ def create_world_runtime(
                     unconscious_context_enabled=_unconscious_context_enabled,
                     error_gated_encoding_enabled=_error_gated_encoding_enabled,
                     pending_prediction_enabled=_pending_prediction_enabled,
+                    hearsay_enabled=_hearsay_enabled,
                 )
                 # scheduler と chunk_coordinator (= stack) が同じ store を
                 # 共有することで、worker が書き込んだ merged episode を
