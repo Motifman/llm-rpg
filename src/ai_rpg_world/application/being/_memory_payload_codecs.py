@@ -172,6 +172,10 @@ def semantic_entry_to_dict(entry: SemanticMemoryEntry) -> dict[str, Any]:
         # 0 に戻り、以後の strengthen/contradict で CONFIRMATION 支持を通常支持
         # として過大評価してしまう (confidence の再膨張)。
         "confirmation_support_count": entry.confirmation_support_count,
+        # P10: HEARSAY 支持の内数。confirmation 同様 sibling が round-trip される
+        # 以上これも往復しないと resume 後に 0 に戻り、以後の strengthen/contradict
+        # で伝聞支持を直接体験として過大評価する (confidence の再膨張)。
+        "hearsay_support_count": entry.hearsay_support_count,
     }
 
 
@@ -202,6 +206,8 @@ def dict_to_semantic_entry(data: dict[str, Any]) -> SemanticMemoryEntry:
         ),
         # P3b: 旧 snapshot (このキー無し) は 0 に倒す (VO 既定と一致)。
         confirmation_support_count=int(data.get("confirmation_support_count", 0)),
+        # P10: 旧 snapshot (このキー無し) は 0 に倒す (VO 既定と一致)。
+        hearsay_support_count=int(data.get("hearsay_support_count", 0)),
     )
 
 

@@ -72,3 +72,43 @@ class TestConfirmationSupportWeight:
     def test_negative_confirmation_raises(self) -> None:
         with pytest.raises(ValueError):
             compute_belief_confidence(3, 0, -1)
+
+
+class TestHearsaySupportWeight:
+    """P10: HEARSAY (伝聞) 由来の支持を通常支持の半分 (0.5) に軽く数える。"""
+
+    def test_default_zero_is_backward_compatible(self) -> None:
+        """hearsay_support_count 未指定なら導入前と完全一致 (既定 0)。"""
+        assert compute_belief_confidence(4, 1) == compute_belief_confidence(
+            4, 1, 0, 0
+        )
+
+    def test_hearsay_support_counts_half(self) -> None:
+        """全支持が HEARSAY なら実効支持は半分 (支持4→実効2)。"""
+        all_hearsay = compute_belief_confidence(4, 0, 0, 4)
+        half_support = compute_belief_confidence(2, 0, 0, 0)
+        assert all_hearsay == pytest.approx(half_support)
+        # 通常支持4件 (直接体験) より確実に低い — 伝聞だけで生まれた belief の
+        # confidence は同数の直接体験由来より低いこと (設計メモ §4)。
+        assert all_hearsay < compute_belief_confidence(4, 0, 0, 0)
+
+    def test_hearsay_and_confirmation_are_disjoint_subsets(self) -> None:
+        """CONFIRMATION と HEARSAY はどちらも支持の内数で、両方 0.5 掛けされる。
+
+        支持4のうち CONFIRMATION 1件・HEARSAY 1件 → 実効 2*1.0 + 2*0.5 = 3件。
+        """
+        both = compute_belief_confidence(4, 0, 1, 1)
+        assert both == pytest.approx(compute_belief_confidence(3, 0, 0, 0))
+
+    def test_hearsay_exceeding_support_raises(self) -> None:
+        with pytest.raises(ValueError):
+            compute_belief_confidence(2, 0, 0, 3)
+
+    def test_confirmation_plus_hearsay_exceeding_support_raises(self) -> None:
+        """CONFIRMATION と HEARSAY の合計が支持を超えたら ValueError (内数の整合)。"""
+        with pytest.raises(ValueError):
+            compute_belief_confidence(3, 0, 2, 2)
+
+    def test_negative_hearsay_raises(self) -> None:
+        with pytest.raises(ValueError):
+            compute_belief_confidence(3, 0, 0, -1)

@@ -660,7 +660,9 @@ class TestBeliefEvidenceTranscriberHeardClaims:
         assert rows[0].source_kind == BeliefEvidenceSourceKind.HEARSAY
         assert rows[0].text == "エイダは頼りになる"
         assert rows[0].source_speaker == "リオ"  # 誰から来た情報か
-        assert rows[0].cue_signature == "player:spot_graph_player_5"  # 何についてか
+        # 何についてか。P10 で直接体験 cue (who = entity:actor:{id}) と同じトークン
+        # 形式に揃え、同一人物の伝聞と直接体験が固着 shortlist で同じクラスタに寄る。
+        assert rows[0].cue_signature == "player:entity:actor:5"
 
     def test_self_reference_uses_self_axis(self) -> None:
         """他者が自分について語ったら self: 軸 (episode.player_id で判定)。"""
@@ -678,7 +680,8 @@ class TestBeliefEvidenceTranscriberHeardClaims:
         transcriber.record_heard_claims(being_id, episode)
 
         rows = buffer_store.list_all_by_being(being_id)
-        assert rows[0].cue_signature == "self:spot_graph_player_1"
+        # P10: self: 軸も人物 cue と同じ id トークン形式 (entity:actor:{id}) に揃える。
+        assert rows[0].cue_signature == "self:entity:actor:1"
         assert rows[0].source_speaker == "リオ"
 
     def test_multiple_claims_all_recorded(self) -> None:

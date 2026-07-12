@@ -71,9 +71,16 @@ class SemanticMemoryEntry:
     # 件数。confidence 計算で CONFIRMATION 支持を通常支持の半分に軽く数えるため
     # に持つ (「信じて当たった」の追認は、予測が外れて得た学びより証拠として
     # 軽い)。support 総数の内数なので 0 <= この値 <= len(support_evidence_ids)。
-    # 他の journal フィールド同様、この値は snapshot codec には載せない
-    # (in-run のみ。第2期計画 P3 の snapshot × 方針)。
+    # support/contradict と同様 snapshot codec で round-trip する (P3b で追加。
+    # sibling が persist する以上これも persist しないと resume 後に confidence が
+    # 再膨張するため。_memory_payload_codecs.semantic_entry_to_dict 参照)。
     confirmation_support_count: int = 0
+    # P10 (HEARSAY 重み): support_evidence_ids のうち HEARSAY (伝聞) 由来の
+    # 件数。confidence 計算で伝聞由来の支持を自分の体験の半分に軽く数えるため
+    # に持つ (「人づてに聞いた」は直接体験より弱い証拠)。CONFIRMATION 内数とは
+    # source 種別が異なる排他的な部分集合なので、両者の合計が支持総数を
+    # 超えてはならない (0 <= confirmation + hearsay <= len(support_evidence_ids))。
+    hearsay_support_count: int = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.entry_id, str) or not self.entry_id.strip():
@@ -177,6 +184,34 @@ class SemanticMemoryEntry:
                 "[0, len(support_evidence_ids)]",
                 field="confirmation_support_count",
                 value=self.confirmation_support_count,
+            )
+
+        if (
+            not isinstance(self.hearsay_support_count, int)
+            or isinstance(self.hearsay_support_count, bool)
+        ):
+            raise SemanticMemoryEntryValidationException(
+                "hearsay_support_count must be int",
+                field="hearsay_support_count",
+                value=self.hearsay_support_count,
+            )
+        if self.hearsay_support_count < 0:
+            raise SemanticMemoryEntryValidationException(
+                "hearsay_support_count must be >= 0",
+                field="hearsay_support_count",
+                value=self.hearsay_support_count,
+            )
+        # P10: CONFIRMATION と HEARSAY は排他的な内数。合計が支持総数を超えると
+        # confidence 計算で二重割引になり不整合なので、ここで弾く。
+        if (
+            self.confirmation_support_count + self.hearsay_support_count
+            > len(self.support_evidence_ids)
+        ):
+            raise SemanticMemoryEntryValidationException(
+                "confirmation_support_count + hearsay_support_count must be "
+                "<= len(support_evidence_ids)",
+                field="hearsay_support_count",
+                value=self.hearsay_support_count,
             )
 
 

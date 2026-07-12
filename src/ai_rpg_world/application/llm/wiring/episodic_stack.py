@@ -410,6 +410,11 @@ def build_episodic_stack(
     goal_reflect_enabled: bool = False,
     objective_text_provider: Optional[Any] = None,
     reflect_observation_sink: Optional[Any] = None,
+    # P10 (伝聞の固着判断 / default False = flag OFF): True のとき固着 LLM に
+    # 伝聞節を出し、shortlist に話者 belief を載せる。HEARSAY 由来の支持は
+    # confidence を半分に数える。OFF なら伝聞 evidence 自体が生成されないので
+    # (P9 の HEARSAY_ENABLED が同時に OFF)、節も話者強制も死んだ経路になる。
+    hearsay_enabled: bool = False,
     # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default False = flag OFF):
     # True のとき chunk_coordinator が完了点で recall_buffer に
     # prediction_error を刻み、reinterpretation_coordinator が誤差専用
@@ -539,6 +544,9 @@ def build_episodic_stack(
                 goal_reflect_enabled=goal_reflect_enabled,
                 objective_text_provider=objective_text_provider,
                 reflect_observation_sink=reflect_observation_sink,
+                # P10: ON のときだけ固着 prompt に伝聞節を足し、shortlist に話者
+                # belief を載せる (OFF = pre-P10 と byte / 挙動一致)。
+                hearsay_enabled=hearsay_enabled,
             )
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()

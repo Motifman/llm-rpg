@@ -154,3 +154,44 @@ class TestConfirmationSupportCount:
     def test_negative_raises(self) -> None:
         with pytest.raises(SemanticMemoryEntryValidationException):
             _entry(confirmation_support_count=-1)
+
+
+class TestHearsaySupportCount:
+    """P10: hearsay_support_count (support の HEARSAY 内数) の不変条件。"""
+
+    def test_default_is_zero(self) -> None:
+        assert _entry().hearsay_support_count == 0
+
+    def test_within_support_bounds_ok(self) -> None:
+        entry = _entry(
+            support_evidence_ids=("e1", "e2", "e3"),
+            hearsay_support_count=2,
+        )
+        assert entry.hearsay_support_count == 2
+
+    def test_exceeding_support_count_raises(self) -> None:
+        with pytest.raises(SemanticMemoryEntryValidationException):
+            _entry(support_evidence_ids=("e1",), hearsay_support_count=2)
+
+    def test_negative_raises(self) -> None:
+        with pytest.raises(SemanticMemoryEntryValidationException):
+            _entry(hearsay_support_count=-1)
+
+    def test_confirmation_plus_hearsay_exceeding_support_raises(self) -> None:
+        """CONFIRMATION と HEARSAY は排他的な内数。合計が支持総数を超えたら不正。"""
+        with pytest.raises(SemanticMemoryEntryValidationException):
+            _entry(
+                support_evidence_ids=("e1", "e2"),
+                confirmation_support_count=1,
+                hearsay_support_count=2,
+            )
+
+    def test_confirmation_plus_hearsay_within_support_ok(self) -> None:
+        """合計が支持総数以内なら両方の内数を同時に持てる。"""
+        entry = _entry(
+            support_evidence_ids=("e1", "e2", "e3"),
+            confirmation_support_count=1,
+            hearsay_support_count=2,
+        )
+        assert entry.confirmation_support_count == 1
+        assert entry.hearsay_support_count == 2

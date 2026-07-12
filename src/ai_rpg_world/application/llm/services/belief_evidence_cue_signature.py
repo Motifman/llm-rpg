@@ -34,6 +34,33 @@ _HEARSAY_AXIS_TO_CUE_PREFIX = {
 # 聞き手本人を指す entity マッチを self: 軸に振り分けるのに使う。
 _SELF_ENTITY_VALUE_FMT = "spot_graph_player_{}"
 
+# noun matcher の entity 値の接頭辞。id 部を取り出して直接体験 cue の
+# 人物トークン形式へ揃えるのに使う (P10)。
+_ENTITY_VALUE_PREFIX = "spot_graph_player_"
+# 直接体験 cue が使う人物マーカー形式。belief evidence は
+# belief_evidence_transcriber が chunk 完了点で作り、その cue は chunk episode
+# の who から来る。chunk の who (chunk_episode_draft_builder._who_from_observations)
+# は観測の actor だけを _actor_from_structured で "entity:actor:{id}" に整形した
+# ものなので、伝聞の人物 cue もこの形式に揃えると、同一人物の伝聞と直接体験が
+# cue_tokens で同じトークンになり、固着 shortlist で同じクラスタに寄る。
+# (action_episode_draft_builder._collect_who は対象 player を "entity:player:{id}"
+# で持つが、そちらは transcriber を経由せず belief evidence にならないので対象外。)
+_DIRECT_ACTOR_VALUE_FMT = "entity:actor:{}"
+
+
+def _to_direct_actor_value(entity_value: str) -> str:
+    """noun matcher の entity 値 (``spot_graph_player_{id}``) を、直接体験 cue が
+    使う who マーカー形式 (``entity:actor:{id}``) に揃える (P10)。
+
+    id 部を取り出せない形 (接頭辞が付かない値) なら元の値のまま返す —
+    揃えられないケースを silent に落とさず、少なくとも伝聞同士は寄る。
+    """
+    if entity_value.startswith(_ENTITY_VALUE_PREFIX):
+        player_id = entity_value[len(_ENTITY_VALUE_PREFIX):]
+        if player_id:
+            return _DIRECT_ACTOR_VALUE_FMT.format(player_id)
+    return entity_value
+
 
 def build_hearsay_cue_signature(
     claim_text: str,
@@ -83,14 +110,14 @@ def build_hearsay_cue_signature(
             best_value = getattr(m, "value", None)
     if best_axis is None or not best_value:
         return ""
-    if best_axis == "entity" and self_value is not None and best_value == self_value:
-        return f"self:{best_value}"
-    # NOTE (P10 で対処): 人物 cue の値は noun matcher の entity 形式
-    # (spot_graph_player_{id})。直接体験側の cue (build_belief_evidence_cue_signature
-    # は episode.who = entity:actor:{id} 形式) と token が揃っておらず、同一人物の
-    # 伝聞と直接体験がまだ同じクラスタに寄らない。固着側で「話者/対象の人物
-    # belief を shortlist に載せる」照合を実装する P10 で、人物 cue の正規化を
-    # 揃えて解消する (場所 spot: 軸は両者一致済み)。
+    if best_axis == "entity":
+        # P10: 人物対象は直接体験 cue (who = entity:actor:{id}) と同じトークン
+        # 形式に揃え、同一人物の伝聞と直接体験が固着 shortlist で同じクラスタに
+        # 寄るようにする。聞き手本人への言及は self: 軸へ分離する (P9)。
+        actor_value = _to_direct_actor_value(best_value)
+        if self_value is not None and best_value == self_value:
+            return f"self:{actor_value}"
+        return f"player:{actor_value}"
     return f"{_HEARSAY_AXIS_TO_CUE_PREFIX[best_axis]}:{best_value}"
 
 
