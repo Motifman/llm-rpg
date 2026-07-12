@@ -1309,33 +1309,40 @@ class WorldRuntime:
         output = ObservationOutput(
             prose=message,
             structured={"type": "goal_revision"},
-            observation_category="self",
+            observation_category="self_only",
             schedules_turn=False,
             breaks_movement=False,
         )
         self._emit_observation_directly(player_id, output)
 
-    def _emit_reflect_observation(self, player_id: PlayerId, message: str) -> None:
-        """P4: 固着パスの reflect (停滞判断) を「ふと振り返ると…」の内省観測
+    def _emit_reflect_observation(
+        self, player_id: PlayerId, message: str, verdict: str = "stalled"
+    ) -> None:
+        """P4/P7: 固着パスの reflect (停滞 / 達成 / 乖離の気づき) を「ふと振り返ると
 
-        として本人に届ける。無意識が感覚を上げ、意識が (P6 の goal_update で)
-        決断する分担。loop_guard 警告と同じ observation buffer 経路。
+        …」の内省観測として本人に届ける。無意識が感覚を上げ、意識が (P6 の
+        goal_update で) 決断する分担。loop_guard 警告と同じ observation buffer
+        経路。verdict は種別として structured に載せる (達成の気づきを P6 の
+        見直しや P8 の清算が拾えるようにする)。ここでは goal store には触れない。
         """
         output = ObservationOutput(
             prose=message,
-            structured={"type": "goal_reflect"},
-            observation_category="self",
+            structured={"type": "goal_reflect", "verdict": verdict},
+            observation_category="self_only",
             schedules_turn=False,
             breaks_movement=False,
         )
         self._emit_observation_directly(player_id, output)
 
     def _reflect_objective_provider(self, player_id: PlayerId) -> Optional[str]:
-        """P4: reflect の監査対象となる現在の目的文を返す (best-effort、読み取り
+        """P4/P7: reflect の監査対象となる現在の目的文を返す (best-effort、
 
-        のみ)。goal store に active があればその文、無ければシナリオ目的文。
-        解決できなければ None (reflect は目的が無ければ判断しない)。P7 で goal
-        store 一本化する。副作用 (seed) は起こさない。
+        読み取りのみ)。監査対象は goal store の active 目的に一本化する: active が
+        あればその文 (シナリオ目的が locked で seed 済み、または P6 で本人が
+        立て直した自己目的)。まだ active が無い場合のみシナリオ目的文へ縮退する
+        が、これは seed される内容と同一なので監査対象は変わらない。どちらも
+        解決できなければ None (目的が無ければ reflect は判断しない)。この経路は
+        副作用 (seed) を起こさない — seed は 【現在の目的】描画側が担う。
         """
         store = self._goal_journal_store
         if store is not None:

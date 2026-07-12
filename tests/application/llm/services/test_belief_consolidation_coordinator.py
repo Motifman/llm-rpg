@@ -1137,14 +1137,15 @@ class TestConfirmationWeightPreservedOnReviseContradict:
 
 
 class TestGoalReflect:
-    """P4: reflect (目的への前進評価) の prompt 露出・停滞観測注入・cap・OFF 不変。"""
+    """P4/P7: reflect の prompt 露出・停滞/達成/乖離の観測注入・種別ごとの cap・
+    OFF 不変・goal store を書かない不変条件を保証する。"""
 
     def test_reflect_section_present_only_when_enabled(self) -> None:
         on = _build_setup(
             outcome={"decisions": []},
             goal_reflect_enabled=True,
             objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg: None,
+            reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         on.evidence_buffer.append_by_being(on.being_id, _evidence("e1"))
         on.coordinator.flush_player(on.player_id)
@@ -1161,7 +1162,7 @@ class TestGoalReflect:
             outcome={"decisions": []},
             goal_reflect_enabled=True,
             objective_text_provider=lambda pid: "山頂で狼煙を上げて救助される",
-            reflect_observation_sink=lambda pid, msg: None,
+            reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
         setup.coordinator.flush_player(setup.player_id)
@@ -1177,7 +1178,7 @@ class TestGoalReflect:
             ]},
             goal_reflect_enabled=True,
             objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg: obs.append((pid, msg)),
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
         setup.coordinator.flush_player(setup.player_id)
@@ -1193,7 +1194,7 @@ class TestGoalReflect:
             ]},
             goal_reflect_enabled=True,
             objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg: obs.append((pid, msg)),
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
         setup.coordinator.flush_player(setup.player_id)
@@ -1206,7 +1207,7 @@ class TestGoalReflect:
                 {"action": "reflect", "verdict": "stalled", "statement": "停滞"}
             ]},
             goal_reflect_enabled=False,
-            reflect_observation_sink=lambda pid, msg: obs.append((pid, msg)),
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
         setup.coordinator.flush_player(setup.player_id)
@@ -1221,7 +1222,7 @@ class TestGoalReflect:
             ]},
             goal_reflect_enabled=True,
             objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg: obs.append((pid, msg)),
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
             stall_min_interval_turns=15,
         )
         # 1 回目: 注入される (turn 0)。
@@ -1243,7 +1244,7 @@ class TestGoalReflect:
             turn_interval=10_000,
             goal_reflect_enabled=True,
             objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg: obs.append((pid, msg)),
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
             stall_min_interval_turns=15,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
@@ -1264,7 +1265,7 @@ class TestGoalReflect:
             _build_setup(
                 outcome={"decisions": []},
                 goal_reflect_enabled=True,
-                reflect_observation_sink=lambda pid, msg: None,
+                reflect_observation_sink=lambda pid, msg, verdict: None,
             )
         with pytest.raises(ValueError, match="reflect_observation_sink"):
             _build_setup(
@@ -1272,3 +1273,95 @@ class TestGoalReflect:
                 goal_reflect_enabled=True,
                 objective_text_provider=lambda pid: "山頂へ行く",
             )
+
+    def test_reflect_section_lists_three_verdicts_when_enabled(self) -> None:
+        """P7: ON のとき reflect 節に停滞/達成/乖離の 3 種が提示される。"""
+        setup = _build_setup(
+            outcome={"decisions": []},
+            goal_reflect_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        system = setup.port.calls[0][0]["content"]
+        assert "stalled" in system
+        assert "achieved" in system
+        assert "misaligned" in system
+
+    def test_achieved_reflect_injects_observation_with_verdict(self) -> None:
+        """P7: 達成の気づきが verdict 種別つきで内省観測として注入される。"""
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "achieved",
+                 "statement": "気づけば、探していた地図はもう手に入れている"}
+            ]},
+            goal_reflect_enabled=True,
+            objective_text_provider=lambda pid: "古い地図を手に入れる",
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert len(obs) == 1
+        assert obs[0][2] == "achieved"
+        assert "地図はもう手に入れている" in obs[0][1]
+
+    def test_misaligned_reflect_injects_observation_with_verdict(self) -> None:
+        """P7: 乖離 (目的から逸れている) の気づきが verdict つきで注入される。"""
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "misaligned",
+                 "statement": "気づけば釣りに夢中で、山頂のことをすっかり忘れていた"}
+            ]},
+            goal_reflect_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert len(obs) == 1
+        assert obs[0][2] == "misaligned"
+
+    def test_cap_is_per_verdict_kind(self) -> None:
+        """P7: cap は種別ごと。直近に停滞を出しても、達成の気づきは別枠で注入される。"""
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "空回りしている"},
+                {"action": "reflect", "verdict": "achieved", "statement": "もう果たしている"},
+            ]},
+            goal_reflect_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
+            stall_min_interval_turns=15,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        kinds = sorted(o[2] for o in obs)
+        assert kinds == ["achieved", "stalled"]
+
+    def test_reflect_coordinator_holds_no_goal_store_reference(self) -> None:
+        """P7 不変条件: 固着 coordinator は goal store への参照を一切持たない。
+
+        reflect が達成と判断しても goal store の status を変えられない ——
+        参照が無いこと自体で「無意識は書かない、意識が決断する」を構造保証する。
+        属性・引数のどこにも goal / journal を名乗るものが無いことを確認する。
+        """
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "achieved", "statement": "果たした"}
+            ]},
+            goal_reflect_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        # goal store / journal / repository を指す参照が無いこと (bool フラグ
+        # _goal_reflect_enabled は保持を意味しないので除外)。
+        attrs = vars(setup.coordinator)
+        offending = [
+            name for name in attrs
+            if any(k in name.lower() for k in ("journal", "goal_store", "goal_repo"))
+        ]
+        assert offending == []

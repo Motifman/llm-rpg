@@ -128,3 +128,34 @@ class TestGoalRevisionWrite:
         runtime.apply_goal_update_if_present(player_id, {"inner_thought": "考え中"})
         after = list(runtime._goal_journal_store.list_all_by_being(being_id))
         assert before == after
+
+    def test_locked_goal_update_rejected_and_emits_observation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """locked 目的への書き換えは拒否され、拒否観測の生成が例外なく通る。
+
+        拒否観測は ``_emit_goal_observation`` 経由で ObservationOutput を組む。
+        observation_category が不正だと構築時に落ちるため、この経路を実際に
+        通して回帰を防ぐ (fake sink では捉えられない実配線のバグ)。
+        """
+        _enable(monkeypatch, revision=True)
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        player_id = PlayerId(1)
+        being_id = runtime.aux_being_resolver.resolve_being_id(
+            runtime.aux_being_default_world_id, player_id
+        )
+        runtime._goal_journal_store.add_by_being(
+            being_id,
+            GoalEntry(
+                goal_id="g-locked", player_id=1, text="禁書を封印する",
+                status=GOAL_STATUS_ACTIVE, locked=True, origin=GOAL_ORIGIN_SELF,
+                created_tick=0, created_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            ),
+        )
+
+        # 拒否観測の生成を含め、例外なく通ること (category バグの回帰ガード)。
+        runtime.apply_goal_update_if_present(player_id, {"goal_update": "宝探しに切り替える"})
+
+        active = runtime._goal_journal_store.get_active_by_being(being_id)
+        assert active.goal_id == "g-locked"  # locked は書き換わらない
+        assert active.text == "禁書を封印する"

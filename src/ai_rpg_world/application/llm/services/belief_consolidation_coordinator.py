@@ -112,6 +112,14 @@ _ACTION_REVISE = "revise"
 _ACTION_CONTRADICT = "contradict"
 _ACTION_DISCARD = "discard"
 _ACTION_REFLECT = "reflect"  # P4: 目的への前進評価 (belief journal には書かない)
+# P7: reflect が返す判定の種類。停滞 / 達成 / 乖離 (目的と行動の乖離)。いずれも
+# 内省観測として本人に返すだけで、goal store の status 変更はしない (不変条件)。
+_REFLECT_VERDICT_STALLED = "stalled"
+_REFLECT_VERDICT_ACHIEVED = "achieved"
+_REFLECT_VERDICT_MISALIGNED = "misaligned"
+_REFLECT_VERDICTS = frozenset(
+    {_REFLECT_VERDICT_STALLED, _REFLECT_VERDICT_ACHIEVED, _REFLECT_VERDICT_MISALIGNED}
+)
 
 _SYSTEM_BELIEF_CONSOLIDATION_JSON = """あなたはある RPG キャラクターの内面で動く「記憶を学びに固着させる機能」です。
 直近たまった「学習の素材 (evidence)」群と、すでに持っている「学び (belief)」の候補一覧 (shortlist) を読み、各 evidence についてどう扱うかを決めてください。
@@ -179,20 +187,27 @@ _REFLECT_INSTRUCTION = """
 
 【目的への前進評価 (reflect)】
 ユーザメッセージに「現在の目的」が渡っている場合、evidence 群を通常どおり
-create / strengthen 等で処理した**うえで、それとは別に**、この期間に目的へ
-前進があったかを必ず一度評価すること。次の停滞サインが揃うときは、他の決定に
-**加えて** reflect を 1 つ足す (create の代わりではなく、追加で書く):
-- 目的に向けた試み (移動・探索など) が続けて 2 回以上ねらいを外している
-- かつ、この期間の evidence に目的へ近づけたもの (道が見つかった・材料が
-  集まった等) が 1 件も無い
-このとき次の形を足す:
-{"action": "reflect", "verdict": "stalled", "statement": "<停滞の内省を一人称で 1 文>"}
-statement は「同じ場所を空回りしている」という気づきを本人の声で 1 文にする。
-reflect は belief を作らない (意識に「気づき」を返すだけ)。
+create / strengthen 等で処理した**うえで、それとは別に**、この期間の行動を
+その目的と照らして評価すること。次の 3 つのいずれかが明らかなときだけ、他の
+決定に**加えて** reflect を 1 つ足す (create の代わりではなく、追加で書く):
+
+(1) 停滞 (stalled): 目的に向けた試み (移動・探索など) が続けて 2 回以上ねらいを
+    外し、かつこの期間の evidence に目的へ近づけたものが 1 件も無い。
+    → {"action":"reflect","verdict":"stalled","statement":"<同じ場所を空回りしている、という気づきを一人称で 1 文>"}
+(2) 達成 (achieved): 目的がすでに果たされたことを示す evidence がある
+    (探していたものを見つけた・行きたかった場所に着いた等)。
+    → {"action":"reflect","verdict":"achieved","statement":"<目指していたことはもう果たした、という気づきを一人称で 1 文>"}
+(3) 乖離 (misaligned): 目的と結びつく行動がなく、目的とは無関係なことばかりに
+    没頭していて、目的から明らかにそれている。
+    → {"action":"reflect","verdict":"misaligned","statement":"<目的から逸れている、という気づきを一人称で 1 文>"}
+
+reflect は belief を作らない (意識に「気づき」を返すだけ)。目的の status を
+変えたり目的文を書き換えたりはしない — 気づきを本人に返すだけで、どうするかの
+判断は本人 (次の手) に委ねる。
 次のときは reflect を書かない:
-- 目的に近づいた evidence が 1 件でもある (前進している)
+- 目的に向けて着実に前進している (近づいた evidence があり、逸れてもいない)
 - 待ち合わせ・看病のように、動いていないことに正当な理由がある
-- 前進したか判断がつかない"""
+- どの判断も確信が持てない"""
 
 
 def _build_belief_consolidation_system_prompt(
@@ -243,7 +258,7 @@ class BeliefConsolidationCoordinator:
         belief_attribution_enabled: bool = False,
         goal_reflect_enabled: bool = False,
         objective_text_provider: Optional[Callable[[PlayerId], Optional[str]]] = None,
-        reflect_observation_sink: Optional[Callable[[PlayerId, str], None]] = None,
+        reflect_observation_sink: Optional[Callable[[PlayerId, str, str], None]] = None,
         stall_min_interval_turns: int = DEFAULT_STALL_MIN_INTERVAL_TURNS,
     ) -> None:
         if not isinstance(evidence_buffer_store, BeliefEvidenceBufferRepository):
@@ -328,9 +343,11 @@ class BeliefConsolidationCoordinator:
             goal_reflect_enabled=goal_reflect_enabled,
         )
         self._turn_counts: dict[int, int] = defaultdict(int)
-        # P4: 同一 being への停滞内省観測の乱発防止 cap。最後に停滞観測を出した
-        # turn index を player ごとに覚え、min_interval 未満なら再注入しない。
-        self._last_stall_turn: dict[int, int] = {}
+        # P4/P7: 同一 being への内省観測の乱発防止 cap。最後に観測を出した turn
+        # index を (player, verdict 種別) ごとに覚え、min_interval 未満なら再注入
+        # しない。種別ごとに分けるのは、直近の停滞観測が達成の気づきを巻き込んで
+        # 抑制してしまわないため (別種の気づきは独立に返せる)。
+        self._last_reflect_turn: dict[tuple[int, str], int] = {}
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _resolve_being_id(self, player_id: PlayerId) -> Optional[BeingId]:
@@ -356,40 +373,47 @@ class BeliefConsolidationCoordinator:
         return text.strip()
 
     def _apply_reflect(self, player_id: int, raw: dict[str, Any]) -> bool:
-        """P4: reflect 決定を処理する。停滞宣言なら内省観測を本人に注入する。
+        """P4/P7: reflect 決定を処理する。停滞 / 達成 / 乖離の気づきを内省観測
 
-        belief journal には書かない (「無意識が感覚を上げ、意識が決断する」の
-        分担)。以下のときは何もせず False を返す (= trace にも残さない):
+        として本人に注入する。**goal store には書かない** — この coordinator は
+        goal store への参照を一切持たず、意識に「気づき」を返すだけ。目的の
+        status 変更や書き換えは本人 (P6 の goal_update) に委ねる (「無意識が感覚を
+        上げ、意識が決断する」の分担を構造で保証する)。以下のときは何もせず
+        False を返す (= trace にも残さない):
         - goal_reflect OFF / 観測 sink 未注入
-        - verdict が "stalled" でない (前進 / 判断不能)
+        - verdict が stalled / achieved / misaligned のいずれでもない
         - statement が空
-        - 同一 player への停滞観測が直近 ``stall_min_interval_turns`` 以内
-          (乱発防止 cap)
-        停滞観測を注入したら True。
+        - 同一 player の同じ種別の観測が直近 ``stall_min_interval_turns`` 以内
+          (種別ごとの乱発防止 cap)
+        観測を注入したら True。
         """
         if not self._goal_reflect_enabled or self._reflect_observation_sink is None:
             return False
-        if raw.get("verdict") != "stalled":
+        verdict = raw.get("verdict")
+        if verdict not in _REFLECT_VERDICTS:
             return False
         statement = raw.get("statement")
         if not isinstance(statement, str) or not statement.strip():
             return False
         turn = self._turn_counts.get(player_id, 0)
-        last = self._last_stall_turn.get(player_id)
+        cap_key = (player_id, verdict)
+        last = self._last_reflect_turn.get(cap_key)
         if last is not None and (turn - last) < self._stall_min_interval_turns:
             return False
         try:
-            self._reflect_observation_sink(PlayerId(player_id), statement.strip())
+            self._reflect_observation_sink(
+                PlayerId(player_id), statement.strip(), verdict
+            )
         except Exception:
             # cap は注入に成功したときだけ消費する。sink が一時的に失敗した局面で
-            # cap を進めてしまうと、注入していないのに次の停滞内省が
-            # stall_min_interval_turns ぶん抑制され、気づきの取りこぼしが長引く。
+            # cap を進めてしまうと、注入していないのに次の同種の気づきが
+            # stall_min_interval_turns ぶん抑制され、取りこぼしが長引く。
             self._logger.warning(
                 "reflect_observation_sink raised for player_id=%s", player_id,
                 exc_info=True,
             )
             return False
-        self._last_stall_turn[player_id] = turn
+        self._last_reflect_turn[cap_key] = turn
         return True
 
     def current_turn_index(self, player_id: PlayerId) -> int:
