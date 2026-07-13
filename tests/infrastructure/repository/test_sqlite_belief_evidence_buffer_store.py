@@ -144,3 +144,79 @@ class TestSqliteBeliefEvidenceBufferStore:
 
             ids = [e.evidence_id for e in store.list_all_by_being(being_id)]
             assert ids == ["e1"]
+
+    def test_in_context_belief_ids_persists_across_reconnect(self) -> None:
+        """U4 で追加された in_context_belief_ids が close → reopen 後も空に
+        落ちず元の belief_id 群のまま戻る (M1 再発防止)。"""
+        being_id = BeingId("being_w1_p1")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "belief_evidence.db")
+            store = SqliteBeliefEvidenceBufferStore.connect(path)
+            evidence = BeliefEvidence(
+                evidence_id="e1",
+                source_kind=BeliefEvidenceSourceKind.PREDICTION_ERROR,
+                episode_ids=("ep-1",),
+                cue_signature="tool:explore|spot:3",
+                text="探索は空振りだった",
+                salience=BELIEF_EVIDENCE_SALIENCE_LOW,
+                occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                in_context_belief_ids=("belief-1", "belief-2"),
+            )
+            store.append_by_being(being_id, evidence)
+            del store
+
+            reopened = SqliteBeliefEvidenceBufferStore.connect(path)
+            restored = reopened.list_all_by_being(being_id)[0]
+            assert restored.in_context_belief_ids == ("belief-1", "belief-2")
+
+
+class TestSqliteBeliefEvidenceFullFieldRoundtripContract:
+    """全フィールドに非 default 値を入れた evidence が保存 → 読み出しで完全一致して戻る契約テスト。
+
+    ``BeliefEvidence`` にフィールドが増えたのに payload codec
+    (``_evidence_to_payload`` / ``_payload_to_evidence``) が追従しないと、非
+    default 値が往復で default に落ちて ``==`` が破れ、このテストが自動で赤に
+    なる。今回の M1 (in_context_belief_ids の追従漏れ) と同型の silent failure を
+    将来も構造で検出するための守り。
+    """
+
+    def _full_evidence(self) -> BeliefEvidence:
+        return BeliefEvidence(
+            evidence_id="e-full",
+            source_kind=BeliefEvidenceSourceKind.HEARSAY,
+            episode_ids=("ep-1", "ep-2"),
+            cue_signature="tool:gather|spot:5",
+            text="全フィールドを非 default 値で埋めた証拠",
+            salience=BELIEF_EVIDENCE_SALIENCE_HIGH,
+            occurred_at=datetime(2026, 7, 1, 12, 30, 45, 123456, tzinfo=timezone.utc),
+            tick=42,
+            in_context_belief_ids=("belief-1", "belief-2"),
+            source_speaker="noah",
+        )
+
+    def test_保存_読み出しで全フィールドが完全一致で戻る(self) -> None:
+        """append_by_being → close → reopen → list_all_by_being の往復で
+        evidence が元と完全一致する。"""
+        being_id = BeingId("being_w1_p1")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "belief_evidence.db")
+            store = SqliteBeliefEvidenceBufferStore.connect(path)
+            evidence = self._full_evidence()
+            store.append_by_being(being_id, evidence)
+            del store
+
+            reopened = SqliteBeliefEvidenceBufferStore.connect(path)
+            restored = reopened.list_all_by_being(being_id)[0]
+            assert restored == evidence
+
+    def test_replace_all_by_beingでも全フィールドが完全一致で戻る(self) -> None:
+        """replace_all_by_being 経路でも evidence が元と完全一致する。"""
+        being_id = BeingId("being_w1_p1")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "belief_evidence.db")
+            store = SqliteBeliefEvidenceBufferStore.connect(path)
+            evidence = self._full_evidence()
+            store.replace_all_by_being(being_id, [evidence])
+
+            restored = store.list_all_by_being(being_id)[0]
+            assert restored == evidence

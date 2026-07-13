@@ -55,6 +55,10 @@ def _evidence_to_payload(evidence: BeliefEvidence) -> dict[str, Any]:
         "salience": evidence.salience,
         "occurred_at": _dt_to_text(evidence.occurred_at),
         "tick": evidence.tick,
+        # U4 (予測誤差統一設計): この evidence 発生ターンで in-context だった
+        # belief_id 群。固着処理が strengthen/contradict の対応づけに使う。
+        # payload JSON 内なので schema 変更不要 (source_speaker と同様)。
+        "in_context_belief_ids": list(evidence.in_context_belief_ids),
         # P9 (伝聞): HEARSAY evidence の話者 (payload JSON 内なので schema 変更不要)。
         "source_speaker": evidence.source_speaker,
     }
@@ -70,6 +74,11 @@ def _payload_to_evidence(data: dict[str, Any]) -> BeliefEvidence:
         salience=str(data["salience"]),
         occurred_at=_text_to_dt(str(data["occurred_at"])),
         tick=int(data["tick"]) if data.get("tick") is not None else None,
+        # 旧 payload (U4 前に書かれた行) には本 key が無いので空タプルに
+        # フォールバックする。attribution 機構 OFF と同じ扱いで後方互換。
+        in_context_belief_ids=tuple(
+            str(x) for x in data.get("in_context_belief_ids", ())
+        ),
         source_speaker=(
             str(data["source_speaker"])
             if data.get("source_speaker") is not None
