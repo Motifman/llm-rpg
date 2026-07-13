@@ -659,6 +659,28 @@ class BeliefConsolidationCoordinator:
         ][:remaining_slots]
         return tuple(forced_beliefs) + tuple(extra)
 
+    @staticmethod
+    def _build_evidence_payload_entry(evidence: BeliefEvidence) -> dict[str, Any]:
+        """evidence 1 件を prompt payload の dict に変換する。
+
+        P10 回帰修正: ``_HEARSAY_INSTRUCTION`` は「source_kind が hearsay の
+        evidence には source_speaker がその話者」と LLM に約束しているが、
+        payload に ``source_speaker`` が無いと話者ごとの文脈信頼判断が構造的に
+        不可能になる。HEARSAY 以外は常に None なので、ノイズを避けるため
+        非 None のときだけキーを載せる。
+        """
+        payload: dict[str, Any] = {
+            "evidence_id": evidence.evidence_id,
+            "source_kind": evidence.source_kind.value,
+            "cue_signature": evidence.cue_signature,
+            "text": evidence.text,
+            "salience": evidence.salience,
+            "episode_ids": list(evidence.episode_ids),
+        }
+        if evidence.source_speaker is not None:
+            payload["source_speaker"] = evidence.source_speaker
+        return payload
+
     def _build_messages(
         self,
         batch: tuple[BeliefEvidence, ...],
@@ -666,15 +688,7 @@ class BeliefConsolidationCoordinator:
         objective_text: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         evidence_payload = [
-            {
-                "evidence_id": e.evidence_id,
-                "source_kind": e.source_kind.value,
-                "cue_signature": e.cue_signature,
-                "text": e.text,
-                "salience": e.salience,
-                "episode_ids": list(e.episode_ids),
-            }
-            for e in batch
+            self._build_evidence_payload_entry(e) for e in batch
         ]
         shortlist_payload = [
             {
