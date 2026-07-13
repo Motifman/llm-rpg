@@ -351,6 +351,7 @@ class InlineEpisodicSubjectiveScheduler:
         *,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
+        actor_name: Optional[str] = None,
     ) -> None:
         if not isinstance(draft, SubjectiveEpisode):
             raise TypeError("draft must be SubjectiveEpisode")
@@ -358,12 +359,15 @@ class InlineEpisodicSubjectiveScheduler:
             raise TypeError("persona_text must be str")
         if not isinstance(encoding_input, ChunkEncodingInput):
             raise TypeError("encoding_input must be ChunkEncodingInput")
+        if actor_name is not None and not isinstance(actor_name, str):
+            raise TypeError("actor_name must be str or None")
         start = time.monotonic()
         try:
             merged = self._service.merge_llm_subjective_fields(
                 draft,
                 persona_text=persona_text,
                 encoding_input=encoding_input,
+                actor_name=actor_name,
             )
             self._put_episode(merged)
             # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
@@ -662,6 +666,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         *,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
+        actor_name: Optional[str] = None,
     ) -> None:
         if not isinstance(draft, SubjectiveEpisode):
             raise TypeError("draft must be SubjectiveEpisode")
@@ -669,6 +674,8 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             raise TypeError("persona_text must be str")
         if not isinstance(encoding_input, ChunkEncodingInput):
             raise TypeError("encoding_input must be ChunkEncodingInput")
+        if actor_name is not None and not isinstance(actor_name, str):
+            raise TypeError("actor_name must be str or None")
         eid = draft.episode_id
         # 重複 / overflow / shutdown チェックはロック内で原子的に。
         # ただし ``_executor.submit`` 自体はロック外で呼ぶ:
@@ -729,7 +736,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         # ── ロック外で executor.submit ──
         try:
             future = self._executor.submit(
-                self._worker, draft, persona_text, encoding_input
+                self._worker, draft, persona_text, encoding_input, actor_name
             )
         except RuntimeError:
             # Executor が shutdown 済み (競合) → 予約を取り消して drop
@@ -829,6 +836,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         draft: SubjectiveEpisode,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
+        actor_name: Optional[str] = None,
     ) -> None:
         """ワーカー thread の本体。例外は呼び出し元に propagate しないこと。"""
         start = time.monotonic()
@@ -837,6 +845,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 draft,
                 persona_text=persona_text,
                 encoding_input=encoding_input,
+                actor_name=actor_name,
             )
             self._put_episode(merged)
             # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。

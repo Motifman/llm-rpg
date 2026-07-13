@@ -346,6 +346,11 @@ def build_episodic_stack(
     current_tick_provider: Optional[Callable[[], Any]] = None,
     chunk_subjective_fields_service: Optional[EpisodicChunkSubjectiveFieldsService] = None,
     persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
+    # H-2 (自己言及ループ / 横断レビュー): heard_claims の話者が本人かどうかを
+    # 判定するための本人名 provider。persona_block_provider と同じ
+    # player_id 引きの形。未指定なら本人名チェックは縮退し従来通り通す
+    # (chunk_coordinator 側のコメント参照)。
+    player_name_provider: Optional[Callable[[PlayerId], str]] = None,
     subjective_completion_scheduler: Optional[IEpisodicSubjectiveCompletionScheduler] = None,
     episode_store: Optional[InMemorySubjectiveEpisodeStore] = None,
     being_attachment_resolver: Optional[Any] = None,
@@ -462,6 +467,8 @@ def build_episodic_stack(
     - ``chunk_subjective_fields_service``: 同期 LLM 補完経路 (旧来)。
       ``subjective_completion_scheduler`` と排他
     - ``persona_block_provider``: player_id → persona text の dict 引き
+    - ``player_name_provider``: player_id → 本人名の dict 引き (H-2)。
+      heard_claims の話者が本人自身のときに弾くための照合キーとして使う
     - ``subjective_completion_scheduler``: 非同期 LLM 補完経路 (#310 推奨)。
       scheduler と stack で同じ ``episode_store`` を共有することが整合性条件
     - ``episode_store``: 呼び出し側が事前に scheduler と共有する store を渡せる。
@@ -647,6 +654,7 @@ def build_episodic_stack(
         chunk_subjective_fields_service=chunk_subjective_fields_service,
         subjective_completion_scheduler=subjective_completion_scheduler,
         persona_block_provider=persona_block_provider,
+        player_name_provider=player_name_provider,
         # semantic OFF なら link service なし (= MVP の従来動作)。ON なら昇格に
         # 必要な memory link を chunk write 経路に通す。
         episodic_memory_link_service=link_service,

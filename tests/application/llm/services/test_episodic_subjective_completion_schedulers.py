@@ -1502,3 +1502,83 @@ class TestThreadPoolSchedulerRecallHitBoost:
                 store,
                 recall_success_store="not_a_store",  # type: ignore[arg-type]
             )
+
+
+# ─────────────────────────────────────────────
+# H-2 (自己言及ループ): submit(actor_name=...) が heard_claims の自己言及
+# フィルタまで伝わること (非同期経路)。単体の正規化ロジック自体は
+# test_episodic_chunk_subjective_fields_hearsay.py で検証済みなので、ここでは
+# scheduler.submit → _service.merge_llm_subjective_fields への配線のみを見る。
+# ─────────────────────────────────────────────
+
+_HEARD_CLAIMS_RETURN = {
+    "interpreted": "I",
+    "recall_text": "R",
+    "heard_claims": [
+        {"speaker": "カイト", "claim": "自分の発言"},
+        {"speaker": "リオ", "claim": "北の泉は安全だ"},
+    ],
+}
+
+
+class TestInlineSchedulerActorNamePropagation:
+    def test_actor_name_を渡すと本人speakerのclaimが弾かれる(self) -> None:
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        port = _StubPort(returns=_HEARD_CLAIMS_RETURN)
+        service = EpisodicChunkSubjectiveFieldsService(port, hearsay_enabled=True)
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            service, store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+        )
+        scheduler.submit(
+            draft, persona_text="", encoding_input=enc, actor_name="カイト"
+        )
+        ep_after = store.get_by_being(being_id, draft.episode_id)
+        assert [c.speaker for c in ep_after.heard_claims] == ["リオ"]
+
+    def test_actor_name_省略時は自己判定を行わない(self) -> None:
+        """未指定 (デフォルト None) では従来通り全ての speaker を通す
+
+        (後方互換: actor_name を渡さない既存呼び出し元の挙動を変えない)。
+        """
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        port = _StubPort(returns=_HEARD_CLAIMS_RETURN)
+        service = EpisodicChunkSubjectiveFieldsService(port, hearsay_enabled=True)
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            service, store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        ep_after = store.get_by_being(being_id, draft.episode_id)
+        assert [c.speaker for c in ep_after.heard_claims] == ["カイト", "リオ"]
+
+
+class TestThreadPoolSchedulerActorNamePropagation:
+    def test_actor_name_を渡すと本人speakerのclaimが弾かれる(self) -> None:
+        enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        port = _StubPort(returns=_HEARD_CLAIMS_RETURN)
+        service = EpisodicChunkSubjectiveFieldsService(port, hearsay_enabled=True)
+        scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+            service, store,
+            max_workers=1,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+        )
+        try:
+            scheduler.submit(
+                draft, persona_text="", encoding_input=enc, actor_name="カイト"
+            )
+            scheduler.shutdown()
+        except Exception:
+            scheduler.shutdown(timeout=2.0)
+            raise
+        ep_after = store.get_by_being(being_id, draft.episode_id)
+        assert [c.speaker for c in ep_after.heard_claims] == ["リオ"]

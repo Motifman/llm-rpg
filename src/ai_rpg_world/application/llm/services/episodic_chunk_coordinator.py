@@ -116,6 +116,11 @@ class EpisodicChunkCoordinator:
         recent_actions_limit: int = 20,
         chunk_subjective_fields_service: EpisodicChunkSubjectiveFieldsService | None = None,
         persona_block_provider: Callable[[PlayerId], str] | None = None,
+        # H-2 (自己言及ループ / 横断レビュー): heard_claims の話者照合に使う
+        # 本人名 provider。persona_block_provider と同じ player_id 引きの形。
+        # 未指定なら自己言及チェックは縮退し従来通り通す (安全側に落とし過ぎて
+        # 伝聞が全滅しないようにする)。
+        player_name_provider: Callable[[PlayerId], str] | None = None,
         episodic_memory_link_service: EpisodicMemoryLinkApplicationService | None = None,
         trace_recorder: Optional[ITraceRecorder] = None,
         trace_recorder_provider: Optional[
@@ -155,6 +160,8 @@ class EpisodicChunkCoordinator:
             )
         if persona_block_provider is not None and not callable(persona_block_provider):
             raise TypeError("persona_block_provider must be callable or None")
+        if player_name_provider is not None and not callable(player_name_provider):
+            raise TypeError("player_name_provider must be callable or None")
         if episodic_memory_link_service is not None and not isinstance(
             episodic_memory_link_service, EpisodicMemoryLinkApplicationService
         ):
@@ -284,6 +291,11 @@ class EpisodicChunkCoordinator:
         self._chunk_subjective_fields_service = chunk_subjective_fields_service
         self._subjective_completion_scheduler = subjective_completion_scheduler
         self._persona_block_provider = persona_block_provider
+        # H-2 (自己言及ループ / 横断レビュー): heard_claims の話者が本人自身か
+        # どうかを判定するための本人名 provider。未指定 (None) なら
+        # merge_llm_subjective_fields / scheduler.submit に actor_name=None を
+        # 渡し、自己判定を行わない (安全側に倒し過ぎて伝聞が全滅しないようにする)。
+        self._player_name_provider = player_name_provider
         self._being_attachment_resolver = being_attachment_resolver
         self._default_world_id = default_world_id
         self._recent_observations_limit = recent_observations_limit
@@ -704,10 +716,19 @@ class EpisodicChunkCoordinator:
                 if self._persona_block_provider is not None
                 else ""
             )
+            # H-2: actor_name は persona_block_provider と同じ player_id 引きの
+            # provider から取る。未配線 (None) なら actor_name=None のまま
+            # merge に渡し、自己判定を行わない (persona_block と同じ規約)。
+            actor_name = (
+                self._player_name_provider(player_id)
+                if self._player_name_provider is not None
+                else None
+            )
             episode = self._chunk_subjective_fields_service.merge_llm_subjective_fields(
                 episode,
                 persona_text=persona_block,
                 encoding_input=encoding_input,
+                actor_name=actor_name,
             )
             # U1: prediction_error が同期経路で確定した瞬間に PREDICTION_OUTCOME
             # を emit する (非同期 scheduler 経路は完了時に別途 emit する)。
@@ -774,11 +795,18 @@ class EpisodicChunkCoordinator:
                 if self._persona_block_provider is not None
                 else ""
             )
+            # H-2: 非同期経路も同期経路と同じ actor_name 解決規約 (未配線なら None)。
+            actor_name = (
+                self._player_name_provider(player_id)
+                if self._player_name_provider is not None
+                else None
+            )
             try:
                 self._subjective_completion_scheduler.submit(
                     episode,
                     persona_text=persona_block,
                     encoding_input=encoding_input,
+                    actor_name=actor_name,
                 )
             except Exception:
                 # scheduler の submit は本来例外を投げないが、誤実装に備えて。

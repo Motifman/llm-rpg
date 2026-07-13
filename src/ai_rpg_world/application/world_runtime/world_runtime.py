@@ -385,6 +385,11 @@ class WorldRuntime:
     # 反映する applier。flag OFF / goal store 無しなら applier は None。
     _goal_revision_enabled: bool = field(default=False, repr=False)
     _goal_revision_applier: Optional[Any] = field(default=None, repr=False)
+    # H-1 (伝聞の入力衛生 / 横断レビュー): HEARSAY_ENABLED を
+    # BELIEF_EVIDENCE_ENABLED と畳み込んだ実効値。GOAL_REVISION と同じ理由で
+    # runtime に保持する (config ミス時に「実際に何が有効か」を後から読める
+    # ようにする)。
+    _hearsay_enabled: bool = field(default=False, repr=False)
     # Issue #526 後続: LLM が「思い出そう」と意志して過去 episode を呼び戻す
     # ``memory_recall_episodes`` tool の executor。``_wire_auxiliary_tool_stack``
     # 時に episodic_stack が wire されていれば構築。OFF (= 構築されない) なら
@@ -3959,8 +3964,28 @@ def create_world_runtime(
         # 加えない。
         _pending_prediction_enabled = resolve_pending_prediction_enabled()
         log_pending_prediction_enabled_state(_pending_prediction_enabled)
-        _hearsay_enabled = resolve_hearsay_enabled()
+        _hearsay_requested = resolve_hearsay_enabled()
+        # H-1 (伝聞の入力衛生 / 横断レビュー): HEARSAY は BELIEF_EVIDENCE_ENABLED
+        # (evidence buffer + transcriber) が前提。抽出側 (chunk 補完 LLM の
+        # heard_claims 節) だけ ON で転記側の transcriber が無いと、抽出コスト
+        # (prompt 節 + LLM 出力) を払うだけで転記点
+        # (_record_belief_evidence_if_applicable) が transcriber None のため
+        # 黙って捨てる「誘うのに黙って捨てる」静かな失敗になる (MEMO_DISTILL
+        # 事件の構造再演)。GOAL_REVISION×GOAL_STORE (直下) と同じパターンで、
+        # BELIEF_EVIDENCE が OFF なら HEARSAY も実効 OFF に畳み、抽出コストも
+        # 払わないようにする。
+        if _hearsay_requested and not _belief_evidence_enabled:
+            logger.warning(
+                "HEARSAY_ENABLED=1 だが BELIEF_EVIDENCE_ENABLED が OFF のため "
+                "伝聞の抽出・転記は無効化される (belief evidence transcriber が "
+                "前提)。BELIEF_EVIDENCE_ENABLED=1 も設定してください。"
+            )
+        _hearsay_enabled = _hearsay_requested and _belief_evidence_enabled
         log_hearsay_enabled_state(_hearsay_enabled)
+        # GOAL_REVISION_ENABLED と同様、畳み込んだ実効値を runtime にも保持する
+        # (テストや後続処理が「実際に何が有効か」を config ミスに関わらず
+        # 一箇所から読めるようにする)。
+        runtime._hearsay_enabled = _hearsay_enabled
         # P5 (目的層 G1): GOAL_STORE_ENABLED ON のとき goal store を構築し
         # runtime に保持する。【現在の目的】provider (prompt builder 側) と実験
         # snapshot stub がここから拾う。OFF なら None のまま (静的シナリオ文字列)。
@@ -4359,6 +4384,11 @@ def create_world_runtime(
             current_tick_provider=runtime.current_tick,
             subjective_completion_scheduler=subjective_scheduler,
             persona_block_provider=persona_provider,
+            # H-2 (自己言及ループ / 横断レビュー): chunk 主観補完が抽出した
+            # heard_claims から「話者 = 聞き手本人」を弾くための本人名。
+            # scenario.player_spawns から名前解決する既存 API を再利用する
+            # (persona_block_provider と同じ player_id 引きの provider 形)。
+            player_name_provider=runtime.get_player_name,
             episode_store=shared_episode_store,
             # Phase 3 Step 3e-3: episode_store 経路を being_id 統一済のため、
             # aux Being 配線をそのまま使う
