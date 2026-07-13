@@ -185,6 +185,30 @@ def _init_memory_graph_v6_semantic_belief_journal(connection: sqlite3.Connection
     )
 
 
+def _init_memory_graph_v7_semantic_support_weights(connection: sqlite3.Connection) -> None:
+    """P3b/P10: CONFIRMATION / HEARSAY 支持件数カラムを追加する。
+
+    v6 と同じく、既存 DB (未適用) を開いても ``apply_migrations`` が version を
+    見て一度だけ ``ALTER TABLE`` を実行するので後方互換はマイグレーション機構が
+    保証する (壊れた状態で始めない)。両カラムとも旧行では 0 相当 (= 割引なし)
+    として読めればよいので ``DEFAULT 0`` で追加する。
+
+    - ``confirmation_support_count``: support 内数のうち「予測的中の追認」件数
+    - ``hearsay_support_count``: support 内数のうち「伝聞」由来件数
+
+    どちらも保存 → 読み出しで 0 に戻ると confidence 計算の割引が消えて再膨張する
+    ため、``SemanticMemoryEntry`` の非 default 値を確実に往復させる必要がある。
+    """
+    connection.executescript(
+        """
+        ALTER TABLE semantic_memory_entries_by_being
+            ADD COLUMN confirmation_support_count INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE semantic_memory_entries_by_being
+            ADD COLUMN hearsay_support_count INTEGER NOT NULL DEFAULT 0;
+        """
+    )
+
+
 def apply_memory_graph_migrations(connection: sqlite3.Connection) -> int:
     """リンク・セマンティック表を同一 DB に作成する。namespace はエピソード本体と独立。"""
     return apply_migrations(
@@ -197,6 +221,7 @@ def apply_memory_graph_migrations(connection: sqlite3.Connection) -> int:
             SqliteMigration(4, _init_memory_graph_v4_memory_link_by_being),
             SqliteMigration(5, _init_memory_graph_v5_drop_legacy_memory_links),
             SqliteMigration(6, _init_memory_graph_v6_semantic_belief_journal),
+            SqliteMigration(7, _init_memory_graph_v7_semantic_support_weights),
         ],
     )
 

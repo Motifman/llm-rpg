@@ -304,3 +304,50 @@ class TestUpdateStatusByBeing:
         store.update_status_by_being(b, "e1", "inactive")
         entries = {e.entry_id: e.status for e in store.list_for_being(b)}
         assert entries == {"e1": "inactive", "e2": "active"}
+
+
+class TestInMemorySemanticFullFieldRoundtripContract:
+    """全フィールドに非 default 値を入れた entry が add → list で完全一致して戻る契約テスト。
+
+    SQLite 実装 (``TestSqliteSemanticFullFieldRoundtripContract``) と対をなす。
+    in-memory は codec を持たず参照をそのまま保持するので現状は自明に通るが、
+    「保存経路が entry を欠損させない」という store interface の契約を SQLite と
+    同じ形で固定し、実装差を出さないための守り。
+    """
+
+    def _full_entry(self) -> SemanticMemoryEntry:
+        return SemanticMemoryEntry(
+            entry_id="e-full",
+            player_id=7,
+            text="全フィールドを非 default 値で埋めた belief",
+            evidence_episode_ids=("ep-1", "ep-2"),
+            confidence=0.42,
+            created_at=datetime(2026, 7, 1, 12, 30, 45, 123456, tzinfo=timezone.utc),
+            importance_score=9,
+            tags=("t1", "t2"),
+            belief_id="belief-x",
+            status="superseded",
+            supersedes="e-old",
+            support_evidence_ids=("s1", "s2", "s3", "s4"),
+            contradict_evidence_ids=("c1",),
+            confirmation_support_count=2,
+            hearsay_support_count=1,
+        )
+
+    def test_add_listで全フィールドが完全一致で戻る(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        """add_by_being → list_for_being の往復で entry が元と完全一致する。"""
+        being_id = BeingId("ada")
+        entry = self._full_entry()
+        store.add_by_being(being_id, entry)
+        assert store.list_for_being(being_id)[0] == entry
+
+    def test_replace_all_by_beingで全フィールドが完全一致で戻る(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        """replace_all_by_being → list_for_being の往復で entry が元と完全一致する。"""
+        being_id = BeingId("ada")
+        entry = self._full_entry()
+        store.replace_all_by_being(being_id, [entry], [])
+        assert store.list_for_being(being_id)[0] == entry

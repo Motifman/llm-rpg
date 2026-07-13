@@ -81,6 +81,18 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                 if "contradict_evidence_ids_json" in row_keys
                 else []
             )
+            # 旧 DB (schema v7 未適用) を素の SQL で開いたケースに備えて
+            # カラム有無を確認し、無ければ 0 (= 割引なし) にフォールバックする。
+            confirmation_count = (
+                int(row["confirmation_support_count"])
+                if "confirmation_support_count" in row_keys
+                else 0
+            )
+            hearsay_count = (
+                int(row["hearsay_support_count"])
+                if "hearsay_support_count" in row_keys
+                else 0
+            )
             out.append(
                 SemanticMemoryEntry(
                     entry_id=str(row["entry_id"]),
@@ -100,6 +112,8 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                     ),
                     support_evidence_ids=tuple(str(x) for x in raw_support),
                     contradict_evidence_ids=tuple(str(x) for x in raw_contradict),
+                    confirmation_support_count=confirmation_count,
+                    hearsay_support_count=hearsay_count,
                 )
             )
         return out
@@ -193,8 +207,9 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                         entry_id, being_id_value, text, evidence_episode_ids_json,
                         confidence, created_at, importance_score, tags_json, player_id,
                         belief_id, status, supersedes,
-                        support_evidence_ids_json, contradict_evidence_ids_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        support_evidence_ids_json, contradict_evidence_ids_json,
+                        confirmation_support_count, hearsay_support_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         entry.entry_id,
@@ -211,6 +226,8 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                         entry.supersedes,
                         support_json,
                         contradict_json,
+                        int(entry.confirmation_support_count),
+                        int(entry.hearsay_support_count),
                     ),
                 )
             for sig in cluster_signatures:
@@ -299,8 +316,9 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                 entry_id, being_id_value, text, evidence_episode_ids_json,
                 confidence, created_at, importance_score, tags_json, player_id,
                 belief_id, status, supersedes,
-                support_evidence_ids_json, contradict_evidence_ids_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                support_evidence_ids_json, contradict_evidence_ids_json,
+                confirmation_support_count, hearsay_support_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(being_id_value, entry_id) DO UPDATE SET
                 text = excluded.text,
                 evidence_episode_ids_json = excluded.evidence_episode_ids_json,
@@ -313,7 +331,9 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                 status = excluded.status,
                 supersedes = excluded.supersedes,
                 support_evidence_ids_json = excluded.support_evidence_ids_json,
-                contradict_evidence_ids_json = excluded.contradict_evidence_ids_json
+                contradict_evidence_ids_json = excluded.contradict_evidence_ids_json,
+                confirmation_support_count = excluded.confirmation_support_count,
+                hearsay_support_count = excluded.hearsay_support_count
             """,
             (
                 entry.entry_id,
@@ -330,6 +350,8 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                 entry.supersedes,
                 support_json,
                 contradict_json,
+                int(entry.confirmation_support_count),
+                int(entry.hearsay_support_count),
             ),
         )
 
