@@ -59,6 +59,7 @@ decisions は次のいずれかの形の要素からなる配列:
   batch_evidence_ids: ['e-error', 'e-confirm']
   shortlist_belief_ids: ['sem-no-resources']
   decisions: [{'action': 'contradict', 'belief_id': 'sem-no-resources', 'evidence_ids': ['e-error']}, {'action': 'strengthen', 'belief_id': 'sem-no-resources', 'evidence_ids': ['e-confirm']}]
+  skipped_decisions: []
 
 === belief journal (list_for_being) ===
 --- entry[0] ---
