@@ -41,6 +41,13 @@ class TestInMemoryPendingPredictionStore:
         rows = store.list_all_by_being(being_id)
         assert [p.pending_id for p in rows] == ["p1", "p2"]
 
+    def test_add_by_being_returns_none_when_capacity_not_exceeded(self) -> None:
+        """容量に余裕があるうちの追加は evict が起きないので None を返す。"""
+        store = InMemoryPendingPredictionStore(capacity=3)
+        being_id = BeingId("being-1")
+        assert store.add_by_being(being_id, _pending("p1", 1)) is None
+        assert store.add_by_being(being_id, _pending("p2", 2)) is None
+
     def test_default_capacity_matches_repository_constant(self) -> None:
         assert PENDING_PREDICTION_DEFAULT_CAP == 8
 
@@ -57,10 +64,14 @@ class TestInMemoryPendingPredictionStore:
             "p2",
         }
         # 4件目追加で最古 (p1, tick=1) が evict される
-        store.add_by_being(being_id, _pending("p3", 10))
+        evicted = store.add_by_being(being_id, _pending("p3", 10))
         remaining = {p.pending_id for p in store.list_all_by_being(being_id)}
         assert remaining == {"p0", "p2", "p3"}
         assert "p1" not in remaining
+        # evict された PendingPrediction 自体が戻り値として返る (呼び出し側が
+        # trace を残せるようにするため)。
+        assert evicted is not None
+        assert evicted.pending_id == "p1"
 
     def test_capacity_overflow_keeps_bucket_size_bounded(self) -> None:
         store = InMemoryPendingPredictionStore(capacity=3)

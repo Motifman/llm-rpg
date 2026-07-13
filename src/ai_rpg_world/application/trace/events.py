@@ -212,6 +212,20 @@ class TraceEventKind:
     #   - being_id: str
     #   - tick: int | None
     PENDING_PREDICTION_EXPIRED = "pending_prediction_expired"
+    # LOW-1 (約束の trace 実態対応): per-Being store の容量上限 (既定 8 件) を
+    # 超えたため、新しい約束を積む際に最も古い未決着の約束が黙って evict
+    # された瞬間。EXPIRED (期限切れによる失効) とは別イベントにする理由は、
+    # run 分析で「作られたのに RESOLVED も EXPIRED も無い pending」が謎として
+    # 残っていた原因がこの evict だったため、両者を区別できる必要があるから。
+    # payload:
+    #   - pending_id: str (= evict された約束の id)
+    #   - being_id: str
+    #   - origin_episode_id: str
+    #   - resolution_cues: list[str]
+    #   - tick_from: int / tick_to: int
+    #   - pending_kind: str ("promise" | "plan")
+    #   - tick: int (= evict が起きた現在 tick。約束自体の created_tick とは別)
+    PENDING_PREDICTION_EVICTED = "pending_prediction_evicted"
     # P8 (目的の清算 / goal_outcome 自己申告): 本人が goal_outcome を宣言し、
     # active 目的が achieved / abandoned で閉じられた瞬間。目的の一生 (立てる →
     # 見直す → 閉じる) の終端で、次の目的が立つまでの「無目的」区間の入口。

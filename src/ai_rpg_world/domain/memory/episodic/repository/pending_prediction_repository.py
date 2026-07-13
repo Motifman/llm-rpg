@@ -10,6 +10,7 @@ U10a (予測誤差統一設計 部品6): ``BeliefEvidenceBufferRepository`` /
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Optional
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
@@ -23,12 +24,19 @@ class PendingPredictionRepository(ABC):
     """保留中の予測を保持する。一次キーは ``BeingId``。"""
 
     @abstractmethod
-    def add_by_being(self, being_id: BeingId, pending: PendingPrediction) -> None:
+    def add_by_being(
+        self, being_id: BeingId, pending: PendingPrediction
+    ) -> Optional[PendingPrediction]:
         """being_id keyed で pending prediction を 1 件追加する。
 
         既存件数が容量上限 (``PENDING_PREDICTION_DEFAULT_CAP``) に達している
         場合は、追加前に最も古い (= ``created_tick`` が最小、同値なら
         追加順が先の) 1 件を evict する。
+
+        evict が発生した場合は、その evict された ``PendingPrediction`` を
+        返す (発生しなければ ``None``)。呼び出し側 (chunk 補完の記録経路) が
+        この戻り値を使って「未決着のまま容量あふれで消えた約束」を trace に
+        残せるようにするための契約。戻り値を無視しても動作は変わらない。
         """
 
     @abstractmethod

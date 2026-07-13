@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import threading
 from collections import defaultdict
+from typing import Optional
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
@@ -39,21 +40,25 @@ class InMemoryPendingPredictionStore(PendingPredictionRepository):
         # 公開メソッド全体を 1 つの RLock で保護する (#309 と同じ粒度・同じ理由)。
         self._lock = threading.RLock()
 
-    def add_by_being(self, being_id: BeingId, pending: PendingPrediction) -> None:
+    def add_by_being(
+        self, being_id: BeingId, pending: PendingPrediction
+    ) -> Optional[PendingPrediction]:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         if not isinstance(pending, PendingPrediction):
             raise TypeError("pending must be PendingPrediction")
         with self._lock:
             bucket = self._predictions[being_id]
+            evicted: Optional[PendingPrediction] = None
             if len(bucket) >= self._capacity:
                 # 最も古い (= created_tick 最小、同値なら追加順が先の) 1 件を
                 # evict。list は追加順を保っているので、created_tick で安定
                 # sort した先頭が「最古」。sorted() は安定ソートなので同値は
                 # 追加順のまま残る。
                 oldest = min(range(len(bucket)), key=lambda i: bucket[i].created_tick)
-                bucket.pop(oldest)
+                evicted = bucket.pop(oldest)
             bucket.append(pending)
+            return evicted
 
     def list_all_by_being(self, being_id: BeingId) -> list[PendingPrediction]:
         if not isinstance(being_id, BeingId):
