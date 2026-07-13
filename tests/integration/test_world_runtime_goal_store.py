@@ -34,6 +34,12 @@ _SURVIVAL_V2_PATH = (
     / "scenarios"
     / "survival_island_v2.json"
 )
+_PERSISTENT_WORLD_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "scenarios"
+    / "persistent_world_demo.json"
+)
 
 
 class TestWorldRuntimeGoalStoreWiring:
@@ -122,3 +128,87 @@ class TestWorldRuntimeGoalStoreLongScenarioText:
         assert seeded is not None
         assert seeded.text == scenario_text
         assert seeded.locked is True
+
+
+class TestWorldRuntimeGoalLockedByHasGoal:
+    """HIGH-3 回帰: seed の locked は _scenario_has_goal (勝敗条件の有無) に連動する。
+
+    以前は全シナリオで locked=True を固定していた。目的文なしの run は作れない
+    ため、どんな run でも goal_update / goal_outcome が 100% 拒否され、P6
+    (言い直し) / P8 (清算) の実効経路が存在しなかった。
+    """
+
+    def test_outcome_resolution_scenario_still_seeds_locked_true(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """survival_island_v2 は win/lose 配列が空で outcome_resolution が
+        勝敗を決める (罠: win/lose だけを見ると誤って unlocked と判定される)。
+        outcome_resolution_config の有無を含めて判定することで、locked=True
+        (従来どおり goal_update / goal_outcome を拒否) を維持する。
+        """
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        monkeypatch.setenv("GOAL_STORE_ENABLED", "1")
+        monkeypatch.setenv("GOAL_REVISION_ENABLED", "1")
+        runtime = create_world_runtime(_SURVIVAL_V2_PATH)
+        # v2 は win/lose 配列が空 (outcome_resolution 駆動) であることの前提確認。
+        assert runtime.scenario.win_conditions == ()
+        assert runtime.scenario.lose_conditions == ()
+        assert runtime.scenario.outcome_resolution_config is not None
+
+        scenario_text = runtime._resolve_scenario_llm_objective_text()
+        player_id = runtime.get_player_ids()[0]
+        runtime._resolve_objective_via_goal_store(player_id, scenario_text)
+
+        being_id = runtime.aux_being_resolver.resolve_being_id(
+            runtime.aux_being_default_world_id, player_id
+        )
+        seeded = runtime._goal_journal_store.get_active_by_being(being_id)
+        assert seeded is not None
+        assert seeded.locked is True
+
+        # 従来どおり goal_update は拒否され、目的は書き換わらない。
+        runtime.apply_goal_update_if_present(
+            player_id, {"goal_update": "宝探しに切り替える"}
+        )
+        active = runtime._goal_journal_store.get_active_by_being(being_id)
+        assert active.goal_id == seeded.goal_id
+
+    def test_open_world_scenario_seeds_locked_false_and_allows_revision(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """persistent_world_demo (勝敗条件なし) は locked=False で seed され、
+        goal_update (言い直し / P6) と goal_outcome のみでの清算 (無目的に戻り
+        「(まだ定まっていない)」描画 / P8) の両方が初めて実効的に通る。
+        """
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        monkeypatch.setenv("GOAL_STORE_ENABLED", "1")
+        monkeypatch.setenv("GOAL_REVISION_ENABLED", "1")
+        runtime = create_world_runtime(_PERSISTENT_WORLD_PATH)
+        assert runtime.scenario.win_conditions == ()
+        assert runtime.scenario.lose_conditions == ()
+        assert runtime.scenario.outcome_resolution_config is None
+
+        scenario_text = runtime._resolve_scenario_llm_objective_text()
+        player_id = runtime.get_player_ids()[0]
+        runtime._resolve_objective_via_goal_store(player_id, scenario_text)
+
+        being_id = runtime.aux_being_resolver.resolve_being_id(
+            runtime.aux_being_default_world_id, player_id
+        )
+        seeded = runtime._goal_journal_store.get_active_by_being(being_id)
+        assert seeded is not None
+        assert seeded.locked is False
+
+        # P6: goal_update で言い直せる (以前は locked=True で必ず拒否されていた)。
+        runtime.apply_goal_update_if_present(
+            player_id, {"goal_update": "灯台を修理する"}
+        )
+        active = runtime._goal_journal_store.get_active_by_being(being_id)
+        assert active.text == "灯台を修理する"
+        assert active.supersedes == seeded.goal_id
+
+        # P8: goal_outcome のみで無目的に戻り、未定表示になる。
+        runtime.apply_goal_update_if_present(player_id, {"goal_outcome": "achieved"})
+        assert runtime._goal_journal_store.get_active_by_being(being_id) is None
+        rendered = runtime._resolve_objective_via_goal_store(player_id, "")
+        assert "まだ定まっていない" in rendered

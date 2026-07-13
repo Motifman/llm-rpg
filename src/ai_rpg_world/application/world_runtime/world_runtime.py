@@ -278,6 +278,30 @@ def _other_explorer_names_for_world_system_prompt(
     return tuple(s.name for s in spawns if s is not self_spawn)
 
 
+def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
+    """勝敗条件を宣言するシナリオか (= goal あり) を導出する (#526 U5, P5)。
+
+    win/lose/outcome のいずれかがあれば goal 前提の文面・目的層 locked=True。
+    既存シナリオは全て game_end_conditions を持つので True になり、system
+    prompt / goal seed の挙動は不変。
+
+    outcome_resolution 駆動のシナリオ (survival_island_v2 系: win_conditions /
+    lose_conditions が空で、代わりに outcome_resolution_config が救助成功・
+    タイムリミット等の勝敗を決める) を含めるのが必須。win/lose 配列だけを見ると
+    v2 系が「勝敗条件なしの open world」に誤判定され、目的が unlocked (=
+    goal_update で書き換え・清算できる) になってしまう。
+
+    ``build_world_system_prompt`` の safe_intro 判定 (create_world_runtime) と
+    goal 目的層の seed 判定 (WorldRuntime._resolve_objective_via_goal_store)
+    の両方がこの 1 つの導出ロジックを共有する (判定基準の分岐を防ぐ)。
+    """
+    return bool(
+        scenario.win_conditions
+        or scenario.lose_conditions
+        or scenario.outcome_resolution_config is not None
+    )
+
+
 @dataclass
 class WorldRuntime:
     """LLM エージェントが世界で生きる汎用ランタイム（全てインメモリ）。"""
@@ -1251,9 +1275,21 @@ class WorldRuntime:
         """P5 (目的層 G1): goal store の active 目的を【現在の目的】に描画する。
 
         遅延 seed: その being にまだ目的が無ければ、シナリオ目的文を
-        ``locked=True / origin=scenario`` で 1 度だけ seed する (以後 active を
-        描画)。locked 初期値なので描画結果は ``fallback_text`` と同一 = 既存
-        シナリオの挙動不変。store 未構築・being 未解決なら安全に fallback_text。
+        ``origin=scenario`` で 1 度だけ seed する。描画結果は常に
+        ``fallback_text`` と同一 (seed 直後の active はまだ改訂されていない
+        ので) = 既存シナリオの挙動不変。store 未構築・being 未解決なら安全に
+        fallback_text。
+
+        locked は ``_scenario_has_goal(self.scenario)`` に連動させる
+        (HIGH-3 回帰対応)。勝敗条件のあるシナリオ (win/lose や
+        outcome_resolution がある) は locked=True (従来どおり、シナリオの
+        終了条件だけが目的の達成/失敗を決める)。勝敗条件を持たない open
+        world (persistent_world_demo 等) は locked=False とし、エージェント
+        自身が goal_update (言い直し) / goal_outcome (清算) で目的を
+        書き換えられるようにする。以前は locked=True を全シナリオに固定して
+        いたため、目的文なしの run が作れない (open world も含め全 run が
+        必ず何らかの目的文を持つ) ことも重なって、P6 (言い直し) / P8 (清算)
+        の実効経路がどのシナリオでも到達不能になっていた。
         """
         store = self._goal_journal_store
         if store is None:
@@ -1296,7 +1332,7 @@ class WorldRuntime:
                 player_id=int(player_id.value),
                 text=fallback_text,
                 status=GOAL_STATUS_ACTIVE,
-                locked=True,
+                locked=_scenario_has_goal(self.scenario),
                 origin=GOAL_ORIGIN_SCENARIO,
                 created_tick=tick if isinstance(tick, int) else 0,
                 created_at=datetime.now(timezone.utc),
@@ -2474,11 +2510,8 @@ def create_world_runtime(
     # win/lose/outcome のいずれかがあれば goal 前提の文面、無ければ永続世界として
     # escape/goal 前提 (脱出できない / 勝利条件・最終目的) を中立化する。既存シナリオは
     # 全て game_end_conditions を持つので has_goal=True となり prompt は不変。
-    _has_goal = bool(
-        scenario.win_conditions
-        or scenario.lose_conditions
-        or scenario.outcome_resolution_config is not None
-    )
+    # 目的層の goal seed (locked 判定) とロジックを共有する (_scenario_has_goal)。
+    _has_goal = _scenario_has_goal(scenario)
     safe_intro = safe_world_intro_text(scenario.metadata, has_goal=_has_goal)
     participants = _other_explorer_names_for_world_system_prompt(
         scenario.player_spawns, world_character

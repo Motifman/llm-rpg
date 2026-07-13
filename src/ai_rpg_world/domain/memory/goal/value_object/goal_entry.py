@@ -3,12 +3,17 @@
 P5 (goal_layer_design_active_inference.md G1): 目的を per-Being の journal
 方式で保持する (belief journal と同型: 改訂は supersede、履歴は消えない)。
 【現在の目的】はこの store の active エントリから描画され、シナリオの
-目的文は run 開始時に ``locked=True, origin="scenario"`` で seed される
-(locked 初期値なら描画結果は従来の静的テキストと同一)。
+目的文は run 開始時に ``origin="scenario"`` で seed される (描画結果は
+seed 直後は従来の静的テキストと同一)。
 
 - status: active | achieved | abandoned | superseded
   (belief と違い、改訂できるのは意識 (G2) だけ。無意識は監査するが書かない)
-- locked: True なら意識 (G2) でも改訂不可 (勝利条件のあるシナリオの初期目的)
+- locked: True なら意識 (G2) でも改訂不可。seed 時の値はシナリオが勝敗条件
+  (win/lose や outcome_resolution) を宣言しているかに連動する
+  (``world_runtime._scenario_has_goal``): 勝敗条件のあるシナリオは
+  locked=True (従来どおり、達成/失敗はシナリオの終了条件が決める)。勝敗条件
+  を持たない open world は locked=False (エージェント自身が goal_update /
+  goal_outcome で書き換え・清算できる。HIGH-3 回帰対応)
 - origin: scenario (初期注入) | self (エージェント自身が立てた)
 - supersedes: 改訂元の goal_id (journal 系譜)。無ければ None
 """
