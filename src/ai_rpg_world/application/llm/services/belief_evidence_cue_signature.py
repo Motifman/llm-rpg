@@ -30,6 +30,13 @@ _HEARSAY_AXIS_TO_CUE_PREFIX = {
     "entity": "player",
 }
 
+# 「自分についての噂」を分ける軸名 (P9/P10)。cue_signature 上は
+# ``self:<value>`` の形で先頭に立つ。他の軸 (tool/spot/player) は value 部だけで
+# 一意に区別できるので cue_tokens が軸名を捨てるが、self: だけは同一人物を指す
+# value が player: 軸と一致してしまう (どちらも ``entity:actor:{id}``)。この軸は
+# 「値ではなく軸そのもの」が区別情報なので、cue_tokens が例外的に軸名を残す。
+_SELF_CUE_AXIS = "self"
+
 # noun matcher の entity 値形式 (world_noun_matcher._format_entity_value と一致)。
 # 聞き手本人を指す entity マッチを self: 軸に振り分けるのに使う。
 _SELF_ENTITY_VALUE_FMT = "spot_graph_player_{}"
@@ -116,7 +123,7 @@ def build_hearsay_cue_signature(
         # 寄るようにする。聞き手本人への言及は self: 軸へ分離する (P9)。
         actor_value = _to_direct_actor_value(best_value)
         if self_value is not None and best_value == self_value:
-            return f"self:{actor_value}"
+            return f"{_SELF_CUE_AXIS}:{actor_value}"
         return f"player:{actor_value}"
     return f"{_HEARSAY_AXIS_TO_CUE_PREFIX[best_axis]}:{best_value}"
 
@@ -152,6 +159,12 @@ def cue_tokens(cue_signature: str) -> tuple[str, ...]:
     固着パス (``belief_consolidation_coordinator._cue_tokens``) の shortlist
     照合と同じ規則を単一の実装に集約したもの (P3: CONFIRMATION 関連性ゲートが
     同じ照合を再利用するため)。
+
+    例外は ``self:`` 軸 (P9/P10)。他の軸は value だけで区別できるが、self: の
+    value は同一人物を指す player: 軸の value と同じ (``entity:actor:{id}``) に
+    なるため、軸名を落とすと「自分についての噂」が「その人物についての player 軸
+    の噂・直接体験」と同じトークンに潰れて分離が消える。この軸だけは軸名込みの
+    ``self:entity:actor:{id}`` をトークンにして、照合層まで区別を貫通させる。
     """
     tokens: list[str] = []
     for part in cue_signature.split("|"):
@@ -159,8 +172,12 @@ def cue_tokens(cue_signature: str) -> tuple[str, ...]:
         if not part:
             continue
         if ":" in part:
-            _, _, value = part.partition(":")
-            value = value.strip().lower()
+            axis, _, value = part.partition(":")
+            # self: 軸は軸名が唯一の区別情報なので、value だけに落とさず丸ごと残す。
+            if axis.strip().lower() == _SELF_CUE_AXIS:
+                value = part.strip().lower()
+            else:
+                value = value.strip().lower()
         else:
             value = part.lower()
         if value:
