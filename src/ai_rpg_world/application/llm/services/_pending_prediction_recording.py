@@ -92,7 +92,7 @@ def record_pending_prediction_if_applicable(
         created_tick=created_tick,
         kind=draft.kind,  # P11: 種別 (promise / plan) を draft から引き継ぐ
     )
-    pending_prediction_store.add_by_being(being_id, pending)
+    evicted = pending_prediction_store.add_by_being(being_id, pending)
 
     if trace_recorder is not None:
         try:
@@ -115,6 +115,49 @@ def record_pending_prediction_if_applicable(
                 "skipping",
                 exc_info=True,
             )
+
+    if evicted is not None:
+        _emit_evicted_trace(
+            trace_recorder,
+            being_id=being_id,
+            evicted=evicted,
+            tick=created_tick,
+        )
+
+
+def _emit_evicted_trace(
+    trace_recorder: Optional[ITraceRecorder],
+    *,
+    being_id: BeingId,
+    evicted: PendingPrediction,
+    tick: int,
+) -> None:
+    """LOW-1: 容量あふれで evict された未決着の約束を trace に残す。
+
+    ``pending_prediction_store.add_by_being`` が evict した約束を返してきた
+    ときにだけ呼ばれる。evict は「新しい約束を積んだ結果として起きた」ため、
+    tick は evict された約束自身の ``created_tick`` ではなく、いま積んでいる
+    約束の ``created_tick`` (= 呼び出し元の現在 tick) を使う。
+    """
+    if trace_recorder is None:
+        return
+    try:
+        trace_recorder.record(
+            TraceEventKind.PENDING_PREDICTION_EVICTED,
+            tick=tick,
+            pending_id=evicted.pending_id,
+            being_id=str(being_id.value),
+            origin_episode_id=evicted.origin_episode_id,
+            resolution_cues=list(evicted.resolution_cues),
+            tick_from=evicted.tick_from,
+            tick_to=evicted.tick_to,
+            pending_kind=evicted.kind,
+        )
+    except Exception:
+        _logger.debug(
+            "trace recorder.record raised for PENDING_PREDICTION_EVICTED; skipping",
+            exc_info=True,
+        )
 
 
 __all__ = ["record_pending_prediction_if_applicable"]

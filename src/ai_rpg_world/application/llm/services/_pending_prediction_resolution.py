@@ -95,6 +95,12 @@ def resolve_pending_predictions_if_applicable(
     by_id = {p.pending_id: p for p in live}
     resolved_ids: set[str] = set()
 
+    # LOW-2: RESOLVED trace の tick には実際に清算された現在 tick を使う
+    # (窓の終端 tick_to を使うと、窓の早い時点で果たされた約束が trace 上は
+    # 未来の tick に記録され、CREATED / EXPIRED (どちらも現在 tick) と非対称に
+    # なる)。失効判定 (step 2) でも同じ current_tick を使う。
+    current_tick = _resolve_tick(current_tick_provider)
+
     # 1. 清算: LLM が決着させた約束を evidence に転記して除く。
     for verdict in episode.pending_resolution_verdicts:
         pending = by_id.get(verdict.pending_id)
@@ -122,10 +128,10 @@ def resolve_pending_predictions_if_applicable(
             pending=pending,
             verdict=verdict.verdict,
             evidence_id=evidence_id,
+            tick=current_tick,
         )
 
     # 2. 失効: tick_to を過ぎても決着しなかった約束を黙って除く。
-    current_tick = _resolve_tick(current_tick_provider)
     expired_ids: set[str] = set()
     if current_tick is not None:
         expired_ids = {
@@ -185,18 +191,23 @@ def _emit_resolved_trace(
     pending,
     verdict: str,
     evidence_id: Optional[str],
+    tick: Optional[int],
 ) -> None:
     if trace_recorder is None:
         return
     try:
         trace_recorder.record(
             TraceEventKind.PENDING_PREDICTION_RESOLVED,
-            tick=pending.tick_to,
+            # LOW-2: tick は実際に清算された現在 tick (窓の終端 tick_to では
+            # ない)。窓の情報は tick_from / tick_to として payload に残す。
+            tick=tick,
             pending_id=pending.pending_id,
             being_id=str(being_id.value),
             verdict=verdict,
             evidence_id=evidence_id,
             origin_episode_id=pending.origin_episode_id,
+            tick_from=pending.tick_from,
+            tick_to=pending.tick_to,
             # P11: 種別 (promise / plan) の区別。payload キーは pending_kind に
             # する (record の第 1 引数 kind = event 種別と衝突するため)。
             pending_kind=pending.kind,
