@@ -589,14 +589,22 @@ class BeliefConsolidationCoordinator:
         evidence が in-context belief を持たない) なら forced は常に空になり、
         本メソッドの挙動は導入前と完全に一致する。
         """
+        all_entries = self._semantic_store.list_for_being(being_id)
         active_beliefs = [
-            e
-            for e in self._semantic_store.list_for_being(being_id)
-            if e.status == SEMANTIC_MEMORY_STATUS_ACTIVE
+            e for e in all_entries if e.status == SEMANTIC_MEMORY_STATUS_ACTIVE
         ]
         if not active_beliefs:
             return ()
-        beliefs_by_id = {b.belief_id: b for b in active_beliefs}
+        # in_context_belief_ids に流れるのは想起時点の entry_id (prompt_builder が
+        # 焼き込む active entry の entry_id)。create 直後は entry_id == belief_id
+        # だが、revise (supersede) すると active entry の entry_id は新しい sem-…
+        # になり belief_id だけ旧値を継ぐ。そのため forced_id を belief_id で直接
+        # 索引すると revise を経た belief が永久に外れる (「学びを信じて外れた/当たった」
+        # の attribution 機会を失う)。entry_id → belief_id → 現在の active entry と
+        # 系譜解決するため、inactive/superseded を含む全 entry で entry_id → belief_id
+        # の索引を作る (中間 revise 時点の旧 entry_id は inactive 側にしか無いため)。
+        entry_id_to_belief_id = {e.entry_id: e.belief_id for e in all_entries}
+        active_by_belief_id = {b.belief_id: b for b in active_beliefs}
         forced_ids: set[str] = set()
         for evidence in batch:
             forced_ids.update(getattr(evidence, "in_context_belief_ids", ()) or ())
@@ -629,11 +637,22 @@ class BeliefConsolidationCoordinator:
                     belief.tags, belief.text, speaker_names
                 ):
                     forced_ids.add(belief.belief_id)
+        # forced_id を entry_id として引き、その belief_id の現在の active entry に
+        # 解決する。entry_id 索引に無ければ (= 既に forced_id 自体が belief_id か、
+        # 削除済みの未知 id) forced_id をそのまま belief_id とみなす。解決先が
+        # active でない (= 反証で inactive 化した等) 場合は載せない。複数の
+        # forced_id が同じ active belief に解決しても belief_id で 1 件に畳む。
+        forced_by_belief_id: dict[str, SemanticMemoryEntry] = {}
+        for fid in forced_ids:
+            resolved_belief_id = entry_id_to_belief_id.get(fid, fid)
+            active_entry = active_by_belief_id.get(resolved_belief_id)
+            if active_entry is not None:
+                forced_by_belief_id[active_entry.belief_id] = active_entry
         forced_beliefs = sorted(
-            (beliefs_by_id[bid] for bid in forced_ids if bid in beliefs_by_id),
+            forced_by_belief_id.values(),
             key=lambda b: b.belief_id,
         )
-        forced_belief_ids = {b.belief_id for b in forced_beliefs}
+        forced_belief_ids = set(forced_by_belief_id)
 
         cue_tokens: set[str] = set()
         for evidence in batch:
