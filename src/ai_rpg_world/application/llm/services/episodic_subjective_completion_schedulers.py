@@ -106,6 +106,36 @@ def _prediction_context_ids_from_encoding(encoding_input: ChunkEncodingInput) ->
     return prediction_context_ids_from_actions(encoding_input.action_results)
 
 
+def _run_sidecar_safely(
+    name: str,
+    episode_id: str,
+    fn: Callable[[], None],
+) -> None:
+    """LOW-4: chunk 完了点の sidecar 処理 (証拠転記・想起系・約束の記録/清算) を
+
+    個別に catch する helper。
+
+    主観補完 (merge) と episode store への put が既に成功した後に呼ぶことが
+    前提。1 つの sidecar が失敗しても他の sidecar をブロックしない (以前は
+    merge → put → 約束の記録 → 清算までを 1 つの try に包んでいたため、
+    ``record_pending_prediction_if_applicable`` の例外 (呼出元へ伝播させる
+    設計) が「LLM 補完が失敗」と誤報告され、実際には既に store に書き込み
+    済みの merged episode がありながら、後続の清算 (resolve) まで巻き添えで
+    skip されていた)。
+    """
+    try:
+        fn()
+    except Exception:
+        _logger.warning(
+            "episodic subjective completion sidecar '%s' failed after merge "
+            "already succeeded (episode_id=%s); merged episode is already "
+            "stored, only this sidecar's effect is missing",
+            name,
+            episode_id,
+            exc_info=True,
+        )
+
+
 def _emit_trace(
     recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]],
     tick_provider: Optional[Callable[[], Optional[int]]],
@@ -370,57 +400,6 @@ class InlineEpisodicSubjectiveScheduler:
                 actor_name=actor_name,
             )
             self._put_episode(merged)
-            # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
-            self._record_belief_evidence_if_applicable(merged, encoding_input)
-            # U9a: 誤差駆動再解釈。同じ完了点で in-context recall observation
-            # 群に prediction_error を刻む (flag OFF / store 未配線なら no-op)。
-            stamp_recall_prediction_outcome_if_applicable(
-                recall_buffer_store=self._recall_buffer_store,
-                error_driven_reinterpretation_enabled=(
-                    self._error_driven_reinterpretation_enabled
-                ),
-                being_id=self._resolve_being_id_for_episode(merged),
-                episode=merged,
-                chunk_actions=encoding_input.action_results,
-            )
-            # U9b (想起の信用割り当て・的中側): 同じ完了点で「思い出したから
-            # 当たった」を的中側 sidecar に還流する (flag OFF / store 未配線
-            # なら no-op)。
-            record_recall_hits_if_applicable(
-                recall_buffer_store=self._recall_buffer_store,
-                recall_success_store=self._recall_success_store,
-                recall_hit_boost_enabled=self._recall_hit_boost_enabled,
-                being_id=self._resolve_being_id_for_episode(merged),
-                episode=merged,
-                chunk_actions=encoding_input.action_results,
-            )
-            # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
-            # 抽出された約束・見込みを PendingPrediction 化して per-Being
-            # store に積む (flag OFF / store 未配線 / 抽出なしなら no-op)。
-            record_pending_prediction_if_applicable(
-                pending_prediction_store=self._pending_prediction_store,
-                pending_prediction_enabled=self._pending_prediction_enabled,
-                being_id=self._resolve_being_id_for_episode(merged),
-                episode=merged,
-                current_tick_provider=self._current_tick_provider,
-                trace_recorder=_resolve_recorder_from_provider(
-                    self._trace_recorder_provider
-                ),
-            )
-            # U10b (予測誤差統一設計 部品6・清算): 同じ完了点で、再浮上して
-            # いた約束の履行/破棄判定を evidence に転記し、決着分と期限切れ分を
-            # store から除く (flag OFF / store 未配線なら no-op)。
-            resolve_pending_predictions_if_applicable(
-                pending_prediction_store=self._pending_prediction_store,
-                pending_prediction_enabled=self._pending_prediction_enabled,
-                being_id=self._resolve_being_id_for_episode(merged),
-                episode=merged,
-                belief_evidence_transcriber=self._belief_evidence_transcriber,
-                current_tick_provider=self._current_tick_provider,
-                trace_recorder=_resolve_recorder_from_provider(
-                    self._trace_recorder_provider
-                ),
-            )
         except Exception as exc:
             _logger.warning(
                 "InlineEpisodicSubjectiveScheduler: LLM 補完が失敗 (%s)。"
@@ -438,6 +417,83 @@ class InlineEpisodicSubjectiveScheduler:
                 },
             )
             return
+
+        # LOW-4: 主観補完 (merge) と episode store への put は既に成功している。
+        # 以降の sidecar 処理 (証拠転記 / 想起系 / 約束の記録・清算) はそれぞれ
+        # 独立に失敗を許容する (1 つの失敗が他をブロックしない。特に約束の
+        # 記録の失敗が同じ chunk の清算を巻き添えにしないことが重要)。
+        # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
+        _run_sidecar_safely(
+            "belief_evidence",
+            merged.episode_id,
+            lambda: self._record_belief_evidence_if_applicable(merged, encoding_input),
+        )
+        # U9a: 誤差駆動再解釈。同じ完了点で in-context recall observation
+        # 群に prediction_error を刻む (flag OFF / store 未配線なら no-op)。
+        _run_sidecar_safely(
+            "recall_prediction_outcome_stamping",
+            merged.episode_id,
+            lambda: stamp_recall_prediction_outcome_if_applicable(
+                recall_buffer_store=self._recall_buffer_store,
+                error_driven_reinterpretation_enabled=(
+                    self._error_driven_reinterpretation_enabled
+                ),
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                chunk_actions=encoding_input.action_results,
+            ),
+        )
+        # U9b (想起の信用割り当て・的中側): 同じ完了点で「思い出したから
+        # 当たった」を的中側 sidecar に還流する (flag OFF / store 未配線
+        # なら no-op)。
+        _run_sidecar_safely(
+            "recall_hits",
+            merged.episode_id,
+            lambda: record_recall_hits_if_applicable(
+                recall_buffer_store=self._recall_buffer_store,
+                recall_success_store=self._recall_success_store,
+                recall_hit_boost_enabled=self._recall_hit_boost_enabled,
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                chunk_actions=encoding_input.action_results,
+            ),
+        )
+        # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
+        # 抽出された約束・見込みを PendingPrediction 化して per-Being
+        # store に積む (flag OFF / store 未配線 / 抽出なしなら no-op)。
+        _run_sidecar_safely(
+            "pending_prediction_record",
+            merged.episode_id,
+            lambda: record_pending_prediction_if_applicable(
+                pending_prediction_store=self._pending_prediction_store,
+                pending_prediction_enabled=self._pending_prediction_enabled,
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                current_tick_provider=self._current_tick_provider,
+                trace_recorder=_resolve_recorder_from_provider(
+                    self._trace_recorder_provider
+                ),
+            ),
+        )
+        # U10b (予測誤差統一設計 部品6・清算): 同じ完了点で、再浮上して
+        # いた約束の履行/破棄判定を evidence に転記し、決着分と期限切れ分を
+        # store から除く (flag OFF / store 未配線なら no-op)。記録 (直上) が
+        # 失敗しても、この清算は独立に実行される。
+        _run_sidecar_safely(
+            "pending_prediction_resolve",
+            merged.episode_id,
+            lambda: resolve_pending_predictions_if_applicable(
+                pending_prediction_store=self._pending_prediction_store,
+                pending_prediction_enabled=self._pending_prediction_enabled,
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                belief_evidence_transcriber=self._belief_evidence_transcriber,
+                current_tick_provider=self._current_tick_provider,
+                trace_recorder=_resolve_recorder_from_provider(
+                    self._trace_recorder_provider
+                ),
+            ),
+        )
         latency_ms = int((time.monotonic() - start) * 1000)
         recall_snippet = (merged.recall_text or "")[:120]
         _emit_trace(
@@ -848,57 +904,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 actor_name=actor_name,
             )
             self._put_episode(merged)
-            # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
-            self._record_belief_evidence_if_applicable(merged, encoding_input)
-            # U9a: 誤差駆動再解釈。同じ完了点で in-context recall observation
-            # 群に prediction_error を刻む (flag OFF / store 未配線なら no-op)。
-            stamp_recall_prediction_outcome_if_applicable(
-                recall_buffer_store=self._recall_buffer_store,
-                error_driven_reinterpretation_enabled=(
-                    self._error_driven_reinterpretation_enabled
-                ),
-                being_id=self._resolve_being_id_for_episode(merged),
-                episode=merged,
-                chunk_actions=encoding_input.action_results,
-            )
-            # U9b (想起の信用割り当て・的中側): 同じ完了点で「思い出したから
-            # 当たった」を的中側 sidecar に還流する (flag OFF / store 未配線
-            # なら no-op)。
-            record_recall_hits_if_applicable(
-                recall_buffer_store=self._recall_buffer_store,
-                recall_success_store=self._recall_success_store,
-                recall_hit_boost_enabled=self._recall_hit_boost_enabled,
-                being_id=self._resolve_being_id_for_episode(merged),
-                episode=merged,
-                chunk_actions=encoding_input.action_results,
-            )
-            # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
-            # 抽出された約束・見込みを PendingPrediction 化して per-Being
-            # store に積む (flag OFF / store 未配線 / 抽出なしなら no-op)。
-            record_pending_prediction_if_applicable(
-                pending_prediction_store=self._pending_prediction_store,
-                pending_prediction_enabled=self._pending_prediction_enabled,
-                being_id=self._resolve_being_id_for_episode(merged),
-                episode=merged,
-                current_tick_provider=self._current_tick_provider,
-                trace_recorder=_resolve_recorder_from_provider(
-                    self._trace_recorder_provider
-                ),
-            )
-            # U10b (予測誤差統一設計 部品6・清算): 同じ完了点で、再浮上して
-            # いた約束の履行/破棄判定を evidence に転記し、決着分と期限切れ分を
-            # store から除く (flag OFF / store 未配線なら no-op)。
-            resolve_pending_predictions_if_applicable(
-                pending_prediction_store=self._pending_prediction_store,
-                pending_prediction_enabled=self._pending_prediction_enabled,
-                being_id=self._resolve_being_id_for_episode(merged),
-                episode=merged,
-                belief_evidence_transcriber=self._belief_evidence_transcriber,
-                current_tick_provider=self._current_tick_provider,
-                trace_recorder=_resolve_recorder_from_provider(
-                    self._trace_recorder_provider
-                ),
-            )
         except Exception as exc:
             _logger.warning(
                 "ThreadPoolEpisodicSubjectiveScheduler worker failed (%s)。"
@@ -918,6 +923,83 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 },
             )
             return
+
+        # LOW-4: 主観補完 (merge) と episode store への put は既に成功している。
+        # 以降の sidecar 処理 (証拠転記 / 想起系 / 約束の記録・清算) はそれぞれ
+        # 独立に失敗を許容する (1 つの失敗が他をブロックしない。特に約束の
+        # 記録の失敗が同じ chunk の清算を巻き添えにしないことが重要)。
+        # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
+        _run_sidecar_safely(
+            "belief_evidence",
+            merged.episode_id,
+            lambda: self._record_belief_evidence_if_applicable(merged, encoding_input),
+        )
+        # U9a: 誤差駆動再解釈。同じ完了点で in-context recall observation
+        # 群に prediction_error を刻む (flag OFF / store 未配線なら no-op)。
+        _run_sidecar_safely(
+            "recall_prediction_outcome_stamping",
+            merged.episode_id,
+            lambda: stamp_recall_prediction_outcome_if_applicable(
+                recall_buffer_store=self._recall_buffer_store,
+                error_driven_reinterpretation_enabled=(
+                    self._error_driven_reinterpretation_enabled
+                ),
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                chunk_actions=encoding_input.action_results,
+            ),
+        )
+        # U9b (想起の信用割り当て・的中側): 同じ完了点で「思い出したから
+        # 当たった」を的中側 sidecar に還流する (flag OFF / store 未配線
+        # なら no-op)。
+        _run_sidecar_safely(
+            "recall_hits",
+            merged.episode_id,
+            lambda: record_recall_hits_if_applicable(
+                recall_buffer_store=self._recall_buffer_store,
+                recall_success_store=self._recall_success_store,
+                recall_hit_boost_enabled=self._recall_hit_boost_enabled,
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                chunk_actions=encoding_input.action_results,
+            ),
+        )
+        # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
+        # 抽出された約束・見込みを PendingPrediction 化して per-Being
+        # store に積む (flag OFF / store 未配線 / 抽出なしなら no-op)。
+        _run_sidecar_safely(
+            "pending_prediction_record",
+            merged.episode_id,
+            lambda: record_pending_prediction_if_applicable(
+                pending_prediction_store=self._pending_prediction_store,
+                pending_prediction_enabled=self._pending_prediction_enabled,
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                current_tick_provider=self._current_tick_provider,
+                trace_recorder=_resolve_recorder_from_provider(
+                    self._trace_recorder_provider
+                ),
+            ),
+        )
+        # U10b (予測誤差統一設計 部品6・清算): 同じ完了点で、再浮上して
+        # いた約束の履行/破棄判定を evidence に転記し、決着分と期限切れ分を
+        # store から除く (flag OFF / store 未配線なら no-op)。記録 (直上) が
+        # 失敗しても、この清算は独立に実行される。
+        _run_sidecar_safely(
+            "pending_prediction_resolve",
+            merged.episode_id,
+            lambda: resolve_pending_predictions_if_applicable(
+                pending_prediction_store=self._pending_prediction_store,
+                pending_prediction_enabled=self._pending_prediction_enabled,
+                being_id=self._resolve_being_id_for_episode(merged),
+                episode=merged,
+                belief_evidence_transcriber=self._belief_evidence_transcriber,
+                current_tick_provider=self._current_tick_provider,
+                trace_recorder=_resolve_recorder_from_provider(
+                    self._trace_recorder_provider
+                ),
+            ),
+        )
         latency_ms = int((time.monotonic() - start) * 1000)
         recall_snippet = (merged.recall_text or "")[:120]
         _emit_trace(

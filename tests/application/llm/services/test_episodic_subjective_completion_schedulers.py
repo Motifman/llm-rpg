@@ -36,6 +36,9 @@ from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedu
     InlineEpisodicSubjectiveScheduler,
     ThreadPoolEpisodicSubjectiveScheduler,
 )
+from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+    InMemoryPendingPredictionStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
@@ -43,6 +46,9 @@ from ai_rpg_world.application.trace import (
     ITraceRecorder,
     NullTraceRecorder,
     TraceEventKind,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+    PendingPrediction,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -1582,3 +1588,210 @@ class TestThreadPoolSchedulerActorNamePropagation:
             raise
         ep_after = store.get_by_being(being_id, draft.episode_id)
         assert [c.speaker for c in ep_after.heard_claims] == ["リオ"]
+
+
+# ─────────────────────────────────────────────
+# LOW-4: 約束の記録 (record_pending_prediction_if_applicable) の失敗が
+# 「LLM 補完が失敗」に誤報告されず、同 chunk の清算 (resolve) も
+# 巻き添えで skip されないこと。
+# ─────────────────────────────────────────────
+
+
+class _RaisingOnAddPendingPredictionStore(InMemoryPendingPredictionStore):
+    """記録 (add_by_being) だけを失敗させる fake store。
+
+    list_all_by_being / replace_all_by_being は正常に動く基底実装のままにし、
+    清算 (resolve_pending_predictions_if_applicable) が記録の失敗と無関係に
+    動くことを検証できるようにする。
+    """
+
+    def add_by_being(self, being_id, pending):  # type: ignore[override]
+        raise RuntimeError("boom-pending-add")
+
+
+def _build_pending_prediction_sidecar_fixture(*, player_id: int = 7):
+    """約束の記録 (pending_prediction) と清算 (pending_resolution) の両方を
+
+    同じ chunk で LLM に返させるための一式を組み立てる。
+
+    - LLM 応答に ``pending_prediction`` (新しい約束) と ``pending_resolutions``
+      (既存約束 "p1" への fulfilled 判定) を両方含める
+    - encoding_input.active_pending_predictions に既存約束 "p1" を乗せておく
+      (清算対象として正規化されるために必要)
+    """
+    t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
+    act = ActionResultEntry(
+        occurred_at=t,
+        action_summary="カイトと話した",
+        result_summary="約束を交わした",
+        tool_name="interact",
+        success=True,
+    )
+    existing_pending = PendingPrediction(
+        pending_id="p1",
+        text="約束-p1",
+        resolution_cues=("player:カイト",),
+        tick_from=1,
+        tick_to=50,
+        origin_episode_id="ep-origin",
+        created_tick=1,
+    )
+    enc = build_chunk_encoding_input(
+        PlayerId(player_id),
+        (),
+        (act,),
+        active_pending_predictions=(existing_pending,),
+    )
+    draft = ChunkEpisodeDraftBuilder().build(enc)
+    being_id, resolver, world_id = _provision_scheduler(player_id)
+    port = _StubPort(
+        returns={
+            "interpreted": "I",
+            "recall_text": "R",
+            "pending_prediction": {
+                "text": "夕方に木の下でカイトと交換する",
+                "resolution_cues": ["player:カイト"],
+                "tick_offset_from": 2,
+                "tick_offset_to": 6,
+            },
+            "pending_resolutions": [{"pending_id": "p1", "verdict": "fulfilled"}],
+        }
+    )
+    service = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
+    return enc, draft, being_id, resolver, world_id, service, existing_pending
+
+
+class TestInlineSchedulerPendingPredictionSidecarIsolation:
+    """約束の記録経路が失敗しても、補完自体の成否や清算の実行が正しく報告される。"""
+
+    def test_約束の記録が失敗しても_FAILED_ではなく_FILLED_trace_になり_episode_はmergedで保存される(
+        self,
+    ) -> None:
+        enc, draft, being_id, resolver, world_id, service, existing_pending = (
+            _build_pending_prediction_sidecar_fixture()
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        pending_store = _RaisingOnAddPendingPredictionStore()
+        recorder = NullTraceRecorder()
+        events = _capture(recorder)
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            service,
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            trace_recorder_provider=lambda: recorder,
+            current_tick_provider=lambda: 10,
+            pending_prediction_store=pending_store,
+            pending_prediction_enabled=True,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+
+        failed = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FAILED]
+        filled = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FILLED]
+        assert failed == [], "約束の記録の失敗が補完失敗と誤報告されてはいけない"
+        assert len(filled) == 1
+        # merge 自体は成功しているので episode は draft ではなく merged で保存される。
+        ep_after = store.get_by_being(being_id, draft.episode_id)
+        assert ep_after is not None
+        assert ep_after.interpreted == "I"
+
+    def test_約束の記録が失敗しても同じchunkの清算は実行される(self) -> None:
+        """記録 (add) の失敗が清算 (resolve) を巻き添えにしないことを保証する。"""
+        enc, draft, being_id, resolver, world_id, service, existing_pending = (
+            _build_pending_prediction_sidecar_fixture()
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        pending_store = _RaisingOnAddPendingPredictionStore()
+        # add_by_being 以外の primitive で既存約束を仕込む (add は必ず失敗する)。
+        pending_store.replace_all_by_being(being_id, [existing_pending])
+        scheduler = InlineEpisodicSubjectiveScheduler(
+            service,
+            store,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            current_tick_provider=lambda: 10,
+            pending_prediction_store=pending_store,
+            pending_prediction_enabled=True,
+        )
+        scheduler.submit(draft, persona_text="", encoding_input=enc)
+
+        # p1 は fulfilled 判定を受けて清算され、store から除かれているはず。
+        remaining = pending_store.list_all_by_being(being_id)
+        assert remaining == [], (
+            "約束の記録が失敗しても、同じ chunk の清算 (resolve) は独立して "
+            "実行されるべき"
+        )
+
+
+class TestThreadPoolSchedulerPendingPredictionSidecarIsolation:
+    """ThreadPool 版の ``_worker`` にも Inline と同じ分離が適用されていること。"""
+
+    def test_約束の記録が失敗しても_FAILED_ではなく_FILLED_trace_になり_episode_はmergedで保存される(
+        self,
+    ) -> None:
+        enc, draft, being_id, resolver, world_id, service, existing_pending = (
+            _build_pending_prediction_sidecar_fixture()
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        pending_store = _RaisingOnAddPendingPredictionStore()
+        recorder = NullTraceRecorder()
+        events = _capture(recorder)
+        scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+            service,
+            store,
+            max_workers=1,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            trace_recorder_provider=lambda: recorder,
+            current_tick_provider=lambda: 10,
+            pending_prediction_store=pending_store,
+            pending_prediction_enabled=True,
+        )
+        try:
+            scheduler.submit(draft, persona_text="", encoding_input=enc)
+            scheduler.shutdown(timeout=5.0)
+        except Exception:
+            scheduler.shutdown(timeout=2.0)
+            raise
+
+        failed = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FAILED]
+        filled = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FILLED]
+        assert failed == [], "約束の記録の失敗が補完失敗と誤報告されてはいけない"
+        assert len(filled) == 1
+        ep_after = store.get_by_being(being_id, draft.episode_id)
+        assert ep_after is not None
+        assert ep_after.interpreted == "I"
+
+    def test_約束の記録が失敗しても同じchunkの清算は実行される(self) -> None:
+        enc, draft, being_id, resolver, world_id, service, existing_pending = (
+            _build_pending_prediction_sidecar_fixture()
+        )
+        store = InMemorySubjectiveEpisodeStore()
+        store.put_by_being(being_id, draft)
+        pending_store = _RaisingOnAddPendingPredictionStore()
+        pending_store.replace_all_by_being(being_id, [existing_pending])
+        scheduler = ThreadPoolEpisodicSubjectiveScheduler(
+            service,
+            store,
+            max_workers=1,
+            being_attachment_resolver=resolver,
+            default_world_id=world_id,
+            current_tick_provider=lambda: 10,
+            pending_prediction_store=pending_store,
+            pending_prediction_enabled=True,
+        )
+        try:
+            scheduler.submit(draft, persona_text="", encoding_input=enc)
+            scheduler.shutdown(timeout=5.0)
+        except Exception:
+            scheduler.shutdown(timeout=2.0)
+            raise
+
+        remaining = pending_store.list_all_by_being(being_id)
+        assert remaining == [], (
+            "約束の記録が失敗しても、同じ chunk の清算 (resolve) は独立して "
+            "実行されるべき"
+        )
