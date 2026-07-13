@@ -8,6 +8,8 @@ list_all_by_being・replace_all_by_being を保証する。慣化 sidecar
 
 from __future__ import annotations
 
+import threading
+
 import pytest
 
 from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
@@ -116,3 +118,45 @@ class TestListAllAndReplaceAllByBeing:
         store.record_hit_by_being(bid, "ep-1")
         store.replace_all_by_being(bid, {})
         assert store.list_all_by_being(bid) == {}
+
+
+class TestInMemoryEpisodicRecallSuccessStoreThreadSafety:
+    """横断レビュー H-3/M2: ThreadPool ワーカーとメイン thread の同時アクセス。"""
+
+    def test_lock_is_reentrant_so_all_public_methods_work_while_held(self) -> None:
+        """外側で ``_lock`` を保持したまま全公開メソッドを呼んでもデッドロックしない
+        (RLock による再入可能性の確認)。"""
+        store = InMemoryEpisodicRecallSuccessStore()
+        bid = BeingId("being_w1_p1")
+        with store._lock:
+            store.record_hit_by_being(bid, "ep-1")
+            store.get_hit_count_by_being(bid, "ep-1")
+            store.list_all_by_being(bid)
+            store.replace_all_by_being(bid, {"ep-1": 1})
+
+    def test_concurrent_record_hit_from_two_threads_never_loses_an_increment(
+        self,
+    ) -> None:
+        """``record_hit_by_being`` の ``get(...) + 1`` は read-modify-write なので、
+        lock がなければ 2 thread が同じ episode を同時に加算すると増分が
+        欠落する (lost update)。並走させても合計加算数どおりに hit_count が
+        積み上がることを保証する。
+        """
+        store = InMemoryEpisodicRecallSuccessStore()
+        bid = BeingId("being_w1_p1")
+        per_thread = 2000
+
+        def hitter() -> None:
+            for _ in range(per_thread):
+                store.record_hit_by_being(bid, "ep-shared")
+
+        t1 = threading.Thread(target=hitter)
+        t2 = threading.Thread(target=hitter)
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+        assert not t1.is_alive()
+        assert not t2.is_alive()
+
+        assert store.get_hit_count_by_being(bid, "ep-shared") == per_thread * 2

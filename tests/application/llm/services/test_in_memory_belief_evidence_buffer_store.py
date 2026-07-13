@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timedelta, timezone
 
 from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
@@ -103,3 +104,58 @@ class TestInMemoryBeliefEvidenceBufferStore:
         """未登録の being_id への remove も例外にならない。"""
         store = InMemoryBeliefEvidenceBufferStore()
         store.remove_by_being(BeingId("unknown"), ["e1"])
+
+
+class TestInMemoryBeliefEvidenceBufferStoreThreadSafety:
+    """横断レビュー H-3/M2: ThreadPool ワーカーとメイン thread の同時アクセス。"""
+
+    def test_lock_is_reentrant_so_all_public_methods_work_while_held(self) -> None:
+        """外側で ``_lock`` を保持したまま全公開メソッドを呼んでもデッドロックしない
+        (RLock による再入可能性の確認)。"""
+        store = InMemoryBeliefEvidenceBufferStore()
+        being_id = BeingId("being-1")
+        base = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        with store._lock:
+            store.append_by_being(being_id, _evidence("e1", base))
+            store.list_all_by_being(being_id)
+            store.replace_all_by_being(being_id, [_evidence("e1", base)])
+            store.remove_by_being(being_id, ["e1"])
+
+    def test_concurrent_append_and_remove_never_loses_evidence(self) -> None:
+        """ワーカー thread の ``append_by_being`` とメイン thread 相当の
+        ``remove_by_being`` (list 再構築 → 差し替え) を並走させても、
+        append した evidence が無音で消えない。
+
+        ``remove_by_being`` は「存在しない id」を渡しても内部で
+        list_all_by_being 相当の読み取り → 差し替えを行うため、この
+        interleaving だけで元のバグ (H-3/M2) を再現できる。
+        """
+        store = InMemoryBeliefEvidenceBufferStore()
+        being_id = BeingId("being-stress")
+        base = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        total = 300
+
+        def appender() -> None:
+            for i in range(total):
+                store.append_by_being(
+                    being_id, _evidence(f"e{i}", base + timedelta(seconds=i))
+                )
+
+        def remover() -> None:
+            for _ in range(total):
+                # 存在しない id への remove でも内部で read-modify-write が
+                # 走るため、これだけで append との競合窓を突く。
+                store.remove_by_being(being_id, ["nonexistent-id"])
+
+        t_append = threading.Thread(target=appender)
+        t_remove = threading.Thread(target=remover)
+        t_append.start()
+        t_remove.start()
+        t_append.join(timeout=10)
+        t_remove.join(timeout=10)
+        assert not t_append.is_alive()
+        assert not t_remove.is_alive()
+
+        rows = store.list_all_by_being(being_id)
+        assert len(rows) == total
+        assert {e.evidence_id for e in rows} == {f"e{i}" for i in range(total)}

@@ -2,10 +2,24 @@
 
 Phase 3 Step 3d-3 (Issue #470): legacy player_id 版を撤去し、being_id 版のみを
 残した。
+
+横断レビュー H-3/M2 で ``InMemoryEpisodicRecallBufferStore`` のみ thread-safe
+化: ThreadPool の chunk 補完ワーカー (``episodic_subjective_completion_schedulers.py``)
+が ``stamp_prediction_outcome_by_being`` (list → replace の read-modify-write)
+/ ``list_episode_ids_by_prediction_context_by_being`` を叩く一方、メイン
+thread は ``prompt_builder`` / ``episodic_reinterpretation_coordinator`` から
+append / peek / mark_processed を行う。#309 と同じ ``threading.RLock``
+パターンで公開メソッド全体を保護する。
+
+``InMemoryEpisodicReinterpretationJournalStore`` はこのワーカー thread から
+呼ばれる経路が無い (呼び出し元は ``episodic_reinterpretation_coordinator`` /
+``belief_consolidation_coordinator`` 経由でメイン thread のみ) ため、今回は
+lock 化の対象外とする。
 """
 
 from __future__ import annotations
 
+import threading
 from collections import defaultdict
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -32,6 +46,10 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
 
     def __init__(self) -> None:
         self._pending: dict[BeingId, list[EpisodicRecallObservation]] = defaultdict(list)
+        # ワーカー thread (stamp_prediction_outcome_by_being 等) とメイン
+        # thread (append / peek / mark_processed) が同じ dict / list を触るため、
+        # 公開メソッド全体を 1 つの RLock で保護する (#309 と同じ粒度・同じ理由)。
+        self._lock = threading.RLock()
 
     def append_by_being(
         self, being_id: BeingId, observation: EpisodicRecallObservation
@@ -40,7 +58,8 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
             raise TypeError("being_id must be BeingId")
         if not isinstance(observation, EpisodicRecallObservation):
             raise TypeError("observation must be EpisodicRecallObservation")
-        self._pending[being_id].append(observation)
+        with self._lock:
+            self._pending[being_id].append(observation)
 
     def peek_batch_by_being(
         self,
@@ -53,8 +72,10 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
             raise TypeError("being_id must be BeingId")
         if batch_size <= 0 or max_contexts_per_episode <= 0:
             return ()
+        with self._lock:
+            snapshot = list(self._pending.get(being_id, ()))
         return select_episode_batched(
-            list(self._pending.get(being_id, ())),
+            snapshot,
             batch_size=batch_size,
             max_contexts_per_episode=max_contexts_per_episode,
         )
@@ -67,23 +88,26 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
         if not recall_ids:
             return
         done = set(recall_ids)
-        self._pending[being_id] = [
-            row
-            for row in self._pending.get(being_id, ())
-            if row.recall_id not in done
-        ]
+        with self._lock:
+            self._pending[being_id] = [
+                row
+                for row in self._pending.get(being_id, ())
+                if row.recall_id not in done
+            ]
 
     def pending_count_by_being(self, being_id: BeingId) -> int:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
-        return len(self._pending.get(being_id, ()))
+        with self._lock:
+            return len(self._pending.get(being_id, ()))
 
     def list_pending_by_being(
         self, being_id: BeingId
     ) -> list[EpisodicRecallObservation]:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
-        return list(self._pending.get(being_id, ()))
+        with self._lock:
+            return list(self._pending.get(being_id, ()))
 
     def replace_all_pending_by_being(
         self,
@@ -99,7 +123,8 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
                 raise TypeError(
                     "observations elements must be EpisodicRecallObservation"
                 )
-        self._pending[being_id] = list(observations)
+        with self._lock:
+            self._pending[being_id] = list(observations)
 
     def stamp_prediction_outcome_by_being(
         self,
@@ -113,19 +138,20 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
             raise ValueError("prediction_context_id must be a non-empty str")
         if not isinstance(prediction_error, str) or not prediction_error.strip():
             raise ValueError("prediction_error must be a non-empty str")
-        rows = self._pending.get(being_id, [])
-        updated: list[EpisodicRecallObservation] = []
-        for row in rows:
-            if (
-                row.prediction_context_id == prediction_context_id
-                and row.prediction_outcome_error is None
-            ):
-                updated.append(
-                    replace(row, prediction_outcome_error=prediction_error)
-                )
-            else:
-                updated.append(row)
-        self._pending[being_id] = updated
+        with self._lock:
+            rows = self._pending.get(being_id, [])
+            updated: list[EpisodicRecallObservation] = []
+            for row in rows:
+                if (
+                    row.prediction_context_id == prediction_context_id
+                    and row.prediction_outcome_error is None
+                ):
+                    updated.append(
+                        replace(row, prediction_outcome_error=prediction_error)
+                    )
+                else:
+                    updated.append(row)
+            self._pending[being_id] = updated
 
     def list_episode_ids_by_prediction_context_by_being(
         self,
@@ -139,14 +165,15 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
             or not prediction_context_id.strip()
         ):
             raise ValueError("prediction_context_id must be a non-empty str")
-        seen: list[str] = []
-        for row in self._pending.get(being_id, ()):
-            if (
-                row.prediction_context_id == prediction_context_id
-                and row.episode_id not in seen
-            ):
-                seen.append(row.episode_id)
-        return tuple(seen)
+        with self._lock:
+            seen: list[str] = []
+            for row in self._pending.get(being_id, ()):
+                if (
+                    row.prediction_context_id == prediction_context_id
+                    and row.episode_id not in seen
+                ):
+                    seen.append(row.episode_id)
+            return tuple(seen)
 
 
 class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJournalRepository):

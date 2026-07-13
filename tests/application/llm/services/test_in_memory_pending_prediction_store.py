@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import threading
+
 from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
     InMemoryPendingPredictionStore,
 )
@@ -89,3 +91,67 @@ class TestInMemoryPendingPredictionStore:
         store.add_by_being(being_id, _pending("p1", 1))
         store.replace_all_by_being(being_id, [])
         assert store.list_all_by_being(being_id) == []
+
+
+class TestInMemoryPendingPredictionStoreThreadSafety:
+    """横断レビュー H-3/M2: ThreadPool ワーカーとメイン thread の同時アクセス。"""
+
+    def test_lock_is_reentrant_so_all_public_methods_work_while_held(self) -> None:
+        """外側で ``_lock`` を保持したまま全公開メソッドを呼んでもデッドロックしない
+        (RLock による再入可能性の確認)。"""
+        store = InMemoryPendingPredictionStore()
+        being_id = BeingId("being-1")
+        with store._lock:
+            store.add_by_being(being_id, _pending("p1", 1))
+            store.list_all_by_being(being_id)
+            store.replace_all_by_being(being_id, [_pending("p1", 1)])
+
+    def test_concurrent_add_and_list_yields_consistent_snapshots(self) -> None:
+        """ワーカー thread の ``add_by_being`` と、メイン thread の
+        ``list_all_by_being`` を並走させても、(1) 例外や部分書き込みの観測が
+        起きず、(2) どの snapshot にも重複が無く、(3) 並走終了後に add した
+        全件が揃っていることを保証する (= メソッド単位の RLock が実際に
+        保証する性質のみを主張する)。
+
+        注意: 「add と『list→replace の複合操作』の並走で無損失」はこの
+        ロックでは保証されない (list と replace の間の窓は守れない)。本番で
+        清算 (``resolve_pending_predictions_if_applicable`` の list→replace)
+        と記録 (add) が安全なのは、ThreadPoolEpisodicSubjectiveScheduler の
+        既定 max_workers=1 により同一 worker thread で直列に走るためであり、
+        本テストの対象外 (``_pending_prediction_resolution.py`` の制約
+        コメント参照)。容量上限に達しないよう capacity は件数より大きく取る
+        (evict との混同を避ける)。
+        """
+        total = 300
+        store = InMemoryPendingPredictionStore(capacity=total * 2)
+        being_id = BeingId("being-stress")
+        snapshot_errors: list[str] = []
+
+        def adder() -> None:
+            for i in range(total):
+                store.add_by_being(being_id, _pending(f"p{i}", i))
+
+        def reader() -> None:
+            for _ in range(total):
+                snapshot = store.list_all_by_being(being_id)
+                ids = [p.pending_id for p in snapshot]
+                if len(ids) != len(set(ids)):
+                    snapshot_errors.append(f"duplicate ids in snapshot: {ids}")
+                    return
+                if not all(isinstance(p, PendingPrediction) for p in snapshot):
+                    snapshot_errors.append("non-PendingPrediction in snapshot")
+                    return
+
+        t_add = threading.Thread(target=adder)
+        t_read = threading.Thread(target=reader)
+        t_add.start()
+        t_read.start()
+        t_add.join(timeout=10)
+        t_read.join(timeout=10)
+        assert not t_add.is_alive()
+        assert not t_read.is_alive()
+        assert snapshot_errors == []
+
+        rows = store.list_all_by_being(being_id)
+        assert len(rows) == total
+        assert {p.pending_id for p in rows} == {f"p{i}" for i in range(total)}
