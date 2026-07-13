@@ -147,14 +147,25 @@ class TestExpectedPayloadKeysCoverage:
     ``ExperimentSnapshotSession`` を構築し、fallback ログが 1 件も出ない
     ことを確認する。新しい per-Being store を追加したのに stub 側の pickup
     を足し忘れると、このテストが red で知らせる。
+
+    逆向きの相棒テスト (store を 1 つ欠いた状態で fallback ログが実際に出る)
+    も併せて持つ。「fallback ログ 0 件」の判定は
+    ``_FALLBACK_LOG_MARKER`` の文字列一致に依存しているため、将来
+    ``experiment_snapshot_session.py`` のログ文言が変わると本体テストは
+    何も検出しないまま緑になり続ける (ガード自身の静かな失敗)。相棒テスト
+    が同じ文字列で「出るべき時に出る」ことを主張することで、文言が変われば
+    相棒側が赤になり、検出機構が生きていることを常に保証する。
     """
 
-    def test_episodic_stack_の全_store_が_fallback_なしで配線される(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        from ai_rpg_world.application.being.experiment_snapshot_session import (
-            ExperimentSnapshotSession,
-        )
+    # ExperimentSnapshotSession の fallback ログ文言と一致させるマーカー。
+    # 文言が変わると test_store_を_1_つ欠くと_fallback_ログが出る が赤に
+    # なるので、そのときは両テストとこのマーカーを一緒に更新する。
+    _FALLBACK_LOG_MARKER = "empty in-memory fallback"
+
+    @staticmethod
+    def _runtime_stub_with_all_stores() -> SimpleNamespace:
+        """BeingMemorySnapshotService が対応する全 per-Being store を
+        episodic_stack / runtime に揃えた runtime stub を作る。"""
         from ai_rpg_world.application.llm.services.afterglow_store import (
             InMemoryAfterglowStore,
         )
@@ -217,7 +228,7 @@ class TestExpectedPayloadKeysCoverage:
             afterglow_store=InMemoryAfterglowStore(),
             recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
         )
-        runtime = SimpleNamespace(
+        return SimpleNamespace(
             _todo_store=InMemoryMemoStore(),
             _aux_being_repository=repo,
             aux_being_resolver=BeingAttachmentResolver(repo),
@@ -225,6 +236,26 @@ class TestExpectedPayloadKeysCoverage:
             _goal_journal_store=InMemoryGoalJournalStore(),
         )
 
+    def _fallback_logs(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> list[object]:
+        return [
+            r
+            for r in caplog.records
+            if self._FALLBACK_LOG_MARKER in r.message
+        ]
+
+    def test_episodic_stack_の全_store_が_fallback_なしで配線される(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """episodic_stack / runtime に全 store が揃っていれば、stub 経由で
+        ExperimentSnapshotSession を構築しても空 in-memory fallback のログが
+        1 件も出ない (= 追従漏れの store が無い)。"""
+        from ai_rpg_world.application.being.experiment_snapshot_session import (
+            ExperimentSnapshotSession,
+        )
+
+        runtime = self._runtime_stub_with_all_stores()
         wiring_stub = _wiring_stub_from_world_runtime(runtime)
 
         with caplog.at_level("INFO"):
@@ -232,14 +263,49 @@ class TestExpectedPayloadKeysCoverage:
                 wiring_result=wiring_stub, snapshot_dir=tmp_path / "snap"
             )
 
-        fallback_logs = [
-            r
-            for r in caplog.records
-            if "empty in-memory fallback" in r.message
-        ]
+        fallback_logs = self._fallback_logs(caplog)
         assert fallback_logs == [], (
             "episodic_stack / runtime に store があるのに stub が拾えず "
             f"fallback している: {fallback_logs[0].args if fallback_logs else None}"
+        )
+
+    def test_store_を_1_つ欠くと_fallback_ログが出る(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """episodic_stack から store を 1 つ欠いた状態では、fallback ログが
+        ``_FALLBACK_LOG_MARKER`` の文字列で実際に 1 件以上出る。
+
+        本体テスト (fallback ログ 0 件で緑) の検出機構が文字列一致に依存する
+        ため、ログ文言が変わると本体テストは無検出のまま緑になり続ける。
+        この相棒テストは「出るべき時にその文字列で出る」ことを主張し、文言が
+        変わればこちらが赤になることで、検出機構が生きていることを保証する。
+        """
+        from ai_rpg_world.application.being.experiment_snapshot_session import (
+            ExperimentSnapshotSession,
+        )
+
+        runtime = self._runtime_stub_with_all_stores()
+        # 想起階層のうち 1 store を欠く = stub は None を渡し、session が
+        # 空 in-memory fallback に倒れてログを出すはず。
+        del runtime._episodic_stack.recall_slot_store
+
+        wiring_stub = _wiring_stub_from_world_runtime(runtime)
+        assert wiring_stub.recall_slot_store is None
+
+        with caplog.at_level("INFO"):
+            ExperimentSnapshotSession(
+                wiring_result=wiring_stub, snapshot_dir=tmp_path / "snap"
+            )
+
+        fallback_logs = self._fallback_logs(caplog)
+        assert len(fallback_logs) >= 1, (
+            "store を欠いたのに fallback ログが出ない。"
+            "experiment_snapshot_session.py のログ文言が変わった場合は "
+            "_FALLBACK_LOG_MARKER と本体テストを一緒に更新すること。"
+        )
+        # 欠いた store 名がログの引数 (fallback 対象リスト) に含まれる。
+        assert any(
+            "recall_slot_store" in str(r.args) for r in fallback_logs
         )
 
 
