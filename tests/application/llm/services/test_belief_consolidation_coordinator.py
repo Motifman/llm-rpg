@@ -768,6 +768,76 @@ class TestShortlistAttribution:
 
         assert [b.belief_id for b in shortlist] == ["sem-unrelated-in-context"]
 
+    def test_revise後の旧entry_idが_in_contextでも新active_beliefが必ず載る(
+        self,
+    ) -> None:
+        """belief を create → revise (supersede) すると active entry の entry_id は
+        新しい値になり belief_id だけ旧値を継ぐ。想起はその時点の entry_id を
+        in_context_belief_ids に焼き込むため、revise 後に想起された belief は
+        forced 照合が entry_id と belief_id の食い違いで永久に外れていた。
+        entry_id → belief_id → 現在の active entry の系譜解決により、旧 entry_id を
+        持つ evidence でも現在の active belief が forced で shortlist に載ること。"""
+        original = _belief_entry(
+            entry_id="sem-A",
+            belief_id="sem-A",
+            text="ノアは機嫌が悪いと無視する",
+            tags=("ノア",),
+            status=SEMANTIC_MEMORY_STATUS_ACTIVE,
+        )
+        revised = _belief_entry(
+            entry_id="sem-B",
+            belief_id="sem-A",
+            text="ノアは機嫌が悪いと無視するが挨拶には応じる",
+            tags=("ノア",),
+            status=SEMANTIC_MEMORY_STATUS_ACTIVE,
+            created_at=datetime(2026, 6, 2, tzinfo=timezone.utc),
+        )
+        setup = _build_setup(outcome={"decisions": []})
+        setup.semantic_store.add_by_being(setup.being_id, original)
+        # revise: 旧 sem-A を superseded にし、新 active sem-B (belief_id=sem-A) を追加。
+        setup.semantic_store.supersede_by_being(
+            setup.being_id, old_entry_id="sem-A", new_entry=revised
+        )
+        # 想起は revise 後の active entry の entry_id (=sem-B) を焼き込む。
+        setup.evidence_buffer.append_by_being(
+            setup.being_id,
+            _evidence(
+                "e1",
+                cue_signature="tool:explore",
+                in_context_belief_ids=("sem-B",),
+            ),
+        )
+
+        shortlist = setup.coordinator._build_shortlist(
+            setup.being_id, tuple(setup.evidence_buffer.list_all_by_being(setup.being_id))
+        )
+
+        assert [(b.entry_id, b.belief_id) for b in shortlist] == [("sem-B", "sem-A")]
+
+    def test_存在しない_in_context_id_は例外にせず無視する(self) -> None:
+        """in_context_belief_ids に active でも inactive でも存在しない id が
+        含まれていても、例外を投げず単に forced 対象から外れること。"""
+        matching = _belief_entry(
+            entry_id="sem-match", text="探索は空振りが多い", tags=("explore",)
+        )
+        setup = _build_setup(outcome={"decisions": []})
+        setup.semantic_store.add_by_being(setup.being_id, matching)
+        setup.evidence_buffer.append_by_being(
+            setup.being_id,
+            _evidence(
+                "e1",
+                cue_signature="tool:explore",
+                in_context_belief_ids=("sem-does-not-exist",),
+            ),
+        )
+
+        shortlist = setup.coordinator._build_shortlist(
+            setup.being_id, tuple(setup.evidence_buffer.list_all_by_being(setup.being_id))
+        )
+
+        # 存在しない forced id は無視され、cue スコア一致の belief だけが残る。
+        assert [b.belief_id for b in shortlist] == ["sem-match"]
+
     def test_in_context_belief_は_top_k_の_cap_を超えても全件残る(self) -> None:
         """forced (in-context) belief は top_k を超過しても全て残す。
         cue スコアベースの追加候補だけが残り枠に絞られる。"""
