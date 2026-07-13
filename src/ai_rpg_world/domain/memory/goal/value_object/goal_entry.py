@@ -21,6 +21,7 @@ from typing import Optional
 
 from ai_rpg_world.domain.memory.goal.exception.goal_exception import (
     GoalEntryValidationException,
+    GoalUpdateTextTooLongException,
 )
 
 GOAL_STATUS_ACTIVE = "active"
@@ -40,9 +41,47 @@ GOAL_ORIGIN_SCENARIO = "scenario"
 GOAL_ORIGIN_SELF = "self"
 _VALID_GOAL_ORIGIN_VALUES = frozenset({GOAL_ORIGIN_SCENARIO, GOAL_ORIGIN_SELF})
 
-# 目的文の上限。プロンプトの【現在の目的】section に載るため、belief の
-# 命題 (50字) より長めだが青天井にはしない。
-MAX_GOAL_TEXT_CHARS = 200
+# 目的文の VO 不変条件としての上限 (= 健全性の上限)。プロンプトの【現在の目的】
+# section にそのまま載るため青天井にはしないが、値そのものは大きく取る。
+#
+# 経緯 (HIGH-1 回帰): この上限はもともと 200 字で、GOAL_STORE=ON + 長い目的文の
+# シナリオ (survival_island_v2 系, 300 字超) で世界注入 (world_runtime の遅延
+# seed) が毎回この上限に阻まれて GoalEntryValidationException → provider が
+# ERROR ログ + 空文字へ縮退 →【現在の目的】section 自体が消える、という静かな
+# 失敗を起こしていた。シナリオ由来の目的文 (数百字の箇条書き) を VO として正当
+# に保持できる必要があるため、VO の上限は「壊れた入力を弾く健全性チェック」
+# としてのみ機能させ、大きく引き上げる。
+#
+# 「エージェントが goal_update で自分で書く目的は短い命題であるべき」という
+# 元々の意図はここでは守らない。その制約は goal_update の入口
+# (tool schema の maxLength と GoalRevisionApplier の事前チェック) が担う —
+# SELF_AUTHORED_GOAL_TEXT_MAX_CHARS と validate_self_authored_goal_text を参照。
+MAX_GOAL_TEXT_CHARS = 2000
+
+# goal_update (自筆の言い直し) の入口で守る上限。VO 全体の上限 (上記) より厳しい。
+# tool schema の maxLength と一致させる (単一の真実源として ai_rpg_world.
+# application.llm.services.tool_catalog.subjective_action がこれを import する)。
+SELF_AUTHORED_GOAL_TEXT_MAX_CHARS = 200
+
+
+def validate_self_authored_goal_text(text: str) -> None:
+    """goal_update で書かれた自筆の目的文が入口の上限内かを検証する。
+
+    VO (``GoalEntry``) 自体の上限は健全性チェックまで緩めたため、
+    「エージェント自筆の目的は短い命題であるべき」という制約はここで守る。
+    tool schema の maxLength (advisory) だけに頼らず、GoalRevisionApplier が
+    GoalEntry を構築する前にこの関数を呼び、超過時は
+    ``GoalUpdateTextTooLongException`` を投げる (呼び出し側が観測として本人に
+    返す拒否経路に載せる)。
+    """
+    if len(text) > SELF_AUTHORED_GOAL_TEXT_MAX_CHARS:
+        raise GoalUpdateTextTooLongException(
+            f"self-authored goal text must be <= "
+            f"{SELF_AUTHORED_GOAL_TEXT_MAX_CHARS} chars",
+            field="text",
+            value=len(text),
+        )
+
 
 # P6: active 目的が無いとき (open world 等) の【現在の目的】描画。毎ターン見える
 # 欠落自体が「目的を立てる」需要信号になる (goal 設計 §4 G2 / P6)。
@@ -150,4 +189,6 @@ __all__ = [
     "GOAL_ORIGIN_SCENARIO",
     "GOAL_ORIGIN_SELF",
     "MAX_GOAL_TEXT_CHARS",
+    "SELF_AUTHORED_GOAL_TEXT_MAX_CHARS",
+    "validate_self_authored_goal_text",
 ]

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from ai_rpg_world.application.llm.services.goal_revision_applier import (
     GOAL_LOCKED_REJECTION_OBSERVATION,
+    GOAL_UPDATE_TEXT_TOO_LONG_OBSERVATION,
     GoalRevisionApplier,
 )
 from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
@@ -21,6 +22,7 @@ from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
     GOAL_STATUS_ACHIEVED,
     GOAL_STATUS_ACTIVE,
     GOAL_STATUS_SUPERSEDED,
+    SELF_AUTHORED_GOAL_TEXT_MAX_CHARS,
     GoalEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -231,12 +233,17 @@ class TestGoalOutcomeSettlement:
         assert transcriber.calls == []
         assert store.list_all_by_being(_BEING) == []
 
-    def test_invalid_new_goal_text_aborts_before_settling(self) -> None:
-        """新目的の text が不正なら、清算前に例外で止まり部分コミットにならない。
+    def test_over_limit_goal_update_text_aborts_before_settling(self) -> None:
+        """新目的の text が入口の上限を超えるとき、清算前に拒否され部分コミットにならない。
 
-        新目的の GoalEntry 構築 (検証) を store 変更より先に置くことで、
-        「旧目的を閉じて達成 evidence まで残したのに次の目的が立たない」
-        部分コミット (silent failure) を防ぐ。旧目的は active のまま・転記も無し。
+        SELF_AUTHORED_GOAL_TEXT_MAX_CHARS 超の text は GoalEntry を構築する前に
+        (store に触れる前に) 観測付きで拒否される。これにより「旧目的を閉じて
+        達成 evidence まで残したのに次の目的が立たない」部分コミット
+        (silent failure) を防ぐ。旧目的は active のまま・転記も無し。
+
+        (HIGH-1 回帰対応で GoalEntry VO 自体の上限は 2000 字まで緩めたため、
+        以前はここで GoalEntryValidationException が飛んでいたが、いまは
+        GoalRevisionApplier の事前チェックが観測を返して no-op に畳む)
         """
         store = InMemoryGoalJournalStore()
         store.add_by_being(
@@ -245,18 +252,68 @@ class TestGoalOutcomeSettlement:
         transcriber = _FakeSettlementTranscriber()
         applier, store, obs = _make(store=store, transcriber=transcriber)
 
-        # GoalEntry の text 上限を超える長文で構築を失敗させる。
-        too_long = "あ" * 500
-        try:
-            applier.apply(
-                _BEING, _PLAYER, goal_update_text=too_long, goal_outcome="achieved"
-            )
-            raised = False
-        except Exception:
-            raised = True
+        too_long = "あ" * (SELF_AUTHORED_GOAL_TEXT_MAX_CHARS + 1)
+        result = applier.apply(
+            _BEING, _PLAYER, goal_update_text=too_long, goal_outcome="achieved"
+        )
 
-        assert raised  # 例外で止まる (world_runtime 側で握られる)
+        assert result is None
         # 旧目的は閉じられていない (active のまま)、転記も起きていない。
         assert store.get_active_by_being(_BEING).goal_id == "g1"
         assert store.get_active_by_being(_BEING).status == GOAL_STATUS_ACTIVE
         assert transcriber.calls == []
+        assert obs == [(_PLAYER, GOAL_UPDATE_TEXT_TOO_LONG_OBSERVATION)]
+
+
+class TestGoalUpdateTextLengthLimit:
+    """HIGH-1 回帰対応: goal_update の入口 (SELF_AUTHORED_GOAL_TEXT_MAX_CHARS)。
+
+    VO (GoalEntry) 自体の上限は 2000 字 (健全性の上限) まで緩めたため、
+    「エージェント自筆の目的は短い命題であるべき」という制約は
+    GoalRevisionApplier のこの事前チェックが守る。
+    """
+
+    def test_over_limit_text_is_rejected_and_existing_goal_unchanged(self) -> None:
+        """201 字の goal_update は拒否され、既存目的は変わらず観測が返る。"""
+        store = InMemoryGoalJournalStore()
+        store.add_by_being(
+            _BEING, _goal("g1", "魚を分けてもらう", locked=False, origin=GOAL_ORIGIN_SELF)
+        )
+        applier, store, obs = _make(store=store)
+
+        too_long = "あ" * (SELF_AUTHORED_GOAL_TEXT_MAX_CHARS + 1)
+        result = applier.apply(
+            _BEING, _PLAYER, goal_update_text=too_long, goal_outcome=None
+        )
+
+        assert result is None
+        active = store.get_active_by_being(_BEING)
+        assert active.goal_id == "g1"  # 既存目的は書き換わっていない
+        assert active.text == "魚を分けてもらう"
+        assert obs == [(_PLAYER, GOAL_UPDATE_TEXT_TOO_LONG_OBSERVATION)]
+
+    def test_over_limit_text_without_existing_goal_stays_noop(self) -> None:
+        """active 目的が無いときも、201 字の goal_update は store に何も積まない。"""
+        applier, store, obs = _make()
+
+        too_long = "あ" * (SELF_AUTHORED_GOAL_TEXT_MAX_CHARS + 1)
+        result = applier.apply(
+            _BEING, _PLAYER, goal_update_text=too_long, goal_outcome=None
+        )
+
+        assert result is None
+        assert store.list_all_by_being(_BEING) == []
+        assert obs == [(_PLAYER, GOAL_UPDATE_TEXT_TOO_LONG_OBSERVATION)]
+
+    def test_text_at_limit_is_accepted(self) -> None:
+        """SELF_AUTHORED_GOAL_TEXT_MAX_CHARS ちょうどの長さは拒否されない (境界値)。"""
+        applier, store, obs = _make()
+
+        at_limit = "あ" * SELF_AUTHORED_GOAL_TEXT_MAX_CHARS
+        result = applier.apply(
+            _BEING, _PLAYER, goal_update_text=at_limit, goal_outcome=None
+        )
+
+        assert result is not None
+        assert result.text == at_limit
+        assert obs == []
