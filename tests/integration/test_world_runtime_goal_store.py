@@ -28,6 +28,12 @@ _SCENARIO_PATH = (
     / "scenarios"
     / "forbidden_library_demo.json"
 )
+_SURVIVAL_V2_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "scenarios"
+    / "survival_island_v2.json"
+)
 
 
 class TestWorldRuntimeGoalStoreWiring:
@@ -80,3 +86,39 @@ class TestWorldRuntimeGoalStoreWiring:
         )
         assert second == scenario_text
         assert len(runtime._goal_journal_store.list_all_by_being(being_id)) == 1
+
+
+class TestWorldRuntimeGoalStoreLongScenarioText:
+    """HIGH-1 回帰: 長い目的文 (300字超) のシナリオでも【現在の目的】が消えない。
+
+    survival_island_v2 の llm_objective_text は 309 字で、旧 GoalEntry の
+    MAX_GOAL_TEXT_CHARS (200字) を超えていた。GOAL_STORE_ENABLED=1 の run では
+    遅延 seed が GoalEntryValidationException を投げ、provider が ERROR ログ +
+    空文字へ縮退して【現在の目的】section 自体が消えていた (毎ターン)。
+    """
+
+    def test_survival_island_v2_objective_renders_full_text_with_goal_store_on(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        monkeypatch.setenv("GOAL_STORE_ENABLED", "1")
+        runtime = create_world_runtime(_SURVIVAL_V2_PATH)
+        player_id = runtime.get_player_ids()[0]
+        scenario_text = runtime._resolve_scenario_llm_objective_text()
+        assert len(scenario_text) > 200  # 旧上限を超える実データであることの前提確認
+
+        prompt = runtime.build_full_prompt(player_id)
+        user = prompt["messages"][1]["content"]
+
+        # section 自体が省略されず、目的文の全文が描画される (以前は空に縮退)。
+        assert "【現在の目的】" in user
+        assert "狼煙" in user
+        assert "山頂" in user
+
+        being_id = runtime.aux_being_resolver.resolve_being_id(
+            runtime.aux_being_default_world_id, player_id
+        )
+        seeded = runtime._goal_journal_store.get_active_by_being(being_id)
+        assert seeded is not None
+        assert seeded.text == scenario_text
+        assert seeded.locked is True

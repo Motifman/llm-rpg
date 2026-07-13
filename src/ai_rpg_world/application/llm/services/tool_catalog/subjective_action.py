@@ -13,6 +13,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_NO_OP,
     TOOL_NAME_PREFIX_TODO,
 )
+from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
+    SELF_AUTHORED_GOAL_TEXT_MAX_CHARS,
+)
 
 SUBJECTIVE_ACTION_FIELDS = (
     "inner_thought",
@@ -78,7 +81,10 @@ GOAL_UPDATE_FIELD_PROPERTY: Dict[str, Any] = {
         "目的を変えることは、これまでの自分の方針を捨てることでもある。"
         "続けるなら書かない (null)。"
     ),
-    "maxLength": 200,
+    # schema の maxLength は advisory (LLM が守るとは限らない) なので、
+    # GoalRevisionApplier が同じ値 (SELF_AUTHORED_GOAL_TEXT_MAX_CHARS) で
+    # 書き込み時にも再検証する。単一の真実源はドメイン側の定数。
+    "maxLength": SELF_AUTHORED_GOAL_TEXT_MAX_CHARS,
 }
 
 
