@@ -233,6 +233,14 @@ class SpotInteractionApplicationService:
                 current_weather_type = self._weather_type_provider()
             except Exception:
                 current_weather_type = None
+
+        # PLAYERS_AT_SPOT (「N 人がその場に居ないと実行できない」) の判定材料。
+        # graph の SpotPresence はプレイヤーのみを数える (monster は別辞書の
+        # MonsterSpotPresence で管理される) ので、そのまま人数として渡せる。
+        # ここで渡さないと domain 側の既定値 1 が使われ、何人集まっても
+        # 常に「1 人」と判定される (PLAYERS_AT_SPOT が構造的に死ぬ)。
+        spot_presence_count = len(graph.presence_at(spot_id).present_entity_ids)
+
         try:
             result = self._interaction.execute_interaction(
                 interior,
@@ -248,6 +256,7 @@ class SpotInteractionApplicationService:
                 acting_player_status=acting_player_status,
                 current_time_of_day_phase=current_time_of_day_phase,
                 current_weather_type=current_weather_type,
+                spot_presence_count=spot_presence_count,
             )
         except InteractionNotAllowedException as exc:
             # 前提条件で拒否された。#356 後続: 旧コードは scenario JSON で
