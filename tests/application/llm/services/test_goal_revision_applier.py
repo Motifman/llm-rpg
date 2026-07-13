@@ -125,6 +125,95 @@ class TestGoalRevisionApplier:
         # 拒否が観測として本人に届く (silent でない)。
         assert obs == [(_PLAYER, GOAL_LOCKED_REJECTION_OBSERVATION)]
 
+    def test_locked_active_is_rejected_with_trace(self) -> None:
+        """locked への書き換え拒否が GOAL_REVISION_REJECTED trace に残る
+
+        (見直しを何回試みて拒否されたかを run 分析で数えられるようにする)。
+        observation (本人向け) の挙動は変えない。"""
+        store = InMemoryGoalJournalStore()
+        store.add_by_being(
+            _BEING, _goal("g0", "山頂で狼煙を上げる", locked=True, origin=GOAL_ORIGIN_SCENARIO)
+        )
+        trace = _FakeTrace()
+        applier, store, obs = _make(store=store, tick=42, trace=trace)
+
+        result = applier.apply(
+            _BEING, _PLAYER, goal_update_text="この島で暮らす", goal_outcome=None
+        )
+
+        assert result is None
+        assert obs == [(_PLAYER, GOAL_LOCKED_REJECTION_OBSERVATION)]
+        rejected = [
+            (kind, payload)
+            for kind, payload in trace.records
+            if kind == TraceEventKind.GOAL_REVISION_REJECTED
+        ]
+        assert len(rejected) == 1
+        _, payload = rejected[0]
+        assert payload["being_id"] == str(_BEING.value)
+        assert payload["tick"] == 42
+        assert payload["reason"] == "locked"
+        assert payload["goal_id"] == "g0"
+        assert payload["attempted_goal_text"] == "この島で暮らす"
+
+    def test_locked_active_rejected_by_goal_outcome_only_also_traces(self) -> None:
+        """goal_update を伴わない goal_outcome だけの清算試行も、locked 拒否と
+
+        同じ trace を残す (attempted_goal_text は None)。"""
+        store = InMemoryGoalJournalStore()
+        store.add_by_being(
+            _BEING, _goal("g0", "山頂で狼煙を上げる", locked=True, origin=GOAL_ORIGIN_SCENARIO)
+        )
+        trace = _FakeTrace()
+        applier, store, obs = _make(store=store, tick=7, trace=trace)
+
+        result = applier.apply(
+            _BEING, _PLAYER, goal_update_text=None, goal_outcome="achieved"
+        )
+
+        assert result is None
+        rejected = [
+            (kind, payload)
+            for kind, payload in trace.records
+            if kind == TraceEventKind.GOAL_REVISION_REJECTED
+        ]
+        assert len(rejected) == 1
+        assert rejected[0][1]["attempted_goal_text"] is None
+
+    def test_locked_rejection_trace_truncates_long_attempted_text(self) -> None:
+        """attempted_goal_text は長すぎる場合に切り詰めて payload に載る。"""
+        store = InMemoryGoalJournalStore()
+        store.add_by_being(
+            _BEING, _goal("g0", "山頂で狼煙を上げる", locked=True, origin=GOAL_ORIGIN_SCENARIO)
+        )
+        trace = _FakeTrace()
+        applier, store, obs = _make(store=store, trace=trace)
+        long_text = "あ" * (SELF_AUTHORED_GOAL_TEXT_MAX_CHARS)
+
+        applier.apply(_BEING, _PLAYER, goal_update_text=long_text, goal_outcome=None)
+
+        rejected = [
+            payload
+            for kind, payload in trace.records
+            if kind == TraceEventKind.GOAL_REVISION_REJECTED
+        ]
+        assert len(rejected[0]["attempted_goal_text"]) <= 120
+
+    def test_locked_rejection_without_trace_recorder_does_not_raise(self) -> None:
+        """trace_recorder_provider 未配線でも拒否自体 (observation) は動く。"""
+        store = InMemoryGoalJournalStore()
+        store.add_by_being(
+            _BEING, _goal("g0", "山頂で狼煙を上げる", locked=True, origin=GOAL_ORIGIN_SCENARIO)
+        )
+        applier, store, obs = _make(store=store)
+
+        result = applier.apply(
+            _BEING, _PLAYER, goal_update_text="この島で暮らす", goal_outcome=None
+        )
+
+        assert result is None
+        assert obs == [(_PLAYER, GOAL_LOCKED_REJECTION_OBSERVATION)]
+
     def test_empty_goal_update_is_noop(self) -> None:
         applier, store, obs = _make()
         assert (

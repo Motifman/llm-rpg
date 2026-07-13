@@ -70,6 +70,12 @@ _OUTCOME_TO_STATUS = {
     "abandoned": GOAL_STATUS_ABANDONED,
 }
 
+# LOW-3: GOAL_REVISION_REJECTED trace の attempted_goal_text 切り詰め長。
+# validate_self_authored_goal_text で既に SELF_AUTHORED_GOAL_TEXT_MAX_CHARS
+# (200) 以内には収まっているが、trace payload はさらに短い snippet で十分
+# なので、他の FILLED trace の recall_text_snippet と同じ 120 に揃える。
+_GOAL_REJECTION_TEXT_SNIPPET_MAX_CHARS = 120
+
 
 class GoalRevisionApplier:
     """非 null の goal_update / goal_outcome を goal store に反映する。"""
@@ -149,6 +155,11 @@ class GoalRevisionApplier:
         if active is not None and active.locked:
             # locked への書き換え・清算はいずれも silent にしない。
             self._observation_sink(player_id, GOAL_LOCKED_REJECTION_OBSERVATION)
+            # LOW-3: 本人への観測とは別に、run 分析で見直し試行 (拒否含む) の
+            # 頻度を数えられるよう trace にも残す。
+            self._emit_goal_revision_rejected_trace(
+                being_id, active, attempted_goal_text=text or None
+            )
             return None
 
         # 新目的があるなら **store を変更する前に** 構築して検証を済ませる。
@@ -270,6 +281,52 @@ class GoalRevisionApplier:
         except Exception:
             _logger.debug(
                 "trace recorder.record raised for GOAL_RESOLUTION; skipping",
+                exc_info=True,
+            )
+
+    def _emit_goal_revision_rejected_trace(
+        self,
+        being_id: BeingId,
+        locked_active: GoalEntry,
+        *,
+        attempted_goal_text: Optional[str],
+    ) -> None:
+        """LOW-3: locked への書き換え・清算の拒否を trace に残す。
+
+        本人への観測 (silent にしない) とは独立の観測点。trace_recorder
+        未配線 / provider 例外 / record 自体の例外は全て黙って skip する
+        (拒否自体の本人への通知は既に済んでおり、trace はあくまで run 分析
+        用の付随情報)。
+        """
+        if self._trace_recorder_provider is None:
+            return
+        try:
+            recorder = self._trace_recorder_provider()
+        except Exception:
+            _logger.debug(
+                "trace_recorder_provider raised; skipping GOAL_REVISION_REJECTED",
+                exc_info=True,
+            )
+            return
+        if recorder is None:
+            return
+        snippet = (
+            attempted_goal_text[:_GOAL_REJECTION_TEXT_SNIPPET_MAX_CHARS]
+            if attempted_goal_text
+            else None
+        )
+        try:
+            recorder.record(
+                TraceEventKind.GOAL_REVISION_REJECTED,
+                tick=self._resolve_tick(),
+                being_id=str(being_id.value),
+                reason="locked",
+                goal_id=locked_active.goal_id,
+                attempted_goal_text=snippet,
+            )
+        except Exception:
+            _logger.debug(
+                "trace recorder.record raised for GOAL_REVISION_REJECTED; skipping",
                 exc_info=True,
             )
 

@@ -223,6 +223,19 @@ class TraceEventKind:
     #   - evidence_id: str | None (= 転記された belief evidence。転記未配線なら None)
     #   - tick: int | None
     GOAL_RESOLUTION = "goal_resolution"
+    # LOW-3 (locked 拒否の trace 追加): 現在の active 目的が locked (シナリオ
+    # 初期目的) のときに goal_update / goal_outcome の反映が拒否された瞬間。
+    # 本人への観測 (GOAL_LOCKED_REJECTION_OBSERVATION) とは別に、run 分析で
+    # 「何回見直しを試みて拒否されたか」を trace から数えられるようにする
+    # ための観測点 (見直し頻度の計測にも使う)。
+    # payload:
+    #   - being_id: str
+    #   - tick: int | None
+    #   - reason: str (現在は "locked" のみ)
+    #   - goal_id: str (= 拒否の原因になった locked 目的の id)
+    #   - attempted_goal_text: str | None (= 試みられた goal_update の文。
+    #     長ければ切り詰め。goal_outcome のみの清算試行では None)
+    GOAL_REVISION_REJECTED = "goal_revision_rejected"
 
 
 @dataclass(frozen=True)
