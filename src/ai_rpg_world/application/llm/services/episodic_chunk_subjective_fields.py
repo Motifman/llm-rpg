@@ -7,6 +7,8 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional, Sequence
 
+_logger = logging.getLogger(__name__)
+
 
 def _as_utc(value: datetime) -> datetime:
     """naive datetime を UTC aware として扱う sort 正規化ヘルパ (Issue #311 後続)。"""
@@ -162,12 +164,22 @@ pending_resolutions は、ユーザメッセージに【保留中の約束】節
 # 変えず「さらにキー heard_claims を加える」と明示する (pending との組み合わせで
 # key list 定数が組合せ爆発するのを避ける追記方式)。flag OFF では一切出ない
 # (byte 不変)。
+#
+# M-2 (heard_claims の暴走ガード / 横断レビュー): 「最大3件」の注意書きは決定論的な
+# 最後の砦 (_normalize_heard_claims の件数キャップ) と二重の防御にする。プレース
+# ホルダ話者禁止と同じ「プロンプトでも言うが、破られても構造で止める」方針。
+#
+# H-2 (自己言及ループ / 横断レビュー): 「聞き手本人の発言を含めない」もプロンプトで
+# 一応触れるが、LLM がペルソナ文字列から自己判定するのは壊れやすいため、これも
+# 構造側 (actor_name との一致で弾く _normalize_heard_claims) を最後の砦にする。
 _HEARD_CLAIMS_INSTRUCTION = """
 
 さらに、JSON にキー heard_claims を加える。heard_claims は、この期間に他者が
 「世界や人がどうであるか」(場所・物事・人物) について語った主張の配列。その場に
 いない人についての話 (噂話) も含む。挨拶・依頼・感想は含めない。誰の発言か
-具体的な名前で特定できるものだけを入れ、無ければ null。各要素は次の 2 キー:
+具体的な名前で特定できるものだけを入れ、無ければ null。**最大3件まで**とし、
+3件を超える場合は最も重要なものを3件選ぶ。自分自身 (この記憶の持ち主本人) の
+発言は聞いた話ではないので含めない。各要素は次の 2 キー:
 - speaker: 主張を語った人物の**具体的な名前**。「不明」「誰か」「声」のような
   プレースホルダは禁止。名前が特定できない発言はこの配列に入れない
 - claim: その人が語った「世界や人がどうであるか」の主張 1 文"""
@@ -180,18 +192,53 @@ _HEARSAY_PLACEHOLDER_SPEAKERS = frozenset(
     {"不明", "誰か", "だれか", "声", "someone", "unknown", "?", "？", "n/a", "none"}
 )
 
+# M-2 (heard_claims の暴走ガード): 1 chunk あたりに積む claim 数の上限。伝聞は
+# 「反復してこそ意味がある」低 salience の証拠 (belief_evidence_transcriber 参照)
+# であり、1 chunk で大量に積んでも固着判断の質は上がらない。一方で無制限だと
+# LLM が指示を無視して長い配列を返したときに evidence buffer が一撃で肥大化する
+# (暴走)。プロンプトの「最大3件」指示と対にした構造側の最後の砦。
+_MAX_HEARD_CLAIMS_PER_CHUNK = 3
 
-def _normalize_heard_claims(raw: Any) -> tuple[HeardClaim, ...]:
+# claim は「その人が語った主張 1 文」の想定。1 文として十分な長さを確保しつつ、
+# LLM が指示を無視して長文 (要約や複数文) を返した場合に BeliefEvidence.text
+# (台帳の 1 行) が肥大化しないよう抑える上限。
+_MAX_HEARD_CLAIM_CHARS = 200
+
+
+def _normalize_heard_claims(
+    raw: Any,
+    *,
+    actor_name: str | None = None,
+    player_id: Any = None,
+) -> tuple[HeardClaim, ...]:
     """LLM 出力の ``heard_claims`` 配列を ``HeardClaim`` のタプルに正規化する (P9)。
 
     null / 非配列 → 空タプル。各要素は dict で speaker / claim が非空 str の
     ものだけ採る (speaker 欠落は捨てる = 話者を特定できない主張は伝聞にしない)。
     speaker が「不明」等のプレースホルダのものも捨てる (話者不明の主張を伝聞に
     しない = 誰から来た情報か分からない証拠を台帳に残さない)。
+
+    H-2 (自己言及ループ): ``actor_name`` (この記憶の持ち主本人の名前) が渡され、
+    speaker がそれと一致する (前後空白除去 + casefold で比較) 場合はその claim を
+    捨てる。「自分の発言を後から自分が聞いた話として拾う」ループを防ぐ。
+    ``actor_name`` が None (provider 未配線) のときは判定自体を行わず、従来通り
+    全ての speaker を通す (自己判定できないときに安全側へ倒して伝聞を全滅させない)。
+
+    M-2 (heard_claims の暴走ガード): 有効な claim は ``_MAX_HEARD_CLAIMS_PER_CHUNK``
+    件までに切り詰め、各 claim は ``_MAX_HEARD_CLAIM_CHARS`` 文字までに切り詰める。
+    切り詰めが発生した場合は WARNING ログで可視化する (黙って捨てない)。
     """
     if not isinstance(raw, list):
         return ()
+    actor_norm = (
+        actor_name.strip().casefold()
+        if isinstance(actor_name, str) and actor_name.strip()
+        else None
+    )
     out: list[HeardClaim] = []
+    dropped_self = 0
+    dropped_over_limit = 0
+    truncated_chars = 0
     for item in raw:
         if not isinstance(item, dict):
             continue
@@ -199,14 +246,43 @@ def _normalize_heard_claims(raw: Any) -> tuple[HeardClaim, ...]:
         claim = item.get("claim")
         if not isinstance(speaker, str) or not speaker.strip():
             continue
-        if speaker.strip().casefold() in _HEARSAY_PLACEHOLDER_SPEAKERS:
+        speaker_norm = speaker.strip().casefold()
+        if speaker_norm in _HEARSAY_PLACEHOLDER_SPEAKERS:
             continue
         if not isinstance(claim, str) or not claim.strip():
             continue
+        if actor_norm is not None and speaker_norm == actor_norm:
+            dropped_self += 1
+            continue
+        if len(out) >= _MAX_HEARD_CLAIMS_PER_CHUNK:
+            dropped_over_limit += 1
+            continue
+        claim_text = claim.strip()
+        if len(claim_text) > _MAX_HEARD_CLAIM_CHARS:
+            claim_text = claim_text[: _MAX_HEARD_CLAIM_CHARS - 1].rstrip() + "…"
+            truncated_chars += 1
         try:
-            out.append(HeardClaim(speaker=speaker, claim=claim))
+            out.append(HeardClaim(speaker=speaker, claim=claim_text))
         except Exception:
             continue
+    if dropped_self:
+        _logger.info(
+            "heard_claims: dropped %d self-referential claim(s) (speaker == "
+            "actor_name)%s",
+            dropped_self,
+            f" player_id={player_id}" if player_id is not None else "",
+        )
+    if dropped_over_limit or truncated_chars:
+        _logger.warning(
+            "heard_claims: capped/truncated (kept=%d, dropped_over_limit=%d, "
+            "chars_truncated=%d, max_claims=%d, max_chars=%d)%s",
+            len(out),
+            dropped_over_limit,
+            truncated_chars,
+            _MAX_HEARD_CLAIMS_PER_CHUNK,
+            _MAX_HEARD_CLAIM_CHARS,
+            f" player_id={player_id}" if player_id is not None else "",
+        )
     return tuple(out)
 
 
@@ -620,6 +696,7 @@ class EpisodicChunkSubjectiveFieldsService:
         *,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
+        actor_name: str | None = None,
     ) -> SubjectiveEpisode:
         """
         LLM で interpreted / recall_text / prediction_error を埋め合わせる。
@@ -627,6 +704,11 @@ class EpisodicChunkSubjectiveFieldsService:
         interpreted / recall_text は LLM 失敗・不正 JSON 時に what / observed 由来の
         テンプレへフォールバックする。prediction_error は LLM 値が無ければ構造的
         失敗のみの保守 fallback (それも無ければ None = 予測どおり / 予測なし)。
+
+        ``actor_name`` (H-2 / 自己言及ループ): この記憶の持ち主本人の名前。
+        ``hearsay_enabled`` のときだけ、抽出された heard_claims から
+        speaker == actor_name の claim を弾く材料として使う (``_normalize_heard_claims``
+        参照)。None (未配線) のときは自己判定を行わず従来通り全ての speaker を通す。
         """
         if not isinstance(draft, SubjectiveEpisode):
             raise TypeError("draft must be SubjectiveEpisode")
@@ -634,6 +716,8 @@ class EpisodicChunkSubjectiveFieldsService:
             raise TypeError("persona_text must be str")
         if not isinstance(encoding_input, ChunkEncodingInput):
             raise TypeError("encoding_input must be ChunkEncodingInput")
+        if actor_name is not None and not isinstance(actor_name, str):
+            raise TypeError("actor_name must be str or None")
 
         fallback_i = _template_interpreted(draft)
         fallback_r = _template_recall(draft)
@@ -758,7 +842,9 @@ class EpisodicChunkSubjectiveFieldsService:
                 # し、episode.heard_claims は常に空タプルのまま (= 導入前と同一)。
                 if self._hearsay_enabled:
                     heard_claims = _normalize_heard_claims(
-                        raw_obj.get("heard_claims")
+                        raw_obj.get("heard_claims"),
+                        actor_name=actor_name,
+                        player_id=draft.player_id,
                     )
         except LlmApiCallException as e:
             self._logger.warning(
