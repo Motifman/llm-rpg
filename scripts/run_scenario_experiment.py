@@ -294,6 +294,27 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     # 構築し ``_goal_journal_store`` に保持する。checklist #27 に従い拾う。
     # OFF なら None = 空 in-memory fallback。
     goal_journal_store = getattr(runtime, "_goal_journal_store", None)
+    # PR-G (想起階層: slot / afterglow / habituation): #526 段階 3 で
+    # episodic_stack に生えた 3 store。checklist #27 の追従漏れが実際に
+    # 起きていた箇所 (ExperimentSnapshotSession 側は getattr で拾う準備が
+    # 済んでいたが、この stub がここまで一度も拾っていなかった)。ここで
+    # 拾わないと enable 時でも想起スロット / afterglow index / 慣化状態が
+    # save/load で silent に失われる。OFF なら None = 空 in-memory fallback。
+    recall_slot_store = (
+        getattr(episodic_stack, "recall_slot_store", None)
+        if episodic_stack is not None
+        else None
+    )
+    afterglow_store = (
+        getattr(episodic_stack, "afterglow_store", None)
+        if episodic_stack is not None
+        else None
+    )
+    recall_habituation_store = (
+        getattr(episodic_stack, "recall_habituation_store", None)
+        if episodic_stack is not None
+        else None
+    )
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
         semantic_memory_store=semantic_store,
@@ -307,6 +328,9 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         recall_success_store=recall_success_store,
         pending_prediction_store=pending_prediction_store,
         goal_journal_store=goal_journal_store,
+        recall_slot_store=recall_slot_store,
+        afterglow_store=afterglow_store,
+        recall_habituation_store=recall_habituation_store,
     )
 
 

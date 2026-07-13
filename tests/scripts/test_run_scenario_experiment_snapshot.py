@@ -6,6 +6,14 @@
 - ``_wiring_stub_from_world_runtime`` が runtime の private 属性を正しく拾う
 - ``--snapshot-save-dir`` / ``--snapshot-load-dir`` の argparse が通る
 - ``--snapshot-load-dir`` が存在しないと parser.error で exit する
+
+``TestExpectedPayloadKeysCoverage`` は CLAUDE.md checklist #27 (per-Being
+store 追加時は snapshot 配線まで 1 PR にまとめる) の追従漏れを構造で検出する
+契約テスト。episodic_stack / runtime が持つ全 store を stub 経由で
+``ExperimentSnapshotSession`` まで運べているかを、fallback ログの有無で確認
+する。過去に recall_slot_store / afterglow_store / recall_habituation_store
+(想起階層 3 store) が拾われずに空 fallback へ倒れていた実欠落を検出できる
+形で書いている。
 """
 
 from __future__ import annotations
@@ -73,6 +81,34 @@ class TestWiringStub:
         stub = _wiring_stub_from_world_runtime(runtime)
         assert stub.belief_evidence_buffer_store is belief_evidence_buffer_store
 
+    def test_想起階層_3_store_が_episodic_stack_にあれば拾う(self) -> None:
+        """PR-G (想起階層: slot / afterglow / habituation) の 3 store が
+        episodic_stack にあるとき stub が拾うことを保証する。
+
+        これらは checklist #27 の追従漏れが実際に発生していた箇所:
+        belief_evidence_buffer_store 等より後に ``EpisodicStack`` に生えたが、
+        この stub 側の pickup が追加されないまま残り、実験の save/load で
+        slot / afterglow / habituation の状態が無音で失われていた。
+        """
+        recall_slot_store = object()
+        afterglow_store = object()
+        recall_habituation_store = object()
+        runtime = SimpleNamespace(
+            _todo_store="memo-handle",
+            _aux_being_repository="repo-handle",
+            aux_being_resolver="resolver-handle",
+            _episodic_stack=SimpleNamespace(
+                episode_store=object(),
+                recall_slot_store=recall_slot_store,
+                afterglow_store=afterglow_store,
+                recall_habituation_store=recall_habituation_store,
+            ),
+        )
+        stub = _wiring_stub_from_world_runtime(runtime)
+        assert stub.recall_slot_store is recall_slot_store
+        assert stub.afterglow_store is afterglow_store
+        assert stub.recall_habituation_store is recall_habituation_store
+
     def test_episodic_stack_が_None_なら_episode_store_も_None(self) -> None:
         runtime = SimpleNamespace(
             _todo_store=None,
@@ -94,6 +130,117 @@ class TestWiringStub:
         assert stub.being_repository is None
         assert stub.being_attachment_resolver is None
         assert stub.episodic_episode_store is None
+
+
+class TestExpectedPayloadKeysCoverage:
+    """checklist #27 の追従漏れを構造で検出する契約テスト。
+
+    ``BeingMemorySnapshotService`` が対応する per-Being store が
+    ``episodic_stack`` / ``runtime`` 側に揃っているにもかかわらず、
+    ``_wiring_stub_from_world_runtime`` がそれを拾い忘れていると
+    ``ExperimentSnapshotSession`` は空 in-memory store に fallback する
+    (= 実験の save/load でその store の状態が無音で失われる)。
+
+    このテストは「stub が拾うべき store 名の一覧」を
+    ``ExperimentSnapshotSession`` の fallback 監視対象リストと同じ形で持ち、
+    episodic_stack 側に **全部揃っている** 状態を作って
+    ``ExperimentSnapshotSession`` を構築し、fallback ログが 1 件も出ない
+    ことを確認する。新しい per-Being store を追加したのに stub 側の pickup
+    を足し忘れると、このテストが red で知らせる。
+    """
+
+    def test_episodic_stack_の全_store_が_fallback_なしで配線される(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from ai_rpg_world.application.being.experiment_snapshot_session import (
+            ExperimentSnapshotSession,
+        )
+        from ai_rpg_world.application.llm.services.afterglow_store import (
+            InMemoryAfterglowStore,
+        )
+        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+            InMemoryEpisodicRecallHabituationStore,
+        )
+        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+            InMemoryEpisodicRecallSlotStore,
+        )
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
+            InMemoryMemoryLinkStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+            InMemoryEpisodicReinterpretationJournalStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
+            InMemoryGoalJournalStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_memo_store import (
+            InMemoryMemoStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+            InMemoryPendingPredictionStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
+            InMemorySemanticMemoryStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+            InMemorySubjectiveEpisodeStore,
+        )
+        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+            BeingAttachmentResolver,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
+            InMemoryBeingRepository,
+        )
+
+        repo = InMemoryBeingRepository()
+        # episodic_stack 側の attribute 名は EpisodicStack dataclass (実体) と
+        # 揃える。reinterpretation_journal だけ stub 内部で
+        # ``episodic_reinterpretation_journal_store`` にリネームされる
+        # (既存の semantic / memory_link / recall_buffer と同じ扱い)。
+        episodic_stack = SimpleNamespace(
+            episode_store=InMemorySubjectiveEpisodeStore(),
+            semantic_memory_store=InMemorySemanticMemoryStore(),
+            memory_link_store=InMemoryMemoryLinkStore(),
+            recall_buffer_store=InMemoryEpisodicRecallBufferStore(),
+            reinterpretation_journal=InMemoryEpisodicReinterpretationJournalStore(),
+            belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
+            recall_success_store=InMemoryEpisodicRecallSuccessStore(),
+            pending_prediction_store=InMemoryPendingPredictionStore(),
+            recall_slot_store=InMemoryEpisodicRecallSlotStore(),
+            afterglow_store=InMemoryAfterglowStore(),
+            recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
+        )
+        runtime = SimpleNamespace(
+            _todo_store=InMemoryMemoStore(),
+            _aux_being_repository=repo,
+            aux_being_resolver=BeingAttachmentResolver(repo),
+            _episodic_stack=episodic_stack,
+            _goal_journal_store=InMemoryGoalJournalStore(),
+        )
+
+        wiring_stub = _wiring_stub_from_world_runtime(runtime)
+
+        with caplog.at_level("INFO"):
+            ExperimentSnapshotSession(
+                wiring_result=wiring_stub, snapshot_dir=tmp_path / "snap"
+            )
+
+        fallback_logs = [
+            r
+            for r in caplog.records
+            if "empty in-memory fallback" in r.message
+        ]
+        assert fallback_logs == [], (
+            "episodic_stack / runtime に store があるのに stub が拾えず "
+            f"fallback している: {fallback_logs[0].args if fallback_logs else None}"
+        )
 
 
 class TestSnapshotArgs:
