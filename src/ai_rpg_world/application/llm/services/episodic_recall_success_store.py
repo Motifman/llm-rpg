@@ -15,6 +15,7 @@ recall ranking で boost される (``episodic_passive_recall_retrieval.py``)。
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Mapping
 from typing import Dict, Protocol, runtime_checkable
 
@@ -60,28 +61,35 @@ class InMemoryEpisodicRecallSuccessStore(IEpisodicRecallSuccessStore):
 
     def __init__(self) -> None:
         self._by_being: Dict[BeingId, Dict[str, int]] = {}
+        # ワーカー thread (record_hit_by_being) とメイン thread (get / list /
+        # replace) が同じ dict を触るため、公開メソッド全体を 1 つの RLock で
+        # 保護する (#309 と同じ粒度・同じ理由)。
+        self._lock = threading.RLock()
 
     def get_hit_count_by_being(self, being_id: BeingId, episode_id: str) -> int:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
-        inner = self._by_being.get(being_id)
-        if inner is None:
-            return 0
-        return inner.get(episode_id, 0)
+        with self._lock:
+            inner = self._by_being.get(being_id)
+            if inner is None:
+                return 0
+            return inner.get(episode_id, 0)
 
     def record_hit_by_being(self, being_id: BeingId, episode_id: str) -> None:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         if not isinstance(episode_id, str) or not episode_id.strip():
             raise ValueError("episode_id must be a non-empty str")
-        inner = self._by_being.setdefault(being_id, {})
-        inner[episode_id] = inner.get(episode_id, 0) + 1
+        with self._lock:
+            inner = self._by_being.setdefault(being_id, {})
+            inner[episode_id] = inner.get(episode_id, 0) + 1
 
     def list_all_by_being(self, being_id: BeingId) -> Mapping[str, int]:
         """copy で返す (= 呼出側変更で内部 state を壊さない)。"""
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
-        return dict(self._by_being.get(being_id, {}))
+        with self._lock:
+            return dict(self._by_being.get(being_id, {}))
 
     def replace_all_by_being(
         self,
@@ -93,12 +101,13 @@ class InMemoryEpisodicRecallSuccessStore(IEpisodicRecallSuccessStore):
         空状態と bit identity を保つ)。"""
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
-        if mapping:
-            self._by_being[being_id] = {
-                str(k): int(v) for k, v in mapping.items()
-            }
-        else:
-            self._by_being.pop(being_id, None)
+        with self._lock:
+            if mapping:
+                self._by_being[being_id] = {
+                    str(k): int(v) for k, v in mapping.items()
+                }
+            else:
+                self._by_being.pop(being_id, None)
 
 
 __all__ = [

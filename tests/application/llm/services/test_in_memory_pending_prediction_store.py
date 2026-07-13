@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import threading
+
 from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
     InMemoryPendingPredictionStore,
 )
@@ -89,3 +91,55 @@ class TestInMemoryPendingPredictionStore:
         store.add_by_being(being_id, _pending("p1", 1))
         store.replace_all_by_being(being_id, [])
         assert store.list_all_by_being(being_id) == []
+
+
+class TestInMemoryPendingPredictionStoreThreadSafety:
+    """横断レビュー H-3/M2: ThreadPool ワーカーとメイン thread の同時アクセス。"""
+
+    def test_lock_is_reentrant_so_all_public_methods_work_while_held(self) -> None:
+        """外側で ``_lock`` を保持したまま全公開メソッドを呼んでもデッドロックしない
+        (RLock による再入可能性の確認)。"""
+        store = InMemoryPendingPredictionStore()
+        being_id = BeingId("being-1")
+        with store._lock:
+            store.add_by_being(being_id, _pending("p1", 1))
+            store.list_all_by_being(being_id)
+            store.replace_all_by_being(being_id, [_pending("p1", 1)])
+
+    def test_concurrent_add_and_resolution_style_replace_never_loses_predictions(
+        self,
+    ) -> None:
+        """ワーカー thread の ``add_by_being`` と、清算経路
+        (``resolve_pending_predictions_if_applicable``) が行う
+        ``list_all_by_being`` → ``replace_all_by_being`` の read-modify-write を
+        並走させても、追加した pending prediction が無音で消えない。
+
+        清算側は「今読んだ内容をそのまま書き戻す」(何も決着していない) ケースを
+        模して、add との競合窓だけを突く。容量上限に達しないよう capacity は
+        件数より大きく取る (evict との混同を避ける)。
+        """
+        total = 300
+        store = InMemoryPendingPredictionStore(capacity=total * 2)
+        being_id = BeingId("being-stress")
+
+        def adder() -> None:
+            for i in range(total):
+                store.add_by_being(being_id, _pending(f"p{i}", i))
+
+        def resolver() -> None:
+            for _ in range(total):
+                live = store.list_all_by_being(being_id)
+                store.replace_all_by_being(being_id, live)
+
+        t_add = threading.Thread(target=adder)
+        t_resolve = threading.Thread(target=resolver)
+        t_add.start()
+        t_resolve.start()
+        t_add.join(timeout=10)
+        t_resolve.join(timeout=10)
+        assert not t_add.is_alive()
+        assert not t_resolve.is_alive()
+
+        rows = store.list_all_by_being(being_id)
+        assert len(rows) == total
+        assert {p.pending_id for p in rows} == {f"p{i}" for i in range(total)}
