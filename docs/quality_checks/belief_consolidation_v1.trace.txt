@@ -58,11 +58,12 @@ decisions は次のいずれかの形の要素からなる配列:
   batch_evidence_ids: ['e1', 'e2', 'e3']
   shortlist_belief_ids: ['sem-existing']
   decisions: [{'action': 'create', 'text': 'この島の探索は空振りが多い', 'importance': 6, 'tags': ['探索', '浜辺'], 'evidence_ids': ['e1', 'e2', 'e3']}]
+  skipped_decisions: []
 
 === belief journal (list_for_being) ===
 --- entry[0] ---
-  entry_id: sem-f6067b1a7e444c92985b29c4df372d59
-  belief_id: sem-f6067b1a7e444c92985b29c4df372d59
+  entry_id: sem-8bce65a2475b4182a9e959543f0f761b
+  belief_id: sem-8bce65a2475b4182a9e959543f0f761b
   status: active
   text: この島の探索は空振りが多い
   confidence: 0.7000000000000001

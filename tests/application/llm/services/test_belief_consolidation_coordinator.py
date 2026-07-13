@@ -102,6 +102,7 @@ def _build_setup(
     objective_text_provider: Any = None,
     reflect_observation_sink: Any = None,
     stall_min_interval_turns: int = 15,
+    trace_recorder_provider: Any = None,
 ) -> _Setup:
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
@@ -130,6 +131,7 @@ def _build_setup(
         objective_text_provider=objective_text_provider,
         reflect_observation_sink=reflect_observation_sink,
         stall_min_interval_turns=stall_min_interval_turns,
+        trace_recorder_provider=trace_recorder_provider,
     )
     return _Setup(
         coordinator=coordinator,
@@ -1845,3 +1847,251 @@ class TestHearsayEvidencePayloadSpeaker:
         payload = json.loads(user_message.split("\n", 1)[1])
         evidence_payload = payload["evidence"][0]
         assert "source_speaker" not in evidence_payload
+
+
+class _CapturingRecorder:
+    """record を横取りして払い出した TraceEvent を蓄える簡易 recorder。"""
+
+    def __init__(self) -> None:
+        from ai_rpg_world.application.trace import NullTraceRecorder
+
+        self._inner = NullTraceRecorder()
+        self.events: list = []
+
+    def record(self, kind, **kw):
+        ev = self._inner.record(kind, **kw)
+        self.events.append(ev)
+        return ev
+
+    def close(self) -> None:
+        self._inner.close()
+
+
+class TestEvidenceIdFallbackScopedToCreate:
+    """H2: evidence_ids 未指定/全滅時の batch 全件フォールバックを create のみに
+    限定し、strengthen / contradict では decision ごと skip すること。"""
+
+    def test_contradict_without_evidence_ids_is_skipped_and_belief_unchanged(
+        self,
+    ) -> None:
+        """contradict に evidence_ids が無いと decision ごと skip され、対象 belief の
+        confidence も status も変わらない (修正前は batch 全件が反証計上され一撃で
+        inactive になっていた)。batch は従来どおり drain される。"""
+        # support=0 / contradict=1 → confidence f(0,1)=0.25 (閾値 0.2 超で active)。
+        # 修正前は e1 が反証に加わり f(0,2)=0.10 < 0.2 で inactive 化していた。
+        existing = _belief_entry(entry_id="sem-1", support=(), contradict=("old-c",))
+        setup = _build_setup(
+            outcome={"decisions": [{"action": "contradict", "belief_id": "sem-1"}]},
+            contradict_inactive_threshold=0.2,
+        )
+        setup.semantic_store.add_by_being(setup.being_id, existing)
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        processed = setup.coordinator.flush_player(setup.player_id)
+
+        assert processed == 1
+        entries = {
+            e.entry_id: e for e in setup.semantic_store.list_for_being(setup.being_id)
+        }
+        assert entries["sem-1"].status == SEMANTIC_MEMORY_STATUS_ACTIVE
+        assert entries["sem-1"].contradict_evidence_ids == ("old-c",)
+        assert entries["sem-1"].confidence == compute_belief_confidence(0, 1)
+
+    def test_strengthen_with_only_hallucinated_evidence_ids_is_skipped(self) -> None:
+        """strengthen の evidence_ids が全て batch に無い幻覚 id なら decision ごと
+        skip され、belief の support も confidence も変わらない (修正前は batch 全件が
+        support に混入し confidence が水増しされていた)。"""
+        existing = _belief_entry(entry_id="sem-1", support=("old-e",))
+        setup = _build_setup(
+            outcome={
+                "decisions": [
+                    {
+                        "action": "strengthen",
+                        "belief_id": "sem-1",
+                        "evidence_ids": ["ghost-1", "ghost-2"],
+                    }
+                ]
+            },
+        )
+        setup.semantic_store.add_by_being(setup.being_id, existing)
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        processed = setup.coordinator.flush_player(setup.player_id)
+
+        assert processed == 1
+        updated = setup.semantic_store.list_for_being(setup.being_id)[0]
+        assert updated.support_evidence_ids == ("old-e",)
+        assert updated.confidence == compute_belief_confidence(1, 0)
+
+    def test_create_without_evidence_ids_still_uses_whole_batch(self) -> None:
+        """create は evidence_ids 未指定でも従来どおり batch 全件を根拠に belief を
+        作れる (H2 の限定は create には及ばない = 回帰防止)。"""
+        setup = _build_setup(
+            outcome={
+                "decisions": [
+                    {
+                        "action": "create",
+                        "text": "この島の探索は空振りが多い",
+                        "importance": 5,
+                        "tags": [],
+                    }
+                ]
+            },
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        entries = setup.semantic_store.list_for_being(setup.being_id)
+        assert len(entries) == 1
+        assert set(entries[0].support_evidence_ids) == {"e1", "e2"}
+
+
+class TestSkippedDecisionVisibility:
+    """H3: 適用できなかった decision を skip 理由つきで分類し、trace payload と
+    warning で可視化すること (適用済みの顔で消える学びを見えるようにする)。"""
+
+    def test_skipped_decisions_emit_warning_with_being_and_count(
+        self, caplog
+    ) -> None:
+        """存在しない belief_id への strengthen は skip され、被 being と件数を
+        含む warning が 1 行出る (静かに消えない)。"""
+        setup = _build_setup(
+            outcome={
+                "decisions": [
+                    {
+                        "action": "strengthen",
+                        "belief_id": "sem-ghost",
+                        "evidence_ids": ["e1"],
+                    }
+                ]
+            },
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        with caplog.at_level(logging.WARNING):
+            setup.coordinator.flush_player(setup.player_id)
+
+        skip_warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "skip" in r.getMessage()
+        ]
+        assert len(skip_warnings) == 1
+        msg = skip_warnings[0].getMessage()
+        assert str(setup.being_id.value) in msg
+        assert "1件" in msg
+
+    def test_trace_payload_carries_skipped_decisions_with_reason(self) -> None:
+        """skip した decision が BELIEF_CONSOLIDATION trace の skipped_decisions に
+        理由つきで載る (幻覚 belief_id への strengthen なら strengthen_belief_not_found)。"""
+        recorder = _CapturingRecorder()
+        setup = _build_setup(
+            outcome={
+                "decisions": [
+                    {
+                        "action": "strengthen",
+                        "belief_id": "sem-ghost",
+                        "evidence_ids": ["e1"],
+                    }
+                ]
+            },
+            trace_recorder_provider=lambda: recorder,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        from ai_rpg_world.application.trace import TraceEventKind
+
+        events = [
+            e
+            for e in recorder.events
+            if e.kind == TraceEventKind.BELIEF_CONSOLIDATION
+        ]
+        assert len(events) == 1
+        payload = events[0].payload
+        assert payload["decisions"] == []
+        assert len(payload["skipped_decisions"]) == 1
+        assert payload["skipped_decisions"][0]["reason"] == "strengthen_belief_not_found"
+
+
+class TestMalformedResponseHandling:
+    """M4: 例外なしの構造不正応答は LLM 例外と同格に扱い、buffer を温存して
+    次周期に再試行すること (正当な空 decisions の drain とは区別する)。"""
+
+    def test_malformed_decisions_string_preserves_buffer_and_retries(self) -> None:
+        """decisions が list でない (文字列) 応答は drain せず buffer を温存し、
+        次の flush で再び LLM に問い合わせる (修正前は空 list 扱いで全 drain された)。"""
+        setup = _build_setup(outcome={"decisions": "これは配列ではない"})
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        processed = setup.coordinator.flush_player(setup.player_id)
+
+        assert processed == 0
+        assert len(setup.port.calls) == 1
+        assert len(setup.evidence_buffer.list_all_by_being(setup.being_id)) == 1
+        assert setup.semantic_store.list_for_being(setup.being_id) == []
+
+        # 次周期: buffer が残っているので再び LLM を呼ぶ (再試行)。
+        processed_again = setup.coordinator.flush_player(setup.player_id)
+
+        assert processed_again == 0
+        assert len(setup.port.calls) == 2
+        assert len(setup.evidence_buffer.list_all_by_being(setup.being_id)) == 1
+
+    def test_non_dict_response_preserves_buffer(self) -> None:
+        """dict ですらない応答 (list) も構造不正として buffer を温存する。"""
+        setup = _build_setup(outcome=["not", "a", "dict"])  # type: ignore[arg-type]
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        processed = setup.coordinator.flush_player(setup.player_id)
+
+        assert processed == 0
+        assert len(setup.evidence_buffer.list_all_by_being(setup.being_id)) == 1
+
+    def test_missing_decisions_key_preserves_buffer(self) -> None:
+        """decisions キーを欠いた dict も構造不正として温存する (空 list とは別)。"""
+        setup = _build_setup(outcome={"foo": "bar"})
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        processed = setup.coordinator.flush_player(setup.player_id)
+
+        assert processed == 0
+        assert len(setup.evidence_buffer.list_all_by_being(setup.being_id)) == 1
+
+    def test_valid_empty_decisions_still_drains(self) -> None:
+        """正当な空 decisions ([]) は従来どおり batch を drain する
+        (構造不正の温存とは区別する回帰テスト)。"""
+        setup = _build_setup(outcome={"decisions": []})
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        processed = setup.coordinator.flush_player(setup.player_id)
+
+        assert processed == 1
+        assert setup.evidence_buffer.list_all_by_being(setup.being_id) == []
+
+    def test_malformed_response_emits_note_trace_not_consolidation(self) -> None:
+        """構造不正のときは NOTE trace が出て、BELIEF_CONSOLIDATION (batch 処理済み
+        の記録) は出ない (温存した局面を trace 上で区別する)。"""
+        recorder = _CapturingRecorder()
+        setup = _build_setup(
+            outcome={"decisions": "壊れている"},
+            trace_recorder_provider=lambda: recorder,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id)
+
+        from ai_rpg_world.application.trace import TraceEventKind
+
+        note_events = [e for e in recorder.events if e.kind == TraceEventKind.NOTE]
+        consolidation_events = [
+            e
+            for e in recorder.events
+            if e.kind == TraceEventKind.BELIEF_CONSOLIDATION
+        ]
+        assert len(note_events) == 1
+        assert note_events[0].payload["batch_evidence_ids"] == ["e1"]
+        assert consolidation_events == []

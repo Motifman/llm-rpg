@@ -45,7 +45,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter, defaultdict
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 from uuid import uuid4
@@ -121,6 +121,34 @@ _REFLECT_VERDICT_MISALIGNED = "misaligned"
 _REFLECT_VERDICTS = frozenset(
     {_REFLECT_VERDICT_STALLED, _REFLECT_VERDICT_ACHIEVED, _REFLECT_VERDICT_MISALIGNED}
 )
+
+# H3 (固着 LLM 出力の検証と可視化): 適用できなかった decision に付ける skip 理由。
+# _apply_* が None を返せば適用成功、これらの文字列を返せば「この理由で適用せず
+# journal に触れなかった」を意味する。trace payload と warning に載せて、学びの
+# 消失がどの観測面からも見えるようにする (silent failure の構造的解消)。
+_SKIP_CREATE_EMPTY_TEXT = "create_empty_text"
+_SKIP_STRENGTHEN_MISSING_BELIEF_ID = "strengthen_missing_belief_id"
+_SKIP_STRENGTHEN_BELIEF_NOT_FOUND = "strengthen_belief_not_found"
+_SKIP_STRENGTHEN_NO_EVIDENCE = "strengthen_no_evidence"
+_SKIP_REVISE_MISSING_BELIEF_ID = "revise_missing_belief_id"
+_SKIP_REVISE_MISSING_TEXT = "revise_missing_text"
+_SKIP_REVISE_BELIEF_NOT_FOUND = "revise_belief_not_found"
+_SKIP_CONTRADICT_MISSING_BELIEF_ID = "contradict_missing_belief_id"
+_SKIP_CONTRADICT_BELIEF_NOT_FOUND = "contradict_belief_not_found"
+_SKIP_CONTRADICT_NO_EVIDENCE = "contradict_no_evidence"
+_SKIP_REFLECT_SUPPRESSED = "reflect_suppressed"
+_SKIP_UNKNOWN_ACTION = "unknown_action"
+_SKIP_NOT_A_DICT = "not_a_dict"
+_SKIP_APPLY_ERROR = "apply_error"
+
+
+@dataclass(frozen=True)
+class _DecisionApplicationResult:
+    """decisions 適用の結果。applied は journal に反映した decision、skipped は
+    適用できず理由つきで見送った decision (H3)。両方を trace payload に載せる。"""
+
+    applied: list[dict[str, Any]]
+    skipped: list[dict[str, Any]]
 
 _SYSTEM_BELIEF_CONSOLIDATION_JSON = """あなたはある RPG キャラクターの内面で動く「記憶を学びに固着させる機能」です。
 直近たまった「学習の素材 (evidence)」群と、すでに持っている「学び (belief)」の候補一覧 (shortlist) を読み、各 evidence についてどう扱うかを決めてください。
@@ -545,26 +573,53 @@ class BeliefConsolidationCoordinator:
                 "Belief consolidation failed; pending evidence kept: %s", e
             )
             return 0
-        decisions = self._apply_decisions(
+        # M4 (例外なしの構造不正): completion は返ったが raw_obj が dict でない、
+        # あるいは decisions が list でない応答は「LLM が何も判断しなかった」正当な
+        # 空 decisions ([]) とは本質的に違う。前者は応答が壊れている = LLM 例外と
+        # 同格の失敗なので、drain せず buffer を温存して次周期に再試行する
+        # (正当な空 decisions は従来どおり drain する)。両者を区別するのが本修正の核心。
+        if not isinstance(raw_obj, dict) or not isinstance(
+            raw_obj.get("decisions"), list
+        ):
+            self._logger.warning(
+                "Belief consolidation: LLM 応答が構造不正 (非 dict または decisions が "
+                "list でない); pending evidence を温存して次周期に再試行する"
+            )
+            self._emit_malformed_trace(being_id, batch)
+            return 0
+        result = self._apply_decisions(
             being_id,
             player_id.value,
             batch,
             raw_obj,
         )
         batch_ids = tuple(e.evidence_id for e in batch)
-        # LLM 呼び出しは成功したが有効な decisions が 0 件だったのに batch を
+        # LLM 呼び出しは成功したが適用された decisions が 0 件だったのに batch を
         # drain するケースを warning で可視化する。プロンプト/LLM 側の不具合で
-        # decisions が空を返し続けると evidence が静かに失われ続けるため
-        # (本プロジェクトが最も嫌う silent failure)。drain 自体は温存しない
-        # 現行仕様のまま (温存するとリトライ地獄になる)。
-        if not decisions:
+        # 適用できる decision を返し続けないと evidence が静かに失われ続けるため
+        # (本プロジェクトが最も嫌う silent failure)。drain 自体は温存しない現行
+        # 仕様のまま (温存するとリトライ地獄になる)。適用ゼロ + skipped 全件の
+        # ときもここに倒れる (decisions 空と同じ可視化)。
+        if not result.applied:
             self._logger.warning(
                 "Belief consolidation: batch %d件を drain したが適用された decision は "
                 "0 件。LLM 応答に有効な decisions が無い可能性",
                 len(batch_ids),
             )
+        # H3: 適用できず skip した decision があれば、被 being と件数・理由内訳を
+        # warning で 1 行残す。存在しない belief_id への strengthen/contradict/revise、
+        # evidence 欠落、text 空などが「適用済みの顔」で消えるのを防ぐ。
+        if result.skipped:
+            reason_counts = Counter(s["reason"] for s in result.skipped)
+            self._logger.warning(
+                "Belief consolidation: being=%s の decision %d件を適用できず skip した "
+                "(理由内訳: %s)",
+                being_id.value,
+                len(result.skipped),
+                dict(reason_counts),
+            )
         self._evidence_buffer_store.remove_by_being(being_id, batch_ids)
-        self._emit_trace(being_id, batch, shortlist, decisions)
+        self._emit_trace(being_id, batch, shortlist, result.applied, result.skipped)
         return len(batch_ids)
 
     def _build_shortlist(
@@ -745,38 +800,56 @@ class BeliefConsolidationCoordinator:
         player_id: int,
         batch: tuple[BeliefEvidence, ...],
         raw_obj: dict[str, Any],
-    ) -> list[dict[str, Any]]:
-        """decisions を belief journal に適用する。適用に使った decisions を返す
-        (trace payload 用)。"""
+    ) -> _DecisionApplicationResult:
+        """decisions を belief journal に適用し、applied / skipped に分類して返す。
+
+        各 ``_apply_*`` は適用できたとき ``None`` を、適用できず見送ったとき
+        skip 理由文字列を返す。ここでその戻り値を見て applied / skipped
+        (理由つき) に振り分ける (H3)。呼び出し側 (``flush_player``) が M4 の
+        構造不正チェックを済ませている前提だが、直接呼ばれても壊れないよう
+        防御的に空 result を返す。"""
         if not isinstance(raw_obj, dict):
-            return []
+            return _DecisionApplicationResult([], [])
         raw_decisions = raw_obj.get("decisions")
         if not isinstance(raw_decisions, list):
-            return []
+            return _DecisionApplicationResult([], [])
         evidence_by_id = {e.evidence_id: e for e in batch}
         batch_ids = tuple(e.evidence_id for e in batch)
         now = datetime.now(timezone.utc)
         applied: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
         for raw in raw_decisions:
             if not isinstance(raw, dict):
+                skipped.append({"reason": _SKIP_NOT_A_DICT, "decision": raw})
                 continue
             action = raw.get("action")
             try:
                 if action == _ACTION_CREATE:
-                    self._apply_create(being_id, player_id, raw, evidence_by_id, batch_ids, now)
+                    skip_reason = self._apply_create(
+                        being_id, player_id, raw, evidence_by_id, batch_ids, now
+                    )
                 elif action == _ACTION_STRENGTHEN:
-                    self._apply_strengthen(being_id, raw, evidence_by_id, batch_ids, now)
+                    skip_reason = self._apply_strengthen(
+                        being_id, raw, evidence_by_id, batch_ids, now
+                    )
                 elif action == _ACTION_REVISE:
-                    self._apply_revise(being_id, player_id, raw, now)
+                    skip_reason = self._apply_revise(being_id, player_id, raw, now)
                 elif action == _ACTION_CONTRADICT:
-                    self._apply_contradict(being_id, raw, evidence_by_id, batch_ids, now)
+                    skip_reason = self._apply_contradict(
+                        being_id, raw, evidence_by_id, batch_ids, now
+                    )
                 elif action == _ACTION_DISCARD:
-                    pass  # evidence は batch drain で自動的に消える
+                    skip_reason = None  # evidence は batch drain で消える (正当な適用)
                 elif action == _ACTION_REFLECT:
-                    if not self._apply_reflect(player_id, raw):
-                        continue  # 停滞でない / cap / flag OFF なら記録しない
+                    # 停滞でない / cap / flag OFF なら注入しない = 適用ではないが
+                    # 「幻覚 belief_id」等の失敗とは質が違うので skip 理由で残す。
+                    skip_reason = (
+                        None
+                        if self._apply_reflect(player_id, raw)
+                        else _SKIP_REFLECT_SUPPRESSED
+                    )
                 else:
-                    continue
+                    skip_reason = _SKIP_UNKNOWN_ACTION
             except Exception as e:  # pragma: no cover - 想定外の1件で全体を壊さない
                 self._logger.warning(
                     "Belief consolidation decision application failed (action=%s): %s",
@@ -784,9 +857,15 @@ class BeliefConsolidationCoordinator:
                     e,
                     exc_info=True,
                 )
+                skipped.append(
+                    {"reason": _SKIP_APPLY_ERROR, "action": action, "decision": raw}
+                )
                 continue
-            applied.append(raw)
-        return applied
+            if skip_reason is None:
+                applied.append(raw)
+            else:
+                skipped.append({"reason": skip_reason, "decision": raw})
+        return _DecisionApplicationResult(applied, skipped)
 
     @staticmethod
     def _count_confirmation(
@@ -827,7 +906,19 @@ class BeliefConsolidationCoordinator:
         raw: dict[str, Any],
         evidence_by_id: dict[str, BeliefEvidence],
         batch_ids: tuple[str, ...],
+        *,
+        allow_batch_fallback: bool,
     ) -> tuple[str, ...]:
+        """decision の evidence_ids を batch 内に実在する id へ解決する。
+
+        H2: id 未指定・全滅時に batch 全件へ倒すフォールバックは **create のみ**
+        (``allow_batch_fallback=True``) に限定する。create は「どの evidence を
+        使ったか明示しない」スキーマを許すが、strengthen / contradict でこれを
+        許すと、evidence_ids を欠いた 1 件の decision が batch 全件 (最大 8) を
+        支持/反証として巻き込み、confidence が水増しされたり一撃 inactive 化する。
+        strengthen / contradict は ``allow_batch_fallback=False`` で呼び、有効な
+        evidence_id が 0 件なら空を返して呼び出し側に skip させる。
+        """
         raw_ids = raw.get("evidence_ids")
         if isinstance(raw_ids, list):
             # 重複除去 + strip して順序を保つ。重複を残すと strengthen で
@@ -848,9 +939,12 @@ class BeliefConsolidationCoordinator:
                     valid.append(stripped)
             if valid:
                 return tuple(valid)
-        # 未指定 / 無効なら batch 全体を根拠とみなす (create がどの evidence を
-        # 使ったか明示しない decisions スキーマへの対応)。
-        return batch_ids
+        # 未指定 / 無効。create のみ batch 全体を根拠とみなす (どの evidence を
+        # 使ったか明示しない decisions スキーマへの対応)。strengthen / contradict は
+        # 空を返し、呼び出し側で decision ごと skip させる (H2)。
+        if allow_batch_fallback:
+            return batch_ids
+        return ()
 
     def _apply_create(
         self,
@@ -860,10 +954,10 @@ class BeliefConsolidationCoordinator:
         evidence_by_id: dict[str, BeliefEvidence],
         batch_ids: tuple[str, ...],
         now: datetime,
-    ) -> None:
+    ) -> Optional[str]:
         text = raw.get("text")
         if not isinstance(text, str) or not text.strip():
-            return
+            return _SKIP_CREATE_EMPTY_TEXT
         text = text.strip()[:MAX_BELIEF_TEXT_CHARS]
         importance = raw.get("importance", 5)
         try:
@@ -871,7 +965,9 @@ class BeliefConsolidationCoordinator:
         except (TypeError, ValueError):
             importance = 5
         importance = max(1, min(10, importance))
-        evidence_ids = self._resolve_evidence_ids(raw, evidence_by_id, batch_ids)
+        evidence_ids = self._resolve_evidence_ids(
+            raw, evidence_by_id, batch_ids, allow_batch_fallback=True
+        )
         # LLM 生成タグに加えて、根拠 evidence の cue_signature 由来トークン
         # (英語の tool token を含む) を tags に混ぜて索引を自己一貫させる。
         # こうしないと tool 軸の cue token (例: "explore") は日本語 belief の
@@ -935,6 +1031,7 @@ class BeliefConsolidationCoordinator:
             hearsay_support_count=hearsay_count,
         )
         self._semantic_store.add_by_being(being_id, entry)
+        return None
 
     def _find_active_entry(
         self, being_id: BeingId, belief_id: str
@@ -951,14 +1048,20 @@ class BeliefConsolidationCoordinator:
         evidence_by_id: dict[str, BeliefEvidence],
         batch_ids: tuple[str, ...],
         now: datetime,
-    ) -> None:
+    ) -> Optional[str]:
         belief_id = raw.get("belief_id")
         if not isinstance(belief_id, str) or not belief_id.strip():
-            return
+            return _SKIP_STRENGTHEN_MISSING_BELIEF_ID
         target = self._find_active_entry(being_id, belief_id.strip())
         if target is None:
-            return
-        evidence_ids = self._resolve_evidence_ids(raw, evidence_by_id, batch_ids)
+            return _SKIP_STRENGTHEN_BELIEF_NOT_FOUND
+        evidence_ids = self._resolve_evidence_ids(
+            raw, evidence_by_id, batch_ids, allow_batch_fallback=False
+        )
+        if not evidence_ids:
+            # H2: 有効な evidence_id が 0 件。batch 全件へ倒さず decision ごと skip
+            # (無関係 evidence の混入で confidence を水増ししない)。
+            return _SKIP_STRENGTHEN_NO_EVIDENCE
         existing_support = set(target.support_evidence_ids)
         new_support = tuple(sorted(existing_support | set(evidence_ids)))
         # P3b: 今回 **新規に** 足された support のうち CONFIRMATION 由来だけを
@@ -989,6 +1092,7 @@ class BeliefConsolidationCoordinator:
             created_at=now,
         )
         self._semantic_store.add_by_being(being_id, updated)
+        return None
 
     def _apply_revise(
         self,
@@ -996,16 +1100,16 @@ class BeliefConsolidationCoordinator:
         player_id: int,
         raw: dict[str, Any],
         now: datetime,
-    ) -> None:
+    ) -> Optional[str]:
         belief_id = raw.get("belief_id")
         text = raw.get("text")
         if not isinstance(belief_id, str) or not belief_id.strip():
-            return
+            return _SKIP_REVISE_MISSING_BELIEF_ID
         if not isinstance(text, str) or not text.strip():
-            return
+            return _SKIP_REVISE_MISSING_TEXT
         target = self._find_active_entry(being_id, belief_id.strip())
         if target is None:
-            return
+            return _SKIP_REVISE_BELIEF_NOT_FOUND
         new_text = text.strip()[:MAX_BELIEF_TEXT_CHARS]
         new_entry_id = f"sem-{uuid4().hex}"
         new_entry = SemanticMemoryEntry(
@@ -1035,6 +1139,7 @@ class BeliefConsolidationCoordinator:
         self._semantic_store.supersede_by_being(
             being_id, old_entry_id=target.entry_id, new_entry=new_entry
         )
+        return None
 
     def _apply_contradict(
         self,
@@ -1043,14 +1148,20 @@ class BeliefConsolidationCoordinator:
         evidence_by_id: dict[str, BeliefEvidence],
         batch_ids: tuple[str, ...],
         now: datetime,
-    ) -> None:
+    ) -> Optional[str]:
         belief_id = raw.get("belief_id")
         if not isinstance(belief_id, str) or not belief_id.strip():
-            return
+            return _SKIP_CONTRADICT_MISSING_BELIEF_ID
         target = self._find_active_entry(being_id, belief_id.strip())
         if target is None:
-            return
-        evidence_ids = self._resolve_evidence_ids(raw, evidence_by_id, batch_ids)
+            return _SKIP_CONTRADICT_BELIEF_NOT_FOUND
+        evidence_ids = self._resolve_evidence_ids(
+            raw, evidence_by_id, batch_ids, allow_batch_fallback=False
+        )
+        if not evidence_ids:
+            # H2: 有効な evidence_id が 0 件。batch 全件を反証計上して一撃 inactive
+            # 化する暴発を避け、decision ごと skip する (復活経路が無いため特に危険)。
+            return _SKIP_CONTRADICT_NO_EVIDENCE
         new_contradict = tuple(
             sorted(set(target.contradict_evidence_ids) | set(evidence_ids))
         )
@@ -1074,6 +1185,26 @@ class BeliefConsolidationCoordinator:
             self._semantic_store.update_status_by_being(
                 being_id, target.entry_id, SEMANTIC_MEMORY_STATUS_INACTIVE
             )
+        return None
+
+    def _resolve_recorder(self) -> Optional[ITraceRecorder]:
+        if self._trace_recorder_provider is None:
+            return None
+        try:
+            return self._trace_recorder_provider()
+        except Exception:
+            _logger.debug(
+                "trace_recorder_provider raised; skipping trace", exc_info=True
+            )
+            return None
+
+    def _resolve_tick(self) -> Optional[int]:
+        if self._current_tick_provider is None:
+            return None
+        try:
+            return self._current_tick_provider()
+        except Exception:
+            return None
 
     def _emit_trace(
         self,
@@ -1081,37 +1212,54 @@ class BeliefConsolidationCoordinator:
         batch: tuple[BeliefEvidence, ...],
         shortlist: tuple[SemanticMemoryEntry, ...],
         decisions: list[dict[str, Any]],
+        skipped_decisions: list[dict[str, Any]],
     ) -> None:
-        recorder: Optional[ITraceRecorder] = None
-        if self._trace_recorder_provider is not None:
-            try:
-                recorder = self._trace_recorder_provider()
-            except Exception:
-                _logger.debug(
-                    "trace_recorder_provider raised; skipping BELIEF_CONSOLIDATION trace",
-                    exc_info=True,
-                )
-                recorder = None
+        recorder = self._resolve_recorder()
         if recorder is None:
             return
-        tick: Optional[int] = None
-        if self._current_tick_provider is not None:
-            try:
-                tick = self._current_tick_provider()
-            except Exception:
-                tick = None
         try:
             recorder.record(
                 TraceEventKind.BELIEF_CONSOLIDATION,
-                tick=tick,
+                tick=self._resolve_tick(),
                 being_id=being_id.value,
                 batch_evidence_ids=[e.evidence_id for e in batch],
                 shortlist_belief_ids=[b.belief_id for b in shortlist],
                 decisions=decisions,
+                # H3: 適用できず見送った decision を理由つきで残す。適用済みの顔で
+                # 消える学びが trace から見えるようにする。
+                skipped_decisions=skipped_decisions,
             )
         except Exception:
             _logger.debug(
                 "trace recorder.record raised for BELIEF_CONSOLIDATION; skipping",
+                exc_info=True,
+            )
+
+    def _emit_malformed_trace(
+        self,
+        being_id: BeingId,
+        batch: tuple[BeliefEvidence, ...],
+    ) -> None:
+        """M4: 構造不正応答で drain せず温存したことを ``TraceEventKind.NOTE`` に
+        残す (失敗は握りつぶす)。BELIEF_CONSOLIDATION は「batch を処理した」記録
+        なので、温存した局面では出さず NOTE で区別する。"""
+        recorder = self._resolve_recorder()
+        if recorder is None:
+            return
+        try:
+            recorder.record(
+                TraceEventKind.NOTE,
+                tick=self._resolve_tick(),
+                being_id=being_id.value,
+                message=(
+                    "belief_consolidation: LLM 応答が構造不正のため drain せず "
+                    "pending evidence を温存した"
+                ),
+                batch_evidence_ids=[e.evidence_id for e in batch],
+            )
+        except Exception:
+            _logger.debug(
+                "trace recorder.record raised for malformed NOTE; skipping",
                 exc_info=True,
             )
 
