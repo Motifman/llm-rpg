@@ -198,12 +198,17 @@ class TraceEventKind:
     # U10b: 再浮上していた pending prediction (約束) が次の chunk 補完で
     # 「果たされた / 破られた」と判定され、PENDING_RESOLUTION evidence に
     # 転記されて store から除かれた瞬間。約束ループが閉じたことの観測点。
+    # tick は「実際に清算された現在 tick」(LOW-2: 以前は窓の終端 tick_to を
+    # 使っており、窓の早い時点で果たされた約束が trace 上は未来の tick に
+    # 記録される非対称があった。CREATED / EXPIRED は現在 tick なのでそちらに
+    # 揃えた)。窓の情報は tick_from / tick_to として別途 payload に残す。
     # payload:
     #   - pending_id: str
     #   - being_id: str
     #   - verdict: str ("fulfilled" | "broken")
     #   - evidence_id: str | None (= 転記された evidence。transcriber 未配線なら None)
     #   - origin_episode_id: str
+    #   - tick_from: int / tick_to: int (= 約束の解決見込み窓)
     PENDING_PREDICTION_RESOLVED = "pending_prediction_resolved"
     # U10b: tick_to を過ぎても果たされも破られもしなかった pending prediction
     # が静かに失効し store から除かれた瞬間 (= 人間でも忘れられた約束は消える)。

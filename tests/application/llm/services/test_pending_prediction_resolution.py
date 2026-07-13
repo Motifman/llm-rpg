@@ -202,6 +202,38 @@ class TestResolutionTranscription:
         assert len(resolved) == 1
         assert resolved[0].payload["pending_kind"] == "plan"
 
+    def test_resolved_trace_tick_is_current_tick_not_window_end(self) -> None:
+        """LOW-2: RESOLVED trace の tick は実際に清算された現在 tick であり、
+
+        窓の終端 (tick_to) ではない。窓の早い時点で果たされた約束が trace 上は
+        未来の tick に記録される非対称を防ぐ (CREATED / EXPIRED は現在 tick)。
+        窓の情報自体は payload の tick_from / tick_to として残す。
+        """
+        store = InMemoryPendingPredictionStore()
+        store.add_by_being(_BEING, _pending("p1", tick_from=10, tick_to=25))
+        buffer = InMemoryBeliefEvidenceBufferStore()
+        transcriber = BeliefEvidenceTranscriber(buffer)
+        recorder = NullTraceRecorder()
+        captured = _capture_trace(recorder)
+        episode = _episode([PendingResolutionVerdict("p1", "fulfilled")])
+
+        # tick_to=25 だが、実際に清算されたのは current_tick=15 (窓の早い時点)。
+        _resolve(
+            store=store,
+            episode=episode,
+            transcriber=transcriber,
+            current_tick=15,
+            recorder=recorder,
+        )
+
+        resolved = [
+            ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_RESOLVED
+        ]
+        assert len(resolved) == 1
+        assert resolved[0].tick == 15
+        assert resolved[0].payload["tick_from"] == 10
+        assert resolved[0].payload["tick_to"] == 25
+
 
 class TestExpiry:
     """tick_to を過ぎた未決着の約束は黙って失効する。"""
