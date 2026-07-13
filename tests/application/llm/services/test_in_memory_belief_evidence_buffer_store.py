@@ -159,3 +159,43 @@ class TestInMemoryBeliefEvidenceBufferStoreThreadSafety:
         rows = store.list_all_by_being(being_id)
         assert len(rows) == total
         assert {e.evidence_id for e in rows} == {f"e{i}" for i in range(total)}
+
+
+class TestInMemoryBeliefEvidenceFullFieldRoundtripContract:
+    """全フィールドに非 default 値を入れた evidence が保存 → 読み出しで完全一致して戻る契約テスト。
+
+    SQLite 実装 (``TestSqliteBeliefEvidenceFullFieldRoundtripContract``) と対を
+    なす。in-memory は codec を持たず参照をそのまま保持するので現状は自明に通るが、
+    「保存経路が evidence を欠損させない」という store interface の契約を SQLite と
+    同じ形で固定し、実装差を出さないための守り。
+    """
+
+    def _full_evidence(self) -> BeliefEvidence:
+        return BeliefEvidence(
+            evidence_id="e-full",
+            source_kind=BeliefEvidenceSourceKind.HEARSAY,
+            episode_ids=("ep-1", "ep-2"),
+            cue_signature="tool:gather|spot:5",
+            text="全フィールドを非 default 値で埋めた証拠",
+            salience=BELIEF_EVIDENCE_SALIENCE_LOW,
+            occurred_at=datetime(2026, 7, 1, 12, 30, 45, 123456, tzinfo=timezone.utc),
+            tick=42,
+            in_context_belief_ids=("belief-1", "belief-2"),
+            source_speaker="noah",
+        )
+
+    def test_append_listで全フィールドが完全一致で戻る(self) -> None:
+        """append_by_being → list_all_by_being の往復で evidence が元と完全一致する。"""
+        store = InMemoryBeliefEvidenceBufferStore()
+        being_id = BeingId("being-1")
+        evidence = self._full_evidence()
+        store.append_by_being(being_id, evidence)
+        assert store.list_all_by_being(being_id)[0] == evidence
+
+    def test_replace_all_by_beingで全フィールドが完全一致で戻る(self) -> None:
+        """replace_all_by_being → list_all_by_being の往復で evidence が元と完全一致する。"""
+        store = InMemoryBeliefEvidenceBufferStore()
+        being_id = BeingId("being-1")
+        evidence = self._full_evidence()
+        store.replace_all_by_being(being_id, [evidence])
+        assert store.list_all_by_being(being_id)[0] == evidence
