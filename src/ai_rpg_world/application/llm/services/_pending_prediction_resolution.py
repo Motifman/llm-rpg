@@ -74,6 +74,13 @@ def resolve_pending_predictions_if_applicable(
     if being_id is None:
         return
 
+    # 単一 writer 前提: ここからの「list_all_by_being → replace_all_by_being」
+    # は複合の read-modify-write で、store のメソッド単位ロック (RLock) では
+    # list と replace の間の窓は守れない (窓の間に別 thread が add した約束は
+    # replace で消える)。現状この清算と record (add) は
+    # ThreadPoolEpisodicSubjectiveScheduler の既定 max_workers=1 により同一
+    # worker thread で直列に走るため安全。scheduler を複数 worker 化するとき
+    # は、清算と記録を being 単位で直列化する仕組みが別途必要になる。
     try:
         live = pending_prediction_store.list_all_by_being(being_id)
     except Exception:
