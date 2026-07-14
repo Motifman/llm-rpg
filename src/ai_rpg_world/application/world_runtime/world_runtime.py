@@ -3645,7 +3645,7 @@ def create_world_runtime(
         PlayerDownedOutcomeHandler(
             outcome_registry=outcome_registry,
             grace_timer=death_grace_timer,
-            current_tick_provider=lambda: int(runtime.current_tick().value),
+            current_tick_provider=lambda: int(runtime.current_tick()),
         ),
     )
     # Issue #621 Phase 5: revive 時の post hoc summary 注入。
@@ -3664,7 +3664,7 @@ def create_world_runtime(
         PlayerRevivedPostHocObservationHandler(
             grace_timer=death_grace_timer,
             observation_appender=observation_appender,
-            current_tick_provider=lambda: int(runtime.current_tick().value),
+            current_tick_provider=lambda: int(runtime.current_tick()),
             caregiver_name_resolver=lambda pid, _d=_caregiver_name_by_pid: (
                 _d.get(int(pid))
             ),
