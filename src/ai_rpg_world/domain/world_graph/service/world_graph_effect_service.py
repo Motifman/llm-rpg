@@ -46,6 +46,15 @@ from ai_rpg_world.domain.world_graph.value_object.world_graph_effect_result impo
 _logger = logging.getLogger(__name__)
 
 
+# PR-F (#710 後続): 看板 (WRITE_PLAYER_TEXT / SHOW_PLAYER_TEXT) が使う
+# object.state key と文字数上限。「静かな失敗」を避けるため、上限超過は
+# 切り詰め + messages への可視化とセットで扱う (定数化して仕様として明示する)。
+SIGN_TEXT_MAX_LENGTH = 200
+SIGN_TEXT_STATE_KEY = "sign_text"
+SIGN_AUTHOR_STATE_KEY = "sign_author_name"
+SIGN_WRITTEN_TICK_STATE_KEY = "sign_written_tick"
+
+
 # 効果ごとの既定の可視性。シナリオ JSON で `visibility` を明示すれば上書きされる。
 # - 行為者本人の体験 (痛み、回復、自分の持ち物変化) → ACTOR_DIRECT
 # - 環境・接続・対象オブジェクトの物理変化 → PUBLIC_OBSERVABLE
@@ -84,6 +93,13 @@ _DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
     InteractionEffectTypeEnum.GIVE_ITEM: EffectVisibility.ACTOR_DIRECT,
     InteractionEffectTypeEnum.REMOVE_ITEM: EffectVisibility.ACTOR_DIRECT,
     InteractionEffectTypeEnum.COMBINE_ITEMS: EffectVisibility.ACTOR_DIRECT,
+    # PR-F: 看板に書き込む行為は物理的な変化であり、同スポットの他者から
+    # 「誰かが書き込んでいる」と見える (CHANGE_OBJECT_STATE と同じ既定)。
+    InteractionEffectTypeEnum.WRITE_PLAYER_TEXT: EffectVisibility.PUBLIC_OBSERVABLE,
+    # 看板を読む行為そのものは他者に観測されない (SHOW_MESSAGE と同じ扱い)。
+    # 読んだ内容を他者に広めるかどうかは、読んだ本人が speech で発話するかに
+    # 委ねる (= 伝聞抽出の入口は speech 側であり、この effect ではない)。
+    InteractionEffectTypeEnum.SHOW_PLAYER_TEXT: EffectVisibility.ACTOR_DIRECT,
 }
 
 
@@ -179,6 +195,13 @@ class WorldGraphEffectService:
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
         acting_player_status: Optional["PlayerStatusAggregate"] = None,
+        # PR-F: interact ツールの自由入力 parameters (パズル用に既存の経路)。
+        # WRITE_PLAYER_TEXT が interaction_parameters["text"] を読むために
+        # 必要になった、effect 適用段への配線。
+        interaction_parameters: Optional[dict] = None,
+        # PR-F: 看板の書き手名として state に残す表示名。
+        # None ならフォールバック名 ("名無し") を使う。
+        acting_player_display_name: Optional[str] = None,
     ) -> WorldGraphEffectResult:
         # Phase 4-B: 同一 instance を acting と target の両方として渡すのは
         # 作家ミスかコール元の wiring バグ。両側に同じ参照を入れると
@@ -268,6 +291,8 @@ class WorldGraphEffectService:
                 acting_item_aggregate=acting_item_aggregate,
                 target_item_aggregate=target_item_aggregate,
                 acting_player_status=acting_player_status,
+                interaction_parameters=interaction_parameters,
+                acting_player_display_name=acting_player_display_name,
             )
 
         item_instance_state_changed = (
@@ -341,6 +366,8 @@ class WorldGraphEffectService:
         acting_item_aggregate: Optional[ItemAggregate] = None,
         target_item_aggregate: Optional[ItemAggregate] = None,
         acting_player_status: Optional[PlayerStatusAggregate] = None,
+        interaction_parameters: Optional[dict] = None,
+        acting_player_display_name: Optional[str] = None,
     ) -> Tuple[
         SpotInterior,
         SpotObject | None,
@@ -940,6 +967,77 @@ class WorldGraphEffectService:
                         target_ref=str(int(cid_raw)),
                     )
                 )
+            return _all
+
+        if et == InteractionEffectTypeEnum.WRITE_PLAYER_TEXT:
+            # PR-F: 「看板」— interaction_parameters["text"] (interact ツールの
+            # 自由入力。パズル用に既存の経路をそのまま使う) を object.state へ
+            # 書き手名・tick と共に上書き保存する。v1 は「最後に書いた 1 枚のみ
+            # 保持」(state を毎回丸ごと差し替えるだけで実現できる)。
+            text_param_key = p.get("text_param_key", "text")
+            params_in = interaction_parameters or {}
+            raw_text = params_in.get(text_param_key)
+            if not isinstance(raw_text, str) or raw_text == "":
+                # silent failure を避ける: 書き込みを試みたのに何も残らない
+                # 状態を、本人が読める messages で明示的に伝える。
+                messages.append(
+                    f"何を書くか {text_param_key} パラメータで指定してください。"
+                )
+                return _all
+            target = self._resolve_target_object(interior, acting_object, p)
+            if target is None:
+                return _all
+            text = raw_text
+            truncated = len(text) > SIGN_TEXT_MAX_LENGTH
+            if truncated:
+                text = text[:SIGN_TEXT_MAX_LENGTH]
+            author_name = acting_player_display_name or "名無し"
+            before_state = dict(target.state)
+            new_state = dict(target.state)
+            new_state[SIGN_TEXT_STATE_KEY] = text
+            new_state[SIGN_AUTHOR_STATE_KEY] = author_name
+            new_state[SIGN_WRITTEN_TICK_STATE_KEY] = (
+                int(current_tick.value) if current_tick is not None else None
+            )
+            updated_target = target.with_state(new_state)
+            interior = interior.replace_object(updated_target)
+            if (
+                acting_object is not None
+                and updated_target.object_id == acting_object.object_id
+            ):
+                acting_object = updated_target
+            if truncated:
+                messages.append(
+                    f"本文が{SIGN_TEXT_MAX_LENGTH}字を超えていたため切り詰めました。"
+                )
+            messages.append(f"{updated_target.name} に書き込んだ。")
+            summaries.append(
+                AppliedEffectSummary(
+                    kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
+                    visibility=visibility,
+                    description=f"{updated_target.name} に {author_name} が書き込んだ",
+                    target_ref=updated_target.name,
+                    state_delta=_state_delta_entries(before_state, new_state),
+                )
+            )
+            _all = (
+                interior, acting_object, flags, grant, remove, messages,
+                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
+            )
+            return _all
+
+        if et == InteractionEffectTypeEnum.SHOW_PLAYER_TEXT:
+            # PR-F: WRITE_PLAYER_TEXT で書かれた内容を読む。state は変更しない
+            # (読む行為自体は他者に観測されない = summaries に積まない)。
+            target = self._resolve_target_object(interior, acting_object, p)
+            if target is None:
+                return _all
+            text = target.state.get(SIGN_TEXT_STATE_KEY)
+            if not isinstance(text, str) or text == "":
+                messages.append(p.get("empty_message", "何も書かれていない。"))
+                return _all
+            author_name = target.state.get(SIGN_AUTHOR_STATE_KEY) or "名無し"
+            messages.append(f"『{text}』 — {author_name}")
             return _all
 
         raise UnsupportedInteractionEffectException(f"Unsupported interaction effect: {et.value}")

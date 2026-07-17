@@ -50,3 +50,13 @@ class InteractionEffectTypeEnum(Enum):
     # 結果は GIVE_ITEM と同じ経路で grant される。「沖の釣りで raw_fish が
     # 大体 / たまに何か別のもの」のような不確実性を表現できる。
     GIVE_FROM_LOOT_TABLE = "GIVE_FROM_LOOT_TABLE"
+    # PR-F (#710 後続): 「看板」— プレイヤーが自由テキストを書き込める世界
+    # オブジェクト。interaction ツールの自由入力 parameters (パズル用に既存)
+    # から `text` を読み、書き手名・tick と共に object.state へ上書き保存する。
+    # v1 は「最後に書いた 1 枚のみ保持」(上書き式)。
+    WRITE_PLAYER_TEXT = "WRITE_PLAYER_TEXT"
+    # 上記で書き込まれた自由テキストを object.state から読み出し、
+    # 「『本文』 — 書き手名」形式の message を組む (examine 系 action 用)。
+    # 未記入なら「何も書かれていない」。SHOW_MESSAGE と同じく messages に
+    # 追加するだけで、state は変更しない (読む行為自体は他者に観測されない)。
+    SHOW_PLAYER_TEXT = "SHOW_PLAYER_TEXT"

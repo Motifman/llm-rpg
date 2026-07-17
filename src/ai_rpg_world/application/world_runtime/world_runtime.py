@@ -2810,6 +2810,11 @@ def create_world_runtime(
     )
     _effect_service = WorldGraphEffectService(loot_table_repository=loot_table_repo)
     _interaction_domain_service = SpotInteractionService(effect_service=_effect_service)
+    # PR-F (#710 後続): 看板 (WRITE_PLAYER_TEXT) が object.state に残す書き手名
+    # 解決用。scenario.player_spawns はこの時点で確定しているので、
+    # interaction_service の構築時に resolver として直接渡せる
+    # (event_publisher のような二段構築を避けられる)。
+    player_name_map = {spawn.player_id: spawn.name for spawn in scenario.player_spawns}
     interaction_service = SpotInteractionApplicationService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -2822,6 +2827,9 @@ def create_world_runtime(
         # するために repo を渡す。これまで None だったため damage_specs が
         # 黙って捨てられていた (廃屋の崩れた梁 / 岩礁の縁 等が flavor 止まり)。
         player_status_repository=player_status_repo,
+        player_display_name_resolver=lambda pid: player_name_map.get(
+            int(pid), f"プレイヤー({int(pid)})"
+        ),
     )
     exploration_service = SpotExplorationApplicationService(
         spot_graph_repository=spot_graph_repo,
@@ -2844,7 +2852,9 @@ def create_world_runtime(
         spot_interior_repository=spot_interior_repo,
         item_repository=item_repo,
     )
-    player_name_map = {spawn.player_id: spawn.name for spawn in scenario.player_spawns}
+    # player_name_map は interaction_service の resolver 用に既に構築済み
+    # (上記 SpotInteractionApplicationService 呼び出しの直前)。ここでは
+    # 再利用するだけ。
 
     def _resolve_entity_name(entity_id: int) -> str:
         return player_name_map.get(entity_id, f"プレイヤー({entity_id})")
