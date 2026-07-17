@@ -947,3 +947,45 @@ def log_goal_reflect_enabled_state(enabled: bool) -> None:
         ENV_GOAL_REFLECT_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Semantic memory: STATE_COLLAPSE evidence (PR-D)
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_STATE_COLLAPSE_EVIDENCE_ENABLED = "STATE_COLLAPSE_EVIDENCE_ENABLED"
+
+
+def resolve_state_collapse_evidence_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """状態破綻 (戦闘不能への遷移 / 空腹 max 到達) の高 salience evidence
+    転記を有効化するか。``STATE_COLLAPSE_EVIDENCE_ENABLED=1`` で ON、
+    未設定 / その他は OFF。
+
+    OFF (既定) のとき、``StateCollapseEvidenceTranscriber`` は配線されず
+    (``world_runtime`` 側で None のまま)、戦闘不能/空腹 max 到達は従来通り
+    prose 観測 1 行のみで belief 形成の素材にはならない (導入前と挙動不変)。
+
+    ON にすると、is_down への遷移と hunger max 到達を
+    ``BeliefEvidence(source_kind=STATE_COLLAPSE, salience=high)`` として
+    evidence buffer に積む。判定基準はエンジン側の状態遷移そのもの
+    (is_down フラグ / hunger.value >= hunger.max_value) であり、新規の
+    LLM 判定は追加しない。「これが良い/悪い」という解釈は付けず事実の
+    記述のみを text に残す (STRUCTURED_FAILURE と同じ転記のみ方針)。
+
+    詳細は ``StateCollapseEvidenceTranscriber`` の docstring (PR-D) を参照。
+    """
+    return _parse_bool_env(
+        ENV_STATE_COLLAPSE_EVIDENCE_ENABLED, env=env, default=False
+    )
+
+
+def log_state_collapse_evidence_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_STATE_COLLAPSE_EVIDENCE_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )

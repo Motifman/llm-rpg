@@ -51,6 +51,7 @@ class TestBeliefEvidenceSourceKindEnum:
             "confirmation",
             "pending_resolution",
             "hearsay",  # P9 (伝聞)
+            "state_collapse",  # PR-D (状態破綻)
         }
         actual = {member.value for member in BeliefEvidenceSourceKind}
         assert actual == expected

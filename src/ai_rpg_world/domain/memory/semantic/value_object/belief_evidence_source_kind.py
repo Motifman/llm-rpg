@@ -12,6 +12,9 @@ U2 (証拠台帳統一設計 §2 / semantic_learning_consolidation_design.md
 - ``FAMILIARITY``: 既存クラスタ検出の転用 (U3 で配線予定)
 - ``CONFIRMATION``: 学びを信じて行動し当たった (U4 で配線予定)
 - ``PENDING_RESOLUTION``: 保留中の予測 (約束) の履行/破棄清算 (U10 で配線予定)
+- ``STATE_COLLAPSE``: 状態破綻 (戦闘不能への遷移 / 空腹 max 到達) の確定事実
+  転記 (PR-D で配線)。判定はエンジン側の状態遷移そのものであり、新たな
+  LLM 判定は加えない (STRUCTURED_FAILURE と同じ「転記のみ」方針)
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ class BeliefEvidenceSourceKind(str, Enum):
     # claim、cue は claim の対象 (spot/player)、話者は source_speaker に分離して
     # 保持する (belief_hearsay_design.md §2)。自分の体験より弱い証拠として扱う。
     HEARSAY = "hearsay"
+    STATE_COLLAPSE = "state_collapse"
 
 
 __all__ = ["BeliefEvidenceSourceKind"]
