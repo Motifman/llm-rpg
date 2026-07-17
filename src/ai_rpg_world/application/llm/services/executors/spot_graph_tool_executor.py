@@ -572,12 +572,21 @@ class SpotGraphToolExecutor:
         try:
             object_str_id = self._runtime.id_mapper.get_str("object", oid)
             subjective = extract_subjective_action_fields(args)
+            # 配線切れ修正 (PR-I): interact ツールの自由入力 `parameters`
+            # (パズルの暗証番号 / 看板の本文など) が、ここで取り出されず
+            # do_interact に渡っていなかった。dict でない値 (None / 型違反)
+            # は None として扱い、不正型で落とさない (入口での型ガード)。
+            raw_parameters = args.get("parameters")
+            interaction_parameters = (
+                raw_parameters if isinstance(raw_parameters, dict) else None
+            )
             # do_interact が execute_interaction + SpotObjectInteractedEvent +
             # _process_graph_events + _record_action_result を面倒見る。
             result = self._runtime.do_interact(
                 PlayerId(player_id),
                 object_str_id,
                 action,
+                interaction_parameters=interaction_parameters,
                 **subjective,
             )
             # PR-ι: interact しながらの一言 (say_inline)。失敗しても親 action
