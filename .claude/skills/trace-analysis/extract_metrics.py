@@ -25,6 +25,8 @@ run_dir / baseline_dir はそれぞれ ``trace.jsonl`` を含む dir。
 from __future__ import annotations
 
 import argparse
+import bisect
+import itertools
 import json
 import re
 import sys
@@ -405,6 +407,176 @@ def _extract_survival_progress(events: list[dict]) -> dict[str, Any]:
     }
 
 
+# PR-A (協調シナリオ v3_coop の勝敗判別指標): survival_island_v3_coop で
+# 勝ち run (救助成功) と負け run を比べたとき、共在時間や伝聞の流れが人手で毎回
+# 計算されていた。勝敗を判別できることが分かった指標を固定して自動集計する。
+# 詳細: docs/memory_system (v3_coop 分析ノート) を参照。
+
+
+def _all_ticks_seen(events: list[dict]) -> list[int]:
+    """run 全体で観測された tick の一覧 (昇順・重複なし)。
+
+    ``tick_start`` があれば tick_start を正とする (= 1 tick に 1 件、抜けが
+    ない前提)。tick_start が無い trace (合成テスト等) では、他 event が持つ
+    tick の最小〜最大の連続範囲で代替する (= 稠密な tick 系列を仮定)。
+    """
+    starts = {
+        e["tick"] for e in events
+        if e.get("kind") == "tick_start" and e.get("tick") is not None
+    }
+    if starts:
+        return sorted(starts)
+    any_ticks = {e["tick"] for e in events if e.get("tick") is not None}
+    if not any_ticks:
+        return []
+    return list(range(min(any_ticks), max(any_ticks) + 1))
+
+
+def _reconstruct_player_positions(
+    events: list[dict],
+) -> dict[int, list[tuple[int, str]]]:
+    """``position_change`` から player_id ごとの (tick, to_spot_id) 系列を作る。
+
+    区分一定 (carry-forward) で「その tick に居たスポット」を復元する前提の
+    土台。from_spot_id=None の初期配置イベントも to_spot_id は必ず入るため、
+    そのまま使える。
+    """
+    by_pid: dict[int, list[tuple[int, str]]] = defaultdict(list)
+    for e in events:
+        if e.get("kind") != "position_change":
+            continue
+        pid = e.get("player_id")
+        tick = e.get("tick")
+        spot = e.get("payload", {}).get("to_spot_id")
+        if pid is None or tick is None or spot is None:
+            continue
+        by_pid[pid].append((tick, spot))
+    for pid in by_pid:
+        by_pid[pid].sort(key=lambda x: x[0])
+    return by_pid
+
+
+def _extract_coop_copresence(events: list[dict]) -> dict[str, Any]:
+    """ペア別 / 全員同スポットの共在 tick 数を position_change から復元する。
+
+    各 player の位置を carry-forward (直前の to_spot_id を次の position_change
+    まで保持) で全 tick に展開し、tick ごとに同一スポットにいる player の組を
+    数える。position_change が 1 件も無い player はどの tick でも位置不明とし
+    数から除外する (= 過大集計を避ける)。
+    """
+    by_pid = _reconstruct_player_positions(events)
+    if not by_pid:
+        return {
+            "player_ids": [],
+            "player_names": {},
+            "tick_count": 0,
+            "pair_copresence_ticks": {},
+            "all_players_copresence_ticks": 0,
+        }
+
+    names: dict[int, str] = {}
+    for e in events:
+        if e.get("kind") != "position_change":
+            continue
+        pid = e.get("player_id")
+        nm = e.get("payload", {}).get("player_name")
+        if pid is not None and nm:
+            names[pid] = nm
+
+    pids = sorted(by_pid.keys())
+    tick_lists = {pid: [t for t, _ in by_pid[pid]] for pid in pids}
+    spot_lists = {pid: [s for _, s in by_pid[pid]] for pid in pids}
+    all_ticks = _all_ticks_seen(events)
+
+    pair_counts: dict[str, int] = {
+        f"P{a}-P{b}": 0 for a, b in itertools.combinations(pids, 2)
+    }
+    all_together = 0
+
+    for t in all_ticks:
+        positions: dict[int, str] = {}
+        for pid in pids:
+            idx = bisect.bisect_right(tick_lists[pid], t) - 1
+            if idx >= 0:
+                positions[pid] = spot_lists[pid][idx]
+        for a, b in itertools.combinations(pids, 2):
+            sa, sb = positions.get(a), positions.get(b)
+            if sa is not None and sb is not None and sa == sb:
+                pair_counts[f"P{a}-P{b}"] += 1
+        if len(pids) >= 2 and len(positions) == len(pids) and len(set(positions.values())) == 1:
+            all_together += 1
+
+    return {
+        "player_ids": pids,
+        "player_names": {f"P{pid}": names.get(pid) for pid in pids},
+        "tick_count": len(all_ticks),
+        "pair_copresence_ticks": pair_counts,
+        "all_players_copresence_ticks": all_together,
+    }
+
+
+def _extract_hearsay_evidence_by_speaker(events: list[dict]) -> dict[str, Any]:
+    """belief_evidence (source_kind=hearsay) を source_speaker 別に集計する。
+
+    伝聞がどの player から流れているかを見る (= 情報伝達の起点の可視化)。
+    """
+    by_speaker: Counter[str] = Counter()
+    for e in events:
+        if e.get("kind") != "belief_evidence":
+            continue
+        p = e.get("payload", {})
+        if p.get("source_kind") != "hearsay":
+            continue
+        speaker = p.get("source_speaker") or "?"
+        by_speaker[speaker] += 1
+    return {
+        "total": sum(by_speaker.values()),
+        "by_speaker": dict(by_speaker.most_common()),
+    }
+
+
+def _extract_pending_prediction_verdicts(events: list[dict]) -> dict[str, Any]:
+    """約束 (pending_prediction) の kind 別件数と resolved の verdict 内訳。
+
+    ``pending_prediction_*`` kind は将来増える予定 (例: verdict_rejected) の
+    ため、既知 kind をハードコードせず prefix match で拾う (= 未知の
+    suffix が来ても静かに無視されず件数に乗る)。
+    """
+    prefix = "pending_prediction_"
+    by_kind: Counter[str] = Counter()
+    verdicts: Counter[str] = Counter()
+    for e in events:
+        k = e.get("kind") or ""
+        if not k.startswith(prefix):
+            continue
+        suffix = k[len(prefix):]
+        by_kind[suffix] += 1
+        if suffix == "resolved":
+            v = e.get("payload", {}).get("verdict") or "?"
+            verdicts[v] += 1
+    return {
+        "by_kind": dict(by_kind.most_common()),
+        "resolved_verdict_breakdown": dict(verdicts.most_common()),
+    }
+
+
+def _extract_give_item(events: list[dict]) -> dict[str, Any]:
+    """give_item (tool=give_item) の action_result を成功/失敗別に数える。"""
+    succ = 0
+    fail = 0
+    for e in events:
+        if e.get("kind") != "action_result":
+            continue
+        p = e.get("payload", {})
+        if p.get("tool") != "give_item":
+            continue
+        if p.get("success", True):
+            succ += 1
+        else:
+            fail += 1
+    return {"total": succ + fail, "success": succ, "fail": fail}
+
+
 def compute_metrics(run_dir: Path) -> dict[str, Any]:
     events = _load_events(run_dir)
     return {
@@ -419,6 +591,10 @@ def compute_metrics(run_dir: Path) -> dict[str, Any]:
         "issue621_chain": _extract_issue621_chain(events),
         "fatigue_trajectory_10tick": _extract_fatigue_trajectory(events),
         "survival_progress": _extract_survival_progress(events),
+        "coop_copresence": _extract_coop_copresence(events),
+        "coop_hearsay_by_speaker": _extract_hearsay_evidence_by_speaker(events),
+        "coop_pending_prediction": _extract_pending_prediction_verdicts(events),
+        "coop_give_item": _extract_give_item(events),
         "total_events": len(events),
     }
 
