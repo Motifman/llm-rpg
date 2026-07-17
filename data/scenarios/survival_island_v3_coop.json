@@ -883,6 +883,37 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "camp_notice_board",
+            "name": "板切れの掲示",
+            "description": "焚き火跡の脇に立てられた、平たい板切れ。誰でも短い言葉を書き残せそうだ。留守にしている仲間への伝言を、ここに置いていける。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "write_notice",
+                "display_label": "板切れに書き残す",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "WRITE_PLAYER_TEXT",
+                    "parameters": {}
+                  }
+                ]
+              },
+              {
+                "action_name": "read_notice",
+                "display_label": "板切れを読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_PLAYER_TEXT",
+                    "parameters": {}
+                  }
+                ]
+              }
+            ]
           }
         ]
       }
@@ -1932,7 +1963,7 @@
     {
       "id": "foothills",
       "name": "山麓",
-      "description": "森を抜けた先の岩がちな斜面。山道が二手に分かれており、一方は崖沿いに、もう一方は洞窟へと続いている。",
+      "description": "森を抜けた先の岩がちな斜面。山道が二手に分かれており、一方は崖沿いに、もう一方は洞窟へと続いている。分岐の目印に石が積まれており、誰かが上に文字を書き残せそうだ。",
       "category": "FIELD",
       "atmosphere": {
         "lighting": "BRIGHT",
@@ -1941,7 +1972,39 @@
       },
       "is_outdoor": true,
       "interior": {
-        "objects": []
+        "objects": [
+          {
+            "id": "trail_cairn",
+            "name": "石積みの目印",
+            "description": "分岐点に積まれた石の目印。上に置かれた薄い石に、誰かが文字を刻み込んでいる。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "carve_message",
+                "display_label": "石に刻む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "WRITE_PLAYER_TEXT",
+                    "parameters": {}
+                  }
+                ]
+              },
+              {
+                "action_name": "read_carving",
+                "display_label": "刻まれた文字を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_PLAYER_TEXT",
+                    "parameters": {}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     },
     {
