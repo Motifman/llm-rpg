@@ -3876,6 +3876,7 @@ def create_world_runtime(
             log_pending_prediction_enabled_state,
             log_recall_hit_boost_enabled_state,
             log_salience_structured_failure_enabled_state,
+            log_state_collapse_evidence_enabled_state,
             log_unconscious_context_enabled_state,
             resolve_belief_attribution_enabled,
             resolve_belief_consolidation_enabled,
@@ -3887,6 +3888,7 @@ def create_world_runtime(
             resolve_pending_prediction_enabled,
             resolve_recall_hit_boost_enabled,
             resolve_salience_structured_failure_enabled,
+            resolve_state_collapse_evidence_enabled,
             resolve_unconscious_context_enabled,
         )
 
@@ -3941,6 +3943,13 @@ def create_world_runtime(
         log_salience_structured_failure_enabled_state(
             _salience_structured_failure_enabled
         )
+        # PR-D (状態破綻を高 salience evidence として記憶化 / default OFF):
+        # is_down への遷移と hunger max 到達を STATE_COLLAPSE 転記する。他の
+        # salience 系 flag と同じ evidence buffer を共有するので、ON なら
+        # buffer store を作る条件に加える。判定は既存の状態遷移そのものであり
+        # LLM 呼び出しは追加しない (structured_failure と同じ「転記のみ」方針)。
+        _state_collapse_evidence_enabled = resolve_state_collapse_evidence_enabled()
+        log_state_collapse_evidence_enabled_state(_state_collapse_evidence_enabled)
         # U8 (予測誤差統一設計 部品2・誤差ゲート付き符号化 / default OFF):
         # 境界 (2a, chunk_coordinator へ伝播) + 解像度 (2b, 下の subjective
         # service 構築時に salience_enabled と合わせて評価) を一括ゲートする。
@@ -4061,6 +4070,7 @@ def create_world_runtime(
             or _belief_consolidation_enabled
             or _salience_structured_failure_enabled
             or _memo_distill_enabled
+            or _state_collapse_evidence_enabled
         ):
             from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
                 InMemoryBeliefEvidenceBufferStore,
@@ -4538,6 +4548,56 @@ def create_world_runtime(
                     trace_recorder_provider=lambda: runtime._trace_recorder,
                     current_tick_provider=runtime.current_tick,
                 )
+            )
+
+        # PR-D (STATE_COLLAPSE): flag ON のときだけ transcriber を作り、
+        # 1) PlayerDownedEvent / PlayerRevivedEvent の side handler として
+        #    pipeline_event_publisher に登録する (is_down 遷移フック)
+        # 2) needs_decay_stage に後付け注入する (hunger max 到達フック)
+        # being 解決は世界内で 1 か所に閉じる (aux_being_resolver 経由)。
+        if _state_collapse_evidence_enabled and belief_evidence_buffer_store is not None:
+            from ai_rpg_world.application.llm.services.state_collapse_evidence_transcriber import (
+                StateCollapseEvidenceTranscriber,
+            )
+            from ai_rpg_world.application.player.handlers.player_downed_state_collapse_evidence_handler import (
+                PlayerDownedStateCollapseEvidenceHandler,
+            )
+            from ai_rpg_world.application.player.handlers.player_revived_state_collapse_evidence_handler import (
+                PlayerRevivedStateCollapseEvidenceHandler,
+            )
+
+            state_collapse_transcriber = StateCollapseEvidenceTranscriber(
+                belief_evidence_buffer_store,
+                runtime._episodic_stack.episode_store,
+                trace_recorder_provider=lambda: runtime._trace_recorder,
+                current_tick_provider=runtime.current_tick,
+            )
+
+            def _resolve_state_collapse_being_id(
+                player_id: PlayerId,
+            ) -> Optional[BeingId]:
+                resolver = getattr(runtime, "_aux_being_resolver", None)
+                world_id = getattr(runtime, "_aux_being_default_world_id", None)
+                if resolver is None or world_id is None:
+                    return None
+                return resolver.resolve_being_id(world_id, player_id)
+
+            pipeline_event_publisher.register_handler(
+                PlayerDownedEvent,
+                PlayerDownedStateCollapseEvidenceHandler(
+                    transcriber=state_collapse_transcriber,
+                    being_id_resolver=_resolve_state_collapse_being_id,
+                ),
+            )
+            pipeline_event_publisher.register_handler(
+                PlayerRevivedEvent,
+                PlayerRevivedStateCollapseEvidenceHandler(
+                    transcriber=state_collapse_transcriber,
+                    being_id_resolver=_resolve_state_collapse_being_id,
+                ),
+            )
+            needs_decay_stage.set_state_collapse_evidence_wiring(
+                state_collapse_transcriber, _resolve_state_collapse_being_id
             )
 
         # U5 (MEMO_DISTILL): flag ON のときだけ transcriber を作り、既に
