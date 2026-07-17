@@ -49,6 +49,23 @@ python scripts/run_scenario_experiment.py \
 
 scenario 固有の集計が欲しくなったら、`scripts/issue154_full_tables_experiment.py` を真似て新規 aggregator を書く (relay_puzzle 専用集計はこれ)。
 
+### `survival_island_v3_coop`（協力シナリオ）を回すとき: `--max-world-ticks 240` を使う
+
+`data/scenarios/survival_island_v3_coop.json` は「協調に失敗すると漂流確定 (stranded) になる」シナリオで、
+`stranded_at_tick: 240`（`estimated_ticks` も 240）で設計されている。**`--max-world-ticks` にこれより小さい値を渡すと
+stranded 判定が発火する前に実験が打ち切られ、協調が破綻したかどうかを一度も観測できない**（M7 実走で
+`--max-world-ticks 200` を指定してしまい、この失敗が起きた）。
+
+```bash
+make experiment-survival-coop OUT=var/runs/m7_coop_r1
+# 等価 (make experiment 直接):
+make experiment SCENARIO=data/scenarios/survival_island_v3_coop.json \
+                MAX_WORLD_TICKS=240 WORKERS=4 OUT=var/runs/m7_coop_r1
+```
+
+`make experiment-survival-coop` は `MAX_WORLD_TICKS=240` / `WORKERS=4` / `PUBLISH=1` を既定に固定したショートカット
+（`make experiment-survival` の v2 版に相当）。他シナリオ (`survival_island_v2` など) の既定値には影響しない。
+
 ### Gist 自動 publish (リモート実験を依頼者と共有)
 
 実行終了時に成果物 (trace.jsonl + report.md + trace.html + scenario.json + **viewer.html**) を **secret gist に一括アップロード**し、`htmlpreview.github.io` 経由のプレビュー URL も同時表示します。

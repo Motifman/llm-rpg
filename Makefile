@@ -3,7 +3,7 @@
 	web-frontend-test web-frontend-build web-frontend \
 	asset-pipeline-sync asset-pipeline-sync-rembg asset-pipeline \
 	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud \
-	experiment experiment-publish experiment-survival experiment-recall-probe \
+	experiment experiment-publish experiment-survival experiment-survival-coop experiment-recall-probe \
 	vllm-tunnel vllm-check \
 	check-no-internal-hostnames build-trace-viewer
 
@@ -53,6 +53,8 @@ help:
 	@echo "  make experiment-publish ...   - experiment + 自動 gist publish"
 	@echo "  make experiment-survival OUT=... [EPISODIC=1]"
 	@echo "                                - survival_island_v2 専用 (140 tick / workers 4 / publish 既定)"
+	@echo "  make experiment-survival-coop OUT=... [EPISODIC=1]"
+	@echo "                                - survival_island_v3_coop 専用 (stranded_at_tick=240 / workers 4 / publish 既定)"
 	@echo "  make experiment-recall-probe OUT=... [DRY_RUN=1]"
 	@echo "                                - Issue #526 不在 2 検証用 (recall_probe_v1 / 15 tick / 1 player)"
 	@echo "  make build-trace-viewer RUN_DIR=...  - viewer 3 種 (main + episodic + timeline) を build"
@@ -344,6 +346,42 @@ experiment-survival:
 		QUANTIZATION=$(QUANTIZATION) \
 		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
 		PUBLISH=$(SURVIVAL_PUBLISH)
+
+# survival_island_v3_coop 専用のショートカット。
+# このシナリオは「漂流確定 (stranded)」が data/scenarios/survival_island_v3_coop.json の
+# stranded_at_tick=240 で設計されている (estimated_ticks も 240)。M7 実走で
+# --max-world-ticks 200 を指定してしまい、200 で打ち切られ stranded 判定が
+# 一度も発火しなかった (協調が破綻したかどうかを観測できなかった) 反省を
+# 踏まえ、v3_coop はこのショートカット経由で 240 を既定にして再発を防ぐ。
+# 他シナリオ (survival_island_v2 / decay_demo 等) の既定値には影響しない。
+#
+# 使い方:
+#   make experiment-survival-coop OUT=var/runs/m7_coop_r1
+#   make experiment-survival-coop OUT=var/runs/m7_coop_r1_episodic EPISODIC=1
+#
+# 上書き可能な変数 (省略時の coop 既定値):
+#   MAX_WORLD_TICKS=240 (= stranded_at_tick)  WORKERS=4  PUBLISH=1
+#   EPISODIC は未指定 (= OFF)。1 で ON_FULL。
+#   SECTION_ORDER / MEMORY_KIND / SCHEDULER_MODE / PROVIDER /
+#   QUANTIZATION / REQUIRE_PARAMS も同様に上位 experiment target へ素通し。
+COOP_MAX_WORLD_TICKS ?= 240
+COOP_WORKERS ?= 4
+COOP_PUBLISH ?= 1
+experiment-survival-coop:
+	$(MAKE) experiment \
+		SCENARIO=data/scenarios/survival_island_v3_coop.json \
+		MAX_WORLD_TICKS=$(COOP_MAX_WORLD_TICKS) \
+		WORKERS=$(COOP_WORKERS) \
+		OUT=$(OUT) \
+		EPISODIC=$(EPISODIC) \
+		IDLE_TICKS=$(IDLE_TICKS) \
+		SECTION_ORDER=$(SECTION_ORDER) \
+		MEMORY_KIND=$(MEMORY_KIND) \
+		SCHEDULER_MODE=$(SCHEDULER_MODE) \
+		PROVIDER=$(PROVIDER) \
+		QUANTIZATION=$(QUANTIZATION) \
+		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
+		PUBLISH=$(COOP_PUBLISH)
 
 # Issue #526 後続: 能動 recall (memory_recall_episodes) 検証用の小規模実験。
 # 1 player + 15 tick + 過去 episode 強制注入 + scripted NPC「シキ」の質問 3 つ。
