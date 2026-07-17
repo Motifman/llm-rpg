@@ -370,6 +370,9 @@ class SpotInteractionService:
         acting_player_status: Optional[PlayerStatusAggregate] = None,
         current_time_of_day_phase: Optional[str] = None,
         current_weather_type: Optional[str] = None,
+        # PR-F: 看板の書き手名。WRITE_PLAYER_TEXT effect が object.state に
+        # 保存するために effect_service まで配線する。
+        acting_player_display_name: Optional[str] = None,
     ) -> InteractionExecutionResult:
         obj = interior.get_object(object_id)
         if obj is None:
@@ -400,6 +403,8 @@ class SpotInteractionService:
             acting_item_aggregate=acting_item_aggregate,
             target_item_aggregate=target_item_aggregate,
             acting_player_status=acting_player_status,
+            interaction_parameters=interaction_parameters,
+            acting_player_display_name=acting_player_display_name,
         )
         return InteractionExecutionResult(
             new_interior=effect_result.new_interior,

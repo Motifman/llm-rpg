@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 _logger = logging.getLogger(__name__)
 
@@ -88,6 +88,10 @@ class SpotInteractionApplicationService:
         # 観測を emit しない (= LLM の retry loop で同じ失敗観測が 100 回
         # 流れる事態を防ぐ)。デフォルト 24 = survival_island_v2 の 1 day。
         failure_observation_dedup_window: int = 24,
+        # PR-F (#710 後続): 看板 (WRITE_PLAYER_TEXT) が object.state に残す
+        # 書き手名を解決する resolver。`Callable[[PlayerId], str]` を渡す。
+        # None (未注入) の場合はフォールバック名 (`"プレイヤー({id})"`) を使う。
+        player_display_name_resolver: Optional[Callable[[PlayerId], str]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -106,6 +110,17 @@ class SpotInteractionApplicationService:
         self._failure_observation_last_tick: Dict[
             Tuple[int, int, str, str], int
         ] = {}
+        self._player_display_name_resolver = player_display_name_resolver
+
+    def set_player_display_name_resolver(
+        self, resolver: Optional[Callable[[PlayerId], str]]
+    ) -> None:
+        """player_display_name_resolver を後付けで注入する (二段構築用)。
+
+        world_runtime のように scenario 由来の name map が interaction
+        service の構築より後に確定するケースで使う。
+        """
+        self._player_display_name_resolver = resolver
 
     def set_time_of_day_phase_provider(self, provider: Optional[Any]) -> None:
         """PR4: 時間帯 provider を後付け bind する (runtime 順序依存解消用)。
@@ -241,6 +256,20 @@ class SpotInteractionApplicationService:
         # 常に「1 人」と判定される (PLAYERS_AT_SPOT が構造的に死ぬ)。
         spot_presence_count = len(graph.presence_at(spot_id).present_entity_ids)
 
+        # PR-F: 看板 (WRITE_PLAYER_TEXT) が object.state に残す書き手名。
+        # resolver 未注入 / 例外時は silent fallback ("プレイヤー({id})") にする。
+        # 看板は書き手が分かることが価値の中心だが、resolver 未配線を例外で
+        # 落とすとシナリオ側で看板を使わない限り無関係な interaction まで
+        # 巻き込んで壊れるため、フォールバック名の劣化として扱う。
+        acting_player_display_name: Optional[str] = None
+        if self._player_display_name_resolver is not None:
+            try:
+                acting_player_display_name = self._player_display_name_resolver(player_id)
+            except Exception:
+                acting_player_display_name = None
+        if not acting_player_display_name:
+            acting_player_display_name = f"プレイヤー({int(player_id)})"
+
         try:
             result = self._interaction.execute_interaction(
                 interior,
@@ -257,6 +286,7 @@ class SpotInteractionApplicationService:
                 current_time_of_day_phase=current_time_of_day_phase,
                 current_weather_type=current_weather_type,
                 spot_presence_count=spot_presence_count,
+                acting_player_display_name=acting_player_display_name,
             )
         except InteractionNotAllowedException as exc:
             # 前提条件で拒否された。#356 後続: 旧コードは scenario JSON で
