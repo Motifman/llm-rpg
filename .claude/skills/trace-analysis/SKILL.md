@@ -33,6 +33,10 @@ PYTHONPATH=. python .claude/skills/trace-analysis/extract_metrics.py <run_dir> [
 - summary 生成回数 (L4/L5/episodic_chunk)
 - loop_guard_warning 詳細
 - baseline 比較 (baseline_dir 指定時)
+- 協調指標 (PR-A, survival_island_v3_coop 系向け): ペア別 / 全員同スポット
+  共在 tick 数、hearsay (伝聞) evidence の話者別件数、pending_prediction の
+  kind 別件数 (created/resolved/expired + 未知 suffix) と resolved の
+  verdict 内訳、give_item 実行件数
 
 `extract_metrics.py --help` で詳細。
 

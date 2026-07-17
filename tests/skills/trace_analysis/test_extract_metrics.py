@@ -250,3 +250,176 @@ class TestSurvivalProgress:
         metrics = em.compute_metrics(run)
         assert "survival_progress" in metrics
         assert metrics["survival_progress"]["summit_reached"]["P1"]["tick"] == 50
+
+
+class TestCoopCopresence:
+    """PR-A: 協力シナリオ v3_coop の勝敗判別指標 — ペア別 / 全員同スポット共在。"""
+
+    def _tick_start(self, tick):
+        return {"kind": "tick_start", "tick": tick, "payload": {}}
+
+    def _pos(self, tick, pid, spot, name):
+        return {
+            "kind": "position_change",
+            "tick": tick,
+            "player_id": pid,
+            "payload": {"to_spot_id": spot, "spot_name": spot, "player_name": name},
+        }
+
+    def test_同一スポットに居る_tick_を_ペア別に数える(self, em) -> None:
+        """P1 は tick0-2 で浜、P2 は tick0-1 で浜・tick2 で森 → 共在は tick0-1 の 2。"""
+        events = [
+            self._tick_start(0), self._tick_start(1), self._tick_start(2),
+            self._pos(0, 1, "浜", "エイダ"),
+            self._pos(0, 2, "浜", "ノア"),
+            self._pos(2, 2, "森", "ノア"),
+        ]
+        out = em._extract_coop_copresence(events)
+        assert out["pair_copresence_ticks"]["P1-P2"] == 2
+        assert out["tick_count"] == 3
+
+    def test_未移動の_player_は_直前の_to_spot_id_を_carry_forward_する(self, em) -> None:
+        """position_change が起きない tick は「最後に移動した先」に居続けたとみなす。"""
+        events = [
+            self._tick_start(0), self._tick_start(1), self._tick_start(2),
+            self._tick_start(3), self._tick_start(4),
+            self._pos(0, 1, "浜", "エイダ"),
+            self._pos(0, 2, "浜", "ノア"),
+            self._pos(3, 1, "森", "エイダ"),
+        ]
+        out = em._extract_coop_copresence(events)
+        # tick0-2 は P1/P2 とも浜 (3), tick3-4 は P1=森/P2=浜 (共在なし)。
+        assert out["pair_copresence_ticks"]["P1-P2"] == 3
+
+    def test_全員同スポットの_tick_数を_数える(self, em) -> None:
+        events = [
+            self._tick_start(0), self._tick_start(1),
+            self._pos(0, 1, "浜", "エイダ"),
+            self._pos(0, 2, "浜", "ノア"),
+            self._pos(0, 3, "浜", "カイ"),
+            self._pos(1, 3, "森", "カイ"),
+        ]
+        out = em._extract_coop_copresence(events)
+        assert out["all_players_copresence_ticks"] == 1
+
+    def test_position_change_が_一件も無い_player_は_数に入らない(self, em) -> None:
+        """観測されていない player の位置は不明として扱い、過大集計しない。"""
+        events = [
+            self._tick_start(0),
+            self._pos(0, 1, "浜", "エイダ"),
+            {"kind": "llm_call", "tick": 0, "player_id": 4, "payload": {}},
+        ]
+        out = em._extract_coop_copresence(events)
+        assert out["player_ids"] == [1]
+        assert out["pair_copresence_ticks"] == {}
+
+    def test_player_name_を_保持する(self, em) -> None:
+        events = [self._tick_start(0), self._pos(0, 1, "浜", "エイダ")]
+        out = em._extract_coop_copresence(events)
+        assert out["player_names"]["P1"] == "エイダ"
+
+    def test_イベントが空なら_全て_0_で返す(self, em) -> None:
+        out = em._extract_coop_copresence([])
+        assert out == {
+            "player_ids": [],
+            "player_names": {},
+            "tick_count": 0,
+            "pair_copresence_ticks": {},
+            "all_players_copresence_ticks": 0,
+        }
+
+
+class TestHearsayEvidenceBySpeaker:
+    """PR-A: belief_evidence (source_kind=hearsay) の話者別集計。"""
+
+    def _hearsay(self, speaker):
+        return {
+            "kind": "belief_evidence",
+            "payload": {"source_kind": "hearsay", "source_speaker": speaker},
+        }
+
+    def test_hearsay_以外の_source_kind_は_数えない(self, em) -> None:
+        events = [
+            self._hearsay("リオ"),
+            {"kind": "belief_evidence", "payload": {"source_kind": "prediction_error"}},
+        ]
+        out = em._extract_hearsay_evidence_by_speaker(events)
+        assert out["total"] == 1
+        assert out["by_speaker"] == {"リオ": 1}
+
+    def test_話者別に_件数を_積む(self, em) -> None:
+        events = [self._hearsay("リオ"), self._hearsay("リオ"), self._hearsay("ノア")]
+        out = em._extract_hearsay_evidence_by_speaker(events)
+        assert out["total"] == 3
+        assert out["by_speaker"] == {"リオ": 2, "ノア": 1}
+
+
+class TestPendingPredictionVerdicts:
+    """PR-A: 約束 (pending_prediction_*) の kind 別件数と resolved の verdict 内訳。
+
+    将来 pending_prediction_verdict_rejected のような未知 kind が増える想定
+    のため、既知 3 種以外の suffix も拾えることを確認する。
+    """
+
+    def test_created_resolved_expired_の_件数を_数える(self, em) -> None:
+        events = [
+            {"kind": "pending_prediction_created", "payload": {}},
+            {"kind": "pending_prediction_created", "payload": {}},
+            {"kind": "pending_prediction_resolved", "payload": {"verdict": "fulfilled"}},
+            {"kind": "pending_prediction_expired", "payload": {}},
+        ]
+        out = em._extract_pending_prediction_verdicts(events)
+        assert out["by_kind"] == {"created": 2, "resolved": 1, "expired": 1}
+
+    def test_resolved_を_verdict_別に_内訳する(self, em) -> None:
+        events = [
+            {"kind": "pending_prediction_resolved", "payload": {"verdict": "fulfilled"}},
+            {"kind": "pending_prediction_resolved", "payload": {"verdict": "fulfilled"}},
+            {"kind": "pending_prediction_resolved", "payload": {"verdict": "broken"}},
+        ]
+        out = em._extract_pending_prediction_verdicts(events)
+        assert out["resolved_verdict_breakdown"] == {"fulfilled": 2, "broken": 1}
+
+    def test_未知の_pending_prediction_kind_も_by_kind_に_乗る(self, em) -> None:
+        events = [{"kind": "pending_prediction_verdict_rejected", "payload": {}}]
+        out = em._extract_pending_prediction_verdicts(events)
+        assert out["by_kind"] == {"verdict_rejected": 1}
+
+
+class TestGiveItem:
+    """PR-A: give_item の action_result を成功/失敗別に数える。"""
+
+    def test_give_item_の_成功_失敗を_数える(self, em) -> None:
+        events = [
+            {"kind": "action_result", "payload": {"tool": "give_item", "success": True}},
+            {"kind": "action_result", "payload": {"tool": "give_item", "success": False}},
+            {"kind": "action_result", "payload": {"tool": "travel_to", "success": True}},
+        ]
+        out = em._extract_give_item(events)
+        assert out == {"total": 2, "success": 1, "fail": 1}
+
+    def test_give_item_が_一件も無ければ_全て_0(self, em) -> None:
+        out = em._extract_give_item([])
+        assert out == {"total": 0, "success": 0, "fail": 0}
+
+
+class TestCoopMetricsIncludedInComputeMetrics:
+    def test_compute_metrics_に_新指標が_含まれる(self, em, tmp_path) -> None:
+        events = [
+            {"kind": "tick_start", "tick": 0, "payload": {}},
+            {
+                "kind": "position_change", "tick": 0, "player_id": 1,
+                "payload": {"to_spot_id": "浜", "spot_name": "浜", "player_name": "エイダ"},
+            },
+            {
+                "kind": "belief_evidence",
+                "payload": {"source_kind": "hearsay", "source_speaker": "リオ"},
+            },
+            {"kind": "pending_prediction_created", "payload": {}},
+            {"kind": "action_result", "payload": {"tool": "give_item", "success": True}},
+        ]
+        m = em.compute_metrics(_write_trace(tmp_path, events))
+        assert m["coop_copresence"]["player_names"]["P1"] == "エイダ"
+        assert m["coop_hearsay_by_speaker"]["by_speaker"] == {"リオ": 1}
+        assert m["coop_pending_prediction"]["by_kind"] == {"created": 1}
+        assert m["coop_give_item"]["success"] == 1
