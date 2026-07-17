@@ -1630,7 +1630,11 @@ def _build_pending_prediction_sidecar_fixture(*, player_id: int = 7):
     existing_pending = PendingPrediction(
         pending_id="p1",
         text="約束-p1",
-        resolution_cues=("player:カイト",),
+        # PR-C 共在ゲート: player cue にすると fulfilled 受理に episode.who
+        # への実在が要る。この fixture の draft には observations が無く
+        # who は空になるため、ゲート対象外の spot cue にしてこのテストの
+        # 本来の関心 (add 失敗が resolve を巻き添えにしないこと) を保つ。
+        resolution_cues=("spot:1",),
         tick_from=1,
         tick_to=50,
         origin_episode_id="ep-origin",

@@ -217,6 +217,20 @@ class TraceEventKind:
     #   - being_id: str
     #   - tick: int | None
     PENDING_PREDICTION_EXPIRED = "pending_prediction_expired"
+    # PR-C (共在ゲート): fulfilled 判定が下ったが、resolution_cues の
+    # player:X 全員が判定 chunk の episode.who (エンジン由来の確定事実) に
+    # 不在だったため、清算を棄却し約束を store に残したままにした瞬間。
+    # 「合流しよう」と*思っただけ*の chunk を LLM が fulfilled と誤判定し、
+    # 現実に反する「果たした」evidence が belief を汚染する事故 (m7_v3coop_001
+    # t188) の再発防止。broken 判定・player cue の無い約束には一切発生しない。
+    # payload:
+    #   - being_id: str
+    #   - pending_id: str
+    #   - verdict: str (常に "fulfilled")
+    #   - required_players: list[str] (= resolution_cues の player:X 全員)
+    #   - present_players: list[str] (= episode.who に実在した相手)
+    #   - missing_players: list[str] (= episode.who に不在だった相手)
+    PENDING_PREDICTION_VERDICT_REJECTED = "pending_prediction_verdict_rejected"
     # LOW-1 (約束の trace 実態対応): per-Being store の容量上限 (既定 8 件) を
     # 超えたため、新しい約束を積む際に最も古い未決着の約束が黙って evict
     # された瞬間。EXPIRED (期限切れによる失効) とは別イベントにする理由は、
