@@ -17,6 +17,7 @@ from ai_rpg_world.application.player.services.player_death_grace_tick_stage impo
 from ai_rpg_world.application.player.services.player_death_grace_timer import (
     PlayerDeathGraceTimer,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.service.player_outcome_registry import (
     PlayerOutcomeRegistry,
@@ -25,7 +26,16 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class TestRun:
-    """tick 毎の run(current_tick) で overdue を確定する。"""
+    """tick 毎の run(current_tick) で overdue を確定する。
+
+    ``SpotGraphSimulationApplicationService`` (実 run で使われる呼び出し元)
+    は ``_SpotGraphTickStage`` protocol に従い ``WorldTick`` を渡す。#710 で
+    ``PlayerDownedOutcomeHandler`` の登録が動くようになるまで ``run()`` は
+    pending が常に空のまま呼ばれ続けていたため、この型不一致
+    (``WorldTick - int`` の ``TypeError``) は実 run r1_001 で初めて down が
+    発生するまで一度も踏まれなかった。ここでは全テストが ``WorldTick`` を
+    渡す実経路の型で固定する。
+    """
 
     def test_grace_経過後の_player_が_DEAD_確定_する(self) -> None:
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
@@ -37,7 +47,7 @@ class TestRun:
             grace_ticks=30,
         )
 
-        stage.run(current_tick=30)
+        stage.run(WorldTick(30))
 
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.DEAD
 
@@ -51,7 +61,7 @@ class TestRun:
             grace_ticks=30,
         )
 
-        stage.run(current_tick=20)  # 経過 10 tick (< 30)
+        stage.run(WorldTick(20))  # 経過 10 tick (< 30)
 
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
 
@@ -66,7 +76,7 @@ class TestRun:
             grace_ticks=30,
         )
 
-        stage.run(current_tick=30)
+        stage.run(WorldTick(30))
 
         assert timer.is_pending(PlayerId(1)) is False
 
@@ -84,7 +94,7 @@ class TestRun:
             grace_ticks=30,
         )
 
-        stage.run(current_tick=35)
+        stage.run(WorldTick(35))
 
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.DEAD
         assert reg.get_outcome(PlayerId(2)) is PlayerOutcomeEnum.UNRESOLVED
@@ -102,7 +112,7 @@ class TestRun:
             grace_ticks=30,
         )
 
-        stage.run(current_tick=100)  # no-op
+        stage.run(WorldTick(100))  # no-op
 
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
 
@@ -120,11 +130,36 @@ class TestRun:
             grace_ticks=30,
         )
 
-        stage.run(current_tick=30)
+        stage.run(WorldTick(30))
 
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.RESCUED
         # 既に resolved なので grace_timer の pending も掃除される
         assert timer.is_pending(PlayerId(1)) is False
+
+    def test_WorldTick_を渡しても_TypeError_にならない(self) -> None:
+        """実 run r1_001 の再現ケース (裏取り済みのクラッシュ)。
+
+        ``SpotGraphSimulationApplicationService._tick_impl`` は
+        ``self._time_provider.advance_tick()`` が返す ``WorldTick`` を
+        そのまま ``death_grace_stage.run(current_tick)`` に渡す。
+        修正前はこの WorldTick が ``PlayerDeathGraceTimer.overdue_players``
+        まで生で渡り、``WorldTick - int`` の減算で
+        ``TypeError: unsupported operand type(s) for -: 'WorldTick' and 'int'``
+        になり tick 全体が SystemErrorException で停止していた。
+        """
+        reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
+        timer = PlayerDeathGraceTimer()
+        timer.register(PlayerId(1), downed_at_tick=5)
+        stage = PlayerDeathGraceTickStage(
+            outcome_registry=reg,
+            grace_timer=timer,
+            grace_ticks=30,
+        )
+
+        # クラッシュしないこと自体が確認事項 (例外が飛べば pytest が失敗させる)
+        stage.run(WorldTick(35))
+
+        assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.DEAD
 
 
 class TestValidation:
