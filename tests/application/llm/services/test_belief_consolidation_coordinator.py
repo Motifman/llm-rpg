@@ -1911,6 +1911,44 @@ class TestStagnationPressure:
                 stagnation_pressure_store=None,
             )
 
+    def test_multiple_stalled_reflects_in_one_flush_increment_counter_once(self) -> None:
+        """敵対的レビュー HIGH-2: 1 flush に reflect (stalled/misaligned) が複数
+        入っても、カウンタは 1 flush につき最大 +1 に畳み込まれる (件数分
+        (+3 等) 加算されない)。1 batch に evidence が複数あれば LLM が複数の
+        reflect decision を返し得るため、この畳み込みが無いと 1 flush で
+        いきなり strong band まで飛ぶ致命的な過剰反応になる。"""
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "空回りA"},
+                {"action": "reflect", "verdict": "stalled", "statement": "空回りB"},
+                {"action": "reflect", "verdict": "misaligned", "statement": "逸れているC"},
+            ]},
+            goal_reflect_enabled=True,
+            stagnation_pressure_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
+
+    def test_achieved_and_stalled_in_same_flush_resets_counter(self) -> None:
+        """敵対的レビュー HIGH-2: 同一 flush に achieved と stalled/misaligned が
+        混在するときは achieved を優先し、リセットする (+1 にはしない)。"""
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "空回りA"},
+                {"action": "reflect", "verdict": "achieved", "statement": "もう果たした"},
+            ]},
+            goal_reflect_enabled=True,
+            stagnation_pressure_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 0
+
     def test_stagnation_pressure_does_not_write_belief_journal_or_goal_store(self) -> None:
         """不変条件: 停滞感カウンタの畳み込みは belief journal にも goal store にも
         書き込まない。積むのは stagnation_pressure_store のカウンタのみ。"""
