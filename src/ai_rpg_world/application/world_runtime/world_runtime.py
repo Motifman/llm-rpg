@@ -2882,7 +2882,21 @@ def create_world_runtime(
     # provider は常に none を返す (= 導入前とプロンプト完全一致)。
     # episodic pipeline 自体が OFF (LLM_EPISODIC_ENABLED=0) で
     # ``_aux_being_resolver`` が未構築の経路も同様に none へ縮退する。
-    def _resolve_own_stagnation_band(player_id: int) -> str:
+    #
+    # 呼び出し対象は自分自身 (P-U3) だけでなく builder の nearby ループが
+    # 引く他 player (P-U4) も含むため、関数名は「自己」に限定しない
+    # (旧名 ``_resolve_own_stagnation_band`` は誤解を招くため改名した)。
+    #
+    # store は組めているのに being が未解決 (= resolve_being_id が None) の
+    # ケースは、player が being に未 attach 等で正当に起こりうる一方、配線
+    # 漏れでも同じ none 縮退になり見分けが付かない。ログが無いと「停滞感が
+    # 永久に出ない」を「前進中で count==0」と区別できず、この機能が守りたい
+    # 「静かな失敗を弾く」という方針に反するので、player_id ごとに 1 回だけ
+    # 診断用の warning を残す (毎 tick 溢れさせないためのスロットル)。
+    # store 自体が None (= 機能無効) のときは何も出さない。
+    _stagnation_being_unresolved_warned: set[int] = set()
+
+    def _resolve_stagnation_band_for_player(player_id: int) -> str:
         resolver = getattr(runtime, "_aux_being_resolver", None)
         world_id = getattr(runtime, "_aux_being_default_world_id", None)
         store = getattr(runtime, "_stagnation_pressure_store", None)
@@ -2890,6 +2904,14 @@ def create_world_runtime(
             return STAGNATION_PRESSURE_BAND_NONE
         being_id = resolver.resolve_being_id(world_id, PlayerId(player_id))
         if being_id is None:
+            if player_id not in _stagnation_being_unresolved_warned:
+                _stagnation_being_unresolved_warned.add(player_id)
+                logger.warning(
+                    "stagnation_band_provider: player_id=%s に attach 済みの "
+                    "being が見つからず band は none に縮退する "
+                    "(この player については以後再警告しない)",
+                    player_id,
+                )
             return STAGNATION_PRESSURE_BAND_NONE
         count = store.get_by_being(being_id)
         return resolve_stagnation_pressure_band(count)
@@ -3041,7 +3063,7 @@ def create_world_runtime(
         # 毎 prompt 構築で叩いても問題なし。
         item_state_resolver=_resolve_item_state,
         current_tick_provider=_current_tick_provider,
-        stagnation_band_provider=_resolve_own_stagnation_band,
+        stagnation_band_provider=_resolve_stagnation_band_for_player,
     )
 
     # ── 観測パイプライン構築 ──
