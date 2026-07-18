@@ -1976,7 +1976,7 @@
           {
             "id": "trail_cairn",
             "name": "石積みの目印",
-            "description": "分岐点に積まれた石の目印。上に置かれた薄い石に、誰かが文字を刻み込んでいる。",
+            "description": "分岐点に積まれた石の目印。上に置かれた薄い石には、文字を刻み込めそうだ。",
             "object_type": "SIGN",
             "state": {},
             "interactions": [

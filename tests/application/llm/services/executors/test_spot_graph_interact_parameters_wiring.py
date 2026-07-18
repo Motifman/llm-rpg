@@ -186,12 +186,15 @@ class TestInteractParametersReachSignEffectThroughToolExecutor:
         state = _object_state(runtime, CODE_LOCK_OBJECT_ID)
         assert state["sign_text"] == "1234"
 
-    def test_parameters未指定でも従来どおり動く(self, scenario_path: Path) -> None:
-        """parameters を渡さない既存呼び出しは後方互換で動き続ける。
-
-        WRITE_PLAYER_TEXT は text が無いと「何を書くか指定してください」の
-        案内メッセージを返す仕様 (effect_service 側の既存挙動)。ここでは
-        例外を投げず success=True のまま案内が返ることを確認する。
+    def test_parameters未指定だとfailureとして返り本人に案内文言が見える(
+        self, scenario_path: Path
+    ) -> None:
+        """PR-L: text 欠落を「成功扱い + 案内メッセージだけ」で返していた旧挙動
+        (実 run r1_001 の t72 で observed) は、本人が action_result.success=true
+        を見て「書けた」と誤解しうる静かな失敗の変種だった。ツール実行層
+        (SpotGraphToolExecutor._interact) を貫通させても failure として
+        返ること、案内文言 (正しいキー名を教える機能) は維持されること、
+        object state が変わらないことを保証する。
         """
         runtime = create_world_runtime(scenario_path)
         executor = _build_executor(runtime)
@@ -206,15 +209,16 @@ class TestInteractParametersReachSignEffectThroughToolExecutor:
             },
         )
 
-        assert result.success is True
+        assert result.success is False
         assert "text" in result.message
         state = _object_state(runtime, NOTICE_BOARD_OBJECT_ID)
         assert "sign_text" not in state
 
-    def test_parameters_が不正型なら例外にならずNoneとして扱われる(
+    def test_parameters_が不正型なら例外にならずNoneとして扱われてfailureになる(
         self, scenario_path: Path
     ) -> None:
-        """dict でない parameters (例: 文字列) は落とさず None 扱いにする。"""
+        """dict でない parameters (例: 文字列) は落とさず None 扱いにする。
+        text が届かない以上、これも欠落と同じく failure として返る。"""
         runtime = create_world_runtime(scenario_path)
         executor = _build_executor(runtime)
         object_id = runtime.id_mapper.get_int("object", NOTICE_BOARD_OBJECT_ID)
@@ -229,6 +233,6 @@ class TestInteractParametersReachSignEffectThroughToolExecutor:
             },
         )
 
-        assert result.success is True
+        assert result.success is False
         state = _object_state(runtime, NOTICE_BOARD_OBJECT_ID)
         assert "sign_text" not in state

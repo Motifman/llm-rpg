@@ -16,6 +16,7 @@ from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
     UnsupportedInteractionEffectException,
 )
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
@@ -996,12 +997,17 @@ class WorldGraphEffectService:
             params_in = interaction_parameters or {}
             raw_text = params_in.get(text_param_key)
             if not isinstance(raw_text, str) or raw_text == "":
-                # silent failure を避ける: 書き込みを試みたのに何も残らない
-                # 状態を、本人が読める messages で明示的に伝える。
-                messages.append(
+                # 実 run r1_001 の t72 で観測: text 欠落/空文字でもこの effect が
+                # 「成功扱い」で messages にだけ案内を積んで return していたため、
+                # action_result.success=true のまま何も書けていない状態が返っていた
+                # (「書いたつもりで書けていない」という静かな失敗の変種)。
+                # 既存の precondition 拒否経路 (InteractionNotAllowedException →
+                # application 層で failure に変換 + failure_message が本人に
+                # 見える) に合わせ、ここでも同じ例外を投げて失敗として返す。
+                # 案内文言はそのまま維持し、正しいキー名を教える機能は残す。
+                raise InteractionNotAllowedException(
                     f"何を書くか {text_param_key} パラメータで指定してください。"
                 )
-                return _all
             target = self._resolve_target_object(interior, acting_object, p)
             if target is None:
                 return _all

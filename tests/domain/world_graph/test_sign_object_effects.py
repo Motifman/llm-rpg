@@ -11,6 +11,8 @@ examine で読める「看板」primitive の挙動を検証する。
 
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
@@ -18,6 +20,9 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
 )
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
+)
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     SIGN_TEXT_MAX_LENGTH,
     WorldGraphEffectService,
@@ -99,43 +104,75 @@ class TestWritePlayerTextEffect:
         assert new_state["sign_author_name"] == "ボブ"
         assert new_state["sign_written_tick"] == 5
 
-    def test_text_が欠落していると_state_は変わらず_failure_message_が返る(self) -> None:
+    def test_text_が欠落していると_InteractionNotAllowedException_が投げられ_state_は変わらない(
+        self,
+    ) -> None:
+        """「書いたつもりで書けていない」まま success=true で返る静かな失敗
+        (実 run t72 で観測) を避けるため、text 欠落は失敗として本人に返す。
+        state を変更する前に例外を投げるので object.state は不変であること
+        も併せて保証する。"""
         svc = WorldGraphEffectService()
         sign = _sign()
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
             parameters={},
         )
-        result = svc.apply_effects(
-            interior=_interior_with(sign),
-            acting_object=sign,
-            effects=[effect],
-            world_flags=frozenset(),
-            current_tick=WorldTick(1),
-            interaction_parameters={},
-            acting_player_display_name="アリス",
-        )
-        assert "sign_text" not in result.new_interior.objects[0].state
-        assert any("text" in m for m in result.messages)
+        with pytest.raises(InteractionNotAllowedException) as exc_info:
+            svc.apply_effects(
+                interior=_interior_with(sign),
+                acting_object=sign,
+                effects=[effect],
+                world_flags=frozenset(),
+                current_tick=WorldTick(1),
+                interaction_parameters={},
+                acting_player_display_name="アリス",
+            )
+        assert "text" in str(exc_info.value)
+        assert "sign_text" not in sign.state
 
-    def test_空文字のtextは拒否され_state_は変わらない(self) -> None:
+    def test_空文字のtextは_InteractionNotAllowedException_が投げられ_state_は変わらない(
+        self,
+    ) -> None:
         svc = WorldGraphEffectService()
         sign = _sign()
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
             parameters={},
         )
-        result = svc.apply_effects(
-            interior=_interior_with(sign),
-            acting_object=sign,
-            effects=[effect],
-            world_flags=frozenset(),
-            current_tick=WorldTick(1),
-            interaction_parameters={"text": ""},
-            acting_player_display_name="アリス",
+        with pytest.raises(InteractionNotAllowedException):
+            svc.apply_effects(
+                interior=_interior_with(sign),
+                acting_object=sign,
+                effects=[effect],
+                world_flags=frozenset(),
+                current_tick=WorldTick(1),
+                interaction_parameters={"text": ""},
+                acting_player_display_name="アリス",
+            )
+        assert "sign_text" not in sign.state
+
+    def test_text_が非文字列だと_InteractionNotAllowedException_が投げられ_state_は変わらない(
+        self,
+    ) -> None:
+        """interact ツールの自由入力は JSON 経由なので数値や配列が渡る余地が
+        あり、非文字列も欠落と同じ扱いにする。"""
+        svc = WorldGraphEffectService()
+        sign = _sign()
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
+            parameters={},
         )
-        assert "sign_text" not in result.new_interior.objects[0].state
-        assert result.messages
+        with pytest.raises(InteractionNotAllowedException):
+            svc.apply_effects(
+                interior=_interior_with(sign),
+                acting_object=sign,
+                effects=[effect],
+                world_flags=frozenset(),
+                current_tick=WorldTick(1),
+                interaction_parameters={"text": 12345},
+                acting_player_display_name="アリス",
+            )
+        assert "sign_text" not in sign.state
 
     def test_文字数上限を超えると切り詰められ_可視化される(self) -> None:
         svc = WorldGraphEffectService()
