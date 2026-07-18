@@ -414,14 +414,15 @@ class BeingMemorySnapshotService:
                 goal_entry_to_dict(e)
                 for e in self._goal_journal.list_all_by_being(being_id)
             ],
-            # P-U2 (停滞感 store): 停滞感カウンタ。0 は空 list (= 他 store の
-            # 「空状態 = 空 list」規約に揃える)。
-            "stagnation_pressure_count": (
-                [self._stagnation_pressure.get_by_being(being_id)]
-                if self._stagnation_pressure.get_by_being(being_id)
-                else []
-            ),
         }
+        # P-U2 (停滞感 store): 停滞感カウンタ。0 は空 list (= 他 store の
+        # 「空状態 = 空 list」規約に揃える)。LOW-1 (敵対的レビュー指摘):
+        # get_by_being を条件式と値の両方で 2 回呼んでいたのを 1 度読んだ値に
+        # 束ねる形に直した (挙動は不変)。
+        stagnation_pressure_count = self._stagnation_pressure.get_by_being(being_id)
+        payload["stagnation_pressure_count"] = (
+            [stagnation_pressure_count] if stagnation_pressure_count else []
+        )
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
         # しているか起動時に確認する。新 store を追加して EXPECTED に key を
         # 足したが capture() の dict 生成を忘れた状態を即時に止める。

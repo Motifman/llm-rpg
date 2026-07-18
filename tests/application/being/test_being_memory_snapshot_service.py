@@ -456,6 +456,36 @@ class TestRestoreRoundTrip:
 
         assert dst_stores["stagnation_pressure"].get_by_being(being) == 0
 
+    def test_capture_は_stagnation_pressure_を1回だけ読む(self) -> None:
+        """LOW-1 (敵対的レビュー指摘): capture() が同じ being_id に対して
+        stagnation_pressure_store.get_by_being を 2 回 (空 list 判定用と値取得用)
+        呼んでいたのを、1 度読んだ値を変数に束ねて使い回す形に直した。挙動は
+        不変 (リファクタのみ) で、呼び出し回数だけが 1 回に減ることを保証する。"""
+        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+            InMemoryStagnationPressureStore,
+        )
+
+        class _CountingStagnationPressureStore(InMemoryStagnationPressureStore):
+            def __init__(self) -> None:
+                super().__init__()
+                self.get_by_being_call_count = 0
+
+            def get_by_being(self, being_id: BeingId) -> int:
+                self.get_by_being_call_count += 1
+                return super().get_by_being(being_id)
+
+        src_svc, src_stores = _make_service()
+        counting_store = _CountingStagnationPressureStore()
+        src_svc._stagnation_pressure = counting_store
+        being = BeingId("ada")
+        counting_store.increment_by_being(being)
+
+        payload_json = src_svc.capture(being)
+
+        assert counting_store.get_by_being_call_count == 1
+        payload = json.loads(payload_json)
+        assert payload["stagnation_pressure_count"] == [1]
+
     def test_belief_evidence_の_in_context_belief_ids_も_round_trip_する(self) -> None:
         """U4 (予測誤差統一設計 部品3): attribution 用の in_context_belief_ids も
         evidence buffer の capture → restore を経て失われないことを保証する。
