@@ -94,6 +94,9 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+        InMemoryStagnationPressureStore,
+    )
 
     memo = InMemoryMemoStore()
     semantic = InMemorySemanticMemoryStore()
@@ -108,6 +111,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     success = InMemoryEpisodicRecallSuccessStore()
     pending_prediction = InMemoryPendingPredictionStore()
     goal_journal = InMemoryGoalJournalStore()
+    stagnation_pressure = InMemoryStagnationPressureStore()
     svc = BeingMemorySnapshotService(
         memo_store=memo,
         semantic_store=semantic,
@@ -122,6 +126,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
         recall_success_store=success,
         pending_prediction_store=pending_prediction,
         goal_journal_store=goal_journal,
+        stagnation_pressure_store=stagnation_pressure,
     )
     return svc, {
         "memo": memo,
@@ -134,6 +139,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
         "success": success,
         "pending_prediction": pending_prediction,
         "goal_journal": goal_journal,
+        "stagnation_pressure": stagnation_pressure,
     }
 
 
@@ -423,6 +429,63 @@ class TestRestoreRoundTrip:
         restored = dst_stores["goal_journal"].list_all_by_being(being)
         assert restored == [goal]
 
+    def test_stagnation_pressure_count_の_round_trip(self) -> None:
+        """P-U2 (停滞感 store): カウンタの capture → restore で値が保存される
+        ことを保証する (snapshot 追従 checklist #27)。"""
+        src_svc, src_stores = _make_service()
+        being = BeingId("ada")
+        src_stores["stagnation_pressure"].increment_by_being(being)
+        src_stores["stagnation_pressure"].increment_by_being(being)
+        payload_json = src_svc.capture(being)
+
+        dst_svc, dst_stores = _make_service()
+        dst_svc.restore(being, payload_json)
+
+        assert dst_stores["stagnation_pressure"].get_by_being(being) == 2
+
+    def test_stagnation_pressure_count_zero_の_round_trip(self) -> None:
+        """P-U2: カウンタが 0 のときも空 state として正しく往復する
+        (= 他 store の「空状態 = 空 list」規約に揃える)。"""
+        src_svc, src_stores = _make_service()
+        being = BeingId("ada")
+        payload_json = src_svc.capture(being)
+
+        dst_svc, dst_stores = _make_service()
+        dst_stores["stagnation_pressure"].increment_by_being(being)  # 事前汚染
+        dst_svc.restore(being, payload_json)
+
+        assert dst_stores["stagnation_pressure"].get_by_being(being) == 0
+
+    def test_capture_は_stagnation_pressure_を1回だけ読む(self) -> None:
+        """LOW-1 (敵対的レビュー指摘): capture() が同じ being_id に対して
+        stagnation_pressure_store.get_by_being を 2 回 (空 list 判定用と値取得用)
+        呼んでいたのを、1 度読んだ値を変数に束ねて使い回す形に直した。挙動は
+        不変 (リファクタのみ) で、呼び出し回数だけが 1 回に減ることを保証する。"""
+        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+            InMemoryStagnationPressureStore,
+        )
+
+        class _CountingStagnationPressureStore(InMemoryStagnationPressureStore):
+            def __init__(self) -> None:
+                super().__init__()
+                self.get_by_being_call_count = 0
+
+            def get_by_being(self, being_id: BeingId) -> int:
+                self.get_by_being_call_count += 1
+                return super().get_by_being(being_id)
+
+        src_svc, src_stores = _make_service()
+        counting_store = _CountingStagnationPressureStore()
+        src_svc._stagnation_pressure = counting_store
+        being = BeingId("ada")
+        counting_store.increment_by_being(being)
+
+        payload_json = src_svc.capture(being)
+
+        assert counting_store.get_by_being_call_count == 1
+        payload = json.loads(payload_json)
+        assert payload["stagnation_pressure_count"] == [1]
+
     def test_belief_evidence_の_in_context_belief_ids_も_round_trip_する(self) -> None:
         """U4 (予測誤差統一設計 部品3): attribution 用の in_context_belief_ids も
         evidence buffer の capture → restore を経て失われないことを保証する。
@@ -646,6 +709,7 @@ class TestRestoreValidation:
                 "recall_success_hit_count": [],
                 "pending_predictions": [],
                 "goal_journal": [],
+                "stagnation_pressure_count": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="memo"):
@@ -687,6 +751,7 @@ class TestRestoreValidation:
                 "recall_success_hit_count": [],
                 "pending_predictions": [],
                 "goal_journal": [],
+                "stagnation_pressure_count": [],
             }
         )
         with pytest.raises(BeingMemoryPayloadFormatError, match="memory_links"):
@@ -747,6 +812,9 @@ class TestConstructor:
         from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
             InMemoryBeliefEvidenceBufferStore,
         )
+        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+            InMemoryStagnationPressureStore,
+        )
 
         with pytest.raises(TypeError, match="memo_store"):
             BeingMemorySnapshotService(
@@ -763,4 +831,48 @@ class TestConstructor:
                 recall_success_store=InMemoryEpisodicRecallSuccessStore(),
                 pending_prediction_store=InMemoryPendingPredictionStore(),
                 goal_journal_store=InMemoryGoalJournalStore(),
+                stagnation_pressure_store=InMemoryStagnationPressureStore(),
+            )
+
+    def test_stagnation_pressure_store_型違反(self) -> None:
+        """P-U2: stagnation_pressure_store が StagnationPressureRepository で
+        なければ TypeError を投げる。"""
+        from ai_rpg_world.application.llm.services.afterglow_store import (
+            InMemoryAfterglowStore,
+        )
+        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+            InMemoryEpisodicRecallHabituationStore,
+        )
+        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+            InMemoryEpisodicRecallSlotStore,
+        )
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+            InMemoryPendingPredictionStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
+            InMemoryGoalJournalStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
+
+        with pytest.raises(TypeError, match="stagnation_pressure_store"):
+            BeingMemorySnapshotService(
+                memo_store=InMemoryMemoStore(),
+                semantic_store=InMemorySemanticMemoryStore(),
+                memory_link_store=InMemoryMemoryLinkStore(),
+                recall_buffer_store=InMemoryEpisodicRecallBufferStore(),
+                reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(),
+                episodic_episode_store=InMemorySubjectiveEpisodeStore(),
+                recall_slot_store=InMemoryEpisodicRecallSlotStore(),
+                afterglow_store=InMemoryAfterglowStore(),
+                recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
+                belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
+                recall_success_store=InMemoryEpisodicRecallSuccessStore(),
+                pending_prediction_store=InMemoryPendingPredictionStore(),
+                goal_journal_store=InMemoryGoalJournalStore(),
+                stagnation_pressure_store="bad",  # type: ignore[arg-type]
             )

@@ -34,6 +34,9 @@ from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_stor
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
 )
+from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+    InMemoryStagnationPressureStore,
+)
 from ai_rpg_world.domain.being.service.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
@@ -84,6 +87,7 @@ class _Setup:
     port: _FakeBeliefConsolidationPort
     being_id: BeingId
     player_id: PlayerId
+    stagnation_pressure_store: InMemoryStagnationPressureStore
 
 
 def _build_setup(
@@ -104,6 +108,8 @@ def _build_setup(
     stall_min_interval_turns: int = 15,
     trace_recorder_provider: Any = None,
     goal_stagnation_evidence_enabled: bool = False,
+    stagnation_pressure_enabled: bool = False,
+    stagnation_pressure_store: Any = _UNSET,
 ) -> _Setup:
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
@@ -113,6 +119,11 @@ def _build_setup(
 
     evidence_buffer = InMemoryBeliefEvidenceBufferStore()
     semantic_store = InMemorySemanticMemoryStore()
+    resolved_stagnation_store = (
+        InMemoryStagnationPressureStore()
+        if stagnation_pressure_store is _UNSET
+        else stagnation_pressure_store
+    )
     port = _FakeBeliefConsolidationPort(outcome)
     coordinator = BeliefConsolidationCoordinator(
         evidence_buffer_store=evidence_buffer,
@@ -134,6 +145,8 @@ def _build_setup(
         stall_min_interval_turns=stall_min_interval_turns,
         trace_recorder_provider=trace_recorder_provider,
         goal_stagnation_evidence_enabled=goal_stagnation_evidence_enabled,
+        stagnation_pressure_enabled=stagnation_pressure_enabled,
+        stagnation_pressure_store=resolved_stagnation_store,
     )
     return _Setup(
         coordinator=coordinator,
@@ -142,6 +155,7 @@ def _build_setup(
         port=port,
         being_id=being_id,
         player_id=player_id,
+        stagnation_pressure_store=resolved_stagnation_store,
     )
 
 
@@ -1736,6 +1750,226 @@ class TestGoalStagnationEvidence:
         ]
         assert len(active) == 1
         assert active[0].text == "山頂へ行くのは前進しない"
+
+
+class TestStagnationPressure:
+    """P-U2: reflect verdict を「停滞感」カウンタに畳み込む挙動を保証する。
+
+    P-U1 (goal: evidence 化) とは独立した経路であり、cap (乱発防止) と
+    無関係にカウンタが動く点が evidence 化との核心的な違い。"""
+
+    def test_stalled_verdict_increments_counter(self) -> None:
+        """stalled → カウンタが 0 から 1 になる。"""
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "空回りしている"}
+            ]},
+            goal_reflect_enabled=True,
+            stagnation_pressure_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
+
+    def test_misaligned_verdict_increments_counter(self) -> None:
+        """misaligned も stalled と同じくカウンタを +1 する。"""
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "misaligned", "statement": "逸れている"}
+            ]},
+            goal_reflect_enabled=True,
+            stagnation_pressure_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
+
+    def test_achieved_verdict_resets_counter(self) -> None:
+        """achieved (前進) は、それまで積み上がったカウンタを 0 に戻す。"""
+        store = InMemoryStagnationPressureStore()
+        being_id_holder: list = []
+
+        # 1 周期目: stalled でカウンタを 2 まで積む。
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "空回りしている"}
+            ]},
+            goal_reflect_enabled=True,
+            stagnation_pressure_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+            stagnation_pressure_store=store,
+            turn_interval=10_000,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        for _ in range(20):
+            setup.coordinator.after_turn_completed(setup.player_id)
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert store.get_by_being(setup.being_id) == 2
+
+        # 2 周期目: achieved でリセットされる。
+        setup.port.outcome = {
+            "decisions": [
+                {"action": "reflect", "verdict": "achieved", "statement": "もう果たした"}
+            ]
+        }
+        for _ in range(20):
+            setup.coordinator.after_turn_completed(setup.player_id)
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e3"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert store.get_by_being(setup.being_id) == 0
+
+    def test_no_verdict_leaves_counter_unchanged(self) -> None:
+        """reflect action が無い (verdict も無い) 回はカウンタを据え置く。"""
+        setup = _build_setup(
+            outcome={"decisions": []},
+            goal_reflect_enabled=True,
+            stagnation_pressure_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 0
+
+    def test_counter_still_increments_when_observation_suppressed_by_cap(self) -> None:
+        """cap (stall_min_interval_turns) で観測注入自体が抑制された回でも、
+        verdict が stalled ならカウンタは増える。
+
+        cap は「同じ気づきを本人に何度も見せない」ための表示側の間引きであって
+        「まだ停滞しているか」の判定ではない、という P-U2 の核心的な設計判断を
+        直接保証するテスト。"""
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
+            ]},
+            goal_reflect_enabled=True,
+            stagnation_pressure_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
+            stall_min_interval_turns=15,
+        )
+        # 1 回目: 観測が注入され、カウンタも 1 になる。
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert len(obs) == 1
+        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
+
+        # 2 回目: turn を進めずに即 flush → 観測は cap で抑制されるが、
+        # verdict は stalled のままなのでカウンタは 2 になる。
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert len(obs) == 1
+        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 2
+
+    def test_flag_off_leaves_counter_untouched_even_when_stalled(self) -> None:
+        """STAGNATION_PRESSURE_ENABLED が OFF (既定) なら、stalled でもカウンタは
+        動かない (= 導入前と完全に一致する)。"""
+        store = InMemoryStagnationPressureStore()
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
+            ]},
+            goal_reflect_enabled=True,
+            stagnation_pressure_enabled=False,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+            stagnation_pressure_store=store,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert store.get_by_being(setup.being_id) == 0
+
+    def test_stagnation_pressure_requires_goal_reflect_enabled(self) -> None:
+        """fail-fast: stagnation_pressure だけ ON にして goal_reflect が OFF だと
+        構築時に落ちる (reflect が発火せずカウンタを動かす verdict が永遠に
+        生まれない「flag を立てたのに何も起きない」静かな失敗を防ぐ)。"""
+        with pytest.raises(ValueError, match="goal_reflect_enabled"):
+            _build_setup(
+                outcome={"decisions": []},
+                goal_reflect_enabled=False,
+                stagnation_pressure_enabled=True,
+            )
+
+    def test_stagnation_pressure_requires_store(self) -> None:
+        """fail-fast: stagnation_pressure_enabled だけ ON にして store を渡さない
+        (None) と構築時に落ちる。"""
+        with pytest.raises(ValueError, match="stagnation_pressure_store"):
+            _build_setup(
+                outcome={"decisions": []},
+                goal_reflect_enabled=True,
+                objective_text_provider=lambda pid: "山頂へ行く",
+                reflect_observation_sink=lambda pid, msg, verdict: None,
+                stagnation_pressure_enabled=True,
+                stagnation_pressure_store=None,
+            )
+
+    def test_multiple_stalled_reflects_in_one_flush_increment_counter_once(self) -> None:
+        """敵対的レビュー HIGH-2: 1 flush に reflect (stalled/misaligned) が複数
+        入っても、カウンタは 1 flush につき最大 +1 に畳み込まれる (件数分
+        (+3 等) 加算されない)。1 batch に evidence が複数あれば LLM が複数の
+        reflect decision を返し得るため、この畳み込みが無いと 1 flush で
+        いきなり strong band まで飛ぶ致命的な過剰反応になる。"""
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "空回りA"},
+                {"action": "reflect", "verdict": "stalled", "statement": "空回りB"},
+                {"action": "reflect", "verdict": "misaligned", "statement": "逸れているC"},
+            ]},
+            goal_reflect_enabled=True,
+            stagnation_pressure_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
+
+    def test_achieved_and_stalled_in_same_flush_resets_counter(self) -> None:
+        """敵対的レビュー HIGH-2: 同一 flush に achieved と stalled/misaligned が
+        混在するときは achieved を優先し、リセットする (+1 にはしない)。"""
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "空回りA"},
+                {"action": "reflect", "verdict": "achieved", "statement": "もう果たした"},
+            ]},
+            goal_reflect_enabled=True,
+            stagnation_pressure_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 0
+
+    def test_stagnation_pressure_does_not_write_belief_journal_or_goal_store(self) -> None:
+        """不変条件: 停滞感カウンタの畳み込みは belief journal にも goal store にも
+        書き込まない。積むのは stagnation_pressure_store のカウンタのみ。"""
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
+            ]},
+            goal_reflect_enabled=True,
+            stagnation_pressure_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert setup.semantic_store.list_for_being(setup.being_id) == []
+        attrs = vars(setup.coordinator)
+        offending = [
+            name for name in attrs
+            if any(k in name.lower() for k in ("journal", "goal_store", "goal_repo"))
+        ]
+        assert offending == []
 
 
 class TestHearsaySupportWeightApplication:

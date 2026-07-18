@@ -381,6 +381,9 @@ class WorldRuntime:
     # OFF なら None (【現在の目的】は従来の静的シナリオ文字列で描画)。
     # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
     _goal_journal_store: Optional[Any] = field(default=None, repr=False)
+    # P-U2 (停滞感 store): reflect verdict の畳み込み先カウンタ store。
+    # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
+    _stagnation_pressure_store: Optional[Any] = field(default=None, repr=False)
     # P6 (目的の見直し): GOAL_REVISION_ENABLED の解決結果と、goal_update を
     # 反映する applier。flag OFF / goal store 無しなら applier は None。
     _goal_revision_enabled: bool = field(default=False, repr=False)
@@ -3937,8 +3940,10 @@ def create_world_runtime(
         from ai_rpg_world.application.llm.wiring.feature_flags import (
             log_goal_reflect_enabled_state,
             log_goal_stagnation_evidence_enabled_state,
+            log_stagnation_pressure_enabled_state,
             resolve_goal_reflect_enabled,
             resolve_goal_stagnation_evidence_enabled,
+            resolve_stagnation_pressure_enabled,
         )
 
         _goal_reflect_enabled = resolve_goal_reflect_enabled()
@@ -3947,11 +3952,40 @@ def create_world_runtime(
         # goal: 軸の evidence に変換するか。
         _goal_stagnation_evidence_enabled = resolve_goal_stagnation_evidence_enabled()
         log_goal_stagnation_evidence_enabled_state(_goal_stagnation_evidence_enabled)
+        # P-U2 (停滞感 store): reflect verdict を停滞感カウンタに畳み込むか。
+        _stagnation_pressure_enabled = resolve_stagnation_pressure_enabled()
+        log_stagnation_pressure_enabled_state(_stagnation_pressure_enabled)
         # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
         # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
         # どちらか一方でも ON なら buffer store 自体は作る。
         _belief_consolidation_enabled = resolve_belief_consolidation_enabled()
         log_belief_consolidation_enabled_state(_belief_consolidation_enabled)
+        # 敵対的レビュー HIGH-1 fail-fast: P-U1 (goal_stagnation_evidence) /
+        # P-U2 (stagnation_pressure) はどちらも BeliefConsolidationCoordinator
+        # (固着パス) 経由でしか動かないが、その coordinator 自体は
+        # belief_consolidation_enabled が ON のときしか構築されない
+        # (episodic_stack.py の `if belief_consolidation_enabled and
+        # belief_evidence_buffer_store is not None` 分岐)。coordinator
+        # コンストラクタ内の fail-fast (goal_reflect_enabled 必須等) は
+        # coordinator が実際に構築されたときにしか働かないため、それより前の
+        # ここで相互ガードしないと「flag を ON にしたのに coordinator が
+        # 一度も作られず、カウンタも evidence 化も一生 0 のまま、警告すら出ない」
+        # 静かな失敗になる (本 PR 群が売りにする「起動時 fail-fast で弾く」に
+        # 正面から反する)。
+        if _goal_stagnation_evidence_enabled and not _belief_consolidation_enabled:
+            raise ValueError(
+                "GOAL_STAGNATION_EVIDENCE_ENABLED=1 だが BELIEF_CONSOLIDATION_ENABLED "
+                "が OFF のため固着パス (BeliefConsolidationCoordinator) が構築されず、"
+                "reflect の stalled/misaligned verdict を evidence 化する経路が丸ごと"
+                "動かない (静かな失敗)。BELIEF_CONSOLIDATION_ENABLED=1 も設定してください。"
+            )
+        if _stagnation_pressure_enabled and not _belief_consolidation_enabled:
+            raise ValueError(
+                "STAGNATION_PRESSURE_ENABLED=1 だが BELIEF_CONSOLIDATION_ENABLED が "
+                "OFF のため固着パス (BeliefConsolidationCoordinator) が構築されず、"
+                "reflect verdict を停滞感カウンタに畳み込む経路が丸ごと動かない "
+                "(静かな失敗)。BELIEF_CONSOLIDATION_ENABLED=1 も設定してください。"
+            )
         # U6: salience 判定 + STRUCTURED_FAILURE 転記 (default OFF)。他 2 flag
         # 同様、同じ evidence buffer を共有するので ON なら buffer store を作る
         # 条件に加える。
@@ -4139,6 +4173,17 @@ def create_world_runtime(
                 # P8: goal 清算の転記も同じ transcriber が担う。上で先に構築した
                 # GoalRevisionApplier の遅延 holder をここで埋める。
                 _goal_settlement_transcriber_holder[0] = belief_evidence_transcriber
+        # P-U2 (停滞感 store): ON のときだけ in-memory store を構築し、
+        # BeliefConsolidationCoordinator に注入する。runtime に保持するのは
+        # snapshot stub (_wiring_stub_from_world_runtime) から拾えるように
+        # するため (checklist #27。goal_journal_store と同じ扱い)。
+        runtime._stagnation_pressure_store = None
+        if _stagnation_pressure_enabled:
+            from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+                InMemoryStagnationPressureStore,
+            )
+
+            runtime._stagnation_pressure_store = InMemoryStagnationPressureStore()
         if is_episodic_subjective_enabled():
             from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
                 EpisodicChunkSubjectiveFieldsService,
@@ -4479,6 +4524,10 @@ def create_world_runtime(
             # P-U1 (目的停滞の evidence 化): ON のときだけ stalled/misaligned の
             # reflect verdict を goal: 軸の高 salience evidence に変換する。
             goal_stagnation_evidence_enabled=_goal_stagnation_evidence_enabled,
+            # P-U2 (停滞感 store): ON のときだけ reflect verdict を停滞感カウンタ
+            # に畳み込む。store は上で構築済み (runtime._stagnation_pressure_store)。
+            stagnation_pressure_enabled=_stagnation_pressure_enabled,
+            stagnation_pressure_store=runtime._stagnation_pressure_store,
             # P10 (伝聞の固着判断): ON のとき固着 LLM に伝聞節を足し、shortlist に
             # 話者 belief を載せ、HEARSAY 支持を confidence 半分に数える。抽出側
             # (P9) と同じ HEARSAY_ENABLED で連動させる (抽出だけ ON で固着側が

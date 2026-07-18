@@ -85,6 +85,9 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
     SEMANTIC_MEMORY_STATUS_INACTIVE,
     SemanticMemoryEntry,
 )
+from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository import (
+    StagnationPressureRepository,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
@@ -316,6 +319,8 @@ class BeliefConsolidationCoordinator:
         reflect_observation_sink: Optional[Callable[[PlayerId, str, str], None]] = None,
         stall_min_interval_turns: int = DEFAULT_STALL_MIN_INTERVAL_TURNS,
         goal_stagnation_evidence_enabled: bool = False,
+        stagnation_pressure_store: Optional[StagnationPressureRepository] = None,
+        stagnation_pressure_enabled: bool = False,
     ) -> None:
         if not isinstance(evidence_buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -387,6 +392,27 @@ class BeliefConsolidationCoordinator:
                 "goal_stagnation_evidence_enabled requires goal_reflect_enabled "
                 "(reflect が発火しないと evidence 化の対象が生まれない)"
             )
+        if stagnation_pressure_store is not None and not isinstance(
+            stagnation_pressure_store, StagnationPressureRepository
+        ):
+            raise TypeError(
+                "stagnation_pressure_store must be StagnationPressureRepository or None"
+            )
+        if not isinstance(stagnation_pressure_enabled, bool):
+            raise TypeError("stagnation_pressure_enabled must be bool")
+        # P-U2 (停滞感 store): stagnation_pressure も goal_stagnation_evidence と
+        # 同じ理由で reflect 発火に依存する。goal_reflect が OFF だと verdict 自体が
+        # 生まれず「flag を立てたのに何も起きない」静かな失敗になるため弾く。
+        if stagnation_pressure_enabled and not goal_reflect_enabled:
+            raise ValueError(
+                "stagnation_pressure_enabled requires goal_reflect_enabled "
+                "(reflect が発火しないとカウンタを動かす verdict が生まれない)"
+            )
+        if stagnation_pressure_enabled and stagnation_pressure_store is None:
+            raise ValueError(
+                "stagnation_pressure_enabled requires stagnation_pressure_store "
+                "(カウンタを書き込む先が無いと ON にする意味が無い)"
+            )
         self._evidence_buffer_store = evidence_buffer_store
         self._semantic_store = semantic_store
         self._completion = completion
@@ -416,6 +442,10 @@ class BeliefConsolidationCoordinator:
         # として buffer に積む。OFF (既定) では evidence を一切積まず、
         # 導入前 (内省観測の注入のみ) と挙動一致する。
         self._goal_stagnation_evidence_enabled = goal_stagnation_evidence_enabled
+        # P-U2 (停滞感 store): ON のときだけ reflect verdict を停滞感カウンタに
+        # 畳み込む。OFF (既定) では store に一切触れず、導入前と挙動一致する。
+        self._stagnation_pressure_store = stagnation_pressure_store
+        self._stagnation_pressure_enabled = stagnation_pressure_enabled
         self._system_prompt = _build_belief_consolidation_system_prompt(
             attribution_enabled=belief_attribution_enabled,
             goal_reflect_enabled=goal_reflect_enabled,
@@ -451,6 +481,18 @@ class BeliefConsolidationCoordinator:
             return None
         return text.strip()
 
+    def _valid_reflect_verdict(self, raw: dict[str, Any]) -> Optional[str]:
+        """reflect decision から、カウンタ集約 (``_apply_flush_stagnation_pressure``)
+        と ``_apply_reflect`` (観測注入/evidence 化) が共通で使う正当な verdict を
+        取り出す。goal_reflect が OFF / 観測 sink 未注入 / verdict が未知の
+        いずれかなら None (= どちらの経路にも寄与しない)。statement の有無や
+        乱発防止 cap には依存しない (それらは呼び出し側がそれぞれの目的で
+        別途判定する)。"""
+        if not self._goal_reflect_enabled or self._reflect_observation_sink is None:
+            return None
+        verdict = raw.get("verdict")
+        return verdict if verdict in _REFLECT_VERDICTS else None
+
     def _apply_reflect(
         self,
         being_id: BeingId,
@@ -483,11 +525,13 @@ class BeliefConsolidationCoordinator:
         (この不変条件は evidence 化を導入しても変わらない。generate するのは
         あくまで記述的な belief evidence であり、目的の改訂ではない)。
         """
-        if not self._goal_reflect_enabled or self._reflect_observation_sink is None:
+        verdict = self._valid_reflect_verdict(raw)
+        if verdict is None:
             return False
-        verdict = raw.get("verdict")
-        if verdict not in _REFLECT_VERDICTS:
-            return False
+        # 敵対的レビュー HIGH-2: 停滞感カウンタの更新は 1 decision ごとではなく
+        # 1 flush につき 1 回だけ集約して行う (``_apply_decisions`` が
+        # ``_apply_flush_stagnation_pressure`` で束ねる)。ここでは観測注入 /
+        # evidence 化だけを扱う。
         statement = raw.get("statement")
         if not isinstance(statement, str) or not statement.strip():
             return False
@@ -518,6 +562,46 @@ class BeliefConsolidationCoordinator:
                 being_id, verdict, objective_text, batch
             )
         return True
+
+    def _apply_flush_stagnation_pressure(
+        self, being_id: BeingId, flush_verdicts: list[str]
+    ) -> None:
+        """P-U2: 1 flush 内の reflect verdict 群を集約し、停滞感カウンタを
+        **1 flush につき最大 ±1** に畳み込む (敵対的レビュー HIGH-2 修正)。
+
+        修正前は reflect decision ごとに (= 1 flush に reflect が複数入ると
+        件数分) カウンタを更新していたため、1 batch に evidence が複数あって
+        LLM が reflect×3 のような decisions を返すと、観測注入・evidence 化は
+        cap で 1 件に抑えられるのにカウンタだけ +3 され、一発で strong band
+        まで飛ぶ過剰反応になっていた。ここでは 1 flush の verdict 群をまとめて
+        一度だけ判定する:
+
+        - achieved が 1 つでもあれば 0 にリセット (最優先。前進の兆候が 1 つでも
+          あれば据え置きにしない)
+        - achieved が無く stalled/misaligned が 1 つでもあれば +1
+        - どちらも無ければ据え置き
+
+        cap (観測注入の乱発防止) とは独立 — 観測注入が cap で抑制されても、
+        その flush に stalled/misaligned の verdict があれば +1 する既存の
+        設計意図は変えない (``flush_verdicts`` は cap を経由せず収集される)。
+        ``stagnation_pressure_enabled`` が OFF、または store が未注入、または
+        この flush に有効な verdict が 1 件も無ければ no-op。belief journal
+        にも goal store にも触れない (P-U1 と同じ「停滞 ≠ 即改訂」の不変条件)。
+        """
+        if (
+            not self._stagnation_pressure_enabled
+            or self._stagnation_pressure_store is None
+        ):
+            return
+        if not flush_verdicts:
+            return
+        if _REFLECT_VERDICT_ACHIEVED in flush_verdicts:
+            self._stagnation_pressure_store.reset_by_being(being_id)
+        elif any(
+            v in (_REFLECT_VERDICT_STALLED, _REFLECT_VERDICT_MISALIGNED)
+            for v in flush_verdicts
+        ):
+            self._stagnation_pressure_store.increment_by_being(being_id)
 
     def _emit_goal_stagnation_evidence(
         self,
@@ -906,6 +990,10 @@ class BeliefConsolidationCoordinator:
         now = datetime.now(timezone.utc)
         applied: list[dict[str, Any]] = []
         skipped: list[dict[str, Any]] = []
+        # 敵対的レビュー HIGH-2: 1 flush 内の reflect verdict を集めておき、
+        # ループを抜けたあとに ``_apply_flush_stagnation_pressure`` で一度だけ
+        # カウンタを更新する (decision ごとの多重加算を防ぐ)。
+        flush_reflect_verdicts: list[str] = []
         for raw in raw_decisions:
             if not isinstance(raw, dict):
                 skipped.append({"reason": _SKIP_NOT_A_DICT, "decision": raw})
@@ -929,6 +1017,11 @@ class BeliefConsolidationCoordinator:
                 elif action == _ACTION_DISCARD:
                     skip_reason = None  # evidence は batch drain で消える (正当な適用)
                 elif action == _ACTION_REFLECT:
+                    # カウンタ集約用に verdict を収集する (statement 空 / cap
+                    # 抑制とは無関係。_valid_reflect_verdict と同じ判定基準)。
+                    verdict_for_pressure = self._valid_reflect_verdict(raw)
+                    if verdict_for_pressure is not None:
+                        flush_reflect_verdicts.append(verdict_for_pressure)
                     # 停滞でない / cap / flag OFF なら注入しない = 適用ではないが
                     # 「幻覚 belief_id」等の失敗とは質が違うので skip 理由で残す。
                     skip_reason = (
@@ -955,6 +1048,7 @@ class BeliefConsolidationCoordinator:
                 applied.append(raw)
             else:
                 skipped.append({"reason": skip_reason, "decision": raw})
+        self._apply_flush_stagnation_pressure(being_id, flush_reflect_verdicts)
         return _DecisionApplicationResult(applied, skipped)
 
     @staticmethod

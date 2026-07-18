@@ -142,6 +142,9 @@ def _build_stack(
     from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
         InMemoryGoalJournalStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+        InMemoryStagnationPressureStore,
+    )
 
     memory_snapshot = BeingMemorySnapshotService(
         memo_store=InMemoryMemoStore(),
@@ -162,6 +165,8 @@ def _build_stack(
         pending_prediction_store=InMemoryPendingPredictionStore(),
         # P5: CLI 経由の単発 dump では goal store も in-memory で足りる。
         goal_journal_store=InMemoryGoalJournalStore(),
+        # P-U2: CLI 経由の単発 dump では停滞感 store も in-memory で足りる。
+        stagnation_pressure_store=InMemoryStagnationPressureStore(),
     )
     return being_repo, memory_snapshot, BeingSnapshotFileGateway()
 

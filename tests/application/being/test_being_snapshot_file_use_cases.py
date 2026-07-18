@@ -75,6 +75,9 @@ def _make_environment():
     from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
         InMemoryGoalJournalStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+        InMemoryStagnationPressureStore,
+    )
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
@@ -99,6 +102,7 @@ def _make_environment():
         recall_success_store=InMemoryEpisodicRecallSuccessStore(),
         pending_prediction_store=InMemoryPendingPredictionStore(),
         goal_journal_store=InMemoryGoalJournalStore(),
+        stagnation_pressure_store=InMemoryStagnationPressureStore(),
     )
     gateway = BeingSnapshotFileGateway()
     capture = CaptureBeingSnapshotToFileUseCase(

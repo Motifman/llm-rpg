@@ -75,6 +75,9 @@ def _build_persistence_service(
     from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
         InMemoryGoalJournalStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+        InMemoryStagnationPressureStore,
+    )
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
@@ -99,6 +102,7 @@ def _build_persistence_service(
         recall_success_store=InMemoryEpisodicRecallSuccessStore(),
         pending_prediction_store=InMemoryPendingPredictionStore(),
         goal_journal_store=InMemoryGoalJournalStore(),
+        stagnation_pressure_store=InMemoryStagnationPressureStore(),
     )
     svc = BeingPersistenceService(
         being_repository=being_repo,
@@ -246,6 +250,9 @@ class TestConstructorTypeGuards:
         from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
             InMemoryGoalJournalStore,
         )
+        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+            InMemoryStagnationPressureStore,
+        )
         from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
             InMemoryBeliefEvidenceBufferStore,
         )
@@ -270,6 +277,7 @@ class TestConstructorTypeGuards:
             recall_success_store=InMemoryEpisodicRecallSuccessStore(),
             pending_prediction_store=InMemoryPendingPredictionStore(),
             goal_journal_store=InMemoryGoalJournalStore(),
+            stagnation_pressure_store=InMemoryStagnationPressureStore(),
         )
         with pytest.raises(TypeError, match="being_repository"):
             BeingPersistenceService(

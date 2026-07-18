@@ -294,6 +294,10 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     # 構築し ``_goal_journal_store`` に保持する。checklist #27 に従い拾う。
     # OFF なら None = 空 in-memory fallback。
     goal_journal_store = getattr(runtime, "_goal_journal_store", None)
+    # P-U2 (停滞感 store): STAGNATION_PRESSURE_ENABLED ON のとき world_runtime が
+    # 停滞感カウンタ store を構築し ``_stagnation_pressure_store`` に保持する。
+    # checklist #27 に従い拾う。OFF なら None = 空 in-memory fallback。
+    stagnation_pressure_store = getattr(runtime, "_stagnation_pressure_store", None)
     # PR-G (想起階層: slot / afterglow / habituation): #526 段階 3 で
     # episodic_stack に生えた 3 store。checklist #27 の追従漏れが実際に
     # 起きていた箇所 (ExperimentSnapshotSession 側は getattr で拾う準備が
@@ -328,6 +332,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         recall_success_store=recall_success_store,
         pending_prediction_store=pending_prediction_store,
         goal_journal_store=goal_journal_store,
+        stagnation_pressure_store=stagnation_pressure_store,
         recall_slot_store=recall_slot_store,
         afterglow_store=afterglow_store,
         recall_habituation_store=recall_habituation_store,
