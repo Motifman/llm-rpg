@@ -128,6 +128,32 @@ def build_hearsay_cue_signature(
     return f"{_HEARSAY_AXIS_TO_CUE_PREFIX[best_axis]}:{best_value}"
 
 
+# P-U1 (目的停滞の evidence 化): 目的への停滞/乖離を積む evidence 専用の軸。
+# 他の軸 (tool/spot/player) は「行動の状況」を表すが、goal: は「目的そのもの」
+# を表す唯一の軸なので、cue_signature 全体をこの 1 軸だけで構成する。同じ
+# 目的文なら同じ cue_signature になり、繰り返しの停滞判定が
+# cue_signature_repeat_threshold の早期 flush にも乗る (goal_utility_gradient_design.md
+# P-U1)。
+_GOAL_STAGNATION_CUE_AXIS = "goal"
+# cue_signature が肥大化しないための上限 (belief 命題の MAX_BELIEF_TEXT_CHARS
+# と揃える必要はないが、極端に長い目的文をそのまま流さないための保守的な値)。
+_GOAL_STAGNATION_CUE_MAX_TEXT_CHARS = 60
+
+
+def build_goal_stagnation_cue_signature(objective_text: str) -> str:
+    """目的文から ``goal:`` 軸の cue_signature を作る (P-U1)。
+
+    ``"|"`` は cue_signature の軸区切りと衝突するため空白に正規化する。
+    目的文が空/空白のみのときは呼び出し側の不変条件違反なので
+    ``ValueError`` を投げる (捏造しない)。
+    """
+    if not isinstance(objective_text, str) or not objective_text.strip():
+        raise ValueError("objective_text must be non-empty str")
+    normalized = objective_text.strip().replace("|", " ")
+    normalized = normalized[:_GOAL_STAGNATION_CUE_MAX_TEXT_CHARS]
+    return f"{_GOAL_STAGNATION_CUE_AXIS}:{normalized}"
+
+
 def build_belief_evidence_cue_signature(episode: SubjectiveEpisode) -> str:
     """episode の構造化フィールドから決定論的な cue_signature を組む。
 
@@ -205,6 +231,7 @@ def belief_matches_cue_tokens(
 __all__ = [
     "build_belief_evidence_cue_signature",
     "build_hearsay_cue_signature",
+    "build_goal_stagnation_cue_signature",
     "cue_tokens",
     "belief_matches_cue_tokens",
 ]

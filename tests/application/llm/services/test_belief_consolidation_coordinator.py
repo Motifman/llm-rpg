@@ -103,6 +103,7 @@ def _build_setup(
     reflect_observation_sink: Any = None,
     stall_min_interval_turns: int = 15,
     trace_recorder_provider: Any = None,
+    goal_stagnation_evidence_enabled: bool = False,
 ) -> _Setup:
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
@@ -132,6 +133,7 @@ def _build_setup(
         reflect_observation_sink=reflect_observation_sink,
         stall_min_interval_turns=stall_min_interval_turns,
         trace_recorder_provider=trace_recorder_provider,
+        goal_stagnation_evidence_enabled=goal_stagnation_evidence_enabled,
     )
     return _Setup(
         coordinator=coordinator,
@@ -1520,6 +1522,220 @@ class TestGoalReflect:
             if any(k in name.lower() for k in ("journal", "goal_store", "goal_repo"))
         ]
         assert offending == []
+
+
+class TestGoalStagnationEvidence:
+    """P-U1: reflect の stalled/misaligned verdict を goal: 軸の高 salience
+    PREDICTION_ERROR evidence として buffer に積む挙動と、その不変条件
+    (停滞 ≠ 即改訂 / goal store を触らない) を保証する。"""
+
+    def _goal_axis_evidence(self, setup) -> list[BeliefEvidence]:
+        return [
+            e
+            for e in setup.evidence_buffer.list_all_by_being(setup.being_id)
+            if e.cue_signature.startswith("goal:")
+        ]
+
+    def test_stalled_verdict_pushes_one_high_salience_goal_evidence(self) -> None:
+        """stalled → goal: 軸・高 salience・PREDICTION_ERROR の evidence が 1 件積まれる。"""
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled",
+                 "statement": "同じ場所を空回りしている気がする"}
+            ]},
+            goal_reflect_enabled=True,
+            goal_stagnation_evidence_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+
+        # 観測は従来どおり注入される (P4/P7 の挙動を壊さない)。
+        assert len(obs) == 1
+        goal_evidences = self._goal_axis_evidence(setup)
+        assert len(goal_evidences) == 1
+        pushed = goal_evidences[0]
+        assert pushed.cue_signature == "goal:山頂へ行く"
+        assert pushed.salience == BELIEF_EVIDENCE_SALIENCE_HIGH
+        assert pushed.source_kind == BeliefEvidenceSourceKind.PREDICTION_ERROR
+
+    def test_achieved_verdict_pushes_no_evidence(self) -> None:
+        """achieved (前進) は誤差ではないので evidence を積まない。"""
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "achieved", "statement": "もう果たした"}
+            ]},
+            goal_reflect_enabled=True,
+            goal_stagnation_evidence_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+
+        assert self._goal_axis_evidence(setup) == []
+
+    def test_misaligned_verdict_pushes_one_goal_evidence(self) -> None:
+        """misaligned (目的と行動の乖離) も stalled と同じく evidence を 1 件積む。"""
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "misaligned",
+                 "statement": "釣りに夢中で山頂のことを忘れていた"}
+            ]},
+            goal_reflect_enabled=True,
+            goal_stagnation_evidence_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+
+        goal_evidences = self._goal_axis_evidence(setup)
+        assert len(goal_evidences) == 1
+
+    def test_flag_off_pushes_no_evidence_even_when_stalled(self) -> None:
+        """GOAL_STAGNATION_EVIDENCE_ENABLED が OFF (既定) なら、stalled でも
+        evidence を積まない = 導入前と完全に一致する。"""
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
+            ]},
+            goal_reflect_enabled=True,
+            goal_stagnation_evidence_enabled=False,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+
+        # 観測注入は変わらず発生するが、evidence は 1 件も積まれない。
+        assert len(obs) == 1
+        assert self._goal_axis_evidence(setup) == []
+
+    def test_suppressed_by_cap_pushes_no_evidence(self) -> None:
+        """観測注入自体が stall_min_interval_turns の cap で抑制された回は、
+        evidence も積まない (「reflect が実際に発火したときだけ」乱発防止を
+        観測と evidence で共有する)。
+
+        2 回目の flush では 1 回目に積んだ goal: evidence が batch に含まれ
+        (0 applied でも batch は 1 単位で drain される既存仕様のため) 一緒に
+        drain されてしまい、buffer の最終件数だけでは「2 回目に新規で積んだか」
+        を判定できない。そのため ``append_by_being`` 呼び出し自体をスパイして
+        goal: 軸 evidence の**追加回数**を直接数える。
+        """
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
+            ]},
+            goal_reflect_enabled=True,
+            goal_stagnation_evidence_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
+            stall_min_interval_turns=15,
+        )
+        appended_goal_cues: list[str] = []
+        original_append = setup.evidence_buffer.append_by_being
+
+        def _spy_append(being_id, evidence) -> None:
+            if evidence.cue_signature.startswith("goal:"):
+                appended_goal_cues.append(evidence.cue_signature)
+            original_append(being_id, evidence)
+
+        setup.evidence_buffer.append_by_being = _spy_append
+
+        # 1 回目: 注入 + evidence 1 件が積まれる。
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+        assert len(appended_goal_cues) == 1
+
+        # 2 回目: turn を進めずに即 flush → cap で観測が抑制され、evidence も
+        # 追加で積まれない (呼び出し回数が増えない)。
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
+        setup.coordinator.flush_player(setup.player_id)
+
+        assert len(obs) == 1
+        assert len(appended_goal_cues) == 1
+
+    def test_reflect_does_not_write_belief_journal_directly(self) -> None:
+        """不変条件: evidence 化を導入しても、reflect 自体は belief journal
+        (semantic_store) に直接書き込まない。積むのは evidence buffer だけで、
+        journal への反映は次周期以降の固着 LLM の判断を経由する。"""
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
+            ]},
+            goal_reflect_enabled=True,
+            goal_stagnation_evidence_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+
+        assert setup.semantic_store.list_for_being(setup.being_id) == []
+        # goal store / journal への参照を持たないという既存不変条件も併せて確認する。
+        attrs = vars(setup.coordinator)
+        offending = [
+            name for name in attrs
+            if any(k in name.lower() for k in ("journal", "goal_store", "goal_repo"))
+        ]
+        assert offending == []
+
+    def test_goal_stagnation_evidence_requires_goal_reflect_enabled(self) -> None:
+        """fail-fast: goal_stagnation_evidence だけ ON にして goal_reflect が
+        OFF だと構築時に落ちる (reflect が発火せず evidence 化の対象が永遠に
+        生まれない「flag を立てたのに何も起きない」静かな失敗を防ぐ)。"""
+        with pytest.raises(ValueError, match="goal_reflect_enabled"):
+            _build_setup(
+                outcome={"decisions": []},
+                goal_reflect_enabled=False,
+                goal_stagnation_evidence_enabled=True,
+            )
+
+    def test_pushed_evidence_consolidates_into_goal_belief(self) -> None:
+        """統合: 積んだ goal: evidence が次周期の固着 LLM 判断で belief 化される
+        (「この方針は目的に前進しない」型の goal: belief 形成を狙う経路の確認)。
+        """
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
+            ]},
+            goal_reflect_enabled=True,
+            goal_stagnation_evidence_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        # 1 周期目: reflect が発火し goal: evidence が 1 件積まれる (journal は空)。
+        setup.coordinator.flush_player(setup.player_id)
+        assert self._goal_axis_evidence(setup) != []
+        assert setup.semantic_store.list_for_being(setup.being_id) == []
+
+        # 2 周期目: 固着 LLM が積まれた goal: evidence を create に変換する
+        # (evidence_ids 未指定 = batch 全体を根拠とみなす仕様を利用)。
+        setup.port.outcome = {
+            "decisions": [
+                {
+                    "action": "create",
+                    "text": "山頂へ行くのは前進しない",
+                    "importance": 7,
+                    "tags": ["goal"],
+                }
+            ]
+        }
+        setup.coordinator.flush_player(setup.player_id)
+
+        active = [
+            e
+            for e in setup.semantic_store.list_for_being(setup.being_id)
+            if e.status == SEMANTIC_MEMORY_STATUS_ACTIVE
+        ]
+        assert len(active) == 1
+        assert active[0].text == "山頂へ行くのは前進しない"
 
 
 class TestHearsaySupportWeightApplication:
