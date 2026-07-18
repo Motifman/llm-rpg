@@ -20,6 +20,7 @@ import logging
 from ai_rpg_world.application.player.services.player_death_grace_timer import (
     PlayerDeathGraceTimer,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.service.player_outcome_registry import (
     PlayerOutcomeRegistry,
@@ -49,10 +50,20 @@ class PlayerDeathGraceTickStage:
         self._grace_ticks = grace_ticks
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def run(self, current_tick: int) -> None:
-        """tick 毎に呼ばれる。overdue player を DEAD 確定して pending 掃除する。"""
+    def run(self, current_tick: WorldTick) -> None:
+        """tick 毎に呼ばれる。overdue player を DEAD 確定して pending 掃除する。
+
+        呼び出し元 (``SpotGraphSimulationApplicationService``) は他の
+        tick stage 同様 ``WorldTick`` を渡す (`_SpotGraphTickStage` protocol
+        参照)。``PlayerDeathGraceTimer.overdue_players`` は int を期待するため、
+        stage の入口 (= application 層の境界) で ``.value`` に変換する。
+        ここを怠ると ``WorldTick - int`` の減算で ``TypeError`` になる
+        (実 run r1_001 で発生したクラッシュ、#710 で register が動くように
+        なって初めて露出した潜在バグ)。
+        """
+        tick_value = current_tick.value
         overdue = self._grace_timer.overdue_players(
-            current_tick=current_tick,
+            current_tick=tick_value,
             grace_ticks=self._grace_ticks,
         )
         for player_id in overdue:
@@ -65,7 +76,7 @@ class PlayerDeathGraceTickStage:
             if changed:
                 self._logger.info(
                     "Player %s outcome confirmed as DEAD after grace period (tick=%d)",
-                    player_id, current_tick,
+                    player_id, tick_value,
                 )
             else:
                 self._logger.debug(
