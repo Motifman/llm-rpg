@@ -1575,6 +1575,78 @@ class TestGoalStagnationEvidence:
         assert pushed.salience == BELIEF_EVIDENCE_SALIENCE_HIGH
         assert pushed.source_kind == BeliefEvidenceSourceKind.PREDICTION_ERROR
 
+    def test_stalled_verdict_emits_belief_evidence_trace(self) -> None:
+        """P-U1 の goal 停滞 evidence は buffer に積むだけでなく、通常の evidence と
+        同形の BELIEF_EVIDENCE trace event を 1 件出す。
+
+        D1 修正の核心: 案1 の evidence は ``append_by_being`` を直呼びしており、
+        buffer には積まれるが trace には一切現れなかった。そのため「停滞を belief に
+        固着させる」案1 の腕が実際に発火したか / belief を作ったかを run データから
+        検証できない静かな失敗になっていた。ここでは stalled のとき goal: 軸 evidence
+        が trace event として観測可能になることを保証する。
+        """
+        recorder = _CapturingRecorder()
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled",
+                 "statement": "同じ場所を空回りしている気がする"}
+            ]},
+            goal_reflect_enabled=True,
+            goal_stagnation_evidence_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+            trace_recorder_provider=lambda: recorder,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+
+        from ai_rpg_world.application.trace import TraceEventKind
+
+        goal_events = [
+            e
+            for e in recorder.events
+            if e.kind == TraceEventKind.BELIEF_EVIDENCE
+            and (e.payload.get("cue_signature") or "").startswith("goal:")
+        ]
+        assert len(goal_events) == 1
+        payload = goal_events[0].payload
+        assert payload["cue_signature"] == "goal:山頂へ行く"
+        assert payload["salience"] == BELIEF_EVIDENCE_SALIENCE_HIGH
+        assert (
+            payload["source_kind"]
+            == BeliefEvidenceSourceKind.PREDICTION_ERROR.value
+        )
+        # buffer に積んだ evidence と同一 id が trace されている (別物を捏造しない)。
+        pushed = self._goal_axis_evidence(setup)[0]
+        assert payload["evidence_id"] == pushed.evidence_id
+
+    def test_flag_off_emits_no_belief_evidence_trace(self) -> None:
+        """GOAL_STAGNATION_EVIDENCE_ENABLED が OFF なら goal: 軸の BELIEF_EVIDENCE
+        trace event も一切出ない (= 導入前と完全一致・byte 不変の不変条件)。"""
+        recorder = _CapturingRecorder()
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
+            ]},
+            goal_reflect_enabled=True,
+            goal_stagnation_evidence_enabled=False,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: None,
+            trace_recorder_provider=lambda: recorder,
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+        setup.coordinator.flush_player(setup.player_id)
+
+        from ai_rpg_world.application.trace import TraceEventKind
+
+        goal_events = [
+            e
+            for e in recorder.events
+            if e.kind == TraceEventKind.BELIEF_EVIDENCE
+            and (e.payload.get("cue_signature") or "").startswith("goal:")
+        ]
+        assert goal_events == []
+
     def test_achieved_verdict_pushes_no_evidence(self) -> None:
         """achieved (前進) は誤差ではないので evidence を積まない。"""
         setup = _build_setup(
