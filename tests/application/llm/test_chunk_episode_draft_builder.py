@@ -468,3 +468,88 @@ class TestChunkEpisodeDraftBuilderRuntimeContext:
         ).build(inp)
         axes_in_episode = {c.axis for c in ep.cues}
         assert "place_spot" not in axes_in_episode
+
+
+class TestChunkEpisodeDraftBuilderCoPresent:
+    """PR-M: chunk write 時の runtime_context の「同席プレイヤー」を co_present
+    として episode に刻印する。約束清算の共在ゲートが who (= 動作した人) だけ
+    でなく co_present (= その場に居た人) も照合できるようにするため。
+    """
+
+    def test_co_present_is_empty_when_no_runtime_context(self) -> None:
+        """runtime_context provider 未注入なら co_present は空 (= 導入前と一致)。"""
+        t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t0,
+            action_summary="x",
+            result_summary="ok",
+            tool_name="t",
+        )
+        inp = build_chunk_encoding_input(PlayerId(1), (), (act,))
+        ep = ChunkEpisodeDraftBuilder().build(inp)
+        assert ep.co_present == ()
+
+    def test_player_targets_become_co_present(self) -> None:
+        """runtime_context.targets の PlayerToolRuntimeTargetDto の表示名が、
+
+        黙っている同席者も含めて co_present に (ラベル昇順・重複除去で) 入る。
+        """
+        from ai_rpg_world.application.llm.contracts.dtos import (
+            PlayerToolRuntimeTargetDto,
+            QuestToolRuntimeTargetDto,
+            ToolRuntimeContextDto,
+        )
+
+        t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t0,
+            action_summary="memo_add",
+            result_summary="ok",
+            tool_name="memo_add",
+        )
+        inp = build_chunk_encoding_input(PlayerId(1), (), (act,))
+        context = ToolRuntimeContextDto(
+            targets={
+                "E2": PlayerToolRuntimeTargetDto(
+                    label="E2",
+                    kind="spot_graph_player",
+                    display_name="ノア",
+                    player_id=3,
+                ),
+                "E1": PlayerToolRuntimeTargetDto(
+                    label="E1",
+                    kind="spot_graph_player",
+                    display_name="カイ",
+                    player_id=2,
+                ),
+                # プレイヤー以外の target (クエスト等) は co_present に含めない。
+                "Q1": QuestToolRuntimeTargetDto(
+                    label="Q1",
+                    kind="quest",
+                    display_name="クエストX",
+                ),
+            }
+        )
+        ep = ChunkEpisodeDraftBuilder(
+            runtime_context_provider=lambda pid: context
+        ).build(inp)
+        assert ep.co_present == ("カイ", "ノア")
+
+    def test_co_present_empty_when_no_player_targets(self) -> None:
+        """同席プレイヤーが居ない (player target が無い) なら co_present は空。"""
+        from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
+
+        t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(
+            occurred_at=t0,
+            action_summary="x",
+            result_summary="ok",
+            tool_name="t",
+        )
+        inp = build_chunk_encoding_input(PlayerId(1), (), (act,))
+        ep = ChunkEpisodeDraftBuilder(
+            runtime_context_provider=lambda pid: ToolRuntimeContextDto(
+                targets={}, current_spot_id=5
+            )
+        ).build(inp)
+        assert ep.co_present == ()

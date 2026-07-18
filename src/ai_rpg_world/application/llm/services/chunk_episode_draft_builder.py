@@ -21,6 +21,7 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     LlmCommandResultDto,
+    PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -120,6 +121,37 @@ def _who_from_observations(entries: tuple[ObservationEntry, ...]) -> tuple[str, 
         if m not in seen:
             seen[m] = None
             ordered.append(m)
+    return tuple(ordered)
+
+
+def _co_present_from_runtime_context(
+    runtime_context: Optional[ToolRuntimeContextDto],
+) -> tuple[str, ...]:
+    """chunk write 時の runtime_context から「同席プレイヤー名」を集める。
+
+    PR-M (約束清算の共在ゲート誤棄却の修正): ``ToolRuntimeContextDto.targets``
+    には、prompt の「同じ場所にいるプレイヤー」節を組み立てるのと同じ occupancy
+    (= 発話せず黙っている相手も含む同席プレイヤー) が ``PlayerToolRuntimeTargetDto``
+    として載っている。ここからその表示名を集め、episode.co_present に刻む材料に
+    する。順序は targets のラベル昇順で安定させ、重複表示名は 1 度だけ残す
+    (``who`` 側の ``_collect_who`` と同じくラベル昇順で並べる規約)。
+
+    ``None`` (provider 未注入 / 「context が取れない」明示) のときは空タプル
+    (= PR-M 導入前と一致する安全な縮退)。
+    """
+    if runtime_context is None:
+        return ()
+    seen: dict[str, None] = {}
+    ordered: list[str] = []
+    for label in sorted(runtime_context.targets.keys()):
+        target = runtime_context.targets[label]
+        if not isinstance(target, PlayerToolRuntimeTargetDto):
+            continue
+        name = target.display_name.strip() if isinstance(target.display_name, str) else ""
+        if not name or name in seen:
+            continue
+        seen[name] = None
+        ordered.append(name)
     return tuple(ordered)
 
 
@@ -365,6 +397,11 @@ class ChunkEpisodeDraftBuilder:
         )
         episode_id = str(uuid.uuid5(_EPISODE_ID_NAMESPACE, fingerprint))
 
+        # runtime_context は cue 抽出 (#526 C2) と co_present 刻印 (PR-M) の両方で
+        # 使うので、provider 呼び出しを 1 回に集約する (chunk 閉じる瞬間の
+        # world 状態を 1 度だけ問い合わせる)。
+        runtime_context = self._resolve_runtime_context(inp.player_id)
+
         return SubjectiveEpisode(
             episode_id=episode_id,
             player_id=pid,
@@ -377,6 +414,10 @@ class ChunkEpisodeDraftBuilder:
                 canonical_arguments_text=_canonical_args_fingerprint_text(acts),
             ),
             who=_who_from_observations(obs_for_place_who),
+            # PR-M: chunk write 時に同席していた他プレイヤー名を co_present に
+            # 刻む。約束清算の共在ゲートが who (動いた人) だけでなく co_present
+            # (その場に居た人) も照合できるようにするため。
+            co_present=_co_present_from_runtime_context(runtime_context),
             what=what,
             why=_compose_why(acts),
             observed=observed,
@@ -390,7 +431,7 @@ class ChunkEpisodeDraftBuilder:
             cues=_build_chunk_cues(
                 inp,
                 noun_matcher=self._noun_matcher,
-                runtime_context=self._resolve_runtime_context(inp.player_id),
+                runtime_context=runtime_context,
             ),
             recall_text=compute_template_recall(observed, what),
             recall_count=0,

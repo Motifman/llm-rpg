@@ -37,14 +37,32 @@ m7_v3coop_001 の t188 で、リオが「下山してカイたちと合流する
 への信頼を強化する evidence になるため、この種の誤判定は素通しできない。
 
 ゲート対象は **fulfilled 判定かつ resolution_cues に ``player:X`` を含む**
-場合のみ (broken 判定・player cue の無い約束は一切変更しない)。判定 chunk の
-``episode.who`` (= エンジン由来の確定事実。chunk の観測に実際に登場した人物名)
-に、約束の相手全員 (複数 player cue のときは全員必須) が登場していることを
+場合のみ (broken 判定・player cue の無い約束は一切変更しない)。約束の相手
+全員 (複数 player cue のときは全員必須) がその chunk に共在していたことを
 fulfilled 受理の必要条件にする。
 
-照合対象を ``episode.who`` に限定するのは、エージェント自身の inner_thought /
-memo / 観測 prose テキストを使うと「カイたちと合流しよう」という自己記述に
-相手の名前が書いてあるだけで素通しし、ゲートの意味が無くなるため。
+照合材料をエンジン由来の確定事実に限定するのは、エージェント自身の
+inner_thought / memo / 観測 prose テキストを使うと「カイたちと合流しよう」
+という自己記述に相手の名前が書いてあるだけで素通しし、ゲートの意味が無く
+なるため。
+
+## PR-M: 照合材料を who ∪ co_present に広げる
+
+PR-C は照合材料を ``episode.who`` に限定していたが、``who`` は「その chunk で
+実際に structured.actor として動作した人」しか集めない (無状態な収集)。その
+結果、同じスポットに居ても黙っている相手は ``who`` に入らず、相手が実在する
+のに fulfilled が誤棄却され、約束がそのまま期限切れで消える事故が起きた
+(r1_003 で 12 件の fulfilled が誤棄却され、位置データで再構成すると 12 件中
+11 件は要求相手が同一スポットに実在していた)。
+
+そこで ``episode.co_present`` (= chunk を閉じた時点で同じスポットに居た他
+プレイヤー名。エンジン由来の確定事実) を新設し、照合を ``who ∪ co_present``
+に対して行う。「ルールを増やさず照合材料を正しくする」修正で、ゲートの意味
+(自己記述だけでは素通ししない) は保ったまま「相手が黙っていても同席して
+いれば清算を通す」ようにする。co_present の供給源は chunk write 時の
+``ToolRuntimeContextDto`` の同席プレイヤー (= prompt の「同じ場所にいる
+プレイヤー」節と同じ occupancy) で、``ChunkEpisodeDraftBuilder`` が episode に
+刻印する。
 
 条件を満たさない fulfilled は **棄却して約束を保留のまま store に残す**
 (drain しない)。期限が来れば従来どおり黙って失効する。fulfilled を broken に
@@ -146,12 +164,20 @@ def resolve_pending_predictions_if_applicable(
             continue
 
         # PR-C (共在ゲート): fulfilled かつ player cue を含む約束は、相手が
-        # 判定 chunk の episode.who (エンジン由来の確定事実) に実在すること
-        # を必要条件にする。broken 判定・player cue の無い約束は対象外。
+        # 判定 chunk に共在していたこと (エンジン由来の確定事実) を必要条件に
+        # する。broken 判定・player cue の無い約束は対象外。
+        #
+        # PR-M: 照合材料を episode.who だけでなく co_present との和集合にする。
+        # who は「実際に動作した人」しか集めないため、同席していても黙っている
+        # 相手は who に入らず fulfilled を誤棄却していた (r1_003 で 12 件)。
+        # co_present (= その場に居た人) を足すことで「相手が黙っていても同席
+        # していれば清算を通す」。順序は who を先に、続けて co_present の順で
+        # 重複除去する (trace の present_players / missing_players の再現性のため)。
         if verdict.verdict == PENDING_VERDICT_FULFILLED:
             required = _required_players(pending)
             if required:
-                missing = _missing_players(required, episode.who)
+                present = tuple(dict.fromkeys((*episode.who, *episode.co_present)))
+                missing = _missing_players(required, present)
                 if missing:
                     _emit_rejected_trace(
                         trace_recorder,
@@ -240,14 +266,15 @@ def _required_players(pending: "PendingPrediction") -> tuple[str, ...]:
 
 
 def _missing_players(
-    required: tuple[str, ...], who: tuple[str, ...]
+    required: tuple[str, ...], present: tuple[str, ...]
 ) -> tuple[str, ...]:
-    """``required`` (約束の相手全員) のうち ``who`` に不在の名前を返す。
+    """``required`` (約束の相手全員) のうち ``present`` に不在の名前を返す。
 
-    「約束の相手全員」の共在を要求する仕様 (複数 player cue のときも全員
-    必須) のため、1 人でも不在なら non-empty を返す。
+    ``present`` は共在の照合材料 (who ∪ co_present)。「約束の相手全員」の共在
+    を要求する仕様 (複数 player cue のときも全員必須) のため、1 人でも不在なら
+    non-empty を返す。
     """
-    return tuple(name for name in required if name not in who)
+    return tuple(name for name in required if name not in present)
 
 
 def _emit_rejected_trace(

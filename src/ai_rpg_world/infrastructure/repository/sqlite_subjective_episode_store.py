@@ -78,6 +78,11 @@ def _episode_to_payload_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
             "canonical_arguments_text": act.canonical_arguments_text,
         },
         "who": list(ep.who),
+        # PR-M (約束清算の共在ゲート誤棄却の修正): co_present (= chunk 時点の
+        # 同席プレイヤー名) も persist する。payload は JSON blob なので ALTER
+        # TABLE 不要。旧行は "co_present" キーを持たないため decode 側の
+        # data.get("co_present", ()) だけで後方互換が成立する。
+        "co_present": list(ep.co_present),
         "what": ep.what,
         "why": ep.why,
         "observed": ep.observed,
@@ -142,6 +147,8 @@ def _payload_dict_to_episode(data: dict[str, Any]) -> SubjectiveEpisode:
         location=loc,
         action=action,
         who=tuple(str(x) for x in data["who"]),
+        # PR-M: co_present キーが無い旧行は空タプルにフォールバック。
+        co_present=tuple(str(x) for x in data.get("co_present", ())),
         what=str(data["what"]),
         why=data.get("why"),
         observed=str(data["observed"]),

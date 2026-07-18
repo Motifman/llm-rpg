@@ -72,6 +72,16 @@ class SubjectiveEpisode:
     recall_text: str | None = None
     recall_count: int = 0
     last_recalled_at: datetime | None = None
+    # PR-M (約束清算の共在ゲート誤棄却の修正): who (= その chunk で実際に
+    # structured.actor として動作した人) とは別に、chunk を閉じた時点で同じ
+    # スポットに居た他プレイヤー名 (= 共在) を、エンジン由来の確定事実として
+    # 保持する。who は「動いた人」しか集めないため、同席していても黙っている
+    # 相手は who に入らず、約束清算の共在ゲートが fulfilled を誤棄却していた。
+    # co_present を照合材料に加えることで「相手が黙っていても同席していれば
+    # 清算を通す」ことができる。who と同じ正規化 (空文字拒否・tuple 検証) を
+    # 持ち、既定は空タプル。既存の全構築箇所・snapshot 往復が co_present を
+    # 意識せずに作っても壊れない後方互換を保つ。
+    co_present: Tuple[str, ...] = ()
     # Afterglow index で使う 1 行見出し (#526 段階 3 後続)。新規 LLM コールは
     # 増やさず、既存の主観文付与で interpreted / recall_text と同じ pass で
     # 書かせる方針のため、未指定や空文字も None として畳み込む Optional に保つ。
@@ -132,6 +142,13 @@ class SubjectiveEpisode:
         for idx, w in enumerate(self.who):
             who_norm.append(reject_blank(f"who[{idx}]", w))
         object.__setattr__(self, "who", tuple(who_norm))
+
+        if not isinstance(self.co_present, tuple):
+            raise TypeError("co_present must be tuple[str, ...]")
+        co_present_norm: list[str] = []
+        for idx, c in enumerate(self.co_present):
+            co_present_norm.append(reject_blank(f"co_present[{idx}]", c))
+        object.__setattr__(self, "co_present", tuple(co_present_norm))
 
         object.__setattr__(self, "what", reject_blank("what", self.what))
         object.__setattr__(self, "why", optional_non_blank("why", self.why))

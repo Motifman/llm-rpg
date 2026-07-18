@@ -22,6 +22,7 @@ def _episode(
     occurred_at: datetime | None = None,
     cues: tuple[EpisodicCue, ...] | None = None,
     recall_text: str = "r",
+    co_present: tuple[str, ...] = (),
 ) -> SubjectiveEpisode:
     ts = occurred_at or datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc)
     cue_list = cues or (
@@ -36,6 +37,7 @@ def _episode(
         location=EpisodeLocation(),
         action=EpisodeAction(tool_name="t"),
         who=("p",),
+        co_present=co_present,
         what="w",
         why=None,
         observed="o",
@@ -67,6 +69,23 @@ class TestSqliteSubjectiveEpisodeStoreBasics:
             assert got.player_id == ep.player_id
             assert got.cues == ep.cues
             assert got.recall_text == ep.recall_text
+
+    def test_co_present_round_trips_through_sqlite(self) -> None:
+        """PR-M: co_present (= chunk 時点の同席プレイヤー名) が sqlite の
+        payload_json を経由して保存・復元される (再開で共在情報を失わない)。"""
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
+        being_id = BeingId("being_w1_p7")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "episodes.db")
+            store = SqliteSubjectiveEpisodeStore.connect(path)
+            ep = _episode(co_present=("ノア", "カイ"))
+            store.put_by_being(being_id, ep)
+            del store
+            store2 = SqliteSubjectiveEpisodeStore.connect(path)
+            got = store2.get_by_being(being_id, "ep-1")
+            assert got is not None
+            assert got.co_present == ("ノア", "カイ")
 
     def test_list_by_cue_after_reopen(self) -> None:
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
