@@ -646,6 +646,44 @@ class BeliefConsolidationCoordinator:
             tick=self._resolve_tick(),
         )
         self._evidence_buffer_store.append_by_being(being_id, evidence)
+        self._emit_belief_evidence_trace(being_id, evidence)
+
+    def _emit_belief_evidence_trace(
+        self, being_id: BeingId, evidence: BeliefEvidence
+    ) -> None:
+        """P-U1 の goal 停滞 evidence を ``BELIEF_EVIDENCE`` trace event として残す
+        (D1 修正)。
+
+        案1 の evidence は ``append_by_being`` を直呼びしており、他経路
+        (memo distill / episodic chunk 等) が transcriber 経由で必ず出す
+        ``BELIEF_EVIDENCE`` trace を出していなかった。そのため run データ上
+        ``cue_signature="goal:..."`` の evidence が 1 件も見えず、「停滞を belief に
+        固着させる」案1 の腕が発火したか・belief を作ったかを検証できない静かな
+        失敗になっていた。ここで他経路と同一 payload 形の trace を 1 件出し、
+        案1 を観測可能にする (buffer への追記が本筋で、trace は観測用の副作用な
+        ので recorder 不在・record 例外では黙って諦める = turn を壊さない)。
+        """
+        recorder = self._resolve_recorder()
+        if recorder is None:
+            return
+        try:
+            recorder.record(
+                TraceEventKind.BELIEF_EVIDENCE,
+                tick=evidence.tick,
+                being_id=being_id.value,
+                evidence_id=evidence.evidence_id,
+                source_kind=evidence.source_kind.value,
+                episode_ids=list(evidence.episode_ids),
+                cue_signature=evidence.cue_signature,
+                text_snippet=evidence.text[:120],
+                salience=evidence.salience,
+            )
+        except Exception:
+            _logger.debug(
+                "trace recorder.record raised for BELIEF_EVIDENCE "
+                "(goal stagnation); skipping",
+                exc_info=True,
+            )
 
     def current_turn_index(self, player_id: PlayerId) -> int:
         if not isinstance(player_id, PlayerId):
