@@ -915,6 +915,10 @@ class EpisodicChunkSubjectiveFieldsService:
             raise ValueError("cues must remain unchanged after subjective merge")
         if merged.who != draft.who:
             raise ValueError("who must remain unchanged after subjective merge")
+        # PR-M: co_present も who と同じくエンジン由来の確定事実なので、主観補完
+        # LLM の merge で書き換わってはならない。
+        if merged.co_present != draft.co_present:
+            raise ValueError("co_present must remain unchanged after subjective merge")
         if merged.what != draft.what:
             raise ValueError("what must remain unchanged after subjective merge")
         if merged.outcome != draft.outcome:

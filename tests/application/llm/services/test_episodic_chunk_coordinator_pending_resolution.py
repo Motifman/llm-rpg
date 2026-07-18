@@ -80,7 +80,9 @@ class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
         return self._returns
 
 
-def _build_coord(*, returns, pending_prediction_enabled, current_tick):
+def _build_coord(
+    *, returns, pending_prediction_enabled, current_tick, runtime_context_provider=None
+):
     buffer = DefaultObservationContextBuffer()
     sliding = DefaultSlidingWindowMemory()
     action_store = DefaultActionResultStore()
@@ -100,7 +102,9 @@ def _build_coord(*, returns, pending_prediction_enabled, current_tick):
         sliding_window_memory=sliding,
         action_result_store=action_store,
         episodic_episode_store=episode_store,
-        chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),
+        chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(
+            runtime_context_provider=runtime_context_provider
+        ),
         chunk_subjective_fields_service=subjective_service,
         being_attachment_resolver=resolver,
         default_world_id=DEFAULT_SINGLE_WORLD_ID,
@@ -217,5 +221,77 @@ class TestCoordinatorPendingResolutionSyncPath:
         )
         assert "保留中の約束" not in user_content
         # 清算も失効もしない (約束は残る)
+        assert len(pending_store.list_all_by_being(being_id)) == 1
+        assert buffer_store.list_all_by_being(being_id) == []
+
+
+class TestCoordinatorPendingResolutionCoPresenceGate:
+    """PR-M: chunk write 時の同席者 (runtime_context 由来) が co_present として
+    episode に刻まれ、fulfilled の共在ゲートを通す実経路を保証する。
+
+    黙っている相手は観測 structured.actor に現れず episode.who に入らないが、
+    同じスポットに居れば co_present に入る。約束の相手が co_present で満たされ
+    れば fulfilled 清算が通る (r1_003 の誤棄却の再現と修正)。
+    """
+
+    def _provider_with_copresent_kaito(self):
+        from ai_rpg_world.application.llm.contracts.dtos import (
+            PlayerToolRuntimeTargetDto,
+            ToolRuntimeContextDto,
+        )
+
+        # カイト は黙って同席している (発話・行動していない = who には入らない)。
+        context = ToolRuntimeContextDto(
+            targets={
+                "E1": PlayerToolRuntimeTargetDto(
+                    label="E1",
+                    kind="spot_graph_player",
+                    display_name="カイト",
+                    player_id=2,
+                ),
+            },
+            current_spot_id=12,
+        )
+        return lambda pid: context
+
+    def test_fulfilled_resolves_when_target_is_silently_co_present(self) -> None:
+        """相手 (カイト) が黙って同席しているだけでも、co_present 経由で
+        fulfilled 清算が通り、約束が store から除かれる。"""
+        coord, buffer, action_store, being_id, pending_store, buffer_store, port = _build_coord(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "pending_resolutions": [{"pending_id": "p1", "verdict": "fulfilled"}],
+            },
+            pending_prediction_enabled=True,
+            current_tick=15,
+            runtime_context_provider=self._provider_with_copresent_kaito(),
+        )
+        pending_store.add_by_being(being_id, _pending("p1", tick_from=10, tick_to=20))
+
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1))
+
+        assert pending_store.list_all_by_being(being_id) == []
+        rows = buffer_store.list_all_by_being(being_id)
+        assert len(rows) == 1
+        assert rows[0].source_kind is BeliefEvidenceSourceKind.PENDING_RESOLUTION
+
+    def test_fulfilled_rejected_when_target_neither_acts_nor_co_present(self) -> None:
+        """相手が who にも co_present にも居ない fulfilled は従来どおり棄却し、
+        約束を保留のまま残す (虚偽の履行 evidence を刻まない安全弁を維持)。"""
+        coord, buffer, action_store, being_id, pending_store, buffer_store, port = _build_coord(
+            returns={
+                "interpreted": "I",
+                "recall_text": "R",
+                "pending_resolutions": [{"pending_id": "p1", "verdict": "fulfilled"}],
+            },
+            pending_prediction_enabled=True,
+            current_tick=15,
+            runtime_context_provider=None,
+        )
+        pending_store.add_by_being(being_id, _pending("p1", tick_from=10, tick_to=20))
+
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1))
+
         assert len(pending_store.list_all_by_being(being_id)) == 1
         assert buffer_store.list_all_by_being(being_id) == []

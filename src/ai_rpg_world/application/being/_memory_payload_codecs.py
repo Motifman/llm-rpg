@@ -377,6 +377,10 @@ def subjective_episode_to_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
             "canonical_arguments_text": act.canonical_arguments_text,
         },
         "who": list(ep.who),
+        # PR-M (約束清算の共在ゲート誤棄却の修正): co_present (= chunk 時点で
+        # 同席していた他プレイヤー名。エンジン由来の確定事実) を snapshot に
+        # 乗せ、長走実験の終了 → 再開で共在情報が静かに失われないようにする。
+        "co_present": list(ep.co_present),
         "what": ep.what,
         "why": ep.why,
         "observed": ep.observed,
@@ -429,6 +433,9 @@ def dict_to_subjective_episode(data: dict[str, Any]) -> SubjectiveEpisode:
             canonical_arguments_text=act_raw.get("canonical_arguments_text"),
         ),
         who=tuple(str(x) for x in data.get("who", ())),
+        # PR-M: co_present キーが無い旧 snapshot は空タプルにフォールバック
+        # (co_present 導入前に保存された episode を壊さない後方互換)。
+        co_present=tuple(str(x) for x in data.get("co_present", ())),
         what=str(data["what"]),
         why=data.get("why"),
         observed=str(data["observed"]),
