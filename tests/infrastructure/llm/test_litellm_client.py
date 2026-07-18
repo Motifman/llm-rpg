@@ -16,6 +16,9 @@ def isolate_litellm_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENROUTER_PROVIDER", raising=False)
     monkeypatch.delenv("OPENROUTER_QUANTIZATION", raising=False)
     monkeypatch.delenv("OPENROUTER_REQUIRE_PARAMS", raising=False)
+    # reasoning effort: 開発者シェルの LLM_REASONING_EFFORT がテストに混入すると
+    # 既定 "none" 前提のアサーションが揺れるので隔離する。
+    monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
     monkeypatch.setattr(
         "ai_rpg_world.infrastructure.llm.litellm_client._load_dotenv_if_available",
         lambda: None,
@@ -1234,3 +1237,103 @@ class TestLiteLLMClientWallTimeHardCap:
         # 2 回目で成功 (= per-attempt wall cap は各 call に独立で適用される)
         assert result is not None
         assert result["name"] == "ok"
+
+
+class TestLiteLLMClientReasoningEffortOverride:
+    """invoke の per-call reasoning_effort override と reasoning_token 捕捉。
+
+    案A (band-gated thinking) の基盤: 通常は構築時の既定 (env / none) で reasoning
+    OFF のまま、詰まったターンだけ呼び出し単位で effort を上書きできることを保証する。
+    """
+
+    @pytest.fixture
+    def client(self):
+        return LiteLLMClient(model="openrouter/deepseek/deepseek-v4-flash", api_key="sk-dummy")
+
+    def _completion_extra_body(self, m_litellm) -> dict:
+        return m_litellm.completion.call_args.kwargs["extra_body"]
+
+    def test_invoke_reasoning_effort_override_sets_effort_in_extra_body(self, client):
+        """reasoning_effort='low' を渡すと、その 1 呼び出しの extra_body.reasoning.effort が
+        構築時の既定 (none) を上書きして 'low' になる。"""
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="required",
+                reasoning_effort="low",
+            )
+            eb = self._completion_extra_body(m_litellm)
+            assert eb["reasoning"]["effort"] == "low"
+
+    def test_invoke_without_override_keeps_construction_default_none(self, client):
+        """reasoning_effort を渡さなければ、構築時の既定 (none) のまま送られる
+        (= 既存挙動を壊さない・プレフィックスキャッシュ不変)。"""
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="required",
+            )
+            eb = self._completion_extra_body(m_litellm)
+            assert eb["reasoning"]["effort"] == "none"
+
+    def test_invoke_rejects_unknown_reasoning_effort(self, client):
+        """未知の reasoning_effort は silent fallback せず ValueError で弾く
+        (PR #433 と同じ「不正値は落とす」方針)。"""
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
+            with pytest.raises(ValueError):
+                client.invoke(
+                    messages=[{"role": "user", "content": "x"}],
+                    tools=[],
+                    tool_choice="required",
+                    reasoning_effort="bogus",
+                )
+
+    def test_extract_reasoning_tokens_reads_completion_tokens_details(self):
+        """usage.completion_tokens_details.reasoning_tokens を best-effort で取り出す。"""
+        usage = MagicMock()
+        details = MagicMock()
+        details.reasoning_tokens = 42
+        usage.completion_tokens_details = details
+        response = MagicMock()
+        response.usage = usage
+        assert LiteLLMClient._extract_reasoning_tokens(response) == 42
+
+    def test_extract_reasoning_tokens_returns_zero_when_absent(self):
+        """reasoning_tokens が無い provider では 0 に縮退する (例外を投げない)。"""
+        response = MagicMock()
+        response.usage = MagicMock(spec=[])  # no completion_tokens_details
+        assert LiteLLMClient._extract_reasoning_tokens(response) == 0
+
+    def test_invoke_emits_reasoning_tokens_in_metrics(self, client):
+        """reasoning_tokens が metrics_sink 経由の LlmCallMetrics に載る。"""
+        captured = []
+
+        class _Sink:
+            def record(self, m):
+                captured.append(m)
+
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            resp = _make_tool_call_response("world_no_op", {})
+            usage = MagicMock()
+            details = MagicMock()
+            details.reasoning_tokens = 33
+            usage.completion_tokens_details = details
+            usage.prompt_tokens = 100
+            usage.completion_tokens = 50
+            usage.prompt_tokens_details = None
+            resp.usage = usage
+            m_litellm.completion.return_value = resp
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="required",
+                reasoning_effort="low",
+                metrics_sink=_Sink(),
+            )
+        assert captured
+        assert captured[0].reasoning_tokens == 33
