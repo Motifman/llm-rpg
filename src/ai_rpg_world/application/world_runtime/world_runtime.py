@@ -3960,6 +3960,32 @@ def create_world_runtime(
         # どちらか一方でも ON なら buffer store 自体は作る。
         _belief_consolidation_enabled = resolve_belief_consolidation_enabled()
         log_belief_consolidation_enabled_state(_belief_consolidation_enabled)
+        # 敵対的レビュー HIGH-1 fail-fast: P-U1 (goal_stagnation_evidence) /
+        # P-U2 (stagnation_pressure) はどちらも BeliefConsolidationCoordinator
+        # (固着パス) 経由でしか動かないが、その coordinator 自体は
+        # belief_consolidation_enabled が ON のときしか構築されない
+        # (episodic_stack.py の `if belief_consolidation_enabled and
+        # belief_evidence_buffer_store is not None` 分岐)。coordinator
+        # コンストラクタ内の fail-fast (goal_reflect_enabled 必須等) は
+        # coordinator が実際に構築されたときにしか働かないため、それより前の
+        # ここで相互ガードしないと「flag を ON にしたのに coordinator が
+        # 一度も作られず、カウンタも evidence 化も一生 0 のまま、警告すら出ない」
+        # 静かな失敗になる (本 PR 群が売りにする「起動時 fail-fast で弾く」に
+        # 正面から反する)。
+        if _goal_stagnation_evidence_enabled and not _belief_consolidation_enabled:
+            raise ValueError(
+                "GOAL_STAGNATION_EVIDENCE_ENABLED=1 だが BELIEF_CONSOLIDATION_ENABLED "
+                "が OFF のため固着パス (BeliefConsolidationCoordinator) が構築されず、"
+                "reflect の stalled/misaligned verdict を evidence 化する経路が丸ごと"
+                "動かない (静かな失敗)。BELIEF_CONSOLIDATION_ENABLED=1 も設定してください。"
+            )
+        if _stagnation_pressure_enabled and not _belief_consolidation_enabled:
+            raise ValueError(
+                "STAGNATION_PRESSURE_ENABLED=1 だが BELIEF_CONSOLIDATION_ENABLED が "
+                "OFF のため固着パス (BeliefConsolidationCoordinator) が構築されず、"
+                "reflect verdict を停滞感カウンタに畳み込む経路が丸ごと動かない "
+                "(静かな失敗)。BELIEF_CONSOLIDATION_ENABLED=1 も設定してください。"
+            )
         # U6: salience 判定 + STRUCTURED_FAILURE 転記 (default OFF)。他 2 flag
         # 同様、同じ evidence buffer を共有するので ON なら buffer store を作る
         # 条件に加える。

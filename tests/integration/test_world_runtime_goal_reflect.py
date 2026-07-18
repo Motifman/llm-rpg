@@ -123,6 +123,57 @@ class TestStagnationPressureWiring:
         assert runtime._stagnation_pressure_store is None
 
 
+class TestFailFastRequiresBeliefConsolidation:
+    """敵対的レビュー HIGH-1: P-U1 / P-U2 は固着パス
+    (``BeliefConsolidationCoordinator``) 経由でしか動かないが、その coordinator
+    自体は ``BELIEF_CONSOLIDATION_ENABLED`` が ON のときしか構築されない
+    (episodic_stack.py の ``if belief_consolidation_enabled and
+    belief_evidence_buffer_store is not None`` 分岐)。GOAL_STAGNATION_EVIDENCE_ENABLED
+    や STAGNATION_PRESSURE_ENABLED だけを ON にして BELIEF_CONSOLIDATION_ENABLED を
+    OFF のままにすると、coordinator が一度も構築されず、カウンタや evidence 化の
+    経路が丸ごと死んだまま起動時に何の警告もエラーも出ない「静かな失敗」になる。
+    本クラスは、この組み合わせを起動時 fail-fast (ValueError) で弾くことを保証する。"""
+
+    def _enable_semantic_without_belief_consolidation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+        monkeypatch.setenv("SEMANTIC_SEARCH_ENABLED", "1")
+        monkeypatch.delenv("BELIEF_CONSOLIDATION_ENABLED", raising=False)
+
+    def test_goal_stagnation_evidence_without_belief_consolidation_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._enable_semantic_without_belief_consolidation(monkeypatch)
+        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
+        monkeypatch.setenv("GOAL_STAGNATION_EVIDENCE_ENABLED", "1")
+        with pytest.raises(ValueError, match="BELIEF_CONSOLIDATION_ENABLED"):
+            create_world_runtime(_SCENARIO_PATH)
+
+    def test_stagnation_pressure_without_belief_consolidation_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._enable_semantic_without_belief_consolidation(monkeypatch)
+        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
+        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
+        with pytest.raises(ValueError, match="BELIEF_CONSOLIDATION_ENABLED"):
+            create_world_runtime(_SCENARIO_PATH)
+
+    def test_all_flags_enabled_together_does_not_raise(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """正当な組み合わせ (belief_consolidation も含め全部 ON) では構築が通る。"""
+        _enable_consolidation(monkeypatch)
+        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
+        monkeypatch.setenv("GOAL_STAGNATION_EVIDENCE_ENABLED", "1")
+        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        coord = _coordinator(runtime)
+        assert coord is not None
+        assert coord._goal_stagnation_evidence_enabled is True
+        assert coord._stagnation_pressure_enabled is True
+
+
 class TestGoalReflectAuditTarget:
     """P7: 監査対象が goal store の active 目的で、reflect が goal store を書かない。"""
 
