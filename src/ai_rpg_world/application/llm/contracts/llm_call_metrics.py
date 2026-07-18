@@ -29,6 +29,11 @@ class LlmCallMetrics:
         cached_tokens: prefix cache 経由で再利用された入力トークン数。
             provider が返さない場合は 0。vLLM / OpenAI は ``usage.prompt_tokens_details.cached_tokens``、
             Anthropic は ``usage.cache_read_input_tokens`` で返す
+        reasoning_tokens: reasoning model が思考に使ったトークン数
+            (``usage.completion_tokens_details.reasoning_tokens``)。reasoning OFF /
+            非 reasoning model / 未対応 provider では 0。案A (band-gated thinking) で
+            「実際にどれだけ熟考したか」の観測点になる (tool-calling 経路では思考
+            本文は返らないため、このトークン数が発火の証拠になる)
         tps: tokens per second (= completion_tokens / wall_seconds)。
             wall_latency_ms <= 0 の場合は 0.0
         success: tool_call が parse できたか / 例外なく終わったか
@@ -48,6 +53,7 @@ class LlmCallMetrics:
     success: bool
     error_code: Optional[str] = None
     cached_tokens: int = 0
+    reasoning_tokens: int = 0
     cost_usd: float = 0.0
 
     @staticmethod

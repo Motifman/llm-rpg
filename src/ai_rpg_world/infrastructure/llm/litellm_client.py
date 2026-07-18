@@ -122,6 +122,11 @@ _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 # (OpenAI 経由でも unknown field は silently dropped)。
 _ENV_VAR_REASONING_EFFORT = "LLM_REASONING_EFFORT"
 _DEFAULT_REASONING_EFFORT = "none"  # reasoning OFF が agent turn 用途の安全 default
+
+# ``_build_extra_body`` の reasoning override 用 sentinel。「override 指定なし
+# (= 構築時の既定を使う)」と「override として None (= reasoning を inject しない)」
+# を区別するために object() を使う。
+_NO_REASONING_OVERRIDE = object()
 _VALID_REASONING_EFFORTS = frozenset({
     "",          # 何も inject しない (旧 model 互換)
     "none",      # 明示 OFF
@@ -206,39 +211,42 @@ def _resolve_openrouter_routing_from_env() -> Optional[Dict[str, Any]]:
     return {"provider": block}
 
 
-def _resolve_reasoning_effort_from_env() -> Optional[Dict[str, Any]]:
-    """``LLM_REASONING_EFFORT`` env を解決し、``extra_body`` 用の reasoning フラグ dict を返す。
+def _validate_reasoning_effort(
+    effort: str, *, source_label: str = "reasoning_effort"
+) -> str:
+    """effort 文字列を正規化し、未知値は ValueError で弾く (silent fallback 防止)。
 
-    - 未設定 → default の ``"none"`` (= 完全 OFF) として扱う
-    - 空文字 ``""`` (明示) → ``None`` を返す = reasoning 系 field を **一切 inject
-      しない**。reasoning 概念のない古い model (gemma 等) で extra_body を汚さない
-      ためのエスケープハッチ
-    - ``"none"`` 〜 ``"xhigh"`` → OpenRouter ``reasoning`` envelope と DeepSeek
-      native ``thinking`` の両方を返す (belt-and-suspenders)
-    - 未知文字列 → ValueError (silent fallback 防止 / PR #433 経緯と同じ方針)
-
-    Returns:
-        ``{"reasoning": {...}, "thinking": {...}}`` か None
+    ``source_label`` はエラーメッセージ中の変数名 (env 経路では ``LLM_REASONING_EFFORT``、
+    invoke の per-call override では ``reasoning_effort``) を切り替えるためのもの。
     """
-    raw_env = os.environ.get(_ENV_VAR_REASONING_EFFORT)
-    if raw_env is None:
-        effort = _DEFAULT_REASONING_EFFORT
-    else:
-        effort = raw_env.strip().lower()
-    if effort not in _VALID_REASONING_EFFORTS:
+    normalized = effort.strip().lower()
+    if normalized not in _VALID_REASONING_EFFORTS:
         raise ValueError(
-            f"{_ENV_VAR_REASONING_EFFORT}={effort!r} is not recognized. "
+            f"{source_label}={effort!r} is not recognized. "
             f"valid: {sorted(_VALID_REASONING_EFFORTS)}"
         )
+    return normalized
+
+
+def _build_reasoning_block(effort: str) -> Optional[Dict[str, Any]]:
+    """検証済みの ``effort`` から ``extra_body`` 用の reasoning ブロックを組む。
+
+    - ``""`` → ``None`` (= reasoning 系 field を一切 inject しない。古い model 互換)
+    - ``"none"`` 〜 ``"xhigh"`` → OpenRouter ``reasoning`` envelope と DeepSeek
+      native ``thinking`` の両方を返す (belt-and-suspenders)
+
+    env 経路 (`_resolve_reasoning_effort_from_env`) と invoke の per-call override の
+    両方が本関数を共有し、reasoning ブロックの形を 1 箇所に集約する。
+    """
     if effort == "":
-        # 明示 OFF: reasoning フィールド自体を inject しない
         return None
     block: Dict[str, Any] = {
         # OpenRouter 統一 envelope (primary control path)
         "reasoning": {
             "effort": effort,
-            # exclude=True で response から reasoning token を剥がす (= prompt
-            # cache hit / cost 計測の安定化に寄与)
+            # exclude=True で response から reasoning token 本文を剥がす (= prompt
+            # cache hit / cost 計測の安定化。なお tool-calling 経路では本文は
+            # どのみち返らず、reasoning_token 数だけ usage に残る)
             "exclude": True,
         },
     }
@@ -247,6 +255,21 @@ def _resolve_reasoning_effort_from_env() -> Optional[Dict[str, Any]]:
         # するときに reasoning envelope を読み落とすケースの保険
         block["thinking"] = {"type": "disabled"}
     return block
+
+
+def _resolve_reasoning_effort_from_env() -> Optional[Dict[str, Any]]:
+    """``LLM_REASONING_EFFORT`` env を解決し、``extra_body`` 用の reasoning ブロックを返す。
+
+    - 未設定 → default の ``"none"`` (= 完全 OFF) として扱う
+    - 空文字 ``""`` (明示) → ``None`` (reasoning 系 field を一切 inject しない)
+    - ``"none"`` 〜 ``"xhigh"`` → reasoning + thinking ブロック
+    - 未知文字列 → ValueError (silent fallback 防止 / PR #433 経緯と同じ方針)
+    """
+    raw_env = os.environ.get(_ENV_VAR_REASONING_EFFORT)
+    effort = _DEFAULT_REASONING_EFFORT if raw_env is None else raw_env
+    return _build_reasoning_block(
+        _validate_reasoning_effort(effort, source_label=_ENV_VAR_REASONING_EFFORT)
+    )
 
 
 def _extract_first_json_object(text: str) -> str:
@@ -526,12 +549,19 @@ class LiteLLMClient(
         assert last_exc is not None
         raise last_exc
 
-    def _build_extra_body(self) -> Optional[Dict[str, Any]]:
+    def _build_extra_body(
+        self, reasoning_override: Any = _NO_REASONING_OVERRIDE
+    ) -> Optional[Dict[str, Any]]:
         """litellm.completion に渡す ``extra_body`` を組み立てる。
 
         - provider routing (OPENROUTER_PROVIDER 等の env が設定されているとき)
         - usage.include (api_base が OpenRouter のとき、cost を返してもらう)
         - reasoning + thinking (reasoning model 用、default OFF)
+
+        ``reasoning_override`` に何か渡された場合 (sentinel 以外)、構築時の既定
+        ``self._reasoning_block`` の代わりにその値を使う (``None`` を渡せば「この
+        呼び出しは reasoning を一切 inject しない」を意味する)。案A の per-call
+        band-gated thinking がここを通る。
 
         どれも要らないときは None を返す (= extra_body を一切渡さない)。
         """
@@ -540,8 +570,13 @@ class LiteLLMClient(
             block.update(copy.deepcopy(self._openrouter_routing))
         if self._is_openrouter_base:
             block["usage"] = {"include": True}
-        if self._reasoning_block is not None:
-            block.update(copy.deepcopy(self._reasoning_block))
+        reasoning = (
+            self._reasoning_block
+            if reasoning_override is _NO_REASONING_OVERRIDE
+            else reasoning_override
+        )
+        if reasoning is not None:
+            block.update(copy.deepcopy(reasoning))
         return block or None
 
     def _lite_api_key(self) -> str:
@@ -602,6 +637,7 @@ class LiteLLMClient(
         tool_choice: str = "required",
         *,
         metrics_sink: Optional[LlmCallMetricsSink] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         1 回の LLM 呼び出しを行い、tool_call があれば {"name": str, "arguments": dict} を返す。
@@ -610,8 +646,19 @@ class LiteLLMClient(
 
         ``metrics_sink`` が渡された場合、呼び出し成否によらず ``LlmCallMetrics`` を 1 件
         sink に流す (実験 #356: τ_sim 設定根拠 + scenario cost 評価用)。
+
+        ``reasoning_effort`` を渡すと、その 1 呼び出しだけ構築時の既定 (env) を
+        上書きして reasoning の effort を変える (案A: band-gated thinking)。``None``
+        なら既定のまま (既存挙動)。未知値は ``ValueError``。tool-calling 経路では
+        reasoning 本文は返らないが、reasoning_token 数は usage 経由で metrics に載る。
         """
         self._assert_can_call_litellm()
+        if reasoning_effort is None:
+            reasoning_override: Any = _NO_REASONING_OVERRIDE
+        else:
+            reasoning_override = _build_reasoning_block(
+                _validate_reasoning_effort(reasoning_effort)
+            )
         start_monotonic = time.monotonic()
         try:
             completion_kw: Dict[str, Any] = {
@@ -629,7 +676,7 @@ class LiteLLMClient(
             }
             if self._api_base is not None:
                 completion_kw["api_base"] = self._api_base
-            extra_body = self._build_extra_body()
+            extra_body = self._build_extra_body(reasoning_override=reasoning_override)
             if extra_body is not None:
                 completion_kw["extra_body"] = extra_body
             # SDK 透過 retry は max_retries=0 で無効化済み。RateLimit / 一時 5xx の
@@ -660,6 +707,7 @@ class LiteLLMClient(
             ) from e
         wall_latency_ms = int((time.monotonic() - start_monotonic) * 1000)
         prompt_tokens, completion_tokens, cached_tokens = self._extract_token_usage(response)
+        reasoning_tokens = self._extract_reasoning_tokens(response)
         cost_usd = self._extract_cost_usd(response)
         tool_call = self._parse_tool_call(response, messages, tools)
         self._emit_metrics(
@@ -668,11 +716,36 @@ class LiteLLMClient(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             cached_tokens=cached_tokens,
+            reasoning_tokens=reasoning_tokens,
             cost_usd=cost_usd,
             success=tool_call is not None,
             error_code=None if tool_call is not None else "NO_TOOL_CALL",
         )
         return tool_call
+
+    @staticmethod
+    def _extract_reasoning_tokens(response: Any) -> int:
+        """litellm レスポンスの ``usage.completion_tokens_details.reasoning_tokens`` を
+        best-effort で取り出す。reasoning model が思考に使ったトークン数。
+
+        tool-calling 経路では reasoning 本文は返らないが、このトークン数は usage に
+        残るので「実際に何回・どれだけ熟考したか」の観測点になる (案A の trace 用)。
+        取れない provider では 0 に縮退する (例外を投げない)。
+        """
+        try:
+            usage = getattr(response, "usage", None)
+            if usage is None:
+                return 0
+            details = getattr(usage, "completion_tokens_details", None)
+            if details is None:
+                return 0
+            if isinstance(details, dict):
+                v = details.get("reasoning_tokens")
+            else:
+                v = getattr(details, "reasoning_tokens", None)
+            return int(v) if v is not None else 0
+        except (TypeError, ValueError):
+            return 0
 
     @staticmethod
     def _extract_token_usage(response: Any) -> tuple[int, int, int]:
@@ -742,6 +815,7 @@ class LiteLLMClient(
         success: bool,
         error_code: Optional[str],
         cached_tokens: int = 0,
+        reasoning_tokens: int = 0,
         cost_usd: float = 0.0,
     ) -> None:
         if sink is None:
@@ -753,6 +827,7 @@ class LiteLLMClient(
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 cached_tokens=cached_tokens,
+                reasoning_tokens=reasoning_tokens,
                 tps=LlmCallMetrics.compute_tps(completion_tokens, wall_latency_ms),
                 success=success,
                 error_code=error_code,
