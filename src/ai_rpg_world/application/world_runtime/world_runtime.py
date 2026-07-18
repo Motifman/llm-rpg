@@ -20,6 +20,10 @@ from typing import Any, Callable, ClassVar, Dict, FrozenSet, List, Optional, Tup
 
 logger = logging.getLogger(__name__)
 
+from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
+    STAGNATION_PRESSURE_BAND_NONE,
+    resolve_stagnation_pressure_band,
+)
 from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
@@ -2864,6 +2868,32 @@ def create_world_runtime(
     def _resolve_entity_name(entity_id: int) -> str:
         return player_name_map.get(entity_id, f"プレイヤー({entity_id})")
 
+    # P-U3/P-U4 (停滞感の表出): 自己・他者の両方が共有する 1 本の provider。
+    # ``runtime`` / ``runtime._stagnation_pressure_store`` は本関数の後段で
+    # 構築される (state_builder は runtime インスタンス生成より前に組み立てる
+    # 既存の配線順)。closure は呼び出し時に free variable ``runtime`` を
+    # enclosing scope から遅延解決するので、実際に snapshot が build される
+    # 時点 (= create_world_runtime 完了後のリクエスト処理中) には
+    # ``runtime._aux_being_resolver`` / ``runtime._stagnation_pressure_store``
+    # は解決済みになっている。
+    #
+    # STAGNATION_PRESSURE_ENABLED が OFF のときは
+    # ``runtime._stagnation_pressure_store`` が None のままなので、この
+    # provider は常に none を返す (= 導入前とプロンプト完全一致)。
+    # episodic pipeline 自体が OFF (LLM_EPISODIC_ENABLED=0) で
+    # ``_aux_being_resolver`` が未構築の経路も同様に none へ縮退する。
+    def _resolve_own_stagnation_band(player_id: int) -> str:
+        resolver = getattr(runtime, "_aux_being_resolver", None)
+        world_id = getattr(runtime, "_aux_being_default_world_id", None)
+        store = getattr(runtime, "_stagnation_pressure_store", None)
+        if resolver is None or world_id is None or store is None:
+            return STAGNATION_PRESSURE_BAND_NONE
+        being_id = resolver.resolve_being_id(world_id, PlayerId(player_id))
+        if being_id is None:
+            return STAGNATION_PRESSURE_BAND_NONE
+        count = store.get_by_being(being_id)
+        return resolve_stagnation_pressure_band(count)
+
     def _resolve_item_state(item_instance_id_value: int) -> Optional[dict]:
         """Phase D-3a: instance_id から state dict を引く軽量 resolver。
 
@@ -3011,6 +3041,7 @@ def create_world_runtime(
         # 毎 prompt 構築で叩いても問題なし。
         item_state_resolver=_resolve_item_state,
         current_tick_provider=_current_tick_provider,
+        stagnation_band_provider=_resolve_own_stagnation_band,
     )
 
     # ── 観測パイプライン構築 ──

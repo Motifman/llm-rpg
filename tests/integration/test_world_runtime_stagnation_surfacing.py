@@ -1,0 +1,162 @@
+"""P-U3/P-U4 (停滞感の表出): world_runtime を通した実プロンプトへの配線を固定する。
+
+P-U2 (停滞感 store) が保持するカウンタを、``stagnation_band_provider`` 1 本
+経由で自己 (P-U3) / 他者 (P-U4) の両方に表出できることを、``create_world_runtime``
+から ``build_llm_context`` までの実配線で確認する。LLM は呼ばない。
+
+STAGNATION_PRESSURE_ENABLED は新設せず P-U2 の flag を再利用するため、OFF
+(既定) のときは stagnation_band_provider が常に none を返し、導入前と
+プロンプトが完全一致することも合わせて固定する (プレフィックスキャッシュ
+不変・docs/design_decisions.md #1 に抵触しないことの確認も兼ねる: ツール
+スキーマ自体は変わらず、user メッセージの state section だけが変わる)。
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+_SCENARIO_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "scenarios"
+    / "single_relic_contention_demo.json"
+)
+
+
+def _enable_consolidation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+    monkeypatch.setenv("SEMANTIC_SEARCH_ENABLED", "1")
+    monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
+    monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
+
+
+def _being_id(runtime, player_id: int):
+    return runtime._aux_being_resolver.resolve_being_id(
+        runtime._aux_being_default_world_id, PlayerId(player_id)
+    )
+
+
+class TestOwnStagnationSurfacingWiring:
+    """P-U3: 自分の停滞感カウンタが自分の身体の状態 section に出る。"""
+
+    def test_カウンタ3以上で_strong_の自己hintが出る(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_consolidation(monkeypatch)
+        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        being_id = _being_id(runtime, 1)
+        assert being_id is not None
+        for _ in range(3):
+            runtime._stagnation_pressure_store.increment_by_being(being_id)
+
+        dto = runtime.build_llm_context(PlayerId(1))
+        assert "同じことばかり繰り返している焦りが拭えない" in dto.current_state_text
+
+    def test_カウンタ1_2で_light_の自己hintが出る(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_consolidation(monkeypatch)
+        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        being_id = _being_id(runtime, 1)
+        assert being_id is not None
+        runtime._stagnation_pressure_store.increment_by_being(being_id)
+
+        dto = runtime.build_llm_context(PlayerId(1))
+        assert "何かが前に進んでいない気がする" in dto.current_state_text
+
+    def test_カウンタ0では_自己hintは出ない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_consolidation(monkeypatch)
+        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        # カウンタに一切触れない (= 0 のまま)。
+        dto = runtime.build_llm_context(PlayerId(1))
+        assert "前に進んでいない" not in dto.current_state_text
+        assert "繰り返している" not in dto.current_state_text
+
+
+class TestOtherStagnationSurfacingWiring:
+    """P-U4: 同 spot の他 player の停滞感カウンタが nearby_entities 側に出る。"""
+
+    def test_相手のカウンタが3以上なら_苛立って落ち着かない様子_が見える(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_consolidation(monkeypatch)
+        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        being_id_p1 = _being_id(runtime, 1)
+        assert being_id_p1 is not None
+        for _ in range(3):
+            runtime._stagnation_pressure_store.increment_by_being(being_id_p1)
+
+        # player 2 視点から player 1 (停滞中) がどう見えるか。
+        dto = runtime.build_llm_context(PlayerId(2))
+        assert "苛立って落ち着かない様子" in dto.current_state_text
+
+    def test_自分自身の停滞感は自分のnearby_entities欄には出ない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """自分自身は同席者リストに出ない前提の回帰ガード。"""
+        _enable_consolidation(monkeypatch)
+        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        being_id_p1 = _being_id(runtime, 1)
+        assert being_id_p1 is not None
+        for _ in range(3):
+            runtime._stagnation_pressure_store.increment_by_being(being_id_p1)
+
+        dto = runtime.build_llm_context(PlayerId(1))
+        # 自己 hint (→ 行) では出るが、同席者向け suffix (苛立って...) は
+        # 自分自身の行には付かない (対象は他者のみ)。
+        assert "同じことばかり繰り返している焦りが拭えない" in dto.current_state_text
+        assert "苛立って落ち着かない様子" not in dto.current_state_text
+
+
+class TestStagnationSurfacingOffByDefault:
+    """flag (STAGNATION_PRESSURE_ENABLED) OFF のとき、導入前とプロンプトが
+    完全一致すること (= 表出が一切乗らない)。"""
+
+    def test_flag_off_なら_store_が_none_で_自己他者とも表出しない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_consolidation(monkeypatch)
+        monkeypatch.delenv("STAGNATION_PRESSURE_ENABLED", raising=False)
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        assert runtime._stagnation_pressure_store is None
+
+        dto1 = runtime.build_llm_context(PlayerId(1))
+        dto2 = runtime.build_llm_context(PlayerId(2))
+        for text in (dto1.current_state_text, dto2.current_state_text):
+            assert "前に進んでいない" not in text
+            assert "繰り返している" not in text
+            assert "手詰まり" not in text
+            assert "苛立って" not in text
+
+    def test_flag_off_のプロンプトは_flag導入前_相当と一致する(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """P-U3/P-U4 の provider は常時配線されるが、store が None のときは
+        常に none を返すため、STAGNATION_PRESSURE_ENABLED=1 でもカウンタに
+        一切触れなければ (= 実質 OFF と同じ状態) OFF 時と同一のテキストになる
+        ことを確認し、プレフィックスキャッシュ不変への影響が無いことを保証
+        する。"""
+        _enable_consolidation(monkeypatch)
+        monkeypatch.delenv("STAGNATION_PRESSURE_ENABLED", raising=False)
+        runtime_off = create_world_runtime(_SCENARIO_PATH)
+        text_off = runtime_off.build_llm_context(PlayerId(1)).current_state_text
+
+        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
+        runtime_on_untouched = create_world_runtime(_SCENARIO_PATH)
+        text_on_untouched = runtime_on_untouched.build_llm_context(
+            PlayerId(1)
+        ).current_state_text
+
+        assert text_off == text_on_untouched

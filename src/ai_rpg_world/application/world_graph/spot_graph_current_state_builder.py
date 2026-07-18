@@ -35,6 +35,9 @@ from ai_rpg_world.domain.world_graph.service.spot_perception_service import Spot
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
+    STAGNATION_PRESSURE_BAND_NONE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +101,11 @@ TimeOfDayProvider = Callable[[], Optional[TimeOfDay]]
 # 名前解決と内部 state の可視化（HP バケット化・behavior の日本語化）を application 層で行う。
 # None を返した場合は builder 側で当該個体を snapshot から黙って除外する（既に死んで掃除されたケース等）。
 MonsterViewProvider = Callable[[MonsterId], Optional[SpotGraphMonsterEntry]]
+# P-U3/P-U4 (停滞感の表出): player_id (int) → 停滞感バンド (``none`` /
+# ``light`` / ``strong``、P-U2 の resolve_stagnation_pressure_band と同型)。
+# 自己 (own_stagnation_band) と他者 (nearby_entities の stagnation_band) の
+# 両方がこの provider を共有する。未注入なら常に none 相当に縮退する。
+StagnationBandProvider = Callable[[int], str]
 
 
 class SpotGraphCurrentStateBuilder:
@@ -126,6 +134,7 @@ class SpotGraphCurrentStateBuilder:
         time_of_day_provider: Optional[TimeOfDayProvider] = None,
         item_state_resolver: Optional[Callable[[int], Optional[dict]]] = None,
         current_tick_provider: Optional[Callable[[], int]] = None,
+        stagnation_band_provider: Optional[StagnationBandProvider] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -145,6 +154,9 @@ class SpotGraphCurrentStateBuilder:
         self._item_state_resolver = item_state_resolver
         # PR #2 状態異常 surface: 残り tick 表示用 (None なら effect 名のみ表示)
         self._current_tick_provider = current_tick_provider
+        # P-U3/P-U4 (停滞感の表出): 未注入 (None) なら自己・他者とも常に
+        # STAGNATION_PRESSURE_BAND_NONE (= 何も描画しない、導入前と挙動一致)。
+        self._stagnation_band_provider = stagnation_band_provider
         self._perception = SpotPerceptionService()
 
     def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
@@ -172,6 +184,26 @@ class SpotGraphCurrentStateBuilder:
             display_text=tod.display_text,
             is_dark=tod.is_dark,
         )
+
+    def _resolve_stagnation_band(self, entity_id: int) -> str:
+        """entity_id の停滞感バンドを provider から引く。
+
+        provider 未注入 / 例外は常に ``STAGNATION_PRESSURE_BAND_NONE`` に
+        縮退させる (= flag OFF や配線漏れで表出が壊れて他の表示まで巻き込む
+        事故を防ぐ、既存の time_of_day_provider 等と同じ safer fallback)。
+        """
+        if self._stagnation_band_provider is None:
+            return STAGNATION_PRESSURE_BAND_NONE
+        try:
+            return self._stagnation_band_provider(entity_id)
+        except Exception:
+            logger.warning(
+                "stagnation_band_provider raised unexpectedly for entity_id=%s; "
+                "falling back to none",
+                entity_id,
+                exc_info=True,
+            )
+            return STAGNATION_PRESSURE_BAND_NONE
 
     def build_snapshot(self, player_id: int) -> SpotGraphPlayerSnapshotDto | None:
         """プレイヤーがグラフに載っていない場合は None。"""
@@ -450,11 +482,15 @@ class SpotGraphCurrentStateBuilder:
                 except Exception:
                     other_is_down = False
                     other_fatigue_level = "ok"
+                # P-U4 (停滞感の表出・他者): fatigue_level と対称に、同 spot の
+                # 他 player の停滞感バンドも常時 state として lift する。
+                other_stagnation_band = self._resolve_stagnation_band(int(other_eid))
                 nearby_entities.append(SpotGraphNearbyEntityEntry(
                     entity_id=int(other_eid),
                     display_name=name,
                     is_down=other_is_down,
                     fatigue_level=other_fatigue_level,
+                    stagnation_band=other_stagnation_band,
                 ))
 
         inventory_items: tuple[SpotGraphInventoryItemEntry, ...] = ()
@@ -505,6 +541,9 @@ class SpotGraphCurrentStateBuilder:
         own_fatigue_level: str = (
             getattr(player, "fatigue_level", "ok") if player is not None else "ok"
         )
+        # P-U3 (停滞感の表出・自己): own_fatigue_level と対称に本人の停滞感
+        # バンドを lift する。
+        own_stagnation_band: str = self._resolve_stagnation_band(player_id)
 
         return SpotGraphPlayerSnapshotDto(
             current_spot_id=spot_id.value,
@@ -530,6 +569,7 @@ class SpotGraphCurrentStateBuilder:
             active_effect_lines=active_effect_lines,
             agent_status=agent_status,
             own_fatigue_level=own_fatigue_level,
+            own_stagnation_band=own_stagnation_band,
         )
 
     def _build_active_effect_lines(self, active_effects) -> tuple[str, ...]:
