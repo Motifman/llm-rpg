@@ -89,7 +89,7 @@ class TestSkipDeadPlayerTurn:
         # 1 人だけ LLM が回るはず。stub で確認。
         called_pids: list[int] = []
 
-        def _stub_invoke(messages, tools, choice, *, metrics_sink=None):
+        def _stub_invoke(messages, tools, choice, *, metrics_sink=None, reasoning_effort=None):
             # messages 内に player_id を含む system prompt があるとは限らないので、
             # 単純に呼び出し回数だけ確認する
             called_pids.append(len(called_pids))

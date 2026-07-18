@@ -1556,10 +1556,16 @@ class _WorldLlmWiring:
             if t.get("function", {}).get("name")
         ]
         metrics_sink = self._build_llm_metrics_sink(player_id, tool_names=tool_names)
+        # 案A (band-gated thinking): 停滞 strong の局面で reflect 注入直後の 1 行動
+        # だけ reasoning を焚く。flag OFF / 対象外なら None (= 既定のまま reasoning
+        # OFF・プロンプト byte 不変)。判断と AGENT_REASONING_ENGAGED trace は runtime
+        # 側に閉じ込め、ここは effort を invoke に橋渡しするだけに留める。
+        reasoning_effort = self.runtime.resolve_turn_reasoning_effort(player_id)
         try:
             tool_call = self.llm_client.invoke(
                 prompt["messages"], tools_payload, "required",
                 metrics_sink=metrics_sink,
+                reasoning_effort=reasoning_effort,
             )
             return _LlmPhaseAResult(
                 player_id=player_id,

@@ -26,6 +26,7 @@ class ILLMClient(ABC):
         tool_choice: str = "required",
         *,
         metrics_sink: Optional[Any] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         LLM を呼び出し、選択された tool_call を返す。
@@ -34,6 +35,10 @@ class ILLMClient(ABC):
         ``metrics_sink`` (``LlmCallMetricsSink``) が渡されたら、呼び出し完了時に
         ``LlmCallMetrics`` で記録する (実装側の任意)。実 LLM クライアントは
         wall_latency + token usage を埋め、stub 系は best-effort で実装する。
+
+        ``reasoning_effort`` が渡されたら、その 1 呼び出しだけ reasoning (熟考) の
+        予算段階を上書きする (案A: band-gated thinking)。``None`` なら既定のまま。
+        stub 系は無視してよい。
         """
         pass
 

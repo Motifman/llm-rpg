@@ -76,7 +76,7 @@ class TestPhaseAParallelExecution:
         class _SlowStubLlmClient:
             """各 invoke で 100ms スリープしてから wait を返す stub。"""
 
-            def invoke(self, messages, tools, choice, *, metrics_sink=None) -> dict:
+            def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None) -> dict:
                 time.sleep(0.1)
                 return {"name": "wait", "arguments": {"reason": "test"}}
 
@@ -126,7 +126,7 @@ class TestPhaseAExceptionHandling:
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         class _BoomLlmClient:
-            def invoke(self, messages, tools, choice, *, metrics_sink=None) -> dict:
+            def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None) -> dict:
                 raise RuntimeError("network down")
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
