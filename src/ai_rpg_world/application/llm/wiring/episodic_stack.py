@@ -415,6 +415,12 @@ def build_episodic_stack(
     goal_reflect_enabled: bool = False,
     objective_text_provider: Optional[Any] = None,
     reflect_observation_sink: Optional[Any] = None,
+    # P-U1 (目的停滞の evidence 化 / default False = flag OFF): True のとき
+    # reflect の stalled/misaligned verdict を goal: 軸の高 salience
+    # PREDICTION_ERROR evidence として buffer に積む。goal_reflect_enabled が
+    # False だと reflect 自体が発火しないため、coordinator 側で組み合わせ
+    # 不整合を起動時 fail-fast で弾く。
+    goal_stagnation_evidence_enabled: bool = False,
     # P10 (伝聞の固着判断 / default False = flag OFF): True のとき固着 LLM に
     # 伝聞節を出し、shortlist に話者 belief を載せる。HEARSAY 由来の支持は
     # confidence を半分に数える。OFF なら伝聞 evidence 自体が生成されないので
@@ -551,6 +557,9 @@ def build_episodic_stack(
                 goal_reflect_enabled=goal_reflect_enabled,
                 objective_text_provider=objective_text_provider,
                 reflect_observation_sink=reflect_observation_sink,
+                # P-U1: ON のときだけ stalled/misaligned の reflect verdict を
+                # goal: 軸の evidence に変換する (OFF = 導入前と挙動一致)。
+                goal_stagnation_evidence_enabled=goal_stagnation_evidence_enabled,
                 # P10: ON のときだけ固着 prompt に伝聞節を足し、shortlist に話者
                 # belief を載せる (OFF = pre-P10 と byte / 挙動一致)。
                 hearsay_enabled=hearsay_enabled,

@@ -64,6 +64,33 @@ class TestGoalReflectWiring:
         assert coord._goal_reflect_enabled is False
 
 
+class TestGoalStagnationEvidenceWiring:
+    """P-U1: GOAL_STAGNATION_EVIDENCE_ENABLED が world_runtime から
+    coordinator まで配線され、既定 OFF であることを固定する。"""
+
+    def test_goal_stagnation_evidence_wired_when_enabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_consolidation(monkeypatch)
+        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
+        monkeypatch.setenv("GOAL_STAGNATION_EVIDENCE_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        coord = _coordinator(runtime)
+        assert coord is not None
+        assert coord._goal_stagnation_evidence_enabled is True
+
+    def test_goal_stagnation_evidence_off_by_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_consolidation(monkeypatch)
+        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
+        monkeypatch.delenv("GOAL_STAGNATION_EVIDENCE_ENABLED", raising=False)
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        coord = _coordinator(runtime)
+        assert coord is not None
+        assert coord._goal_stagnation_evidence_enabled is False
+
+
 class TestGoalReflectAuditTarget:
     """P7: 監査対象が goal store の active 目的で、reflect が goal store を書かない。"""
 

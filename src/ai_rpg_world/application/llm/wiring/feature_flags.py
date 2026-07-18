@@ -949,6 +949,45 @@ def log_goal_reflect_enabled_state(enabled: bool) -> None:
     )
 
 
+# ---- P-U1 (目的停滞の evidence 化) ------------------------------------------
+
+ENV_GOAL_STAGNATION_EVIDENCE_ENABLED = "GOAL_STAGNATION_EVIDENCE_ENABLED"
+
+
+def resolve_goal_stagnation_evidence_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """reflect の stalled/misaligned verdict を ``goal:`` 軸の高 salience
+    PREDICTION_ERROR evidence に変換するか (goal_utility_gradient_design.md P-U1)。
+
+    ``GOAL_STAGNATION_EVIDENCE_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    前提として ``GOAL_REFLECT_ENABLED`` が ON である必要がある (reflect が
+    発火しなければ evidence 化の対象自体が生まれない。
+    ``BeliefConsolidationCoordinator`` がこの組み合わせ不整合を起動時
+    fail-fast で弾く)。
+
+    OFF (既定) のとき、reflect は従来どおり内省観測を注入するだけで
+    evidence は一切積まない (belief journal には書かない、という導入前の
+    不変条件が維持される)。ON にすると、停滞 (stalled) / 乖離 (misaligned)
+    と判定された回だけ (達成 achieved は対象外)、その期間の evidence の
+    episode_ids を束ねた高 salience evidence を 1 件 buffer に積む。目的
+    そのものの改訂は行わない (「停滞 ≠ 即改訂」の不変条件は変えない)。
+    """
+    return _parse_bool_env(
+        ENV_GOAL_STAGNATION_EVIDENCE_ENABLED, env=env, default=False
+    )
+
+
+def log_goal_stagnation_evidence_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_GOAL_STAGNATION_EVIDENCE_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )
+
+
 # ──────────────────────────────────────────────────────────────────
 # Semantic memory: STATE_COLLAPSE evidence (PR-D)
 # ──────────────────────────────────────────────────────────────────

@@ -3936,11 +3936,17 @@ def create_world_runtime(
         # P4 (reflect): 固着パスに目的への前進評価を足すか。
         from ai_rpg_world.application.llm.wiring.feature_flags import (
             log_goal_reflect_enabled_state,
+            log_goal_stagnation_evidence_enabled_state,
             resolve_goal_reflect_enabled,
+            resolve_goal_stagnation_evidence_enabled,
         )
 
         _goal_reflect_enabled = resolve_goal_reflect_enabled()
         log_goal_reflect_enabled_state(_goal_reflect_enabled)
+        # P-U1 (目的停滞の evidence 化): reflect の stalled/misaligned verdict を
+        # goal: 軸の evidence に変換するか。
+        _goal_stagnation_evidence_enabled = resolve_goal_stagnation_evidence_enabled()
+        log_goal_stagnation_evidence_enabled_state(_goal_stagnation_evidence_enabled)
         # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
         # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
         # どちらか一方でも ON なら buffer store 自体は作る。
@@ -4470,6 +4476,9 @@ def create_world_runtime(
             goal_reflect_enabled=_goal_reflect_enabled,
             objective_text_provider=runtime._reflect_objective_provider,
             reflect_observation_sink=runtime._emit_reflect_observation,
+            # P-U1 (目的停滞の evidence 化): ON のときだけ stalled/misaligned の
+            # reflect verdict を goal: 軸の高 salience evidence に変換する。
+            goal_stagnation_evidence_enabled=_goal_stagnation_evidence_enabled,
             # P10 (伝聞の固着判断): ON のとき固着 LLM に伝聞節を足し、shortlist に
             # 話者 belief を載せ、HEARSAY 支持を confidence 半分に数える。抽出側
             # (P9) と同じ HEARSAY_ENABLED で連動させる (抽出だけ ON で固着側が

@@ -14,6 +14,8 @@ import pytest
 
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     build_belief_evidence_cue_signature,
+    build_goal_stagnation_cue_signature,
+    cue_tokens,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -264,3 +266,34 @@ class TestSelfAxisSeparationInCueTokens:
             "カイはよく笑う", matcher, self_player_id=7
         )
         assert set(cue_tokens(first)) & set(cue_tokens(second))
+
+
+class TestGoalStagnationCueSignature:
+    """P-U1: build_goal_stagnation_cue_signature が goal: 軸の cue_signature を
+    決定論的に組み立てる挙動を保証する。"""
+
+    def test_same_objective_text_yields_same_cue_signature(self) -> None:
+        """同じ目的文からは常に同じ cue_signature が出る (繰り返し停滞が同一
+        cue に積み上がり、cue_signature_repeat_threshold の早期 flush に乗る)。"""
+        first = build_goal_stagnation_cue_signature("山頂へ行く")
+        second = build_goal_stagnation_cue_signature("山頂へ行く")
+        assert first == second == "goal:山頂へ行く"
+
+    def test_different_objective_text_yields_different_cue_signature(self) -> None:
+        """目的が違えば cue_signature も分かれる (異なる目的の停滞が同じ
+        belief にまとまらない)。"""
+        a = build_goal_stagnation_cue_signature("山頂へ行く")
+        b = build_goal_stagnation_cue_signature("古い地図を手に入れる")
+        assert a != b
+
+    def test_pipe_character_is_normalized_to_avoid_axis_collision(self) -> None:
+        """目的文に含まれる \"|\" は cue_signature の軸区切りと衝突するため
+        空白に正規化される。"""
+        cue = build_goal_stagnation_cue_signature("山頂へ行く|狼煙を上げる")
+        assert "|" not in cue
+        assert cue == "goal:山頂へ行く 狼煙を上げる"
+
+    def test_empty_objective_text_raises(self) -> None:
+        """空/空白のみの目的文は呼び出し側の不変条件違反として ValueError。"""
+        with pytest.raises(ValueError):
+            build_goal_stagnation_cue_signature("   ")
