@@ -155,6 +155,26 @@ def _format_fatigue_suffix(fatigue_level: str) -> str:
     return _FATIGUE_DISPLAY.get(fatigue_level, "")
 
 
+# P-U3/P-U4 (停滞感の表出): stagnation_band (none/light/strong) → prompt 用
+# 文言。バンドごとの文言を 1 箇所に集約する (将来のペルソナ色付けのため)。
+# none (前進中) は fatigue の ok/tired と同じく静かに省略する — 前進中に
+# 偽の圧を出さないための意図的な非対称。
+_STAGNATION_OWN_HINT = {
+    "light": "何かが前に進んでいない気がする。",
+    "strong": "同じことばかり繰り返している焦りが拭えない。",
+}
+
+_STAGNATION_OTHER_DISPLAY = {
+    "light": " (何か手詰まりの様子)",
+    "strong": " (苛立って落ち着かない様子)",
+}
+
+
+def _format_stagnation_suffix(stagnation_band: str) -> str:
+    """停滞感バンド → 他者表示用の日本語 suffix。light 未満は空文字。"""
+    return _STAGNATION_OTHER_DISPLAY.get(stagnation_band, "")
+
+
 # own player 向けの行動ヒント。describe() の数値表記に加えて、操作可能性に
 # 直結する情報 (重い tool が block されている / 動きが鈍る) を 1 行足す。
 _FATIGUE_OWN_HINT = {
@@ -561,8 +581,10 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # state として常時表示する。is_down 優先、それ以外で疲労を出す。
             if not entry.is_down:
                 fatigue_suffix = _format_fatigue_suffix(entry.fatigue_level)
-                if fatigue_suffix:
-                    suffix = fatigue_suffix
+                # P-U4 (停滞感の表出・他者): fatigue と併存させる。ゲージ値は
+                # 見せず、バンドに応じた様子の suffix だけを足す。
+                stagnation_suffix = _format_stagnation_suffix(entry.stagnation_band)
+                suffix = fatigue_suffix + stagnation_suffix
             # PR4 (Encounter Memory): familiarity 注記 (= 「初めて会った」)。
             # display_name (= 表示名 / 安定名) で encounter を引く。is_down /
             # fatigue suffix と併存させたいので suffix の後に追加する。
@@ -663,6 +685,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         hint = _FATIGUE_OWN_HINT.get(fatigue_level)
         if hint:
             lines.append(f"  → {hint}")
+        # P-U3 (停滞感の表出・自己): fatigue hint と同じ形式で 1 行足す。
+        # none (前進中) では何も出さない (fatigue の ok/tired と同じ扱い)。
+        stagnation_band = getattr(snap, "own_stagnation_band", "none") or "none"
+        stagnation_hint = _STAGNATION_OWN_HINT.get(stagnation_band)
+        if stagnation_hint:
+            lines.append(f"  → {stagnation_hint}")
 
     @staticmethod
     def _build_active_effects_section(
