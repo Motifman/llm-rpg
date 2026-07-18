@@ -1700,6 +1700,7 @@ class WorldRuntime:
     def do_interact(
         self, player_id: PlayerId, object_str_id: str, action_name: str,
         *,
+        interaction_parameters: Optional[Dict[str, Any]] = None,
         expected_result: Optional[str] = None,
         intention: Optional[str] = None,
         emotion_hint: Optional[str] = None,
@@ -1714,6 +1715,7 @@ class WorldRuntime:
         action_ja = self._interaction_action_label_ja(action_name)
         result = self._interaction_service.execute_interaction(
             player_id, obj_id, action_name,
+            interaction_parameters=interaction_parameters,
         )
         result_text = "; ".join(result.messages) if result.messages else "完了"
         graph = self._spot_graph_repo.find_graph()
