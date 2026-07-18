@@ -2882,7 +2882,11 @@ def create_world_runtime(
     # provider は常に none を返す (= 導入前とプロンプト完全一致)。
     # episodic pipeline 自体が OFF (LLM_EPISODIC_ENABLED=0) で
     # ``_aux_being_resolver`` が未構築の経路も同様に none へ縮退する。
-    def _resolve_own_stagnation_band(player_id: int) -> str:
+    #
+    # 呼び出し対象は自分自身 (P-U3) だけでなく builder の nearby ループが
+    # 引く他 player (P-U4) も含むため、関数名は「自己」に限定しない
+    # (旧名 ``_resolve_own_stagnation_band`` は誤解を招くため改名した)。
+    def _resolve_stagnation_band_for_player(player_id: int) -> str:
         resolver = getattr(runtime, "_aux_being_resolver", None)
         world_id = getattr(runtime, "_aux_being_default_world_id", None)
         store = getattr(runtime, "_stagnation_pressure_store", None)
@@ -3041,7 +3045,7 @@ def create_world_runtime(
         # 毎 prompt 構築で叩いても問題なし。
         item_state_resolver=_resolve_item_state,
         current_tick_provider=_current_tick_provider,
-        stagnation_band_provider=_resolve_own_stagnation_band,
+        stagnation_band_provider=_resolve_stagnation_band_for_player,
     )
 
     # ── 観測パイプライン構築 ──
