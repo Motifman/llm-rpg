@@ -195,6 +195,118 @@ class TestWritePlayerTextEffect:
         )
         assert len(result.public_observable_effects) == 1
 
+    def test_更新後のオブジェクトは看板_3keyがhidden_state_keysに入る(self) -> None:
+        """PR-J: examine した本人だけが読める設計を守るため、書き込み確定時に
+        sign_text / sign_author_name / sign_written_tick を hidden_state_keys へ
+        自動で加える (シナリオ JSON 側の設定に頼らない)。"""
+        svc = WorldGraphEffectService()
+        sign = _sign()
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
+            parameters={},
+        )
+        result = svc.apply_effects(
+            interior=_interior_with(sign),
+            acting_object=sign,
+            effects=[effect],
+            world_flags=frozenset(),
+            current_tick=WorldTick(1),
+            interaction_parameters={"text": "メモ"},
+            acting_player_display_name="アリス",
+        )
+        updated = result.new_interior.objects[0]
+        assert updated.hidden_state_keys == {
+            "sign_text",
+            "sign_author_name",
+            "sign_written_tick",
+        }
+
+    def test_更新後のvisible_stateには本文_書き手名_tickが含まれない(self) -> None:
+        """visible_state() 経由で周囲プレイヤーのプロンプトに本文が乗らない
+        ことを current_state_builder レベルの前提として保証する。"""
+        svc = WorldGraphEffectService()
+        sign = _sign()
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
+            parameters={},
+        )
+        result = svc.apply_effects(
+            interior=_interior_with(sign),
+            acting_object=sign,
+            effects=[effect],
+            world_flags=frozenset(),
+            current_tick=WorldTick(1),
+            interaction_parameters={"text": "メモ"},
+            acting_player_display_name="アリス",
+        )
+        updated = result.new_interior.objects[0]
+        visible = updated.visible_state()
+        assert "sign_text" not in visible
+        assert "sign_author_name" not in visible
+        assert "sign_written_tick" not in visible
+
+    def test_上書き後もhidden_state_keysが維持される(self) -> None:
+        """2人目が書き込んで上書きしても hidden 属性が消えないことを保証する。"""
+        svc = WorldGraphEffectService()
+        sign = _sign()
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
+            parameters={},
+        )
+        first = svc.apply_effects(
+            interior=_interior_with(sign),
+            acting_object=sign,
+            effects=[effect],
+            world_flags=frozenset(),
+            current_tick=WorldTick(1),
+            interaction_parameters={"text": "1人目のメモ"},
+            acting_player_display_name="アリス",
+        )
+        updated_sign = first.new_interior.objects[0]
+        second = svc.apply_effects(
+            interior=first.new_interior,
+            acting_object=updated_sign,
+            effects=[effect],
+            world_flags=frozenset(),
+            current_tick=WorldTick(5),
+            interaction_parameters={"text": "2人目のメモ"},
+            acting_player_display_name="ボブ",
+        )
+        updated = second.new_interior.objects[0]
+        assert updated.hidden_state_keys == {
+            "sign_text",
+            "sign_author_name",
+            "sign_written_tick",
+        }
+        assert "sign_text" not in updated.visible_state()
+
+    def test_効果サマリのstate_deltaに本文_書き手名_tickが乗らない(self) -> None:
+        """description には「書き込んだ」という行為の可視性は残すが、
+        state_delta からは本文相当の 3 key を除外する。"""
+        svc = WorldGraphEffectService()
+        sign = _sign()
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
+            parameters={},
+        )
+        result = svc.apply_effects(
+            interior=_interior_with(sign),
+            acting_object=sign,
+            effects=[effect],
+            world_flags=frozenset(),
+            current_tick=WorldTick(1),
+            interaction_parameters={"text": "水場はここから北"},
+            acting_player_display_name="アリス",
+        )
+        assert len(result.public_observable_effects) == 1
+        summary = result.public_observable_effects[0]
+        assert "アリス" in summary.description
+        assert "書き込んだ" in summary.description
+        delta_keys = {entry.key for entry in summary.state_delta}
+        assert "sign_text" not in delta_keys
+        assert "sign_author_name" not in delta_keys
+        assert "sign_written_tick" not in delta_keys
+
 
 class TestShowPlayerTextEffect:
     """SHOW_PLAYER_TEXT: state から「『本文』 — 書き手名」形式の message を組む。"""

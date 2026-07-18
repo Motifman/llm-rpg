@@ -259,3 +259,24 @@ class TestSignObjectAppIntegration:
             "examine",
         )
         assert result.messages == ("『2人目のメモ』 — アリス",)
+
+    def test_書き込み後もvisible_stateには本文_書き手名_tickが含まれない(self) -> None:
+        """PR-J: `SpotGraphCurrentStateBuilder` が読む `visible_state()` の
+        出力レベルで、周囲プレイヤーのプロンプトに看板の本文が漏れないこと
+        を保証する (examine した本人だけが読める設計)。"""
+        app, interior_repo = _build_app(player_names={PLAYER_ID: "アリス"})
+
+        app.execute_interaction(
+            PlayerId(PLAYER_ID),
+            SpotObjectId.create(SIGN_OBJECT_ID),
+            "write",
+            interaction_parameters={"text": "水場はここから北"},
+            current_tick=WorldTick(3),
+        )
+
+        interior = interior_repo.find_by_spot_id(SpotId.create(SPOT_ID))
+        sign = interior.get_object(SpotObjectId.create(SIGN_OBJECT_ID))
+        visible = sign.visible_state()
+        assert "sign_text" not in visible
+        assert "sign_author_name" not in visible
+        assert "sign_written_tick" not in visible
