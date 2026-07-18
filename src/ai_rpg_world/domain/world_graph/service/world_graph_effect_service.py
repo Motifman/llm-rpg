@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, List, Optional, Tuple
+from typing import Any, FrozenSet, Iterable, List, Optional, Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -53,6 +53,15 @@ SIGN_TEXT_MAX_LENGTH = 200
 SIGN_TEXT_STATE_KEY = "sign_text"
 SIGN_AUTHOR_STATE_KEY = "sign_author_name"
 SIGN_WRITTEN_TICK_STATE_KEY = "sign_written_tick"
+
+# PR-J (#714 後続): 「書き込みは公開、内容は examine (SHOW_PLAYER_TEXT) した
+# 本人だけが読める」という看板の設計を、visible_state() / state_delta の
+# 両方で実際に守るための hidden key 集合。WRITE_PLAYER_TEXT がこの 3 key を
+# 書いた時点で自分で hidden_state_keys へ加える (シナリオ JSON の設定漏れに
+# 依存しない)。
+SIGN_HIDDEN_STATE_KEYS = frozenset(
+    {SIGN_TEXT_STATE_KEY, SIGN_AUTHOR_STATE_KEY, SIGN_WRITTEN_TICK_STATE_KEY}
+)
 
 
 # 効果ごとの既定の可視性。シナリオ JSON で `visibility` を明示すれば上書きされる。
@@ -139,7 +148,10 @@ _MISSING = object()
 
 
 def _state_delta_entries(
-    before: Optional[dict], after: dict
+    before: Optional[dict],
+    after: dict,
+    *,
+    exclude_keys: FrozenSet[str] = frozenset(),
 ) -> Tuple[StateDeltaEntry, ...]:
     """state map の before/after から変更箇所だけを抜き出す。
 
@@ -148,11 +160,17 @@ def _state_delta_entries(
     残すため）。同様に `after` で消えたキーも、値が None なのか削除なのか
     の判別が必要。`dict.get` の戻り値だけでは区別不能なので sentinel を使う。
     `before==after` の場合はエントリを生成しない。
+
+    `exclude_keys` は「行為が起きたことは見せてよいが、値そのものは第三者
+    観測イベント (state_delta) に乗せたくない」key を落とすためのもの
+    (PR-J: 看板の本文 / 書き手名 / tick)。`hidden_state_keys` (プロンプトの
+    現在状態表示から除外) とは独立した経路なので、こちらでも明示的に除外
+    する必要がある。
     """
 
     if before is None:
         before = {}
-    keys = set(before.keys()) | set(after.keys())
+    keys = (set(before.keys()) | set(after.keys())) - set(exclude_keys)
     entries: List[StateDeltaEntry] = []
     for key in sorted(keys, key=str):
         b = before.get(key, _MISSING)
@@ -999,7 +1017,9 @@ class WorldGraphEffectService:
             new_state[SIGN_WRITTEN_TICK_STATE_KEY] = (
                 int(current_tick.value) if current_tick is not None else None
             )
-            updated_target = target.with_state(new_state)
+            updated_target = target.with_state(new_state).with_additional_hidden_state_keys(
+                SIGN_HIDDEN_STATE_KEYS
+            )
             interior = interior.replace_object(updated_target)
             if (
                 acting_object is not None
@@ -1017,7 +1037,13 @@ class WorldGraphEffectService:
                     visibility=visibility,
                     description=f"{updated_target.name} に {author_name} が書き込んだ",
                     target_ref=updated_target.name,
-                    state_delta=_state_delta_entries(before_state, new_state),
+                    # PR-J: 「examine した本人だけが読める」設計を state_delta
+                    # (第三者観測イベント) 経由で裏切らないよう、本文/書き手名/
+                    # tick は除外する。行為が起きたこと自体は description で
+                    # 伝わるので情報が失われるわけではない。
+                    state_delta=_state_delta_entries(
+                        before_state, new_state, exclude_keys=SIGN_HIDDEN_STATE_KEYS
+                    ),
                 )
             )
             _all = (

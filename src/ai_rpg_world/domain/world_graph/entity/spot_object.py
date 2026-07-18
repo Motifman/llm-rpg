@@ -41,6 +41,19 @@ class SpotObject:
     def with_state(self, new_state: Dict[str, Any]) -> SpotObject:
         return replace(self, state=dict(new_state))
 
+    def with_additional_hidden_state_keys(self, keys: FrozenSet[str]) -> SpotObject:
+        """`hidden_state_keys` に新たな key を追加した (和集合) コピーを返す。
+
+        PR-J: 「書いた内容は examine した本人だけが読める」看板のように、
+        state key を書き込む effect 自体が「これは第三者に見せない」ことを
+        自分で保証したいケースのためのヘルパ。シナリオ JSON 側で
+        hidden_state_keys を設定する運用に頼ると、設定漏れがあれば本文が
+        `visible_state()` 経由で周囲に漏れる (実際に発生した回帰)。
+        """
+        if not keys:
+            return self
+        return replace(self, hidden_state_keys=self.hidden_state_keys | frozenset(keys))
+
     def visible_state(self) -> Dict[str, Any]:
         """`hidden_state_keys` を除いた、第三者プロンプトに載せて良い state。
 
