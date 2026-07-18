@@ -211,6 +211,17 @@ def _empty_goal_journal_store() -> Any:
     return InMemoryGoalJournalStore()
 
 
+def _empty_stagnation_pressure_store() -> Any:
+    """P-U2 (停滞感 store): snapshot 配線時に停滞感 store が未配線 (= flag OFF)
+
+    なら空 in-memory store で代用する (checklist #27)。"""
+    from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+        InMemoryStagnationPressureStore,
+    )
+
+    return InMemoryStagnationPressureStore()
+
+
 @dataclass(frozen=True)
 class _PlayerSnapshotMapping:
     """1 player ↔ 1 file のマッピング。"""
@@ -385,6 +396,12 @@ class ExperimentSnapshotSession:
             getattr(wiring_result, "goal_journal_store", None)
             or _empty_goal_journal_store()
         )
+        # P-U2 (停滞感 store): 停滞感 store も未配線なら空 in-memory store に
+        # フォールバックする (checklist #27)。
+        stagnation_pressure_store = (
+            getattr(wiring_result, "stagnation_pressure_store", None)
+            or _empty_stagnation_pressure_store()
+        )
 
         # どの store が空 fallback で稼働しているかを 1 度だけ info ログに残す
         # = 「snapshot 取ったけど semantic は空だった」のデバッグ材料。
@@ -410,6 +427,8 @@ class ExperimentSnapshotSession:
                 "pending_prediction_store",
                 # P5: goal store も同じ監視対象に入れる。
                 "goal_journal_store",
+                # P-U2: 停滞感 store も同じ監視対象に入れる。
+                "stagnation_pressure_store",
             )
             if getattr(wiring_result, name, None) is None
         ]
@@ -434,6 +453,7 @@ class ExperimentSnapshotSession:
             recall_success_store=recall_success_store,
             pending_prediction_store=pending_prediction_store,
             goal_journal_store=goal_journal_store,
+            stagnation_pressure_store=stagnation_pressure_store,
         )
         self._gateway = BeingSnapshotFileGateway()
         self._capture_use_case = CaptureBeingSnapshotToFileUseCase(

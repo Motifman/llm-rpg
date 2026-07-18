@@ -85,6 +85,9 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
     SEMANTIC_MEMORY_STATUS_INACTIVE,
     SemanticMemoryEntry,
 )
+from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository import (
+    StagnationPressureRepository,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
@@ -316,6 +319,8 @@ class BeliefConsolidationCoordinator:
         reflect_observation_sink: Optional[Callable[[PlayerId, str, str], None]] = None,
         stall_min_interval_turns: int = DEFAULT_STALL_MIN_INTERVAL_TURNS,
         goal_stagnation_evidence_enabled: bool = False,
+        stagnation_pressure_store: Optional[StagnationPressureRepository] = None,
+        stagnation_pressure_enabled: bool = False,
     ) -> None:
         if not isinstance(evidence_buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -387,6 +392,27 @@ class BeliefConsolidationCoordinator:
                 "goal_stagnation_evidence_enabled requires goal_reflect_enabled "
                 "(reflect が発火しないと evidence 化の対象が生まれない)"
             )
+        if stagnation_pressure_store is not None and not isinstance(
+            stagnation_pressure_store, StagnationPressureRepository
+        ):
+            raise TypeError(
+                "stagnation_pressure_store must be StagnationPressureRepository or None"
+            )
+        if not isinstance(stagnation_pressure_enabled, bool):
+            raise TypeError("stagnation_pressure_enabled must be bool")
+        # P-U2 (停滞感 store): stagnation_pressure も goal_stagnation_evidence と
+        # 同じ理由で reflect 発火に依存する。goal_reflect が OFF だと verdict 自体が
+        # 生まれず「flag を立てたのに何も起きない」静かな失敗になるため弾く。
+        if stagnation_pressure_enabled and not goal_reflect_enabled:
+            raise ValueError(
+                "stagnation_pressure_enabled requires goal_reflect_enabled "
+                "(reflect が発火しないとカウンタを動かす verdict が生まれない)"
+            )
+        if stagnation_pressure_enabled and stagnation_pressure_store is None:
+            raise ValueError(
+                "stagnation_pressure_enabled requires stagnation_pressure_store "
+                "(カウンタを書き込む先が無いと ON にする意味が無い)"
+            )
         self._evidence_buffer_store = evidence_buffer_store
         self._semantic_store = semantic_store
         self._completion = completion
@@ -416,6 +442,10 @@ class BeliefConsolidationCoordinator:
         # として buffer に積む。OFF (既定) では evidence を一切積まず、
         # 導入前 (内省観測の注入のみ) と挙動一致する。
         self._goal_stagnation_evidence_enabled = goal_stagnation_evidence_enabled
+        # P-U2 (停滞感 store): ON のときだけ reflect verdict を停滞感カウンタに
+        # 畳み込む。OFF (既定) では store に一切触れず、導入前と挙動一致する。
+        self._stagnation_pressure_store = stagnation_pressure_store
+        self._stagnation_pressure_enabled = stagnation_pressure_enabled
         self._system_prompt = _build_belief_consolidation_system_prompt(
             attribution_enabled=belief_attribution_enabled,
             goal_reflect_enabled=goal_reflect_enabled,
@@ -488,6 +518,14 @@ class BeliefConsolidationCoordinator:
         verdict = raw.get("verdict")
         if verdict not in _REFLECT_VERDICTS:
             return False
+        # P-U2 (停滞感 store): カウンタは reflect の verdict の有無だけで動く。
+        # 観測注入の乱発防止 cap (stall_min_interval_turns) はこの下で判定するが、
+        # cap は「同じ気づきを本人に何度も見せない」ための表示側の間引きであって
+        # 「まだ停滞しているか」という内部状態の判定ではない。そのため cap の
+        # 判定より前でカウンタを更新し、cap で観測注入自体が抑制された回でも
+        # stalled/misaligned ならカウンタは増える (goal_utility_gradient_design.md
+        # P-U2)。statement の有無にも依存しない (verdict が全て)。
+        self._update_stagnation_pressure(being_id, verdict)
         statement = raw.get("statement")
         if not isinstance(statement, str) or not statement.strip():
             return False
@@ -518,6 +556,25 @@ class BeliefConsolidationCoordinator:
                 being_id, verdict, objective_text, batch
             )
         return True
+
+    def _update_stagnation_pressure(self, being_id: BeingId, verdict: str) -> None:
+        """P-U2: reflect verdict を「停滞感」カウンタに畳み込む。
+
+        stalled / misaligned はカウンタを +1 (まだ停滞している)、achieved は
+        0 にリセット (目的への前進があった) する。``stagnation_pressure_enabled``
+        が OFF、または store が未注入なら no-op (= 導入前と挙動一致)。ここは
+        buffer への evidence 追記とは独立した経路で、belief journal にも
+        goal store にも触れない (P-U1 と同じ「停滞 ≠ 即改訂」の不変条件)。
+        """
+        if (
+            not self._stagnation_pressure_enabled
+            or self._stagnation_pressure_store is None
+        ):
+            return
+        if verdict in (_REFLECT_VERDICT_STALLED, _REFLECT_VERDICT_MISALIGNED):
+            self._stagnation_pressure_store.increment_by_being(being_id)
+        elif verdict == _REFLECT_VERDICT_ACHIEVED:
+            self._stagnation_pressure_store.reset_by_being(being_id)
 
     def _emit_goal_stagnation_evidence(
         self,

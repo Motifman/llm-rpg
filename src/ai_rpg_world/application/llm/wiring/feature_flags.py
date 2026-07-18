@@ -988,6 +988,42 @@ def log_goal_stagnation_evidence_enabled_state(enabled: bool) -> None:
     )
 
 
+# ---- P-U2 (停滞感 store) -----------------------------------------------------
+
+ENV_STAGNATION_PRESSURE_ENABLED = "STAGNATION_PRESSURE_ENABLED"
+
+
+def resolve_stagnation_pressure_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """reflect の verdict (stalled/misaligned/achieved) を「停滞感」カウンタに
+    畳み込むか (goal_utility_gradient_design.md P-U2)。
+
+    ``STAGNATION_PRESSURE_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    前提として ``GOAL_REFLECT_ENABLED`` が ON である必要がある (reflect が
+    発火しなければカウンタを動かす verdict 自体が生まれない。
+    ``BeliefConsolidationCoordinator`` がこの組み合わせ不整合を起動時
+    fail-fast で弾く)。
+
+    OFF (既定) のとき、reflect は従来どおり内省観測を注入する / P-U1 の
+    evidence 化を行うだけで、停滞感カウンタには一切触れない。ON にすると、
+    stalled / misaligned の回にカウンタを +1、achieved の回に 0 リセットする。
+    P-U1 (evidence 化) の乱発防止 cap とは独立に動く点に注意
+    (cap は表示側の間引きであって、停滞の内部判定ではないため)。
+    """
+    return _parse_bool_env(ENV_STAGNATION_PRESSURE_ENABLED, env=env, default=False)
+
+
+def log_stagnation_pressure_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_STAGNATION_PRESSURE_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )
+
+
 # ──────────────────────────────────────────────────────────────────
 # Semantic memory: STATE_COLLAPSE evidence (PR-D)
 # ──────────────────────────────────────────────────────────────────

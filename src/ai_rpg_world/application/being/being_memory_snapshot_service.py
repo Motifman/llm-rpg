@@ -130,6 +130,9 @@ from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repos
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     SemanticMemoryRepository,
 )
+from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository import (
+    StagnationPressureRepository,
+)
 
 
 CURRENT_PAYLOAD_SCHEMA_VERSION: int = 1
@@ -242,6 +245,9 @@ class BeingMemorySnapshotService:
         "pending_predictions",
         # P5 (目的層): 目的 journal の per-Being state (belief journal と同型)。
         "goal_journal",
+        # P-U2 (停滞感 store): 停滞感カウンタの per-Being state。scalar な
+        # ため list 1 要素 (0 なら空 list) で運ぶ (他 key と同じ list 規約に揃える)。
+        "stagnation_pressure_count",
     })
 
     def __init__(
@@ -260,6 +266,7 @@ class BeingMemorySnapshotService:
         recall_success_store: IEpisodicRecallSuccessStore,
         pending_prediction_store: PendingPredictionRepository,
         goal_journal_store: GoalJournalRepository,
+        stagnation_pressure_store: StagnationPressureRepository,
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository")
@@ -312,6 +319,10 @@ class BeingMemorySnapshotService:
             )
         if not isinstance(goal_journal_store, GoalJournalRepository):
             raise TypeError("goal_journal_store must be GoalJournalRepository")
+        if not isinstance(stagnation_pressure_store, StagnationPressureRepository):
+            raise TypeError(
+                "stagnation_pressure_store must be StagnationPressureRepository"
+            )
         self._memo = memo_store
         self._semantic = semantic_store
         self._memory_link = memory_link_store
@@ -325,6 +336,7 @@ class BeingMemorySnapshotService:
         self._recall_success = recall_success_store
         self._pending_prediction = pending_prediction_store
         self._goal_journal = goal_journal_store
+        self._stagnation_pressure = stagnation_pressure_store
 
     def capture(self, being_id: BeingId) -> str:
         """10 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
@@ -402,6 +414,13 @@ class BeingMemorySnapshotService:
                 goal_entry_to_dict(e)
                 for e in self._goal_journal.list_all_by_being(being_id)
             ],
+            # P-U2 (停滞感 store): 停滞感カウンタ。0 は空 list (= 他 store の
+            # 「空状態 = 空 list」規約に揃える)。
+            "stagnation_pressure_count": (
+                [self._stagnation_pressure.get_by_being(being_id)]
+                if self._stagnation_pressure.get_by_being(being_id)
+                else []
+            ),
         }
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
         # しているか起動時に確認する。新 store を追加して EXPECTED に key を
@@ -543,6 +562,22 @@ class BeingMemorySnapshotService:
             dict_to_goal_entry,
             "goal_journal",
         )
+        # P-U2 (停滞感 store): カウンタのデコード。list が空なら 0、要素があれば
+        # 先頭値を採用する (capture 側は常に 0 or 1 要素で emit するため)。
+        stagnation_pressure_raw = payload["stagnation_pressure_count"]
+        if len(stagnation_pressure_raw) > 1:
+            raise BeingMemoryPayloadFormatError(
+                "payload['stagnation_pressure_count'] must have at most 1 element, "
+                f"got {len(stagnation_pressure_raw)}"
+            )
+        try:
+            stagnation_pressure_count = (
+                int(stagnation_pressure_raw[0]) if stagnation_pressure_raw else 0
+            )
+        except (TypeError, ValueError) as exc:
+            raise BeingMemoryPayloadFormatError(
+                f"payload['stagnation_pressure_count'][0] is malformed: {exc!r}"
+            ) from exc
 
         # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない、
         # memory_link / reinterpretation_journal / recall_buffer は episode に
@@ -583,6 +618,10 @@ class BeingMemorySnapshotService:
         )
         # P5 (目的層): 目的 journal の bulk overwrite。
         self._goal_journal.replace_all_by_being(being_id, goal_entries)
+        # P-U2 (停滞感 store): カウンタの bulk overwrite。
+        self._stagnation_pressure.replace_all_by_being(
+            being_id, stagnation_pressure_count
+        )
 
 
 __all__ = [

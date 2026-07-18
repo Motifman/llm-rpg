@@ -91,6 +91,38 @@ class TestGoalStagnationEvidenceWiring:
         assert coord._goal_stagnation_evidence_enabled is False
 
 
+class TestStagnationPressureWiring:
+    """P-U2: STAGNATION_PRESSURE_ENABLED が world_runtime から coordinator まで
+    配線され、既定 OFF であることを固定する。"""
+
+    def test_stagnation_pressure_wired_when_enabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_consolidation(monkeypatch)
+        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
+        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        coord = _coordinator(runtime)
+        assert coord is not None
+        assert coord._stagnation_pressure_enabled is True
+        assert coord._stagnation_pressure_store is not None
+        # runtime 側にも store が保持され、snapshot stub から拾える (checklist #27)。
+        assert runtime._stagnation_pressure_store is not None
+        assert runtime._stagnation_pressure_store is coord._stagnation_pressure_store
+
+    def test_stagnation_pressure_off_by_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_consolidation(monkeypatch)
+        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
+        monkeypatch.delenv("STAGNATION_PRESSURE_ENABLED", raising=False)
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        coord = _coordinator(runtime)
+        assert coord is not None
+        assert coord._stagnation_pressure_enabled is False
+        assert runtime._stagnation_pressure_store is None
+
+
 class TestGoalReflectAuditTarget:
     """P7: 監査対象が goal store の active 目的で、reflect が goal store を書かない。"""
 
