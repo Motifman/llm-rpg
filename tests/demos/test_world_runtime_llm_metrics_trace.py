@@ -34,7 +34,7 @@ class _FakeLlmClient:
         self.last_sink: Any = None
 
     def invoke(
-        self, messages, tools, choice, *, metrics_sink=None
+        self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None
     ) -> dict:
         self.last_sink = metrics_sink
         if metrics_sink is not None:
@@ -101,7 +101,7 @@ class TestPhaseAMetricsSink:
             def __init__(self, runtime):
                 self.runtime = runtime
 
-            def invoke(self, messages, tools, choice, *, metrics_sink=None) -> dict:
+            def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None) -> dict:
                 # 呼び出し中に tick を 1 進める (= LLM call が tick boundary を跨ぐ)
                 self.runtime.advance_tick()
                 if metrics_sink is not None:

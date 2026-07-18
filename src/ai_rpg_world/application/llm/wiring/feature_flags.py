@@ -1024,6 +1024,41 @@ def log_stagnation_pressure_enabled_state(enabled: bool) -> None:
     )
 
 
+# ---- 案A (band-gated thinking) ----------------------------------------------
+
+ENV_STAGNATION_REASONING_ENABLED = "STAGNATION_REASONING_ENABLED"
+
+
+def resolve_stagnation_reasoning_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """停滞感 band が strong の局面で、停滞 reflect 注入直後の 1 行動に限り
+    reasoning (熟考) を有効化するか (goal_utility_gradient_design.md 案A)。
+
+    ``STAGNATION_REASONING_ENABLED=1`` で ON、未設定 / その他は OFF。
+
+    前提として ``STAGNATION_PRESSURE_ENABLED`` (band の供給元) と
+    ``GOAL_REFLECT_ENABLED`` (reflect 注入 = ラッチ武装のトリガ) の両方が ON で
+    ある必要がある。この組み合わせ不整合は wiring 構築時に fail-fast で弾く。
+
+    OFF (既定) のとき、行動経路は従来どおり ``reasoning_effort=None`` で invoke し
+    (プロンプト byte 不変・プレフィックスキャッシュ不変)、ラッチも構築しない。
+    ON にすると、詰まった局面の 1 行動だけ reasoning を焚き、tool 選択の前に
+    熟考させる。inner_thought (tool_call 後の後付け) では埋められない「熟考 →
+    行動選択」の解離を埋める狙い。
+    """
+    return _parse_bool_env(ENV_STAGNATION_REASONING_ENABLED, env=env, default=False)
+
+
+def log_stagnation_reasoning_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_STAGNATION_REASONING_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )
+
+
 # ──────────────────────────────────────────────────────────────────
 # Semantic memory: STATE_COLLAPSE evidence (PR-D)
 # ──────────────────────────────────────────────────────────────────
