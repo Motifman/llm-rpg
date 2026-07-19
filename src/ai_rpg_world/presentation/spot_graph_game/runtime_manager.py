@@ -45,6 +45,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     with_inner_thought_empty_warning,
 )
+from ai_rpg_world.application.llm.services.force_tool_call_instruction import (
+    append_force_tool_call_instruction,
+)
 from ai_rpg_world.application.llm.services.subjective_args import (
     extract_subjective_action_fields,
 )
@@ -1576,8 +1579,20 @@ class _WorldLlmWiring:
         reasoning_effort = self.runtime.resolve_turn_reasoning_effort(player_id)
 
         def _invoke(effort):
+            # 熟考ターン (effort != None) は tool_choice="auto" にする。DeepSeek は
+            # thinking + tool_choice="required" を 400 (Thinking mode does not support
+            # this tool_choice) で拒否するため。auto だと考察だけで行動しないことが
+            # あるので、末尾に「必ずツールを呼べ」を足して抑える (prefix cache 維持の
+            # ため system は触らず末尾のみ)。通常ターンは従来どおり required + 元
+            # プロンプト (byte 不変)。
+            if effort is not None:
+                messages = append_force_tool_call_instruction(prompt["messages"])
+                tool_choice = "auto"
+            else:
+                messages = prompt["messages"]
+                tool_choice = "required"
             return self.llm_client.invoke(
-                prompt["messages"], tools_payload, "required",
+                messages, tools_payload, tool_choice,
                 metrics_sink=metrics_sink,
                 reasoning_effort=effort,
             )

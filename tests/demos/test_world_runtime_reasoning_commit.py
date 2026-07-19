@@ -103,6 +103,72 @@ class _ReasoningFailThenFallbackClient:
         return {"name": "wait", "arguments": {"reason": "fallback"}}
 
 
+class _RecordingArgsClient:
+    """invoke の (tool_choice, 強制指示の有無, reasoning_effort) を記録し成功を返す。"""
+
+    def __init__(self) -> None:
+        self.calls: list = []
+
+    def invoke(
+        self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None
+    ):
+        from ai_rpg_world.application.llm.services.force_tool_call_instruction import (
+            FORCE_TOOL_CALL_INSTRUCTION,
+        )
+        has_instr = any(
+            isinstance(m.get("content"), str)
+            and FORCE_TOOL_CALL_INSTRUCTION in m["content"]
+            for m in messages
+        )
+        self.calls.append((choice, has_instr, reasoning_effort))
+        return {"name": "wait", "arguments": {"reason": "ok"}}
+
+
+class TestReasoningTurnUsesAutoWithForceInstruction:
+    """熟考ターンは tool_choice=auto + 強制指示、通常ターンは required + 指示なし。
+
+    DeepSeek が thinking + required を 400 で拒否するため、熟考ターンだけ auto に
+    切替え「必ずツールを呼べ」を末尾に足す。通常ターンは従来どおり required で
+    プロンプトも不変 (prefix cache 維持)。
+    """
+
+    def test_熟考ターンはauto_and_強制指示つき(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        from tests.demos._world_runtime_helpers import create_world_runtime_session
+
+        _enable_reasoning_prereqs(monkeypatch)
+        state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
+        client = _RecordingArgsClient()
+        state.llm_wiring.llm_client = client
+        pid = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
+        being_id = state.runtime._aux_being_resolver.resolve_being_id(
+            state.runtime._aux_being_default_world_id, pid
+        )
+        for _ in range(3):  # band strong
+            state.runtime._stagnation_pressure_store.increment_by_being(being_id)
+        state.runtime._emit_reflect_observation(pid, "空回りしている", "stalled")
+
+        state.llm_wiring.run_phase_a(pid)
+
+        assert client.calls == [("auto", True, "low")]
+
+    def test_通常ターンはrequired_and_指示なし(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        from tests.demos._world_runtime_helpers import create_world_runtime_session
+
+        _enable_reasoning_prereqs(monkeypatch)
+        state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
+        client = _RecordingArgsClient()
+        state.llm_wiring.llm_client = client
+        pid = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
+        # ラッチを arm しない → 熟考しない通常ターン
+        state.llm_wiring.run_phase_a(pid)
+
+        assert client.calls == [("required", False, None)]
+
+
 class TestReasoningStarvationFallback:
     """熟考ターンの invoke が失敗したら latch を消費し reasoning なしで降格再試行する。
 
