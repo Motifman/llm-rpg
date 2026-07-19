@@ -43,6 +43,7 @@ class _FakeLlmClient:
                 wall_latency_ms=1234,
                 prompt_tokens=100,
                 completion_tokens=42,
+                reasoning_tokens=17,
                 tps=34.0,
                 success=True,
                 error_code=None,
@@ -83,6 +84,9 @@ class TestPhaseAMetricsSink:
         assert payload["tps"] == 34.0
         assert payload["success"] is True
         assert payload["player_id"] == pid.value
+        # 案A の効果測定用: reasoning_tokens は metrics から trace payload へ
+        # 転記されていなければ「どれだけ熟考したか」を事後計算できない。
+        assert payload["reasoning_tokens"] == 17
 
     def test_tick_は_sink_record_時点で_取得される(
         self, monkeypatch, tmp_path: Path
