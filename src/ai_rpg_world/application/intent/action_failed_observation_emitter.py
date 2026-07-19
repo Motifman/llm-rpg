@@ -126,6 +126,8 @@ class ActionFailedObservationEmitter:
             if dto.message
             else f"{intent.tool_name} は失敗した。"
         )
+        if dto.remediation:
+            prose = f"{prose} 修正のヒント: {dto.remediation}"
         # observation_category="self_only": ActionFailed は「自分の行動が世界に
         # 拒否された」体験で、他エージェントには本質的に観測されない (副作用
         # としての観測は別途 environment カテゴリで投入される想定)。

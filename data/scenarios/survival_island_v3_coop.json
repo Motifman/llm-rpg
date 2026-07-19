@@ -26,7 +26,7 @@
       "name": "野いちご",
       "description": "酸味のある赤い実。生のまま食べられるが日持ちはしない。",
       "category": "FOOD",
-      "spoils_after_ticks": 48,
+      "spoils_after_ticks": 96,
       "consume_effect": [
         {
           "type": "heal_hp",
@@ -45,7 +45,7 @@
       "name": "椰子の実",
       "description": "栄養価が高く水分も摂れる。落ちているものを拾える。",
       "category": "FOOD",
-      "spoils_after_ticks": 120,
+      "spoils_after_ticks": 240,
       "consume_effect": [
         {
           "type": "heal_hp",
@@ -64,7 +64,7 @@
       "name": "貝",
       "description": "干潟で採れる貝。生でも食べられるが火を通すと安全。",
       "category": "FOOD",
-      "spoils_after_ticks": 24,
+      "spoils_after_ticks": 48,
       "consume_effect": [
         {
           "type": "heal_hp",
@@ -83,7 +83,7 @@
       "name": "生の魚",
       "description": "釣り上げたばかりの魚。生では食あたりの危険がある。",
       "category": "FOOD",
-      "spoils_after_ticks": 32,
+      "spoils_after_ticks": 64,
       "consume_effect": [
         {
           "type": "heal_hp",
@@ -102,7 +102,7 @@
       "name": "焼き魚",
       "description": "焚き火で焼いた魚。安全に食べられる。",
       "category": "FOOD",
-      "spoils_after_ticks": 80,
+      "spoils_after_ticks": 160,
       "consume_effect": [
         {
           "type": "heal_hp",
@@ -121,7 +121,7 @@
       "name": "食べられるキノコ",
       "description": "白い傘の見覚えあるキノコ。食用。",
       "category": "FOOD",
-      "spoils_after_ticks": 72,
+      "spoils_after_ticks": 144,
       "consume_effect": [
         {
           "type": "heal_hp",
@@ -140,7 +140,7 @@
       "name": "毒キノコ",
       "description": "食用キノコによく似た見た目だが、よく見れば軸の色がやや赤い。食べると激しい嘔吐に襲われ、体力を奪われる。",
       "category": "FOOD",
-      "spoils_after_ticks": 72,
+      "spoils_after_ticks": 144,
       "consume_effect": [
         {
           "type": "damage_hp",
