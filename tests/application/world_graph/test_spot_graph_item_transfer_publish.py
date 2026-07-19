@@ -5,7 +5,10 @@
 配信挙動が変わらないことを保証する:
 
 - drop → PlayerDroppedItemEvent / pickup → PlayerPickedUpItemEvent /
-  give → PlayerGaveItemEvent がそれぞれ 1 件ずつ publish される。
+  give → PlayerGaveItemEvent が、**オペレーション境界で publish_all を 1 度だけ** 呼び、
+  そこに 1 件だけ乗る (Stage 2 の「境界で 1 度 dispatch」を batches で固定)。
+- 各イベントの payload (entity_id / recipient_entity_id / spot_id / item_instance_id /
+  item_spec_id / item_name / witness_policy) が保持される (退行検出)。
 - publisher 未注入 (None) なら発火せず状態遷移のみ (最小構成の後方互換)。
 - publisher が例外を投げても本体オペレーションは成功する (相② best-effort)。
 
@@ -34,6 +37,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -67,13 +71,22 @@ ITEM_SPEC_ID = ItemSpecId.create(100)
 
 
 class _SpyPublisher:
-    """publish_all で受け取ったイベントを平坦に記録する duck-typed publisher。"""
+    """publish_all の呼び出しを batch 単位で記録する duck-typed publisher。
+
+    ``batches`` は publish_all 1 回ごとに 1 要素 (そのとき渡されたイベント列を list 化)。
+    これで「境界で publish_all を何回呼んだか」「1 回あたり何件乗せたか」を固定できる。
+    ``published`` は全 batch を平坦化した便宜アクセサ。
+    """
 
     def __init__(self) -> None:
-        self.published: List[object] = []
+        self.batches: List[List[object]] = []
 
     def publish_all(self, events) -> None:
-        self.published.extend(events)
+        self.batches.append(list(events))
+
+    @property
+    def published(self) -> List[object]:
+        return [event for batch in self.batches for event in batch]
 
 
 class _RaisingPublisher:
@@ -144,39 +157,71 @@ def _build_service(publisher, *, players: tuple[PlayerId, ...] = (PLAYER_ID,)):
 
 
 class TestPublishedEventSet:
-    """各オペレーションが期待するイベントを 1 件だけ publish する。"""
+    """各オペレーションが境界で publish_all を 1 度だけ呼び、期待 payload を 1 件乗せる。"""
 
-    def test_drop_publishes_single_dropped_event(self) -> None:
-        """drop_item は PlayerDroppedItemEvent を 1 件 publish する。"""
+    def test_drop_publishes_single_dropped_event_with_payload(self) -> None:
+        """drop_item は publish_all を 1 度呼び、PlayerDroppedItemEvent を payload 込みで 1 件乗せる。"""
         spy = _SpyPublisher()
-        service, _ = _build_service(spy)
+        service, instance_id = _build_service(spy)
 
-        service.drop_item(PLAYER_ID, SlotId(0))
+        service.drop_item(
+            PLAYER_ID, SlotId(0), witness_policy=WitnessPolicy.ACTOR_ONLY
+        )
 
-        assert len(spy.published) == 1
-        assert isinstance(spy.published[0], PlayerDroppedItemEvent)
+        # 境界で 1 度だけ dispatch、その batch に 1 件
+        assert len(spy.batches) == 1
+        assert len(spy.batches[0]) == 1
+        event = spy.batches[0][0]
+        assert isinstance(event, PlayerDroppedItemEvent)
+        assert event.entity_id == EntityId.create(int(PLAYER_ID))
+        assert event.spot_id == SPOT_ID
+        assert event.item_instance_id == instance_id
+        assert event.item_spec_id == ITEM_SPEC_ID
+        assert "流木" in event.item_name
+        # witness_policy が service を素通りして保持される (recipient strategy に直結)
+        assert event.witness_policy == WitnessPolicy.ACTOR_ONLY
 
-    def test_pickup_publishes_single_picked_up_event(self) -> None:
-        """pickup_item は PlayerPickedUpItemEvent を 1 件 publish する。"""
+    def test_pickup_publishes_single_picked_up_event_with_payload(self) -> None:
+        """pickup_item は publish_all を 1 度呼び、PlayerPickedUpItemEvent を payload 込みで 1 件乗せる。"""
         spy = _SpyPublisher()
         service, instance_id = _build_service(spy)
         service.drop_item(PLAYER_ID, SlotId(0))
-        spy.published.clear()
+        spy.batches.clear()
 
-        service.pickup_item(PLAYER_ID, instance_id)
+        service.pickup_item(
+            PLAYER_ID, instance_id, witness_policy=WitnessPolicy.ACTOR_ONLY
+        )
 
-        assert len(spy.published) == 1
-        assert isinstance(spy.published[0], PlayerPickedUpItemEvent)
+        assert len(spy.batches) == 1
+        assert len(spy.batches[0]) == 1
+        event = spy.batches[0][0]
+        assert isinstance(event, PlayerPickedUpItemEvent)
+        assert event.entity_id == EntityId.create(int(PLAYER_ID))
+        assert event.spot_id == SPOT_ID
+        assert event.item_instance_id == instance_id
+        # item_spec_id は地面アイテム由来 (ground_item.item_spec_id)
+        assert event.item_spec_id == ITEM_SPEC_ID
+        assert "流木" in event.item_name
+        assert event.witness_policy == WitnessPolicy.ACTOR_ONLY
 
-    def test_give_publishes_single_gave_event(self) -> None:
-        """give_item は PlayerGaveItemEvent を 1 件 publish する。"""
+    def test_give_publishes_single_gave_event_with_payload(self) -> None:
+        """give_item は publish_all を 1 度呼び、送り手/受け手を含む payload で 1 件乗せる。"""
         spy = _SpyPublisher()
-        service, _ = _build_service(spy, players=(PLAYER_ID, OTHER_PLAYER_ID))
+        service, instance_id = _build_service(spy, players=(PLAYER_ID, OTHER_PLAYER_ID))
 
         service.give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(0))
 
-        assert len(spy.published) == 1
-        assert isinstance(spy.published[0], PlayerGaveItemEvent)
+        assert len(spy.batches) == 1
+        assert len(spy.batches[0]) == 1
+        event = spy.batches[0][0]
+        assert isinstance(event, PlayerGaveItemEvent)
+        assert event.entity_id == EntityId.create(int(PLAYER_ID))
+        # 受け手が欠落/誤ると受取り側への観測が壊れるため固定する
+        assert event.recipient_entity_id == EntityId.create(int(OTHER_PLAYER_ID))
+        assert event.spot_id == SPOT_ID
+        assert event.item_instance_id == instance_id
+        assert event.item_spec_id == ITEM_SPEC_ID
+        assert "流木" in event.item_name
 
 
 class TestPublisherGuards:

@@ -555,6 +555,10 @@ class SpotGraphItemTransferService:
 
         相① を含むサービス (needs_decay / revive / consumable) の移行では、この境界で
         相ごとの dispatcher に振り分ける契約 (stage1_contract.md §4) へ拡張する。
+
+        注: 旧 _publish_event は publisher=None なら即 return したが、本メソッドは
+        publisher の有無に関わらず collector の fail-fast (event_id 検証) を先に通す。
+        現行の公開 API 経由では常に valid な BaseDomainEvent を渡すので挙動は同じ。
         """
         collector = DomainEventCollector()
         collector.add_all(events)
