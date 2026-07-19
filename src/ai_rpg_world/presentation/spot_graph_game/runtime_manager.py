@@ -1563,42 +1563,69 @@ class _WorldLlmWiring:
         # 案A (band-gated thinking): 停滞 strong の局面で reflect 注入直後の 1 行動
         # だけ reasoning を焚く。flag OFF / 対象外なら None (= 既定のまま reasoning
         # OFF・プロンプト byte 不変)。判断と AGENT_REASONING_ENGAGED trace は runtime
-        # 側に閉じ込め、ここは effort を invoke に橋渡しするだけに留める。
+        # 側に閉じ込め、ここは effort を invoke に橋渡しし、失敗時の降格を扱う。
         reasoning_effort = self.runtime.resolve_turn_reasoning_effort(player_id)
-        try:
-            tool_call = self.llm_client.invoke(
+
+        def _invoke(effort):
+            return self.llm_client.invoke(
                 prompt["messages"], tools_payload, "required",
                 metrics_sink=metrics_sink,
-                reasoning_effort=reasoning_effort,
+                reasoning_effort=effort,
             )
-            # 案A HIGH 2: 熟考付き行動が「成立した後にだけ」ラッチを消費し
-            # AGENT_REASONING_ENGAGED trace を残す。「成立」= 例外を投げず、かつ
-            # tool_call が実際に返ったこと。LiteLLMClient.invoke は NO_TOOL_CALL を
-            # 例外ではなく tool_call=None で返すため、tool_call is not None の条件を
-            # 欠くと「行動が成立していないのに engaged」の偽陽性になる (Phase B で
-            # was_no_op になる)。commit しなければラッチは armed のまま残り、次行動で
-            # 再挑戦できる。
-            if reasoning_effort is not None and tool_call is not None:
-                self.runtime.commit_turn_reasoning_engaged(player_id, reasoning_effort)
+
+        def _result(tool_call, exception):
             return _LlmPhaseAResult(
                 player_id=player_id,
                 prompt=prompt,
                 tools_payload=tools_payload,
                 tool_call=tool_call,
-                exception=None,
+                exception=exception,
             )
-        except Exception as exc:  # review HIGH 2: KeyboardInterrupt / SystemExit / GeneratorExit は伝播させる
-            logger.exception(
-                "Phase A llm invoke failed for player_id=%s",
+
+        def _fallback_without_reasoning():
+            # 餓死ループ修正: 熟考ターンが失敗 (例外 / tool_call なし) したら latch を
+            # 消費して「同条件での再試行」を止め、reasoning なしで 1 回だけ降格再試行
+            # して行動を成立させる。これをしないと詰まった agent が毎行動 same-condition
+            # で失敗し続けて餓死する (実 run v3coop_stagnation_002 の P3)。
+            self.runtime.abandon_turn_reasoning(player_id)
+            try:
+                return _result(_invoke(None), None)
+            except Exception as exc:  # noqa: BLE001 — 降格後も失敗なら通常の失敗として詰める
+                logger.exception(
+                    "Phase A fallback (reasoning なし) invoke failed for player_id=%s",
+                    player_id.value,
+                )
+                return _result(None, exc)
+
+        try:
+            tool_call = _invoke(reasoning_effort)
+        except Exception as exc:  # KeyboardInterrupt / SystemExit / GeneratorExit は伝播
+            if reasoning_effort is None:
+                logger.exception(
+                    "Phase A llm invoke failed for player_id=%s", player_id.value
+                )
+                return _result(None, exc)
+            logger.warning(
+                "Phase A reasoning invoke failed for player_id=%s; "
+                "latch を消費し reasoning なしで降格再試行する",
+                player_id.value, exc_info=True,
+            )
+            return _fallback_without_reasoning()
+
+        if reasoning_effort is not None and tool_call is None:
+            # 熟考ターンだが tool_call なし (NO_TOOL_CALL)。commit せず降格再試行。
+            logger.warning(
+                "Phase A reasoning turn returned no tool_call for player_id=%s; "
+                "latch を消費し reasoning なしで降格再試行する",
                 player_id.value,
             )
-            return _LlmPhaseAResult(
-                player_id=player_id,
-                prompt=prompt,
-                tools_payload=tools_payload,
-                tool_call=None,
-                exception=exc,
-            )
+            return _fallback_without_reasoning()
+
+        # 案A HIGH 2: 熟考付き行動が「成立した後にだけ」ラッチを消費し
+        # AGENT_REASONING_ENGAGED trace を残す (成立 = 例外なし かつ tool_call あり)。
+        if reasoning_effort is not None:
+            self.runtime.commit_turn_reasoning_engaged(player_id, reasoning_effort)
+        return _result(tool_call, None)
 
     def run_phase_b(self, phase_a: _LlmPhaseAResult) -> LlmCommandResultDto:
         """Phase B: Phase A の結果を受けて世界 mutation を適用する。

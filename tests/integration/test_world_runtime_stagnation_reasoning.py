@@ -220,6 +220,33 @@ class TestStagnationReasoningEffortDecision:
         runtime._emit_reflect_observation(PlayerId(1), "もう果たした", "achieved")
         assert runtime.resolve_turn_reasoning_effort(PlayerId(1)) is None
 
+    def test_abandonはラッチを消費し_engaged_traceを出さない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """餓死ループ修正: 熟考ターンの invoke が失敗したとき呼ぶ abandon は、
+        latch を消費して「同条件での再試行」を止める。reasoning は実行成立して
+        いないので AGENT_REASONING_ENGAGED trace は出さない。"""
+        _enable_prereqs(monkeypatch)
+        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        recorder = _CapturingRecorder()
+        runtime.set_trace_recorder(recorder)
+        being_id = _being_id(runtime, 1)
+        for _ in range(3):
+            runtime._stagnation_pressure_store.increment_by_being(being_id)
+        runtime._emit_reflect_observation(PlayerId(1), "停滞", "stalled")
+        assert runtime._stagnation_reasoning_latch.is_armed(PlayerId(1)) is True
+
+        runtime.abandon_turn_reasoning(PlayerId(1))
+
+        assert runtime._stagnation_reasoning_latch.is_armed(PlayerId(1)) is False
+        engaged = [
+            p for (k, p) in recorder.events if k == TraceEventKind.AGENT_REASONING_ENGAGED
+        ]
+        assert engaged == []
+        # 消費後は resolve が None (次行動で同条件リトライしない = 餓死しない)
+        assert runtime.resolve_turn_reasoning_effort(PlayerId(1)) is None
+
     def test_commitはラッチ未武装なら_traceを出さない(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

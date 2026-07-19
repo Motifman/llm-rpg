@@ -1472,6 +1472,20 @@ class WorldRuntime:
         band = self._resolve_stagnation_band_value(player_id)
         self._emit_agent_reasoning_engaged_trace(player_id, band, effort)
 
+    def abandon_turn_reasoning(self, player_id: PlayerId) -> None:
+        """案A 餓死ループ修正: 熟考ターンの invoke が失敗 (例外 / tool_call なし)
+        したときに呼ぶ。熟考の一発権 (latch) を消費して「同条件での再試行」を止める。
+
+        これをしないと、詰まった (band=strong) agent の熟考リクエストが失敗し続ける
+        たびに latch が armed のまま残り、毎行動 same-condition で失敗を繰り返して
+        餓死する (実 run v3coop_stagnation_002 で P3 が tick42 以降 38 連続失敗)。
+        reasoning は実行成立していないので AGENT_REASONING_ENGAGED trace は出さない。
+        """
+        latch = getattr(self, "_stagnation_reasoning_latch", None)
+        if latch is None:
+            return
+        latch.consume(player_id)
+
     def _emit_agent_reasoning_engaged_trace(
         self, player_id: PlayerId, band: str, effort: str
     ) -> None:
