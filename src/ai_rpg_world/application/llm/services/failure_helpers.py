@@ -38,18 +38,18 @@ logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────
-# ToolRuntimeContextDto.targets から有効ラベル一覧を組み立てるヘルパー
+# ToolRuntimeContextDto.targets から LLM 向けの有効候補一覧を組み立てるヘルパー
 # ──────────────────────────────────────────────────────────────────
 
 
 def list_targets_of_kind(
     targets: Dict[str, ToolRuntimeTargetDto], kind: str
 ) -> str:
-    """``targets`` から指定 kind の項目を ``"L1 (display) / L2 (...)"`` で返す。
+    """``targets`` から指定 kind の項目を ``"display" / "display2"`` で返す。
 
-    空なら空文字列。LLM 向けに **ラベルを先頭**、display name を括弧内に置く
-    順序にする (LLM が ``object_label`` に何を入れるべきかを最初に目に入れる
-    ため)。
+    空なら空文字列。spot_graph の現在プロンプトでは S1 / OBJ1 / I1 のような
+    揮発ラベルを表示せず、名前を ``""`` で囲んで渡す値として示している。
+    そのため失敗時の候補一覧も display_name を先頭にし、旧ラベルは表示しない。
     """
     items = []
     for label, target in targets.items():
@@ -62,7 +62,15 @@ def list_targets_of_kind(
         if label.startswith("__"):
             continue
         display = target.display_name or ""
-        items.append(f"{label} ({display})" if display else label)
+        if not display:
+            logger.warning(
+                "target without display_name is hidden from LLM-facing candidate list: "
+                "label=%s kind=%s",
+                label,
+                kind,
+            )
+            continue
+        items.append(f'"{display}"')
     return " / ".join(items)
 
 
@@ -127,23 +135,23 @@ def build_unknown_label_failure(
     valid_labels_summary: str,
     error_code: str = "INVALID_TARGET_LABEL",
 ) -> LlmCommandResultDto:
-    """ラベル解決失敗 (UNKNOWN_LABEL カテゴリ) の learnable 失敗 DTO。
+    """名前解決失敗 (UNKNOWN_LABEL カテゴリ) の learnable 失敗 DTO。
 
     PR #167 で world_runtime 経路に入れたパターンを共通化したもの。message に
-    有効ラベル一覧を併記し、LLM が次の試行で正しい label を選べるようにする。
+    有効候補一覧を併記し、LLM が次の試行で正しい表示名を選べるようにする。
 
     Args:
         label_kind: ``"object_label"`` / ``"destination_label"`` /
             ``"target_label"`` 等、LLM が使う argument 名
         given_label: LLM が渡してきた (解決できなかった) 値
         valid_labels_summary: ``list_*_labels`` 系ヘルパーの出力。空のとき
-            は「該当ラベル無し」と読み替える
+            は「該当候補無し」と読み替える
         error_code: 任意上書き。既定 ``"INVALID_TARGET_LABEL"``
     """
     valid_part = (
         f"有効な {label_kind}: {valid_labels_summary}"
         if valid_labels_summary
-        else f"この場所には有効な {label_kind} がありません"
+        else f"この場所には有効な {label_kind} 候補がありません"
     )
     return LlmCommandResultDto(
         success=False,

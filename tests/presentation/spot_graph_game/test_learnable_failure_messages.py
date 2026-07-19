@@ -75,38 +75,43 @@ class TestListTargetsHelpers:
     """`_list_targets_of_kind` / 各 wrapper の出力形式。"""
 
     def test_lists_label_with_display_name(self) -> None:
-        """ラベルを先頭、display name を括弧内に置く形式で出力する。"""
+        """候補一覧はプロンプトに表示される名前だけを quote 付きで出力する。"""
         targets = {
             "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
             "OBJ2": _make_target("OBJ2", "spot_graph_object", "コンソール"),
             "S1": _make_target("S1", "spot_graph_destination", "中央廊下"),
         }
         result = _list_object_labels(targets)
-        assert result == "OBJ1 (操作盤) / OBJ2 (コンソール)"
+        assert result == '"操作盤" / "コンソール"'
 
     def test_destination_helper_filters_by_kind(self) -> None:
-        """destination 用 helper は object kind を含めない。"""
+        """destination 用 helper は object kind を含めず、スポット名だけを出す。"""
         targets = {
             "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
             "S1": _make_target("S1", "spot_graph_destination", "中央廊下"),
         }
         result = _list_destination_labels(targets)
-        assert result == "S1 (中央廊下)"
+        assert result == '"中央廊下"'
 
     def test_player_helper_filters_by_kind(self) -> None:
-        """player 用 helper は player kind だけ列挙。"""
+        """player 用 helper は player kind だけ、名前で列挙する。"""
         targets = {
             "P1": _make_target("P1", "spot_graph_player", "リン"),
             "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
         }
         result = _list_player_labels(targets)
-        assert result == "P1 (リン)"
+        assert result == '"リン"'
 
     def test_empty_targets_returns_empty_string(self) -> None:
         """対応 kind が無いと空文字列を返す。"""
         targets = {"S1": _make_target("S1", "spot_graph_destination", "廊下")}
         assert _list_object_labels(targets) == ""
         assert _list_player_labels(targets) == ""
+
+    def test_target_without_display_name_is_hidden(self) -> None:
+        """表示名の無い内部候補は、旧ラベルを LLM に出さないため一覧から隠す。"""
+        targets = {"OBJ1": _make_target("OBJ1", "spot_graph_object", "")}
+        assert _list_object_labels(targets) == ""
 
     def test_unknown_kind_is_ignored(self) -> None:
         """未知 kind は出力に含めない (新 kind 追加時の安全側挙動)。"""
@@ -122,7 +127,7 @@ class TestInvalidTargetLabelMessage:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """LLM が存在しない object 名を渡したとき、有効候補ラベルがメッセージに含まれる。
+        """LLM が存在しない object 名を渡したとき、有効候補名がメッセージに含まれる。
 
         PR #441 で display_name fallback が入ったため、relay シナリオで実在する
         ``"操作盤"`` は label と一致して解決されるようになった。本テストは
@@ -143,11 +148,38 @@ class TestInvalidTargetLabelMessage:
         assert result.error_code == "INVALID_TARGET_LABEL"
         # 失敗 label が message に含まれる (元の form)
         assert "存在しない架空のオブジェクト_X" in result.message
-        # F1: 有効ラベル列挙が含まれる
-        assert "OBJ1" in result.message
-        # F1: remediation が "label を指定" を明示
+        # F1: 有効候補名が含まれる
+        assert '"操作盤"' in result.message
+        assert "OBJ1" not in result.message
+        # F1: remediation が object_label に表示名を指定すると明示
         assert result.remediation is not None
         assert "object_label" in result.remediation
+        assert "オブジェクト名" in result.remediation
+        assert "OBJ1" not in result.remediation
+
+    def test_missing_action_name_reports_action_name_not_object_name(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """object_label が正しく action_name だけ欠けると、操作名不足として返す。"""
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": "interact",
+                "arguments": {"object_label": "操作盤", "action_name": ""},
+            }
+        )
+        state = _create_relay_session(monkeypatch, tmp_path, stub)
+        target_pid = state.runtime.get_player_ids()[0]
+        result = state.llm_wiring.run_turn(target_pid)
+
+        assert result.success is False
+        assert result.error_code == "INVALID_ARGUMENT"
+        assert "action_name" in result.message
+        assert "オブジェクト名が見つかりません" not in result.message
+        assert result.remediation is not None
+        assert "action_name" in result.remediation
+        assert "オブジェクト名" not in result.remediation
 
 
 class TestInvalidDestinationLabelMessage:
@@ -197,14 +229,14 @@ class TestInvalidDestinationLabelMessage:
 
         assert result.success is False
         assert result.error_code == "INVALID_DESTINATION_LABEL"
-        # 有効ラベル列挙
-        assert "S1" in result.message
-        # 期待する display name も併記される
-        assert "中央廊下" in result.message
+        # 有効候補名が quote 付きで列挙され、旧 S1 は出ない
+        assert '"中央廊下"' in result.message
+        assert "S1" not in result.message
         assert result.remediation is not None
         assert "destination_label" in result.remediation
-        # 新 remediation はラベル or スポット名どちらでも OK と案内する
+        # 新 remediation はスポット名を指定すると案内する
         assert "スポット名" in result.remediation
+        assert "S1" not in result.remediation
 
 
 class TestInvalidWhisperMessage:
@@ -238,7 +270,7 @@ class TestInvalidWhisperMessage:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """target_label が解決できないとき、有効な player ラベル候補を提示する。"""
+        """target_label が解決できないとき、有効な player 名候補を提示する。"""
         stub = StubLlmClient(
             tool_call_to_return={
                 "name": "speak",
@@ -259,6 +291,7 @@ class TestInvalidWhisperMessage:
         # remediation も含む
         assert result.remediation is not None
         assert "target_label" in result.remediation
+        assert "P1" not in result.remediation
 
 
 class TestExploreEmptyMessageAugmented:
@@ -269,7 +302,7 @@ class TestExploreEmptyMessageAugmented:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """relay_puzzle_demo の制御室 (操作盤あり) で explore → "OBJ1 (操作盤)" を併記。"""
+        """relay_puzzle_demo の制御室 (操作盤あり) で explore → "操作盤" を併記。"""
         stub = StubLlmClient(
             tool_call_to_return={
                 "name": "explore",
@@ -283,7 +316,7 @@ class TestExploreEmptyMessageAugmented:
 
         assert result.success is True
         # F2: 単純な「新しい発見はなかった」だけではなく、可視オブジェクトを列挙
-        assert "OBJ1" in result.message
-        assert "操作盤" in result.message
+        assert '"操作盤"' in result.message
+        assert "OBJ1" not in result.message
         # 「object_label に指定」のヒントも含まれる
         assert "object_label" in result.message

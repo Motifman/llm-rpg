@@ -124,7 +124,7 @@ def resolve_destination_target(
     """
     if not isinstance(label, str) or not label:
         raise ToolArgumentResolutionException(
-            "接続先ラベルが指定されていません。",
+            "接続先名が指定されていません。",
             "INVALID_DESTINATION_LABEL",
         )
     target: Optional[ToolRuntimeTargetDto] = None
@@ -148,16 +148,16 @@ def resolve_destination_target(
     if target is None:
         if kind_mismatch:
             raise ToolArgumentResolutionException(
-                f"接続先ラベルとして使えないラベルです: {label}",
+                f"接続先名として使えない値です: {label}",
                 "INVALID_DESTINATION_KIND",
             )
         raise ToolArgumentResolutionException(
-            f"指定された対象ラベルは現在の候補にありません: {label}",
+            f"指定された接続先名は現在の候補にありません: {label}",
             "INVALID_DESTINATION_LABEL",
         )
     if target.spot_id is None:
         raise ToolArgumentResolutionException(
-            f"移動先として解決できないラベルです: {label}",
+            f"移動先として解決できない名前です: {label}",
             "INVALID_DESTINATION_KIND",
         )
     return target  # type: ignore[return-value]
@@ -196,7 +196,7 @@ def _resolve_target_with_display_name_fallback(
             (例: ``"spot_graph_object"`` / ``"inventory_item"`` / ``"ground_item"``
             / ``"spot_graph_monster"``)
         expected_types: 見つかった target の許容型 tuple。空 tuple なら型 check 無し
-        label_name: エラーメッセージに含める日本語名 (例: ``"オブジェクトラベル"``)
+        label_name: エラーメッセージに含める日本語名 (例: ``"オブジェクト名"``)
 
     Raises:
         ToolArgumentResolutionException: 解決できないとき
@@ -229,11 +229,11 @@ def _resolve_target_with_display_name_fallback(
     if target is None:
         if kind_mismatch:
             raise ToolArgumentResolutionException(
-                f"{label_name}として使えないラベルです: {label}",
+                f"{label_name}として使えない値です: {label}",
                 invalid_kind_code,
             )
         raise ToolArgumentResolutionException(
-            f"指定された対象ラベルは現在の候補にありません: {label}",
+            f"指定された{label_name}は現在の候補にありません: {label}",
             invalid_label_code,
         )
     return target
@@ -256,11 +256,11 @@ def resolve_object_target(
         label,
         runtime_context,
         kind="spot_graph_object",
-        label_name="オブジェクトラベル",
+        label_name="オブジェクト名",
     )
     if target.world_object_id is None:
         raise ToolArgumentResolutionException(
-            f"オブジェクトとして解決できないラベルです: {label}",
+            f"オブジェクトとして解決できない名前です: {label}",
             "INVALID_TARGET_KIND",
         )
     return target
@@ -297,12 +297,12 @@ def resolve_sub_location_target(
             break
     if target is None:
         raise ToolArgumentResolutionException(
-            f"指定された対象ラベルは現在の候補にありません: {label}",
+            f"指定されたサブロケーション名は現在の候補にありません: {label}",
             "INVALID_TARGET_LABEL",
         )
     if target.sub_location_id is None:
         raise ToolArgumentResolutionException(
-            f"サブロケーションとして解決できないラベルです: {label}",
+            f"サブロケーションとして解決できない名前です: {label}",
             "INVALID_TARGET_KIND",
         )
     return target
@@ -508,18 +508,18 @@ class SpotGraphArgumentResolver:
             runtime_context,
             kind="inventory_item",
             expected_types=(InventoryToolRuntimeTargetDto,),
-            label_name="使用するアイテムのラベル",
+            label_name="使用するアイテム名",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )
         if target.kind != "inventory_item":
             raise ToolArgumentResolutionException(
-                f"このラベルは所持アイテムではありません: {label}",
+                f"この名前は所持アイテムではありません: {label}",
                 "INVALID_TARGET_KIND",
             )
         if target.item_instance_id is None:
             raise ToolArgumentResolutionException(
-                f"このラベルから item_spec_id を解決できません: {label}",
+                f"この名前から item_spec_id を解決できません: {label}",
                 "INVALID_TARGET_KIND",
             )
         return _with_inner_thought(
@@ -549,31 +549,31 @@ class SpotGraphArgumentResolver:
             runtime_context,
             kind="inventory_item",
             expected_types=(InventoryToolRuntimeTargetDto,),
-            label_name="渡すアイテムのラベル",
+            label_name="渡すアイテム名",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )
         if item_target.kind != "inventory_item":
             raise ToolArgumentResolutionException(
-                f"このラベルは所持アイテムではありません: {item_label}",
+                f"この名前は所持アイテムではありません: {item_label}",
                 "INVALID_TARGET_KIND",
             )
         if item_target.inventory_slot_id is None:
             raise ToolArgumentResolutionException(
-                f"このラベルから slot を解決できません: {item_label}",
+                f"この名前から slot を解決できません: {item_label}",
                 "INVALID_TARGET_KIND",
             )
 
         target_player_label = args.get("target_player_label")
         if not isinstance(target_player_label, str) or not target_player_label.strip():
             raise ToolArgumentResolutionException(
-                "渡す相手のラベルが指定されていません。",
+                "渡す相手の名前が指定されていません。",
                 "INVALID_TARGET_LABEL",
             )
         player_target = resolve_player_target(target_player_label, runtime_context)
         if player_target is None or player_target.player_id is None:
             raise ToolArgumentResolutionException(
-                f"指定された相手ラベルが現在の候補にありません: {target_player_label}",
+                f"指定された相手の名前が現在の候補にありません: {target_player_label}",
                 "INVALID_TARGET_LABEL",
             )
 
@@ -678,19 +678,19 @@ class SpotGraphArgumentResolver:
             runtime_context,
             kind="inventory_item",
             expected_types=(InventoryToolRuntimeTargetDto,),
-            label_name="落とすアイテムのラベル",
+            label_name="落とすアイテム名",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )
         # 地面アイテム (kind="ground_item") は drop の対象にならない
         if target.kind != "inventory_item":
             raise ToolArgumentResolutionException(
-                f"このラベルは所持アイテムではありません: {label}",
+                f"この名前は所持アイテムではありません: {label}",
                 "INVALID_TARGET_KIND",
             )
         if target.inventory_slot_id is None or target.real_item_instance_id is None:
             raise ToolArgumentResolutionException(
-                f"このラベルから slot/instance を解決できません: {label}",
+                f"この名前から slot/instance を解決できません: {label}",
                 "INVALID_TARGET_KIND",
             )
         return _with_inner_thought(
@@ -719,18 +719,18 @@ class SpotGraphArgumentResolver:
             runtime_context,
             kind="ground_item",
             expected_types=(InventoryToolRuntimeTargetDto,),
-            label_name="拾うアイテムのラベル",
+            label_name="拾うアイテム名",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )
         if target.kind != "ground_item":
             raise ToolArgumentResolutionException(
-                f"このラベルは地面アイテムではありません: {label}",
+                f"この名前は地面アイテムではありません: {label}",
                 "INVALID_TARGET_KIND",
             )
         if target.real_item_instance_id is None:
             raise ToolArgumentResolutionException(
-                f"このラベルから instance を解決できません: {label}",
+                f"この名前から instance を解決できません: {label}",
                 "INVALID_TARGET_KIND",
             )
         return _with_inner_thought(
@@ -758,7 +758,7 @@ class SpotGraphArgumentResolver:
         label = args.get("target_player_label")
         if not isinstance(label, str) or not label.strip():
             raise ToolArgumentResolutionException(
-                "蘇生する相手のラベルが指定されていません。",
+                "蘇生する相手の名前が指定されていません。",
                 "INVALID_TARGET_LABEL",
             )
         try:
@@ -767,7 +767,7 @@ class SpotGraphArgumentResolver:
                 runtime_context,
                 kind="spot_graph_player",
                 expected_types=(PlayerToolRuntimeTargetDto,),
-                label_name="蘇生対象のラベル",
+                label_name="蘇生対象の名前",
                 invalid_label_code="INVALID_TARGET_LABEL",
                 invalid_kind_code="INVALID_TARGET_KIND",
             )
@@ -791,7 +791,7 @@ class SpotGraphArgumentResolver:
             raise
         if target.player_id is None:
             raise ToolArgumentResolutionException(
-                f"このラベルから player_id を解決できません: {label}",
+                f"この名前から player_id を解決できません: {label}",
                 "INVALID_TARGET_KIND",
             )
         return _with_inner_thought(
@@ -819,13 +819,13 @@ class SpotGraphArgumentResolver:
             runtime_context,
             kind="spot_graph_monster",
             expected_types=(MonsterToolRuntimeTargetDto,),
-            label_name="攻撃対象ラベル",
+            label_name="攻撃対象名",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )
         if target.monster_id is None:
             raise ToolArgumentResolutionException(
-                f"このラベルは攻撃対象ではありません: {label}",
+                f"この名前は攻撃対象ではありません: {label}",
                 "INVALID_TARGET_KIND",
             )
         return _with_inner_thought(

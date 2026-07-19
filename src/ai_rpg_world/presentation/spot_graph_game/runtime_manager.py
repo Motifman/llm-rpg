@@ -65,11 +65,17 @@ from ai_rpg_world.application.llm.services.world_llm_prompt import (
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
+    TOOL_NAME_SPOT_GRAPH_ATTACK,
+    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
+    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
+    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
     TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
     TOOL_NAME_MEMORY_RECALL_EPISODES,
@@ -1323,17 +1329,30 @@ class _WorldLlmWiring:
         label = str(arguments.get("object_label", ""))
         valid_objects = _list_object_labels(targets)
         error_code = getattr(exc, "error_code", "INVALID_TARGET_LABEL")
+        if error_code == "INVALID_ARGUMENT":
+            return LlmCommandResultDto(
+                success=False,
+                message=str(exc),
+                error_code=error_code,
+                remediation=(
+                    "action_name には、object_label で指定したオブジェクト行の "
+                    "[] 内に表示されている操作名を 1 つ指定してください。"
+                    "日本語の説明文ではなく、表示された action_name をそのまま使ってください。"
+                ),
+                should_reschedule=is_reschedulable_error_code(error_code),
+            )
         return LlmCommandResultDto(
             success=False,
             message=(
-                f"オブジェクトラベルが見つかりません: {label}。"
+                f"オブジェクト名が見つかりません: {label}。"
                 f"有効な object_label: "
                 f"{valid_objects or '(この場所に interactable なオブジェクトなし)'}"
             ),
             error_code=error_code,
             remediation=(
-                "object_label には現在の状況に表示された OBJ1, OBJ2 等の "
-                "ラベル (display name ではなく) を指定してください。"
+                "object_label には「現在の状況」のオブジェクト欄で "
+                "\"\" に囲まれているオブジェクト名を指定してください。"
+                "action_name は同じ行の [] 内に表示された操作名から選んでください。"
             ),
             should_reschedule=is_reschedulable_error_code(error_code),
         )
@@ -1368,10 +1387,60 @@ class _WorldLlmWiring:
             ),
             error_code=error_code,
             remediation=(
-                "destination_label には現在の状況に表示された S1, S2 等の "
-                "ラベル、またはスポット名 (例: 閲覧室) を指定してください。"
+                "destination_label には「現在の状況」の接続先で "
+                "\"\" に囲まれている行き先スポット名を指定してください。"
+                "矢印の左側の道や扉の名前は指定しないでください。"
             ),
             should_reschedule=is_reschedulable_error_code(error_code),
+        )
+
+    @staticmethod
+    def _resolver_failure_remediation(tool_name: str, error_code: str) -> str:
+        """resolver 失敗時に、現在プロンプトと同じ名前指定規約で復帰ヒントを返す。"""
+        if error_code == "INVALID_ARGUMENT":
+            if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM:
+                return (
+                    "gives には {item_label: アイテム名, target_player_label: 相手の名前} "
+                    "の object を 1 件以上入れてください。item_label は所持アイテム欄の "
+                    "\"\" 内、target_player_label は同じ場所にいるプレイヤー名を使います。"
+                )
+            return "ツール説明にある必須引数と型を確認し、足りない引数を指定してください。"
+        if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
+            return (
+                "item_label には「現在の状況」の所持アイテム欄で \"\" に囲まれている"
+                "アイテム名を指定してください。食べ物以外を使うと別の失敗になります。"
+            )
+        if tool_name == TOOL_NAME_SPOT_GRAPH_DROP_ITEM:
+            return (
+                "item_label には「現在の状況」の所持アイテム欄で \"\" に囲まれている"
+                "アイテム名を指定してください。地面に落ちているものの名前は drop_item には使えません。"
+            )
+        if tool_name == TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM:
+            return (
+                "ground_item_label には「現在の状況」の地面に落ちているもの欄で "
+                "\"\" に囲まれているアイテム名を指定してください。所持アイテム名は pickup_item には使えません。"
+            )
+        if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM:
+            return (
+                "gives の item_label には所持アイテム欄の \"\" 内のアイテム名を、"
+                "target_player_label には同じ場所にいる相手の名前を指定してください。"
+            )
+        if tool_name == TOOL_NAME_SPOT_GRAPH_ATTACK:
+            return (
+                "target_label には「現在の状況」に表示されているモンスター名を指定してください。"
+                "アイテム名・プレイヤー名・オブジェクト名は attack の対象には使えません。"
+            )
+        if tool_name == TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER:
+            return (
+                "target_player_label には同じ場所で倒れているプレイヤーの名前を指定してください。"
+                "相手が別の場所にいるなら travel_to で移動し、倒れていない相手には speech_speak などを使ってください。"
+            )
+        if tool_name == TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION:
+            return (
+                "sub_location_label には「現在の状況」に表示されているサブロケーション名を指定してください。"
+            )
+        return (
+            "ツール説明と「現在の状況」を確認し、そのツールが要求する種類の名前を指定してください。"
         )
 
     @staticmethod
@@ -1444,9 +1513,9 @@ class _WorldLlmWiring:
                     success=False,
                     message=str(e),
                     error_code=getattr(e, "error_code", "INVALID_TARGET_LABEL"),
-                    remediation=(
-                        "所持アイテム表示にある I1/I2 等のラベルを指定してください。"
-                        "ラベルが見つからない場合、そのアイテムは現在所持していない可能性があります。"
+                    remediation=_WorldLlmWiring._resolver_failure_remediation(
+                        tool_name,
+                        getattr(e, "error_code", "INVALID_TARGET_LABEL"),
                     ),
                 )
             if resolved is None:
@@ -2196,8 +2265,7 @@ class _WorldLlmWiring:
                     error_code="INVALID_WHISPER",
                     remediation=(
                         "channel=whisper のときは target_label に同じスポット内の "
-                        "プレイヤーラベル (P1, P2 等) または相手の名前 (例: リン) "
-                        "を指定してください。"
+                        "相手の名前を指定してください。"
                     ),
                 )
             target_player_id_obj = PlayerId(target.player_id)

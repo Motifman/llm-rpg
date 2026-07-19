@@ -39,37 +39,39 @@ class TestListTargetsOfKind:
     """``list_targets_of_kind`` の出力形式と kind フィルタ。"""
 
     def test_lists_label_with_display_name(self) -> None:
-        """ラベル先頭、display name は括弧内の順序。"""
+        """候補一覧はプロンプトに表示される名前だけを quote 付きで出力する。"""
         targets = {
             "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
             "OBJ2": _make_target("OBJ2", "spot_graph_object", "コンソール"),
             "S1": _make_target("S1", "spot_graph_destination", "中央廊下"),
         }
-        assert list_object_labels(targets) == "OBJ1 (操作盤) / OBJ2 (コンソール)"
+        assert list_object_labels(targets) == '"操作盤" / "コンソール"'
 
     def test_destination_helper_filters_by_kind(self) -> None:
+        """移動先候補も旧 S1 ではなくスポット名を出す。"""
         targets = {
             "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
             "S1": _make_target("S1", "spot_graph_destination", "中央廊下"),
         }
-        assert list_destination_labels(targets) == "S1 (中央廊下)"
+        assert list_destination_labels(targets) == '"中央廊下"'
 
     def test_player_helper_filters_by_kind(self) -> None:
+        """プレイヤー候補も旧 P1 ではなく名前を出す。"""
         targets = {
             "P1": _make_target("P1", "spot_graph_player", "B"),
             "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
         }
-        assert list_player_labels(targets) == "P1 (B)"
+        assert list_player_labels(targets) == '"B"'
 
     def test_empty_targets_returns_empty_string(self) -> None:
         targets = {"S1": _make_target("S1", "spot_graph_destination", "廊下")}
         assert list_object_labels(targets) == ""
         assert list_player_labels(targets) == ""
 
-    def test_label_only_when_display_empty(self) -> None:
-        """display_name が空ならラベルだけを並べる (括弧なし)。"""
+    def test_target_without_display_name_is_hidden(self) -> None:
+        """display_name が空の内部候補は、旧ラベル露出を避けるため一覧から隠す。"""
         targets = {"OBJ1": _make_target("OBJ1", "spot_graph_object", "")}
-        assert list_object_labels(targets) == "OBJ1"
+        assert list_object_labels(targets) == ""
 
     def test_unknown_kind_returns_empty(self) -> None:
         targets = {"X1": _make_target("X1", "future_kind", "未来")}
@@ -115,18 +117,18 @@ class TestBuildUnknownLabelFailure:
         dto = build_unknown_label_failure(
             label_kind="object_label",
             given_label="操作盤",
-            valid_labels_summary="OBJ1 (操作盤) / OBJ2 (コンソール)",
+            valid_labels_summary='"操作盤" / "コンソール"',
         )
         assert dto.success is False
         assert dto.error_code == "INVALID_TARGET_LABEL"
         # 与えられた間違い label
         assert "'操作盤'" in dto.message or "操作盤" in dto.message
-        # 有効ラベル一覧
-        assert "OBJ1" in dto.message
-        assert "OBJ2" in dto.message
+        # 有効候補一覧
+        assert '"操作盤"' in dto.message
+        assert '"コンソール"' in dto.message
 
     def test_empty_valid_labels_says_none_available(self) -> None:
-        """有効ラベルが空のときは「該当ラベルなし」を明示。"""
+        """有効候補が空のときは候補なしを明示。"""
         dto = build_unknown_label_failure(
             label_kind="object_label",
             given_label="操作盤",
@@ -139,10 +141,10 @@ class TestBuildUnknownLabelFailure:
         dto = build_unknown_label_failure(
             label_kind="destination_label",
             given_label="中央廊下",
-            valid_labels_summary="S1 (中央廊下)",
+            valid_labels_summary='"中央廊下"',
         )
         assert "destination_label" in dto.message
-        assert "S1" in dto.message
+        assert '"中央廊下"' in dto.message
 
 
 class TestBuildSanitizedExceptionFailure:
