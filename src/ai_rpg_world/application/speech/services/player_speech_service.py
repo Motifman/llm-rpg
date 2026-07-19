@@ -109,6 +109,9 @@ class PlayerSpeechApplicationService:
         # 寄せる。collector は原本から収集し event_id で dedup する (再放出の構造的防止)。
         # speech の現行方針は保存する: publisher 必須 (None ガードを足さない) / 例外は
         # 握らず伝播 / publish 後に集約を clear。
+        # 厳密には「正常な DomainEvent 前提で挙動保存」: 壊れた pending (event_id 欠落や
+        # 同 id 重複) には collector の fail-fast / dedup が効く。speak は PlayerSpokeEvent を
+        # 1 件出すだけなので通常経路では差は出ない。
         collector = DomainEventCollector()
         collector.add_all(status.get_events())
         events = collector.drain()

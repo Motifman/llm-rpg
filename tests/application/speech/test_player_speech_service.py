@@ -205,6 +205,14 @@ class TestPlayerSpeechApplicationService:
         with pytest.raises(SpeechSystemErrorException):
             svc.speak(SpeakCommand(speaker_player_id=1, content="やあ", channel=SpeechChannel.SAY))
 
+        # publish 失敗時は clear が走らないので、未 publish の PlayerSpokeEvent が集約に
+        # 残る (再放出/再試行 semantics の要)。clear を publish 前や finally に移すと
+        # ここで消えるため、その退行を固定する。
+        assert status.get_events() != []
+        assert any(
+            isinstance(e, PlayerSpokeEvent) for e in status.get_events()
+        )
+
     def test_speak_when_downed_raises(self):
         """ダウン状態のプレイヤーが発言すると SpeechCommandException"""
         status = _make_status(1, spot_id=1)
