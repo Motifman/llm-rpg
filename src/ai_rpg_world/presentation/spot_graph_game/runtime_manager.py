@@ -1571,6 +1571,15 @@ class _WorldLlmWiring:
                 metrics_sink=metrics_sink,
                 reasoning_effort=reasoning_effort,
             )
+            # 案A HIGH 2: 熟考付き行動が「成立した後にだけ」ラッチを消費し
+            # AGENT_REASONING_ENGAGED trace を残す。「成立」= 例外を投げず、かつ
+            # tool_call が実際に返ったこと。LiteLLMClient.invoke は NO_TOOL_CALL を
+            # 例外ではなく tool_call=None で返すため、tool_call is not None の条件を
+            # 欠くと「行動が成立していないのに engaged」の偽陽性になる (Phase B で
+            # was_no_op になる)。commit しなければラッチは armed のまま残り、次行動で
+            # 再挑戦できる。
+            if reasoning_effort is not None and tool_call is not None:
+                self.runtime.commit_turn_reasoning_engaged(player_id, reasoning_effort)
             return _LlmPhaseAResult(
                 player_id=player_id,
                 prompt=prompt,

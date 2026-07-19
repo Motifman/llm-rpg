@@ -1422,17 +1422,20 @@ class WorldRuntime:
     def resolve_turn_reasoning_effort(self, player_id: PlayerId) -> Optional[str]:
         """案A: この行動で reasoning (熟考) を焚くべきか判断し effort or None を返す。
 
-        停滞ラッチを consume し (= 「停滞注入直後の 1 行動」判定)、band==strong の
-        ときだけ effort を返す。flag OFF (ラッチ未構築) のときは何もせず None。
-        熟考を焚くと決めた瞬間に ``AGENT_REASONING_ENGAGED`` trace を 1 件残す
-        (tool-calling 経路では思考本文は返らないので、同 tick の LLM metrics の
-        reasoning_tokens と突き合わせて「どれだけ熟考したか」を見る)。
+        敵対的レビュー HIGH 2 対応: ここは**決定のみ**で、ラッチの消費も trace も
+        しない (副作用は invoke 成功後の ``commit_turn_reasoning_engaged`` に寄せる)。
+        停滞ラッチを peek し (= 「停滞注入直後の 1 行動」判定)、band==strong のとき
+        だけ effort を返す。band が strong 未満なら焚かないので、古いラッチをここで
+        畳んで残さない (「注入直後の 1 行動」の意味を保つ)。flag OFF (ラッチ未構築)
+        のときは何もせず None。
+
+        invoke が失敗して commit されなかった場合、strong のラッチは armed のまま
+        残るため次行動で再挑戦でき、熟考機会を焼失させない。
         """
         latch = getattr(self, "_stagnation_reasoning_latch", None)
         if latch is None:
             return None
-        fresh_reflect = latch.consume(player_id)
-        if not fresh_reflect:
+        if not latch.is_armed(player_id):
             return None
         from ai_rpg_world.domain.memory.goal.service.stagnation_reasoning_policy import (
             resolve_stagnation_reasoning_effort,
@@ -1440,9 +1443,34 @@ class WorldRuntime:
 
         band = self._resolve_stagnation_band_value(player_id)
         effort = resolve_stagnation_reasoning_effort(band, fresh_reflect=True)
-        if effort is not None:
-            self._emit_agent_reasoning_engaged_trace(player_id, band, effort)
+        if effort is None:
+            # band < strong: 焚かないので古いフラグをここで畳む (次行動に持ち越さない)。
+            latch.consume(player_id)
         return effort
+
+    def commit_turn_reasoning_engaged(
+        self, player_id: PlayerId, effort: str
+    ) -> None:
+        """案A: 熟考付き行動 (invoke) が成立した後に呼ぶ。ラッチを消費し
+        ``AGENT_REASONING_ENGAGED`` trace を 1 件残す。
+
+        敵対的レビュー HIGH 2 対応: ラッチ消費と trace を invoke 成功後まで遅らせる
+        ことで、(1) invoke 失敗時に熟考の一発権を焼失させず、(2) trace の意味を
+        「実際に行動選択へ投入された熟考」に一致させる (tool-calling 経路では思考
+        本文は返らないので、同 tick の LLM metrics の reasoning_tokens と突き合わせて
+        「どれだけ熟考したか」を見る)。
+        """
+        latch = getattr(self, "_stagnation_reasoning_latch", None)
+        if latch is None:
+            return
+        # 防御: ラッチが立っていなければ (= 既に消費済み / 経路不整合) trace を
+        # 出さない。二重 commit や想定外の呼び出しで「熟考していないのに engaged」
+        # の偽陽性を出さないためのガード。通常経路では resolve が effort を返した
+        # 直後に呼ばれるので armed のはず。
+        if not latch.consume(player_id):
+            return
+        band = self._resolve_stagnation_band_value(player_id)
+        self._emit_agent_reasoning_engaged_trace(player_id, band, effort)
 
     def _emit_agent_reasoning_engaged_trace(
         self, player_id: PlayerId, band: str, effort: str
@@ -1471,7 +1499,10 @@ class WorldRuntime:
                 trigger="fresh_reflect",
             )
         except Exception:
-            logger.debug(
+            # 敵対的レビュー LOW: これは実験の効果測定用 trace なので、記録失敗を
+            # debug で握ると穴が見えにくい。turn は壊さないが warning で気づける
+            # ようにする。
+            logger.warning(
                 "AGENT_REASONING_ENGAGED trace record failed for player_id=%s; skipping",
                 player_id.value,
                 exc_info=True,
@@ -3991,6 +4022,38 @@ def create_world_runtime(
         build_episodic_stack,
         is_episodic_subjective_enabled,
     )
+    # 敵対的レビュー HIGH 1: 「episodic を前提にする機能群」の fail-fast を親 gate の
+    # 外に出す。P-U1 (GOAL_STAGNATION_EVIDENCE) / P-U2 (STAGNATION_PRESSURE) / 案A
+    # (STAGNATION_REASONING) はいずれも episodic pipeline (固着パス / 停滞感 store /
+    # 熟考ラッチ) の内側でしか配線されない。従来これらの相互ガードは
+    # `if config.episodic_enabled:` の内側にあったため、LLM_EPISODIC_ENABLED を
+    # 立て忘れたまま各 flag を ON にすると、ブロックごと skip されて fail-fast すら
+    # 走らず「flag は立てたのに機能が一生動かず警告も出ない」静かな失敗になっていた
+    # (本 PR 群が売りにする「起動時 fail-fast」に正面から反する)。episodic 前提の
+    # flag が 1 つでも ON なら、親 gate に入る前にここで LLM_EPISODIC_ENABLED を要求
+    # して落とす。
+    if not config.episodic_enabled:
+        from ai_rpg_world.application.llm.wiring.feature_flags import (
+            resolve_goal_stagnation_evidence_enabled,
+            resolve_stagnation_pressure_enabled,
+            resolve_stagnation_reasoning_enabled,
+        )
+
+        _episodic_dependent_flags = {
+            "GOAL_STAGNATION_EVIDENCE_ENABLED": resolve_goal_stagnation_evidence_enabled(),
+            "STAGNATION_PRESSURE_ENABLED": resolve_stagnation_pressure_enabled(),
+            "STAGNATION_REASONING_ENABLED": resolve_stagnation_reasoning_enabled(),
+        }
+        _on_but_orphaned = [
+            name for name, enabled in _episodic_dependent_flags.items() if enabled
+        ]
+        if _on_but_orphaned:
+            raise ValueError(
+                f"{', '.join(_on_but_orphaned)}=1 だが LLM_EPISODIC_ENABLED が OFF の"
+                "ため episodic pipeline (固着パス / 停滞感 store / 熟考ラッチ) が丸ごと"
+                "構築されず、これらの機能が一生動かない (静かな失敗)。"
+                "LLM_EPISODIC_ENABLED=1 も設定してください。"
+            )
     if config.episodic_enabled:
         # Phase 3 Step 3e-3: ChunkCoordinator / Scheduler / passive_recall は
         # episode_store 経路で being_id 必須化済。world_runtime の aux Being 配線

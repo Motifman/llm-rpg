@@ -77,13 +77,56 @@ class TestStagnationReasoningFailFast:
         with pytest.raises(ValueError, match="GOAL_REFLECT_ENABLED"):
             create_world_runtime(_SCENARIO_PATH)
 
-
-class TestStagnationReasoningEffortDecision:
-    """reflect 注入 → ラッチ武装 → band==strong で effort=low + trace。"""
-
-    def test_stalled注入後_band_strong_で_effort_low_と_trace(
+    def test_episodic_off_で_reasoning_on_は_起動時に落ちる(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """敵対的レビュー HIGH 1: LLM_EPISODIC_ENABLED を立て忘れたまま案A を ON に
+        すると、従来は fail-fast も含む episodic ブロック丸ごとが skip され、熟考が
+        一生焚かれない静かな失敗になっていた。episodic を前提にする案A の flag が
+        ON なら、親 gate より前で LLM_EPISODIC_ENABLED を要求して落とす。"""
+        monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
+        monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
+        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
+        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
+        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
+        with pytest.raises(ValueError, match="LLM_EPISODIC_ENABLED"):
+            create_world_runtime(_SCENARIO_PATH)
+
+    def test_episodic_off_で_pressure_on_は_起動時に落ちる(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """HIGH 1 (同じ親 gate 穴の共有): STAGNATION_PRESSURE も episodic 前提なので、
+        episodic OFF のまま ON にすると起動時に落ちる。"""
+        monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
+        monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
+        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
+        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
+        monkeypatch.delenv("STAGNATION_REASONING_ENABLED", raising=False)
+        with pytest.raises(ValueError, match="LLM_EPISODIC_ENABLED"):
+            create_world_runtime(_SCENARIO_PATH)
+
+    def test_episodic_off_で_goal_stagnation_evidence_on_は_起動時に落ちる(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """HIGH 1 (同じ親 gate 穴の共有): GOAL_STAGNATION_EVIDENCE も episodic 前提。"""
+        monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
+        monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
+        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
+        monkeypatch.setenv("GOAL_STAGNATION_EVIDENCE_ENABLED", "1")
+        with pytest.raises(ValueError, match="LLM_EPISODIC_ENABLED"):
+            create_world_runtime(_SCENARIO_PATH)
+
+
+class TestStagnationReasoningEffortDecision:
+    """reflect 注入 → ラッチ武装 → band==strong で effort=low。決定 (resolve) は
+    ラッチを消費せず trace も出さない。実際の消費と AGENT_REASONING_ENGAGED trace
+    は invoke 成功後の commit で起きる (敵対的レビュー HIGH 2)。"""
+
+    def test_resolveは決定だけしラッチも消費せずtraceも出さない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """band==strong で resolve は effort=low を返すが、ラッチはまだ armed のまま
+        で trace も出ない (invoke 前に副作用を確定させない)。"""
         _enable_prereqs(monkeypatch)
         monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
         runtime = create_world_runtime(_SCENARIO_PATH)
@@ -93,11 +136,36 @@ class TestStagnationReasoningEffortDecision:
         assert being_id is not None
         for _ in range(3):  # band を strong (>=3) にする
             runtime._stagnation_pressure_store.increment_by_being(being_id)
-        # 停滞の気づきが注入された = ラッチ武装
         runtime._emit_reflect_observation(PlayerId(1), "同じ場所を空回りしている", "stalled")
 
         effort = runtime.resolve_turn_reasoning_effort(PlayerId(1))
         assert effort == "low"
+        # まだ trace は出ない
+        engaged = [
+            p for (k, p) in recorder.events if k == TraceEventKind.AGENT_REASONING_ENGAGED
+        ]
+        assert engaged == []
+        # ラッチも消費されていない (invoke 失敗時に次行動で再挑戦できる)
+        assert runtime._stagnation_reasoning_latch.is_armed(PlayerId(1)) is True
+
+    def test_commitでラッチ消費とtrace_engagedが起きる(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """invoke 成功後の commit で初めてラッチが落ち、AGENT_REASONING_ENGAGED が出る。"""
+        _enable_prereqs(monkeypatch)
+        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        recorder = _CapturingRecorder()
+        runtime.set_trace_recorder(recorder)
+        being_id = _being_id(runtime, 1)
+        for _ in range(3):
+            runtime._stagnation_pressure_store.increment_by_being(being_id)
+        runtime._emit_reflect_observation(PlayerId(1), "停滞", "stalled")
+        effort = runtime.resolve_turn_reasoning_effort(PlayerId(1))
+        assert effort == "low"
+
+        runtime.commit_turn_reasoning_engaged(PlayerId(1), effort)
+
         engaged = [
             p for (k, p) in recorder.events if k == TraceEventKind.AGENT_REASONING_ENGAGED
         ]
@@ -106,11 +174,14 @@ class TestStagnationReasoningEffortDecision:
         assert engaged[0]["effort"] == "low"
         assert engaged[0]["player_id"] == 1
         assert engaged[0]["trigger"] == "fresh_reflect"
+        # commit 後はラッチが落ちる
+        assert runtime._stagnation_reasoning_latch.is_armed(PlayerId(1)) is False
 
-    def test_consume_は一発_二度目は_None(
+    def test_commitしなければ次行動で再挑戦できる(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """武装は 1 行動で消費される。次行動 (再武装なし) では焚かない。"""
+        """invoke 失敗 (= commit されない) を模し、ラッチが armed のまま残ることで
+        次行動でも resolve が effort=low を返す (熟考機会を焼失させない)。"""
         _enable_prereqs(monkeypatch)
         monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
         runtime = create_world_runtime(_SCENARIO_PATH)
@@ -118,13 +189,14 @@ class TestStagnationReasoningEffortDecision:
         for _ in range(3):
             runtime._stagnation_pressure_store.increment_by_being(being_id)
         runtime._emit_reflect_observation(PlayerId(1), "停滞", "stalled")
+        # commit を挟まず 2 回 resolve → どちらも low (再挑戦できる)
         assert runtime.resolve_turn_reasoning_effort(PlayerId(1)) == "low"
-        assert runtime.resolve_turn_reasoning_effort(PlayerId(1)) is None
+        assert runtime.resolve_turn_reasoning_effort(PlayerId(1)) == "low"
 
-    def test_band_light_では_注入後でも_None(
+    def test_band_light_では_注入後でも_None_でラッチは畳まれる(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """band が strong 未満なら reflect 注入直後でも熟考しない。"""
+        """band が strong 未満なら熟考しない。かつ古いラッチはここで畳んで残さない。"""
         _enable_prereqs(monkeypatch)
         monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
         runtime = create_world_runtime(_SCENARIO_PATH)
@@ -132,6 +204,8 @@ class TestStagnationReasoningEffortDecision:
         runtime._stagnation_pressure_store.increment_by_being(being_id)  # count=1 (light)
         runtime._emit_reflect_observation(PlayerId(1), "停滞", "stalled")
         assert runtime.resolve_turn_reasoning_effort(PlayerId(1)) is None
+        # 焚かない場合は古いフラグを残さない
+        assert runtime._stagnation_reasoning_latch.is_armed(PlayerId(1)) is False
 
     def test_achieved注入では武装しない(
         self, monkeypatch: pytest.MonkeyPatch
@@ -145,6 +219,24 @@ class TestStagnationReasoningEffortDecision:
             runtime._stagnation_pressure_store.increment_by_being(being_id)
         runtime._emit_reflect_observation(PlayerId(1), "もう果たした", "achieved")
         assert runtime.resolve_turn_reasoning_effort(PlayerId(1)) is None
+
+    def test_commitはラッチ未武装なら_traceを出さない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """防御: ラッチが立っていない (consume False) 状態で commit を呼んでも、
+        AGENT_REASONING_ENGAGED trace は出さない。二重 commit / 経路不整合で
+        「熟考していないのに engaged」の偽陽性を出さないためのガード。"""
+        _enable_prereqs(monkeypatch)
+        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        recorder = _CapturingRecorder()
+        runtime.set_trace_recorder(recorder)
+        # arm せずにいきなり commit
+        runtime.commit_turn_reasoning_engaged(PlayerId(1), "low")
+        engaged = [
+            p for (k, p) in recorder.events if k == TraceEventKind.AGENT_REASONING_ENGAGED
+        ]
+        assert engaged == []
 
 
 class TestStagnationReasoningOffByDefault:
