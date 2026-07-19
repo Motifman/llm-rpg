@@ -26,10 +26,33 @@ class InMemoryRepositoryBase:
         self._unit_of_work = unit_of_work
 
     def _clone(self, obj: T) -> T:
-        """オブジェクトを複製する（ロールバック支援のため）"""
+        """オブジェクトを複製する（ロールバック支援のため）。
+
+        リポジトリは「状態」を永続化するものであり、「未 publish のドメイン
+        イベント queue」は永続化対象ではない。複製時にイベントを drain し、
+        保存・取得される集約が未 publish イベントを持ち越さないようにする。
+
+        これをしないと、deepcopy がイベントごと集約を canonical に焼き付け、
+        後続の ``find_by_id → get_events → publish`` (speak / interact など)
+        が既に publish 済みのイベントを拾って再放出する。実 run
+        v3coop_stagnation_003 では 1 個の PlayerRevivedEvent が 46 tick /
+        141 観測に増幅し、記憶を汚染した (silent failure)。ドメインイベントは
+        「mutate 直後に emission サイトが回収・publish する transient」であり、
+        リポジトリ境界で持ち越させないのが正しい semantics。
+
+        clear するのは複製側だけ。呼び出し元が渡した原本 (``obj``) の events は
+        触らないので、``save(agg)`` 後に呼び出し元が ``agg.get_events()`` で
+        回収する経路 (emission サイトや UoW の add_events_from_aggregate) は
+        従来どおり動く。イベントを持たない値オブジェクト等 (clear_events
+        非対応) はそのまま複製する。
+        """
         if obj is None:
             return None
-        return copy.deepcopy(obj)
+        cloned = copy.deepcopy(obj)
+        clear_events = getattr(cloned, "clear_events", None)
+        if callable(clear_events):
+            clear_events()
+        return cloned
 
     def _execute_operation(self, operation: Callable[[], Any]) -> Any:
         """操作を実行またはUOWに登録

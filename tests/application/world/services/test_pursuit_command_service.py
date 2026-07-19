@@ -158,7 +158,7 @@ class TestPursuitCommandService:
         def create_uow():
             return InMemoryUnitOfWork(unit_of_work_factory=create_uow, data_store=data_store)
 
-        unit_of_work, _ = InMemoryUnitOfWork.create_with_event_publisher(
+        unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
             unit_of_work_factory=create_uow,
             data_store=data_store,
         )
@@ -184,10 +184,10 @@ class TestPursuitCommandService:
             world_query_service=world_query_service,
             unit_of_work=unit_of_work,
         )
-        return service, status_repo, profile_repo, phys_repo, time_provider
+        return service, status_repo, profile_repo, phys_repo, time_provider, event_publisher
 
     def test_start_pursuit_to_visible_player_succeeds_and_clears_path(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         profile_repo.save(_make_profile(2, "Bob"))
         status = _make_status(1)
@@ -208,10 +208,13 @@ class TestPursuitCommandService:
         assert int(saved.pursuit_state.target_id) == 2
         assert saved.current_destination is None
         assert saved.planned_path == []
-        assert any(isinstance(event, PursuitStartedEvent) for event in saved.get_events())
+        assert any(
+            isinstance(event, PursuitStartedEvent)
+            for event in event_publisher.get_published_events()
+        )
 
     def test_start_pursuit_to_visible_monster_succeeds(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         status_repo.save(_make_status(1))
         phys_repo.save(_make_map(1, [_make_player_object(1, 0, 0), _make_monster_object(200, 1, 0)]))
@@ -224,7 +227,7 @@ class TestPursuitCommandService:
         assert int(saved.pursuit_state.target_id) == 200
 
     def test_start_pursuit_missing_target_raises(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         status_repo.save(_make_status(1))
         phys_repo.save(_make_map(1, [_make_player_object(1, 0, 0)]))
@@ -233,7 +236,7 @@ class TestPursuitCommandService:
             service.start_pursuit(StartPursuitCommand(player_id=1, target_world_object_id=999))
 
     def test_start_pursuit_invisible_target_raises(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         profile_repo.save(_make_profile(2, "Bob"))
         status_repo.save(_make_status(1))
@@ -245,7 +248,7 @@ class TestPursuitCommandService:
             service.start_pursuit(StartPursuitCommand(player_id=1, target_world_object_id=2))
 
     def test_start_pursuit_invalid_target_kind_raises(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         status_repo.save(_make_status(1))
         phys_repo.save(_make_map(1, [_make_player_object(1, 0, 0), _make_chest_object(200, 1, 0)]))
@@ -254,7 +257,7 @@ class TestPursuitCommandService:
             service.start_pursuit(StartPursuitCommand(player_id=1, target_world_object_id=200))
 
     def test_start_pursuit_self_target_raises(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         status_repo.save(_make_status(1))
         phys_repo.save(_make_map(1, [_make_player_object(1, 0, 0)]))
@@ -263,7 +266,7 @@ class TestPursuitCommandService:
             service.start_pursuit(StartPursuitCommand(player_id=1, target_world_object_id=1))
 
     def test_start_pursuit_without_placement_raises(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         status = _make_status(1)
         status.update_location(SpotId(1), Coordinate(0, 0, 0))
@@ -286,7 +289,7 @@ class TestPursuitCommandService:
             service.start_pursuit(StartPursuitCommand(player_id=1, target_world_object_id=2))
 
     def test_start_pursuit_busy_actor_raises(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, time_provider = setup_service
+        service, status_repo, profile_repo, phys_repo, time_provider, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         profile_repo.save(_make_profile(2, "Bob"))
         status_repo.save(_make_status(1))
@@ -298,7 +301,7 @@ class TestPursuitCommandService:
             service.start_pursuit(StartPursuitCommand(player_id=1, target_world_object_id=2))
 
     def test_start_pursuit_missing_actor_object_raises(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         profile_repo.save(_make_profile(2, "Bob"))
         status_repo.save(_make_status(1))
@@ -308,7 +311,7 @@ class TestPursuitCommandService:
             service.start_pursuit(StartPursuitCommand(player_id=1, target_world_object_id=2))
 
     def test_start_same_target_refreshes(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         profile_repo.save(_make_profile(2, "Bob"))
         status_repo.save(_make_status(1))
@@ -323,19 +326,22 @@ class TestPursuitCommandService:
         assert result.success is True
         assert saved is not None and saved.pursuit_state is not None
         assert saved.pursuit_state.target_snapshot.coordinate == Coordinate(2, 0, 0)
-        assert any(isinstance(event, PursuitUpdatedEvent) for event in saved.get_events())
+        assert any(
+            isinstance(event, PursuitUpdatedEvent)
+            for event in event_publisher.get_published_events()
+        )
 
     def test_start_same_target_without_meaningful_change_is_noop(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         profile_repo.save(_make_profile(2, "Bob"))
         status_repo.save(_make_status(1))
         phys_repo.save(_make_map(1, [_make_player_object(1, 0, 0), _make_player_object(2, 1, 0)]))
 
         service.start_pursuit(StartPursuitCommand(player_id=1, target_world_object_id=2))
-        saved_before = status_repo.find_by_id(PlayerId(1))
-        assert saved_before is not None
-        saved_before.clear_events()
+        # 1 回目の PursuitStarted を除いて 2 回目だけを観測するため、記録済み
+        # publish イベントをリセットする。
+        event_publisher.clear_events()
 
         result = service.start_pursuit(StartPursuitCommand(player_id=1, target_world_object_id=2))
 
@@ -344,11 +350,14 @@ class TestPursuitCommandService:
         assert result.no_op is True
         assert saved_after is not None and saved_after.pursuit_state is not None
         assert saved_after.pursuit_state.target_snapshot.coordinate == Coordinate(1, 0, 0)
-        assert not any(isinstance(event, PursuitUpdatedEvent) for event in saved_after.get_events())
-        assert not any(isinstance(event, PursuitCancelledEvent) for event in saved_after.get_events())
+        # 意味のある変化が無いので Updated/Cancelled は publish されない。
+        assert not any(
+            isinstance(event, (PursuitUpdatedEvent, PursuitCancelledEvent))
+            for event in event_publisher.get_published_events()
+        )
 
     def test_start_different_target_switches(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         profile_repo.save(_make_profile(2, "Bob"))
         profile_repo.save(_make_profile(3, "Carol"))
@@ -372,10 +381,13 @@ class TestPursuitCommandService:
         assert "Carol" in result.message
         assert saved is not None and saved.pursuit_state is not None
         assert int(saved.pursuit_state.target_id) == 3
-        assert any(isinstance(event, PursuitCancelledEvent) for event in saved.get_events())
+        assert any(
+            isinstance(event, PursuitCancelledEvent)
+            for event in event_publisher.get_published_events()
+        )
 
     def test_cancel_pursuit_active_clears_state_and_path(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         profile_repo.save(_make_profile(2, "Bob"))
         status = _make_status(1)
@@ -395,10 +407,13 @@ class TestPursuitCommandService:
         assert saved.pursuit_state is None
         assert saved.current_destination is None
         assert saved.planned_path == []
-        assert any(isinstance(event, PursuitCancelledEvent) for event in saved.get_events())
+        assert any(
+            isinstance(event, PursuitCancelledEvent)
+            for event in event_publisher.get_published_events()
+        )
 
     def test_cancel_pursuit_without_active_pursuit_is_noop(self, setup_service):
-        service, status_repo, profile_repo, phys_repo, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, _, event_publisher = setup_service
         profile_repo.save(_make_profile(1, "Alice"))
         status = _make_status(1)
         status.set_destination(

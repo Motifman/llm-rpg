@@ -938,6 +938,7 @@ class TestWorldSimulationApplicationService:
             world_query_service,
             movement_service=movement_service,
             physical_map_repository=repository,
+            player_status_repository=player_status_repo,
         )
 
         service.tick()
@@ -955,7 +956,7 @@ class TestWorldSimulationApplicationService:
     def test_tick_lost_visibility_moves_to_frozen_last_known_then_fails_after_arrival(
         self, setup_service
     ):
-        service, _, repository, _, player_status_repo, _, _, _, _, _ = setup_service
+        service, _, repository, _, player_status_repo, _, _, event_publisher, _, _ = setup_service
         status = self._player_status()
         status.start_pursuit(
             PursuitTargetSnapshot(
@@ -965,8 +966,6 @@ class TestWorldSimulationApplicationService:
             )
         )
         player_status_repo.save(status)
-
-        pursuit_events: list[object] = []
 
         player_map = PhysicalMapAggregate.create(
             SpotId(1),
@@ -1014,6 +1013,7 @@ class TestWorldSimulationApplicationService:
             world_query_service,
             movement_service=movement_service,
             physical_map_repository=repository,
+            player_status_repository=player_status_repo,
         )
 
         service.tick()
@@ -1024,10 +1024,13 @@ class TestWorldSimulationApplicationService:
         assert saved_after_first_tick.current_coordinate == Coordinate(1, 0, 0)
         assert saved_after_first_tick.pursuit_state is not None
         assert saved_after_first_tick.pursuit_state.last_known.coordinate == Coordinate(1, 0, 0)
-        pursuit_events.extend(saved_after_first_tick.get_events())
-        saved_after_first_tick.clear_events()
+        # 1 tick 目ではまだ失敗イベントは publish されていない。
+        # (リポジトリ残渣ではなくバスへ publish されたイベントで観測する。tick() は
+        #  UoW トランザクション内で走り、pursuit の失敗イベントは save 時に UoW へ
+        #  原本から収集され commit で publish される。)
         assert not any(
-            getattr(event, "failure_reason", None) is not None for event in pursuit_events
+            getattr(event, "failure_reason", None) is not None
+            for event in event_publisher.get_published_events()
         )
 
         service.tick()
@@ -1036,12 +1039,12 @@ class TestWorldSimulationApplicationService:
         assert saved_after_second_tick is not None
         assert saved_after_second_tick.has_active_pursuit is False
         assert saved_after_second_tick.current_coordinate == Coordinate(1, 0, 0)
-        pursuit_events.extend(saved_after_second_tick.get_events())
         movement_service.tick_movement_in_current_unit_of_work.assert_called_once_with(1)
+        # 2 tick 目で「最後の目撃地点に着いたが見失った」失敗イベントが publish される。
         assert any(
             getattr(event, "failure_reason", None)
             == PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN
-            for event in pursuit_events
+            for event in event_publisher.get_published_events()
         )
 
     def test_tick_stops_movement_when_pursuit_fails_with_structured_reason(

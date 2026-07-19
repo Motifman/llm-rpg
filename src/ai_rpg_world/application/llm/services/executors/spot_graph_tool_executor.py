@@ -1440,15 +1440,24 @@ class SpotGraphToolExecutor:
                 hp_recovery_rate=self.TEND_REVIVE_HP_RATE,
                 caregiver_player_id=PlayerId(player_id),
             )
+            # イベントは save より先に回収 + clear する (needs_decay /
+            # status_effects と同じ「publisher ガード内で clear してから save」)。
+            # save→clear の逆順だと PlayerRevivedEvent を持ったまま集約が
+            # 永続化され、後続の find→get_events→publish で 1 個の復帰イベントが
+            # 毎ターン再放出されて観測を汚染する (実 run v3coop_stagnation_003 で
+            # エイダの復帰が 46 tick / 141 観測に増幅)。repo 境界の drain
+            # (in_memory_repository_base._clone) と二重の防御。publisher が
+            # 無いときは clear せず save する (canonical は _clone が drain する)。
+            events: list = []
+            if self._event_publisher is not None:
+                events = list(target.get_events())
+                target.clear_events()
             self._player_status_repository.save(target)
             # PlayerRevivedEvent を pipeline に流す。これにより
             # PlayerRevivedOutcomeHandler が grace_timer.cancel して
             # DEAD 確定を回避する。
-            if self._event_publisher is not None:
-                events = list(target.get_events())
-                target.clear_events()
-                if events:
-                    self._event_publisher.publish_all(events)
+            if events:
+                self._event_publisher.publish_all(events)
             base = (
                 f"{display_name} を介抱して意識を取り戻させた。"
                 f"（HP {target.hp.value}/{target.base_stats.max_hp}）"
