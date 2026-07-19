@@ -281,6 +281,23 @@ class TraceEventKind:
     #   - attempted_goal_text: str | None (= 試みられた goal_update の文。
     #     長ければ切り詰め。goal_outcome のみの清算試行では None)
     GOAL_REVISION_REJECTED = "goal_revision_rejected"
+    # 配信一元化リファクタ Stage 3X 前段 (観測): PipelineEventPublisher が
+    # side handler の例外を握って observation pipeline を継続したとき、その失敗を
+    # log だけでなく trace にも 1 件残す。現状は log のみで実 run の集計に乗らず、
+    # 「load-bearing な同期副作用 (grace 登録/解除・消費効果適用) が実際にどれだけ
+    # 失敗しているか」が見えない。将来 相①a を swallow→伝播へ変える判断の影響
+    # 見積もりに使う。挙動は変えない (握って継続はそのまま、記録を足すだけ)。
+    # payload:
+    #   - handler: str (= 失敗した handler クラス名)
+    #   - event_type: str (= 処理中だったドメインイベントのクラス名)
+    #   - event_id: int | None (= イベント instance の event_id。二重失敗の集計用)
+    #   - aggregate_type: str | None (= イベントの aggregate_type)
+    #   - aggregate_id: int | str | None (= 影響対象の aggregate 識別子)
+    #   - error_type: str (= 例外クラス名)
+    #   - error_message: str (= 例外メッセージ。500 字超は切り詰め)
+    # top-level player_id: aggregate が PlayerStatusAggregate のときだけ best-effort で
+    # 入る (= どの player の grace 登録/解除・効果適用が失われたかの per-agent 分析用)。
+    SIDE_HANDLER_FAILED = "side_handler_failed"
 
 
 @dataclass(frozen=True)

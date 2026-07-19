@@ -76,6 +76,27 @@ class _FakeRuntime:
         return "day"
 
 
+class _RecordingTraceRecorder:
+    """trace recorder spy。record(kind, *, tick, player_id, **payload) を記録する。"""
+
+    def __init__(self) -> None:
+        self.records: List[dict] = []
+
+    def record(self, kind: str, *, tick=None, player_id=None, **payload):
+        self.records.append({"kind": kind, "tick": tick, "player_id": player_id, **payload})
+
+
+class _FakeRuntimeWithTrace(_FakeRuntime):
+    """_trace_recorder と current_tick を持つ runtime spy。"""
+
+    def __init__(self, recorder: List[str], trace_recorder) -> None:
+        super().__init__(recorder)
+        self._trace_recorder = trace_recorder
+
+    def current_tick(self):
+        return 7
+
+
 @dataclass
 class _RecordingHandler:
     """handle(event) 呼び出しを recorder に記録する side handler spy。fail=True で例外を投げる。"""
@@ -245,3 +266,108 @@ class TestRealHandlerImmediacy:
         publisher.publish(_make_revived_event(1))
 
         assert timer.is_pending(PlayerId(1)) is False
+
+
+class TestSideHandlerFailureTrace:
+    """side handler の失敗を SIDE_HANDLER_FAILED trace に落とす (観測。挙動は変えない)。"""
+
+    def test_failing_handler_records_side_handler_failed_trace(self) -> None:
+        """side handler が例外を投げると SIDE_HANDLER_FAILED trace が payload 付きで 1 件残る。"""
+        recorder: List[str] = []
+        tracer = _RecordingTraceRecorder()
+        publisher = PipelineEventPublisher(_FakeRuntimeWithTrace(recorder, tracer))
+        publisher.register_handler(_EventA, _RecordingHandler("boom", recorder, fail=True))
+
+        publisher.publish(_EventA())
+
+        # 観測は握った後も継続する (挙動不変)
+        assert recorder == ["boom", "obs"]
+        # 失敗が trace に 1 件残る
+        assert len(tracer.records) == 1
+        rec = tracer.records[0]
+        assert rec["kind"] == "side_handler_failed"
+        assert rec["handler"] == "_RecordingHandler"
+        assert rec["event_type"] == "_EventA"
+        assert rec["error_type"] == "RuntimeError"
+        assert rec["tick"] == 7
+
+    def test_no_trace_recorder_is_safe(self) -> None:
+        """_trace_recorder が無い構成でも、失敗時に crash せず pipeline は継続する。"""
+        recorder: List[str] = []
+        publisher = PipelineEventPublisher(_FakeRuntime(recorder))
+        publisher.register_handler(_EventA, _RecordingHandler("boom", recorder, fail=True))
+
+        publisher.publish(_EventA())
+
+        assert recorder == ["boom", "obs"]
+
+    def test_successful_handler_records_no_trace(self) -> None:
+        """成功した side handler では SIDE_HANDLER_FAILED trace は残らない。"""
+        recorder: List[str] = []
+        tracer = _RecordingTraceRecorder()
+        publisher = PipelineEventPublisher(_FakeRuntimeWithTrace(recorder, tracer))
+        publisher.register_handler(_EventA, _RecordingHandler("ok", recorder))
+
+        publisher.publish(_EventA())
+
+        assert tracer.records == []
+
+    def test_trace_payload_includes_impact_identifiers_for_player_event(self) -> None:
+        """player 由来イベントの失敗 trace は player_id / event_id / aggregate_id を持つ。
+
+        Stage 3X の per-agent 影響分析 (誰の grace 登録/解除が失われたか) のため、
+        aggregate が PlayerStatusAggregate のとき player_id が best-effort で入る。
+        """
+        recorder: List[str] = []
+        tracer = _RecordingTraceRecorder()
+        publisher = PipelineEventPublisher(_FakeRuntimeWithTrace(recorder, tracer))
+        publisher.register_handler(
+            PlayerDownedEvent, _RecordingHandler("boom", recorder, fail=True)
+        )
+        event = _make_downed_event(3)
+
+        publisher.publish(event)
+
+        assert len(tracer.records) == 1
+        rec = tracer.records[0]
+        assert rec["player_id"] == 3  # PlayerStatusAggregate なので昇格
+        assert rec["aggregate_type"] == "PlayerStatusAggregate"
+        assert rec["aggregate_id"] == 3
+        assert rec["event_id"] == event.event_id
+        assert rec["error_type"] == "RuntimeError"
+
+    def test_trace_error_message_captured_and_truncated(self) -> None:
+        """error_message に例外文言が入り、500 字超は切り詰められる。"""
+
+        class _LongBoomHandler:
+            def handle(self, event: Any) -> None:
+                raise RuntimeError("x" * 600)
+
+        recorder: List[str] = []
+        tracer = _RecordingTraceRecorder()
+        publisher = PipelineEventPublisher(_FakeRuntimeWithTrace(recorder, tracer))
+        publisher.register_handler(_EventA, _LongBoomHandler())
+
+        publisher.publish(_EventA())
+
+        msg = tracer.records[0]["error_message"]
+        assert msg.startswith("x" * 500)
+        assert msg.endswith("…")
+        assert len(msg) == 501
+
+    def test_raising_trace_recorder_does_not_break_pipeline(self) -> None:
+        """trace recorder 自体が例外を投げても、observation 継続と pipeline は止まらない。"""
+
+        class _RaisingTraceRecorder:
+            def record(self, kind, *, tick=None, player_id=None, **payload):
+                raise RuntimeError("recorder down")
+
+        recorder: List[str] = []
+        publisher = PipelineEventPublisher(
+            _FakeRuntimeWithTrace(recorder, _RaisingTraceRecorder())
+        )
+        publisher.register_handler(_EventA, _RecordingHandler("boom", recorder, fail=True))
+
+        publisher.publish(_EventA())  # 例外が漏れないこと
+
+        assert recorder == ["boom", "obs"]
