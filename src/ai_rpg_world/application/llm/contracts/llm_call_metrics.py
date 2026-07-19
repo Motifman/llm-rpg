@@ -39,6 +39,16 @@ class LlmCallMetrics:
         success: tool_call が parse できたか / 例外なく終わったか
         error_code: 失敗時のエラー識別子 (例: "LLM_API_CALL_FAILED",
             "LLM_RATE_LIMIT", "NO_TOOL_CALL")
+        error_detail: 失敗時の例外本文 (provider 名・provider エラーコード等を含む
+            生メッセージを truncate したもの)。成功時は空文字。error_code だけでは
+            「なぜ失敗したか」が分からない (例: 400 の本文
+            "Thinking mode does not support this tool_choice") ため、trace から
+            事後診断できるように残す。
+        reasoning_effort: この呼び出しで指定した reasoning の effort (案A の
+            熟考ターンなら "low" 等、通常ターンは None)。熟考ターンと通常ターンを
+            trace で区別し、reasoning 指定が失敗と相関するかを見るため。
+        tool_choice: この呼び出しの tool_choice ("required" / "auto" 等)。
+            reasoning との組合せ起因の provider 拒否を trace から切り分けるため。
         cost_usd: 1 呼び出し分の USD コスト。provider 側が usage に乗せて返した値を
             そのまま使う (= モデル価格表をコード側で持たない / 値段改定の追従不要)。
             OpenRouter は ``extra_body.usage.include=true`` を付けると ``usage.cost``
@@ -55,6 +65,9 @@ class LlmCallMetrics:
     cached_tokens: int = 0
     reasoning_tokens: int = 0
     cost_usd: float = 0.0
+    error_detail: str = ""
+    reasoning_effort: Optional[str] = None
+    tool_choice: str = ""
 
     @staticmethod
     def compute_tps(completion_tokens: int, wall_latency_ms: int) -> float:

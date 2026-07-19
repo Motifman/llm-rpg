@@ -62,6 +62,11 @@ _VLLM_DEFAULT_PLACEHOLDER_KEY = "EMPTY"
 _ENV_VAR_LLM_TIMEOUT = "LLM_REQUEST_TIMEOUT_SECONDS"
 _DEFAULT_LLM_TIMEOUT_SECONDS = 90.0
 
+# 失敗時に metrics/trace に残す例外本文の最大文字数。provider 400 の本文
+# (provider 名・provider エラーコード等) が診断に足りる長さを確保しつつ、
+# trace.jsonl が膨れないよう truncate する。
+_ERROR_DETAIL_MAX_CHARS = 500
+
 # Wall-time hard cap (PR #463 後続: H run で 122s outlier を観測した対策)。
 #
 # 背景: litellm に渡した `timeout=90` (float) は httpx で
@@ -698,6 +703,11 @@ class LiteLLMClient(
                 completion_tokens=0,
                 success=False,
                 error_code=error_code,
+                # 例外本文 (provider 名・provider エラーコードを含む) を truncate して
+                # trace に残す。error_code だけでは「なぜ失敗したか」が分からない。
+                error_detail=str(e)[:_ERROR_DETAIL_MAX_CHARS],
+                reasoning_effort=reasoning_effort,
+                tool_choice=tool_choice,
             )
             self._logger.exception("LiteLLM completion failed: %s", e)
             raise LlmApiCallException(
@@ -720,6 +730,8 @@ class LiteLLMClient(
             cost_usd=cost_usd,
             success=tool_call is not None,
             error_code=None if tool_call is not None else "NO_TOOL_CALL",
+            reasoning_effort=reasoning_effort,
+            tool_choice=tool_choice,
         )
         return tool_call
 
@@ -817,6 +829,9 @@ class LiteLLMClient(
         cached_tokens: int = 0,
         reasoning_tokens: int = 0,
         cost_usd: float = 0.0,
+        error_detail: str = "",
+        reasoning_effort: Optional[str] = None,
+        tool_choice: str = "",
     ) -> None:
         if sink is None:
             return
@@ -832,6 +847,9 @@ class LiteLLMClient(
                 success=success,
                 error_code=error_code,
                 cost_usd=cost_usd,
+                error_detail=error_detail,
+                reasoning_effort=reasoning_effort,
+                tool_choice=tool_choice,
             )
             sink.record(metrics)
         except Exception:

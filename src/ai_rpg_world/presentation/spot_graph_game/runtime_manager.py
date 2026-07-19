@@ -503,6 +503,15 @@ class _LlmMetricsTraceSink:
                 tps=metrics.tps,
                 success=metrics.success,
                 error_code=metrics.error_code,
+                # 失敗観測性: error_code だけでは「なぜ失敗したか」が分からないので
+                # 例外本文 (provider 名・400 の本文等) を残す。reasoning_effort /
+                # tool_choice で「熟考ターンか」「required 起因の拒否か」を trace
+                # だけで切り分けられるようにする (実 run v3coop_stagnation_002 の
+                # 「Thinking mode does not support this tool_choice」診断が
+                # trace から即できなかった穴を塞ぐ)。
+                error_detail=getattr(metrics, "error_detail", ""),
+                reasoning_effort=getattr(metrics, "reasoning_effort", None),
+                tool_choice=getattr(metrics, "tool_choice", ""),
                 # OpenRouter 経由のとき usage.cost (USD) が乗る。直結 / vLLM では 0.0。
                 # 実験 trace を見れば cost 合計が事後計算できる。
                 cost_usd=getattr(metrics, "cost_usd", 0.0),
