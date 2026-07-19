@@ -143,6 +143,31 @@ class TestIssue621Chain:
         assert chain["PlayerDownedEvent"] >= 1
         assert chain["tend_to_player"] >= 1
 
+    def test_実際のdownはstructured_player_downedから数える(self, em, tmp_path) -> None:
+        """実 trace の down は文字列 "PlayerDownedEvent" ではなく observation の
+        structured.type=="player_downed" で表現される。self 視点 (role=="self") が
+        実際の down 1 件、social 視点は他プレイヤーの観測。
+
+        現抽出器は "PlayerDownedEvent" 文字列だけを数えるため、実 run の down を
+        取り逃がして 0 と出していた (v3coop_stagnation_002 で P3/P4 が down したのに
+        PlayerDownedEvent=0)。structured 由来の実カウントを別途出す。
+        """
+        events = [
+            # 実 down (自分視点)
+            {"kind": "observation", "player_id": 3, "payload": {
+                "structured": {"type": "player_downed", "role": "self"}}},
+            # 他プレイヤーが観測した social な player_downed (実 down ではない)
+            {"kind": "observation", "player_id": 1, "payload": {
+                "structured": {"type": "player_downed", "actor": "リオ"}}},
+            {"kind": "observation", "player_id": 2, "payload": {
+                "structured": {"type": "player_downed", "actor": "リオ"}}},
+        ]
+        chain = em.compute_metrics(_write_trace(tmp_path, events))["issue621_chain"]
+        # 実際の down は self 視点の 1 件
+        assert chain["player_downed_self"] == 1
+        # self+social すべての player_downed observation は 3 件
+        assert chain["player_downed_observations"] == 3
+
 
 class TestComparison:
     def test_baseline_を_渡すと_比較行が_生成される(self, em, tmp_path) -> None:
