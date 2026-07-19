@@ -3,6 +3,9 @@
 import logging
 from typing import Callable, Any, Optional
 
+from ai_rpg_world.application.common.events.domain_event_collector import (
+    DomainEventCollector,
+)
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
@@ -102,7 +105,16 @@ class PlayerSpeechApplicationService:
             target_player_id=target_player_id,
         )
 
-        events = status.get_events()
+        # Stage 3a: 手動 drain (get_events→publish→clear) を DomainEventCollector 経由に
+        # 寄せる。collector は原本から収集し event_id で dedup する (再放出の構造的防止)。
+        # speech の現行方針は保存する: publisher 必須 (None ガードを足さない) / 例外は
+        # 握らず伝播 / publish 後に集約を clear。
+        # 厳密には「正常な DomainEvent 前提で挙動保存」: 壊れた pending (event_id 欠落や
+        # 同 id 重複) には collector の fail-fast / dedup が効く。speak は PlayerSpokeEvent を
+        # 1 件出すだけなので通常経路では差は出ない。
+        collector = DomainEventCollector()
+        collector.add_all(status.get_events())
+        events = collector.drain()
         if events:
             self._event_publisher.publish_all(events)
             status.clear_events()
