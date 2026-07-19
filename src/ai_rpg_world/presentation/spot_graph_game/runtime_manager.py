@@ -1571,6 +1571,11 @@ class _WorldLlmWiring:
                 metrics_sink=metrics_sink,
                 reasoning_effort=reasoning_effort,
             )
+            # 案A HIGH 2: 熟考付き行動が成立した後にだけラッチを消費し
+            # AGENT_REASONING_ENGAGED trace を残す。invoke が例外の場合は commit
+            # されないので、ラッチは armed のまま次行動で再挑戦できる。
+            if reasoning_effort is not None:
+                self.runtime.commit_turn_reasoning_engaged(player_id, reasoning_effort)
             return _LlmPhaseAResult(
                 player_id=player_id,
                 prompt=prompt,

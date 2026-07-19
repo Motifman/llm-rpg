@@ -28,6 +28,17 @@ class InMemoryStagnationReasoningLatch:
             raise TypeError("player_id must be PlayerId")
         self._armed.add(player_id.value)
 
+    def is_armed(self, player_id: PlayerId) -> bool:
+        """立っているかを覗くだけで消費しない (peek)。
+
+        案A HIGH 2 対応: 熟考を焚くかの決定 (resolve) は行動 (invoke) の前に行うが、
+        ラッチの消費と AGENT_REASONING_ENGAGED trace は invoke 成功後の commit まで
+        遅らせる。そのため決定時はここで peek し、実際の消費は ``consume`` で行う。
+        """
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        return player_id.value in self._armed
+
     def consume(self, player_id: PlayerId) -> bool:
         """立っていれば True を返して即座に落とす。立っていなければ False。
 
