@@ -282,7 +282,7 @@ class TestPromptBuilderPassiveRecall:
         assert expected_joined in user
         assert out["current_beliefs_snapshot"] == expected_joined
 
-    def test_U1_prediction_context_id_に想起episode紐づき_recall_observationにも_stamp_される(
+    def test_u1_prediction_context_id_recall_episode_recall_observation_stamp(
         self,
     ) -> None:
         """build() が発行する prediction_context_id に、その build で
@@ -398,7 +398,7 @@ class TestPromptBuilderPassiveRecall:
         assert observations[0].episode_id == "e_for_ledger"
         assert observations[0].prediction_context_id == issued_id
 
-    def test_U1_flag_OFF_相当_ledger未注入なら_recall_observationの_id_は_None(
+    def test_u1_flag_off_ledger_uninjected_recall_observation_id_none(
         self,
     ) -> None:
         """id 機構 OFF (ledger 未注入) では recall observation の

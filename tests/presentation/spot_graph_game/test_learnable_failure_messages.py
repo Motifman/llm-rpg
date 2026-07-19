@@ -153,7 +153,7 @@ class TestInvalidTargetLabelMessage:
 class TestInvalidDestinationLabelMessage:
     """INVALID_DESTINATION_LABEL (spot_graph_travel_to) の learnable message。"""
 
-    def test_destination_にスポット名を渡すと解決されて移動が成功する(
+    def test_destination_spot_name_resolves_and_move_succeeds(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
@@ -178,7 +178,7 @@ class TestInvalidDestinationLabelMessage:
         assert result.success is True
         assert "中央廊下" in result.message
 
-    def test_存在しないラベル_かつ_存在しないスポット名_は_有効候補を列挙して失敗(
+    def test_label_spot_candidate_column_failure(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,

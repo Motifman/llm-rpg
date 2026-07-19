@@ -42,7 +42,7 @@ def store() -> InMemorySemanticMemoryStore:
 class TestAddByBeing:
     """add_by_being の挙動。"""
 
-    def test_being_id_keyed_で_entry_を追加できる(
+    def test_being_id_keyed_entry(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """add → list_for_being で取り出せる。"""
@@ -52,7 +52,7 @@ class TestAddByBeing:
         result = store.list_for_being(being_id)
         assert result == [entry]
 
-    def test_同一_entry_id_は_upsert_される(
+    def test_same_entry_id_upsert(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """既存 entry_id を再度 add すると上書きされる (= 件数増えない)。"""
@@ -63,7 +63,7 @@ class TestAddByBeing:
         assert len(result) == 1
         assert result[0].text == "v2"
 
-    def test_異なる_being_id_の_entry_は混ざらない(
+    def test_being_id_entry(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """ada と ben で同じ entry_id でも独立して保持される。"""
@@ -72,7 +72,7 @@ class TestAddByBeing:
         assert store.list_for_being(BeingId("ada"))[0].text == "ada-side"
         assert store.list_for_being(BeingId("ben"))[0].text == "ben-side"
 
-    def test_型違反は_TypeError(self, store: InMemorySemanticMemoryStore) -> None:
+    def test_value_raises_type_error_3(self, store: InMemorySemanticMemoryStore) -> None:
         """being_id / entry の型違反は TypeError。"""
         with pytest.raises(TypeError, match="being_id"):
             store.add_by_being("ada", _make_entry())  # type: ignore[arg-type]
@@ -83,13 +83,13 @@ class TestAddByBeing:
 class TestListForBeing:
     """list_for_being の挙動。"""
 
-    def test_未登録_being_には空リスト(
+    def test_unregistered_being_empty_list(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """未登録 being_id は空リスト。"""
         assert store.list_for_being(BeingId("nobody")) == []
 
-    def test_created_at_降順で返る(
+    def test_returns_created(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """SQLite 実装と挙動を揃えるため、新しい順で返る。"""
@@ -123,7 +123,7 @@ class TestListForBeing:
 class TestRegisterClusterSignatureByBeing:
     """register_cluster_signature_if_new_by_being の挙動。"""
 
-    def test_初回は_True_既存は_False(
+    def test_first_true_existing_false(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """同一 (being, signature) ペアの 2 回目は False。"""
@@ -140,7 +140,7 @@ class TestRegisterClusterSignatureByBeing:
             is False
         )
 
-    def test_異なる_being_id_なら独立して登録(
+    def test_being_id_independently(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """同じ signature でも being_id が違えば独立。"""
@@ -157,7 +157,7 @@ class TestRegisterClusterSignatureByBeing:
             is True
         )
 
-    def test_型違反は_TypeError(self, store: InMemorySemanticMemoryStore) -> None:
+    def test_value_raises_type_error_2(self, store: InMemorySemanticMemoryStore) -> None:
         """being_id / signature の型違反は TypeError。"""
         with pytest.raises(TypeError, match="being_id"):
             store.register_cluster_signature_if_new_by_being(
@@ -172,17 +172,19 @@ class TestRegisterClusterSignatureByBeing:
 class TestListClusterSignaturesByBeing:
     """list_cluster_signatures_by_being の挙動 (Phase 4 Step 4-2a)。"""
 
-    def test_登録済_signature_を辞書順で返す(
+    def test_returns_signature_dict(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
+        """登録済 signature を辞書順で返す。"""
         b = BeingId("ada")
         store.register_cluster_signature_if_new_by_being(b, "z-sig")
         store.register_cluster_signature_if_new_by_being(b, "a-sig")
         assert store.list_cluster_signatures_by_being(b) == ["a-sig", "z-sig"]
 
-    def test_他_being_の_signature_は混ざらない(
+    def test_other_being_signature(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
+        """他 being の signature は混ざらない。"""
         store.register_cluster_signature_if_new_by_being(BeingId("ada"), "x")
         store.register_cluster_signature_if_new_by_being(BeingId("ben"), "y")
         assert store.list_cluster_signatures_by_being(BeingId("ada")) == ["x"]
@@ -191,9 +193,10 @@ class TestListClusterSignaturesByBeing:
 class TestReplaceAllByBeing:
     """replace_all_by_being の挙動 (snapshot restore primitive)。"""
 
-    def test_entries_と_signatures_を一括置換できる(
+    def test_replace_all_replaces_entries_and_signatures(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
+        """entries と signatures を一括置換できる。"""
         b = BeingId("ada")
         store.add_by_being(b, _make_entry("old"))
         store.register_cluster_signature_if_new_by_being(b, "old-sig")
@@ -202,9 +205,10 @@ class TestReplaceAllByBeing:
         assert [e.entry_id for e in store.list_for_being(b)] == ["new"]
         assert store.list_cluster_signatures_by_being(b) == ["new-sig"]
 
-    def test_空入力で全クリアできる(
+    def test_empty_replacement_clears_entries_and_signatures(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
+        """空入力で全クリアできる。"""
         b = BeingId("ada")
         store.add_by_being(b, _make_entry())
         store.register_cluster_signature_if_new_by_being(b, "sig")
@@ -212,9 +216,10 @@ class TestReplaceAllByBeing:
         assert store.list_for_being(b) == []
         assert store.list_cluster_signatures_by_being(b) == []
 
-    def test_他_being_の状態は影響を受けない(
+    def test_other_being_state_not_affected(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
+        """他 being の状態は影響を受けない。"""
         store.add_by_being(BeingId("ada"), _make_entry("a1"))
         store.register_cluster_signature_if_new_by_being(BeingId("ada"), "sig-a")
         store.add_by_being(BeingId("ben"), _make_entry("b1"))
@@ -233,9 +238,10 @@ class TestReplaceAllByBeing:
 class TestSupersedeByBeing:
     """supersede_by_being の挙動 (U3a: belief journal の revise 操作)。"""
 
-    def test_old_が_superseded_に_new_が_active_で追加される(
+    def test_old_superseded_new_active(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
+        """old が superseded に new が active で追加される。"""
         b = BeingId("ada")
         old = _make_entry("old", text="拠点に資源はない")
         store.add_by_being(b, old)
@@ -257,15 +263,17 @@ class TestSupersedeByBeing:
         assert entries["new"].supersedes == "old"
         assert entries["new"].belief_id == old.belief_id
 
-    def test_old_entry_id_が存在しなくても_new_entry_は追加される(
+    def test_old_entry_id_new_entry(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
+        """old entry id が存在しなくても new entry は追加される。"""
         b = BeingId("ada")
         new = _make_entry("new")
         store.supersede_by_being(b, old_entry_id="does-not-exist", new_entry=new)
         assert [e.entry_id for e in store.list_for_being(b)] == ["new"]
 
-    def test_型違反は_TypeError(self, store: InMemorySemanticMemoryStore) -> None:
+    def test_value_raises_type_error(self, store: InMemorySemanticMemoryStore) -> None:
+        """型違反は TypeError。"""
         with pytest.raises(TypeError, match="being_id"):
             store.supersede_by_being(
                 "ada", old_entry_id="old", new_entry=_make_entry()  # type: ignore[arg-type]
@@ -279,25 +287,28 @@ class TestSupersedeByBeing:
 class TestUpdateStatusByBeing:
     """update_status_by_being の挙動 (U3a: 反証による inactive 化等)。"""
 
-    def test_指定_entry_の_status_が更新される(
+    def test_entry_status_updated(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
+        """指定 entry の status が更新される。"""
         b = BeingId("ada")
         store.add_by_being(b, _make_entry("e1"))
         store.update_status_by_being(b, "e1", "inactive")
         assert store.list_for_being(b)[0].status == "inactive"
 
-    def test_存在しない_entry_id_は無視される(
+    def test_entry_id(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
+        """存在しない entry id は無視される。"""
         b = BeingId("ada")
         store.add_by_being(b, _make_entry("e1"))
         store.update_status_by_being(b, "does-not-exist", "inactive")
         assert store.list_for_being(b)[0].status == "active"
 
-    def test_他_entry_は影響を受けない(
+    def test_other_entry_not_affected(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
+        """他 entry は影響を受けない。"""
         b = BeingId("ada")
         store.add_by_being(b, _make_entry("e1"))
         store.add_by_being(b, _make_entry("e2"))
@@ -334,7 +345,7 @@ class TestInMemorySemanticFullFieldRoundtripContract:
             hearsay_support_count=1,
         )
 
-    def test_add_listで全フィールドが完全一致で戻る(
+    def test_add_list_all_round_trips_exactly(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """add_by_being → list_for_being の往復で entry が元と完全一致する。"""
@@ -343,7 +354,7 @@ class TestInMemorySemanticFullFieldRoundtripContract:
         store.add_by_being(being_id, entry)
         assert store.list_for_being(being_id)[0] == entry
 
-    def test_replace_all_by_beingで全フィールドが完全一致で戻る(
+    def test_replace_all_being_all_round_trips_exactly(
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """replace_all_by_being → list_for_being の往復で entry が元と完全一致する。"""

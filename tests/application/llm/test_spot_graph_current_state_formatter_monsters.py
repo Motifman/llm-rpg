@@ -57,7 +57,7 @@ def _make_dto(*monsters: SpotGraphMonsterEntry) -> PlayerCurrentStateDto:
 class TestMonsterSection:
     """生存個体・死体・空の各表記。"""
 
-    def test_生存個体は_behavior_と_health_を日本語で含む(self) -> None:
+    def test_includes_behavior_health_japanese(self) -> None:
         """落ち着いている・傷を負っている のような日本語が出る。"""
         dto = _make_dto(
             SpotGraphMonsterEntry(
@@ -74,7 +74,7 @@ class TestMonsterSection:
         assert "落ち着いている" in text
         assert "傷を負っている" in text
 
-    def test_死体は専用表記(self) -> None:
+    def test_corpse(self) -> None:
         """is_dead=True の個体は「死骸」表記になる。"""
         dto = _make_dto(
             SpotGraphMonsterEntry(
@@ -92,14 +92,14 @@ class TestMonsterSection:
         # 死体には behavior / health の通常表記は混ぜない（専用文字列のみ）
         assert "傷を負っている" not in text
 
-    def test_モンスター不在ならセクション全体が出ない(self) -> None:
+    def test_monster_all_not_rendered(self) -> None:
         """monsters_at_spot が空ならヘッダ自体を出さない。"""
         dto = _make_dto()
         text = SpotGraphCurrentStateFormatter().format(dto)
 
         assert "同じ場所に居るモンスター" not in text
 
-    def test_未知の_health_bucket_はそのまま表示(self) -> None:
+    def test_unknown_health_bucket(self) -> None:
         """マップに無い health は raw 文字列が入る（落ちない・潰さない）。"""
         dto = _make_dto(
             SpotGraphMonsterEntry(

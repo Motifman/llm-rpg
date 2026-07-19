@@ -48,12 +48,12 @@ def _make_hint_service(
 class TestMemoCompletionHintServiceConstruction:
     """MemoCompletionHintService コンストラクタの引数バリデーション挙動。"""
 
-    def test_memo_store_が_MemoRepository_でなければ_TypeError_を投げる(self) -> None:
+    def test_memo_store_memo_repository_raises_type_error(self) -> None:
         """memo_store が MemoRepository 実装でない場合は TypeError。"""
         with pytest.raises(TypeError, match="memo_store"):
             MemoCompletionHintService(memo_store="not-a-store")  # type: ignore[arg-type]
 
-    def test_threshold_が_範囲外なら_ValueError_を投げる(self) -> None:
+    def test_threshold_raises_value_error(self) -> None:
         """similarity_threshold は [0.0, 1.0] 範囲外なら ValueError。"""
         store = InMemoryMemoStore()
         with pytest.raises(ValueError):
@@ -65,14 +65,14 @@ class TestMemoCompletionHintServiceConstruction:
 class TestMemoCompletionHintDetect:
     """detect の hint 検出挙動。"""
 
-    def test_未完了_memo_が_無ければ_None_を返す(
+    def test_returns_none_memo(
         self, player_id: PlayerId, being_setup: MemoBeingTestSetup
     ) -> None:
         """memo_store が空なら hint なし (None)。"""
         service = _make_hint_service(being_setup)
         assert service.detect(player_id, "act", "res") is None
 
-    def test_類似度が閾値未満なら_None_を返す(
+    def test_returns_none_value_below(
         self, player_id: PlayerId, being_setup: MemoBeingTestSetup
     ) -> None:
         """全 memo が閾値未満なら hint なし。"""
@@ -88,7 +88,7 @@ class TestMemoCompletionHintDetect:
         )
         assert result is None
 
-    def test_類似度が閾値以上なら_hint_を返す(
+    def test_returns_value_more_hint(
         self, player_id: PlayerId, being_setup: MemoBeingTestSetup
     ) -> None:
         """memo content と action/result が十分に類似していれば hint。"""
@@ -105,7 +105,7 @@ class TestMemoCompletionHintDetect:
         assert result.memo.id == memo_id
         assert result.similarity >= 0.3
 
-    def test_複数_memo_の中から最も類似度の高いものを選ぶ(
+    def test_multiple_memo(
         self, player_id: PlayerId, being_setup: MemoBeingTestSetup
     ) -> None:
         """複数候補があれば最高 ratio の memo を返す。"""
@@ -126,7 +126,7 @@ class TestMemoCompletionHintDetect:
 class TestMemoCompletionHintAugmentResultSummary:
     """augment_result_summary の整形挙動。"""
 
-    def test_hint_なしなら_result_summary_を変更しない(
+    def test_hint_result_summary_does_not_change(
         self, player_id: PlayerId, being_setup: MemoBeingTestSetup
     ) -> None:
         """memo が無い / 閾値未満なら augment しても元のまま。"""
@@ -137,7 +137,7 @@ class TestMemoCompletionHintAugmentResultSummary:
             == original
         )
 
-    def test_hint_ありなら_result_summary_に_hint_を_append_する(
+    def test_hint_result_summary_hint_append(
         self, player_id: PlayerId, being_setup: MemoBeingTestSetup
     ) -> None:
         """閾値以上の memo があれば result_summary 末尾に [hint] が付く。"""
@@ -158,7 +158,7 @@ class TestMemoCompletionHintAugmentResultSummary:
 class TestMemoCompletionHintToHintText:
     """MemoCompletionHint.to_hint_text の整形。"""
 
-    def test_hint_文に_memo_id_と_類似度が含まれる(
+    def test_hint_memo_id_included(
         self, player_id: PlayerId, being_setup: MemoBeingTestSetup
     ) -> None:
         """LLM 向け hint 文に id (短縮形) と類似度が表示される。"""
@@ -175,6 +175,6 @@ class TestMemoCompletionHintToHintText:
         assert "memo_done" in text
 
 
-def test_DEFAULT_SIMILARITY_THRESHOLD_は_範囲内() -> None:
+def test_default_similarity_threshold() -> None:
     """既定閾値が [0,1] 範囲内であること。"""
     assert 0.0 <= DEFAULT_SIMILARITY_THRESHOLD <= 1.0

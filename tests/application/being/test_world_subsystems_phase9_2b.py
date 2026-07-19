@@ -134,7 +134,7 @@ class TestPlayerGrowthCodec:
         agg._events = []
         return agg
 
-    def test_capture_restore_round_trip(self) -> None:
+    def test_capture_restore_round_trip_2(self) -> None:
         src_agg = self._make_status_stub(level=5, total_exp=1234, max_hp=150)
         src_repo: dict[PlayerId, Any] = {PlayerId(1): src_agg}
         src_runtime = SimpleNamespace(
@@ -168,7 +168,7 @@ class TestPlayerGrowthCodec:
 class TestPlayerStateDictCodec:
     """``_state`` dict の往復。"""
 
-    def test_capture_restore_round_trip(self) -> None:
+    def test_capture_restore_round_trip_3(self) -> None:
         agg = SimpleNamespace()
         agg._state = {"disguise_active": True, "scenario_flag_x": 42}
         agg._events = []
@@ -203,7 +203,8 @@ class TestPlayerStateDictCodec:
             "scenario_flag_x": 42,
         }
 
-    def test_空_state_でも_動く(self) -> None:
+    def test_empty_state_works(self) -> None:
+        """空 state でも 動く。"""
         agg = SimpleNamespace()
         agg._state = {}
         agg._events = []
@@ -230,7 +231,8 @@ class TestUnsupportedSchemaVersion:
             PlayerStateDictSubsystemCodec,
         ],
     )
-    def test_未サポート_schema_version_は_例外(self, codec_cls) -> None:
+    def test_unsupported_schema_version_raises_exception(self, codec_cls) -> None:
+        """未サポート schemaversion は例外。"""
         codec = codec_cls()
         with pytest.raises(ValueError, match="schema_version"):
             codec.restore(SimpleNamespace(), {"schema_version": 999, "entries": []})

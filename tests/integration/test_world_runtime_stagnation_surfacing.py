@@ -57,9 +57,10 @@ def _being_id(runtime, player_id: int):
 class TestOwnStagnationSurfacingWiring:
     """P-U3: 自分の停滞感カウンタが自分の身体の状態 section に出る。"""
 
-    def test_カウンタ3以上で_strong_の自己hintが出る(
+    def test_three_more_strong_hint_rendered(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """カウンタ3以上で strong の自己hintが出る。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=_stagnation_config(stagnation_pressure_enabled=True),
@@ -72,9 +73,10 @@ class TestOwnStagnationSurfacingWiring:
         dto = runtime.build_llm_context(PlayerId(1))
         assert "同じことばかり繰り返している焦りが拭えない" in dto.current_state_text
 
-    def test_カウンタ1_2で_light_の自己hintが出る(
+    def test_one_two_light_hint_rendered(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """カウンタ1 2で light の自己hintが出る。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=_stagnation_config(stagnation_pressure_enabled=True),
@@ -86,9 +88,10 @@ class TestOwnStagnationSurfacingWiring:
         dto = runtime.build_llm_context(PlayerId(1))
         assert "何かが前に進んでいない気がする" in dto.current_state_text
 
-    def test_カウンタ0では_自己hintは出ない(
+    def test_zero_hint_not_rendered(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """カウンタ0では 自己hintは出ない。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=_stagnation_config(stagnation_pressure_enabled=True),
@@ -102,9 +105,10 @@ class TestOwnStagnationSurfacingWiring:
 class TestOtherStagnationSurfacingWiring:
     """P-U4: 同 spot の他 player の停滞感カウンタが nearby_entities 側に出る。"""
 
-    def test_相手のカウンタが3以上なら_苛立って落ち着かない様子_が見える(
+    def test_target_three_more(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """相手のカウンタが3以上なら 苛立って落ち着かない様子 が見える。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=_stagnation_config(stagnation_pressure_enabled=True),
@@ -118,7 +122,7 @@ class TestOtherStagnationSurfacingWiring:
         dto = runtime.build_llm_context(PlayerId(2))
         assert "苛立って落ち着かない様子" in dto.current_state_text
 
-    def test_自分自身の停滞感は自分のnearby_entities欄には出ない(
+    def test_self_nearby_entities_not_rendered(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """自分自身は同席者リストに出ない前提の回帰ガード。"""
@@ -142,9 +146,10 @@ class TestStagnationSurfacingOffByDefault:
     """flag (STAGNATION_PRESSURE_ENABLED) OFF のとき、導入前とプロンプトが
     完全一致すること (= 表出が一切乗らない)。"""
 
-    def test_flag_off_なら_store_が_none_で_自己他者とも表出しない(
+    def test_flag_off_store_none_other(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flagoff なら store が none で自己他者とも表出しない。"""
         runtime = create_world_runtime(_SCENARIO_PATH, config=_stagnation_config())
         assert runtime._stagnation_pressure_store is None
 
@@ -156,7 +161,7 @@ class TestStagnationSurfacingOffByDefault:
             assert "手詰まり" not in text
             assert "苛立って" not in text
 
-    def test_flag_off_のプロンプトは_flag導入前_相当と一致する(
+    def test_flag_off_flag_before_matches(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """P-U3/P-U4 の provider は常時配線されるが、store が None のときは
@@ -187,9 +192,10 @@ class TestStagnationBandUnresolvedBeingDiagnostics:
     store が組めているのに being だけ解決できない経路に限定して警告を残す。
     """
 
-    def test_store非Noneでbeing未解決なら警告が1回だけ出てbandはnoneのまま(
+    def test_emits_warning_for_store_none_being_once_band_none(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """store非Noneでbeing未解決なら警告が1回だけ出てbandはnoneのまま。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=_stagnation_config(stagnation_pressure_enabled=True),
@@ -219,9 +225,10 @@ class TestStagnationBandUnresolvedBeingDiagnostics:
         assert len(player1_warnings) == 1
         assert player1_warnings[0].levelno == logging.WARNING
 
-    def test_store未構築_flag_offなら被attach警告は出ずbandはnoneのまま(
+    def test_emits_warning_for_store_flag_off_attach_band_none(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """store未構築 flag offなら被attach警告は出ずbandはnoneのまま。"""
         runtime = create_world_runtime(_SCENARIO_PATH, config=_stagnation_config())
         assert runtime._stagnation_pressure_store is None
         # 機能自体が無効な経路では resolver を差し替えなくても being 未解決

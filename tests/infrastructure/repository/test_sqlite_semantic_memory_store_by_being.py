@@ -46,7 +46,7 @@ def store() -> SqliteSemanticMemoryStore:
 class TestSqliteSemanticByBeingRoundtrip:
     """add_by_being → list_for_being のラウンドトリップ。"""
 
-    def test_保存して取り出せる(self, store: SqliteSemanticMemoryStore) -> None:
+    def test_documented_behavior(self, store: SqliteSemanticMemoryStore) -> None:
         """add → list で同等の entry が返る。"""
         being_id = BeingId("ada")
         entry = _make_entry()
@@ -62,7 +62,7 @@ class TestSqliteSemanticByBeingRoundtrip:
         assert loaded.tags == entry.tags
         assert loaded.player_id == entry.player_id
 
-    def test_同一_entry_id_は_upsert_される(
+    def test_same_entry_id_upsert(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """同 (being_id, entry_id) は ON CONFLICT で上書きされる。"""
@@ -73,7 +73,7 @@ class TestSqliteSemanticByBeingRoundtrip:
         assert len(result) == 1
         assert result[0].text == "v2"
 
-    def test_異なる_being_id_の_entry_は独立に保持(
+    def test_being_id_entry_independently(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """同じ entry_id でも being_id が違えば PK が違うので独立保持。"""
@@ -82,13 +82,13 @@ class TestSqliteSemanticByBeingRoundtrip:
         assert store.list_for_being(BeingId("ada"))[0].text == "ada"
         assert store.list_for_being(BeingId("ben"))[0].text == "ben"
 
-    def test_未登録_being_には空リスト(
+    def test_unregistered_being_empty_list(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """未登録 being_id は空リスト。"""
         assert store.list_for_being(BeingId("nobody")) == []
 
-    def test_created_at_降順で返る(
+    def test_returns_created(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """list_for_being は created_at DESC で並ぶ。"""
@@ -122,7 +122,8 @@ class TestSqliteSemanticByBeingRoundtrip:
 class TestSqliteClusterSignatureByBeing:
     """register_cluster_signature_if_new_by_being の永続化挙動。"""
 
-    def test_初回_True_既存_False(self, store: SqliteSemanticMemoryStore) -> None:
+    def test_first_true_existing_false(self, store: SqliteSemanticMemoryStore) -> None:
+        """初回 True 既存 False。"""
         assert (
             store.register_cluster_signature_if_new_by_being(
                 BeingId("ada"), "sig-1"
@@ -136,7 +137,7 @@ class TestSqliteClusterSignatureByBeing:
             is False
         )
 
-    def test_異なる_being_id_なら独立に登録(
+    def test_being_id_independently(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """異なる being_id 同 signature は両方登録される。"""
@@ -157,17 +158,20 @@ class TestSqliteClusterSignatureByBeing:
 class TestSqliteSemanticTypeGuards:
     """型違反の弾き方。"""
 
-    def test_add_by_being_の型違反(self, store: SqliteSemanticMemoryStore) -> None:
+    def test_add_by_being_raises_type_error(self, store: SqliteSemanticMemoryStore) -> None:
+        """add by being の型違反。"""
         with pytest.raises(TypeError, match="being_id"):
             store.add_by_being("ada", _make_entry())  # type: ignore[arg-type]
         with pytest.raises(TypeError, match="entry"):
             store.add_by_being(BeingId("ada"), "not-an-entry")  # type: ignore[arg-type]
 
-    def test_list_for_being_の型違反(self, store: SqliteSemanticMemoryStore) -> None:
+    def test_list_for_being_raises_type_error(self, store: SqliteSemanticMemoryStore) -> None:
+        """list for being の型違反。"""
         with pytest.raises(TypeError):
             store.list_for_being("ada")  # type: ignore[arg-type]
 
-    def test_signature_の型違反(self, store: SqliteSemanticMemoryStore) -> None:
+    def test_signature_raises_type_error(self, store: SqliteSemanticMemoryStore) -> None:
+        """signature の型違反。"""
         with pytest.raises(TypeError, match="evidence_signature"):
             store.register_cluster_signature_if_new_by_being(
                 BeingId("ada"), 123  # type: ignore[arg-type]
@@ -177,9 +181,10 @@ class TestSqliteSemanticTypeGuards:
 class TestSqliteSemanticReplaceAll:
     """Phase 4 Step 4-2a: replace_all_by_being の挙動 (snapshot restore primitive)。"""
 
-    def test_既存_entries_と_signatures_を一括置換する(
+    def test_replace_all_replaces_existing_entries_and_signatures(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
+        """既存 entries と signatures を一括置換する。"""
         b = BeingId("ada")
         store.add_by_being(b, _make_entry("old"))
         store.register_cluster_signature_if_new_by_being(b, "sig-old")
@@ -189,9 +194,10 @@ class TestSqliteSemanticReplaceAll:
         assert ids == ["new"]
         assert store.list_cluster_signatures_by_being(b) == ["sig-new"]
 
-    def test_他_being_の状態は影響を受けない(
+    def test_other_being_state_not_affected(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
+        """他 being の状態は影響を受けない。"""
         store.add_by_being(BeingId("ada"), _make_entry("a1"))
         store.register_cluster_signature_if_new_by_being(BeingId("ada"), "sig-a")
         store.add_by_being(BeingId("ben"), _make_entry("b1"))
@@ -201,9 +207,10 @@ class TestSqliteSemanticReplaceAll:
         assert ids == ["b1"]
         assert store.list_cluster_signatures_by_being(BeingId("ben")) == ["sig-b"]
 
-    def test_list_cluster_signatures_は_辞書順(
+    def test_list_cluster_signatures_dict(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
+        """listclustersignatures は辞書順。"""
         b = BeingId("ada")
         store.register_cluster_signature_if_new_by_being(b, "z")
         store.register_cluster_signature_if_new_by_being(b, "a")
@@ -221,9 +228,10 @@ class TestSqliteSemanticReplaceAll:
 class TestSqliteSemanticBeliefJournalRoundtrip:
     """U3a: belief journal フィールドの永続化 round-trip。"""
 
-    def test_belief_journal_フィールドが永続化される(
+    def test_belief_journal(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
+        """belief journal フィールドが永続化される。"""
         being_id = BeingId("ada")
         entry = SemanticMemoryEntry(
             entry_id="e1",
@@ -256,7 +264,7 @@ class TestSqliteSemanticSupportWeightRoundtrip:
     固定する (H4 再発防止)。
     """
 
-    def test_confirmationとhearsayのカウントが永続化される(
+    def test_confirmation_hearsay_count(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """support 内数の confirmation_support_count / hearsay_support_count が
@@ -278,7 +286,7 @@ class TestSqliteSemanticSupportWeightRoundtrip:
         assert loaded.confirmation_support_count == 2
         assert loaded.hearsay_support_count == 1
 
-    def test_replace_all_by_being_でもカウントが永続化される(
+    def test_replace_all_being_count(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """snapshot restore 経路 (replace_all_by_being) でも両カウントが戻る。"""
@@ -329,7 +337,7 @@ class TestSqliteSemanticFullFieldRoundtripContract:
             hearsay_support_count=1,
         )
 
-    def test_add_listで全フィールドが完全一致で戻る(
+    def test_add_list_all_round_trips_exactly(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """add_by_being → list_for_being の往復で entry が元と完全一致する。"""
@@ -339,7 +347,7 @@ class TestSqliteSemanticFullFieldRoundtripContract:
         loaded = store.list_for_being(being_id)[0]
         assert loaded == entry
 
-    def test_replace_all_by_beingで全フィールドが完全一致で戻る(
+    def test_replace_all_being_all_round_trips_exactly(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """replace_all_by_being → list_for_being の往復で entry が元と完全一致する。"""
@@ -353,9 +361,10 @@ class TestSqliteSemanticFullFieldRoundtripContract:
 class TestSqliteSupersedeByBeing:
     """supersede_by_being の永続化挙動 (U3a)。"""
 
-    def test_old_が_superseded_new_が_active_で保存される(
+    def test_old_superseded_new_active_saved(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
+        """old が superseded new が active で保存される。"""
         being_id = BeingId("ada")
         old = _make_entry("old", text="拠点に資源はない")
         store.add_by_being(being_id, old)
@@ -377,9 +386,10 @@ class TestSqliteSupersedeByBeing:
         assert entries["new"].supersedes == "old"
         assert entries["new"].belief_id == old.belief_id
 
-    def test_old_entry_id_が存在しなくても_new_entry_は追加される(
+    def test_old_entry_id_new_entry(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
+        """old entry id が存在しなくても new entry は追加される。"""
         being_id = BeingId("ada")
         new = _make_entry("new")
         store.supersede_by_being(
@@ -387,7 +397,8 @@ class TestSqliteSupersedeByBeing:
         )
         assert [e.entry_id for e in store.list_for_being(being_id)] == ["new"]
 
-    def test_型違反は_TypeError(self, store: SqliteSemanticMemoryStore) -> None:
+    def test_value_raises_type_error(self, store: SqliteSemanticMemoryStore) -> None:
+        """型違反は TypeError。"""
         with pytest.raises(TypeError, match="being_id"):
             store.supersede_by_being(
                 "ada", old_entry_id="old", new_entry=_make_entry()  # type: ignore[arg-type]
@@ -401,17 +412,19 @@ class TestSqliteSupersedeByBeing:
 class TestSqliteUpdateStatusByBeing:
     """update_status_by_being の永続化挙動 (U3a)。"""
 
-    def test_指定_entry_の_status_が更新される(
+    def test_entry_status_updated(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
+        """指定 entry の status が更新される。"""
         being_id = BeingId("ada")
         store.add_by_being(being_id, _make_entry("e1"))
         store.update_status_by_being(being_id, "e1", "inactive")
         assert store.list_for_being(being_id)[0].status == "inactive"
 
-    def test_存在しない_entry_id_は無視される(
+    def test_entry_id(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
+        """存在しない entry id は無視される。"""
         being_id = BeingId("ada")
         store.add_by_being(being_id, _make_entry("e1"))
         store.update_status_by_being(being_id, "does-not-exist", "inactive")
@@ -427,7 +440,8 @@ class TestSqliteSemanticBackwardCompatOldSchema:
     で読めることを確認する。
     """
 
-    def test_旧スキーマの行が_default_値で読める(self) -> None:
+    def test_legacy_key_line_default_value(self) -> None:
+        """旧スキーマの行が default 値で読める。"""
         from ai_rpg_world.infrastructure.repository.sqlite_migration import (
             SqliteMigration,
             apply_migrations,
@@ -499,7 +513,8 @@ class TestSqliteSemanticBackwardCompatSupportWeightColumns:
     黙って壊さず、既存行を読めなくもしないことの担保。
     """
 
-    def test_旧スキーマの行が両カウント0で読める(self) -> None:
+    def test_legacy_key_line_count_zero(self) -> None:
+        """旧スキーマの行が両カウント0で読める。"""
         from ai_rpg_world.infrastructure.repository.sqlite_migration import (
             SqliteMigration,
             apply_migrations,

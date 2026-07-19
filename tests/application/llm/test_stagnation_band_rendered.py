@@ -67,24 +67,26 @@ class TestOwnStagnationHintRendered:
         builder._build_needs_section(snap, lines)
         return lines
 
-    def test_none_カウンタ0では_hint_は出ない(self) -> None:
+    def test_none_zero_hint_not_rendered(self) -> None:
         """前進中 (カウンタ0) では偽の圧を出さない。"""
         lines = self._render_state_section(_snapshot(own_stagnation_band="none"))
         joined = "\n".join(lines)
         assert "前に進んでいない" not in joined
         assert "繰り返している" not in joined
 
-    def test_light_で_何かが前に進んでいない気がする_が出る(self) -> None:
+    def test_light_before_rendered(self) -> None:
+        """light で何かが前に進んでいない気がするが出る。"""
         lines = self._render_state_section(_snapshot(own_stagnation_band="light"))
         joined = "\n".join(lines)
         assert "何かが前に進んでいない気がする" in joined
 
-    def test_strong_で_同じことばかり繰り返している焦り_が出る(self) -> None:
+    def test_strong_same_rendered(self) -> None:
+        """strong で同じことばかり繰り返している焦りが出る。"""
         lines = self._render_state_section(_snapshot(own_stagnation_band="strong"))
         joined = "\n".join(lines)
         assert "同じことばかり繰り返している" in joined
 
-    def test_default_は_none_扱い(self) -> None:
+    def test_default_none(self) -> None:
         """own_stagnation_band field を default のまま使うと none と同じ挙動。"""
         snap = SpotGraphPlayerSnapshotDto(
             current_spot_id=0,
@@ -98,13 +100,14 @@ class TestOwnStagnationHintRendered:
         assert "前に進んでいない" not in joined
         assert "繰り返している" not in joined
 
-    def test_未知のバンドでも_落ちない(self) -> None:
+    def test_unknown_does_not_crash(self) -> None:
+        """未知のバンドでも 落ちない。"""
         lines = self._render_state_section(_snapshot(own_stagnation_band="???"))
         joined = "\n".join(lines)
         assert "前に進んでいない" not in joined
         assert "繰り返している" not in joined
 
-    def test_ゲージ値そのものは表示されない(self) -> None:
+    def test_value_not_displayed(self) -> None:
         """バンドだけを見せる設計: カウンタ数値が文言に混入しないことを保証。"""
         lines = self._render_state_section(_snapshot(own_stagnation_band="strong"))
         joined = "\n".join(lines)
@@ -114,7 +117,8 @@ class TestOwnStagnationHintRendered:
 class TestNearbyEntityStagnationSuffixRendered:
     """P-U4: nearby_entities[].stagnation_band に応じた行末 suffix。"""
 
-    def test_none_のときは_suffix_が出ない(self) -> None:
+    def test_none_suffix_not_rendered(self) -> None:
+        """none のときは suffix が出ない。"""
         snap = _snapshot(
             nearby_entities=(
                 SpotGraphNearbyEntityEntry(
@@ -127,7 +131,8 @@ class TestNearbyEntityStagnationSuffixRendered:
         assert "手詰まり" not in result.current_state_text
         assert "苛立って" not in result.current_state_text
 
-    def test_light_で_手詰まりの様子_が出る(self) -> None:
+    def test_light_rendered(self) -> None:
+        """light で手詰まりの様子が出る。"""
         snap = _snapshot(
             nearby_entities=(
                 SpotGraphNearbyEntityEntry(
@@ -138,7 +143,8 @@ class TestNearbyEntityStagnationSuffixRendered:
         result = SpotGraphUiContextBuilder().build("base", _wrap(snap))
         assert "何か手詰まりの様子" in result.current_state_text
 
-    def test_strong_で_苛立って落ち着かない様子_が出る(self) -> None:
+    def test_strong_rendered(self) -> None:
+        """strong で苛立って落ち着かない様子が出る。"""
         snap = _snapshot(
             nearby_entities=(
                 SpotGraphNearbyEntityEntry(
@@ -149,7 +155,8 @@ class TestNearbyEntityStagnationSuffixRendered:
         result = SpotGraphUiContextBuilder().build("base", _wrap(snap))
         assert "苛立って落ち着かない様子" in result.current_state_text
 
-    def test_倒れている相手は_停滞感suffixより_倒れて動かない_が優先される(self) -> None:
+    def test_target_suffix_preferred(self) -> None:
+        """倒れている相手は 停滞感suffixより 倒れて動かない が優先される。"""
         snap = _snapshot(
             nearby_entities=(
                 SpotGraphNearbyEntityEntry(
@@ -164,7 +171,8 @@ class TestNearbyEntityStagnationSuffixRendered:
         assert "倒れて動かない" in result.current_state_text
         assert "苛立って落ち着かない様子" not in result.current_state_text
 
-    def test_デフォルトの_stagnation_band_は_none相当(self) -> None:
+    def test_default_stagnation_band_none(self) -> None:
+        """デフォルトの stagnation band は none相当。"""
         snap = _snapshot(
             nearby_entities=(SpotGraphNearbyEntityEntry(entity_id=2, display_name="リン"),)
         )

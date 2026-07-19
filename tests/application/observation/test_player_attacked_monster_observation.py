@@ -57,7 +57,7 @@ def _make_event(*, target_incapacitated: bool = False, damage: int = 7):
 
 
 class TestRegistryRouting:
-    def test_strategy_は_spot_graph(self) -> None:
+    def test_strategy_spot_graph(self) -> None:
         """PlayerAttackedMonsterInSpotEvent → spot_graph 戦略。"""
         registry = ObservedEventRegistry()
         event = _make_event()
@@ -68,7 +68,7 @@ class TestRegistryRouting:
 class TestRecipientStrategy:
     """行為者本人は除外、同スポットの第三者プレイヤーのみ配信先。"""
 
-    def test_行為者は除外され_第三者のみ配信先(self) -> None:
+    def test_line(self) -> None:
         """attacker P1 は除外、bystander P2 のみ recipients。"""
         registry = ObservedEventRegistry(
             event_to_strategy={PlayerAttackedMonsterInSpotEvent: "spot_graph"}
@@ -115,7 +115,7 @@ def _make_ctx() -> ObservationFormatterContext:
 class TestFormatter:
     """prose 生成の検証。"""
 
-    def test_actor_と_monster_を含む_social_観測(self) -> None:
+    def test_social_observation_includes_actor_and_monster(self) -> None:
         """recipient_id を渡しても本人除外は recipient_strategy で済むため、
         formatter は常に第三者向け prose を返す。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
@@ -129,7 +129,7 @@ class TestFormatter:
         assert result.structured["damage"] == 12
         assert result.structured["target_incapacitated"] is False
 
-    def test_target_incapacitated_で倒した_suffix(self) -> None:
+    def test_target_incapacitated_suffix(self) -> None:
         """target_incapacitated=True で「倒した」suffix が付く。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
 

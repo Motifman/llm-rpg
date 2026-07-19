@@ -31,26 +31,26 @@ def service(repo: InMemoryBeingRepository) -> BeingProvisioningService:
 class TestConstruction:
     """コンストラクタの型ガード + default 値。"""
 
-    def test_BeingRepository_を渡せば構築できる(
+    def test_being_repository_can_build(
         self, repo: InMemoryBeingRepository
     ) -> None:
         """正常系: Repository を渡せばインスタンス化される。"""
         s = BeingProvisioningService(repo)
         assert s.default_world_id == WorldId(1)
 
-    def test_default_world_id_を上書きできる(
+    def test_default_world_id_can_override(
         self, repo: InMemoryBeingRepository
     ) -> None:
         """default_world_id を渡せばそれを使う。"""
         s = BeingProvisioningService(repo, default_world_id=WorldId(7))
         assert s.default_world_id == WorldId(7)
 
-    def test_非_Repository_は_TypeError(self) -> None:
+    def test_repository_raises_type_error(self) -> None:
         """型違反は TypeError。"""
         with pytest.raises(TypeError, match="being_repository"):
             BeingProvisioningService("not-a-repo")  # type: ignore[arg-type]
 
-    def test_非_WorldId_の_default_は_TypeError(
+    def test_world_id_default_raises_type_error(
         self, repo: InMemoryBeingRepository
     ) -> None:
         """default_world_id の型違反は TypeError。"""
@@ -61,7 +61,7 @@ class TestConstruction:
 class TestEnsureAttachedNewBeing:
     """初回 provisioning: Being が存在しないケース。"""
 
-    def test_新規_player_に_Being_が作成される(
+    def test_new_player_being_created(
         self,
         repo: InMemoryBeingRepository,
         service: BeingProvisioningService,
@@ -76,7 +76,7 @@ class TestEnsureAttachedNewBeing:
             world_id=WorldId(1), player_id=PlayerId(2)
         )
 
-    def test_identity_hint_を渡せば反映される(
+    def test_identity_hint(
         self,
         repo: InMemoryBeingRepository,
         service: BeingProvisioningService,
@@ -88,7 +88,7 @@ class TestEnsureAttachedNewBeing:
         assert being is not None
         assert being.identity == hint
 
-    def test_identity_hint_未指定なら_placeholder_が使われる(
+    def test_identity_hint_unspecified_placeholder_used(
         self,
         repo: InMemoryBeingRepository,
         service: BeingProvisioningService,
@@ -100,7 +100,7 @@ class TestEnsureAttachedNewBeing:
         assert being.identity.name == "agent_7"
         assert being.identity.first_person == "わたし"
 
-    def test_world_id_を渡せば_その_world_に_attach_される(
+    def test_world_id_world_attach(
         self,
         repo: InMemoryBeingRepository,
         service: BeingProvisioningService,
@@ -119,7 +119,7 @@ class TestEnsureAttachedNewBeing:
 class TestEnsureAttachedIdempotent:
     """idempotent な挙動: 既に attach 中なら何もしない。"""
 
-    def test_2_回目の_ensure_attached_は同じ_BeingId_を返す(
+    def test_returns_two_ensure_attached_same_being_id(
         self,
         repo: InMemoryBeingRepository,
         service: BeingProvisioningService,
@@ -129,7 +129,7 @@ class TestEnsureAttachedIdempotent:
         second = service.ensure_attached(PlayerId(2))
         assert first == second
 
-    def test_2_回目で_identity_hint_を変えても_既存_identity_は変わらない(
+    def test_two_identity_hint_existing_identity(
         self,
         repo: InMemoryBeingRepository,
         service: BeingProvisioningService,
@@ -150,7 +150,7 @@ class TestEnsureAttachedIdempotent:
 class TestEnsureAttachedReattach:
     """既存 Being が別 (world, player) に attach 中の場合、再 attach する。"""
 
-    def test_異なる_world_id_での_provisioning_は_独立した_Being_を作る(
+    def test_creates_world_id_provisioning_independent_being(
         self,
         repo: InMemoryBeingRepository,
         service: BeingProvisioningService,
@@ -177,7 +177,7 @@ class TestEnsureAttachedReattach:
         assert being_99_after is not None
         assert being_99_after.is_attached is True
 
-    def test_既存_BeingId_を_別_player_に_引き継ぐと_detach_then_attach_される(
+    def test_existing_being_id_different_player_detach_then_attach(
         self,
         repo: InMemoryBeingRepository,
         service: BeingProvisioningService,
@@ -206,21 +206,21 @@ class TestEnsureAttachedReattach:
 class TestEnsureAttachedTypeGuards:
     """型違反の弾き方。"""
 
-    def test_非_PlayerId_は_TypeError(
+    def test_player_id_raises_type_error(
         self, service: BeingProvisioningService
     ) -> None:
         """player_id の型違反は TypeError。"""
         with pytest.raises(TypeError, match="player_id"):
             service.ensure_attached(2)  # type: ignore[arg-type]
 
-    def test_非_WorldId_の_world_id_は_TypeError(
+    def test_world_id_world_id_raises_type_error(
         self, service: BeingProvisioningService
     ) -> None:
         """world_id の型違反は TypeError。"""
         with pytest.raises(TypeError, match="world_id"):
             service.ensure_attached(PlayerId(2), world_id=1)  # type: ignore[arg-type]
 
-    def test_非_BeingIdentity_の_hint_は_TypeError(
+    def test_being_id_entity_hint_raises_type_error(
         self, service: BeingProvisioningService
     ) -> None:
         """identity_hint の型違反は TypeError。"""

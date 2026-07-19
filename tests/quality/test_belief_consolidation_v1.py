@@ -154,7 +154,8 @@ class TestBeliefConsolidationV1:
     """S1 (反復誤差の一般化) 相当の evidence 3 件を 1 回の flush で処理し、
     prompt 構造 + journal 反映を dump する。LLM は呼ばない (スタブ port)。"""
 
-    def test_同型evidence3件が1件のcreateに畳まれる様子を_dump_する(self) -> None:
+    def test_type_evidence3_one_create_dump(self) -> None:
+        """同型evidence3件が1件のcreateに畳まれる様子を dump する。"""
         being_repo = InMemoryBeingRepository()
         resolver = BeingAttachmentResolver(being_repo)
         being_id = BeingProvisioningService(being_repo).ensure_attached(PlayerId(1))

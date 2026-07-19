@@ -125,7 +125,7 @@ class TestChunkEpisodeDraftBuilder:
         assert "place_spot:77" in canon
         assert any(k.startswith("entity:") for k in canon)
 
-    def test_overflow_observation_contributes_to_cues_not_timeline(self) -> None:
+    def test_overflow_observation_contributes_cues_timeline(self) -> None:
         """
         observation_overflow_from_window は unified には入らないが、
         cue / who / 場所ヒントの材料には含まれる。
@@ -207,7 +207,7 @@ class TestChunkEpisodeDraftBuilder:
         # prediction_error は質的乖離判定なので LLM 補完 (PR2b) に委ね、ここでは None
         assert ep.prediction_error is None
 
-    def test_subjective_fields_none_when_actions_lack_them(self) -> None:
+    def test_subjective_fields_None_when_actions_lack_them(self) -> None:
         """action が主観入力を持たないとき expected/why/felt は None のまま。"""
         act = ActionResultEntry(
             occurred_at=datetime(2026, 5, 4, 17, 0, 0, tzinfo=timezone.utc),
@@ -295,7 +295,7 @@ class TestChunkEpisodeDraftBuilderNounMatcher:
     """#526 後続 Fix A: write 側で noun_matcher を使い、観測 prose 中の
     固有名詞から place_spot / entity / object cue を episode に貼る。"""
 
-    def test_noun_matcher_未注入なら_既存挙動と同一(self) -> None:
+    def test_noun_matcher_uninjected_existing_same(self) -> None:
         """``noun_matcher=None`` (default) では prose 由来 cue は付かない。
         既存の structured / action / outcome cue のみ。"""
         t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
@@ -321,7 +321,7 @@ class TestChunkEpisodeDraftBuilderNounMatcher:
         assert "entity" not in axes_in_episode
         assert "object" not in axes_in_episode
 
-    def test_noun_matcher_注入時_観測_prose_由来_cue_が_episode_に_乗る(self) -> None:
+    def test_noun_matcher_observation_prose_cue_episode_included(self) -> None:
         """matcher が「書架A」を spot_id=3 として登録していれば、
         観測 prose にその語が含まれる episode の cues に place_spot:3 が乗る。"""
         t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
@@ -349,7 +349,7 @@ class TestChunkEpisodeDraftBuilderNounMatcher:
         assert "place_spot:3" in canons
         assert "object:world_object_1" in canons
 
-    def test_noun_matcher_注入時_観測_prose_が_None_なら_cue_は_増えない(self) -> None:
+    def test_noun_matcher_observation_prose_none_cue(self) -> None:
         """observation の prose が None / 空でも例外を投げず、追加 cue 0 件。"""
         t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
         obs = ObservationEntry(
@@ -379,7 +379,7 @@ class TestChunkEpisodeDraftBuilderRuntimeContext:
     現在の player の場所 / 視界 object / 同席者が episode の cue に固定される。
     """
 
-    def test_runtime_context_provider_未注入なら_既存挙動と同一(self) -> None:
+    def test_runtime_context_provider_uninjected_existing_same(self) -> None:
         """provider が ``None`` のときは place_spot / object cue が運ばれない
         (Fix A 単独の挙動を維持)。"""
         from ai_rpg_world.application.llm.contracts.dtos import (
@@ -398,7 +398,7 @@ class TestChunkEpisodeDraftBuilderRuntimeContext:
         assert "place_spot" not in axes_in_episode
         assert "object" not in axes_in_episode
 
-    def test_runtime_context_provider_注入時_current_spot_id_が_place_spot_cue_に乗る(self) -> None:
+    def test_runtime_context_provider_current_spot_id_place_spot_cue_included(self) -> None:
         """provider が ``current_spot_id=5`` を返せば、episode に
         ``place_spot:5`` cue が貼られる。これにより memo_add のような
         prose / structured が乏しいターンでも場所文脈が episode に残る。"""
@@ -430,7 +430,7 @@ class TestChunkEpisodeDraftBuilderRuntimeContext:
         canons = {c.to_canonical() for c in ep.cues}
         assert "place_spot:5" in canons, f"current_spot_id が cue 化されていない: {canons}"
 
-    def test_runtime_context_provider_例外を投げても_episode_は_書ける(self) -> None:
+    def test_runtime_context_provider_episode_raises_exception(self) -> None:
         """provider が例外を投げても chunk write 自体は止めない (graceful)。
         cue は付かないが episode は成立する。"""
         t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
@@ -451,7 +451,7 @@ class TestChunkEpisodeDraftBuilderRuntimeContext:
         ).build(inp)
         assert ep.episode_id  # 正常に id が振られている
 
-    def test_runtime_context_provider_が_None_を返したら_cue_は_増えない(self) -> None:
+    def test_returns_cue_runtime_context_provider_none_when(self) -> None:
         """provider が ``None`` (= 「context が取れない」明示) を返すケースでも
         例外を投げず既存挙動と同一。"""
         t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
@@ -476,7 +476,7 @@ class TestChunkEpisodeDraftBuilderCoPresent:
     でなく co_present (= その場に居た人) も照合できるようにするため。
     """
 
-    def test_co_present_is_empty_when_no_runtime_context(self) -> None:
+    def test_co_present_is_empty_when_runtime_context(self) -> None:
         """runtime_context provider 未注入なら co_present は空 (= 導入前と一致)。"""
         t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
         act = ActionResultEntry(
@@ -535,7 +535,7 @@ class TestChunkEpisodeDraftBuilderCoPresent:
         ).build(inp)
         assert ep.co_present == ("カイ", "ノア")
 
-    def test_co_present_empty_when_no_player_targets(self) -> None:
+    def test_co_present_empty_when_player_targets(self) -> None:
         """同席プレイヤーが居ない (player target が無い) なら co_present は空。"""
         from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 

@@ -83,7 +83,8 @@ class TestSlidingWindowCodec:
         p1 = dst.get_recent(PlayerId(1), limit=10)
         assert [e.output.prose for e in p1] == ["first", "second"]
 
-    def test_sliding_window_が_None_でも_no_op(self) -> None:
+    def test_sliding_window_none_op(self) -> None:
+        """sliding window が None でも no op。"""
         runtime = SimpleNamespace(_sliding_window=None)
         captured = SlidingWindowMemorySubsystemCodec().capture(runtime)
         assert captured["entries"] == []
@@ -91,7 +92,7 @@ class TestSlidingWindowCodec:
 
 
 class TestObservationBufferCodec:
-    def test_capture_restore_round_trip(self) -> None:
+    def test_capture_restore_round_trip_2(self) -> None:
         src = DefaultObservationContextBuffer()
         src.append(PlayerId(1), _obs_entry("pending obs"))
         src_runtime = SimpleNamespace(_obs_buffer=src)
@@ -104,14 +105,15 @@ class TestObservationBufferCodec:
         assert len(observations) == 1
         assert observations[0].output.prose == "pending obs"
 
-    def test_obs_buffer_が_None_でも_no_op(self) -> None:
+    def test_obs_buffer_none_op(self) -> None:
+        """obs buffer が None でも no op。"""
         runtime = SimpleNamespace(_obs_buffer=None)
         captured = ObservationBufferSubsystemCodec().capture(runtime)
         assert captured["entries"] == []
 
 
 class TestActionResultStoreCodec:
-    def test_capture_restore_round_trip(self) -> None:
+    def test_capture_restore_round_trip_3(self) -> None:
         src = DefaultActionResultStore()
         # DefaultActionResultStore.append のシグネチャは複雑なので直接 _store
         # に詰める (= test 用)。実本番では append 経由で乗る。
@@ -145,12 +147,13 @@ class TestActionResultStoreCodec:
         assert results[0].prediction_context_id == "predctx-abc123"
         assert results[0].in_context_belief_ids == ("sem-belief-1", "sem-belief-2")
 
-    def test_action_result_store_が_None_でも_no_op(self) -> None:
+    def test_action_result_store_none_op(self) -> None:
+        """action result store が None でも no op。"""
         runtime = SimpleNamespace(_action_result_store=None)
         captured = ActionResultStoreSubsystemCodec().capture(runtime)
         assert captured["entries"] == []
 
-    def test_prediction_context_id_欠損の旧スキーマ相当データは_None_に倒れる(self) -> None:
+    def test_prediction_context_id_legacy_schema_data_none(self) -> None:
         """v4 導入前 (= キー自体が無い) payload を decode しても例外にならず None になる。
 
         schema_version チェック自体は旧 snapshot を弾く仕様 (バージョン不一致で
@@ -179,7 +182,7 @@ class TestActionResultStoreCodec:
         results = dst.get_recent(PlayerId(1), limit=10)
         assert results[0].prediction_context_id is None
 
-    def test_in_context_belief_ids_欠損の旧スキーマ相当データは空タプルに倒れる(self) -> None:
+    def test_context_belief_ids_legacy_schema_data_empty_tuple(self) -> None:
         """v5 導入前 (= キー自体が無い) payload を decode しても例外にならず空タプルになる。
 
         U4 で追加した ``in_context_belief_ids`` の後方互換を、
@@ -222,7 +225,8 @@ class TestSlidingWindowCodecRollingSummaryBackend:
             l1_soft_cap=15, l1_hard_cap=25, l4_keep_generations=3
         )
 
-    def test_L1_raw_と_L4_と_L5_が_全部_往復する(self) -> None:
+    def test_includes_all_l_one_raw_l4_l_five(self) -> None:
+        """L1raw と L4 と L5 が全部往復する。"""
         from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
             L4MidSummary,
         )
@@ -285,7 +289,7 @@ class TestSlidingWindowCodecRollingSummaryBackend:
         assert l5.self_image == "探索者カイ"
         assert dst._long_gen_index[1] == 2
 
-    def test_sliding_v1_snapshot_を_rolling_backend_に_load_できる(self) -> None:
+    def test_sliding_v1_snapshot_rolling_backend_load(self) -> None:
         """v1 (sliding 専用) フォーマットを rolling backend が読めるか (= マイグレーション互換)。"""
         v1_data = {
             "schema_version": 1,
@@ -315,7 +319,7 @@ class TestSlidingWindowCodecRollingSummaryBackend:
         assert [e.output.prose for e in recent] == ["migrated"]
         assert dst._long_summary(1) is None  # v1 には L5 が無い
 
-    def test_rolling_snapshot_を_sliding_backend_に_load_は_raw_のみ移送(self) -> None:
+    def test_rolling_snapshot_sliding_backend_load_raw(self) -> None:
         """cross-backend (rolling → sliding): L4 / L5 は捨てて raw だけ復元。"""
         src = self._make_rolling()
         src.append(PlayerId(1), _obs_entry("raw-only"))
@@ -338,7 +342,8 @@ class TestUnsupportedSchemaVersion:
             ActionResultStoreSubsystemCodec,
         ],
     )
-    def test_未サポート_schema_version_は_例外(self, codec_cls) -> None:
+    def test_unsupported_schema_version_raises_exception(self, codec_cls) -> None:
+        """未サポート schemaversion は例外。"""
         codec = codec_cls()
         with pytest.raises(ValueError, match="schema_version"):
             codec.restore(SimpleNamespace(), {"schema_version": 999})

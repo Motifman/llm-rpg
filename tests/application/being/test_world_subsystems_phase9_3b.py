@@ -101,7 +101,8 @@ def _disc(spec_id: int = 100, is_discovered: bool = False) -> DiscoverableItem:
 class TestSpotInteriorCodec:
     """SpotInterior の dynamic 部分のみ往復することを担保。"""
 
-    def test_object_の_state_と_is_visible_を_往復(self) -> None:
+    def test_object_state_visible_round_trips(self) -> None:
+        """object の state と isvisible を往復。"""
         # source: object.state = {"door_open": True}, is_visible = False
         src_obj = _spot_obj(
             object_id=1,
@@ -145,7 +146,8 @@ class TestSpotInteriorCodec:
         # 静的 metadata (name 等) は dst 側のまま
         assert restored_obj.name == "door"
 
-    def test_ground_items_は_完全置換(self) -> None:
+    def test_ground_items_replace_existing_items(self) -> None:
+        """grounditems は完全置換。"""
         src_interior = SpotInterior(
             sub_locations=(),
             objects=(),
@@ -182,7 +184,8 @@ class TestSpotInteriorCodec:
         assert len(restored.ground_items) == 1
         assert restored.ground_items[0].item_instance_id == ItemInstanceId(7)
 
-    def test_discoverable_item_is_discovered_往復(self) -> None:
+    def test_discoverable_item_discovered_round_trips(self) -> None:
+        """discoverable item is discovered 往復。"""
         src = SpotInterior(
             sub_locations=(),
             objects=(),
@@ -207,7 +210,8 @@ class TestSpotInteriorCodec:
         assert restored is not None
         assert restored.discoverable_items[0].is_discovered is True
 
-    def test_sub_location_is_hidden_往復(self) -> None:
+    def test_sub_location_hidden_round_trips(self) -> None:
+        """sub location is hidden 往復。"""
         src = SpotInterior(
             sub_locations=(_sub_loc(sub_id=1, is_hidden=False),),
             objects=(),
@@ -235,7 +239,8 @@ class TestSpotInteriorCodec:
         assert restored is not None
         assert restored.sub_locations[0].is_hidden is False
 
-    def test_puzzle_state_往復(self) -> None:
+    def test_puzzle_state_round_trips(self) -> None:
+        """puzzle state 往復。"""
         src_puzzle = PuzzleState(
             puzzle_type="combination_lock",
             solution=("1", "2", "3"),
@@ -277,7 +282,7 @@ class TestSpotInteriorCodec:
         assert restored_puzzle.current_input == ("1", "2")
         assert restored_puzzle.attempts == 2
 
-    def test_snapshot_側に存在しない_spot_は_skip(
+    def test_snapshot_spot_skip(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """snapshot に SpotId(99) のデータがあるが dst には spot がない → skip。"""
@@ -319,7 +324,8 @@ class TestItemInstanceCodec:
             durability_max=durability_max,
         )
 
-    def test_quantity_と_state_を_往復(self) -> None:
+    def test_quantity_state_round_trips(self) -> None:
+        """quantity と state を往復。"""
         spec = self._make_spec(spec_id=1, max_stack=99)
         src_inst = ItemInstance(
             item_instance_id=ItemInstanceId(10),
@@ -363,7 +369,8 @@ class TestItemInstanceCodec:
         assert restored.quantity == 5
         assert restored.state == {"opened": True, "remaining": 3}
 
-    def test_durability_往復(self) -> None:
+    def test_durability_round_trips(self) -> None:
+        """durability 往復。"""
         spec = self._make_spec(spec_id=2, max_stack=1, durability_max=100)
         src_inst = ItemInstance(
             item_instance_id=ItemInstanceId(20),
@@ -403,9 +410,10 @@ class TestItemInstanceCodec:
         )
         assert dst_store[ItemInstanceId(20)].item_instance.durability.current == 42
 
-    def test_snapshot_側にあるが_repo_になければ_skip(
+    def test_snapshot_repo_skip(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """snapshot 側にあるが repo になければ skip。"""
         captured = {
             "schema_version": 1,
             "entries": [
@@ -437,7 +445,8 @@ class TestUnsupportedSchemaVersion:
         "codec_cls",
         [SpotInteriorSubsystemCodec, ItemInstanceSubsystemCodec],
     )
-    def test_未サポート_schema_version_は_例外(self, codec_cls) -> None:
+    def test_unsupported_schema_version_raises_exception(self, codec_cls) -> None:
+        """未サポート schemaversion は例外。"""
         codec = codec_cls()
         with pytest.raises(ValueError, match="schema_version"):
             codec.restore(SimpleNamespace(), {"schema_version": 999})

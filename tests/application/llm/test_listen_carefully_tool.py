@@ -44,7 +44,8 @@ def _build_executor(*, runtime) -> SpotGraphToolExecutor:
 class TestListenCarefullyHappyPath:
     """runtime.do_listen が返す件数に応じた prose が組み立てられる。"""
 
-    def test_2_件の音が観測されたら_件数入り_message(self) -> None:
+    def test_two_observation_count_message(self) -> None:
+        """2 件の音が観測されたら 件数入り message。"""
         runtime = MagicMock()
         runtime.do_listen.return_value = 2
         executor = _build_executor(runtime=runtime)
@@ -57,7 +58,8 @@ class TestListenCarefullyHappyPath:
         args, _ = runtime.do_listen.call_args
         assert int(args[0].value) == 7
 
-    def test_1_件の音が観測されたら_単数形_message(self) -> None:
+    def test_one_observation_message(self) -> None:
+        """1 件の音が観測されたら 単数形 message。"""
         runtime = MagicMock()
         runtime.do_listen.return_value = 1
         executor = _build_executor(runtime=runtime)
@@ -72,7 +74,8 @@ class TestListenCarefullyHappyPath:
 class TestListenCarefullySilent:
     """全 spot SILENT / 減衰しきり: 「何も聞こえなかった」message。"""
 
-    def test_0_件なら_何も聞こえなかった(self) -> None:
+    def test_zero(self) -> None:
+        """0 件なら 何も聞こえなかった。"""
         runtime = MagicMock()
         runtime.do_listen.return_value = 0
         executor = _build_executor(runtime=runtime)
@@ -86,7 +89,8 @@ class TestListenCarefullySilent:
 class TestListenCarefullyUnwired:
     """runtime 未注入時は NOT_WIRED。"""
 
-    def test_runtime_未注入_は_NOT_WIRED(self) -> None:
+    def test_runtime_uninjected_not_wired(self) -> None:
+        """runtime 未注入は NOTWIRED。"""
         executor = _build_executor(runtime=None)
 
         result = executor._listen(7, {"inner_thought": ""})
@@ -98,7 +102,8 @@ class TestListenCarefullyUnwired:
 class TestListenCarefullyHandlerRegistration:
     """get_handlers() に listen ハンドラが登録される。"""
 
-    def test_get_handlers_に_listen_が_登録される(self) -> None:
+    def test_get_handlers_listen(self) -> None:
+        """gethandlers に listen が登録される。"""
         services = MagicMock()
         services.movement = MagicMock()
         executor = SpotGraphToolExecutor(

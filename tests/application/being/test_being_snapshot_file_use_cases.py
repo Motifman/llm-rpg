@@ -138,14 +138,16 @@ def _make_being() -> Being:
 
 
 class TestCaptureUseCase:
-    def test_未登録_being_は_例外(self, tmp_path: Path) -> None:
+    def test_unregistered_being_raises_exception(self, tmp_path: Path) -> None:
+        """未登録 being は例外。"""
         env = _make_environment()
         with pytest.raises(BeingNotFoundForSnapshotError):
             env["capture"].execute(BeingId("missing"), tmp_path / "x.json")
 
-    def test_capture_は_ファイルを書き出し_repo_を変更しない(
+    def test_writes_repo_does_not_change_capture_file(
         self, tmp_path: Path
     ) -> None:
+        """capture はファイルを書き出し repo を変更しない。"""
         env = _make_environment()
         being = _make_being()
         env["repo"].save(being)
@@ -164,7 +166,7 @@ class TestCaptureUseCase:
 
 
 class TestRestoreUseCase:
-    def test_capture_して_restore_すると_memory_が復元される(
+    def test_capture_restore_memory_restored(
         self, tmp_path: Path
     ) -> None:
         """source 側 → file → 別 dst 環境への完全 round-trip。"""
@@ -200,7 +202,7 @@ class TestRestoreUseCase:
         assert loaded is not None
         assert loaded.identity.name == "アダ"
 
-    def test_payload_なし_snapshot_の_restore_は_memory_スキップ(
+    def test_payload_snapshot_restore_memory(
         self, tmp_path: Path
     ) -> None:
         """v1 snapshot 想定: memory_payload_json=None なら memory_restored=False。"""
@@ -227,7 +229,8 @@ class TestRestoreUseCase:
 
 
 class TestConstructorTypeGuards:
-    def test_capture_constructor_型違反(self) -> None:
+    def test_capture_constructor_raises_type_error(self) -> None:
+        """capture constructor 型違反。"""
         with pytest.raises(TypeError, match="being_repository"):
             CaptureBeingSnapshotToFileUseCase(
                 being_repository="bad",  # type: ignore[arg-type]
@@ -235,7 +238,8 @@ class TestConstructorTypeGuards:
                 file_gateway=BeingSnapshotFileGateway(),
             )
 
-    def test_restore_constructor_型違反(self) -> None:
+    def test_restore_constructor_raises_type_error(self) -> None:
+        """restore constructor 型違反。"""
         with pytest.raises(TypeError, match="file_gateway"):
             RestoreBeingSnapshotFromFileUseCase(
                 being_repository=InMemoryBeingRepository(),
@@ -243,7 +247,8 @@ class TestConstructorTypeGuards:
                 file_gateway="bad",  # type: ignore[arg-type]
             )
 
-    def test_execute_の引数型違反(self, tmp_path: Path) -> None:
+    def test_execute_argument_raises_type_error(self, tmp_path: Path) -> None:
+        """execute の引数型違反。"""
         env = _make_environment()
         with pytest.raises(TypeError):
             env["capture"].execute("ada", tmp_path / "x.json")  # type: ignore[arg-type]

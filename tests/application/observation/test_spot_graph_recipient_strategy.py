@@ -129,7 +129,7 @@ class TestEntityEnteredSpot:
         assert 2 in ids
         assert 3 not in ids
 
-    def test_no_others_at_spot(self):
+    def test_others_at_spot(self):
         strategy = _make_strategy({1: 1, 3: 2})
         event = EntityEnteredSpotEvent.create(
             aggregate_id=GRAPH_ID,
@@ -174,7 +174,7 @@ class TestSpotObjectInteracted:
         assert 1 not in ids
         assert 2 in ids
 
-    def test_ACTOR_ONLY_では誰も観測しない(self):
+    def test_actor_only_observation(self):
         """Phase G #1: witness_policy=ACTOR_ONLY なら同室他者にも届かない。"""
         from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
         strategy = _make_strategy({1: 1, 2: 1})
@@ -195,7 +195,7 @@ class TestSpotObjectInteracted:
 class TestPlayerDroppedItem:
     """drop event は同スポットの他プレイヤーに witness として配信され、行為者は除外される。"""
 
-    def test_actor_を除外して同室の他者に配信する(self):
+    def test_actor_same_room_other_2(self):
         """Player 1 が drop すると、Player 2 (同室) に届き、Player 1 自身には届かない。"""
         strategy = _make_strategy({1: 1, 2: 1})
         event = PlayerDroppedItemEvent.create(
@@ -211,7 +211,7 @@ class TestPlayerDroppedItem:
         assert 1 not in ids
         assert 2 in ids
 
-    def test_別スポットのプレイヤーには届かない(self):
+    def test_different_spot_player(self):
         """SPOT_A での drop は SPOT_B にいる Player 3 には届かない。"""
         strategy = _make_strategy({1: 1, 2: 1, 3: 2})
         event = PlayerDroppedItemEvent.create(
@@ -231,7 +231,8 @@ class TestPlayerDroppedItem:
 class TestPlayerPickedUpItem:
     """pickup event も drop と対称な配信仕様。"""
 
-    def test_actor_を除外して同室の他者に配信する(self):
+    def test_actor_same_room_other(self):
+        """actor を除外して同室の他者に配信する。"""
         strategy = _make_strategy({1: 1, 2: 1, 3: 1})
         event = PlayerPickedUpItemEvent.create(
             aggregate_id=GRAPH_ID,
@@ -282,7 +283,7 @@ class TestConnectionStateChanged:
         assert 2 in ids
         assert 3 in ids
 
-    def test_no_duplicate_when_same_spot(self):
+    def test_duplicate_when_same_spot(self):
         strategy = _make_strategy({1: 1, 2: 1})
         event = ConnectionStateChangedEvent.create(
             aggregate_id=GRAPH_ID,
@@ -399,7 +400,7 @@ class TestConnectionStateChangedAdjacentDelivery:
         # P1 だけ直接観測。P3 (隣接だが遮音) は届かない
         assert ids == {1}
 
-    def test_neighbor_via_to_spot_is_also_audible(self):
+    def test_neighbor_via_spot_is_also_audible(self):
         """to_spot から出る隣接 connection も配信対象になる。"""
         SPOT_D = 4
         strategy = self._make_strategy_with_adjacency(
@@ -423,7 +424,7 @@ class TestConnectionStateChangedAdjacentDelivery:
         # P2 (at B, 直接) + P4 (at D, 隣接)
         assert ids == {2, 4}
 
-    def test_direct_recipient_not_double_counted_as_neighbor(self):
+    def test_direct_recipient_double_counted_as_neighbor(self):
         """直接観測 spot に居る人が隣接探索でも引かれた場合、重複しない。"""
         # 仮想的: SPOT_A → SPOT_B も双方向 connection があるとして、
         # SPOT_B にいる P2 は直接観測 (to_spot) と隣接観測の両方の候補になる
@@ -488,7 +489,7 @@ class TestSpotObjectStateChanged:
 class TestSpotPlayerStateChangedInSpot:
     """Phase 4-E: 公開可能なプレイヤー state 変化は同スポットの他プレイヤーに届く。"""
 
-    def test_excludes_actor(self):
+    def test_excludes_actor_2(self):
         """行為者本人は除外される (本人は current_state プロンプトで自己認識する)。"""
         strategy = _make_strategy({1: 1, 2: 1, 3: 2})
         event = SpotPlayerStateChangedInSpotEvent.create(
@@ -541,7 +542,7 @@ class TestSpotSoundHeardRecipientResolution:
             player_status_repository=player_status_repo,
         )
 
-    def test_known_player_entity_に届く(self):
+    def test_known_player_entity(self):
         """entity_id が known player なら recipient に含まれる。"""
         strategy = self._make_with_sound_event({1: 1, 2: 1})
         event = SpotSoundHeardEvent.create(
@@ -557,7 +558,7 @@ class TestSpotSoundHeardRecipientResolution:
         ids = {p.value for p in recipients}
         assert ids == {1}
 
-    def test_unknown_entity_には届かない(self):
+    def test_unknown_entity(self):
         """player として登録されていない entity_id は recipient に含まれない。
 
         monster の `EntityId` を渡したケースを想定。
@@ -575,7 +576,7 @@ class TestSpotSoundHeardRecipientResolution:
         recipients = strategy.resolve(event)
         assert recipients == []
 
-    def test_他のplayerには漏れない(self):
+    def test_other_player(self):
         """同じ spot に居る他 player には届かない (本人だけ)。"""
         strategy = self._make_with_sound_event({1: 1, 2: 1, 3: 1})
         event = SpotSoundHeardEvent.create(
@@ -600,7 +601,7 @@ class TestDownPlayerExcluded:
     引きずらない) と整合させるため、最初から届けないのが最も静かな実装。
     """
 
-    def test_同_spot_の_down_player_は_actor_除外イベントの_配信先から外れる(self):
+    def test_spot_down_player_actor_event(self):
         """drop 観測: 同 spot にいる元気な P2 と倒れた P3 がいるとき、
         recipient は P2 のみ。倒れた P3 は除外される。"""
         strategy = _make_strategy({1: 1, 2: 1, 3: 1}, down_player_ids={3})
@@ -616,7 +617,7 @@ class TestDownPlayerExcluded:
         ids = {r.value for r in strategy.resolve(event)}
         assert ids == {2}
 
-    def test_全員配信イベントでも_down_player_は_除外される(self):
+    def test_all_players_event_down_player_excluded(self):
         """SpotObjectStateChangedEvent (actor_entity_id=None) は同 spot 全員に
         届く _resolve_all_at_spot 経路。倒れた player はここでも除外する。"""
         strategy = _make_strategy({1: 1, 2: 1, 3: 1}, down_player_ids={2})
@@ -632,7 +633,7 @@ class TestDownPlayerExcluded:
         ids = {r.value for r in strategy.resolve(event)}
         assert ids == {1, 3}
 
-    def test_down_player_が_actor_の_event_は_他者だけが_受信する(self):
+    def test_down_player_actor_event_other(self):
         """down 中に actor になることは無い前提だが、防御的に: actor 自身は
         actor-exclude で除かれ、他者のうち down している人も除外される。"""
         strategy = _make_strategy({1: 1, 2: 1, 3: 1}, down_player_ids={3})
@@ -660,6 +661,6 @@ class TestSupports:
         )
         assert strategy.supports(event) is True
 
-    def test_does_not_support_unregistered(self):
+    def test_does_support_unregistered(self):
         strategy = _make_strategy({})
         assert strategy.supports("unknown event") is False

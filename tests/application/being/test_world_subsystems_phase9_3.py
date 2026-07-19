@@ -44,13 +44,15 @@ class TestWorldFlagsCodec:
         # flag_c は消えて、src の flag_a / flag_b に置換されている
         assert dst_state.as_frozen_set() == frozenset({"flag_a", "flag_b"})
 
-    def test_空_flag_state_も_動く(self) -> None:
+    def test_empty_flag_state_works(self) -> None:
+        """空 flagstate も動く。"""
         state = MutableWorldFlagState()
         runtime = SimpleNamespace(_world_flag_state=state)
         captured = WorldFlagsSubsystemCodec().capture(runtime)
         assert captured["flags"] == []
 
-    def test_未サポート_schema_version_は_例外(self) -> None:
+    def test_unsupported_schema_version_raises_exception_2(self) -> None:
+        """未サポート schemaversion は例外。"""
         state = MutableWorldFlagState()
         runtime = SimpleNamespace(_world_flag_state=state)
         with pytest.raises(ValueError, match="schema_version"):
@@ -62,7 +64,7 @@ class TestWorldFlagsCodec:
 class TestScenarioEventProgressCodec:
     """fired + scheduled の往復。"""
 
-    def test_capture_restore_round_trip(self) -> None:
+    def test_capture_restore_round_trip_2(self) -> None:
         src_store = InMemorySpotGraphScenarioEventProgressStore()
         src_store.mark_fired("ev_intro")
         src_store.mark_fired("ev_midpoint")
@@ -83,7 +85,8 @@ class TestScenarioEventProgressCodec:
         assert dst_store._scheduled == {"ev_endgame": 50}
         assert "ev_dst_stale" not in dst_store._fired_event_ids
 
-    def test_空_progress_も_動く(self) -> None:
+    def test_empty_progress_works(self) -> None:
+        """空 progress も動く。"""
         store = InMemorySpotGraphScenarioEventProgressStore()
         runtime = SimpleNamespace(_scenario_event_progress=store)
         captured = ScenarioEventProgressSubsystemCodec().capture(runtime)
@@ -94,7 +97,7 @@ class TestScenarioEventProgressCodec:
 class TestExplorationProgressCodec:
     """(player, spot) → count の往復。"""
 
-    def test_capture_restore_round_trip(self) -> None:
+    def test_capture_restore_round_trip_3(self) -> None:
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
@@ -127,7 +130,8 @@ class TestUnsupportedSchemaVersion:
             SpotExplorationProgressSubsystemCodec,
         ],
     )
-    def test_未サポート_schema_version_は_例外(self, codec_cls) -> None:
+    def test_unsupported_schema_version_raises_exception(self, codec_cls) -> None:
+        """未サポート schemaversion は例外。"""
         codec = codec_cls()
         with pytest.raises(ValueError, match="schema_version"):
             codec.restore(SimpleNamespace(), {"schema_version": 999})

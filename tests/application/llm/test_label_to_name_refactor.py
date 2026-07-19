@@ -39,30 +39,33 @@ from ai_rpg_world.application.world.contracts.dtos import (
 class TestOrdinalDisambiguator:
     """``_build_ordinal_disambiguator`` の境界条件。"""
 
-    def test_全部一意なら_素の名前を返す(self) -> None:
+    def test_returns_all_name(self) -> None:
+        """全部一意なら 素の名前を返す。"""
         result = _build_ordinal_disambiguator(["A", "B", "C"])
         assert result == {0: "A", 1: "B", 2: "C"}
 
-    def test_衝突するものだけ_番号が付く(self) -> None:
+    def test_documented_behavior(self) -> None:
         """A は単独 → "A"、B は 2 つ → "B #1" / "B #2"。"""
         result = _build_ordinal_disambiguator(["A", "B", "B"])
         assert result == {0: "A", 1: "B #1", 2: "B #2"}
 
-    def test_3_重衝突は_1_2_3(self) -> None:
+    def test_three_one_two_three(self) -> None:
+        """3 重衝突は 1 2 3。"""
         result = _build_ordinal_disambiguator(["X", "X", "X"])
         assert result == {0: "X #1", 1: "X #2", 2: "X #3"}
 
-    def test_出現順で_ordinal_が割り当てられる(self) -> None:
+    def test_ordinal(self) -> None:
         """並び順で #1 → #2。後から見た方が #1 にならない。"""
         result = _build_ordinal_disambiguator(["A", "B", "A", "B", "A"])
         assert result == {
             0: "A #1", 1: "B #1", 2: "A #2", 3: "B #2", 4: "A #3",
         }
 
-    def test_空入力なら_空辞書(self) -> None:
+    def test_empty_dict(self) -> None:
+        """空入力なら 空辞書。"""
         assert _build_ordinal_disambiguator([]) == {}
 
-    def test_既に_含む_name_は_base_で集計され_二重ordinal_を生まない(self) -> None:
+    def test_includes_name_base_ordinal(self) -> None:
         """PR #421 MEDIUM 反映: シナリオ JSON が "小屋 #1" のような名前を
         既に持っているとき、衝突検出は base name (= "#N" を剥がしたもの) で
         行い、"小屋 #1 #1" のような二重 ordinal を生まない。
@@ -73,12 +76,13 @@ class TestOrdinalDisambiguator:
         # 入力 2 件はいずれも base="小屋"、counts["小屋"]=2 で disambiguate
         assert result == {0: "小屋 #1", 1: "小屋 #2"}
 
-    def test_既存_ordinal_と_素の名前が混ざるケース(self) -> None:
+    def test_existing_ordinal_name(self) -> None:
+        """既存 ordinal と素の名前が混ざるケース。"""
         result = _build_ordinal_disambiguator(["小屋", "小屋 #2"])
         # 両方 base="小屋"、衝突するので index 順で renumber される
         assert result == {0: "小屋 #1", 1: "小屋 #2"}
 
-    def test_public_な_別名でも_import_できる(self) -> None:
+    def test_public_different_import(self) -> None:
         """PR #421 LOW 反映: ``build_ordinal_disambiguator`` (private prefix 無し)
         を public 関数として export。private alias は後方互換のために残す。"""
         from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
@@ -135,7 +139,8 @@ def _build(snap: SpotGraphPlayerSnapshotDto) -> str:
 class TestSectionRenderingHasNoLabelPrefix:
     """各 section が旧ラベル prefix を出さないことを確認。"""
 
-    def test_inventory_section_に_I1_prefix_が_無い(self) -> None:
+    def test_inventory_section_i1_prefix(self) -> None:
+        """inventorysection に I1prefix が無い。"""
         snap = _make_snap(
             inventory_items=(
                 SpotGraphInventoryItemEntry(item_spec_id=1, name="流木", quantity=2),
@@ -147,7 +152,8 @@ class TestSectionRenderingHasNoLabelPrefix:
         assert "I1:" not in text
         assert "I1 " not in text  # 安全側でスペースも検査
 
-    def test_ground_items_section_に_G1_prefix_が_無い(self) -> None:
+    def test_ground_items_section_g1_prefix(self) -> None:
+        """grounditemssection に G1prefix が無い。"""
         snap = _make_snap(
             ground_items=(
                 SpotGraphGroundItemEntry(item_instance_id=1, item_spec_id=1, name="流木"),
@@ -162,7 +168,7 @@ class TestSectionRenderingHasNoLabelPrefix:
 class TestSectionRenderingHasOrdinalDisambiguation:
     """同名衝突時に ``#1`` / ``#2`` が付くことを確認。"""
 
-    def test_inventory_に_同名_2_件あったら_番号が付く(self) -> None:
+    def test_inventory_two(self) -> None:
         """同じ name のアイテムが (例えば spoiled/fresh 別エントリで) 並ぶケース。"""
         snap = _make_snap(
             inventory_items=(
@@ -176,7 +182,8 @@ class TestSectionRenderingHasOrdinalDisambiguation:
         assert "生の魚 #1" in text
         assert "生の魚 #2" in text
 
-    def test_monster_に_同種_2_体ならば_番号が付く(self) -> None:
+    def test_monster_two(self) -> None:
+        """monster に同種 2 体ならば番号が付く。"""
         snap = _make_snap(
             monsters_at_spot=(
                 SpotGraphMonsterEntry(
@@ -193,7 +200,7 @@ class TestSectionRenderingHasOrdinalDisambiguation:
         assert "灰色のオオカミ #1" in text
         assert "灰色のオオカミ #2" in text
 
-    def test_player_の_同名_2_人は_番号が付く(self) -> None:
+    def test_player_two(self) -> None:
         """scenario で同名 player が居たら #N で区別する (防御的)。"""
         snap = _make_snap(
             nearby_entities=(
@@ -209,7 +216,8 @@ class TestSectionRenderingHasOrdinalDisambiguation:
 class TestCollectorPreservesLabelKey:
     """内部 collector は引き続き label をキーに target を保存する (resolver 互換)。"""
 
-    def test_inventory_collector_key_は_I1_等のラベルのまま(self) -> None:
+    def test_inventory_collector_key_i1_label(self) -> None:
+        """inventory collector key は I1 等のラベルのまま。"""
         snap = _make_snap(
             inventory_items=(
                 SpotGraphInventoryItemEntry(item_spec_id=1, name="流木", quantity=1),
@@ -223,7 +231,7 @@ class TestCollectorPreservesLabelKey:
         # display_name は disambiguated 名 (この場合 衝突なしで "流木")
         assert targets["I1"].display_name == "流木"
 
-    def test_衝突時の_target_display_name_は_disambiguated_になる(self) -> None:
+    def test_target_display_name_disambiguated(self) -> None:
         """resolver が ``灰色のオオカミ #2`` を渡されたら 2 番目に解決できるよう、
         target.display_name には ordinal 付きの名前を保存する。"""
         snap = _make_snap(

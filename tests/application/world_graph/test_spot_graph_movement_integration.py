@@ -134,7 +134,7 @@ def test_ensure_spot_nav_syncs_from_graph() -> None:
     assert p.spot_navigation_state.is_traveling
 
 
-def test_move_to_sub_location() -> None:
+def test_move_sub_location() -> None:
     graph = _line_graph_three_spots()
     graph_repo = InMemorySpotGraphRepository(graph)
     player_repo = InMemoryPlayerStatusRepository()
@@ -149,7 +149,7 @@ def test_move_to_sub_location() -> None:
     assert p.spot_navigation_state.current_sub_location_id == SubLocationId.create(7)
 
 
-def test_same_destination_no_op() -> None:
+def test_same_destination_op() -> None:
     graph = _line_graph_three_spots()
     graph_repo = InMemorySpotGraphRepository(graph)
     player_repo = InMemoryPlayerStatusRepository()
@@ -172,7 +172,7 @@ class TestTravelStageOnArrival:
     is_traveling=True → False の遷移を検知して on_arrival を呼ぶ。
     """
 
-    def test_到着時に_on_arrival_が呼ばれる(self) -> None:
+    def test_calls_on_arrival(self) -> None:
         """travel が at_rest に遷移した tick で on_arrival(player_id) が来る。"""
         graph = _line_graph_three_spots(travel_ticks=1)
         graph_repo = InMemorySpotGraphRepository(graph)
@@ -193,7 +193,7 @@ class TestTravelStageOnArrival:
         stage.run(WorldTick(2))  # leg2 終了 (S2→S3)、at_rest に遷移
         assert arrived == [1]
 
-    def test_途中_tick_では_on_arrival_が呼ばれない(self) -> None:
+    def test_does_not_call_tick_on_arrival(self) -> None:
         """is_traveling が継続している間はコールバックが鳴らない。"""
         graph = _line_graph_three_spots(travel_ticks=3)
         graph_repo = InMemorySpotGraphRepository(graph)
@@ -213,7 +213,7 @@ class TestTravelStageOnArrival:
             stage.run(WorldTick(t))
         assert arrived == []  # 6 tick 必要 (3+3) なのでまだ未到着
 
-    def test_set_on_arrival_で後付け注入できる(self) -> None:
+    def test_set_arrival_can_injected_later(self) -> None:
         """wiring の順序制約 (turn_trigger が travel_stage より後で構築される) を
         満たすため、コールバックは後付けで差し替えられる必要がある。"""
         graph = _line_graph_three_spots(travel_ticks=1)
@@ -231,7 +231,7 @@ class TestTravelStageOnArrival:
         stage.run(WorldTick(1))
         assert arrived == [1]
 
-    def test_on_arrival_の例外は_travel_stage_を倒さない(self) -> None:
+    def test_on_arrival_exception_does_not_fail_travel_stage(self) -> None:
         """コールバック失敗は他 player の advance を止めない (fail-safe)。"""
         graph = _line_graph_three_spots(travel_ticks=1)
         graph_repo = InMemorySpotGraphRepository(graph)

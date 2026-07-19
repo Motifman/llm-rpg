@@ -147,7 +147,7 @@ def _make_svc(graph, monster, *, interior_repo=None):
 class TestHungerTick:
     """飢餓 tick の挙動。"""
 
-    def test_starvation_ticks_ゼロでは_hunger_進行しない(self) -> None:
+    def test_starvation_ticks_hunger_line(self) -> None:
         """飢餓無効テンプレでは `_lifecycle_state.hunger` が変化しない。"""
         template = _hungry_template(
             starvation_ticks=0, hunger_increase=0.5
@@ -162,7 +162,7 @@ class TestHungerTick:
         # 飢餓無効なので hunger は 0 のまま
         assert monster._lifecycle_state.hunger == 0.0
 
-    def test_飢餓有効で_hunger_が増える(self) -> None:
+    def test_hunger(self) -> None:
         """`hunger_increase_per_tick` 分だけ hunger が増加する。"""
         template = _hungry_template(hunger_increase=0.3)
         monster = _make_monster(template)
@@ -181,7 +181,7 @@ class TestHungerTick:
 class TestStarvationDeath:
     """飢餓死: 閾値超過で `monster.starve()` が呼ばれる。"""
 
-    def test_starvation_閾値超過で_died_event(self) -> None:
+    def test_starvation_value_exceeds_died_event(self) -> None:
         """starvation_ticks 超えるまで hunger が高いと MonsterDiedEvent が発火。"""
         # starvation_ticks=2, hunger=1.0 で即死スレッシュホールド
         template = _hungry_template(
@@ -205,7 +205,7 @@ class TestStarvationDeath:
         assert len(died_events) == 1
         assert monster.status != MonsterStatusEnum.ALIVE
 
-    def test_飢餓死後も_graph_の_presence_は維持される(self) -> None:
+    def test_after_graph_presence_preserved(self) -> None:
         """Phase 1/2 と同方針: 死亡しても graph から自動除去しない。
 
         次 tick で behavior service が `find_by_id` した monster は
@@ -235,7 +235,7 @@ class TestStarvationDeath:
 class TestForage:
     """採食: 同スポットの preferred 食材を 1 個食べる。"""
 
-    def test_hunger_閾値超過_かつ_preferred_食材ありで採食(self) -> None:
+    def test_hunger_value_exceeds_preferred(self) -> None:
         """採食成立で MonsterAteGroundItemEvent + interior から item 消費。"""
         template = _hungry_template(
             starvation_ticks=10,
@@ -288,7 +288,7 @@ class TestForage:
         # graph save も呼ばれた
         spot_repo.save.assert_called_once_with(graph)
 
-    def test_hunger_未満では採食しない(self) -> None:
+    def test_hunger_below(self) -> None:
         """hunger < forage_threshold では採食試行しない。"""
         template = _hungry_template(
             starvation_ticks=10,
@@ -324,7 +324,7 @@ class TestForage:
         assert events == []
         interior_repo.save.assert_not_called()
 
-    def test_preferred_外の食材は食べない(self) -> None:
+    def test_preferred(self) -> None:
         """preferred_feed_item_spec_ids にマッチしない item は食べない。"""
         template = _hungry_template(
             starvation_ticks=10,
@@ -361,7 +361,7 @@ class TestForage:
         ]
         assert events == []
 
-    def test_interior_repo_未注入では採食しない(self) -> None:
+    def test_interior_repo_uninjected(self) -> None:
         """`spot_interior_repository=None` で採食機能がスキップされる。"""
         template = _hungry_template(
             starvation_ticks=10,

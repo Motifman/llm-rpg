@@ -53,13 +53,13 @@ def resolver(repo: InMemoryBeingRepository) -> BeingAttachmentResolver:
 class TestResolverConstruction:
     """コンストラクタの型ガード。"""
 
-    def test_BeingRepository_を渡すと生成できる(
+    def test_being_repository_can_create(
         self, repo: InMemoryBeingRepository
     ) -> None:
         """正しい Repository を渡せばインスタンス化される。"""
         BeingAttachmentResolver(repo)
 
-    def test_非_BeingRepository_を渡すと_TypeError_を投げる(self) -> None:
+    def test_being_repository_raises_type_error(self) -> None:
         """型違反は TypeError で弾く。"""
         with pytest.raises(TypeError, match="being_repository"):
             BeingAttachmentResolver("not-a-repo")  # type: ignore[arg-type]
@@ -68,7 +68,7 @@ class TestResolverConstruction:
 class TestResolveAttachedBeing:
     """resolve_attached_being の挙動 (= (world, player) → Being | None)。"""
 
-    def test_該当_Being_が_attach_中なら_その_Being_を返す(
+    def test_returns_being_attach_being(
         self,
         repo: InMemoryBeingRepository,
         resolver: BeingAttachmentResolver,
@@ -79,7 +79,7 @@ class TestResolveAttachedBeing:
         assert result is not None
         assert result.being_id == BeingId("ada")
 
-    def test_該当_Being_がいなければ_None_を返す(
+    def test_returns_none_being(
         self,
         repo: InMemoryBeingRepository,
         resolver: BeingAttachmentResolver,
@@ -88,7 +88,7 @@ class TestResolveAttachedBeing:
         repo.save(_being("ada", attached=(1, 99)))  # 別 player
         assert resolver.resolve_attached_being(WorldId(1), PlayerId(2)) is None
 
-    def test_未_attach_Being_は_検索対象に含まれない(
+    def test_attach_being_target_not_included(
         self,
         repo: InMemoryBeingRepository,
         resolver: BeingAttachmentResolver,
@@ -97,7 +97,7 @@ class TestResolveAttachedBeing:
         repo.save(_being("ada", attached=None))
         assert resolver.resolve_attached_being(WorldId(1), PlayerId(2)) is None
 
-    def test_別世界の_同_player_には反応しない(
+    def test_different_world_player(
         self,
         repo: InMemoryBeingRepository,
         resolver: BeingAttachmentResolver,
@@ -106,7 +106,7 @@ class TestResolveAttachedBeing:
         repo.save(_being("ada", attached=(2, 2)))  # world=2
         assert resolver.resolve_attached_being(WorldId(1), PlayerId(2)) is None
 
-    def test_同_world_player_に_2_Being_attach_していると_例外(
+    def test_world_player_two_being_attach_raises_exception(
         self,
         repo: InMemoryBeingRepository,
         resolver: BeingAttachmentResolver,
@@ -120,7 +120,7 @@ class TestResolveAttachedBeing:
         ):
             resolver.resolve_attached_being(WorldId(1), PlayerId(2))
 
-    def test_非_VO_を渡すと_TypeError(
+    def test_vo_raises_type_error(
         self, resolver: BeingAttachmentResolver
     ) -> None:
         """型違反は TypeError で弾く。"""
@@ -133,7 +133,7 @@ class TestResolveAttachedBeing:
 class TestResolveBeingId:
     """resolve_being_id の挙動 (= (world, player) → BeingId | None)。"""
 
-    def test_attach_中なら_BeingId_を返す(
+    def test_returns_attach_being_id(
         self,
         repo: InMemoryBeingRepository,
         resolver: BeingAttachmentResolver,
@@ -144,7 +144,7 @@ class TestResolveBeingId:
             "ada"
         )
 
-    def test_該当なしなら_None(
+    def test_none(
         self,
         repo: InMemoryBeingRepository,
         resolver: BeingAttachmentResolver,
@@ -156,7 +156,7 @@ class TestResolveBeingId:
 class TestResolvePlayerId:
     """resolve_player_id の挙動 (= BeingId → PlayerId | None)。"""
 
-    def test_attach_中の_Being_は_PlayerId_を返す(
+    def test_returns_attach_being_player_id(
         self,
         repo: InMemoryBeingRepository,
         resolver: BeingAttachmentResolver,
@@ -165,7 +165,7 @@ class TestResolvePlayerId:
         repo.save(_being("ada", attached=(1, 2)))
         assert resolver.resolve_player_id(BeingId("ada")) == PlayerId(2)
 
-    def test_detach_中の_Being_は_None(
+    def test_detach_being_none(
         self,
         repo: InMemoryBeingRepository,
         resolver: BeingAttachmentResolver,
@@ -174,13 +174,13 @@ class TestResolvePlayerId:
         repo.save(_being("ada", attached=None))
         assert resolver.resolve_player_id(BeingId("ada")) is None
 
-    def test_存在しない_Being_は_None(
+    def test_being_none(
         self, resolver: BeingAttachmentResolver
     ) -> None:
         """未保存の BeingId は None を返す (= 例外ではない)。"""
         assert resolver.resolve_player_id(BeingId("missing")) is None
 
-    def test_非_BeingId_を渡すと_TypeError(
+    def test_being_id_raises_type_error(
         self, resolver: BeingAttachmentResolver
     ) -> None:
         """型違反は TypeError で弾く。"""

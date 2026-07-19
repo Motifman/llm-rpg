@@ -43,7 +43,8 @@ def _make_runtime(tick: int = 5) -> MagicMock:
 
 
 class TestToolNamesRecorded:
-    def test_tool_names_を_渡すと_trace_event_に_乗る(self) -> None:
+    def test_tool_names_trace_event_included(self) -> None:
+        """toolnames を渡すと traceevent に乗る。"""
         recorder = MagicMock()
         tool_names = ["explore", "speech_speak", "tend_to_player"]
         sink = _LlmMetricsTraceSink(
@@ -58,7 +59,7 @@ class TestToolNamesRecorded:
         kwargs = recorder.record.call_args.kwargs
         assert kwargs["tool_names"] == tool_names
 
-    def test_tool_names_未指定なら_空_list_で_記録される(self) -> None:
+    def test_tool_names_unspecified_empty_list_recorded(self) -> None:
         """back-compat: 既存 caller (tool_names を渡さない) でも壊れない。"""
         recorder = MagicMock()
         sink = _LlmMetricsTraceSink(
@@ -74,7 +75,7 @@ class TestToolNamesRecorded:
         # `tool_names` フィールドの有無を気にせず長さ判定だけで済む。
         assert kwargs["tool_names"] == []
 
-    def test_既存のメトリクス_field_も_引き続き_記録される_regression(self) -> None:
+    def test_existing_field_recorded_regression(self) -> None:
         """tool_names 追加で既存 payload が落ちないこと。"""
         recorder = MagicMock()
         sink = _LlmMetricsTraceSink(

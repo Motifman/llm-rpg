@@ -52,7 +52,8 @@ def _stub_item_repo(spec_by_iid: dict) -> MagicMock:
 class TestIterSlots:
     """`iter_slots` の挙動。"""
 
-    def test_全スロット_を_順序通り_yield(self) -> None:
+    def test_all_slot_order_yield(self) -> None:
+        """全スロットを順序通り yield。"""
         inv = _new_inv(max_slots=3)
         # 内部 dict の insertion 順 = slot_id.value 昇順 (create_new_inventory の実装)
         slots = list(inv.iter_slots())
@@ -61,7 +62,8 @@ class TestIterSlots:
         for slot_id, iid in slots:
             assert iid is None
 
-    def test_空スロットも_含む(self) -> None:
+    def test_includes_empty_slot(self) -> None:
+        """空スロットも 含む。"""
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         slots = list(inv.iter_slots())
@@ -75,7 +77,8 @@ class TestIterSlots:
 class TestIterOccupiedSlots:
     """`iter_occupied_slots` の挙動。"""
 
-    def test_item_が_入っているスロットだけ_yield(self) -> None:
+    def test_item_slot_yield(self) -> None:
+        """item が入っているスロットだけ yield。"""
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         inv.acquire_item(item_instance_id=ItemInstanceId(7002))
@@ -84,7 +87,8 @@ class TestIterOccupiedSlots:
         iids = {iid for _, iid in occ}
         assert iids == {ItemInstanceId(7001), ItemInstanceId(7002)}
 
-    def test_空_inventory_は_空_iter(self) -> None:
+    def test_empty_inventory_empty_iter(self) -> None:
+        """空 inventory は空 iter。"""
         inv = _new_inv(max_slots=4)
         assert list(inv.iter_occupied_slots()) == []
 
@@ -92,7 +96,8 @@ class TestIterOccupiedSlots:
 class TestFindSlotByItemSpecId:
     """`find_slot_by_item_spec_id` の挙動 (executor の典型用途)。"""
 
-    def test_見つかる_場合_は_slot_id_と_iid_の_ペアを返す(self) -> None:
+    def test_returns_slot_id_iid(self) -> None:
+        """見つかる場合は slotid と iid のペアを返す。"""
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         repo = _stub_item_repo({ItemInstanceId(7001): ItemSpecId.create(101)})
@@ -102,7 +107,8 @@ class TestFindSlotByItemSpecId:
         assert iid == ItemInstanceId(7001)
         assert isinstance(slot_id, SlotId)
 
-    def test_見つからない_場合_は_None(self) -> None:
+    def test_none(self) -> None:
+        """見つからない場合は None。"""
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         repo = _stub_item_repo({ItemInstanceId(7001): ItemSpecId.create(101)})
@@ -110,7 +116,7 @@ class TestFindSlotByItemSpecId:
         result = inv.find_slot_by_item_spec_id(ItemSpecId.create(999), repo)
         assert result is None
 
-    def test_aggregate_が_repo_に_なければ_skip_して_None(self) -> None:
+    def test_aggregate_repo_skip_none(self) -> None:
         """orphan item_instance_id (= item_repository に登録されていない)
         があってもクラッシュせず None で返す。"""
         inv = _new_inv(max_slots=4)
@@ -119,7 +125,7 @@ class TestFindSlotByItemSpecId:
         result = inv.find_slot_by_item_spec_id(ItemSpecId.create(101), repo)
         assert result is None
 
-    def test_最初の_match_を_返す(self) -> None:
+    def test_returns_match(self) -> None:
         """同じ spec_id の item が複数あったら最初に見つかったものを返す。"""
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
@@ -139,7 +145,8 @@ class TestPrivateAccessRemoval:
     """executor が public API を使い、private `_inventory_slots` 直接アクセスを
     残していないことを source レベルで確認する。"""
 
-    def test_executor_が_inv_inventory_slots_を_直接_参照しない(self) -> None:
+    def test_executor_inv_inventory_slots(self) -> None:
+        """executor が invinventoryslots を直接参照しない。"""
         from pathlib import Path
         executor_src = (
             Path(__file__).resolve().parents[4]

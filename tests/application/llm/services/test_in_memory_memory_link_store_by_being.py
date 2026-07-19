@@ -63,9 +63,10 @@ def being() -> BeingId:
 class TestUpsertAndGetByBeing:
     """``upsert_link_by_being`` / ``get_link_by_being`` の基本挙動。"""
 
-    def test_新規_upsert_は_get_で_取得できる(
+    def test_new_upsert_get_can_get(
         self, store: InMemoryMemoryLinkStore, being: BeingId
     ) -> None:
+        """新規 upsert は get で取得できる。"""
         link = _link(episode_id_a="a", episode_id_b="b")
         store.upsert_link_by_being(being, link)
         got = store.get_link_by_being(being, "a", "b", MemoryLinkType.CO_RECALL)
@@ -73,15 +74,16 @@ class TestUpsertAndGetByBeing:
         assert got.episode_id_a == "a"
         assert got.episode_id_b == "b"
 
-    def test_同一_key_の_upsert_は_上書き(
+    def test_same_key_upsert(
         self, store: InMemoryMemoryLinkStore, being: BeingId
     ) -> None:
+        """同一 key の upsert は上書き。"""
         store.upsert_link_by_being(being, _link(episode_id_a="a", episode_id_b="b", strength=0.5))
         store.upsert_link_by_being(being, _link(episode_id_a="a", episode_id_b="b", strength=0.9))
         got = store.get_link_by_being(being, "a", "b", MemoryLinkType.CO_RECALL)
         assert got is not None and got.strength == pytest.approx(0.9)
 
-    def test_episode_pair_は_正規化される(
+    def test_episode_pair(
         self, store: InMemoryMemoryLinkStore, being: BeingId
     ) -> None:
         """a,b と b,a は同一リンク。"""
@@ -89,9 +91,10 @@ class TestUpsertAndGetByBeing:
         got = store.get_link_by_being(being, "b", "a", MemoryLinkType.CO_RECALL)
         assert got is not None
 
-    def test_being_id_型違反は_TypeError(
+    def test_being_id_raises_type_error(
         self, store: InMemoryMemoryLinkStore
     ) -> None:
+        """being id 型違反は TypeError。"""
         with pytest.raises(TypeError, match="being_id"):
             store.upsert_link_by_being(
                 "not-a-being-id",  # type: ignore[arg-type]
@@ -103,9 +106,10 @@ class TestListAndCountByBeing:
     """``list_links_for_episode_by_being`` / ``list_all_incident_links_by_being`` /
     ``count_links_for_episode_by_being`` の挙動。"""
 
-    def test_episode_に_接続する_link_を_全件返す(
+    def test_returns_all_episode_link(
         self, store: InMemoryMemoryLinkStore, being: BeingId
     ) -> None:
+        """episode に接続する link を全件返す。"""
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="y"))
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="z"))
         store.upsert_link_by_being(being, _link(episode_id_a="y", episode_id_b="z"))
@@ -113,17 +117,19 @@ class TestListAndCountByBeing:
         result = store.list_all_incident_links_by_being(being, "x", now=_NOW)
         assert len(result) == 2
 
-    def test_count_も_接続数を返す(
+    def test_returns_count(
         self, store: InMemoryMemoryLinkStore, being: BeingId
     ) -> None:
+        """count も接続数を返す。"""
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="y"))
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="z"))
         assert store.count_links_for_episode_by_being(being, "x") == 2
         assert store.count_links_for_episode_by_being(being, "y") == 1
 
-    def test_list_links_for_episode_は_strength_降順で_limit_適用(
+    def test_list_links_episode_strength_limit(
         self, store: InMemoryMemoryLinkStore, being: BeingId
     ) -> None:
+        """list links for episode は strength 降順で limit 適用。"""
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="a", strength=0.3))
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="b", strength=0.9))
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="c", strength=0.6))
@@ -133,9 +139,10 @@ class TestListAndCountByBeing:
             r.episode_id_a for r in result if r.episode_id_b == "x"
         } >= {"b", "c"}  # 強い 2 件 (b=0.9, c=0.6) が選ばれる
 
-    def test_limit_0_以下は_空_list(
+    def test_limit_zero_less_empty_list(
         self, store: InMemoryMemoryLinkStore, being: BeingId
     ) -> None:
+        """limit 0 以下は 空 list。"""
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="y"))
         assert store.list_links_for_episode_by_being(being, "x", now=_NOW, limit=0) == []
 
@@ -143,9 +150,10 @@ class TestListAndCountByBeing:
 class TestRemoveWeakestByBeing:
     """``remove_weakest_link_for_episode_by_being`` の挙動。"""
 
-    def test_最弱_link_が_削除される(
+    def test_link_deleted(
         self, store: InMemoryMemoryLinkStore, being: BeingId
     ) -> None:
+        """最弱 link が削除される。"""
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="strong", strength=0.9))
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="weak", strength=0.1))
         removed = store.remove_weakest_link_for_episode_by_being(being, "x", now=_NOW)
@@ -155,9 +163,10 @@ class TestRemoveWeakestByBeing:
         assert len(remaining) == 1
         assert "weak" not in (remaining[0].episode_id_a, remaining[0].episode_id_b)
 
-    def test_該当_link_が_無ければ_False(
+    def test_link_false(
         self, store: InMemoryMemoryLinkStore, being: BeingId
     ) -> None:
+        """該当 link が無ければ False。"""
         assert (
             store.remove_weakest_link_for_episode_by_being(being, "nope", now=_NOW)
             is False
@@ -167,17 +176,19 @@ class TestRemoveWeakestByBeing:
 class TestListAllForBeing:
     """``list_all_links_for_being``: 当該 Being の全リンク。"""
 
-    def test_全件返す(
+    def test_returns_all_items(
         self, store: InMemoryMemoryLinkStore, being: BeingId
     ) -> None:
+        """全件返す。"""
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="y"))
         store.upsert_link_by_being(being, _link(episode_id_a="y", episode_id_b="z"))
         all_links = store.list_all_links_for_being(being)
         assert len(all_links) == 2
 
-    def test_他_Being_の_link_は_出ない(
+    def test_other_being_link_not_rendered(
         self, store: InMemoryMemoryLinkStore, being: BeingId
     ) -> None:
+        """他 Being の link は出ない。"""
         other = BeingId("being_w1_p2")
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="y"))
         store.upsert_link_by_being(other, _link(episode_id_a="x", episode_id_b="z"))
@@ -188,7 +199,8 @@ class TestListAllForBeing:
 class TestReplaceAllByBeing:
     """replace_all_by_being の挙動 (Phase 4 Step 4-2a, snapshot restore primitive)。"""
 
-    def test_既存_link_を一括置換できる(self, store: InMemoryMemoryLinkStore) -> None:
+    def test_replace_all_replaces_existing_links(self, store: InMemoryMemoryLinkStore) -> None:
+        """既存 link を一括置換できる。"""
         b = BeingId("ada")
         old = _link(episode_id_a="ep-1", episode_id_b="ep-2")
         store.upsert_link_by_being(b, old)
@@ -198,7 +210,8 @@ class TestReplaceAllByBeing:
         assert len(all_links) == 1
         assert all_links[0].episode_id_a == "ep-3"
 
-    def test_空リストで全削除できる(self, store: InMemoryMemoryLinkStore) -> None:
+    def test_empty_list_all_can_delete(self, store: InMemoryMemoryLinkStore) -> None:
+        """空リストで全削除できる。"""
         b = BeingId("ada")
         store.upsert_link_by_being(
             b, _link(episode_id_a="ep-1", episode_id_b="ep-2")
@@ -206,7 +219,8 @@ class TestReplaceAllByBeing:
         store.replace_all_by_being(b, [])
         assert store.list_all_links_for_being(b) == []
 
-    def test_他_being_の_link_は影響しない(self, store: InMemoryMemoryLinkStore) -> None:
+    def test_other_being_link_does_not_affect(self, store: InMemoryMemoryLinkStore) -> None:
+        """他 being の link は影響しない。"""
         store.upsert_link_by_being(
             BeingId("ada"), _link(episode_id_a="ep-1", episode_id_b="ep-2")
         )
@@ -216,7 +230,7 @@ class TestReplaceAllByBeing:
         store.replace_all_by_being(BeingId("ada"), [])
         assert len(store.list_all_links_for_being(BeingId("ben"))) == 1
 
-    def test_replace_後_episode_index_経由でも引ける(
+    def test_replace_after_episode_index_via_can_lookup(
         self, store: InMemoryMemoryLinkStore
     ) -> None:
         """list_links_for_episode_by_being が replace 後も整合する。"""

@@ -42,7 +42,7 @@ def _write_trace(tmp_path: Path, events: list[dict]) -> Path:
 
 
 class TestSummary:
-    def test_LLM_call_数と_latency_と_token_を_集計する(self, em, tmp_path) -> None:
+    def test_aggregates_llm_call_latency_token(self, em, tmp_path) -> None:
         """llm_call 3 件 / cached_tokens 入りで cache hit 率も出る。"""
         events = [
             {"kind": "llm_call", "tick": 1, "player_id": 1, "payload": {
@@ -69,7 +69,8 @@ class TestSummary:
         # latency は p50 = 中央 = 2 秒 (n=3 の middle index)
         assert s["latency_p50_s"] == pytest.approx(2.0)
 
-    def test_失敗率は_action_result_の_success_False_の_比率(self, em, tmp_path) -> None:
+    def test_failure_action_result_success_false_ratio(self, em, tmp_path) -> None:
+        """失敗率は actionresult の successFalse の比率。"""
         events = [
             {"kind": "action_result", "payload": {"success": True}},
             {"kind": "action_result", "payload": {"success": False, "error_code": "X"}},
@@ -83,7 +84,8 @@ class TestSummary:
 
 
 class TestPerPlayer:
-    def test_player_別_tool_histogram_と_失敗_error_code_集計(self, em, tmp_path) -> None:
+    def test_player_different_tool_histogram_failure_error_code(self, em, tmp_path) -> None:
+        """player 別 toolhistogram と失敗 errorcode 集計。"""
         events = [
             {"kind": "action", "tick": 1, "player_id": 1, "payload": {
                 "tool": "explore", "arguments": {},
@@ -113,7 +115,8 @@ class TestPerPlayer:
 
 
 class TestPerTool:
-    def test_tool_別_成功_失敗_error_code_breakdown(self, em, tmp_path) -> None:
+    def test_tool_different_success_failure_error_code_breakdown(self, em, tmp_path) -> None:
+        """tool 別 成功 失敗 error code breakdown。"""
         events = [
             {"kind": "action_result", "payload": {
                 "tool": "use_item", "success": False, "error_code": "ITEM_NOT_CONSUMABLE",
@@ -133,7 +136,8 @@ class TestPerTool:
 
 
 class TestIssue621Chain:
-    def test_PlayerDownedEvent_と_tend_to_player_を_数える(self, em, tmp_path) -> None:
+    def test_counts_player_downed_event_tend_player(self, em, tmp_path) -> None:
+        """PlayerDownedEvent と tendtoplayer を数える。"""
         events = [
             {"kind": "observation", "payload": {"prose": "PlayerDownedEvent fired"}},
             {"kind": "action", "payload": {"tool": "tend_to_player"}},
@@ -143,7 +147,7 @@ class TestIssue621Chain:
         assert chain["PlayerDownedEvent"] >= 1
         assert chain["tend_to_player"] >= 1
 
-    def test_実際のdownはstructured_player_downedから数える(self, em, tmp_path) -> None:
+    def test_counts_down_structured_player_downed(self, em, tmp_path) -> None:
         """実 trace の down は文字列 "PlayerDownedEvent" ではなく observation の
         structured.type=="player_downed" で表現される。self 視点 (role=="self") が
         実際の down 1 件、social 視点は他プレイヤーの観測。
@@ -170,7 +174,8 @@ class TestIssue621Chain:
 
 
 class TestComparison:
-    def test_baseline_を_渡すと_比較行が_生成される(self, em, tmp_path) -> None:
+    def test_baseline_line_created(self, em, tmp_path) -> None:
+        """baseline を渡すと比較行が生成される。"""
         ev1 = [{"kind": "llm_call", "payload": {"wall_latency_ms": 1000, "prompt_tokens": 100, "cached_tokens": 50}}]
         ev2 = [{"kind": "llm_call", "payload": {"wall_latency_ms": 2000, "prompt_tokens": 100, "cached_tokens": 50}}]
         run = _write_trace(tmp_path, ev1)
@@ -210,7 +215,7 @@ class TestSurvivalProgress:
         assert out["summit_reached"]["P1"]["tick"] == 50
         assert out["summit_reached"]["P2"]["tick"] == 80
 
-    def test_no_summit_when_never_reached(self, em) -> None:
+    def test_summit_when_never_reached(self, em) -> None:
         out = em._extract_survival_progress([self._pos(10, 1, "難破船の浜")])
         assert out["summit_reached"] == {}
 
@@ -231,7 +236,7 @@ class TestSurvivalProgress:
         out = em._extract_survival_progress(events)
         assert out["signal_fire_lit_tick"] == 70
 
-    def test_signal_fire_none_when_not_lit(self, em) -> None:
+    def test_signal_fire_None_when_lit(self, em) -> None:
         events = [
             {"kind": "action_result", "tick": 10,
              "payload": {"tool": "spot_graph_interact", "success": True,
@@ -291,7 +296,7 @@ class TestCoopCopresence:
             "payload": {"to_spot_id": spot, "spot_name": spot, "player_name": name},
         }
 
-    def test_同一スポットに居る_tick_を_ペア別に数える(self, em) -> None:
+    def test_counts_same_spot_tick(self, em) -> None:
         """P1 は tick0-2 で浜、P2 は tick0-1 で浜・tick2 で森 → 共在は tick0-1 の 2。"""
         events = [
             self._tick_start(0), self._tick_start(1), self._tick_start(2),
@@ -303,7 +308,7 @@ class TestCoopCopresence:
         assert out["pair_copresence_ticks"]["P1-P2"] == 2
         assert out["tick_count"] == 3
 
-    def test_未移動の_player_は_直前の_to_spot_id_を_carry_forward_する(self, em) -> None:
+    def test_player_before_spot_id_carry_forward(self, em) -> None:
         """position_change が起きない tick は「最後に移動した先」に居続けたとみなす。"""
         events = [
             self._tick_start(0), self._tick_start(1), self._tick_start(2),
@@ -316,7 +321,8 @@ class TestCoopCopresence:
         # tick0-2 は P1/P2 とも浜 (3), tick3-4 は P1=森/P2=浜 (共在なし)。
         assert out["pair_copresence_ticks"]["P1-P2"] == 3
 
-    def test_全員同スポットの_tick_数を_数える(self, em) -> None:
+    def test_counts_all_players_spot_tick(self, em) -> None:
+        """全員同スポットの tick 数を 数える。"""
         events = [
             self._tick_start(0), self._tick_start(1),
             self._pos(0, 1, "浜", "エイダ"),
@@ -327,7 +333,7 @@ class TestCoopCopresence:
         out = em._extract_coop_copresence(events)
         assert out["all_players_copresence_ticks"] == 1
 
-    def test_position_change_が_一件も無い_player_は_数に入らない(self, em) -> None:
+    def test_position_change_player(self, em) -> None:
         """観測されていない player の位置は不明として扱い、過大集計しない。"""
         events = [
             self._tick_start(0),
@@ -338,12 +344,14 @@ class TestCoopCopresence:
         assert out["player_ids"] == [1]
         assert out["pair_copresence_ticks"] == {}
 
-    def test_player_name_を_保持する(self, em) -> None:
+    def test_preserves_player_name(self, em) -> None:
+        """playername を保持する。"""
         events = [self._tick_start(0), self._pos(0, 1, "浜", "エイダ")]
         out = em._extract_coop_copresence(events)
         assert out["player_names"]["P1"] == "エイダ"
 
-    def test_イベントが空なら_全て_0_で返す(self, em) -> None:
+    def test_returns_empty_when_all_zero(self, em) -> None:
+        """イベントが空なら 全て 0 で返す。"""
         out = em._extract_coop_copresence([])
         assert out == {
             "player_ids": [],
@@ -363,7 +371,8 @@ class TestHearsayEvidenceBySpeaker:
             "payload": {"source_kind": "hearsay", "source_speaker": speaker},
         }
 
-    def test_hearsay_以外の_source_kind_は_数えない(self, em) -> None:
+    def test_hearsay_source_kind(self, em) -> None:
+        """hearsay 以外の sourcekind は数えない。"""
         events = [
             self._hearsay("リオ"),
             {"kind": "belief_evidence", "payload": {"source_kind": "prediction_error"}},
@@ -372,7 +381,8 @@ class TestHearsayEvidenceBySpeaker:
         assert out["total"] == 1
         assert out["by_speaker"] == {"リオ": 1}
 
-    def test_話者別に_件数を_積む(self, em) -> None:
+    def test_speaker_count(self, em) -> None:
+        """話者別に 件数を 積む。"""
         events = [self._hearsay("リオ"), self._hearsay("リオ"), self._hearsay("ノア")]
         out = em._extract_hearsay_evidence_by_speaker(events)
         assert out["total"] == 3
@@ -386,7 +396,8 @@ class TestPendingPredictionVerdicts:
     のため、既知 3 種以外の suffix も拾えることを確認する。
     """
 
-    def test_created_resolved_expired_の_件数を_数える(self, em) -> None:
+    def test_counts_created_resolved_expired_count(self, em) -> None:
+        """createdresolvedexpired の件数を数える。"""
         events = [
             {"kind": "pending_prediction_created", "payload": {}},
             {"kind": "pending_prediction_created", "payload": {}},
@@ -396,7 +407,8 @@ class TestPendingPredictionVerdicts:
         out = em._extract_pending_prediction_verdicts(events)
         assert out["by_kind"] == {"created": 2, "resolved": 1, "expired": 1}
 
-    def test_resolved_を_verdict_別に_内訳する(self, em) -> None:
+    def test_resolved_verdict_breakdown(self, em) -> None:
+        """resolved を verdict 別に 内訳する。"""
         events = [
             {"kind": "pending_prediction_resolved", "payload": {"verdict": "fulfilled"}},
             {"kind": "pending_prediction_resolved", "payload": {"verdict": "fulfilled"}},
@@ -405,7 +417,8 @@ class TestPendingPredictionVerdicts:
         out = em._extract_pending_prediction_verdicts(events)
         assert out["resolved_verdict_breakdown"] == {"fulfilled": 2, "broken": 1}
 
-    def test_未知の_pending_prediction_kind_も_by_kind_に_乗る(self, em) -> None:
+    def test_unknown_pending_prediction_kind_included(self, em) -> None:
+        """未知の pendingpredictionkind も bykind に乗る。"""
         events = [{"kind": "pending_prediction_verdict_rejected", "payload": {}}]
         out = em._extract_pending_prediction_verdicts(events)
         assert out["by_kind"] == {"verdict_rejected": 1}
@@ -414,7 +427,8 @@ class TestPendingPredictionVerdicts:
 class TestGiveItem:
     """PR-A: give_item の action_result を成功/失敗別に数える。"""
 
-    def test_give_item_の_成功_失敗を_数える(self, em) -> None:
+    def test_counts_give_item_success_failure(self, em) -> None:
+        """giveitem の成功失敗を数える。"""
         events = [
             {"kind": "action_result", "payload": {"tool": "give_item", "success": True}},
             {"kind": "action_result", "payload": {"tool": "give_item", "success": False}},
@@ -423,13 +437,15 @@ class TestGiveItem:
         out = em._extract_give_item(events)
         assert out == {"total": 2, "success": 1, "fail": 1}
 
-    def test_give_item_が_一件も無ければ_全て_0(self, em) -> None:
+    def test_give_item_all_zero(self, em) -> None:
+        """giveitem が一件も無ければ全て 0。"""
         out = em._extract_give_item([])
         assert out == {"total": 0, "success": 0, "fail": 0}
 
 
 class TestCoopMetricsIncludedInComputeMetrics:
-    def test_compute_metrics_に_新指標が_含まれる(self, em, tmp_path) -> None:
+    def test_compute_metrics_included(self, em, tmp_path) -> None:
+        """computemetrics に新指標が含まれる。"""
         events = [
             {"kind": "tick_start", "tick": 0, "payload": {}},
             {

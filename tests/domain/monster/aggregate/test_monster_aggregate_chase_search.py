@@ -93,7 +93,7 @@ def _enter_chase(agg: MonsterAggregate) -> None:
 class TestStartChaseSearch:
     """start_chase_search の no-op 経路と正常系。"""
 
-    def test_CHASE_中に_timer_が_セットされる(self) -> None:
+    def test_chase_timer(self) -> None:
         """CHASE 中に start_chase_search すると search_timer が設定される。"""
         agg = _aggregate()
         _enter_chase(agg)
@@ -101,21 +101,22 @@ class TestStartChaseSearch:
         assert agg.is_searching_lost_target() is True
         assert agg._behavior_state.search_timer == 3
 
-    def test_CHASE_でない_状態では_no_op(self) -> None:
+    def test_chase_state_op(self) -> None:
         """IDLE で start_chase_search を呼んでも timer は 0 のまま。"""
         agg = _aggregate()
         agg.start_chase_search(3)
         assert agg._behavior_state.search_timer == 0
         assert agg.is_searching_lost_target() is False
 
-    def test_DEAD_状態では_no_op(self) -> None:
+    def test_dead_state_op(self) -> None:
+        """DEAD 状態では no op。"""
         agg = _aggregate(status=MonsterStatusEnum.DEAD)
         # DEAD なので enter_chase_state も no-op、結果 IDLE のまま
         _enter_chase(agg)
         agg.start_chase_search(3)
         assert agg._behavior_state.search_timer == 0
 
-    def test_search_ticks_0_以下は_no_op(self) -> None:
+    def test_search_ticks_zero_less_op(self) -> None:
         """search_ticks <= 0 は timer 設定しない。"""
         agg = _aggregate()
         _enter_chase(agg)
@@ -128,16 +129,19 @@ class TestStartChaseSearch:
 class TestIsSearchingLostTarget:
     """is_searching_lost_target の境界条件。"""
 
-    def test_IDLE_で_False(self) -> None:
+    def test_idle_false(self) -> None:
+        """IDLE で False。"""
         agg = _aggregate()
         assert agg.is_searching_lost_target() is False
 
-    def test_CHASE_でも_search_timer_0_なら_False(self) -> None:
+    def test_chase_search_timer_zero_false(self) -> None:
+        """CHASE でも search timer 0 なら False。"""
         agg = _aggregate()
         _enter_chase(agg)
         assert agg.is_searching_lost_target() is False
 
-    def test_CHASE_で_search_timer_2_なら_True(self) -> None:
+    def test_chase_search_timer_two_true(self) -> None:
+        """CHASE で search timer 2 なら True。"""
         agg = _aggregate()
         _enter_chase(agg)
         agg.start_chase_search(2)
@@ -147,7 +151,8 @@ class TestIsSearchingLostTarget:
 class TestTickChaseSearchTimer:
     """tick_chase_search_timer の戻り値と境界。"""
 
-    def test_timer_2_を_減算して_True_を_返す(self) -> None:
+    def test_returns_timer_two_true(self) -> None:
+        """timer2 を減算して True を返す。"""
         agg = _aggregate()
         _enter_chase(agg)
         agg.start_chase_search(2)
@@ -155,7 +160,7 @@ class TestTickChaseSearchTimer:
         assert result is True
         assert agg._behavior_state.search_timer == 1
 
-    def test_timer_1_を_減算して_False_を_返す(self) -> None:
+    def test_returns_timer_one_false(self) -> None:
         """timer=1 の最後の tick では減算後 False (timer 切れ)。"""
         agg = _aggregate()
         _enter_chase(agg)
@@ -164,13 +169,15 @@ class TestTickChaseSearchTimer:
         assert result is False
         assert agg._behavior_state.search_timer == 0
 
-    def test_timer_0_では_何もせず_False(self) -> None:
+    def test_timer_zero_false(self) -> None:
+        """timer 0 では 何もせず False。"""
         agg = _aggregate()
         _enter_chase(agg)
         result = agg.tick_chase_search_timer()
         assert result is False
 
-    def test_CHASE_でない_と_False(self) -> None:
+    def test_chase_false(self) -> None:
+        """CHASE でないと False。"""
         agg = _aggregate()
         result = agg.tick_chase_search_timer()
         assert result is False
@@ -179,7 +186,8 @@ class TestTickChaseSearchTimer:
 class TestResetSearchTimerOnRediscovery:
     """reset_search_timer_on_rediscovery の no-op 経路と挙動。"""
 
-    def test_探索中なら_timer_を_0_に_戻し_CHASE_は_継続(self) -> None:
+    def test_timer_zero_chase(self) -> None:
+        """探索中なら timer を 0 に戻し CHASE は継続。"""
         agg = _aggregate()
         _enter_chase(agg)
         agg.start_chase_search(3)
@@ -190,7 +198,7 @@ class TestResetSearchTimerOnRediscovery:
         assert agg.chase_attacker_ref() == AttackerRef.of_player(PlayerId(1))
         assert agg.chase_last_observed_target_spot_id == SpotId.create(1)
 
-    def test_探索中でない場合_no_op(self) -> None:
+    def test_op(self) -> None:
         """CHASE 中だが timer 0 なら何もしない。"""
         agg = _aggregate()
         _enter_chase(agg)
@@ -202,16 +210,19 @@ class TestResetSearchTimerOnRediscovery:
 class TestChaseLastObservedProperty:
     """chase_last_observed_target_spot_id プロパティ。"""
 
-    def test_CHASE_中は_state_の_値を_返す(self) -> None:
+    def test_returns_chase_state_value(self) -> None:
+        """CHASE 中は state の値を返す。"""
         agg = _aggregate()
         _enter_chase(agg)
         assert agg.chase_last_observed_target_spot_id == SpotId.create(1)
 
-    def test_IDLE_では_None(self) -> None:
+    def test_idle_none(self) -> None:
+        """IDLE では None。"""
         agg = _aggregate()
         assert agg.chase_last_observed_target_spot_id is None
 
-    def test_CHASE_を_clear_すると_None(self) -> None:
+    def test_chase_clear_none(self) -> None:
+        """CHASE を clear すると None。"""
         agg = _aggregate()
         _enter_chase(agg)
         agg.clear_behavior_state_to_idle()

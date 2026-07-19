@@ -63,7 +63,7 @@ def _make_player(*, is_down_before: bool = False, is_down_after: bool = False):
 class TestNotHostile:
     """faction が ENEMY 以外なら攻撃しない。"""
 
-    def test_neutral_は不発(self) -> None:
+    def test_neutral(self) -> None:
         """faction=NEUTRAL のモンスターは攻撃を試みない。"""
         svc = SpotMonsterAttackService()
         monster = _make_monster(faction=MonsterFactionEnum.NEUTRAL)
@@ -82,8 +82,8 @@ class TestNotHostile:
 class TestCannotAttack:
     """cooldown 中 / DEAD は攻撃不可。"""
 
-    def test_can_attack_now_が_falseなら不発(self) -> None:
-        """can_attack_now=False → executed=False, reason='cannot_attack'。"""
+    def test_can_attack_now_false(self) -> None:
+        """can_attack_now が False のモンスターは攻撃せず cannot_attack 理由を返す。"""
         svc = SpotMonsterAttackService()
         monster = _make_monster(can_attack=False)
         player = _make_player()
@@ -100,7 +100,7 @@ class TestCannotAttack:
 class TestVisibility:
     """視認可否判定。"""
 
-    def test_暗闇_かつ_dark_vision無しは不発(self) -> None:
+    def test_darkness_dark_vision_2(self) -> None:
         """DARK で dark_vision なし → not_visible。"""
         svc = SpotMonsterAttackService()
         monster = _make_monster(has_dark_vision=False)
@@ -113,7 +113,7 @@ class TestVisibility:
         assert outcome.executed is False
         assert outcome.reason == "not_visible"
 
-    def test_暗闇でも_dark_vision有りなら攻撃成立(self) -> None:
+    def test_darkness_dark_vision(self) -> None:
         """DARK + dark_vision あり → 攻撃が通る。"""
         svc = SpotMonsterAttackService()
         monster = _make_monster(has_dark_vision=True, attack=12)
@@ -130,7 +130,7 @@ class TestVisibility:
 class TestTargetAlreadyDown:
     """既にダウンしているターゲットは攻撃しない。"""
 
-    def test_ダウン中は不発(self) -> None:
+    def test_downed(self) -> None:
         """is_down=True のターゲットは executed=False。"""
         svc = SpotMonsterAttackService()
         monster = _make_monster()
@@ -148,7 +148,7 @@ class TestTargetAlreadyDown:
 class TestSuccessfulAttack:
     """攻撃成立時のダメージ反映と cooldown 記録。"""
 
-    def test_apply_damage_と_record_attack_が呼ばれる(self) -> None:
+    def test_calls_apply_damage_record_attack(self) -> None:
         """成立時、player.apply_damage と monster.record_attack が両方呼ばれる。"""
         svc = SpotMonsterAttackService()
         monster = _make_monster(attack=8)
@@ -164,7 +164,7 @@ class TestSuccessfulAttack:
         player.apply_damage.assert_called_once_with(8)
         monster.record_attack.assert_called_once_with(WorldTick(20))
 
-    def test_attack_ゼロのテンプレは_executed_false(self) -> None:
+    def test_attack_executed_false(self) -> None:
         """`base_stats.attack=0` のテンプレは event を発火させず cooldown も進めない。"""
         svc = SpotMonsterAttackService()
         monster = _make_monster(attack=0)
@@ -179,7 +179,7 @@ class TestSuccessfulAttack:
         player.apply_damage.assert_not_called()
         monster.record_attack.assert_not_called()
 
-    def test_ターゲットがダウンしたら_outcome_に反映される(self) -> None:
+    def test_downed_outcome(self) -> None:
         """apply_damage 後に is_down=True になったら target_incapacitated=True。"""
         svc = SpotMonsterAttackService()
         monster = _make_monster(attack=999)

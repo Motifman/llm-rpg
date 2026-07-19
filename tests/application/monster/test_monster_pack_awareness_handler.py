@@ -157,9 +157,10 @@ def _events_of_type(graph: SpotGraphAggregate, evt_type) -> list:
 class TestPackAwarenessSuccess:
     """scout が CHASE 中なら近くの仲間も連動 CHASE。"""
 
-    def test_隣接_spot_の_scout_が_CHASE_中なら_responder_も_CHASE_に_遷移(
+    def test_neighbor_spot_scout_chase_responder_chase(
         self,
     ) -> None:
+        """隣接 spot の scout が CHASE 中なら responder も CHASE に遷移。"""
         scout = _make_monster(101)
         target_ref = AttackerRef.of_player(PlayerId(7))
         scout.enter_chase_state(
@@ -195,9 +196,10 @@ class TestPackAwarenessSuccess:
         assert events[0].target_player_id is not None
         assert events[0].target_player_id.value == 7
 
-    def test_scout_が_monster_target_を_CHASE_中なら_target_monster_id_を_継承(
+    def test_scout_monster_target_chase_target_monster_id(
         self,
     ) -> None:
+        """scout が monstertarget を CHASE 中なら targetmonsterid を継承。"""
         scout = _make_monster(101)
         target_monster_id = MonsterId.create(999)
         target_ref = AttackerRef.of_monster(target_monster_id)
@@ -229,7 +231,8 @@ class TestPackAwarenessSuccess:
 class TestNoAlert:
     """連動しない経路。"""
 
-    def test_pack_awareness_radius_0_テンプレ_なら_無反応(self) -> None:
+    def test_pack_awareness_radius_zero(self) -> None:
+        """pack awareness radius 0 テンプレ なら 無反応。"""
         scout = _make_monster(101)
         scout.enter_chase_state(
             attacker_ref=AttackerRef.of_player(PlayerId(7)),
@@ -251,7 +254,8 @@ class TestNoAlert:
         )
         assert result is False
 
-    def test_pack_id_None_なら_無反応(self) -> None:
+    def test_pack_id_none(self) -> None:
+        """pack id None なら 無反応。"""
         scout = _make_monster(101)
         scout.enter_chase_state(
             attacker_ref=AttackerRef.of_player(PlayerId(7)),
@@ -271,7 +275,7 @@ class TestNoAlert:
         )
         assert result is False
 
-    def test_scout_が_CHASE_中で_ない_なら_無反応(self) -> None:
+    def test_scout_chase(self) -> None:
         """同 pack に member は居るが、誰も CHASE していない。"""
         member = _make_monster(101)  # IDLE
         responder = _make_monster(102)
@@ -287,7 +291,7 @@ class TestNoAlert:
         )
         assert result is False
 
-    def test_既に_CHASE_中なら_無反応(self) -> None:
+    def test_chase(self) -> None:
         """既存の CHASE を別 target に上書きしない。"""
         scout = _make_monster(101)
         scout.enter_chase_state(
@@ -315,7 +319,7 @@ class TestNoAlert:
         # 既存の CHASE 対象は変わらない
         assert responder.chase_attacker_ref().player_id == PlayerId(99)
 
-    def test_境界_radius_と_等しい_距離なら_連動する(self) -> None:
+    def test_boundary_radius_equals(self) -> None:
         """radius=2、scout=A、responder=C (2 hop) → 包含境界で連動する。"""
         scout = _make_monster(101)
         scout.enter_chase_state(
@@ -338,7 +342,7 @@ class TestNoAlert:
         )
         assert result is True
 
-    def test_radius_を_超える_距離なら_無反応(self) -> None:
+    def test_radius_exceeds(self) -> None:
         """radius=1、scout=A、responder=C (2 hop) → 連動不可。"""
         scout = _make_monster(101)
         scout.enter_chase_state(
@@ -361,7 +365,8 @@ class TestNoAlert:
         )
         assert result is False
 
-    def test_別_pack_の_scout_には_反応しない(self) -> None:
+    def test_different_pack_scout(self) -> None:
+        """別 pack の scout には 反応しない。"""
         rabbit_pack = PackId.create("rabbit_pack_2")
         scout = _make_monster(101, pack_id=rabbit_pack)
         scout.enter_chase_state(
@@ -382,7 +387,8 @@ class TestNoAlert:
         )
         assert result is False
 
-    def test_DEAD_の_scout_には_反応しない(self) -> None:
+    def test_dead_scout(self) -> None:
+        """DEAD の scout には 反応しない。"""
         from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import (
             MonsterLifecycleState,
         )
@@ -420,7 +426,8 @@ class TestNoAlert:
 class TestMultipleAlerted:
     """複数 follower が同時に警戒共有で連動 (pack_members 引数経由で N×N 回避)。"""
 
-    def test_3_follower_全員が_連動_CHASE_に_遷移(self) -> None:
+    def test_three_follower_all_players_chase(self) -> None:
+        """3follower 全員が連動 CHASE に遷移。"""
         scout = _make_monster(101)
         scout.enter_chase_state(
             attacker_ref=AttackerRef.of_player(PlayerId(7)),

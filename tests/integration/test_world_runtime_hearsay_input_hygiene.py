@@ -31,7 +31,7 @@ _SCENARIO_PATH = (
 class TestHearsayFoldedIntoBeliefEvidence:
     """HEARSAY_ENABLED は BELIEF_EVIDENCE_ENABLED が ON でなければ実効 OFF に畳まれる。"""
 
-    def test_hearsay_on_かつ_belief_evidence_off_なら実効offに畳まれ警告が出る(
+    def test_emits_warning_for_hearsay_on_belief_evidence_off(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """config ミス (HEARSAY ON / BELIEF_EVIDENCE OFF) でも heard_claims
@@ -50,9 +50,10 @@ class TestHearsayFoldedIntoBeliefEvidence:
             for r in caplog.records
         )
 
-    def test_hearsay_on_かつ_belief_evidence_on_なら実効onになる(
+    def test_hearsay_belief_evidence(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """hearsay on かつ belief evidence on なら実効onになる。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=episodic_config(
@@ -62,7 +63,7 @@ class TestHearsayFoldedIntoBeliefEvidence:
         )
         assert runtime._hearsay_enabled is True
 
-    def test_hearsay_未設定なら_belief_evidence_onでも実効offのまま(
+    def test_hearsay_unset_belief_evidence_off(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """HEARSAY_ENABLED 自体を要求していないときは、BELIEF_EVIDENCE_ENABLED
@@ -75,9 +76,10 @@ class TestHearsayFoldedIntoBeliefEvidence:
         )
         assert runtime._hearsay_enabled is False
 
-    def test_両方offなら実効offで警告も出ない(
+    def test_emits_warning_for_off(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """両方offなら実効offで警告も出ない。"""
         with caplog.at_level(logging.WARNING):
             runtime = create_world_runtime(_SCENARIO_PATH, config=episodic_config())
         assert runtime._hearsay_enabled is False

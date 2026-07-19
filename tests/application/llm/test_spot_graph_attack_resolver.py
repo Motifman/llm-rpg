@@ -47,7 +47,7 @@ def _make_context() -> ToolRuntimeContextDto:
 class TestAttackResolverSuccess:
     """正常系: M1 → monster_id 解決。"""
 
-    def test_m1_は_monster_id_に解決される(self) -> None:
+    def test_m1_monster_id_resolved(self) -> None:
         """target_label='M1' で `monster_id=101` と表示名が返る。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -64,7 +64,7 @@ class TestAttackResolverSuccess:
 class TestAttackResolverErrors:
     """異常系: 不正ラベル / 不正種別 / 空ラベル。"""
 
-    def test_player_ラベルは_invalid_target_kind(self) -> None:
+    def test_player_label_invalid_target_kind(self) -> None:
         """target_label='P1' （Player）は kind 違いで弾く。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
@@ -75,7 +75,7 @@ class TestAttackResolverErrors:
             )
         assert exc.value.error_code == "INVALID_TARGET_KIND"
 
-    def test_未知のラベルは_invalid_target_label(self) -> None:
+    def test_unknown_label_invalid_target_label(self) -> None:
         """存在しないラベルは label code で弾く。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
@@ -86,7 +86,7 @@ class TestAttackResolverErrors:
             )
         assert exc.value.error_code == "INVALID_TARGET_LABEL"
 
-    def test_空ラベルは_invalid_target_label(self) -> None:
+    def test_empty_label_invalid_target_label(self) -> None:
         """target_label が空文字なら INVALID_TARGET_LABEL。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
@@ -106,7 +106,7 @@ class TestAttackResolverDisplayNameFallback:
     本テスト群は新仕様の引数経路を保証する。
     """
 
-    def test_display_name_だけで_monster_id_に解決される(self) -> None:
+    def test_display_name_monster_id_resolved(self) -> None:
         """target_label='灰色のオオカミ' (display_name) でも resolver は解決する。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -118,7 +118,7 @@ class TestAttackResolverDisplayNameFallback:
         assert result["monster_id"] == 101
         assert result["target_display_name"] == "灰色のオオカミ"
 
-    def test_崩れ表現_M1_括弧_でも解決される(self) -> None:
+    def test_m1_resolved(self) -> None:
         """'M1 (灰色のオオカミ)' のような崩れ表現も _normalize_label_candidates 経由で解決。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -129,7 +129,7 @@ class TestAttackResolverDisplayNameFallback:
         assert result is not None
         assert result["monster_id"] == 101
 
-    def test_display_name_で_player_を_指したら_invalid_target_kind(self) -> None:
+    def test_display_name_player_invalid_target_kind(self) -> None:
         """display_name 経路でも Player target を指した場合は kind mismatch で弾く。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:

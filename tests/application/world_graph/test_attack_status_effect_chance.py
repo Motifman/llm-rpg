@@ -113,7 +113,8 @@ def _make_orchestrator(
 class TestAttackStatusEffectApplication:
     """provider が返す効果が確率で付与される。"""
 
-    def test_provider_未注入なら_add_status_effect_は呼ばれない(self) -> None:
+    def test_does_not_call_provider_add_status_effect(self) -> None:
+        """provider 未注入なら add status effect は呼ばれない。"""
         graph = _make_graph()
         monster = _make_monster()
         player = _make_player()
@@ -126,7 +127,8 @@ class TestAttackStatusEffectApplication:
         assert outcome.executed is True
         player.add_status_effect.assert_not_called()
 
-    def test_chance_1_0_なら_必ず_add_status_effect_が呼ばれる(self) -> None:
+    def test_calls_chance_one_zero_add_status_effect(self) -> None:
+        """chance 1 0 なら 必ず add status effect が呼ばれる。"""
         graph = _make_graph()
         monster = _make_monster()
         player = _make_player()
@@ -146,7 +148,8 @@ class TestAttackStatusEffectApplication:
         effect = player.add_status_effect.call_args[0][0]
         assert effect.expiry_tick.value == 22
 
-    def test_chance_0_0_なら_add_status_effect_は呼ばれない(self) -> None:
+    def test_does_not_call_chance_zero_add_status_effect(self) -> None:
+        """chance 0 0 なら add status effect は呼ばれない。"""
         graph = _make_graph()
         monster = _make_monster()
         player = _make_player()
@@ -162,7 +165,7 @@ class TestAttackStatusEffectApplication:
         )
         player.add_status_effect.assert_not_called()
 
-    def test_chance_0_5_random_0_3_なら_hit(self) -> None:
+    def test_chance_zero_five_random_zero_three_hit(self) -> None:
         """random < chance で hit。0.3 < 0.5 → 付与される。"""
         graph = _make_graph()
         monster = _make_monster()
@@ -179,7 +182,7 @@ class TestAttackStatusEffectApplication:
         )
         player.add_status_effect.assert_called_once()
 
-    def test_chance_0_5_random_0_7_なら_miss(self) -> None:
+    def test_chance_zero_five_random_zero_7_miss(self) -> None:
         """random >= chance で miss。0.7 >= 0.5 → 付与されない。"""
         graph = _make_graph()
         monster = _make_monster()
@@ -196,7 +199,7 @@ class TestAttackStatusEffectApplication:
         )
         player.add_status_effect.assert_not_called()
 
-    def test_複数_chance_が_独立に_roll_される(self) -> None:
+    def test_multiple_chance_independently_roll(self) -> None:
         """BLEEDING (1.0) + POISON (0.0) → BLEEDING のみ付与。"""
         graph = _make_graph()
         monster = _make_monster()
@@ -219,7 +222,7 @@ class TestAttackStatusEffectApplication:
         effect = player.add_status_effect.call_args[0][0]
         assert effect.effect_type.value == "bleeding"
 
-    def test_target_incapacitated_なら_status_effect_は_付与しない(self) -> None:
+    def test_target_incapacitated_status_effect(self) -> None:
         """HP 0 になった瞬間は status effect 不要 (蘇生後の蓄積を避ける設計)。"""
         graph = _make_graph()
         monster = _make_monster(attack=999)  # 即死
@@ -237,7 +240,7 @@ class TestAttackStatusEffectApplication:
         assert outcome.target_incapacitated is True
         player.add_status_effect.assert_not_called()
 
-    def test_provider_例外でも_attack_本体は_成立する(self) -> None:
+    def test_provider_attack_raises_exception(self) -> None:
         """provider が raise しても attack の世界 mutation は完了する。"""
         graph = _make_graph()
         monster = _make_monster()
@@ -255,7 +258,7 @@ class TestAttackStatusEffectApplication:
         assert outcome.executed is True
         player.add_status_effect.assert_not_called()
 
-    def test_未知の_effect_type_は_warning_で_skip(self) -> None:
+    def test_emits_warning_for_unknown_effect_type_skip(self) -> None:
         """provider が未登録の effect_type_name を返したら warning して skip。"""
         graph = _make_graph()
         monster = _make_monster()

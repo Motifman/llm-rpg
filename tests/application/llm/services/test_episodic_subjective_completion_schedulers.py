@@ -213,7 +213,8 @@ def _provision_scheduler(player_id: int):
 class TestInlineScheduler:
     """同期 scheduler が同じ thread 内で merge → store 上書きを完結させる。"""
 
-    def test_submit_で_store_の_episode_が_LLM_文に上書きされる(self) -> None:
+    def test_submit_store_episode_llm_overwritten(self) -> None:
+        """submit で store の episode が LLM 文に上書きされる。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)  # chunk_coordinator が事前に draft を入れた状態を模す
@@ -231,7 +232,8 @@ class TestInlineScheduler:
         assert ep_after.recall_text == "STUB_R"
         assert port.call_count == 1
 
-    def test_LLM_失敗時は_draft_のまま_FAILED_trace_を出す(self) -> None:
+    def test_llm_failure_draft_failed_trace(self) -> None:
+        """LLM 失敗時は draft のまま FAILED trace を出す。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -262,7 +264,8 @@ class TestInlineScheduler:
         ep_after = store.get_by_being(being_id, draft.episode_id)
         assert ep_after == draft
 
-    def test_FILLED_trace_の_recall_text_snippet_は_120_文字まで(self) -> None:
+    def test_filled_trace_recall_text_snippet_120(self) -> None:
+        """FILLED trace の recall text snippet は 120 文字まで。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -282,7 +285,7 @@ class TestInlineScheduler:
         assert len(filled) == 1
         assert len(filled[0].payload["recall_text_snippet"]) <= 120
 
-    def test_U1_prediction_error_確定時に_PREDICTION_OUTCOME_が_id_付きで出る(
+    def test_u1_prediction_error_prediction_outcome_id_rendered(
         self,
     ) -> None:
         """chunk を構成する action の prediction_context_id が重複排除で乗り、
@@ -333,7 +336,7 @@ class TestInlineScheduler:
         assert ev.payload["prediction_error"] == "開くと思ったら鍵がかかっていた"
         assert ev.payload["prediction_context_ids"] == ["predctx-aaa"]
 
-    def test_U1_prediction_error_が_None_でも_in_context_id_があれば_PREDICTION_OUTCOME_は出る(
+    def test_u1_prediction_error_none_context_id_prediction_outcome_rendered(
         self,
     ) -> None:
         """予測どおり (None) でも in-context id があれば「判定は走った」事実を
@@ -369,7 +372,7 @@ class TestInlineScheduler:
         assert outcomes[0].payload["prediction_error"] is None
         assert outcomes[0].payload["prediction_context_ids"] == ["predctx-bbb"]
 
-    def test_U1_id_機構_OFF_相当_id無しなら_PREDICTION_OUTCOME_は出ない(self) -> None:
+    def test_u1_id_off_id_prediction_outcome_not_rendered_2(self) -> None:
         """PREDICTION_CONTEXT_ID_ENABLED=OFF (default) では action に id が付かない。
         その場合 PREDICTION_OUTCOME を emit せず、trace が U1 導入前と一致する。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
@@ -391,7 +394,8 @@ class TestInlineScheduler:
         ]
         assert outcomes == []
 
-    def test_shutdown_は_noop(self) -> None:
+    def test_shutdown_noop(self) -> None:
+        """shutdown は noop。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         port = _StubPort()
@@ -413,7 +417,8 @@ class TestInlineScheduler:
 class TestThreadPoolScheduler:
     """非同期 scheduler が裏で merge → store 上書きを完了する。"""
 
-    def test_submit_後_shutdown_で_store_が_LLM_文に上書きされる(self) -> None:
+    def test_submit_after_shutdown_store_llm_overwritten(self) -> None:
+        """submit 後 shutdown で store が LLM 文に上書きされる。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -436,7 +441,7 @@ class TestThreadPoolScheduler:
         assert ep_after.recall_text == "ASYNC_R"
         assert ep_after.interpreted == "ASYNC_I"
 
-    def test_U1_in_context_id_があれば_PREDICTION_OUTCOME_が_id_付きで出る(self) -> None:
+    def test_u1_context_id_prediction_outcome_id_rendered(self) -> None:
         """非同期経路でも in-context id 付き chunk では PREDICTION_OUTCOME を emit。"""
         t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
         act = ActionResultEntry(
@@ -474,7 +479,7 @@ class TestThreadPoolScheduler:
         assert len(outcomes) == 1
         assert outcomes[0].payload["prediction_context_ids"] == ["predctx-async"]
 
-    def test_U1_id_機構_OFF_相当_id無しなら_PREDICTION_OUTCOME_は出ない(self) -> None:
+    def test_u1_id_off_id_prediction_outcome_not_rendered(self) -> None:
         """非同期経路でも PREDICTION_CONTEXT_ID_ENABLED=OFF (= id 無し) では
         PREDICTION_OUTCOME を emit しない (default run の trace が導入前と一致)。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
@@ -502,7 +507,7 @@ class TestThreadPoolScheduler:
         ]
         assert outcomes == []
 
-    def test_submit_は_非ブロッキング(self) -> None:
+    def test_submit_non(self) -> None:
         """重い LLM (1 秒 sleep) を投げても submit は瞬時に返る。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
@@ -522,7 +527,8 @@ class TestThreadPoolScheduler:
         finally:
             scheduler.shutdown(timeout=2.0)
 
-    def test_LLM_失敗時_は_draft_のまま_FAILED_trace_が出る(self) -> None:
+    def test_llm_failure_draft_failed_trace_rendered(self) -> None:
+        """LLM 失敗時は draft のまま FAILEDtrace が出る。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -546,7 +552,8 @@ class TestThreadPoolScheduler:
         # draft が store に残っている (上書き無し)
         assert store.get_by_being(being_id, draft.episode_id) == draft
 
-    def test_同一_episode_id_の_重複_submit_は_dedupe_される(self) -> None:
+    def test_same_episode_id_duplicate_submit_dedupe(self) -> None:
+        """同一 episodeid の重複 submit は dedupe される。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -569,7 +576,7 @@ class TestThreadPoolScheduler:
         # 同一 episode_id の重複は 1 回しか LLM を呼ばない
         assert port.call_count == 1
 
-    def test_max_queue_size_超過で_DROPPED_trace_が出る(self) -> None:
+    def test_max_queue_size_exceeds_dropped_trace_rendered(self) -> None:
         """max_queue_size=2 に設定して 3 件投げると 1 件は drop される。"""
         enc1, draft1, being1, resolver, world_id = _build_encoding_and_draft(player_id=1)
         enc2, draft2, being2, _, _ = _build_encoding_and_draft(player_id=2)
@@ -606,7 +613,7 @@ class TestThreadPoolScheduler:
         assert dropped[0].payload["episode_id"] == draft3.episode_id
         assert dropped[0].payload["max_queue_size"] == 2
 
-    def test_shutdown_後の_submit_は_DROPPED_trace_付きで_drop_される(self) -> None:
+    def test_shutdown_after_submit_dropped_trace_drop(self) -> None:
         """無音 drop ではなく観測可能にする (silent-failure-hunter #1 への対応)。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
@@ -634,7 +641,8 @@ class TestThreadPoolScheduler:
         assert dropped[0].payload["episode_id"] == draft.episode_id
         assert dropped[0].payload["reason"] == "shutdown"
 
-    def test_shutdown_timeout_で_未完了は_諦める(self) -> None:
+    def test_shutdown_timeout(self) -> None:
+        """shutdowntimeout で未完了は諦める。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -653,7 +661,7 @@ class TestThreadPoolScheduler:
         # timeout を大きく超えて待たない (= ジョブを諦めて返る)
         assert elapsed < 1.5, f"shutdown が長すぎる: {elapsed:.2f}s"
 
-    def test_shutdown_timeout_未完了は_WARN_log_で_観測可能(
+    def test_shutdown_timeout_warn_log_observation(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """timeout 超過ジョブは episode_id 付きで WARN ログに出る
@@ -731,12 +739,14 @@ class TestThreadPoolScheduler:
 class TestSchedulerValidation:
     """コンストラクタ引数の型 / 値検証。"""
 
-    def test_inline_service_型違反は_TypeError(self) -> None:
+    def test_inline_service_raises_type_error(self) -> None:
+        """inline service 型違反は TypeError。"""
         store = InMemorySubjectiveEpisodeStore()
         with pytest.raises(TypeError):
             InlineEpisodicSubjectiveScheduler("not_a_service", store)  # type: ignore[arg-type]
 
-    def test_inline_store_型違反は_TypeError(self) -> None:
+    def test_inline_store_raises_type_error(self) -> None:
+        """inline store 型違反は TypeError。"""
         port = _StubPort()
         with pytest.raises(TypeError):
             InlineEpisodicSubjectiveScheduler(
@@ -744,7 +754,8 @@ class TestSchedulerValidation:
                 "not_a_store",  # type: ignore[arg-type]
             )
 
-    def test_threadpool_max_workers_は_正の整数(self) -> None:
+    def test_threadpool_max_workers(self) -> None:
+        """threadpoolmaxworkers は正の整数。"""
         port = _StubPort()
         svc = EpisodicChunkSubjectiveFieldsService(port)
         store = InMemorySubjectiveEpisodeStore()
@@ -753,7 +764,8 @@ class TestSchedulerValidation:
         with pytest.raises(ValueError):
             ThreadPoolEpisodicSubjectiveScheduler(svc, store, max_workers=-1)
 
-    def test_threadpool_max_queue_size_は_正の整数(self) -> None:
+    def test_threadpool_max_queue_size(self) -> None:
+        """threadpoolmaxqueuesize は正の整数。"""
         port = _StubPort()
         svc = EpisodicChunkSubjectiveFieldsService(port)
         store = InMemorySubjectiveEpisodeStore()
@@ -769,7 +781,8 @@ class TestSchedulerValidation:
 class TestInlineSchedulerBeliefEvidenceTranscription:
     """InlineEpisodicSubjectiveScheduler が完了点で transcriber を呼ぶ挙動。"""
 
-    def test_prediction_error_ありなら_evidence_が_1件積まれる(self) -> None:
+    def test_prediction_error_adds_one_evidence_record(self) -> None:
+        """prediction error ありなら evidence が 1件積まれる。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
             BeliefEvidenceTranscriber,
         )
@@ -802,7 +815,8 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
         assert len(rows) == 1
         assert rows[0].text == "待っても何も起きなかった"
 
-    def test_prediction_error_なしなら_evidence_は_積まれない(self) -> None:
+    def test_prediction_error_evidence(self) -> None:
+        """predictionerror なしなら evidence は積まれない。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
             BeliefEvidenceTranscriber,
         )
@@ -827,7 +841,7 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
 
         assert buffer_store.list_all_by_being(being_id) == []
 
-    def test_transcriber_未注入なら_flag_OFF_相当で何も積まない(self) -> None:
+    def test_transcriber_uninjected_flag_off(self) -> None:
         """belief_evidence_transcriber=None (既定) は既存動作と完全互換。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
@@ -851,7 +865,8 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
         assert ep_after is not None
         assert ep_after.prediction_error == "外れた"
 
-    def test_belief_evidence_transcriber_型違反は_TypeError(self) -> None:
+    def test_belief_evidence_transcriber_raises_type_error_2(self) -> None:
+        """belief evidence transcriber 型違反は TypeError。"""
         port = _StubPort()
         store = InMemorySubjectiveEpisodeStore()
         with pytest.raises(TypeError):
@@ -865,9 +880,10 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
 class TestInlineSchedulerBeliefAttribution:
     """U4 (予測誤差統一設計 部品3): 非同期経路 (Inline 実装) の attribution + CONFIRMATION。"""
 
-    def test_belief_attribution_enabled_で_prediction_error_evidence_に_in_context_belief_ids_が添付される(
+    def test_belief_attribution_enabled_prediction_error_evidence_context_belief_ids_2(
         self,
     ) -> None:
+        """belief attribution enabled で prediction error evidence に in context belief ids が添付される。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
             BeliefEvidenceTranscriber,
         )
@@ -903,9 +919,10 @@ class TestInlineSchedulerBeliefAttribution:
         assert len(rows) == 1
         assert rows[0].in_context_belief_ids == ("sem-1",)
 
-    def test_belief_attribution_enabled_で_prediction_error_None_かつ_in_context_belief_あり_expected_result_ありなら_CONFIRMATION(
+    def test_belief_attribution_enabled_prediction_error_none_context_belief_expected_result_confirmation(
         self,
     ) -> None:
+        """belief attribution enabled で prediction error None かつ in context belief あり expected result ありなら CONFIRMATION。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
             BeliefEvidenceTranscriber,
         )
@@ -935,9 +952,10 @@ class TestInlineSchedulerBeliefAttribution:
         assert len(rows) == 1
         assert rows[0].source_kind.value == "confirmation"
 
-    def test_belief_attribution_enabled_False_既定なら_in_context_belief_ids_を添付しない(
+    def test_belief_attribution_enabled_false_default_context_belief_ids_2(
         self,
     ) -> None:
+        """belief attribution enabled False 既定なら in context belief ids を添付しない。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
             BeliefEvidenceTranscriber,
         )
@@ -978,7 +996,8 @@ class TestThreadPoolSchedulerBeliefEvidenceTranscription:
     """ThreadPoolEpisodicSubjectiveScheduler (ワーカー thread 経路) も同じ完了点で
     transcriber を呼ぶことを保証する。"""
 
-    def test_prediction_error_ありなら_evidence_が_1件積まれる(self) -> None:
+    def test_prediction_error_adds_one_evidence_record(self) -> None:
+        """prediction error ありなら evidence が 1件積まれる。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
             BeliefEvidenceTranscriber,
         )
@@ -1012,7 +1031,8 @@ class TestThreadPoolSchedulerBeliefEvidenceTranscription:
         assert len(rows) == 1
         assert rows[0].text == "見つからなかった"
 
-    def test_belief_evidence_transcriber_型違反は_TypeError(self) -> None:
+    def test_belief_evidence_transcriber_raises_type_error(self) -> None:
+        """belief evidence transcriber 型違反は TypeError。"""
         port = _StubPort()
         store = InMemorySubjectiveEpisodeStore()
         with pytest.raises(TypeError):
@@ -1026,9 +1046,10 @@ class TestThreadPoolSchedulerBeliefEvidenceTranscription:
 class TestThreadPoolSchedulerBeliefAttribution:
     """U4 (予測誤差統一設計 部品3): 非同期経路 (ThreadPool 実装) の attribution。"""
 
-    def test_belief_attribution_enabled_で_prediction_error_evidence_に_in_context_belief_ids_が添付される(
+    def test_belief_attribution_enabled_prediction_error_evidence_context_belief_ids(
         self,
     ) -> None:
+        """belief attribution enabled で prediction error evidence に in context belief ids が添付される。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
             BeliefEvidenceTranscriber,
         )
@@ -1065,9 +1086,10 @@ class TestThreadPoolSchedulerBeliefAttribution:
         assert len(rows) == 1
         assert rows[0].in_context_belief_ids == ("sem-1",)
 
-    def test_belief_attribution_enabled_False_既定なら_in_context_belief_ids_を添付しない(
+    def test_belief_attribution_enabled_false_default_context_belief_ids(
         self,
     ) -> None:
+        """belief attribution enabled False 既定なら in context belief ids を添付しない。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
             BeliefEvidenceTranscriber,
         )
@@ -1108,9 +1130,10 @@ class TestThreadPoolSchedulerBeliefAttribution:
 class TestInlineSchedulerRecallPredictionOutcomeStamping:
     """U9a (誤差駆動再解釈): InlineEpisodicSubjectiveScheduler の完了点での刻み。"""
 
-    def test_flag_ON_で_prediction_error_ありなら_recall_observation_に誤差が刻まれる(
+    def test_flag_prediction_error_recall_observation_2(
         self,
     ) -> None:
+        """flag ON で prediction error ありなら recall observation に誤差が刻まれる。"""
         from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
             InMemoryEpisodicRecallBufferStore,
         )
@@ -1144,7 +1167,7 @@ class TestInlineSchedulerRecallPredictionOutcomeStamping:
         obs = recall_buffer.list_pending_by_being(being_id)[0]
         assert obs.prediction_outcome_error == "待っても何も起きなかった"
 
-    def test_flag_OFF_既定なら誤差は刻まれない(self) -> None:
+    def test_flag_off_default_2(self) -> None:
         """error_driven_reinterpretation_enabled=False (既定) は導入前と一致。"""
         from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
             InMemoryEpisodicRecallBufferStore,
@@ -1179,7 +1202,7 @@ class TestInlineSchedulerRecallPredictionOutcomeStamping:
         obs = recall_buffer.list_pending_by_being(being_id)[0]
         assert obs.prediction_outcome_error is None
 
-    def test_recall_buffer_store_未配線_既定なら例外を投げず完了する(self) -> None:
+    def test_default_unwired_recall_buffer_store_completes_without_exception(self) -> None:
         """recall_buffer_store=None (既定) は既存動作と完全互換。"""
         enc, draft, being_id, resolver, world_id = (
             _build_encoding_and_draft_with_prediction_context_id(
@@ -1207,7 +1230,8 @@ class TestInlineSchedulerRecallPredictionOutcomeStamping:
         assert ep_after is not None
         assert ep_after.prediction_error == "外れた"
 
-    def test_recall_buffer_store_型違反は_TypeError(self) -> None:
+    def test_recall_buffer_store_raises_type_error_2(self) -> None:
+        """recall buffer store 型違反は TypeError。"""
         port = _StubPort()
         store = InMemorySubjectiveEpisodeStore()
         with pytest.raises(TypeError):
@@ -1221,9 +1245,10 @@ class TestInlineSchedulerRecallPredictionOutcomeStamping:
 class TestThreadPoolSchedulerRecallPredictionOutcomeStamping:
     """U9a (誤差駆動再解釈): ThreadPoolEpisodicSubjectiveScheduler の完了点での刻み。"""
 
-    def test_flag_ON_で_prediction_error_ありなら_recall_observation_に誤差が刻まれる(
+    def test_flag_prediction_error_recall_observation(
         self,
     ) -> None:
+        """flag ON で prediction error ありなら recall observation に誤差が刻まれる。"""
         from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
             InMemoryEpisodicRecallBufferStore,
         )
@@ -1260,7 +1285,8 @@ class TestThreadPoolSchedulerRecallPredictionOutcomeStamping:
         obs = recall_buffer.list_pending_by_being(being_id)[0]
         assert obs.prediction_outcome_error == "外れた"
 
-    def test_flag_OFF_既定なら誤差は刻まれない(self) -> None:
+    def test_flag_off_default(self) -> None:
+        """flag OFF 既定なら誤差は刻まれない。"""
         from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
             InMemoryEpisodicRecallBufferStore,
         )
@@ -1297,7 +1323,8 @@ class TestThreadPoolSchedulerRecallPredictionOutcomeStamping:
         obs = recall_buffer.list_pending_by_being(being_id)[0]
         assert obs.prediction_outcome_error is None
 
-    def test_recall_buffer_store_型違反は_TypeError(self) -> None:
+    def test_recall_buffer_store_raises_type_error(self) -> None:
+        """recall buffer store 型違反は TypeError。"""
         port = _StubPort()
         store = InMemorySubjectiveEpisodeStore()
         with pytest.raises(TypeError):
@@ -1313,9 +1340,10 @@ class TestInlineSchedulerRecallHitBoost:
 
     完了点での的中側 sidecar への還流。"""
 
-    def test_flag_ON_で的中かつexpected_resultありなら的中回数が加算される(
+    def test_flag_expected_result_count_incremented_2(
         self,
     ) -> None:
+        """flag ON で的中かつexpected resultありなら的中回数が加算される。"""
         from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
             InMemoryEpisodicRecallSuccessStore,
         )
@@ -1348,7 +1376,8 @@ class TestInlineSchedulerRecallHitBoost:
 
         assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 1
 
-    def test_flag_OFF_既定なら加算されない(self) -> None:
+    def test_flag_off_default_not_incremented_2(self) -> None:
+        """flag OFF 既定なら加算されない。"""
         from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
             InMemoryEpisodicRecallSuccessStore,
         )
@@ -1381,7 +1410,8 @@ class TestInlineSchedulerRecallHitBoost:
 
         assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 0
 
-    def test_recall_success_store_未配線_既定なら例外を投げず完了する(self) -> None:
+    def test_default_unwired_recall_success_store_completes_without_exception(self) -> None:
+        """recall success store 未配線 既定なら例外を投げず完了する。"""
         from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
             InMemoryEpisodicRecallBufferStore,
         )
@@ -1409,7 +1439,8 @@ class TestInlineSchedulerRecallHitBoost:
         ep_after = store.get_by_being(being_id, draft.episode_id)
         assert ep_after is not None
 
-    def test_recall_success_store_型違反は_TypeError(self) -> None:
+    def test_recall_success_store_raises_type_error_2(self) -> None:
+        """recall success store 型違反は TypeError。"""
         port = _StubPort()
         store = InMemorySubjectiveEpisodeStore()
         with pytest.raises(TypeError):
@@ -1425,9 +1456,10 @@ class TestThreadPoolSchedulerRecallHitBoost:
 
     完了点での的中側 sidecar への還流。"""
 
-    def test_flag_ON_で的中かつexpected_resultありなら的中回数が加算される(
+    def test_flag_expected_result_count_incremented(
         self,
     ) -> None:
+        """flag ON で的中かつexpected resultありなら的中回数が加算される。"""
         from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
             InMemoryEpisodicRecallSuccessStore,
         )
@@ -1463,7 +1495,8 @@ class TestThreadPoolSchedulerRecallHitBoost:
 
         assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 1
 
-    def test_flag_OFF_既定なら加算されない(self) -> None:
+    def test_flag_off_default_not_incremented(self) -> None:
+        """flag OFF 既定なら加算されない。"""
         from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
             InMemoryEpisodicRecallSuccessStore,
         )
@@ -1499,7 +1532,8 @@ class TestThreadPoolSchedulerRecallHitBoost:
 
         assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 0
 
-    def test_recall_success_store_型違反は_TypeError(self) -> None:
+    def test_recall_success_store_raises_type_error(self) -> None:
+        """recall success store 型違反は TypeError。"""
         port = _StubPort()
         store = InMemorySubjectiveEpisodeStore()
         with pytest.raises(TypeError):
@@ -1528,7 +1562,8 @@ _HEARD_CLAIMS_RETURN = {
 
 
 class TestInlineSchedulerActorNamePropagation:
-    def test_actor_name_を渡すと本人speakerのclaimが弾かれる(self) -> None:
+    def test_actor_name_self_speaker_claim_rejected_2(self) -> None:
+        """actor name を渡すと本人speakerのclaimが弾かれる。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -1545,7 +1580,7 @@ class TestInlineSchedulerActorNamePropagation:
         ep_after = store.get_by_being(being_id, draft.episode_id)
         assert [c.speaker for c in ep_after.heard_claims] == ["リオ"]
 
-    def test_actor_name_省略時は自己判定を行わない(self) -> None:
+    def test_actor_name_line(self) -> None:
         """未指定 (デフォルト None) では従来通り全ての speaker を通す
 
         (後方互換: actor_name を渡さない既存呼び出し元の挙動を変えない)。
@@ -1566,7 +1601,8 @@ class TestInlineSchedulerActorNamePropagation:
 
 
 class TestThreadPoolSchedulerActorNamePropagation:
-    def test_actor_name_を渡すと本人speakerのclaimが弾かれる(self) -> None:
+    def test_actor_name_self_speaker_claim_rejected(self) -> None:
+        """actor name を渡すと本人speakerのclaimが弾かれる。"""
         enc, draft, being_id, resolver, world_id = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -1668,9 +1704,10 @@ def _build_pending_prediction_sidecar_fixture(*, player_id: int = 7):
 class TestInlineSchedulerPendingPredictionSidecarIsolation:
     """約束の記録経路が失敗しても、補完自体の成否や清算の実行が正しく報告される。"""
 
-    def test_約束の記録が失敗しても_FAILED_ではなく_FILLED_trace_になり_episode_はmergedで保存される(
+    def test_failure_failed_filled_trace_episode_merged_saved_2(
         self,
     ) -> None:
+        """約束の記録が失敗しても FAILED ではなく FILLED trace になり episode はmergedで保存される。"""
         enc, draft, being_id, resolver, world_id, service, existing_pending = (
             _build_pending_prediction_sidecar_fixture()
         )
@@ -1700,7 +1737,7 @@ class TestInlineSchedulerPendingPredictionSidecarIsolation:
         assert ep_after is not None
         assert ep_after.interpreted == "I"
 
-    def test_約束の記録が失敗しても同じchunkの清算は実行される(self) -> None:
+    def test_failure_same_chunk_line_2(self) -> None:
         """記録 (add) の失敗が清算 (resolve) を巻き添えにしないことを保証する。"""
         enc, draft, being_id, resolver, world_id, service, existing_pending = (
             _build_pending_prediction_sidecar_fixture()
@@ -1732,9 +1769,10 @@ class TestInlineSchedulerPendingPredictionSidecarIsolation:
 class TestThreadPoolSchedulerPendingPredictionSidecarIsolation:
     """ThreadPool 版の ``_worker`` にも Inline と同じ分離が適用されていること。"""
 
-    def test_約束の記録が失敗しても_FAILED_ではなく_FILLED_trace_になり_episode_はmergedで保存される(
+    def test_failure_failed_filled_trace_episode_merged_saved(
         self,
     ) -> None:
+        """約束の記録が失敗しても FAILED ではなく FILLED trace になり episode はmergedで保存される。"""
         enc, draft, being_id, resolver, world_id, service, existing_pending = (
             _build_pending_prediction_sidecar_fixture()
         )
@@ -1769,7 +1807,8 @@ class TestThreadPoolSchedulerPendingPredictionSidecarIsolation:
         assert ep_after is not None
         assert ep_after.interpreted == "I"
 
-    def test_約束の記録が失敗しても同じchunkの清算は実行される(self) -> None:
+    def test_failure_same_chunk_line(self) -> None:
+        """約束の記録が失敗しても同じchunkの清算は実行される。"""
         enc, draft, being_id, resolver, world_id, service, existing_pending = (
             _build_pending_prediction_sidecar_fixture()
         )

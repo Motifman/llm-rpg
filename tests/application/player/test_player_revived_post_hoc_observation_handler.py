@@ -47,7 +47,8 @@ def _make_event(
 class TestSuccessCase:
     """tend_to_player 経由の標準ケース。caregiver と down_ticks が prose に入る。"""
 
-    def test_caregiver_と_down_ticks_を_prose_に_含めて_append_する(self) -> None:
+    def test_caregiver_down_ticks_prose_append(self) -> None:
+        """caregiver と downticks を prose に含めて append する。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(2), downed_at_tick=10)
         appender = MagicMock()
@@ -72,7 +73,7 @@ class TestSuccessCase:
         # 復活後すぐに本人ターンを動かしたい
         assert output.schedules_turn is True
 
-    def test_default_な_caregiver_resolver_未渡しでも_caregiver_id_が_prose_に_出る(self) -> None:
+    def test_default_caregiver_resolver_caregiver_id_prose_rendered(self) -> None:
         """resolver が None を返す (= 名前未解決) なら ``Player N`` でフォールバック。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(2), downed_at_tick=0)
@@ -91,7 +92,8 @@ class TestSuccessCase:
 class TestNoCaregiverCase:
     """caregiver 不明経路 (scenario_event 等)。"""
 
-    def test_caregiver_None_でも_落ちず_caregiver_を_含めない_prose_を_append(self) -> None:
+    def test_excludes_prose_append_caregiver_none_caregiver(self) -> None:
+        """caregiverNone でも落ちず caregiver を含めない prose を append。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(2), downed_at_tick=3)
         appender = MagicMock()
@@ -111,7 +113,8 @@ class TestNoCaregiverCase:
 class TestMissingDownedAt:
     """grace_timer に downed_at が無い fail-safe ケース。"""
 
-    def test_downed_at_未登録でも_appendは走り_時間表示を_省略する(self) -> None:
+    def test_downed_unregistered_append(self) -> None:
+        """downed at 未登録でも appendは走り 時間表示を 省略する。"""
         timer = PlayerDeathGraceTimer()
         # register していない
         appender = MagicMock()
@@ -138,7 +141,8 @@ class TestReviveProsePRKappa:
     危険地帯なら travel_to で退避する判断を促される。
     """
 
-    def test_prose_に_HP_情報が含まれる(self) -> None:
+    def test_prose_hp_included(self) -> None:
+        """prose に HP 情報が含まれる。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(2), downed_at_tick=10)
         appender = MagicMock()
@@ -158,7 +162,8 @@ class TestReviveProsePRKappa:
         # HP 60 が prose に含まれる
         assert "60" in output.prose
 
-    def test_prose_に_travel_to_誘導が含まれる(self) -> None:
+    def test_prose_travel_included(self) -> None:
+        """prose に travel to 誘導が含まれる。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(2), downed_at_tick=10)
         appender = MagicMock()
@@ -176,7 +181,8 @@ class TestReviveProsePRKappa:
 
 
 class TestConstructorValidation:
-    def test_grace_timer_型_check(self) -> None:
+    def test_grace_timer_type_check(self) -> None:
+        """grace timer 型 check。"""
         with pytest.raises(TypeError):
             PlayerRevivedPostHocObservationHandler(
                 grace_timer="not a timer",  # type: ignore[arg-type]

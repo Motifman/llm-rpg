@@ -40,7 +40,7 @@ class TestRecallSlotEntryCodec:
 class TestAfterglowEntryCodec:
     """``AfterglowEntry`` ↔ dict の 1:1 往復。source enum も復元される。"""
 
-    def test_round_trip_preserves_fields(self):
+    def test_round_trip_preserves_fields_2(self):
         original = AfterglowEntry(
             episode_id="ep-002",
             heading="シキに今日の話をしたが届かなかった",
@@ -98,7 +98,7 @@ class TestSemanticEntryCodecBeliefJournal:
         assert restored.confirmation_support_count == 1
         assert restored.hearsay_support_count == 1
 
-    def test_旧_snapshot_dict_new_key_無しは_default_に倒れる(self):
+    def test_legacy_snapshot_dict_new_key_default(self):
         """belief journal キーが無い旧 snapshot dict → status=active / belief_id
         は entry_id にフォールバックする (後方互換)。"""
         from ai_rpg_world.application.being._memory_payload_codecs import (
@@ -359,7 +359,7 @@ class TestPendingPredictionKindCodec:
         assert restored == original
         assert restored.kind == PENDING_KIND_PLAN
 
-    def test_legacy_dict_without_kind_falls_back_to_promise(self) -> None:
+    def test_legacy_dict_without_kind_falls_back_promise(self) -> None:
         """kind キーの無い旧 snapshot は promise に倒れる (後方互換)。"""
         from ai_rpg_world.application.being._memory_payload_codecs import (
             dict_to_pending_prediction,

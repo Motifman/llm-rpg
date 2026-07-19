@@ -214,7 +214,8 @@ class TestChunkCoordinatorTraceEmission:
         )
         coord.after_action_recorded(player_id)
 
-    def test_recorder_注入_かつ_chunk_close_で_event_が_emit(self) -> None:
+    def test_recorder_chunk_close_event_emit(self) -> None:
+        """recorder 注入 かつ chunk close で event が emit。"""
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         coord, buffer, action_store, episode_store = self._build_coord(recorder=recorder)
@@ -237,13 +238,14 @@ class TestChunkCoordinatorTraceEmission:
         assert ev.payload["action_count"] >= 1
         assert ev.payload["observation_count"] >= 1
 
-    def test_recorder_未注入なら_event_は_emit_されない(self) -> None:
+    def test_recorder_uninjected_event_emit(self) -> None:
+        """recorder 未注入なら event は emit されない。"""
         coord, buffer, action_store, _ = self._build_coord(recorder=None)
         pid = PlayerId(1)
         # ただ実行できることだけ確認 (recorder lookup が None なので no-op)
         self._trigger_chunk_close(coord, buffer, action_store, pid)
 
-    def test_naive_と_aware_の_datetime_が混在しても_TypeError_を投げない(self) -> None:
+    def test_naive_aware_datetime_raises_type_error(self) -> None:
         """tz-naive と tz-aware の occurred_at が混在しても chunk 書き込みが成功する。
 
         第20回実験で 48/50 件の chunk write が
@@ -298,7 +300,7 @@ class TestChunkCoordinatorTraceEmission:
         # chunk write が完走したことを episode_store の有無で確認
         assert len(episode_store.list_recent_by_being(being_id, 10)) > 0
 
-    def test_obs_slice_に_naive_と_aware_が_複数件混在しても_sort_で_落ちない(self) -> None:
+    def test_obs_slice_naive_aware_multiple_sort_does_not_crash(self) -> None:
         """``obs_slice`` の sort key も _as_utc で正規化されている (Issue #311 後続)。
 
         Issue #295 r2 fix (#309) は filter 比較を _as_utc で守ったが、その直後の
@@ -362,7 +364,7 @@ class TestChunkCoordinatorTraceEmission:
         coord.after_action_recorded(pid)
         assert len(episode_store.list_recent_by_being(being_id, 10)) > 0
 
-    def test_recorder_例外は_chunk_書き込みを止めない(self) -> None:
+    def test_recorder_chunk_raises_exception(self) -> None:
         """recorder.record が例外を投げても episode は store に書かれる。"""
 
         class _BrokenRecorder(ITraceRecorder):
@@ -407,9 +409,10 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
 
         return EpisodicChunkSubjectiveFieldsService(_StubPort())
 
-    def test_prediction_error_が確定した瞬間に_id_付きで_PREDICTION_OUTCOME_が出る(
+    def test_prediction_error_id_prediction_outcome_rendered(
         self,
     ) -> None:
+        """prediction error が確定した瞬間に id 付きで PREDICTION OUTCOME が出る。"""
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         service = self._build_service_with_prediction_error("鍵がかかっていた")
@@ -466,7 +469,7 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
         assert ev.payload["prediction_context_ids"] == ["predctx-xyz"]
         assert ev.payload["episode_id"]
 
-    def test_chunk_subjective_fields_service_未注入なら_PREDICTION_OUTCOME_は出ない(
+    def test_chunk_subjective_fields_service_uninjected_prediction_outcome_not_rendered(
         self,
     ) -> None:
         """同期 merge 自体が走らない (= scheduler 経路のみ使う構成) なら
@@ -483,7 +486,7 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
         ]
         assert outcomes == []
 
-    def test_id機構_OFF相当_id無しの_chunk_では_PREDICTION_OUTCOME_は出ない(
+    def test_id_off_id_chunk_prediction_outcome_not_rendered(
         self,
     ) -> None:
         """PREDICTION_CONTEXT_ID_ENABLED=OFF (default) では action に id が付かない。
@@ -517,7 +520,7 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
 class TestPromptBuilderRecallTraceEmission:
     """passive recall 実行ごとに EPISODIC_RECALL が記録される。"""
 
-    def test_recall_時に_候補と_situation_cues_が_event_に乗る(self) -> None:
+    def test_recall_candidate_situation_cues_event_included(self) -> None:
         """builder._emit_episodic_recall_trace を直接駆動して payload を検証
         (full prompt build を経由しない最小ユニットテスト)。"""
         from ai_rpg_world.application.llm.services.prompt_builder import (
@@ -567,7 +570,7 @@ class TestPromptBuilderRecallTraceEmission:
         # relevant_memories_text を渡さない既定では chars_total=0
         assert ev.payload["recall_text_chars_total"] == 0
 
-    def test_recall_text_chars_total_に_実注入テキスト長が乗る(self) -> None:
+    def test_recall_text_chars_total_included(self) -> None:
         """relevant_memories_text を渡すと、その文字数が payload に出る
         (post-hoc に prompt_tokens 比へ換算するための計測点)。"""
         from ai_rpg_world.application.llm.services.prompt_builder import (
@@ -594,7 +597,7 @@ class TestPromptBuilderRecallTraceEmission:
         assert len(events) == 1
         assert events[0].payload["recall_text_chars_total"] == len(joined)
 
-    def test_recorder_未注入なら_emit_は_no_op(self) -> None:
+    def test_recorder_uninjected_emit_op(self) -> None:
         """trace_recorder=None なら例外なく no-op。"""
         from ai_rpg_world.application.llm.services.prompt_builder import (
             DefaultPromptBuilder,
@@ -615,7 +618,7 @@ class TestPromptBuilderRecallTraceEmission:
             candidates=[],
         )
 
-    def test_retrieval_debug_が_payload_に乗る(self) -> None:
+    def test_retrieval_debug_payload_included(self) -> None:
         """``retrieval_debug`` を渡すと axis 別 raw 件数 / union 件数 /
         最終 source_axes 別件数 / candidate ごとの source_axes が payload に
         乗る (#526 後続: cue 設計の post-hoc 解析のため)。"""
@@ -693,7 +696,7 @@ class TestPromptBuilderRecallTraceEmission:
         # 値が入っていなければ空 dict として乗る (key 自体は常に存在)。
         assert p["habituation_penalty_by_episode"] == {}
 
-    def test_habituation_penalty_payload_が_乗る(self) -> None:
+    def test_habituation_penalty_payload_included(self) -> None:
         """#526 段階 2 (PR #565) 続き: retrieval_debug の
         ``habituation_penalty_by_episode`` が trace payload にも反映される。
 
@@ -741,7 +744,7 @@ class TestPromptBuilderRecallTraceEmission:
         p = events[0].payload
         assert p["habituation_penalty_by_episode"] == {"ep-x": 3, "ep-y": 1}
 
-    def test_候補ごとに_habituation_penalty_が_紐付く(self) -> None:
+    def test_candidate_per_habituation_penalty(self) -> None:
         """PR-E: 各 candidate に ``habituation_penalty`` を直接埋め込む。
 
         Y_after_issue621 trace 分析で「habituation の罰則が trace に出ているか
@@ -800,7 +803,7 @@ class TestPromptBuilderRecallTraceEmission:
             "ep-b": 0,
         }
 
-    def test_retrieval_debug_未指定でも_candidate_に_habituation_penalty_0_が_出る(self) -> None:
+    def test_retrieval_debug_unspecified_candidate_habituation_penalty_zero_rendered(self) -> None:
         """PR-E 後方互換: ``retrieval_debug`` 無し (= 旧経路) でも各 candidate
         に ``habituation_penalty=0`` が一律で乗る。集計側が常に同じ shape を
         前提にできるようにする。"""
@@ -829,7 +832,7 @@ class TestPromptBuilderRecallTraceEmission:
         events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_RECALL]
         assert events[0].payload["candidates"][0]["habituation_penalty"] == 0
 
-    def test_retrieval_debug_未指定なら_既存_payload_と互換(self) -> None:
+    def test_retrieval_debug_unspecified_existing_payload_compatible(self) -> None:
         """``retrieval_debug`` を渡さない呼び出しは既存形式 (追加キー無し) を
         維持する (= 後方互換)。"""
         from ai_rpg_world.application.llm.services.prompt_builder import (
@@ -860,7 +863,7 @@ class TestPromptBuilderRecallTraceEmission:
         assert "union_episode_count_before_max_cap" not in p
         assert "final_episode_count_by_source_axis" not in p
 
-    def test_provider_経由_遅延注入された_recorder_に追従(self) -> None:
+    def test_provider_via_recorder(self) -> None:
         """trace_recorder_provider が後から非 None を返せばその recorder に
         emit される。"""
         from ai_rpg_world.application.llm.services.prompt_builder import (
@@ -897,7 +900,7 @@ class TestPromptBuilderSectionBreakdownTraceEmission:
     """``_emit_prompt_section_breakdown_trace`` が section 別 char 数を払い出す
     (実験 #356 後続: prefix cache 分析用)。"""
 
-    def test_section_別_char_数が_event_に乗る(self) -> None:
+    def test_section_different_char_event_included(self) -> None:
         """各 section のテキスト長が独立に payload に乗る。token ではなく char。"""
         from ai_rpg_world.application.llm.services.prompt_builder import (
             DefaultPromptBuilder,
@@ -949,7 +952,7 @@ class TestPromptBuilderSectionBreakdownTraceEmission:
         # tools は json.dumps の長さで近似される (>0 で十分)
         assert p["tools_chars"] > 0
 
-    def test_recorder_未注入なら_section_breakdown_emit_は_no_op(self) -> None:
+    def test_recorder_uninjected_section_breakdown_emit_op(self) -> None:
         """trace_recorder=None でも例外なく完走 (prompt 構築を止めない)。"""
         from ai_rpg_world.application.llm.services.prompt_builder import (
             DefaultPromptBuilder,
@@ -983,9 +986,10 @@ class TestWorldRuntimeEpisodicTraceE2E:
     """env=1 で trace_recorder を runtime に差し込んで実行すると、chunk
     write と recall の両方が trace event として記録される。"""
 
-    def test_smoke_run_で_chunk_written_と_recall_イベントが_両方_emit(
+    def test_smoke_run_chunk_written_recall_event_emit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """smoke run で chunk written と recall イベントが 両方 emit。"""
         from pathlib import Path
 
         from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel

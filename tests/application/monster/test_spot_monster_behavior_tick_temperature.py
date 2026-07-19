@@ -147,7 +147,8 @@ def _events_of_type(graph, evt_type):
 class TestComfortableTemperature:
     """快適範囲内では効果無し。"""
 
-    def test_NORMAL_spot_では_event_発火_しない(self) -> None:
+    def test_normal_spot_event_trigger(self) -> None:
+        """NORMAL spot では event 発火 しない。"""
         graph = _graph_with_temperature(TemperatureEnum.NORMAL)
         monster = _monster(_template())  # COLD-WARM 快適
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -167,7 +168,8 @@ class TestComfortableTemperature:
 class TestTooCold:
     """寒すぎる spot で HP 減少 + too_cold event。"""
 
-    def test_FREEZING_spot_で_HP_減_event_発火(self) -> None:
+    def test_freezing_spot_hp_event_trigger(self) -> None:
+        """FREEZING spot で HP 減 event 発火。"""
         graph = _graph_with_temperature(TemperatureEnum.FREEZING)
         monster = _monster(_template(discomfort_damage=2))
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -188,7 +190,8 @@ class TestTooCold:
 class TestTooHot:
     """暑すぎる spot で HP 減少 + too_hot event。"""
 
-    def test_HOT_spot_で_HP_減_event_発火(self) -> None:
+    def test_hot_spot_hp_event_trigger(self) -> None:
+        """HOT spot で HP 減 event 発火。"""
         graph = _graph_with_temperature(TemperatureEnum.HOT)
         monster = _monster(_template(discomfort_damage=3))
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -209,7 +212,8 @@ class TestTooHot:
 class TestLethalDamage:
     """温度ダメージで monster が DEAD になる経路。"""
 
-    def test_HP_を_削り切ると_DEAD_に_遷移(self) -> None:
+    def test_hp_dead(self) -> None:
+        """HP を削り切ると DEAD に遷移。"""
         graph = _graph_with_temperature(TemperatureEnum.FREEZING)
         # max_hp=5、damage=10 で 1 tick で死亡
         monster = _monster(_template(discomfort_damage=10, max_hp=5))
@@ -230,7 +234,8 @@ class TestLethalDamage:
 class TestDisabled:
     """damage=0 のテンプレでは効果無効化。"""
 
-    def test_damage_0_テンプレ_では_event_発火_しない(self) -> None:
+    def test_damage_zero_event_trigger(self) -> None:
+        """damage 0 テンプレ では event 発火 しない。"""
         graph = _graph_with_temperature(TemperatureEnum.FREEZING)
         # NORMAL のみ快適だが damage=0 で無効
         monster = _monster(

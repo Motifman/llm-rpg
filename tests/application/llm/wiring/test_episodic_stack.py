@@ -96,39 +96,46 @@ class TestIsEpisodicEnabled:
             ("garbage", False),
         ],
     )
-    def test_各種値の解釈(self, raw: str, expected: bool) -> None:
+    def test_value(self, raw: str, expected: bool) -> None:
+        """各種値の解釈。"""
         assert is_episodic_enabled({"LLM_EPISODIC_ENABLED": raw}) is expected
 
-    def test_未設定なら_False(self) -> None:
+    def test_unset_false(self) -> None:
+        """未設定なら False。"""
         assert is_episodic_enabled({}) is False
 
 
 class TestIsEpisodicSubjectiveEnabled:
     """``LLM_EPISODIC_SUBJECTIVE_ENABLED`` の解釈 (既定 ON)。"""
 
-    def test_未設定なら_True(self) -> None:
+    def test_unset_true(self) -> None:
         """既定 ON (#308): 未設定でも True。"""
         assert is_episodic_subjective_enabled({}) is True
 
-    def test_空文字なら_True(self) -> None:
+    def test_empty_string_true(self) -> None:
+        """空文字なら True。"""
         assert is_episodic_subjective_enabled({"LLM_EPISODIC_SUBJECTIVE_ENABLED": ""}) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
-    def test_明示_off_文字列で_False(self, raw: str) -> None:
+    def test_off_string_false(self, raw: str) -> None:
+        """明示 off 文字列で False。"""
         assert is_episodic_subjective_enabled({"LLM_EPISODIC_SUBJECTIVE_ENABLED": raw}) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "yes", "on"])
-    def test_明示_on_文字列で_True(self, raw: str) -> None:
+    def test_string_true(self, raw: str) -> None:
+        """明示 on 文字列で True。"""
         assert is_episodic_subjective_enabled({"LLM_EPISODIC_SUBJECTIVE_ENABLED": raw}) is True
 
-    def test_不明値は_True_既定側(self) -> None:
+    def test_value_true_default(self) -> None:
+        """不明値は True 既定側。"""
         assert is_episodic_subjective_enabled({"LLM_EPISODIC_SUBJECTIVE_ENABLED": "?"}) is True
 
 
 class TestBuildScenarioNounMatcher:
     """spot / character の名前抽出は duck-type で動く。"""
 
-    def test_spot_と_character_を抽出する(self) -> None:
+    def test_spot_character(self) -> None:
+        """spot と character を抽出する。"""
         graph = _stub_graph(spots={1: "入口広間", 2: "閲覧室"})
         scenario = _stub_scenario(players=[(10, "カイト"), (20, "リン")])
         matcher = build_scenario_noun_matcher(scenario=scenario, graph=graph)
@@ -139,7 +146,7 @@ class TestBuildScenarioNounMatcher:
         char_hits = matcher.find_in_text("カイトが探索した")
         assert any(m.axis == "entity" for m in char_hits)
 
-    def test_scenario_に_player_spawns_が_無くても_落ちない(self) -> None:
+    def test_scenario_player_spawns_does_not_crash(self) -> None:
         """getattr ベースなので欠落しても安全。"""
         graph = _stub_graph(spots={1: "広間"})
         scenario = SimpleNamespace()  # player_spawns 欠落
@@ -147,7 +154,7 @@ class TestBuildScenarioNounMatcher:
         # spot だけは取れる
         assert matcher.find_in_text("広間に入った")
 
-    def test_world_object_名_を抽出する(self) -> None:
+    def test_world_object(self) -> None:
         """#526 後続 C1: 各 spot の ``interior.objects`` から world_object 名を
         抽出し、``object:world_object_{id}`` cue として recall に乗るようにする。
 
@@ -178,7 +185,7 @@ class TestBuildScenarioNounMatcher:
             for m in obj_hits2
         )
 
-    def test_interior_が_欠落しても_落ちない(self) -> None:
+    def test_interior_missing_does_not_crash(self) -> None:
         """``interior`` 属性が無い古い stub / scenario でも落とさない (getattr 安全側)。"""
         # interior 属性そのものを持たない spot を作る
         spot_id_obj = SimpleNamespace(value=1)
@@ -201,7 +208,8 @@ class TestBuildEpisodicStack:
             DefaultActionResultStore(),
         )
 
-    def test_episodic_stack_の_4要素が組み立てられる(self) -> None:
+    def test_episodic_stack_four_element_built(self) -> None:
+        """episodic stack の 4要素が組み立てられる。"""
         graph = _stub_graph(spots={1: "広間"})
         scenario = _stub_scenario(players=[(1, "テスター")])
         obs_buf, sliding, action_store = self._minimal_io()
@@ -220,7 +228,7 @@ class TestBuildEpisodicStack:
         # scheduler 未指定なら None
         assert stack.subjective_completion_scheduler is None
 
-    def test_episode_store_を外から渡せる(self) -> None:
+    def test_episode_store(self) -> None:
         """scheduler と stack で同じ store を共有するための入口。"""
         graph = _stub_graph(spots={1: "x"})
         scenario = _stub_scenario(players=[(1, "y")])
@@ -248,7 +256,7 @@ class TestReinterpretationOptIn:
             DefaultActionResultStore(),
         )
 
-    def test_default_off_では_reinterpretation_は全て_None(self) -> None:
+    def test_default_off_reinterpretation_all_none(self) -> None:
         """reinterpretation_enabled 未指定なら coordinator/journal/buffer 全て None (従来挙動)。"""
         obs_buf, sliding, action_store = self._io()
         stack = build_episodic_stack(
@@ -262,7 +270,7 @@ class TestReinterpretationOptIn:
         assert stack.reinterpretation_journal is None
         assert stack.recall_buffer_store is None
 
-    def test_enabled_かつ_completion_None_なら_coordinator_は作るが_prompt_buffer_は_None(self) -> None:
+    def test_creates_prompt_buffer_none_enabled_completion_none_coordinator(self) -> None:
         """completion なし: coordinator/journal は組むが、prompt は recall buffer を覗かない。"""
         obs_buf, sliding, action_store = self._io()
         stack = build_episodic_stack(
@@ -279,7 +287,7 @@ class TestReinterpretationOptIn:
         # completion 無し = 再解釈 LLM が走らないので prompt には buffer を渡さない
         assert stack.recall_buffer_store is None
 
-    def test_enabled_かつ_completion_あり_なら_prompt_buffer_も_非None(self) -> None:
+    def test_enabled_completion_prompt_buffer_non_none(self) -> None:
         """completion あり: prompt 用 recall_buffer_store も非 None になる (想起を pending 化)。"""
         from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
             IEpisodicReinterpretationCompletionPort,
@@ -317,7 +325,7 @@ class TestRecallHitBoostOptIn:
             DefaultActionResultStore(),
         )
 
-    def test_default_off_では_recall_success_store_は_None(self) -> None:
+    def test_default_off_recall_success_store_none(self) -> None:
         """recall_hit_boost_enabled 未指定なら的中側 sidecar は None (従来挙動)。"""
         obs_buf, sliding, action_store = self._io()
         stack = build_episodic_stack(
@@ -329,7 +337,7 @@ class TestRecallHitBoostOptIn:
         )
         assert stack.recall_success_store is None
 
-    def test_enabled_なら_recall_success_store_が構築され_chunk_coordinator_に渡る(
+    def test_enabled_recall_success_store_chunk_coordinator(
         self,
     ) -> None:
         """flag ON で的中側 sidecar が構築され、stack が公開する。"""
@@ -349,9 +357,10 @@ class TestRecallHitBoostOptIn:
         assert stack.chunk_coordinator._recall_success_store is stack.recall_success_store  # noqa: SLF001
         assert stack.chunk_coordinator._recall_hit_boost_enabled is True  # noqa: SLF001
 
-    def test_enabled_なら_passive_recall_にも_同一store_と_strength_が配線される(
+    def test_enabled_passive_recall_same_store_strength_wired(
         self,
     ) -> None:
+        """enabled なら passive recall にも 同一store と strength が配線される。"""
         obs_buf, sliding, action_store = self._io()
         stack = build_episodic_stack(
             scenario=_stub_scenario(players=[(1, "t")]),
@@ -374,21 +383,24 @@ class TestBackwardCompatAlias:
     既存のテスト / 外部依存を壊さないことの保証。
     """
 
-    def test_旧名_WorldEpisodicStack_は_EpisodicStack_の_alias(self) -> None:
+    def test_legacy_world_episodic_stack_episodic_stack_alias(self) -> None:
+        """旧名 WorldEpisodicStack は EpisodicStack の alias。"""
         from ai_rpg_world.application.world_runtime.world_episodic_wiring import (
             EpisodicStack as NewName,
             WorldEpisodicStack as OldName,
         )
         assert OldName is NewName
 
-    def test_旧名_build_world_episodic_stack_は_build_episodic_stack_の_alias(self) -> None:
+    def test_legacy_build_world_episodic_stack_build_episodic_stack_alias(self) -> None:
+        """旧名 build world episodic stack は build episodic stack の alias。"""
         from ai_rpg_world.application.world_runtime.world_episodic_wiring import (
             build_episodic_stack as new_build,
             build_world_episodic_stack as old_build,
         )
         assert old_build is new_build
 
-    def test_旧名_envヘルパ_も_alias_経由で_動く(self) -> None:
+    def test_legacy_env_alias_via_works(self) -> None:
+        """旧名 env ヘルパも alias 経由で動く。"""
         from ai_rpg_world.application.world_runtime.world_episodic_wiring import (
             is_episodic_enabled,
             is_episodic_subjective_enabled,

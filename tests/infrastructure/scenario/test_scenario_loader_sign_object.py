@@ -57,7 +57,8 @@ def _scenario_with_sign() -> dict:
 class TestSignObjectScenarioLoading:
     """看板の JSON 定義が InteractionEffect まで正しく解決される。"""
 
-    def test_write_player_text_effect_typeが解決される(self) -> None:
+    def test_write_player_text_effect_type_resolved(self) -> None:
+        """write player text effect typeが解決される。"""
         result = ScenarioLoader().load_from_dict(_scenario_with_sign())
         for interior in result.interiors.values():
             for obj in interior.objects:
@@ -72,7 +73,8 @@ class TestSignObjectScenarioLoading:
                     return
         raise AssertionError("掲示板 object not found")
 
-    def test_show_player_text_effect_typeが解決される(self) -> None:
+    def test_show_player_text_effect_type_resolved(self) -> None:
+        """show player text effect typeが解決される。"""
         result = ScenarioLoader().load_from_dict(_scenario_with_sign())
         for interior in result.interiors.values():
             for obj in interior.objects:
@@ -87,7 +89,8 @@ class TestSignObjectScenarioLoading:
                     return
         raise AssertionError("掲示板 object not found")
 
-    def test_object_type_signが保持される(self) -> None:
+    def test_object_type_sign_preserved(self) -> None:
+        """object type signが保持される。"""
         result = ScenarioLoader().load_from_dict(_scenario_with_sign())
         for interior in result.interiors.values():
             for obj in interior.objects:

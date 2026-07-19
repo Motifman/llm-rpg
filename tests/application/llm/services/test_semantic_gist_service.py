@@ -91,7 +91,8 @@ class _RaisingPort(ISemanticGistCompletionPort):
 class TestSemanticGistServiceGenerate:
     """正常系: LLM 応答を SemanticGistResult に変換する。"""
 
-    def test_有効な_LLM_応答が_そのまま_result_に乗る(self) -> None:
+    def test_llm_result_included(self) -> None:
+        """有効な LLM 応答が そのまま result に乗る。"""
         port = _StubPort(response={
             "gist_text": "タカシは漁の名手で信頼できる",
             "importance_score": 8,
@@ -110,7 +111,8 @@ class TestSemanticGistServiceGenerate:
         assert result.importance_score == 8
         assert result.tags == ("タカシ", "信頼")
 
-    def test_50字超の_gist_は_50字で_truncate(self) -> None:
+    def test_fifty_over_gist_fifty_truncate(self) -> None:
+        """50字超の gist は 50字で truncate。"""
         long_text = "あ" * 80
         port = _StubPort(response={"gist_text": long_text, "importance_score": 5, "tags": []})
         svc = SemanticGistService(port)
@@ -121,7 +123,8 @@ class TestSemanticGistServiceGenerate:
         )
         assert len(result.gist_text) == 50
 
-    def test_importance_score_が_範囲外なら_クランプ(self) -> None:
+    def test_importance_score(self) -> None:
+        """importancescore が範囲外ならクランプ。"""
         port = _StubPort(response={"gist_text": "g", "importance_score": 99, "tags": []})
         svc = SemanticGistService(port)
         assert svc.generate(
@@ -134,14 +137,16 @@ class TestSemanticGistServiceGenerate:
             player_name="x", persona_block="", cluster_episodes=[_make_episode()]
         ).importance_score == 1
 
-    def test_importance_score_が_非数値なら_default_5(self) -> None:
+    def test_importance_score_non_number_default_five(self) -> None:
+        """importancescore が非数値なら default5。"""
         port = _StubPort(response={"gist_text": "g", "importance_score": "abc", "tags": []})
         svc = SemanticGistService(port)
         assert svc.generate(
             player_name="x", persona_block="", cluster_episodes=[_make_episode()]
         ).importance_score == 5
 
-    def test_tags_は_8件_までで_cap(self) -> None:
+    def test_tags_eight_cap(self) -> None:
+        """tags は 8件 までで cap。"""
         port = _StubPort(response={
             "gist_text": "g",
             "importance_score": 5,
@@ -153,7 +158,8 @@ class TestSemanticGistServiceGenerate:
         )
         assert len(result.tags) == 8
 
-    def test_tag_の各要素は_30文字で_cap(self) -> None:
+    def test_tag_element_30_cap(self) -> None:
+        """tag の各要素は 30文字で cap。"""
         port = _StubPort(response={
             "gist_text": "g",
             "importance_score": 5,
@@ -165,7 +171,8 @@ class TestSemanticGistServiceGenerate:
         )
         assert len(result.tags[0]) == 30
 
-    def test_tags_の空文字や_非str要素は_除外(self) -> None:
+    def test_tags_empty_string_non_str_element(self) -> None:
+        """tags の空文字や 非str要素は 除外。"""
         port = _StubPort(response={
             "gist_text": "g",
             "importance_score": 5,
@@ -181,7 +188,8 @@ class TestSemanticGistServiceGenerate:
 class TestSemanticGistServicePromptStructure:
     """messages にペルソナ / 名前 / 記憶 / 既存 semantic が乗る。"""
 
-    def test_player_name_と_persona_が_user_メッセージに乗る(self) -> None:
+    def test_player_name_persona_user_included(self) -> None:
+        """player name と persona が user メッセージに乗る。"""
         port = _StubPort(response={"gist_text": "g", "importance_score": 5, "tags": []})
         svc = SemanticGistService(port)
         svc.generate(
@@ -195,7 +203,7 @@ class TestSemanticGistServicePromptStructure:
         assert "慎重で寡黙な漁師" in user_content
         assert "魚を獲った" in user_content
 
-    def test_prediction_error_が_evidence_として_user_に乗る(self) -> None:
+    def test_prediction_error_evidence_user_included(self) -> None:
         """予測との食い違いが記憶の sub-bullet として gist prompt に渡る (PR3)。"""
         port = _StubPort(response={"gist_text": "g", "importance_score": 5, "tags": []})
         svc = SemanticGistService(port)
@@ -212,7 +220,7 @@ class TestSemanticGistServicePromptStructure:
         user_content = port.captured_messages[0][1]["content"]
         assert "予測との食い違い: 話せると思ったが無視された" in user_content
 
-    def test_prediction_error_が_無い記憶には_食い違い行を出さない(self) -> None:
+    def test_prediction_error_memory_line(self) -> None:
         """prediction_error が None の記憶では食い違い行を付けない。"""
         port = _StubPort(response={"gist_text": "g", "importance_score": 5, "tags": []})
         svc = SemanticGistService(port)
@@ -224,7 +232,7 @@ class TestSemanticGistServicePromptStructure:
         user_content = port.captured_messages[0][1]["content"]
         assert "予測との食い違い" not in user_content
 
-    def test_system_prompt_が_予測誤差からの学びを_促す(self) -> None:
+    def test_system_prompt(self) -> None:
         """system prompt に予測誤差を重視する指示と importance rubric がある。"""
         port = _StubPort(response={"gist_text": "g", "importance_score": 5, "tags": []})
         svc = SemanticGistService(port)
@@ -234,7 +242,8 @@ class TestSemanticGistServicePromptStructure:
         # 予測が繰り返し外れた経験を重要度高に評価する rubric
         assert "予測が繰り返し" in system_content
 
-    def test_既存_semantic_が_あれば_参考として乗る(self) -> None:
+    def test_existing_semantic_included(self) -> None:
+        """既存 semantic があれば参考として乗る。"""
         port = _StubPort(response={"gist_text": "g", "importance_score": 5, "tags": []})
         svc = SemanticGistService(port)
         existing = SemanticMemoryEntry(
@@ -254,7 +263,8 @@ class TestSemanticGistServicePromptStructure:
         user_content = port.captured_messages[0][1]["content"]
         assert "タカシは漁の名手" in user_content
 
-    def test_system_メッセージに_ラベル禁止_の指示が入る(self) -> None:
+    def test_system_label(self) -> None:
+        """system メッセージに ラベル禁止 の指示が入る。"""
         port = _StubPort(response={"gist_text": "g", "importance_score": 5, "tags": []})
         svc = SemanticGistService(port)
         svc.generate(
@@ -269,13 +279,15 @@ class TestSemanticGistServicePromptStructure:
 class TestSemanticGistServiceErrors:
     """異常系: 空 cluster / API 例外 / 不正 JSON。"""
 
-    def test_空_cluster_は_value_error(self) -> None:
+    def test_empty_cluster_value_error(self) -> None:
+        """空 cluster は value error。"""
         port = _StubPort(response={"gist_text": "g", "importance_score": 5, "tags": []})
         svc = SemanticGistService(port)
         with pytest.raises(ValueError, match="cluster_episodes must not be empty"):
             svc.generate(player_name="x", persona_block="", cluster_episodes=[])
 
-    def test_port_が_LlmApiCallException_なら_伝播(self) -> None:
+    def test_port_llm_api_call_exception(self) -> None:
+        """port が LlmApiCallException なら 伝播。"""
         port = _RaisingPort(
             exc=LlmApiCallException("test fail", error_code="LLM_API_CALL_FAILED")
         )
@@ -285,7 +297,8 @@ class TestSemanticGistServiceErrors:
                 player_name="x", persona_block="", cluster_episodes=[_make_episode()]
             )
 
-    def test_gist_text_が_欠落なら_value_error(self) -> None:
+    def test_gist_text_missing_value_error(self) -> None:
+        """gisttext が欠落なら valueerror。"""
         port = _StubPort(response={"importance_score": 5, "tags": []})
         svc = SemanticGistService(port)
         with pytest.raises(ValueError, match="missing or empty gist_text"):
@@ -293,7 +306,8 @@ class TestSemanticGistServiceErrors:
                 player_name="x", persona_block="", cluster_episodes=[_make_episode()]
             )
 
-    def test_gist_text_が_空文字なら_value_error(self) -> None:
+    def test_gist_text_empty_string_value_error(self) -> None:
+        """gisttext が空文字なら valueerror。"""
         port = _StubPort(response={"gist_text": "   ", "importance_score": 5, "tags": []})
         svc = SemanticGistService(port)
         with pytest.raises(ValueError, match="missing or empty gist_text"):
@@ -301,6 +315,7 @@ class TestSemanticGistServiceErrors:
                 player_name="x", persona_block="", cluster_episodes=[_make_episode()]
             )
 
-    def test_port_が_None_なら_type_error(self) -> None:
+    def test_port_none_type_error(self) -> None:
+        """port が None なら type error。"""
         with pytest.raises(TypeError, match="port must not be None"):
             SemanticGistService(port=None)  # type: ignore[arg-type]

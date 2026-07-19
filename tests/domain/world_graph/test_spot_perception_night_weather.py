@@ -32,14 +32,15 @@ def _atm(lighting: LightingEnum) -> SpotAtmosphere:
 class TestBackwardCompat:
     """既存呼び出し (kwarg 省略) は従来挙動を維持。"""
 
-    def test_kwarg_省略時は_従来挙動(self) -> None:
+    def test_kwarg(self) -> None:
+        """kwarg 省略時は 従来挙動。"""
         svc = SpotPerceptionService()
         # 屋外/夜/悪天候の各 kwarg を省略 = default False
         # → 屋外でも夜でも悪天候でもないものとして扱う
         result = svc.compute_effective_lighting(_atm(LightingEnum.BRIGHT), False)
         assert result is LightingEnum.BRIGHT
 
-    def test_DARK_な_spot_は_光源持ちで_DIM_に引き上げ(self) -> None:
+    def test_dark_spot_dim(self) -> None:
         """既存挙動: 光源持ちは PITCH_BLACK/DARK を DIM にする。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
@@ -51,7 +52,8 @@ class TestBackwardCompat:
 class TestOutdoorNight:
     """屋外スポットは夜になると 1 段暗くなる。"""
 
-    def test_屋外_BRIGHT_は_夜に_DIM_になる(self) -> None:
+    def test_bright_dim_2(self) -> None:
+        """屋外 BRIGHT は夜に DIM になる。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
             _atm(LightingEnum.BRIGHT), False,
@@ -59,7 +61,7 @@ class TestOutdoorNight:
         )
         assert result is LightingEnum.DIM
 
-    def test_屋外_DIM_は_夜に_DARK_になる(self) -> None:
+    def test_dim_dark(self) -> None:
         """森の中など元から DIM な屋外スポットは夜で DARK に。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
@@ -68,7 +70,8 @@ class TestOutdoorNight:
         )
         assert result is LightingEnum.DARK
 
-    def test_屋外_DARK_は_夜に_PITCH_BLACK_になる(self) -> None:
+    def test_dark_pitch_black(self) -> None:
+        """屋外 DARK は夜に PITCHBLACK になる。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
             _atm(LightingEnum.DARK), False,
@@ -80,7 +83,7 @@ class TestOutdoorNight:
 class TestIndoorNight:
     """屋内スポットは空の影響を受けない (夜でも元のまま)。"""
 
-    def test_屋内_BRIGHT_は_夜でも_BRIGHT(self) -> None:
+    def test_bright(self) -> None:
         """屋内で BRIGHT (例えば焚き火が点いている部屋) は夜でも明るい。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
@@ -89,7 +92,7 @@ class TestIndoorNight:
         )
         assert result is LightingEnum.BRIGHT
 
-    def test_屋内_DARK_は_夜でも_DARK_のまま(self) -> None:
+    def test_dark(self) -> None:
         """洞窟は元から DARK で、夜という概念に影響されない。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
@@ -102,7 +105,8 @@ class TestIndoorNight:
 class TestWeatherObscuresVision:
     """嵐 / 濃霧で屋外の視界が下がる。"""
 
-    def test_屋外_嵐で_BRIGHT_は_DIM_になる(self) -> None:
+    def test_bright_dim(self) -> None:
+        """屋外 嵐で BRIGHT は DIM になる。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
             _atm(LightingEnum.BRIGHT), False,
@@ -110,7 +114,8 @@ class TestWeatherObscuresVision:
         )
         assert result is LightingEnum.DIM
 
-    def test_屋内_は_天候の影響を受けない(self) -> None:
+    def test_not_affected(self) -> None:
+        """屋内は天候の影響を受けない。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
             _atm(LightingEnum.BRIGHT), False,
@@ -122,7 +127,8 @@ class TestWeatherObscuresVision:
 class TestNightAndWeatherCombo:
     """夜と悪天候が両立しても 1 段だけ下げる (重複しない)。"""
 
-    def test_夜_and_嵐_は_1_段だけ下がる(self) -> None:
+    def test_night_and_storm_lower_visibility_by_one_stage(self) -> None:
+        """夜 and 嵐は 1 段だけ下がる。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
             _atm(LightingEnum.BRIGHT), False,
@@ -135,7 +141,7 @@ class TestNightAndWeatherCombo:
 class TestLightBearerInteraction:
     """光源持ちは夜の DARK 化後にも DIM 引き上げが効く。"""
 
-    def test_夜の屋外_DIM_は_光源持ちで_DIM_に引き上げ(self) -> None:
+    def test_dim(self) -> None:
         """森が夜で DARK になっても、誰かが松明を持っていれば DIM (見える)。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(

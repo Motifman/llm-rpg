@@ -110,7 +110,7 @@ class TestLiteLLMClientInvoke:
         assert result["name"] == "first_tool"
         assert result["arguments"] == {"a": 1}
 
-    def test_invoke_returns_none_when_no_tool_calls(self, client):
+    def test_invoke_returns_None_when_tool_calls(self, client):
         """tool_calls が空のとき None を返す"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             msg = MagicMock()
@@ -128,7 +128,7 @@ class TestLiteLLMClientInvoke:
             )
         assert result is None
 
-    def test_invoke_returns_none_when_choices_empty(self, client):
+    def test_invoke_returns_None_when_choices_empty(self, client):
         """choices が空のとき None を返す"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             resp = MagicMock()
@@ -142,7 +142,7 @@ class TestLiteLLMClientInvoke:
             )
         assert result is None
 
-    def test_invoke_passes_messages_tools_tool_choice_to_litellm(self, client):
+    def test_invoke_passes_messages_tools_tool_choice_litellm(self, client):
         """messages, tools, tool_choice がそのまま litellm.completion に渡る"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             m_litellm.completion.return_value = _make_tool_call_response("tool_a", {"k": "v"})
@@ -189,7 +189,7 @@ class TestLiteLLMClientInvoke:
 class TestLiteLLMClientInvokeApiKey:
     """API key まわりの境界・例外"""
 
-    def test_invoke_raises_when_api_key_not_set(self):
+    def test_invoke_raises_when_api_key_set(self):
         """api_key が空のとき LlmApiCallException（LLM_API_KEY_MISSING）"""
         client_empty = LiteLLMClient(model="openai/gpt-5-mini", api_key="")
         with pytest.raises(LlmApiCallException) as exc_info:
@@ -201,7 +201,7 @@ class TestLiteLLMClientInvokeApiKey:
         assert exc_info.value.error_code == "LLM_API_KEY_MISSING"
         assert "OPENAI_API_KEY" in exc_info.value.message or "api_key" in exc_info.value.message.lower()
 
-    def test_invoke_uses_env_var_when_api_key_none(self):
+    def test_invoke_uses_env_var_when_api_key_None(self):
         """api_key が None のとき環境変数 OPENAI_API_KEY を使う"""
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-from-env"}, clear=False):
             client = LiteLLMClient(model="openai/gpt-5-mini", api_key=None)
@@ -284,7 +284,7 @@ class TestLiteLLMClientMaxRetriesZero:
         assert "max_retries" in kw, "max_retries key must be present to override SDK default"
         assert kw["max_retries"] == 0
 
-    def test_invoke_passes_max_retries_zero_to_litellm(self) -> None:
+    def test_invoke_passes_max_retries_zero_litellm(self) -> None:
         """invoke が litellm.completion を呼ぶとき max_retries=0 を渡す。"""
         client = LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x")
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
@@ -365,7 +365,7 @@ class TestLiteLLMClientSelectiveRetry:
         assert m_litellm.completion.call_count == 4
         assert exc_info.value.error_code == "LLM_RATE_LIMIT"
 
-    def test_timeout_is_not_retried(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_timeout_is_retried(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """litellm.Timeout (= httpx.TimeoutException 由来) は retry されず即 raise。
 
         PR #454 の意図: timeout を retry すると wall_time が 3 倍まで膨らむ。
@@ -397,7 +397,7 @@ class TestLiteLLMClientSelectiveRetry:
         assert m_litellm.completion.call_count == 1
         assert slept == []
 
-    def test_authentication_error_is_not_retried(
+    def test_authentication_error_is_retried(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """認証エラーは retry しても直らないので即失敗。"""
@@ -522,7 +522,7 @@ class TestLiteLLMClientInvokeExceptions:
         assert exc_info.value.cause is not None
         assert isinstance(exc_info.value.cause, RuntimeError)
 
-    def test_失敗時のmetricsにerror_detailとreasoning_effortが載る(self, client):
+    def test_failure_metrics_error_detail_reasoning_effort_included(self, client):
         """API 失敗時、sink に流す metrics に例外本文 (error_detail) と、その呼び出しで
         指定した reasoning_effort / tool_choice が載る。
 
@@ -547,7 +547,7 @@ class TestLiteLLMClientInvokeExceptions:
         assert m.reasoning_effort == "low"
         assert m.tool_choice == "required"
 
-    def test_成功時のmetricsにもreasoning_effortとtool_choiceが載る(self, client):
+    def test_success_metrics_reasoning_effort_tool_choice_included(self, client):
         """成功時も、その呼び出しの reasoning_effort / tool_choice を metrics に残す
         (熟考ターンか通常ターンかを trace で区別できるようにする)。error_detail は空。"""
         sink = _RecordingSink()
@@ -633,7 +633,7 @@ class TestLiteLLMClientInit:
         with pytest.raises(ValueError, match="api_key_env_var must be a non-empty string"):
             LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x", api_key_env_var="   ")
 
-    def test_api_key_not_str_raises_type_error(self):
+    def test_api_key_str_raises_type_error(self):
         """api_key に str 以外を渡したとき TypeError"""
         with pytest.raises(TypeError, match="api_key must be str or None"):
             LiteLLMClient(model="openai/gpt-5-mini", api_key=123)  # type: ignore[arg-type]
@@ -649,12 +649,12 @@ class TestLiteLLMClientInit:
 class TestExtractTokenUsage:
     """_extract_token_usage が provider 別の cached_tokens 経路を全部拾える。"""
 
-    def test_usage_欠落_なら_全部_0(self) -> None:
+    def test_usage_missing_all_zero(self) -> None:
         """usage 属性が無い response は (0, 0, 0)。"""
         response = MagicMock(spec=[])  # usage 属性なし
         assert LiteLLMClient._extract_token_usage(response) == (0, 0, 0)
 
-    def test_openai_vllm_の_prompt_tokens_details_cached_tokens_を_読む(self) -> None:
+    def test_openai_vllm_prompt_tokens_details_cached_tokens(self) -> None:
         """OpenAI / vLLM 互換: usage.prompt_tokens_details.cached_tokens。"""
         details = MagicMock()
         details.cached_tokens = 320
@@ -666,7 +666,7 @@ class TestExtractTokenUsage:
         response.usage = usage
         assert LiteLLMClient._extract_token_usage(response) == (500, 40, 320)
 
-    def test_prompt_tokens_details_が_dict_でも_読める(self) -> None:
+    def test_prompt_tokens_details_dict(self) -> None:
         """litellm は dict / object どちらでも返してくることがあるので両対応。"""
         usage = MagicMock()
         usage.prompt_tokens = 100
@@ -676,7 +676,7 @@ class TestExtractTokenUsage:
         response.usage = usage
         assert LiteLLMClient._extract_token_usage(response) == (100, 10, 50)
 
-    def test_anthropic_の_cache_read_input_tokens_を_読む(self) -> None:
+    def test_anthropic_cache_read_input_tokens(self) -> None:
         """Anthropic: usage.cache_read_input_tokens (prompt_tokens_details は無い)。"""
         usage = MagicMock(spec=["prompt_tokens", "completion_tokens", "cache_read_input_tokens"])
         usage.prompt_tokens = 800
@@ -686,7 +686,7 @@ class TestExtractTokenUsage:
         response.usage = usage
         assert LiteLLMClient._extract_token_usage(response) == (800, 50, 600)
 
-    def test_旧_vllm_の_直下_cached_tokens_を_読む(self) -> None:
+    def test_legacy_vllm_cached_tokens(self) -> None:
         """legacy fallback: usage.cached_tokens 直下 (prompt_tokens_details / cache_read_input_tokens 共に無い)。"""
         usage = MagicMock(spec=["prompt_tokens", "completion_tokens", "cached_tokens"])
         usage.prompt_tokens = 200
@@ -696,7 +696,7 @@ class TestExtractTokenUsage:
         response.usage = usage
         assert LiteLLMClient._extract_token_usage(response) == (200, 20, 150)
 
-    def test_cached_tokens_が_どこにも_無い_なら_0(self) -> None:
+    def test_cached_tokens_zero(self) -> None:
         """cache 系 field がどこにも無い response は cached_tokens=0。"""
         usage = MagicMock(spec=["prompt_tokens", "completion_tokens"])
         usage.prompt_tokens = 100
@@ -705,7 +705,7 @@ class TestExtractTokenUsage:
         response.usage = usage
         assert LiteLLMClient._extract_token_usage(response) == (100, 10, 0)
 
-    def test_cached_tokens_が_None_なら_他経路にフォールバック(self) -> None:
+    def test_cached_tokens_none_other_fallback(self) -> None:
         """prompt_tokens_details.cached_tokens=None でも他経路で 0 まで降りる。"""
         details = MagicMock(spec=["cached_tokens"])
         details.cached_tokens = None
@@ -726,7 +726,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
     防ぐ。env 未設定なら何も注入しない後方互換を厳守する。
     """
 
-    def test_env_未設定なら_provider_routing_は_extra_body_に_入らない(
+    def test_env_unset_provider_routing_extra_body(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """OPENROUTER_* が無ければ provider routing は extra_body に乗らない。
@@ -744,8 +744,8 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             assert "provider" not in eb
             assert "quantizations" not in eb
 
-    def test_provider_だけ_設定で_order_と_allow_fallbacks_が入る(self) -> None:
-        """provider=DeepInfra → order=[DeepInfra], allow_fallbacks=False。"""
+    def test_provider_config_order_allow_fallbacks(self) -> None:
+        """DeepInfra provider 指定時は provider order を単一化し fallback を無効にする。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-x",
@@ -756,7 +756,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             "provider": {"order": ["DeepInfra"], "allow_fallbacks": False}
         }
 
-    def test_quantization_と_require_params_を_組み合わせると_全部入る(self) -> None:
+    def test_quantization_and_require_params_are_both_included(self) -> None:
         """provider + quantization + require_params を同時に指定。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
@@ -774,7 +774,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             }
         }
 
-    def test_quantization_だけ_設定だと_provider_は_含まれない(self) -> None:
+    def test_quantization_config_provider_not_included(self) -> None:
         """provider 指定無しなら order / allow_fallbacks は付けない (=他 provider への
         fallback を残す)。quantization フィルタだけ効かせる用途。"""
         client = LiteLLMClient(
@@ -784,7 +784,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         )
         assert client.openrouter_routing == {"provider": {"quantizations": ["fp8"]}}
 
-    def test_require_params_True_で_require_parameters_が入る(self) -> None:
+    def test_require_params_true_require_parameters(self) -> None:
         """truthy 解釈は設定 DTO 側で済ませ、クライアントは bool を受け取る。"""
         client = LiteLLMClient(
             model="m", api_key="sk-x", openrouter_require_params=True
@@ -793,14 +793,14 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             "provider": {"require_parameters": True}
         }
 
-    def test_require_params_False_なら_無視される(self) -> None:
+    def test_require_params_false(self) -> None:
         """False なら他に routing 設定が無いため routing 全体が None になる。"""
         client = LiteLLMClient(
             model="m", api_key="sk-x", openrouter_require_params=False
         )
         assert client.openrouter_routing is None
 
-    def test_completion_base_kwargs_に_extra_body_が_注入される(
+    def test_completion_base_kwargs_extra_body_injected(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """JSON 系経路は completion_base_kwargs() を踏むので、ここに入れば
@@ -822,7 +822,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         }
         # reasoning は default OFF として乗っているはず (別テストで保証)
 
-    def test_invoke_が_litellm_completion_に_extra_body_を_渡す(
+    def test_invoke_litellm_completion_extra_body(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """tool_choice='required' 経路でも extra_body が litellm に流れる。"""
@@ -846,7 +846,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
                 "quantizations": ["fp8"],
             }
 
-    def test_openrouter_routing_property_は_コピーを返す(
+    def test_returns_openrouter_routing_property(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """外部から property 経由で取った dict を mutate しても内部状態は壊れない。"""
@@ -898,7 +898,7 @@ class TestLiteLLMClientOpenRouterCostTracking:
     USD コストを返す。直結 / vLLM では返ってこないので 0.0 維持。
     """
 
-    def test_api_base_が_openrouter_なら_usage_include_が_extra_body_に_乗る(
+    def test_api_base_openrouter_usage_include_extra_body_included(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """api_base に 'openrouter.ai' を含む場合に限り usage.include を注入する。"""
@@ -912,7 +912,7 @@ class TestLiteLLMClientOpenRouterCostTracking:
         # usage.include が乗っていることだけ assert (本テストの主眼)
         assert kw["extra_body"]["usage"] == {"include": True}
 
-    def test_api_base_が_openai_直結なら_provider_routing_系_field_は_付かない(
+    def test_api_base_openai_provider_routing_field(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """OpenAI / vLLM 直結では usage.include / provider 系は付けない。
@@ -932,7 +932,7 @@ class TestLiteLLMClientOpenRouterCostTracking:
             assert "usage" not in eb
             assert "provider" not in eb
 
-    def test_provider_routing_と_usage_include_が_同じ_extra_body_に_共存する(
+    def test_provider_routing_usage_include_same_extra_body(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """provider routing + api_base=openrouter の組み合わせで両方乗る。"""
@@ -954,7 +954,7 @@ class TestLiteLLMClientOpenRouterCostTracking:
         }
         assert eb["usage"] == {"include": True}
 
-    def test_response_の_usage_cost_が_metrics_の_cost_usd_に_流れる(
+    def test_response_usage_cost_metrics_cost_usd(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """invoke 経路で response.usage.cost が LlmCallMetrics.cost_usd に入る。"""
@@ -978,7 +978,7 @@ class TestLiteLLMClientOpenRouterCostTracking:
         assert len(sink.records) == 1
         assert sink.records[0].cost_usd == pytest.approx(0.0000089)
 
-    def test_usage_に_cost_が_無い_provider_では_cost_usd_は_0(
+    def test_usage_cost_provider_cost_usd_zero(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """OpenAI 直結 / vLLM などで cost フィールドが無いとき 0.0 を維持。"""
@@ -989,13 +989,13 @@ class TestLiteLLMClientOpenRouterCostTracking:
         response.usage = usage
         assert LiteLLMClient._extract_cost_usd(response) == 0.0
 
-    def test_usage_全体が_None_なら_cost_usd_は_0(self) -> None:
+    def test_usage_all_none_cost_usd_zero(self) -> None:
         """usage がそもそも無い (失敗 response 等) でも例外を出さず 0.0。"""
         response = MagicMock()
         response.usage = None
         assert LiteLLMClient._extract_cost_usd(response) == 0.0
 
-    def test_usage_が_dict_で_来る_provider_でも_cost_を_拾う(self) -> None:
+    def test_finds_usage_dict_provider_cost(self) -> None:
         """一部 provider 経路で usage が dict のまま返る場合の救済。"""
         response = MagicMock()
         response.usage = {"prompt_tokens": 10, "completion_tokens": 2, "cost": 0.0001}
@@ -1010,7 +1010,7 @@ class TestLiteLLMClientTimeout:
     本テスト群は LiteLLMClient が timeout を必ず litellm に渡すことを保証する。
     """
 
-    def test_default_timeout_は_90秒(
+    def test_default_timeout_90(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """env / 引数指定なしなら default 90 秒 (long-tail を抑制する程度)。"""
@@ -1018,36 +1018,41 @@ class TestLiteLLMClientTimeout:
         client = LiteLLMClient(model="openai/gpt-4o-mini", api_key="sk-x")
         assert client._timeout_seconds == 90.0
 
-    def test_引数で_timeout_を_明示できる(self) -> None:
+    def test_argument_timeout(self) -> None:
+        """引数で timeout を明示できる。"""
         client = LiteLLMClient(
             model="m", api_key="sk-x", timeout_seconds=30.0
         )
         assert client._timeout_seconds == 30.0
 
-    def test_constructor_で_timeout_を_override_できる(self) -> None:
+    def test_constructor_timeout_override(self) -> None:
+        """constructor で timeout を override できる。"""
         client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=45.0)
         assert client._timeout_seconds == 45.0
 
-    def test_timeout_引数がそのまま使われる(
+    def test_timeout_argument_used(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """timeout 引数がそのまま使われる。"""
         monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECONDS", "10")
         client = LiteLLMClient(
             model="m", api_key="sk-x", timeout_seconds=120.0
         )
         assert client._timeout_seconds == 120.0
 
-    def test_timeout_非数値引数なら_ValueError(self) -> None:
+    def test_timeout_raises_value_error(self) -> None:
         """クライアント単体でも不正な timeout 引数は失敗する。"""
         with pytest.raises(ValueError):
             LiteLLMClient(model="m", api_key="sk-x", timeout_seconds="ten")  # type: ignore[arg-type]
 
-    def test_completion_base_kwargs_に_timeout_が_含まれる(self) -> None:
+    def test_completion_base_kwargs_timeout_included(self) -> None:
+        """completionbasekwargs に timeout が含まれる。"""
         client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=60.0)
         kw = client.completion_base_kwargs()
         assert kw["timeout"] == 60.0
 
-    def test_invoke_が_litellm_completion_に_timeout_を_渡す(self) -> None:
+    def test_invoke_litellm_completion_timeout(self) -> None:
+        """invoke が litellmcompletion に timeout を渡す。"""
         client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=45.0)
         with patch(
             "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
@@ -1069,7 +1074,7 @@ class TestLiteLLMClientReasoningEffort:
     belt-and-suspenders 戦略を採る。
     """
 
-    def test_default_は_reasoning_none_と_thinking_disabled_を_注入する(
+    def test_default_reasoning_none_thinking_disabled_injects(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """未指定なら reasoning OFF + thinking disabled が extra_body に乗る。"""
@@ -1080,7 +1085,7 @@ class TestLiteLLMClientReasoningEffort:
         assert eb["reasoning"]["exclude"] is True
         assert eb["thinking"] == {"type": "disabled"}
 
-    def test_high_を_指定すると_reasoning_high_が_乗り_thinking_は_付かない(
+    def test_high_reasoning_high_thinking(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """effort=high のとき OpenRouter envelope だけ inject、native kill switch は不要。"""
@@ -1091,7 +1096,7 @@ class TestLiteLLMClientReasoningEffort:
         # high のときは thinking:disabled は意味がないので入れない
         assert "thinking" not in eb
 
-    def test_空文字_指定で_reasoning_系_field_を_一切_注入しない(
+    def test_empty_string_reasoning_field(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """reasoning_effort="" は古い model 互換用のエスケープハッチ。"""
@@ -1102,14 +1107,14 @@ class TestLiteLLMClientReasoningEffort:
             assert "reasoning" not in eb
             assert "thinking" not in eb
 
-    def test_未知の_effort_文字列_は_ValueError(
+    def test_unknown_effort_raises_value_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """typo 防止 (silent fallback しない / PR #434 ポリシー継承)。"""
         with pytest.raises(ValueError, match="reasoning_effort"):
             LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="extreme")
 
-    def test_invoke_が_extra_body_に_reasoning_block_を_渡す(
+    def test_invoke_extra_body_reasoning_block(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """invoke の litellm.completion 呼び出し時、extra_body に reasoning が乗る。"""
@@ -1124,7 +1129,7 @@ class TestLiteLLMClientReasoningEffort:
             assert eb["reasoning"]["effort"] == "none"
             assert eb["thinking"] == {"type": "disabled"}
 
-    def test_openrouter_routing_と_共存する(
+    def test_openrouter_routing(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """provider routing + reasoning が同一 extra_body に並ぶ (どちらも保持)。"""
@@ -1154,14 +1159,14 @@ class TestLiteLLMClientWallTimeHardCap:
     アプリ層から wall-time を独立に強制する。
     """
 
-    def test_default_wall_cap_は_timeout_seconds_プラス_5秒(
+    def test_default_wall_cap_timeout_seconds_five(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """未指定なら self._timeout_seconds + 5 が wall cap になる。"""
         client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=60.0)
         assert client._wall_cap_seconds == 65.0
 
-    def test_constructor_で_wall_cap_を_短く_設定できる(self) -> None:
+    def test_constructor_can_set_short_wall_cap(self) -> None:
         """45.0 秒に絞れる (全体律速を避ける用途)。"""
         client = LiteLLMClient(
             model="m",
@@ -1171,17 +1176,17 @@ class TestLiteLLMClientWallTimeHardCap:
         )
         assert client._wall_cap_seconds == 45.0
 
-    def test_wall_cap_非数値引数は_ValueError(self) -> None:
+    def test_wall_cap_raises_value_error_2(self) -> None:
         """クライアント単体でも不正な wall cap 引数は失敗する。"""
         with pytest.raises(ValueError):
             LiteLLMClient(model="m", api_key="sk-x", wall_cap_seconds="thirty")  # type: ignore[arg-type]
 
-    def test_wall_cap_ゼロ以下は_ValueError(self) -> None:
+    def test_wall_cap_raises_value_error(self) -> None:
         """0 以下は意味がない (即 timeout = 1 回も呼べない) ので fail-fast。"""
         with pytest.raises(ValueError, match="must be greater than 0"):
             LiteLLMClient(model="m", api_key="sk-x", wall_cap_seconds=0)
 
-    def test_wall_cap_を_超えた_call_は_LitellmTimeout_に_packaged(
+    def test_wall_cap_over_call_litellm_timeout_packaged(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """litellm.completion が遅延するときに wall cap で打ち切られ Timeout になる。
@@ -1216,7 +1221,7 @@ class TestLiteLLMClientWallTimeHardCap:
         msg = str(exc_info.value)
         assert "wall-time cap" in msg or "Timeout" in msg, msg
 
-    def test_通常_call_は_wall_cap_の_影響を_受けない(
+    def test_call_wall_cap(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """wall cap 内に完走する call は普通に結果を返す。"""
@@ -1233,7 +1238,7 @@ class TestLiteLLMClientWallTimeHardCap:
         assert result is not None
         assert result["name"] == "ok"
 
-    def test_wall_cap_は_per_attempt_で_retry_累積_しない(
+    def test_wall_cap_per_attempt_retry(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """wall cap は各 attempt 個別に効き、retry 合算には適用されない。
@@ -1296,7 +1301,7 @@ class TestLiteLLMClientReasoningEffortOverride:
             eb = self._completion_extra_body(m_litellm)
             assert eb["reasoning"]["effort"] == "low"
 
-    def test_invoke_without_override_keeps_construction_default_none(self, client):
+    def test_invoke_without_override_keeps_construction_default_None(self, client):
         """reasoning_effort を渡さなければ、構築時の既定 (none) のまま送られる
         (= 既存挙動を壊さない・プレフィックスキャッシュ不変)。"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:

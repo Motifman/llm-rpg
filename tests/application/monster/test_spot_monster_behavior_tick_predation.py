@@ -153,7 +153,7 @@ def _make_svc(graph, monsters: dict):
 class TestPredationViaTick:
     """tick 駆動で捕食が発火する。"""
 
-    def test_hungry_wolf_が_rabbit_を捕食する(self) -> None:
+    def test_hungry_wolf_rabbit(self) -> None:
         """1 tick で hunger が forage_threshold を超え、prey 種族の rabbit を狩る。"""
         wolf = _make_monster(_wolf_template(), 1)
         rabbit = _make_monster(_rabbit_template(), 2)
@@ -178,7 +178,7 @@ class TestPredationViaTick:
 class TestPreyRacesGate:
     """prey_races 不設定では捕食しない。"""
 
-    def test_prey_races_空では捕食しない(self) -> None:
+    def test_empty_prey_races_prevent_predation(self) -> None:
         """prey_races が空なら hungry でも捕食発火しない。"""
         wolf = _make_monster(_wolf_template(prey=frozenset()), 1)
         rabbit = _make_monster(_rabbit_template(), 2)
@@ -202,7 +202,7 @@ class TestPreyRacesGate:
 class TestHungerThresholdGate:
     """hunger 未閾値では捕食しない。"""
 
-    def test_forage_threshold_未満では捕食しない(self) -> None:
+    def test_forage_threshold_below(self) -> None:
         """hunger_increase_per_tick=0.1 で forage_threshold=0.5 に届かない。"""
         wolf_template = MonsterTemplate(
             template_id=MonsterTemplateId.create(1),
@@ -243,7 +243,7 @@ class TestHungerThresholdGate:
 class TestPlayerAttackPriority:
     """player attack > predation の priority chain。"""
 
-    def test_player_が_priority_を奪う(self) -> None:
+    def test_player_priority(self) -> None:
         """ENEMY 設定の wolf がプレイヤーと prey を同 spot に持つとき、
         プレイヤー攻撃が優先される。"""
         # ENEMY faction の wolf

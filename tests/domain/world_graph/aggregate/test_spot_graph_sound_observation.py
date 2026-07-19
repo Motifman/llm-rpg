@@ -63,7 +63,8 @@ def _events_of_type(graph: SpotGraphAggregate, evt_type) -> list:
 class TestPlaceEntitySilence:
     """SILENT な spot に入っても event 発火しない。"""
 
-    def test_SILENT_spot_では_event_発火_なし(self) -> None:
+    def test_silent_spot_event_trigger(self) -> None:
+        """SILENT spot では event 発火 なし。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A))  # SILENT
         g.clear_events()
@@ -76,9 +77,10 @@ class TestPlaceEntitySilence:
 class TestPlaceEntityWithSound:
     """sound_intensity > SILENT の spot に入ると event 発火。"""
 
-    def test_MODERATE_spot_で_event_発火_intensity_と_ambient_が_乗る(
+    def test_moderate_spot_event_trigger_intensity_ambient_included(
         self,
     ) -> None:
+        """MODERATEspot で event 発火 intensity と ambient が乗る。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(
             SPOT_A,
@@ -98,7 +100,8 @@ class TestPlaceEntityWithSound:
         assert ev.intensity == "MODERATE"
         assert ev.ambient_description == "川のせせらぎ"
 
-    def test_LOUD_spot_で_intensity_LOUD(self) -> None:
+    def test_loud_spot_intensity_loud(self) -> None:
+        """LOUD spot で intensity LOUD。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A, intensity=SoundIntensityEnum.LOUD))
 
@@ -113,7 +116,8 @@ class TestPlaceEntityWithSound:
 class TestMoveEntityWithSound:
     """move_entity で移動先 spot の音が観測される。"""
 
-    def test_移動先_spot_の_sound_を_event_で_観測(self) -> None:
+    def test_spot_sound_event_observation(self) -> None:
+        """移動先 spot の sound を event で観測。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A))  # 静か
         g.add_spot(_node(

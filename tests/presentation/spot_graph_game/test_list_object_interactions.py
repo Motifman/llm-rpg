@@ -79,7 +79,7 @@ def _make_runtime_with_object(
 
 
 class TestEnumerationActuallyWorks:
-    def test_world_object_id_int_を渡すと_その_object_の_action_name_を_返す(
+    def test_returns_world_object_id_int_object_action_name(
         self,
     ) -> None:
         """これが今回直すバグの核心。Y_after_issue621 では空 list が返っていた。"""
@@ -89,19 +89,21 @@ class TestEnumerationActuallyWorks:
         result = _list_object_interactions(runtime, 42)
         assert set(result) == {"search_debris", "examine"}
 
-    def test_interactions_が_空の_object_では_空_list_を_返す(self) -> None:
+    def test_returns_interactions_empty_object_empty_list(self) -> None:
         """純粋に interactions が無い object はそのまま空 list を返す
         (= LLM 側にも (なし) を伝える)。"""
         runtime = _make_runtime_with_object(object_id=42, interactions=[])
         assert _list_object_interactions(runtime, 42) == []
 
-    def test_未知の_world_object_id_は_空_list_を_返す(self) -> None:
+    def test_returns_unknown_world_object_id_empty_list(self) -> None:
+        """未知の worldobjectid は空 list を返す。"""
         runtime = _make_runtime_with_object(
             object_id=42, interactions=["gather"]
         )
         assert _list_object_interactions(runtime, 99) == []
 
-    def test_runtime_例外時は_空_list_に_fallback(self) -> None:
+    def test_runtime_empty_list_fallback_raises_exception(self) -> None:
+        """runtime 例外時は 空 list に fallback。"""
         runtime = MagicMock()
         runtime._spot_graph_repo.find_graph.side_effect = RuntimeError(
             "graph broken"

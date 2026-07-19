@@ -79,7 +79,8 @@ def _build(snap: SpotGraphPlayerSnapshotDto) -> str:
 class TestObjectSectionQuotesAndActionSimplification:
     """object 名の quote + action 表示簡略化 (PR-FF + PR-EE)。"""
 
-    def test_object_名が_quote_で囲まれる(self) -> None:
+    def test_object_quote(self) -> None:
+        """object 名が quote で囲まれる。"""
         snap = SpotGraphPlayerSnapshotDto(
             current_spot_id=1,
             current_spot_name="浜辺",
@@ -99,7 +100,7 @@ class TestObjectSectionQuotesAndActionSimplification:
         text = _build(snap)
         assert '"流木の山"' in text, "object 名が \"\" で囲まれていない"
 
-    def test_action_表示は_action_name_だけの_カンマ区切り(self) -> None:
+    def test_action_name(self) -> None:
         """旧: ``[gather(action_name="gather") / examine(action_name="examine")]``
         新: ``[gather, examine]``。冗長表記を排除し「action_name の列」を
         直接示す。"""
@@ -132,7 +133,7 @@ class TestObjectSectionQuotesAndActionSimplification:
         assert "採取する" not in text
         assert "調べる" not in text
 
-    def test_action_なしの_場合は_角括弧を省く(self) -> None:
+    def test_action(self) -> None:
         """interactions が空の object は ``[]`` や ``[-]`` を出さず、シンプル
         に名前+説明だけを表示する。"""
         snap = SpotGraphPlayerSnapshotDto(
@@ -158,7 +159,7 @@ class TestObjectSectionQuotesAndActionSimplification:
 class TestObjectStateVisibleInPrompt:
     """object 状態を prompt に露出する (PR-X)。"""
 
-    def test_state_が_空でない場合_状態タグが表示される(self) -> None:
+    def test_state_empty_state_displayed(self) -> None:
         """`visible_state = {'available': False}` のような state が
         プロンプト上で ``(available=false)`` のように可視化される。
         LLM が「もう採れない」を prompt から直接読めるようになる。"""
@@ -188,7 +189,7 @@ class TestObjectStateVisibleInPrompt:
             "「もう採れない」を prompt から読めない"
         )
 
-    def test_state_が_空の場合_タグは表示されない(self) -> None:
+    def test_state_empty_not_displayed(self) -> None:
         """state 空の object は既存挙動と同じでシンプル表示。"""
         snap = SpotGraphPlayerSnapshotDto(
             current_spot_id=1,
@@ -216,7 +217,8 @@ class TestObjectStateVisibleInPrompt:
 class TestSubLocationSectionQuotes:
     """sub_location 名が quote される (PR-FF)。"""
 
-    def test_sub_location_名が_quote_で囲まれる(self) -> None:
+    def test_sub_location_quote(self) -> None:
+        """sub location 名が quote で囲まれる。"""
         snap = SpotGraphPlayerSnapshotDto(
             current_spot_id=1,
             current_spot_name="祠",
@@ -238,7 +240,8 @@ class TestSubLocationSectionQuotes:
 class TestEntitySectionQuotes:
     """他プレイヤー名が quote される (PR-FF)。"""
 
-    def test_他プレイヤー名が_quote_で囲まれる(self) -> None:
+    def test_other_player_quote(self) -> None:
+        """他プレイヤー名が quote で囲まれる。"""
         snap = SpotGraphPlayerSnapshotDto(
             current_spot_id=1,
             current_spot_name="拠点",
@@ -255,7 +258,8 @@ class TestEntitySectionQuotes:
 class TestMonsterSectionQuotes:
     """モンスター名が quote される (PR-FF)。"""
 
-    def test_モンスター名が_quote_で囲まれる(self) -> None:
+    def test_monster_quote(self) -> None:
+        """モンスター名が quote で囲まれる。"""
         snap = SpotGraphPlayerSnapshotDto(
             current_spot_id=1,
             current_spot_name="森",
@@ -279,7 +283,7 @@ class TestSubLocationResolverStripsQuotes:
     code-review CRITICAL、prompt 表示が ``"祭壇前"`` になったので resolver も
     quote strip を通す必要がある)。"""
 
-    def test_quote_ごと_sub_location_名を_渡しても_resolve_される(self) -> None:
+    def test_quote_per_sub_location_resolve(self) -> None:
         """LLM が prompt 表示通り ``sub_location_label='"祭壇前"'`` と渡して
         きても解決できる。他 4 resolver (object/player/attack/tend) と同じく
         ``_normalize_label_candidates`` 経由で quote が剥がれる。"""
@@ -307,7 +311,7 @@ class TestSubLocationResolverStripsQuotes:
         assert target is not None
         assert target.sub_location_id == 42
 
-    def test_quote_なし_の_場合も_従来通り_resolve_される(self) -> None:
+    def test_quote_resolve(self) -> None:
         """後方互換: quote なし入力もこれまで通り動く。"""
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             resolve_sub_location_target,
@@ -337,7 +341,8 @@ class TestObjectStateNoneRendersAsNull:
     """state の値 None は ``null`` として表示される (regression: code-review
     MEDIUM、formatter._render_value と同じ convention)。"""
 
-    def test_state_値が_None_の場合_null_で表示される(self) -> None:
+    def test_state_value_none_null_displayed(self) -> None:
+        """state 値が None の場合 null で表示される。"""
         snap = SpotGraphPlayerSnapshotDto(
             current_spot_id=1,
             current_spot_name="祠",
@@ -367,7 +372,7 @@ class TestObjectStateNotDuplicatedInFormatter:
     """object state が formatter の別 section と inline で二重表示されない
     (regression: code-review HIGH)。"""
 
-    def test_旧_スポット内オブジェクトの状態_block_は_削除済み(self) -> None:
+    def test_legacy_spot_state_block(self) -> None:
         """PR-X 適用後、object state は「オブジェクト:」section の各行
         inline (``(key=value)``) にのみ表示される。formatter の旧
         「スポット内オブジェクトの状態:」block は削除された。"""
@@ -401,7 +406,8 @@ class TestObjectStateNotDuplicatedInFormatter:
 class TestInteractDescriptionMentionsQuoteRegime:
     """INTERACT_DEFINITION の object_label description が quote 規約に触れる。"""
 
-    def test_object_label_description_に_クオート規約が含まれる(self) -> None:
+    def test_object_label_description_included(self) -> None:
+        """objectlabeldescription にクオート規約が含まれる。"""
         desc = INTERACT_DEFINITION.parameters["properties"]["object_label"][
             "description"
         ]
@@ -410,7 +416,8 @@ class TestInteractDescriptionMentionsQuoteRegime:
             "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
         )
 
-    def test_description_は_静的文字列(self) -> None:
+    def test_description_string(self) -> None:
+        """description は静的文字列。"""
         desc = INTERACT_DEFINITION.parameters["properties"]["object_label"][
             "description"
         ]

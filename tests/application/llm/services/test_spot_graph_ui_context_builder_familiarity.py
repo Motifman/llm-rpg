@@ -46,26 +46,30 @@ def _make_builder(memory: InMemoryEncounterMemory, tick: int = 0):
 class TestSpotFamiliarityAnnotation:
     """``_spot_familiarity_annotation`` の挙動。"""
 
-    def test_初訪問_spot_は_初めて訪れた_注記(self) -> None:
+    def test_first_visit_spot_gets_first_visit_note(self) -> None:
+        """初訪問 spot は初めて訪れた注記。"""
         memory = InMemoryEncounterMemory()
         memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 0)
         builder = _make_builder(memory)
         annotation = builder._spot_familiarity_annotation(PlayerId(1), 100)
         assert annotation == "(初めて訪れた)"
 
-    def test_再訪_spot_は_PR4_範囲では_None(self) -> None:
+    def test_spot_pr4_none(self) -> None:
+        """再訪 spot は PR4 範囲では None。"""
         memory = InMemoryEncounterMemory()
         memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 0)
         memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 5)
         builder = _make_builder(memory)
         assert builder._spot_familiarity_annotation(PlayerId(1), 100) is None
 
-    def test_未_observe_な_spot_は_None(self) -> None:
+    def test_observe_spot_none(self) -> None:
+        """未 observe な spot は None。"""
         memory = InMemoryEncounterMemory()
         builder = _make_builder(memory)
         assert builder._spot_familiarity_annotation(PlayerId(1), 100) is None
 
-    def test_resolver_が_例外を_投げても_None_に_縮退(self) -> None:
+    def test_resolver_exception_falls_back_to_none(self) -> None:
+        """resolver が例外を投げても None に縮退。"""
         memory = InMemoryEncounterMemory()
         memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 0)
         builder = SpotGraphUiContextBuilder(
@@ -79,7 +83,8 @@ class TestSpotFamiliarityAnnotation:
 class TestPlayerFamiliarityAnnotation:
     """``_player_familiarity_annotation`` の挙動。"""
 
-    def test_初対面_player_は_初めて会った_注記(self) -> None:
+    def test_player(self) -> None:
+        """初対面 player は初めて会った注記。"""
         memory = InMemoryEncounterMemory()
         memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
         builder = _make_builder(memory)
@@ -88,7 +93,8 @@ class TestPlayerFamiliarityAnnotation:
             == "(初めて会った)"
         )
 
-    def test_再会_player_は_PR4_範囲では_None(self) -> None:
+    def test_player_pr4_none(self) -> None:
+        """再会 player は PR4 範囲では None。"""
         memory = InMemoryEncounterMemory()
         memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
         memory.observe(PlayerId(1), EncounterKey.player("ノア"), 5)
@@ -97,20 +103,23 @@ class TestPlayerFamiliarityAnnotation:
             builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
         )
 
-    def test_未_observe_な_player_は_None(self) -> None:
+    def test_observe_player_none(self) -> None:
+        """未 observe な player は None。"""
         memory = InMemoryEncounterMemory()
         builder = _make_builder(memory)
         assert (
             builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
         )
 
-    def test_display_name_が_空文字なら_None(self) -> None:
+    def test_display_name_empty_string_none(self) -> None:
+        """displayname が空文字なら None。"""
         memory = InMemoryEncounterMemory()
         memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
         builder = _make_builder(memory)
         assert builder._player_familiarity_annotation(PlayerId(1), "") is None
 
-    def test_viewer_id_が_None_なら_None(self) -> None:
+    def test_viewer_id_none(self) -> None:
+        """viewer id が None なら None。"""
         memory = InMemoryEncounterMemory()
         memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
         builder = _make_builder(memory)
@@ -120,21 +129,25 @@ class TestPlayerFamiliarityAnnotation:
 class TestEncounterEnabledGuard:
     """3 要素 (memory / tick_provider / resolver) のいずれかが欠ければ off。"""
 
-    def test_3_要素_全部_揃って_initial_enabled(self) -> None:
+    def test_three_element_all_initial_enabled(self) -> None:
+        """3 要素 全部 揃って initial enabled。"""
         memory = InMemoryEncounterMemory()
         builder = _make_builder(memory)
         assert builder._encounter_enabled() is True
 
-    def test_memory_のみで_disabled(self) -> None:
+    def test_memory_disabled(self) -> None:
+        """memory のみで disabled。"""
         memory = InMemoryEncounterMemory()
         builder = SpotGraphUiContextBuilder(encounter_memory=memory)
         assert builder._encounter_enabled() is False
 
-    def test_完全未注入で_disabled(self) -> None:
+    def test_all_uninjected_disabled(self) -> None:
+        """完全未注入で disabled。"""
         builder = SpotGraphUiContextBuilder()
         assert builder._encounter_enabled() is False
 
-    def test_disabled_時_player_注記は_出ない(self) -> None:
+    def test_disabled_player_not_rendered(self) -> None:
+        """disabled 時 player 注記は 出ない。"""
         memory = InMemoryEncounterMemory()
         memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
         builder = SpotGraphUiContextBuilder(encounter_memory=memory)
@@ -145,25 +158,28 @@ class TestEncounterEnabledGuard:
 
 
 class TestConstructorTypeChecks:
-    def test_encounter_memory_が_IEncounterMemory_でなければ_TypeError(
+    def test_en_count_er_memory_ien_count_er_memory_raises_type_error(
         self,
     ) -> None:
+        """encounter memory が IEncounterMemory でなければ TypeError。"""
         with pytest.raises(TypeError, match="encounter_memory"):
             SpotGraphUiContextBuilder(
                 encounter_memory="x"  # type: ignore[arg-type]
             )
 
-    def test_current_tick_provider_が_callable_でなければ_TypeError(
+    def test_current_tick_provider_callable_raises_type_error(
         self,
     ) -> None:
+        """current tick provider が callable でなければ TypeError。"""
         with pytest.raises(TypeError, match="current_tick_provider"):
             SpotGraphUiContextBuilder(
                 current_tick_provider=0  # type: ignore[arg-type]
             )
 
-    def test_spot_str_id_resolver_が_callable_でなければ_TypeError(
+    def test_spot_str_id_resolver_callable_raises_type_error(
         self,
     ) -> None:
+        """spot str id resolver が callable でなければ TypeError。"""
         with pytest.raises(TypeError, match="spot_str_id_resolver"):
             SpotGraphUiContextBuilder(
                 spot_str_id_resolver=0  # type: ignore[arg-type]
@@ -179,9 +195,10 @@ class TestAnnotateCurrentSpotText:
         memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 0)
         return _make_builder(memory)
 
-    def test_初訪問の_spot_行を_書き換える(
+    def test_spot_line_2(
         self, builder: SpotGraphUiContextBuilder
     ) -> None:
+        """初訪問の spot 行を 書き換える。"""
         # snap stub: SimpleNamespace で必要 field だけ
         from types import SimpleNamespace
 
@@ -194,9 +211,10 @@ class TestAnnotateCurrentSpotText:
         )
         assert "現在地: 森の広場 (初めて訪れた)\n  description" == out
 
-    def test_注記なしの_spot_行は_書き換えない(
+    def test_spot_line(
         self, builder: SpotGraphUiContextBuilder
     ) -> None:
+        """注記なしの spot 行は 書き換えない。"""
         from types import SimpleNamespace
 
         snap = SimpleNamespace(current_spot_id=200, current_spot_name="山頂")
@@ -207,9 +225,10 @@ class TestAnnotateCurrentSpotText:
         )
         assert out == original
 
-    def test_spot_id_が_None_なら_書き換えない(
+    def test_spot_id_none(
         self, builder: SpotGraphUiContextBuilder
     ) -> None:
+        """spot id が None なら 書き換えない。"""
         from types import SimpleNamespace
 
         snap = SimpleNamespace(current_spot_id=None, current_spot_name="不明")
@@ -219,9 +238,10 @@ class TestAnnotateCurrentSpotText:
         )
         assert out == original
 
-    def test_viewer_None_なら_書き換えない(
+    def test_viewer_none(
         self, builder: SpotGraphUiContextBuilder
     ) -> None:
+        """viewer None なら 書き換えない。"""
         from types import SimpleNamespace
 
         snap = SimpleNamespace(current_spot_id=100, current_spot_name="森の広場")
@@ -229,7 +249,7 @@ class TestAnnotateCurrentSpotText:
         out = builder._annotate_current_spot_familiarity(original, snap, None)
         assert out == original
 
-    def test_spot_名が_description_に_部分文字列として_含まれても_誤置換しない(
+    def test_spot_description_string(
         self, builder: SpotGraphUiContextBuilder
     ) -> None:
         """``str.replace`` で部分一致させると description に紛れた名前まで

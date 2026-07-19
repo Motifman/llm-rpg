@@ -184,7 +184,7 @@ class TestInMemoryBeliefEvidenceFullFieldRoundtripContract:
             source_speaker="noah",
         )
 
-    def test_append_listで全フィールドが完全一致で戻る(self) -> None:
+    def test_append_list_all_round_trips_exactly(self) -> None:
         """append_by_being → list_all_by_being の往復で evidence が元と完全一致する。"""
         store = InMemoryBeliefEvidenceBufferStore()
         being_id = BeingId("being-1")
@@ -192,7 +192,7 @@ class TestInMemoryBeliefEvidenceFullFieldRoundtripContract:
         store.append_by_being(being_id, evidence)
         assert store.list_all_by_being(being_id)[0] == evidence
 
-    def test_replace_all_by_beingで全フィールドが完全一致で戻る(self) -> None:
+    def test_replace_all_being_all_round_trips_exactly(self) -> None:
         """replace_all_by_being → list_all_by_being の往復で evidence が元と完全一致する。"""
         store = InMemoryBeliefEvidenceBufferStore()
         being_id = BeingId("being-1")

@@ -38,15 +38,18 @@ def _entry(**overrides) -> SemanticMemoryEntry:
 class TestBeliefIdFallback:
     """belief_id 未指定 (旧 entry 相当) の後方互換。"""
 
-    def test_belief_id_未指定なら_entry_id_にフォールバックする(self) -> None:
+    def test_belief_id_unspecified_entry_id_fallback(self) -> None:
+        """belief id 未指定なら entry id にフォールバックする。"""
         entry = _entry(entry_id="entry-42")
         assert entry.belief_id == "entry-42"
 
-    def test_belief_id_を明示すればそのまま保持される(self) -> None:
+    def test_belief_id_preserved(self) -> None:
+        """belief id を明示すればそのまま保持される。"""
         entry = _entry(entry_id="entry-42", belief_id="belief-noah-mood")
         assert entry.belief_id == "belief-noah-mood"
 
-    def test_belief_id_の前後空白は_strip_される(self) -> None:
+    def test_belief_id_around_blank_strip(self) -> None:
+        """belief id の前後空白は strip される。"""
         entry = _entry(belief_id="  belief-x  ")
         assert entry.belief_id == "belief-x"
 
@@ -54,11 +57,13 @@ class TestBeliefIdFallback:
 class TestStatusDefault:
     """status のデフォルトと後方互換。"""
 
-    def test_status_未指定なら_active(self) -> None:
+    def test_status_unspecified_active(self) -> None:
+        """status 未指定なら active。"""
         entry = _entry()
         assert entry.status == SEMANTIC_MEMORY_STATUS_ACTIVE
 
-    def test_不正な_status_はドメイン例外(self) -> None:
+    def test_invalid_status_raises_domain_exception(self) -> None:
+        """不正な status はドメイン例外。"""
         with pytest.raises(SemanticMemoryEntryValidationException, match="status"):
             _entry(status="unknown_status")
 
@@ -70,7 +75,8 @@ class TestStatusDefault:
             SEMANTIC_MEMORY_STATUS_INACTIVE,
         ],
     )
-    def test_有効な_status_は全て構築できる(self, status: str) -> None:
+    def test_status_all_can_build(self, status: str) -> None:
+        """有効な status は全て構築できる。"""
         entry = _entry(status=status)
         assert entry.status == status
 
@@ -78,17 +84,20 @@ class TestStatusDefault:
 class TestSupersedes:
     """supersedes の default と型バリデーション。"""
 
-    def test_supersedes_未指定は_None(self) -> None:
+    def test_supersedes_unspecified_none(self) -> None:
+        """supersedes 未指定は None。"""
         entry = _entry()
         assert entry.supersedes is None
 
-    def test_supersedes_に空文字はドメイン例外(self) -> None:
+    def test_supersedes_empty_string_raises_domain_exception(self) -> None:
+        """supersedes に空文字はドメイン例外。"""
         with pytest.raises(
             SemanticMemoryEntryValidationException, match="supersedes"
         ):
             _entry(supersedes="")
 
-    def test_supersedes_を指定すれば保持される(self) -> None:
+    def test_supersedes_preserved(self) -> None:
+        """supersedes を指定すれば保持される。"""
         entry = _entry(supersedes="entry-old")
         assert entry.supersedes == "entry-old"
 
@@ -96,24 +105,28 @@ class TestSupersedes:
 class TestEvidenceIdTuples:
     """support_evidence_ids / contradict_evidence_ids の default とバリデーション。"""
 
-    def test_未指定は空タプル(self) -> None:
+    def test_unspecified_empty_tuple(self) -> None:
+        """未指定は空タプル。"""
         entry = _entry()
         assert entry.support_evidence_ids == ()
         assert entry.contradict_evidence_ids == ()
 
-    def test_support_evidence_ids_の空文字要素はドメイン例外(self) -> None:
+    def test_empty_support_evidence_id_element_raises_domain_exception(self) -> None:
+        """support evidence ids の空文字要素はドメイン例外。"""
         with pytest.raises(
             SemanticMemoryEntryValidationException, match="support_evidence_ids"
         ):
             _entry(support_evidence_ids=("",))
 
-    def test_contradict_evidence_ids_の空文字要素はドメイン例外(self) -> None:
+    def test_contradict_evidence_ids_empty_element_raises_domain_exception(self) -> None:
+        """contradict evidence ids の空文字要素はドメイン例外。"""
         with pytest.raises(
             SemanticMemoryEntryValidationException, match="contradict_evidence_ids"
         ):
             _entry(contradict_evidence_ids=("",))
 
-    def test_evidence_ids_がタプルでなければドメイン例外(self) -> None:
+    def test_evidence_ids_raises_domain_exception(self) -> None:
+        """evidence ids がタプルでなければドメイン例外。"""
         with pytest.raises(
             SemanticMemoryEntryValidationException, match="support_evidence_ids"
         ):
@@ -123,7 +136,8 @@ class TestEvidenceIdTuples:
 class TestExistingFieldsUnaffected:
     """U3a のフィールド追加が既存フィールドのバリデーションを壊していないこと。"""
 
-    def test_既存フィールドのみで構築できる(self) -> None:
+    def test_existing_can_build(self) -> None:
+        """既存フィールドのみで構築できる。"""
         entry = _entry()
         assert entry.entry_id == "entry-1"
         assert entry.confidence == 0.6
@@ -159,21 +173,21 @@ class TestConfirmationSupportCount:
 class TestHearsaySupportCount:
     """P10: hearsay_support_count (support の HEARSAY 内数) の不変条件。"""
 
-    def test_default_is_zero(self) -> None:
+    def test_default_is_zero_2(self) -> None:
         assert _entry().hearsay_support_count == 0
 
-    def test_within_support_bounds_ok(self) -> None:
+    def test_within_support_bounds_ok_2(self) -> None:
         entry = _entry(
             support_evidence_ids=("e1", "e2", "e3"),
             hearsay_support_count=2,
         )
         assert entry.hearsay_support_count == 2
 
-    def test_exceeding_support_count_raises(self) -> None:
+    def test_exceeding_support_count_raises_2(self) -> None:
         with pytest.raises(SemanticMemoryEntryValidationException):
             _entry(support_evidence_ids=("e1",), hearsay_support_count=2)
 
-    def test_negative_raises(self) -> None:
+    def test_negative_raises_2(self) -> None:
         with pytest.raises(SemanticMemoryEntryValidationException):
             _entry(hearsay_support_count=-1)
 

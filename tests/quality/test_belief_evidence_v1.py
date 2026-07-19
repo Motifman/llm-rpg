@@ -203,7 +203,8 @@ class TestBeliefEvidenceV1:
     """chunk 主観補完で prediction_error が確定した瞬間の evidence 転記を
     dump し、構造を人が確認できるようにする。LLM は呼ばない (スタブ port)。"""
 
-    def test_prediction_error_の転記構造を_dump_する(self) -> None:
+    def test_prediction_error_dump(self) -> None:
+        """prediction error の転記構造を dump する。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)

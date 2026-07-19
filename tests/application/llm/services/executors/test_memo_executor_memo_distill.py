@@ -77,9 +77,10 @@ def _make_executor_with_transcriber(*, inject_transcriber: bool):
 
 
 class TestMemoExecutorMemoDistillIntegration:
-    def test_memo_done_成功時に_transcriber_が注入されていれば_MEMO_DISTILL_evidence_を積む(
+    def test_memo_done_success_transcriber_memo_distill_evidence(
         self,
     ) -> None:
+        """memo done 成功時に transcriber が注入されていれば MEMO DISTILL evidence を積む。"""
         executor, memo_id, buffer_store, being_id = _make_executor_with_transcriber(
             inject_transcriber=True
         )
@@ -93,7 +94,7 @@ class TestMemoExecutorMemoDistillIntegration:
         assert evidences[0].source_kind == BeliefEvidenceSourceKind.MEMO_DISTILL
         assert "岩礁海岸は山方面に通じず×" in evidences[0].text
 
-    def test_transcriber_未注入なら_MEMO_DISTILL_evidence_を積まない(self) -> None:
+    def test_transcriber_uninjected_memo_distill_evidence(self) -> None:
         """flag OFF (= constructor に transcriber を渡さない) のときは
         転記コードパス自体が no-op になる。"""
         executor, memo_id, buffer_store, being_id = _make_executor_with_transcriber(
@@ -106,7 +107,7 @@ class TestMemoExecutorMemoDistillIntegration:
         assert result.success
         assert buffer_store.list_all_by_being(being_id) == []
 
-    def test_set_memo_distill_transcriber_による_post_hoc_注入も動く(self) -> None:
+    def test_set_memo_distill_transcriber_post_hoc_works(self) -> None:
         """world_runtime.create_world_runtime は executor 構築後に
         belief_evidence_buffer_store を確定させるため、post-hoc setter で
         差し込む経路も同じ挙動になることを保証する。"""
@@ -131,7 +132,7 @@ class TestMemoExecutorMemoDistillIntegration:
         assert result.success
         assert len(buffer_store.list_all_by_being(being_id)) == 1
 
-    def test_ノイズに見える_memo_内容でも無条件で転記する(self) -> None:
+    def test_memo(self) -> None:
         """discard 判定は固着パスの LLM に委ねるため、一般化不能に見える
         タスクメモでも memo_executor 側では判定せず積む。"""
         setup = make_memo_being_setup()
@@ -154,7 +155,8 @@ class TestMemoExecutorMemoDistillIntegration:
         assert result.success
         assert len(buffer_store.list_all_by_being(being_id)) == 1
 
-    def test_memo_done_失敗時は_MEMO_DISTILL_evidence_を積まない(self) -> None:
+    def test_memo_done_failure_memo_distill_evidence(self) -> None:
+        """memo done 失敗時は MEMO DISTILL evidence を積まない。"""
         executor, _memo_id, buffer_store, being_id = _make_executor_with_transcriber(
             inject_transcriber=True
         )
@@ -165,7 +167,7 @@ class TestMemoExecutorMemoDistillIntegration:
         assert not result.success
         assert buffer_store.list_all_by_being(being_id) == []
 
-    def test_transcriber_が例外を投げても_memo_done_本体は成功する(self) -> None:
+    def test_transcriber_memo_done_raises_exception(self) -> None:
         """転記失敗が memo_done の成功応答を巻き込まない (silent failure より
         「本体は成功、転記だけ諦めて warning ログ」を選ぶ既存方針)。"""
         setup = make_memo_being_setup()

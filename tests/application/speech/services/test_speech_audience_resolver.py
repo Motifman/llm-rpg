@@ -63,7 +63,7 @@ def _make_resolver(*, speaker_in_graph=True, recipients_entity_ids=()):
 class TestSpeechAudienceResolverSayMode:
     """SAY モード (デフォルト) の挙動。"""
 
-    def test_speaker_が_graph_に居ない場合は_空_list(self):
+    def test_speaker_graph_empty_list(self):
         """話者自身がグラフに載っていない (= not placed) なら audience なし。"""
         resolver = _make_resolver(speaker_in_graph=False)
         result = resolver.resolve_audience(
@@ -72,7 +72,7 @@ class TestSpeechAudienceResolverSayMode:
         )
         assert result == []
 
-    def test_周囲に他プレイヤーがいない場合は_空_list(self):
+    def test_nearby_other_player_empty_list(self):
         """sound_propagation が誰も返さなければ audience 0。"""
         resolver = _make_resolver(recipients_entity_ids=())
         result = resolver.resolve_audience(
@@ -81,7 +81,7 @@ class TestSpeechAudienceResolverSayMode:
         )
         assert result == []
 
-    def test_範囲内の他プレイヤー_PlayerId_の_list_を返す(self):
+    def test_returns_other_player_id_list(self):
         """sound_propagation が返した recipients を PlayerId list として返す。"""
         resolver = _make_resolver(recipients_entity_ids=(2, 3))
         result = resolver.resolve_audience(
@@ -90,7 +90,7 @@ class TestSpeechAudienceResolverSayMode:
         )
         assert [pid.value for pid in result] == [2, 3]
 
-    def test_speaker_自身は_audience_から除外(self):
+    def test_speaker_audience(self):
         """sound_propagation が speaker 本人を返しても除外される。"""
         resolver = _make_resolver(recipients_entity_ids=(100, 2))
         result = resolver.resolve_audience(
@@ -103,7 +103,7 @@ class TestSpeechAudienceResolverSayMode:
 class TestSpeechAudienceResolverWhisperMode:
     """WHISPER モード (1-on-1) の挙動。"""
 
-    def test_target_未指定なら_空(self):
+    def test_unspecified_target_returns_empty_audience(self):
         """WHISPER は target_player_id 必須。未指定なら空。"""
         resolver = _make_resolver()
         result = resolver.resolve_audience(
@@ -113,7 +113,7 @@ class TestSpeechAudienceResolverWhisperMode:
         )
         assert result == []
 
-    def test_target_が_speaker_自身なら_空(self):
+    def test_self_target_returns_empty_audience(self):
         """自分自身への whisper は空。"""
         resolver = _make_resolver()
         result = resolver.resolve_audience(

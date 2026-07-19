@@ -94,7 +94,8 @@ _PID = PlayerId(7)
 class TestRollingSummaryBasicQueue:
     """L1 raw の append / get_recent の挙動。"""
 
-    def test_append_すると_get_recent_に_新しい順で_出る(self) -> None:
+    def test_append_get_recent_rendered(self) -> None:
+        """append すると getrecent に新しい順で出る。"""
         mem = RollingSummaryShortTermMemory(summary_service=None)
         mem.append(_PID, _obs("p1", seq=1))
         mem.append(_PID, _obs("p2", seq=2))
@@ -102,20 +103,23 @@ class TestRollingSummaryBasicQueue:
         proses = [o.output.prose for o in recent]
         assert proses == ["p2", "p1"]
 
-    def test_append_all_は_順番に_append_する(self) -> None:
+    def test_append_all_order_append(self) -> None:
+        """appendall は順番に append する。"""
         mem = RollingSummaryShortTermMemory(summary_service=None)
         evicted = mem.append_all(_PID, [_obs("p1", seq=1), _obs("p2", seq=2)])
         # rolling 実装は evict せず L4 に畳むので overflow は空
         assert evicted == []
         assert len(mem.get_recent(_PID, limit=10)) == 2
 
-    def test_get_recent_の_limit_が_0以下_は_空list(self) -> None:
+    def test_get_recent_limit_zero_less_empty_list(self) -> None:
+        """getrecent の limit が 0 以下は空 list。"""
         mem = RollingSummaryShortTermMemory(summary_service=None)
         mem.append(_PID, _obs("p", seq=1))
         assert mem.get_recent(_PID, limit=0) == []
         assert mem.get_recent(_PID, limit=-1) == []
 
-    def test_未_append_な_player_は_空_list(self) -> None:
+    def test_append_player_empty_list(self) -> None:
+        """未 append な player は空 list。"""
         mem = RollingSummaryShortTermMemory(summary_service=None)
         assert mem.get_recent(_PID, limit=10) == []
         assert mem.get_mid_summary_text(_PID) == ""
@@ -129,7 +133,8 @@ class TestRollingSummaryBasicQueue:
 class TestRollingSummaryTrigger:
     """soft cap (15) 到達で L4 生成 trigger が発火する。"""
 
-    def test_15件未満なら_L4_は_生成されない(self) -> None:
+    def test_fifteen_below_l4(self) -> None:
+        """15 件未満なら L4 は生成されない。"""
         stub = _StubSummaryService.make(
             result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
         )
@@ -140,7 +145,8 @@ class TestRollingSummaryTrigger:
         assert mem._mid_generations(_PID.value) == []
         assert mem._raw_queue_len(_PID.value) == DEFAULT_L1_SOFT_CAP - 1
 
-    def test_15件目で_L4_を_生成し_L1_を_減らす(self) -> None:
+    def test_fifteen_l4_l1(self) -> None:
+        """15 件目で L4 を生成し L1 を減らす。"""
         stub = _StubSummaryService.make(
             result=_ParsedSummary(
                 compressed_activity="北東を探索",
@@ -159,7 +165,8 @@ class TestRollingSummaryTrigger:
         # 古い 15 件は L4 に畳まれて L1 から消える
         assert mem._raw_queue_len(_PID.value) == 0
 
-    def test_L4_は_3世代までで_最古を破棄(self) -> None:
+    def test_l4_three(self) -> None:
+        """L4 は 3世代までで 最古を破棄。"""
         stub = _StubSummaryService.make(
             result=_ParsedSummary(
                 compressed_activity="ok", emotional_summary="", unresolved=()
@@ -176,7 +183,8 @@ class TestRollingSummaryTrigger:
         # 4 回 LLM 呼ばれた
         assert stub.call_count == 4
 
-    def test_L4_は_新しい順に_append_left_される(self) -> None:
+    def test_l4_append_left(self) -> None:
+        """L4 は新しい順に appendleft される。"""
         stub = _StubSummaryService.make(
             result=_ParsedSummary(
                 compressed_activity="ok", emotional_summary="", unresolved=()
@@ -198,7 +206,8 @@ class TestRollingSummaryServiceNone:
     ため、soft cap 到達時に必ず L4 を生やす方針。
     """
 
-    def test_15件超えると_template_fallback_で_L4_を_生やす(self) -> None:
+    def test_fifteen_exceeds_template_fallback_l4(self) -> None:
+        """15 件超えると templatefallback で L4 を生やす。"""
         mem = RollingSummaryShortTermMemory(summary_service=None)
         for i in range(DEFAULT_L1_SOFT_CAP + 5):
             mem.append(_PID, _obs(f"p{i}", seq=i))
@@ -211,9 +220,10 @@ class TestRollingSummaryServiceNone:
 class TestRollingSummaryLLMFailure:
     """LLM 失敗時は template fallback + warning ログを出す。"""
 
-    def test_LLM_例外なら_template_fallback_に_縮退(
+    def test_llm_exception_uses_template_fallback(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """LLM 例外なら templatefallback に縮退。"""
         stub = _StubSummaryService.make(
             exc=LlmApiCallException("sim", error_code="LLM_API_CALL_FAILED")
         )
@@ -229,7 +239,8 @@ class TestRollingSummaryLLMFailure:
         assert gens[0].is_fallback is True
         assert any("LLM 生成失敗" in rec.message for rec in caplog.records)
 
-    def test_LLM_の_ValueError_でも_fallback(self) -> None:
+    def test_llm_fallback_raises_value_error(self) -> None:
+        """LLM の ValueError でも fallback。"""
         stub = _StubSummaryService.make(exc=ValueError("parse failed"))
         mem = RollingSummaryShortTermMemory(summary_service=stub)
         for i in range(DEFAULT_L1_SOFT_CAP):
@@ -237,7 +248,7 @@ class TestRollingSummaryLLMFailure:
         gens = mem._mid_generations(_PID.value)
         assert gens[0].is_fallback is True
 
-    def test_hard_cap_到達時は_LLM_を_skip_して_強制_fallback(
+    def test_hard_cap_llm_skip_fallback(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """L1 が hard_cap を超えた状態で trigger された場合、LLM を呼ばず
@@ -285,11 +296,13 @@ class TestRollingSummaryLLMFailure:
 class TestRollingSummaryMidSummaryText:
     """get_mid_summary_text の整形。"""
 
-    def test_L4_が_空なら_空文字(self) -> None:
+    def test_returns_empty_when_l4_empty_string(self) -> None:
+        """L4 が空なら空文字。"""
         mem = RollingSummaryShortTermMemory(summary_service=None)
         assert mem.get_mid_summary_text(_PID) == ""
 
-    def test_最新世代が_先頭で_出る(self) -> None:
+    def test_first_rendered(self) -> None:
+        """最新世代が 先頭で 出る。"""
         stub = _StubSummaryService.make(
             result=_ParsedSummary(
                 compressed_activity="今日の動き",
@@ -310,9 +323,10 @@ class TestRollingSummaryMidSummaryText:
 class TestRollingSummaryPersonaResolver:
     """persona_resolver が失敗しても prompt 構築を止めない。"""
 
-    def test_resolver_の_例外は_default_に_縮退する(
+    def test_resolver_exception_falls_back_to_default(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """resolver の例外は default に縮退する。"""
         called_with_args: dict = {}
 
         class _RecordingService(ShortTermMemorySummaryService):
@@ -340,7 +354,8 @@ class TestRollingSummaryPersonaResolver:
         assert called_with_args["player_name"] == f"Player {_PID.value}"
         assert called_with_args["persona_block"] == ""
 
-    def test_resolver_未指定なら_default_の_player_X_名で_動く(self) -> None:
+    def test_resolver_unspecified_default_player_x_works(self) -> None:
+        """resolver 未指定なら default の player X 名で 動く。"""
         called: dict = {}
 
         class _RecordingService(ShortTermMemorySummaryService):
@@ -365,23 +380,28 @@ class TestRollingSummaryPersonaResolver:
 class TestRollingSummaryValidation:
     """constructor の不変条件。"""
 
-    def test_soft_cap_が_0以下なら_value_error(self) -> None:
+    def test_soft_cap_zero_less_value_error(self) -> None:
+        """soft cap が 0以下なら value error。"""
         with pytest.raises(ValueError, match="l1_soft_cap"):
             RollingSummaryShortTermMemory(l1_soft_cap=0)
 
-    def test_hard_cap_が_soft_未満なら_value_error(self) -> None:
+    def test_hard_cap_soft_below_value_error(self) -> None:
+        """hard cap が soft 未満なら value error。"""
         with pytest.raises(ValueError, match="l1_hard_cap"):
             RollingSummaryShortTermMemory(l1_soft_cap=15, l1_hard_cap=10)
 
-    def test_keep_generations_が_0以下なら_value_error(self) -> None:
+    def test_keep_generations_zero_less_value_error(self) -> None:
+        """keep generations が 0以下なら value error。"""
         with pytest.raises(ValueError, match="l4_keep_generations"):
             RollingSummaryShortTermMemory(l4_keep_generations=0)
 
-    def test_service_が_非_ShortTermMemorySummaryService_なら_type_error(self) -> None:
+    def test_service_non_short_term_memory_summary_service_type_error(self) -> None:
+        """service が非 ShortTermMemorySummaryService なら typeerror。"""
         with pytest.raises(TypeError, match="summary_service"):
             RollingSummaryShortTermMemory(summary_service="not-a-service")  # type: ignore[arg-type]
 
-    def test_persona_resolver_が_callable_でなければ_type_error(self) -> None:
+    def test_persona_resolver_callable_type_error(self) -> None:
+        """persona resolver が callable でなければ type error。"""
         with pytest.raises(TypeError, match="persona_resolver"):
             RollingSummaryShortTermMemory(persona_resolver="not-callable")  # type: ignore[arg-type]
 
@@ -394,10 +414,12 @@ class TestRollingSummaryValidation:
 class TestFormatMidSummaryBlock:
     """prompt 用の text 整形。"""
 
-    def test_空_input_は_空文字(self) -> None:
+    def test_empty_input_empty_string(self) -> None:
+        """空 input は空文字。"""
         assert format_mid_summary_block([]) == ""
 
-    def test_先頭世代に_最新_ラベルが_付く(self) -> None:
+    def test_first_label(self) -> None:
+        """先頭世代に 最新 ラベルが 付く。"""
         gens = [
             L4MidSummary(
                 summary_id=f"l4-{i}",
@@ -415,7 +437,8 @@ class TestFormatMidSummaryBlock:
         # 2 世代目には [2 世代前] ラベル
         assert "[2 世代前]" in text
 
-    def test_emotional_summary_と_unresolved_が_空なら_該当行が_出ない(self) -> None:
+    def test_returns_empty_when_emotional_summary_unresolved(self) -> None:
+        """emotionalsummary と unresolved が空なら該当行が出ない。"""
         gen = L4MidSummary(
             summary_id="l4-1",
             player_id=1,
@@ -438,12 +461,14 @@ class TestFormatMidSummaryBlock:
 class TestRollingSummarySchedulerIntegration:
     """scheduler 経由の L4 生成 (Inline / ThreadPool)。"""
 
-    def test_default_scheduler_は_Inline(self) -> None:
+    def test_default_scheduler_inline(self) -> None:
+        """default scheduler は Inline。"""
         mem = RollingSummaryShortTermMemory(summary_service=None)
         # default は Inline (= 同期実行)
         assert isinstance(mem._scheduler, InlineShortTermMemoryScheduler)
 
-    def test_明示_Inline_scheduler_でも_動く(self) -> None:
+    def test_inline_scheduler_works(self) -> None:
+        """明示 Inline scheduler でも 動く。"""
         stub = _StubSummaryService.make(
             result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
         )
@@ -457,7 +482,7 @@ class TestRollingSummarySchedulerIntegration:
         gens = mem._mid_generations(_PID.value)
         assert len(gens) == 1
 
-    def test_ThreadPool_scheduler_で_L4_は_非同期に_install(self) -> None:
+    def test_thread_pool_scheduler_l4_non_install(self) -> None:
         """ThreadPool: submit は即時 return、L4 install は worker thread が完了させる。"""
         import threading
 
@@ -497,11 +522,12 @@ class TestRollingSummarySchedulerIntegration:
         assert len(gens) == 1
         assert gens[0].compressed_activity == "slow result"
 
-    def test_scheduler_が_非_IShortTermMemoryScheduler_なら_type_error(self) -> None:
+    def test_scheduler_non_ishort_term_memory_scheduler_type_error(self) -> None:
+        """scheduler が非 IShortTermMemoryScheduler なら typeerror。"""
         with pytest.raises(TypeError, match="scheduler"):
             RollingSummaryShortTermMemory(scheduler="not-a-scheduler")  # type: ignore[arg-type]
 
-    def test_scheduler_が_drop_すると_warning_と_件数を_log(
+    def test_emits_warning_for_scheduler_drop_log(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """review HIGH #1: scheduler.submit が False を返すと observations は
@@ -533,7 +559,8 @@ class TestRollingSummarySchedulerIntegration:
             "drop" in rec.message and "15" in rec.message for rec in caplog.records
         )
 
-    def test_shutdown_は_scheduler_に_委譲(self) -> None:
+    def test_shutdown_scheduler(self) -> None:
+        """shutdown は scheduler に委譲。"""
         called = {"n": 0}
 
         class _RecordingScheduler(InlineShortTermMemoryScheduler):
@@ -583,7 +610,8 @@ class _StubLongService(ShortTermMemoryLongSummaryService):
 class TestRollingSummaryL5Trigger:
     """L4 が keep_gen+1 世代目に達したら L5 統合 task が発火する (Phase 3)。"""
 
-    def test_L4_が_3世代以下なら_L5_は_生成されない(self) -> None:
+    def test_l4_three_less_l5(self) -> None:
+        """L4 が 3 世代以下なら L5 は生成されない。"""
         mid_stub = _StubSummaryService.make(
             result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
         )
@@ -603,7 +631,8 @@ class TestRollingSummaryL5Trigger:
         assert long_stub.call_count == 0
         assert mem._long_summary(_PID.value) is None
 
-    def test_L4_が_4世代目で_L5_統合_が_発火_最古_L4_が_evict(self) -> None:
+    def test_l4_four_l5_trigger_l4_evict(self) -> None:
+        """L4 が 4 世代目で L5 統合が発火最古 L4 が evict。"""
         mid_stub = _StubSummaryService.make(
             result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
         )
@@ -631,7 +660,8 @@ class TestRollingSummaryL5Trigger:
         assert l5.generation_index == 1
         assert l5.is_fallback is False
 
-    def test_L4_evict_を_繰り返すと_L5_の_generation_index_が_増える(self) -> None:
+    def test_returns_l5_generation_index_l4_evict_when(self) -> None:
+        """L4evict を繰り返すと L5 の generationindex が増える。"""
         mid_stub = _StubSummaryService.make(
             result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
         )
@@ -651,7 +681,7 @@ class TestRollingSummaryL5Trigger:
         assert l5 is not None
         assert l5.generation_index == 2
 
-    def test_long_service_が_None_なら_template_fallback_で_延命(self) -> None:
+    def test_long_service_none_template_fallback(self) -> None:
         """previous_l5 が None で long_service も None なら placeholder L5。"""
         mid_stub = _StubSummaryService.make(
             result=_ParsedSummary(compressed_activity="北を歩いた", emotional_summary="", unresolved=())
@@ -669,7 +699,7 @@ class TestRollingSummaryL5Trigger:
         # 初回 L5 で previous_l5 が無いので placeholder
         assert "未生成" in l5.self_image
 
-    def test_LLM_失敗時は_previous_l5_を_延命(
+    def test_llm_failure_previous_l5(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """L5 LLM が落ちても previous_l5 で延命される (persona drift 防止)。"""
@@ -714,7 +744,8 @@ class TestRollingSummaryL5Trigger:
         assert l5.generation_index == 2
         assert any("L5 LLM 生成失敗" in rec.message for rec in caplog.records)
 
-    def test_get_long_summary_text_が_self_image_と_world_view_を_整形(self) -> None:
+    def test_get_long_summary_text_self_image_world_view(self) -> None:
+        """getlongsummarytext が selfimage と worldview を整形。"""
         long_stub = _StubLongService.make(
             result=_ParsedLongSummary(
                 self_image="寡黙な漁師",
@@ -737,11 +768,13 @@ class TestRollingSummaryL5Trigger:
         assert "この世界について" in text
         assert "島は穏やか" in text
 
-    def test_get_long_summary_text_は_L5_未生成なら_空文字(self) -> None:
+    def test_get_long_summary_text_l5_empty_string(self) -> None:
+        """get long summary text は L5 未生成なら 空文字。"""
         mem = RollingSummaryShortTermMemory(summary_service=None)
         assert mem.get_long_summary_text(_PID) == ""
 
-    def test_long_summary_service_が_非_service_なら_type_error(self) -> None:
+    def test_long_summary_service_non_service_type_error(self) -> None:
+        """longsummaryservice が非 service なら typeerror。"""
         with pytest.raises(TypeError, match="long_summary_service"):
             RollingSummaryShortTermMemory(
                 long_summary_service="not-a-service",  # type: ignore[arg-type]
@@ -765,7 +798,7 @@ class TestShortTermSummaryGeneratedTrace:
     なかった。実験 #30 前準備でギャップとして発覚し、本トレースで埋める。
     """
 
-    def test_L4_install_時に_SHORT_TERM_SUMMARY_GENERATED_が_emit_される(self) -> None:
+    def test_l4_install_short_term_summary_generated_emit(self) -> None:
         """LLM 成功経路で L4 が install されたら 1 件 trace に出る。"""
         rec = _RecordingRecorder()
         parsed = _ParsedSummary(
@@ -793,7 +826,7 @@ class TestShortTermSummaryGeneratedTrace:
         assert ev["is_fallback"] is False
         assert ev["summary_id"].startswith("l4-")
 
-    def test_template_fallback_でも_trace_は_出て_is_fallback_True(self) -> None:
+    def test_template_fallback_trace_fallback_true(self) -> None:
         """summary_service=None でも (LLM なしモード) template fallback で trace。"""
         rec = _RecordingRecorder()
         mem = RollingSummaryShortTermMemory(
@@ -806,7 +839,7 @@ class TestShortTermSummaryGeneratedTrace:
         assert len(l4_events) == 1
         assert l4_events[0]["is_fallback"] is True
 
-    def test_recorder_provider_が_None_なら_例外なく_no_op(self) -> None:
+    def test_missing_recorder_provider_is_no_op_without_exception(self) -> None:
         """既存挙動の後方互換: provider 未指定なら trace は出ず、本体は動く。"""
         mem = RollingSummaryShortTermMemory(summary_service=None)
         # 例外を投げずに L4 install まで通る
@@ -815,7 +848,7 @@ class TestShortTermSummaryGeneratedTrace:
         # mid summary は生成されている
         assert len(mem._mid_generations(_PID.value)) == 1
 
-    def test_recorder_provider_が_例外を投げても_本体は止まらない(self) -> None:
+    def test_recorder_provider_exception_does_not_stop_summary(self) -> None:
         """trace recorder の I/O 失敗が L4 install を倒さないこと (best-effort)。"""
         def boom() -> object:
             raise RuntimeError("recorder broken")
@@ -828,7 +861,7 @@ class TestShortTermSummaryGeneratedTrace:
             mem.append(_PID, _obs(f"o{i}", seq=i))
         assert len(mem._mid_generations(_PID.value)) == 1
 
-    def test_current_tick_provider_が_None_なら_tick_は_None(self) -> None:
+    def test_current_tick_provider_none_tick_none(self) -> None:
         """tick provider 未指定なら trace の tick は None になる (recorder には届く)。"""
         rec = _RecordingRecorder()
         mem = RollingSummaryShortTermMemory(
@@ -841,7 +874,7 @@ class TestShortTermSummaryGeneratedTrace:
         l4_events = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
         assert l4_events[0]["tick"] is None
 
-    def test_L5_install_時に_SHORT_TERM_LONG_SUMMARY_GENERATED_が_emit_される(self) -> None:
+    def test_l5_install_short_term_long_summary_generated_emit(self) -> None:
         """L4 が keep_gen=3 を超えて evict されると L5 が install され、trace に 1 件出る。"""
         rec = _RecordingRecorder()
         # 4 generation 分 L4 を生成して L5 を発火させる (DEFAULT_L4_KEEP_GENERATIONS=3)
@@ -880,7 +913,7 @@ class TestPostHocSetters:
     """PR #439: trace_recorder_provider / current_tick_provider / summary_services
     を runtime 構築後に注入できる setter。world_runtime 等で必要。"""
 
-    def test_set_trace_recorder_provider_で_emit_経路が_有効化される(self) -> None:
+    def test_set_trace_recorder_provider_emit(self) -> None:
         """ctor で None 渡し → setter で注入 → L4 install 時に trace 出る。"""
         rec = _RecordingRecorder()
         mem = RollingSummaryShortTermMemory(summary_service=None)
@@ -899,7 +932,7 @@ class TestPostHocSetters:
         assert len(l4_events) == 1
         assert l4_events[0]["tick"] == 77
 
-    def test_set_trace_recorder_provider_None_で_no_op_に戻る(self) -> None:
+    def test_returns_set_trace_recorder_provider_none_op(self) -> None:
         """provider=None で再び no-op (= 過去のセットアップを解除可能)。"""
         rec = _RecordingRecorder()
         mem = RollingSummaryShortTermMemory(
@@ -926,7 +959,7 @@ class TestTraceRecorderNullObjectNormalization:
     保証する。
     """
 
-    def test_provider_None_でも_emit_は_例外を投げない(self) -> None:
+    def test_provider_none_emit_raises_exception(self) -> None:
         """ctor で None を渡しても emit は NullTraceRecorder に流れる。"""
         mem = RollingSummaryShortTermMemory(
             summary_service=None,
@@ -937,7 +970,7 @@ class TestTraceRecorderNullObjectNormalization:
             mem.append(_PID, _obs(f"o{i}", seq=i))
         assert len(mem._mid_generations(_PID.value)) == 1
 
-    def test_provider_が_例外を投げても_NullTraceRecorder_にフォールバック(self) -> None:
+    def test_provider_null_trace_recorder_raises_exception(self) -> None:
         """provider 自体が raise するケースでも本体は止まらない。"""
         def boom() -> object:
             raise RuntimeError("recorder broken")
@@ -950,7 +983,7 @@ class TestTraceRecorderNullObjectNormalization:
             mem.append(_PID, _obs(f"o{i}", seq=i))
         assert len(mem._mid_generations(_PID.value)) == 1
 
-    def test_provider_が_None_を返しても_NullTraceRecorder_にフォールバック(self) -> None:
+    def test_returns_null_trace_recorder_fallback_provider_none_even_if(self) -> None:
         """lazy lookup で recorder 未確定の場合 (provider が None を返す) でも emit する。"""
         mem = RollingSummaryShortTermMemory(
             summary_service=None,
@@ -960,7 +993,7 @@ class TestTraceRecorderNullObjectNormalization:
             mem.append(_PID, _obs(f"o{i}", seq=i))
         assert len(mem._mid_generations(_PID.value)) == 1
 
-    def test_setter_経由でも_正規化が効く(self) -> None:
+    def test_setter_via(self) -> None:
         """set_trace_recorder_provider(None) で no-op に戻しても emit は安全。"""
         rec = _RecordingRecorder()
         mem = RollingSummaryShortTermMemory(

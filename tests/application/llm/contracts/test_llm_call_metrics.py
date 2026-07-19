@@ -12,24 +12,29 @@ from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
 class TestComputeTps:
     """compute_tps が 0 除算 / 0 トークン を安全に扱う。"""
 
-    def test_通常ケース_は_完了トークン_per_壁時計秒(self) -> None:
+    def test_per(self) -> None:
+        """通常ケースは完了トークン per 壁時計秒。"""
         # 50 tokens / 2000 ms = 25 tps
         assert LlmCallMetrics.compute_tps(50, 2000) == 25.0
 
-    def test_wall_latency_0_なら_0(self) -> None:
+    def test_wall_latency_zero_0(self) -> None:
+        """wall latency 0 なら 0。"""
         assert LlmCallMetrics.compute_tps(100, 0) == 0.0
 
-    def test_wall_latency_負値_なら_0(self) -> None:
+    def test_wall_latency_negative_value_zero(self) -> None:
+        """wall latency 負値 なら 0。"""
         assert LlmCallMetrics.compute_tps(100, -100) == 0.0
 
-    def test_completion_tokens_0_なら_0(self) -> None:
+    def test_completion_tokens_zero_0(self) -> None:
+        """completion tokens 0 なら 0。"""
         assert LlmCallMetrics.compute_tps(0, 1000) == 0.0
 
 
 class TestMetricsDataclass:
     """LlmCallMetrics の生成と immutability。"""
 
-    def test_全フィールドを_dataclass_で_保持できる(self) -> None:
+    def test_all_dataclass(self) -> None:
+        """全フィールドを dataclass で保持できる。"""
         m = LlmCallMetrics(
             model="test/model",
             wall_latency_ms=1500,
@@ -44,7 +49,8 @@ class TestMetricsDataclass:
         assert m.tps == 20.0
         assert m.success is True
 
-    def test_失敗時は_error_code_が_入る(self) -> None:
+    def test_failure_error_code(self) -> None:
+        """失敗時は errorcode が入る。"""
         m = LlmCallMetrics(
             model="test/model",
             wall_latency_ms=200,
@@ -57,7 +63,7 @@ class TestMetricsDataclass:
         assert m.success is False
         assert m.error_code == "LLM_RATE_LIMIT"
 
-    def test_cached_tokens_の_デフォルトは_0(self) -> None:
+    def test_cached_tokens_default_zero(self) -> None:
         """cached_tokens 未指定なら 0 (provider が返さない場合の挙動)。"""
         m = LlmCallMetrics(
             model="test/model",
@@ -69,7 +75,7 @@ class TestMetricsDataclass:
         )
         assert m.cached_tokens == 0
 
-    def test_cached_tokens_を_明示_設定できる(self) -> None:
+    def test_cached_tokens_can_be_set_explicitly(self) -> None:
         """prefix cache 効率の指標として cached_tokens を保持する。"""
         m = LlmCallMetrics(
             model="test/model",
@@ -82,7 +88,7 @@ class TestMetricsDataclass:
         )
         assert m.cached_tokens == 350
 
-    def test_cost_usd_の_デフォルトは_0(self) -> None:
+    def test_cost_usd_default_zero(self) -> None:
         """cost_usd 未指定なら 0.0 (OpenAI 直結 / vLLM 等で provider が返さない場合)。"""
         m = LlmCallMetrics(
             model="test/model",
@@ -94,7 +100,7 @@ class TestMetricsDataclass:
         )
         assert m.cost_usd == 0.0
 
-    def test_cost_usd_を_明示_設定できる(self) -> None:
+    def test_cost_usd_can_be_set_explicitly(self) -> None:
         """OpenRouter 経由なら provider 宣告の USD コストを保持する。"""
         m = LlmCallMetrics(
             model="openrouter/google/gemma-4-31b-it",

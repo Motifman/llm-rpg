@@ -35,14 +35,15 @@ class TestWeatherCodec:
         assert dst_holder["state"].weather_type == WeatherTypeEnum.RAIN
         assert dst_holder["state"].intensity == 0.8
 
-    def test_weather_holder_が_None_でも_動く(self) -> None:
+    def test_weather_holder_none_works(self) -> None:
         """scenario が天候を使わない構成: capture / restore が壊れない。"""
         runtime = SimpleNamespace(_current_weather=None)
         captured = WeatherSubsystemCodec().capture(runtime)
         assert captured["state"] is None
         WeatherSubsystemCodec().restore(runtime, captured)  # no-op
 
-    def test_state_が_None_の_holder_でも_動く(self) -> None:
+    def test_state_none_holder_works(self) -> None:
+        """state が None の holder でも 動く。"""
         holder = {"state": None}
         runtime = SimpleNamespace(_current_weather=holder)
         captured = WeatherSubsystemCodec().capture(runtime)
@@ -50,7 +51,8 @@ class TestWeatherCodec:
         WeatherSubsystemCodec().restore(runtime, captured)
         assert holder["state"] is None
 
-    def test_未サポート_schema_version_は_例外(self) -> None:
+    def test_unsupported_schema_version_raises_exception_2(self) -> None:
+        """未サポート schemaversion は例外。"""
         with pytest.raises(ValueError, match="schema_version"):
             WeatherSubsystemCodec().restore(
                 SimpleNamespace(), {"schema_version": 999}
@@ -89,7 +91,8 @@ class _StubTimeProvider:
 class TestDayNightCodec:
     """day_night._current を tick から再計算で復元。"""
 
-    def test_capture_は_phase_name_を_含む(self) -> None:
+    def test_includes_capture_phase_name(self) -> None:
+        """capture は phasename を含む。"""
         stage = SimpleNamespace(
             _cycle=_StubCycle({0: _StubTimeOfDay("MORNING")}),
             _current=_StubTimeOfDay("MIDDAY"),
@@ -98,7 +101,8 @@ class TestDayNightCodec:
         captured = DayNightSubsystemCodec().capture(runtime)
         assert captured["phase_name"] == "MIDDAY"
 
-    def test_restore_は_tick_から_再計算する(self) -> None:
+    def test_restore_tick(self) -> None:
+        """restore は tick から再計算する。"""
         # cycle: tick=30 → "NIGHT"
         cycle = _StubCycle({30: _StubTimeOfDay("NIGHT")})
         stage = SimpleNamespace(
@@ -116,7 +120,8 @@ class TestDayNightCodec:
         assert stage._current.phase_name == "NIGHT"
         assert cycle.lookup_calls == [30]
 
-    def test_day_night_stage_が_None_なら_no_op(self) -> None:
+    def test_day_night_stage_none_op(self) -> None:
+        """day night stage が None なら no op。"""
         runtime = SimpleNamespace(_day_night_stage=None)
         captured = DayNightSubsystemCodec().capture(runtime)
         assert captured["phase_name"] is None
@@ -124,7 +129,8 @@ class TestDayNightCodec:
             runtime, {"schema_version": 1, "phase_name": None}
         )  # no error
 
-    def test_未サポート_schema_version_は_例外(self) -> None:
+    def test_unsupported_schema_version_raises_exception(self) -> None:
+        """未サポート schemaversion は例外。"""
         with pytest.raises(ValueError, match="schema_version"):
             DayNightSubsystemCodec().restore(
                 SimpleNamespace(), {"schema_version": 999}

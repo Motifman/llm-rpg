@@ -80,7 +80,7 @@ class TestWorldRuntimeDispatchTable:
             f"dispatch table から必須 tool が欠落: {missing}"
         )
 
-    def test_ConsumableEffectHandler_が_pipeline_に_subscribe_されている(
+    def test_consumable_effect_handler_pipeline_subscribe(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """#344 subagent review 後続: ConsumableUsedEvent → ConsumableEffectHandler
@@ -198,7 +198,7 @@ class TestWorldRuntimeScheduleTurnDoesNotTouchSelfRescheduleStreak:
             "外部起床は self-loop chain の連続性に介入してはいけない。"
         )
 
-    def test_schedule_turn_does_not_initialize_streak_for_new_player(
+    def test_schedule_turn_does_initialize_streak_for_new_player(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """未登録 player への schedule_turn は streak を初期化しない
@@ -218,7 +218,7 @@ class TestWorldRuntimeScheduleTurnDoesNotTouchSelfRescheduleStreak:
 class TestReinterpretationAfterTurnTrigger:
     """U3: ターン完了で reinterpretation coordinator.after_turn_completed を呼ぶ。"""
 
-    def test_coordinator_ありなら_after_turn_completed_を呼ぶ(
+    def test_calls_coordinator_after_turn_completed(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """_episodic_stack.reinterpretation_coordinator があれば player_id 付きで通知する。"""
@@ -245,7 +245,7 @@ class TestReinterpretationAfterTurnTrigger:
         trigger._note_turn_for_reinterpretation(1)
         assert spy.calls == [PlayerId(1)]
 
-    def test_coordinator_未配線なら_no_op(
+    def test_coordinator_unwired_op(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """reinterpretation OFF (stack=None / coordinator=None) では何もしない・例外も出さない。"""

@@ -155,7 +155,7 @@ def _make_player(*, player_id_value: int = 1, is_down: bool = False):
 class TestAttackHappens:
     """敵対モンスターが視認できる相手を攻撃する。"""
 
-    def test_攻撃成立時に_graph_も_save(self) -> None:
+    def test_graph_save(self) -> None:
         """attack 成立後は spot_graph_repository.save(graph) が呼ばれる。
 
         graph aggregate に追加した MonsterAttackedPlayerInSpotEvent が観測
@@ -190,7 +190,7 @@ class TestAttackHappens:
 
         spot_repo.save.assert_called_once_with(graph)
 
-    def test_attack_未発生なら_graph_は_save_スキップ(self) -> None:
+    def test_attack_graph_save(self) -> None:
         """attack が一度も成立しなければ graph.save はスキップされる（無駄な永続化を避ける）。"""
         graph = _make_graph()
         # cooldown 中で attack しないモンスター
@@ -222,7 +222,7 @@ class TestAttackHappens:
 
         spot_repo.save.assert_not_called()
 
-    def test_event_が発火し_player_と_monster_を_save(self) -> None:
+    def test_event_trigger_player_monster_save(self) -> None:
         """攻撃成立で SpotGraphAggregate に event 追加 + repository.save が両方呼ばれる。"""
         graph = _make_graph()
         monster = _make_monster(attack=7)
@@ -269,7 +269,7 @@ class TestAttackHappens:
 class TestCooldownSkip:
     """cooldown 中のモンスターは tick で skip。"""
 
-    def test_can_attack_now_false_は_event発火なし(self) -> None:
+    def test_can_attack_now_false_event_trigger(self) -> None:
         """can_attack_now=False のモンスターは event を発火しない。"""
         graph = _make_graph()
         monster = _make_monster(can_attack=False)
@@ -309,7 +309,7 @@ class TestCooldownSkip:
 class TestDarknessGate:
     """暗闇 + dark_vision 無しは攻撃しない。dark_vision ありなら攻撃するが target_visible=False。"""
 
-    def test_暗闇_かつ_dark_vision無しは攻撃しない(self) -> None:
+    def test_darkness_dark_vision(self) -> None:
         """DARK で dark_vision なし → event 発火なし。"""
         graph = _make_graph(lighting=LightingEnum.DARK)
         monster = _make_monster(has_dark_vision=False)
@@ -344,7 +344,7 @@ class TestDarknessGate:
         ]
         assert events == []
 
-    def test_暗闇_かつ_dark_vision有りは_target_visible_false_で攻撃する(self) -> None:
+    def test_darkness_dark_vision_target_visible_false(self) -> None:
         """DARK + dark_vision あり → 攻撃成立、ただし target_visible=False。"""
         graph = _make_graph(lighting=LightingEnum.DARK)
         monster = _make_monster(has_dark_vision=True, attack=4)
@@ -384,7 +384,7 @@ class TestDarknessGate:
 class TestNoTarget:
     """同スポットに敵対対象が居ない場合は何もしない。"""
 
-    def test_プレイヤー不在は_event発火なし(self) -> None:
+    def test_player_event_trigger(self) -> None:
         """presence にプレイヤーが居なければ skip。"""
         graph = _make_graph()
         monster = _make_monster()
@@ -422,7 +422,7 @@ class TestNoTarget:
 class TestNonHostile:
     """neutral / ally のモンスターは tick で attack しない。"""
 
-    def test_neutral_は事前スクリーニングでスキップ(self) -> None:
+    def test_neutral_before(self) -> None:
         """faction=NEUTRAL は can_attack_now すら呼ばれない（最適化）。"""
         graph = _make_graph()
         monster = _make_monster(faction=MonsterFactionEnum.NEUTRAL)
@@ -539,7 +539,7 @@ def _make_svc(graph, monster, *, random_seed: int = 0):
 class TestWanderBasic:
     """ランダム徘徊が `idle_wander_chance` で発火し、隣接 spot へ移動する。"""
 
-    def test_chance_1_で必ず移動する(self) -> None:
+    def test_chance_one_always_moves_monster(self) -> None:
         """idle_wander_chance=1.0 なら毎 tick 必ず passable 接続へ移動。"""
         graph = _make_two_spot_graph()
         monster = _make_monster(idle_wander_chance=1.0, can_attack=False)
@@ -559,7 +559,7 @@ class TestWanderBasic:
         # graph save が tick 末で呼ばれている
         spot_repo.save.assert_called_once_with(graph)
 
-    def test_chance_0_では移動しない(self) -> None:
+    def test_chance_zero(self) -> None:
         """idle_wander_chance=0.0 なら徘徊試行せず position 維持。"""
         graph = _make_two_spot_graph()
         monster = _make_monster(idle_wander_chance=0.0, can_attack=False)
@@ -576,7 +576,7 @@ class TestWanderBasic:
 class TestWanderEcology:
     """ecology_type による徘徊抑制。"""
 
-    def test_ambush_は_chance_1_でも移動しない(self) -> None:
+    def test_ambush_monster_does_not_move_even_with_chance_one(self) -> None:
         """AMBUSH は待ち伏せ習性で徘徊しない（idle_wander_chance によらず）。"""
         graph = _make_two_spot_graph()
         monster = _make_monster(
@@ -597,7 +597,7 @@ class TestWanderEcology:
 class TestWanderPassageGate:
     """passage_conditions / traversable=False の通行不可は徘徊先から除外される。"""
 
-    def test_traversable_false_は徘徊先から除外される(self) -> None:
+    def test_traversable_false_excluded(self) -> None:
         """traversable=False の接続しか無ければ徘徊しない。"""
         graph = _make_two_spot_graph(traversable_to_b=False)
         monster = _make_monster(idle_wander_chance=1.0, can_attack=False)
@@ -615,7 +615,7 @@ class TestWanderPassageGate:
 class TestAttackPriorityOverWander:
     """attack が成立する状況では wander を試みない（priority chain）。"""
 
-    def test_attack_成立時は移動しない(self) -> None:
+    def test_attack(self) -> None:
         """attack 成立 monster は同じ tick で wander 抽選すらしない。"""
         graph = _make_two_spot_graph()
         monster = _make_monster(idle_wander_chance=1.0, can_attack=True, attack=5)

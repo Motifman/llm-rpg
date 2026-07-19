@@ -27,12 +27,14 @@ def _scenario_with_loot_tables(loot_tables: list) -> dict:
 class TestLootTableParsing:
     """loot_tables block の基本パース挙動。"""
 
-    def test_未指定なら_loot_tables_は_空(self) -> None:
+    def test_unspecified_loot_tables_default_to_empty(self) -> None:
+        """未指定なら loottables は空。"""
         from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
         r = ScenarioLoader().load_from_dict(_minimal_scenario())
         assert r.loot_tables == ()
 
-    def test_単一_table_の_パース(self) -> None:
+    def test_single_table(self) -> None:
+        """単一 table のパース。"""
         r = ScenarioLoader().load_from_dict(_scenario_with_loot_tables([
             {
                 "id": "test_loot",
@@ -51,7 +53,8 @@ class TestLootTableParsing:
         assert lt.entries[0].min_quantity == 1
         assert lt.entries[0].max_quantity == 2
 
-    def test_複数_table_の_パース(self) -> None:
+    def test_multiple_table(self) -> None:
+        """複数 table のパース。"""
         r = ScenarioLoader().load_from_dict(_scenario_with_loot_tables([
             {"id": "t1", "entries": [{"item_spec": "key", "weight": 1}]},
             {"id": "t2", "entries": [{"item_spec": "key", "weight": 1}]},
@@ -60,7 +63,8 @@ class TestLootTableParsing:
         ids = {lt.string_id for lt in r.loot_tables}
         assert ids == {"t1", "t2"}
 
-    def test_min_max_quantity_の_default_は_1(self) -> None:
+    def test_min_max_quantity_defaults_to_one(self) -> None:
+        """min max quantity の default は 1。"""
         r = ScenarioLoader().load_from_dict(_scenario_with_loot_tables([
             {"id": "t1", "entries": [{"item_spec": "key", "weight": 1}]},
         ]))
@@ -72,19 +76,22 @@ class TestLootTableParsing:
 class TestValidation:
     """loot_tables の不正値を boundary で弾く。"""
 
-    def test_id_欠落で_ScenarioLoadError(self) -> None:
+    def test_id_missing_scenario_load_error(self) -> None:
+        """id 欠落で ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError, match="loot_tables.*id is required"):
             ScenarioLoader().load_from_dict(_scenario_with_loot_tables([
                 {"entries": [{"item_spec": "key", "weight": 1}]},
             ]))
 
-    def test_entries_空で_ScenarioLoadError(self) -> None:
+    def test_entries_empty_scenario_load_error(self) -> None:
+        """entries 空で ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError, match="entries must be non-empty"):
             ScenarioLoader().load_from_dict(_scenario_with_loot_tables([
                 {"id": "t1", "entries": []},
             ]))
 
-    def test_item_spec_欠落で_ScenarioLoadError(self) -> None:
+    def test_item_spec_missing_scenario_load_error(self) -> None:
+        """item spec 欠落で ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError, match="item_spec required"):
             ScenarioLoader().load_from_dict(_scenario_with_loot_tables([
                 {"id": "t1", "entries": [{"weight": 1}]},
@@ -94,25 +101,29 @@ class TestValidation:
 class TestLootEntryValidationErrors:
     """PR #1 follow-up: 数値・範囲不正は ScenarioLoadError に包む。"""
 
-    def test_weight_が文字列なら_ScenarioLoadError(self) -> None:
+    def test_weight_string_scenario_load_error(self) -> None:
+        """weight が文字列なら ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError, match="non-integer weight/quantity"):
             ScenarioLoader().load_from_dict(_scenario_with_loot_tables([
                 {"id": "t1", "entries": [{"item_spec": "key", "weight": "abc"}]},
             ]))
 
-    def test_weight_負値で_ScenarioLoadError(self) -> None:
+    def test_weight_negative_value_scenario_load_error(self) -> None:
+        """weight 負値で ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError, match="weight must be >= 0"):
             ScenarioLoader().load_from_dict(_scenario_with_loot_tables([
                 {"id": "t1", "entries": [{"item_spec": "key", "weight": -1}]},
             ]))
 
-    def test_min_quantity_が_0以下で_ScenarioLoadError(self) -> None:
+    def test_min_quantity_zero_less_scenario_load_error(self) -> None:
+        """min quantity が 0以下で ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError, match="min_quantity must be >= 1"):
             ScenarioLoader().load_from_dict(_scenario_with_loot_tables([
                 {"id": "t1", "entries": [{"item_spec": "key", "weight": 1, "min_quantity": 0}]},
             ]))
 
-    def test_max_quantity_が_min未満で_ScenarioLoadError(self) -> None:
+    def test_max_quantity_min_below_scenario_load_error(self) -> None:
+        """max quantity が min未満で ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError, match="max_quantity .* must be >= min_quantity"):
             ScenarioLoader().load_from_dict(_scenario_with_loot_tables([
                 {"id": "t1", "entries": [

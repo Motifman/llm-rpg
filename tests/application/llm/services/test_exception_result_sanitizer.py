@@ -40,7 +40,8 @@ class TestExceptionResultDomainException:
     """``error_code`` 属性を持つ domain exception。error_code は保持されるが
     message は「日本語判定」に基づいて sanitize される (下記 English case 参照)。"""
 
-    def test_error_code_付きの_domain_exception_は_message_と_code_を_使う(self) -> None:
+    def test_error_code_domain_message_code_raises_exception(self) -> None:
+        """errorcode 付きの domainexception は message と code を使う。"""
         class MyDomainError(Exception):
             error_code = "GIVE_ITEM_TARGET_IS_SELF"
 
@@ -50,7 +51,7 @@ class TestExceptionResultDomainException:
         assert result.error_code == "GIVE_ITEM_TARGET_IS_SELF"
         assert result.message == "自分自身にアイテムを渡すことはできません。"
 
-    def test_error_code_付きだが_message_が英語の_domain_exception_も_message_は_fallback(self) -> None:
+    def test_error_code_message_domain_message_fallback_raises_exception(self) -> None:
         """PR-δ v1 抜け穴修正: ``ItemNotInSlotException("No item in slot 3")``
         のように「error_code は日本語じゃないカテゴリだが message 側が
         整備されていない」ケースを塞ぐ。error_code / remediation は保持し、
@@ -71,7 +72,8 @@ class TestExceptionResultDomainException:
 class TestExceptionResultEnglishFallback:
     """domain exception ではない英語 exception は汎用日本語 fallback。"""
 
-    def test_KeyError_の英語_message_は_日本語_fallback_に置換される(self) -> None:
+    def test_key_error_english_message_japanese_fallback(self) -> None:
+        """KeyError の英語 message は日本語 fallback に置換される。"""
         exc = KeyError("inventory_slot_id")
         result = exception_result(exc)
         assert result.success is False
@@ -81,14 +83,15 @@ class TestExceptionResultEnglishFallback:
         # 日本語 fallback が入っている
         assert "システム" in result.message or "エラー" in result.message
 
-    def test_ValueError_英語_の_message_も_日本語_fallback_に置換される(self) -> None:
+    def test_message_fallback_raises_value_error(self) -> None:
+        """ValueError 英語の message も日本語 fallback に置換される。"""
         exc = ValueError("invalid literal for int() with base 10: 'foo'")
         result = exception_result(exc)
         assert "invalid literal" not in result.message
         # LLM が次アクションを取るための日本語 hint がある
         assert "エラー" in result.message or "再試" in result.message or "別" in result.message
 
-    def test_message_が_空の_exception_も_日本語_fallback(self) -> None:
+    def test_message_empty_fallback_raises_exception(self) -> None:
         """str(e) が空の Exception でも汎用日本語で埋める。"""
         exc = RuntimeError()
         result = exception_result(exc)
@@ -100,24 +103,27 @@ class TestExceptionResultEnglishFallback:
 class TestExceptionResultJapaneseMessagePreserved:
     """日本語 message は (domain exception でなくても) 尊重される。"""
 
-    def test_日本語混じり_の_exception_message_は_そのまま_LLM_に届く(self) -> None:
+    def test_message_llm_raises_exception(self) -> None:
         """application 層で日本語 raise する ApplicationException 等の互換性を保つ。
         「〜 not found」のような英語混じりでも日本語文字が 1 個でもあれば尊重。"""
         exc = RuntimeError("アイテムが見つかりませんでした。再度確認してください。")
         result = exception_result(exc)
         assert result.message == "アイテムが見つかりませんでした。再度確認してください。"
 
-    def test_ひらがなだけでも_日本語判定_される(self) -> None:
+    def test_japanese_3(self) -> None:
+        """ひらがなだけでも 日本語判定 される。"""
         exc = RuntimeError("あ")  # 極端ケース
         result = exception_result(exc)
         assert result.message == "あ"
 
-    def test_漢字だけでも_日本語判定_される(self) -> None:
+    def test_japanese_2(self) -> None:
+        """漢字だけでも 日本語判定 される。"""
         exc = RuntimeError("失敗")
         result = exception_result(exc)
         assert result.message == "失敗"
 
-    def test_カタカナだけでも_日本語判定_される(self) -> None:
+    def test_japanese(self) -> None:
+        """カタカナだけでも 日本語判定 される。"""
         exc = RuntimeError("エラー")
         result = exception_result(exc)
         assert result.message == "エラー"
@@ -126,7 +132,8 @@ class TestExceptionResultJapaneseMessagePreserved:
 class TestExceptionResultRemediation:
     """remediation は error_code に対応するものを埋める。"""
 
-    def test_domain_exception_の_remediation_は_error_code_由来(self) -> None:
+    def test_domain_remediation_error_code_raises_exception(self) -> None:
+        """domain exception の remediation は error code 由来。"""
         class MyErr(Exception):
             error_code = "GIVE_ITEM_TARGET_IS_SELF"
 
@@ -134,7 +141,8 @@ class TestExceptionResultRemediation:
         # PR-α で登録済み
         assert "自分自身" in result.remediation or "別" in result.remediation
 
-    def test_english_fallback_の_remediation_は_SYSTEM_ERROR_由来(self) -> None:
+    def test_english_fallback_remediation_system_error(self) -> None:
+        """english fallback の remediation は SYSTEM ERROR 由来。"""
         result = exception_result(RuntimeError("something broke internally"))
         assert result.error_code == "SYSTEM_ERROR"
         # SYSTEM_ERROR は既存 mapping で「しばらくしてから再度お試しください。」

@@ -110,7 +110,7 @@ def _args(target_player_id: int, **extra) -> dict:
 class TestTendToPlayerSuccess:
     """同 spot にいる倒れた仲間を介抱して revive する。"""
 
-    def test_倒れた仲間を_revive_して_HP_60_で_復帰させる(self) -> None:
+    def test_revive_hp_60(self) -> None:
         """PR-κ: TEND_REVIVE_HP_RATE を 0.4 → 0.6 に引き上げ。理由は
         Y_after_pr651_652 trace で「復帰 → 2 tick 後に再ダウン」ループが
         観測されたため。60 HP なら野犬 (15 ダメ/tick) 4 発耐えられるので、
@@ -134,7 +134,7 @@ class TestTendToPlayerSuccess:
         # PlayerRevivedEvent が pipeline に流れる
         publisher.publish_all.assert_called_once()
 
-    def test_pipeline_に_流れる_PlayerRevivedEvent_に_caregiver_player_id_actor_が_乗る(self) -> None:
+    def test_pipeline_player_revived_event_caregiver_player_id_actor_included(self) -> None:
         """Phase 5: post hoc observation handler が「誰に介抱されたか」を読むために
         actor の PlayerId が PlayerRevivedEvent.caregiver_player_id に乗る必要がある。"""
         from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
@@ -154,7 +154,8 @@ class TestTendToPlayerSuccess:
         assert len(revived) == 1
         assert revived[0].caregiver_player_id == PlayerId(1)
 
-    def test_成功メッセージに_HP_と_対象名が含まれる(self) -> None:
+    def test_success_hp_target_included(self) -> None:
+        """成功メッセージに HP と対象名が含まれる。"""
         exec, status_repo, publisher = _build_executor()
         actor = _build_player(player_id=1, is_down=False, spot_id=10)
         target = _build_player(
@@ -175,13 +176,15 @@ class TestTendToPlayerSuccess:
 class TestTendToPlayerFailures:
     """前提条件違反の各ケース。"""
 
-    def test_自分自身を_対象に_すると_INVALID_TARGET_KIND(self) -> None:
+    def test_self_target_invalid_target_kind(self) -> None:
+        """自分自身を 対象に すると INVALID TARGET KIND。"""
         exec, status_repo, publisher = _build_executor()
         result = exec._tend_to_player(player_id=1, args=_args(1))
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_KIND"
 
-    def test_target_player_id_が_int_でない場合_INVALID_TARGET_LABEL(self) -> None:
+    def test_target_player_id_int_invalid_target_label(self) -> None:
+        """target player id が int でない場合 INVALID TARGET LABEL。"""
         exec, status_repo, publisher = _build_executor()
         result = exec._tend_to_player(
             player_id=1,
@@ -190,7 +193,8 @@ class TestTendToPlayerFailures:
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
 
-    def test_対象が_元気だと_INTERACTION_PRECONDITION_FAILED(self) -> None:
+    def test_target_interaction_precondition_failed(self) -> None:
+        """対象が 元気だと INTERACTION PRECONDITION FAILED。"""
         exec, status_repo, publisher = _build_executor()
         actor = _build_player(player_id=1, is_down=False, spot_id=10)
         target = _build_player(player_id=2, is_down=False, spot_id=10)
@@ -203,7 +207,7 @@ class TestTendToPlayerFailures:
         assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
         assert "倒れていない" in result.message
 
-    def test_自分が_倒れている_と_EXHAUSTED(self) -> None:
+    def test_self_exhausted(self) -> None:
         """倒れた player は他人を介抱できない。"""
         exec, status_repo, publisher = _build_executor()
         actor = _build_player(player_id=1, is_down=True, spot_id=10, hp_current=0)
@@ -216,7 +220,8 @@ class TestTendToPlayerFailures:
         assert result.success is False
         assert result.error_code == "EXHAUSTED"
 
-    def test_別_spot_の_対象は_INTERACTION_PRECONDITION_FAILED(self) -> None:
+    def test_different_spot_target_interaction_precondition_failed(self) -> None:
+        """別 spot の対象は INTERACTIONPRECONDITIONFAILED。"""
         exec, status_repo, publisher = _build_executor()
         actor = _build_player(player_id=1, is_down=False, spot_id=10)
         target = _build_player(player_id=2, is_down=True, spot_id=20)  # 別 spot
@@ -229,14 +234,16 @@ class TestTendToPlayerFailures:
         assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
         assert "同じ場所" in result.message
 
-    def test_対象が_repository_に存在しない場合_TARGET_NOT_FOUND(self) -> None:
+    def test_target_repository_target_not_found(self) -> None:
+        """対象が repository に存在しない場合 TARGET NOT FOUND。"""
         exec, status_repo, publisher = _build_executor()
         status_repo.find_by_id.return_value = None
         result = exec._tend_to_player(player_id=1, args=_args(99))
         assert result.success is False
         assert result.error_code == "TARGET_NOT_FOUND"
 
-    def test_player_status_repository_未注入で_UNSUPPORTED_TOOL(self) -> None:
+    def test_player_status_repository_uninjected_unsupported_tool(self) -> None:
+        """player status repository 未注入で UNSUPPORTED TOOL。"""
         services = SpotGraphWorldServices(
             interaction=MagicMock(),
             exploration=MagicMock(),
@@ -260,7 +267,7 @@ class TestTendToPlayerFailures:
 
 
 class TestDispatch:
-    def test_get_handlers_に_TEND_TO_PLAYER_が_登録(self) -> None:
+    def test_get_handlers_tend_player(self) -> None:
         """executor が新 tool の handler を expose する (regression test)。"""
         from ai_rpg_world.application.llm.tool_constants import (
             TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,

@@ -274,7 +274,7 @@ class TestConsumableEffectHandler:
         assert player_status.gold.value == initial_gold + 50
         player_status_repo.save.assert_called_once()
 
-    def test_item_spec_not_found_raises(self):
+    def test_item_spec_found_raises(self):
         """ItemSpec が見つからない場合は ItemSpecNotFoundForConsumableEffectException"""
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         item_spec_repo.find_by_id.return_value = None
@@ -287,7 +287,7 @@ class TestConsumableEffectHandler:
         with pytest.raises(ItemSpecNotFoundForConsumableEffectException, match="999"):
             handler.handle(event)
 
-    def test_no_consume_effect_raises(self):
+    def test_consume_effect_raises(self):
         """consume_effect が None の場合は ConsumeEffectMissingException"""
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         spec_rm = ItemSpecReadModel(
@@ -309,7 +309,7 @@ class TestConsumableEffectHandler:
         with pytest.raises(ConsumeEffectMissingException, match="905"):
             handler.handle(event)
 
-    def test_player_status_not_found_raises(self):
+    def test_player_status_found_raises(self):
         """PlayerStatus が見つからない場合は PlayerNotFoundForConsumableEffectException"""
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         spec_rm = ItemSpecReadModel(
@@ -501,7 +501,8 @@ class TestReviveEffect:
     適用は no-op として扱う (= 既に元気なのに revive される無害ケース)。
     """
 
-    def test_ダウン中の_player_を_ReviveEffect_で_蘇生する(self) -> None:
+    def test_downed_player_revive_effect(self) -> None:
+        """ダウン中の player を ReviveEffect で蘇生する。"""
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)
         item_spec_id = ItemSpecId(921)
@@ -535,7 +536,7 @@ class TestReviveEffect:
         assert player_status.hp.value == 4
         player_status_repo.save.assert_called_once()
 
-    def test_ダウンしていない_player_への_ReviveEffect_は_no_op(self) -> None:
+    def test_downed_player_revive_effect_op(self) -> None:
         """is_down=False に revive を呼ぶと PlayerNotDownedException が出るので、
         handler は事前 check して no-op にする。"""
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
@@ -568,7 +569,7 @@ class TestReviveEffect:
         assert player_status.hp.value == 80
         assert player_status.is_down is False
 
-    def test_composite_に_含まれる_ReviveEffect_も_適用される(self) -> None:
+    def test_composite_included_revive_effect(self) -> None:
         """救急用品が ReviveEffect + HealEffect の合成だったケース。"""
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)

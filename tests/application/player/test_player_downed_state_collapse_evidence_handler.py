@@ -38,7 +38,8 @@ class _RaisingTranscriber:
 
 
 class TestPlayerDownedStateCollapseEvidenceHandler:
-    def test_being解決に成功すると_record_down_evidenceを呼ぶ(self) -> None:
+    def test_succeeds_record_down_evidence_calls_being(self) -> None:
+        """being解決に成功すると record down evidenceを呼ぶ。"""
         transcriber = _TranscriberSpy()
         being_id = BeingId("being-1")
         handler = PlayerDownedStateCollapseEvidenceHandler(
@@ -50,7 +51,8 @@ class TestPlayerDownedStateCollapseEvidenceHandler:
 
         assert transcriber.recorded == [being_id]
 
-    def test_being解決が_Noneのとき_transcriberを呼ばない(self) -> None:
+    def test_being_none_transcriber_does_not_call(self) -> None:
+        """being解決が Noneのとき transcriberを呼ばない。"""
         transcriber = _TranscriberSpy()
         handler = PlayerDownedStateCollapseEvidenceHandler(
             transcriber=transcriber,
@@ -61,7 +63,8 @@ class TestPlayerDownedStateCollapseEvidenceHandler:
 
         assert transcriber.recorded == []
 
-    def test_transcriberが例外を投げても_handleは例外を伝播しない(self) -> None:
+    def test_transcriber_handle_raises_exception(self) -> None:
+        """transcriberが例外を投げても handleは例外を伝播しない。"""
         handler = PlayerDownedStateCollapseEvidenceHandler(
             transcriber=_RaisingTranscriber(),
             being_id_resolver=lambda pid: BeingId("being-1"),
@@ -69,7 +72,8 @@ class TestPlayerDownedStateCollapseEvidenceHandler:
 
         handler.handle(_make_downed_event(1))  # 例外なく完了
 
-    def test_being_id_resolverに渡されるのはevent由来のplayer_id(self) -> None:
+    def test_being_id_resolver_event_player_id(self) -> None:
+        """being id resolverに渡されるのはevent由来のplayer id。"""
         transcriber = _TranscriberSpy()
         received: list[PlayerId] = []
 

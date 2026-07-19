@@ -172,7 +172,7 @@ def _make_handler(*, player=None, world_flags=frozenset()):
 class TestMultiSpotChasePlayer:
     """target が player で他 spot に居る場合、BFS で 1 hop 進む。"""
 
-    def test_隣接_spot_の_player_に_向かって_1hop_移動する(self) -> None:
+    def test_neighbor_spot_player_1hop(self) -> None:
         """A に居る monster が、B に居る player を CHASE 中なら 1 tick で B へ移動。"""
         player = _player(player_id_value=7)
         handler, monster_repo = _make_handler(player=player)
@@ -199,7 +199,7 @@ class TestMultiSpotChasePlayer:
         # state 永続化
         assert monster_repo.save.called
 
-    def test_2hop_先の_player_に_向かって_1tick_目は_中継_spot_に移動(self) -> None:
+    def test_first_tick_moves_toward_two_hop_player_via_intermediate_spot(self) -> None:
         """A に居る monster が C に居る player を CHASE → 1 tick 目で B に移動。"""
         player = _player(player_id_value=7)
         handler, _ = _make_handler(player=player)
@@ -221,7 +221,7 @@ class TestMultiSpotChasePlayer:
         assert graph.get_monster_spot(monster.monster_id) == SPOT_B
         assert monster.is_chasing() is True
 
-    def test_target_が_graph_に_居なければ_IDLE_に_戻る(self) -> None:
+    def test_returns_target_graph_idle(self) -> None:
         """player が graph 上のどこにも居なければ追跡諦める。"""
         handler, _ = _make_handler(player=None)
         monster = _monster()
@@ -246,7 +246,7 @@ class TestMultiSpotChasePlayer:
 class TestMultiSpotChaseLastKnownUpdate:
     """multi-spot 移動時に `last_observed_target_spot_id` が更新される。"""
 
-    def test_1hop_移動後の_last_observed_target_spot_id_は_target_spot_を_指す(self) -> None:
+    def test_last_observed_target_spot_points_to_target_after_one_hop_move(self) -> None:
         """A→B 移動後、state.last_observed_target_spot_id は target が居る B (or 探索先) を指す。
 
         現実装では `update_chase_last_observed_target_spot(target_spot)` を呼ぶため
@@ -273,7 +273,8 @@ class TestMultiSpotChaseLastKnownUpdate:
 class TestMultiSpotChaseAttackOnSameSpot:
     """target が同 spot に居る場合は移動せず攻撃する (既存挙動の維持)。"""
 
-    def test_同_spot_の_player_には_攻撃_event_が_発火し_移動しない(self) -> None:
+    def test_spot_player_event_trigger(self) -> None:
+        """同 spot の player には攻撃 event が発火し移動しない。"""
         player = _player(player_id_value=7)
         handler, _ = _make_handler(player=player)
         # ENEMY faction が必要
@@ -327,7 +328,7 @@ class TestMultiSpotChaseAttackOnSameSpot:
 class TestMultiSpotChaseMonster:
     """target が monster (player ではなく) でも multi-spot 追跡できる。"""
 
-    def test_隣接_spot_の_monster_に_向かって_1hop_移動する(self) -> None:
+    def test_neighbor_spot_monster_1hop(self) -> None:
         """A に居る attacker が、B に居る target_monster を CHASE 中なら B へ 1 hop 移動。"""
         handler, monster_repo = _make_handler(player=None)
         attacker = _monster()
@@ -362,7 +363,7 @@ class TestMultiSpotChaseMonster:
         assert graph.get_monster_spot(attacker.monster_id) == SPOT_B
         assert attacker.is_chasing() is True
 
-    def test_target_monster_が_graph_に_居なければ_IDLE_に_戻る(self) -> None:
+    def test_returns_target_monster_graph_idle(self) -> None:
         """target_monster が graph 上に居なければ追跡諦める。"""
         handler, _ = _make_handler(player=None)
         attacker = _monster()

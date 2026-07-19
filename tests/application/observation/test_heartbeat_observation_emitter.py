@@ -84,7 +84,7 @@ def _build_emitter(
 class TestHeartbeatObservationEmitter:
     """``HeartbeatObservationEmitter`` の発行と turn スケジューリングの挙動。"""
 
-    def test_first_tick_only_anchors_no_emission(self) -> None:
+    def test_first_tick_only_anchors_emission(self) -> None:
         """初回 tick では発行せず基準点を記録するだけ (起動直後の一斉発火回避)。"""
         emitter, buffer, trigger = _build_emitter(interval_ticks=3)
 
@@ -140,7 +140,7 @@ class TestHeartbeatObservationEmitter:
         assert len(buffer.get_observations(PlayerId(2))) == 1
         assert sorted(trigger.scheduled) == [1, 2]
 
-    def test_provider_exception_does_not_propagate(self) -> None:
+    def test_provider_exception_does_propagate(self) -> None:
         """provider が例外を投げても tick 全体を倒さず安全に return する。"""
         buffer = DefaultObservationContextBuffer()
         appender = ObservationAppender(buffer)
@@ -200,7 +200,7 @@ class TestHeartbeatObservationEmitter:
                 interval_ticks=0,
             )
 
-    def test_schedule_failure_does_not_cause_duplicate_observation(self) -> None:
+    def test_schedule_failure_does_cause_duplicate_observation(self) -> None:
         """maybe_schedule が失敗しても次 tick で同じ観測が再投入されない。
 
         HIGH 指摘: append 成功後 schedule 失敗のケースで _last_emitted_tick を
@@ -281,7 +281,7 @@ class TestHeartbeatSkipsTravelingPlayers:
         )
         return emitter, buffer, turn_trigger
 
-    def test_移動中の_player_には_heartbeat_を発行しない(self) -> None:
+    def test_player_heartbeat_line(self) -> None:
         """is_traveling=True の player は buffer に観測が積まれず schedule も走らない。"""
         emitter, buffer, trigger = self._build_emitter_with_traveling({1})
         emitter.run(WorldTick(10))  # anchor
@@ -291,7 +291,7 @@ class TestHeartbeatSkipsTravelingPlayers:
         assert len(buffer.get_observations(PlayerId(2))) == 1
         assert trigger.scheduled == [2]
 
-    def test_provider_が例外を投げても_fail_safe_で従来通り発行する(self) -> None:
+    def test_provider_fail_safe_raises_exception(self) -> None:
         """provider 失敗は heartbeat を止めない。silent failure 防止のため fail-open。"""
         buffer = DefaultObservationContextBuffer()
         appender = ObservationAppender(buffer)
@@ -317,7 +317,7 @@ class TestHeartbeatSkipsTravelingPlayers:
         assert len(buffer.get_observations(PlayerId(1))) == 1
         assert turn_trigger.scheduled == [1]
 
-    def test_provider_未指定なら従来通り全員発行(self) -> None:
+    def test_provider_unspecified_all_players_line(self) -> None:
         """is_traveling_provider 省略時 (後方互換) は全員に発行される。"""
         emitter, buffer, trigger = _build_emitter(interval_ticks=2)
         emitter.run(WorldTick(10))
@@ -334,7 +334,7 @@ class TestPerAgentIdleTimer:
     player だけ ``interval_ticks`` 経過後に 1 回起こされる。
     """
 
-    def test_note_player_activity_は_heartbeat_発火を_interval_遅延させる(self) -> None:
+    def test_note_player_activity_heartbeat_trigger_interval(self) -> None:
         """活動を通知すると last_emitted がリセットされ、次の発火が後ろにずれる。"""
         emitter, buffer, trigger = _build_emitter(interval_ticks=5)
         # anchor
@@ -350,7 +350,7 @@ class TestPerAgentIdleTimer:
         assert len(buffer.get_observations(PlayerId(1))) == 1
         assert trigger.scheduled == [1]
 
-    def test_event_駆動で動き続ける_player_には_heartbeat_が出ない(self) -> None:
+    def test_event_player_heartbeat_not_rendered(self) -> None:
         """毎 tick の event 駆動 turn で last が更新され続けると heartbeat は永続 silent。"""
         emitter, buffer, trigger = _build_emitter(interval_ticks=3)
         emitter.run(WorldTick(0))  # anchor
@@ -360,7 +360,7 @@ class TestPerAgentIdleTimer:
         assert buffer.get_observations(PlayerId(1)) == []
         assert trigger.scheduled == []
 
-    def test_完全_idle_な_player_は_interval_経過で_1回起きる(self) -> None:
+    def test_fully_idle_player_wakes_once_after_interval(self) -> None:
         """活動通知が無いまま interval が経つと、想定通り heartbeat 1 回。"""
         emitter, buffer, trigger = _build_emitter(interval_ticks=6)
         emitter.run(WorldTick(0))  # anchor
@@ -370,7 +370,7 @@ class TestPerAgentIdleTimer:
         assert len(buffer.get_observations(PlayerId(1))) == 1
         assert trigger.scheduled == [1]
 
-    def test_PlayerId_以外を渡しても落ちない(self) -> None:
+    def test_player_id_does_not_crash(self) -> None:
         """note_player_activity の入口は防御的に PlayerId 型をチェックする。"""
         emitter, _, _ = _build_emitter(interval_ticks=5)
         # 例外を投げないこと (型違いは黙って no-op)

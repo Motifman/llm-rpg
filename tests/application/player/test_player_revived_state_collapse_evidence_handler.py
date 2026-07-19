@@ -42,7 +42,8 @@ class _RaisingTranscriber:
 
 
 class TestPlayerRevivedStateCollapseEvidenceHandler:
-    def test_being解決に成功すると_clear_down_stateを呼ぶ(self) -> None:
+    def test_succeeds_clear_down_state_calls_being(self) -> None:
+        """being解決に成功すると clear down stateを呼ぶ。"""
         transcriber = _TranscriberSpy()
         being_id = BeingId("being-1")
         handler = PlayerRevivedStateCollapseEvidenceHandler(
@@ -54,7 +55,8 @@ class TestPlayerRevivedStateCollapseEvidenceHandler:
 
         assert transcriber.cleared == [being_id]
 
-    def test_being解決が_Noneのとき_transcriberを呼ばない(self) -> None:
+    def test_being_none_transcriber_does_not_call(self) -> None:
+        """being解決が Noneのとき transcriberを呼ばない。"""
         transcriber = _TranscriberSpy()
         handler = PlayerRevivedStateCollapseEvidenceHandler(
             transcriber=transcriber,
@@ -65,7 +67,8 @@ class TestPlayerRevivedStateCollapseEvidenceHandler:
 
         assert transcriber.cleared == []
 
-    def test_transcriberが例外を投げても_handleは例外を伝播しない(self) -> None:
+    def test_transcriber_handle_raises_exception(self) -> None:
+        """transcriberが例外を投げても handleは例外を伝播しない。"""
         handler = PlayerRevivedStateCollapseEvidenceHandler(
             transcriber=_RaisingTranscriber(),
             being_id_resolver=lambda pid: BeingId("being-1"),

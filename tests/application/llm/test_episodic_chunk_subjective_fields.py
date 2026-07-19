@@ -65,7 +65,7 @@ class TestEpisodicChunkSubjectiveFieldsService:
         assert merged.interpreted == "意味付け。"
         assert merged.recall_text == "短い想起。"
 
-    def test_llm_api_failure_falls_back_to_template(self) -> None:
+    def test_llm_api_failure_falls_back_template(self) -> None:
         """LlmApiCallException はテンプレへ落ち、それでも observed・cues は不変。"""
         enc = self._minimal_encoding()
         draft = ChunkEpisodeDraftBuilder().build(enc)
@@ -118,7 +118,8 @@ class TestSystemPromptPastTense:
     プロンプト側で抑制するための後退防止 (regression) テスト。
     """
 
-    def test_system_prompt_に_recall_text_の_過去形_ルールが_明示されている(self) -> None:
+    def test_system_prompt_recall_text(self) -> None:
+        """systemprompt に recalltext の過去形ルールが明示されている。"""
         enc = self._make_encoding()
         draft = ChunkEpisodeDraftBuilder().build(enc)
         port = _StubSubjectivePort({"interpreted": "x", "recall_text": "y"})
@@ -155,21 +156,25 @@ class TestComputeTemplateHelpers:
     を介さず生文字列で動くことが契約。
     """
 
-    def test_interpreted_は_what_をそのまま返す(self) -> None:
+    def test_returns_interpreted_what_unchanged(self) -> None:
+        """interpreted は what をそのまま返す。"""
         assert compute_template_interpreted("カイトが入口広間で待機した") == (
             "カイトが入口広間で待機した"
         )
 
-    def test_interpreted_は_前後空白_を_trim(self) -> None:
+    def test_interpreted_around_blank_trim(self) -> None:
+        """interpreted は前後空白を trim。"""
         assert compute_template_interpreted("  hello  ") == "hello"
 
-    def test_interpreted_は_長すぎる_what_を_省略記号_で切り詰める(self) -> None:
+    def test_interpreted_what(self) -> None:
+        """interpreted は長すぎる what を省略記号で切り詰める。"""
         long_what = "あ" * 800
         out = compute_template_interpreted(long_what)
         assert len(out) <= 700
         assert out.endswith("…")
 
-    def test_recall_は_observed_の_最初の非空行_を_bullet_除去して返す(self) -> None:
+    def test_returns_recall_observed_non_empty_line_bullet(self) -> None:
+        """recall は observed の最初の非空行を bullet 除去して返す。"""
         observed = "\n".join([
             "",
             "- [12:00] カイトが入口広間に立った",
@@ -179,11 +184,13 @@ class TestComputeTemplateHelpers:
             "[12:00] カイトが入口広間に立った"
         )
 
-    def test_recall_は_observed_が_空_なら_what_に_フォールバック(self) -> None:
+    def test_returns_empty_when_recall_observed_what(self) -> None:
+        """recall は observed が空なら what にフォールバック。"""
         assert compute_template_recall("", what="待機した") == "待機した"
         assert compute_template_recall("   \n   ", what="待機した") == "待機した"
 
-    def test_recall_は_長すぎる_行_を_省略記号_で切り詰める(self) -> None:
+    def test_recall_line(self) -> None:
+        """recall は長すぎる行を省略記号で切り詰める。"""
         long_line = "あ" * 800
         out = compute_template_recall(long_line, what="x")
         assert len(out) <= 700
@@ -221,7 +228,7 @@ class TestPredictionErrorCompletion:
         merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
         assert merged.prediction_error == "話せると思ったが黙って立ち去られた。"
 
-    def test_empty_llm_prediction_error_with_no_failure_is_none(self) -> None:
+    def test_empty_llm_prediction_error_with_failure_is_None(self) -> None:
         """予測どおり (空 prediction_error) かつ失敗なしなら None。"""
         enc = self._encoding_with_expected(success=True)
         draft = ChunkEpisodeDraftBuilder().build(enc)
@@ -245,7 +252,7 @@ class TestPredictionErrorCompletion:
         merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
         assert merged.prediction_error == "予測していたが、行動の一部が失敗した。"
 
-    def test_no_structured_fallback_when_all_success(self) -> None:
+    def test_structured_fallback_when_all_success(self) -> None:
         """LLM 失敗 + expected あり + 全成功なら None (誤った驚きを捏造しない)。"""
         enc = self._encoding_with_expected(success=True)
         draft = ChunkEpisodeDraftBuilder().build(enc)
@@ -257,7 +264,7 @@ class TestPredictionErrorCompletion:
         merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
         assert merged.prediction_error is None
 
-    def test_no_fallback_when_no_expected(self) -> None:
+    def test_fallback_when_expected(self) -> None:
         """expected が無ければ失敗があっても prediction_error は None。"""
         t = datetime(2026, 5, 4, 5, 0, tzinfo=timezone.utc)
         act = ActionResultEntry(

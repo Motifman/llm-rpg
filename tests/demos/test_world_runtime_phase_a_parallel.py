@@ -35,33 +35,33 @@ SCENARIO_PATH = (
 class TestResolveLlmParallelWorkers:
     """config の解釈が安全であること。"""
 
-    def test_未設定なら_0(self) -> None:
+    def test_unset_zero(self) -> None:
         """未設定なら serial 経路を使う。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
         assert cfg.llm_turn_parallel_workers == 0
 
-    def test_config_が_正の整数なら_その値(self) -> None:
+    def test_config_value(self) -> None:
         """正の整数ならその worker 数を使う。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(
             values={"LLM_TURN_PARALLEL_WORKERS": "4"}
         )
         assert cfg.llm_turn_parallel_workers == 4
 
-    def test_config_が_0_なら_0(self) -> None:
+    def test_config_zero_0(self) -> None:
         """0 は明示的な serial 指定として受け付ける。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(
             values={"LLM_TURN_PARALLEL_WORKERS": "0"}
         )
         assert cfg.llm_turn_parallel_workers == 0
 
-    def test_config_が_負値なら_ValueError(self) -> None:
+    def test_config_negative_raises_value_error(self) -> None:
         """負値は既定値縮退ではなく profile ミスとして止める。"""
         with pytest.raises(ValueError, match="LLM_TURN_PARALLEL_WORKERS"):
             ResolvedLlmRuntimeConfig.from_mapping(
                 values={"LLM_TURN_PARALLEL_WORKERS": "-3"}
             )
 
-    def test_config_が_不正値なら_ValueError(self) -> None:
+    def test_config_invalid_raises_value_error(self) -> None:
         """非整数も fail-fast する。"""
         with pytest.raises(ValueError, match="LLM_TURN_PARALLEL_WORKERS"):
             ResolvedLlmRuntimeConfig.from_mapping(
@@ -78,9 +78,10 @@ class TestPhaseAParallelExecution:
     並列化を分離して計測)。
     """
 
-    def test_run_phase_a_を_4_並列で呼ぶと_4倍速に近づく(
+    def test_calls_four_run_phase_four_column(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """run phase a を 4 並列で呼ぶと 4倍速に近づく。"""
         from concurrent.futures import ThreadPoolExecutor
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
@@ -131,9 +132,10 @@ class TestPhaseAParallelExecution:
 class TestPhaseAExceptionHandling:
     """Phase A で LLM が例外を投げた場合、Phase B が LlmCommandResultDto 化する。"""
 
-    def test_LLM_例外時に_LLM_API_FAILED_result_が返る(
+    def test_llm_api_failed_result_raises_exception(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """LLM 例外時に LLM API FAILED result が返る。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         class _BoomLlmClient:

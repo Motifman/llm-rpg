@@ -152,7 +152,7 @@ def _make_player(player_id_value: int = 1):
 class TestPassivePolicy:
     """PASSIVE policy では None を返して chain を続行させる。"""
 
-    def test_PASSIVE_は_None_を_返す(self) -> None:
+    def test_returns_none_passive(self) -> None:
         """policy=PASSIVE の monster は被弾していても None を返す。"""
         monster = _monster(_template(reaction=ReactionPolicyEnum.PASSIVE))
         monster.record_attacked_by_in_spot(
@@ -171,7 +171,7 @@ class TestPassivePolicy:
 class TestNoAttackHistory:
     """被弾履歴がない / grace 切れ。"""
 
-    def test_last_attacked_tick_None_は_None_を_返す(self) -> None:
+    def test_returns_none_last_attacked_tick_none(self) -> None:
         """攻撃を受けたことがない monster は None を返す。"""
         monster = _monster(_template(reaction=ReactionPolicyEnum.ALWAYS_FLEE))
         handler, *_ = _make_handler()
@@ -181,7 +181,7 @@ class TestNoAttackHistory:
         result = handler.try_react(monster, graph, SPOT_A, WorldTick(10))
         assert result is None
 
-    def test_grace_切れの_被弾は_反応しない(self) -> None:
+    def test_grace(self) -> None:
         """flee_grace_ticks より古い被弾なら反応しない。"""
         monster = _monster(
             _template(reaction=ReactionPolicyEnum.ALWAYS_FLEE, flee_grace_ticks=3),
@@ -201,7 +201,7 @@ class TestNoAttackHistory:
 class TestForceWanderInjection:
     """FLEE 中は force_wander_fn が呼び出される。"""
 
-    def test_FLEE_遷移後に_force_wander_fn_が_呼ばれる(self) -> None:
+    def test_calls_flee_force_wander_fn(self) -> None:
         """ALWAYS_FLEE 反応で FLEE に遷移したら注入された wander 関数が呼ばれる。"""
         wander_fn = MagicMock(return_value=True)
         handler, monster_repo, _ = _make_handler(force_wander_fn=wander_fn)
@@ -227,7 +227,7 @@ class TestForceWanderInjection:
 class TestChaseTargetMissingClearsState:
     """CHASE 遷移後 target 不在で IDLE に自動解除される。"""
 
-    def test_target_player_が_spot_に_居ない場合_IDLE_に_戻り_None_を_返す(self) -> None:
+    def test_returns_none_target_player_spot_idle(self) -> None:
         """ALWAYS_RETALIATE で CHASE に入ったが player が同 spot に居ないと、
         state が IDLE に戻され `None` を返して chain は続行可能になる。"""
         handler, monster_repo, _ = _make_handler()  # player_repo は None を返す
@@ -256,7 +256,7 @@ class TestChaseContinuationTick:
     `if monster.is_chasing():` 分岐。
     """
 
-    def test_CHASE_継続_tick_で_orchestrator_に_委譲される(self) -> None:
+    def test_chase_tick_orchestrator(self) -> None:
         """事前に CHASE 状態の monster が次 tick で `_continue_chase` を通り、
         orchestrator に処理が委譲される (`is_chasing` 分岐の網羅)。
 
@@ -284,7 +284,7 @@ class TestChaseContinuationTick:
         # CHASE state はまだ継続中 (grace 切れではない / target 居る)
         assert monster.is_chasing() is True
 
-    def test_CHASE_継続_tick_で_target_が_別spot_に_行ったら_IDLE_に_戻る(
+    def test_returns_chase_tick_target_different_spot_line_idle(
         self,
     ) -> None:
         """事前に CHASE 状態に入れた monster の target が graph に居なくなって
@@ -305,7 +305,7 @@ class TestChaseContinuationTick:
         assert result is None
         assert monster.is_chasing() is False
 
-    def test_CHASE_継続_tick_で_grace_切れなら_IDLE_に_戻る(self) -> None:
+    def test_returns_chase_tick_grace_idle(self) -> None:
         """CHASE 状態でも last_attacked から grace_ticks 超過なら IDLE 化。"""
         handler, monster_repo, _ = _make_handler()
         monster = _monster(
@@ -327,7 +327,7 @@ class TestChaseContinuationTick:
         assert result is None
         assert monster.is_chasing() is False
 
-    def test_chase_attacker_ref_が_None_の_異常系で_IDLE_に_戻る(self) -> None:
+    def test_returns_chase_attacker_ref_none_idle(self) -> None:
         """CHASE state だが何らかの理由で chase_attacker_ref が None の場合、
         防御的に IDLE に戻して chain 続行を許す。"""
         handler, *_ = _make_handler()

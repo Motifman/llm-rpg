@@ -30,7 +30,7 @@ class TestObservationAppenderNormal:
     def appender(self, buffer):
         return ObservationAppender(buffer=buffer)
 
-    def test_append_adds_entry_to_buffer_with_all_fields(
+    def test_append_adds_entry_buffer_with_all_fields(
         self, appender, buffer
     ):
         """全フィールド指定時に観測がバッファに追加される"""
@@ -55,7 +55,7 @@ class TestObservationAppenderNormal:
         assert entries[0].output == output
         assert entries[0].game_time_label == game_time_label
 
-    def test_append_with_game_time_label_none(self, appender, buffer):
+    def test_append_with_game_time_label_None(self, appender, buffer):
         """game_time_label が None でも正常に追加される"""
         player_id = PlayerId(2)
         output = ObservationOutput(
@@ -95,7 +95,7 @@ class TestObservationAppenderNormal:
         assert len(entries) == 3
         assert [e.output.structured["index"] for e in entries] == [0, 1, 2]
 
-    def test_runtime_context_provider_passed_to_buffer(self) -> None:
+    def test_runtime_context_provider_passed_buffer(self) -> None:
         """runtime_context_provider が戻した値が buffer.append に渡る"""
         calls = []
 
@@ -166,7 +166,7 @@ class TestObservationAppenderTraceRecording:
             schedules_turn=True,
         )
 
-    def test_trace_recorder_注入時_observation_イベントが記録される(self):
+    def test_trace_recorder_observation_event_recorded(self):
         """append 1 件で trace に kind=OBSERVATION が 1 件残る。"""
         from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
 
@@ -205,7 +205,7 @@ class TestObservationAppenderTraceRecording:
         assert ev.payload["schedules_turn"] is True
         assert ev.payload["game_time_label"] == "深夜 0:25"
 
-    def test_trace_recorder_未注入なら_record_しない(self):
+    def test_trace_recorder_uninjected_record(self):
         """trace_recorder=None なら buffer は更新するが trace 呼び出しなし。"""
         buffer = DefaultObservationContextBuffer()
         appender = ObservationAppender(buffer=buffer)
@@ -217,7 +217,7 @@ class TestObservationAppenderTraceRecording:
         )
         assert len(buffer.get_observations(PlayerId(1))) == 1
 
-    def test_provider_経由で_遅延注入された_recorder_に追従する(self):
+    def test_provider_via_recorder(self):
         """trace_recorder_provider 経路: 後から差し替えられた recorder を毎回 lookup する。"""
         from ai_rpg_world.application.trace import NullTraceRecorder
 
@@ -252,7 +252,7 @@ class TestObservationAppenderTraceRecording:
         )
         assert len(seen) == 1
 
-    def test_trace_record_失敗は_buffer_append_を止めない(self):
+    def test_trace_record_failure_buffer_append_does_not_stop(self):
         """recorder.record が例外を投げても buffer への append は完了する。"""
         from ai_rpg_world.application.trace import NullTraceRecorder
 

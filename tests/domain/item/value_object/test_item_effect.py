@@ -40,12 +40,12 @@ class TestRecoverMpEffect:
         effect = RecoverMpEffect(amount=30)
         assert effect.amount == 30
 
-    def test_create_with_zero_amount(self):
+    def test_create_with_zero_amount_2(self):
         """0MP回復のテスト"""
         effect = RecoverMpEffect(amount=0)
         assert effect.amount == 0
 
-    def test_invalid_negative_amount(self):
+    def test_invalid_negative_amount_2(self):
         """無効な負のMP回復量のテスト"""
         with pytest.raises(ItemEffectValidationException) as exc_info:
             RecoverMpEffect(amount=-5)
@@ -60,12 +60,12 @@ class TestGoldEffect:
         effect = GoldEffect(amount=100)
         assert effect.amount == 100
 
-    def test_create_with_zero_amount(self):
+    def test_create_with_zero_amount_3(self):
         """0ゴールドのテスト"""
         effect = GoldEffect(amount=0)
         assert effect.amount == 0
 
-    def test_invalid_negative_amount(self):
+    def test_invalid_negative_amount_3(self):
         """無効な負のゴールド量のテスト"""
         with pytest.raises(ItemEffectValidationException) as exc_info:
             GoldEffect(amount=-10)
@@ -80,12 +80,12 @@ class TestExpEffect:
         effect = ExpEffect(amount=100)
         assert effect.amount == 100
 
-    def test_create_with_zero_amount(self):
+    def test_create_with_zero_amount_4(self):
         """0経験値のテスト"""
         effect = ExpEffect(amount=0)
         assert effect.amount == 0
 
-    def test_invalid_negative_amount(self):
+    def test_invalid_negative_amount_4(self):
         """無効な負の経験値量のテスト"""
         with pytest.raises(ItemEffectValidationException) as exc_info:
             ExpEffect(amount=-25)
@@ -115,7 +115,7 @@ class TestCompositeItemEffect:
         composite = CompositeItemEffect(effects=(heal_effect,))
         assert composite.effects == (heal_effect,)
 
-    def test_effects_none_raises(self):
+    def test_effects_None_raises(self):
         """effects が None の場合は ItemEffectValidationException"""
         with pytest.raises(ItemEffectValidationException) as exc_info:
             CompositeItemEffect(effects=None)  # type: ignore[arg-type]
@@ -173,18 +173,20 @@ class TestReviveEffect:
         effect = ReviveEffect(hp_rate=1.0)
         assert effect.hp_rate == 1.0
 
-    def test_negative_rate_は_例外(self) -> None:
+    def test_negative_rate_raises_exception(self) -> None:
+        """negativerate は例外。"""
         with pytest.raises(ItemEffectValidationException) as ei:
             ReviveEffect(hp_rate=-0.1)
         assert "hp_rate" in str(ei.value)
 
-    def test_one_を_超える_rate_は_例外(self) -> None:
+    def test_one_rate_raises_exception(self) -> None:
         """1.0 超 (= max_hp 以上) は revive の意味を超える。"""
         with pytest.raises(ItemEffectValidationException) as ei:
             ReviveEffect(hp_rate=1.5)
         assert "hp_rate" in str(ei.value)
 
-    def test_frozen_dataclass_で_immutable(self) -> None:
+    def test_frozen_dataclass_immutable(self) -> None:
+        """frozen dataclass で immutable。"""
         effect = ReviveEffect(hp_rate=0.4)
         with pytest.raises(Exception):
             effect.hp_rate = 0.5  # type: ignore[misc]

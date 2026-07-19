@@ -52,7 +52,8 @@ def _make_handler(
 class TestPendingRegistration:
     """ダウン event 受信で grace_timer に pending 登録される (Issue #621 新仕様)。"""
 
-    def test_PlayerDownedEvent_受信で_grace_timer_に_register_される(self) -> None:
+    def test_player_downed_event_grace_timer_register(self) -> None:
+        """PlayerDownedEvent 受信で grace timer に register される。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
         handler = _make_handler(reg=reg, timer=timer, tick=42)
@@ -68,7 +69,7 @@ class TestPendingRegistration:
         )
         assert PlayerId(1) not in overdue_before
 
-    def test_PlayerDownedEvent_受信時は_outcome_は_DEAD_には_ならない(self) -> None:
+    def test_player_downed_event_outcome_dead(self) -> None:
         """旧仕様の即時 DEAD ではなく、UNRESOLVED のまま pending 登録のみ。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
@@ -78,7 +79,7 @@ class TestPendingRegistration:
 
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
 
-    def test_既に_RESCUED_な_player_は_pending_登録されない(self) -> None:
+    def test_rescued_player_pending(self) -> None:
         """救助確定済みの player に対する後発 PlayerDownedEvent は無視。
         旧仕様で「冪等で no-op」だった部分の新仕様での同等保証。
         """
@@ -92,7 +93,7 @@ class TestPendingRegistration:
         assert timer.is_pending(PlayerId(1)) is False
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.RESCUED
 
-    def test_既に_DEAD_な_player_は_pending_再登録されない(self) -> None:
+    def test_dead_player_pending(self) -> None:
         """DEAD 確定後の重複 PlayerDownedEvent もそのまま無視 (= 冪等)。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         reg.set_outcome(PlayerId(1), PlayerOutcomeEnum.DEAD)
@@ -103,7 +104,8 @@ class TestPendingRegistration:
 
         assert timer.is_pending(PlayerId(1)) is False
 
-    def test_複数_player_の_pending_は_独立に_処理(self) -> None:
+    def test_multiple_player_pending_independently(self) -> None:
+        """複数 player の pending は独立に処理。"""
         reg = PlayerOutcomeRegistry.new_for_players(
             [PlayerId(1), PlayerId(2), PlayerId(3)]
         )
@@ -121,7 +123,7 @@ class TestPendingRegistration:
 class TestTickProvider:
     """current_tick_provider が呼ばれて、その値が register の起点になる。"""
 
-    def test_provider_が_event_受信時の_tick_を_返す(self) -> None:
+    def test_returns_provider_event_tick(self) -> None:
         """tick が時間とともに変わる前提 (= simulation 上は handle 時点の current tick)。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
@@ -143,7 +145,8 @@ class TestTickProvider:
 
 
 class TestValidation:
-    def test_outcome_registry_None_は_TypeError(self) -> None:
+    def test_outcome_registry_none_raises_type_error(self) -> None:
+        """outcome registry None は TypeError。"""
         with pytest.raises(TypeError):
             PlayerDownedOutcomeHandler(
                 outcome_registry=None,  # type: ignore[arg-type]
@@ -151,7 +154,8 @@ class TestValidation:
                 current_tick_provider=lambda: 0,
             )
 
-    def test_grace_timer_None_は_TypeError(self) -> None:
+    def test_grace_timer_none_raises_type_error(self) -> None:
+        """grace timer None は TypeError。"""
         with pytest.raises(TypeError):
             PlayerDownedOutcomeHandler(
                 outcome_registry=PlayerOutcomeRegistry(),
@@ -159,7 +163,8 @@ class TestValidation:
                 current_tick_provider=lambda: 0,
             )
 
-    def test_current_tick_provider_None_は_TypeError(self) -> None:
+    def test_current_tick_provider_none_raises_type_error(self) -> None:
+        """current tick provider None は TypeError。"""
         with pytest.raises(TypeError):
             PlayerDownedOutcomeHandler(
                 outcome_registry=PlayerOutcomeRegistry(),

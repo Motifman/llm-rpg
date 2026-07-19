@@ -48,7 +48,7 @@ class TestPhaseForTool:
         """
         assert phase_for_tool(tool_name) == expected
 
-    def test_unknown_tool_falls_back_to_other(self) -> None:
+    def test_unknown_tool_falls_back_other(self) -> None:
         """既知の prefix にも該当しないツールは OTHER。"""
         assert phase_for_tool("totally_unknown_tool") == IntentPhase.OTHER
 
@@ -72,7 +72,7 @@ class TestSpotGraphToolsAreExplicitlyMapped:
     連動を忘れる」silent failure パターンに近いため、構造テストで検出する。
     """
 
-    def test_全ての_spot_graph_tool_が_明示_phase_dict_に登録されている(self) -> None:
+    def test_all_spot_graph_tool_phase_dict(self) -> None:
         """``get_spot_graph_specs()`` が返す全 tool 名について、
         ``_EXPLICIT_TOOL_PHASE`` dict の key に含まれることを確認。
 

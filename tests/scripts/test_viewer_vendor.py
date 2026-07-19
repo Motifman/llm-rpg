@@ -34,7 +34,7 @@ def _fake_resp(data: bytes):
 class TestFetchCytoscape:
     """fetch_cytoscape の挙動。"""
 
-    def test_キャッシュにあれば_ダウンロードしない(
+    def test_downed_3(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """キャッシュ済みファイルは再 download しない (urlopen 呼ばれない)。"""
@@ -52,7 +52,7 @@ class TestFetchCytoscape:
         assert asset.content == content.decode("utf-8")
         mock_open.assert_not_called()
 
-    def test_キャッシュ無しなら_ダウンロードして保存(
+    def test_downed_2(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """初回は urlopen が呼ばれ、ファイルがキャッシュされる。"""
@@ -70,7 +70,7 @@ class TestFetchCytoscape:
         assert cache_file.read_bytes() == content
         assert asset.content == content.decode("utf-8")
 
-    def test_SHA256_不一致なら_VendorFetchError(
+    def test_sha256_matches_vendor_fetch_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """download した内容のハッシュが期待と違うと例外、キャッシュにも書かない。"""
@@ -86,7 +86,7 @@ class TestFetchCytoscape:
         cache_file = tmp_path / f"cytoscape-{vendor.CYTOSCAPE_VERSION}.min.js"
         assert not cache_file.exists()
 
-    def test_offline_mode_でキャッシュなしなら_エラー(
+    def test_offline_mode_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """``offline=True`` で未キャッシュなら download 試みずエラー。"""
@@ -96,7 +96,7 @@ class TestFetchCytoscape:
                 vendor.fetch_cytoscape(offline=True)
         mock_open.assert_not_called()
 
-    def test_キャッシュが壊れていれば_再ダウンロード(
+    def test_downed(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """SHA 不一致のキャッシュは破棄して download し直す。"""

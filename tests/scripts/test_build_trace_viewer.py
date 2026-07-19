@@ -116,12 +116,12 @@ def _sample_events() -> list[TraceEvent]:
 class TestLoadScenarioTopology:
     """scenario.json からの spot graph 抽出。"""
 
-    def test_存在しない_scenario_は_空のトポロジを返す(self, tmp_path: Path) -> None:
+    def test_returns_empty_scenario(self, tmp_path: Path) -> None:
         """ファイルがないときも crash せず空で返す。"""
         topo = load_scenario_topology(tmp_path / "missing.json")
         assert topo == {"spots": [], "connections": []}
 
-    def test_標準的な_spot_graph_を抽出できる(self, tmp_path: Path) -> None:
+    def test_spot_graph(self, tmp_path: Path) -> None:
         """spot_graph.spots と spot_graph.connections を読む。"""
         scen = tmp_path / "s.json"
         scen.write_text(
@@ -151,7 +151,7 @@ class TestLoadScenarioTopology:
         assert topo["connections"][0]["from"] == "a"
         assert topo["connections"][0]["bidirectional"] is True
 
-    def test_壊れた_JSON_でも_空のトポロジを返す(self, tmp_path: Path) -> None:
+    def test_returns_empty_json(self, tmp_path: Path) -> None:
         """parse 失敗時もクラッシュせず空で返す。"""
         scen = tmp_path / "broken.json"
         scen.write_text("{not json", encoding="utf-8")
@@ -162,7 +162,7 @@ class TestLoadScenarioTopology:
 class TestCollectPlayers:
     """trace から登場プレイヤー一覧を抽出。"""
 
-    def test_最終位置を_position_change_の最後で決定する(self) -> None:
+    def test_position_change_last(self) -> None:
         """同じプレイヤーが複数回移動した場合、最後の to_spot_id が final になる。"""
         players = collect_players(_sample_events())
         # カイト (id=1) は s1 のまま、リン (id=2) は s2 → s3 で final=s3
@@ -170,19 +170,19 @@ class TestCollectPlayers:
         assert by_id[1]["final_spot_id"] == "s1"
         assert by_id[2]["final_spot_id"] == "s3"
 
-    def test_player_name_は_payload_から_拾われる(self) -> None:
+    def test_player_name_payload_picked_up(self) -> None:
         """payload.player_name があれば名前として使う。"""
         players = collect_players(_sample_events())
         by_id = {p["id"]: p for p in players}
         assert by_id[1]["name"] == "カイト"
         assert by_id[2]["name"] == "リン"
 
-    def test_player_id_順に_ソートされる(self) -> None:
+    def test_player_id_sorted(self) -> None:
         """出力順は id 昇順 (UI 安定性のため)。"""
         players = collect_players(_sample_events())
         assert [p["id"] for p in players] == [1, 2]
 
-    def test_spot_name_to_id_で_trace_と_scenario_の_id_差分を吸収する(self) -> None:
+    def test_spot_name_id_trace_scenario_id(self) -> None:
         """trace の to_spot_id="1" と scenario の id="control_room" を spot_name "制御室" 経由で結びつける。"""
         events = [
             TraceEvent(
@@ -208,14 +208,14 @@ class TestCollectPlayers:
 class TestGroupEventsByTick:
     """tick 別 grouping。"""
 
-    def test_tick_None_は_別グループとして扱われる(self) -> None:
+    def test_tick_none_different(self) -> None:
         """run_start (tick=None) と tick=0 以降は分かれる。"""
         grouped = group_events_by_tick(_sample_events())
         assert None in grouped
         assert 0 in grouped
         assert 1 in grouped
 
-    def test_llm_call_と_prompt_section_breakdown_は_除外される(self) -> None:
+    def test_llm_call_prompt_section_breakdown_excluded(self) -> None:
         """実験 #26 user feedback: 性能計測系 kind は timeline から非表示。"""
         events = [
             TraceEvent(seq=1, timestamp="t", kind="action", tick=0, player_id=1, payload={"tool": "x"}),
@@ -230,14 +230,15 @@ class TestGroupEventsByTick:
         assert "llm_call" not in kinds_at_0
         assert "prompt_section_breakdown" not in kinds_at_0
 
-    def test_hide_metrics_kinds_False_で_表示できる(self) -> None:
+    def test_hide_metrics_kinds_false_can_display(self) -> None:
+        """hidemetricskindsFalse で表示できる。"""
         events = [
             TraceEvent(seq=1, timestamp="t", kind="llm_call", tick=0, player_id=1, payload={}),
         ]
         grouped = group_events_by_tick(events, hide_metrics_kinds=False)
         assert any(e.kind == "llm_call" for e in grouped[0])
 
-    def test_重複_observation_は_除外される(self) -> None:
+    def test_duplicate_observation_excluded(self) -> None:
         """同 tick / 同 prose / 同 structured.type の observation は 1 件に。
         (4 player broadcast で同じ prose が 4 連続並ぶのを抑制)"""
         events = [
@@ -249,7 +250,7 @@ class TestGroupEventsByTick:
         obs = [e for e in grouped[0] if e.kind == "observation"]
         assert len(obs) == 1, f"重複除外後は 1 件のはずが {len(obs)} 件"
 
-    def test_別_prose_の_observation_は_両方残る(self) -> None:
+    def test_different_prose_observation_remains(self) -> None:
         """prose が違えば別 event として両方残す。"""
         events = [
             TraceEvent(seq=1, timestamp="t", kind="observation", tick=0, player_id=1,
@@ -265,13 +266,15 @@ class TestGroupEventsByTick:
 class TestFormatEventBody:
     """個別 event の 1 行サマリ HTML。"""
 
-    def test_action_は_tool_名を含む(self) -> None:
+    def test_includes_action_tool(self) -> None:
+        """action は tool 名を含む。"""
         e = _sample_events()[3]
         out = _format_event_body(e)
         assert "examine" in out
         assert "panel" in out
 
-    def test_action_result_失敗は_NG_マーク(self) -> None:
+    def test_action_result_failure_ng(self) -> None:
+        """action result 失敗は NG マーク。"""
         e = TraceEvent(
             seq=1,
             timestamp="t",
@@ -284,13 +287,15 @@ class TestFormatEventBody:
         assert "[NG]" in out
         assert "broke" in out
 
-    def test_position_change_初期配置は_spawn_と表示(self) -> None:
+    def test_position_change_initial_position_spawn(self) -> None:
+        """position change 初期配置は spawn と表示。"""
         e = _sample_events()[1]  # カイト初期配置
         out = _format_event_body(e)
         assert "spawn" in out
         assert "制御室" in out
 
-    def test_position_change_移動は_矢印で_from_to(self) -> None:
+    def test_position_change(self) -> None:
+        """position change 移動は 矢印で from to。"""
         e = _sample_events()[5]  # リン s2 → s3
         out = _format_event_body(e)
         assert "→" in out
@@ -300,7 +305,7 @@ class TestFormatEventBody:
 class TestRenderViewerHtml:
     """end-to-end の HTML 出力。"""
 
-    def test_HTML_に_必須要素が含まれる(self) -> None:
+    def test_html_element_included(self) -> None:
         """ヘッダ / map 用 #cy / event log / Cytoscape script。"""
         topo = {
             "spots": [{"id": "s1", "name": "制御室"}, {"id": "s2", "name": "廊下"}, {"id": "s3", "name": "金庫室"}],
@@ -325,7 +330,7 @@ class TestRenderViewerHtml:
         # 全角化なしで日本語の spot 名も出る
         assert "制御室" in out
 
-    def test_scenario_が空でも_HTML_は生成できる(self) -> None:
+    def test_scenario_empty_html_can_create(self) -> None:
         """topology 空でも HTML は生成される (map が空表示になるだけ)。"""
         out = render_viewer_html(
             title="no-scenario",
@@ -335,7 +340,7 @@ class TestRenderViewerHtml:
         )
         assert 'id="cy"' in out
 
-    def test_outcome_は_run_end_payload_から取られる(self) -> None:
+    def test_outcome_run_end_payload(self) -> None:
         """RUN_END の payload.outcome が header に出る。"""
         out = render_viewer_html(
             title="x",
@@ -349,7 +354,7 @@ class TestRenderViewerHtml:
 class TestMainCli:
     """``main()`` の CLI 動作 (vendor download は mock)。"""
 
-    def test_run_dir_から_viewer_html_を生成する(self, tmp_path: Path) -> None:
+    def test_run_dir_viewer_html(self, tmp_path: Path) -> None:
         """trace.jsonl + scenario.json から viewer.html を出力。"""
         from scripts import build_trace_viewer  # noqa: WPS433
 
@@ -390,7 +395,7 @@ class TestMainCli:
         assert "P1" in content
         assert 'id="cy"' in content
 
-    def test_trace_jsonl_が無いと_エラー(self, tmp_path: Path) -> None:
+    def test_trace_jsonl_error(self, tmp_path: Path) -> None:
         """trace.jsonl 未配置なら argparse のエラーで終わる (SystemExit)。"""
         from scripts import build_trace_viewer  # noqa: WPS433
 
@@ -405,7 +410,7 @@ class TestMainCli:
 class TestPositionTimeline:
     """build_position_timeline の挙動 (PR γ playback の入力)。"""
 
-    def test_各_tick_でのスナップショットを返す(self) -> None:
+    def test_returns_tick(self) -> None:
         """各 position_change tick のスナップショットが順に積まれる。"""
         events = _sample_events()
         timeline = build_position_timeline(
@@ -416,7 +421,7 @@ class TestPositionTimeline:
         # tick 2: リンが移動 → カイトはまだ s1, リン=s3
         assert timeline[2] == {1: "s1", 2: "s3"}
 
-    def test_position_change_の無い_tick_はスナップショット未登録(self) -> None:
+    def test_position_change_tick_unregistered(self) -> None:
         """変化が無い tick はキーが入らない (JS 側で前進補間する想定)。"""
         events = _sample_events()
         timeline = build_position_timeline(events)
@@ -427,7 +432,7 @@ class TestPositionTimeline:
 class TestMemoStateTimeline:
     """build_memo_state_timeline の挙動 (PR γ memo panel 用)。"""
 
-    def test_memo_add_で_active_な_memo_が記録される(self) -> None:
+    def test_memo_add_active_memo_recorded(self) -> None:
         """memo_add 発生 tick のスナップショットに該当 memo が active で含まれる。"""
         events = [
             TraceEvent(
@@ -446,7 +451,7 @@ class TestMemoStateTimeline:
         assert snap[0]["status"] == "active"
         assert snap[0]["added_tick"] == 3
 
-    def test_memo_done_で_status_が_done_になる(self) -> None:
+    def test_memo_done_status_done(self) -> None:
         """memo_done 後のスナップショットで該当 memo の status=done。"""
         events = [
             TraceEvent(
@@ -478,7 +483,7 @@ class TestMemoStateTimeline:
 class TestEventHeatmap:
     """compute_event_heatmap の出力。"""
 
-    def test_kind_別に_tick_配列を返す(self) -> None:
+    def test_returns_kind_tick_column(self) -> None:
         """action / observation / memo / position_change それぞれの tick 配列が揃う。"""
         events = _sample_events()
         hm = compute_event_heatmap(events)
@@ -493,8 +498,8 @@ class TestEventHeatmap:
 class TestComputeTraceMoments:
     """compute_trace_moments (PR ε): trace navigator の自動ブックマーク抽出。"""
 
-    def test_run_start_と_run_end_を_start_end_kind_で_抽出する(self) -> None:
-        """RUN_START → kind="start", RUN_END → kind="end" (label=outcome)。"""
+    def test_run_start_run_end_start_end_kind(self) -> None:
+        """RUN_START と RUN_END は開始・終了の moment として扱われる。"""
         events = _sample_events()
         moments = compute_trace_moments(events)
         kinds = [m["kind"] for m in moments]
@@ -503,7 +508,7 @@ class TestComputeTraceMoments:
         end_m = next(m for m in moments if m["kind"] == "end")
         assert end_m["label"] == "WIN"
 
-    def test_memo_add_は_memo_kind_で_score_中(self) -> None:
+    def test_memo_add_has_medium_score_from_memo_kind(self) -> None:
         """memo_add は kind="memo", score≈65, content が detail に入る。"""
         events = [
             TraceEvent(
@@ -521,7 +526,7 @@ class TestComputeTraceMoments:
         assert moments[0]["detail"] == "power_on を維持"
         assert moments[0]["score"] == 65
 
-    def test_failed_action_result_は_failed_kind_で_score_高(self) -> None:
+    def test_failed_action_result_has_high_score_from_failed_kind(self) -> None:
         """action_result.success=False は kind="failed" (score=85)。"""
         events = [
             TraceEvent(
@@ -538,7 +543,7 @@ class TestComputeTraceMoments:
         assert moments[0]["kind"] == "failed"
         assert moments[0]["score"] == 85
 
-    def test_position_change_の初期配置は_moment_に含めない(self) -> None:
+    def test_excludes_position_change_initial_position_moment(self) -> None:
         """from_spot_id=None は除外、実 move のみ kind="move" として拾う。"""
         events = [
             TraceEvent(
@@ -564,7 +569,7 @@ class TestComputeTraceMoments:
         assert moments[0]["kind"] == "move"
         assert "金庫室" in moments[0]["label"]
 
-    def test_成功_action_result_で_キーワード含むなら_result_kind_で拾う(self) -> None:
+    def test_includes_result_kind_finds_success_action_result_key(self) -> None:
         """result_summary に "=true" / "OPEN" / "latch" 等の状態変化語が含まれれば kind="result"。"""
         events = [
             TraceEvent(
@@ -592,7 +597,8 @@ class TestComputeTraceMoments:
 class TestTacticalThemeMarkers:
     """PR ε: viewer HTML が tactical 風テーマの要素を含む回帰防止。"""
 
-    def test_HTML_に_tactical_テーマ要素が含まれる(self) -> None:
+    def test_html_tactical_element_included(self) -> None:
+        """HTML に tactical テーマ要素が含まれる。"""
         out = render_viewer_html(
             title="t",
             events=_sample_events(),
@@ -628,7 +634,7 @@ class TestSpeechTimeline:
             payload={"tool": tool, "arguments": args},
         )
 
-    def test_speech_say_は_kind_speech_で_拾う(self) -> None:
+    def test_speech_say_is_found_by_speech_kind(self) -> None:
         """``say`` / ``speech_*`` ツールの message を kind="speech" として拾う。"""
         events = [self._evt(1, 3, 1, "say", {"message": "hello"})]
         tl = build_speech_timeline(events)
@@ -636,7 +642,7 @@ class TestSpeechTimeline:
         assert tl[3][0]["text"] == "hello"
         assert tl[3][0]["player_id"] == 1
 
-    def test_inner_thought_は_kind_thought_で_拾う(self) -> None:
+    def test_finds_inner_thought_kind_thought(self) -> None:
         """arguments.inner_thought は kind="thought" として別ものとして拾う。"""
         events = [
             self._evt(1, 5, 1, "examine", {"target": "x", "inner_thought": "考えごと"})
@@ -647,7 +653,7 @@ class TestSpeechTimeline:
         assert "thought" in kinds
         assert "speech" not in kinds
 
-    def test_say_と_inner_thought_両方ある_action_は_両方拾う(self) -> None:
+    def test_finds_say_inner_thought_action(self) -> None:
         """同一 action に message と inner_thought 両方あれば bubble 2 件。"""
         events = [
             self._evt(1, 3, 1, "speech_say", {"message": "公開", "inner_thought": "心声"})
@@ -656,7 +662,7 @@ class TestSpeechTimeline:
         kinds = sorted([b["kind"] for b in tl[3]])
         assert kinds == ["speech", "thought"]
 
-    def test_bubble_は_既定_1_tick_だけ_表示される(self) -> None:
+    def test_bubble_default_one_tick_displayed(self) -> None:
         """実験 #26 user feedback: 当該 tick だけに留めて次 tick には残さない。
         OFF / ON_FULL の trace で「次 tick まで残る」のが視認上の重なりの
         原因だったため persistence default を 2 → 1 に変更。"""
@@ -665,14 +671,14 @@ class TestSpeechTimeline:
         assert 3 in tl
         assert 4 not in tl  # persistence=1 で発生 tick のみ
 
-    def test_明示的に_persistence_を_長くもできる(self) -> None:
+    def test_persistence(self) -> None:
         """テスト目的や旧挙動互換が必要なら kwarg で長くも設定可能。"""
         events = [self._evt(1, 3, 1, "say", {"message": "hi"})]
         tl = build_speech_timeline(events, bubble_persistence=3)
         assert 3 in tl and 4 in tl and 5 in tl
         assert 6 not in tl
 
-    def test_同_player_同_kind_の次の発言は_前を上書きする(self) -> None:
+    def test_player_kind_before_overwrites(self) -> None:
         """同じ player の連続発言は前の bubble を即上書き (overlap しない)。"""
         events = [
             self._evt(1, 3, 1, "say", {"message": "first"}),
@@ -684,7 +690,7 @@ class TestSpeechTimeline:
         # tick 4 は second だけ (first は次発言で打ち切り)
         assert [b["text"] for b in tl[4]] == ["second"]
 
-    def test_長い_inner_thought_は_truncate_される(self) -> None:
+    def test_inner_thought_truncate(self) -> None:
         """100 字を超える inner_thought は "…" で切り詰める。"""
         long_text = "あ" * 200
         events = [self._evt(1, 1, 1, "examine", {"inner_thought": long_text})]
@@ -693,7 +699,7 @@ class TestSpeechTimeline:
         assert len(text) <= 100
         assert text.endswith("…")
 
-    def test_非_speech_かつ_inner_thought_無しは_timeline_に_入らない(self) -> None:
+    def test_non_speech_inner_thought_timeline(self) -> None:
         """普通の action は bubble 化されない (map をうるさくしない)。"""
         events = [self._evt(1, 3, 1, "examine", {"target": "panel"})]
         tl = build_speech_timeline(events)
@@ -703,7 +709,7 @@ class TestSpeechTimeline:
 class TestRenderViewerHtmlSpeech:
     """render_viewer_html が speech bubble UI を埋め込むか確認。"""
 
-    def test_HTML_に_speechTimeline_と_toggle_thoughts_と_bubble_CSS_が含まれる(self) -> None:
+    def test_html_speech_timeline_toggle_thoughts_bubble_css_included(self) -> None:
         """JS 側に speechTimeline 配列、UI に inner_thought トグル、CSS に .bubble.speech 等。"""
         out = render_viewer_html(
             title="t",
@@ -721,7 +727,7 @@ class TestRenderViewerHtmlSpeech:
 class TestRenderViewerHtmlSiblingLinks:
     """episodic / timeline への遷移リンクが htmlpreview 経由でも壊れない仕掛けを確認する。"""
 
-    def test_episodic_timeline_リンクは_data_sibling_属性で兄弟ファイル名を持つ(self) -> None:
+    def test_episodic_timeline_data_sibling_attribute_file(self) -> None:
         """相対 href だけだと htmlpreview 経由で raw gist (text/plain) に解決され
         ソース表示になるため、JS 書き換えの起点として data-sibling を持たせる。"""
         out = render_viewer_html(
@@ -733,7 +739,7 @@ class TestRenderViewerHtmlSiblingLinks:
         assert 'data-sibling="episodic.html"' in out
         assert 'data-sibling="timeline.html"' in out
 
-    def test_htmlpreview_経由で兄弟リンクを_htmlpreview_url_に書き換える_JS_が埋め込まれる(self) -> None:
+    def test_htmlpreview_via_htmlpreview_url_js(self) -> None:
         """viewer 自身が htmlpreview.github.io 経由で配信されている場合、兄弟
         リンクも htmlpreview でラップした URL に書き換える JS が含まれる。"""
         out = render_viewer_html(

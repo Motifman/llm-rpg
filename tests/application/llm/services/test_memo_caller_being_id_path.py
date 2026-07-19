@@ -67,7 +67,7 @@ def provisioning(repo: InMemoryBeingRepository) -> BeingProvisioningService:
 class TestMemoToolExecutorNewPath:
     """MemoToolExecutor: Resolver 注入時に being_id store に書く。"""
 
-    def test_memo_add_は_being_id_store_に書く(
+    def test_memo_add_being_id_store(
         self,
         memo_store: InMemoryMemoStore,
         resolver: BeingAttachmentResolver,
@@ -92,7 +92,7 @@ class TestMemoToolExecutorNewPath:
         assert len(entries) == 1
         assert entries[0].content == "via being"
 
-    def test_memo_list_は_being_id_store_から読む(
+    def test_memo_list_being_id_store(
         self,
         memo_store: InMemoryMemoStore,
         resolver: BeingAttachmentResolver,
@@ -113,7 +113,7 @@ class TestMemoToolExecutorNewPath:
         assert result.success is True
         assert "stored via being" in result.message
 
-    def test_memo_done_は_being_id_store_で完了する(
+    def test_memo_done_being_id_store_completes(
         self,
         memo_store: InMemoryMemoStore,
         resolver: BeingAttachmentResolver,
@@ -135,7 +135,7 @@ class TestMemoToolExecutorNewPath:
         # being store からは消えるが、旧 store は空のまま (= 独立性維持)
         assert memo_store.list_uncompleted_by_being(being_id) == []
 
-    def test_provision_せず_Resolver_注入だけだと_RuntimeError_で_fail_fast(
+    def test_provision_resolver_fail_fast_raises_runtime_error(
         self,
         memo_store: InMemoryMemoStore,
         resolver: BeingAttachmentResolver,
@@ -159,7 +159,7 @@ class TestMemoToolExecutorNewPath:
 class TestMemoCompletionHintServiceNewPath:
     """MemoCompletionHintService: Resolver 注入時に being_id store から read。"""
 
-    def test_detect_は_being_id_store_の_memo_を見る(
+    def test_detect_being_id_store_memo(
         self,
         memo_store: InMemoryMemoStore,
         resolver: BeingAttachmentResolver,
@@ -234,7 +234,7 @@ class TestPromptBuilderNewPath:
     helper を直接テストする (= dual-path 分岐の単体検証で十分)。
     """
 
-    def test_fetch_uncompleted_memos_は_being_経路を使う(
+    def test_uses_fetch_uncompleted_memos_being(
         self,
         memo_store: InMemoryMemoStore,
         resolver: BeingAttachmentResolver,

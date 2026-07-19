@@ -61,7 +61,7 @@ def _make_dto(*monsters: SpotGraphMonsterEntry) -> PlayerCurrentStateDto:
 class TestMonsterLabeling:
     """M1, M2 ラベル + MonsterToolRuntimeTargetDto 登録。"""
 
-    def test_複数個体は_m1_m2_と採番される(self) -> None:
+    def test_multiple_m1_m2(self) -> None:
         """先頭から順に M1, M2 を割り当てる（揮発採番）。"""
         dto = _make_dto(
             SpotGraphMonsterEntry(
@@ -95,7 +95,7 @@ class TestMonsterLabeling:
         assert targets["M1"].display_name == "灰色のオオカミ #1"
         assert targets["M2"].display_name == "灰色のオオカミ #2"
 
-    def test_target_に_monster_id_が乗る(self) -> None:
+    def test_target_monster_id_included(self) -> None:
         """ToolRuntimeTargetDto.monster_id にドメイン側 ID が入る。"""
         dto = _make_dto(
             SpotGraphMonsterEntry(
@@ -113,7 +113,7 @@ class TestMonsterLabeling:
         assert target.monster_id == 101
         assert target.display_name == "灰色のオオカミ"
 
-    def test_死体も同じ_m_prefix_で_target_に登録される(self) -> None:
+    def test_corpses_register_same_m_prefix_targets(self) -> None:
         """死体も attack 対象にはならないが、M-prefix で内部 target に登録され
         将来 examine 等のツールから参照可能にしておく。
 
@@ -136,7 +136,7 @@ class TestMonsterLabeling:
         assert isinstance(target, MonsterToolRuntimeTargetDto)
         assert target.monster_id == 101
 
-    def test_モンスター不在のときは_空の事実を明示する(self) -> None:
+    def test_empty_monster_fact_is_rendered_when_no_monsters_exist(self) -> None:
         """Issue #283 後続の五感対称化: monsters_at_spot が空でも
         「モンスターはいない」事実を明示する。M-prefix の target は当然増えない。
         旧実装は section ごと省略していたため、LLM が「section 無し = いない」を
@@ -151,7 +151,7 @@ class TestMonsterLabeling:
             not k.startswith("M") for k in result.tool_runtime_context.targets
         )
 
-    def test_health_と_behavior_がラベル説明に含まれる(self) -> None:
+    def test_health_behavior_label_included(self) -> None:
         """説明部分にも behavior と health の日本語が混じる。"""
         dto = _make_dto(
             SpotGraphMonsterEntry(

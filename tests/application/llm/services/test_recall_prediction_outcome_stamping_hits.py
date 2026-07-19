@@ -101,9 +101,10 @@ def _seed_recall_buffer(
 class TestRecordRecallHitsHappyPath:
     """flag ON + 全条件が揃ったときに hit が加算される。"""
 
-    def test_的中_かつ_expected_result_ありなら_in_context_episode_のhitが加算される(
+    def test_expected_result_context_episode_hit_incremented(
         self,
     ) -> None:
+        """的中 かつ expected result ありなら in context episode のhitが加算される。"""
         buffer = InMemoryEpisodicRecallBufferStore()
         success = InMemoryEpisodicRecallSuccessStore()
         _seed_recall_buffer(
@@ -123,9 +124,10 @@ class TestRecordRecallHitsHappyPath:
         )
         assert success.get_hit_count_by_being(_BEING, "ep-source") == 1
 
-    def test_複数_episode_が_同じ_prediction_context_id_なら全件加算される(
+    def test_multiple_episode_same_prediction_context_id_all_incremented(
         self,
     ) -> None:
+        """複数 episode が同じ predictioncontextid なら全件加算される。"""
         buffer = InMemoryEpisodicRecallBufferStore()
         success = InMemoryEpisodicRecallSuccessStore()
         _seed_recall_buffer(
@@ -155,7 +157,8 @@ class TestRecordRecallHitsHappyPath:
         assert success.get_hit_count_by_being(_BEING, "ep-a") == 1
         assert success.get_hit_count_by_being(_BEING, "ep-b") == 1
 
-    def test_複数回呼ばれると加算され続ける(self) -> None:
+    def test_calls_multiple(self) -> None:
+        """複数回呼ばれると加算され続ける。"""
         buffer = InMemoryEpisodicRecallBufferStore()
         success = InMemoryEpisodicRecallSuccessStore()
         _seed_recall_buffer(
@@ -179,7 +182,8 @@ class TestRecordRecallHitsHappyPath:
 class TestRecordRecallHitsGuards:
     """安全な縮退条件 (= 導入前と一致) を保証する。"""
 
-    def test_flag_OFF_なら加算しない(self) -> None:
+    def test_flag_off(self) -> None:
+        """flag OFF なら加算しない。"""
         buffer = InMemoryEpisodicRecallBufferStore()
         success = InMemoryEpisodicRecallSuccessStore()
         _seed_recall_buffer(
@@ -199,7 +203,8 @@ class TestRecordRecallHitsGuards:
         )
         assert success.get_hit_count_by_being(_BEING, "ep-source") == 0
 
-    def test_recall_buffer_store_未配線なら加算しない(self) -> None:
+    def test_recall_buffer_store_unwired(self) -> None:
+        """recall buffer store 未配線なら加算しない。"""
         success = InMemoryEpisodicRecallSuccessStore()
         record_recall_hits_if_applicable(
             recall_buffer_store=None,
@@ -215,7 +220,8 @@ class TestRecordRecallHitsGuards:
         )
         assert success.get_hit_count_by_being(_BEING, "ep-source") == 0
 
-    def test_recall_success_store_未配線なら例外を投げず完了する(self) -> None:
+    def test_unwired_recall_success_store_completes_without_exception(self) -> None:
+        """recall success store 未配線なら例外を投げず完了する。"""
         buffer = InMemoryEpisodicRecallBufferStore()
         _seed_recall_buffer(
             buffer, prediction_context_id="pc-1", episode_id="ep-source"
@@ -234,7 +240,8 @@ class TestRecordRecallHitsGuards:
             ],
         )
 
-    def test_being_id_未解決なら加算しない(self) -> None:
+    def test_being_id_unresolved(self) -> None:
+        """being id 未解決なら加算しない。"""
         buffer = InMemoryEpisodicRecallBufferStore()
         success = InMemoryEpisodicRecallSuccessStore()
         _seed_recall_buffer(
@@ -254,7 +261,8 @@ class TestRecordRecallHitsGuards:
         )
         assert success.get_hit_count_by_being(_BEING, "ep-source") == 0
 
-    def test_prediction_error_が非Noneなら外れなので加算しない(self) -> None:
+    def test_prediction_error_non_none(self) -> None:
+        """prediction error が非Noneなら外れなので加算しない。"""
         buffer = InMemoryEpisodicRecallBufferStore()
         success = InMemoryEpisodicRecallSuccessStore()
         _seed_recall_buffer(
@@ -274,7 +282,7 @@ class TestRecordRecallHitsGuards:
         )
         assert success.get_hit_count_by_being(_BEING, "ep-source") == 0
 
-    def test_expected_result_を伴う行動が無ければ何もしなかったターンとして加算しない(
+    def test_expected_result_action(
         self,
     ) -> None:
         """CONFIRMATION 転記 (U4) と同じ「水増しガード」。"""
@@ -295,9 +303,10 @@ class TestRecordRecallHitsGuards:
         )
         assert success.get_hit_count_by_being(_BEING, "ep-source") == 0
 
-    def test_prediction_context_id_が無ければ_id機構OFFとして加算しない(
+    def test_prediction_context_id_off(
         self,
     ) -> None:
+        """prediction context id が無ければ id機構OFFとして加算しない。"""
         buffer = InMemoryEpisodicRecallBufferStore()
         success = InMemoryEpisodicRecallSuccessStore()
         _seed_recall_buffer(
@@ -315,7 +324,8 @@ class TestRecordRecallHitsGuards:
         )
         assert success.get_hit_count_by_being(_BEING, "ep-source") == 0
 
-    def test_一致するrecall_observationが無ければ何も加算されない(self) -> None:
+    def test_matches_recall_observation_not_incremented(self) -> None:
+        """一致するrecall observationが無ければ何も加算されない。"""
         buffer = InMemoryEpisodicRecallBufferStore()
         success = InMemoryEpisodicRecallSuccessStore()
         # recall observation を seed しない = 想起無しで予測が当たったケース

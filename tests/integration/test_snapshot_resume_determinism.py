@@ -254,9 +254,10 @@ def _strip_volatile_metadata(payload_dict: dict) -> dict:
 class TestSnapshotRoundTripDeterminism:
     """P1: capture → restore → recapture で payload が bit-identical。"""
 
-    def test_全_5_store_を埋めた_capture_restore_recapture_で一致(
+    def test_all_five_store_capture_restore_recapture_matches(
         self, tmp_path: Path
     ) -> None:
+        """全 5 store を埋めた capture restore recapture で一致。"""
         src_wiring, src_prov = _make_stack()
         src_prov.ensure_attached(PlayerId(1))
         being_id = src_wiring.being_attachment_resolver.resolve_being_id(
@@ -295,7 +296,8 @@ class TestSnapshotRoundTripDeterminism:
 class TestRestoreIdempotency:
     """P2: 同じ snapshot を 2 回 restore しても結果は同じ。"""
 
-    def test_2回_restore_しても_capture_結果が同じ(self, tmp_path: Path) -> None:
+    def test_two_restore_capture_same(self, tmp_path: Path) -> None:
+        """2回 restore しても capture 結果が同じ。"""
         src_wiring, src_prov = _make_stack()
         src_prov.ensure_attached(PlayerId(1))
         being_id = src_wiring.being_attachment_resolver.resolve_being_id(
@@ -336,9 +338,10 @@ class TestRestoreIdempotency:
 class TestRestoreInsensitivityToScenarioName:
     """P4: cross-scenario でも Being aggregate + memory 内容は変わらない。"""
 
-    def test_別_scenario_で_restore_しても_payload_内容は同一(
+    def test_different_scenario_restore_payload_same(
         self, tmp_path: Path
     ) -> None:
+        """別 scenario で restore しても payload 内容は同一。"""
         src_wiring, src_prov = _make_stack()
         src_prov.ensure_attached(PlayerId(1))
         being_id = src_wiring.being_attachment_resolver.resolve_being_id(
@@ -384,7 +387,7 @@ class TestRestoreInsensitivityToScenarioName:
 class TestSchemaStrictness:
     """P5 (schema 進化 (a) 厳格モード): 未知 schema_version は load 失敗。"""
 
-    def test_BeingSnapshot_の_未知_snapshot_version_は_例外(
+    def test_being_snapshot_unknown_snapshot_version_raises_exception(
         self, tmp_path: Path
     ) -> None:
         """JSON ファイルの ``snapshot_version`` が SUPPORTED_VERSIONS 外なら例外。"""
@@ -416,7 +419,7 @@ class TestSchemaStrictness:
         with pytest.raises(BeingSnapshotVersionException):
             session.restore_all_from_dir(bad_dir)
 
-    def test_memory_payload_の_未知_schema_version_は_例外(
+    def test_memory_payload_unknown_schema_version_raises_exception(
         self, tmp_path: Path
     ) -> None:
         """payload JSON の ``schema_version`` が SUPPORTED_PAYLOAD_SCHEMA_VERSIONS 外なら例外。"""

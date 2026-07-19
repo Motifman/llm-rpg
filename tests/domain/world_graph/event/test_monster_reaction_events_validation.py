@@ -30,7 +30,8 @@ MONSTER_1 = MonsterId.create(101)
 class TestStartedChasingValidation:
     """MonsterStartedChasingInSpotEvent の discriminated union バリデーション。"""
 
-    def test_player_target_だけ非None_は_OK(self) -> None:
+    def test_player_target_non_none_ok(self) -> None:
+        """player target だけ非None は OK。"""
         ev = MonsterStartedChasingInSpotEvent.create(
             aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
             monster_id=MONSTER_1, spot_id=SPOT_A,
@@ -39,7 +40,8 @@ class TestStartedChasingValidation:
         assert ev.target_player_id is not None
         assert ev.target_monster_id is None
 
-    def test_monster_target_だけ非None_は_OK(self) -> None:
+    def test_monster_target_non_none_ok(self) -> None:
+        """monster target だけ非None は OK。"""
         ev = MonsterStartedChasingInSpotEvent.create(
             aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
             monster_id=MONSTER_1, spot_id=SPOT_A,
@@ -48,14 +50,16 @@ class TestStartedChasingValidation:
         assert ev.target_monster_id is not None
         assert ev.target_player_id is None
 
-    def test_両方None_は_ValueError(self) -> None:
+    def test_none_raises_value_error_2(self) -> None:
+        """両方None は ValueError。"""
         with pytest.raises(ValueError, match="片方だけ非 None"):
             MonsterStartedChasingInSpotEvent.create(
                 aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
                 monster_id=MONSTER_1, spot_id=SPOT_A,
             )
 
-    def test_両方非None_は_ValueError(self) -> None:
+    def test_none_raises_value_error(self) -> None:
+        """両方非None は ValueError。"""
         with pytest.raises(ValueError, match="片方だけ非 None"):
             MonsterStartedChasingInSpotEvent.create(
                 aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
@@ -78,7 +82,7 @@ class TestAbandonedChaseReason:
             "no_path",
         ],
     )
-    def test_全_AbandonChaseReason_値で_event_構築できる(
+    def test_all_abandon_chase_reason_value_event_can_build(
         self, reason: str,
     ) -> None:
         """5 種の reason が問題なく構築できる (Literal 型は実行時 check 無し
@@ -93,7 +97,8 @@ class TestAbandonedChaseReason:
 class TestStartedFleeingShape:
     """MonsterStartedFleeingInSpotEvent は単純な shape のみ。"""
 
-    def test_最小フィールドで_構築できる(self) -> None:
+    def test_min_can_build(self) -> None:
+        """最小フィールドで 構築できる。"""
         ev = MonsterStartedFleeingInSpotEvent.create(
             aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
             monster_id=MONSTER_1, spot_id=SPOT_A,

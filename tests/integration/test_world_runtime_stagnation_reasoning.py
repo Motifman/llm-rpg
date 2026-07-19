@@ -59,7 +59,8 @@ class _CapturingRecorder:
 class TestStagnationReasoningFailFast:
     """前提 flag が欠けたまま案A を ON にすると起動時に落ちる (静かな失敗を弾く)。"""
 
-    def test_pressure_off_で_reasoning_on_は_起動時に落ちる(self) -> None:
+    def test_fails_fast_pressure_off_reasoning(self) -> None:
+        """pressureoff で reasoningon は起動時に落ちる。"""
         with pytest.raises(ValueError, match="STAGNATION_PRESSURE_ENABLED"):
             create_world_runtime(
                 _SCENARIO_PATH,
@@ -69,7 +70,8 @@ class TestStagnationReasoningFailFast:
                 ),
             )
 
-    def test_goal_reflect_off_で_reasoning_on_は_起動時に落ちる(self) -> None:
+    def test_fails_fast_goal_reflect_off_reasoning(self) -> None:
+        """goalreflectoff で reasoningon は起動時に落ちる。"""
         with pytest.raises(ValueError, match="GOAL_REFLECT_ENABLED"):
             create_world_runtime(
                 _SCENARIO_PATH,
@@ -79,7 +81,7 @@ class TestStagnationReasoningFailFast:
                 ),
             )
 
-    def test_episodic_off_で_reasoning_on_は_起動時に落ちる(self) -> None:
+    def test_fails_fast_episodic_off_reasoning(self) -> None:
         """敵対的レビュー HIGH 1: LLM_EPISODIC_ENABLED を立て忘れたまま案A を ON に
         すると、従来は fail-fast も含む episodic ブロック丸ごとが skip され、熟考が
         一生焚かれない静かな失敗になっていた。episodic を前提にする案A の flag が
@@ -93,7 +95,7 @@ class TestStagnationReasoningFailFast:
                 ),
             )
 
-    def test_episodic_off_で_pressure_on_は_起動時に落ちる(self) -> None:
+    def test_fails_fast_episodic_off_pressure(self) -> None:
         """HIGH 1 (同じ親 gate 穴の共有): STAGNATION_PRESSURE も episodic 前提なので、
         episodic OFF のまま ON にすると起動時に落ちる。"""
         with pytest.raises(ValueError, match="LLM_EPISODIC_ENABLED"):
@@ -102,7 +104,7 @@ class TestStagnationReasoningFailFast:
                 config=_stagnation_config(episodic_enabled=False),
             )
 
-    def test_episodic_off_で_goal_stagnation_evidence_on_は_起動時に落ちる(self) -> None:
+    def test_fails_fast_episodic_off_goal_stagnation_evidence(self) -> None:
         """HIGH 1 (同じ親 gate 穴の共有): GOAL_STAGNATION_EVIDENCE も episodic 前提。"""
         with pytest.raises(ValueError, match="LLM_EPISODIC_ENABLED"):
             create_world_runtime(
@@ -120,7 +122,7 @@ class TestStagnationReasoningEffortDecision:
     ラッチを消費せず trace も出さない。実際の消費と AGENT_REASONING_ENGAGED trace
     は invoke 成功後の commit で起きる (敵対的レビュー HIGH 2)。"""
 
-    def test_resolveは決定だけしラッチも消費せずtraceも出さない(
+    def test_resolve_trace(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """band==strong で resolve は effort=low を返すが、ラッチはまだ armed のまま
@@ -147,7 +149,7 @@ class TestStagnationReasoningEffortDecision:
         # ラッチも消費されていない (invoke 失敗時に次行動で再挑戦できる)
         assert runtime._stagnation_reasoning_latch.is_armed(PlayerId(1)) is True
 
-    def test_commitでラッチ消費とtrace_engagedが起きる(
+    def test_commit_trace_engaged(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """invoke 成功後の commit で初めてラッチが落ち、AGENT_REASONING_ENGAGED が出る。"""
@@ -177,7 +179,7 @@ class TestStagnationReasoningEffortDecision:
         # commit 後はラッチが落ちる
         assert runtime._stagnation_reasoning_latch.is_armed(PlayerId(1)) is False
 
-    def test_commitしなければ次行動で再挑戦できる(
+    def test_commit_action(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """invoke 失敗 (= commit されない) を模し、ラッチが armed のまま残ることで
@@ -194,7 +196,7 @@ class TestStagnationReasoningEffortDecision:
         assert runtime.resolve_turn_reasoning_effort(PlayerId(1)) == "low"
         assert runtime.resolve_turn_reasoning_effort(PlayerId(1)) == "low"
 
-    def test_band_light_では_注入後でも_None_でラッチは畳まれる(
+    def test_band_light_after_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """band が strong 未満なら熟考しない。かつ古いラッチはここで畳んで残さない。"""
@@ -209,7 +211,7 @@ class TestStagnationReasoningEffortDecision:
         # 焚かない場合は古いフラグを残さない
         assert runtime._stagnation_reasoning_latch.is_armed(PlayerId(1)) is False
 
-    def test_achieved注入では武装しない(
+    def test_achieved(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """achieved (前進) の気づきでは熟考ラッチを立てない。"""
@@ -223,7 +225,7 @@ class TestStagnationReasoningEffortDecision:
         runtime._emit_reflect_observation(PlayerId(1), "もう果たした", "achieved")
         assert runtime.resolve_turn_reasoning_effort(PlayerId(1)) is None
 
-    def test_abandonはラッチを消費し_engaged_traceを出さない(
+    def test_abandon_engaged_trace(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """餓死ループ修正: 熟考ターンの invoke が失敗したとき呼ぶ abandon は、
@@ -251,7 +253,7 @@ class TestStagnationReasoningEffortDecision:
         # 消費後は resolve が None (次行動で同条件リトライしない = 餓死しない)
         assert runtime.resolve_turn_reasoning_effort(PlayerId(1)) is None
 
-    def test_commitはラッチ未武装なら_traceを出さない(
+    def test_commit_trace(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """防御: ラッチが立っていない (consume False) 状態で commit を呼んでも、
@@ -274,9 +276,10 @@ class TestStagnationReasoningEffortDecision:
 class TestStagnationReasoningOffByDefault:
     """flag OFF のとき、ラッチは構築されず effort は常に None (既存挙動不変)。"""
 
-    def test_flag_off_なら_latch_none_で_effort_none(
+    def test_flag_off_latch_none_effort_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flag off なら latch none で effort none。"""
         runtime = create_world_runtime(_SCENARIO_PATH, config=_stagnation_config())
         assert runtime._stagnation_reasoning_latch is None
         being_id = _being_id(runtime, 1)

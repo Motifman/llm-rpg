@@ -21,7 +21,7 @@ def _ensure_executable(path: Path) -> None:
     not (_REPO_ROOT / "scripts" / "check_no_internal_hostnames.sh").exists(),
     reason="hostname check script not present in this checkout",
 )
-def test_check_no_internal_hostnames_shell_scenarios_すべて_passed() -> None:
+def test_check_internal_hostnames_shell_scenarios_passed() -> None:
     """安全 / 漏洩 / allow-listed / staged モードを bash シェルで end-to-end 確認する。"""
     _ensure_executable(_SHELL_TEST)
     result = subprocess.run(
@@ -41,7 +41,7 @@ def test_check_no_internal_hostnames_shell_scenarios_すべて_passed() -> None:
     not (_REPO_ROOT / "scripts" / "check_no_internal_hostnames.sh").exists(),
     reason="hostname check script not present in this checkout",
 )
-def test_リポジトリ全体は_漏洩パターン無しで_passed() -> None:
+def test_whole_repository_leak_patterns_passed() -> None:
     """本リポジトリ自身が漏洩パターンを含まないことを継続的に保証する (CI gate)。"""
     script = _REPO_ROOT / "scripts" / "check_no_internal_hostnames.sh"
     _ensure_executable(script)

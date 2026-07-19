@@ -164,7 +164,7 @@ def _make_handler(*, player=None):
 class TestChaseMaxDistance:
     """chase_max_distance を超える target は追跡できない。"""
 
-    def test_2hop_先で_max_distance_1_なら_BFS_諦めて_IDLE(self) -> None:
+    def test_2hop_max_distance_one_bfs_idle(self) -> None:
         """1 → 2 → 3 のグラフで monster は 1、target は 3、max_distance=1
         では到達不可と判定 → CHASE 解除。"""
         player = _player(player_id_value=7)
@@ -193,7 +193,7 @@ class TestChaseMaxDistance:
         # monster は移動していない
         assert graph.get_monster_spot(monster.monster_id) == SpotId.create(1)
 
-    def test_2hop_先で_max_distance_2_なら_1hop_進む(self) -> None:
+    def test_advances_2hop_max_distance_two_1hop(self) -> None:
         """同じグラフで max_distance=2 なら BFS 成功 → 中継 spot へ 1 hop。"""
         player = _player(player_id_value=7)
         handler, _ = _make_handler(player=player)
@@ -221,7 +221,7 @@ class TestChaseMaxDistance:
         # 1 hop 進んで中継 spot 2 に居る
         assert graph.get_monster_spot(monster.monster_id) == SpotId.create(2)
 
-    def test_max_distance_0_は_無制限_扱い(self) -> None:
+    def test_max_distance_zero(self) -> None:
         """max_distance=0 を指定すると BFS が無制限で全 spot を探索する。"""
         player = _player(player_id_value=7)
         handler, _ = _make_handler(player=player)
@@ -253,7 +253,7 @@ class TestChaseMaxDistance:
 class TestChaseMaxTicks:
     """chase_max_ticks 超過で CHASE 状態を諦める。"""
 
-    def test_chase_開始後_max_ticks_経過で_IDLE(self) -> None:
+    def test_chase_after_max_ticks_idle(self) -> None:
         """`enter_chase_state` で開始 tick=10、`chase_max_ticks=5`、現 tick=16
         → 経過 6 > 5 で諦めて IDLE。"""
         player = _player(player_id_value=7)
@@ -283,7 +283,7 @@ class TestChaseMaxTicks:
         assert result is None
         assert monster.is_chasing() is False
 
-    def test_chase_開始_直後の_tick_では_諦めない(self) -> None:
+    def test_chase_after_tick(self) -> None:
         """開始 tick=10、現 tick=11、max_ticks=5 → 経過 1 で継続。"""
         player = _player(player_id_value=7)
         handler, _ = _make_handler(player=player)
@@ -311,7 +311,7 @@ class TestChaseMaxTicks:
         assert result.reason == "chasing_to_other_spot"
         assert monster.is_chasing() is True
 
-    def test_境界_経過_ちょうど_max_ticks_は_継続(self) -> None:
+    def test_boundary_max_ticks(self) -> None:
         """`chase_max_ticks=5`、開始 tick=10、現 tick=15 (経過ちょうど 5) は
         まだ CHASE 継続 (`>` で実装しているため)。"""
         player = _player(player_id_value=7)
@@ -339,7 +339,7 @@ class TestChaseMaxTicks:
         assert result.reason == "chasing_to_other_spot"
         assert monster.is_chasing() is True
 
-    def test_search_中でも_max_ticks_超過で_IDLE(self) -> None:
+    def test_search_max_ticks_exceeds_idle(self) -> None:
         """探索フェーズ (chase_search_ticks=3) 中に `chase_max_ticks=4` を
         超えたら諦める。"""
         handler, _ = _make_handler(player=None)
@@ -387,7 +387,7 @@ class TestChaseMaxTicks:
         assert result is None
         assert monster.is_chasing() is False
 
-    def test_chase_max_ticks_0_は_無制限_扱い(self) -> None:
+    def test_chase_max_ticks_zero(self) -> None:
         """`chase_max_ticks=0` なら経過 100 tick でも CHASE 継続。"""
         player = _player(player_id_value=7)
         handler, _ = _make_handler(player=player)
@@ -419,7 +419,8 @@ class TestChaseMaxTicks:
 class TestChaseStartedAtTick:
     """`MonsterAggregate.chase_started_at_tick` プロパティの境界。"""
 
-    def test_CHASE_中なら_開始_tick_を_返す(self) -> None:
+    def test_returns_chase_tick(self) -> None:
+        """CHASE 中なら開始 tick を返す。"""
         monster = _monster(_template())
         ref = AttackerRef.of_player(PlayerId(7))
         monster.enter_chase_state(
@@ -429,11 +430,13 @@ class TestChaseStartedAtTick:
         )
         assert monster.chase_started_at_tick == WorldTick(42)
 
-    def test_CHASE_でなければ_None(self) -> None:
+    def test_chase_none(self) -> None:
+        """CHASE でなければ None。"""
         monster = _monster(_template())
         assert monster.chase_started_at_tick is None
 
-    def test_clear_すると_None(self) -> None:
+    def test_clear_none(self) -> None:
+        """clear すると None。"""
         monster = _monster(_template())
         ref = AttackerRef.of_player(PlayerId(7))
         monster.enter_chase_state(

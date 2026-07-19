@@ -45,22 +45,25 @@ class TestActiveEffectLinesBuilder:
             expiry_tick=WorldTick(expiry),
         )
 
-    def test_BLEEDING_は_出血_日本語ラベルで_残りtick付きで_出る(self) -> None:
+    def test_bleeding_japanese_label_tick_rendered(self) -> None:
+        """BLEEDING は出血日本語ラベルで残り tick 付きで出る。"""
         builder = self._make_builder(current_tick=1)
         lines = builder._build_active_effect_lines([self._make_effect("bleeding", 13)])
         assert lines == ("出血 (残り 12 tick)",)
 
-    def test_provider_なしなら_残りtickは_出ない(self) -> None:
+    def test_provider_tick_not_rendered(self) -> None:
+        """provider なしなら 残りtickは 出ない。"""
         builder = self._make_builder(current_tick=None)
         lines = builder._build_active_effect_lines([self._make_effect("bleeding", 13)])
         assert lines == ("出血",)
 
-    def test_残りtick_0以下は_まもなく治る_表記(self) -> None:
+    def test_tick_zero_less(self) -> None:
+        """残りtick 0以下は まもなく治る 表記。"""
         builder = self._make_builder(current_tick=13)
         lines = builder._build_active_effect_lines([self._make_effect("bleeding", 13)])
         assert lines == ("出血 (まもなく治る)",)
 
-    def test_未知の_effect_type_は_value文字列で_出る(self) -> None:
+    def test_unknown_effect_type_value_string_rendered(self) -> None:
         """ラベル辞書未登録の effect は value 文字列をそのまま出す。"""
         # StatusEffectType enum に未登録の値は作れないので、現状未マッピング
         # な PARALYSIS が「麻痺」に変換されることだけ確認 (回帰ガード)。
@@ -68,7 +71,8 @@ class TestActiveEffectLinesBuilder:
         lines = builder._build_active_effect_lines([self._make_effect("paralysis", 5)])
         assert lines[0].startswith("麻痺")
 
-    def test_provider_が例外を投げても_snapshot_は_落ちない(self) -> None:
+    def test_provider_snapshot_raises_exception(self) -> None:
+        """provider が例外を投げても snapshot は落ちない。"""
         def boom() -> int:
             raise RuntimeError("clock broken")
         from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
@@ -120,14 +124,16 @@ class TestUiContextActiveEffectsSection:
             spot_graph_snapshot=snap,
         )
 
-    def test_active_effect_lines_があれば_section_が_追記される(self) -> None:
+    def test_active_effect_lines_section(self) -> None:
+        """activeeffectlines があれば section が追記される。"""
         builder = SpotGraphUiContextBuilder()
         snap = self._snap(active_effect_lines=("出血 (残り 12 tick)",))
         dto = builder.build(current_state_text="(base)\n", current_state=self._wrap(snap))
         assert "現在の状態異常:" in dto.current_state_text
         assert "出血 (残り 12 tick)" in dto.current_state_text
 
-    def test_active_effect_lines_が_空なら_section_は_出ない(self) -> None:
+    def test_returns_empty_when_active_effect_lines_section(self) -> None:
+        """activeeffectlines が空なら section は出ない。"""
         builder = SpotGraphUiContextBuilder()
         snap = self._snap(active_effect_lines=())
         dto = builder.build(current_state_text="(base)\n", current_state=self._wrap(snap))

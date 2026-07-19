@@ -114,7 +114,8 @@ def _snap_with_inventory() -> SpotGraphPlayerSnapshotDto:
 class TestPromptQuotesInventoryItemName:
     """所持アイテム表示で item 名のみが ``""`` で囲まれる。"""
 
-    def test_inventory_の_item_名が_クオートで囲まれる(self) -> None:
+    def test_inventory_quotes_item_name(self) -> None:
+        """inventory の item 名が クオートで囲まれる。"""
         result = SpotGraphUiContextBuilder().build(
             "現在地: 拠点", _make_dto(_snap_with_inventory())
         )
@@ -122,7 +123,7 @@ class TestPromptQuotesInventoryItemName:
         assert '"流木"' in text, "inventory item 名が \"\" で囲まれていない"
         assert '"野いちご"' in text
 
-    def test_inventory_の_装飾サフィックスは_クオートで囲まれない(self) -> None:
+    def test_inventory(self) -> None:
         """``x3`` / ``(素材・使用不可)`` / ``(腐敗)`` は囲まない。
         ``""`` の有無で「渡すべき値」と「補足情報」を視覚的に区別する。"""
         result = SpotGraphUiContextBuilder().build(
@@ -141,7 +142,8 @@ class TestPromptQuotesInventoryItemName:
 class TestPromptQuotesGroundItemName:
     """地面アイテム表示も同じ規約。"""
 
-    def test_ground_item_の_名前が_クオートで囲まれる(self) -> None:
+    def test_ground_item_name(self) -> None:
+        """grounditem の名前がクオートで囲まれる。"""
         result = SpotGraphUiContextBuilder().build(
             "現在地: 拠点", _make_dto(_snap_with_inventory())
         )
@@ -156,14 +158,16 @@ class TestUseItemDescriptionExplainsQuoteConvention:
     def _item_label_desc(self, defn) -> str:
         return defn.parameters["properties"]["item_label"]["description"]
 
-    def test_use_item_の_item_label_に_クオート規約が含まれる(self) -> None:
+    def test_use_item_label_included(self) -> None:
+        """useitem の itemlabel にクオート規約が含まれる。"""
         desc = self._item_label_desc(USE_ITEM_DEFINITION)
         assert "\"" in desc
         assert (
             "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
         ), "use_item の item_label に \"\" 規約が説明されていない"
 
-    def test_drop_item_の_item_label_に_クオート規約が含まれる(self) -> None:
+    def test_drop_item_label_included(self) -> None:
+        """dropitem の itemlabel にクオート規約が含まれる。"""
         desc = self._item_label_desc(DROP_ITEM_DEFINITION)
         assert "\"" in desc
         assert "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
@@ -173,14 +177,15 @@ class TestUseItemDescriptionExplainsQuoteConvention:
     # gives entry の item_label description 側でカバーされる
     # (test_give_item_の_gives_entry_の_item_label_にも_クオート規約が含まれる)。
 
-    def test_pickup_item_の_ground_item_label_に_クオート規約が含まれる(self) -> None:
+    def test_pickup_item_ground_item_label_included(self) -> None:
+        """pickupitem の grounditemlabel にクオート規約が含まれる。"""
         desc = PICKUP_ITEM_DEFINITION.parameters["properties"]["ground_item_label"][
             "description"
         ]
         assert "\"" in desc
         assert "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
 
-    def test_give_item_の_gives_entry_の_item_label_にも_クオート規約が含まれる(self) -> None:
+    def test_give_item_gives_entry_item_label_included(self) -> None:
         """PR-α (Y_after_pr639_640 後続): give_item は batch-always
         (gives: [...]) に統合された。gives 配列内の item_label description
         にも quote 規約が伝達される。"""
@@ -210,7 +215,8 @@ class TestDescriptionsAreStatic:
             (PICKUP_ITEM_DEFINITION, "ground_item_label"),
         ],
     )
-    def test_description_は_str_型で_placeholder_なし(self, defn, prop) -> None:
+    def test_description_is_static_string_without_placeholders(self, defn, prop) -> None:
+        """description は str 型で placeholder なし。"""
         desc = defn.parameters["properties"][prop]["description"]
         assert isinstance(desc, str)
         assert "{" not in desc

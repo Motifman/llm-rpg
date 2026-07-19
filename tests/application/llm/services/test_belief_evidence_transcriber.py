@@ -70,7 +70,7 @@ def _capture_trace(recorder: NullTraceRecorder) -> list:
 
 
 class TestBeliefEvidenceTranscriberRecordCondition:
-    def test_prediction_error_none_does_not_record(self) -> None:
+    def test_prediction_error_None_does_record(self) -> None:
         """転記条件: prediction_error が None なら evidence を積まない。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer_store)
@@ -81,7 +81,7 @@ class TestBeliefEvidenceTranscriberRecordCondition:
         assert result is None
         assert buffer_store.list_all_by_being(being_id) == []
 
-    def test_prediction_error_non_none_records_one_evidence(self) -> None:
+    def test_prediction_error_non_None_records_one_evidence(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer_store)
         being_id = BeingId("being-1")
@@ -154,7 +154,7 @@ class TestBeliefEvidenceTranscriberTick:
 
         assert buffer_store.list_all_by_being(being_id)[0].tick == 42
 
-    def test_tick_provider_exception_falls_back_to_none(self) -> None:
+    def test_tick_provider_exception_falls_back_None(self) -> None:
         """current_tick_provider が例外を投げても転記本体は止めない。"""
 
         def _raising() -> int:
@@ -199,7 +199,7 @@ class TestBeliefEvidenceTranscriberTrace:
         assert payload["episode_ids"] == ["ep-1"]
         assert events[0].tick == 5
 
-    def test_no_trace_recorder_provider_is_safe(self) -> None:
+    def test_trace_recorder_provider_is_safe(self) -> None:
         """trace_recorder_provider 未注入でも転記自体は成功する。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer_store)
@@ -211,7 +211,7 @@ class TestBeliefEvidenceTranscriberTrace:
 
         assert result is not None
 
-    def test_no_evidence_means_no_trace(self) -> None:
+    def test_evidence_means_trace(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
@@ -229,9 +229,10 @@ class TestBeliefEvidenceTranscriberTrace:
 class TestBeliefEvidenceTranscriberAttribution:
     """U4 (予測誤差統一設計 部品3): in_context_belief_ids の添付と CONFIRMATION 転記。"""
 
-    def test_prediction_error_evidence_に_in_context_belief_ids_が添付される(
+    def test_prediction_error_evidence_context_belief_ids(
         self,
     ) -> None:
+        """prediction error evidence に in context belief ids が添付される。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer_store)
         being_id = BeingId("being-1")
@@ -248,9 +249,10 @@ class TestBeliefEvidenceTranscriberAttribution:
         assert rows[0].source_kind == BeliefEvidenceSourceKind.PREDICTION_ERROR
         assert rows[0].in_context_belief_ids == ("sem-1", "sem-2")
 
-    def test_prediction_error_None_かつ_in_context_belief_あり_かつ_expected_result_ありなら_CONFIRMATION(
+    def test_prediction_error_none_context_belief_expected_result_confirmation(
         self,
     ) -> None:
+        """prediction error None かつ in context belief あり かつ expected result ありなら CONFIRMATION。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer_store)
         being_id = BeingId("being-1")
@@ -269,7 +271,7 @@ class TestBeliefEvidenceTranscriberAttribution:
         assert rows[0].in_context_belief_ids == ("sem-1",)
         assert rows[0].text == "予測が当たった: 何か見つかるはず"
 
-    def test_prediction_error_None_かつ_in_context_belief_無しなら何も積まない(
+    def test_prediction_error_none_context_belief(
         self,
     ) -> None:
         """水増しガード: in-context belief が無いターンでは CONFIRMATION を作らない。"""
@@ -287,7 +289,7 @@ class TestBeliefEvidenceTranscriberAttribution:
         assert result is None
         assert buffer_store.list_all_by_being(being_id) == []
 
-    def test_prediction_error_None_かつ_expected_result_無しターンなら何も積まない(
+    def test_prediction_error_none_expected_result(
         self,
     ) -> None:
         """水増しガード: 何も予測せず行動しただけのターンでは CONFIRMATION を作らない。"""
@@ -305,7 +307,7 @@ class TestBeliefEvidenceTranscriberAttribution:
         assert result is None
         assert buffer_store.list_all_by_being(being_id) == []
 
-    def test_flag_OFF相当_呼び出し側が空を渡せば導入前と一致する(self) -> None:
+    def test_flag_off_call_empty_before_matches(self) -> None:
         """呼び出し側 (coordinator/scheduler) が flag OFF のとき常に空/False を
         渡す設計 (= transcriber 自身は flag を知らない) の安全性を確認する。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
@@ -339,7 +341,7 @@ class TestConfirmationRelevanceGate:
 
         return lookup
 
-    def test_no_axis_match_does_not_record(self) -> None:
+    def test_axis_match_does_record(self) -> None:
         """cue (explore/3) と一致しない belief のみなら CONFIRMATION を積まない。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         provider = self._provider({"b1": (("信頼",), "タカシは信頼できる")})
@@ -406,7 +408,7 @@ class TestConfirmationRelevanceGate:
         assert result is not None
         assert result.in_context_belief_ids == ("b-beach",)
 
-    def test_provider_none_keeps_all_beliefs_backward_compat(self) -> None:
+    def test_provider_None_keeps_all_beliefs_backward_compat(self) -> None:
         """provider 未注入なら従来どおり in-context belief 全件に積む。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer_store)
@@ -426,7 +428,8 @@ class TestConfirmationRelevanceGate:
 class TestComputeChunkAttribution:
     """U4: chunk を構成する action 群から attribution 用の値を計算する純関数。"""
 
-    def test_複数_action_の_in_context_belief_ids_を重複排除して和集合する(self) -> None:
+    def test_multiple_action_context_belief_ids_deduplicates(self) -> None:
+        """複数 action の in context belief ids を重複排除して和集合する。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
             compute_chunk_attribution,
         )
@@ -446,7 +449,8 @@ class TestComputeChunkAttribution:
         assert belief_ids == ("sem-1", "sem-2", "sem-3")
         assert had_expected_result is True
 
-    def test_action群が空なら空タプルとFalseを返す(self) -> None:
+    def test_returns_empty_when_action_empty_false(self) -> None:
+        """action群が空なら空タプルとFalseを返す。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
             compute_chunk_attribution,
         )
@@ -526,7 +530,7 @@ class TestBeliefEvidenceTranscriberPendingResolution:
         assert ev.salience == "high"
         assert "破られた" in ev.text
 
-    def test_cue_signature_falls_back_to_first_cue_without_player(self) -> None:
+    def test_cue_signature_falls_back_first_cue_without_player(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer_store)
         being_id = BeingId("being-1")

@@ -90,7 +90,7 @@ def _make_player(*, attack: int = 10, is_down: bool = False):
 class TestAttackerDown:
     """ダウン中のプレイヤーは攻撃できない。"""
 
-    def test_is_down_true_は_executed_false(self) -> None:
+    def test_down_true_executed_false(self) -> None:
         """attacker.is_down=True なら不発。"""
         svc = SpotPlayerAttackService()
         outcome = svc.try_attack(
@@ -105,7 +105,7 @@ class TestAttackerDown:
 class TestTargetDead:
     """既に死んでいるモンスターは攻撃できない。"""
 
-    def test_status_dead_は_executed_false(self) -> None:
+    def test_status_dead_executed_false(self) -> None:
         """target.status != ALIVE なら不発。"""
         svc = SpotPlayerAttackService()
         # alive=False で構築すると status=DEAD + spawned_at_tick=None で
@@ -123,7 +123,7 @@ class TestTargetDead:
 class TestZeroDamage:
     """attack=0 のプレイヤーでは不発。"""
 
-    def test_attack_ゼロは_executed_false(self) -> None:
+    def test_attack_executed_false(self) -> None:
         """`attacker.base_stats.attack=0` で event を発火させない。"""
         svc = SpotPlayerAttackService()
         outcome = svc.try_attack(
@@ -138,7 +138,7 @@ class TestZeroDamage:
 class TestAttackHits:
     """成立時にダメージが入り MonsterDamagedEvent が発火する。"""
 
-    def test_apply_damage_経由で_event_が発火する(self) -> None:
+    def test_triggers_apply_damage_via_event(self) -> None:
         """成立時、monster aggregate に MonsterDamagedEvent が発火する。"""
         svc = SpotPlayerAttackService()
         monster = _make_monster(hp_max=30, attack=5)
@@ -159,7 +159,7 @@ class TestAttackHits:
 class TestKillingBlow:
     """致命攻撃で target_incapacitated=True になり MonsterDiedEvent が発火する。"""
 
-    def test_致命攻撃で_target_incapacitated_true(self) -> None:
+    def test_target_incapacitated_true(self) -> None:
         """attacker.attack >= monster.hp で target_incapacitated=True。"""
         svc = SpotPlayerAttackService()
         monster = _make_monster(hp_max=10, attack=5)
@@ -174,7 +174,7 @@ class TestKillingBlow:
         died_events = [e for e in monster.get_events() if isinstance(e, MonsterDiedEvent)]
         assert len(died_events) == 1
 
-    def test_致命攻撃後も_spot_graph_の_presence_は維持される(self) -> None:
+    def test_after_spot_graph_presence_preserved(self) -> None:
         """本 PR では despawn を自動化しないため、致命攻撃後も
         `SpotGraphAggregate.get_monster_spot(monster_id)` は成功する想定。
         executor が event の `spot_id` を取得する際に依存している不変条件。

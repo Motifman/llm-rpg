@@ -170,7 +170,7 @@ class TestE2ECaptureRestoreRoundTrip:
             "subsystem codec のいずれかで非対称な変換が起きている可能性。"
         )
 
-    def test_subsystems_に_全_22_が乗る(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_subsystems_all_22_included(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Phase 9 完成版 + PR3 で世界状態 snapshot に 22 subsystem が含まれる。"""
         runtime, session, _mgr = _build_runtime_session(tmp_path, monkeypatch)
         session.capture_world(
@@ -496,7 +496,7 @@ class TestE2EFailFast:
                 current_scenario="regrowth_demo",
             )
 
-    def test_legacy_snapshot_dir_no_world_json_skips_world(
+    def test_legacy_snapshot_dir_world_json_skips_world(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """world.json なし (= Phase 6 までの旧 snapshot) でも restore は no-op で動く。"""

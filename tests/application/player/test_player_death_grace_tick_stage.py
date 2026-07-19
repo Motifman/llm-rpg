@@ -37,7 +37,8 @@ class TestRun:
     渡す実経路の型で固定する。
     """
 
-    def test_grace_経過後の_player_が_DEAD_確定_する(self) -> None:
+    def test_grace_after_player_dead(self) -> None:
+        """grace 経過後の player が DEAD 確定 する。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=0)
@@ -51,7 +52,8 @@ class TestRun:
 
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.DEAD
 
-    def test_grace_未経過の_player_は_確定_しない(self) -> None:
+    def test_grace_player(self) -> None:
+        """grace 未経過の player は確定しない。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=10)
@@ -65,7 +67,7 @@ class TestRun:
 
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
 
-    def test_確定後_grace_timer_からも_削除される(self) -> None:
+    def test_after_grace_timer_deleted(self) -> None:
         """DEAD 確定したら pending は不要なので clean up する (= 二重判定防止)。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
@@ -80,7 +82,8 @@ class TestRun:
 
         assert timer.is_pending(PlayerId(1)) is False
 
-    def test_複数_player_を_独立に_判定(self) -> None:
+    def test_multiple_player_independently(self) -> None:
+        """複数 player を独立に判定。"""
         reg = PlayerOutcomeRegistry.new_for_players(
             [PlayerId(1), PlayerId(2), PlayerId(3)]
         )
@@ -103,7 +106,8 @@ class TestRun:
         assert timer.is_pending(PlayerId(2)) is True
         assert timer.is_pending(PlayerId(3)) is True
 
-    def test_pending_が_空_でも_例外_なし(self) -> None:
+    def test_pending_empty_raises_exception(self) -> None:
+        """pending が空でも例外なし。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
         stage = PlayerDeathGraceTickStage(
@@ -116,7 +120,7 @@ class TestRun:
 
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
 
-    def test_既に_RESCUED_な_player_は_DEAD_に_上書きされない(self) -> None:
+    def test_rescued_player_dead(self) -> None:
         """grace pending 中に scenario_event で RESCUED 確定されたら、
         set_outcome が冪等なので DEAD に塗り直されない (= 旧仕様の冪等性保証)。
         """
@@ -136,7 +140,7 @@ class TestRun:
         # 既に resolved なので grace_timer の pending も掃除される
         assert timer.is_pending(PlayerId(1)) is False
 
-    def test_WorldTick_を渡しても_TypeError_にならない(self) -> None:
+    def test_world_tick_raises_type_error(self) -> None:
         """実 run r1_001 の再現ケース (裏取り済みのクラッシュ)。
 
         ``SpotGraphSimulationApplicationService._tick_impl`` は
@@ -163,7 +167,8 @@ class TestRun:
 
 
 class TestValidation:
-    def test_outcome_registry_None_は_TypeError(self) -> None:
+    def test_outcome_registry_none_raises_type_error(self) -> None:
+        """outcome registry None は TypeError。"""
         with pytest.raises(TypeError):
             PlayerDeathGraceTickStage(
                 outcome_registry=None,  # type: ignore[arg-type]
@@ -171,7 +176,8 @@ class TestValidation:
                 grace_ticks=30,
             )
 
-    def test_grace_timer_None_は_TypeError(self) -> None:
+    def test_grace_timer_none_raises_type_error(self) -> None:
+        """grace timer None は TypeError。"""
         with pytest.raises(TypeError):
             PlayerDeathGraceTickStage(
                 outcome_registry=PlayerOutcomeRegistry(),
@@ -179,7 +185,8 @@ class TestValidation:
                 grace_ticks=30,
             )
 
-    def test_grace_ticks_非負(self) -> None:
+    def test_grace_ticks_non(self) -> None:
+        """grace ticks 非負。"""
         with pytest.raises(ValueError):
             PlayerDeathGraceTickStage(
                 outcome_registry=PlayerOutcomeRegistry(),

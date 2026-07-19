@@ -93,7 +93,7 @@ def _make_entry(
 class TestSemanticPassiveRecallServiceNewPath:
     """SemanticPassiveRecallService: Resolver 注入時に being_id store から読む。"""
 
-    def test_retrieve_は_being_id_store_の_entry_を見る(
+    def test_retrieve_being_id_store_entry(
         self,
         store: InMemorySemanticMemoryStore,
         resolver: BeingAttachmentResolver,
@@ -121,7 +121,7 @@ class TestSemanticPassiveRecallServiceNewPath:
         assert len(result) == 1
         assert result[0].entry.text == "りんご"
 
-    def test_未_provision_なら_空_list(
+    def test_provision_empty_list(
         self,
         store: InMemorySemanticMemoryStore,
         resolver: BeingAttachmentResolver,
@@ -140,7 +140,7 @@ class TestSemanticPassiveRecallServiceNewPath:
         )
         assert result == []
 
-    def test_resolver_未注入なら_空_list(
+    def test_resolver_uninjected_empty_list(
         self,
         store: InMemorySemanticMemoryStore,
     ) -> None:
@@ -153,7 +153,7 @@ class TestSemanticPassiveRecallServiceNewPath:
 class TestSemanticMemorySearchToolExecutorNewPath:
     """SemanticMemorySearchToolExecutor: Resolver 注入時の検索経路。"""
 
-    def test_search_は_being_id_store_の_entry_を検索する(
+    def test_search_being_id_store_entry(
         self,
         store: InMemorySemanticMemoryStore,
         resolver: BeingAttachmentResolver,
@@ -180,7 +180,7 @@ class TestSemanticMemorySearchToolExecutorNewPath:
         assert len(payload["matched_entries"]) == 1
         assert "りんご" in payload["matched_entries"][0]["summary"]
 
-    def test_resolver_未注入なら_INVALID_STATE(
+    def test_resolver_uninjected_invalid_state(
         self,
         store: InMemorySemanticMemoryStore,
     ) -> None:
@@ -193,7 +193,7 @@ class TestSemanticMemorySearchToolExecutorNewPath:
         assert result.success is False
         assert result.error_code == "INVALID_STATE"
 
-    def test_being_未_provision_なら_INVALID_STATE(
+    def test_being_provision_invalid_state(
         self,
         store: InMemorySemanticMemoryStore,
         resolver: BeingAttachmentResolver,
@@ -223,7 +223,7 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
     で別途取れている。
     """
 
-    def test_register_signature_は_being_id_store_に書く(
+    def test_register_signature_being_id_store(
         self,
         store: InMemorySemanticMemoryStore,
         resolver: BeingAttachmentResolver,
@@ -251,7 +251,7 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
             is False
         )
 
-    def test_add_entry_は_being_id_store_に書く(
+    def test_add_entry_being_id_store(
         self,
         store: InMemorySemanticMemoryStore,
         resolver: BeingAttachmentResolver,
@@ -274,7 +274,7 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
         service._add_entry(2, entry)
         assert len(store.list_for_being(being_id)) == 1
 
-    def test_being_未_provision_なら_no_op(
+    def test_being_provision_op(
         self,
         store: InMemorySemanticMemoryStore,
         resolver: BeingAttachmentResolver,

@@ -51,13 +51,15 @@ def _apply_effect(interior: SpotInterior, params: dict) -> SpotInterior:
 
 
 class TestIncrementBasic:
-    def test_default_delta_1_で_state_が_1_増える(self) -> None:
+    def test_default_delta_increments_state_by_one(self) -> None:
+        """default delta 1 で state が 1 増える。"""
         interior = _make_interior_with_state({"harvest_count": 5})
         new_interior = _apply_effect(interior, {"state_key": "harvest_count"})
         new_obj = new_interior.get_object(OBJ_ID)
         assert new_obj.state["harvest_count"] == 6
 
-    def test_明示_delta_で_指定量_増える(self) -> None:
+    def test_delta(self) -> None:
+        """明示 delta で指定量増える。"""
         interior = _make_interior_with_state({"harvest_count": 5})
         new_interior = _apply_effect(
             interior, {"state_key": "harvest_count", "delta": 3},
@@ -65,7 +67,7 @@ class TestIncrementBasic:
         new_obj = new_interior.get_object(OBJ_ID)
         assert new_obj.state["harvest_count"] == 8
 
-    def test_負の_delta_で_減らすことも可能(self) -> None:
+    def test_negative_delta(self) -> None:
         """例: 食料消費で stock を 1 減らす等、汎用 accumulator。"""
         interior = _make_interior_with_state({"stock": 10})
         new_interior = _apply_effect(
@@ -74,13 +76,14 @@ class TestIncrementBasic:
         new_obj = new_interior.get_object(OBJ_ID)
         assert new_obj.state["stock"] == 8
 
-    def test_state_key_不在は_0_から_カウント開始(self) -> None:
+    def test_state_key_zero_count(self) -> None:
+        """statekey 不在は 0 からカウント開始。"""
         interior = _make_interior_with_state({})
         new_interior = _apply_effect(interior, {"state_key": "harvest_count"})
         new_obj = new_interior.get_object(OBJ_ID)
         assert new_obj.state["harvest_count"] == 1
 
-    def test_非整数値は_0_扱いで_再初期化(self) -> None:
+    def test_non_number_zero(self) -> None:
         """文字列等が入っていたら 0 扱いで上書きする (silent fallback)。"""
         interior = _make_interior_with_state({"harvest_count": "invalid"})
         new_interior = _apply_effect(interior, {"state_key": "harvest_count"})
@@ -91,7 +94,8 @@ class TestIncrementBasic:
 class TestIncrementSilentFallbackWarning:
     """PR #1 follow-up: 黙って skip / 黙って再初期化 する経路は warning log で surface する。"""
 
-    def test_state_key_欠落で_warning_log_が出る(self, caplog) -> None:
+    def test_emits_warning_for_state_key_missing_log(self, caplog) -> None:
+        """state key 欠落で warning log が出る。"""
         interior = _make_interior_with_state({})
         with caplog.at_level("WARNING"):
             _apply_effect(interior, {})  # state_key 未指定 → silent skip だが log は出す
@@ -100,7 +104,8 @@ class TestIncrementSilentFallbackWarning:
             for r in caplog.records
         )
 
-    def test_非整数値の再初期化で_warning_log_が出る(self, caplog) -> None:
+    def test_emits_warning_for_log(self, caplog) -> None:
+        """非整数値の再初期化で warning log が出る。"""
         interior = _make_interior_with_state({"harvest_count": "invalid"})
         with caplog.at_level("WARNING"):
             _apply_effect(interior, {"state_key": "harvest_count"})

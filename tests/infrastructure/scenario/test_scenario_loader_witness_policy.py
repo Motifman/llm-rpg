@@ -36,7 +36,8 @@ def _load_first_interaction(scenario: dict):
 class TestWitnessPolicyDefault:
     """既存シナリオ (witness_policy 未指定) は default SAME_SPOT。"""
 
-    def test_未指定なら_SAME_SPOT(self) -> None:
+    def test_unspecified_witness_policy_defaults_to_same_spot(self) -> None:
+        """未指定なら SAME SPOT。"""
         idef = _load_first_interaction(_scenario_with_interaction({}))
         assert idef.witness_policy is WitnessPolicy.SAME_SPOT
 
@@ -44,13 +45,14 @@ class TestWitnessPolicyDefault:
 class TestWitnessPolicyExplicit:
     """明示宣言で正しく enum に変換される。"""
 
-    def test_ACTOR_ONLY_を_文字列で宣言できる(self) -> None:
+    def test_actor_only_string(self) -> None:
+        """ACTORONLY を文字列で宣言できる。"""
         idef = _load_first_interaction(_scenario_with_interaction({
             "witness_policy": "ACTOR_ONLY",
         }))
         assert idef.witness_policy is WitnessPolicy.ACTOR_ONLY
 
-    def test_SAME_SPOT_を_明示宣言できる(self) -> None:
+    def test_same_spot_witness_policy_can_be_declared_explicitly(self) -> None:
         """明示しても default と同じ結果。"""
         idef = _load_first_interaction(_scenario_with_interaction({
             "witness_policy": "SAME_SPOT",
@@ -61,13 +63,15 @@ class TestWitnessPolicyExplicit:
 class TestWitnessPolicyValidation:
     """typo や型エラーを boundary で弾く。"""
 
-    def test_未知の値は_ScenarioLoadError(self) -> None:
+    def test_unknown_value_scenario_load_error(self) -> None:
+        """未知の値は ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError, match="witness_policy must be one of"):
             _load_first_interaction(_scenario_with_interaction({
                 "witness_policy": "EVERYONE",
             }))
 
-    def test_文字列以外なら_ScenarioLoadError(self) -> None:
+    def test_string_scenario_load_error(self) -> None:
+        """文字列以外なら ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError, match="witness_policy must be a string"):
             _load_first_interaction(_scenario_with_interaction({
                 "witness_policy": 1,

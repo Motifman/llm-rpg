@@ -47,7 +47,8 @@ def _make_status(hp: int = 100) -> PlayerStatusAggregate:
 
 
 class TestBleedingDamage:
-    def test_BLEEDING_は_毎_tick_HP_1_減らす(self) -> None:
+    def test_bleeding_reduces_hp_by_one_each_tick(self) -> None:
+        """BLEEDING は毎 tickHP1 減らす。"""
         status = _make_status(hp=100)
         status.add_status_effect(StatusEffect(
             effect_type=StatusEffectType.BLEEDING,
@@ -64,7 +65,8 @@ class TestBleedingDamage:
 
 
 class TestRegenerationHeal:
-    def test_REGENERATION_は_毎_tick_HP_1_回復(self) -> None:
+    def test_regeneration_restores_hp_by_one_each_tick(self) -> None:
+        """REGENERATION は毎 tickHP1 回復。"""
         status = _make_status(hp=50)
         status.add_status_effect(StatusEffect(
             effect_type=StatusEffectType.REGENERATION,
@@ -83,7 +85,8 @@ class TestRegenerationHeal:
 class TestPoisonStrongerThanBleeding:
     """POISON は BLEEDING より速い (毎 tick -2)。"""
 
-    def test_POISON_は_毎_tick_HP_2_減らす(self) -> None:
+    def test_poison_tick_hp_two(self) -> None:
+        """POISON は毎 tickHP2 減らす。"""
         status = _make_status(hp=100)
         status.add_status_effect(StatusEffect(
             effect_type=StatusEffectType.POISON,
@@ -102,7 +105,8 @@ class TestPoisonStrongerThanBleeding:
 class TestExpiry:
     """期限切れの effect は active_effects から消える。"""
 
-    def test_expiry_tick_到達で_最終ダメージが入ったあと_cleanup_される(self) -> None:
+    def test_expiry_tick_cleanup(self) -> None:
+        """expiry tick 到達で 最終ダメージが入ったあと cleanup される。"""
         status = _make_status(hp=100)
         status.add_status_effect(StatusEffect(
             effect_type=StatusEffectType.BLEEDING,
@@ -120,7 +124,8 @@ class TestExpiry:
         assert status.hp.value == 99
         assert len(status.active_effects) == 0
 
-    def test_expiry_を_超えた_tick_では_ダメージが_入らない(self) -> None:
+    def test_expiry_over_tick(self) -> None:
+        """expiry を超えた tick ではダメージが入らない。"""
         status = _make_status(hp=100)
         status.add_status_effect(StatusEffect(
             effect_type=StatusEffectType.BLEEDING,
@@ -140,7 +145,8 @@ class TestExpiry:
 class TestDeathChain:
     """HP 0 で PlayerDownedEvent が publish_all に乗る → DEAD 連鎖。"""
 
-    def test_BLEEDING_で_HP_0_に_なったら_PlayerDownedEvent_が_流れる(self) -> None:
+    def test_bleeding_hp_zero_player_downed_event(self) -> None:
+        """BLEEDING で HP0 になったら PlayerDownedEvent が流れる。"""
         status = _make_status(hp=1)
         status.add_status_effect(StatusEffect(
             effect_type=StatusEffectType.BLEEDING,
@@ -164,7 +170,8 @@ class TestDeathChain:
 class TestNoEffectNoMutation:
     """active_effects が空のプレイヤーは触らない。"""
 
-    def test_active_effects_空なら_save_されない(self) -> None:
+    def test_returns_empty_when_active_effects_save(self) -> None:
+        """active effects 空なら save されない。"""
         status = _make_status(hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]

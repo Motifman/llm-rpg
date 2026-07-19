@@ -220,7 +220,7 @@ def _belief_entry(
 class TestAfterTurnCompletedTriggers:
     """flush 発火条件 (interval / cue_signature 反復 / salience=high) を検証する。"""
 
-    def test_does_not_flush_before_interval(self) -> None:
+    def test_does_flush_before_interval(self) -> None:
         """interval 未到達かつ早期トリガーも無ければ LLM を呼ばない。"""
         setup = _build_setup(outcome={"decisions": []}, turn_interval=10)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
@@ -270,7 +270,7 @@ class TestAfterTurnCompletedTriggers:
 
         assert len(setup.port.calls) == 1
 
-    def test_completion_none_never_flushes(self) -> None:
+    def test_completion_None_never_flushes(self) -> None:
         """completion 未注入 (flag OFF 相当) では何ターン経っても LLM を呼ばない。"""
         setup = _build_setup(outcome={"decisions": []}, completion=None, turn_interval=1)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
@@ -285,7 +285,7 @@ class TestAfterTurnCompletedTriggers:
 class TestFlushPlayerBatchAndFailure:
     """batch drain と LLM 失敗時の evidence 温存を検証する。"""
 
-    def test_flush_player_batches_up_to_batch_size(self) -> None:
+    def test_flush_player_batches_up_batch_size(self) -> None:
         """batch_size を超える evidence があっても 1 回の flush では上限件数だけ処理する。"""
         setup = _build_setup(outcome={"decisions": []}, batch_size=2)
         base = datetime(2026, 7, 1, tzinfo=timezone.utc)
@@ -746,7 +746,7 @@ class TestShortlistDeterminism:
         assert [b.belief_id for b in shortlist_1] == [b.belief_id for b in shortlist_2]
         assert len(shortlist_1) == 2
 
-    def test_shortlist_empty_when_no_active_beliefs(self) -> None:
+    def test_shortlist_empty_when_active_beliefs(self) -> None:
         """active belief が無ければ shortlist は空になる。"""
         setup = _build_setup(outcome={"decisions": []})
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
@@ -762,7 +762,7 @@ class TestShortlistAttribution:
     """U4 (予測誤差統一設計 部品3): in_context_belief_ids が指す belief は
     cue スコアに関わらず必ず shortlist に含まれること。"""
 
-    def test_cue_スコアが0でも_in_context_belief_は必ず載る(self) -> None:
+    def test_cue_zero_context_belief_included(self) -> None:
         """cue_signature がノアと無関係な belief でも、evidence の
         in_context_belief_ids に含まれていれば shortlist に強制搭載される。"""
         unrelated_but_in_context = _belief_entry(
@@ -787,7 +787,7 @@ class TestShortlistAttribution:
 
         assert [b.belief_id for b in shortlist] == ["sem-unrelated-in-context"]
 
-    def test_revise後の旧entry_idが_in_contextでも新active_beliefが必ず載る(
+    def test_revise_after_legacy_entry_id_context_active_belief_included(
         self,
     ) -> None:
         """belief を create → revise (supersede) すると active entry の entry_id は
@@ -833,7 +833,7 @@ class TestShortlistAttribution:
 
         assert [(b.entry_id, b.belief_id) for b in shortlist] == [("sem-B", "sem-A")]
 
-    def test_存在しない_in_context_id_は例外にせず無視する(self) -> None:
+    def test_missing_in_context_id_is_ignored_without_exception(self) -> None:
         """in_context_belief_ids に active でも inactive でも存在しない id が
         含まれていても、例外を投げず単に forced 対象から外れること。"""
         matching = _belief_entry(
@@ -857,7 +857,7 @@ class TestShortlistAttribution:
         # 存在しない forced id は無視され、cue スコア一致の belief だけが残る。
         assert [b.belief_id for b in shortlist] == ["sem-match"]
 
-    def test_in_context_belief_は_top_k_の_cap_を超えても全件残る(self) -> None:
+    def test_context_belief_top_k_cap_over_all_remains(self) -> None:
         """forced (in-context) belief は top_k を超過しても全て残す。
         cue スコアベースの追加候補だけが残り枠に絞られる。"""
         forced_beliefs = [
@@ -890,7 +890,7 @@ class TestShortlistAttribution:
         # 残り枠 0 件で採用されない。
         assert "sem-scored" not in shortlist_ids
 
-    def test_flag_OFF相当_in_context_belief_ids_が空なら従来どおりcueスコアのみ(
+    def test_returns_empty_when_flag_off_context_belief_ids_cue(
         self,
     ) -> None:
         """evidence.in_context_belief_ids が常に空 (U4 flag OFF) のときは
@@ -916,7 +916,8 @@ class TestSystemPromptConfirmationGating:
     """U4: CONFIRMATION 節の system prompt 追記が
     belief_attribution_enabled に連動すること (OFF なら pre-U4 と byte 一致)。"""
 
-    def test_flag_OFF_なら_confirmation_節が_prompt_に無い(self) -> None:
+    def test_flag_off_confirmation_prompt(self) -> None:
+        """flag OFF なら confirmation 節が prompt に無い。"""
         setup = _build_setup(
             outcome={"decisions": []}, belief_attribution_enabled=False
         )
@@ -927,7 +928,8 @@ class TestSystemPromptConfirmationGating:
         system_message = setup.port.calls[0][0]["content"]
         assert "confirmation" not in system_message
 
-    def test_flag_ON_なら_confirmation_節が_prompt_に有る(self) -> None:
+    def test_flag_confirmation_prompt(self) -> None:
+        """flag ON なら confirmation 節が prompt に有る。"""
         setup = _build_setup(
             outcome={"decisions": []}, belief_attribution_enabled=True
         )
@@ -938,7 +940,7 @@ class TestSystemPromptConfirmationGating:
         system_message = setup.port.calls[0][0]["content"]
         assert "confirmation" in system_message
 
-    def test_flag_OFF_の_system_prompt_は_pre_U4_定数と_byte_一致(self) -> None:
+    def test_flag_off_system_prompt_pre_u4_byte_matches(self) -> None:
         """OFF のとき組み立てる system prompt が既定定数そのものであること
         (U1 で確立した flag 規律: OFF なら導入前とプロンプト byte 一致)。"""
         from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
@@ -1159,7 +1161,7 @@ class TestConfirmationSupportWeightApplication:
             compute_belief_confidence(2, 0, 1)
         )
 
-    def test_strengthen_with_duplicate_evidence_ids_does_not_break_invariant(
+    def test_strengthen_with_duplicate_evidence_ids_does_break_invariant(
         self,
     ) -> None:
         """LLM が同一 evidence_id を重複列挙しても strengthen が握りつぶされない。
@@ -1509,7 +1511,7 @@ class TestGoalReflect:
         kinds = sorted(o[2] for o in obs)
         assert kinds == ["achieved", "stalled"]
 
-    def test_reflect_coordinator_holds_no_goal_store_reference(self) -> None:
+    def test_reflect_coordinator_holds_goal_store_reference(self) -> None:
         """P7 不変条件: 固着 coordinator は goal store への参照を一切持たない。
 
         reflect が達成と判断しても goal store の status を変えられない ——
@@ -1620,7 +1622,7 @@ class TestGoalStagnationEvidence:
         pushed = self._goal_axis_evidence(setup)[0]
         assert payload["evidence_id"] == pushed.evidence_id
 
-    def test_flag_off_emits_no_belief_evidence_trace(self) -> None:
+    def test_flag_off_emits_belief_evidence_trace(self) -> None:
         """GOAL_STAGNATION_EVIDENCE_ENABLED が OFF なら goal: 軸の BELIEF_EVIDENCE
         trace event も一切出ない (= 導入前と完全一致・byte 不変の不変条件)。"""
         recorder = _CapturingRecorder()
@@ -1647,7 +1649,7 @@ class TestGoalStagnationEvidence:
         ]
         assert goal_events == []
 
-    def test_achieved_verdict_pushes_no_evidence(self) -> None:
+    def test_achieved_verdict_pushes_evidence(self) -> None:
         """achieved (前進) は誤差ではないので evidence を積まない。"""
         setup = _build_setup(
             outcome={"decisions": [
@@ -1681,7 +1683,7 @@ class TestGoalStagnationEvidence:
         goal_evidences = self._goal_axis_evidence(setup)
         assert len(goal_evidences) == 1
 
-    def test_flag_off_pushes_no_evidence_even_when_stalled(self) -> None:
+    def test_flag_off_pushes_evidence_even_when_stalled(self) -> None:
         """GOAL_STAGNATION_EVIDENCE_ENABLED が OFF (既定) なら、stalled でも
         evidence を積まない = 導入前と完全に一致する。"""
         obs: list = []
@@ -1701,7 +1703,7 @@ class TestGoalStagnationEvidence:
         assert len(obs) == 1
         assert self._goal_axis_evidence(setup) == []
 
-    def test_suppressed_by_cap_pushes_no_evidence(self) -> None:
+    def test_suppressed_by_cap_pushes_evidence(self) -> None:
         """観測注入自体が stall_min_interval_turns の cap で抑制された回は、
         evidence も積まない (「reflect が実際に発火したときだけ」乱発防止を
         観測と evidence で共有する)。
@@ -1746,7 +1748,7 @@ class TestGoalStagnationEvidence:
         assert len(obs) == 1
         assert len(appended_goal_cues) == 1
 
-    def test_reflect_does_not_write_belief_journal_directly(self) -> None:
+    def test_reflect_does_write_belief_journal_directly(self) -> None:
         """不変条件: evidence 化を導入しても、reflect 自体は belief journal
         (semantic_store) に直接書き込まない。積むのは evidence buffer だけで、
         journal への反映は次周期以降の固着 LLM の判断を経由する。"""
@@ -1897,7 +1899,7 @@ class TestStagnationPressure:
         setup.coordinator.flush_player(setup.player_id)
         assert store.get_by_being(setup.being_id) == 0
 
-    def test_no_verdict_leaves_counter_unchanged(self) -> None:
+    def test_verdict_leaves_counter_unchanged(self) -> None:
         """reflect action が無い (verdict も無い) 回はカウンタを据え置く。"""
         setup = _build_setup(
             outcome={"decisions": []},
@@ -2021,7 +2023,7 @@ class TestStagnationPressure:
         setup.coordinator.flush_player(setup.player_id)
         assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 0
 
-    def test_stagnation_pressure_does_not_write_belief_journal_or_goal_store(self) -> None:
+    def test_stagnation_pressure_does_write_belief_journal_or_goal_store(self) -> None:
         """不変条件: 停滞感カウンタの畳み込みは belief journal にも goal store にも
         書き込まない。積むのは stagnation_pressure_store のカウンタのみ。"""
         setup = _build_setup(
@@ -2226,7 +2228,7 @@ class TestHearsaySpeakerShortlist:
 
         assert "sem-rio" in {b.belief_id for b in shortlist}
 
-    def test_non_speaker_belief_not_forced(self) -> None:
+    def test_non_speaker_belief_forced(self) -> None:
         """話者名を含まない belief は (cue も一致しなければ) 強制搭載されない。"""
         other = _belief_entry(
             entry_id="sem-other",
@@ -2252,7 +2254,7 @@ class TestHearsaySpeakerShortlist:
 
         assert "sem-other" not in {b.belief_id for b in shortlist}
 
-    def test_speaker_belief_not_forced_when_flag_off(self) -> None:
+    def test_speaker_belief_forced_when_flag_off(self) -> None:
         """flag OFF なら、batch に HEARSAY evidence が残留していても話者強制は
         発火しない (flag OFF = pre-P10 挙動一致を batch 残留物に依存せず保証)。"""
         speaker_belief = _belief_entry(
@@ -2306,7 +2308,7 @@ class TestSystemPromptHearsayGating:
         assert "hearsay" in system_message
         assert "伝聞" in system_message
 
-    def test_system_prompt_byte_identical_to_pre_p10_when_flag_off(self) -> None:
+    def test_system_prompt_byte_identical_pre_p10_when_flag_off(self) -> None:
         """flag OFF のとき system prompt が pre-P10 定数と byte 一致する。"""
         from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
             _SYSTEM_BELIEF_CONSOLIDATION_JSON,
@@ -2594,7 +2596,7 @@ class TestMalformedResponseHandling:
         assert processed == 1
         assert setup.evidence_buffer.list_all_by_being(setup.being_id) == []
 
-    def test_malformed_response_emits_note_trace_not_consolidation(self) -> None:
+    def test_malformed_response_emits_note_trace_consolidation(self) -> None:
         """構造不正のときは NOTE trace が出て、BELIEF_CONSOLIDATION (batch 処理済み
         の記録) は出ない (温存した局面を trace 上で区別する)。"""
         recorder = _CapturingRecorder()

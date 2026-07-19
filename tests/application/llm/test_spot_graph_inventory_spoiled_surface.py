@@ -34,7 +34,8 @@ def _empty_snapshot(**overrides) -> SpotGraphPlayerSnapshotDto:
 class TestInventorySpoiledSurface:
     """所持品エントリで is_spoiled=True なら「(腐敗)」が付与される。"""
 
-    def test_腐敗していないアイテムにはマーカーが付かない(self) -> None:
+    def test_unspoiled_items_do_not_get_spoilage_marker(self) -> None:
+        """腐敗していないアイテムにはマーカーが付かない。"""
         snap = _empty_snapshot(
             inventory_items=(
                 SpotGraphInventoryItemEntry(
@@ -52,7 +53,8 @@ class TestInventorySpoiledSurface:
         assert "(腐敗)" not in lines[-1]
         assert "生の魚" in lines[-1]
 
-    def test_腐敗アイテムには_腐敗_が表示される(self) -> None:
+    def test_item_displayed(self) -> None:
+        """腐敗アイテムには 腐敗 が表示される。"""
         snap = _empty_snapshot(
             inventory_items=(
                 SpotGraphInventoryItemEntry(
@@ -70,7 +72,8 @@ class TestInventorySpoiledSurface:
         assert "(腐敗)" in lines[-1]
         assert "生の魚" in lines[-1]
 
-    def test_quantity_と_腐敗_の両方が表示される(self) -> None:
+    def test_quantity_displayed(self) -> None:
+        """quantity と腐敗の両方が表示される。"""
         snap = _empty_snapshot(
             inventory_items=(
                 SpotGraphInventoryItemEntry(
@@ -93,7 +96,8 @@ class TestInventorySpoiledSurface:
 class TestGroundItemSpoiledSurface:
     """地面アイテムも同じく (腐敗) が付与される。"""
 
-    def test_地面の腐敗アイテムにも_腐敗_が出る(self) -> None:
+    def test_ground_item_rendered(self) -> None:
+        """地面の腐敗アイテムにも 腐敗 が出る。"""
         snap = _empty_snapshot(
             ground_items=(
                 SpotGraphGroundItemEntry(
@@ -110,7 +114,8 @@ class TestGroundItemSpoiledSurface:
 
         assert "(腐敗)" in lines[-1]
 
-    def test_地面の新鮮アイテムには_腐敗_が出ない(self) -> None:
+    def test_ground_item_not_rendered(self) -> None:
+        """地面の新鮮アイテムには 腐敗 が出ない。"""
         snap = _empty_snapshot(
             ground_items=(
                 SpotGraphGroundItemEntry(
@@ -131,15 +136,17 @@ class TestGroundItemSpoiledSurface:
 class TestDtoDefaults:
     """DTO の default 値 (既存呼び出し側に無影響であること)。"""
 
-    def test_InventoryEntry_の_is_spoiled_default_は_False(self) -> None:
+    def test_inventory_entry_spoiled_default_false(self) -> None:
+        """InventoryEntry の is spoiled default は False。"""
         entry = SpotGraphInventoryItemEntry(item_spec_id=1, name="x", quantity=1)
         assert entry.is_spoiled is False
 
-    def test_GroundItemEntry_の_is_spoiled_default_は_False(self) -> None:
+    def test_ground_item_entry_spoiled_default_false(self) -> None:
+        """GroundItemEntry の is spoiled default は False。"""
         entry = SpotGraphGroundItemEntry(item_instance_id=1, item_spec_id=1, name="x")
         assert entry.is_spoiled is False
 
-    def test_InventoryEntry_の_item_type_default_は_空文字(self) -> None:
+    def test_inventory_entry_item_type_default_empty_string(self) -> None:
         """旧呼び出し側 (item_type を渡さない) には何のタグも付かないことを保証。"""
         entry = SpotGraphInventoryItemEntry(item_spec_id=1, name="x", quantity=1)
         assert entry.item_type == ""
@@ -161,7 +168,8 @@ class TestInventoryItemTypeTag:
         builder._build_inventory_section(snap, allocator, collector, lines)
         return lines[-1]
 
-    def test_consumable_は_食料_タグ(self) -> None:
+    def test_consumable(self) -> None:
+        """consumable は食料タグ。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=1, name="生の魚", quantity=1, item_type="consumable",
@@ -169,7 +177,7 @@ class TestInventoryItemTypeTag:
         )
         assert "(食料)" in line
 
-    def test_material_は_素材_使用不可_タグ(self) -> None:
+    def test_material(self) -> None:
         """PR-C: ``material`` は use_item できないため「使用不可」を明示する。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
@@ -178,7 +186,8 @@ class TestInventoryItemTypeTag:
         )
         assert "(素材・使用不可)" in line
 
-    def test_tool_は_道具_使用不可_タグ(self) -> None:
+    def test_tool(self) -> None:
+        """tool は道具使用不可タグ。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=3, name="火打ち石", quantity=1, item_type="tool",
@@ -186,7 +195,8 @@ class TestInventoryItemTypeTag:
         )
         assert "(道具・使用不可)" in line
 
-    def test_key_item_は_重要_使用不可_タグ(self) -> None:
+    def test_key_item_gets_important_and_unusable_tags(self) -> None:
+        """keyitem は重要使用不可タグ。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=4, name="骨のナイフ", quantity=1, item_type="key_item",
@@ -194,7 +204,7 @@ class TestInventoryItemTypeTag:
         )
         assert "(重要・使用不可)" in line
 
-    def test_未知_type_はタグなし(self) -> None:
+    def test_unknown_type(self) -> None:
         """fallback 動作: 未知文字列でもクラッシュせずタグ非表示。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
@@ -205,7 +215,7 @@ class TestInventoryItemTypeTag:
         for tag in ("(食料)", "(素材", "(道具", "(重要", "(装備"):
             assert tag not in line
 
-    def test_other_type_は_使用不可_のみ(self) -> None:
+    def test_other_type(self) -> None:
         """PR-C: ``other`` は日本語 type 名は無いが、use_item できないことだけ
         明示する。Y_after_issue621 で「分類不能で使用不可」のフィードバックが
         足りず、LLM が試行に走った例を防ぐ。"""
@@ -219,7 +229,7 @@ class TestInventoryItemTypeTag:
         for tag in ("(食料)", "(素材", "(道具", "(重要"):
             assert tag not in line
 
-    def test_type_と_腐敗_の両方が表示される(self) -> None:
+    def test_type_displayed(self) -> None:
         """腐敗食 = (食料)(腐敗) の両方が並ぶ。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(

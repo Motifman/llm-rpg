@@ -37,17 +37,19 @@ def runtime(monkeypatch: pytest.MonkeyPatch):
 class TestLlmCallCounter:
     """LLM 呼び出しカウンタ (#404 P2)。"""
 
-    def test_初期値は_0(self, runtime) -> None:
+    def test_initial_value_zero(self, runtime) -> None:
+        """初期値は 0。"""
         assert runtime.pop_llm_call_count() == 0
 
-    def test_bump_3回_pop_で_3が返り_次の_pop_は_0(self, runtime) -> None:
+    def test_bump_three_pop_three_pop_zero(self, runtime) -> None:
+        """bump 3回 pop で 3が返り 次の pop は 0。"""
         runtime.bump_llm_call_count()
         runtime.bump_llm_call_count()
         runtime.bump_llm_call_count()
         assert runtime.pop_llm_call_count() == 3
         assert runtime.pop_llm_call_count() == 0
 
-    def test_並列_bump_でも_値が落ちない(self, runtime) -> None:
+    def test_column_bump_value_does_not_crash(self, runtime) -> None:
         """ThreadPoolExecutor で 4 worker × 250 bump = 1000 件。Lock 不在で
         ++int が race するパスを検知する。"""
         N = 1000
@@ -66,15 +68,18 @@ class TestLlmCallCounter:
 class TestCountTravelingPlayers:
     """travel_active 集計 (#404 P2)。"""
 
-    def test_誰も移動していない時は_0(self, runtime) -> None:
+    def test_zero(self, runtime) -> None:
+        """誰も移動していない時は 0。"""
         assert runtime.count_traveling_players() == 0
 
-    def test_1人移動を開始すると_1が返る(self, runtime) -> None:
+    def test_returns_one_1(self, runtime) -> None:
+        """1人移動を開始すると 1が返る。"""
         player_id = runtime.get_player_ids()[0]
         runtime.do_move(player_id, "reading_room")
         assert runtime.count_traveling_players() == 1
 
-    def test_到着すると_0に戻る(self, runtime) -> None:
+    def test_returns_zero(self, runtime) -> None:
+        """到着すると 0に戻る。"""
         player_id = runtime.get_player_ids()[0]
         runtime.do_move(player_id, "reading_room")
         runtime.advance_until_player_idle(player_id)

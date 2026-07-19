@@ -15,12 +15,14 @@ from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEnd
 class TestBackwardCompat:
     """既存呼び出し (3 引数) は player_outcomes=None で動く。"""
 
-    def test_既存_3_引数_constructor_で_player_outcomes_は_None(self) -> None:
+    def test_existing_three_argument_constructor_player_outcomes_none(self) -> None:
+        """既存 3 引数 constructor で player outcomes は None。"""
         result = GameEndResult(is_ended=True, result=GameResultEnum.WIN, reason="勝利")
         assert result.player_outcomes is None
         assert result.result is GameResultEnum.WIN
 
-    def test_per_player_モードの_GameEndResult(self) -> None:
+    def test_per_player_game_end_result(self) -> None:
+        """per player モードの GameEndResult。"""
         snapshot = {1: PlayerOutcomeEnum.RESCUED, 2: PlayerOutcomeEnum.DEAD}
         result = GameEndResult(
             is_ended=True, result=None, reason="全員 outcome 確定",

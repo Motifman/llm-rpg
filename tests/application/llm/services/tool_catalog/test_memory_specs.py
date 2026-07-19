@@ -16,22 +16,26 @@ def _names(specs):
 class TestGetMemorySpecsFlags:
     """flag が False のときは tool が出ない / True のときだけ出る。"""
 
-    def test_default_は_全部_OFF(self) -> None:
+    def test_default_all_off(self) -> None:
+        """default は全部 OFF。"""
         names = _names(get_memory_specs())
         assert TOOL_NAME_MEMORY_EXPLORE_RELATED not in names
         assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC not in names
 
-    def test_episodic_explore_related_enabled_True_で_だけ_出る(self) -> None:
+    def test_episodic_explore_related_enabled_true_rendered(self) -> None:
+        """episodicexplorerelatedenabledTrue でだけ出る。"""
         names = _names(get_memory_specs(episodic_explore_related_enabled=True))
         assert TOOL_NAME_MEMORY_EXPLORE_RELATED in names
         assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC not in names
 
-    def test_semantic_search_enabled_True_で_だけ_出る(self) -> None:
+    def test_semantic_search_enabled_true_rendered(self) -> None:
+        """semanticsearchenabledTrue でだけ出る。"""
         names = _names(get_memory_specs(semantic_search_enabled=True))
         assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in names
         assert TOOL_NAME_MEMORY_EXPLORE_RELATED not in names
 
-    def test_両方_True_なら_両方_出る(self) -> None:
+    def test_true_rendered(self) -> None:
+        """両方 True なら 両方 出る。"""
         names = _names(
             get_memory_specs(
                 episodic_explore_related_enabled=True,
@@ -41,7 +45,7 @@ class TestGetMemorySpecsFlags:
         assert TOOL_NAME_MEMORY_EXPLORE_RELATED in names
         assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in names
 
-    def test_memo_enabled_と_combinable(self) -> None:
+    def test_memo_enabled_combinable(self) -> None:
         """memo 系と semantic search は同時に有効化できる。"""
         specs = get_memory_specs(memo_enabled=True, semantic_search_enabled=True)
         names = _names(specs)

@@ -87,7 +87,8 @@ def _evaluator(repo) -> ScenarioConditionEvaluator:
 class TestObjectStateIntAtLeast:
     """OBJECT_STATE_INT_AT_LEAST predicate の評価ロジック。"""
 
-    def test_count_が_threshold_に達したら_True(self) -> None:
+    def test_count_threshold_true(self) -> None:
+        """count が threshold に達したら True。"""
         graph, repo = _make_graph_with_object({"harvest_count": 5})
         cond = ScenarioEventCondition(
             condition_type="OBJECT_STATE_INT_AT_LEAST",
@@ -97,7 +98,8 @@ class TestObjectStateIntAtLeast:
         )
         assert _evaluator(repo).evaluate(cond, WorldTick(0), graph) is True
 
-    def test_count_が_threshold_未満なら_False(self) -> None:
+    def test_count_threshold_below_false(self) -> None:
+        """count が threshold 未満なら False。"""
         graph, repo = _make_graph_with_object({"harvest_count": 3})
         cond = ScenarioEventCondition(
             condition_type="OBJECT_STATE_INT_AT_LEAST",
@@ -107,7 +109,7 @@ class TestObjectStateIntAtLeast:
         )
         assert _evaluator(repo).evaluate(cond, WorldTick(0), graph) is False
 
-    def test_state_key_不在は_0_扱い_False(self) -> None:
+    def test_state_key_zero_false(self) -> None:
         """まだ採取してないオブジェクトは枯渇判定で False (= まだ枯渇してない)。"""
         graph, repo = _make_graph_with_object({})
         cond = ScenarioEventCondition(
@@ -118,7 +120,7 @@ class TestObjectStateIntAtLeast:
         )
         assert _evaluator(repo).evaluate(cond, WorldTick(0), graph) is False
 
-    def test_count_と_threshold_が_完全一致なら_True(self) -> None:
+    def test_count_threshold_all_matches_true(self) -> None:
         """境界条件: ちょうど threshold に達した瞬間に枯渇判定される。"""
         graph, repo = _make_graph_with_object({"harvest_count": 5})
         cond = ScenarioEventCondition(
@@ -129,7 +131,8 @@ class TestObjectStateIntAtLeast:
         )
         assert _evaluator(repo).evaluate(cond, WorldTick(0), graph) is True
 
-    def test_必須フィールド不足は_False(self) -> None:
+    def test_false(self) -> None:
+        """必須フィールド不足は False。"""
         graph, repo = _make_graph_with_object({"harvest_count": 10})
         # state_key 無し
         cond_no_key = ScenarioEventCondition(

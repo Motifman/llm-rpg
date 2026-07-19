@@ -24,29 +24,31 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 class TestRegisterAndCancel:
     """pending state の出入りを管理する基本動作。"""
 
-    def test_register_すると_is_pending_が_True_になる(self) -> None:
+    def test_register_pending_true(self) -> None:
+        """register すると is pending が True になる。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=10)
         assert timer.is_pending(PlayerId(1)) is True
 
-    def test_register_していない_player_は_is_pending_False(self) -> None:
+    def test_register_player_pending_false(self) -> None:
+        """register していない player は is pending False。"""
         timer = PlayerDeathGraceTimer()
         assert timer.is_pending(PlayerId(99)) is False
 
-    def test_cancel_すると_is_pending_が_False_に_戻る(self) -> None:
+    def test_returns_cancel_pending_false(self) -> None:
         """revive で grace 期間がキャンセルされた状態を表現する。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=10)
         timer.cancel(PlayerId(1))
         assert timer.is_pending(PlayerId(1)) is False
 
-    def test_pending_でない_player_を_cancel_しても_例外にならない(self) -> None:
+    def test_pending_player_cancel_raises_exception(self) -> None:
         """revive event が重複発火しても破綻しない冪等性。"""
         timer = PlayerDeathGraceTimer()
         timer.cancel(PlayerId(99))  # no-op
         # 例外なく完了
 
-    def test_同じ_player_を_2_回_register_すると_最新の_tick_で_上書きされる(self) -> None:
+    def test_same_player_two_register_tick_overwritten(self) -> None:
         """ダウン後に revive、再ダウン (= 短時間で 2 度倒れた) ケース。
         2 度目の register が新しい起点となる (= 30 tick 猶予がリセット)。
         """
@@ -64,27 +66,30 @@ class TestRegisterAndCancel:
 class TestOverduePlayers:
     """猶予 tick を過ぎた player を抽出する挙動。"""
 
-    def test_grace_tick_経過前は_overdue_に_含まれない(self) -> None:
+    def test_grace_tick_before_overdue_not_included(self) -> None:
+        """gracetick 経過前は overdue に含まれない。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=10)
         # tick 39 = 29 tick 経過 (= grace 30 未満)
         overdue = timer.overdue_players(current_tick=39, grace_ticks=30)
         assert PlayerId(1) not in overdue
 
-    def test_grace_tick_ちょうどで_overdue_に_含まれる(self) -> None:
+    def test_grace_tick_overdue_included(self) -> None:
         """downed_at_tick + grace_ticks = current_tick で確定 (= 境界が inclusive)。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=10)
         overdue = timer.overdue_players(current_tick=40, grace_ticks=30)
         assert PlayerId(1) in overdue
 
-    def test_grace_tick_経過後は_overdue_に_含まれる(self) -> None:
+    def test_grace_tick_after_overdue_included(self) -> None:
+        """gracetick 経過後は overdue に含まれる。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=10)
         overdue = timer.overdue_players(current_tick=100, grace_ticks=30)
         assert PlayerId(1) in overdue
 
-    def test_複数_player_の_overdue_を_独立に_判定(self) -> None:
+    def test_multiple_player_overdue_independently(self) -> None:
+        """複数 player の overdue を独立に判定。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=10)   # tick 40 で overdue
         timer.register(PlayerId(2), downed_at_tick=20)   # tick 50 で overdue
@@ -94,7 +99,7 @@ class TestOverduePlayers:
         assert PlayerId(2) not in overdue
         assert PlayerId(3) not in overdue
 
-    def test_cancel_された_player_は_overdue_に_含まれない(self) -> None:
+    def test_cancel_player_overdue_not_included(self) -> None:
         """revive 後の player は猶予判定の対象外。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=10)
@@ -102,7 +107,8 @@ class TestOverduePlayers:
         overdue = timer.overdue_players(current_tick=100, grace_ticks=30)
         assert PlayerId(1) not in overdue
 
-    def test_pending_player_が_空_なら_overdue_も_空(self) -> None:
+    def test_empty_pending_players_returns_empty_overdue_players(self) -> None:
+        """pendingplayer が空なら overdue も空。"""
         timer = PlayerDeathGraceTimer()
         overdue = timer.overdue_players(current_tick=100, grace_ticks=30)
         assert overdue == []
@@ -111,17 +117,20 @@ class TestOverduePlayers:
 class TestValidation:
     """不正な入力を弾く。"""
 
-    def test_register_の_downed_at_tick_は_非負(self) -> None:
+    def test_register_downed_tick_non(self) -> None:
+        """register の downedattick は非負。"""
         timer = PlayerDeathGraceTimer()
         with pytest.raises(ValueError):
             timer.register(PlayerId(1), downed_at_tick=-1)
 
-    def test_overdue_players_の_grace_ticks_は_非負(self) -> None:
+    def test_overdue_players_grace_ticks_non(self) -> None:
+        """overdueplayers の graceticks は非負。"""
         timer = PlayerDeathGraceTimer()
         with pytest.raises(ValueError):
             timer.overdue_players(current_tick=10, grace_ticks=-1)
 
-    def test_register_の_player_id_は_PlayerId(self) -> None:
+    def test_register_player_id_player_id(self) -> None:
+        """register の player id は PlayerId。"""
         timer = PlayerDeathGraceTimer()
         with pytest.raises(TypeError):
             timer.register(1, downed_at_tick=0)  # type: ignore[arg-type]
@@ -132,24 +141,28 @@ class TestGetDownedAtTick:
     のに ``downed_at_tick`` を読み出すための getter。cancel される前に handler
     から参照する用途。"""
 
-    def test_register_された_player_の_tick_を_返す(self) -> None:
+    def test_returns_register_player_tick(self) -> None:
+        """register された player の tick を返す。"""
         timer = PlayerDeathGraceTimer()
         pid = PlayerId(1)
         timer.register(pid, downed_at_tick=7)
         assert timer.get_downed_at_tick(pid) == 7
 
-    def test_register_していない_player_は_None_を_返す(self) -> None:
+    def test_returns_none_register_player(self) -> None:
+        """register していない player は None を返す。"""
         timer = PlayerDeathGraceTimer()
         assert timer.get_downed_at_tick(PlayerId(99)) is None
 
-    def test_cancel_後は_None_を_返す(self) -> None:
+    def test_returns_none_cancel_after(self) -> None:
+        """cancel 後は None を返す。"""
         timer = PlayerDeathGraceTimer()
         pid = PlayerId(1)
         timer.register(pid, downed_at_tick=7)
         timer.cancel(pid)
         assert timer.get_downed_at_tick(pid) is None
 
-    def test_player_id_は_PlayerId(self) -> None:
+    def test_player_id_player_id(self) -> None:
+        """player id は PlayerId。"""
         timer = PlayerDeathGraceTimer()
         with pytest.raises(TypeError):
             timer.get_downed_at_tick(1)  # type: ignore[arg-type]

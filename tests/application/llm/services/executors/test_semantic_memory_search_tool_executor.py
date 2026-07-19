@@ -79,38 +79,42 @@ def _add(
 class TestSemanticMemorySearchHandlerRegistration:
     """get_handlers が tool name を返す。"""
 
-    def test_handler_dict_に_tool_name_が_キーとして含まれる(
+    def test_handler_dict_tool_name_key_included(
         self, executor: SemanticMemorySearchToolExecutor
     ) -> None:
+        """handlerdict に toolname がキーとして含まれる。"""
         assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in executor.get_handlers()
 
 
 class TestSemanticMemorySearchArgValidation:
     """引数の境界。"""
 
-    def test_query_が_空文字なら_invalid_argument(
+    def test_query_empty_string_invalid_argument(
         self, executor: SemanticMemorySearchToolExecutor
     ) -> None:
+        """query が空文字なら invalidargument。"""
         result = executor._run_search_semantic(player_id=1, arguments={"query": ""})
         assert result.success is False
         assert result.error_code == "INVALID_ARGUMENT"
 
-    def test_query_が_未指定なら_invalid_argument(
+    def test_query_unspecified_invalid_argument(
         self, executor: SemanticMemorySearchToolExecutor
     ) -> None:
+        """query が未指定なら invalidargument。"""
         result = executor._run_search_semantic(player_id=1, arguments={})
         assert result.success is False
         assert result.error_code == "INVALID_ARGUMENT"
 
-    def test_query_が_前後空白だけなら_invalid_argument(
+    def test_query_around_blank_invalid_argument(
         self, executor: SemanticMemorySearchToolExecutor
     ) -> None:
+        """query が前後空白だけなら invalidargument。"""
         result = executor._run_search_semantic(
             player_id=1, arguments={"query": "   "}
         )
         assert result.success is False
 
-    def test_top_k_の_非数値は_default_に_縮退(
+    def test_top_k_non_number_default(
         self,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
@@ -122,20 +126,22 @@ class TestSemanticMemorySearchArgValidation:
         )
         assert result.success is True
 
-    def test_top_k_が_負数_または_0_は_default_に_縮退(
+    def test_top_k_zero_default(
         self, executor: SemanticMemorySearchToolExecutor
     ) -> None:
+        """topk が負数または 0 は default に縮退。"""
         for raw in (0, -3):
             result = executor._run_search_semantic(
                 player_id=1, arguments={"query": "a", "top_k": raw}
             )
             assert result.success is True
 
-    def test_top_k_が_最大値_を超えたら_32_で_cap(
+    def test_top_k_max_value_over_32_cap(
         self,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
+        """topk が最大値を超えたら 32 で cap。"""
         for i in range(50):
             _add(setup, _entry(entry_id=f"s{i}", text=f"q{i}", tags=("q",)))
         result = executor._run_search_semantic(
@@ -148,11 +154,12 @@ class TestSemanticMemorySearchArgValidation:
 class TestSemanticMemorySearchScoring:
     """tag 完全一致 / tag 部分一致 / 本文一致 の score 優先順。"""
 
-    def test_tag_完全一致が_最上位(
+    def test_tag_all_matches(
         self,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
+        """tag 完全一致が 最上位。"""
         _add(setup, _entry(entry_id="text_only", text="タカシは漁の名手", tags=()))
         _add(setup, _entry(entry_id="exact", text="ある記憶", tags=("タカシ",)))
         result = executor._run_search_semantic(
@@ -162,11 +169,12 @@ class TestSemanticMemorySearchScoring:
         ids = [row["entry_id"] for row in payload["matched_entries"]]
         assert ids[0] == "exact"
 
-    def test_match_しない_entry_は_結果に出ない(
+    def test_match_entry_not_rendered(
         self,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
+        """match しない entry は結果に出ない。"""
         _add(setup, _entry(entry_id="match", text="毒キノコ", tags=()))
         _add(setup, _entry(entry_id="miss", text="ココナッツ", tags=()))
         result = executor._run_search_semantic(
@@ -176,11 +184,12 @@ class TestSemanticMemorySearchScoring:
         ids = [row["entry_id"] for row in payload["matched_entries"]]
         assert ids == ["match"]
 
-    def test_本文部分一致でも_hit_する(
+    def test_text_matches_hit(
         self,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
+        """本文部分一致でも hit する。"""
         _add(setup, _entry(entry_id="text", text="北の洞窟は熊の巣", tags=()))
         result = executor._run_search_semantic(
             player_id=1, arguments={"query": "北の洞窟"}
@@ -188,7 +197,7 @@ class TestSemanticMemorySearchScoring:
         payload = json.loads(result.message)
         assert any(row["entry_id"] == "text" for row in payload["matched_entries"])
 
-    def test_case_insensitive_に_match(
+    def test_case_insensitive_match(
         self,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
@@ -201,11 +210,12 @@ class TestSemanticMemorySearchScoring:
         payload = json.loads(result.message)
         assert payload["matched_entries"][0]["entry_id"] == "b"
 
-    def test_同じ_match_score_なら_importance_が_高い方が_上位(
+    def test_same_match_score_importance(
         self,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
+        """同じ matchscore なら importance が高い方が上位。"""
         _add(setup, _entry(entry_id="low", tags=("q",), importance_score=3))
         _add(setup, _entry(entry_id="high", tags=("q",), importance_score=9))
         result = executor._run_search_semantic(
@@ -218,11 +228,12 @@ class TestSemanticMemorySearchScoring:
 class TestSemanticMemorySearchPayload:
     """返却 JSON が想定通り。"""
 
-    def test_query_と_matched_entries_が_含まれる(
+    def test_query_matched_entries_included(
         self,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
+        """query と matchedentries が含まれる。"""
         _add(setup, _entry(entry_id="x", text="ok", tags=("k",), importance_score=7))
         result = executor._run_search_semantic(
             player_id=1, arguments={"query": "k"}
@@ -236,7 +247,7 @@ class TestSemanticMemorySearchPayload:
         assert row["match_score"] > 0
         assert row["summary"] == "ok"
 
-    def test_store_が_空でも_success_を返す(
+    def test_returns_store_empty_success(
         self, executor: SemanticMemorySearchToolExecutor
     ) -> None:
         """「思い出そうとしたが何もなかった」も正常な検索結果。"""

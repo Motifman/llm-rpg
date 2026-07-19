@@ -171,7 +171,7 @@ def _runtime_context_at(spot_id: int) -> ToolRuntimeContextDto:
 class TestRecallByCurrentLocationCue:
     """シナリオ 1: 同一スポットへの再訪。place_spot 軸で過去訪問が recall される。"""
 
-    def test_閲覧室に戻ると過去の閲覧室訪問が想起される(
+    def test_returns_recall(
         self, lin_visit_history: InMemorySubjectiveEpisodeStore
     ) -> None:
         """リンが閲覧室に戻った場面で、過去の閲覧室訪問 (ep1, ep5) が cue 軸で
@@ -211,7 +211,7 @@ class TestRecallByObservationStructuredCue:
     届けば、自然に書架A の過去 episode が recall される。
     """
 
-    def test_観測_structured_に_書架A_が乗ると書架A訪問が想起される(
+    def test_observation_structured_included_recall(
         self, lin_visit_history: InMemorySubjectiveEpisodeStore
     ) -> None:
         """リンは閲覧室にいる。SNS / speech 観測の structured に
@@ -263,7 +263,7 @@ class TestRecallByFreeTextMention:
     という単一原則のみで emergent に成立する動作。
     """
 
-    def test_matcher_未注入なら自由文_書架A_は_cue_にならない(
+    def test_matcher_uninjected_cue(
         self, lin_visit_history: InMemorySubjectiveEpisodeStore
     ) -> None:
         """matcher を渡さなければ自由文経路は無効 = 旧挙動を維持する後方互換。
@@ -289,7 +289,7 @@ class TestRecallByFreeTextMention:
         cue_keys = {(c.axis, c.value) for c in cues}
         assert ("place_spot", "3") not in cue_keys
 
-    def test_matcher_注入で自由文_書架A_が_cue_になり_書架A_episode_が_recall_される(
+    def test_matcher_cue_episode_recall(
         self, lin_visit_history: InMemorySubjectiveEpisodeStore
     ) -> None:
         """**Issue #283 後続の主目的動作**:
@@ -354,9 +354,10 @@ class TestRecallScalesWithRepeatedVisits:
     """ボーナス: 同じスポットを何度も訪れた場合、recall は重複 episode を
     distinct に扱う。"""
 
-    def test_閲覧室_2_回訪問が_distinct_episode_としてrecallされる(
+    def test_two_distinct_episode_recall(
         self, lin_visit_history: InMemorySubjectiveEpisodeStore
     ) -> None:
+        """閲覧室 2 回訪問が distinct episode としてrecallされる。"""
         svc = EpisodicPassiveRecallRetrievalService(
             lin_visit_history,
             being_attachment_resolver=_resolver_for_lin()[0],

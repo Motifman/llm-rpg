@@ -60,17 +60,21 @@ def _llm_call(
 
 
 class TestPercentile:
-    def test_空_list_は_None(self) -> None:
+    def test_empty_list_none(self) -> None:
+        """空 list は None。"""
         assert _percentile([], 50) is None
 
-    def test_単一値_は_そのまま(self) -> None:
+    def test_single_value(self) -> None:
+        """単一値はそのまま。"""
         assert _percentile([100.0], 50) == 100.0
         assert _percentile([100.0], 99) == 100.0
 
-    def test_中央値(self) -> None:
+    def test_value(self) -> None:
+        """中央値。"""
         assert _percentile([1.0, 2.0, 3.0], 50) == 2.0
 
-    def test_p95_の境界(self) -> None:
+    def test_p95_boundary(self) -> None:
+        """p95 の境界。"""
         # 0-99 の 100 値で p95 = 94.05
         values = [float(i) for i in range(100)]
         result = _percentile(values, 95)
@@ -79,13 +83,15 @@ class TestPercentile:
 
 
 class TestSummarize:
-    def test_空なら_count_0(self) -> None:
+    def test_returns_empty_when_count_zero(self) -> None:
+        """空なら count 0。"""
         s = _summarize([])
         assert s["count"] == 0
         assert s["p50"] is None
         assert s["max"] is None
 
-    def test_値ありで_summary_が_出る(self) -> None:
+    def test_value_summary_rendered(self) -> None:
+        """値ありで summary が出る。"""
         s = _summarize([1.0, 2.0, 3.0, 4.0, 5.0])
         assert s["count"] == 5
         assert s["p50"] == 3.0
@@ -94,7 +100,8 @@ class TestSummarize:
 
 
 class TestIterLlmCallEvents:
-    def test_LLM_CALL_だけ_filter_される(self, tmp_path: Path) -> None:
+    def test_llm_call_filter(self, tmp_path: Path) -> None:
+        """LLM CALL だけ filter される。"""
         path = tmp_path / "trace.jsonl"
         _write_trace(path, [
             {"kind": "llm_call", "payload": {"wall_latency_ms": 100}},
@@ -105,7 +112,8 @@ class TestIterLlmCallEvents:
         events = list(iter_llm_call_events([path]))
         assert len(events) == 2
 
-    def test_壊れた行は_skip(self, tmp_path: Path) -> None:
+    def test_line_skip(self, tmp_path: Path) -> None:
+        """壊れた行は skip。"""
         path = tmp_path / "trace.jsonl"
         path.write_text(
             'not-json\n'
@@ -117,15 +125,17 @@ class TestIterLlmCallEvents:
         events = list(iter_llm_call_events([path]))
         assert len(events) == 2
 
-    def test_存在しないパスは_warning_で_skip(
+    def test_emits_warning_for_missing_skip(
         self, tmp_path: Path, capsys
     ) -> None:
+        """存在しないパスは warning で skip。"""
         events = list(iter_llm_call_events([tmp_path / "missing.jsonl"]))
         assert events == []
 
 
 class TestAnalyze:
-    def test_全体_と_breakdown_を_集計(self, tmp_path: Path) -> None:
+    def test_all_breakdown(self, tmp_path: Path) -> None:
+        """全体と breakdown を集計。"""
         path = tmp_path / "trace.jsonl"
         _write_trace(path, [
             _llm_call(wall=1000, model="m1", player_id=1, success=True),
@@ -148,7 +158,8 @@ class TestAnalyze:
         assert 2 in stats["by_player"]
         assert stats["by_player"][1]["count"] == 3
 
-    def test_LLM_CALL_event_が_無いと_total_0(self, tmp_path: Path) -> None:
+    def test_llm_call_event_total_zero(self, tmp_path: Path) -> None:
+        """LLMCALLevent が無いと total0。"""
         path = tmp_path / "trace.jsonl"
         _write_trace(path, [
             {"kind": "action", "payload": {}},
@@ -157,7 +168,8 @@ class TestAnalyze:
         assert stats["total_calls"] == 0
         assert stats["by_model"] == {}
 
-    def test_payload_欠落でも_落ちない(self, tmp_path: Path) -> None:
+    def test_payload_missing_does_not_crash(self, tmp_path: Path) -> None:
+        """payload 欠落でも 落ちない。"""
         path = tmp_path / "trace.jsonl"
         _write_trace(path, [
             {"kind": "llm_call"},  # payload なし
@@ -170,7 +182,8 @@ class TestAnalyze:
 
 
 class TestRenderReport:
-    def test_主要セクションが含まれる(self, tmp_path: Path) -> None:
+    def test_included(self, tmp_path: Path) -> None:
+        """主要セクションが含まれる。"""
         path = tmp_path / "trace.jsonl"
         _write_trace(path, [
             _llm_call(wall=1000, success=True),
@@ -183,7 +196,8 @@ class TestRenderReport:
         assert "## Model 別 wall_latency_ms" in report
         assert "## τ_sim 設計の手がかり" in report
 
-    def test_τ_sim_推奨値が_表示される(self, tmp_path: Path) -> None:
+    def test_sim_value_displayed(self, tmp_path: Path) -> None:
+        """τ sim 推奨値が 表示される。"""
         path = tmp_path / "trace.jsonl"
         _write_trace(path, [
             _llm_call(wall=1000),
@@ -194,7 +208,8 @@ class TestRenderReport:
         report = render_report(stats)
         assert "推奨 τ_sim" in report
 
-    def test_失敗_0_件なら_失敗内訳_section_出ない(self, tmp_path: Path) -> None:
+    def test_failure_zero_failure_breakdown_section_not_rendered(self, tmp_path: Path) -> None:
+        """失敗 0 件なら 失敗内訳 section 出ない。"""
         path = tmp_path / "trace.jsonl"
         _write_trace(path, [_llm_call(wall=1000, success=True)])
         stats = analyze([path])
@@ -203,17 +218,20 @@ class TestRenderReport:
 
 
 class TestMainCli:
-    def test_存在しないファイルは_exit_2(self, tmp_path: Path) -> None:
+    def test_file_exit_two(self, tmp_path: Path) -> None:
+        """存在しないファイルは exit 2。"""
         ret = main([str(tmp_path / "missing.jsonl")])
         assert ret == 2
 
-    def test_LLM_CALL_0_件なら_exit_1(self, tmp_path: Path) -> None:
+    def test_zero_llm_calls_exits_one(self, tmp_path: Path) -> None:
+        """LLM CALL 0 件なら exit 1。"""
         path = tmp_path / "trace.jsonl"
         _write_trace(path, [{"kind": "action"}])
         ret = main([str(path)])
         assert ret == 1
 
-    def test_markdown_出力(self, tmp_path: Path) -> None:
+    def test_markdown(self, tmp_path: Path) -> None:
+        """markdown 出力。"""
         trace = tmp_path / "trace.jsonl"
         report = tmp_path / "report.md"
         _write_trace(trace, [_llm_call(wall=1000)])
@@ -222,7 +240,8 @@ class TestMainCli:
         assert report.exists()
         assert "LLM Call Latency Analysis" in report.read_text(encoding="utf-8")
 
-    def test_json_出力(self, tmp_path: Path) -> None:
+    def test_json(self, tmp_path: Path) -> None:
+        """json 出力。"""
         trace = tmp_path / "trace.jsonl"
         json_out = tmp_path / "stats.json"
         _write_trace(trace, [_llm_call(wall=1000)])
@@ -235,7 +254,7 @@ class TestMainCli:
 class TestCostAggregation:
     """OpenRouter 経由の cost_usd を analyze が拾うか。"""
 
-    def test_cost_usd_の_合計と_per_model_集計が_出る(self, tmp_path: Path) -> None:
+    def test_cost_usd_per_model_rendered(self, tmp_path: Path) -> None:
         """複数 event を合算し、model 別 cost も per-model_cost_usd_total に出る。"""
         trace = tmp_path / "trace.jsonl"
         _write_trace(
@@ -253,14 +272,14 @@ class TestCostAggregation:
         )
         assert stats["by_model_cost_usd_total"]["other/model"] == pytest.approx(0.000002)
 
-    def test_cost_が_全部_0_なら_合計も_0(self, tmp_path: Path) -> None:
+    def test_cost_all_zero(self, tmp_path: Path) -> None:
         """OpenAI 直結 / vLLM 想定 (cost フィールドが 0 / 未設定)。"""
         trace = tmp_path / "trace.jsonl"
         _write_trace(trace, [_llm_call(wall=400), _llm_call(wall=500)])
         stats = analyze([trace])
         assert stats["overall"]["cost_usd_total"] == 0.0
 
-    def test_cost_total_が_0_なら_render_に_cost_section_が_出ない(
+    def test_cost_total_zero_render_cost_section_not_rendered(
         self, tmp_path: Path
     ) -> None:
         """cost が無い実験では report に cost section を出さない (ノイズ削減)。"""
@@ -270,7 +289,7 @@ class TestCostAggregation:
         report = render_report(stats)
         assert "Cost (OpenRouter" not in report
 
-    def test_cost_total_が_正値_なら_render_に_cost_section_が_出る(
+    def test_cost_total_value_render_cost_section_rendered(
         self, tmp_path: Path
     ) -> None:
         """OpenRouter 実験では cost section が markdown に出る。"""

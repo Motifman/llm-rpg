@@ -129,7 +129,7 @@ def transfer_service():
 class TestSpotGraphItemTransferServiceDrop:
     """drop が SpotInterior.ground_items に書き込む経路を保証する。"""
 
-    def test_drop_する_と_インベントリから消えて地面に出現する(self, transfer_service):
+    def test_drop_inventory_ground(self, transfer_service):
         """drop_item 後、インベントリは空 / 地面に GroundItem が 1 つ。"""
         deps = transfer_service
         result = deps["service"].drop_item(PLAYER_ID, SlotId(0))
@@ -146,7 +146,7 @@ class TestSpotGraphItemTransferServiceDrop:
         assert result.spot_id == SPOT_ID
         assert any("流木" in m for m in result.messages)
 
-    def test_drop_は空のスロットでは_SlotIsEmptyError_を投げる(self, transfer_service):
+    def test_raises_drop_empty_slot_empty_error(self, transfer_service):
         """PR-ε: 空スロット drop は LLM 頻発ミス。専用 SlotIsEmptyError
         (ItemTransferException の subclass) に更新され、LLM 向け日本語
         message + error_code を持つ。"""
@@ -159,7 +159,7 @@ class TestSpotGraphItemTransferServiceDrop:
         # slot_id が message に埋まっている
         assert "5" in str(excinfo.value)
 
-    def test_drop_はグラフに居ないプレイヤーで_ItemTransferException_を投げる(self, transfer_service):
+    def test_raises_drop_player_item_transfer_exception(self, transfer_service):
         """SpotGraphAggregate に place_entity されてないプレイヤーで drop すると境界例外。
 
         orphan のインベントリにもアイテムを 1 つ入れておくことで、
@@ -187,7 +187,7 @@ class TestSpotGraphItemTransferServiceDrop:
 class TestSpotGraphItemTransferServicePickup:
     """pickup が SpotInterior.ground_items から拾い上げてインベントリに入れる経路を保証する。"""
 
-    def test_drop_の直後に_pickup_すると_往復で元に戻る(self, transfer_service):
+    def test_returns_drop_after_pickup_round_trips(self, transfer_service):
         """drop → pickup の最短往復で player のインベントリに戻る。"""
         deps = transfer_service
         deps["service"].drop_item(PLAYER_ID, SlotId(0))
@@ -199,7 +199,7 @@ class TestSpotGraphItemTransferServicePickup:
         interior = deps["spot_interior_repo"].find_by_spot_id(SPOT_ID)
         assert interior.ground_items == ()
 
-    def test_他人が_drop_したアイテムを別プレイヤーが拾える(self, transfer_service):
+    def test_other_drop_item_different_player_can_pick_up(self, transfer_service):
         """これが本 PR の本質: A が落として B が拾う、を機械的に通す。"""
         deps = transfer_service
         # B もスポットに配置: 既存グラフに place_entity を追加する
@@ -218,7 +218,7 @@ class TestSpotGraphItemTransferServicePickup:
         assert a_inv.get_item_instance_id_by_slot(SlotId(0)) is None
         assert b_inv.get_item_instance_id_by_slot(SlotId(0)) == deps["instance_id"]
 
-    def test_pickup_は地面にないアイテムで_GroundItemGoneError_を投げる(self, transfer_service):
+    def test_raises_pickup_ground_item_ground_item_gone_error(self, transfer_service):
         """PR-ε: ground_items に無い instance_id (先取り済み / 観測ラグ) は
         LLM 頻発ケース。専用 GroundItemGoneError に区別され、LLM 向け
         「他プレイヤー先取りかも」の日本語 message が届く。"""
@@ -230,7 +230,7 @@ class TestSpotGraphItemTransferServicePickup:
         with pytest.raises(GroundItemGoneError):
             deps["service"].pickup_item(PLAYER_ID, nowhere)
 
-    def test_pickup_で自分のインベントリ満杯なら_PickupSelfInventoryFullError_を投げる(
+    def test_raises_pickup_self_inventory_pickup_self_inventory_full_error(
         self, transfer_service
     ):
         """PR-ε: silent overflow を防ぐ事前ガード。地面 item がある状態で
@@ -269,7 +269,7 @@ class TestSpotGraphItemTransferServicePickup:
         inv_after = deps["inventory_repo"].find_by_id(PLAYER_ID)
         assert inv_after.is_inventory_full()  # 中途半端な追加は無い
 
-    def test_list_ground_items_at_player_spot_は現在地の地面一覧を返す(self, transfer_service):
+    def test_returns_list_ground_items_player_spot_current_spot_ground(self, transfer_service):
         """ランナー/将来の LLM tool が「拾える物」を列挙するヘルパ。"""
         deps = transfer_service
         assert deps["service"].list_ground_items_at_player_spot(PLAYER_ID) == ()
@@ -282,7 +282,7 @@ class TestSpotGraphItemTransferServicePickup:
 class TestSpotGraphItemTransferServiceIdempotency:
     """drop の二重実行と pickup の二重実行が geometry を壊さない。"""
 
-    def test_with_ground_item_は_idempotent_なので_二重_drop_でも壊れない(self, transfer_service):
+    def test_ground_item_idempotent_drop(self, transfer_service):
         """drop した instance を再度 SpotInterior に追加しても重複しない。"""
         deps = transfer_service
         deps["service"].drop_item(PLAYER_ID, SlotId(0))
@@ -304,7 +304,7 @@ class TestSpotGraphItemTransferServiceGive:
         b_inv = PlayerInventoryAggregate.create_new_inventory(player_id)
         deps["inventory_repo"].save(b_inv)
 
-    def test_同室の別プレイヤーへ渡せる(self, transfer_service):
+    def test_same_room_different_player(self, transfer_service):
         """A の slot 0 アイテムが B の任意の slot へ移る。"""
         deps = transfer_service
         self._add_other_player_to_spot(deps, OTHER_PLAYER_ID)
@@ -318,13 +318,13 @@ class TestSpotGraphItemTransferServiceGive:
         assert result.item_instance_id == deps["instance_id"]
         assert any("流木" in m for m in result.messages)
 
-    def test_自分自身に渡そうとすると_ItemTransferException(self, transfer_service):
+    def test_self_item_transfer_exception(self, transfer_service):
         """A → A は弾く。"""
         deps = transfer_service
         with pytest.raises(ItemTransferException):
             deps["service"].give_item(PLAYER_ID, PLAYER_ID, SlotId(0))
 
-    def test_別スポットの相手には渡せない(self, transfer_service):
+    def test_cannot_give_item_to_target_in_different_spot(self, transfer_service):
         """B が別 spot に居る場合は弾く。"""
         deps = transfer_service
         # B を別の spot に配置する
@@ -348,7 +348,7 @@ class TestSpotGraphItemTransferServiceGive:
         with pytest.raises(ItemTransferException):
             deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(0))
 
-    def test_空スロットを渡そうとすると_SlotIsEmptyError(self, transfer_service):
+    def test_empty_slot_empty_error(self, transfer_service):
         """PR-ε: give_item も drop_item と同じ SlotIsEmptyError に統一する。
         A のスロット 5 は空。"""
         from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
@@ -359,7 +359,7 @@ class TestSpotGraphItemTransferServiceGive:
         with pytest.raises(SlotIsEmptyError):
             deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(5))
 
-    def test_受け手のインベントリ満杯時は弾かれ送り手側にアイテムが残る(self, transfer_service):
+    def test_inventory_item_remains(self, transfer_service):
         """orphan item silent failure 回帰: 受け手満杯なら ItemTransferException を投げ、
         送り手から抜かない & item_repository 上の instance は残る。
 

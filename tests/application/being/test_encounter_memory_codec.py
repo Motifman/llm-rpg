@@ -34,24 +34,27 @@ def _runtime_with(memory: InMemoryEncounterMemory) -> SimpleNamespace:
 class TestSubsystemKey:
     """subsystem_key と schema_version の不変条件。"""
 
-    def test_subsystem_key_は_encounter_memory(self) -> None:
+    def test_subsystem_key_encounter_memory(self) -> None:
+        """subsystem key は encounter memory。"""
         assert EncounterMemorySubsystemCodec().subsystem_key == SUBSYSTEM_KEY
         assert SUBSYSTEM_KEY == "encounter_memory"
 
-    def test_初版_schema_version_は_1(self) -> None:
+    def test_initial_schema_version_is_one(self) -> None:
+        """初版 schema version は 1。"""
         assert SCHEMA_VERSION == 1
 
 
 class TestCaptureEmpty:
     """空 memory の capture 挙動。"""
 
-    def test_未_observe_の_memory_は_空_entries_を_返す(self) -> None:
+    def test_returns_observe_memory_empty_entries(self) -> None:
+        """未 observe の memory は空 entries を返す。"""
         memory = InMemoryEncounterMemory()
         data = EncounterMemorySubsystemCodec().capture(_runtime_with(memory))
         assert data["schema_version"] == 1
         assert data["entries"] == []
 
-    def test_runtime_に__encounter_memory_が_無ければ_RuntimeError(self) -> None:
+    def test_runtime_en_count_er_memory_raises_runtime_error_2(self) -> None:
         """wiring 漏れを silent failure で隠さない (fail-fast)。"""
         runtime = SimpleNamespace()
         with pytest.raises(RuntimeError, match="_encounter_memory"):
@@ -61,7 +64,8 @@ class TestCaptureEmpty:
 class TestCaptureRestoreRoundTrip:
     """observe 後の record が capture → restore で完全復元されることを確認。"""
 
-    def test_単一_player_単一_record_の_round_trip(self) -> None:
+    def test_single_player_single_record_round_trip(self) -> None:
+        """単一 player 単一 record の round trip。"""
         src = InMemoryEncounterMemory()
         src.observe(PlayerId(1), EncounterKey.player("noa"), current_tick=10)
 
@@ -76,7 +80,7 @@ class TestCaptureRestoreRoundTrip:
         assert rec.first_seen_tick == 10
         assert rec.last_seen_tick == 10
 
-    def test_count_と_first_last_が_完全に_復元される(self) -> None:
+    def test_count_first_last_all_restored(self) -> None:
         """observe を 3 回繰り返した record が count=3 / first_seen / last_seen
         ともに復元される。restore で observe() を呼んでしまうと count や
         first_seen が変質するため、内部 store への直書きが正しく機能して
@@ -96,7 +100,8 @@ class TestCaptureRestoreRoundTrip:
         assert rec.first_seen_tick == 5
         assert rec.last_seen_tick == 100
 
-    def test_複数_player_複数_record_の_round_trip(self) -> None:
+    def test_multiple_player_multiple_record_round_trip(self) -> None:
+        """複数 player 複数 record の round trip。"""
         src = InMemoryEncounterMemory()
         # player 1: noa (再会) + 森の広場 (初訪問)
         src.observe(PlayerId(1), EncounterKey.player("noa"), current_tick=5)
@@ -121,7 +126,7 @@ class TestCaptureRestoreRoundTrip:
         storm = dst.lookup(PlayerId(2), EncounterKey.event("storm_arrives"))
         assert storm is not None and storm.first_seen_tick == 96
 
-    def test_restore_は_既存_record_を_全消し_して書き戻す(self) -> None:
+    def test_clears_and_restores_restore_existing_record(self) -> None:
         """部分復元による不整合を防ぐ (= save 時点での状態に完全に戻す)。"""
         src = InMemoryEncounterMemory()
         src.observe(PlayerId(1), EncounterKey.player("noa"), current_tick=5)
@@ -139,7 +144,7 @@ class TestCaptureRestoreRoundTrip:
         # player 1 の record は復元されている
         assert dst.lookup(PlayerId(1), EncounterKey.player("noa")) is not None
 
-    def test_entries_と_records_は_決定的順序で_dump_される(self) -> None:
+    def test_records_deterministic_order_dump_entries(self) -> None:
         """snapshot diff の noise を減らすため。player_id 昇順 / canonical key 昇順。"""
         src = InMemoryEncounterMemory()
         # 故意に挿入順を逆順にしても dump は sort される
@@ -161,7 +166,8 @@ class TestCaptureRestoreRoundTrip:
 class TestRestoreSchemaCompatibility:
     """schema_version の forward-compat / 後方互換。"""
 
-    def test_未_サポート_schema_version_は_例外(self) -> None:
+    def test_schema_version_raises_exception(self) -> None:
+        """未サポート schemaversion は例外。"""
         memory = InMemoryEncounterMemory()
         with pytest.raises(ValueError, match="schema_version"):
             EncounterMemorySubsystemCodec().restore(
@@ -169,7 +175,8 @@ class TestRestoreSchemaCompatibility:
                 {"schema_version": 999, "entries": []},
             )
 
-    def test_runtime_に__encounter_memory_が_無ければ_RuntimeError(self) -> None:
+    def test_runtime_en_count_er_memory_raises_runtime_error(self) -> None:
+        """runtime に の encountermemory が無ければ RuntimeError。"""
         runtime = SimpleNamespace()
         with pytest.raises(RuntimeError, match="_encounter_memory"):
             EncounterMemorySubsystemCodec().restore(
@@ -177,7 +184,7 @@ class TestRestoreSchemaCompatibility:
                 {"schema_version": 1, "entries": []},
             )
 
-    def test_entries_キー_が_欠落しても_空_扱いで_落ちない(self) -> None:
+    def test_entries_key_missing_empty_does_not_crash(self) -> None:
         """forward-compat: 上位 schema が entries を出さない場合の防衛。"""
         memory = InMemoryEncounterMemory()
         EncounterMemorySubsystemCodec().restore(
@@ -187,7 +194,7 @@ class TestRestoreSchemaCompatibility:
         # 復元後は空のはず
         assert memory.get_records_for(PlayerId(1)) == {}
 
-    def test_別実装の_IEncounterMemory_は_NotImplementedError(self) -> None:
+    def test_different_ien_count_er_memory_raises_not_implemented_error(self) -> None:
         """``InMemoryEncounterMemory`` 以外を渡すと dead silent fallback ではなく
         明示的に NotImplementedError を投げる (= silent failure 防止)。"""
 
@@ -210,7 +217,8 @@ class TestRestoreInvalidPayloadSurfacesDomainException:
     例外を握り潰していないことを保証する。
     """
 
-    def test_count_0_の_record_は_validation_例外を_投げる(self) -> None:
+    def test_count_zero_record_validation_raises_validation_exception(self) -> None:
+        """count 0 の record は validation 例外を 投げる。"""
         from ai_rpg_world.domain.memory.encounter.exception.encounter_exception import (
             EncounterRecordValidationException,
         )
@@ -237,9 +245,10 @@ class TestRestoreInvalidPayloadSurfacesDomainException:
                 },
             )
 
-    def test_first_seen_が_last_seen_より_大きい_record_は_validation_例外を_投げる(
+    def test_first_seen_last_seen_record_validation_raises_validation_exception(
         self,
     ) -> None:
+        """first seen が last seen より 大きい record は validation 例外を 投げる。"""
         from ai_rpg_world.domain.memory.encounter.exception.encounter_exception import (
             EncounterRecordValidationException,
         )
@@ -268,7 +277,8 @@ class TestRestoreInvalidPayloadSurfacesDomainException:
                 },
             )
 
-    def test_不正な_canonical_key_は_validation_例外を_投げる(self) -> None:
+    def test_invalid_canonical_key_validation_raises_validation_exception(self) -> None:
+        """不正な canonical key は validation 例外を 投げる。"""
         from ai_rpg_world.domain.memory.encounter.exception.encounter_exception import (
             EncounterKeyValidationException,
         )

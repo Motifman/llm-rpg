@@ -36,7 +36,8 @@ from scripts.run_scenario_experiment import (  # noqa: E402
 class TestWiringStub:
     """``_wiring_stub_from_world_runtime`` の attribute pickup。"""
 
-    def test_runtime_の_private_属性を拾う(self) -> None:
+    def test_finds_runtime_private_attribute(self) -> None:
+        """runtime の private 属性を拾う。"""
         # 既存の WorldRuntime と同じ名前で attribute を立てる。
         # ``aux_being_resolver`` は public property、``_aux_being_repository``
         # は private 属性として直接読む (= helper の現実装に合わせる)。
@@ -61,7 +62,7 @@ class TestWiringStub:
         # (= BELIEF_EVIDENCE_ENABLED OFF) なら None。
         assert stub.belief_evidence_buffer_store is None
 
-    def test_belief_evidence_buffer_store_が_episodic_stack_にあれば拾う(
+    def test_finds_belief_evidence_buffer_store_episodic_stack(
         self,
     ) -> None:
         """U2 (証拠台帳統一設計): BELIEF_EVIDENCE_ENABLED ON のとき
@@ -81,7 +82,7 @@ class TestWiringStub:
         stub = _wiring_stub_from_world_runtime(runtime)
         assert stub.belief_evidence_buffer_store is belief_evidence_buffer_store
 
-    def test_想起階層_3_store_が_episodic_stack_にあれば拾う(self) -> None:
+    def test_finds_recall_three_store_episodic_stack(self) -> None:
         """PR-G (想起階層: slot / afterglow / habituation) の 3 store が
         episodic_stack にあるとき stub が拾うことを保証する。
 
@@ -109,7 +110,8 @@ class TestWiringStub:
         assert stub.afterglow_store is afterglow_store
         assert stub.recall_habituation_store is recall_habituation_store
 
-    def test_episodic_stack_が_None_なら_episode_store_も_None(self) -> None:
+    def test_episodic_stack_none_episode_store_none(self) -> None:
+        """episodic stack が None なら episode store も None。"""
         runtime = SimpleNamespace(
             _todo_store=None,
             _aux_being_repository=None,
@@ -119,7 +121,7 @@ class TestWiringStub:
         stub = _wiring_stub_from_world_runtime(runtime)
         assert stub.episodic_episode_store is None
 
-    def test_どの_attribute_も_欠落なら_None_を返す(self) -> None:
+    def test_returns_none_attribute_missing(self) -> None:
         """getattr の default 経由で SimpleNamespace ですらない object でも壊れない。"""
 
         class _Bare:
@@ -249,7 +251,7 @@ class TestExpectedPayloadKeysCoverage:
             if self._FALLBACK_LOG_MARKER in r.message
         ]
 
-    def test_episodic_stack_の全_store_が_fallback_なしで配線される(
+    def test_episodic_stack_all_store_fallback_wired(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """episodic_stack / runtime に全 store が揃っていれば、stub 経由で
@@ -273,7 +275,7 @@ class TestExpectedPayloadKeysCoverage:
             f"fallback している: {fallback_logs[0].args if fallback_logs else None}"
         )
 
-    def test_store_を_1_つ欠くと_fallback_ログが出る(
+    def test_store_one_fallback_log_rendered(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """episodic_stack から store を 1 つ欠いた状態では、fallback ログが
@@ -316,9 +318,10 @@ class TestExpectedPayloadKeysCoverage:
 class TestSnapshotArgs:
     """snapshot 関連の argparse / 早期 validation。"""
 
-    def test_snapshot_load_dir_が_存在しないと_exit_2(
+    def test_snapshot_load_dir_exit_two(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        """snapshotloaddir が存在しないと exit2。"""
         scenario = tmp_path / "demo.json"
         scenario.write_text("{}", encoding="utf-8")
         missing = tmp_path / "no-such-dir"
@@ -340,7 +343,7 @@ class TestSnapshotArgs:
         captured = capsys.readouterr()
         assert "snapshot-load-dir" in captured.err
 
-    def test_snapshot_save_dir_を_受け取れる(
+    def test_snapshot_save_dir_can_get(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """argparse で --snapshot-save-dir が解釈され、_drive_scenario に渡る。

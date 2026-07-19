@@ -115,7 +115,8 @@ def _make_service(
 class TestDayNightPhaseGate:
     """day_night_phase_names による spawn 制御。"""
 
-    def test_phase_合致時に_spawn_する(self) -> None:
+    def test_phase_spawn(self) -> None:
+        """phase 合致時に spawn する。"""
         slot = MonsterSpawnSlot(
             slot_key="wolf@forest#0",
             template=_make_template(),
@@ -138,7 +139,8 @@ class TestDayNightPhaseGate:
         # スロットは active 状態
         assert service.active_slot_keys() == ["wolf@forest#0"]
 
-    def test_phase_不一致なら_spawn_しない(self) -> None:
+    def test_phase_matches_spawn(self) -> None:
+        """phase 不一致なら spawn しない。"""
         slot = MonsterSpawnSlot(
             slot_key="wolf@forest#0",
             template=_make_template(),
@@ -156,7 +158,7 @@ class TestDayNightPhaseGate:
         assert monster_repo.find_by_spot_id(SPOT_DEEP_FOREST) == []
         assert service.active_slot_keys() == []
 
-    def test_phase_の遷移で_despawn_する(self) -> None:
+    def test_phase_despawn(self) -> None:
         """spawn 後に phase が変わったら despawn される。"""
         slot = MonsterSpawnSlot(
             slot_key="wolf@forest#0",
@@ -182,7 +184,7 @@ class TestDayNightPhaseGate:
         # 「最初から朝で spawn 無し」のテスト (test_phase_不一致) と
         # 「夜で spawn する」テストの組み合わせで仕様を担保する。
 
-    def test_phase_が_morning_になったら_despawn(self) -> None:
+    def test_phase_morning_despawn(self) -> None:
         """phase が夜 → 朝 に変わったら active slot が空になる。"""
         slot = MonsterSpawnSlot(
             slot_key="wolf@forest#0",
@@ -226,7 +228,7 @@ class TestDayNightPhaseGate:
 class TestFlagGates:
     """required_flags / forbidden_flags の評価。"""
 
-    def test_forbidden_flag_中は_spawn_しない(self) -> None:
+    def test_forbidden_flag_spawn(self) -> None:
         """forbidden_flag=high_tide で「干潮中のみ出現」を表現。"""
         slot = MonsterSpawnSlot(
             slot_key="crab@tidal#0",
@@ -252,7 +254,8 @@ class TestFlagGates:
         service2.run(WorldTick(0))
         assert service2.active_slot_keys() == ["crab@tidal#0"]
 
-    def test_required_flag_が無いと_spawn_しない(self) -> None:
+    def test_required_flag_spawn(self) -> None:
+        """required flag が無いと spawn しない。"""
         slot = MonsterSpawnSlot(
             slot_key="x@y#0",
             template=_make_template(),
@@ -271,7 +274,8 @@ class TestFlagGates:
 class TestAlwaysCondition:
     """全軸空なら always 成立 (= 毎 tick spawn 試行) するが既に spawn 済なら no-op。"""
 
-    def test_全軸空なら毎_tick_active_を維持(self) -> None:
+    def test_returns_empty_when_all_tick_active(self) -> None:
+        """全軸空なら毎 tick active を維持。"""
         slot = MonsterSpawnSlot(
             slot_key="a@b#0",
             template=_make_template(),

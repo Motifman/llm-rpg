@@ -72,7 +72,7 @@ def _context() -> ObservationFormatterContext:
 class TestPlayerFormatterAudit:
     """``player_formatter`` audit 修正の回帰テスト。"""
 
-    def test_自分の_revived_は_schedules_turn_True(self) -> None:
+    def test_self_revived_schedules_turn_true(self) -> None:
         """復帰で行動再開できる状態 → 即起床。"""
         formatter = PlayerObservationFormatter(_context())
         event = PlayerRevivedEvent.create(
@@ -85,7 +85,7 @@ class TestPlayerFormatterAudit:
         assert out is not None
         assert out.schedules_turn is True
 
-    def test_inventory_overflow_は_schedules_turn_True(self) -> None:
+    def test_inventory_overflow_schedules_turn_true(self) -> None:
         """アイテム消失リスク → 即起床して捨てる / 装備し直す判断を促す。"""
         formatter = PlayerObservationFormatter(_context())
         event = InventorySlotOverflowEvent.create(
@@ -102,7 +102,7 @@ class TestPlayerFormatterAudit:
 class TestMonsterFormatterAudit:
     """``monster_formatter`` audit 修正の回帰テスト。"""
 
-    def test_monster_respawned_は_schedules_turn_True(self) -> None:
+    def test_monster_respawned_schedules_turn_true(self) -> None:
         """spawned と同じく敵が居る状態への遷移 → 即起床。"""
         formatter = MonsterObservationFormatter(_context())
         event = MonsterRespawnedEvent.create(
@@ -119,7 +119,7 @@ class TestMonsterFormatterAudit:
 class TestHarvestFormatterAudit:
     """``harvest_formatter`` audit 修正の回帰テスト。"""
 
-    def test_harvest_cancelled_は_schedules_turn_True(self) -> None:
+    def test_harvest_cancelled_schedules_turn_true(self) -> None:
         """予約行動失敗 → 別行動を選ばせる。"""
         formatter = HarvestObservationFormatter(_context())
         event = HarvestCancelledEvent.create(
@@ -133,7 +133,7 @@ class TestHarvestFormatterAudit:
         assert out is not None
         assert out.schedules_turn is True
 
-    def test_harvest_completed_は_schedules_turn_True(self) -> None:
+    def test_harvest_completed_schedules_turn_true(self) -> None:
         """予約行動完了 → 次の行動を選ばせる。"""
         formatter = HarvestObservationFormatter(_context())
         event = HarvestCompletedEvent.create(
@@ -151,7 +151,7 @@ class TestHarvestFormatterAudit:
 class TestWorldFormatterAudit:
     """``world_formatter`` audit 修正の回帰テスト。"""
 
-    def test_自分の_location_entered_は_schedules_turn_True(self) -> None:
+    def test_self_location_entered_schedules_turn_true(self) -> None:
         """summit / shore 等の特殊 location 到着 → 即起床。"""
         formatter = WorldObservationFormatter(_context())
         event = LocationEnteredEvent.create(

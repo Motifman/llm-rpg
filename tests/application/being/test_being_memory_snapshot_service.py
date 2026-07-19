@@ -251,7 +251,7 @@ def _populate(stores: dict[str, object], being_id: BeingId) -> None:
 class TestCapture:
     """capture の挙動。"""
 
-    def test_空store_からも_有効な_payload_を返す(self) -> None:
+    def test_returns_empty_store_payload(self) -> None:
         """全 store が空でも payload は schema_version と全 key を持つ。"""
         svc, _ = _make_service()
         being = BeingId("ada")
@@ -268,7 +268,8 @@ class TestCapture:
         ):
             assert payload[k] == []
 
-    def test_5_store_の状態を全て載せる(self) -> None:
+    def test_includes_all_five_store(self) -> None:
+        """5 store の状態を全て載せる。"""
         svc, stores = _make_service()
         being = BeingId("ada")
         _populate(stores, being)
@@ -281,7 +282,8 @@ class TestCapture:
         assert len(payload["reinterpretation_journal"]) == 1
         assert len(payload["episodic_episodes"]) == 1
 
-    def test_being_id_型違反は_TypeError(self) -> None:
+    def test_being_id_raises_type_error(self) -> None:
+        """being id 型違反は TypeError。"""
         svc, _ = _make_service()
         with pytest.raises(TypeError):
             svc.capture("ada")  # type: ignore[arg-type]
@@ -304,7 +306,7 @@ class TestRestoreRoundTrip:
         # capture 結果同士が等しければ、状態は一致している。
         assert json.loads(payload_json) == json.loads(dst_svc.capture(being))
 
-    def test_restore_は_既存データを上書きする(self) -> None:
+    def test_restore_existing_overwrites(self) -> None:
         """restore 先に古い state が入っていても、payload で完全置換される。"""
         src_svc, src_stores = _make_service()
         being = BeingId("ada")
@@ -321,7 +323,7 @@ class TestRestoreRoundTrip:
         contents = sorted(e.content for e in memos)
         assert contents == ["完了 memo", "未完了 memo"]
 
-    def test_belief_evidence_buffer_の_round_trip(self) -> None:
+    def test_belief_evidence_buffer_round_trip(self) -> None:
         """U2 (証拠台帳統一設計): evidence buffer の capture → restore で
         中身が一致することを保証する (snapshot 追従 checklist #27)。"""
         from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
@@ -354,7 +356,7 @@ class TestRestoreRoundTrip:
         assert len(restored) == 1
         assert restored[0] == evidence
 
-    def test_recall_success_hit_count_の_round_trip(self) -> None:
+    def test_recall_success_hit_count_round_trip(self) -> None:
         """U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar の
 
         capture → restore で中身が一致することを保証する
@@ -372,7 +374,7 @@ class TestRestoreRoundTrip:
         restored = dst_stores["success"].list_all_by_being(being)
         assert restored == {"ep-1": 2, "ep-2": 1}
 
-    def test_pending_predictions_の_round_trip(self) -> None:
+    def test_pending_predictions_round_trip(self) -> None:
         """U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
 
         capture → restore で中身が一致することを保証する
@@ -401,7 +403,7 @@ class TestRestoreRoundTrip:
         restored = dst_stores["pending_prediction"].list_all_by_being(being)
         assert restored == [pending]
 
-    def test_goal_journal_の_round_trip(self) -> None:
+    def test_goal_journal_round_trip(self) -> None:
         """P5 (目的層): goal journal の capture → restore で中身が一致する
 
         (snapshot 追従 checklist #27。codec 単体でなく restore 経路
@@ -429,7 +431,7 @@ class TestRestoreRoundTrip:
         restored = dst_stores["goal_journal"].list_all_by_being(being)
         assert restored == [goal]
 
-    def test_stagnation_pressure_count_の_round_trip(self) -> None:
+    def test_stagnation_pressure_count_round_trip(self) -> None:
         """P-U2 (停滞感 store): カウンタの capture → restore で値が保存される
         ことを保証する (snapshot 追従 checklist #27)。"""
         src_svc, src_stores = _make_service()
@@ -443,7 +445,7 @@ class TestRestoreRoundTrip:
 
         assert dst_stores["stagnation_pressure"].get_by_being(being) == 2
 
-    def test_stagnation_pressure_count_zero_の_round_trip(self) -> None:
+    def test_stagnation_pressure_count_zero_round_trip(self) -> None:
         """P-U2: カウンタが 0 のときも空 state として正しく往復する
         (= 他 store の「空状態 = 空 list」規約に揃える)。"""
         src_svc, src_stores = _make_service()
@@ -456,7 +458,7 @@ class TestRestoreRoundTrip:
 
         assert dst_stores["stagnation_pressure"].get_by_being(being) == 0
 
-    def test_capture_は_stagnation_pressure_を1回だけ読む(self) -> None:
+    def test_reads_capture_stagnation_pressure_once(self) -> None:
         """LOW-1 (敵対的レビュー指摘): capture() が同じ being_id に対して
         stagnation_pressure_store.get_by_being を 2 回 (空 list 判定用と値取得用)
         呼んでいたのを、1 度読んだ値を変数に束ねて使い回す形に直した。挙動は
@@ -486,7 +488,7 @@ class TestRestoreRoundTrip:
         payload = json.loads(payload_json)
         assert payload["stagnation_pressure_count"] == [1]
 
-    def test_belief_evidence_の_in_context_belief_ids_も_round_trip_する(self) -> None:
+    def test_belief_evidence_context_belief_ids_round_trip(self) -> None:
         """U4 (予測誤差統一設計 部品3): attribution 用の in_context_belief_ids も
         evidence buffer の capture → restore を経て失われないことを保証する。
         新規 per-Being store は作らず既存 belief_evidence_buffer の codec を
@@ -523,7 +525,7 @@ class TestRestoreRoundTrip:
         assert len(restored) == 1
         assert restored[0].in_context_belief_ids == ("sem-belief-1", "sem-belief-2")
 
-    def test_belief_evidence_の_in_context_belief_ids_欠損の旧データは空タプルに倒れる(
+    def test_belief_evidence_context_belief_ids_legacy_data_empty_tuple(
         self,
     ) -> None:
         """U4 導入前 (キー自体が無い) payload を decode しても例外にならず
@@ -548,7 +550,7 @@ class TestRestoreRoundTrip:
 
         assert evidence.in_context_belief_ids == ()
 
-    def test_belief_evidence_の_source_speaker_も_round_trip_する(self) -> None:
+    def test_belief_evidence_source_speaker_round_trip(self) -> None:
         """P9 (伝聞): HEARSAY evidence の source_speaker (話者) が capture →
         restore を経て失われないことを保証する。source_kind 拡張と同じく既存
         codec の拡張なので EXPECTED_PAYLOAD_KEYS の変更は不要。"""
@@ -584,7 +586,7 @@ class TestRestoreRoundTrip:
         assert restored[0].source_kind == BeliefEvidenceSourceKind.HEARSAY
         assert restored[0].source_speaker == "リオ"
 
-    def test_belief_evidence_の_source_speaker_欠損の旧データは_None_に倒れる(
+    def test_belief_evidence_source_speaker_legacy_data_none(
         self,
     ) -> None:
         """P9 導入前 (キー自体が無い) payload を decode しても例外にならず None。"""
@@ -608,7 +610,7 @@ class TestRestoreRoundTrip:
 
         assert evidence.source_speaker is None
 
-    def test_recall_observation_の_prediction_outcome_error_欠損の旧データは_None_に倒れる(
+    def test_recall_observation_prediction_outcome_error_legacy_data_none(
         self,
     ) -> None:
         """U9a 導入前 (キー自体が無い) payload を decode しても例外にならず
@@ -636,7 +638,8 @@ class TestRestoreRoundTrip:
         assert obs.prediction_context_id is None
         assert obs.prediction_outcome_error is None
 
-    def test_他_being_は影響しない(self) -> None:
+    def test_other_being_does_not_affect(self) -> None:
+        """他 being は影響しない。"""
         src_svc, src_stores = _make_service()
         ada = BeingId("ada")
         ben = BeingId("ben")
@@ -656,28 +659,33 @@ class TestRestoreRoundTrip:
 class TestRestoreValidation:
     """restore の payload 検査挙動。"""
 
-    def test_非_str_payload_は_TypeError(self) -> None:
+    def test_str_payload_raises_type_error(self) -> None:
+        """非 str payload は TypeError。"""
         svc, _ = _make_service()
         with pytest.raises(TypeError):
             svc.restore(BeingId("ada"), {})  # type: ignore[arg-type]
 
-    def test_不正_json_は_FormatError(self) -> None:
+    def test_invalid_json_raises_format_error(self) -> None:
+        """不正 json は FormatError。"""
         svc, _ = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError, match="not valid JSON"):
             svc.restore(BeingId("ada"), "not json")
 
-    def test_root_が_object_でないと_FormatError(self) -> None:
+    def test_root_object_raises_format_error(self) -> None:
+        """root が object でないと FormatError。"""
         svc, _ = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError, match="object"):
             svc.restore(BeingId("ada"), "[]")
 
-    def test_未サポート_schema_version_は_SchemaError(self) -> None:
+    def test_unsupported_schema_version_raises_schema_error(self) -> None:
+        """未サポート schema version は SchemaError。"""
         svc, _ = _make_service()
         bad = json.dumps({"schema_version": 999, "memo": []})
         with pytest.raises(BeingMemoryPayloadSchemaError, match="999"):
             svc.restore(BeingId("ada"), bad)
 
-    def test_required_key_欠落は_FormatError(self) -> None:
+    def test_required_key_missing_raises_format_error(self) -> None:
+        """required key 欠落は FormatError。"""
         svc, _ = _make_service()
         # memo だけ持つ payload。
         bad = json.dumps(
@@ -686,7 +694,7 @@ class TestRestoreValidation:
         with pytest.raises(BeingMemoryPayloadFormatError, match="missing required key"):
             svc.restore(BeingId("ada"), bad)
 
-    def test_memo_要素の_id_欠落は_FormatError(self) -> None:
+    def test_memo_element_id_missing_raises_format_error(self) -> None:
         """list 要素内の dict key 欠落は KeyError ではなく FormatError に wrap される。"""
         svc, _ = _make_service()
         bad = json.dumps(
@@ -715,7 +723,7 @@ class TestRestoreValidation:
         with pytest.raises(BeingMemoryPayloadFormatError, match="memo"):
             svc.restore(BeingId("ada"), bad)
 
-    def test_unknown_enum_値は_FormatError(self) -> None:
+    def test_unknown_enum_value_raises_format_error(self) -> None:
         """memory_link の link_type が未知値なら FormatError。"""
         svc, _ = _make_service()
         bad = json.dumps(
@@ -757,7 +765,8 @@ class TestRestoreValidation:
         with pytest.raises(BeingMemoryPayloadFormatError, match="memory_links"):
             svc.restore(BeingId("ada"), bad)
 
-    def test_required_key_の値が_list_でないと_FormatError(self) -> None:
+    def test_required_key_list_raises_format_error(self) -> None:
+        """required key の値が list でないと FormatError。"""
         svc, _ = _make_service()
         bad = json.dumps(
             {
@@ -790,7 +799,8 @@ class TestRestoreValidation:
 class TestConstructor:
     """constructor の型ガード。"""
 
-    def test_memo_store_型違反(self) -> None:
+    def test_memo_store_raises_type_error(self) -> None:
+        """memo store 型違反。"""
         from ai_rpg_world.application.llm.services.afterglow_store import (
             InMemoryAfterglowStore,
         )
@@ -834,7 +844,7 @@ class TestConstructor:
                 stagnation_pressure_store=InMemoryStagnationPressureStore(),
             )
 
-    def test_stagnation_pressure_store_型違反(self) -> None:
+    def test_stagnation_pressure_store_raises_type_error(self) -> None:
         """P-U2: stagnation_pressure_store が StagnationPressureRepository で
         なければ TypeError を投げる。"""
         from ai_rpg_world.application.llm.services.afterglow_store import (

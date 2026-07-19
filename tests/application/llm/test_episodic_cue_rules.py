@@ -86,7 +86,7 @@ class TestOutcomeCue:
     なので cue 化しない。失敗は希少で意味があるので残す。
     """
 
-    def test_success_は_outcome_cue_を_付与しない(self) -> None:
+    def test_success_outcome_cue(self) -> None:
         """成功時は ``outcome:success`` を出さない (#526 後続 Fix D)。
 
         Why: 実 run の trace 解析で「ほぼ全 episode が outcome:success を持ち、
@@ -120,7 +120,7 @@ class TestOutcomeCue:
         assert len(oc) == 1
         assert oc[0].value == "failure_trap_triggered"
 
-    def test_failure_without_error_code_では_outcome_failure_を_付与(self) -> None:
+    def test_failure_error_code_outcome_failure(self) -> None:
         """error_code 無しの失敗でも ``outcome:failure`` 単独 cue は残す。
 
         失敗は希少で「何かおかしかった」シグナルとして意味がある。
@@ -139,7 +139,7 @@ class TestOutcomeCue:
 class TestUnknownAndNoneIgnored:
     """unknown / None は安全に無視されること"""
 
-    def test_none_runtime_and_observation_skipped(self) -> None:
+    def test_None_runtime_and_observation_skipped(self) -> None:
         """runtime / structured が None でも構わず action は付く。
 
         #526 後続 Fix D: 成功時の outcome cue は無価値なので付けない。
@@ -238,7 +238,7 @@ class TestDedupeAndCaps:
         )
         assert len(cues) <= MAX_EPISODIC_CUES
 
-    def test_massive_tile_areas_do_not_drop_action_or_outcome(self) -> None:
+    def test_massive_tile_areas_do_drop_action_or_outcome(self) -> None:
         """
         current_area_ids が極端に多くても、先頭の action / outcome が
         MAX_EPISODIC_CUES 打ち切りで欠落しない（旧実装のレビューブロッカー回帰）。

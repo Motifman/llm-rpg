@@ -64,7 +64,7 @@ def _sample_events() -> list[TraceEvent]:
 class TestRenderHtml:
     """render_html の HTML 出力構造。"""
 
-    def test_メタ情報_と_mermaid_と_per_tick_が含まれる(self) -> None:
+    def test_mermaid_per_tick_included(self) -> None:
         """生成 HTML に主要 section ヘッダと mermaid ブロックが含まれる。"""
         out = render_html(_sample_events(), title="my-run")
         assert "<title>my-run" in out
@@ -75,12 +75,12 @@ class TestRenderHtml:
         assert "sequenceDiagram" in out
         assert "mermaid.initialize" in out
 
-    def test_player_label_は_player_name_を優先する(self) -> None:
+    def test_player_label_player_name_prefers(self) -> None:
         """payload.player_name が見つかれば actor label に使う。"""
         out = render_html(_sample_events())
         assert "カイト" in out
 
-    def test_action_result_の_NG_は_failed_success_で分岐(self) -> None:
+    def test_action_result_ng_failed_success(self) -> None:
         """success=False の result は NG マークになる。"""
         events = list(_sample_events())
         events[3] = TraceEvent(
@@ -94,7 +94,7 @@ class TestRenderHtml:
         out = render_html(events)
         assert "[NG]" in out
 
-    def test_mermaid_arrows_は_raw_の_リテラル_矢印で_出力される(self) -> None:
+    def test_mermaid_arrows_raw(self) -> None:
         """Mermaid のシーケンス矢印 ``->>`` / ``-->>`` が HTML エスケープされず
         リテラルで出力されること (描画バグの回帰防止)。
 
@@ -109,7 +109,7 @@ class TestRenderHtml:
         assert "->>" in out, "raw `->>` arrow not found in HTML"
         assert "-->>" in out, "raw `-->>` arrow not found in HTML"
 
-    def test_actor_label_の_HTML_特殊文字は_全角化される(self) -> None:
+    def test_actor_label_html_special_chars_are_fullwidth(self) -> None:
         """player_name に ``<`` / ``>`` / ``&`` が混入してもタグ解釈されない。"""
         events = [
             TraceEvent(
@@ -130,7 +130,7 @@ class TestRenderHtml:
         # 代わりに全角化された文字列が入っている
         assert "＜script＞" in out
 
-    def test_fallback_の_raw_mermaid_ブロックが含まれる(self) -> None:
+    def test_fallback_raw_mermaid_included(self) -> None:
         """CDN ブロック時用に mermaid raw source の <details> と mermaid.live リンクがある。"""
         out = render_html(_sample_events())
         assert "raw-mermaid" in out
@@ -140,7 +140,7 @@ class TestRenderHtml:
 class TestMain:
     """CLI main エントリポイントの基本動作。"""
 
-    def test_jsonl_から_html_を生成する(self, tmp_path: Path) -> None:
+    def test_jsonl_html(self, tmp_path: Path) -> None:
         """jsonl → html へ変換、出力パスが返る。"""
         jsonl = tmp_path / "trace.jsonl"
         with JsonlTraceRecorder(jsonl) as rec:
@@ -159,7 +159,7 @@ class TestMain:
         assert "<title>trace" in text
         assert "リン" in text
 
-    def test_出力パス未指定なら_拡張子を_html_に置換する(self, tmp_path: Path) -> None:
+    def test_unspecified_html(self, tmp_path: Path) -> None:
         """-o 省略時は input と同じ場所に .html を出す。"""
         jsonl = tmp_path / "auto.jsonl"
         with JsonlTraceRecorder(jsonl) as rec:

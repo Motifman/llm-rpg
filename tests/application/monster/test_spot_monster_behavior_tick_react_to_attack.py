@@ -179,7 +179,7 @@ def _make_service(graph, monster, *, player=None, second_monster=None):
 class TestPassivePolicy:
     """PASSIVE policy では何も反応しない。"""
 
-    def test_PASSIVE_は_被弾していても_FLEE_CHASE_に_遷移しない(self) -> None:
+    def test_passive_flee_chase(self) -> None:
         """policy=PASSIVE なら直近 last_attacked_tick があっても通常 chain。"""
         monster = _make_monster(_template(reaction=ReactionPolicyEnum.PASSIVE))
         monster.record_attacked_by_in_spot(
@@ -198,7 +198,7 @@ class TestPassivePolicy:
 class TestAlwaysFlee:
     """ALWAYS_FLEE policy で被弾後 FLEE に遷移する。"""
 
-    def test_被弾後_FLEE_に_遷移し_flee_until_tick_が_設定される(self) -> None:
+    def test_attacked_monster_transitions_to_flee_and_sets_flee_until_tick(self) -> None:
         """ALWAYS_FLEE で last_attacked_tick が grace 内なら FLEE に遷移。"""
         monster = _make_monster(
             _template(
@@ -219,7 +219,7 @@ class TestAlwaysFlee:
         assert monster.behavior_state == BehaviorStateEnum.FLEE
         assert monster.is_fleeing(WorldTick(10)) is True
 
-    def test_grace_切れの被弾は_反応しない(self) -> None:
+    def test_grace(self) -> None:
         """last_attacked_tick が grace_ticks より古ければ FLEE しない。"""
         monster = _make_monster(
             _template(
@@ -244,7 +244,7 @@ class TestAlwaysFlee:
 class TestAlwaysRetaliate:
     """ALWAYS_RETALIATE policy で被弾後 CHASE → 攻撃。"""
 
-    def test_player_attacker_に_反撃して_event_が_発火する(self) -> None:
+    def test_triggers_player_attacker_event(self) -> None:
         """player から攻撃を受けた monster は同 spot の player を攻撃する。"""
         monster = _make_monster(
             _template(
@@ -275,7 +275,7 @@ class TestAlwaysRetaliate:
         # CHASE 状態に遷移している
         assert monster.behavior_state == BehaviorStateEnum.CHASE
 
-    def test_monster_attacker_に_反撃して_predation_event_が_発火する(self) -> None:
+    def test_triggers_monster_attacker_predation_event(self) -> None:
         """monster から攻撃を受けた monster は同 spot の attacker を反撃する。"""
         attacker = _make_monster(
             _template(
@@ -314,7 +314,7 @@ class TestAlwaysRetaliate:
 class TestFleeWhenLowHp:
     """FLEE_WHEN_LOW_HP policy: HP 比 < threshold で逃走、以外で反撃。"""
 
-    def test_HP満タンなら_CHASE_に_遷移する(self) -> None:
+    def test_hp_chase(self) -> None:
         """flee_threshold より HP 比が大きければ反撃を選ぶ。"""
         monster = _make_monster(
             _template(
@@ -338,7 +338,7 @@ class TestFleeWhenLowHp:
 
         assert monster.behavior_state == BehaviorStateEnum.CHASE
 
-    def test_HP_閾値未満なら_FLEE_に_遷移する(self) -> None:
+    def test_hp_value_below_flee(self) -> None:
         """HP 比が flee_threshold を下回っていれば逃走する。"""
         monster = _make_monster(
             _template(
@@ -369,7 +369,7 @@ class TestFleeWhenLowHp:
 class TestNoAttackHistory:
     """被弾履歴がない / attacker_ref がない場合の挙動。"""
 
-    def test_last_attacked_tick_が_None_なら_反応しない(self) -> None:
+    def test_last_attacked_tick_none(self) -> None:
         """攻撃を受けたことがない monster は state 遷移しない。"""
         monster = _make_monster(
             _template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE),
@@ -386,7 +386,7 @@ class TestNoAttackHistory:
 class TestFleeingShortCircuit:
     """既に FLEE 中の monster は他のアクションをスキップして wander のみ実行。"""
 
-    def test_FLEE_中は_attack_chain_を_スキップする(self) -> None:
+    def test_flee_attack_chain(self) -> None:
         """is_fleeing=True なら同 spot に player が居ても攻撃しない。"""
         monster = _make_monster(
             _template(
@@ -415,7 +415,7 @@ class TestFleeingShortCircuit:
         assert len(events) == 0
         assert monster.behavior_state == BehaviorStateEnum.FLEE
 
-    def test_flee_until_tick_経過後は_IDLE_に_自動復帰(self) -> None:
+    def test_flee_until_tick_after_idle(self) -> None:
         """flee_until を超えた tick で is_fleeing=False、IDLE に復帰する。"""
         monster = _make_monster(
             _template(reaction=ReactionPolicyEnum.ALWAYS_FLEE),
@@ -434,7 +434,7 @@ class TestFleeingShortCircuit:
 class TestStatePersistence:
     """state 遷移時に monster_repository.save() が呼ばれる (SQLite 永続化用)。"""
 
-    def test_FLEE_遷移後に_monster_save_が_呼ばれる(self) -> None:
+    def test_calls_flee_monster_save(self) -> None:
         """ALWAYS_FLEE 反応で FLEE に入った直後に save される。"""
         monster = _make_monster(
             _template(reaction=ReactionPolicyEnum.ALWAYS_FLEE),
@@ -456,7 +456,7 @@ class TestStatePersistence:
             for call in monster_repo.save.call_args_list
         )
 
-    def test_CHASE_遷移後に_monster_save_が_呼ばれる(self) -> None:
+    def test_calls_chase_monster_save(self) -> None:
         """ALWAYS_RETALIATE 反応で CHASE に入った直後に save される。"""
         monster = _make_monster(
             _template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE, attack=4),
@@ -480,7 +480,7 @@ class TestStatePersistence:
 class TestChaseTargetMissing:
     """CHASE 中に target が同 spot から居なくなった場合は IDLE に戻る。"""
 
-    def test_target_player_が_別spot_に_移動済みなら_CHASE_を_解除(self) -> None:
+    def test_target_player_different_spot_chase(self) -> None:
         """CHASE 中の player が同 spot に居なければ state クリア。"""
         monster = _make_monster(
             _template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE, attack=4),
@@ -509,7 +509,7 @@ class TestChaseTargetMissing:
 class TestThirdPartyAttackerRefSafety:
     """CHASE 中に第三者から殴られても追跡対象は変わらない。"""
 
-    def test_第三者の_record_attacked_by_in_spot_では_CHASE_target_は_不変(self) -> None:
+    def test_third_party_attack_record_does_not_change_chase_target(self) -> None:
         """CHASE 中に新しい attacker_ref が記録されても chase target は固定。"""
         monster = _make_monster(
             _template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE, attack=4),

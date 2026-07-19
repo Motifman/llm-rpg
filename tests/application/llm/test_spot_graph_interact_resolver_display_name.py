@@ -85,40 +85,41 @@ class TestResolveObjectTargetDisplayNameFallback:
     root fix を保証する。
     """
 
-    def test_label_直書き_OBJ1_で_解決する_後方互換(self) -> None:
+    def test_resolves_after_compatible_label_obj1(self) -> None:
         """旧形式 'OBJ1' も引き続き解決できる (= 既存挙動の維持)。"""
         ctx = _make_object_context()
         target = resolve_object_target("OBJ1", ctx)
         assert target.world_object_id == 101
         assert target.display_name == "流木の山"
 
-    def test_display_name_流木の山_で解決する_PR_421_新仕様(self) -> None:
+    def test_resolves_pr_421_display_name(self) -> None:
         """新仕様: LLM が prompt で見た '流木の山' をそのまま引数に入れる。"""
         ctx = _make_object_context()
         target = resolve_object_target("流木の山", ctx)
         assert target.world_object_id == 101
         assert target.display_name == "流木の山"
 
-    def test_display_name_難破船の船倉_でも解決する(self) -> None:
+    def test_resolves_display_name_2(self) -> None:
         """同 context 内の別 object も display_name で解決できる。"""
         ctx = _make_object_context()
         target = resolve_object_target("難破船の船倉", ctx)
         assert target.world_object_id == 102
 
-    def test_崩れ表現_OBJ1_括弧つき_でも解決する(self) -> None:
+    def test_resolves_obj1(self) -> None:
         """LLM が 'OBJ1 (流木の山)' のような hallucination 表記を渡しても拾う。"""
         ctx = _make_object_context()
         target = resolve_object_target("OBJ1 (流木の山)", ctx)
         assert target.world_object_id == 101
 
-    def test_未知の_display_name_は_INVALID_TARGET_LABEL(self) -> None:
+    def test_unknown_display_name_invalid_target_label(self) -> None:
         """周囲に無い object 名を渡したら従来通り label error。"""
         ctx = _make_object_context()
         with pytest.raises(ToolArgumentResolutionException) as exc:
             resolve_object_target("存在しない物", ctx)
         assert exc.value.error_code == "INVALID_TARGET_LABEL"
 
-    def test_空文字は_INVALID_TARGET_LABEL(self) -> None:
+    def test_empty_string_invalid_target_label(self) -> None:
+        """空文字は INVALID TARGET LABEL。"""
         ctx = _make_object_context()
         with pytest.raises(ToolArgumentResolutionException) as exc:
             resolve_object_target("", ctx)
@@ -128,7 +129,8 @@ class TestResolveObjectTargetDisplayNameFallback:
 class TestResolveUseItemDisplayNameFallback:
     """spot_graph_use_item の item_label を display_name で解決する。"""
 
-    def test_label_直書き_I1_で解決する_後方互換(self) -> None:
+    def test_resolves_after_compatible_label_i1(self) -> None:
+        """label 直書き I1 で解決する 後方互換。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
             TOOL_NAME_SPOT_GRAPH_USE_ITEM,
@@ -138,7 +140,7 @@ class TestResolveUseItemDisplayNameFallback:
         assert result is not None
         assert result["item_spec_id"] == 1001
 
-    def test_display_name_真水_食料_で解決する(self) -> None:
+    def test_resolves_display_name(self) -> None:
         """実験 #438 で 42 件失敗していた '真水 (食料)' を解決できる。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -150,7 +152,7 @@ class TestResolveUseItemDisplayNameFallback:
         assert result["item_spec_id"] == 1001
         assert result["item_display_name"] == "真水 (食料)"
 
-    def test_ground_item_の_display_name_を_渡したら_kind_mismatch(self) -> None:
+    def test_ground_item_display_name_kind_mismatch(self) -> None:
         """use_item は inventory_item 限定。ground_item は kind 違いで弾く。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
@@ -167,7 +169,8 @@ class TestResolveUseItemDisplayNameFallback:
 class TestResolveDropItemDisplayNameFallback:
     """spot_graph_drop_item も同じ display_name fallback を持つ。"""
 
-    def test_display_name_で_drop_できる(self) -> None:
+    def test_display_name_drop(self) -> None:
+        """display name で drop できる。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
@@ -182,7 +185,8 @@ class TestResolveDropItemDisplayNameFallback:
 class TestResolvePickupItemDisplayNameFallback:
     """spot_graph_pickup_item も同じ display_name fallback を持つ (kind=ground_item)。"""
 
-    def test_display_name_で_pickup_できる(self) -> None:
+    def test_display_name_pickup(self) -> None:
+        """display name で pickup できる。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
@@ -192,7 +196,7 @@ class TestResolvePickupItemDisplayNameFallback:
         assert result is not None
         assert result["item_instance_id"] == 2002
 
-    def test_inventory_item_の_display_name_を_pickup_しようとしたら_kind_mismatch(self) -> None:
+    def test_inventory_item_display_name_pickup_kind_mismatch(self) -> None:
         """pickup は ground_item 限定。inventory item を指したら見つからず label error。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:

@@ -103,7 +103,7 @@ class TestShortTermMemoryConfigVsRuntime:
     が使われていた) が発覚し fix された。本 test 群は再発防止。
     """
 
-    def test_設定未指定なら_DefaultSlidingWindowMemory(self) -> None:
+    def test_config_unspecified_default_sliding_window_memory(self) -> None:
         """設定未指定 → default の DefaultSlidingWindowMemory が使われる。"""
         from ai_rpg_world.application.llm.services.sliding_window_memory import (
             DefaultSlidingWindowMemory,
@@ -112,7 +112,8 @@ class TestShortTermMemoryConfigVsRuntime:
         runtime = _build_runtime()
         assert isinstance(runtime._sliding_window, DefaultSlidingWindowMemory)
 
-    def test_sliding_window_明示_でも_DefaultSlidingWindowMemory(self) -> None:
+    def test_sliding_window_default_sliding_window_memory(self) -> None:
+        """sliding window 明示 でも DefaultSlidingWindowMemory。"""
         from ai_rpg_world.application.llm.services.sliding_window_memory import (
             DefaultSlidingWindowMemory,
         )
@@ -124,7 +125,7 @@ class TestShortTermMemoryConfigVsRuntime:
         )
         assert isinstance(runtime._sliding_window, DefaultSlidingWindowMemory)
 
-    def test_rolling_summary_で_RollingSummaryShortTermMemory(self) -> None:
+    def test_rolling_summary_rolling_summary_short_term_memory(self) -> None:
         """PR #439 silent failure 再発防止の核心 assert。"""
         from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
             RollingSummaryShortTermMemory,
@@ -150,7 +151,7 @@ class TestShortTermMemoryLlmServicesWired:
     L4 / L5 が全件 template fallback だった) が fix された。本 test 群は再発防止。
     """
 
-    def test_rolling_summary_と_stub_client_の組み合わせは_summary_service_None(
+    def test_rolling_summary_stub_client_summary_service_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """LLM_CLIENT=stub なら LiteLLMClient ではないので summary_service は注入されない
@@ -171,7 +172,7 @@ class TestShortTermMemoryLlmServicesWired:
         assert sw._service is None
         assert sw._long_service is None
 
-    def test_rolling_summary_と_litellm_client_の組み合わせは_summary_service_注入(
+    def test_rolling_summary_litellm_client_summary_service(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """PR #444 fix の核心 assert: rolling + litellm なら setter 注入が走り、
@@ -223,7 +224,8 @@ class TestLiteLLMClientTimeout:
     """litellm の default request_timeout=6000 (= 100 分) ハングを防ぐため、
     LiteLLMClient は必ず有限値の timeout を持つことを保証する (PR #444)。"""
 
-    def test_litellm_で_timeout_が_有限値(self) -> None:
+    def test_litellm_timeout_value(self) -> None:
+        """litellm で timeout が有限値。"""
         from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
         from ai_rpg_world.application.llm.wiring._llm_client_factory import (
             create_llm_client_from_config,
@@ -242,7 +244,8 @@ class TestLiteLLMClientTimeout:
             f"({client._timeout_seconds}s)。litellm default 6000 秒は許容しない"
         )
 
-    def test_config_timeout_が_反映される(self) -> None:
+    def test_config_timeout(self) -> None:
+        """configtimeout が反映される。"""
         from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
         from ai_rpg_world.application.llm.wiring._llm_client_factory import (
             create_llm_client_from_config,
@@ -267,7 +270,8 @@ class TestLiteLLMClientTimeout:
 class TestSectionOrderConfigVsRuntime:
     """prompt_section_order 設定と prompt builder の strategy が一致する。"""
 
-    def test_設定未指定なら_stable_to_volatile_default(self) -> None:
+    def test_config_unspecified_stable_volatile_default(self) -> None:
+        """設定未指定なら stable to volatile default。"""
         from ai_rpg_world.application.llm.services.context_format_strategy import (
             SECTION_ORDER_STABLE_TO_VOLATILE,
         )
@@ -278,7 +282,8 @@ class TestSectionOrderConfigVsRuntime:
         assert strategy is not None
         assert strategy.section_order == SECTION_ORDER_STABLE_TO_VOLATILE
 
-    def test_legacy_明示で_legacy_strategy(self) -> None:
+    def test_legacy_strategy(self) -> None:
+        """legacy 明示で legacy strategy。"""
         from ai_rpg_world.application.llm.services.context_format_strategy import (
             SECTION_ORDER_LEGACY,
         )
@@ -301,7 +306,7 @@ class TestConfigInjection:
     を直接渡せる経路の確認。entrypoint が一度だけ ``from_mapping()`` を呼んで全部に
     渡し回す形を構造で保証する。"""
 
-    def test_明示_cfg_を_渡すと_cfg_を_使う(self) -> None:
+    def test_uses_cfg(self) -> None:
         """cfg を渡したら、その値で配線される。
 
         = 設定入力経路を 1 つにする原則の構造的保証。
@@ -320,7 +325,7 @@ class TestConfigInjection:
         runtime = create_world_runtime(_SCENARIO, config=cfg)
         assert isinstance(runtime._sliding_window, RollingSummaryShortTermMemory)
 
-    def test_cfg_省略時は空設定_default(self) -> None:
+    def test_cfg_empty_config_default(self) -> None:
         """cfg 引数省略時は環境変数を読まず、空設定の既定値になる。"""
         from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
             RollingSummaryShortTermMemory,
@@ -344,7 +349,7 @@ class TestRunStartTraceVsRuntime:
     「runtime の実体」が同じ config から派生していることを構造的に保証する。
     """
 
-    def test_rolling_summary_config_が_RollingSummary_実装と_一致(self) -> None:
+    def test_rolling_summary_config_rolling_summary_matches(self) -> None:
         """trace に出す config と runtime の sliding_window type が同一 cfg から決まる。"""
         from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
             RollingSummaryShortTermMemory,

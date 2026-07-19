@@ -175,7 +175,7 @@ class TestTodoToolExecutorComplete:
 class TestMemoExecutorBatchComplete:
     """memo_done の batch 完了挙動 (Issue #228)。"""
 
-    def test_複数_id_を一括で完了できる(self, executor_with_store, todo_store, being_setup):
+    def test_multiple_id_can_complete(self, executor_with_store, todo_store, being_setup):
         """配列に複数 ID を渡すと全て完了状態になる。"""
         executor_with_store._execute_memo_add(1, {"content": "A"})
         executor_with_store._execute_memo_add(1, {"content": "B"})
@@ -188,7 +188,7 @@ class TestMemoExecutorBatchComplete:
         # message に 3 件まとめて完了した旨が含まれる
         assert "3" in result.message
 
-    def test_存在する_id_と存在しない_id_が混在しても_存在分は完了する(
+    def test_id_completes(
         self, executor_with_store, todo_store, being_setup
     ):
         """部分成功: 存在する ID は done、存在しない ID は not_found として個別報告。"""
@@ -206,7 +206,7 @@ class TestMemoExecutorBatchComplete:
         # 有効 ID 側は実際に completed 化されている
         assert todo_store.list_uncompleted_by_being(being_setup.being_id_for(1)) == []
 
-    def test_重複_id_を含めても二重完了でエラーにならない(
+    def test_duplicate_id_error(
         self, executor_with_store, todo_store, being_setup
     ):
         """同じ ID を 2 回含めると、1 回目で done、2 回目は not_found 扱い。"""
@@ -220,7 +220,7 @@ class TestMemoExecutorBatchComplete:
         # Issue #276: 完了 ID は短縮形で表示される
         assert memo_id[:6] in result.message
 
-    def test_短縮形_prefix_で完了できる(self, executor_with_store, todo_store, being_setup):
+    def test_prefix_can_complete(self, executor_with_store, todo_store, being_setup):
         """Issue #276: memo_done は full UUID と先頭 6 文字短縮形のどちらも
         受け付ける (git commit hash 風 prefix 一致)。"""
         executor_with_store._execute_memo_add(1, {"content": "A"})
@@ -233,7 +233,7 @@ class TestMemoExecutorBatchComplete:
         # 完了済み
         assert todo_store.list_uncompleted_by_being(being_setup.being_id_for(1)) == []
 
-    def test_曖昧な_prefix_は_ambiguous_エラー(self, executor_with_store, todo_store, being_setup):
+    def test_prefix_ambiguous_error(self, executor_with_store, todo_store, being_setup):
         """同じ先頭文字で始まる 2 つの memo に短縮形が一致すると、ambiguous
         として個別報告される。"""
         # uuid4 はランダムなので、無理やり同じ先頭にするためにモンキーパッチで対応

@@ -129,7 +129,8 @@ def _build_app(*, player_names: dict[int, str] | None = None):
 class TestSignObjectAppIntegration:
     """看板の書き込み→永続化→読み取りの end-to-end 挙動。"""
 
-    def test_書き込みが_spot_interior_repository_に永続化される(self) -> None:
+    def test_spot_interior_repository(self) -> None:
+        """書き込みが spot interior repository に永続化される。"""
         app, interior_repo = _build_app(player_names={PLAYER_ID: "アリス"})
 
         app.execute_interaction(
@@ -146,7 +147,7 @@ class TestSignObjectAppIntegration:
         assert state["sign_author_name"] == "アリス"
         assert state["sign_written_tick"] == 3
 
-    def test_resolver_未注入でもフォールバック名で書き込める(self) -> None:
+    def test_resolver_uninjected_fallback(self) -> None:
         """player_display_name_resolver を渡さない構成でも書き込みは失敗しない。"""
         sign = SpotObject(
             object_id=SpotObjectId.create(SIGN_OBJECT_ID),
@@ -205,7 +206,8 @@ class TestSignObjectAppIntegration:
         state = interior.get_object(SpotObjectId.create(SIGN_OBJECT_ID)).state
         assert state["sign_author_name"]  # フォールバック名が入っている
 
-    def test_examineで書かれた内容が本人へのmessageとして返る(self) -> None:
+    def test_returns_examine_self_message(self) -> None:
+        """examineで書かれた内容が本人へのmessageとして返る。"""
         app, _ = _build_app(player_names={PLAYER_ID: "アリス"})
         app.execute_interaction(
             PlayerId(PLAYER_ID),
@@ -223,7 +225,8 @@ class TestSignObjectAppIntegration:
 
         assert result.messages == ("『水場はここから北』 — アリス",)
 
-    def test_未記入の看板をexamineすると何も書かれていないと返る(self) -> None:
+    def test_returns_examine(self) -> None:
+        """未記入の看板をexamineすると何も書かれていないと返る。"""
         app, _ = _build_app(player_names={PLAYER_ID: "アリス"})
 
         result = app.execute_interaction(
@@ -234,7 +237,8 @@ class TestSignObjectAppIntegration:
 
         assert result.messages == ("何も書かれていない。",)
 
-    def test_2人目が書き込むと1人目の内容が上書きされる(self) -> None:
+    def test_writes_one_overwritten_two(self) -> None:
+        """2人目が書き込むと1人目の内容が上書きされる。"""
         app, _ = _build_app(player_names={PLAYER_ID: "アリス", 2: "ボブ"})
         app.execute_interaction(
             PlayerId(PLAYER_ID),
@@ -260,7 +264,7 @@ class TestSignObjectAppIntegration:
         )
         assert result.messages == ("『2人目のメモ』 — アリス",)
 
-    def test_書き込み後もvisible_stateには本文_書き手名_tickが含まれない(self) -> None:
+    def test_after_visible_state_text_tick_not_included(self) -> None:
         """PR-J: `SpotGraphCurrentStateBuilder` が読む `visible_state()` の
         出力レベルで、周囲プレイヤーのプロンプトに看板の本文が漏れないこと
         を保証する (examine した本人だけが読める設計)。"""

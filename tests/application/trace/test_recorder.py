@@ -25,7 +25,7 @@ from ai_rpg_world.application.trace.recorder import (
 class TestTraceEvent:
     """TraceEvent の dict 化往復。"""
 
-    def test_to_jsonable_と_from_jsonable_が往復可能(self) -> None:
+    def test_jsonable_round_trips(self) -> None:
         """JSON シリアライズ可能な dict と TraceEvent を相互変換できる。"""
         event = TraceEvent(
             seq=1,
@@ -38,7 +38,7 @@ class TestTraceEvent:
         restored = TraceEvent.from_jsonable(event.to_jsonable())
         assert restored == event
 
-    def test_from_jsonable_は_dict_以外で_TypeError(self) -> None:
+    def test_from_jsonable_dict_raises_type_error(self) -> None:
         """非 dict が来たら TypeError。"""
         with pytest.raises(TypeError):
             TraceEvent.from_jsonable("not-a-dict")  # type: ignore[arg-type]
@@ -47,7 +47,7 @@ class TestTraceEvent:
 class TestNullTraceRecorder:
     """no-op recorder の seq 振り挙動。"""
 
-    def test_record_は_seq_だけ進めて何も書かない(self) -> None:
+    def test_record_seq(self) -> None:
         """ファイル書き出しなく seq だけ単調増加する。"""
         rec = NullTraceRecorder()
         e1 = rec.record(TraceEventKind.NOTE, tick=1, player_id=1, message="hi")
@@ -62,7 +62,7 @@ class TestNullTraceRecorder:
 class TestJsonlTraceRecorder:
     """JSONL 出力 recorder の整形と読み戻し。"""
 
-    def test_記録した_event_が_JSONL_に_1_行ずつ書かれる(self, tmp_path: Path) -> None:
+    def test_event_jsonl_one_line_written(self, tmp_path: Path) -> None:
         """record() 呼び出しごとに 1 行 (JSON) が append される。"""
         path = tmp_path / "trace.jsonl"
         with JsonlTraceRecorder(path) as rec:
@@ -81,7 +81,7 @@ class TestJsonlTraceRecorder:
         assert first["kind"] == TraceEventKind.RUN_START
         assert first["payload"] == {"run_id": "exp-01"}
 
-    def test_load_trace_events_で_書いた_event_を読み戻せる(self, tmp_path: Path) -> None:
+    def test_load_trace_events_event(self, tmp_path: Path) -> None:
         """JSONL 読み込みジェネレータが seq 順で TraceEvent を返す。"""
         path = tmp_path / "trace.jsonl"
         with JsonlTraceRecorder(path) as rec:
@@ -93,7 +93,7 @@ class TestJsonlTraceRecorder:
         assert events[0].kind == TraceEventKind.ACTION
         assert events[1].payload == {"success": True}
 
-    def test_close_後の_record_は_silently_drop_されカウンタが進む(
+    def test_advances_close_after_record_silently_drop(
         self, tmp_path: Path
     ) -> None:
         """close 済み recorder への record は静かに drop し、件数を観測可能にする。
@@ -122,12 +122,12 @@ class TestJsonlTraceRecorder:
         content = path.read_text(encoding="utf-8")
         assert "post-close" not in content
 
-    def test_path_引数が_Path_でなければ_TypeError(self) -> None:
+    def test_path_raises_type_error(self) -> None:
         """path に str が来たら TypeError。"""
         with pytest.raises(TypeError):
             JsonlTraceRecorder("/tmp/trace.jsonl")  # type: ignore[arg-type]
 
-    def test_seq_は_1_から始まり単調増加する(self, tmp_path: Path) -> None:
+    def test_seq_one_increases(self, tmp_path: Path) -> None:
         """recorder の seq は 1 から始まり各 record で 1 増える。"""
         path = tmp_path / "trace.jsonl"
         with JsonlTraceRecorder(path) as rec:
@@ -153,9 +153,10 @@ class TestJsonlTraceRecorderCloseRaceWithAsyncScheduler:
     という流れを再現する。
     """
 
-    def test_async_worker_が_close_後に_record_しても_例外なく_dropped_カウンタが進む(
+    def test_record_after_async_worker_close_increments_dropped_without_exception(
         self, tmp_path: Path
     ) -> None:
+        """async worker が close 後に record しても 例外なく dropped カウンタが進む。"""
         import time
         from datetime import datetime, timezone
         from typing import Any

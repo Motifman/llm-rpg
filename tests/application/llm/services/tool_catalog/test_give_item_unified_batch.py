@@ -53,7 +53,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
 class TestGiveItemDefinitionIsBatchAlways:
     """統合後の give_item schema が batch-always である。"""
 
-    def test_give_item_の_required_に_gives_が_含まれる(self) -> None:
+    def test_give_item_required_gives_included(self) -> None:
         """トップレベルの ``item_label`` / ``target_player_label`` は廃止、
         ``gives`` 配列必須に。"""
         props = GIVE_ITEM_DEFINITION.parameters["properties"]
@@ -66,7 +66,8 @@ class TestGiveItemDefinitionIsBatchAlways:
             "top-level target_player_label は廃止"
         )
 
-    def test_gives_は_array_型_で_length_制約_あり(self) -> None:
+    def test_gives_array_type_length(self) -> None:
+        """gives は array 型で length 制約あり。"""
         gives_spec = GIVE_ITEM_DEFINITION.parameters["properties"]["gives"]
         assert gives_spec["type"] == "array"
         assert gives_spec.get("minItems") == 1
@@ -74,7 +75,8 @@ class TestGiveItemDefinitionIsBatchAlways:
         assert gives_spec.get("maxItems") is not None
         assert gives_spec["maxItems"] >= 1
 
-    def test_gives_の_各_entry_は_item_label_と_target_player_label_が_required(self) -> None:
+    def test_gives_entry_item_label_target_player_label_required(self) -> None:
+        """gives の各 entry は itemlabel と targetplayerlabel が required。"""
         gives_items = GIVE_ITEM_DEFINITION.parameters["properties"]["gives"][
             "items"
         ]
@@ -90,13 +92,15 @@ class TestGiveItemDefinitionIsBatchAlways:
 class TestGiveItemsIsDeleted:
     """旧 ``give_items`` tool は完全削除された (give_item に吸収)。"""
 
-    def test_give_items_spec_は_get_spot_graph_specs_から_消えている(self) -> None:
+    def test_give_items_spec_get_spot_graph_specs(self) -> None:
+        """giveitemsspec は getspotgraphspecs から消えている。"""
         names = {defn.name for defn, _ in get_spot_graph_specs()}
         assert "give_items" not in names, (
             "give_items は give_item (batch-always) に統合されて廃止された"
         )
 
-    def test_give_item_は_get_spot_graph_specs_に_1件だけ存在する(self) -> None:
+    def test_give_item_appears_once_in_spot_graph_specs(self) -> None:
+        """give item は get spot graph specs に 1件だけ存在する。"""
         names = [defn.name for defn, _ in get_spot_graph_specs()]
         assert names.count("give_item") == 1
 
@@ -104,7 +108,8 @@ class TestGiveItemsIsDeleted:
 class TestGiveItemDescriptionExplainsBatchFormat:
     """統合後の description が「単発でも配列で渡す」を明示する。"""
 
-    def test_description_に_複数配布_または_batch_の_言及_あり(self) -> None:
+    def test_description_multiple_batch(self) -> None:
+        """description に複数配布または batch の言及あり。"""
         desc = GIVE_ITEM_DEFINITION.description
         # 「複数」「まとめて」「一度」「batch」のいずれかを含む
         assert (
@@ -115,7 +120,7 @@ class TestGiveItemDescriptionExplainsBatchFormat:
             or "配列" in desc
         )
 
-    def test_description_に_単発_ケースの_書き方_も_触れる(self) -> None:
+    def test_description(self) -> None:
         """LLM が単発ケースで戸惑わないよう「1 件でも配列で」を書く。"""
         desc = GIVE_ITEM_DEFINITION.description
         # 「1 件」「単発」「gives: [」のような hint を含む
@@ -127,7 +132,8 @@ class TestGiveItemDescriptionExplainsBatchFormat:
             or "1つ" in desc
         )
 
-    def test_description_は_静的文字列(self) -> None:
+    def test_description_string(self) -> None:
+        """description は静的文字列。"""
         desc = GIVE_ITEM_DEFINITION.description
         assert isinstance(desc, str)
         assert "{" not in desc

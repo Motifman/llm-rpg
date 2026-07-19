@@ -41,11 +41,13 @@ class TestIsEpisodicEnabled:
             ("garbage", False),
         ],
     )
-    def test_各種文字列の解釈(self, raw: str, expected: bool) -> None:
+    def test_string(self, raw: str, expected: bool) -> None:
+        """各種文字列の解釈。"""
         env = {"LLM_EPISODIC_ENABLED": raw}
         assert is_episodic_enabled(env) is expected
 
-    def test_未設定なら_False(self) -> None:
+    def test_unset_false(self) -> None:
+        """未設定なら False。"""
         assert is_episodic_enabled({}) is False
 
 
@@ -56,23 +58,25 @@ class TestIsEpisodicSubjectiveEnabled:
     方針になったため、明示的に OFF にしたいときだけ falsy 値を指定する。
     """
 
-    def test_未設定なら_True_既定_on(self) -> None:
+    def test_unset_true_default(self) -> None:
         """key 自体が無いとき既定 ON。"""
         assert is_episodic_subjective_enabled({}) is True
 
-    def test_空文字なら_True_既定_on(self) -> None:
+    def test_empty_string_true_default(self) -> None:
         """空文字は「key だけ設定されたが値なし」と同じ扱いで既定 ON。"""
         assert is_episodic_subjective_enabled({"LLM_EPISODIC_SUBJECTIVE_ENABLED": ""}) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "False", "no", "NO", "off"])
-    def test_明示的_off_文字列で_False(self, raw: str) -> None:
+    def test_off_string_false(self, raw: str) -> None:
+        """明示的 off 文字列で False。"""
         assert is_episodic_subjective_enabled({"LLM_EPISODIC_SUBJECTIVE_ENABLED": raw}) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "TRUE", "yes", "on"])
-    def test_明示的_on_文字列で_True(self, raw: str) -> None:
+    def test_string_true(self, raw: str) -> None:
+        """明示的 on 文字列で True。"""
         assert is_episodic_subjective_enabled({"LLM_EPISODIC_SUBJECTIVE_ENABLED": raw}) is True
 
-    def test_不明値は_True_既定側に倒す(self) -> None:
+    def test_value_true_default(self) -> None:
         """誤設定で機能が消えるより、on 側に倒して通知する方が安全。"""
         assert is_episodic_subjective_enabled({"LLM_EPISODIC_SUBJECTIVE_ENABLED": "garbage"}) is True
 
@@ -80,7 +84,7 @@ class TestIsEpisodicSubjectiveEnabled:
 class TestBuildScenarioNounMatcher:
     """シナリオ → 固有名詞 matcher 抽出 (config で構築された runtime から検証)。"""
 
-    def test_spot_と_character_の名前が登録される(self) -> None:
+    def test_spot_character_name(self) -> None:
         """config で有効化して runtime を作り、内部の matcher を直接調べる。"""
         from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
             ResolvedLlmRuntimeConfig,
@@ -110,7 +114,8 @@ class TestBuildScenarioNounMatcher:
 class TestWorldRuntimeEpisodicSwitch:
     """``create_world_runtime`` が config で episodic を on/off 切替する。"""
 
-    def test_config_未指定なら_episodic_stack_は_None(self) -> None:
+    def test_config_unspecified_episodic_stack_none(self) -> None:
+        """config 未指定なら episodic stack は None。"""
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
         scenario_path = (
@@ -122,7 +127,8 @@ class TestWorldRuntimeEpisodicSwitch:
         runtime = create_world_runtime(scenario_path)
         assert runtime._episodic_stack is None
 
-    def test_config_で有効化すると_episodic_stack_が組み立てられる(self) -> None:
+    def test_config_episodic_stack_built(self) -> None:
+        """config で有効化すると episodic stack が組み立てられる。"""
         from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
             ResolvedLlmRuntimeConfig,
         )

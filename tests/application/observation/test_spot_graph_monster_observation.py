@@ -57,7 +57,7 @@ MONSTER_1 = MonsterId.create(101)
 class TestRegistryRouting:
     """MonsterAppearedAtSpotEvent / MonsterLeftSpotEvent が spot_graph strategy にルーティングされる。"""
 
-    def test_appeared_event_は_spot_graph_strategy_にルーティングされる(self) -> None:
+    def test_appeared_event_spot_graph_strategy(self) -> None:
         """MonsterAppearedAtSpotEvent を `spot_graph` strategy として解決する。"""
         registry = ObservedEventRegistry()
         event = MonsterAppearedAtSpotEvent.create(
@@ -70,7 +70,7 @@ class TestRegistryRouting:
         assert registry.is_observed(event)
         assert registry.get_strategy_for_event(event) == "spot_graph"
 
-    def test_left_event_は_spot_graph_strategy_にルーティングされる(self) -> None:
+    def test_left_event_spot_graph_strategy(self) -> None:
         """MonsterLeftSpotEvent を `spot_graph` strategy として解決する。"""
         registry = ObservedEventRegistry()
         event = MonsterLeftSpotEvent.create(
@@ -124,7 +124,7 @@ def _make_strategy(entity_spot_mapping: dict[int, int]) -> SpotGraphRecipientStr
 class TestRecipientStrategyAppeared:
     """MonsterAppearedAtSpotEvent の配信先解決。"""
 
-    def test_出現スポットに居る全プレイヤーが配信先(self) -> None:
+    def test_spot_all_player(self) -> None:
         """同じスポットの全プレイヤーが recipient に含まれる（actor 除外なし）。"""
         strategy = _make_strategy({1: 1, 2: 1, 3: 2})
         event = MonsterAppearedAtSpotEvent.create(
@@ -138,7 +138,7 @@ class TestRecipientStrategyAppeared:
         ids = {r.value for r in recipients}
         assert ids == {1, 2}
 
-    def test_スポットに誰も居なければ空(self) -> None:
+    def test_empty_spot_returns_no_monster_observations(self) -> None:
         """対象スポットにプレイヤーが居なければ空のリストを返す。"""
         strategy = _make_strategy({3: 2})
         event = MonsterAppearedAtSpotEvent.create(
@@ -154,7 +154,7 @@ class TestRecipientStrategyAppeared:
 class TestRecipientStrategyLeft:
     """MonsterLeftSpotEvent の配信先解決。"""
 
-    def test_対象スポットに居る全プレイヤーが配信先(self) -> None:
+    def test_target_spot_all_player(self) -> None:
         """モンスターが居なくなったスポットの全プレイヤーに届く。"""
         strategy = _make_strategy({1: 1, 2: 1, 3: 2})
         event = MonsterLeftSpotEvent.create(
@@ -219,7 +219,7 @@ def formatter() -> SpotGraphObservationFormatter:
 class TestFormatterMonsterAppeared:
     """MonsterAppearedAtSpotEvent の prose 生成。"""
 
-    def test_モンスター名とスポット名を含む_environment_観測を返す(
+    def test_environment_observation_includes_monster_and_spot_names(
         self, formatter: SpotGraphObservationFormatter
     ) -> None:
         """prose にモンスター名とスポット名が含まれ、environment カテゴリで返る。"""
@@ -242,7 +242,7 @@ class TestFormatterMonsterAppeared:
         assert result.structured["monster_name"] == "灰色のオオカミ"
         assert result.structured["spot_name"] == "薄暗い森"
 
-    def test_モンスター名が解決できない場合のフォールバック(
+    def test_monster_fallback(
         self,
     ) -> None:
         """name_resolver が見つからないと FALLBACK_MONSTER_LABEL を使う。"""
@@ -264,7 +264,7 @@ class TestFormatterMonsterAppeared:
 class TestFormatterMonsterLeft:
     """MonsterLeftSpotEvent の prose 生成。"""
 
-    def test_モンスター名を含む_environment_観測を返す(
+    def test_environment_observation_includes_monster_name(
         self, formatter: SpotGraphObservationFormatter
     ) -> None:
         """姿が消える文体で environment カテゴリの観測が返る。"""

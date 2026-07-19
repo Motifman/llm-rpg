@@ -33,14 +33,14 @@ _DEFAULT_POLICY = RecallSlotPolicy(
 class TestRecallSlotPolicyValidation:
     """ポリシーの境界値バリデーション。"""
 
-    def test_負の値はエラーになる(self) -> None:
+    def test_negative_value_error(self) -> None:
         """capacity / insert_per_tick / max_residence / cooldown_ticks は 0 以上。"""
         with pytest.raises(ValueError):
             RecallSlotPolicy(
                 capacity=-1, insert_per_tick=0, max_residence=0, cooldown_ticks=0
             )
 
-    def test_insert_per_tick_が_capacity_を超えるとエラー(self) -> None:
+    def test_insert_per_tick_capacity_exceeds_error(self) -> None:
         """1 tick で容量超の挿入はできないため設定段階で弾く。"""
         with pytest.raises(ValueError):
             RecallSlotPolicy(
@@ -51,7 +51,7 @@ class TestRecallSlotPolicyValidation:
 class TestApplySlotPolicy:
     """``apply_slot_policy`` の主要パスを保証する。"""
 
-    def test_空_slot_から_capacity_と_insert_per_tick_の小さい方まで挿入する(self) -> None:
+    def test_empty_slot_capacity_insert_per_tick(self) -> None:
         """初回 tick はスロット空 → insert_per_tick まで詰める。"""
         decision = apply_slot_policy(
             prev_slot=(),
@@ -64,7 +64,7 @@ class TestApplySlotPolicy:
         assert [e.episode_id for e in decision.new_slot] == ["e1", "e2", "e3"]
         assert decision.evicted_ids == ()
 
-    def test_前_slot_を持ち越し新規は_K_insert_まで(self) -> None:
+    def test_before_slot_new_k_insert(self) -> None:
         """retained 3 + insert 3 で N=6 を満たす。retained は順序を保つ。"""
         prev = (
             RecallSlotEntry("a", entered_tick=0),
@@ -84,7 +84,7 @@ class TestApplySlotPolicy:
             "a", "b", "c", "x", "y", "z",
         ]
 
-    def test_max_residence_を超えた_entry_は強制退去する(self) -> None:
+    def test_max_residence_over_entry(self) -> None:
         """L=5 で entered_tick=0 の entry は current_tick=5 以降で退去。"""
         prev = (
             RecallSlotEntry("old", entered_tick=0),
@@ -101,7 +101,7 @@ class TestApplySlotPolicy:
         assert [e.episode_id for e in decision.retained] == ["recent"]
         assert [e.episode_id for e in decision.inserted] == ["new"]
 
-    def test_cooldown_中の_episode_は候補から外れる(self) -> None:
+    def test_cooldown_episode_candidate(self) -> None:
         """退去後 C tick の間は再入を許さない (= 慣化の構造的な実装)。"""
         decision = apply_slot_policy(
             prev_slot=(),
@@ -112,7 +112,7 @@ class TestApplySlotPolicy:
         )
         assert [e.episode_id for e in decision.inserted] == ["e2"]
 
-    def test_cooldown_満了直後は再入可能(self) -> None:
+    def test_cooldown_after(self) -> None:
         """current_tick が cooldown_until に達したら復帰できる (境界値)。"""
         decision = apply_slot_policy(
             prev_slot=(),
@@ -123,7 +123,7 @@ class TestApplySlotPolicy:
         )
         assert [e.episode_id for e in decision.inserted] == ["e1"]
 
-    def test_retained_に既にいる_episode_は候補から除外される(self) -> None:
+    def test_retained_episode_candidate_excluded(self) -> None:
         """slot 内の重複挿入を防ぐ。"""
         prev = (RecallSlotEntry("a", entered_tick=0),)
         decision = apply_slot_policy(
@@ -135,7 +135,7 @@ class TestApplySlotPolicy:
         )
         assert [e.episode_id for e in decision.inserted] == ["b"]
 
-    def test_新規候補が高_score_でも既存は押し出さない(self) -> None:
+    def test_new_candidate_score_existing(self) -> None:
         """N に達していて空き枠無ければ insert 0 件。prefix cache 重視の設計。"""
         prev = tuple(
             RecallSlotEntry(f"e{i}", entered_tick=0) for i in range(6)
@@ -156,13 +156,13 @@ class TestApplySlotPolicy:
 class TestInMemoryEpisodicRecallSlotStore:
     """sidecar store の永続性と cooldown 反映を保証する。"""
 
-    def test_未記録の_being_は空_slot_と空_cooldown_を返す(self) -> None:
+    def test_returns_being_empty_slot_empty_cooldown(self) -> None:
         """初期状態の getter は空を返し、書込みなしで例外も出さない。"""
         store = InMemoryEpisodicRecallSlotStore()
         assert store.get_slot(_being()) == ()
         assert dict(store.get_cooldown_until(_being())) == {}
 
-    def test_apply_decision_で_slot_が更新され_evicted_は_cooldown_に積まれる(self) -> None:
+    def test_apply_decision_slot_evicted_cooldown(self) -> None:
         """退去 episode は current_tick + cooldown_ticks まで除外される。"""
         store = InMemoryEpisodicRecallSlotStore()
         being = _being()
@@ -176,7 +176,7 @@ class TestInMemoryEpisodicRecallSlotStore:
         assert [e.episode_id for e in store.get_slot(being)] == ["e1"]
         assert dict(store.get_cooldown_until(being)) == {"old": 15}
 
-    def test_being_間は隔離される(self) -> None:
+    def test_being(self) -> None:
         """1P と 2P で slot / cooldown が混ざらないこと。"""
         store = InMemoryEpisodicRecallSlotStore()
         being_a = BeingId("being_w1_p1")
@@ -240,7 +240,7 @@ class TestApplySlotPolicyScoreThreshold:
             insert_score_threshold=2,
         )
 
-    def test_weak_candidate_loses_to_strong_when_strong_is_available(self) -> None:
+    def test_weak_candidate_loses_strong_when_strong_is_available(self) -> None:
         """強い候補 (score=2) が混在するときは、弱い候補 (score=1) は閾値で
         落ち、強い側だけが挿入される。「強いものがある限り弱いものは入れない」
         を明文化する。fallback は強い候補が 0 件のときだけ発火するので、
@@ -267,7 +267,7 @@ class TestApplySlotPolicyScoreThreshold:
         )
         assert [e.episode_id for e in decision.inserted] == ["strong"]
 
-    def test_empty_slot_falls_back_to_weak_candidate(self) -> None:
+    def test_empty_slot_falls_back_weak_candidate(self) -> None:
         """slot が空 (retained 0) で、閾値を満たす候補が無いときは、
         「鮮明な記憶が無いよりは弱いものでもあった方がマシ」として
         閾値を一段だけ緩めて 1 件挿入する。afterglow が空のときの空白を

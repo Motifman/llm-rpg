@@ -146,7 +146,7 @@ def _make_orchestrator(graph, attacker, prey):
 class TestPredationSuccess:
     """通常攻撃 (target 生存) 成立。"""
 
-    def test_event_発火_と_3_セーブ_と_record_attacked_by_in_spot(self) -> None:
+    def test_predation_emits_event_saves_three_times_and_records_attack(self) -> None:
         """attack 成立で event + monster save 2 件 + graph save、prey に
         record_attacked_by_in_spot が記録される。"""
         wolf_t = _make_template(name="Wolf", race=Race.BEAST, attack=5, max_hp=30)
@@ -188,7 +188,7 @@ class TestPredationSuccess:
 class TestPredationKill:
     """致命攻撃で hunger 回復。"""
 
-    def test_致命攻撃で_record_prey_kill_経由で_hunger_減少(self) -> None:
+    def test_record_prey_kill_via_hunger(self) -> None:
         """attacker.attack >= prey.hp で致命、hunger が回復する。"""
         wolf_t = _make_template(
             name="Wolf",
@@ -233,7 +233,7 @@ class TestPredationKill:
 class TestPredationFailure:
     """各失敗系。"""
 
-    def test_target_dead_で_executed_false(self) -> None:
+    def test_target_dead_executed_false(self) -> None:
         """既に死んでいる prey は捕食できない。"""
         from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import (
             MonsterLifecycleState,
@@ -266,7 +266,7 @@ class TestPredationFailure:
         assert outcome.executed is False
         assert outcome.reason == "target_dead"
 
-    def test_暗闇_かつ_dark_vision無しで_not_visible(self) -> None:
+    def test_darkness_dark_vision_not_visible(self) -> None:
         """DARK + dark_vision なしの捕食者は狩らない。"""
         wolf = _make_monster(_make_template(name="Wolf", race=Race.BEAST), 1)
         rabbit = _make_monster(_make_template(name="Rabbit", race=Race.BEAST), 2)
@@ -285,7 +285,7 @@ class TestPredationFailure:
         assert outcome.executed is False
         assert outcome.reason == "not_visible"
 
-    def test_attack_ゼロで_zero_damage(self) -> None:
+    def test_attack_zero_damage(self) -> None:
         """attack=0 のテンプレでは捕食成立しない。"""
         wolf = _make_monster(_make_template(name="Wolf", race=Race.BEAST, attack=0), 1)
         rabbit = _make_monster(_make_template(name="Rabbit", race=Race.BEAST), 2)

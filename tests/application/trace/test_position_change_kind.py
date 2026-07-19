@@ -18,11 +18,11 @@ from ai_rpg_world.application.trace.recorder import (
 class TestPositionChangeKind:
     """``POSITION_CHANGE`` event kind の schema 整合性。"""
 
-    def test_TraceEventKind_に_POSITION_CHANGE_が定義されている(self) -> None:
+    def test_trace_event_kind_position_change(self) -> None:
         """新規 kind を追加した結果。"""
         assert TraceEventKind.POSITION_CHANGE == "position_change"
 
-    def test_position_change_event_を_JSONL_に_書いて読み戻せる(self, tmp_path: Path) -> None:
+    def test_position_change_event_jsonl(self, tmp_path: Path) -> None:
         """recorder が新 kind を扱え、payload も含めて round-trip する。"""
         path = tmp_path / "trace.jsonl"
         with JsonlTraceRecorder(path) as rec:
@@ -48,7 +48,7 @@ class TestPositionChangeKind:
             "player_name": "カイト",
         }
 
-    def test_初期配置は_from_spot_id_None_で記録できる(self, tmp_path: Path) -> None:
+    def test_initial_position_spot_id_none_can_record(self, tmp_path: Path) -> None:
         """``run_start`` 直後の初期位置は from_spot_id=None で表現する規約。"""
         path = tmp_path / "trace.jsonl"
         with JsonlTraceRecorder(path) as rec:

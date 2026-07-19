@@ -28,7 +28,7 @@ from scripts.publish_experiment_gist import (  # noqa: E402
 class TestPrefixedName:
     """既知ファイル名は GitHub UI 並び順用 prefix が付く。"""
 
-    def test_既知ファイル名は_prefix_付きに変換される(self) -> None:
+    def test_file_prefix(self) -> None:
         """summary.md → 00_summary.md など、辞書順が論理順になる。"""
         assert _prefixed_name("summary.md") == "00_summary.md"
         assert _prefixed_name("report.md") == "01_report.md"
@@ -36,7 +36,7 @@ class TestPrefixedName:
         assert _prefixed_name("trace.html") == "03_trace.html"
         assert _prefixed_name("scenario.json") == "04_scenario.json"
 
-    def test_未知ファイル名は変換されない(self) -> None:
+    def test_unknown_file(self) -> None:
         """マッピングに無い名前は素通り。"""
         assert _prefixed_name("custom.txt") == "custom.txt"
 
@@ -44,16 +44,17 @@ class TestPrefixedName:
 class TestCollectFiles:
     """run_dir からの publish 対象収集。"""
 
-    def test_ファイルがなければ_GistPublishError(self, tmp_path: Path) -> None:
+    def test_file_gist_publish_error(self, tmp_path: Path) -> None:
         """空ディレクトリは publish できない (gh がエラーになる前にここで止める)。"""
         with pytest.raises(GistPublishError, match="no files"):
             _collect_files(tmp_path)
 
-    def test_存在しないディレクトリは_FileNotFoundError(self, tmp_path: Path) -> None:
+    def test_missing_raises_file_not_found_error(self, tmp_path: Path) -> None:
+        """存在しないディレクトリは FileNotFoundError。"""
         with pytest.raises(FileNotFoundError):
             _collect_files(tmp_path / "missing")
 
-    def test_隠しファイルは無視される(self, tmp_path: Path) -> None:
+    def test_file(self, tmp_path: Path) -> None:
         """ドットファイル (.DS_Store 等) は publish 対象外。"""
         (tmp_path / ".DS_Store").write_text("x")
         (tmp_path / "report.md").write_text("# r")
@@ -62,7 +63,7 @@ class TestCollectFiles:
         assert "01_report.md" in names
         assert not any(n.startswith(".") for n in names)
 
-    def test_サブディレクトリは無視される(self, tmp_path: Path) -> None:
+    def test_directory(self, tmp_path: Path) -> None:
         """flat なファイル群だけが対象 (再帰しない)。"""
         (tmp_path / "report.md").write_text("# r")
         (tmp_path / "subdir").mkdir()
@@ -74,15 +75,17 @@ class TestCollectFiles:
 class TestExtractGistId:
     """gh gist create の出力 URL から id を抜く。"""
 
-    def test_標準的な_URL_から_id_を返す(self) -> None:
+    def test_returns_url_id(self) -> None:
         """通常の gist URL から末尾 id を取る。"""
         url = "https://gist.github.com/Motifman/abc123def456"
         assert _extract_gist_id(url) == "abc123def456"
 
-    def test_空文字なら_None(self) -> None:
+    def test_empty_string_none(self) -> None:
+        """空文字なら None。"""
         assert _extract_gist_id("") is None
 
-    def test_末尾スラッシュも吸収する(self) -> None:
+    def test_last(self) -> None:
+        """末尾スラッシュも吸収する。"""
         url = "https://gist.github.com/Motifman/abc123/"
         assert _extract_gist_id(url) == "abc123"
 
@@ -90,7 +93,7 @@ class TestExtractGistId:
 class TestHtmlPreviewUrl:
     """htmlpreview.github.io URL の組み立て。"""
 
-    def test_URL_に_id_と_user_と_ファイル名が入る(self) -> None:
+    def test_url_id_user_file(self) -> None:
         """組み立てた URL からブラウザで HTML をプレビューできる形にする。"""
         url = _html_preview_url("abc123", "Motifman", "03_trace.html")
         assert "abc123" in url
@@ -102,7 +105,7 @@ class TestHtmlPreviewUrl:
 class TestPublishWithMock:
     """publish() の外部 gh 呼び出しをモックして end-to-end の組み立てを確認。"""
 
-    def test_publish_は_gh_を呼び_URL_を返す(self, tmp_path: Path) -> None:
+    def test_returns_publish_gh_url(self, tmp_path: Path) -> None:
         """gh gist create / gh api user の両方が呼ばれ結果が返る。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -132,7 +135,7 @@ class TestPublishWithMock:
         # staging ディレクトリは掃除されていること
         assert not (run_dir / "_gist_staging").exists()
 
-    def test_html_が無ければ_html_preview_url_は_None(self, tmp_path: Path) -> None:
+    def test_html_preview_url_none(self, tmp_path: Path) -> None:
         """HTML ファイルが run_dir に無い場合は html_preview_url キーが None。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -152,7 +155,7 @@ class TestPublishWithMock:
 
         assert result["html_preview_url"] is None
 
-    def test_secret_既定で_public_フラグ_は_付かない(self, tmp_path: Path) -> None:
+    def test_secret_default_public(self, tmp_path: Path) -> None:
         """secret=True (既定) のとき --public が cmd に出ない。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -174,7 +177,7 @@ class TestPublishWithMock:
         create_cmd = next(c for c in captured if c[:3] == ["gh", "gist", "create"])
         assert "--public" not in create_cmd
 
-    def test_public_True_のとき_public_フラグが付く(self, tmp_path: Path) -> None:
+    def test_public_true_public(self, tmp_path: Path) -> None:
         """secret=False (公開) のとき --public フラグが追加される。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -195,7 +198,7 @@ class TestPublishWithMock:
         create_cmd = next(c for c in captured if c[:3] == ["gh", "gist", "create"])
         assert "--public" in create_cmd
 
-    def test_gh_が_失敗したら_GistPublishError(self, tmp_path: Path) -> None:
+    def test_gh_failure_gist_publish_error(self, tmp_path: Path) -> None:
         """gh CLI が非 0 終了したら GistPublishError に詰めて投げる。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -210,7 +213,7 @@ class TestPublishWithMock:
             with pytest.raises(GistPublishError, match="gh command failed"):
                 publish(run_dir, secret=True)
 
-    def test_gh_未インストールなら_GistPublishError(self, tmp_path: Path) -> None:
+    def test_gh_gist_publish_error(self, tmp_path: Path) -> None:
         """gh が PATH にない時は分かりやすいメッセージで止める。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -227,7 +230,7 @@ class TestPublishWithMock:
 class TestViewerIntegration:
     """PR δ: viewer.html 同梱機構。"""
 
-    def test_viewer_html_があれば_viewer_preview_url_が返る(self, tmp_path: Path) -> None:
+    def test_returns_viewer_html_viewer_preview_url(self, tmp_path: Path) -> None:
         """run_dir に viewer.html があれば gist に含まれ、viewer URL が出る。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -254,7 +257,7 @@ class TestViewerIntegration:
         # 後方互換: html_preview_url は viewer (primary) を指す
         assert "06_viewer.html" in result["html_preview_url"]
 
-    def test_viewer_html_だけの場合は_legacy_は_None(self, tmp_path: Path) -> None:
+    def test_viewer_html_legacy_none(self, tmp_path: Path) -> None:
         """viewer.html のみで trace.html (Mermaid 版) が無い場合、legacy は None。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -277,7 +280,7 @@ class TestViewerIntegration:
         assert "06_viewer.html" in result["viewer_preview_url"]
         assert result["legacy_preview_url"] is None
 
-    def test_no_viewer_no_trace_html_は_全部_None(self, tmp_path: Path) -> None:
+    def test_missing_viewer_and_trace_html_return_none_paths(self, tmp_path: Path) -> None:
         """HTML 1 つも無ければ viewer / legacy / html すべて None。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -319,9 +322,10 @@ class TestEpisodicTimelinePreviewUrls:
             return stub
         return fake_run
 
-    def test_episodic_html_があれば_episodic_preview_url_が_返る(
+    def test_returns_episodic_html_episodic_preview_url(
         self, tmp_path: Path
     ) -> None:
+        """episodichtml があれば episodicpreviewurl が返る。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
         (run_dir / "report.md").write_text("# r")
@@ -338,9 +342,10 @@ class TestEpisodicTimelinePreviewUrls:
         assert "htmlpreview.github.io" in result["episodic_preview_url"]
         assert "episodic.html" in result["episodic_preview_url"]
 
-    def test_timeline_html_があれば_timeline_preview_url_が_返る(
+    def test_returns_timeline_html_timeline_preview_url(
         self, tmp_path: Path
     ) -> None:
+        """timelinehtml があれば timelinepreviewurl が返る。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
         (run_dir / "report.md").write_text("# r")
@@ -357,7 +362,7 @@ class TestEpisodicTimelinePreviewUrls:
         assert "htmlpreview.github.io" in result["timeline_preview_url"]
         assert "timeline.html" in result["timeline_preview_url"]
 
-    def test_episodic_timeline_両方なしなら_None(self, tmp_path: Path) -> None:
+    def test_episodic_timeline_none(self, tmp_path: Path) -> None:
         """gist 内に該当 HTML が無ければ None (壊れない後方互換)。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -373,7 +378,7 @@ class TestEpisodicTimelinePreviewUrls:
         assert result["episodic_preview_url"] is None
         assert result["timeline_preview_url"] is None
 
-    def test_build_viewer_True_で_trace_jsonl_から_viewer_を_自動生成(
+    def test_build_viewer_true_trace_jsonl_viewer(
         self, tmp_path: Path
     ) -> None:
         """build_viewer=True かつ trace.jsonl があれば publish 前に viewer.html を build。"""
@@ -415,7 +420,7 @@ class TestEpisodicTimelinePreviewUrls:
         assert (run_dir / "viewer.html").exists()
         assert "06_viewer.html" in result["viewer_preview_url"]
 
-    def test_build_viewer_True_でも_Cytoscape_取得失敗時は_publish_続行(
+    def test_build_viewer_true_cytoscape_failure_publish_line(
         self, tmp_path: Path
     ) -> None:
         """ネット越し取得が失敗しても publish 全体は止まらない (trace.html の代替がある想定)。"""

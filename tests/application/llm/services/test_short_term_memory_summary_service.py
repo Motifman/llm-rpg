@@ -68,7 +68,8 @@ class _RaisingPort(IShortTermMemorySummaryCompletionPort):
 class TestShortTermMemorySummaryServiceGenerate:
     """正常系: LLM 応答を _ParsedSummary に変換する。"""
 
-    def test_有効な_LLM_応答が_そのまま_result_に_乗る(self) -> None:
+    def test_llm_result_included(self) -> None:
+        """有効な LLM 応答がそのまま result に乗る。"""
         port = _StubPort(response={
             "compressed_activity": "北東を探索したが収穫薄",
             "emotional_summary": "やや疲労",
@@ -84,7 +85,8 @@ class TestShortTermMemorySummaryServiceGenerate:
         assert result.emotional_summary == "やや疲労"
         assert result.unresolved == ("水源を見つける", "タカシと再会する")
 
-    def test_compressed_activity_は_cap_される(self) -> None:
+    def test_compressed_activity_cap(self) -> None:
+        """compressed activity は cap される。"""
         long = "あ" * (COMPRESSED_ACTIVITY_MAX_CHARS * 2)
         port = _StubPort(response={
             "compressed_activity": long,
@@ -99,7 +101,8 @@ class TestShortTermMemorySummaryServiceGenerate:
         )
         assert len(result.compressed_activity) == COMPRESSED_ACTIVITY_MAX_CHARS
 
-    def test_emotional_summary_は_cap_される(self) -> None:
+    def test_emotional_summary_cap(self) -> None:
+        """emotional summary は cap される。"""
         long = "あ" * (EMOTIONAL_SUMMARY_MAX_CHARS * 2)
         port = _StubPort(response={
             "compressed_activity": "ok",
@@ -114,7 +117,8 @@ class TestShortTermMemorySummaryServiceGenerate:
         )
         assert len(result.emotional_summary) == EMOTIONAL_SUMMARY_MAX_CHARS
 
-    def test_unresolved_は_3件_でcap_される(self) -> None:
+    def test_unresolved_three_cap(self) -> None:
+        """unresolved は 3件 でcap される。"""
         port = _StubPort(response={
             "compressed_activity": "ok",
             "emotional_summary": "",
@@ -128,7 +132,8 @@ class TestShortTermMemorySummaryServiceGenerate:
         )
         assert len(result.unresolved) == UNRESOLVED_MAX_ITEMS
 
-    def test_unresolved_の_各要素は_120字で_cap_される(self) -> None:
+    def test_unresolved_element_120_cap(self) -> None:
+        """unresolved の各要素は 120 字で cap される。"""
         long = "あ" * (UNRESOLVED_ITEM_MAX_CHARS * 2)
         port = _StubPort(response={
             "compressed_activity": "ok",
@@ -143,7 +148,8 @@ class TestShortTermMemorySummaryServiceGenerate:
         )
         assert len(result.unresolved[0]) == UNRESOLVED_ITEM_MAX_CHARS
 
-    def test_unresolved_の_非str_や_空文字は_除外(self) -> None:
+    def test_unresolved_non_str_empty_string(self) -> None:
+        """unresolved の非 str や空文字は除外。"""
         port = _StubPort(response={
             "compressed_activity": "ok",
             "emotional_summary": "",
@@ -157,7 +163,8 @@ class TestShortTermMemorySummaryServiceGenerate:
         )
         assert result.unresolved == ("a", "b")
 
-    def test_emotional_summary_が_非str_でも_空文字に_縮退(self) -> None:
+    def test_emotional_summary_non_str_empty_string(self) -> None:
+        """emotionalsummary が非 str でも空文字に縮退。"""
         port = _StubPort(response={
             "compressed_activity": "ok",
             "emotional_summary": 123,
@@ -175,7 +182,8 @@ class TestShortTermMemorySummaryServiceGenerate:
 class TestShortTermMemorySummaryServicePromptStructure:
     """messages に名前 / persona / 直前 L4 / 観測群 が乗る。"""
 
-    def test_player_name_と_persona_が_user_メッセージに_乗る(self) -> None:
+    def test_player_name_persona_user_included(self) -> None:
+        """player name と persona が user メッセージに 乗る。"""
         port = _StubPort(response={"compressed_activity": "ok", "emotional_summary": "", "unresolved": []})
         svc = ShortTermMemorySummaryService(port)
         svc.generate(
@@ -188,7 +196,8 @@ class TestShortTermMemorySummaryServicePromptStructure:
         assert "慎重で寡黙" in user
         assert "行動 X" in user
 
-    def test_直前_L4_が_あれば_引き継ぎ_section_が_乗る(self) -> None:
+    def test_before_l4_section_included(self) -> None:
+        """直前 L4 があれば引き継ぎ section が乗る。"""
         port = _StubPort(response={"compressed_activity": "ok", "emotional_summary": "", "unresolved": []})
         svc = ShortTermMemorySummaryService(port)
         prev = L4MidSummary(
@@ -211,7 +220,8 @@ class TestShortTermMemorySummaryServicePromptStructure:
         assert "先回の気分" in user
         assert "先回未解決" in user
 
-    def test_system_メッセージに_ラベル禁止_の指示が_入る(self) -> None:
+    def test_system_label(self) -> None:
+        """system メッセージに ラベル禁止 の指示が 入る。"""
         port = _StubPort(response={"compressed_activity": "ok", "emotional_summary": "", "unresolved": []})
         svc = ShortTermMemorySummaryService(port)
         svc.generate(
@@ -226,7 +236,8 @@ class TestShortTermMemorySummaryServicePromptStructure:
 class TestShortTermMemorySummaryServiceErrors:
     """異常系: 空 observations / API 例外 / 不正 JSON。"""
 
-    def test_空_observations_は_value_error(self) -> None:
+    def test_empty_observations_value_error(self) -> None:
+        """空 observations は value error。"""
         port = _StubPort(response={"compressed_activity": "ok", "emotional_summary": "", "unresolved": []})
         svc = ShortTermMemorySummaryService(port)
         with pytest.raises(ValueError, match="observations must not be empty"):
@@ -234,7 +245,8 @@ class TestShortTermMemorySummaryServiceErrors:
                 player_name="x", persona_block="", observations=[]
             )
 
-    def test_port_が_LlmApiCallException_なら_伝播(self) -> None:
+    def test_port_llm_api_call_exception(self) -> None:
+        """port が LlmApiCallException なら 伝播。"""
         svc = ShortTermMemorySummaryService(
             _RaisingPort(exc=LlmApiCallException("x", error_code="LLM_API_CALL_FAILED"))
         )
@@ -245,7 +257,8 @@ class TestShortTermMemorySummaryServiceErrors:
                 observations=[_make_observation("p")],
             )
 
-    def test_compressed_activity_が_空文字なら_value_error(self) -> None:
+    def test_compressed_activity_empty_string_value_error(self) -> None:
+        """compressedactivity が空文字なら valueerror。"""
         port = _StubPort(response={
             "compressed_activity": "   ",
             "emotional_summary": "",
@@ -259,7 +272,8 @@ class TestShortTermMemorySummaryServiceErrors:
                 observations=[_make_observation("p")],
             )
 
-    def test_port_が_None_なら_type_error(self) -> None:
+    def test_port_none_type_error(self) -> None:
+        """port が None なら type error。"""
         with pytest.raises(TypeError, match="port must not be None"):
             ShortTermMemorySummaryService(port=None)  # type: ignore[arg-type]
 
@@ -267,7 +281,8 @@ class TestShortTermMemorySummaryServiceErrors:
 class TestBuildTemplateFallbackSummary:
     """LLM 失敗時の縮退テンプレ。"""
 
-    def test_観測_prose_が_箇条書きで_詰まる(self) -> None:
+    def test_observation_prose(self) -> None:
+        """観測 prose が箇条書きで詰まる。"""
         obs = [_make_observation("p1"), _make_observation("p2")]
         result = build_template_fallback_summary(obs)
         assert "p1" in result.compressed_activity
@@ -275,11 +290,13 @@ class TestBuildTemplateFallbackSummary:
         assert result.emotional_summary == ""
         assert result.unresolved == ()
 
-    def test_観測ゼロでも_空文字_placeholder_を返す(self) -> None:
+    def test_returns_observation_empty_string_placeholder(self) -> None:
+        """観測ゼロでも 空文字 placeholder を返す。"""
         result = build_template_fallback_summary([])
         assert "no prose" in result.compressed_activity
 
-    def test_15件超は_前から_15件で_打ち切り(self) -> None:
+    def test_fifteen_over_before_fifteen(self) -> None:
+        """15件超は 前から 15件で 打ち切り。"""
         obs = [_make_observation(f"p{i}") for i in range(30)]
         result = build_template_fallback_summary(obs)
         assert "p14" in result.compressed_activity

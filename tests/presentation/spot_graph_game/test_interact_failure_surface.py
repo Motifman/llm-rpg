@@ -25,33 +25,33 @@ from ai_rpg_world.application.llm.services.executors.interact_helpers import (
 class TestInteractRemediationKeywords:
     """`_interact_remediation_for_reason` のキーワード分岐。"""
 
-    def test_採り尽くした_reason_は_retry_抑制_remediation(self) -> None:
+    def test_reason_retry_remediation_2(self) -> None:
         """「近くの蔓は採り尽くした」のような reason で枯渇 remediation。"""
         rem = _interact_remediation_for_reason("近くの蔓は採り尽くした。")
         assert "同じ object に同 action_name を再試行しても結果は変わらない" in rem
 
-    def test_枯渇_reason_でも_retry_抑制_remediation(self) -> None:
+    def test_reason_retry_remediation(self) -> None:
         """「枯渇」を含む reason でも同 remediation。"""
         rem = _interact_remediation_for_reason("資源が枯渇している")
         assert "別の場所・別 object・別 action" in rem
 
-    def test_もう開いている_reason_でも_retry_抑制(self) -> None:
+    def test_reason_retry_2(self) -> None:
         """すでに完了している interaction (chest opened 等) も retry 抑制。"""
         rem = _interact_remediation_for_reason("宝箱はもう空だ。")
         assert "再試行しても結果は変わらない" in rem
 
-    def test_燃え上がっている_reason_でも_retry_抑制(self) -> None:
+    def test_reason_retry(self) -> None:
         """狼煙台 lit=True 再点火など、対象状態が既達なら retry 不要。"""
         rem = _interact_remediation_for_reason("狼煙はすでに燃え上がっている。")
         assert "再試行しても結果は変わらない" in rem
 
-    def test_アイテム不足_reason_では_前提条件_remediation(self) -> None:
+    def test_item_reason_before_remediation(self) -> None:
         """「流木が足りない」のような precondition 不足は通常 remediation。"""
         rem = _interact_remediation_for_reason("流木が足りない。")
         assert "前提条件" in rem
         assert "再試行しても結果は変わらない" not in rem
 
-    def test_火打ち石_必要_reason_でも_前提条件_remediation(self) -> None:
+    def test_reason_before_remediation(self) -> None:
         """「火打ち石が必要だ」もアイテム不足扱い (= 揃えれば成功)。"""
         rem = _interact_remediation_for_reason("火打ち石が必要だ。")
         assert "前提条件" in rem

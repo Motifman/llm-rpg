@@ -24,12 +24,12 @@ from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 class TestFatiguePassiveDecayIsZero:
     """疲労は時間経過では増えない。"""
 
-    def test_FATIGUE_の_passive_decay_rate_は_0(self) -> None:
+    def test_fatigue_passive_decay_rate_zero(self) -> None:
         """行動以外で疲労が増えると「何もしなくても詰む」構造になるため、
         ``DEFAULT_NEED_RATES[FATIGUE]`` は 0 に固定する。"""
         assert DEFAULT_NEED_RATES[NeedType.FATIGUE] == 0
 
-    def test_過去の値_1_に_戻っていない_regression_check(self) -> None:
+    def test_value_one_regression_check(self) -> None:
         """Y_after_pr634 で 1 → 0 に下げた。回帰で 1 に戻ると 140 tick の
         survival シナリオで再び全員 exhausted ロックになるので明示的に弾く。"""
         assert DEFAULT_NEED_RATES[NeedType.FATIGUE] < 1
@@ -38,7 +38,7 @@ class TestFatiguePassiveDecayIsZero:
 class TestHungerPassiveDecayIsUnchanged:
     """HUNGER は据え置き — 食料探し動機を消さない。"""
 
-    def test_HUNGER_の_passive_decay_rate_は_1_のまま(self) -> None:
+    def test_hunger_passive_decay_rate_stays_one(self) -> None:
         """空腹は時間で増える設計を維持する。survival シナリオでは食料探しが
         ゲームの核なので、FATIGUE と一緒に 0 に落とさない。"""
         assert DEFAULT_NEED_RATES[NeedType.HUNGER] == 1

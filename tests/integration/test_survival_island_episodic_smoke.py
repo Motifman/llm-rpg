@@ -44,15 +44,17 @@ class TestSurvivalIslandV1EpisodicWiring:
 
     SCENARIO = "survival_island.json"
 
-    def test_env_未設定なら_stack_は_None(
+    def test_env_unset_stack_none_2(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """env 未設定なら stack は None。"""
         runtime = _build_runtime(self.SCENARIO, enabled=False)
         assert runtime._episodic_stack is None
 
-    def test_env_1_で_stack_が組み立てられる(
+    def test_env_one_stack_built_2(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """env 1 で stack が組み立てられる。"""
         runtime = _build_runtime(self.SCENARIO, enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
@@ -62,7 +64,7 @@ class TestSurvivalIslandV1EpisodicWiring:
         assert stack.noun_matcher is not None
         assert stack.episode_store is not None
 
-    def test_noun_matcher_が_player_名を認識する(
+    def test_noun_matcher_player(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """survival_island.json の player_spawns から character cue が立つ。"""
@@ -84,7 +86,7 @@ class TestSurvivalIslandV1EpisodicWiring:
             "立たない。scenario loader が player_spawns を正規化しているか確認。"
         )
 
-    def test_episodic_有効でも_do_wait_は例外なく完走(
+    def test_do_wait_completes_with_episodic_enabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """エピソード stack 配線下でも survival シナリオの動作が壊れない。"""
@@ -100,15 +102,17 @@ class TestSurvivalIslandV2EpisodicWiring:
 
     SCENARIO = "survival_island_v2.json"
 
-    def test_env_未設定なら_stack_は_None(
+    def test_env_unset_stack_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """env 未設定なら stack は None。"""
         runtime = _build_runtime(self.SCENARIO, enabled=False)
         assert runtime._episodic_stack is None
 
-    def test_env_1_で_stack_が組み立てられる(
+    def test_env_one_stack_built(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """env 1 で stack が組み立てられる。"""
         runtime = _build_runtime(self.SCENARIO, enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
@@ -117,7 +121,7 @@ class TestSurvivalIslandV2EpisodicWiring:
         assert stack.noun_matcher is not None
         assert stack.episode_store is not None
 
-    def test_noun_matcher_が_spot_名を認識する(
+    def test_noun_matcher_recognizes_spot_names(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """survival_island_v2.json の spots (25 件) から place_spot cue が立つ。"""
@@ -139,7 +143,7 @@ class TestSurvivalIslandV2EpisodicWiring:
             "立たない。graph._spots と builder の橋渡しを確認。"
         )
 
-    def test_noun_matcher_が_4_persona_名を認識する(
+    def test_noun_matcher_four_persona(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """survival_island_v2 は 4 ペルソナ構成。全員 entity として認識される。"""

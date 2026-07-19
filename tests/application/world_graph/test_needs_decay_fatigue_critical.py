@@ -49,7 +49,7 @@ def _build_status(fatigue_value: int, hp: int = 100) -> PlayerStatusAggregate:
 class TestFatigueCriticalDamageDisabled:
     """``fatigue_critical_damage_per_tick=0`` (default) は HP に影響しない。"""
 
-    def test_default_では_疲労限界でも_HP_減らない(self) -> None:
+    def test_default_hp(self) -> None:
         """旧シナリオ (脱出ゲーム等) の挙動は完全に不変であること。"""
         status = _build_status(fatigue_value=100, hp=100)
         repo = MagicMock()
@@ -64,7 +64,7 @@ class TestFatigueCriticalDamageDisabled:
 class TestFatigueCriticalDamageEnabled:
     """``fatigue_critical_damage_per_tick=1`` で threshold 超過時に HP-1/tick。"""
 
-    def test_FATIGUE_threshold_以上で_HP_減る(self) -> None:
+    def test_fatigue_threshold_more_hp_decreases(self) -> None:
         """fatigue 95 (default threshold) を超えていれば毎 tick HP-1。
 
         Y_after_pr634 後続で ``DEFAULT_NEED_RATES[FATIGUE]`` が 0 になったため、
@@ -85,7 +85,7 @@ class TestFatigueCriticalDamageEnabled:
         assert status.needs.get(NeedType.FATIGUE).value == 95
         assert status.hp.value == 99
 
-    def test_FATIGUE_threshold_未満なら_HP_減らない(self) -> None:
+    def test_fatigue_threshold_below_hp(self) -> None:
         """fatigue 93→94 では threshold 95 に届かないので HP は維持される。"""
         status = _build_status(fatigue_value=93, hp=100)
         repo = MagicMock()
@@ -101,7 +101,7 @@ class TestFatigueCriticalDamageEnabled:
         assert status.needs.get(NeedType.FATIGUE).value == 94
         assert status.hp.value == 100
 
-    def test_カスタム_threshold_を尊重する(self) -> None:
+    def test_custom_threshold(self) -> None:
         """threshold をシナリオで調整できること (例: 90)。"""
         status = _build_status(fatigue_value=89, hp=100)
         repo = MagicMock()

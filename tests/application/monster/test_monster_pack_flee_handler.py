@@ -157,7 +157,8 @@ class TestMultipleFollowers:
     """同 pack に複数の follower が居る場合、各 follower が個別に連動 FLEE
     する (上限なし、群れ全体崩壊の演出)。"""
 
-    def test_3_follower_全員が_連動_FLEE_に_遷移(self) -> None:
+    def test_three_follower_all_players_flee(self) -> None:
+        """3follower 全員が連動 FLEE に遷移。"""
         leader = _make_monster(101, template=_leader_template(), is_pack_leader=True)
         leader.enter_flee_state(WorldTick(9), duration_ticks=10)
         followers = [
@@ -202,7 +203,8 @@ class TestMultipleFollowers:
 class TestPackFleeFollowSuccess:
     """leader が FLEE 中なら follower も連動。"""
 
-    def test_leader_FLEE_中なら_follower_も_FLEE_に_遷移(self) -> None:
+    def test_leader_flee_follower_flee(self) -> None:
+        """leaderFLEE 中なら follower も FLEE に遷移。"""
         leader = _make_monster(101, template=_leader_template(), is_pack_leader=True)
         # leader を FLEE 状態にする (実際には reaction handler 経由で入る想定)
         leader.enter_flee_state(WorldTick(9), duration_ticks=10)
@@ -235,7 +237,8 @@ class TestPackFleeFollowSuccess:
 class TestNoFollow:
     """連動しない経路。"""
 
-    def test_pack_flee_follower_False_なら_連動しない(self) -> None:
+    def test_pack_flee_follower_false(self) -> None:
+        """pack flee follower False なら 連動しない。"""
         leader = _make_monster(101, template=_leader_template(), is_pack_leader=True)
         leader.enter_flee_state(WorldTick(9), duration_ticks=10)
         follower = _make_monster(
@@ -254,7 +257,7 @@ class TestNoFollow:
         assert result is False
         assert follower.is_fleeing(WorldTick(10)) is False
 
-    def test_follower_True_かつ_duration_0_は_template_作成時に_例外(self) -> None:
+    def test_follower_true_duration_zero_template_raises_exception(self) -> None:
         """`pack_flee_follower=True, duration=0` の矛盾組み合わせは
         `MonsterTemplate.__post_init__` のバリデーションで弾かれる
         (handler に到達する前に template 作成が失敗する)。"""
@@ -271,7 +274,8 @@ class TestNoFollow:
                 pack_flee_follower=True, pack_flee_follower_duration=0,
             )
 
-    def test_pack_id_None_なら_連動しない(self) -> None:
+    def test_pack_id_none(self) -> None:
+        """pack id None なら 連動しない。"""
         leader = _make_monster(101, template=_leader_template(), is_pack_leader=True)
         leader.enter_flee_state(WorldTick(9), duration_ticks=10)
         follower = _make_monster(
@@ -289,7 +293,7 @@ class TestNoFollow:
         )
         assert result is False
 
-    def test_自分が_leader_なら_連動しない(self) -> None:
+    def test_self_leader(self) -> None:
         """leader 自身は通常 reaction 経路で FLEE に入る。"""
         another_leader = _make_monster(
             101, template=_leader_template(), is_pack_leader=True,
@@ -311,7 +315,8 @@ class TestNoFollow:
         )
         assert result is False
 
-    def test_既に_FLEE_中なら_無反応(self) -> None:
+    def test_flee(self) -> None:
+        """既に FLEE 中なら 無反応。"""
         leader = _make_monster(101, template=_leader_template(), is_pack_leader=True)
         leader.enter_flee_state(WorldTick(9), duration_ticks=10)
         follower = _make_monster(102, template=_follower_template())
@@ -329,7 +334,8 @@ class TestNoFollow:
         )
         assert result is False
 
-    def test_既に_CHASE_中なら_無反応(self) -> None:
+    def test_chase(self) -> None:
+        """既に CHASE 中なら 無反応。"""
         leader = _make_monster(101, template=_leader_template(), is_pack_leader=True)
         leader.enter_flee_state(WorldTick(9), duration_ticks=10)
         follower = _make_monster(102, template=_follower_template())
@@ -350,7 +356,7 @@ class TestNoFollow:
         )
         assert result is False
 
-    def test_pack_に_leader_が_居ない_と_無反応(self) -> None:
+    def test_pack_leader(self) -> None:
         """pack 内に `is_pack_leader=True` の member が居ない (= 全員 follower)。"""
         # 全員 follower 役の pack
         member_a = _make_monster(101, template=_follower_template())
@@ -369,7 +375,7 @@ class TestNoFollow:
         )
         assert result is False
 
-    def test_leader_が_FLEE_でない_と_無反応(self) -> None:
+    def test_leader_flee(self) -> None:
         """leader は居るが FLEE 中ではない (= IDLE)。"""
         leader = _make_monster(101, template=_leader_template(), is_pack_leader=True)
         # leader は FLEE 状態に入れない → IDLE
@@ -386,7 +392,8 @@ class TestNoFollow:
         )
         assert result is False
 
-    def test_DEAD_の_leader_には_連動しない(self) -> None:
+    def test_dead_leader(self) -> None:
+        """DEAD の leader には 連動しない。"""
         from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import (
             MonsterLifecycleState,
         )

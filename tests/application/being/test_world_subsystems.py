@@ -45,10 +45,12 @@ class TestWorldTickCodec:
         codec.restore(new_runtime, captured)
         assert new_provider.get_current_tick().value == 42
 
-    def test_subsystem_key_は_world_tick(self) -> None:
+    def test_subsystem_key_world_tick(self) -> None:
+        """subsystem key は world tick。"""
         assert WorldTickSubsystemCodec().subsystem_key == "world_tick"
 
-    def test_unsupported_schema_version_は_例外(self) -> None:
+    def test_unsupported_schema_version_raises_exception(self) -> None:
+        """unsupportedschemaversion は例外。"""
         provider = InMemoryGameTimeProvider()
         runtime = SimpleNamespace(_time_provider=provider)
         with pytest.raises(ValueError, match="schema_version"):
@@ -56,7 +58,8 @@ class TestWorldTickCodec:
                 runtime, {"schema_version": 999, "world_tick": 1}
             )
 
-    def test_set_current_tick_の_負値は_ValueError(self) -> None:
+    def test_set_current_tick_negative_raises_value_error(self) -> None:
+        """setcurrenttick の負値は ValueError。"""
         provider = InMemoryGameTimeProvider()
         with pytest.raises(ValueError):
             provider.set_current_tick(-1)
@@ -82,7 +85,7 @@ class TestPlayerVitalsCodec:
         agg._events = []
         return agg
 
-    def test_capture_restore_round_trip(self) -> None:
+    def test_capture_restore_round_trip_2(self) -> None:
         src_agg = self._make_agg_stub(hp=75)
         repo: dict[PlayerId, Any] = {PlayerId(1): src_agg}
 
@@ -118,7 +121,7 @@ class TestPlayerVitalsCodec:
 class TestPlayerNeedsCodec:
     """AgentNeeds (= HUNGER / FATIGUE) の save / restore。"""
 
-    def test_capture_restore_round_trip(self) -> None:
+    def test_capture_restore_round_trip_3(self) -> None:
         agg = SimpleNamespace()
         agg._needs = AgentNeeds.default(max_value=100).with_updated(
             AgentNeed.create(NeedType.HUNGER, 65, 100)
@@ -155,7 +158,8 @@ class TestPlayerNeedsCodec:
 class TestPlayerPositionCodec:
     """spot_id の save / restore (= 内部 dict 直接書き換え)。"""
 
-    def test_capture_は_全_player_の_spot_id_を集める(self) -> None:
+    def test_capture_all_player_spot_id(self) -> None:
+        """capture は全 player の spotid を集める。"""
         # runtime stub: get_player_ids + get_player_spot_id を持つ
         runtime = SimpleNamespace(
             _spot_graph_repo=SimpleNamespace(
@@ -172,7 +176,8 @@ class TestPlayerPositionCodec:
 class TestCodecsKeysAreUnique:
     """4 codec の subsystem_key が衝突していないことを担保。"""
 
-    def test_全keys_が_unique(self) -> None:
+    def test_all_keys_unique(self) -> None:
+        """全keys が unique。"""
         keys = [
             WorldTickSubsystemCodec().subsystem_key,
             PlayerPositionSubsystemCodec().subsystem_key,

@@ -95,7 +95,8 @@ class _RaisingPort(IShortTermMemoryLongSummaryCompletionPort):
 class TestLongSummaryServiceGenerate:
     """正常系: LLM 応答を _ParsedLongSummary に変換する。"""
 
-    def test_有効な_LLM_応答が_そのまま_result_に_乗る(self) -> None:
+    def test_llm_result_included(self) -> None:
+        """有効な LLM 応答がそのまま result に乗る。"""
         port = _StubPort(response={
             "self_image": "私は流木集めで一族を支える寡黙な漁師",
             "world_view": "島は流木と魚で食料は確保できる",
@@ -110,7 +111,8 @@ class TestLongSummaryServiceGenerate:
         assert result.self_image == "私は流木集めで一族を支える寡黙な漁師"
         assert result.world_view == "島は流木と魚で食料は確保できる"
 
-    def test_self_image_は_cap_される(self) -> None:
+    def test_self_image_cap(self) -> None:
+        """self image は cap される。"""
         long = "あ" * (SELF_IMAGE_MAX_CHARS * 2)
         port = _StubPort(response={"self_image": long, "world_view": "ok"})
         svc = ShortTermMemoryLongSummaryService(port)
@@ -122,7 +124,8 @@ class TestLongSummaryServiceGenerate:
         )
         assert len(result.self_image) == SELF_IMAGE_MAX_CHARS
 
-    def test_world_view_は_cap_される(self) -> None:
+    def test_world_view_cap(self) -> None:
+        """world view は cap される。"""
         long = "あ" * (WORLD_VIEW_MAX_CHARS * 2)
         port = _StubPort(response={"self_image": "ok", "world_view": long})
         svc = ShortTermMemoryLongSummaryService(port)
@@ -134,7 +137,8 @@ class TestLongSummaryServiceGenerate:
         )
         assert len(result.world_view) == WORLD_VIEW_MAX_CHARS
 
-    def test_world_view_が_非str_でも_空文字に_縮退(self) -> None:
+    def test_world_view_non_str_empty_string(self) -> None:
+        """worldview が非 str でも空文字に縮退。"""
         port = _StubPort(response={"self_image": "ok", "world_view": 123})
         svc = ShortTermMemoryLongSummaryService(port)
         result = svc.generate(
@@ -149,7 +153,8 @@ class TestLongSummaryServiceGenerate:
 class TestLongSummaryServicePromptStructure:
     """messages に player_name / persona / previous_l5 / evicted_l4 が乗る。"""
 
-    def test_player_name_と_persona_が_user_メッセージに_乗る(self) -> None:
+    def test_player_name_persona_user_included(self) -> None:
+        """player name と persona が user メッセージに 乗る。"""
         port = _StubPort(response={"self_image": "ok", "world_view": ""})
         svc = ShortTermMemoryLongSummaryService(port)
         svc.generate(
@@ -162,7 +167,8 @@ class TestLongSummaryServicePromptStructure:
         assert "ハル" in user
         assert "慎重で寡黙" in user
 
-    def test_previous_l5_が_あれば_user_メッセージに_乗る(self) -> None:
+    def test_previous_l5_user_included(self) -> None:
+        """previousl5 があれば user メッセージに乗る。"""
         port = _StubPort(response={"self_image": "ok", "world_view": ""})
         svc = ShortTermMemoryLongSummaryService(port)
         prev = _make_l5(self_image="先回の自己像", world_view="先回の世界観")
@@ -176,7 +182,8 @@ class TestLongSummaryServicePromptStructure:
         assert "先回の自己像" in user
         assert "先回の世界観" in user
 
-    def test_previous_l5_が_None_なら_初期_メッセージが_出る(self) -> None:
+    def test_previous_l5_none_rendered(self) -> None:
+        """previous l5 が None なら 初期 メッセージが 出る。"""
         port = _StubPort(response={"self_image": "ok", "world_view": ""})
         svc = ShortTermMemoryLongSummaryService(port)
         svc.generate(
@@ -188,7 +195,8 @@ class TestLongSummaryServicePromptStructure:
         user = port.captured[0][1]["content"]
         assert "まだ自己像は形成されていない" in user
 
-    def test_evicted_l4_が_user_メッセージに_乗る(self) -> None:
+    def test_evicted_l4_user_included(self) -> None:
+        """evicted l4 が user メッセージに 乗る。"""
         port = _StubPort(response={"self_image": "ok", "world_view": ""})
         svc = ShortTermMemoryLongSummaryService(port)
         l4 = _make_l4(compressed="北を探索", emotional="不安", unresolved=("食料",))
@@ -203,7 +211,8 @@ class TestLongSummaryServicePromptStructure:
         assert "不安" in user
         assert "食料" in user
 
-    def test_system_メッセージに_persona_不変_の指示が_入る(self) -> None:
+    def test_system_persona(self) -> None:
+        """system メッセージに persona 不変 の指示が 入る。"""
         port = _StubPort(response={"self_image": "ok", "world_view": ""})
         svc = ShortTermMemoryLongSummaryService(port)
         svc.generate(
@@ -215,7 +224,8 @@ class TestLongSummaryServicePromptStructure:
         system = port.captured[0][0]["content"]
         assert "persona" in system or "性格" in system
 
-    def test_system_メッセージに_ラベル禁止_の指示が_入る(self) -> None:
+    def test_system_label(self) -> None:
+        """system メッセージに ラベル禁止 の指示が 入る。"""
         port = _StubPort(response={"self_image": "ok", "world_view": ""})
         svc = ShortTermMemoryLongSummaryService(port)
         svc.generate(
@@ -231,7 +241,8 @@ class TestLongSummaryServicePromptStructure:
 class TestLongSummaryServiceErrors:
     """異常系: 空 evicted_l4 / API 例外 / 不正 JSON。"""
 
-    def test_evicted_l4_が_None_なら_value_error(self) -> None:
+    def test_evicted_l4_none_value_error(self) -> None:
+        """evicted l4 が None なら value error。"""
         port = _StubPort(response={"self_image": "ok", "world_view": ""})
         svc = ShortTermMemoryLongSummaryService(port)
         with pytest.raises(ValueError, match="evicted_l4"):
@@ -242,7 +253,8 @@ class TestLongSummaryServiceErrors:
                 evicted_l4=None,  # type: ignore[arg-type]
             )
 
-    def test_port_例外は_伝播(self) -> None:
+    def test_port_raises_exception(self) -> None:
+        """port 例外は 伝播。"""
         svc = ShortTermMemoryLongSummaryService(
             _RaisingPort(exc=LlmApiCallException("x", error_code="LLM_API_CALL_FAILED"))
         )
@@ -254,7 +266,8 @@ class TestLongSummaryServiceErrors:
                 evicted_l4=_make_l4(),
             )
 
-    def test_self_image_が_空文字なら_value_error(self) -> None:
+    def test_self_image_empty_string_value_error(self) -> None:
+        """selfimage が空文字なら valueerror。"""
         port = _StubPort(response={"self_image": "  ", "world_view": ""})
         svc = ShortTermMemoryLongSummaryService(port)
         with pytest.raises(ValueError, match="missing or empty self_image"):
@@ -265,7 +278,8 @@ class TestLongSummaryServiceErrors:
                 evicted_l4=_make_l4(),
             )
 
-    def test_port_が_None_なら_type_error(self) -> None:
+    def test_port_none_type_error(self) -> None:
+        """port が None なら type error。"""
         with pytest.raises(TypeError, match="port must not be None"):
             ShortTermMemoryLongSummaryService(port=None)  # type: ignore[arg-type]
 
@@ -273,7 +287,8 @@ class TestLongSummaryServiceErrors:
 class TestBuildTemplateFallbackLongSummary:
     """LLM 失敗時の縮退テンプレ: previous_l5 があれば延命、無ければ placeholder。"""
 
-    def test_previous_l5_があれば_そのまま_延命(self) -> None:
+    def test_previous_l5(self) -> None:
+        """previous l5 があれば そのまま 延命。"""
         prev = _make_l5(self_image="不変の自己像", world_view="不変の世界観")
         result = build_template_fallback_long_summary(
             previous_l5=prev,
@@ -282,7 +297,8 @@ class TestBuildTemplateFallbackLongSummary:
         assert result.self_image == "不変の自己像"
         assert result.world_view == "不変の世界観"
 
-    def test_previous_l5_が_None_なら_placeholder(self) -> None:
+    def test_previous_l5_none_placeholder(self) -> None:
+        """previous l5 が None なら placeholder。"""
         result = build_template_fallback_long_summary(
             previous_l5=None,
             evicted_l4=_make_l4(compressed="行動 X"),

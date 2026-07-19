@@ -114,7 +114,8 @@ class _StubCompletion(IEpisodicReinterpretationCompletionPort):
 class TestCoordinatorDualPath:
     """``EpisodicReinterpretationCoordinator.flush_player`` の経路切り替え。"""
 
-    def test_resolver_注入_時は_being_id_経路で_recall_buffer_を_読む(self) -> None:
+    def test_resolver_being_id_recall_buffer(self) -> None:
+        """resolver 注入時は beingid 経路で recallbuffer を読む。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_reinterpretation_being_setup()
         being_id = setup.provision(1)
@@ -153,7 +154,7 @@ class TestCoordinatorDualPath:
         # being_id 経路の recall_buffer は 0 件に
         assert setup.recall_buffer.pending_count_by_being(being_id) == 0
 
-    def test_resolver_未注入_時は_silent_no_op(self) -> None:
+    def test_resolver_uninjected_silent_op(self) -> None:
         """Phase 3 Step 3d-3: legacy 撤去後、Resolver 未注入は silent skip。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_reinterpretation_being_setup()
@@ -194,7 +195,8 @@ class TestCoordinatorDualPath:
 class TestCoordinatorTypeGuard:
     """constructor の型ガード。"""
 
-    def test_resolver_型違反は_TypeError(self) -> None:
+    def test_resolver_raises_type_error(self) -> None:
+        """resolver 型違反は TypeError。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_reinterpretation_being_setup()
         with pytest.raises(TypeError, match="being_attachment_resolver"):
@@ -206,7 +208,8 @@ class TestCoordinatorTypeGuard:
                 being_attachment_resolver="not-resolver",  # type: ignore[arg-type]
             )
 
-    def test_world_id_型違反は_TypeError(self) -> None:
+    def test_world_id_raises_type_error(self) -> None:
+        """world id 型違反は TypeError。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_reinterpretation_being_setup()
         with pytest.raises(TypeError, match="default_world_id"):
@@ -229,7 +232,8 @@ class TestPromptBuilderRecallBufferDualPath:
     integration test に委ねる方針)。
     """
 
-    def test_being_id_を_渡すと_journal_を_being_id_経路で_読む(self) -> None:
+    def test_being_id_journal_being_id(self) -> None:
+        """beingid を渡すと journal を beingid 経路で読む。"""
         from ai_rpg_world.application.llm.services.prompt_builder import (
             _join_passive_recall_texts,
         )
@@ -273,7 +277,7 @@ class TestPromptBuilderRecallBufferDualPath:
         )
         assert result == "REINTERPRETED"
 
-    def test_append_recall_observation_は_being_id_あれば_書き_None_なら_skip(self) -> None:
+    def test_append_recall_observation_being_id_none_skip(self) -> None:
         """Phase 3 Step 3d-3: legacy 撤去後、Being 未解決時は silent skip。"""
         # being_id 注入時 → append_by_being が呼ばれる
         store_new = MagicMock()
@@ -299,7 +303,7 @@ class TestPromptBuilderRecallBufferDualPath:
         )
         store_no_buffer.append_by_being.assert_not_called()
 
-    def test_being_id_未指定なら_生_recall_text_に_縮退(self) -> None:
+    def test_being_id_unspecified_recall_text(self) -> None:
         """Phase 3 Step 3d-3: legacy journal lookup 撤去後、Being 未解決時は
         journal をスキップして生の ``recall_text`` を使う graceful fallback。"""
         from ai_rpg_world.application.llm.services.prompt_builder import (

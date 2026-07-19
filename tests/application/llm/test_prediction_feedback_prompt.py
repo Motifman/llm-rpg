@@ -53,7 +53,7 @@ def _obs(minutes: int, prose: str) -> ObservationEntry:
 class TestBuildPredictionFeedbackText:
     """ActionResultEntry.expected_result から prompt feedback を組み立てる。"""
 
-    def test_expected_result_なしなら空文字(self) -> None:
+    def test_expected_result_empty_string(self) -> None:
         """予測を持つ action が無いと section 本文は出ない。"""
         text = build_prediction_feedback_text(
             [_action(minutes=0, expected_result=None)],
@@ -61,7 +61,7 @@ class TestBuildPredictionFeedbackText:
         )
         assert text == ""
 
-    def test_予測付きentryが0件なら空文字(self) -> None:
+    def test_entry_zero_empty_string(self) -> None:
         """予測 (expected_result) を一切持たない action だけなら、複数件あっても空文字。"""
         text = build_prediction_feedback_text(
             [
@@ -72,7 +72,7 @@ class TestBuildPredictionFeedbackText:
         )
         assert text == ""
 
-    def test_直近3件が古い順に台帳として並ぶ(self) -> None:
+    def test_three(self) -> None:
         """予測付き action が 4 件あっても、直近 3 件だけが古い順 (時系列) に載る。"""
         text = build_prediction_feedback_text(
             [
@@ -95,7 +95,7 @@ class TestBuildPredictionFeedbackText:
         # 古い順 (時系列昇順) に並ぶこと。【直近の出来事】と向きを揃える。
         assert text.index("予測2") < text.index("予測3") < text.index("予測4 (最新)")
 
-    def test_cap超過時は古いentryから切り詰められる(self) -> None:
+    def test_cap_exceeds_entry(self) -> None:
         """総文字数が cap を超える場合、新しい entry を優先し古い entry を落とす。"""
         long_expected = "あ" * 500
         text = build_prediction_feedback_text(
@@ -113,7 +113,7 @@ class TestBuildPredictionFeedbackText:
         assert "最新_" in text
         assert "最古_" not in text
 
-    def test_成功かつresult_summaryも後続観測も無ければ結果待ち行になる(self) -> None:
+    def test_success_result_summary_after_observation_line(self) -> None:
         """成功したが result_summary も後続観測も無い entry (帰結が本当に
         未確定) だけが「結果待ち」になり、予測だけを出す。"""
         text = build_prediction_feedback_text(
@@ -129,7 +129,7 @@ class TestBuildPredictionFeedbackText:
         assert "- 予測 (結果待ち): 扉の仕掛けが分かる" in text
         assert "- 実際:" not in text
 
-    def test_失敗action_は後続観測が無くても実際にerror_codeが出る(self) -> None:
+    def test_failure_action_after_observation_error_code_rendered(self) -> None:
         """失敗 action (success=False) は予測誤差が確定しているので、後続観測が
         無くても「結果待ち」に隠さず success=False / error_code を出す。"""
         text = build_prediction_feedback_text(
@@ -148,7 +148,7 @@ class TestBuildPredictionFeedbackText:
         assert "success=False" in text
         assert "error_code=LOCKED" in text
 
-    def test_result_summary付き成功_は後続観測が無くても実際が出る(self) -> None:
+    def test_result_summary_success_after_observation_rendered(self) -> None:
         """result_summary を持つ成功 action は結果が出ているので、後続観測が
         無くても「結果待ち」にならず「実際」を出す。"""
         text = build_prediction_feedback_text(
@@ -165,7 +165,7 @@ class TestBuildPredictionFeedbackText:
         assert "- 実際:" in text
         assert "result=扉が静かに開いた" in text
 
-    def test_結果待ちは古い順表示で最後の行に来る(self) -> None:
+    def test_last_line(self) -> None:
         """古い解決済み entry と最新の結果待ち entry が混在する場合、古い順表示
         では解決済みが上・結果待ちが最後の行に来る。"""
         text = build_prediction_feedback_text(
@@ -187,7 +187,7 @@ class TestBuildPredictionFeedbackText:
         assert lines[-1] == "- 予測 (結果待ち): 最新はまだ結果待ち"
         assert text.index("古い予測") < text.index("最新はまだ結果待ち")
 
-    def test_最新entryに後続観測があれば結果待ちにならない(self) -> None:
+    def test_entry_after_observation(self) -> None:
         """最新 entry でも後続観測があれば通常どおり予測/実際/後続観測を出す。"""
         text = build_prediction_feedback_text(
             [_action(minutes=0, expected_result="扉の仕掛けが分かる")],
@@ -198,7 +198,7 @@ class TestBuildPredictionFeedbackText:
         assert "- 実際:" in text
         assert "鍵穴に青い光が見えた" in text
 
-    def test_古いentryの後続観測は次に新しいentryの時刻で区切られる(self) -> None:
+    def test_entry_after_observation_entry(self) -> None:
         """entry ごとの後続観測が、次に新しい予測付き entry の occurred_at で
         区切られ、複数 entry 間で観測が重複しないこと。"""
         text = build_prediction_feedback_text(
@@ -225,7 +225,7 @@ class TestBuildPredictionFeedbackText:
         assert "- 予測: 古い予測" in text
         assert "古い予測への観測" in text
 
-    def test_failed_action_では_error_code_も実際に含める(self) -> None:
+    def test_failed_action_error_code(self) -> None:
         """失敗 action の実際には success=False と error_code を出す (後続観測なし)。"""
         text = build_prediction_feedback_text(
             [

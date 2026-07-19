@@ -145,7 +145,8 @@ def _populate_memory(stores: dict[str, object], being: BeingId) -> None:
 class TestSaveLoadRoundTripInMemory:
     """InMemoryBeingRepository での save → load round-trip。"""
 
-    def test_save_すると_payload_付き_v2_snapshot_が保存される(self) -> None:
+    def test_save_payload_v2_snapshot_saved(self) -> None:
+        """save すると payload 付き v2 snapshot が保存される。"""
         repo = InMemoryBeingRepository()
         svc, stores = _build_persistence_service(repo)
         being = _make_being()
@@ -156,7 +157,8 @@ class TestSaveLoadRoundTripInMemory:
         assert snap.has_memory_payload is True
         assert snap.snapshot_version == 2
 
-    def test_save_load_で_memory_状態が一致する(self) -> None:
+    def test_save_load_memory_state_matches(self) -> None:
+        """save load で memory 状態が一致する。"""
         # source 環境にデータを詰めて save。
         src_repo = InMemoryBeingRepository()
         src_svc, src_stores = _build_persistence_service(src_repo)
@@ -178,12 +180,13 @@ class TestSaveLoadRoundTripInMemory:
         assert len(dst_stores["memo"].list_all_by_being(being.being_id)) == 1
         assert len(dst_stores["semantic"].list_for_being(being.being_id)) == 1
 
-    def test_未登録_being_id_は_None(self) -> None:
+    def test_unregistered_being_id_none(self) -> None:
+        """未登録 being id は None。"""
         repo = InMemoryBeingRepository()
         svc, _ = _build_persistence_service(repo)
         assert svc.load(BeingId("missing")) is None
 
-    def test_payload_なし_snapshot_の_load_は_memory_restore_を呼ばない(
+    def test_payload_snapshot_load_memory_restore_does_not_call(
         self,
     ) -> None:
         """``BeingRepository.save(being)`` 経由で保存された v2 (payload=None) snapshot は
@@ -207,7 +210,8 @@ class TestSaveLoadRoundTripInMemory:
 class TestSaveLoadRoundTripSqlite:
     """SqliteBeingRepository でも同じ round-trip が成立すること。"""
 
-    def test_sqlite_save_load_で_memory_が_復元される(self) -> None:
+    def test_sqlite_save_load_memory_restored(self) -> None:
+        """sqlitesaveload で memory が復元される。"""
         src_conn = sqlite3.connect(":memory:", check_same_thread=False)
         src_repo = SqliteBeingRepository(src_conn)
         src_svc, src_stores = _build_persistence_service(src_repo)
@@ -231,7 +235,8 @@ class TestSaveLoadRoundTripSqlite:
 
 
 class TestConstructorTypeGuards:
-    def test_being_repository_型違反(self) -> None:
+    def test_being_repository_raises_type_error(self) -> None:
+        """being repository 型違反。"""
         from ai_rpg_world.application.llm.services.afterglow_store import (
             InMemoryAfterglowStore,
         )
@@ -285,20 +290,23 @@ class TestConstructorTypeGuards:
                 memory_snapshot_service=snap_svc,
             )
 
-    def test_memory_snapshot_service_型違反(self) -> None:
+    def test_memory_snapshot_service_raises_type_error(self) -> None:
+        """memory snapshot service 型違反。"""
         with pytest.raises(TypeError, match="memory_snapshot_service"):
             BeingPersistenceService(
                 being_repository=InMemoryBeingRepository(),
                 memory_snapshot_service="bad",  # type: ignore[arg-type]
             )
 
-    def test_save_の_being_型違反(self) -> None:
+    def test_save_being_raises_type_error(self) -> None:
+        """save の being 型違反。"""
         repo = InMemoryBeingRepository()
         svc, _ = _build_persistence_service(repo)
         with pytest.raises(TypeError):
             svc.save("not-a-being")  # type: ignore[arg-type]
 
-    def test_load_の_being_id_型違反(self) -> None:
+    def test_load_being_id_raises_type_error(self) -> None:
+        """load の being id 型違反。"""
         repo = InMemoryBeingRepository()
         svc, _ = _build_persistence_service(repo)
         with pytest.raises(TypeError):

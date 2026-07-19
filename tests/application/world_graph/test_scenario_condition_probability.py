@@ -48,17 +48,20 @@ def _empty_graph() -> SpotGraphAggregate:
 class TestProbabilityValidation:
     """domain レベルのバリデーション (probability の不在 / 範囲外)。"""
 
-    def test_probability_欠落で_PROBABILITY_は構築できない(self) -> None:
+    def test_probability_missing_probability(self) -> None:
+        """probability 欠落で PROBABILITY は構築できない。"""
         with pytest.raises(ScenarioEventConditionValidationException):
             ScenarioEventCondition(condition_type="PROBABILITY")
 
-    def test_probability_が_範囲外なら弾く(self) -> None:
+    def test_rejects_probability(self) -> None:
+        """probability が範囲外なら弾く。"""
         with pytest.raises(ScenarioEventConditionValidationException):
             ScenarioEventCondition(condition_type="PROBABILITY", probability=1.5)
         with pytest.raises(ScenarioEventConditionValidationException):
             ScenarioEventCondition(condition_type="PROBABILITY", probability=-0.1)
 
-    def test_範囲内の_probability_は受理される(self) -> None:
+    def test_probability_2(self) -> None:
+        """範囲内の probability は受理される。"""
         c0 = ScenarioEventCondition(condition_type="PROBABILITY", probability=0.0)
         c1 = ScenarioEventCondition(condition_type="PROBABILITY", probability=1.0)
         assert c0.probability == 0.0
@@ -68,7 +71,8 @@ class TestProbabilityValidation:
 class TestProbabilityEvaluation:
     """ScenarioConditionEvaluator の PROBABILITY 評価。"""
 
-    def test_確率_1_0_は常に_True(self, evaluator_factory) -> None:
+    def test_one_zero_true(self, evaluator_factory) -> None:
+        """確率 1 0 は常に True。"""
         ev = evaluator_factory(seed=42)
         cond = ScenarioEventCondition(
             condition_type="PROBABILITY", probability=1.0,
@@ -76,7 +80,8 @@ class TestProbabilityEvaluation:
         for _ in range(20):
             assert ev.evaluate(cond, WorldTick(0), _empty_graph()) is True
 
-    def test_確率_0_0_は常に_False(self, evaluator_factory) -> None:
+    def test_zero_0_false(self, evaluator_factory) -> None:
+        """確率 0 0 は常に False。"""
         ev = evaluator_factory(seed=42)
         cond = ScenarioEventCondition(
             condition_type="PROBABILITY", probability=0.0,
@@ -84,7 +89,7 @@ class TestProbabilityEvaluation:
         for _ in range(20):
             assert ev.evaluate(cond, WorldTick(0), _empty_graph()) is False
 
-    def test_同じ_seed_の評価器は同じシーケンスを生む(self, evaluator_factory) -> None:
+    def test_same_seed_same(self, evaluator_factory) -> None:
         """再現性のテスト: seed=123 で 2 つ作って同じ結果が出る。"""
         cond = ScenarioEventCondition(
             condition_type="PROBABILITY", probability=0.5,
@@ -95,7 +100,7 @@ class TestProbabilityEvaluation:
         seq2 = [ev2.evaluate(cond, WorldTick(0), _empty_graph()) for _ in range(50)]
         assert seq1 == seq2
 
-    def test_確率_0_5_は約半分が_True(self, evaluator_factory) -> None:
+    def test_zero_five_true(self, evaluator_factory) -> None:
         """大数で 50% に近い (sanity check)。"""
         ev = evaluator_factory(seed=42)
         cond = ScenarioEventCondition(
@@ -109,7 +114,7 @@ class TestProbabilityEvaluation:
         # 1000 回で 50% 期待 → 標準偏差 ~16、±5σ = 80。安全マージンで 400〜600
         assert 400 <= true_count <= 600
 
-    def test_AND_の中で_PROBABILITY_を組み合わせられる(self, evaluator_factory) -> None:
+    def test_probability(self, evaluator_factory) -> None:
         """確率 1.0 と確率 1.0 の AND は True。確率 1.0 と 0.0 の AND は False。"""
         ev = evaluator_factory(seed=42)
         both_true = ScenarioEventCondition(
@@ -129,7 +134,7 @@ class TestProbabilityEvaluation:
         assert ev.evaluate(both_true, WorldTick(0), _empty_graph()) is True
         assert ev.evaluate(one_false, WorldTick(0), _empty_graph()) is False
 
-    def test_NOT_の中で_PROBABILITY_を否定できる(self, evaluator_factory) -> None:
+    def test_not_probability(self, evaluator_factory) -> None:
         """NOT(PROBABILITY=1.0) は常に False。"""
         ev = evaluator_factory(seed=42)
         not_certain = ScenarioEventCondition(

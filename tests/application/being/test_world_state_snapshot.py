@@ -36,35 +36,40 @@ from ai_rpg_world.application.being.world_state_snapshot_service import (
 class TestWorldStateSnapshotVO:
     """VO の不変条件挙動。"""
 
-    def test_最小構成で生成できる(self) -> None:
+    def test_min_can_create(self) -> None:
+        """最小構成で生成できる。"""
         s = WorldStateSnapshot(source_scenario="demo", world_tick=0)
         assert s.source_scenario == "demo"
         assert s.world_tick == 0
         assert s.subsystems == {}
         assert s.schema_version == 1
 
-    def test_空_source_scenario_は_例外(self) -> None:
+    def test_empty_source_scenario_raises_exception(self) -> None:
+        """空 sourcescenario は例外。"""
         with pytest.raises(ValueError, match="source_scenario"):
             WorldStateSnapshot(source_scenario="", world_tick=0)
 
-    def test_負の_world_tick_は_例外(self) -> None:
+    def test_negative_world_tick_raises_exception(self) -> None:
+        """負の worldtick は例外。"""
         with pytest.raises(ValueError, match="world_tick"):
             WorldStateSnapshot(source_scenario="demo", world_tick=-1)
 
-    def test_bool_world_tick_は_例外(self) -> None:
+    def test_bool_world_tick_raises_exception(self) -> None:
         """``True`` は int 派生だが意図的に弾く (= 既存 BeingSnapshot 同方針)。"""
         with pytest.raises(ValueError, match="world_tick"):
             WorldStateSnapshot(
                 source_scenario="demo", world_tick=True  # type: ignore[arg-type]
             )
 
-    def test_0以下の_schema_version_は_例外(self) -> None:
+    def test_zero_schema_version_raises_exception(self) -> None:
+        """0 以下の schemaversion は例外。"""
         with pytest.raises(ValueError, match="schema_version"):
             WorldStateSnapshot(
                 source_scenario="demo", world_tick=0, schema_version=0
             )
 
-    def test_to_dict_と_from_dict_の_round_trip(self) -> None:
+    def test_dict_round_trip(self) -> None:
+        """to dict と from dict の round trip。"""
         s = WorldStateSnapshot(
             source_scenario="demo",
             world_tick=42,
@@ -101,7 +106,8 @@ class _RecordingCodec(WorldSubsystemCodec):
 class TestWorldStateSnapshotServiceCapture:
     """capture の挙動。"""
 
-    def test_codec_未登録なら_subsystems_は_空(self) -> None:
+    def test_unregistered_codec_keeps_subsystems_empty(self) -> None:
+        """codec 未登録なら subsystems は空。"""
         service = WorldStateSnapshotService()
         snapshot = service.capture(
             runtime=SimpleNamespace(),
@@ -110,7 +116,8 @@ class TestWorldStateSnapshotServiceCapture:
         )
         assert snapshot.subsystems == {}
 
-    def test_登録済_codec_が_capture_に呼ばれる(self) -> None:
+    def test_calls_codec_capture(self) -> None:
+        """登録済 codec が capture に呼ばれる。"""
         codec = _RecordingCodec("player_status")
         service = WorldStateSnapshotService(subsystem_codecs=[codec])
         snapshot = service.capture(
@@ -121,7 +128,8 @@ class TestWorldStateSnapshotServiceCapture:
         assert codec.capture_count == 1
         assert snapshot.subsystems == {"player_status": {"hello": "world"}}
 
-    def test_重複_subsystem_key_は_constructor_エラー(self) -> None:
+    def test_duplicate_subsystem_key_constructor_error(self) -> None:
+        """重複 subsystem key は constructor エラー。"""
         with pytest.raises(ValueError, match="duplicate"):
             WorldStateSnapshotService(
                 subsystem_codecs=[
@@ -134,7 +142,8 @@ class TestWorldStateSnapshotServiceCapture:
 class TestWorldStateSnapshotServiceRestore:
     """restore の挙動 (scenario / version / unknown subsystem)。"""
 
-    def test_codec_が_restore_に呼ばれる(self) -> None:
+    def test_calls_codec_restore(self) -> None:
+        """codec が restore に呼ばれる。"""
         codec = _RecordingCodec("player_status")
         service = WorldStateSnapshotService(subsystem_codecs=[codec])
         snap = WorldStateSnapshot(
@@ -145,7 +154,8 @@ class TestWorldStateSnapshotServiceRestore:
         service.restore(SimpleNamespace(), snap, current_scenario="demo")
         assert codec.restore_calls == [{"x": 1}]
 
-    def test_未サポート_schema_version_は_例外(self) -> None:
+    def test_unsupported_schema_version_raises_exception(self) -> None:
+        """未サポート schemaversion は例外。"""
         service = WorldStateSnapshotService()
         snap = WorldStateSnapshot(
             source_scenario="demo", world_tick=0, schema_version=99
@@ -153,13 +163,14 @@ class TestWorldStateSnapshotServiceRestore:
         with pytest.raises(WorldStateSnapshotVersionError):
             service.restore(SimpleNamespace(), snap, current_scenario="demo")
 
-    def test_scenario_不一致は_fail_fast(self) -> None:
+    def test_scenario_matches_fail_fast(self) -> None:
+        """scenario 不一致は fail fast。"""
         service = WorldStateSnapshotService()
         snap = WorldStateSnapshot(source_scenario="forest", world_tick=0)
         with pytest.raises(WorldStateScenarioMismatchError, match="forest"):
             service.restore(SimpleNamespace(), snap, current_scenario="desert")
 
-    def test_未知_subsystem_は_skip_される(
+    def test_unknown_subsystem_skip(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """新 version で増えた subsystem を旧 code で読む場合の後方互換。"""
@@ -182,7 +193,8 @@ class TestWorldStateSnapshotServiceRestore:
             "future_subsystem" in r.message for r in caplog.records
         )
 
-    def test_registered_subsystem_keys_を取れる(self) -> None:
+    def test_registered_subsystem_keys_can_get(self) -> None:
+        """registered subsystem keys を取れる。"""
         service = WorldStateSnapshotService(
             subsystem_codecs=[
                 _RecordingCodec("a"),
@@ -206,7 +218,8 @@ class TestWorldStateSnapshotFileGateway:
         loaded = gateway.read(tmp_path)
         assert loaded == snap
 
-    def test_exists_in_の_前後(self, tmp_path: Path) -> None:
+    def test_exists_around(self, tmp_path: Path) -> None:
+        """existsin の前後。"""
         gateway = WorldStateSnapshotFileGateway()
         assert gateway.exists_in(tmp_path) is False
         gateway.write(
@@ -214,14 +227,16 @@ class TestWorldStateSnapshotFileGateway:
         )
         assert gateway.exists_in(tmp_path) is True
 
-    def test_read_は_ファイルなしで_FileNotFoundError(
+    def test_read_raises_file_not_found_error(
         self, tmp_path: Path
     ) -> None:
+        """read はファイルなしで FileNotFoundError。"""
         gateway = WorldStateSnapshotFileGateway()
         with pytest.raises(FileNotFoundError):
             gateway.read(tmp_path)
 
-    def test_書き出した_JSON_は_human_readable(self, tmp_path: Path) -> None:
+    def test_written_json_human_readable(self, tmp_path: Path) -> None:
+        """書き出した JSON は human readable。"""
         gateway = WorldStateSnapshotFileGateway()
         gateway.write(
             WorldStateSnapshot(source_scenario="森の世界", world_tick=42),

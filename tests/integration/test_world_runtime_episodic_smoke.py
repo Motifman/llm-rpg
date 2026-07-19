@@ -58,13 +58,14 @@ def _build_runtime(enabled: bool, **overrides):
 class TestSmokeOffByDefault:
     """env 未設定では従来挙動を完全に維持する (backward compat smoke)。"""
 
-    def test_env_未設定なら_stack_は_None(
+    def test_env_unset_stack_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """env 未設定なら stack は None。"""
         runtime = _build_runtime(enabled=False)
         assert runtime._episodic_stack is None
 
-    def test_env_未設定での_do_move_は例外なく完走(
+    def test_do_move_completes_without_env_configuration(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """OFF 時に action を実行しても何も壊れない。"""
@@ -82,7 +83,7 @@ class TestSmokeOffByDefault:
 class TestSmokeWriteSide:
     """env=1 で chunk coordinator が action 後に episode を書く。"""
 
-    def test_env_1_で_action_の間に観測を挟むと_episode_が書かれる(
+    def test_env_one_action_observation_episode_written(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """chunk boundary は (1) bucket に action が 2 件以上溜まり、
@@ -128,7 +129,7 @@ class TestSmokeWriteSide:
             "書かれていない。chunk_coordinator フックが alive か確認すべき。"
         )
 
-    def test_env_未設定での_move_では_当然_episode_は書かれない(
+    def test_env_unset_move_episode_not_written(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """対照: OFF では stack 自体が無く、当然 episode も書かれない。"""
@@ -137,7 +138,7 @@ class TestSmokeWriteSide:
         runtime.do_move(runtime.get_player_ids()[0], "reading_room")
         assert runtime._episodic_stack is None
 
-    def test_書かれた_episode_の_cue_に_unknown_tool_が出ない(
+    def test_episode_cue_unknown_tool_not_rendered(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """``action`` 軸の cue は LLM tool 名 (``spot_graph_wait`` 等) で記録される。
@@ -188,7 +189,7 @@ class TestSmokeWriteSide:
 class TestSmokePromptBuilds:
     """env=1 で prompt 構築が完走する。"""
 
-    def test_env_1_で_build_full_prompt_が_例外なく完走(
+    def test_build_full_prompt_completes_with_env_enabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """passive_recall + noun_matcher が wire された状態で prompt を組んでも
@@ -208,7 +209,7 @@ class TestSmokeRecallSide:
     """過去 episode を store に注入し、prose に「書架A」を含む観測を流すと、
     その episode が prompt の user content に現れる (recall 側が alive)。"""
 
-    def test_過去の書架A_episode_が_自由文_cue_経由で_prompt_に_recall_される(
+    def test_episode_cue_via_prompt_recall(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """end-to-end recall smoke:
@@ -334,7 +335,7 @@ class TestSmokeMemoryRecallTool:
         names = {d.name for d in runtime.get_tool_definitions()}
         assert "memory_recall_episodes" in names
 
-    def test_tool_is_not_exposed_when_episodic_disabled(
+    def test_tool_is_exposed_when_episodic_disabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """env 未設定で episodic stack が wire されていないとき、memory_recall_episodes は出ない。"""
@@ -438,7 +439,7 @@ class TestSmokeMemoryRecallTool:
         assert result.success is True
         assert "RECALL_TOOL_MARKER" in result.message
 
-    def test_returns_empty_message_when_no_match(
+    def test_returns_empty_message_when_match(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """過去 episode が無い状態で memory_recall_episodes を呼ぶと「思い出そうとしたが何も浮かばなかった」。"""
@@ -471,7 +472,7 @@ class TestSmokeSubjectiveServiceWiring:
     OFF にしたいときだけ ``LLM_EPISODIC_SUBJECTIVE_ENABLED=0`` を渡す。
     """
 
-    def test_env_未設定でも_subjective_は_既定で_有効_だが_stub_LLM_では_silent_skip(
+    def test_env_unset_subjective_default_stub_llm_silent_skip(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """SUBJECTIVE フラグ未設定でも既定 ON なので有効化を試みるが、stub LLM_CLIENT
@@ -483,7 +484,7 @@ class TestSmokeSubjectiveServiceWiring:
         assert stack.chunk_coordinator._chunk_subjective_fields_service is None
         assert stack.chunk_coordinator._persona_block_provider is None
 
-    def test_subjective_明示的に_0_なら_litellm_でも_配線されない(
+    def test_subjective_zero_litellm(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """``LLM_EPISODIC_SUBJECTIVE_ENABLED=0`` で明示的に OFF にできる。
@@ -501,7 +502,7 @@ class TestSmokeSubjectiveServiceWiring:
         assert stack is not None
         assert stack.chunk_coordinator._chunk_subjective_fields_service is None
 
-    def test_subjective_既定_かつ_litellm_未指定なら_service_は_無効化(
+    def test_subjective_default_litellm_unspecified_service(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """LLM_CLIENT=stub (default) のままだと LiteLLMClient にならないので、
@@ -523,7 +524,7 @@ class TestSmokeSubjectiveServiceMergesText:
     直接渡して挙動だけ確認する。
     """
 
-    def test_subjective_service_注入時に_chunk_書き込みで_recall_text_が_LLM_文に_差し替わる(
+    def test_subjective_service_chunk_recall_text_llm(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """draft の `compute_template_recall` 結果が、注入した stub の文字列で上書きされる。"""
@@ -593,9 +594,10 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
     chunk write 後にバックグラウンドで LLM が走り episode が上書きされる経路の
     smoke (PR #309)。"""
 
-    def test_async_scheduler_経由で_chunk_書き込み後に_LLM_文で上書きされる(
+    def test_async_scheduler_via_chunk_after_llm_overwritten(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """async scheduler 経由で chunk 書き込み後に LLM 文で上書きされる。"""
         from typing import Any
         from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
             IEpisodicChunkSubjectiveCompletionPort,
@@ -686,15 +688,17 @@ class TestSmokeBeliefEvidenceWiring:
     ``test_episodic_subjective_completion_schedulers.py`` で担保済み。
     """
 
-    def test_flag_OFF_なら_belief_evidence_buffer_store_は_None(
+    def test_flag_off_belief_evidence_buffer_store_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flag OFF なら belief evidence buffer store は None。"""
         runtime = _build_runtime(enabled=True)
         assert runtime._episodic_stack.belief_evidence_buffer_store is None
 
-    def test_flag_ON_なら_belief_evidence_buffer_store_が公開される(
+    def test_flag_belief_evidence_buffer_store(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flag ON なら belief evidence buffer store が公開される。"""
         from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
             InMemoryBeliefEvidenceBufferStore,
         )
@@ -718,15 +722,17 @@ class TestSmokeMemoDistillWiring:
     ``test_memo_executor_memo_distill.py`` で担保済み。
     """
 
-    def test_flag_OFF_なら_todo_tool_executor_に_transcriber_が注入されない(
+    def test_flag_off_todo_tool_executor_transcriber_not_injected(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flag OFF なら todo tool executor に transcriber が注入されない。"""
         runtime = _build_runtime(enabled=True)
         assert runtime._todo_tool_executor._memo_distill_transcriber is None
 
-    def test_flag_ON_なら_todo_tool_executor_に_transcriber_が注入される(
+    def test_flag_todo_tool_executor_transcriber_injected(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flag ON なら todo tool executor に transcriber が注入される。"""
         from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import (
             MemoDistillEvidenceTranscriber,
         )

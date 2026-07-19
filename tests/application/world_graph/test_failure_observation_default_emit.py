@@ -42,7 +42,8 @@ class TestEventCarriesFailureReason:
         )
         assert ev.failure_reason is None
 
-    def test_明示指定で_event_に_乗る(self) -> None:
+    def test_event_included(self) -> None:
+        """明示指定で event に乗る。"""
         ev = SpotObjectInteractionFailedEvent.create(
             aggregate_id=SpotGraphId.create(1),
             aggregate_type="SpotGraphAggregate",
@@ -77,7 +78,8 @@ class TestFormatterAutoComposesProse:
         h._resolve_object_name = lambda sid, oid: "狼煙台"
         return h
 
-    def test_observation_message_override_があれば_それを_prose_に_使う(self, handler):
+    def test_uses_observation_message_override_prose(self, handler):
+        """observationmessageoverride があればそれを prose に使う。"""
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
         ev = SpotObjectInteractionFailedEvent.create(
@@ -94,7 +96,8 @@ class TestFormatterAutoComposesProse:
         assert out is not None
         assert out.prose == "ノアが何かを擦るような仕草をしている。"
 
-    def test_override_無し_reason_有り_で_prose_を_自動構築(self, handler):
+    def test_override_reason_prose(self, handler):
+        """override 無し reason 有りで prose を自動構築。"""
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
         ev = SpotObjectInteractionFailedEvent.create(
@@ -114,7 +117,8 @@ class TestFormatterAutoComposesProse:
         assert "light_signal" in out.prose
         assert "火打ち石がなければ火を起こせない。" in out.prose
 
-    def test_両方_無ければ_silent(self, handler):
+    def test_silent(self, handler):
+        """両方 無ければ silent。"""
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
         ev = SpotObjectInteractionFailedEvent.create(
@@ -130,7 +134,8 @@ class TestFormatterAutoComposesProse:
         out = handler._format_interaction_failed(ev, PlayerId(2))
         assert out is None
 
-    def test_actor_本人には_None_を_返す(self, handler):
+    def test_returns_none_actor_self(self, handler):
+        """actor 本人には None を返す。"""
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
         ev = SpotObjectInteractionFailedEvent.create(
@@ -210,29 +215,33 @@ class TestServiceDedupThrottle:
         )
         return service._event_publisher.publish_all.call_count
 
-    def test_初回_emit_される(self) -> None:
+    def test_first_emit(self) -> None:
+        """初回 emit される。"""
         service = self._make_service()
         assert self._emit(service, tick=10) == 1
 
-    def test_dedup_window_内_2回目は_skip(self) -> None:
+    def test_dedup_window_two_skip(self) -> None:
+        """dedup window 内 2回目は skip。"""
         service = self._make_service(dedup_window=24)
         assert self._emit(service, tick=10) == 1
         # tick 10 + 5 = window 24 以内 → skip
         assert self._emit(service, tick=15) == 1
 
-    def test_dedup_window_超過なら_再度_emit(self) -> None:
+    def test_dedup_window_exceeds_emit(self) -> None:
+        """dedup window 超過なら 再度 emit。"""
         service = self._make_service(dedup_window=24)
         assert self._emit(service, tick=10) == 1
         # tick 10 + 24 = ちょうど window 境界 → 再 emit
         assert self._emit(service, tick=34) == 2
 
-    def test_別_reason_は_独立に_dedup(self) -> None:
+    def test_different_reason_independently_dedup(self) -> None:
+        """別 reason は独立に dedup。"""
         service = self._make_service(dedup_window=24)
         assert self._emit(service, tick=10, reason="火打ち石が無い") == 1
         # 別 reason は別 key → 同 tick でも emit される
         assert self._emit(service, tick=12, reason="流木が足りない") == 2
 
-    def test_current_tick_None_なら_dedup_skip_されない(self) -> None:
+    def test_current_tick_none_dedup_skip(self) -> None:
         """tick 不明の呼び出しでは dedup を無効化する (legacy 互換)。"""
         service = self._make_service()
         from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior

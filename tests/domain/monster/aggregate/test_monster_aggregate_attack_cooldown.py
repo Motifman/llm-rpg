@@ -83,12 +83,12 @@ def _aggregate(template: MonsterTemplate | None = None) -> MonsterAggregate:
 class TestInitialState:
     """生成直後の状態。"""
 
-    def test_last_attack_tick_は初期値_none(self) -> None:
+    def test_last_attack_tick_initial_value_none(self) -> None:
         """last_attack_tick は初期 None。"""
         agg = _aggregate()
         assert agg.last_attack_tick is None
 
-    def test_初撃は_can_attack_now_true(self) -> None:
+    def test_can_attack_now_true(self) -> None:
         """last_attack_tick=None なら can_attack_now は True。"""
         agg = _aggregate()
         assert agg.can_attack_now(WorldTick(5)) is True
@@ -97,7 +97,7 @@ class TestInitialState:
 class TestCooldown:
     """record_attack 後の cooldown 経過判定。"""
 
-    def test_record_attack_後_直後は_false(self) -> None:
+    def test_record_attack_after_false(self) -> None:
         """同じ tick では cooldown 未満で can_attack_now=False。"""
         agg = _aggregate(_template(attack_cooldown_ticks=3))
         agg.record_attack(WorldTick(10))
@@ -105,14 +105,14 @@ class TestCooldown:
         assert agg.can_attack_now(WorldTick(11)) is False
         assert agg.can_attack_now(WorldTick(12)) is False
 
-    def test_record_attack_と同一_tickでは_can_attack_now_false(self) -> None:
+    def test_record_attack_same_tick_can_attack_now_false(self) -> None:
         """同じ tick で 2 回目を呼ぶと False（elapsed=0 < cooldown）。"""
         agg = _aggregate(_template(attack_cooldown_ticks=1))
         agg.record_attack(WorldTick(10))
         # cooldown=1 でも record と同じ tick なら elapsed=0 で不可
         assert agg.can_attack_now(WorldTick(10)) is False
 
-    def test_境界値_elapsed_が_cooldown_と等しいと_true(self) -> None:
+    def test_boundary_value_elapsed_cooldown_equals_true(self) -> None:
         """`elapsed == attack_cooldown_ticks` で can_attack_now=True（>= 比較）。"""
         agg = _aggregate(_template(attack_cooldown_ticks=5))
         agg.record_attack(WorldTick(10))
@@ -121,13 +121,13 @@ class TestCooldown:
         # 境界ちょうどで True
         assert agg.can_attack_now(WorldTick(15)) is True
 
-    def test_record_attack_後_cooldown経過で_true(self) -> None:
+    def test_record_attack_after_cooldown_true(self) -> None:
         """`current_tick - last_attack_tick >= attack_cooldown_ticks` で True。"""
         agg = _aggregate(_template(attack_cooldown_ticks=3))
         agg.record_attack(WorldTick(10))
         assert agg.can_attack_now(WorldTick(13)) is True
 
-    def test_last_attack_tick_は最新値で更新される(self) -> None:
+    def test_last_attack_tick_value_updated(self) -> None:
         """連続 record_attack で last_attack_tick が上書きされる。"""
         agg = _aggregate(_template(attack_cooldown_ticks=2))
         agg.record_attack(WorldTick(10))
@@ -138,7 +138,7 @@ class TestCooldown:
 class TestDeadMonster:
     """DEAD 状態の挙動。"""
 
-    def test_dead_は_can_attack_now_false(self) -> None:
+    def test_dead_can_attack_now_false(self) -> None:
         """status=DEAD は cooldown 関係なく False。"""
         agg = _aggregate()
         agg._lifecycle_state = agg._lifecycle_state.apply_damage(999)  # 致命
@@ -160,7 +160,7 @@ class TestDeadMonster:
         )
         assert agg.can_attack_now(WorldTick(100)) is False
 
-    def test_dead_への_record_attack_は例外(self) -> None:
+    def test_dead_record_attack_raises_exception(self) -> None:
         """DEAD 状態で record_attack を呼ぶと MonsterAlreadyDeadException。"""
         from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import (
             MonsterLifecycleState,
@@ -183,22 +183,22 @@ class TestDeadMonster:
 class TestTemplateValidation:
     """attack_cooldown_ticks / has_dark_vision のバリデーション。"""
 
-    def test_attack_cooldown_ticks_が_0以下は例外(self) -> None:
+    def test_zero_or_less_attack_cooldown_ticks_raise_exception(self) -> None:
         """0 以下は ValidationException。"""
         with pytest.raises(MonsterTemplateValidationException):
             _template(attack_cooldown_ticks=0)
 
-    def test_attack_cooldown_ticks_が負は例外(self) -> None:
+    def test_negative_attack_cooldown_ticks_raise_exception(self) -> None:
         """負値は ValidationException。"""
         with pytest.raises(MonsterTemplateValidationException):
             _template(attack_cooldown_ticks=-1)
 
-    def test_has_dark_vision_デフォルトは_false(self) -> None:
+    def test_has_dark_vision_default_false(self) -> None:
         """デフォルト has_dark_vision は False。"""
         t = _template()
         assert t.has_dark_vision is False
 
-    def test_attack_cooldown_ticks_デフォルトは_1(self) -> None:
+    def test_attack_cooldown_ticks_defaults_to_one(self) -> None:
         """デフォルト attack_cooldown_ticks は 1（毎 tick 攻撃可）。"""
         t = MonsterTemplate(
             template_id=MonsterTemplateId.create(1),

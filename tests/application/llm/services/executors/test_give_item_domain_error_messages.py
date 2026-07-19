@@ -66,7 +66,8 @@ def _resolved_entry(
 class TestGiveItemTargetIsSelf:
     """自分自身に渡そうとした場合の error_code + message。"""
 
-    def test_全件_target_self_なら_success_False_と_error_code(self) -> None:
+    def test_all_target_self_success_false_error_code(self) -> None:
+        """全件 target self なら success False と error code。"""
         stub = MagicMock()
         stub.give_item.side_effect = TargetIsSelfError()
         executor = _make_executor(stub)
@@ -89,7 +90,8 @@ class TestGiveItemTargetIsSelf:
 class TestGiveItemTargetNotInSameSpot:
     """相手が別 spot にいる → travel_to を示唆する。"""
 
-    def test_message_に_相手名と_travel_to_が_含まれる(self) -> None:
+    def test_message_target_travel_included(self) -> None:
+        """message に相手名と travelto が含まれる。"""
         stub = MagicMock()
         stub.give_item.side_effect = TargetNotInSameSpotError()
         executor = _make_executor(stub)
@@ -115,7 +117,8 @@ class TestGiveItemTargetNotInSameSpot:
 class TestGiveItemTargetInventoryFull:
     """相手のインベントリ満杯 → drop 待ち / 別の相手 を示唆する。"""
 
-    def test_message_に_相手名_item名_drop提案が含まれる(self) -> None:
+    def test_message_target_item_drop_included(self) -> None:
+        """message に相手名 item 名 drop 提案が含まれる。"""
         stub = MagicMock()
         stub.give_item.side_effect = TargetInventoryFullError()
         executor = _make_executor(stub)
@@ -151,7 +154,8 @@ class TestGiveItemSlotIsEmpty:
     Code review HIGH #1 で「_give_item の except ItemTransferException が
     error_code を無条件で ITEM_TRANSFER_FAILED に丸めていた」抜けをカバーする。"""
 
-    def test_空スロット_give_で_ITEM_TRANSFER_SLOT_IS_EMPTY_が_LLM_に届く(self) -> None:
+    def test_empty_slot_give_item_transfer_slot_empty_llm(self) -> None:
+        """空スロット give で ITEM TRANSFER SLOT IS EMPTY が LLM に届く。"""
         from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
             SlotIsEmptyError,
         )
@@ -182,7 +186,8 @@ class TestGiveItemSlotIsEmpty:
 class TestGiveItemPartialSuccess:
     """batch 内 1 件失敗 + 他成功 → success=True + partial 集約 message。"""
 
-    def test_1件成功_1件_target_self_失敗の場合(self) -> None:
+    def test_one_success_one_target_self_failure(self) -> None:
+        """1件成功 1件 target self 失敗の場合。"""
         stub = MagicMock()
         # 呼び出し順に成功 → 失敗 を返す
         stub.give_item.side_effect = [
@@ -220,7 +225,8 @@ class TestGiveItemPartialSuccess:
 class TestGiveItemAllFail:
     """全件失敗 → success=False + 最初の failure の error_code。"""
 
-    def test_全件失敗なら_success_False_かつ_first_error_code(self) -> None:
+    def test_all_failure_success_false_first_error_code(self) -> None:
+        """全件失敗なら success False かつ first error code。"""
         stub = MagicMock()
         stub.give_item.side_effect = [
             TargetInventoryFullError(),        # 1 件目 NG (最初なので error_code)
@@ -246,7 +252,8 @@ class TestGiveItemAllFail:
 class TestGiveItemGivesResolvedRequired:
     """gives_resolved が無い / 空だと INVALID_ARGUMENT。"""
 
-    def test_gives_resolved_空_なら_INVALID_ARGUMENT(self) -> None:
+    def test_returns_empty_when_gives_resolved_invalid_argument(self) -> None:
+        """gives resolved 空 なら INVALID ARGUMENT。"""
         stub = MagicMock()
         executor = _make_executor(stub)
         result = executor._give_item(
@@ -255,7 +262,8 @@ class TestGiveItemGivesResolvedRequired:
         assert result.success is False
         assert result.error_code == "INVALID_ARGUMENT"
 
-    def test_gives_resolved_未指定_なら_INVALID_ARGUMENT(self) -> None:
+    def test_gives_resolved_unspecified_invalid_argument(self) -> None:
+        """gives resolved 未指定 なら INVALID ARGUMENT。"""
         stub = MagicMock()
         executor = _make_executor(stub)
         result = executor._give_item(1, {"inner_thought": "test"})

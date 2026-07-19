@@ -131,7 +131,8 @@ class TestSignHearsayV1:
     判断する (LLM 品質そのものの検証は L2 replay の仕事、本テストのスコープ外)。
     """
 
-    def test_看板を読んだ結果が_extraction_prompt_に現れるか_dump_する(self) -> None:
+    def test_extraction_prompt_dump(self) -> None:
+        """看板を読んだ結果が extraction prompt に現れるか dump する。"""
         enc = _make_encoding()
         draft = ChunkEpisodeDraftBuilder().build(enc)
         port = _StubSubjectivePort()

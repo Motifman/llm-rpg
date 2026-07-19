@@ -301,7 +301,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         assert "Alice" not in out.prose
         assert out.structured["killer_visible_to_recipient"] is False
 
-    def test_third_party_no_killer_still_outputs_victim_prose(self):
+    def test_third_party_killer_still_outputs_victim_prose(self):
         """killer 不明 (event.killer_player_id=None) は victim 名のみで prose 出す。"""
         ctx = self._make_ctx_with_positions(
             recipient_spot=SpotId(5), killer_spot=SpotId(5)
@@ -403,7 +403,7 @@ class TestPlayerObservationFormatterItemAddedToInventory:
         assert out is not None
         assert out.structured.get("item_spec_id_value") == 888
 
-    def test_fallback_when_repository_none(self):
+    def test_fallback_when_repository_None(self):
         """item_repository なしのとき「何かのアイテムを入手」"""
         ctx = _make_context()
         formatter = PlayerObservationFormatter(ctx)
@@ -421,7 +421,7 @@ class TestPlayerObservationFormatterItemAddedToInventory:
 class TestPlayerObservationFormatterPlayerSpoke:
     """PlayerSpokeEvent のフォーマットテスト"""
 
-    def test_say_channel_uses_言った(self):
+    def test_uses_say_channel(self):
         """SAY チャンネルは「言った」"""
         profile_repo = MagicMock()
         profile = MagicMock()
@@ -460,7 +460,7 @@ class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
         profile_repo.find_by_id.return_value = profile
         return _make_context(player_profile_repository=profile_repo)
 
-    def test_self_say_returns_none(self):
+    def test_self_say_returns_None(self):
         """SAY を自分自身に対しては formatter が None を返す。"""
         ctx = self._make_speaker_ctx()
         formatter = PlayerObservationFormatter(ctx)
@@ -475,7 +475,7 @@ class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
         out = formatter.format(event, PlayerId(2))  # 話者本人
         assert out is None
 
-    def test_self_shout_returns_none(self):
+    def test_self_shout_returns_None(self):
         """SHOUT も同様に話者本人には届けない。"""
         ctx = self._make_speaker_ctx()
         formatter = PlayerObservationFormatter(ctx)
@@ -490,7 +490,7 @@ class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
         out = formatter.format(event, PlayerId(2))
         assert out is None
 
-    def test_self_whisper_returns_none(self):
+    def test_self_whisper_returns_None(self):
         """WHISPER も話者本人には届けない (action_result_store で十分)。"""
         ctx = self._make_speaker_ctx()
         formatter = PlayerObservationFormatter(ctx)
@@ -533,7 +533,7 @@ class TestPlayerObservationFormatterUnknownEvent:
     def formatter(self):
         return PlayerObservationFormatter(_make_context())
 
-    def test_returns_none_for_skill_event(self, formatter):
+    def test_returns_None_for_skill_event(self, formatter):
         """Skill イベントは None。"""
         event = SkillEquippedEvent.create(
             aggregate_id=SkillLoadoutId(1),
@@ -549,7 +549,7 @@ class TestPlayerObservationFormatterUnknownEvent:
 class TestPlayerObservationFormatterRecipientIndependence:
     """recipient_player_id への依存テスト"""
 
-    def test_level_up_does_not_depend_on_recipient(self):
+    def test_level_up_does_depend_on_recipient(self):
         """PlayerLevelUp は recipient に依存しない（出力は常に本人向け）。"""
         ctx = _make_context()
         formatter = PlayerObservationFormatter(ctx)

@@ -51,14 +51,16 @@ def _current_state_section(text: str) -> str:
 class TestCurrentSpotFamiliarityE2E:
     """初回 spawn 直後の player について「初めて訪れた」が prompt に出る。"""
 
-    def test_spawn_直後の_player_は_現在地に_初めて訪れた_が_出る(self) -> None:
+    def test_spawn_after_player_current_spot_rendered(self) -> None:
+        """spawn 直後の player は現在地に初めて訪れたが出る。"""
         runtime = _create_runtime()
         kaito = runtime.get_player_ids()[0]
         section = _current_state_section(_user_prompt_text(runtime, kaito))
         # kaito の spawn spot は entrance_hall = 入口広間
         assert "現在地: 入口広間 (初めて訪れた)" in section, section
 
-    def test_別_player_も_独立に_初めて訪れた_が_出る(self) -> None:
+    def test_different_player_independently_rendered(self) -> None:
+        """別 player も独立に初めて訪れたが出る。"""
         runtime = _create_runtime()
         rin = runtime.get_player_ids()[1]
         section = _current_state_section(_user_prompt_text(runtime, rin))
@@ -69,7 +71,8 @@ class TestCurrentSpotFamiliarityE2E:
 class TestNearbyPlayerFamiliarityE2E:
     """初対面の player に対して「初めて会った」が出る。"""
 
-    def test_同_spot_初対面_player_に_初めて会った_注記が_出る(self) -> None:
+    def test_spot_player_rendered(self) -> None:
+        """同 spot 初対面 player に初めて会った注記が出る。"""
         runtime = _create_runtime()
         pids = runtime.get_player_ids()
         kaito = pids[0]
@@ -130,7 +133,8 @@ class TestNearbyPlayerFamiliarityE2E:
 class TestPromptRegressionForViewer:
     """encounter wiring が prompt 構造を壊さないことを確認する regression test。"""
 
-    def test_prompt_に_必須_section_が_すべて_含まれる(self) -> None:
+    def test_prompt_section_included(self) -> None:
+        """prompt に必須 section がすべて含まれる。"""
         runtime = _create_runtime()
         kaito = runtime.get_player_ids()[0]
         text = _user_prompt_text(runtime, kaito)
@@ -139,7 +143,8 @@ class TestPromptRegressionForViewer:
         # 注記は最低 1 つは出る (spawn spot は確実に「初訪問」)
         assert "(初めて訪れた)" in text
 
-    def test_messages_は_2_件_system_user(self) -> None:
+    def test_messages_two_system_user(self) -> None:
+        """messages は 2 件 system user。"""
         runtime = _create_runtime()
         kaito = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(kaito)

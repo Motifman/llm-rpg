@@ -73,7 +73,8 @@ class _RaisingTranscriber:
 
 
 class TestNoWiringIsNoOp:
-    def test_transcriber未設定なら例外なく完了し呼ばれない相当(self) -> None:
+    def test_missing_transcriber_completes_without_exception(self) -> None:
+        """transcriber未設定なら例外なく完了し呼ばれない相当。"""
         status = _build_status_with_hunger(hunger_value=99, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
@@ -85,7 +86,8 @@ class TestNoWiringIsNoOp:
 
 
 class TestHungerMaxEvidenceWiring:
-    def test_hunger_maxに到達すると_record_hunger_max_evidenceを呼ぶ(self) -> None:
+    def test_calls_hunger_max_record_hunger_max_evidence(self) -> None:
+        """hunger maxに到達すると record hunger max evidenceを呼ぶ。"""
         status = _build_status_with_hunger(hunger_value=99, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
@@ -101,7 +103,8 @@ class TestHungerMaxEvidenceWiring:
 
         assert transcriber.recorded == [being_id]
 
-    def test_hunger_max未満なら_clear_hunger_max_stateを呼ぶ(self) -> None:
+    def test_calls_hunger_max_below_clear_hunger_max_state(self) -> None:
+        """hunger max未満なら clear hunger max stateを呼ぶ。"""
         status = _build_status_with_hunger(hunger_value=10, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
@@ -118,7 +121,8 @@ class TestHungerMaxEvidenceWiring:
         assert transcriber.recorded == []
         assert transcriber.cleared == [being_id]
 
-    def test_being_id解決失敗なら_transcriberを呼ばない(self) -> None:
+    def test_being_id_resolution_failure_transcriber_does_not_call(self) -> None:
+        """being id解決失敗なら transcriberを呼ばない。"""
         status = _build_status_with_hunger(hunger_value=99, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
@@ -134,7 +138,8 @@ class TestHungerMaxEvidenceWiring:
         assert transcriber.recorded == []
         assert transcriber.cleared == []
 
-    def test_transcriberが例外を投げても_tick処理は止まらない(self) -> None:
+    def test_transcriber_exception_does_not_stop_tick_processing(self) -> None:
+        """transcriberが例外を投げても tick処理は止まらない。"""
         status = _build_status_with_hunger(hunger_value=99, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
@@ -151,7 +156,8 @@ class TestHungerMaxEvidenceWiring:
 
 
 class TestSetterInjection:
-    def test_set_state_collapse_evidence_wiringで後付けできる(self) -> None:
+    def test_set_state_collapse_evidence_wiring_can_attached_later(self) -> None:
+        """set state collapse evidence wiringで後付けできる。"""
         status = _build_status_with_hunger(hunger_value=99, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]

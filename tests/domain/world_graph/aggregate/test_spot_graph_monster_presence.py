@@ -43,7 +43,7 @@ def _graph_with_two_spots() -> SpotGraphAggregate:
 class TestPlaceMonster:
     """SpotGraphAggregate.place_monster の挙動。"""
 
-    def test_配置成功で在席集合とマッピングに登録される(self) -> None:
+    def test_success(self) -> None:
         """place_monster 成功で monster_presence と monster_spot_mapping に反映される。"""
         g = _graph_with_two_spots()
         m1 = MonsterId.create(101)
@@ -56,7 +56,7 @@ class TestPlaceMonster:
         assert pres.is_present(m1)
         assert pres.count() == 1
 
-    def test_appeared_event_を発行する(self) -> None:
+    def test_publishes_appeared_event(self) -> None:
         """place_monster は MonsterAppearedAtSpotEvent を発行する。"""
         g = _graph_with_two_spots()
         m1 = MonsterId.create(101)
@@ -68,13 +68,13 @@ class TestPlaceMonster:
         assert events[0].monster_id == m1
         assert events[0].spot_id == SpotId.create(1)
 
-    def test_存在しないスポットへの配置は例外(self) -> None:
+    def test_missing_raises_exception(self) -> None:
         """place_monster で未登録スポットを指定すると SpotNotInGraphException を投げる。"""
         g = _graph_with_two_spots()
         with pytest.raises(SpotNotInGraphException):
             g.place_monster(MonsterId.create(101), SpotId.create(999))
 
-    def test_重複配置は不変条件違反例外(self) -> None:
+    def test_case_raises_exception_3(self) -> None:
         """同じ monster_id を二度 place すると MonsterPresenceInvariantException。"""
         g = _graph_with_two_spots()
         m1 = MonsterId.create(101)
@@ -83,7 +83,7 @@ class TestPlaceMonster:
         with pytest.raises(MonsterPresenceInvariantException):
             g.place_monster(m1, SpotId.create(2))
 
-    def test_同一スポットに複数モンスターが共存できる(self) -> None:
+    def test_multiple_monsters_can_coexist_in_same_spot(self) -> None:
         """異なる monster_id は同じスポットに同居できる。"""
         g = _graph_with_two_spots()
         g.place_monster(MonsterId.create(101), SpotId.create(1))
@@ -96,7 +96,7 @@ class TestPlaceMonster:
 class TestUnplaceMonster:
     """SpotGraphAggregate.unplace_monster の挙動。"""
 
-    def test_除去で在席とマッピングから消える(self) -> None:
+    def test_removed(self) -> None:
         """unplace_monster 後は is_monster_present が False、presence からも除外される。"""
         g = _graph_with_two_spots()
         m1 = MonsterId.create(101)
@@ -108,7 +108,7 @@ class TestUnplaceMonster:
         assert not g.is_monster_present(m1)
         assert g.monster_presence_at(SpotId.create(1)).count() == 0
 
-    def test_left_event_を発行する(self) -> None:
+    def test_publishes_left_event(self) -> None:
         """unplace_monster は MonsterLeftSpotEvent を発行する。"""
         g = _graph_with_two_spots()
         m1 = MonsterId.create(101)
@@ -122,7 +122,7 @@ class TestUnplaceMonster:
         assert events[0].monster_id == m1
         assert events[0].spot_id == SpotId.create(1)
 
-    def test_未配置モンスターの除去は例外(self) -> None:
+    def test_case_raises_exception_2(self) -> None:
         """配置されていない monster_id を unplace すると MonsterNotInGraphException。"""
         g = _graph_with_two_spots()
         with pytest.raises(MonsterNotInGraphException):
@@ -132,7 +132,7 @@ class TestUnplaceMonster:
 class TestMonsterSpotMapping:
     """永続化用のマッピング取得が独立したコピーであること。"""
 
-    def test_返り値の改変は集約状態に影響しない(self) -> None:
+    def test_value_state_does_not_affect_2(self) -> None:
         """monster_spot_mapping は防御的コピーを返す。"""
         g = _graph_with_two_spots()
         g.place_monster(MonsterId.create(101), SpotId.create(1))
@@ -146,7 +146,7 @@ class TestMonsterSpotMapping:
 class TestGetMonsterSpot:
     """所在スポット取得時のエラーハンドリング。"""
 
-    def test_未配置なら例外(self) -> None:
+    def test_case_raises_exception(self) -> None:
         """get_monster_spot は未配置で MonsterNotInGraphException。"""
         g = _graph_with_two_spots()
         with pytest.raises(MonsterNotInGraphException):
@@ -156,7 +156,7 @@ class TestGetMonsterSpot:
 class TestEmptyPresenceCleanup:
     """除去後に空になったスポットの presence エントリが残らないこと。"""
 
-    def test_最後の一体を取り除いたらマッピングから消える(self) -> None:
+    def test_last_removed(self) -> None:
         """unplace_monster でスポット内が空になったら辞書のキー自体が消える。"""
         from ai_rpg_world.domain.world_graph.value_object.monster_spot_presence import (
             MonsterSpotPresence,
@@ -172,7 +172,7 @@ class TestEmptyPresenceCleanup:
         # 公開クエリ側は空 presence を返し続ける（後方互換）。
         assert g.monster_presence_at(SpotId.create(1)).count() == 0
 
-    def test_他にもモンスターが居ればエントリが残る(self) -> None:
+    def test_other_monster_remains(self) -> None:
         """同じスポットに別個体が残っていればキーは保持される。"""
         g = _graph_with_two_spots()
         g.place_monster(MonsterId.create(101), SpotId.create(1))
@@ -187,7 +187,7 @@ class TestEmptyPresenceCleanup:
 class TestPresencesMapping:
     """`monster_presences_mapping` の防御的コピー挙動。"""
 
-    def test_返り値の改変は集約状態に影響しない(self) -> None:
+    def test_value_state_does_not_affect(self) -> None:
         """monster_presences_mapping は防御的コピーを返す。"""
         g = _graph_with_two_spots()
         g.place_monster(MonsterId.create(101), SpotId.create(1))
@@ -202,7 +202,7 @@ class TestPresencesMapping:
 class TestRestoreConsistencyCheck:
     """コンストラクタ復元時の整合性チェック (二重インデックス整合)。"""
 
-    def test_mapping_側にだけある状態は例外(self) -> None:
+    def test_mapping_raises_exception(self) -> None:
         """`_monster_spot` にあるが presence 側に居ない → 不変条件違反。"""
         from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
             SpotGraphAggregate,
@@ -218,7 +218,7 @@ class TestRestoreConsistencyCheck:
                 monster_presences={},
             )
 
-    def test_presence_側にだけある状態は例外(self) -> None:
+    def test_presence_raises_exception(self) -> None:
         """`_monster_presences` に居るが mapping に居ない → 不変条件違反。"""
         from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
             SpotGraphAggregate,
@@ -241,7 +241,7 @@ class TestRestoreConsistencyCheck:
                 },
             )
 
-    def test_mapping_と_presence_でスポットが食い違うと例外(self) -> None:
+    def test_mapping_presence_raises_exception(self) -> None:
         """mapping は spot1 を指すが presence は spot2 に居る → 不変条件違反。"""
         from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
             SpotGraphAggregate,
@@ -266,7 +266,7 @@ class TestRestoreConsistencyCheck:
                 },
             )
 
-    def test_整合した状態なら復元可能(self) -> None:
+    def test_state_restore(self) -> None:
         """両インデックスが一致している場合は例外なく復元できる。"""
         from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
             SpotGraphAggregate,

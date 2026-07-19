@@ -87,7 +87,7 @@ def _episode(
 class TestEpisodicPassiveRecallRetrievalTemporalOnly:
     """時間軸だけで候補が取れること"""
 
-    def test_temporal_axis_only_when_no_situation_cues(self) -> None:
+    def test_temporal_axis_only_when_situation_cues(self) -> None:
         """situation_cues が空なら temporal のみがソースとなり、debug に temporal が載る。"""
         store = InMemorySubjectiveEpisodeStore()
         base = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
@@ -116,7 +116,7 @@ class TestEpisodicPassiveRecallRetrievalTemporalOnly:
 class TestEpisodicPassiveRecallRetrievalCueOnly:
     """cue 軸だけで temporal に入らない古い episode を拾えること"""
 
-    def test_cue_axis_retrieves_old_episode_not_in_temporal_window(self) -> None:
+    def test_cue_axis_retrieves_old_episode_in_temporal_window(self) -> None:
         """temporal の limit で切り落とされる古い件が、cue 照合で和集合に入る。"""
         store = InMemorySubjectiveEpisodeStore()
         base = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
@@ -154,7 +154,7 @@ class TestEpisodicPassiveRecallRetrievalCueOnly:
 class TestEpisodicPassiveRecallRetrievalUnionDedupe:
     """temporal と cue の重複が和集合で 1 件になること"""
 
-    def test_episode_は_cue_軸経由でのみ出る_R2_後(self) -> None:
+    def test_episode_cue_via_rendered_r2_after(self) -> None:
         """PR5 R2 後: cue が立っているときは temporal 軸が off になる。
 
         旧テスト名 ``test_same_episode_from_temporal_and_cue_has_single_row_and_merged_axes``
@@ -230,7 +230,7 @@ class TestEpisodicPassiveRecallRetrievalLimits:
         assert raw.get(PASSIVE_RECALL_AXIS_TEMPORAL, 0) == 0
         assert raw["cue:action"] == 2
 
-    def test_max_candidates_uses_round_robin_not_global_recency(self) -> None:
+    def test_max_candidates_uses_round_robin_global_recency(self) -> None:
         """max_candidates 件は全体時刻順の先頭ではなく、軸巡回で選ばれる。"""
         store = InMemorySubjectiveEpisodeStore()
         base = datetime(2026, 5, 1, tzinfo=timezone.utc)
@@ -514,7 +514,7 @@ class TestEpisodicPassiveRecallRetrievalHabituation:
         habit_store = InMemoryEpisodicRecallHabituationStore()
         return store, habit_store, _res, _wid, c_place, c_obj
 
-    def test_habituation_未注入なら_既存挙動と同一(self) -> None:
+    def test_habituation_uninjected_existing_same(self) -> None:
         """``habituation_store=None`` で構成すれば既存の round-robin 結果と同じ。"""
         store, _, res, wid, c_place, c_obj = self._setup()
         svc = EpisodicPassiveRecallRetrievalService(
@@ -532,7 +532,7 @@ class TestEpisodicPassiveRecallRetrievalHabituation:
         # debug に habituation 関連キーは出ない (= default off)
         assert result.debug.habituation_penalty_by_episode == ()
 
-    def test_直前_tick_で_recall_された_episode_は_順位が下がる(self) -> None:
+    def test_before_tick_recall_episode(self) -> None:
         """ep-B を直前 tick で recall 済にすると、arm 内 score が下がって
         ep-A が同 arm の上位になる。round-robin で ep-A が先に選ばれる。"""
         store, habit, res, wid, c_place, c_obj = self._setup()
@@ -564,7 +564,7 @@ class TestEpisodicPassiveRecallRetrievalHabituation:
         # ep-A は未 recall なので penalty 0 (または非含)
         assert penalty_dict.get("ep-A", 0) == 0
 
-    def test_decay_window_経過後は_慣化が解ける(self) -> None:
+    def test_decay_window_after(self) -> None:
         """十分時間が経った recall は penalty を出さない (= 再度引かれる)。"""
         store, habit, res, wid, c_place, c_obj = self._setup()
         habit.record_recall(being_id, ["ep-B"], tick=1)
@@ -588,7 +588,7 @@ class TestEpisodicPassiveRecallRetrievalHabituation:
         # decay 切れの episode は debug にも含めない (penalty=0 は記録不要)
         assert penalty_dict.get("ep-B", 0) == 0
 
-    def test_current_tick_未指定なら_penalty_は_適用されない(self) -> None:
+    def test_current_tick_unspecified_penalty(self) -> None:
         """tick が分からない呼び出し (idle 等) では penalty を出さない。"""
         store, habit, res, wid, c_place, c_obj = self._setup()
         habit.record_recall(being_id, ["ep-B"], tick=0)
@@ -654,7 +654,7 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
         success_store = InMemoryEpisodicRecallSuccessStore()
         return store, success_store, _res, _wid, c_place, c_obj
 
-    def test_success_store_未注入なら既存挙動と同一(self) -> None:
+    def test_success_store_uninjected_existing_same(self) -> None:
         """``recall_success_store=None`` (既定) は既存の round-robin 結果と同じ。"""
         store, _, res, wid, c_place, c_obj = self._setup()
         svc = EpisodicPassiveRecallRetrievalService(
@@ -670,7 +670,7 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
         # boost 無し: multi_cue_score が高い ep-B が単独枠を取る
         assert ids == ["ep-B"]
 
-    def test_的中回数が多いepisodeは加点されて上位に来る(self) -> None:
+    def test_count_episode(self) -> None:
         """ep-A に的中を積んで boost すると、score 1 の ep-A が score 2 の
         ep-B を逆転できる (strength=2 * hit=1 = +2 で score 1+2=3 > 2)。"""
         store, success, res, wid, c_place, c_obj = self._setup()
@@ -692,7 +692,7 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
         ids = [c.episode.episode_id for c in result.candidates]
         assert ids == ["ep-A"]
 
-    def test_boost_された_episode_はdebugにも記録される(self) -> None:
+    def test_boost_episode_debug_recorded(self) -> None:
         """M3 で recall 分布を post-hoc 計測するための観測可能性。"""
         store, success, res, wid, c_place, c_obj = self._setup()
         success.record_hit_by_being(being_id, "ep-A")
@@ -714,7 +714,7 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
         assert boost_dict["ep-A"] == 2
         assert boost_dict.get("ep-B", 0) == 0
 
-    def test_strength_0_既定なら加点されない(self) -> None:
+    def test_strength_zero_default(self) -> None:
         """store は注入されていても strength=0 (既定) なら boost 0。"""
         store, success, res, wid, c_place, c_obj = self._setup()
         success.record_hit_by_being(being_id, "ep-A")
@@ -734,7 +734,7 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
         ids = [c.episode.episode_id for c in result.candidates]
         assert ids == ["ep-B"]
 
-    def test_cap_を超えた的中回数は打ち止めになる(self) -> None:
+    def test_cap_over_count(self) -> None:
         """cap=1 のとき、的中を何度積んでも boost は 1 回分までしか効かない
         (= 想起の多様性が死ぬのを防ぐ上限)。"""
         store, success, res, wid, c_place, c_obj = self._setup()
@@ -763,7 +763,7 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
         # score は 100 回分にはならない)。
         assert ids != []
 
-    def test_being_id_未解決なら加点されない(self) -> None:
+    def test_being_id_unresolved(self) -> None:
         """Resolver / default_world_id 未注入で being_id が解決できない場合。"""
         from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
             InMemoryEpisodicRecallSuccessStore,
@@ -793,7 +793,8 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
 class TestHitBoostConstructorValidation:
     """``hit_boost_strength`` / ``hit_boost_cap`` の境界値ガード。"""
 
-    def test_strength_は_int(self) -> None:
+    def test_strength_int(self) -> None:
+        """strength は int。"""
         import pytest
 
         with pytest.raises(TypeError):
@@ -802,7 +803,8 @@ class TestHitBoostConstructorValidation:
                 hit_boost_strength=1.5,  # type: ignore[arg-type]
             )
 
-    def test_strength_の_bool_は_int扱いされない(self) -> None:
+    def test_strength_bool_int(self) -> None:
+        """strength の bool は int扱いされない。"""
         import pytest
 
         with pytest.raises(TypeError):
@@ -811,7 +813,8 @@ class TestHitBoostConstructorValidation:
                 hit_boost_strength=True,  # type: ignore[arg-type]
             )
 
-    def test_strength_負値は_ValueError(self) -> None:
+    def test_strength_negative_raises_value_error(self) -> None:
+        """strength 負値は ValueError。"""
         import pytest
 
         with pytest.raises(ValueError):
@@ -820,7 +823,8 @@ class TestHitBoostConstructorValidation:
                 hit_boost_strength=-1,
             )
 
-    def test_cap_は_int(self) -> None:
+    def test_cap_int(self) -> None:
+        """cap は int。"""
         import pytest
 
         with pytest.raises(TypeError):
@@ -829,7 +833,8 @@ class TestHitBoostConstructorValidation:
                 hit_boost_cap=1.5,  # type: ignore[arg-type]
             )
 
-    def test_cap_負値は_ValueError(self) -> None:
+    def test_cap_negative_raises_value_error(self) -> None:
+        """cap 負値は ValueError。"""
         import pytest
 
         with pytest.raises(ValueError):
@@ -880,7 +885,7 @@ class TestEpisodicPassiveRecallRetrievalSlot:
         )
         return store, slot_store, policy, res, wid, c_place
 
-    def test_slot_未注入なら_既存挙動と同一(self) -> None:
+    def test_slot_uninjected_existing_same(self) -> None:
         """``slot_store=None`` で構成すれば従来の round-robin 結果と debug は同じ。"""
         store, _slot, _policy, res, wid, c_place = self._setup()
         svc = EpisodicPassiveRecallRetrievalService(
@@ -894,7 +899,7 @@ class TestEpisodicPassiveRecallRetrievalSlot:
         )
         assert result.debug.recall_slot_decision is None
 
-    def test_slot_有効時は_K_insert_までしか新規挿入されない(self) -> None:
+    def test_slot_k_insert_new(self) -> None:
         """初回 tick は空 slot から K_insert=2 件だけ挿入される。"""
         store, slot_store, policy, res, wid, c_place = self._setup()
         svc = EpisodicPassiveRecallRetrievalService(
@@ -918,7 +923,7 @@ class TestEpisodicPassiveRecallRetrievalSlot:
         ids = [c.episode.episode_id for c in result.candidates]
         assert len(ids) == 2
 
-    def test_前_tick_の_slot_は_持ち越される(self) -> None:
+    def test_previous_tick_slot_is_carried_over(self) -> None:
         """tick 0 で 2 件入った slot は tick 1 でも持ち越され、retained=2 になる。"""
         store, slot_store, policy, res, wid, c_place = self._setup()
         svc = EpisodicPassiveRecallRetrievalService(
@@ -958,7 +963,7 @@ class TestEpisodicPassiveRecallRetrievalSlot:
         # 新規挿入分と合わせて N=3 件
         assert len(decision.new_slot) == 3
 
-    def test_max_residence_超過で退去_cooldown_で再入不可(self) -> None:
+    def test_max_residence_exceeds_cooldown(self) -> None:
         """L=5 超過の entry は evict、その後 C=5 tick の間は同じ episode が再入できない。"""
         store, slot_store, policy, res, wid, c_place = self._setup()
         svc = EpisodicPassiveRecallRetrievalService(
@@ -1109,7 +1114,7 @@ class TestEpisodicPassiveRecallRetrievalAfterglow:
         assert weak_entry.source == AfterglowSource.WEAK_RECALL
         assert weak_entry.heading == "弱い見出し"
 
-    def test_no_heading_episodes_are_skipped_from_afterglow(self) -> None:
+    def test_heading_episodes_are_skipped_from_afterglow(self) -> None:
         """heading が None の episode は afterglow に並べる意味がない (= 見出し
         として表示できない) ため、投入経路で skip する。"""
         (

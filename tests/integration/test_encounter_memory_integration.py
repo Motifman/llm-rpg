@@ -88,11 +88,12 @@ def _scenario_event_output(event_id: str, message: str) -> ObservationOutput:
 class TestRuntimeWiring:
     """runtime が ``_encounter_memory`` を持ち、collector が wire されている。"""
 
-    def test_runtime_は__encounter_memory_を_持つ(self) -> None:
+    def test_runtime_encounter_memory(self) -> None:
+        """runtime は の encountermemory を持つ。"""
         runtime = _create_runtime()
         assert isinstance(runtime._encounter_memory, InMemoryEncounterMemory)
 
-    def test_observation_appender_に_observer_として_collector_が_接続されている(
+    def test_observation_appender_observer_collector_connected(
         self,
     ) -> None:
         """factory function が collector.on_observation を ObservationAppender
@@ -119,7 +120,7 @@ class TestRuntimeWiring:
         collector = encounter_observer.__self__
         assert collector._memory is runtime._encounter_memory
 
-    def test_初期状態は_spawn_spot_だけが_encounter_に_立つ(self) -> None:
+    def test_initial_state_spawn_spot_encounter(self) -> None:
         """PR4 後: 初期 spawn 時に自分の spot encounter が直接記録される。
         forbidden_library_demo では kaito=entrance_hall, rin=reading_room
         が spawn 直後の唯一の encounter。"""
@@ -145,9 +146,10 @@ class TestAppenderToEncounterEndToEnd:
     encounter_memory に到達する」end-to-end の経路を保証する。
     """
 
-    def test_entity_entered_spot_観測で_player_encounter_が_記録される(
+    def test_entity_entered_spot_observation_player_encounter_recorded(
         self,
     ) -> None:
+        """entityenteredspot 観測で playerencounter が記録される。"""
         runtime = _create_runtime()
         rin = runtime.get_player_ids()[1]
         runtime._observation_appender.append(
@@ -164,9 +166,10 @@ class TestAppenderToEncounterEndToEnd:
         # tick は runtime.current_tick() (= 初期 0) で記録される
         assert record.last_seen_tick == runtime.current_tick()
 
-    def test_scenario_event_観測で_event_encounter_が_記録される(
+    def test_scenario_event_observation_event_encounter_recorded(
         self,
     ) -> None:
+        """scenarioevent 観測で eventencounter が記録される。"""
         runtime = _create_runtime()
         kaito = runtime.get_player_ids()[0]
         runtime._observation_appender.append(
@@ -181,7 +184,8 @@ class TestAppenderToEncounterEndToEnd:
         assert record is not None
         assert record.is_first is True
 
-    def test_他_player_は_独立に_encounter_を_持つ(self) -> None:
+    def test_other_player_independently_encounter(self) -> None:
+        """他 player は独立に encounter を持つ。"""
         runtime = _create_runtime()
         kaito = runtime.get_player_ids()[0]
         rin = runtime.get_player_ids()[1]
@@ -212,7 +216,8 @@ class TestSnapshotRoundTripViaRuntime:
     単体の round-trip は test_encounter_memory_codec.py で別途担保。
     """
 
-    def test_codec_リストに_encounter_memory_が_含まれる(self) -> None:
+    def test_codec_list_encounter_memory_included(self) -> None:
+        """codec リストに encountermemory が含まれる。"""
         from ai_rpg_world.application.being.experiment_snapshot_session import (
             _default_world_subsystem_codecs,
         )
@@ -220,7 +225,8 @@ class TestSnapshotRoundTripViaRuntime:
         codec_keys = {c.subsystem_key for c in _default_world_subsystem_codecs()}
         assert "encounter_memory" in codec_keys
 
-    def test_実_runtime_で_capture_して_別_runtime_に_restore_できる(self) -> None:
+    def test_runtime_capture_different_runtime_restore(self) -> None:
+        """実 runtime で capture して 別 runtime に restore できる。"""
         from ai_rpg_world.application.being.experiment_snapshot_session import (
             _default_world_subsystem_codecs,
         )

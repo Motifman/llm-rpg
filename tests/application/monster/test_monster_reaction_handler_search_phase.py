@@ -163,7 +163,7 @@ def _make_handler(*, player=None, force_wander_fn=None):
 class TestHeadingToLastObserved:
     """target 見失い + monster が last_observed と離れている場合、向かって 1 hop。"""
 
-    def test_target_見失い_monster_は_last_observed_に_向かって_1hop_移動(self) -> None:
+    def test_target_monster_last_observed_1hop(self) -> None:
         """A に居る monster が last_observed=B、target は graph に居ない →
         B に向かって 1 hop 移動。search はまだ開始しない。"""
         handler, monster_repo = _make_handler(player=None)
@@ -188,7 +188,7 @@ class TestHeadingToLastObserved:
         assert monster.is_searching_lost_target() is False
         assert monster.is_chasing() is True
 
-    def test_経路無しで_last_observed_到達不可なら_IDLE(self) -> None:
+    def test_last_observed_idle(self) -> None:
         """last_observed への passable 経路が無ければ CHASE 諦める。"""
         handler, _ = _make_handler(player=None)
         monster = _monster()
@@ -216,7 +216,7 @@ class TestHeadingToLastObserved:
 class TestSearchStart:
     """last_observed 到着で探索フェーズを開始。"""
 
-    def test_last_observed_到着時に_search_timer_が_セットされる(self) -> None:
+    def test_last_observed_search_timer(self) -> None:
         """B に居る monster が last_observed=B + target 居ない → 探索開始。
         force_wander_fn が呼ばれ、search_timer が初期 (3) - 1 (即減算) = 2 になる。"""
         wander_fn = MagicMock(return_value=True)
@@ -242,7 +242,7 @@ class TestSearchStart:
         assert monster.is_searching_lost_target() is True
         assert monster._behavior_state.search_timer == 2  # 3 - 1
 
-    def test_chase_search_ticks_1_は_wander_1回_即_IDLE(self) -> None:
+    def test_chase_search_ticks_one_wander_one_idle(self) -> None:
         """境界値 chase_search_ticks=1: 到着 tick で wander 1 回実行 → 即 IDLE。"""
         wander_fn = MagicMock(return_value=True)
         handler, _ = _make_handler(player=None, force_wander_fn=wander_fn)
@@ -264,7 +264,7 @@ class TestSearchStart:
         # wander は 1 回呼ばれている (探索開始 tick の分)
         wander_fn.assert_called_once()
 
-    def test_chase_search_ticks_0_の_テンプレなら_即_IDLE(self) -> None:
+    def test_chase_search_ticks_zero_idle(self) -> None:
         """chase_search_ticks=0 のテンプレでは last_observed 到着即 IDLE。"""
         handler, _ = _make_handler(player=None)
         monster = _monster(_template(chase_search_ticks=0))
@@ -286,7 +286,7 @@ class TestSearchStart:
 class TestSearchContinuationAndExpiry:
     """探索中の継続と timer 切れ。"""
 
-    def test_探索中は_wander_fn_が_呼ばれ_timer_が_1減る(self) -> None:
+    def test_wander_fn_timer_one_decreases(self) -> None:
         """search_timer=2 → 探索 1 tick → timer=1、wander 呼ばれる。"""
         wander_fn = MagicMock(return_value=True)
         handler, _ = _make_handler(player=None, force_wander_fn=wander_fn)
@@ -310,7 +310,7 @@ class TestSearchContinuationAndExpiry:
         assert monster._behavior_state.search_timer == 1
         assert monster.is_chasing() is True
 
-    def test_search_timer_切れで_IDLE(self) -> None:
+    def test_search_timer_idle(self) -> None:
         """search_timer=1 → 探索 1 tick → timer=0 で IDLE 復帰。"""
         wander_fn = MagicMock(return_value=True)
         handler, _ = _make_handler(player=None, force_wander_fn=wander_fn)
@@ -337,7 +337,7 @@ class TestSearchContinuationAndExpiry:
 class TestSearchRediscoveryOtherSpot:
     """探索中に target が他 spot に出現したら追跡再開し、search_timer もリセット。"""
 
-    def test_探索中に_player_が_別spot_に_現れたら_追跡再開して_search_終了(
+    def test_player_different_spot_search(
         self,
     ) -> None:
         """探索フェーズ中 (search_timer=2) に player が SPOT_C に出現
@@ -374,7 +374,7 @@ class TestSearchRediscoveryOtherSpot:
 class TestSearchRediscovery:
     """探索中に target を再発見したら攻撃に戻り、search_timer もリセット。"""
 
-    def test_探索中に_player_が_同_spot_に_現れたら_攻撃して_search_終了(self) -> None:
+    def test_player_spot_search(self) -> None:
         """探索フェーズ中 (timer=2) に同 spot に player が出現 → 攻撃 +
         search_timer は 0 にリセット。"""
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
@@ -432,7 +432,7 @@ class TestSearchRediscovery:
 class TestNoLastObservedFallback:
     """last_observed_target_spot_id が無いまま target 見失いなら IDLE。"""
 
-    def test_last_observed_None_かつ_target_居なければ_IDLE(self) -> None:
+    def test_last_observed_none_target_idle(self) -> None:
         """理論上ありえない不整合だが防御的に。"""
         handler, _ = _make_handler(player=None)
         monster = _monster()

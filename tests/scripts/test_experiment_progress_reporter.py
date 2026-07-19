@@ -24,23 +24,28 @@ from scripts.run_scenario_experiment import (
 class TestFormatDuration:
     """秒を MM:SS / HH:MM:SS に整形する境界条件。"""
 
-    def test_0秒は_00_00(self) -> None:
+    def test_zero_00(self) -> None:
+        """0秒は 00 00。"""
         assert _format_duration(0) == "00:00"
 
-    def test_負値も_00_00(self) -> None:
+    def test_negative_value_00(self) -> None:
+        """負値も 00 00。"""
         assert _format_duration(-100) == "00:00"
 
-    def test_1分_30秒は_01_30(self) -> None:
+    def test_one_30_01_30(self) -> None:
+        """1分 30秒は 01 30。"""
         assert _format_duration(90) == "01:30"
 
-    def test_1時間以上は_HH_MM_SS(self) -> None:
+    def test_one_more_hh_mm_ss(self) -> None:
+        """1時間以上は HH MM SS。"""
         assert _format_duration(3661) == "1:01:01"
 
 
 class TestProgressReporterStdout:
     """stdout に旧来形式の 1 行 print が出る。"""
 
-    def test_tick_end_で_stdout_に_進捗行が_出る(self, tmp_path: Path) -> None:
+    def test_tick_end_stdout_line_rendered(self, tmp_path: Path) -> None:
+        """tickend で stdout に進捗行が出る。"""
         out = io.StringIO()
         err = io.StringIO()
         reporter = _ExperimentProgressReporter(
@@ -57,7 +62,8 @@ class TestProgressReporterStdout:
 class TestProgressReporterStderr:
     """stderr inline 進捗 (非 tty なら改行、tty なら \\r)。"""
 
-    def test_非_tty_stderr_は_改行で_書く(self) -> None:
+    def test_non_tty_stderr_line(self) -> None:
+        """非 ttystderr は改行で書く。"""
         out = io.StringIO()
         err = io.StringIO()  # StringIO は isatty() を持たない (= False)
         reporter = _ExperimentProgressReporter(
@@ -71,7 +77,8 @@ class TestProgressReporterStderr:
         # 非 tty なら \r ではなく \n
         assert stderr_value.endswith("\n")
 
-    def test_stderr_None_なら_出力されない(self) -> None:
+    def test_stderr_none_not_output(self) -> None:
+        """stderr None なら 出力されない。"""
         out = io.StringIO()
         reporter = _ExperimentProgressReporter(
             max_world_ticks=5, stdout=out, stderr=None, progress_jsonl=None
@@ -84,7 +91,8 @@ class TestProgressReporterStderr:
 class TestProgressJsonl:
     """progress.jsonl が 1 tick 1 行 JSON で append される。"""
 
-    def test_tick_end_で_1行_jsonl_に_書かれる(self, tmp_path: Path) -> None:
+    def test_tick_end_one_line_jsonl_written(self, tmp_path: Path) -> None:
+        """tickend で 1 行 jsonl に書かれる。"""
         out = io.StringIO()
         progress_path = tmp_path / "progress.jsonl"
         reporter = _ExperimentProgressReporter(
@@ -103,7 +111,8 @@ class TestProgressJsonl:
         assert "eta_seconds" in entry0
         assert "elapsed_seconds" in entry0
 
-    def test_jsonl_None_なら_書かない(self, tmp_path: Path) -> None:
+    def test_jsonl_none(self, tmp_path: Path) -> None:
+        """jsonl None なら 書かない。"""
         out = io.StringIO()
         reporter = _ExperimentProgressReporter(
             max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=None
@@ -113,7 +122,7 @@ class TestProgressJsonl:
         # tmp_path に progress.jsonl が無いことを確認
         assert not (tmp_path / "progress.jsonl").exists()
 
-    def test_可観測性フィールド_world_tick_start_llm_calls_travel_active_を含む(
+    def test_progress_report_includes_observability_fields(
         self, tmp_path: Path
     ) -> None:
         """``#404`` P2 で追加した内訳フィールドが progress.jsonl に出る。
@@ -146,7 +155,7 @@ class TestProgressJsonl:
         assert entry["llm_calls"] == 4
         assert entry["travel_active"] == 2
 
-    def test_可観測性フィールド未指定なら省略される(self, tmp_path: Path) -> None:
+    def test_observation_unspecified(self, tmp_path: Path) -> None:
         """後方互換: optional パラメータを渡さなければ従来通り。"""
         out = io.StringIO()
         progress_path = tmp_path / "progress.jsonl"
@@ -166,7 +175,8 @@ class TestProgressJsonl:
 class TestFinalize:
     """finalize でファイルが閉じる / 二重 finalize 安全。"""
 
-    def test_finalize_後の_finalize_は_no_op(self, tmp_path: Path) -> None:
+    def test_finalize_after_finalize_op(self, tmp_path: Path) -> None:
+        """finalize 後の finalize は no op。"""
         out = io.StringIO()
         progress_path = tmp_path / "progress.jsonl"
         reporter = _ExperimentProgressReporter(

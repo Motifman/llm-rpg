@@ -59,7 +59,8 @@ def repo_with_raw_fish():
 class TestAcquiredAtTickLazyInit:
     """acquired_at_tick の遅延初期化挙動。"""
 
-    def test_最初の_run_で_acquired_at_tick_が記録される(self, repo_with_raw_fish) -> None:
+    def test_run_acquired_tick_recorded(self, repo_with_raw_fish) -> None:
+        """最初の run で acquired at tick が記録される。"""
         repo, inst = repo_with_raw_fish
         stage = FoodSpoilageStageService(
             item_repository=repo,
@@ -72,7 +73,8 @@ class TestAcquiredAtTickLazyInit:
         assert reloaded.state[STATE_KEY_ACQUIRED_AT_TICK] == 3
         assert reloaded.state.get(STATE_KEY_SPOILED) is not True
 
-    def test_既に_acquired_at_tick_があれば上書きしない(self, repo_with_raw_fish) -> None:
+    def test_acquired_tick(self, repo_with_raw_fish) -> None:
+        """既に acquired at tick があれば上書きしない。"""
         repo, inst = repo_with_raw_fish
         inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 10})
         repo.save(inst)
@@ -90,7 +92,8 @@ class TestAcquiredAtTickLazyInit:
 class TestSpoiledFlag:
     """spoils_after_ticks 経過時に spoiled が立つ挙動。"""
 
-    def test_閾値未到達なら_spoiled_は立たない(self, repo_with_raw_fish) -> None:
+    def test_value_spoiled_2(self, repo_with_raw_fish) -> None:
+        """閾値未到達なら spoiled は立たない。"""
         repo, inst = repo_with_raw_fish
         inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
         repo.save(inst)
@@ -104,7 +107,8 @@ class TestSpoiledFlag:
         reloaded = repo.find_by_id(inst.item_instance_id)
         assert reloaded.state.get(STATE_KEY_SPOILED) is not True
 
-    def test_閾値到達ちょうどで_spoiled_が立つ(self, repo_with_raw_fish) -> None:
+    def test_value_spoiled(self, repo_with_raw_fish) -> None:
+        """閾値到達ちょうどで spoiled が立つ。"""
         repo, inst = repo_with_raw_fish
         inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
         repo.save(inst)
@@ -118,7 +122,8 @@ class TestSpoiledFlag:
         reloaded = repo.find_by_id(inst.item_instance_id)
         assert reloaded.state[STATE_KEY_SPOILED] is True
 
-    def test_閾値超過でも_spoiled_が立つ(self, repo_with_raw_fish) -> None:
+    def test_value_exceeds_spoiled(self, repo_with_raw_fish) -> None:
+        """閾値超過でも spoiled が立つ。"""
         repo, inst = repo_with_raw_fish
         inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
         repo.save(inst)
@@ -136,7 +141,8 @@ class TestSpoiledFlag:
 class TestCallback:
     """spoiled_callback の呼び出し挙動。"""
 
-    def test_腐ったとき_callbackが呼ばれる(self, repo_with_raw_fish) -> None:
+    def test_calls_when_spoiled_callback(self, repo_with_raw_fish) -> None:
+        """腐ったとき callbackが呼ばれる。"""
         repo, inst = repo_with_raw_fish
         inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
         repo.save(inst)
@@ -152,7 +158,8 @@ class TestCallback:
 
         assert calls == [(7001, 101, "生の魚")]
 
-    def test_callbackは二重発火しない(self, repo_with_raw_fish) -> None:
+    def test_callback_does_not_trigger(self, repo_with_raw_fish) -> None:
+        """callbackは二重発火しない。"""
         repo, inst = repo_with_raw_fish
         inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
         repo.save(inst)
@@ -173,7 +180,8 @@ class TestCallback:
 class TestSpoiledBatchCallback:
     """#343 対策: 同 tick の複数 instance を 1 件に集約する batch callback。"""
 
-    def test_同_tick_の_複数_instance_は_1_batch_で_呼ばれる(self) -> None:
+    def test_calls_tick_multiple_instance_one_batch(self) -> None:
+        """同 tick の複数 instance は 1batch で呼ばれる。"""
         data_store = InMemoryDataStore()
         repo = InMemoryItemRepository(data_store)
         spec = _spec(RAW_FISH_SPEC_ID, "生の魚", spoils_after_ticks=4)
@@ -201,9 +209,10 @@ class TestSpoiledBatchCallback:
         assert len(batches[0]) == 3
         assert {iid.value for iid, _, _ in batches[0]} == {7001, 7002, 7003}
 
-    def test_この_tick_で_何も腐っていなければ_batch_callback_は_呼ばれない(
+    def test_does_not_call_tick_batch_callback(
         self,
     ) -> None:
+        """この tick で何も腐っていなければ batchcallback は呼ばれない。"""
         data_store = InMemoryDataStore()
         repo = InMemoryItemRepository(data_store)
         spec = _spec(RAW_FISH_SPEC_ID, "生の魚", spoils_after_ticks=10)
@@ -229,7 +238,8 @@ class TestSpoiledBatchCallback:
 class TestEmptySpoilableSpecs:
     """空 dict のときは no-op になる (シナリオに腐る食料が無いとき)。"""
 
-    def test_腐るアイテムが無ければ何もしない(self, repo_with_raw_fish) -> None:
+    def test_no_spoilable_items_leaves_state_unchanged(self, repo_with_raw_fish) -> None:
+        """腐るアイテムが無ければ何もしない。"""
         repo, inst = repo_with_raw_fish
         stage = FoodSpoilageStageService(
             item_repository=repo,

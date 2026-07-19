@@ -75,7 +75,8 @@ def _build_builder(*, graph, stagnation_band_provider=None):
 class TestOwnStagnationBandSurface:
     """P-U3: 行動者本人の own_stagnation_band が provider から埋まる。"""
 
-    def test_provider_が_light_を返すと_own_stagnation_band_に反映される(self) -> None:
+    def test_returns_own_stagnation_band_provider_light_when(self) -> None:
+        """provider が light を返すと own stagnation band に反映される。"""
         graph = _build_graph_mock()
         builder = _build_builder(
             graph=graph,
@@ -85,7 +86,8 @@ class TestOwnStagnationBandSurface:
         assert snap is not None
         assert snap.own_stagnation_band == "light"
 
-    def test_provider_が_strong_を返すと_own_stagnation_band_に反映される(self) -> None:
+    def test_returns_own_stagnation_band_provider_strong_when(self) -> None:
+        """provider が strong を返すと own stagnation band に反映される。"""
         graph = _build_graph_mock()
         builder = _build_builder(
             graph=graph,
@@ -95,14 +97,16 @@ class TestOwnStagnationBandSurface:
         assert snap is not None
         assert snap.own_stagnation_band == "strong"
 
-    def test_provider_未注入なら_own_stagnation_band_は_none(self) -> None:
+    def test_provider_uninjected_own_stagnation_band_none(self) -> None:
+        """provider 未注入なら own stagnation band は none。"""
         graph = _build_graph_mock()
         builder = _build_builder(graph=graph, stagnation_band_provider=None)
         snap = builder.build_snapshot(PLAYER_ID)
         assert snap is not None
         assert snap.own_stagnation_band == "none"
 
-    def test_provider_が例外を投げても_snapshot生成は落ちず_none_に縮退する(self) -> None:
+    def test_provider_exception_falls_back_to_none_without_failing_snapshot(self) -> None:
+        """provider が例外を投げても snapshot生成は落ちず none に縮退する。"""
         def boom(pid: int) -> str:
             raise RuntimeError("store broken")
 
@@ -112,7 +116,8 @@ class TestOwnStagnationBandSurface:
         assert snap is not None
         assert snap.own_stagnation_band == "none"
 
-    def test_provider_には_行動者本人の_player_id_が渡る(self) -> None:
+    def test_provider_action_self_player_id(self) -> None:
+        """provider には 行動者本人の player id が渡る。"""
         received: list[int] = []
 
         def capture(pid: int) -> str:
@@ -128,7 +133,8 @@ class TestOwnStagnationBandSurface:
 class TestNearbyEntityStagnationBandSurface:
     """P-U4: 同 spot の他 player の stagnation_band が provider から埋まる。"""
 
-    def test_同spotの他playerの_stagnation_band_が_strong_で埋まる(self) -> None:
+    def test_spot_other_player_stagnation_band_strong(self) -> None:
+        """同spotの他playerの stagnation band が strong で埋まる。"""
         graph = _build_graph_mock(present_entity_ids=[PLAYER_ID, OTHER_PLAYER_ID])
         builder = _build_builder(
             graph=graph,
@@ -142,7 +148,8 @@ class TestNearbyEntityStagnationBandSurface:
         assert snap.nearby_entities[0].entity_id == OTHER_PLAYER_ID
         assert snap.nearby_entities[0].stagnation_band == "strong"
 
-    def test_カウンタ0相当_none_のときは_nearby_entityも_none(self) -> None:
+    def test_zero_none_nearby_entity_none(self) -> None:
+        """カウンタ0相当 none のときは nearby entityも none。"""
         graph = _build_graph_mock(present_entity_ids=[PLAYER_ID, OTHER_PLAYER_ID])
         builder = _build_builder(
             graph=graph,
@@ -152,14 +159,15 @@ class TestNearbyEntityStagnationBandSurface:
         assert snap is not None
         assert snap.nearby_entities[0].stagnation_band == "none"
 
-    def test_provider_未配線なら_nearby_entityの_stagnation_bandも_none(self) -> None:
+    def test_provider_unwired_nearby_entity_stagnation_band_none(self) -> None:
+        """provider 未配線なら nearby entityの stagnation bandも none。"""
         graph = _build_graph_mock(present_entity_ids=[PLAYER_ID, OTHER_PLAYER_ID])
         builder = _build_builder(graph=graph, stagnation_band_provider=None)
         snap = builder.build_snapshot(PLAYER_ID)
         assert snap is not None
         assert snap.nearby_entities[0].stagnation_band == "none"
 
-    def test_行動者本人は_nearby_entitiesに出ない(self) -> None:
+    def test_action_self_nearby_entities_not_rendered(self) -> None:
         """自分自身の停滞感が「他者」欄に混ざらないことを確認する。"""
         graph = _build_graph_mock(present_entity_ids=[PLAYER_ID, OTHER_PLAYER_ID])
         builder = _build_builder(

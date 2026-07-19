@@ -95,7 +95,7 @@ def _pickup_event(witness_policy: WitnessPolicy) -> PlayerPickedUpItemEvent:
 class TestDropEventWitnessPolicy:
     """drop イベントの witness_policy を尊重する。"""
 
-    def test_SAME_SPOT_は同室の他者に届く(self):
+    def test_same_spot_same_room_other_2(self):
         """default 動作の回帰: actor 1 が drop すると 2 は受信 / 1 は除外。"""
         strategy = _make_strategy({1: 1, 2: 1})
         recipients = strategy.resolve(_drop_event(WitnessPolicy.SAME_SPOT))
@@ -103,7 +103,7 @@ class TestDropEventWitnessPolicy:
         assert 1 not in ids
         assert 2 in ids
 
-    def test_ACTOR_ONLY_は誰にも届かない(self):
+    def test_actor_only_2(self):
         """同室にプレイヤーが居ても recipients は空集合。"""
         strategy = _make_strategy({1: 1, 2: 1, 3: 1})
         recipients = strategy.resolve(_drop_event(WitnessPolicy.ACTOR_ONLY))
@@ -113,13 +113,15 @@ class TestDropEventWitnessPolicy:
 class TestPickupEventWitnessPolicy:
     """pickup イベントも drop と対称に witness_policy を尊重する。"""
 
-    def test_SAME_SPOT_は同室の他者に届く(self):
+    def test_same_spot_same_room_other(self):
+        """SAME SPOT は同室の他者に届く。"""
         strategy = _make_strategy({1: 1, 2: 1})
         recipients = strategy.resolve(_pickup_event(WitnessPolicy.SAME_SPOT))
         ids = {r.value for r in recipients}
         assert 2 in ids
 
-    def test_ACTOR_ONLY_は誰にも届かない(self):
+    def test_actor_only(self):
+        """ACTOR ONLY は誰にも届かない。"""
         strategy = _make_strategy({1: 1, 2: 1, 3: 1})
         recipients = strategy.resolve(_pickup_event(WitnessPolicy.ACTOR_ONLY))
         assert recipients == []

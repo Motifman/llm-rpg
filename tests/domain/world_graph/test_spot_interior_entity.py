@@ -57,7 +57,7 @@ class TestSpotInterior:
 class TestSpotInteriorGroundItems:
     """SpotInterior.with_ground_item / without_ground_item / find_ground_item の挙動。"""
 
-    def test_with_ground_item_は新規アイテムを追加する(self):
+    def test_with_ground_item_adds_new_item(self):
         """with_ground_item が指定 GroundItem を ground_items に追加して新インスタンスを返す。"""
         interior = SpotInterior((), (), (), ())
         g = _ground(1, 100)
@@ -67,14 +67,14 @@ class TestSpotInteriorGroundItems:
         # 元の interior は不変 (immutability の確認)
         assert interior.ground_items == ()
 
-    def test_with_ground_item_は同一_instance_の二重追加を無視する(self):
+    def test_ground_item_same_instance(self):
         """同一 ItemInstanceId が既に存在する場合は重複追加しない (idempotent)。"""
         g = _ground(1, 100)
         interior = SpotInterior((), (), (g,), ())
         ni = interior.with_ground_item(g)
         assert len(ni.ground_items) == 1
 
-    def test_without_ground_item_は指定_instance_を除外する(self):
+    def test_excludes_ground_item_instance(self):
         """既存メソッド without_ground_item の回帰テスト。"""
         g1 = _ground(1, 100)
         g2 = _ground(2, 200)
@@ -83,13 +83,13 @@ class TestSpotInteriorGroundItems:
         assert len(ni.ground_items) == 1
         assert ni.ground_items[0] == g2
 
-    def test_find_ground_item_は存在する_instance_を返す(self):
+    def test_returns_find_ground_item_instance(self):
         """find_ground_item が ItemInstanceId で GroundItem を取り出せる。"""
         g = _ground(1, 100)
         interior = SpotInterior((), (), (g,), ())
         assert interior.find_ground_item(g.item_instance_id) == g
 
-    def test_find_ground_item_は存在しなければ_None(self):
+    def test_find_ground_item_none(self):
         """find_ground_item は地面にない instance に対しては None を返す。"""
         interior = SpotInterior((), (), (), ())
         assert interior.find_ground_item(ItemInstanceId.create(99)) is None

@@ -242,7 +242,7 @@ class TestObservationRecipientResolver:
         assert len(ids) == 2
         assert {p.value for p in ids} == {1, 2}
 
-    def test_resolve_item_added_to_inventory_returns_aggregate_player(self, resolver):
+    def test_resolve_item_added_inventory_returns_aggregate_player(self, resolver):
         """ItemAddedToInventoryEvent: aggregate_id が配信先"""
         event = ItemAddedToInventoryEvent.create(
             aggregate_id=PlayerId(3),
@@ -315,7 +315,7 @@ class TestObservationRecipientResolver:
         assert len(ids) == 1
         assert ids[0].value == 1
 
-    def test_resolve_resource_harvested_returns_empty_when_actor_not_on_map(
+    def test_resolve_resource_harvested_returns_empty_when_actor_on_map(
         self, resolver
     ):
         """ResourceHarvestedEvent: actor_id がどのマップにもいなければ配信先なし"""
@@ -412,7 +412,7 @@ class TestObservationRecipientResolver:
         assert len(ids) == 1
         assert ids[0].value == 3
 
-    def test_resolve_location_exited_returns_empty_when_object_not_on_map(
+    def test_resolve_location_exited_returns_empty_when_object_on_map(
         self, resolver
     ):
         """LocationExitedEvent: object_id がマップにいなければ配信先なし"""
@@ -445,7 +445,7 @@ class TestObservationRecipientResolver:
         assert len(ids) == 1
         assert ids[0].value == 2
 
-    def test_resolve_world_object_interacted_returns_empty_when_actor_not_on_map(
+    def test_resolve_world_object_interacted_returns_empty_when_actor_on_map(
         self, resolver
     ):
         """WorldObjectInteractedEvent: actor_id がマップにいなければ配信先なし"""
@@ -541,7 +541,7 @@ class TestDefaultRecipientStrategy:
         )
         assert strategy.supports(event) is True
 
-    def test_supports_returns_false_for_unknown_event(self, strategy):
+    def test_supports_returns_False_for_unknown_event(self, strategy):
         """未知のイベントでは supports が False"""
         class UnknownEvent:
             pass
@@ -560,7 +560,7 @@ class TestDefaultRecipientStrategy:
         assert len(ids) == 1
         assert ids[0].value == 7
 
-    def test_PlayerDownedEvent_は_本人と同_spot_の他プレイヤーに_broadcast(
+    def test_player_downed_event_self_spot_other_player_broadcast(
         self, strategy, status_repo
     ):
         """ダウンしたプレイヤー本人だけでなく、同 spot に居る目撃者にも観測が届く。
@@ -586,7 +586,7 @@ class TestDefaultRecipientStrategy:
         assert 3 in id_values  # 目撃者
         assert 4 not in id_values  # 別 spot なので届かない
 
-    def test_PlayerDownedEvent_は_spot_不明なら_本人のみ(
+    def test_player_downed_event_spot_self(
         self, strategy, status_repo
     ):
         """downed 本人が status_repo に居ない場合は spot 解決できないため本人だけが audience。
@@ -632,7 +632,7 @@ class TestWorldObjectToPlayerResolver:
         assert pid is not None
         assert pid.value == 3
 
-    def test_resolve_player_id_returns_none_when_object_not_on_any_map(
+    def test_resolve_player_id_returns_None_when_object_on_any_map(
         self, resolver
     ):
         """どのマップにも存在しない object_id の場合は None（境界）"""

@@ -105,7 +105,7 @@ def _label_for_item(runtime, pid: PlayerId, item_spec_str: str) -> str:
 class TestUseItemEndToEnd:
     """use_item の wiring → resolver → executor → event publish → formatter を通す。"""
 
-    def test_椰子の実_を_使用すると_成功し_inventory_から_消える(self, session) -> None:
+    def test_success_inventory_removed(self, session) -> None:
         """成功パス: LLM が item_label を指定 → 実 aggregate / event publish /
         formatter まで例外なく通る。**実験 #24-27 の全 4 バグを 1 件でも残せば
         ここで AttributeError or KeyError や False で落ちる**。"""
@@ -130,7 +130,7 @@ class TestUseItemEndToEnd:
         occupied = [iid for _, iid in inv._inventory_slots.items() if iid is not None]
         assert len(occupied) == 0, "use_item 成功後も inventory に残っている"
 
-    def test_存在しない_item_label_は_INVALID_TARGET_LABEL_で_返る(self, session) -> None:
+    def test_returns_item_label_invalid_target_label(self, session) -> None:
         """resolver 経路が壊れていれば INVALID_ARGUMENT (= 実験 #25 の症状) に化ける。"""
         runtime = session.runtime
         ada = _player_id(runtime, "ada")
@@ -145,7 +145,7 @@ class TestUseItemEndToEnd:
             "INVALID_TARGET_LABEL", "INVALID_TARGET_KIND",
         ), f"unexpected code: {result.error_code} (resolver が動いていない疑い)"
 
-    def test_use_item_成功時の_observation_pipeline_が_例外なく動く(self, session) -> None:
+    def test_successful_use_item_runs_observation_pipeline_without_exception(self, session) -> None:
         """**実験 #27 の症状 (`item_name` AttributeError) を直接検知する test**。
 
         event publisher 経由で formatter が動くため、ConsumableUsedEvent →
@@ -180,7 +180,8 @@ class TestUseItemEndToEnd:
 # drop_item: PR #385 で resolver 経由になった
 # ---------------------------------------------------------------------------
 class TestDropItemEndToEnd:
-    def test_drop_成功で_inventory_から_消え_ground_に_移る(self, session) -> None:
+    def test_drop_success_inventory_ground(self, session) -> None:
+        """drop 成功で inventory から消え ground に移る。"""
         runtime = session.runtime
         ada = _player_id(runtime, "ada")
         _teleport(runtime, int(ada), "shipwreck_beach")
@@ -202,7 +203,8 @@ class TestDropItemEndToEnd:
 # give_item: 同 spot の player に渡す
 # ---------------------------------------------------------------------------
 class TestGiveItemEndToEnd:
-    def test_give_成功で_対象_player_に_所有が_移る(self, session) -> None:
+    def test_give_success_target_player(self, session) -> None:
+        """give 成功で対象 player に所有が移る。"""
         runtime = session.runtime
         ada = _player_id(runtime, "ada")
         noah = _player_id(runtime, "noah")
@@ -257,7 +259,7 @@ class TestGiveItemEndToEnd:
 # pickup_item: 地面 → inventory
 # ---------------------------------------------------------------------------
 class TestPickupItemEndToEnd:
-    def test_drop_して_pickup_する_往復(self, session) -> None:
+    def test_drop_pickup_round_trips(self, session) -> None:
         """drop → pickup の往復で resolver / executor / inventory が整合する。"""
         runtime = session.runtime
         ada = _player_id(runtime, "ada")
@@ -303,7 +305,7 @@ class TestNameResolverMethodNames:
     """name_resolver の typo regression 防止。実験 #27 の `item_name` 同型バグを
     formatter ファイル全体で再発させない。"""
 
-    def test_全_formatter_で_name_resolver_の_存在する_method_だけ呼ぶ(self) -> None:
+    def test_calls_all_formatter_name_resolver_method(self) -> None:
         """formatter 群が `name_resolver.<method>(...)` で呼ぶ method 名が、
         実 `ObservationNameResolver` の public method として存在することを
         全件チェックする。
@@ -347,7 +349,7 @@ class TestNameResolverMethodNames:
             )
         )
 
-    def test_inv_aggregate_の_method_typo_regression(self) -> None:
+    def test_inv_aggregate_method_typo_regression(self) -> None:
         """executor が `inv.<method>(...)` で呼ぶ method 名が、実
         PlayerInventoryAggregate の public method (or property) として
         存在することを確認する。実験 #26 の `inv.slots` バグ同型を防ぐ。"""

@@ -194,7 +194,7 @@ class TestSqliteBeliefEvidenceFullFieldRoundtripContract:
             source_speaker="noah",
         )
 
-    def test_保存_読み出しで全フィールドが完全一致で戻る(self) -> None:
+    def test_all_round_trips_exactly(self) -> None:
         """append_by_being → close → reopen → list_all_by_being の往復で
         evidence が元と完全一致する。"""
         being_id = BeingId("being_w1_p1")
@@ -209,7 +209,7 @@ class TestSqliteBeliefEvidenceFullFieldRoundtripContract:
             restored = reopened.list_all_by_being(being_id)[0]
             assert restored == evidence
 
-    def test_replace_all_by_beingでも全フィールドが完全一致で戻る(self) -> None:
+    def test_replace_all_being_all_round_trips_exactly(self) -> None:
         """replace_all_by_being 経路でも evidence が元と完全一致する。"""
         being_id = BeingId("being_w1_p1")
         with tempfile.TemporaryDirectory() as tmp:

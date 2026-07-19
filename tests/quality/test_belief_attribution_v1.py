@@ -152,9 +152,10 @@ class TestBeliefAttributionV1:
     in_context_belief_ids による shortlist 強制搭載と prompt 構造を dump する。
     LLM は呼ばない (スタブ port)。"""
 
-    def test_in_context_belief_が_cueスコア0でも強制搭載され_CONFIRMATIONも同居する(
+    def test_context_belief_cue_zero_confirmation(
         self,
     ) -> None:
+        """in context belief が cueスコア0でも強制搭載され CONFIRMATIONも同居する。"""
         being_repo = InMemoryBeingRepository()
         resolver = BeingAttachmentResolver(being_repo)
         being_id = BeingProvisioningService(being_repo).ensure_attached(PlayerId(1))

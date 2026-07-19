@@ -62,7 +62,8 @@ def _make_interaction(condition_type, **kwargs) -> InteractionDef:
 class TestObjectStatePreconditionFailureHidesInteraction:
     """OBJECT_STATE が現在失敗 → interaction は隠す (= cockpit retry の停止)。"""
 
-    def test_OBJECT_STATE_が現在の値と一致しないなら_true(self) -> None:
+    def test_object_state_value_does_not_match_true(self) -> None:
+        """OBJECT STATE が現在の値と一致しないなら true。"""
         interior = _make_interior({"opened": True})
         interaction = _make_interaction(
             InteractionConditionTypeEnum.OBJECT_STATE,
@@ -71,7 +72,8 @@ class TestObjectStatePreconditionFailureHidesInteraction:
         )
         assert _has_failing_object_state_precondition(interaction, interior) is True
 
-    def test_OBJECT_STATE_が現在の値と一致するなら_false(self) -> None:
+    def test_object_state_value_matches_false(self) -> None:
+        """OBJECT STATE が現在の値と一致するなら false。"""
         interior = _make_interior({"opened": False})
         interaction = _make_interaction(
             InteractionConditionTypeEnum.OBJECT_STATE,
@@ -84,7 +86,8 @@ class TestObjectStatePreconditionFailureHidesInteraction:
 class TestNonObjectStateConditionsAreNotHidden:
     """HAS_ITEM / ALWAYS / FLAG_SET 等は OBJECT_STATE ではないので落とさない。"""
 
-    def test_HAS_ITEM_は_対象外_常に_false(self) -> None:
+    def test_has_item_target_false(self) -> None:
+        """HASITEM は対象外常に false。"""
         interior = _make_interior({})
         interaction = _make_interaction(
             InteractionConditionTypeEnum.HAS_ITEM,
@@ -94,7 +97,8 @@ class TestNonObjectStateConditionsAreNotHidden:
         # ここでは「OBJECT_STATE による永続失敗ではない」と判断 = false。
         assert _has_failing_object_state_precondition(interaction, interior) is False
 
-    def test_ALWAYS_は_対象外_常に_false(self) -> None:
+    def test_always_target_false(self) -> None:
+        """ALWAYS は対象外常に false。"""
         interior = _make_interior({})
         interaction = _make_interaction(InteractionConditionTypeEnum.ALWAYS)
         assert _has_failing_object_state_precondition(interaction, interior) is False
@@ -103,7 +107,8 @@ class TestNonObjectStateConditionsAreNotHidden:
 class TestEdgeCases:
     """target_object_id 無効 / required_state 空のときは hide しない (安全側)。"""
 
-    def test_target_object_id_未指定なら_false(self) -> None:
+    def test_target_object_id_unspecified_false(self) -> None:
+        """target object id 未指定なら false。"""
         interior = _make_interior({})
         interaction = _make_interaction(
             InteractionConditionTypeEnum.OBJECT_STATE,
@@ -112,7 +117,8 @@ class TestEdgeCases:
         )
         assert _has_failing_object_state_precondition(interaction, interior) is False
 
-    def test_対象_object_が_interior_に無いなら_false(self) -> None:
+    def test_target_object_interior_false(self) -> None:
+        """対象 object が interior に無いなら false。"""
         interior = _make_interior({})
         interaction = _make_interaction(
             InteractionConditionTypeEnum.OBJECT_STATE,

@@ -68,12 +68,12 @@ def _pid(value: int) -> PlayerId:
 class TestPromptBuilderLoopWarningPrefix:
     """直前ターンと同じ手を選ぼうとしているとき instruction 末尾に警告 prefix を載せる挙動を保証する。"""
 
-    def test_loop_guard_未注入なら_空文字(self) -> None:
+    def test_loop_guard_uninjected_empty_string(self) -> None:
         """tool_call_loop_guard=None なら警告 prefix は出ない (= 既存挙動)。"""
         builder = DefaultPromptBuilder(_make_core())
         assert builder._build_loop_warning_prefix(_pid(1)) == ""
 
-    def test_連続_1回目_では_空文字(self) -> None:
+    def test_one_empty_string(self) -> None:
         """直前と違う手なら警告は出さない (peek_streak が None を返す)。"""
         buf = DefaultObservationContextBuffer()
         guard = ToolCallLoopGuardService(buf)
@@ -81,7 +81,7 @@ class TestPromptBuilderLoopWarningPrefix:
         builder = DefaultPromptBuilder(_make_core(), tool_call_loop_guard=guard)
         assert builder._build_loop_warning_prefix(_pid(1)) == ""
 
-    def test_連続_2回目_でtool名と回数が_prefix_に含まれる(self) -> None:
+    def test_two_tool_count_prefix_included(self) -> None:
         """同じ tool + 同じ引数を 2 連続したら、prefix に tool 名と回数が乗る。"""
         buf = DefaultObservationContextBuffer()
         guard = ToolCallLoopGuardService(buf)
@@ -95,7 +95,7 @@ class TestPromptBuilderLoopWarningPrefix:
         # 「同じ手」「別の選択肢」など、行動を変えるよう促す語が含まれる
         assert "同じ" in prefix and "別" in prefix
 
-    def test_他プレイヤーのstreak_は混ざらない(self) -> None:
+    def test_other_player_streak(self) -> None:
         """player_id ごとに独立。別 player の streak が漏れて来ない。"""
         buf = DefaultObservationContextBuffer()
         guard = ToolCallLoopGuardService(buf)
@@ -105,6 +105,7 @@ class TestPromptBuilderLoopWarningPrefix:
         # player 2 はまだ何もしていない
         assert builder._build_loop_warning_prefix(_pid(2)) == ""
 
-    def test_型違いの_guard_を渡したら_TypeError(self) -> None:
+    def test_guard_raises_type_error(self) -> None:
+        """型違いの guard を渡したら TypeError。"""
         with pytest.raises(TypeError):
             DefaultPromptBuilder(_make_core(), tool_call_loop_guard="not a guard")  # type: ignore[arg-type]
