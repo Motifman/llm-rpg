@@ -44,6 +44,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
@@ -141,7 +142,7 @@ class TestAdapterWithResolver:
         assert "item_label" not in seen_args
 
     def test_resolver_llm_command_result_dto_raises_exception(self) -> None:
-        """resolver 例外は LlmCommandResultDto に変換。"""
+        """resolver 例外は名前指定の remediation を持つ LlmCommandResultDto に変換。"""
         def fake_executor(pid_int: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
             pytest.fail("resolver 失敗時に executor が呼ばれてはいけない")
 
@@ -156,9 +157,50 @@ class TestAdapterWithResolver:
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
         assert "I99" in result.message
-        # remediation は LLM が次のターンで何をすべきか示唆する
+        # remediation は現在プロンプトに出る「名前」を使うよう示唆する
         assert result.remediation
-        assert "I1" in result.remediation or "ラベル" in result.remediation
+        assert "所持アイテム" in result.remediation
+        assert "アイテム名" in result.remediation
+        assert "I1" not in result.remediation
+        assert "ラベル" not in result.remediation
+
+    @pytest.mark.parametrize(
+        ("tool_name", "expected_phrase", "forbidden_phrase"),
+        [
+            (TOOL_NAME_SPOT_GRAPH_USE_ITEM, "所持アイテム", "I1"),
+            (TOOL_NAME_SPOT_GRAPH_DROP_ITEM, "所持アイテム", "I1"),
+            (TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM, "地面に落ちているもの", "I1"),
+            (TOOL_NAME_SPOT_GRAPH_GIVE_ITEM, "相手の名前", "P1"),
+            (TOOL_NAME_SPOT_GRAPH_ATTACK, "モンスター名", "I1"),
+            (TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER, "倒れているプレイヤー", "P1"),
+        ],
+    )
+    def test_resolver_failure_remediation_matches_each_tool(
+        self,
+        tool_name: str,
+        expected_phrase: str,
+        forbidden_phrase: str,
+    ) -> None:
+        """resolver 汎用失敗でも、各 tool の対象種別に合う復帰ヒントを返す。"""
+        def fake_executor(pid_int: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+            pytest.fail("resolver 失敗時に executor が呼ばれてはいけない")
+
+        resolver = MagicMock()
+        resolver.resolve_args.side_effect = ToolArgumentResolutionException(
+            "指定された名前は現在の候補にありません: ghost",
+            "INVALID_TARGET_LABEL",
+        )
+        handler = _WorldLlmWiring._adapt_executor_handler_with_resolver(
+            fake_executor, tool_name, resolver,
+        )
+        result = handler(PlayerId(1), {"inner_thought": "t"}, _runtime_context({}))
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert result.remediation is not None
+        assert expected_phrase in result.remediation
+        assert forbidden_phrase not in result.remediation
+        assert "I1/I2" not in result.remediation
+        assert "ラベル" not in result.remediation
 
     def test_returns_resolver_dispatch_missing_returns_resolver_none_when(
         self,

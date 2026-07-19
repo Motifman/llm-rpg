@@ -96,8 +96,8 @@ class TestWorldRuntimeTravelBySpotName:
     def test_unknown_destination_returns_learnable_failure_dto(
         self, monkeypatch, tmp_path: Path
     ) -> None:
-        """ラベルにも display_name にもマッチしなければ INVALID_DESTINATION_LABEL
-        を返し、有効候補を message に列挙する (F1 学習可能性)。"""
+        """旧ラベルにも表示名にもマッチしなければ INVALID_DESTINATION_LABEL
+        を返し、現在プロンプトで指定すべき名前候補を message に列挙する。"""
         stub = StubLlmClient(
             tool_call_to_return={
                 "name": "travel_to",
@@ -110,8 +110,10 @@ class TestWorldRuntimeTravelBySpotName:
 
         assert result.success is False
         assert result.error_code == "INVALID_DESTINATION_LABEL"
-        # 有効候補が message に並ぶ
-        assert "S1" in result.message
+        # 有効候補は旧 S1 ではなく、現在プロンプトで指定するスポット名として並ぶ
+        assert '"閲覧室"' in result.message
+        assert "S1" not in result.message
         assert result.remediation is not None
-        # 新 remediation はラベル or スポット名どちらでも OK と案内する
+        # remediation はスポット名を指定するよう案内する
         assert "スポット名" in result.remediation
+        assert "S1" not in result.remediation

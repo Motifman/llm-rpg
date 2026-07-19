@@ -16,10 +16,10 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "INVALID_DESTINATION": "有効な移動先を選んでください。接続先スポット一覧を確認してください。",
     "GATEWAY_OBJECT_NOT_FOUND": "移動先のゲートウェイまたはオブジェクトを確認してください。",
     "GATEWAY_MONSTER_NOT_FOUND": "移動先のゲートウェイを確認してください。",
-    "INVALID_DESTINATION_LABEL": "現在の状況に表示されている移動先ラベルから選択してください。",
-    "INVALID_DESTINATION_KIND": "移動先として使えるラベルを選択してください。",
-    "INVALID_TARGET_LABEL": "現在の状況に表示されている対象ラベルから選択してください。",
-    "INVALID_TARGET_KIND": "そのラベルはこの操作には使えません。対象の種類を確認してください。",
+    "INVALID_DESTINATION_LABEL": "「現在の状況」の接続先に表示されているスポット名を destination_label に指定してください。矢印の左側の道や扉の名前ではなく、\"\" で囲まれた行き先名を使ってください。",
+    "INVALID_DESTINATION_KIND": "destination_label には移動先として使えるスポット名を指定してください。アイテム名・プレイヤー名・オブジェクト名は移動先には使えません。",
+    "INVALID_TARGET_LABEL": "「現在の状況」に表示されている対象の名前を指定してください。名前が \"\" で囲まれている場合は、その中身をそのまま引数に入れてください。",
+    "INVALID_TARGET_KIND": "指定した名前はこの操作の対象ではありません。ツール説明と「現在の状況」を確認し、オブジェクト名・所持アイテム名・その場に落ちているものの名前・プレイヤー名・モンスター名のうち、そのツールが要求する名前を指定してください。",
     "INTERACTION_INVALID": "相互作用できる距離や状態か確認し、別の対象を選んでください。",
     "INTERACTION_TARGET_NOT_FOUND": "対象オブジェクトがまだ見えているか確認してください。",
     "ITEM_NOT_FOUND": "指定されたアイテムがインベントリにないか、既に失われています。",
@@ -68,7 +68,7 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     # 対する remediation。LLM が result_summary の「対処:」欄を読んで
     # 次アクションを選べるよう、具体的な行動を書く。
     "GIVE_ITEM_TARGET_IS_SELF": "自分自身は指定できません。gives 配列の target_player_label に別のプレイヤー名を指定してください。",
-    "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT": "渡したい相手が同じ場所にいません。travel_to で相手のいる spot へ移動してから、または同じ場所にいる別の相手を選んでから再度渡してください。",
+    "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT": "渡したい相手が同じ場所にいません。先に相手のいる場所へ移動してから、または同じ場所にいる別の相手を選んでから再度渡してください。",
     "GIVE_ITEM_TARGET_INVENTORY_FULL": "相手のインベントリが満杯で受け取れません。相手が別アイテムを drop するのを待つか、別の相手に渡してください。",
     # PR-ε (Y_after_pr639_640 audit 後続): drop / pickup 系の頻発失敗を汎用
     # ITEM_TRANSFER_FAILED から分離し、LLM が次アクションを判断できる粒度に
