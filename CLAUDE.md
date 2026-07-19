@@ -100,6 +100,27 @@ per-Being scope の state を持つ store (= `BeingId` をキーに保持する 
 止めてくれる。1 を含めて完全に忘れた場合は構造で検出できないので、本
 checklist が最後の砦になる。
 
+## セットアップとテスト実行
+
+依存のインストール:
+
+```bash
+make install       # ランタイム依存
+make dev-install   # + pytest / pytest-cov (テスト実行に必要)
+```
+
+テストの実行 (このリポジトリは uv で回す):
+
+```bash
+uv run pytest                                      # 全テスト
+uv run pytest tests/domain/guild -v                # 一部だけ
+uv run pytest --cov=src --cov-report=term-missing  # カバレッジつき
+# マーカー: -m unit | integration | slow | asyncio
+```
+
+`make test` / `make test-cov` も同じ pytest を叩く薄いラッパーです。テスト駆動の
+進め方と「テストは仕様書」の書き方は後述の専用節を参照してください。
+
 ## アーキテクチャ
 
 `src/ai_rpg_world/` 配下にドメイン駆動設計 (DDD) のレイヤードアーキテクチャを採用しています。
