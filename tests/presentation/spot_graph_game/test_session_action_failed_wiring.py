@@ -116,6 +116,38 @@ class TestSessionActionFailedWiring:
         assert structured["tool_name"] == "travel_to"
         assert "intent_id" in structured
 
+    def test_action_failed_remediation_surfaces_in_next_prompt(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """ActionFailed の remediation は次ターンの直近の出来事として prompt に出る。"""
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": "travel_to",
+                "arguments": {"destination_label": "存在しない扉"},
+            }
+        )
+        state = _create_session_with_stub(monkeypatch, tmp_path, stub)
+        runtime = state.runtime
+        target_pid = runtime.get_player_ids()[0]
+
+        result = state.llm_wiring.run_turn(target_pid)
+        assert result.success is False
+        assert result.error_code == "INVALID_DESTINATION_LABEL"
+        assert result.remediation
+
+        prompt = runtime.build_full_prompt(target_pid)
+        user_content = "\n".join(
+            message.get("content", "")
+            for message in prompt.get("messages", [])
+            if message.get("role") == "user"
+        )
+
+        assert "【直近の出来事】" in user_content
+        assert "INVALID_DESTINATION_LABEL" in user_content
+        assert result.remediation in user_content
+
     def test_other_player_does_not_receive_action_failed_observation(
         self,
         monkeypatch: pytest.MonkeyPatch,
