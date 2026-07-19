@@ -76,6 +76,27 @@ class _FakeRuntime:
         return "day"
 
 
+class _RecordingTraceRecorder:
+    """trace recorder spy。record(kind, *, tick, player_id, **payload) を記録する。"""
+
+    def __init__(self) -> None:
+        self.records: List[dict] = []
+
+    def record(self, kind: str, *, tick=None, player_id=None, **payload):
+        self.records.append({"kind": kind, "tick": tick, "player_id": player_id, **payload})
+
+
+class _FakeRuntimeWithTrace(_FakeRuntime):
+    """_trace_recorder と current_tick を持つ runtime spy。"""
+
+    def __init__(self, recorder: List[str], trace_recorder) -> None:
+        super().__init__(recorder)
+        self._trace_recorder = trace_recorder
+
+    def current_tick(self):
+        return 7
+
+
 @dataclass
 class _RecordingHandler:
     """handle(event) 呼び出しを recorder に記録する side handler spy。fail=True で例外を投げる。"""
@@ -245,3 +266,48 @@ class TestRealHandlerImmediacy:
         publisher.publish(_make_revived_event(1))
 
         assert timer.is_pending(PlayerId(1)) is False
+
+
+class TestSideHandlerFailureTrace:
+    """side handler の失敗を SIDE_HANDLER_FAILED trace に落とす (観測。挙動は変えない)。"""
+
+    def test_failing_handler_records_side_handler_failed_trace(self) -> None:
+        """side handler が例外を投げると SIDE_HANDLER_FAILED trace が payload 付きで 1 件残る。"""
+        recorder: List[str] = []
+        tracer = _RecordingTraceRecorder()
+        publisher = PipelineEventPublisher(_FakeRuntimeWithTrace(recorder, tracer))
+        publisher.register_handler(_EventA, _RecordingHandler("boom", recorder, fail=True))
+
+        publisher.publish(_EventA())
+
+        # 観測は握った後も継続する (挙動不変)
+        assert recorder == ["boom", "obs"]
+        # 失敗が trace に 1 件残る
+        assert len(tracer.records) == 1
+        rec = tracer.records[0]
+        assert rec["kind"] == "side_handler_failed"
+        assert rec["handler"] == "_RecordingHandler"
+        assert rec["event_type"] == "_EventA"
+        assert rec["error_type"] == "RuntimeError"
+        assert rec["tick"] == 7
+
+    def test_no_trace_recorder_is_safe(self) -> None:
+        """_trace_recorder が無い構成でも、失敗時に crash せず pipeline は継続する。"""
+        recorder: List[str] = []
+        publisher = PipelineEventPublisher(_FakeRuntime(recorder))
+        publisher.register_handler(_EventA, _RecordingHandler("boom", recorder, fail=True))
+
+        publisher.publish(_EventA())
+
+        assert recorder == ["boom", "obs"]
+
+    def test_successful_handler_records_no_trace(self) -> None:
+        """成功した side handler では SIDE_HANDLER_FAILED trace は残らない。"""
+        recorder: List[str] = []
+        tracer = _RecordingTraceRecorder()
+        publisher = PipelineEventPublisher(_FakeRuntimeWithTrace(recorder, tracer))
+        publisher.register_handler(_EventA, _RecordingHandler("ok", recorder))
+
+        publisher.publish(_EventA())
+
+        assert tracer.records == []

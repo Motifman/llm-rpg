@@ -80,6 +80,40 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
         for event in events:
             self._dispatch(event)
 
+    def _record_side_handler_failure(self, handler: Any, event: DomainEvent, exc: Exception) -> None:
+        """side handler の失敗を trace event に落とす (best-effort、挙動は変えない)。
+
+        ``_trace_recorder`` が runtime に無い / まだ set されていない構成では
+        静かに no-op する。trace 記録自体の例外も握って pipeline を止めない
+        (観測のために足したものが本体を倒すのは本末転倒なので)。
+        """
+        recorder = getattr(self._runtime, "_trace_recorder", None)
+        if recorder is None:
+            return
+        try:
+            from ai_rpg_world.application.trace.events import TraceEventKind
+
+            tick_getter = getattr(self._runtime, "current_tick", None)
+            tick = tick_getter() if callable(tick_getter) else None
+            message = str(exc)
+            if len(message) > 500:
+                message = message[:500] + "…"
+            recorder.record(
+                TraceEventKind.SIDE_HANDLER_FAILED,
+                tick=getattr(tick, "value", tick),
+                handler=type(handler).__name__,
+                event_type=type(event).__name__,
+                error_type=type(exc).__name__,
+                error_message=message,
+                aggregate_type=getattr(event, "aggregate_type", None),
+            )
+        except Exception:
+            logger.warning(
+                "failed to record SIDE_HANDLER_FAILED trace for handler=%s event=%s",
+                type(handler).__name__, type(event).__name__,
+                exc_info=True,
+            )
+
     def _dispatch(self, event: DomainEvent) -> None:
         # Phase E-3: side handler を先に走らせる。observation pipeline より先に
         # registry mutation を済ませることで「player downed → DEAD outcome が
@@ -95,11 +129,15 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
                 continue
             try:
                 handler.handle(event)
-            except Exception:
+            except Exception as exc:
                 logger.exception(
                     "side handler %s failed on event %s — continuing pipeline",
                     type(handler).__name__, type(event).__name__,
                 )
+                # Stage 3X 前段 (観測): 握った失敗を trace にも残す。log だけだと
+                # 実 run の集計に乗らず、load-bearing な同期副作用の失敗頻度が
+                # 見えない。記録自体の失敗で pipeline を止めない (best-effort)。
+                self._record_side_handler_failure(handler, event, exc)
         items = self._runtime._obs_pipeline.run(event)
         if not items:
             return
