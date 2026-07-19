@@ -12,33 +12,65 @@
 
 「なぜこの形になっているか」を理解せずに変更すると過去に解決した問題が再発します。新しい判断を作ったら該当ファイルに追記してください。
 
-## ビルドと実行
+## 実験の進め方
+
+実験は `make experiment` を入口にします。実験条件を後から復元できるように、実験に意味を持つ設定は `data/experiment_profiles/*.json` または `EXPERIMENT_CONFIG` で渡す JSON に集約します。環境変数で実験フラグを直接渡さないでください。例外は `OPENAI_API_KEY` などの秘密情報だけです。
+
+### run 前に決めること
+
+- run id: `var/runs/...` に使う名前
+- run の型: 探索 / 観察 / 比較
+- profile: `belief_goal_full` / `ablation_base` / `smoke_stub`
+- scenario: profile 既定を使うか、`SCENARIO=...` で一時上書きするか
+- tick 数: profile 既定を使うか、`MAX_WORLD_TICKS=...` で短くするか
+- 見たい trace: 発火、効果判断に必要な値、未発火理由を確認できるか
+
+高コスト run の前には、必要に応じて `smoke_stub` や短い `MAX_WORLD_TICKS` で、profile 読み込み・fail-fast・trace 観測点だけを先に確認します。新しい実験機能を追加した PR では [docs/trace_observability_review.md](docs/trace_observability_review.md) を参照してください。
+
+### 標準コマンド
 
 ```bash
-# インストール
-pip install -e .          # もしくは make install / make dev-install
+# 普段の本命観察 run。profile 内の scenario / max_world_ticks を使う。
+make experiment EXPERIMENT_PROFILE=belief_goal_full OUT=var/runs/<run_id>
 
-# テスト
-pytest                                         # 全テスト
-pytest tests/domain/guild -v                   # 一部のみ
-pytest --cov=src --cov-report=term-missing     # カバレッジつき
-# マーカー: -m unit | integration | slow | asyncio
+# 実 LLM を呼ばず、低コストで profile / fail-fast / trace 配線を確認する。
+make experiment EXPERIMENT_PROFILE=smoke_stub OUT=/tmp/llm-rpg-smoke
 
-# バックエンドサーバ
-python -m ai_rpg_world.presentation.spot_graph_game.server   # ゲームサーバ (8080)
-AI_RPG_WORLD_GAME_DB=var/game/ai_rpg_world.db \
-  uv run python -m ai_rpg_world.presentation.web.server      # 観戦用 (8000)
-make web-demo-db          # 観戦用 DB を作る
-make web-demo-db-reset    # 作り直し
+# 比較土台。belief_goal_full から停滞 reasoning を落とした profile。
+make experiment EXPERIMENT_PROFILE=ablation_base OUT=var/runs/<run_id>
 
-# フロントエンド (React + Phaser)
-cd frontend && npm install --cache .npm-cache && npm run dev
+# scenario だけ一時的に変える。profile ファイル自体は書き換えない。
+make experiment EXPERIMENT_PROFILE=belief_goal_full \
+    SCENARIO=data/scenarios/survival_island_v3_coop.json \
+    OUT=var/runs/<run_id>
 
-# 実験 (snapshot による途中再開を統合)
-make experiment-with-snapshot SCENARIO=data/scenarios/decay_demo.json OUT=var/runs/exp1
-make experiment-resume SCENARIO=data/scenarios/decay_demo.json \
-    OUT=var/runs/exp2 SNAPSHOT_LOAD_DIR=var/runs/exp1/snapshots
+# tick 数だけ短くして低コスト確認する。
+make experiment EXPERIMENT_PROFILE=belief_goal_full \
+    MAX_WORLD_TICKS=5 \
+    OUT=var/runs/<run_id>
+
+# profile ではなく、明示した実験設定 JSON を使う。
+make experiment EXPERIMENT_PROFILE= EXPERIMENT_CONFIG=path/to/experiment.json \
+    OUT=var/runs/<run_id>
+
+# snapshot を保存して、別 run で再開する。
+make experiment-with-snapshot EXPERIMENT_PROFILE=belief_goal_full OUT=var/runs/<run_id>
+make experiment-resume EXPERIMENT_PROFILE=belief_goal_full \
+    OUT=var/runs/<run_id>_resume \
+    SNAPSHOT_LOAD_DIR=var/runs/<run_id>/snapshots
 ```
+
+### run 後に確認すること
+
+`OUT` 配下に少なくとも次が残ります。
+
+- `experiment.config.source.json`: 入力した profile/config
+- `experiment.config.resolved.json`: 解決済み設定、起動引数、scenario hash、git 情報
+- `trace.jsonl`: 分析対象の trace
+- `report.md`: run の概要
+- `trace.html`: trace の閲覧用 HTML
+
+run 後はまず `experiment.config.resolved.json` を見て、意図した profile、scenario、tick 数、git commit で動いたことを確認します。次に、run 前に決めた「見たい trace」が `trace.jsonl` に出ているかを確認します。観測点が出ていない run は、効果測定に使わず原因を切り分けます。
 
 ### Snapshot と途中再開 (Issue #470)
 
