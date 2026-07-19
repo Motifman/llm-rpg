@@ -21,6 +21,7 @@ from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
     GOAL_STATUS_ACTIVE,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from tests.runtime_config_helpers import episodic_config, runtime_config
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -46,16 +47,16 @@ class TestWorldRuntimeGoalStoreWiring:
     def test_flag_off_keeps_static_objective_and_no_store(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.delenv("GOAL_STORE_ENABLED", raising=False)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=runtime_config())
         assert runtime._goal_journal_store is None
 
     def test_flag_on_builds_store_and_seeds_locked_scenario_goal(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("GOAL_STORE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=episodic_config(goal_store_enabled=True),
+        )
         assert runtime._goal_journal_store is not None
 
         scenario_text = runtime._resolve_scenario_llm_objective_text()
@@ -78,9 +79,10 @@ class TestWorldRuntimeGoalStoreWiring:
 
     def test_seed_is_idempotent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """2 回描画しても seed は 1 件だけ (get_active が既存を返す)。"""
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("GOAL_STORE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=episodic_config(goal_store_enabled=True),
+        )
         scenario_text = runtime._resolve_scenario_llm_objective_text()
         player_id = PlayerId(1)
 
@@ -106,9 +108,10 @@ class TestWorldRuntimeGoalStoreLongScenarioText:
     def test_survival_island_v2_objective_renders_full_text_with_goal_store_on(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("GOAL_STORE_ENABLED", "1")
-        runtime = create_world_runtime(_SURVIVAL_V2_PATH)
+        runtime = create_world_runtime(
+            _SURVIVAL_V2_PATH,
+            config=episodic_config(goal_store_enabled=True),
+        )
         player_id = runtime.get_player_ids()[0]
         scenario_text = runtime._resolve_scenario_llm_objective_text()
         assert len(scenario_text) > 200  # 旧上限を超える実データであることの前提確認
@@ -146,10 +149,13 @@ class TestWorldRuntimeGoalLockedByHasGoal:
         outcome_resolution_config の有無を含めて判定することで、locked=True
         (従来どおり goal_update / goal_outcome を拒否) を維持する。
         """
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("GOAL_STORE_ENABLED", "1")
-        monkeypatch.setenv("GOAL_REVISION_ENABLED", "1")
-        runtime = create_world_runtime(_SURVIVAL_V2_PATH)
+        runtime = create_world_runtime(
+            _SURVIVAL_V2_PATH,
+            config=episodic_config(
+                goal_store_enabled=True,
+                goal_revision_enabled=True,
+            ),
+        )
         # v2 は win/lose 配列が空 (outcome_resolution 駆動) であることの前提確認。
         assert runtime.scenario.win_conditions == ()
         assert runtime.scenario.lose_conditions == ()
@@ -180,10 +186,13 @@ class TestWorldRuntimeGoalLockedByHasGoal:
         goal_update (言い直し / P6) と goal_outcome のみでの清算 (無目的に戻り
         「(まだ定まっていない)」描画 / P8) の両方が初めて実効的に通る。
         """
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("GOAL_STORE_ENABLED", "1")
-        monkeypatch.setenv("GOAL_REVISION_ENABLED", "1")
-        runtime = create_world_runtime(_PERSISTENT_WORLD_PATH)
+        runtime = create_world_runtime(
+            _PERSISTENT_WORLD_PATH,
+            config=episodic_config(
+                goal_store_enabled=True,
+                goal_revision_enabled=True,
+            ),
+        )
         assert runtime.scenario.win_conditions == ()
         assert runtime.scenario.lose_conditions == ()
         assert runtime.scenario.outcome_resolution_config is None

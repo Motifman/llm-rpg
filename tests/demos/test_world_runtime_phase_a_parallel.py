@@ -1,6 +1,6 @@
 """Phase A 並列化 (#346 Step 1) の挙動検証。
 
-env LLM_TURN_PARALLEL_WORKERS が 0 / 未設定なら従来の serial 経路。
+``LLM_TURN_PARALLEL_WORKERS`` が config で 0 / 未設定なら従来の serial 経路。
 2 以上なら ThreadPoolExecutor で LLM 呼び出しを並列化する。
 
 並列化後でも:
@@ -17,12 +17,11 @@ import time
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
+)
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
-    _resolve_llm_parallel_workers,
-    _LLM_PARALLEL_WORKERS_ENV,
-)
 
 
 SCENARIO_PATH = (
@@ -34,28 +33,40 @@ SCENARIO_PATH = (
 
 
 class TestResolveLlmParallelWorkers:
-    """env の解釈が安全であること。"""
+    """config の解釈が安全であること。"""
 
-    def test_env_未設定なら_default_を返す(self, monkeypatch) -> None:
-        monkeypatch.delenv(_LLM_PARALLEL_WORKERS_ENV, raising=False)
-        assert _resolve_llm_parallel_workers(default=0) == 0
-        assert _resolve_llm_parallel_workers(default=4) == 4
+    def test_未設定なら_0(self) -> None:
+        """未設定なら serial 経路を使う。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
+        assert cfg.llm_turn_parallel_workers == 0
 
-    def test_env_が_正の整数なら_その値(self, monkeypatch) -> None:
-        monkeypatch.setenv(_LLM_PARALLEL_WORKERS_ENV, "4")
-        assert _resolve_llm_parallel_workers() == 4
+    def test_config_が_正の整数なら_その値(self) -> None:
+        """正の整数ならその worker 数を使う。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            values={"LLM_TURN_PARALLEL_WORKERS": "4"}
+        )
+        assert cfg.llm_turn_parallel_workers == 4
 
-    def test_env_が_0_なら_0(self, monkeypatch) -> None:
-        monkeypatch.setenv(_LLM_PARALLEL_WORKERS_ENV, "0")
-        assert _resolve_llm_parallel_workers() == 0
+    def test_config_が_0_なら_0(self) -> None:
+        """0 は明示的な serial 指定として受け付ける。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            values={"LLM_TURN_PARALLEL_WORKERS": "0"}
+        )
+        assert cfg.llm_turn_parallel_workers == 0
 
-    def test_env_が_負値_なら_0(self, monkeypatch) -> None:
-        monkeypatch.setenv(_LLM_PARALLEL_WORKERS_ENV, "-3")
-        assert _resolve_llm_parallel_workers() == 0
+    def test_config_が_負値なら_ValueError(self) -> None:
+        """負値は既定値縮退ではなく profile ミスとして止める。"""
+        with pytest.raises(ValueError, match="LLM_TURN_PARALLEL_WORKERS"):
+            ResolvedLlmRuntimeConfig.from_mapping(
+                values={"LLM_TURN_PARALLEL_WORKERS": "-3"}
+            )
 
-    def test_env_が_不正値なら_default(self, monkeypatch) -> None:
-        monkeypatch.setenv(_LLM_PARALLEL_WORKERS_ENV, "not-a-number")
-        assert _resolve_llm_parallel_workers(default=2) == 2
+    def test_config_が_不正値なら_ValueError(self) -> None:
+        """非整数も fail-fast する。"""
+        with pytest.raises(ValueError, match="LLM_TURN_PARALLEL_WORKERS"):
+            ResolvedLlmRuntimeConfig.from_mapping(
+                values={"LLM_TURN_PARALLEL_WORKERS": "not-a-number"}
+            )
 
 
 class TestPhaseAParallelExecution:

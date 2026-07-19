@@ -25,19 +25,18 @@ from pathlib import Path
 
 import pytest
 
+from tests.runtime_config_helpers import episodic_config, runtime_config
+
 
 _SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 
 
-def _build_runtime(monkeypatch: pytest.MonkeyPatch, scenario_name: str, *, enabled: bool):
-    """env を設定して指定シナリオで runtime を作る。"""
-    if enabled:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    else:
-        monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
+def _build_runtime(scenario_name: str, *, enabled: bool):
+    """config を明示して指定シナリオで runtime を作る。"""
     from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-    return create_world_runtime(_SCENARIOS_DIR / scenario_name)
+    config = episodic_config() if enabled else runtime_config()
+    return create_world_runtime(_SCENARIOS_DIR / scenario_name, config=config)
 
 
 class TestSurvivalIslandV1EpisodicWiring:
@@ -48,13 +47,13 @@ class TestSurvivalIslandV1EpisodicWiring:
     def test_env_未設定なら_stack_は_None(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        runtime = _build_runtime(monkeypatch, self.SCENARIO, enabled=False)
+        runtime = _build_runtime(self.SCENARIO, enabled=False)
         assert runtime._episodic_stack is None
 
     def test_env_1_で_stack_が組み立てられる(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        runtime = _build_runtime(monkeypatch, self.SCENARIO, enabled=True)
+        runtime = _build_runtime(self.SCENARIO, enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
         # 4 要素が揃う
@@ -67,7 +66,7 @@ class TestSurvivalIslandV1EpisodicWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """survival_island.json の player_spawns から character cue が立つ。"""
-        runtime = _build_runtime(monkeypatch, self.SCENARIO, enabled=True)
+        runtime = _build_runtime(self.SCENARIO, enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
         # 各 player 名で matcher を試す
@@ -89,7 +88,7 @@ class TestSurvivalIslandV1EpisodicWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """エピソード stack 配線下でも survival シナリオの動作が壊れない。"""
-        runtime = _build_runtime(monkeypatch, self.SCENARIO, enabled=True)
+        runtime = _build_runtime(self.SCENARIO, enabled=True)
         player_ids = runtime.get_player_ids()
         assert len(player_ids) > 0
         # 最小限の動作確認: wait を 1 回 (chunk close まで踏まないので safe)
@@ -104,13 +103,13 @@ class TestSurvivalIslandV2EpisodicWiring:
     def test_env_未設定なら_stack_は_None(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        runtime = _build_runtime(monkeypatch, self.SCENARIO, enabled=False)
+        runtime = _build_runtime(self.SCENARIO, enabled=False)
         assert runtime._episodic_stack is None
 
     def test_env_1_で_stack_が組み立てられる(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        runtime = _build_runtime(monkeypatch, self.SCENARIO, enabled=True)
+        runtime = _build_runtime(self.SCENARIO, enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
         assert stack.chunk_coordinator is not None
@@ -122,7 +121,7 @@ class TestSurvivalIslandV2EpisodicWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """survival_island_v2.json の spots (25 件) から place_spot cue が立つ。"""
-        runtime = _build_runtime(monkeypatch, self.SCENARIO, enabled=True)
+        runtime = _build_runtime(self.SCENARIO, enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
         # 任意の player が今いる spot 名で matcher を試す
@@ -144,7 +143,7 @@ class TestSurvivalIslandV2EpisodicWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """survival_island_v2 は 4 ペルソナ構成。全員 entity として認識される。"""
-        runtime = _build_runtime(monkeypatch, self.SCENARIO, enabled=True)
+        runtime = _build_runtime(self.SCENARIO, enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
         recognized_count = 0

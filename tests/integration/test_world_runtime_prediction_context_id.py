@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from tests.runtime_config_helpers import runtime_config
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -27,14 +28,12 @@ _SCENARIO_PATH = (
 )
 
 
-@pytest.fixture(autouse=True)
-def _enable_prediction_context_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PREDICTION_CONTEXT_ID_ENABLED", "1")
-
-
 class TestWorldRuntimePredictionContextIdWiring:
     def test_build_full_prompt_の直後の_do_wait_で_id_が_consume_される(self) -> None:
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=runtime_config(prediction_context_id_enabled=True),
+        )
         player_id = runtime.get_player_ids()[0]
 
         prompt = runtime.build_full_prompt(player_id)
@@ -59,7 +58,10 @@ class TestWorldRuntimePredictionContextIdWiring:
     def test_build_を挟まず_do_wait_だけを呼ぶと_id_は_None(self) -> None:
         """id は build 経由でしか発行されない。build を経ない action 記録は
         引き続き None (= 既存挙動と同じ)。"""
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=runtime_config(prediction_context_id_enabled=True),
+        )
         player_id = runtime.get_player_ids()[0]
 
         runtime.do_wait(player_id)
@@ -71,7 +73,10 @@ class TestWorldRuntimePredictionContextIdWiring:
     def test_build_だけ呼んで_record_されないと次の_build_で破棄される(self) -> None:
         """no-tool ターン相当: build だけ 2 回連続で呼ぶと 1 回目の id は
         consume されないまま破棄される。"""
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=runtime_config(prediction_context_id_enabled=True),
+        )
         player_id = runtime.get_player_ids()[0]
 
         first = runtime.build_full_prompt(player_id)["prediction_context_id"]
@@ -87,8 +92,7 @@ class TestPredictionContextIdDisabledByDefault:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """共通規約 §0: 新機構は明示的に有効化しない限り動かさない。"""
-        monkeypatch.delenv("PREDICTION_CONTEXT_ID_ENABLED", raising=False)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=runtime_config())
         player_id = runtime.get_player_ids()[0]
 
         assert runtime._get_prediction_context_ledger() is None

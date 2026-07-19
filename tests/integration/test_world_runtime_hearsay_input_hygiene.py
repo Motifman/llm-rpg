@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from tests.runtime_config_helpers import episodic_config
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -38,11 +39,11 @@ class TestHearsayFoldedIntoBeliefEvidence:
         抽出を有効化しない = 「誘うのに黙って捨てる」静かな失敗を作らない。
         併せて、config ミスに気付けるよう WARNING ログを出す。
         """
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("HEARSAY_ENABLED", "1")
-        monkeypatch.delenv("BELIEF_EVIDENCE_ENABLED", raising=False)
         with caplog.at_level(logging.WARNING):
-            runtime = create_world_runtime(_SCENARIO_PATH)
+            runtime = create_world_runtime(
+                _SCENARIO_PATH,
+                config=episodic_config(hearsay_enabled=True),
+            )
         assert runtime._hearsay_enabled is False
         assert any(
             "HEARSAY_ENABLED" in r.message and "BELIEF_EVIDENCE_ENABLED" in r.message
@@ -52,10 +53,13 @@ class TestHearsayFoldedIntoBeliefEvidence:
     def test_hearsay_on_かつ_belief_evidence_on_なら実効onになる(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("HEARSAY_ENABLED", "1")
-        monkeypatch.setenv("BELIEF_EVIDENCE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=episodic_config(
+                hearsay_enabled=True,
+                belief_evidence_enabled=True,
+            ),
+        )
         assert runtime._hearsay_enabled is True
 
     def test_hearsay_未設定なら_belief_evidence_onでも実効offのまま(
@@ -65,19 +69,16 @@ class TestHearsayFoldedIntoBeliefEvidence:
 
         が ON でも HEARSAY は ON にならない (畳み込みは「要求を弱める」方向のみ)。
         """
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.delenv("HEARSAY_ENABLED", raising=False)
-        monkeypatch.setenv("BELIEF_EVIDENCE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=episodic_config(belief_evidence_enabled=True),
+        )
         assert runtime._hearsay_enabled is False
 
     def test_両方offなら実効offで警告も出ない(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.delenv("HEARSAY_ENABLED", raising=False)
-        monkeypatch.delenv("BELIEF_EVIDENCE_ENABLED", raising=False)
         with caplog.at_level(logging.WARNING):
-            runtime = create_world_runtime(_SCENARIO_PATH)
+            runtime = create_world_runtime(_SCENARIO_PATH, config=episodic_config())
         assert runtime._hearsay_enabled is False
         assert not any("HEARSAY_ENABLED" in r.message for r in caplog.records)

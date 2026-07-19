@@ -24,6 +24,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
     SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from tests.runtime_config_helpers import episodic_config, runtime_config
 
 
 _SCENARIO_PATH = (
@@ -34,12 +35,12 @@ _SCENARIO_PATH = (
 )
 
 
-def _build_runtime(monkeypatch: pytest.MonkeyPatch):
+def _build_runtime(config=None):
     from ai_rpg_world.application.world_runtime.world_runtime import (
         create_world_runtime,
     )
 
-    return create_world_runtime(_SCENARIO_PATH)
+    return create_world_runtime(_SCENARIO_PATH, config=config or runtime_config())
 
 
 def _resolve_player_id(runtime, name: str) -> PlayerId:
@@ -53,10 +54,7 @@ class TestWorldRuntimeSemanticFlagOff:
     """フラグ未設定なら従来どおり semantic は配線されない (後方互換)。"""
 
     def test_semantic_absent_when_flags_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.delenv("SEMANTIC_PASSIVE_TOP_K", raising=False)
-        monkeypatch.delenv("SEMANTIC_LLM_GIST_ENABLED", raising=False)
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime(episodic_config())
         stack = runtime._episodic_stack
         assert stack is not None
         assert stack.semantic_passive_recall is None
@@ -70,10 +68,7 @@ class TestWorldRuntimeSemanticFlagOn:
 
     def test_semantic_wired_when_top_k_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """フラグ ON で passive recall / promotion / store が配線される。"""
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("SEMANTIC_PASSIVE_TOP_K", "3")
-        monkeypatch.delenv("SEMANTIC_LLM_GIST_ENABLED", raising=False)
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime(episodic_config(semantic_passive_top_k=3))
         stack = runtime._episodic_stack
         assert stack is not None
         assert stack.semantic_passive_recall is not None
@@ -87,12 +82,10 @@ class TestWorldRuntimeSemanticFlagOn:
     ) -> None:
         """semantic store にある学びが【関連する学び】section に戻る
         (= white-box 注入なしでループの「学び→次の予測」が閉じる)。"""
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("SEMANTIC_PASSIVE_TOP_K", "3")
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime(episodic_config(semantic_passive_top_k=3))
         rin_id = _resolve_player_id(runtime, "リン")
-        being = runtime._aux_being_resolver.resolve_being_id(
-            runtime._aux_being_default_world_id, rin_id
+        being = runtime.aux_being_resolver.resolve_being_id(
+            runtime.aux_being_default_world_id, rin_id
         )
         assert being is not None
         runtime._episodic_stack.semantic_memory_store.add_by_being(
@@ -127,9 +120,7 @@ class TestWorldRuntimeSemanticFlagOn:
         昇格ゲート (recall_count>=3) を誰も超えられず、学びが 1 件も生まれない
         (全機能 ON 実験 memory_full_002 で発覚した静かな失敗)。
         """
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("SEMANTIC_PASSIVE_TOP_K", "3")
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime(episodic_config(semantic_passive_top_k=3))
         stack = runtime._episodic_stack
         assert stack.link_service is not None
         builder = runtime._get_or_build_default_prompt_builder()
@@ -140,9 +131,7 @@ class TestWorldRuntimeSemanticFlagOn:
     ) -> None:
         """semantic ON では昇格根拠の memory_link_store も公開される
         (semantic entries だけ保存され link graph が空 fallback になるのを防ぐ)。"""
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("SEMANTIC_PASSIVE_TOP_K", "3")
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime(episodic_config(semantic_passive_top_k=3))
         assert runtime._episodic_stack.memory_link_store is not None
         # snapshot stub が semantic store と memory_link_store の両方を拾う
         from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
@@ -153,38 +142,26 @@ class TestWorldRuntimeSemanticFlagOn:
 
 
 class TestWorldRuntimeSemanticConfigWins:
-    """create_world_runtime(config=...) の semantic 設定が env に勝つ
-    (HIGH: silent config drift 防止)。短期記憶 (TestConfigInjection) と同じ契約。"""
-
-    def _cfg(self, **overrides):
-        from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
-            ResolvedLlmRuntimeConfig,
-        )
-
-        return ResolvedLlmRuntimeConfig.for_tests(**overrides)
+    """create_world_runtime(config=...) が semantic 設定の単一入口になる。"""
 
     def test_config_on_beats_env_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """env で semantic OFF でも config で top_k=3 なら配線される。"""
+        """config で top_k=3 なら semantic が配線される。"""
         from ai_rpg_world.application.world_runtime.world_runtime import (
             create_world_runtime,
         )
 
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.delenv("SEMANTIC_PASSIVE_TOP_K", raising=False)
-        cfg = self._cfg(episodic_enabled=True, semantic_passive_top_k=3)
+        cfg = episodic_config(semantic_passive_top_k=3)
         runtime = create_world_runtime(_SCENARIO_PATH, config=cfg)
         assert runtime._episodic_stack.semantic_passive_top_k == 3
         assert runtime._episodic_stack.semantic_passive_recall is not None
 
     def test_config_off_beats_env_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """env で semantic ON でも config で top_k=0 なら配線されない。"""
+        """config で top_k=0 なら semantic は配線されない。"""
         from ai_rpg_world.application.world_runtime.world_runtime import (
             create_world_runtime,
         )
 
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("SEMANTIC_PASSIVE_TOP_K", "5")
-        cfg = self._cfg(episodic_enabled=True, semantic_passive_top_k=0)
+        cfg = episodic_config(semantic_passive_top_k=0)
         runtime = create_world_runtime(_SCENARIO_PATH, config=cfg)
         assert runtime._episodic_stack.semantic_passive_top_k == 0
         assert runtime._episodic_stack.semantic_passive_recall is None
@@ -193,13 +170,6 @@ class TestWorldRuntimeSemanticConfigWins:
 class TestWorldRuntimeReinterpretationSnapshotSurface:
     """U3/#558 MEDIUM-2: reinterpretation ON のとき snapshot stub が journal を拾う
     (= save/load で再解釈 journal を silent に失わない / 自己の継続性)。"""
-
-    def _cfg(self, **overrides):
-        from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
-            ResolvedLlmRuntimeConfig,
-        )
-
-        return ResolvedLlmRuntimeConfig.for_tests(**overrides)
 
     def test_stub_exposes_reinterpretation_journal_when_on(
         self, monkeypatch: pytest.MonkeyPatch
@@ -210,8 +180,7 @@ class TestWorldRuntimeReinterpretationSnapshotSurface:
         )
         from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
 
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        cfg = self._cfg(episodic_enabled=True, episodic_reinterpretation_enabled=True)
+        cfg = episodic_config(episodic_reinterpretation_enabled=True)
         runtime = create_world_runtime(_SCENARIO_PATH, config=cfg)
         assert runtime._episodic_stack.reinterpretation_journal is not None
 
@@ -232,8 +201,7 @@ class TestWorldRuntimeReinterpretationSnapshotSurface:
         )
         from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
 
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        cfg = self._cfg(episodic_enabled=True)
+        cfg = episodic_config()
         runtime = create_world_runtime(_SCENARIO_PATH, config=cfg)
         stub = _wiring_stub_from_world_runtime(runtime)
         assert stub.episodic_reinterpretation_journal_store is None
