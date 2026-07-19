@@ -3994,9 +3994,10 @@ def create_world_runtime(
     # 旧 alias も後方互換で生きているが、application 層から直接 import する。
     # #558 MEDIUM-1 後続: 親 gate を env 直読み (is_episodic_enabled) から
     # config.episodic_enabled に寄せ、ResolvedLlmRuntimeConfig 単一窓口に揃えた。
-    # config=None のときは from_mapping() が LLM_EPISODIC_ENABLED を読むので、env で
-    # 立てる experiment 経路は不変。explicit config を渡すと env でなく config が
-    # 効くため「同 env を 2 経路で別解釈する」silent failure を構造で防げる。
+    # config=None のときは from_mapping() が空 mapping を解決する (= env は読まず
+    # 全 default = episodic OFF)。実験経路 (run_scenario_experiment.py) は profile
+    # から明示 config を組んで渡すため env に依存しない。explicit config が effect
+    # するので「同 env を 2 経路で別解釈する」silent failure を構造で防げる。
     from ai_rpg_world.application.llm.wiring.episodic_stack import (
         build_episodic_stack,
     )
@@ -4754,6 +4755,11 @@ def create_world_runtime(
             episodic_promotion_expansion_hops=(
                 config.episodic_promotion_expansion_hops
             ),
+            # episode store の永続化先。subjective 経路は shared_episode_store を
+            # 先に組んで渡すため resolve_default はそれを尊重する (db_path 未使用)。
+            # config の __post_init__ が「db_path + subjective」の無視組み合わせを
+            # fail-fast 済みなので、ここに来る db_path は非 subjective 経路のみ。
+            subjective_episode_db_path=config.subjective_episode_db_path,
         )
 
         # U9a: recall_buffer を scheduler に後から差し込む。

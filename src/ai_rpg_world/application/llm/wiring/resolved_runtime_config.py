@@ -110,6 +110,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "STAGNATION_PRESSURE_ENABLED",
     "STAGNATION_REASONING_ENABLED",
     "STATE_COLLAPSE_EVIDENCE_ENABLED",
+    "SUBJECTIVE_EPISODE_DB_PATH",
     "UNCONSCIOUS_CONTEXT_ENABLED",
 })
 
@@ -278,6 +279,13 @@ class ResolvedLlmRuntimeConfig:
     escape_llm_ssot_enabled: bool = False
     scenario_random_seed: Optional[int] = None
 
+    # Episode store の永続化先 (``SUBJECTIVE_EPISODE_DB_PATH``)。None なら in-memory。
+    # 実 path 指定時は SQLite 永続化。従来 ``_default_episodic_episode_store`` が
+    # os.environ を直読みしており profile/manifest の外で決まっていた
+    # (PR #736 の単一窓口化で取り残されていた env)。config に載せ替えて
+    # 解決経路を from_mapping の 1 本に固定し、run_start / manifest に残す。
+    subjective_episode_db_path: Optional[str] = None
+
     # ──────────────────────────────────────────────────────────────
     # Invariants
     # ──────────────────────────────────────────────────────────────
@@ -332,6 +340,25 @@ class ResolvedLlmRuntimeConfig:
                 "STAGNATION_PRESSURE_ENABLED=1 / "
                 "STAGNATION_REASONING_ENABLED=1 require LLM_EPISODIC_ENABLED=1"
             )
+        # SUBJECTIVE_EPISODE_DB_PATH は episode store が組まれる経路でしか意味を
+        # 持たない。episodic OFF では store 自体を作らず、subjective 経路は
+        # (scheduler と共有する都合で) 常に in-memory を使うため、どちらの場合も
+        # path 指定は静かに無視される。従来 env 直読み時代からの silent failure
+        # なので、無視になる組み合わせは fail-fast で落とす。
+        if self.subjective_episode_db_path:
+            if not self.episodic_enabled:
+                raise ValueError(
+                    "SUBJECTIVE_EPISODE_DB_PATH requires LLM_EPISODIC_ENABLED=1 "
+                    "(episodic OFF では episode store を組まないため path が無視される)"
+                )
+            if self.episodic_subjective_enabled:
+                raise ValueError(
+                    "SUBJECTIVE_EPISODE_DB_PATH is not supported with "
+                    "LLM_EPISODIC_SUBJECTIVE_ENABLED=1 "
+                    "(subjective 経路は in-memory episode store 固定なので path が"
+                    "無視される)。永続化が要るなら subjective を OFF にするか "
+                    "snapshot を使う"
+                )
 
     # ──────────────────────────────────────────────────────────────
     # Construction
@@ -527,6 +554,9 @@ class ResolvedLlmRuntimeConfig:
             source.get("ESCAPE_LLM_SSOT"), default=False
         )
         scenario_random_seed = _resolve_optional_int(source, "SCENARIO_RANDOM_SEED")
+        subjective_episode_db_path = _strip_or_none(
+            source.get("SUBJECTIVE_EPISODE_DB_PATH")
+        )
 
         return cls(
             short_term_memory_kind=short_term_memory_kind,
@@ -590,6 +620,7 @@ class ResolvedLlmRuntimeConfig:
             tool_mode=tool_mode,
             escape_llm_ssot_enabled=escape_llm_ssot_enabled,
             scenario_random_seed=scenario_random_seed,
+            subjective_episode_db_path=subjective_episode_db_path,
         )
 
     @classmethod
@@ -673,6 +704,7 @@ class ResolvedLlmRuntimeConfig:
             tool_mode="default",
             escape_llm_ssot_enabled=False,
             scenario_random_seed=None,
+            subjective_episode_db_path=None,
         )
         unknown = set(overrides) - set(defaults)
         if unknown:
