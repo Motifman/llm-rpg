@@ -47,6 +47,9 @@ class _FakeLlmClient:
                 tps=34.0,
                 success=True,
                 error_code=None,
+                error_detail="",
+                reasoning_effort="low",
+                tool_choice="required",
             ))
         return {"name": "wait", "arguments": {"reason": "test"}}
 
@@ -87,6 +90,11 @@ class TestPhaseAMetricsSink:
         # 案A の効果測定用: reasoning_tokens は metrics から trace payload へ
         # 転記されていなければ「どれだけ熟考したか」を事後計算できない。
         assert payload["reasoning_tokens"] == 17
+        # 失敗観測性: error_detail / reasoning_effort / tool_choice も trace に載る
+        # (失敗の原因と、熟考ターンか通常ターンかを trace だけで診断できるように)。
+        assert payload["error_detail"] == ""
+        assert payload["reasoning_effort"] == "low"
+        assert payload["tool_choice"] == "required"
 
     def test_tick_は_sink_record_時点で_取得される(
         self, monkeypatch, tmp_path: Path

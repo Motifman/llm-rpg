@@ -517,6 +517,48 @@ class TestLiteLLMClientInvokeExceptions:
         assert exc_info.value.cause is not None
         assert isinstance(exc_info.value.cause, RuntimeError)
 
+    def test_失敗時のmetricsにerror_detailとreasoning_effortが載る(self, client):
+        """API 失敗時、sink に流す metrics に例外本文 (error_detail) と、その呼び出しで
+        指定した reasoning_effort / tool_choice が載る。
+
+        実 run v3coop_stagnation_002 で「Thinking mode does not support this tool_choice」
+        という provider 400 本文がログにしか残らず trace から診断できなかった穴を塞ぐ。
+        """
+        sink = _RecordingSink()
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.side_effect = RuntimeError(
+                "Thinking mode does not support this tool_choice"
+            )
+            with pytest.raises(LlmApiCallException):
+                client.invoke(
+                    messages=[], tools=[], tool_choice="required",
+                    metrics_sink=sink, reasoning_effort="low",
+                )
+        assert len(sink.records) == 1
+        m = sink.records[0]
+        assert m.success is False
+        assert m.error_code == "LLM_API_CALL_FAILED"
+        assert "Thinking mode does not support this tool_choice" in m.error_detail
+        assert m.reasoning_effort == "low"
+        assert m.tool_choice == "required"
+
+    def test_成功時のmetricsにもreasoning_effortとtool_choiceが載る(self, client):
+        """成功時も、その呼び出しの reasoning_effort / tool_choice を metrics に残す
+        (熟考ターンか通常ターンかを trace で区別できるようにする)。error_detail は空。"""
+        sink = _RecordingSink()
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("wait", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}], tools=[],
+                tool_choice="required", metrics_sink=sink, reasoning_effort="low",
+            )
+        assert len(sink.records) == 1
+        m = sink.records[0]
+        assert m.success is True
+        assert m.error_detail == ""
+        assert m.reasoning_effort == "low"
+        assert m.tool_choice == "required"
+
 
 class TestLiteLLMClientJsonCompletion:
     """tools なし JSON completion のパース境界。"""
