@@ -98,14 +98,30 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
             message = str(exc)
             if len(message) > 500:
                 message = message[:500] + "…"
+            # 影響対象の識別子を残す (Stage 3X の per-agent 影響分析用): どの player /
+            # aggregate / event instance の副作用が失われたかを後段で集計できるように。
+            aggregate_type = getattr(event, "aggregate_type", None)
+            aggregate_id_raw = getattr(event, "aggregate_id", None)
+            aggregate_id = getattr(aggregate_id_raw, "value", aggregate_id_raw)
+            if aggregate_id is not None and not isinstance(aggregate_id, (int, str)):
+                aggregate_id = str(aggregate_id)
+            # aggregate が player のときだけ best-effort で player_id に昇格する。
+            player_id = (
+                aggregate_id
+                if aggregate_type == "PlayerStatusAggregate" and isinstance(aggregate_id, int)
+                else None
+            )
             recorder.record(
                 TraceEventKind.SIDE_HANDLER_FAILED,
                 tick=getattr(tick, "value", tick),
+                player_id=player_id,
                 handler=type(handler).__name__,
                 event_type=type(event).__name__,
+                event_id=getattr(event, "event_id", None),
+                aggregate_type=aggregate_type,
+                aggregate_id=aggregate_id,
                 error_type=type(exc).__name__,
                 error_message=message,
-                aggregate_type=getattr(event, "aggregate_type", None),
             )
         except Exception:
             logger.warning(
