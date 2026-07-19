@@ -117,10 +117,20 @@ tick stage 間の必要箇所で保つ契約**にしなければならない。
   カバー済み。否定側は重い実 runtime 構築が要るため、Stage 2 で `DomainEventCollector`
   spy を入れる段で安価に書ける。そこで追加する。
 
-### Stage 1 — dispatch 意味論の 3 相分解と契約化 (port 統一ではない)
-- dispatch を「同期ドメイン副作用 / 観測 append+schedule / 非同期 post-commit」に分解し、
-  それぞれの契約 (実行タイミング / 例外方針 / 順序) を明文化・型化。
-- 2 publisher の差 (transaction 外可否 / 例外握り) をこの契約の上で吸収する設計にする。
+### Stage 1 — dispatch 意味論の相分解と契約化 (port 統一ではない) ✅ 完了 (2026-07-20, codex レビュー反映)
+- 成果物: [domain_event_dispatch_stage1_contract.md](./domain_event_dispatch_stage1_contract.md)
+- dispatch を相に分解し、各相の (実行タイミング / 例外方針 / 順序 / 冪等性) を明文化・型化。
+  2 publisher (regime P: Pipeline / regime U: WithUow) の意味論差をこの契約の上で吸収する。
+- **codex CRITICAL 反映で「3 相」→ 5 相に精緻化**:
+  - ①a CRITICAL_SYNC_SIDE_EFFECT (Downed/Revived/Consumable。失敗は**伝播**し operation/tick
+    を失敗させ、相②へ進めない・成功観測を出さない)。現状 Pipeline の「全握り」は目標契約にしない。
+  - ①b BEST_EFFORT_SIDE_EFFECT (evidence/encounter 等。握るが必ず warning/trace)。
+  - ①c SYNC_OBSERVATION_SIDE_EFFECT (PostHoc の direct append。cancel より先の登録順が load-bearing)。
+  - ② OBSERVE_AND_SCHEDULE (通常観測。tick 内は伝播/rollback 非保証、post-tick は hook 単位 catch)。
+  - ③ ASYNC_POST_COMMIT (spot_graph では**新設しない** = eager 維持)。
+- **本番では相が実在せず `_dispatch` の 2 ステップに畳まれる**が、例外 2 つ (direct append /
+  nested publish) がある点を明記。dedup は event_id (int) ベース operation-local を新設。
+- U1 (UseItemService) 除去は本計画 scope 外 (別計画の入力)。Stage 5 に含めない。
 
 ### Stage 2 — 明示的 DomainEventCollector の導入 (1 サービス先行)
 - operation context に `DomainEventCollector` を注入。集約 event + 手作り非集約 event を

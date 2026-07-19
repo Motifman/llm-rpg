@@ -17,8 +17,12 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
+from ai_rpg_world.application.common.events.domain_event_collector import (
+    DomainEventCollector,
+)
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.exception.player_exceptions import (
@@ -318,16 +322,20 @@ class SpotGraphItemTransferService:
         # witness 最小版: 同室の他プレイヤーに観測として届ける。
         # 行為者本人には messages を ItemTransferResult で返し、観測ストリームには
         # 流さない (recipient strategy 側で actor exclusion される)。
-        self._publish_event(
-            PlayerDroppedItemEvent.create(
-                aggregate_id=self._spot_graph_repository.find_graph().graph_id,
-                aggregate_type="SpotGraphAggregate",
-                entity_id=EntityId.create(int(player_id)),
-                spot_id=spot_id,
-                item_instance_id=item_instance_id,
-                item_spec_id=item_spec_id,
-                item_name=item_name,
-                witness_policy=witness_policy,
+        # Stage 2: その場 publish ではなく collector 経由でオペレーション境界で
+        # 1 度 dispatch する (収集の一元化)。
+        self._flush_events(
+            (
+                PlayerDroppedItemEvent.create(
+                    aggregate_id=self._spot_graph_repository.find_graph().graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    entity_id=EntityId.create(int(player_id)),
+                    spot_id=spot_id,
+                    item_instance_id=item_instance_id,
+                    item_spec_id=item_spec_id,
+                    item_name=item_name,
+                    witness_policy=witness_policy,
+                ),
             )
         )
 
@@ -392,16 +400,18 @@ class SpotGraphItemTransferService:
         # item_name は事前ガード用に既に引いてある (このメソッド頭で lookup 済み)。
 
         # witness 最小版: 同室の他プレイヤーに観測として届ける。
-        self._publish_event(
-            PlayerPickedUpItemEvent.create(
-                aggregate_id=self._spot_graph_repository.find_graph().graph_id,
-                aggregate_type="SpotGraphAggregate",
-                entity_id=EntityId.create(int(player_id)),
-                spot_id=spot_id,
-                item_instance_id=item_instance_id,
-                item_spec_id=ground_item.item_spec_id,
-                item_name=item_name,
-                witness_policy=witness_policy,
+        self._flush_events(
+            (
+                PlayerPickedUpItemEvent.create(
+                    aggregate_id=self._spot_graph_repository.find_graph().graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    entity_id=EntityId.create(int(player_id)),
+                    spot_id=spot_id,
+                    item_instance_id=item_instance_id,
+                    item_spec_id=ground_item.item_spec_id,
+                    item_name=item_name,
+                    witness_policy=witness_policy,
+                ),
             )
         )
 
@@ -497,16 +507,18 @@ class SpotGraphItemTransferService:
 
         # witness 配信: 同室の第三者と受取り側に「Xが流木をYに渡した」を届ける。
         # recipient strategy で送り手 entity_id は除外される。
-        self._publish_event(
-            PlayerGaveItemEvent.create(
-                aggregate_id=self._spot_graph_repository.find_graph().graph_id,
-                aggregate_type="SpotGraphAggregate",
-                entity_id=EntityId.create(int(from_player_id)),
-                recipient_entity_id=EntityId.create(int(to_player_id)),
-                spot_id=from_spot,
-                item_instance_id=item_instance_id,
-                item_spec_id=item_spec_id,
-                item_name=item_name,
+        self._flush_events(
+            (
+                PlayerGaveItemEvent.create(
+                    aggregate_id=self._spot_graph_repository.find_graph().graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    entity_id=EntityId.create(int(from_player_id)),
+                    recipient_entity_id=EntityId.create(int(to_player_id)),
+                    spot_id=from_spot,
+                    item_instance_id=item_instance_id,
+                    item_spec_id=item_spec_id,
+                    item_name=item_name,
+                ),
             )
         )
 
@@ -529,19 +541,30 @@ class SpotGraphItemTransferService:
             return ()
         return interior.ground_items
 
-    def _publish_event(self, event: object) -> None:
-        """event_publisher が注入されていれば publish_all で 1 件発火する。
+    def _flush_events(self, events: Iterable[DomainEvent]) -> None:
+        """収集したイベントを DomainEventCollector 経由で境界 dispatch する。
 
-        publisher は publish_all(events) を持つ duck-typed object (本番では
-        PipelineEventPublisher) を想定。未注入 (None) なら no-op で、最小
-        構成・テスト用の経路を維持する。
+        collector を通すことで event_id ベースの operation-local dedup と、
+        event_id 欠落の fail-fast (`DomainEventCollector.add`) を経由させる。
+
+        item_transfer のイベント (drop/pickup/give) は棚卸し上すべて相② (観測のみ、
+        同期 side handler なし) なので、現状の best-effort 方針を保つ:
+        publisher 未注入なら no-op、publisher 例外は握って本体オペレーションを
+        倒さない。publisher は publish_all(events) を持つ duck-typed object (本番では
+        PipelineEventPublisher) を想定。
+
+        相① を含むサービス (needs_decay / revive / consumable) の移行では、この境界で
+        相ごとの dispatcher に振り分ける契約 (stage1_contract.md §4) へ拡張する。
         """
-        if self._event_publisher is None:
+        collector = DomainEventCollector()
+        collector.add_all(events)
+        drained = collector.drain()
+        if self._event_publisher is None or not drained:
             return
         try:
-            self._event_publisher.publish_all([event])
+            self._event_publisher.publish_all(drained)
         except Exception:  # noqa: BLE001 — publisher 側の失敗で本体を倒さない
-            _logger.exception("failed to publish item transfer event")
+            _logger.exception("failed to publish item transfer events")
 
     def _resolve_current_spot(self, player_id: PlayerId) -> SpotId:
         graph = self._spot_graph_repository.find_graph()
