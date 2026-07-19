@@ -1539,19 +1539,28 @@ class TestMovementApplicationService:
         # 最初の暫定目的地は Spot2 へのゲートウェイであるべき
         assert updated_status.current_destination == Coordinate(5, 5, 0)
         
-        # ゲートウェイまで移動しきると Spot2 へ遷移するはず
-        # ここではモック的に最後の1ステップを実行
+        # プレイヤーを gateway (5,5,0) の隣 (4,5,0) に置き、planned_path の次の 1 歩を
+        # gateway 自身にする。これで tick_movement の executor が「自分の move で
+        # gateway を跨ぐ」= 本番と同じ経路で GatewayTriggeredEvent を同一
+        # オペレーション内に発生させ、Spot2 へ遷移する。
+        # (以前は手動で gateway に move_object + save して作った GatewayTriggeredEvent が
+        #  canonical に残り続けるのを tick_movement が拾う残渣依存のセットアップだった。
+        #  リポジトリが未 publish イベントを持ち越さなくなったので、実遷移で検証する。)
         phys_map_spot1 = phys_repo.find_by_spot_id(SpotId(spot1_id))
-        phys_map_spot1.move_object(WorldObjectId.create(player_id), Coordinate(5, 5, 0), WorldTick(100))
+        phys_map_spot1.move_object(WorldObjectId.create(player_id), Coordinate(4, 5, 0), WorldTick(100))
         phys_repo.save(phys_map_spot1)
-        
-        updated_status.update_location(SpotId(spot1_id), Coordinate(5, 5, 0))
+
+        updated_status.update_location(SpotId(spot1_id), Coordinate(4, 5, 0))
+        # path は先頭に現在位置を含める (advance_path は先頭=現在地を消費し次を返す)。
+        updated_status.set_destination(
+            Coordinate(5, 5, 0), [Coordinate(4, 5, 0), Coordinate(5, 5, 0)]
+        )
         status_repo.save(updated_status)
-        
+
         # 時間を進める（移動ビジーを解消するため）
         time_provider.advance_tick(10)
-        
-        # 次の tick_movement で Spot2 へ遷移
+
+        # 次の tick_movement で (4,5,0)→(5,5,0) と動いて gateway を跨ぎ Spot2 へ遷移
         result = service.tick_movement(TickMovementCommand(player_id=player_id))
         assert result.success is True
         assert result.to_spot_id == spot2_id

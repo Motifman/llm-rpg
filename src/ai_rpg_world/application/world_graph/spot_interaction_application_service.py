@@ -412,8 +412,13 @@ class SpotInteractionApplicationService:
         # が走らず、接触ダメージで死んでも DEAD outcome が確定しない silent
         # 破綻になっていた。aggregate の events を回収して後段の publish_all
         # で他 event と合わせて流す。
-        # event_publisher が None のときは aggregate に events を残したまま
-        # にする (将来別経路で publish される可能性を保つ)。
+        # イベントは save より先に回収 + clear する (needs_decay / status_effects と
+        # 同じ「publisher ガード内で clear してから save」)。save→clear の逆順だと
+        # PlayerDownedEvent を持ったまま集約が永続化され、後続の
+        # find→get_events→publish で陳腐化イベントが再放出される (tend_to_player の
+        # 復帰イベント再放出と同型のバグ)。repo 境界の drain
+        # (in_memory_repository_base._clone) と二重の防御。event_publisher が None の
+        # ときは clear せず save する (canonical は _clone が drain する)。
         status_events_from_damage: list = []
         if result.damage_specs and self._player_status_repository is not None:
             status = self._player_status_repository.find_by_id(player_id)
@@ -422,10 +427,10 @@ class SpotInteractionApplicationService:
                     if spec.damage <= 0:
                         continue  # 0 ダメージは no-op
                     status.apply_damage(spec.damage)
-                self._player_status_repository.save(status)
                 if self._event_publisher is not None:
                     status_events_from_damage = list(status.get_events())
                     status.clear_events()
+                self._player_status_repository.save(status)
 
         # PR #2 状態異常: APPLY_STATUS_EFFECT で発生した StatusEffectSpec を
         # PlayerStatusAggregate.add_status_effect に渡す。expiry_tick は
