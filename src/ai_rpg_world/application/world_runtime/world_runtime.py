@@ -425,6 +425,9 @@ class WorldRuntime:
     # (schema に出すが必須にしない) | ``"required"`` (毎ターン必須)。factory が
     # ResolvedLlmRuntimeConfig.expected_result_policy から設定する。
     _expected_result_policy: str = field(default="off", repr=False)
+    # 実験設定の解決済み DTO。遅延構築される component も env を読み直さず、
+    # runtime 作成時と同じ設定を見るために保持する。
+    _runtime_config: Optional[Any] = field(default=None, repr=False)
     # PR 2 (#227): speech 配信経路統一。PlayerSpokeEvent をドメインイベント
     # として fire し、ObservationPipeline → buffer 経路で配信する。直接
     # broadcast (旧 _append_agent_speech) は廃止。
@@ -937,7 +940,7 @@ class WorldRuntime:
         ``_cached_default_prompt_builder`` と同じ lazy キャッシュパターンで
         world_runtime が唯一の owner になる。
 
-        ``PREDICTION_CONTEXT_ID_ENABLED`` env で default OFF
+        ``ResolvedLlmRuntimeConfig.prediction_context_id_enabled`` で default OFF
         (共通規約 §0: 新機構は明示的に有効化しない限り動かさない)。OFF の間は
         None を返し、builder / recorder 側は ledger 未注入と同じ経路
         (= prediction_context_id は常に None) を通る。
@@ -950,10 +953,14 @@ class WorldRuntime:
 
         from ai_rpg_world.application.llm.wiring.feature_flags import (
             log_prediction_context_id_state,
-            resolve_prediction_context_id_enabled,
         )
 
-        enabled = resolve_prediction_context_id_enabled()
+        cfg = getattr(self, "_runtime_config", None)
+        enabled = (
+            bool(cfg.prediction_context_id_enabled)
+            if cfg is not None
+            else False
+        )
         log_prediction_context_id_state(enabled)
         ledger = PredictionContextLedger() if enabled else None
         self._prediction_context_ledger_instance = ledger
@@ -2432,50 +2439,8 @@ class WorldRuntime:
         return str(value)
 
 
-def _world_llm_ssot_enabled_from_env() -> bool:
-    """環境変数 ESCAPE_LLM_SSOT が 1/true/yes/on のいずれかなら SSoT を有効にする。"""
-    v = os.environ.get("ESCAPE_LLM_SSOT", "").strip().lower()
-    return v in ("1", "true", "yes", "on")
-
-
-_ENV_LLM_TOOL_MODE = "LLM_TOOL_MODE"
 _LLM_TOOL_MODE_DEFAULT = "default"
 _LLM_TOOL_MODE_PURE_SPOT_GRAPH = "pure_spot_graph"
-# TODO(#155): 「TODO 系の有無」以外の軸が増えたら bool 戻り値ではなく
-# ``_resolve_tool_mode_from_env() -> str`` に書き直す。例: "no_memory" や
-# "minimal_combat" のような細かい mode が要る場合。binary で済む間は単純化
-# を優先。
-_VALID_LLM_TOOL_MODES = frozenset(
-    {_LLM_TOOL_MODE_DEFAULT, _LLM_TOOL_MODE_PURE_SPOT_GRAPH}
-)
-
-
-def _include_todo_tools_from_env() -> bool:
-    """環境変数 ``LLM_TOOL_MODE`` を解釈し TODO 系ツールを含めるかを返す。
-
-    - ``default`` (既定 / 未設定): TODO 系を含める従来構成
-    - ``pure_spot_graph``: TODO 系を除外、spot_graph_* + speech のみ
-    - 未知の値: warning ログを残して既定 (TODO 含む) にフォールバック
-
-    システムプロンプト側には mode のヒントを意図的に伝えない (B-4 設計判断)。
-    LLM が「TODO 系が無い環境でどう動くか」を観察するための実験なので、
-    プロンプトで「TODO ツールは使えません」と教えると測定が汚染される。
-    現代のツール呼び出しモデルは tools リストに無いツールを呼ばないという
-    前提に依存している。
-    """
-    raw = os.environ.get(_ENV_LLM_TOOL_MODE, "").strip().lower()
-    if not raw:
-        return True  # 既定は TODO 含む
-    if raw not in _VALID_LLM_TOOL_MODES:
-        logger.warning(
-            "Unknown %s=%r; valid values are %s. Falling back to %r.",
-            _ENV_LLM_TOOL_MODE,
-            raw,
-            sorted(_VALID_LLM_TOOL_MODES),
-            _LLM_TOOL_MODE_DEFAULT,
-        )
-        return True
-    return raw != _LLM_TOOL_MODE_PURE_SPOT_GRAPH
 
 
 def _build_context_format_strategy_from_config(
@@ -2539,7 +2504,7 @@ def _build_short_term_memory(
         ShortTermMemorySummaryService,
     )
     from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-        create_llm_client_from_env,
+        create_llm_client_from_config,
     )
     from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
@@ -2548,7 +2513,7 @@ def _build_short_term_memory(
     persona_resolver = None
     if cfg.llm_client_kind == "litellm":
         try:
-            client = create_llm_client_from_env()
+            client = create_llm_client_from_config(cfg)
         except Exception:
             logger.exception("LLM client factory failed; short-term LLM services disabled")
             client = None
@@ -2632,19 +2597,19 @@ def create_world_runtime(
             (既定) の場合は環境変数 ``LLM_TOOL_MODE`` から解決する。Issue #155
             (TODO 設計の再評価) の判断材料を取るための比較実験用。
         config: PR #448 (PR 3/6): LLM runtime 設定の単一窓口。省略時は
-            ``ResolvedLlmRuntimeConfig.from_env()`` で env から 1 度だけ resolve。
-            entrypoint (run_scenario_experiment 等) で既に from_env() 済みの cfg を
-            渡せば、env を 2 度読まず確実に同じ値を共有する。**run_start trace と
+            ``ResolvedLlmRuntimeConfig.from_mapping()`` で空設定から既定値を
+            resolve。entrypoint (run_scenario_experiment 等) で既に
+            from_mapping() 済みの cfg を渡せば、**run_start trace と
             実 wiring の同一性を構造で保証する**ための引数。
     """
-    # PR #448: env を読むのはここ 1 回だけ (= 単一窓口)。引数 cfg が来ていれば
-    # それを使うが、来ていなければ from_env() で構築する (= 後方互換)。
+    # 引数 cfg が来ていればそれを使う。来ていなければ空設定の既定値で構築する。
+    # 実験に意味を持つ設定は環境変数から読まない。
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
         ResolvedLlmRuntimeConfig,
     )
 
     if config is None:
-        config = ResolvedLlmRuntimeConfig.from_env()
+        config = ResolvedLlmRuntimeConfig.from_mapping()
 
     loader = ScenarioLoader()
     scenario = loader.load_from_file(scenario_path)
@@ -2671,7 +2636,7 @@ def create_world_runtime(
         persona_block=persona_block,
         safe_intro=safe_intro,
         participant_names=participants,
-        enable_string_seed_of_thought=_world_llm_ssot_enabled_from_env(),
+        enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
         expected_result_policy=config.expected_result_policy,
         has_goal=_has_goal,
     )
@@ -2729,7 +2694,7 @@ def create_world_runtime(
                     persona_block=this_persona,
                     safe_intro=safe_intro,
                     participant_names=other_names,
-                    enable_string_seed_of_thought=_world_llm_ssot_enabled_from_env(),
+                    enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
                     expected_result_policy=config.expected_result_policy,
                     has_goal=_has_goal,
                 )
@@ -3330,14 +3295,13 @@ def create_world_runtime(
     # 評価器は scenario_event_stage と reactive_binding_stage で共有する。
     # weather_state_provider を渡すことで WEATHER_IS 条件が解ける。
     # Phase D-1: PROBABILITY 条件評価用の random.Random を注入する。
-    # SCENARIO_RANDOM_SEED 環境変数があれば seed 注入で再現性を確保、
+    # 実験設定に scenario_random_seed があれば seed 注入で再現性を確保、
     # 無ければ非決定的 (デフォルト random.Random()) で運用する。
-    # CI / 実験スクリプトでは seed を固定して同じ rng_sequence を再現できる。
-    import os as _os
     import random as _random
-    _seed_str = _os.environ.get("SCENARIO_RANDOM_SEED")
     _scenario_random = (
-        _random.Random(int(_seed_str)) if _seed_str else _random.Random()
+        _random.Random(config.scenario_random_seed)
+        if config.scenario_random_seed is not None
+        else _random.Random()
     )
     condition_evaluator = ScenarioConditionEvaluator(
         world_flag_state=world_flag_state,
@@ -3744,10 +3708,11 @@ def create_world_runtime(
         _include_todo_tools=(
             include_todo_tools
             if include_todo_tools is not None
-            else _include_todo_tools_from_env()
+            else config.tool_mode != _LLM_TOOL_MODE_PURE_SPOT_GRAPH
         ),
         # Prediction (#526 v0): expected_result 露出 policy を config から設定。
         _expected_result_policy=config.expected_result_policy,
+        _runtime_config=config,
     )
     scenario_event_stage.set_message_callback(
         runtime._append_scenario_event_observation
@@ -4029,12 +3994,11 @@ def create_world_runtime(
     # 旧 alias も後方互換で生きているが、application 層から直接 import する。
     # #558 MEDIUM-1 後続: 親 gate を env 直読み (is_episodic_enabled) から
     # config.episodic_enabled に寄せ、ResolvedLlmRuntimeConfig 単一窓口に揃えた。
-    # config=None のときは from_env() が LLM_EPISODIC_ENABLED を読むので、env で
+    # config=None のときは from_mapping() が LLM_EPISODIC_ENABLED を読むので、env で
     # 立てる experiment 経路は不変。explicit config を渡すと env でなく config が
     # 効くため「同 env を 2 経路で別解釈する」silent failure を構造で防げる。
     from ai_rpg_world.application.llm.wiring.episodic_stack import (
         build_episodic_stack,
-        is_episodic_subjective_enabled,
     )
     # 敵対的レビュー HIGH 1: 「episodic を前提にする機能群」の fail-fast を親 gate の
     # 外に出す。P-U1 (GOAL_STAGNATION_EVIDENCE) / P-U2 (STAGNATION_PRESSURE) / 案A
@@ -4047,16 +4011,12 @@ def create_world_runtime(
     # flag が 1 つでも ON なら、親 gate に入る前にここで LLM_EPISODIC_ENABLED を要求
     # して落とす。
     if not config.episodic_enabled:
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            resolve_goal_stagnation_evidence_enabled,
-            resolve_stagnation_pressure_enabled,
-            resolve_stagnation_reasoning_enabled,
-        )
-
         _episodic_dependent_flags = {
-            "GOAL_STAGNATION_EVIDENCE_ENABLED": resolve_goal_stagnation_evidence_enabled(),
-            "STAGNATION_PRESSURE_ENABLED": resolve_stagnation_pressure_enabled(),
-            "STAGNATION_REASONING_ENABLED": resolve_stagnation_reasoning_enabled(),
+            "GOAL_STAGNATION_EVIDENCE_ENABLED": (
+                config.goal_stagnation_evidence_enabled
+            ),
+            "STAGNATION_PRESSURE_ENABLED": config.stagnation_pressure_enabled,
+            "STAGNATION_REASONING_ENABLED": config.stagnation_reasoning_enabled,
         }
         _on_but_orphaned = [
             name for name, enabled in _episodic_dependent_flags.items() if enabled
@@ -4114,27 +4074,15 @@ def create_world_runtime(
             log_salience_structured_failure_enabled_state,
             log_state_collapse_evidence_enabled_state,
             log_unconscious_context_enabled_state,
-            resolve_belief_attribution_enabled,
-            resolve_belief_consolidation_enabled,
-            resolve_belief_evidence_enabled,
-            resolve_error_driven_reinterpretation_enabled,
-            resolve_error_gated_encoding_enabled,
-            resolve_hearsay_enabled,
-            resolve_memo_distill_enabled,
-            resolve_pending_prediction_enabled,
-            resolve_recall_hit_boost_enabled,
-            resolve_salience_structured_failure_enabled,
-            resolve_state_collapse_evidence_enabled,
-            resolve_unconscious_context_enabled,
         )
 
-        _belief_evidence_enabled = resolve_belief_evidence_enabled()
+        _belief_evidence_enabled = config.belief_evidence_enabled
         log_belief_evidence_enabled_state(_belief_evidence_enabled)
         # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default OFF): 実効的には
         # reinterpretation_enabled (段1) と PREDICTION_CONTEXT_ID_ENABLED (U1) の
         # 両方が ON でないと stamp 対象の recall observation が無く安全に縮退する。
         _error_driven_reinterpretation_enabled = (
-            resolve_error_driven_reinterpretation_enabled()
+            config.error_driven_reinterpretation_enabled
         )
         log_error_driven_reinterpretation_enabled_state(
             _error_driven_reinterpretation_enabled
@@ -4147,7 +4095,7 @@ def create_world_runtime(
         # 強さ (strength=1) と cap (RECALL_HIT_BOOST_DEFAULT_CAP) は小さく
         # 始める前提の定数 (habituation_strength と同じく env 非公開。
         # 「当たる記憶」の固定化を防ぐための上限)。
-        _recall_hit_boost_enabled = resolve_recall_hit_boost_enabled()
+        _recall_hit_boost_enabled = config.recall_hit_boost_enabled
         log_recall_hit_boost_enabled_state(_recall_hit_boost_enabled)
         _recall_hit_boost_strength = 1
         # U4 (予測誤差統一設計 部品3 / default OFF): attribution + CONFIRMATION。
@@ -4155,7 +4103,7 @@ def create_world_runtime(
         # が流れてこないが、ここでは独立に flag を解決するだけに留める
         # (U1 flag OFF のまま本 flag だけ ON でも in_context_belief_ids は常に
         # 空になり安全に縮退する)。
-        _belief_attribution_enabled = resolve_belief_attribution_enabled()
+        _belief_attribution_enabled = config.belief_attribution_enabled
         log_belief_attribution_enabled_state(_belief_attribution_enabled)
         # P4 (reflect): 固着パスに目的への前進評価を足すか。
         from ai_rpg_world.application.llm.wiring.feature_flags import (
@@ -4163,29 +4111,25 @@ def create_world_runtime(
             log_goal_stagnation_evidence_enabled_state,
             log_stagnation_pressure_enabled_state,
             log_stagnation_reasoning_enabled_state,
-            resolve_goal_reflect_enabled,
-            resolve_goal_stagnation_evidence_enabled,
-            resolve_stagnation_pressure_enabled,
-            resolve_stagnation_reasoning_enabled,
         )
 
-        _goal_reflect_enabled = resolve_goal_reflect_enabled()
+        _goal_reflect_enabled = config.goal_reflect_enabled
         log_goal_reflect_enabled_state(_goal_reflect_enabled)
         # P-U1 (目的停滞の evidence 化): reflect の stalled/misaligned verdict を
         # goal: 軸の evidence に変換するか。
-        _goal_stagnation_evidence_enabled = resolve_goal_stagnation_evidence_enabled()
+        _goal_stagnation_evidence_enabled = config.goal_stagnation_evidence_enabled
         log_goal_stagnation_evidence_enabled_state(_goal_stagnation_evidence_enabled)
         # P-U2 (停滞感 store): reflect verdict を停滞感カウンタに畳み込むか。
-        _stagnation_pressure_enabled = resolve_stagnation_pressure_enabled()
+        _stagnation_pressure_enabled = config.stagnation_pressure_enabled
         log_stagnation_pressure_enabled_state(_stagnation_pressure_enabled)
         # 案A (band-gated thinking): 停滞 strong の局面で reflect 注入直後の 1 行動に
         # reasoning を焚くか。
-        _stagnation_reasoning_enabled = resolve_stagnation_reasoning_enabled()
+        _stagnation_reasoning_enabled = config.stagnation_reasoning_enabled
         log_stagnation_reasoning_enabled_state(_stagnation_reasoning_enabled)
         # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
         # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
         # どちらか一方でも ON なら buffer store 自体は作る。
-        _belief_consolidation_enabled = resolve_belief_consolidation_enabled()
+        _belief_consolidation_enabled = config.belief_consolidation_enabled
         log_belief_consolidation_enabled_state(_belief_consolidation_enabled)
         # 敵対的レビュー HIGH-1 fail-fast: P-U1 (goal_stagnation_evidence) /
         # P-U2 (stagnation_pressure) はどちらも BeliefConsolidationCoordinator
@@ -4233,7 +4177,7 @@ def create_world_runtime(
         # 同様、同じ evidence buffer を共有するので ON なら buffer store を作る
         # 条件に加える。
         _salience_structured_failure_enabled = (
-            resolve_salience_structured_failure_enabled()
+            config.salience_structured_failure_enabled
         )
         log_salience_structured_failure_enabled_state(
             _salience_structured_failure_enabled
@@ -4243,32 +4187,32 @@ def create_world_runtime(
         # salience 系 flag と同じ evidence buffer を共有するので、ON なら
         # buffer store を作る条件に加える。判定は既存の状態遷移そのものであり
         # LLM 呼び出しは追加しない (structured_failure と同じ「転記のみ」方針)。
-        _state_collapse_evidence_enabled = resolve_state_collapse_evidence_enabled()
+        _state_collapse_evidence_enabled = config.state_collapse_evidence_enabled
         log_state_collapse_evidence_enabled_state(_state_collapse_evidence_enabled)
         # U8 (予測誤差統一設計 部品2・誤差ゲート付き符号化 / default OFF):
         # 境界 (2a, chunk_coordinator へ伝播) + 解像度 (2b, 下の subjective
         # service 構築時に salience_enabled と合わせて評価) を一括ゲートする。
         # evidence buffer とは無関係な独立 flag なので buffer store 条件には
         # 加えない。
-        _error_gated_encoding_enabled = resolve_error_gated_encoding_enabled()
+        _error_gated_encoding_enabled = config.error_gated_encoding_enabled
         log_error_gated_encoding_enabled_state(_error_gated_encoding_enabled)
         # U5: MEMO_DISTILL 転記 (default OFF)。他 3 flag 同様、同じ evidence
         # buffer を共有するので ON なら buffer store を作る条件に加える。
-        _memo_distill_enabled = resolve_memo_distill_enabled()
+        _memo_distill_enabled = config.memo_distill_enabled
         log_memo_distill_enabled_state(_memo_distill_enabled)
         # U7 (予測誤差統一設計 / 無意識コンテキスト / default OFF): belief top-K +
         # L5 を chunk 主観補完 LLM に渡すか。他 flag と独立 (evidence buffer は
         # 使わない = 読み取り専用の追加コンテキストなので buffer store 条件には
         # 加えない)。
-        _unconscious_context_enabled = resolve_unconscious_context_enabled()
+        _unconscious_context_enabled = config.unconscious_context_enabled
         log_unconscious_context_enabled_state(_unconscious_context_enabled)
         # U10a (予測誤差統一設計 部品6・pending prediction / default OFF):
         # 抽出・保持・再浮上を一括ゲートする。evidence buffer とは無関係な
         # 独立 flag (別の per-Being store を使う) なので buffer store 条件には
         # 加えない。
-        _pending_prediction_enabled = resolve_pending_prediction_enabled()
+        _pending_prediction_enabled = config.pending_prediction_enabled
         log_pending_prediction_enabled_state(_pending_prediction_enabled)
-        _hearsay_requested = resolve_hearsay_enabled()
+        _hearsay_requested = config.hearsay_enabled
         # H-1 (伝聞の入力衛生 / 横断レビュー): HEARSAY は BELIEF_EVIDENCE_ENABLED
         # (evidence buffer + transcriber) が前提。抽出側 (chunk 補完 LLM の
         # heard_claims 節) だけ ON で転記側の transcriber が無いと、抽出コスト
@@ -4295,10 +4239,9 @@ def create_world_runtime(
         # snapshot stub がここから拾う。OFF なら None のまま (静的シナリオ文字列)。
         from ai_rpg_world.application.llm.wiring.feature_flags import (
             log_goal_store_enabled_state,
-            resolve_goal_store_enabled,
         )
 
-        _goal_store_enabled = resolve_goal_store_enabled()
+        _goal_store_enabled = config.goal_store_enabled
         log_goal_store_enabled_state(_goal_store_enabled)
         if _goal_store_enabled:
             from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
@@ -4311,10 +4254,9 @@ def create_world_runtime(
         # 無ければ改訂しようがないので何もしない (revision は store が前提)。
         from ai_rpg_world.application.llm.wiring.feature_flags import (
             log_goal_revision_enabled_state,
-            resolve_goal_revision_enabled,
         )
 
-        _goal_revision_requested = resolve_goal_revision_enabled()
+        _goal_revision_requested = config.goal_revision_enabled
         # revision は goal store が前提。GOAL_REVISION_ENABLED だけ ON で
         # GOAL_STORE_ENABLED が OFF だと、goal_update を schema に露出しつつ
         # applier が無く「誘うのに黙って捨てる」= 静かな失敗 (本 PR が撤回した
@@ -4437,7 +4379,7 @@ def create_world_runtime(
             )
 
             runtime._stagnation_reasoning_latch = InMemoryStagnationReasoningLatch()
-        if is_episodic_subjective_enabled():
+        if config.episodic_subjective_enabled:
             from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
                 EpisodicChunkSubjectiveFieldsService,
             )
@@ -4445,12 +4387,12 @@ def create_world_runtime(
                 ThreadPoolEpisodicSubjectiveScheduler,
             )
             from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                create_llm_client_from_env,
+                create_llm_client_from_config,
             )
             from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
             try:
-                _client = create_llm_client_from_env()
+                _client = create_llm_client_from_config(config)
             except Exception:
                 logger.exception("LLM client factory failed; subjective service disabled")
                 _client = None
@@ -4632,11 +4574,11 @@ def create_world_runtime(
                     optional_semantic_gist_service,
                 )
                 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                    create_llm_client_from_env,
+                    create_llm_client_from_config,
                 )
 
                 try:
-                    _gist_client = create_llm_client_from_env()
+                    _gist_client = create_llm_client_from_config(config)
                 except Exception:
                     logger.exception(
                         "LLM client factory failed; semantic gist disabled"
@@ -4660,11 +4602,11 @@ def create_world_runtime(
                 optional_episodic_reinterpretation_completion,
             )
             from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                create_llm_client_from_env,
+                create_llm_client_from_config,
             )
 
             try:
-                _reinterp_client = create_llm_client_from_env()
+                _reinterp_client = create_llm_client_from_config(config)
             except Exception:
                 logger.exception(
                     "LLM client factory failed; episodic reinterpretation disabled"
@@ -4684,12 +4626,12 @@ def create_world_runtime(
         _belief_consolidation_completion = None
         if _belief_consolidation_enabled and config.llm_client_kind == "litellm":
             from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                create_llm_client_from_env,
+                create_llm_client_from_config,
             )
             from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
             try:
-                _belief_consolidation_client = create_llm_client_from_env()
+                _belief_consolidation_client = create_llm_client_from_config(config)
             except Exception:
                 logger.exception(
                     "LLM client factory failed; belief consolidation disabled"
@@ -4806,6 +4748,12 @@ def create_world_runtime(
             # store 自体の構築を build_episodic_stack に任せる。非同期経路
             # (scheduler) は下で set_pending_prediction_store により差し込む。
             pending_prediction_enabled=_pending_prediction_enabled,
+            episodic_promotion_force_full_scan=(
+                config.episodic_promotion_force_full_scan
+            ),
+            episodic_promotion_expansion_hops=(
+                config.episodic_promotion_expansion_hops
+            ),
         )
 
         # U9a: recall_buffer を scheduler に後から差し込む。

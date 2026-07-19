@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Mapping, Optional
 
 _logger = logging.getLogger(__name__)
@@ -35,7 +34,7 @@ def _parse_bool_env(
     *,
     default: bool = False,
 ) -> bool:
-    """env var を bool として解釈する。値が未設定なら ``default``。
+    """設定値を bool として解釈する。値が未設定なら ``default``。
 
     - truthy: ``"1" / "true" / "yes" / "on"`` (case-insensitive) → True
     - falsy:  ``"0" / "false" / "no" / "off"`` (case-insensitive) → False
@@ -44,14 +43,18 @@ def _parse_bool_env(
       実験前提を壊した事例があった / PR #433 で発覚)
 
     Args:
-        var_name: 環境変数名 (エラーメッセージに含める)
-        env: 上書き用 mapping (テストで使う)。None なら ``os.environ``
+        var_name: 設定名 (エラーメッセージに含める)
+        env: 設定 mapping。None は許可しない
         default: 未設定時の戻り値
 
     Raises:
         ValueError: 値が truthy / falsy のいずれにも該当しないとき
     """
-    source = env if env is not None else os.environ
+    if env is None:
+        raise TypeError(
+            "env mapping is required; use ResolvedLlmRuntimeConfig.from_mapping()"
+        )
+    source = env
     raw = (source.get(var_name) or "").strip().lower()
     if not raw:
         return default
@@ -154,7 +157,11 @@ def resolve_semantic_passive_top_k(
     Raises:
         ValueError: 非整数または負数のとき
     """
-    source = env if env is not None else os.environ
+    if env is None:
+        raise TypeError(
+            "env mapping is required; use ResolvedLlmRuntimeConfig.from_mapping()"
+        )
+    source = env
     raw = (source.get(ENV_SEMANTIC_PASSIVE_TOP_K) or "").strip()
     if not raw:
         return DEFAULT_SEMANTIC_PASSIVE_TOP_K
@@ -273,7 +280,11 @@ def resolve_short_term_memory_kind(
     Raises:
         ValueError: 未知の文字列 (短縮形 typo 等) のとき
     """
-    source = env if env is not None else os.environ
+    if env is None:
+        raise TypeError(
+            "env mapping is required; use ResolvedLlmRuntimeConfig.from_mapping()"
+        )
+    source = env
     raw = (source.get(ENV_SHORT_TERM_MEMORY_KIND) or "").strip().lower()
     if not raw:
         return SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
@@ -323,7 +334,11 @@ def resolve_short_term_memory_scheduler_mode(
     Raises:
         ValueError: 未知の文字列のとき
     """
-    source = env if env is not None else os.environ
+    if env is None:
+        raise TypeError(
+            "env mapping is required; use ResolvedLlmRuntimeConfig.from_mapping()"
+        )
+    source = env
     raw = (source.get(ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE) or "").strip().lower()
     if not raw:
         return SCHEDULER_MODE_THREAD_POOL

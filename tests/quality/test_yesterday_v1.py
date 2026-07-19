@@ -59,6 +59,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import 
     SubjectiveEpisode,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from tests.runtime_config_helpers import episodic_config
 
 
 _SCENARIO_PATH = (
@@ -71,13 +72,12 @@ _SCENARIO_PATH = (
 _DUMP_DIR = Path(__file__).resolve().parents[2] / "docs" / "quality_checks"
 
 
-def _build_runtime(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+def _build_runtime():
     from ai_rpg_world.application.world_runtime.world_runtime import (
         create_world_runtime,
     )
 
-    return create_world_runtime(_SCENARIO_PATH)
+    return create_world_runtime(_SCENARIO_PATH, config=episodic_config())
 
 
 def _resolve_player_id(runtime, name: str) -> PlayerId:
@@ -203,8 +203,8 @@ class TestYesterdayV1Baseline:
                 ),
             ),
         ]
-        rin_being = runtime._aux_being_resolver.resolve_being_id(
-            runtime._aux_being_default_world_id, rin_id
+        rin_being = runtime.aux_being_resolver.resolve_being_id(
+            runtime.aux_being_default_world_id, rin_id
         )
         assert rin_being is not None
         stack = runtime._episodic_stack
@@ -264,7 +264,7 @@ class TestYesterdayV1Baseline:
         乗っている前提で、prompt の中身を見る。短期記憶 section に
         昨日の活動が見えるはずだが、それを narrative にまとめられるかは
         別問題。"""
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime()
         rin_id = _resolve_player_id(runtime, "リン")
         episodes = self._setup_past_episodes(runtime, rin_id)
         # 過去観測も sliding window に流す (= "in window")
@@ -301,7 +301,7 @@ class TestYesterdayV1Baseline:
         空であれば、Issue #526 の "時間軸の不在" + "agent-driven 想起の
         不在" がここに刺さっていることが具体的に確認できる。
         """
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime()
         rin_id = _resolve_player_id(runtime, "リン")
         self._setup_past_episodes(runtime, rin_id)
         # 過去観測は sliding window に流さない (= "out of window")

@@ -1,0 +1,23 @@
+{
+  "profile": "smoke_stub",
+  "description": "実 LLM を呼ばずに profile / fail-fast / manifest 配線を確認する低コスト smoke run。",
+  "scenario": "data/scenarios/survival_island_v3_coop.json",
+  "max_world_ticks": 2,
+  "snapshot_save": false,
+  "runtime_config": {
+    "LLM_CLIENT": "stub",
+    "LLM_TURN_PARALLEL_WORKERS": 0,
+    "LLM_IDLE_TIMEOUT_TICKS": 6,
+    "SHORT_TERM_MEMORY_KIND": "sliding_window",
+    "SHORT_TERM_MEMORY_SCHEDULER_MODE": "thread_pool",
+    "LLM_EPISODIC_ENABLED": false,
+    "LLM_EPISODIC_SUBJECTIVE_ENABLED": true,
+    "EPISODIC_PROMOTION_FORCE_FULL_SCAN": false,
+    "EPISODIC_PROMOTION_EXPANSION_HOPS": 4,
+    "PROMPT_SECTION_ORDER": "stable_to_volatile",
+    "LLM_EXPECTED_RESULT_POLICY": "off",
+    "LLM_TOOL_MODE": "default",
+    "ESCAPE_LLM_SSOT": false,
+    "SCENARIO_RANDOM_SEED": 42
+  }
+}

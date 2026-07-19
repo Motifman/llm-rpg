@@ -36,6 +36,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.runtime_config_helpers import episodic_config, runtime_config
+
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -45,15 +47,12 @@ _SCENARIO_PATH = (
 )
 
 
-def _build_runtime(monkeypatch: pytest.MonkeyPatch, enabled: bool):
-    """env を設定して runtime を作る共通ヘルパ。"""
-    if enabled:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    else:
-        monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
+def _build_runtime(enabled: bool, **overrides):
+    """config を明示して runtime を作る共通ヘルパ。"""
     from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-    return create_world_runtime(_SCENARIO_PATH)
+    config = episodic_config(**overrides) if enabled else runtime_config(**overrides)
+    return create_world_runtime(_SCENARIO_PATH, config=config)
 
 
 class TestSmokeOffByDefault:
@@ -62,14 +61,14 @@ class TestSmokeOffByDefault:
     def test_env_未設定なら_stack_は_None(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        runtime = _build_runtime(monkeypatch, enabled=False)
+        runtime = _build_runtime(enabled=False)
         assert runtime._episodic_stack is None
 
     def test_env_未設定での_do_move_は例外なく完走(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """OFF 時に action を実行しても何も壊れない。"""
-        runtime = _build_runtime(monkeypatch, enabled=False)
+        runtime = _build_runtime(enabled=False)
         # カイト = player_a を 入口広間 → 閲覧室 に移動
         kaito_id = runtime.get_player_ids()[0]
         runtime.do_move(kaito_id, "reading_room")
@@ -99,7 +98,7 @@ class TestSmokeWriteSide:
           → after_action_recorded: bucket=[wait_t0, wait_t2], obs_slice は
             [t0, t2] 内に speech 観測あり → boundary close → episode write
         """
-        runtime = _build_runtime(monkeypatch, enabled=True)
+        runtime = _build_runtime(enabled=True, episodic_recall_enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
 
@@ -133,7 +132,7 @@ class TestSmokeWriteSide:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """対照: OFF では stack 自体が無く、当然 episode も書かれない。"""
-        runtime = _build_runtime(monkeypatch, enabled=False)
+        runtime = _build_runtime(enabled=False)
         # 一応 move しても stack=None なので何も書かれない
         runtime.do_move(runtime.get_player_ids()[0], "reading_room")
         assert runtime._episodic_stack is None
@@ -150,7 +149,7 @@ class TestSmokeWriteSide:
         全 do_* 呼び出し側で tool_name を明示的に渡すよう修正したので、
         書かれた episode の cue に ``unknown_tool`` が現れないことを保証する。
         """
-        runtime = _build_runtime(monkeypatch, enabled=True)
+        runtime = _build_runtime(enabled=True, episodic_recall_enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
 
@@ -194,7 +193,7 @@ class TestSmokePromptBuilds:
     ) -> None:
         """passive_recall + noun_matcher が wire された状態で prompt を組んでも
         例外が出ないこと。messages 配列が空でない。"""
-        runtime = _build_runtime(monkeypatch, enabled=True)
+        runtime = _build_runtime(enabled=True, episodic_recall_enabled=True)
         kaito_id = runtime.get_player_ids()[0]
         runtime.do_move(kaito_id, "reading_room")
         prompt = runtime.build_full_prompt(kaito_id)
@@ -231,7 +230,7 @@ class TestSmokeRecallSide:
             ObservationOutput,
         )
 
-        runtime = _build_runtime(monkeypatch, enabled=True)
+        runtime = _build_runtime(enabled=True, episodic_recall_enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
 
@@ -284,8 +283,8 @@ class TestSmokeRecallSide:
         )
         # Phase 3 Step 3e-3: rin_id 用の being_id で put (= runtime の aux
         # provisioning で attach 済の Being を resolve して使う)
-        rin_being = runtime._aux_being_resolver.resolve_being_id(
-            runtime._aux_being_default_world_id, rin_id
+        rin_being = runtime.aux_being_resolver.resolve_being_id(
+            runtime.aux_being_default_world_id, rin_id
         )
         assert rin_being is not None, "リンの Being が provision されていない"
         stack.episode_store.put_by_being(rin_being, past_episode)
@@ -331,7 +330,7 @@ class TestSmokeMemoryRecallTool:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """env=1 で episodic stack が wire されているとき、tool 定義に memory_recall_episodes が含まれる。"""
-        runtime = _build_runtime(monkeypatch, enabled=True)
+        runtime = _build_runtime(enabled=True, episodic_recall_enabled=True)
         names = {d.name for d in runtime.get_tool_definitions()}
         assert "memory_recall_episodes" in names
 
@@ -339,7 +338,7 @@ class TestSmokeMemoryRecallTool:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """env 未設定で episodic stack が wire されていないとき、memory_recall_episodes は出ない。"""
-        runtime = _build_runtime(monkeypatch, enabled=False)
+        runtime = _build_runtime(enabled=False)
         names = {d.name for d in runtime.get_tool_definitions()}
         assert "memory_recall_episodes" not in names
 
@@ -368,7 +367,7 @@ class TestSmokeMemoryRecallTool:
             SubjectiveEpisode,
         )
 
-        runtime = _build_runtime(monkeypatch, enabled=True)
+        runtime = _build_runtime(enabled=True, episodic_recall_enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
 
@@ -394,8 +393,8 @@ class TestSmokeMemoryRecallTool:
         # aux Being を attach (= run_llm_auxiliary_tool が中でやるが、test 内で直接 put するので先に解決)
         runtime._wire_auxiliary_tool_stack()
         runtime._aux_being_provisioning.ensure_attached(rin_id)
-        rin_being = runtime._aux_being_resolver.resolve_being_id(
-            runtime._aux_being_default_world_id, rin_id
+        rin_being = runtime.aux_being_resolver.resolve_being_id(
+            runtime.aux_being_default_world_id, rin_id
         )
         assert rin_being is not None
 
@@ -445,7 +444,7 @@ class TestSmokeMemoryRecallTool:
         """過去 episode が無い状態で memory_recall_episodes を呼ぶと「思い出そうとしたが何も浮かばなかった」。"""
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-        runtime = _build_runtime(monkeypatch, enabled=True)
+        runtime = _build_runtime(enabled=True)
         rin_id = None
         for spawn in runtime.scenario.player_spawns:
             if spawn.name == "リン":
@@ -477,7 +476,7 @@ class TestSmokeSubjectiveServiceWiring:
     ) -> None:
         """SUBJECTIVE フラグ未設定でも既定 ON なので有効化を試みるが、stub LLM_CLIENT
         だと LiteLLMClient にならず service は wire されない (silent skip)。"""
-        runtime = _build_runtime(monkeypatch, enabled=True)
+        runtime = _build_runtime(enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
         # 既定 ON でも stub のときは service が wire されない (= 安全な縮退)
@@ -492,12 +491,12 @@ class TestSmokeSubjectiveServiceWiring:
         LiteLLMClient が居ても subjective service は wire されない (テスト環境では
         実 LLM を叩かないので LiteLLMClient は通常使わないが、env 解決のみ検証)。
         """
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-        monkeypatch.delenv("LLM_CLIENT", raising=False)
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=episodic_config(episodic_subjective_enabled=False),
+        )
         stack = runtime._episodic_stack
         assert stack is not None
         assert stack.chunk_coordinator._chunk_subjective_fields_service is None
@@ -507,12 +506,9 @@ class TestSmokeSubjectiveServiceWiring:
     ) -> None:
         """LLM_CLIENT=stub (default) のままだと LiteLLMClient にならないので、
         SUBJECTIVE_ENABLED 既定 ON でも service は wire されない (silent skip + info log)。"""
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.delenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", raising=False)
-        monkeypatch.delenv("LLM_CLIENT", raising=False)  # = stub default
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=episodic_config())
         stack = runtime._episodic_stack
         assert stack is not None
         # stub のときは service が wire されないこと (= 安全な縮退)
@@ -544,8 +540,7 @@ class TestSmokeSubjectiveServiceMergesText:
             build_world_episodic_stack,
         )
 
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=episodic_config())
         assert runtime._episodic_stack is not None
 
         class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
@@ -566,8 +561,8 @@ class TestSmokeSubjectiveServiceMergesText:
             observation_buffer=runtime._obs_buffer,
             sliding_window_memory=runtime._sliding_window,
             action_result_store=runtime._action_result_store,
-            being_attachment_resolver=runtime._aux_being_resolver,
-            default_world_id=runtime._aux_being_default_world_id,
+            being_attachment_resolver=runtime.aux_being_resolver,
+            default_world_id=runtime.aux_being_default_world_id,
             chunk_subjective_fields_service=subjective_service,
             persona_block_provider=lambda pid: "ペルソナ片",
         )
@@ -620,8 +615,7 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
             build_world_episodic_stack,
         )
 
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=episodic_config())
 
         class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
             def complete_episode_subjective_json(
@@ -638,8 +632,8 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
             service,
             shared_store,
             max_workers=1,
-            being_attachment_resolver=runtime._aux_being_resolver,
-            default_world_id=runtime._aux_being_default_world_id,
+            being_attachment_resolver=runtime.aux_being_resolver,
+            default_world_id=runtime.aux_being_default_world_id,
         )
         # scheduler 経由の stack で差し替える
         runtime._episodic_stack = build_world_episodic_stack(
@@ -648,8 +642,8 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
             observation_buffer=runtime._obs_buffer,
             sliding_window_memory=runtime._sliding_window,
             action_result_store=runtime._action_result_store,
-            being_attachment_resolver=runtime._aux_being_resolver,
-            default_world_id=runtime._aux_being_default_world_id,
+            being_attachment_resolver=runtime.aux_being_resolver,
+            default_world_id=runtime.aux_being_default_world_id,
             subjective_completion_scheduler=scheduler,
             persona_block_provider=lambda pid: "ペルソナ片",
             episode_store=shared_store,
@@ -695,8 +689,7 @@ class TestSmokeBeliefEvidenceWiring:
     def test_flag_OFF_なら_belief_evidence_buffer_store_は_None(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.delenv("BELIEF_EVIDENCE_ENABLED", raising=False)
-        runtime = _build_runtime(monkeypatch, enabled=True)
+        runtime = _build_runtime(enabled=True)
         assert runtime._episodic_stack.belief_evidence_buffer_store is None
 
     def test_flag_ON_なら_belief_evidence_buffer_store_が公開される(
@@ -706,8 +699,7 @@ class TestSmokeBeliefEvidenceWiring:
             InMemoryBeliefEvidenceBufferStore,
         )
 
-        monkeypatch.setenv("BELIEF_EVIDENCE_ENABLED", "1")
-        runtime = _build_runtime(monkeypatch, enabled=True)
+        runtime = _build_runtime(enabled=True, belief_evidence_enabled=True)
         assert isinstance(
             runtime._episodic_stack.belief_evidence_buffer_store,
             InMemoryBeliefEvidenceBufferStore,
@@ -729,8 +721,7 @@ class TestSmokeMemoDistillWiring:
     def test_flag_OFF_なら_todo_tool_executor_に_transcriber_が注入されない(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.delenv("MEMO_DISTILL_ENABLED", raising=False)
-        runtime = _build_runtime(monkeypatch, enabled=True)
+        runtime = _build_runtime(enabled=True)
         assert runtime._todo_tool_executor._memo_distill_transcriber is None
 
     def test_flag_ON_なら_todo_tool_executor_に_transcriber_が注入される(
@@ -740,8 +731,11 @@ class TestSmokeMemoDistillWiring:
             MemoDistillEvidenceTranscriber,
         )
 
-        monkeypatch.setenv("MEMO_DISTILL_ENABLED", "1")
-        runtime = _build_runtime(monkeypatch, enabled=True)
+        runtime = _build_runtime(
+            enabled=True,
+            belief_evidence_enabled=True,
+            memo_distill_enabled=True,
+        )
         assert isinstance(
             runtime._todo_tool_executor._memo_distill_transcriber,
             MemoDistillEvidenceTranscriber,

@@ -1,7 +1,6 @@
 """コンテキストフォーマット戦略 (world_runtime format に統一)。"""
 
 import logging
-import os
 from typing import Mapping, Optional
 
 from ai_rpg_world.application.llm.contracts.interfaces import IContextFormatStrategy
@@ -147,10 +146,10 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
 def resolve_section_order_from_env(
     env: Optional[Mapping[str, str]] = None,
 ) -> str:
-    """``PROMPT_SECTION_ORDER`` env var から section 順序を解決する。
+    """``PROMPT_SECTION_ORDER`` 設定値から section 順序を解決する。
 
-    実験スクリプト経由で A/B 検証する用途。``env`` を渡せばその dict を見る
-    (テスト用)、None なら ``os.environ``。
+    実験スクリプト経由で A/B 検証する用途。``env`` を渡せばその dict を見る。
+    ``env=None`` は古い呼び出し経路の取りこぼしとして失敗させる。
 
     - 値が未設定・空文字なら default の ``stable_to_volatile`` を返す
     - 値が未知の文字列なら ``ValueError`` (silent fallback 防止 / PR #433 経緯)
@@ -158,7 +157,11 @@ def resolve_section_order_from_env(
     Raises:
         ValueError: 未知の文字列のとき
     """
-    source = env if env is not None else os.environ
+    if env is None:
+        raise TypeError(
+            "env mapping is required; use ResolvedLlmRuntimeConfig.from_mapping()"
+        )
+    source = env
     raw = (source.get(ENV_PROMPT_SECTION_ORDER) or "").strip()
     if not raw:
         return SECTION_ORDER_STABLE_TO_VOLATILE

@@ -40,6 +40,10 @@ from typing import Any
 
 import pytest
 
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
+)
+
 _SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 # 4 player / spot_graph / inventory / monster を全部含むので production wiring の
 # 縮図として最も妥当。test_survival_island_episodic_smoke.py と同じ選択。
@@ -80,11 +84,11 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _build_runtime() -> Any:
-    """env だけ事前 setup した上で production runtime を構築する。"""
+def _build_runtime(config: Any = None) -> Any:
+    """解決済み設定を渡して production runtime を構築する。"""
     from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-    return create_world_runtime(_SCENARIO)
+    return create_world_runtime(_SCENARIO, config=config)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -92,15 +96,15 @@ def _build_runtime() -> Any:
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestShortTermMemoryEnvVsRuntime:
-    """SHORT_TERM_MEMORY_KIND env と実体の type が一致するか。
+class TestShortTermMemoryConfigVsRuntime:
+    """short_term_memory_kind 設定と実体の type が一致するか。
 
     PR #439 で silent failure (env=rolling_summary でも DefaultSlidingWindowMemory
     が使われていた) が発覚し fix された。本 test 群は再発防止。
     """
 
-    def test_env_未設定なら_DefaultSlidingWindowMemory(self) -> None:
-        """env 未設定 → default の DefaultSlidingWindowMemory が使われる。"""
+    def test_設定未指定なら_DefaultSlidingWindowMemory(self) -> None:
+        """設定未指定 → default の DefaultSlidingWindowMemory が使われる。"""
         from ai_rpg_world.application.llm.services.sliding_window_memory import (
             DefaultSlidingWindowMemory,
         )
@@ -108,27 +112,29 @@ class TestShortTermMemoryEnvVsRuntime:
         runtime = _build_runtime()
         assert isinstance(runtime._sliding_window, DefaultSlidingWindowMemory)
 
-    def test_env_sliding_window_明示_でも_DefaultSlidingWindowMemory(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_sliding_window_明示_でも_DefaultSlidingWindowMemory(self) -> None:
         from ai_rpg_world.application.llm.services.sliding_window_memory import (
             DefaultSlidingWindowMemory,
         )
 
-        monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "sliding_window")
-        runtime = _build_runtime()
+        runtime = _build_runtime(
+            ResolvedLlmRuntimeConfig.for_tests(
+                short_term_memory_kind="sliding_window"
+            )
+        )
         assert isinstance(runtime._sliding_window, DefaultSlidingWindowMemory)
 
-    def test_env_rolling_summary_で_RollingSummaryShortTermMemory(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_rolling_summary_で_RollingSummaryShortTermMemory(self) -> None:
         """PR #439 silent failure 再発防止の核心 assert。"""
         from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
             RollingSummaryShortTermMemory,
         )
 
-        monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "rolling_summary")
-        runtime = _build_runtime()
+        runtime = _build_runtime(
+            ResolvedLlmRuntimeConfig.for_tests(
+                short_term_memory_kind="rolling_summary"
+            )
+        )
         assert isinstance(runtime._sliding_window, RollingSummaryShortTermMemory)
 
 
@@ -153,9 +159,12 @@ class TestShortTermMemoryLlmServicesWired:
             RollingSummaryShortTermMemory,
         )
 
-        monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "rolling_summary")
-        monkeypatch.setenv("LLM_CLIENT", "stub")
-        runtime = _build_runtime()
+        runtime = _build_runtime(
+            ResolvedLlmRuntimeConfig.for_tests(
+                short_term_memory_kind="rolling_summary",
+                llm_client_kind="stub",
+            )
+        )
         sw = runtime._sliding_window
         assert isinstance(sw, RollingSummaryShortTermMemory)
         # stub なので LLM 経路は注入されない
@@ -181,13 +190,14 @@ class TestShortTermMemoryLlmServicesWired:
             ShortTermMemoryLongSummaryService,
         )
 
-        monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "rolling_summary")
-        monkeypatch.setenv("LLM_CLIENT", "litellm")
-        # litellm client は構築できるよう API key を仕込む (実 API は呼ばない)
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-dummy")
-        monkeypatch.setenv("LLM_MODEL", "openai/gpt-4o-mini")
-
-        runtime = _build_runtime()
+        runtime = _build_runtime(
+            ResolvedLlmRuntimeConfig.for_tests(
+                short_term_memory_kind="rolling_summary",
+                llm_client_kind="litellm",
+                llm_model="openai/gpt-4o-mini",
+                llm_api_key="sk-test-dummy",
+            )
+        )
         sw = runtime._sliding_window
         assert isinstance(sw, RollingSummaryShortTermMemory)
         # PR #444: LLM 経路が確実に注入される
@@ -213,17 +223,18 @@ class TestLiteLLMClientTimeout:
     """litellm の default request_timeout=6000 (= 100 分) ハングを防ぐため、
     LiteLLMClient は必ず有限値の timeout を持つことを保証する (PR #444)。"""
 
-    def test_LLM_CLIENT_litellm_で_timeout_が_有限値(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_litellm_で_timeout_が_有限値(self) -> None:
         from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
         from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-            create_llm_client_from_env,
+            create_llm_client_from_config,
         )
 
-        monkeypatch.setenv("LLM_CLIENT", "litellm")
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-dummy")
-        client = create_llm_client_from_env()
+        client = create_llm_client_from_config(
+            ResolvedLlmRuntimeConfig.for_tests(
+                llm_client_kind="litellm",
+                llm_api_key="sk-test-dummy",
+            )
+        )
         assert isinstance(client, LiteLLMClient)
         # default 90 秒 / 100 分ハングは起きない
         assert 0 < client._timeout_seconds < 600.0, (
@@ -231,18 +242,19 @@ class TestLiteLLMClientTimeout:
             f"({client._timeout_seconds}s)。litellm default 6000 秒は許容しない"
         )
 
-    def test_env_LLM_REQUEST_TIMEOUT_SECONDS_が_反映される(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_config_timeout_が_反映される(self) -> None:
         from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
         from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-            create_llm_client_from_env,
+            create_llm_client_from_config,
         )
 
-        monkeypatch.setenv("LLM_CLIENT", "litellm")
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-dummy")
-        monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECONDS", "45")
-        client = create_llm_client_from_env()
+        client = create_llm_client_from_config(
+            ResolvedLlmRuntimeConfig.for_tests(
+                llm_client_kind="litellm",
+                llm_api_key="sk-test-dummy",
+                llm_request_timeout_seconds=45.0,
+            )
+        )
         assert isinstance(client, LiteLLMClient)
         assert client._timeout_seconds == 45.0
 
@@ -252,10 +264,10 @@ class TestLiteLLMClientTimeout:
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestSectionOrderEnvVsRuntime:
-    """PROMPT_SECTION_ORDER env と prompt builder の strategy が一致する。"""
+class TestSectionOrderConfigVsRuntime:
+    """prompt_section_order 設定と prompt builder の strategy が一致する。"""
 
-    def test_env_未設定なら_stable_to_volatile_default(self) -> None:
+    def test_設定未指定なら_stable_to_volatile_default(self) -> None:
         from ai_rpg_world.application.llm.services.context_format_strategy import (
             SECTION_ORDER_STABLE_TO_VOLATILE,
         )
@@ -266,15 +278,14 @@ class TestSectionOrderEnvVsRuntime:
         assert strategy is not None
         assert strategy.section_order == SECTION_ORDER_STABLE_TO_VOLATILE
 
-    def test_env_legacy_明示で_legacy_strategy(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_legacy_明示で_legacy_strategy(self) -> None:
         from ai_rpg_world.application.llm.services.context_format_strategy import (
             SECTION_ORDER_LEGACY,
         )
 
-        monkeypatch.setenv("PROMPT_SECTION_ORDER", "legacy")
-        runtime = _build_runtime()
+        runtime = _build_runtime(
+            ResolvedLlmRuntimeConfig.for_tests(prompt_section_order="legacy")
+        )
         strategy = getattr(runtime, "_context_strategy", None)
         assert strategy is not None
         assert strategy.section_order == SECTION_ORDER_LEGACY
@@ -287,15 +298,13 @@ class TestSectionOrderEnvVsRuntime:
 
 class TestConfigInjection:
     """PR #448 (PR 3/6): create_world_runtime に ResolvedLlmRuntimeConfig
-    を直接渡せる経路の確認。entrypoint が一度だけ ``from_env()`` を呼んで全部に
+    を直接渡せる経路の確認。entrypoint が一度だけ ``from_mapping()`` を呼んで全部に
     渡し回す形を構造で保証する。"""
 
-    def test_明示_cfg_を_渡すと_env_を_読まずに_使う(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """env と異なる cfg を渡したら、env ではなく cfg の値で配線される。
+    def test_明示_cfg_を_渡すと_cfg_を_使う(self) -> None:
+        """cfg を渡したら、その値で配線される。
 
-        = 「同 env を 2 回読まない」原則の構造的保証。
+        = 設定入力経路を 1 つにする原則の構造的保証。
         """
         from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
             RollingSummaryShortTermMemory,
@@ -305,67 +314,50 @@ class TestConfigInjection:
         )
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-        # env では sliding_window を要求
-        monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "sliding_window")
-        # cfg では rolling_summary を要求
         cfg = ResolvedLlmRuntimeConfig.for_tests(
             short_term_memory_kind="rolling_summary",
         )
         runtime = create_world_runtime(_SCENARIO, config=cfg)
-        # cfg が勝つ (env を読み直さない)
         assert isinstance(runtime._sliding_window, RollingSummaryShortTermMemory)
 
-    def test_cfg_省略時は_env_から_resolve(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """既存挙動の後方互換: cfg 引数省略時は from_env() でフォールバック。"""
+    def test_cfg_省略時は空設定_default(self) -> None:
+        """cfg 引数省略時は環境変数を読まず、空設定の既定値になる。"""
         from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
             RollingSummaryShortTermMemory,
         )
+        from ai_rpg_world.application.llm.services.sliding_window_memory import (
+            DefaultSlidingWindowMemory,
+        )
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-        monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "rolling_summary")
         runtime = create_world_runtime(_SCENARIO)  # cfg 省略
-        assert isinstance(runtime._sliding_window, RollingSummaryShortTermMemory)
+        assert not isinstance(runtime._sliding_window, RollingSummaryShortTermMemory)
+        assert isinstance(runtime._sliding_window, DefaultSlidingWindowMemory)
 
 
 class TestRunStartTraceVsRuntime:
-    """run_scenario_experiment.py が run_start trace に書く env と、実体の
+    """run_scenario_experiment.py が run_start trace に書く設定と、実体の
     runtime 内部の type が一致するか。
 
     PR #439 silent failure はまさにこのズレ (trace は rolling_summary と書くが
     実体は DefaultSlidingWindowMemory) だった。本 test で「trace に出る値」と
-    「runtime の実体」が同じ env から派生していることを構造的に保証する。
+    「runtime の実体」が同じ config から派生していることを構造的に保証する。
     """
 
-    def test_rolling_summary_env_の_trace_用_resolver_が_RollingSummary_実装と_一致(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """env から resolver で取った kind と、runtime の sliding_window type
-        の対応関係を 1 つの env source から確認する。
-
-        PR #446 (ResolvedLlmRuntimeConfig DTO) でこの assertion は「同一の
-        config instance を共有」という形に強化される予定。
-        """
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            resolve_short_term_memory_kind,
-            SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
-        )
+    def test_rolling_summary_config_が_RollingSummary_実装と_一致(self) -> None:
+        """trace に出す config と runtime の sliding_window type が同一 cfg から決まる。"""
         from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
             RollingSummaryShortTermMemory,
         )
 
-        monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "rolling_summary")
+        cfg = ResolvedLlmRuntimeConfig.for_tests(
+            short_term_memory_kind="rolling_summary"
+        )
+        assert cfg.to_trace_dict()["short_term_memory_kind"] == "rolling_summary"
 
-        # 1. trace 経路: resolver で取った値
-        kind = resolve_short_term_memory_kind()
-        assert kind == SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
-
-        # 2. 実体経路: runtime を組んだ結果の type
-        runtime = _build_runtime()
-        # 1 と 2 がズレていたら PR #439 silent failure 再発
+        runtime = _build_runtime(cfg)
         assert isinstance(runtime._sliding_window, RollingSummaryShortTermMemory), (
-            f"env で {kind} を指定したのに、実体は "
+            "config で rolling_summary を指定したのに、実体は "
             f"{type(runtime._sliding_window).__name__}。"
             "PR #439 silent failure (config-init split) が再発している"
         )

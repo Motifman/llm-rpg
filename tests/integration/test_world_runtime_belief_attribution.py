@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from tests.runtime_config_helpers import belief_consolidation_config, runtime_config
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -28,28 +29,22 @@ _SCENARIO_PATH = (
 )
 
 
-def _enable_common_memory_flags(monkeypatch: pytest.MonkeyPatch) -> None:
-    """attribution が実際に流れるための前提 flag 一式を ON にする。
-
-    - LLM_EPISODIC_ENABLED: episodic stack (chunk_coordinator) を組む前提
-    - PREDICTION_CONTEXT_ID_ENABLED: U1 (belief_ids を流す土台)
-    - BELIEF_EVIDENCE_ENABLED / BELIEF_CONSOLIDATION_ENABLED: evidence buffer
-      + 固着 coordinator を組む前提
-    """
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("PREDICTION_CONTEXT_ID_ENABLED", "1")
-    monkeypatch.setenv("BELIEF_EVIDENCE_ENABLED", "1")
-    monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
+def _common_memory_config(**overrides):
+    """attribution が実際に流れるための前提設定一式を作る。"""
+    return belief_consolidation_config(
+        prediction_context_id_enabled=True,
+        **overrides,
+    )
 
 
 class TestWorldRuntimeBeliefAttributionWiring:
     def test_flag_ON_で_chunk_coordinator_と_固着coordinator_に_attribution_が届く(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_common_memory_flags(monkeypatch)
-        monkeypatch.setenv("BELIEF_ATTRIBUTION_ENABLED", "1")
-
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_common_memory_config(belief_attribution_enabled=True),
+        )
         stack = runtime._episodic_stack
         assert stack is not None
 
@@ -65,10 +60,7 @@ class TestWorldRuntimeBeliefAttributionWiring:
     def test_flag_OFF_なら_attribution_は_不活性で_confirmation節も出ない(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_common_memory_flags(monkeypatch)
-        monkeypatch.delenv("BELIEF_ATTRIBUTION_ENABLED", raising=False)
-
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_common_memory_config())
         stack = runtime._episodic_stack
         assert stack is not None
 
@@ -84,8 +76,8 @@ class TestWorldRuntimeBeliefAttributionWiring:
     ) -> None:
         """LLM_EPISODIC_ENABLED が無ければそもそも stack を組まない
         (attribution flag 単独では副作用を持たないことの確認)。"""
-        monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
-        monkeypatch.setenv("BELIEF_ATTRIBUTION_ENABLED", "1")
-
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=runtime_config(belief_attribution_enabled=True),
+        )
         assert runtime._episodic_stack is None

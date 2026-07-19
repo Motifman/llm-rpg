@@ -20,6 +20,7 @@ import pytest
 
 from ai_rpg_world.application.trace import NullTraceRecorder
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from tests.runtime_config_helpers import episodic_config
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -29,19 +30,19 @@ _SCENARIO_PATH = (
 )
 
 
-def _enable_memo_distill_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+def _memo_distill_config():
     # MEMO_DISTILL の transcriber が構築される前提: episodic + 証拠 buffer (U2)。
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("BELIEF_EVIDENCE_ENABLED", "1")
-    monkeypatch.setenv("MEMO_DISTILL_ENABLED", "1")
+    return episodic_config(
+        belief_evidence_enabled=True,
+        memo_distill_enabled=True,
+    )
 
 
 class TestWorldRuntimeMemoDistillRewire:
     def test_transcriber_wired_after_build(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_memo_distill_flags(monkeypatch)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_memo_distill_config())
         assert runtime._memo_distill_transcriber is not None
         assert runtime._todo_tool_executor is not None
         # memo executor 実体にも届いている。
@@ -53,8 +54,7 @@ class TestWorldRuntimeMemoDistillRewire:
         """set_trace_recorder は _todo_tool_executor を作り直すが、
 
         memo_distill transcriber は再適用されて生き残る (回帰の核心)。"""
-        _enable_memo_distill_flags(monkeypatch)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_memo_distill_config())
         executor_before = runtime._todo_tool_executor
         assert executor_before is not None
         assert executor_before._memo_distill_transcriber is not None
@@ -72,9 +72,7 @@ class TestWorldRuntimeMemoDistillRewire:
     def test_flag_off_keeps_transcriber_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.delenv("MEMO_DISTILL_ENABLED", raising=False)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=episodic_config())
         assert runtime._memo_distill_transcriber is None
         if runtime._todo_tool_executor is not None:
             assert runtime._todo_tool_executor._memo_distill_transcriber is None

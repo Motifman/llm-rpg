@@ -20,6 +20,7 @@ from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
     GoalEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from tests.runtime_config_helpers import episodic_config
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -29,13 +30,13 @@ _SCENARIO_PATH = (
 )
 
 
-def _enable(monkeypatch, revision: bool) -> None:
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("GOAL_STORE_ENABLED", "1")
-    if revision:
-        monkeypatch.setenv("GOAL_REVISION_ENABLED", "1")
-    else:
-        monkeypatch.delenv("GOAL_REVISION_ENABLED", raising=False)
+def _goal_config(*, revision: bool, **overrides):
+    values = {
+        "goal_store_enabled": True,
+        "goal_revision_enabled": revision,
+    }
+    values.update(overrides)
+    return episodic_config(**values)
 
 
 def _field_in_defs(runtime, field: str) -> bool:
@@ -69,8 +70,7 @@ class TestGoalRevisionSchemaWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """設計判断 #1: flag ON でも tool 定義は tick 間で byte 不変。"""
-        _enable(monkeypatch, revision=True)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_goal_config(revision=True))
         first = runtime.get_tool_definitions()
         second = runtime.get_tool_definitions()
         # ToolDefinitionDto は dataclass。2 回の呼び出しで完全一致。
@@ -81,8 +81,7 @@ class TestGoalRevisionSchemaWiring:
     def test_goal_update_absent_when_revision_off(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable(monkeypatch, revision=False)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_goal_config(revision=False))
         assert runtime._goal_revision_applier is None
         assert not _goal_update_in_defs(runtime)
 
@@ -93,10 +92,10 @@ class TestGoalRevisionSchemaWiring:
 
         露出しない = 「誘うのに黙って捨てる」静かな失敗を作らない。revision は
         store を前提に実効 OFF へ畳まれる。"""
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.delenv("GOAL_STORE_ENABLED", raising=False)
-        monkeypatch.setenv("GOAL_REVISION_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=episodic_config(goal_revision_enabled=True),
+        )
         assert runtime._goal_journal_store is None
         assert runtime._goal_revision_enabled is False
         assert runtime._goal_revision_applier is None
@@ -108,8 +107,7 @@ class TestGoalRevisionWrite:
     def test_apply_supersedes_unlocked_active_goal(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable(monkeypatch, revision=True)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_goal_config(revision=True))
         player_id = PlayerId(1)
         being_id = runtime.aux_being_resolver.resolve_being_id(
             runtime.aux_being_default_world_id, player_id
@@ -137,8 +135,7 @@ class TestGoalRevisionWrite:
     def test_apply_noop_when_goal_update_absent(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable(monkeypatch, revision=True)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_goal_config(revision=True))
         player_id = PlayerId(1)
         being_id = runtime.aux_being_resolver.resolve_being_id(
             runtime.aux_being_default_world_id, player_id
@@ -157,8 +154,7 @@ class TestGoalRevisionWrite:
         observation_category が不正だと構築時に落ちるため、この経路を実際に
         通して回帰を防ぐ (fake sink では捉えられない実配線のバグ)。
         """
-        _enable(monkeypatch, revision=True)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_goal_config(revision=True))
         player_id = PlayerId(1)
         being_id = runtime.aux_being_resolver.resolve_being_id(
             runtime.aux_being_default_world_id, player_id
@@ -187,16 +183,14 @@ class TestGoalOutcomeWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """flag ON で goal_outcome が露出し、tool 定義は tick 間 byte 不変 (設計判断 #1)。"""
-        _enable(monkeypatch, revision=True)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_goal_config(revision=True))
         assert _field_in_defs(runtime, "goal_outcome")
         assert runtime.get_tool_definitions() == runtime.get_tool_definitions()
 
     def test_goal_outcome_absent_when_revision_off(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable(monkeypatch, revision=False)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_goal_config(revision=False))
         assert not _field_in_defs(runtime, "goal_outcome")
 
     def test_achieved_settles_goal_and_transcribes_evidence(
@@ -207,10 +201,14 @@ class TestGoalOutcomeWiring:
         applier → 実 transcriber → evidence buffer の end-to-end 配線を通す
         (遅延 holder が正しく埋まっているかの防波堤)。
         """
-        _enable(monkeypatch, revision=True)
-        monkeypatch.setenv("BELIEF_EVIDENCE_ENABLED", "1")
-        monkeypatch.setenv("SEMANTIC_SEARCH_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_goal_config(
+                revision=True,
+                belief_evidence_enabled=True,
+                semantic_search_enabled=True,
+            ),
+        )
         player_id = PlayerId(1)
         being_id = _seed_active_self_goal(runtime, player_id, "g1", "古い地図を手に入れる")
 
@@ -233,8 +231,7 @@ class TestGoalOutcomeWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """goal_outcome のみで閉じた後、【現在の目的】が未定描画に戻る。"""
-        _enable(monkeypatch, revision=True)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_goal_config(revision=True))
         player_id = PlayerId(1)
         _seed_active_self_goal(runtime, player_id, "g1", "山頂で狼煙を上げる")
 

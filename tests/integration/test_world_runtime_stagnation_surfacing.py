@@ -20,6 +20,7 @@ import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from tests.runtime_config_helpers import belief_consolidation_config
 
 _UNRESOLVED_BEING_LOG_SUBSTRING = "に attach 済みの being が見つからず"
 
@@ -43,16 +44,13 @@ _SCENARIO_PATH = (
 )
 
 
-def _enable_consolidation(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("SEMANTIC_SEARCH_ENABLED", "1")
-    monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
-    monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
+def _stagnation_config(**overrides):
+    return belief_consolidation_config(goal_reflect_enabled=True, **overrides)
 
 
 def _being_id(runtime, player_id: int):
-    return runtime._aux_being_resolver.resolve_being_id(
-        runtime._aux_being_default_world_id, PlayerId(player_id)
+    return runtime.aux_being_resolver.resolve_being_id(
+        runtime.aux_being_default_world_id, PlayerId(player_id)
     )
 
 
@@ -62,9 +60,10 @@ class TestOwnStagnationSurfacingWiring:
     def test_カウンタ3以上で_strong_の自己hintが出る(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_pressure_enabled=True),
+        )
         being_id = _being_id(runtime, 1)
         assert being_id is not None
         for _ in range(3):
@@ -76,9 +75,10 @@ class TestOwnStagnationSurfacingWiring:
     def test_カウンタ1_2で_light_の自己hintが出る(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_pressure_enabled=True),
+        )
         being_id = _being_id(runtime, 1)
         assert being_id is not None
         runtime._stagnation_pressure_store.increment_by_being(being_id)
@@ -89,9 +89,10 @@ class TestOwnStagnationSurfacingWiring:
     def test_カウンタ0では_自己hintは出ない(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_pressure_enabled=True),
+        )
         # カウンタに一切触れない (= 0 のまま)。
         dto = runtime.build_llm_context(PlayerId(1))
         assert "前に進んでいない" not in dto.current_state_text
@@ -104,9 +105,10 @@ class TestOtherStagnationSurfacingWiring:
     def test_相手のカウンタが3以上なら_苛立って落ち着かない様子_が見える(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_pressure_enabled=True),
+        )
         being_id_p1 = _being_id(runtime, 1)
         assert being_id_p1 is not None
         for _ in range(3):
@@ -120,9 +122,10 @@ class TestOtherStagnationSurfacingWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """自分自身は同席者リストに出ない前提の回帰ガード。"""
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_pressure_enabled=True),
+        )
         being_id_p1 = _being_id(runtime, 1)
         assert being_id_p1 is not None
         for _ in range(3):
@@ -142,9 +145,7 @@ class TestStagnationSurfacingOffByDefault:
     def test_flag_off_なら_store_が_none_で_自己他者とも表出しない(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.delenv("STAGNATION_PRESSURE_ENABLED", raising=False)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_stagnation_config())
         assert runtime._stagnation_pressure_store is None
 
         dto1 = runtime.build_llm_context(PlayerId(1))
@@ -163,13 +164,13 @@ class TestStagnationSurfacingOffByDefault:
         一切触れなければ (= 実質 OFF と同じ状態) OFF 時と同一のテキストになる
         ことを確認し、プレフィックスキャッシュ不変への影響が無いことを保証
         する。"""
-        _enable_consolidation(monkeypatch)
-        monkeypatch.delenv("STAGNATION_PRESSURE_ENABLED", raising=False)
-        runtime_off = create_world_runtime(_SCENARIO_PATH)
+        runtime_off = create_world_runtime(_SCENARIO_PATH, config=_stagnation_config())
         text_off = runtime_off.build_llm_context(PlayerId(1)).current_state_text
 
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-        runtime_on_untouched = create_world_runtime(_SCENARIO_PATH)
+        runtime_on_untouched = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_pressure_enabled=True),
+        )
         text_on_untouched = runtime_on_untouched.build_llm_context(
             PlayerId(1)
         ).current_state_text
@@ -189,9 +190,10 @@ class TestStagnationBandUnresolvedBeingDiagnostics:
     def test_store非Noneでbeing未解決なら警告が1回だけ出てbandはnoneのまま(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_pressure_enabled=True),
+        )
         assert runtime._stagnation_pressure_store is not None
         # being を未 attach 状態に見立てるため resolver を stub に差し替える。
         runtime._aux_being_resolver = _AlwaysNoneBeingResolver()
@@ -220,9 +222,7 @@ class TestStagnationBandUnresolvedBeingDiagnostics:
     def test_store未構築_flag_offなら被attach警告は出ずbandはnoneのまま(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.delenv("STAGNATION_PRESSURE_ENABLED", raising=False)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_stagnation_config())
         assert runtime._stagnation_pressure_store is None
         # 機能自体が無効な経路では resolver を差し替えなくても being 未解決
         # 判定に到達しないはずだが、念のため常に None を返す stub にしておき

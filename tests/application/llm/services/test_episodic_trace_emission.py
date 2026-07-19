@@ -990,8 +990,8 @@ class TestWorldRuntimeEpisodicTraceE2E:
 
         from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+        from tests.runtime_config_helpers import episodic_config
 
         scenario_path = (
             Path(__file__).resolve().parents[4]
@@ -999,7 +999,7 @@ class TestWorldRuntimeEpisodicTraceE2E:
             / "scenarios"
             / "forbidden_library_demo.json"
         )
-        runtime = create_world_runtime(scenario_path)
+        runtime = create_world_runtime(scenario_path, config=episodic_config())
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         runtime.set_trace_recorder(recorder)

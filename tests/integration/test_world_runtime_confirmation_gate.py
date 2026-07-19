@@ -22,6 +22,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
     SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from tests.runtime_config_helpers import belief_consolidation_config
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -29,13 +30,6 @@ _SCENARIO_PATH = (
     / "scenarios"
     / "forbidden_library_demo.json"
 )
-
-
-def _enable_flags(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("BELIEF_EVIDENCE_ENABLED", "1")
-    monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
-    monkeypatch.setenv("SEMANTIC_SEARCH_ENABLED", "1")
 
 
 def _transcriber(runtime):
@@ -48,8 +42,10 @@ class TestWorldRuntimeConfirmationGateWiring:
     def test_belief_axis_provider_is_wired(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_flags(monkeypatch)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=belief_consolidation_config(),
+        )
         transcriber = _transcriber(runtime)
         assert transcriber is not None
         assert transcriber._belief_axis_provider is not None
@@ -60,15 +56,17 @@ class TestWorldRuntimeConfirmationGateWiring:
         """seed した belief の (tags, text) を provider が返す (遅延ルックアップ
 
         が semantic store に届いている)。"""
-        _enable_flags(monkeypatch)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=belief_consolidation_config(),
+        )
         transcriber = _transcriber(runtime)
         store = runtime._episodic_stack.semantic_memory_store
         assert store is not None
 
         # player_id=1 の being を解決し、belief を 1 件 seed する。
-        being_id = runtime._aux_being_resolver.resolve_being_id(
-            runtime._aux_being_default_world_id, PlayerId(1)
+        being_id = runtime.aux_being_resolver.resolve_being_id(
+            runtime.aux_being_default_world_id, PlayerId(1)
         )
         assert being_id is not None
         store.add_by_being(
@@ -101,12 +99,14 @@ class TestWorldRuntimeConfirmationGateWiring:
         現在の entry_id で解決できる。passive recall は entry_id を
         in_context_belief_ids に流すため、belief_id で照合すると revise 済み
         belief が永久にゲートに一致しなくなる回帰を防ぐ。"""
-        _enable_flags(monkeypatch)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=belief_consolidation_config(),
+        )
         transcriber = _transcriber(runtime)
         store = runtime._episodic_stack.semantic_memory_store
-        being_id = runtime._aux_being_resolver.resolve_being_id(
-            runtime._aux_being_default_world_id, PlayerId(1)
+        being_id = runtime.aux_being_resolver.resolve_being_id(
+            runtime.aux_being_default_world_id, PlayerId(1)
         )
         # revise 後の状態を模す: 新 entry は別 entry_id を持ち、belief_id は
         # 元の lineage id を継ぐ。recall はこの新 entry の entry_id を流す。

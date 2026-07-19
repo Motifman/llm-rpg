@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from tests.runtime_config_helpers import episodic_config
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -28,28 +29,23 @@ _SCENARIO_PATH = (
 )
 
 
-def _enable_common_memory_flags(monkeypatch: pytest.MonkeyPatch) -> None:
-    """想起の信用割り当てが実際に流れるための前提 flag 一式を ON にする。
-
-    - LLM_EPISODIC_ENABLED: episodic stack (chunk_coordinator) を組む前提
-    - PREDICTION_CONTEXT_ID_ENABLED: U1 (recall と prediction を紐付ける土台)
-    - LLM_EPISODIC_REINTERPRETATION_ENABLED: 段1 (recall_buffer を組む前提。
-      completion 未設定でも build_episodic_stack 自体は recall_buffer を
-      作る。prompt が実際に覗くかは completion 有無に依る)
-    """
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("PREDICTION_CONTEXT_ID_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_REINTERPRETATION_ENABLED", "1")
+def _common_memory_config(**overrides):
+    """想起の信用割り当てが実際に流れるための前提設定一式を作る。"""
+    return episodic_config(
+        prediction_context_id_enabled=True,
+        episodic_reinterpretation_enabled=True,
+        **overrides,
+    )
 
 
 class TestWorldRuntimeRecallHitBoostWiring:
     def test_flag_ON_で_chunk_coordinator_と_passive_recall_に届く(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_common_memory_flags(monkeypatch)
-        monkeypatch.setenv("RECALL_HIT_BOOST_ENABLED", "1")
-
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_common_memory_config(recall_hit_boost_enabled=True),
+        )
         stack = runtime._episodic_stack
         assert stack is not None
 
@@ -69,10 +65,7 @@ class TestWorldRuntimeRecallHitBoostWiring:
     def test_flag_OFF_既定なら不活性で_recall_success_store_はNone(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_common_memory_flags(monkeypatch)
-        monkeypatch.delenv("RECALL_HIT_BOOST_ENABLED", raising=False)
-
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_common_memory_config())
         stack = runtime._episodic_stack
         assert stack is not None
 
@@ -88,12 +81,13 @@ class TestWorldRuntimeRecallHitBoostWiring:
         組まれないため、的中側 store は構築されても record_hit 対象の
         recall observation が無く安全に縮退する (本 flag 単独では実害無し)。
         """
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("PREDICTION_CONTEXT_ID_ENABLED", "1")
-        monkeypatch.delenv("LLM_EPISODIC_REINTERPRETATION_ENABLED", raising=False)
-        monkeypatch.setenv("RECALL_HIT_BOOST_ENABLED", "1")
-
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=episodic_config(
+                prediction_context_id_enabled=True,
+                recall_hit_boost_enabled=True,
+            ),
+        )
         stack = runtime._episodic_stack
         assert stack is not None
         assert stack.reinterpretation_coordinator is None

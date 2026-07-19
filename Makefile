@@ -44,12 +44,8 @@ help:
 	@echo "  make experiment-relay-r1      - R1 のみ"
 	@echo "  make experiment-relay-r2      - R2 のみ"
 	@echo "  make experiment-relay-cloud   - OpenAI クラウド（OPENAI_API_BASE 空）"
-	@echo "  make experiment SCENARIO=... MAX_WORLD_TICKS=... [WORKERS=4 EPISODIC=1 IDLE_TICKS=6 OUT=...]"
-	@echo "                                  prefix cache 系: [SECTION_ORDER=stable_to_volatile|legacy]"
-	@echo "                                                   [MEMORY_KIND=sliding_window|rolling_summary]"
-	@echo "                                                   [SCHEDULER_MODE=inline|thread_pool]"
-	@echo "                                  OpenRouter: [PROVIDER=Parasail QUANTIZATION=fp8 REQUIRE_PARAMS=1]"
-	@echo "                                - 汎用シナリオ実験 (任意 scenario JSON)"
+	@echo "  make experiment [EXPERIMENT_PROFILE=belief_goal_full] [OUT=...]"
+	@echo "                                - profile に固定した汎用シナリオ実験"
 	@echo "  make experiment-publish ...   - experiment + 自動 gist publish"
 	@echo "  make experiment-survival OUT=... [EPISODIC=1]"
 	@echo "                                - survival_island_v2 専用 (140 tick / workers 4 / publish 既定)"
@@ -151,98 +147,38 @@ experiment-relay-cloud:
 # trace.jsonl + report.md + trace.html を出力する。
 #
 # 使い方:
-#   make experiment SCENARIO=data/scenarios/survival_island_v2.json
-#   make experiment SCENARIO=data/scenarios/foo.json MAX_WORLD_TICKS=140 OUT=var/runs/foo-001 WORKERS=4
-#   make experiment SCENARIO=... EPISODIC=1   # episodic memory pipeline 有効
-#   make experiment SCENARIO=... SECTION_ORDER=stable_to_volatile MEMORY_KIND=rolling_summary
-#   make experiment SCENARIO=... PROVIDER=Parasail QUANTIZATION=fp8  # OpenRouter routing
+#   make experiment EXPERIMENT_PROFILE=belief_goal_full OUT=var/runs/foo-001
+#   make experiment EXPERIMENT_PROFILE=smoke_stub OUT=/tmp/llm-rpg-smoke
+#   make experiment EXPERIMENT_PROFILE=ablation_base SCENARIO=data/scenarios/foo.json
 #
 # 引数 (= make 変数):
-#   SCENARIO        実行するシナリオ JSON のパス (必須)
+#   EXPERIMENT_PROFILE
+#                   data/experiment_profiles/<name>.json を読む。
+#                   実験フラグ・LLM 設定はここだけに置く。
+#   EXPERIMENT_CONFIG
+#                   profile ではなく任意 JSON ファイルを読む。
+#   SCENARIO        profile の scenario を一時的に上書きするパス。
 #   MAX_WORLD_TICKS world_tick がこの値に達したらループ終了 (既定 30)。
 #                   旧名 MAX_TICKS は外側 iteration 回数だったが #404 P1 で
 #                   意味論を world tick 基準に統一した。
 #   OUT             出力ディレクトリ (省略時 var/runs/<scenario>-<timestamp>)
-#   WORKERS         LLM Phase A 並列ワーカー数 (既定 1。実験は 4 推奨)
-#   EPISODIC        1 で episodic memory 有効 (= LLM_EPISODIC_ENABLED=1)
-#   IDLE_TICKS      per-agent idle timer の沈黙上限 tick (既定 6)
 #   PUBLISH         1 で gist 自動 publish (= --publish-gist)
-#
-# 記憶 / prefix cache 系 (実 LLM 実験で prefix cache 効果を見るための切替):
-#   SECTION_ORDER   stable_to_volatile | legacy (= PROMPT_SECTION_ORDER)。
-#                   未指定なら default (stable_to_volatile)。Phase 0 の
-#                   reorder OFF/ON 比較に使う。
-#   MEMORY_KIND     sliding_window | rolling_summary (= SHORT_TERM_MEMORY_KIND)。
-#                   未指定なら default (sliding_window)。rolling_summary は
-#                   Phase 2 の L4 mid summary 経路。
-#                   **注意**: 短縮形 ``rolling`` / ``sliding`` は無効値で
-#                   sliding_window に fallback するため必ず完全名を使うこと。
-#   SCHEDULER_MODE  inline | thread_pool (= SHORT_TERM_MEMORY_SCHEDULER_MODE)。
-#                   rolling 時の L4 生成タスクを非同期にするか。未指定なら inline。
-#
-# OpenRouter provider routing (実 LLM 実験で provider/quant を固定):
-#   PROVIDER        provider 名 (例: DeepInfra / Parasail / Venice)。指定時は
-#                   OPENROUTER_PROVIDER として渡り allow_fallbacks=False が付く。
-#   QUANTIZATION    fp8 / fp4 / bf16 等 (= OPENROUTER_QUANTIZATION)。同 provider
-#                   内で variant を絞るとき。例: DeepInfra fp8 (turbo=fp4 を回避)。
-#   REQUIRE_PARAMS  1 で OPENROUTER_REQUIRE_PARAMS=true。リクエスト param 全対応
-#                   provider のみに限定 (tools / response_format を要求するとき)。
-#
-# その他の env (litellm 接続):
-#   OPENAI_API_BASE / LLM_MODEL / OPENAI_API_KEY
-MAX_WORLD_TICKS ?= 30
-WORKERS ?= 1
-# #346 Step 3 / #404: per-agent idle timer (heartbeat 沈黙上限) tick 数。
-# 既定 6 = 「event 駆動で active なら heartbeat は出ず、丸 6 tick 何もなければ
-# 1 回起こす」。0 / 未指定 = 既定 (6) を使う。沈黙を強めたい実験では 12 / 24
-# に上げる。
-IDLE_TICKS ?=
-# 実 LLM 実験のデフォルト model / provider。run 同士の prompt prefix cache を
-# 共有させるため、未指定なら必ず同じ model + provider に固定する。openrouter
-# は同じ model 名でも複数 provider (DeepSeek 本家 / DeepInfra / Parasail /
-# 他) にルーティングし、provider が変わると cache が共有されない。default を
-# 明示することで「あの run と同じ条件か」を疑う必要をなくす。
-# 別 provider で実験したい場合は呼び出し側で LLM_MODEL=... PROVIDER=... を
-# 上書きする。0 byte の cache hit に悩んだら、まず stdout の
-# `[run] openrouter routing: provider=...` を確認すること。
-LLM_MODEL ?= openrouter/deepseek/deepseek-v4-flash
-PROVIDER ?= DeepSeek
-# 受動 episodic recall の「賢く使う」拡張をデフォルト ON にする (Issue #526
-# 段階 2-3 / PR-C)。EPISODIC=1 で受動 recall そのものを有効化したときに、
-# 以下 3 機構も併せて動く。受動 recall が OFF なら何も影響しない。
-#   - RECALL_HABITUATION: 直近 N tick 採用した episode の score を一時的に
-#     下げる慣化 (= 同じ記憶が連続して上に出続けるのを防ぐ)
-#   - RECALL_SLOT: working memory スロット (= 想起した記憶を数 tick 保持)
-#   - AFTERGLOW: 採用されなかった候補の「ぼんやり覚えてる」インデックス
-# これらは Y_recall_layer (= 旧 cache hit 63.7% 取れていた run) のときも
-# 全部 ON だった。EPISODIC と一緒にこれら 3 つを忘れないようデフォルト 1。
-# 個別に OFF にしたい場合は RECALL_HABITUATION=0 のように 0 を渡す。
-RECALL_HABITUATION ?= 1
-RECALL_SLOT ?= 1
-AFTERGLOW ?= 1
+#   OPENAI_API_KEY  実 LLM 接続用の秘密情報。profile には書かない。
+MAX_WORLD_TICKS ?=
+EXPERIMENT_PROFILE ?= belief_goal_full
+EXPERIMENT_CONFIG ?=
 experiment:
-	@if [ -z "$(SCENARIO)" ]; then \
-		echo "SCENARIO is required. e.g. make experiment SCENARIO=data/scenarios/survival_island_v2.json"; \
+	@if [ -n "$(EXPERIMENT_PROFILE)" ] && [ -n "$(EXPERIMENT_CONFIG)" ]; then \
+		echo "EXPERIMENT_PROFILE and EXPERIMENT_CONFIG are mutually exclusive"; \
 		exit 2; \
 	fi
 	@mkdir -p var/runs
-	@echo "[experiment] LLM_MODEL=$(LLM_MODEL) PROVIDER=$(PROVIDER) (default; 上書きは LLM_MODEL=... PROVIDER=...)"
-	LLM_MODEL=$(LLM_MODEL) \
-	LLM_TURN_PARALLEL_WORKERS=$(WORKERS) \
-	$(if $(EPISODIC),LLM_EPISODIC_ENABLED=1,) \
-	LLM_EPISODIC_RECALL_HABITUATION_ENABLED=$(RECALL_HABITUATION) \
-	LLM_EPISODIC_RECALL_SLOT_ENABLED=$(RECALL_SLOT) \
-	LLM_AFTERGLOW_ENABLED=$(AFTERGLOW) \
-	$(if $(IDLE_TICKS),LLM_IDLE_TIMEOUT_TICKS=$(IDLE_TICKS),) \
-	$(if $(SECTION_ORDER),PROMPT_SECTION_ORDER=$(SECTION_ORDER),) \
-	$(if $(MEMORY_KIND),SHORT_TERM_MEMORY_KIND=$(MEMORY_KIND),) \
-	$(if $(SCHEDULER_MODE),SHORT_TERM_MEMORY_SCHEDULER_MODE=$(SCHEDULER_MODE),) \
-	OPENROUTER_PROVIDER=$(PROVIDER) \
-	$(if $(QUANTIZATION),OPENROUTER_QUANTIZATION=$(QUANTIZATION),) \
-	$(if $(REQUIRE_PARAMS),OPENROUTER_REQUIRE_PARAMS=true,) \
-	$(PYTHON) scripts/run_scenario_experiment.py \
-		--scenario $(SCENARIO) \
-		--max-world-ticks $(MAX_WORLD_TICKS) \
+	@echo "[experiment] profile=$(EXPERIMENT_PROFILE) config=$(EXPERIMENT_CONFIG)"
+	uv run python scripts/run_scenario_experiment.py \
+		$(if $(EXPERIMENT_PROFILE),--profile $(EXPERIMENT_PROFILE),) \
+		$(if $(EXPERIMENT_CONFIG),--experiment-config $(EXPERIMENT_CONFIG),) \
+		$(if $(SCENARIO),--scenario $(SCENARIO),) \
+		$(if $(MAX_WORLD_TICKS),--max-world-ticks $(MAX_WORLD_TICKS),) \
 		$(if $(OUT),--out $(OUT),) \
 		$(if $(PUBLISH),--publish-gist,) \
 		$(if $(SNAPSHOT_SAVE_DIR),--snapshot-save-dir $(SNAPSHOT_SAVE_DIR),$(if $(OUT),--snapshot-save-dir $(OUT)/snapshots,)) \
@@ -391,33 +327,15 @@ experiment-survival-coop:
 #   make experiment-recall-probe DRY_RUN=1 OUT=/tmp/dryrun   # LLM 呼ばずに構造確認
 #
 # 既定: K run 設定 (rolling_summary / thread_pool / stable_to_volatile) +
-#       DeepInfra fp4 / deepseek-v4-flash。OPENROUTER_API_KEY が要る。
+#       DeepInfra fp4 / deepseek-v4-flash。OPENAI_API_KEY が要る。
 #
-# 環境変数で上書き可能:
-#   RECALL_PROBE_MODEL    既定 openrouter/deepseek/deepseek-v4-flash
-#   RECALL_PROBE_PROVIDER 既定 DeepInfra
-#   RECALL_PROBE_QUANT    既定 fp4
+# 引数:
 #   RECALL_PROBE_SCENARIO 既定 data/scenarios/recall_probe_v1.json
 #                         v2 (中立 objective + passive 痩せ) を使うときは
 #                         data/scenarios/recall_probe_v2.json
-RECALL_PROBE_MODEL ?= openrouter/deepseek/deepseek-v4-flash
-RECALL_PROBE_PROVIDER ?= DeepInfra
-RECALL_PROBE_QUANT ?= fp4
 RECALL_PROBE_SCENARIO ?= data/scenarios/recall_probe_v1.json
 experiment-recall-probe:
 	@mkdir -p var/runs
-	LLM_CLIENT=$(if $(DRY_RUN),stub,litellm) \
-	LLM_MODEL=$(RECALL_PROBE_MODEL) \
-	OPENROUTER_PROVIDER=$(RECALL_PROBE_PROVIDER) \
-	OPENROUTER_QUANTIZATION=$(RECALL_PROBE_QUANT) \
-	OPENROUTER_REQUIRE_PARAMS=true \
-	LLM_EPISODIC_ENABLED=1 \
-	SHORT_TERM_MEMORY_KIND=rolling_summary \
-	SHORT_TERM_MEMORY_SCHEDULER_MODE=thread_pool \
-	PROMPT_SECTION_ORDER=stable_to_volatile \
-	LLM_IDLE_TIMEOUT_TICKS=1 \
-	LLM_TURN_PARALLEL_WORKERS=1 \
-	SPOT_GRAPH_TICK_LOOP_ENABLED=false \
 	uv run python scripts/run_recall_probe_experiment.py \
 		--scenario $(RECALL_PROBE_SCENARIO) \
 		$(if $(RECALL_PROBE_MODE),--mode $(RECALL_PROBE_MODE),) \

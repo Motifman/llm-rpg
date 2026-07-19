@@ -20,21 +20,8 @@ tool を呼ぶか、passive recall で済ますか、誤想起するか) を tra
 # 使い方
 
 ```bash
-# vLLM 経由 (K run と同じ DeepInfra fp4 経由を再現する場合は OpenRouter 経由)
-LLM_CLIENT=litellm \\
-LLM_MODEL=openrouter/deepseek/deepseek-v4-flash \\
-OPENROUTER_PROVIDER=DeepInfra \\
-OPENROUTER_QUANTIZATION=fp4 \\
-OPENROUTER_REQUIRE_PARAMS=1 \\
-OPENAI_API_KEY=$OPENROUTER_API_KEY \\
-OPENAI_API_BASE=https://openrouter.ai/api/v1 \\
-LLM_EPISODIC_ENABLED=1 \\
-SHORT_TERM_MEMORY_KIND=rolling_summary \\
-SHORT_TERM_MEMORY_SCHEDULER_MODE=thread_pool \\
-PROMPT_SECTION_ORDER=stable_to_volatile \\
-LLM_IDLE_TIMEOUT_TICKS=1 \\
-LLM_TURN_PARALLEL_WORKERS=1 \\
-SPOT_GRAPH_TICK_LOOP_ENABLED=false \\
+# K run と同じ DeepInfra fp4 経由を再現する固定設定。
+# API key だけは process env の OPENAI_API_KEY から読む。
 uv run python scripts/run_recall_probe_experiment.py \\
     --out var/runs/recall_probe_v1_$(date +%Y%m%d_%H%M%S)
 ```
@@ -204,13 +191,11 @@ def _resolve_out_dir(arg_out: Optional[Path], scenario_path: Path) -> Path:
 
 def _setup_runtime(*, no_llm: bool, scenario_path: Path) -> Tuple[Any, Any, str]:
     """GameRuntimeManager 経由で runtime / session を作る。"""
-    if no_llm:
-        os.environ["LLM_CLIENT"] = "stub"
-    else:
-        os.environ.setdefault("LLM_CLIENT", "litellm")
     os.environ["SPOT_GRAPH_TICK_LOOP_ENABLED"] = "false"
-    os.environ.setdefault("LLM_EPISODIC_ENABLED", "1")
 
+    from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+        ResolvedLlmRuntimeConfig,
+    )
     from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
         GameRuntimeManager,
     )
@@ -221,8 +206,26 @@ def _setup_runtime(*, no_llm: bool, scenario_path: Path) -> Tuple[Any, Any, str]
 
     tmp = tempfile.mkdtemp(prefix="recall_probe_")
     chars_path = Path(tmp) / "characters.json"
+    runtime_config = ResolvedLlmRuntimeConfig.from_mapping(
+        values={
+            "LLM_CLIENT": "stub" if no_llm else "litellm",
+            "LLM_MODEL": "openrouter/deepseek/deepseek-v4-flash",
+            "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
+            "OPENROUTER_PROVIDER": "DeepInfra",
+            "OPENROUTER_QUANTIZATION": "fp4",
+            "OPENROUTER_REQUIRE_PARAMS": "1",
+            "LLM_EPISODIC_ENABLED": "1",
+            "SHORT_TERM_MEMORY_KIND": "rolling_summary",
+            "SHORT_TERM_MEMORY_SCHEDULER_MODE": "thread_pool",
+            "PROMPT_SECTION_ORDER": "stable_to_volatile",
+            "LLM_IDLE_TIMEOUT_TICKS": "1",
+            "LLM_TURN_PARALLEL_WORKERS": "1",
+        }
+    )
     mgr = GameRuntimeManager(
-        scenarios_dir=scenario_path.parent, characters_path=chars_path
+        scenarios_dir=scenario_path.parent,
+        characters_path=chars_path,
+        runtime_config=runtime_config,
     )
     char = mgr.create_character(CharacterCreateRequest(name="recall_probe"))
     summary = mgr.create_session(

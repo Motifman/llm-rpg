@@ -799,3 +799,48 @@ source of truth。``check_game_end`` は ``scenario.win_conditions`` /
 解消した際、それ以前の 3 store を追加した一連の経路 (#580 / #583 が想起
 スロット、#588 が afterglow、Issue #526 段階 2 が慣化 store) すべてが本
 手順を踏んでいなかったことが判明したため、再発防止として本項を追加。
+
+## 28. 実験に意味を持つ設定は profile/config だけから入れる
+
+**何を**: LLM 実験の挙動を変える設定は、`data/experiment_profiles/*.json`
+または `--experiment-config` の `runtime_config` だけから
+`ResolvedLlmRuntimeConfig` に解決する。環境変数から同じ値を入れる互換経路は
+作らない。例外は API キー、サーバのホスト/ポート、ローカル DB パスのような
+秘密情報または実行基盤の設定に限る。
+
+**なぜこの形か**:
+
+- 1 つの値に複数の入力経路があると、run_start trace に残った値と実 runtime の
+  値がずれる。過去の rolling_summary / prompt section / provider routing 系の
+  静かな失敗はこの形で起きた。
+- 実 LLM run はコストが高い。外側 shell に残った古い環境変数が混ざるだけで、
+  比較不能な run ができてしまう。
+- profile/config は成果物として `experiment.config.source.json` と
+  `experiment.config.resolved.json` に保存できる。環境変数の履歴を後から完全に
+  復元するより、入力を 1 本にする方が事故が少ない。
+
+**実装上の決まり**:
+
+- `run_scenario_experiment.py` は profile/config を process env に注入しない。
+  `runtime_config` の mapping を直接 `ResolvedLlmRuntimeConfig.from_mapping(...)`
+  に渡す。
+- `create_world_runtime(..., config=cfg)` / `GameRuntimeManager(runtime_config=cfg)`
+  / `create_llm_client_from_config(cfg)` のように、解決済み config を引数で渡す。
+- 低レベル resolver は `env=None` でも `os.environ` を読まない。テストや移行用に
+  mapping を渡す場合だけ、その mapping を読む。
+- 新しい実験設定を足すときは、`ResolvedLlmRuntimeConfig`、profile、manifest、
+  配線契約テストを同じ PR に含める。
+
+**どうしないと壊れるか**:
+
+- 「後方互換」として `LLM_*` や `BELIEF_*` を環境変数から読む経路を戻すと、
+  profile に書いた条件と実 runtime の条件が分岐する。
+- `LiteLLMClient` 内部で provider / model / reasoning / timeout を環境変数から
+  読むと、manifest に残らないコスト条件が混ざる。
+- 並列度や idle timeout も観測結果に影響しうるため、実験 run では config に
+  固定して trace に残す。
+
+**どこで出てきたか**: `v3coop_stagnation_001` / `002` 相当の「全部盛り」
+実験条件を profile 化する作業中、ユーザから「API キー以外の env 入力経路は
+廃止したい。一つの値に複数経路があることで過去にも苦しんだ」と指摘された。
+そのため、後方互換よりも経路の単一化を優先する判断として固定した。

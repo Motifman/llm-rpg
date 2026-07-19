@@ -188,21 +188,15 @@ def _detect_openrouter_base(api_base: Optional[str]) -> bool:
     return "openrouter.ai" in api_base.lower()
 
 
-def _resolve_openrouter_routing_from_env() -> Optional[Dict[str, Any]]:
-    """OpenRouter provider routing 設定を env から resolve し ``extra_body`` 用 dict を返す。
-
-    いずれの env も未設定なら ``None`` を返す (= 何も注入しない / 既存挙動)。
-    1 つでも設定があれば ``{"provider": {...}}`` を返す。
-
-    ``OPENROUTER_PROVIDER`` が設定された場合は ``allow_fallbacks=False`` を必ず付ける
-    (provider 固定の意図を裏切らないため)。
-
-    返り値は **immutable 想定** で扱うこと (constructor で 1 度作って共有)。
-    """
-    provider = (os.environ.get(_ENV_VAR_OPENROUTER_PROVIDER) or "").strip()
-    quantization = (os.environ.get(_ENV_VAR_OPENROUTER_QUANTIZATION) or "").strip()
-    require_params_raw = (os.environ.get(_ENV_VAR_OPENROUTER_REQUIRE_PARAMS) or "").strip().lower()
-    require_params = require_params_raw in _TRUTHY_ENV_VALUES
+def _build_openrouter_routing(
+    *,
+    provider: Optional[str],
+    quantization: Optional[str],
+    require_params: bool,
+) -> Optional[Dict[str, Any]]:
+    """明示値から OpenRouter provider routing 設定を組む。"""
+    provider = (provider or "").strip()
+    quantization = (quantization or "").strip()
     if not provider and not quantization and not require_params:
         return None
     block: Dict[str, Any] = {}
@@ -240,8 +234,8 @@ def _build_reasoning_block(effort: str) -> Optional[Dict[str, Any]]:
     - ``"none"`` 〜 ``"xhigh"`` → OpenRouter ``reasoning`` envelope と DeepSeek
       native ``thinking`` の両方を返す (belt-and-suspenders)
 
-    env 経路 (`_resolve_reasoning_effort_from_env`) と invoke の per-call override の
-    両方が本関数を共有し、reasoning ブロックの形を 1 箇所に集約する。
+    config 経路と invoke の per-call override の両方が本関数を共有し、
+    reasoning ブロックの形を 1 箇所に集約する。
     """
     if effort == "":
         return None
@@ -260,21 +254,6 @@ def _build_reasoning_block(effort: str) -> Optional[Dict[str, Any]]:
         # するときに reasoning envelope を読み落とすケースの保険
         block["thinking"] = {"type": "disabled"}
     return block
-
-
-def _resolve_reasoning_effort_from_env() -> Optional[Dict[str, Any]]:
-    """``LLM_REASONING_EFFORT`` env を解決し、``extra_body`` 用の reasoning ブロックを返す。
-
-    - 未設定 → default の ``"none"`` (= 完全 OFF) として扱う
-    - 空文字 ``""`` (明示) → ``None`` (reasoning 系 field を一切 inject しない)
-    - ``"none"`` 〜 ``"xhigh"`` → reasoning + thinking ブロック
-    - 未知文字列 → ValueError (silent fallback 防止 / PR #433 経緯と同じ方針)
-    """
-    raw_env = os.environ.get(_ENV_VAR_REASONING_EFFORT)
-    effort = _DEFAULT_REASONING_EFFORT if raw_env is None else raw_env
-    return _build_reasoning_block(
-        _validate_reasoning_effort(effort, source_label=_ENV_VAR_REASONING_EFFORT)
-    )
 
 
 def _extract_first_json_object(text: str) -> str:
@@ -344,6 +323,13 @@ class LiteLLMClient(
         api_key_env_var: str = _ENV_VAR_API_KEY,
         api_base: Optional[str] = None,
         timeout_seconds: Optional[float] = None,
+        openrouter_provider: Optional[str] = None,
+        openrouter_quantization: Optional[str] = None,
+        openrouter_require_params: bool = False,
+        reasoning_effort: str = _DEFAULT_REASONING_EFFORT,
+        wall_cap_seconds: Optional[float] = None,
+        rate_limit_retry_attempts: int = _DEFAULT_RATE_LIMIT_RETRY_ATTEMPTS,
+        rate_limit_retry_base_sleep: float = _DEFAULT_RATE_LIMIT_RETRY_BASE_SLEEP,
     ) -> None:
         if not isinstance(model, str) or not model.strip():
             raise ValueError("model must be a non-empty string")
@@ -353,7 +339,7 @@ class LiteLLMClient(
             raise TypeError("api_key must be str or None")
         if api_base is not None and not isinstance(api_base, str):
             raise TypeError("api_base must be str or None")
-        if api_key is None or api_base is None:
+        if api_key is None:
             _load_dotenv_if_available()
         self._model = model.strip()
         self._api_key_env_var = api_key_env_var
@@ -366,37 +352,33 @@ class LiteLLMClient(
         resolved_base = ""
         if api_base is not None:
             resolved_base = api_base.strip()
-        else:
-            resolved_base = (os.environ.get(_ENV_VAR_API_BASE) or "").strip()
         self._api_base = resolved_base or None
 
-        # PR #444: timeout を明示。引数 > env > default の優先で解決し、毎呼び
+        # PR #444: timeout を明示。設定引数 > default の優先で解決し、毎呼び
         # 出しの litellm.completion に渡す。これがないと litellm 既定 6000 秒
         # (= 100 分) で長期 hang を許容してしまう。
-        if timeout_seconds is not None:
-            self._timeout_seconds: float = float(timeout_seconds)
-        else:
-            raw = (os.environ.get(_ENV_VAR_LLM_TIMEOUT) or "").strip()
-            if raw:
-                try:
-                    self._timeout_seconds = float(raw)
-                except ValueError:
-                    raise ValueError(
-                        f"{_ENV_VAR_LLM_TIMEOUT}={raw!r} must be a number (seconds)"
-                    )
-            else:
-                self._timeout_seconds = _DEFAULT_LLM_TIMEOUT_SECONDS
+        self._timeout_seconds = (
+            float(timeout_seconds)
+            if timeout_seconds is not None
+            else _DEFAULT_LLM_TIMEOUT_SECONDS
+        )
 
-        # OpenRouter provider routing: constructor 時点で env を 1 度だけ resolve
-        # して保持する。invoke() / complete_*_json() の度に env を読み直すと、実験
-        # 中の env 変動で挙動がブレるため。
-        self._openrouter_routing: Optional[Dict[str, Any]] = _resolve_openrouter_routing_from_env()
+        self._openrouter_routing: Optional[Dict[str, Any]] = _build_openrouter_routing(
+            provider=openrouter_provider,
+            quantization=openrouter_quantization,
+            require_params=openrouter_require_params,
+        )
 
         # reasoning model (deepseek-v4-flash 等) に対する effort 制御。
-        # default = "none" (= reasoning 完全 OFF)。LLM_REASONING_EFFORT で上書き可能。
+        # default = "none" (= reasoning 完全 OFF)。
         # 非 reasoning model でも余計な field が乗るだけで害はない (= provider 側で
         # silently dropped)。
-        self._reasoning_block: Optional[Dict[str, Any]] = _resolve_reasoning_effort_from_env()
+        self._reasoning_block: Optional[Dict[str, Any]] = _build_reasoning_block(
+            _validate_reasoning_effort(
+                reasoning_effort,
+                source_label="reasoning_effort",
+            )
+        )
 
         # OpenRouter は api_base が openrouter ドメインかで判定する。
         # ``extra_body.usage.include=True`` を付けると response.usage.cost に
@@ -404,68 +386,26 @@ class LiteLLMClient(
         # OpenAI 直結 / vLLM には影響しない (api_base が違うので付かない)。
         self._is_openrouter_base: bool = _detect_openrouter_base(self._api_base)
 
-        # 選択的リトライの設定。env override 可能 (実験再現性)。
-        self._rate_limit_retry_attempts: int = self._resolve_int_env(
-            _ENV_VAR_RATE_LIMIT_RETRY_ATTEMPTS,
-            _DEFAULT_RATE_LIMIT_RETRY_ATTEMPTS,
-            minimum=0,
-        )
-        self._rate_limit_retry_base_sleep: float = self._resolve_float_env(
-            _ENV_VAR_RATE_LIMIT_RETRY_BASE_SLEEP,
-            _DEFAULT_RATE_LIMIT_RETRY_BASE_SLEEP,
-            minimum=0.0,
-        )
+        if rate_limit_retry_attempts < 0:
+            raise ValueError("rate_limit_retry_attempts must be 0 or greater")
+        if rate_limit_retry_base_sleep < 0:
+            raise ValueError("rate_limit_retry_base_sleep must be 0 or greater")
+        self._rate_limit_retry_attempts = int(rate_limit_retry_attempts)
+        self._rate_limit_retry_base_sleep = float(rate_limit_retry_base_sleep)
 
         # Wall-time hard cap: httpx の per-recv read timeout が効かないケースの
         # 保険として、`concurrent.futures.ThreadPoolExecutor.result(timeout=)`
         # で wall-time を独立に強制する。default は self._timeout_seconds + 5s
-        # (httpx 経路が正常に動くケースの邪魔をしない)。env で短く設定すれば
-        # 「全体の律速を避ける」用途に使える (= 通常 p99 < 40s なので 45s 等
-        # 短めでも正常 call はほぼ通る + outlier だけ確実に切れる)。
-        env_cap = (os.environ.get(_ENV_VAR_LLM_WALL_CAP) or "").strip()
-        if env_cap:
-            try:
-                self._wall_cap_seconds: float = float(env_cap)
-            except ValueError:
-                raise ValueError(
-                    f"{_ENV_VAR_LLM_WALL_CAP}={env_cap!r} must be a number (seconds)"
-                )
-            if self._wall_cap_seconds <= 0:
-                raise ValueError(
-                    f"{_ENV_VAR_LLM_WALL_CAP}={self._wall_cap_seconds} must be > 0"
-                )
-        else:
-            self._wall_cap_seconds = (
-                self._timeout_seconds + _DEFAULT_WALL_CAP_BUFFER_SECONDS
-            )
+        # (httpx 経路が正常に動くケースの邪魔をしない)。
+        self._wall_cap_seconds = (
+            float(wall_cap_seconds)
+            if wall_cap_seconds is not None
+            else self._timeout_seconds + _DEFAULT_WALL_CAP_BUFFER_SECONDS
+        )
+        if self._wall_cap_seconds <= 0:
+            raise ValueError("wall_cap_seconds must be greater than 0")
 
         self._logger = logging.getLogger(self.__class__.__name__)
-
-    @staticmethod
-    def _resolve_int_env(name: str, default: int, *, minimum: int) -> int:
-        raw = (os.environ.get(name) or "").strip()
-        if not raw:
-            return default
-        try:
-            value = int(raw)
-        except ValueError:
-            raise ValueError(f"{name}={raw!r} must be an integer")
-        if value < minimum:
-            raise ValueError(f"{name}={value} must be >= {minimum}")
-        return value
-
-    @staticmethod
-    def _resolve_float_env(name: str, default: float, *, minimum: float) -> float:
-        raw = (os.environ.get(name) or "").strip()
-        if not raw:
-            return default
-        try:
-            value = float(raw)
-        except ValueError:
-            raise ValueError(f"{name}={raw!r} must be a number")
-        if value < minimum:
-            raise ValueError(f"{name}={value} must be >= {minimum}")
-        return value
 
     def _call_with_wall_cap(self, call_fn: Callable[[], Any]) -> Any:
         """``self._wall_cap_seconds`` を per-attempt wall-time hard cap として強制する。

@@ -46,6 +46,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
     SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from tests.runtime_config_helpers import episodic_config
 
 
 _SCENARIO_PATH = (
@@ -57,13 +58,12 @@ _SCENARIO_PATH = (
 _DUMP_DIR = Path(__file__).resolve().parents[2] / "docs" / "quality_checks"
 
 
-def _build_runtime(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+def _build_runtime():
     from ai_rpg_world.application.world_runtime.world_runtime import (
         create_world_runtime,
     )
 
-    return create_world_runtime(_SCENARIO_PATH)
+    return create_world_runtime(_SCENARIO_PATH, config=episodic_config())
 
 
 def _resolve_player_id(runtime, name: str) -> PlayerId:
@@ -151,8 +151,8 @@ class TestPredictionV1Baseline:
 
     def _seed_prediction_learning(self, runtime, rin_id: PlayerId) -> SemanticPassiveRecallService:
         """予測由来の学びを semantic store にシードし、recall service を返す。"""
-        rin_being = runtime._aux_being_resolver.resolve_being_id(
-            runtime._aux_being_default_world_id, rin_id
+        rin_being = runtime.aux_being_resolver.resolve_being_id(
+            runtime.aux_being_default_world_id, rin_id
         )
         assert rin_being is not None
         store = InMemorySemanticMemoryStore()
@@ -171,8 +171,8 @@ class TestPredictionV1Baseline:
         )
         return SemanticPassiveRecallService(
             store,
-            being_attachment_resolver=runtime._aux_being_resolver,
-            default_world_id=runtime._aux_being_default_world_id,
+            being_attachment_resolver=runtime.aux_being_resolver,
+            default_world_id=runtime.aux_being_default_world_id,
         )
 
     def _push_noa_encounter(self, runtime, rin_id: PlayerId) -> None:
@@ -197,7 +197,7 @@ class TestPredictionV1Baseline:
     def test_immediate_baseline(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """immediate variant: 予測が外れた直後の prompt に【前回の予測と実際】が
         出て、予測と実際の gap が並ぶか。"""
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime()
         rin_id = _resolve_player_id(runtime, "リン")
         self._push_missed_prediction(runtime, rin_id)
         prompt = runtime.build_full_prompt(rin_id)
@@ -215,7 +215,7 @@ class TestPredictionV1Baseline:
         world_runtime runtime は semantic recall を配線しないため、prompt builder に
         SemanticPassiveRecallService を white-box 注入する。
         """
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime()
         rin_id = _resolve_player_id(runtime, "リン")
         recall_svc = self._seed_prediction_learning(runtime, rin_id)
         # world_runtime runtime の prompt builder へ semantic recall を注入

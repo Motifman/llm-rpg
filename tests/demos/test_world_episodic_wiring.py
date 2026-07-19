@@ -5,8 +5,8 @@
 - ``build_scenario_noun_matcher`` がシナリオから固有名詞を拾う
 - ``build_world_episodic_stack`` が chunk_coordinator + passive_recall +
   noun_matcher を組み立てて返す
-- ``create_world_runtime`` が env=0/未設定で episodic_stack=None を
-  維持し、env=1 で stack を構築する (configurable on/off の確認)
+- ``create_world_runtime`` が runtime_config で episodic_stack の有無を
+  切り替える
 """
 
 from __future__ import annotations
@@ -78,13 +78,13 @@ class TestIsEpisodicSubjectiveEnabled:
 
 
 class TestBuildScenarioNounMatcher:
-    """シナリオ → 固有名詞 matcher 抽出 (env=1 で構築された runtime から検証)。"""
+    """シナリオ → 固有名詞 matcher 抽出 (config で構築された runtime から検証)。"""
 
-    def test_spot_と_character_の名前が登録される(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """env を有効化して runtime を作り、内部の matcher を直接調べる。"""
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+    def test_spot_と_character_の名前が登録される(self) -> None:
+        """config で有効化して runtime を作り、内部の matcher を直接調べる。"""
+        from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+            ResolvedLlmRuntimeConfig,
+        )
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
         scenario_path = (
@@ -93,7 +93,10 @@ class TestBuildScenarioNounMatcher:
             / "scenarios"
             / "forbidden_library_demo.json"
         )
-        runtime = create_world_runtime(scenario_path)
+        runtime = create_world_runtime(
+            scenario_path,
+            config=ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True),
+        )
         matcher = runtime._episodic_stack.noun_matcher
 
         # spot 名 (forbidden_library_demo に存在する) → place_spot cue
@@ -105,12 +108,9 @@ class TestBuildScenarioNounMatcher:
 
 
 class TestWorldRuntimeEpisodicSwitch:
-    """``create_world_runtime`` が env で episodic を on/off 切替する。"""
+    """``create_world_runtime`` が config で episodic を on/off 切替する。"""
 
-    def test_env_未設定なら_episodic_stack_は_None(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
+    def test_config_未指定なら_episodic_stack_は_None(self) -> None:
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
         scenario_path = (
@@ -122,10 +122,10 @@ class TestWorldRuntimeEpisodicSwitch:
         runtime = create_world_runtime(scenario_path)
         assert runtime._episodic_stack is None
 
-    def test_env_1_なら_episodic_stack_が組み立てられる(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
+    def test_config_で有効化すると_episodic_stack_が組み立てられる(self) -> None:
+        from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+            ResolvedLlmRuntimeConfig,
+        )
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
         scenario_path = (
@@ -134,7 +134,10 @@ class TestWorldRuntimeEpisodicSwitch:
             / "scenarios"
             / "forbidden_library_demo.json"
         )
-        runtime = create_world_runtime(scenario_path)
+        runtime = create_world_runtime(
+            scenario_path,
+            config=ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True),
+        )
         assert runtime._episodic_stack is not None
         # 主要 3 要素が揃っている
         assert runtime._episodic_stack.chunk_coordinator is not None

@@ -15,6 +15,9 @@ from typing import Any
 import pytest
 
 from ai_rpg_world.application.llm.contracts.llm_call_metrics import LlmCallMetrics
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
+)
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -57,13 +60,16 @@ class _NoToolCallClient:
         return None
 
 
-def _enable_reasoning_prereqs(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("SEMANTIC_SEARCH_ENABLED", "1")
-    monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
-    monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-    monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-    monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
+def _reasoning_config() -> ResolvedLlmRuntimeConfig:
+    return ResolvedLlmRuntimeConfig.for_tests(
+        episodic_enabled=True,
+        semantic_search_enabled=True,
+        belief_evidence_enabled=True,
+        belief_consolidation_enabled=True,
+        goal_reflect_enabled=True,
+        stagnation_pressure_enabled=True,
+        stagnation_reasoning_enabled=True,
+    )
 
 
 class _ReasoningFailThenFallbackClient:
@@ -137,13 +143,14 @@ class TestReasoningTurnUsesAutoWithForceInstruction:
     ) -> None:
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
-        _enable_reasoning_prereqs(monkeypatch)
-        state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
+        state = create_world_runtime_session(
+            monkeypatch, tmp_path, stub=None, runtime_config=_reasoning_config()
+        )
         client = _RecordingArgsClient()
         state.llm_wiring.llm_client = client
         pid = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
-        being_id = state.runtime._aux_being_resolver.resolve_being_id(
-            state.runtime._aux_being_default_world_id, pid
+        being_id = state.runtime.aux_being_resolver.resolve_being_id(
+            state.runtime.aux_being_default_world_id, pid
         )
         for _ in range(3):  # band strong
             state.runtime._stagnation_pressure_store.increment_by_being(being_id)
@@ -158,8 +165,9 @@ class TestReasoningTurnUsesAutoWithForceInstruction:
     ) -> None:
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
-        _enable_reasoning_prereqs(monkeypatch)
-        state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
+        state = create_world_runtime_session(
+            monkeypatch, tmp_path, stub=None, runtime_config=_reasoning_config()
+        )
         client = _RecordingArgsClient()
         state.llm_wiring.llm_client = client
         pid = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
@@ -179,14 +187,15 @@ class TestReasoningStarvationFallback:
     def _armed_session(self, monkeypatch, tmp_path, client):
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
-        _enable_reasoning_prereqs(monkeypatch)
-        state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
+        state = create_world_runtime_session(
+            monkeypatch, tmp_path, stub=None, runtime_config=_reasoning_config()
+        )
         state.llm_wiring.llm_client = client
         rec = _CapturingTraceRecorder()
         state.runtime.set_trace_recorder(rec)
         pid = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
-        being_id = state.runtime._aux_being_resolver.resolve_being_id(
-            state.runtime._aux_being_default_world_id, pid
+        being_id = state.runtime.aux_being_resolver.resolve_being_id(
+            state.runtime.aux_being_default_world_id, pid
         )
         for _ in range(3):
             state.runtime._stagnation_pressure_store.increment_by_being(being_id)
@@ -243,8 +252,9 @@ class TestReasoningCommitOnNoToolCall:
     ) -> None:
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
-        _enable_reasoning_prereqs(monkeypatch)
-        state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
+        state = create_world_runtime_session(
+            monkeypatch, tmp_path, stub=None, runtime_config=_reasoning_config()
+        )
         # 熟考でも降格でも常に None (NO_TOOL_CALL) を返す
         client = _NoToolCallClient()
         state.llm_wiring.llm_client = client
@@ -252,8 +262,8 @@ class TestReasoningCommitOnNoToolCall:
         state.runtime.set_trace_recorder(rec)
 
         pid = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
-        being_id = state.runtime._aux_being_resolver.resolve_being_id(
-            state.runtime._aux_being_default_world_id, pid
+        being_id = state.runtime.aux_being_resolver.resolve_being_id(
+            state.runtime.aux_being_default_world_id, pid
         )
         assert being_id is not None
         for _ in range(3):  # band を strong にする

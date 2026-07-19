@@ -21,6 +21,7 @@ from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
     GoalEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from tests.runtime_config_helpers import belief_consolidation_config, episodic_config
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -36,17 +37,16 @@ def _coordinator(runtime):
     return stack.belief_consolidation_coordinator
 
 
-def _enable_consolidation(monkeypatch) -> None:
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("SEMANTIC_SEARCH_ENABLED", "1")
-    monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
+def _consolidation_config(**overrides):
+    return belief_consolidation_config(**overrides)
 
 
 class TestGoalReflectWiring:
     def test_reflect_wired_when_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_consolidation_config(goal_reflect_enabled=True),
+        )
         coord = _coordinator(runtime)
         assert coord is not None
         assert coord._goal_reflect_enabled is True
@@ -56,9 +56,7 @@ class TestGoalReflectWiring:
         assert coord._objective_text_provider(PlayerId(1))
 
     def test_reflect_off_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.delenv("GOAL_REFLECT_ENABLED", raising=False)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_consolidation_config())
         coord = _coordinator(runtime)
         assert coord is not None
         assert coord._goal_reflect_enabled is False
@@ -71,10 +69,13 @@ class TestGoalStagnationEvidenceWiring:
     def test_goal_stagnation_evidence_wired_when_enabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        monkeypatch.setenv("GOAL_STAGNATION_EVIDENCE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_consolidation_config(
+                goal_reflect_enabled=True,
+                goal_stagnation_evidence_enabled=True,
+            ),
+        )
         coord = _coordinator(runtime)
         assert coord is not None
         assert coord._goal_stagnation_evidence_enabled is True
@@ -82,10 +83,10 @@ class TestGoalStagnationEvidenceWiring:
     def test_goal_stagnation_evidence_off_by_default(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        monkeypatch.delenv("GOAL_STAGNATION_EVIDENCE_ENABLED", raising=False)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_consolidation_config(goal_reflect_enabled=True),
+        )
         coord = _coordinator(runtime)
         assert coord is not None
         assert coord._goal_stagnation_evidence_enabled is False
@@ -98,10 +99,13 @@ class TestStagnationPressureWiring:
     def test_stagnation_pressure_wired_when_enabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_consolidation_config(
+                goal_reflect_enabled=True,
+                stagnation_pressure_enabled=True,
+            ),
+        )
         coord = _coordinator(runtime)
         assert coord is not None
         assert coord._stagnation_pressure_enabled is True
@@ -113,10 +117,10 @@ class TestStagnationPressureWiring:
     def test_stagnation_pressure_off_by_default(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        monkeypatch.delenv("STAGNATION_PRESSURE_ENABLED", raising=False)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_consolidation_config(goal_reflect_enabled=True),
+        )
         coord = _coordinator(runtime)
         assert coord is not None
         assert coord._stagnation_pressure_enabled is False
@@ -134,40 +138,45 @@ class TestFailFastRequiresBeliefConsolidation:
     経路が丸ごと死んだまま起動時に何の警告もエラーも出ない「静かな失敗」になる。
     本クラスは、この組み合わせを起動時 fail-fast (ValueError) で弾くことを保証する。"""
 
-    def _enable_semantic_without_belief_consolidation(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("SEMANTIC_SEARCH_ENABLED", "1")
-        monkeypatch.delenv("BELIEF_CONSOLIDATION_ENABLED", raising=False)
+    def _semantic_without_belief_consolidation_config(self, **overrides):
+        return episodic_config(semantic_search_enabled=True, **overrides)
 
     def test_goal_stagnation_evidence_without_belief_consolidation_raises(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        self._enable_semantic_without_belief_consolidation(monkeypatch)
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        monkeypatch.setenv("GOAL_STAGNATION_EVIDENCE_ENABLED", "1")
         with pytest.raises(ValueError, match="BELIEF_CONSOLIDATION_ENABLED"):
-            create_world_runtime(_SCENARIO_PATH)
+            create_world_runtime(
+                _SCENARIO_PATH,
+                config=self._semantic_without_belief_consolidation_config(
+                    goal_reflect_enabled=True,
+                    goal_stagnation_evidence_enabled=True,
+                ),
+            )
 
     def test_stagnation_pressure_without_belief_consolidation_raises(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        self._enable_semantic_without_belief_consolidation(monkeypatch)
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
         with pytest.raises(ValueError, match="BELIEF_CONSOLIDATION_ENABLED"):
-            create_world_runtime(_SCENARIO_PATH)
+            create_world_runtime(
+                _SCENARIO_PATH,
+                config=self._semantic_without_belief_consolidation_config(
+                    goal_reflect_enabled=True,
+                    stagnation_pressure_enabled=True,
+                ),
+            )
 
     def test_all_flags_enabled_together_does_not_raise(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """正当な組み合わせ (belief_consolidation も含め全部 ON) では構築が通る。"""
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        monkeypatch.setenv("GOAL_STAGNATION_EVIDENCE_ENABLED", "1")
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_consolidation_config(
+                goal_reflect_enabled=True,
+                goal_stagnation_evidence_enabled=True,
+                stagnation_pressure_enabled=True,
+            ),
+        )
         coord = _coordinator(runtime)
         assert coord is not None
         assert coord._goal_stagnation_evidence_enabled is True
@@ -195,10 +204,13 @@ class TestGoalReflectAuditTarget:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """P7: goal store に自己目的 (active) があれば、それが監査対象になる。"""
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("GOAL_STORE_ENABLED", "1")
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_consolidation_config(
+                goal_store_enabled=True,
+                goal_reflect_enabled=True,
+            ),
+        )
         self._seed_active_goal(runtime, "自力で食料源を確保する")
         target = _coordinator(runtime)._objective_text_provider(PlayerId(1))
         assert target == "自力で食料源を確保する"
@@ -211,10 +223,13 @@ class TestGoalReflectAuditTarget:
         達成の気づきは意識に上げるだけ。status 変更は本人 (P6) が決める ——
         reflect の観測経路が goal を achieved にしてしまわないことを固定する。
         """
-        _enable_consolidation(monkeypatch)
-        monkeypatch.setenv("GOAL_STORE_ENABLED", "1")
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_consolidation_config(
+                goal_store_enabled=True,
+                goal_reflect_enabled=True,
+            ),
+        )
         being_id = self._seed_active_goal(runtime, "古い地図を手に入れる")
         before = runtime._goal_journal_store.get_active_by_being(being_id)
 

@@ -13,6 +13,9 @@ from typing import Optional
 import pytest
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
+)
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
@@ -36,6 +39,7 @@ def create_world_runtime_session(
     *,
     world_id: str = "forbidden_library_demo",
     character_name: str = "カイト",
+    runtime_config: Optional[ResolvedLlmRuntimeConfig] = None,
 ):
     """world_runtime セッションを立ち上げて ``_SessionState`` を返す。
 
@@ -54,6 +58,7 @@ def create_world_runtime_session(
     mgr = GameRuntimeManager(
         scenarios_dir=SCENARIO_DIR,
         characters_path=tmp_path / "characters.json",
+        runtime_config=runtime_config,
     )
     char = mgr.create_character(CharacterCreateRequest(name=character_name))
     summary = mgr.create_session(

@@ -25,6 +25,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
     SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from tests.runtime_config_helpers import episodic_config
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -34,15 +35,15 @@ _SCENARIO_PATH = (
 )
 
 
-def _enable_litellm_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    """subjective service (= LiteLLMClient 前提) を wire するための最小 env。
-
-    実 API は呼ばない。ダミー key + model は ``LiteLLMClient`` を構築できる
-    ようにするためだけ (PR #444 の timeout smoke と同じ手法)。
-    """
-    monkeypatch.setenv("LLM_CLIENT", "litellm")
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-dummy")
-    monkeypatch.setenv("LLM_MODEL", "openai/gpt-4o-mini")
+def _litellm_config(**overrides):
+    """subjective service (= LiteLLMClient 前提) を wire するための最小 config。"""
+    values = {
+        "llm_client_kind": "litellm",
+        "llm_api_key": "sk-test-dummy",
+        "llm_model": "openai/gpt-4o-mini",
+    }
+    values.update(overrides)
+    return episodic_config(**values)
 
 
 def _resolve_player_id(runtime, name: str) -> PlayerId:
@@ -52,10 +53,10 @@ def _resolve_player_id(runtime, name: str) -> PlayerId:
     raise AssertionError(f"player {name!r} not found")
 
 
-def _build_runtime(monkeypatch: pytest.MonkeyPatch):
+def _build_runtime(config):
     from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-    return create_world_runtime(_SCENARIO_PATH)
+    return create_world_runtime(_SCENARIO_PATH, config=config)
 
 
 class TestUnconsciousContextWiringFlagOn:
@@ -65,12 +66,9 @@ class TestUnconsciousContextWiringFlagOn:
         """belief top-K を読むには semantic_memory_store が要るため、
         SEMANTIC_PASSIVE_TOP_K=0 のままでも UNCONSCIOUS_CONTEXT_ENABLED だけで
         semantic スタックが組まれる (= _semantic_enabled 強制の確認)。"""
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("UNCONSCIOUS_CONTEXT_ENABLED", "1")
-        monkeypatch.delenv("SEMANTIC_PASSIVE_TOP_K", raising=False)
-        monkeypatch.delenv("SEMANTIC_LLM_GIST_ENABLED", raising=False)
-
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime(
+            episodic_config(unconscious_context_enabled=True)
+        )
         stack = runtime._episodic_stack
         assert stack is not None
         assert stack.semantic_memory_store is not None
@@ -81,11 +79,9 @@ class TestUnconsciousContextWiringFlagOn:
     def test_subjective_service_に_flagとproviderが届く(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("UNCONSCIOUS_CONTEXT_ENABLED", "1")
-        _enable_litellm_client(monkeypatch)
-
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime(
+            _litellm_config(unconscious_context_enabled=True)
+        )
         stack = runtime._episodic_stack
         assert stack is not None
         scheduler = stack.subjective_completion_scheduler
@@ -101,16 +97,14 @@ class TestUnconsciousContextWiringFlagOn:
     ) -> None:
         """holder 経由の遅延解決が正しく機能し、seed した belief が provider
         経由で「## いまの自分」相当のテキストとして返ること。"""
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("UNCONSCIOUS_CONTEXT_ENABLED", "1")
-        _enable_litellm_client(monkeypatch)
-
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime(
+            _litellm_config(unconscious_context_enabled=True)
+        )
         stack = runtime._episodic_stack
         assert stack is not None
         rin_id = _resolve_player_id(runtime, "リン")
-        being = runtime._aux_being_resolver.resolve_being_id(
-            runtime._aux_being_default_world_id, rin_id
+        being = runtime.aux_being_resolver.resolve_being_id(
+            runtime.aux_being_default_world_id, rin_id
         )
         assert being is not None
         stack.semantic_memory_store.add_by_being(
@@ -140,11 +134,7 @@ class TestUnconsciousContextWiringFlagOff:
     def test_flag_未設定なら_service_のunconscious_context_enabledはFalse(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.delenv("UNCONSCIOUS_CONTEXT_ENABLED", raising=False)
-        _enable_litellm_client(monkeypatch)
-
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime(_litellm_config())
         stack = runtime._episodic_stack
         assert stack is not None
         scheduler = stack.subjective_completion_scheduler
@@ -156,13 +146,7 @@ class TestUnconsciousContextWiringFlagOff:
     def test_flag_OFFなら_semantic_top_k_0のまま_semantic_stackは組まれない(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.delenv("UNCONSCIOUS_CONTEXT_ENABLED", raising=False)
-        monkeypatch.delenv("SEMANTIC_PASSIVE_TOP_K", raising=False)
-        monkeypatch.delenv("SEMANTIC_LLM_GIST_ENABLED", raising=False)
-        monkeypatch.delenv("BELIEF_CONSOLIDATION_ENABLED", raising=False)
-
-        runtime = _build_runtime(monkeypatch)
+        runtime = _build_runtime(episodic_config())
         stack = runtime._episodic_stack
         assert stack is not None
         assert stack.semantic_memory_store is None
