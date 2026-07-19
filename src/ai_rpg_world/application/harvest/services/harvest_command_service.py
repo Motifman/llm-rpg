@@ -1,6 +1,9 @@
 import logging
 from typing import Callable, Any, Optional, List
 
+from ai_rpg_world.application.common.events.domain_event_collector import (
+    DomainEventCollector,
+)
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -283,8 +286,15 @@ class HarvestCommandService:
         # _register_aggregate が UoW に events を回して aggregate を空に
         # する可能性がある。事前回収で両経路 (= UoW + Pipeline) に確実に
         # 流す。publisher 未注入時は no-op (後方互換)。
+        # Stage 3c: 回収を DomainEventCollector 経由 (event_id dedup) に寄せる。
+        # ただし harvest 固有の「clear しない」を保存する: 原本 physical_map を
+        # clear すると save 内の _register_aggregate が UoW pending へ流す経路が
+        # 断たれる (両経路供給が壊れる)。collector には add するが原本は触らない。
+        # canonical 汚染は #746 の save 時 clone drain が防ぐ。
         if self._event_publisher is not None:
-            events = list(physical_map.get_events())
+            collector = DomainEventCollector()
+            collector.add_all(physical_map.get_events())
+            events = collector.drain()
             if events:
                 self._event_publisher.publish_all(events)
 
