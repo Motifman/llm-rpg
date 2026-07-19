@@ -89,25 +89,28 @@ def being() -> BeingId:
 class TestSqliteByBeingBasic:
     """put / get / list_recent / list_by_cue の SQLite 永続化挙動。"""
 
-    def test_put_と_get(
+    def test_put_get(
         self, store: SqliteSubjectiveEpisodeStore, being: BeingId
     ) -> None:
+        """put と get。"""
         ep = _episode(episode_id="e1")
         store.put_by_being(being, ep)
         got = store.get_by_being(being, "e1")
         assert got is not None and got.episode_id == "e1"
 
-    def test_list_recent_は_occurred_at_降順(
+    def test_list_recent_occurred(
         self, store: SqliteSubjectiveEpisodeStore, being: BeingId
     ) -> None:
+        """list recent は occurred at 降順。"""
         store.put_by_being(being, _episode(episode_id="old", occurred_at=_NOW - timedelta(hours=1)))
         store.put_by_being(being, _episode(episode_id="new", occurred_at=_NOW))
         result = store.list_recent_by_being(being, limit=10)
         assert [ep.episode_id for ep in result] == ["new", "old"]
 
-    def test_list_by_cue_は_canonical_一致(
+    def test_list_cue_canonical_matches(
         self, store: SqliteSubjectiveEpisodeStore, being: BeingId
     ) -> None:
+        """list by cue は canonical 一致。"""
         cue_a = EpisodicCue(
             axis="entity", value="alice", source=EpisodicCueSource.RUNTIME_CONTEXT
         )
@@ -119,9 +122,10 @@ class TestSqliteByBeingBasic:
         result = store.list_by_cue_by_being(being, cue_a, limit=10)
         assert [ep.episode_id for ep in result] == ["ea"]
 
-    def test_cue_index_は_put_で_更新される(
+    def test_cue_index_put_updated(
         self, store: SqliteSubjectiveEpisodeStore, being: BeingId
     ) -> None:
+        """cueindex は put で更新される。"""
         cue_old = EpisodicCue(
             axis="entity", value="old", source=EpisodicCueSource.RUNTIME_CONTEXT
         )
@@ -133,7 +137,7 @@ class TestSqliteByBeingBasic:
         assert store.list_by_cue_by_being(being, cue_old, limit=10) == []
         assert len(store.list_by_cue_by_being(being, cue_new, limit=10)) == 1
 
-    def test_limit_0_以下は_空_list(
+    def test_limit_zero_less_empty_list(
         self, store: SqliteSubjectiveEpisodeStore, being: BeingId
     ) -> None:
         """``limit <= 0`` は SQL 発行前に早期 return (= InMemory 側と挙動一致)。"""
@@ -164,7 +168,7 @@ class TestSqliteSalience:
         got = store.get_by_being(being, "e1")
         assert got is not None and got.salience == "high"
 
-    def test_old_row_without_salience_key_defaults_to_low(
+    def test_old_row_without_salience_key_defaults_low(
         self, store: SqliteSubjectiveEpisodeStore, being: BeingId
     ) -> None:
         """U6 導入前に書かれた行を模して payload_json から salience キーを
@@ -218,9 +222,10 @@ class TestSqliteV3DropLegacy:
 class TestSqliteByBeingPersistence:
     """SQLite を再接続しても being_id 経路のデータが残る。"""
 
-    def test_再接続後も_episode_が_残る(
+    def test_after_episode_remains(
         self, db_path: Path, being: BeingId
     ) -> None:
+        """再接続後も episode が残る。"""
         store = SqliteSubjectiveEpisodeStore.connect(str(db_path))
         store.put_by_being(being, _episode(episode_id="persistent"))
         del store

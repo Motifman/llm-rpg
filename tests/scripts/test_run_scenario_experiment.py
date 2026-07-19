@@ -18,7 +18,7 @@ from scripts.run_scenario_experiment import _build_report, main  # noqa: E402
 class TestBuildReport:
     """trace.jsonl からの汎用レポート生成。"""
 
-    def test_outcome_と各イベントカウントを含む(self, tmp_path: Path) -> None:
+    def test_includes_outcome_event_count(self, tmp_path: Path) -> None:
         """生成 Markdown に outcome / action 数 / memo 数 / プレイヤー別集計が出る。"""
         scenario = tmp_path / "demo.json"
         scenario.write_text("{}", encoding="utf-8")
@@ -69,7 +69,7 @@ class TestBuildReport:
         assert "| 1 | 1 | 1 | 0 | 0 | 0 | 0 |" in report
         assert "| 2 | 1 | 0 | 1 | 1 | 0 | 0 |" in report
 
-    def test_position_change_event_は_moves_列に_集計される(
+    def test_position_change_event_moves_column_aggregated(
         self, tmp_path: Path
     ) -> None:
         """from_spot_id=None の初期配置は moves に含めず、移動だけがカウントされる。"""
@@ -116,7 +116,7 @@ class TestBuildReport:
         # player 1: actions=0 successes=0 failures=0 memo_adds=0 memo_dones=0 moves=2
         assert "| 1 | 0 | 0 | 0 | 0 | 0 | 2 |" in report
 
-    def test_イベントが_observation_系のみでも_table_は_最小限で出る(
+    def test_event_observation_table_min_rendered(
         self, tmp_path: Path
     ) -> None:
         """action がゼロでもクラッシュせず 0 件として表示される。"""
@@ -143,7 +143,7 @@ class TestBuildReport:
 class TestMaxWorldTicksRename:
     """``#404`` P1 回帰: ``--max-world-ticks`` フラグと ``max_world_ticks`` フィールド。"""
 
-    def test_progress_jsonl_は_max_world_ticks_キーを使う(self, tmp_path: Path) -> None:
+    def test_uses_progress_jsonl_max_world_ticks_key(self, tmp_path: Path) -> None:
         """progress.jsonl entry の最大値フィールドが ``max_world_ticks``
         (旧 ``max_ticks``) になっている。集計スクリプトの追従漏れを検知する。"""
         from scripts.run_scenario_experiment import _ExperimentProgressReporter
@@ -161,7 +161,7 @@ class TestMaxWorldTicksRename:
         assert entry["max_world_ticks"] == 10
         assert "max_ticks" not in entry
 
-    def test_build_report_は_max_world_ticks_を表示する(
+    def test_build_report_max_world_ticks_displays(
         self, tmp_path: Path
     ) -> None:
         """report.md に ``max world ticks`` 行が含まれる (旧 ``max ticks`` リネーム)。"""
@@ -187,7 +187,7 @@ class TestMaxWorldTicksRename:
 class TestExperimentProfileManifest:
     """実験 profile/config が解決済み成果物として保存されることを保証する。"""
 
-    def test_profile_を使うと_manifestとrun_startに解決済み設定が残る(
+    def test_uses_manifest_run_start_resolved_config_remains_profile(
         self,
         tmp_path: Path,
         monkeypatch,
@@ -252,7 +252,7 @@ class TestExperimentProfileManifest:
         assert payload["experiment_manifest_sha256"]
         assert payload["belief_evidence_enabled"] is False
 
-    def test_experiment_config_のシナリオとmax_world_ticksを使える(
+    def test_experiment_config_scenario_max_world_ticks_can_use(
         self,
         tmp_path: Path,
         monkeypatch,
@@ -306,7 +306,7 @@ class TestExperimentProfileManifest:
         assert captured["scenario_path"] == scenario
         assert captured["max_world_ticks"] == 7
 
-    def test_manifest用_secret_mask_は再帰的に秘密値を伏せる(self) -> None:
+    def test_manifest_secret_mask_recursively_secret_values(self) -> None:
         """source に秘密値が混じっても manifest には生値を残さない。"""
         import scripts.run_scenario_experiment as runner
 

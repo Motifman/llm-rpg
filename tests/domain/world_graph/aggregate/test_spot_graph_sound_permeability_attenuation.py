@@ -112,16 +112,18 @@ class TestSoundPermeabilityToHops:
         (0.09, 4),
         (0.0, 4),
     ])
-    def test_境界値_で_期待_hops_を_返す(
+    def test_returns_boundary_value_hops(
         self, permeability: float, expected_hops: int,
     ) -> None:
+        """境界値で期待 hops を返す。"""
         assert sound_permeability_to_hops(permeability) == expected_hops
 
 
 class TestOpenPassage1Hop:
     """開口部 / 開いた扉 / 壊れた壁 (permeability 1.0) は 1 hop 減衰。"""
 
-    def test_OPEN_LOUD_は_MODERATE_に_減衰(self) -> None:
+    def test_open_loud_moderate(self) -> None:
+        """OPENLOUD は MODERATE に減衰。"""
         g, eid = _build_AB(
             intensity_B=SoundIntensityEnum.LOUD,
             passage=Passage.open(),
@@ -131,7 +133,8 @@ class TestOpenPassage1Hop:
         assert len(events) == 1
         assert events[0].intensity == "MODERATE"
 
-    def test_WALL_BROKEN_LOUD_も_MODERATE_に_減衰(self) -> None:
+    def test_wall_broken_loud_moderate(self) -> None:
+        """WALLBROKENLOUD も MODERATE に減衰。"""
         g, eid = _build_AB(
             intensity_B=SoundIntensityEnum.LOUD,
             passage=Passage.wall(WallStateEnum.BROKEN),
@@ -141,7 +144,8 @@ class TestOpenPassage1Hop:
         assert len(events) == 1
         assert events[0].intensity == "MODERATE"
 
-    def test_DOOR_OPEN_MODERATE_は_FAINT_に_減衰(self) -> None:
+    def test_door_open_moderate_faint(self) -> None:
+        """DOOROPENMODERATE は FAINT に減衰。"""
         g, eid = _build_AB(
             intensity_B=SoundIntensityEnum.MODERATE,
             passage=Passage.door(DoorStateEnum.OPEN),
@@ -155,7 +159,8 @@ class TestOpenPassage1Hop:
 class TestClosedDoorAndCrackedWall2Hops:
     """閉じた扉 / 鍵付き扉 / ヒビ壁 (permeability 0.4-0.6) は 2 hops 減衰。"""
 
-    def test_DOOR_CLOSED_LOUD_は_FAINT_に_減衰(self) -> None:
+    def test_door_closed_loud_faint(self) -> None:
+        """DOORCLOSEDLOUD は FAINT に減衰。"""
         g, eid = _build_AB(
             intensity_B=SoundIntensityEnum.LOUD,
             passage=Passage.door(DoorStateEnum.CLOSED),
@@ -165,7 +170,8 @@ class TestClosedDoorAndCrackedWall2Hops:
         assert len(events) == 1
         assert events[0].intensity == "FAINT"  # LOUD(3) - 2 = FAINT(1)
 
-    def test_DOOR_CLOSED_MODERATE_は_SILENT_で_発火しない(self) -> None:
+    def test_door_closed_moderate_silent_does_not_trigger(self) -> None:
+        """DOORCLOSEDMODERATE は SILENT で発火しない。"""
         g, eid = _build_AB(
             intensity_B=SoundIntensityEnum.MODERATE,
             passage=Passage.door(DoorStateEnum.CLOSED),
@@ -173,7 +179,8 @@ class TestClosedDoorAndCrackedWall2Hops:
         g.emit_listen_carefully(eid)
         assert _events(g) == []  # MODERATE(2) - 2 = SILENT
 
-    def test_WALL_CRACKED_LOUD_は_FAINT_に_減衰(self) -> None:
+    def test_wall_cracked_loud_faint(self) -> None:
+        """WALLCRACKEDLOUD は FAINT に減衰。"""
         g, eid = _build_AB(
             intensity_B=SoundIntensityEnum.LOUD,
             passage=Passage.wall(WallStateEnum.CRACKED),
@@ -187,7 +194,8 @@ class TestClosedDoorAndCrackedWall2Hops:
 class TestIntactWall3Hops:
     """通常の壁 (permeability 0.1) は LOUD ですら遮断する。"""
 
-    def test_WALL_INTACT_LOUD_は_SILENT_で_発火しない(self) -> None:
+    def test_wall_intact_loud_silent_does_not_trigger(self) -> None:
+        """WALLINTACTLOUD は SILENT で発火しない。"""
         g, eid = _build_AB(
             intensity_B=SoundIntensityEnum.LOUD,
             passage=Passage.wall(WallStateEnum.INTACT),
@@ -200,7 +208,7 @@ class TestIntactWall3Hops:
 class TestMultiConnectionPicksBestPath:
     """同一隣接 spot に複数 connection があるとき、最も透過率が高いものを採用。"""
 
-    def test_壁_と_開いた扉_が_並ぶと_扉_側の_1_hop_減衰が採用される(
+    def test_one_hop(
         self,
     ) -> None:
         """壁 INTACT (3 hops) と DOOR OPEN (1 hop) の両方が B を指している
@@ -238,7 +246,8 @@ class TestMultiConnectionPicksBestPath:
 class TestSelfSpotIgnoresPermeability:
     """自 spot の音は permeability の影響を受けず、常に減衰なし。"""
 
-    def test_壁に囲まれた自_spot_でも_自分の音は減衰なし(self) -> None:
+    def test_spot_self(self) -> None:
+        """壁に囲まれた自 spot でも 自分の音は減衰なし。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A, intensity=SoundIntensityEnum.FAINT, ambient="心音"))
         g.add_spot(_node(SPOT_B))

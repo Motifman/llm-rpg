@@ -65,7 +65,7 @@ def _make_context() -> ToolRuntimeContextDto:
 class TestTravelToByLabel:
     """既存のラベル経由 (S1, S2 等) の解決パスが回帰していないこと。"""
 
-    def test_destination_label_に_S1_を渡すと_spot_id_に解決される(self) -> None:
+    def test_destination_label_s1_spot_id_resolved(self) -> None:
         """destination_label='S1' で対応する spot_id が返ること（回帰）。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -80,7 +80,7 @@ class TestTravelToByLabel:
 class TestTravelToByDisplayName:
     """destination_label にスポット名そのものを渡しても解決できること。"""
 
-    def test_destination_label_にスポット名を渡すと_spot_id_に解決される(self) -> None:
+    def test_destination_label_spot_id_resolved(self) -> None:
         """destination_label='入口広間' でラベル S1 と同じ spot_id が返る。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -91,7 +91,7 @@ class TestTravelToByDisplayName:
         assert result is not None
         assert result["destination_spot_id"] == 10
 
-    def test_別のスポット名でも対応する_spot_id_に解決される(self) -> None:
+    def test_different_spot_id_resolved(self) -> None:
         """destination_label='閲覧室' で S2 と同じ spot_id が返る。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -102,7 +102,7 @@ class TestTravelToByDisplayName:
         assert result is not None
         assert result["destination_spot_id"] == 20
 
-    def test_存在しないスポット名は_INVALID_DESTINATION_LABEL_を投げる(self) -> None:
+    def test_raises_spot_invalid_destination_label(self) -> None:
         """存在しないスポット名は既存と同じ error_code で弾かれる。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc_info:
@@ -117,7 +117,7 @@ class TestTravelToByDisplayName:
 class TestTravelToDisplayNameDuplicate:
     """同名スポットが複数ある防御ケース。最初の 1 件を採用する。"""
 
-    def test_同名スポットが複数あっても最初のものが採用される(self) -> None:
+    def test_spot_multiple(self) -> None:
         """display_name の重複時は最初にマッチした target の spot_id が返る。"""
         context = ToolRuntimeContextDto(
             targets={
@@ -152,7 +152,7 @@ class TestTravelToLenientLabelCandidates:
     """Issue #269 第17回 R2: LLM が prompt 行を貼って destination_label を
     崩すパターンを候補抽出で吸収する。"""
 
-    def test_S2_括弧つきスポット名形式_を解決できる(self) -> None:
+    def test_s2_spot_can_resolve(self) -> None:
         """'S2 (閲覧室)' のような括弧つきラベルでも S2 として解決される。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -163,7 +163,7 @@ class TestTravelToLenientLabelCandidates:
         assert result is not None
         assert result["destination_spot_id"] == 20
 
-    def test_S2_コロン区切りで連結されたprompt行を解決できる(self) -> None:
+    def test_s2_prompt_line_can_resolve(self) -> None:
         """'S2: 禁書扉 → 閲覧室' を S2 + 末尾スポット名から解決する。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -174,7 +174,7 @@ class TestTravelToLenientLabelCandidates:
         assert result is not None
         assert result["destination_spot_id"] == 20
 
-    def test_末尾スポット名_と_先頭ラベル_の両方から候補解決できる(self) -> None:
+    def test_last_spot_first_label_candidate_can_resolve(self) -> None:
         """'S99 → 入口広間' は S99 (存在せず) を諦め、末尾の '入口広間' で解決する。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -189,7 +189,8 @@ class TestTravelToLenientLabelCandidates:
 class TestNormalizeLabelCandidates:
     """``_normalize_label_candidates`` の抽出パターン。"""
 
-    def test_S2_コロン_矢印_連結文字列の候補(self) -> None:
+    def test_s2_string_candidate(self) -> None:
+        """S2 コロン 矢印 連結文字列の候補。"""
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             _normalize_label_candidates,
         )
@@ -200,7 +201,8 @@ class TestNormalizeLabelCandidates:
         # 入力そのものも残る
         assert c[0] == "S2: 禁書扉 → 館長書斎"
 
-    def test_括弧つき注釈はtrailingを剥がして取り出す(self) -> None:
+    def test_trailing(self) -> None:
+        """括弧つき注釈はtrailingを剥がして取り出す。"""
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             _normalize_label_candidates,
         )
@@ -208,14 +210,16 @@ class TestNormalizeLabelCandidates:
         # 末尾の通行可注釈は剥がされた "館長書斎" が候補に出る
         assert "館長書斎" in c
 
-    def test_空文字列は空リスト(self) -> None:
+    def test_empty_string_column_empty_list(self) -> None:
+        """空文字列は空リスト。"""
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             _normalize_label_candidates,
         )
         assert _normalize_label_candidates("") == []
         assert _normalize_label_candidates("   ") == []
 
-    def test_重複候補は除去される(self) -> None:
+    def test_duplicate_candidate(self) -> None:
+        """重複候補は除去される。"""
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             _normalize_label_candidates,
         )
@@ -226,7 +230,7 @@ class TestNormalizeLabelCandidates:
 class TestSetSubLocationByDisplayName:
     """sub_location_label にもサブロケーション名を直接渡せること。"""
 
-    def test_sub_location_label_に_SL1_を渡すと_id_に解決される(self) -> None:
+    def test_sub_location_label_sl1_id_resolved(self) -> None:
         """既存ラベル経由 (回帰確認): SL1 で対応する sub_location_id が返る。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -237,7 +241,7 @@ class TestSetSubLocationByDisplayName:
         assert result is not None
         assert result["sub_location_id"] == 101
 
-    def test_sub_location_label_にサブロケーション名を渡すと_id_に解決される(self) -> None:
+    def test_sub_location_label_id_resolved(self) -> None:
         """sub_location_label='祭壇前' で SL1 と同じ sub_location_id が返る。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -248,7 +252,7 @@ class TestSetSubLocationByDisplayName:
         assert result is not None
         assert result["sub_location_id"] == 101
 
-    def test_存在しないサブロケーション名は_INVALID_TARGET_LABEL_を投げる(self) -> None:
+    def test_raises_invalid_target_label(self) -> None:
         """存在しないサブロケーション名は既存と同じ error_code で弾かれる。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc_info:

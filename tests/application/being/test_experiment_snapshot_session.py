@@ -73,7 +73,8 @@ def _make_wiring_stub() -> tuple[SimpleNamespace, BeingProvisioningService]:
 class TestConstructorGuards:
     """必須 / 任意 store の判定。"""
 
-    def test_being_repository_missing_は_RuntimeError(self, tmp_path: Path) -> None:
+    def test_being_repository_missing_raises_runtime_error(self, tmp_path: Path) -> None:
+        """being repository missing は RuntimeError。"""
         wiring, _ = _make_wiring_stub()
         wiring.being_repository = None
         with pytest.raises(RuntimeError, match="being_repository"):
@@ -82,7 +83,7 @@ class TestConstructorGuards:
                 snapshot_dir=tmp_path / "snap",
             )
 
-    def test_memo_store_missing_は_空fallbackで動く(self, tmp_path: Path) -> None:
+    def test_memo_store_missing_empty_fallback_works(self, tmp_path: Path) -> None:
         """memo_store が None でも構築は成功し、capture は空 memo の snapshot を出す。"""
         from ai_rpg_world.application.being.being_provisioning_service import (
             BeingProvisioningService,
@@ -104,7 +105,8 @@ class TestConstructorGuards:
 class TestCaptureAll:
     """capture_all の集計動作。"""
 
-    def test_2_player_全員_capture_できる(self, tmp_path: Path) -> None:
+    def test_two_player_all_players_capture(self, tmp_path: Path) -> None:
+        """2 player 全員 capture できる。"""
         wiring, provisioning = _make_wiring_stub()
         provisioning.ensure_attached(PlayerId(1))
         provisioning.ensure_attached(PlayerId(2))
@@ -126,9 +128,10 @@ class TestCaptureAll:
         assert len(files) == 2
         assert all(f.suffix == ".json" for f in files)
 
-    def test_attach_されていない_player_はスキップして警告(
+    def test_emits_warning_for_attach_player(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """attach されていない player はスキップして警告。"""
         wiring, provisioning = _make_wiring_stub()
         provisioning.ensure_attached(PlayerId(1))
         # PlayerId(2) は attach されていない
@@ -141,7 +144,7 @@ class TestCaptureAll:
         # warning ログに player_id=2 が出ている。
         assert any("player_id=2" in r.message for r in caplog.records)
 
-    def test_1_player_の_capture_失敗は他の_player_を止めない(
+    def test_one_player_capture_failure_other_player_does_not_stop(
         self, tmp_path: Path
     ) -> None:
         """memo_store の add_by_being が 1 being だけで例外を投げるよう細工し、
@@ -181,7 +184,8 @@ class TestCaptureAll:
 class TestRestoreAll:
     """restore_all_from_dir の挙動。"""
 
-    def test_capture_して_restore_で_memory_が一致する(self, tmp_path: Path) -> None:
+    def test_capture_restore_memory_matches(self, tmp_path: Path) -> None:
+        """capture して restore で memory が一致する。"""
         src_wiring, src_prov = _make_wiring_stub()
         src_prov.ensure_attached(PlayerId(1))
         being_1 = src_wiring.being_attachment_resolver.resolve_being_id(
@@ -204,7 +208,8 @@ class TestRestoreAll:
         memos = dst_wiring.memo_store.list_all_by_being(being_1)
         assert [m.content for m in memos] == ["from-source"]
 
-    def test_存在しない_ディレクトリは_FileNotFoundError(self, tmp_path: Path) -> None:
+    def test_missing_raises_file_not_found_error(self, tmp_path: Path) -> None:
+        """存在しない ディレクトリは FileNotFoundError。"""
         wiring, _ = _make_wiring_stub()
         session = ExperimentSnapshotSession(
             wiring_result=wiring, snapshot_dir=tmp_path / "snap"
@@ -212,7 +217,8 @@ class TestRestoreAll:
         with pytest.raises(FileNotFoundError):
             session.restore_all_from_dir(tmp_path / "no-such-dir")
 
-    def test_空ディレクトリは_no_op(self, tmp_path: Path) -> None:
+    def test_empty_directory_op(self, tmp_path: Path) -> None:
+        """空ディレクトリは no op。"""
         empty = tmp_path / "empty"
         empty.mkdir()
         wiring, _ = _make_wiring_stub()
@@ -222,7 +228,8 @@ class TestRestoreAll:
         report = session.restore_all_from_dir(empty)
         assert report.restored == []
 
-    def test_壊れた_JSON_は例外で全体停止(self, tmp_path: Path) -> None:
+    def test_invalid_json_all_raises_exception(self, tmp_path: Path) -> None:
+        """壊れた JSON は例外で全体停止。"""
         wiring, _ = _make_wiring_stub()
         bad_dir = tmp_path / "bad"
         bad_dir.mkdir()
@@ -237,9 +244,10 @@ class TestRestoreAll:
 class TestScenarioMetadata:
     """Phase 7: scenario メタデータの埋め込み + cross-scenario transfer 検知。"""
 
-    def test_capture_は_source_scenario_を_metadata_に書き込む(
+    def test_writes_capture_source_scenario_metadata(
         self, tmp_path: Path
     ) -> None:
+        """capture は source scenario を metadata に書き込む。"""
         from ai_rpg_world.application.being.being_snapshot_file_gateway import (
             BeingSnapshotFileGateway,
         )
@@ -261,9 +269,10 @@ class TestScenarioMetadata:
         assert metadata.source_scenario == "decay_demo"
         assert metadata.captured_at is not None  # ISO 8601 文字列
 
-    def test_同じ_scenario_の_restore_は_cross_transfer_に乗らない(
+    def test_same_scenario_restore_cross_transfer_not_included(
         self, tmp_path: Path
     ) -> None:
+        """同じ scenario の restore は cross transfer に乗らない。"""
         src_wiring, src_prov = _make_wiring_stub()
         src_prov.ensure_attached(PlayerId(1))
         src_session = ExperimentSnapshotSession(
@@ -281,7 +290,7 @@ class TestScenarioMetadata:
         assert report.cross_scenario_transfers == []
         assert len(report.metadata_by_being) == 1
 
-    def test_別_scenario_への_restore_は_warning_と_report_に乗る(
+    def test_emits_warning_for_different_scenario_restore_re_port(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """同じ Being を別シナリオに転送する use case が許容されることを担保。"""
@@ -312,7 +321,7 @@ class TestScenarioMetadata:
             "cross-scenario transfer" in r.message for r in caplog.records
         )
 
-    def test_旧_snapshot_dir_に_world_json_が無い_restore_は_world_skip(
+    def test_legacy_snapshot_dir_world_json_restore_world_skip(
         self, tmp_path: Path
     ) -> None:
         """Phase 9-1: world.json なしの snapshot dir (= Phase 6 までの形式) の
@@ -328,7 +337,7 @@ class TestScenarioMetadata:
         )
         assert result is None
 
-    def test_capture_world_で_world_json_が出る(self, tmp_path: Path) -> None:
+    def test_capture_world_json_rendered(self, tmp_path: Path) -> None:
         """Phase 9-2: 既定 subsystem codec が登録されたので、capture_world
         には runtime が必要。空の subsystem 群でも世界 snapshot が成立する
         ことを担保するため、minimum stub を渡す。"""
@@ -362,7 +371,7 @@ class TestScenarioMetadata:
         assert path.exists()
         assert path.name == "world.json"
 
-    def test_world_snapshot_の_scenario_mismatch_は_fail_fast(
+    def test_world_snapshot_scenario_mismatch_fail_fast(
         self, tmp_path: Path
     ) -> None:
         """Phase 9-1: world は scenario 不一致を hard-error で弾く。"""
@@ -391,7 +400,7 @@ class TestScenarioMetadata:
                 current_scenario="desert_world",
             )
 
-    def test_metadata_なし_旧_snapshot_の_restore_は_問題なく動く(
+    def test_metadata_legacy_snapshot_restore_works(
         self, tmp_path: Path
     ) -> None:
         """``_metadata`` キー無しの旧 snapshot ファイルでも壊れない (後方互換)。"""

@@ -68,7 +68,7 @@ def _make_context_with_players(*names: str) -> ToolRuntimeContextDto:
 class TestTendToPlayerResolverErrorMessage:
     """resolver 失敗時の message が同 spot 制約を示唆する。"""
 
-    def test_label_が_候補にない場合_同spot制約を_hint_する(self) -> None:
+    def test_label_candidate_spot_hint(self) -> None:
         """P4 カイが遠く離れた spot にいる ノアに tend_to_player を呼ぶ
         シナリオを再現。resolver 側で targets に含まれない (= 別 spot) ため
         失敗するが、message は「候補にない」だけでなく tend の同 spot 制約
@@ -98,7 +98,7 @@ class TestTendToPlayerResolverErrorMessage:
             f"「倒れている」条件が説明されていない: {msg}"
         )
 
-    def test_エラーコードは_INVALID_TARGET_LABEL_を保つ(self) -> None:
+    def test_preserves_error_code_invalid_target_label(self) -> None:
         """既存の error_code は変えない (LLM の学習パスと remediation mapping
         を壊さない)。message だけを改善する。"""
         ctx = _make_context_with_players("エイダ")
@@ -111,7 +111,7 @@ class TestTendToPlayerResolverErrorMessage:
             )
         assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
 
-    def test_同spot_に居るplayerが指定された時は_通常通り解決される(self) -> None:
+    def test_spot_player_resolved(self) -> None:
         """同 spot に居る player を渡した場合は既存挙動 (成功) を維持。"""
         ctx = _make_context_with_players("ノア")
         resolver = SpotGraphArgumentResolver()
@@ -124,7 +124,7 @@ class TestTendToPlayerResolverErrorMessage:
         assert result["target_player_id"] == 101
         assert result["target_display_name"] == "ノア"
 
-    def test_空のラベルは_引数欠落として弾かれる(self) -> None:
+    def test_empty_label_argument_missing_rejected(self) -> None:
         """空文字は引数欠落の別 error として扱う (message の内容は既存維持)。"""
         ctx = _make_context_with_players("ノア")
         resolver = SpotGraphArgumentResolver()

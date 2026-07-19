@@ -69,7 +69,8 @@ def _apply(svc: WorldGraphEffectService, params: dict):
 class TestBasicLootDrop:
     """LootTable から確実に 1 アイテムが grant される。"""
 
-    def test_単一_entry_の_table_は_常に_その_item_が_出る(self) -> None:
+    def test_single_entry_table_item_rendered(self) -> None:
+        """単一 entry の table は常にその item が出る。"""
         repo = InMemoryLootTableRepository()
         repo.save(_make_loot_table(1, [
             LootEntry(item_spec_id=ItemSpecId.create(100), weight=1),
@@ -81,7 +82,8 @@ class TestBasicLootDrop:
         # 単一 entry なので必ず item_spec_id=100 が grant される
         assert any(s.value == 100 for s in result.item_spec_ids_to_grant)
 
-    def test_times_2_で_2_回抽選(self) -> None:
+    def test_times_two_2(self) -> None:
+        """times 2 で 2 回抽選。"""
         repo = InMemoryLootTableRepository()
         repo.save(_make_loot_table(1, [
             LootEntry(
@@ -96,7 +98,8 @@ class TestBasicLootDrop:
         # 各回 quantity=1 なので合計 2 個 grant される
         assert len([s for s in result.item_spec_ids_to_grant if s.value == 100]) == 2
 
-    def test_min_max_quantity_範囲で_grant_される(self) -> None:
+    def test_min_max_quantity_grant(self) -> None:
+        """min max quantity 範囲で grant される。"""
         repo = InMemoryLootTableRepository()
         repo.save(_make_loot_table(1, [
             LootEntry(
@@ -115,7 +118,8 @@ class TestBasicLootDrop:
 class TestSilentSkip:
     """provider 不在 / table 未登録は silent skip (例外を投げず continue)。"""
 
-    def test_repository_未注入なら_silent_skip(self) -> None:
+    def test_repository_uninjected_silent_skip(self) -> None:
+        """repository 未注入なら silent skip。"""
         svc = WorldGraphEffectService()  # repo 無し
 
         result = _apply(svc, {"loot_table_id": 1})
@@ -123,7 +127,8 @@ class TestSilentSkip:
         # 何も grant されない、例外も投げない
         assert result.item_spec_ids_to_grant == ()
 
-    def test_loot_table_id_が_未登録なら_silent_skip(self) -> None:
+    def test_loot_table_id_unregistered_silent_skip(self) -> None:
+        """loottableid が未登録なら silentskip。"""
         repo = InMemoryLootTableRepository()
         svc = WorldGraphEffectService(loot_table_repository=repo)
 
@@ -131,7 +136,8 @@ class TestSilentSkip:
 
         assert result.item_spec_ids_to_grant == ()
 
-    def test_loot_table_id_が_不正なら_silent_skip(self) -> None:
+    def test_loot_table_id_invalid_silent_skip(self) -> None:
+        """loottableid が不正なら silentskip。"""
         repo = InMemoryLootTableRepository()
         svc = WorldGraphEffectService(loot_table_repository=repo)
 

@@ -36,13 +36,15 @@ def runtime():
 class TestOutcomeGameEnd:
     """v2 の game end は all_resolved 連動。"""
 
-    def test_初期状態は_未確定で_終了しない(self, runtime) -> None:
+    def test_initial_state(self, runtime) -> None:
+        """初期状態は 未確定で 終了しない。"""
         result = runtime.check_game_end()
         assert result.is_ended is False
         # outcome モードに入っていることを reason で確認 (集団判定とは別経路)
         assert "outcome" in result.reason or "未確定" in result.reason
 
-    def test_全員確定で_is_ended_True_かつ_player_outcomes_が返る(self, runtime) -> None:
+    def test_returns_all_players_ended_true_player_outcomes(self, runtime) -> None:
+        """全員確定で is ended True かつ player outcomes が返る。"""
         registry = runtime._player_outcome_registry
         assert registry is not None
         # 4 人全員に outcome をセット

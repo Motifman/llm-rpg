@@ -52,7 +52,8 @@ def _snap(**overrides) -> SpotGraphPlayerSnapshotDto:
 class TestNearbyEntityIsDown:
     """nearby_entities の is_down フラグが UI プロンプトに reflect される。"""
 
-    def test_is_down_True_なら_倒れて動かない_接尾辞が付く(self) -> None:
+    def test_down_true(self) -> None:
+        """is down True なら 倒れて動かない 接尾辞が付く。"""
         snap = _snap(
             nearby_entities=(
                 SpotGraphNearbyEntityEntry(
@@ -64,7 +65,8 @@ class TestNearbyEntityIsDown:
         dto = builder.build(current_state_text="(base)\n", current_state=_wrap(snap))
         assert '"エイダ" (倒れて動かない)' in dto.current_state_text
 
-    def test_is_down_False_は_通常表記(self) -> None:
+    def test_down_false(self) -> None:
+        """isdownFalse は通常表記。"""
         snap = _snap(
             nearby_entities=(
                 SpotGraphNearbyEntityEntry(
@@ -78,7 +80,8 @@ class TestNearbyEntityIsDown:
         assert "ノア" in dto.current_state_text
         assert "倒れて動かない" not in dto.current_state_text
 
-    def test_混在時は_該当する人のみ_接尾辞(self) -> None:
+    def test_documented_behavior(self) -> None:
+        """混在時は 該当する人のみ 接尾辞。"""
         snap = _snap(
             nearby_entities=(
                 SpotGraphNearbyEntityEntry(

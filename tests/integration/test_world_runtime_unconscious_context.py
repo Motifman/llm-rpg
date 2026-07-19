@@ -60,7 +60,7 @@ def _build_runtime(config):
 
 
 class TestUnconsciousContextWiringFlagOn:
-    def test_semantic_stack_は_top_k_未指定でも強制的に組まれる(
+    def test_semantic_stack_top_k_unspecified(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """belief top-K を読むには semantic_memory_store が要るため、
@@ -76,9 +76,10 @@ class TestUnconsciousContextWiringFlagOn:
         # コンテキストとは独立した knob であることの確認)。
         assert stack.semantic_passive_top_k == 0
 
-    def test_subjective_service_に_flagとproviderが届く(
+    def test_subjective_service_flag_provider(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """subjective service に flagとproviderが届く。"""
         runtime = _build_runtime(
             _litellm_config(unconscious_context_enabled=True)
         )
@@ -92,7 +93,7 @@ class TestUnconsciousContextWiringFlagOn:
         assert service._unconscious_context_enabled is True
         assert service._unconscious_context_provider is not None
 
-    def test_provider_が実際に_semantic_store_から_belief_を引ける(
+    def test_provider_semantic_store_belief_can_lookup(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """holder 経由の遅延解決が正しく機能し、seed した belief が provider
@@ -131,9 +132,10 @@ class TestUnconsciousContextWiringFlagOn:
 class TestUnconsciousContextWiringFlagOff:
     """flag OFF (default) では従来どおり provider が呼ばれる余地すら無い。"""
 
-    def test_flag_未設定なら_service_のunconscious_context_enabledはFalse(
+    def test_flag_unset_service_unconscious_context_enabled_false(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flag 未設定なら service のunconscious context enabledはFalse。"""
         runtime = _build_runtime(_litellm_config())
         stack = runtime._episodic_stack
         assert stack is not None
@@ -143,9 +145,10 @@ class TestUnconsciousContextWiringFlagOff:
         assert service._unconscious_context_enabled is False
         assert service._unconscious_context_provider is None
 
-    def test_flag_OFFなら_semantic_top_k_0のまま_semantic_stackは組まれない(
+    def test_flag_off_semantic_top_k_zero_semantic_stack(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flag OFFなら semantic top k 0のまま semantic stackは組まれない。"""
         runtime = _build_runtime(episodic_config())
         stack = runtime._episodic_stack
         assert stack is not None

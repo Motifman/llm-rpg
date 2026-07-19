@@ -28,7 +28,8 @@ def _make_revived_event(player_id: int, hp: int = 40) -> PlayerRevivedEvent:
 
 
 class TestPendingCancellation:
-    def test_PlayerRevivedEvent_受信で_grace_timer_から_cancel_される(self) -> None:
+    def test_player_revived_event_grace_timer_cancel(self) -> None:
+        """PlayerRevivedEvent 受信で grace timer から cancel される。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=10)
         handler = PlayerRevivedOutcomeHandler(grace_timer=timer)
@@ -37,7 +38,7 @@ class TestPendingCancellation:
 
         assert timer.is_pending(PlayerId(1)) is False
 
-    def test_pending_でない_player_への_PlayerRevivedEvent_でも_例外なし(self) -> None:
+    def test_pending_player_revived_event_raises_exception(self) -> None:
         """revive event が pending でない player に飛んできても破綻しない冪等性。
 
         例: scenario_event で「ダウンせず復活」のような変則ケースを将来許容
@@ -48,7 +49,8 @@ class TestPendingCancellation:
 
         handler.handle(_make_revived_event(99))  # 例外なく完了
 
-    def test_他_player_の_pending_には_影響しない(self) -> None:
+    def test_other_player_pending_does_not_affect(self) -> None:
+        """他 player の pending には 影響しない。"""
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=10)
         timer.register(PlayerId(2), downed_at_tick=15)
@@ -61,6 +63,7 @@ class TestPendingCancellation:
 
 
 class TestValidation:
-    def test_grace_timer_None_は_TypeError(self) -> None:
+    def test_grace_timer_none_raises_type_error(self) -> None:
+        """grace timer None は TypeError。"""
         with pytest.raises(TypeError):
             PlayerRevivedOutcomeHandler(grace_timer=None)  # type: ignore[arg-type]

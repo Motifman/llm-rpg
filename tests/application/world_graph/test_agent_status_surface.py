@@ -51,7 +51,8 @@ def _snap(**overrides) -> SpotGraphPlayerSnapshotDto:
 class TestAgentStatusSurface:
     """agent_status の busy フラグが UI プロンプトに reflect される。"""
 
-    def test_busy_True_なら_現在の行動状態_section_が_追記される(self) -> None:
+    def test_busy_true_action_state_section(self) -> None:
+        """busyTrue なら現在の行動状態 section が追記される。"""
         snap = _snap(
             agent_status=SpotGraphAgentStatusEntry(
                 busy=True,
@@ -68,13 +69,15 @@ class TestAgentStatusSurface:
         # 中断可能の説明も出る
         assert "軽い行動" in text and "重い行動" in text
 
-    def test_busy_False_なら_section_は_出ない(self) -> None:
+    def test_busy_false_section_not_rendered(self) -> None:
+        """busyFalse なら section は出ない。"""
         snap = _snap()  # default = busy=False
         builder = SpotGraphUiContextBuilder()
         dto = builder.build(current_state_text="(base)\n", current_state=_wrap(snap))
         assert "現在の行動状態" not in dto.current_state_text
 
-    def test_busy_かつ_interruptible_False_なら_中断説明は出ない(self) -> None:
+    def test_busy_interruptible_false_not_rendered(self) -> None:
+        """busy かつ interruptible False なら 中断説明は出ない。"""
         snap = _snap(
             agent_status=SpotGraphAgentStatusEntry(
                 busy=True,

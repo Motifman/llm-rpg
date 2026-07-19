@@ -71,7 +71,7 @@ def _graph_with_two_spots_and_path(
 class TestMoveMonsterSuccess:
     """正常系移動。"""
 
-    def test_from_から消え_to_に居る(self) -> None:
+    def test_documented_behavior(self) -> None:
         """move_monster 後、from spot からは消えて to spot で見える。"""
         g = _graph_with_two_spots_and_path()
         m1 = MonsterId.create(101)
@@ -89,7 +89,7 @@ class TestMoveMonsterSuccess:
         assert g.monster_presence_at(SpotId.create(1)).count() == 0
         assert g.monster_presence_at(SpotId.create(2)).is_present(m1)
 
-    def test_left_と_appeared_event_の対が発火する(self) -> None:
+    def test_triggers_left_appeared_event(self) -> None:
         """MonsterLeftSpotEvent → MonsterAppearedAtSpotEvent の順で発火。"""
         g = _graph_with_two_spots_and_path()
         m1 = MonsterId.create(101)
@@ -119,7 +119,7 @@ class TestMoveMonsterSuccess:
         assert left.monster_id == m1
         assert appeared.monster_id == m1
 
-    def test_最後の一体が出ていけば元_spot_の_presence_キーが削除される(self) -> None:
+    def test_last_spot_presence_key_deleted(self) -> None:
         """move 後に空になったスポットは _monster_presences からキー消去。"""
         g = _graph_with_two_spots_and_path()
         m1 = MonsterId.create(101)
@@ -142,7 +142,7 @@ class TestMoveMonsterSuccess:
 class TestMoveMonsterFailure:
     """失敗系。"""
 
-    def test_未配置モンスターの移動は例外(self) -> None:
+    def test_case_raises_exception_2(self) -> None:
         """配置されていない monster_id の移動は MonsterNotInGraphException。"""
         g = _graph_with_two_spots_and_path()
         with pytest.raises(MonsterNotInGraphException):
@@ -153,7 +153,7 @@ class TestMoveMonsterFailure:
                 world_flags=frozenset(),
             )
 
-    def test_違うスポット起点の接続は不変条件違反例外(self) -> None:
+    def test_case_raises_exception(self) -> None:
         """monster の現在 spot と接続の from_spot が一致しないと例外。"""
         g = SpotGraphAggregate.empty(SpotGraphId.create(1))
         g.add_spot(_node(1))
@@ -186,7 +186,7 @@ class TestMoveMonsterFailure:
                 world_flags=frozenset(),
             )
 
-    def test_traversable_false_で通行不可例外(self) -> None:
+    def test_traversable_false_raises_exception(self) -> None:
         """passage.traversable=False の接続では ConnectionNotPassableException。"""
         g = SpotGraphAggregate.empty(SpotGraphId.create(1))
         g.add_spot(_node(1))
@@ -259,7 +259,7 @@ class TestPassageConditions:
         )
         return g
 
-    def test_鍵を持たないモンスターは通行不可と判定される(self) -> None:
+    def test_monster_line(self) -> None:
         """ITEM_REQUIRED の扉は鍵なし owned_item_spec_ids では can_traverse=False。"""
         g = self._graph_with_item_required_door()
 
@@ -272,7 +272,7 @@ class TestPassageConditions:
             is False
         )
 
-    def test_鍵を持たないモンスターの_move_は例外(self) -> None:
+    def test_move_raises_exception(self) -> None:
         """ITEM_REQUIRED 未満足での move_monster は ConnectionNotPassableException。"""
         g = self._graph_with_item_required_door()
         m1 = MonsterId.create(101)
@@ -286,7 +286,7 @@ class TestPassageConditions:
                 world_flags=frozenset(),
             )
 
-    def test_world_flag_依存通路はフラグ未設定で通行不可(self) -> None:
+    def test_world_flag_unset_line(self) -> None:
         """FLAG_SET 未満足での can_traverse は False。"""
         from ai_rpg_world.domain.world_graph.enum.passage_condition_type import (
             PassageConditionTypeEnum,
@@ -341,7 +341,7 @@ class TestPassageConditions:
 class TestCanTraverseConnection:
     """can_traverse_connection の合否判定。"""
 
-    def test_traversable_true_で_true(self) -> None:
+    def test_traversable_true(self) -> None:
         """通常通行可能な接続では True を返す。"""
         g = _graph_with_two_spots_and_path()
         assert (
@@ -351,7 +351,7 @@ class TestCanTraverseConnection:
             is True
         )
 
-    def test_traversable_false_で_false(self) -> None:
+    def test_traversable_false(self) -> None:
         """traversable=False では False。"""
         g = SpotGraphAggregate.empty(SpotGraphId.create(1))
         g.add_spot(_node(1))

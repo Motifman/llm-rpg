@@ -155,7 +155,7 @@ class TestBeingSnapshotCliEndToEnd:
         entries = dst_sem.list_for_being(being_id)
         assert [e.entry_id for e in entries] == ["s-cli"]
 
-    def test_存在しない_source_DB_の_save_は_exit_code_1(self, tmp_path: Path) -> None:
+    def test_save_missing_source_db_exits_one(self, tmp_path: Path) -> None:
         """source DB が無い save は sqlite が自動生成する前に弾かれる。"""
         cli = _load_cli_module()
         rc = cli.main(
@@ -177,7 +177,7 @@ class TestBeingSnapshotCliEndToEnd:
         )
         assert rc == 1
 
-    def test_存在しない_input_の_load_は_exit_code_1(self, tmp_path: Path) -> None:
+    def test_load_missing_input_exits_one(self, tmp_path: Path) -> None:
         """load で input file が無い場合は traceback ではなく exit 1。"""
         cli = _load_cli_module()
         rc = cli.main(
@@ -197,7 +197,8 @@ class TestBeingSnapshotCliEndToEnd:
         )
         assert rc == 1
 
-    def test_未登録_being_id_の_save_は_exit_code_1(self, tmp_path: Path) -> None:
+    def test_save_unregistered_being_id_exits_one(self, tmp_path: Path) -> None:
+        """未登録 being id の save は exit code 1。"""
         cli = _load_cli_module()
         rc = cli.main(
             [
@@ -219,7 +220,7 @@ class TestBeingSnapshotCliEndToEnd:
         assert rc == 1
 
 
-def test_help_は_subcommand_を表示する() -> None:
+def test_help_subcommand_displays() -> None:
     """argparse の help 出力に save / load の両 subcommand が出る。"""
     cli = _load_cli_module()
     parser = cli.build_parser()

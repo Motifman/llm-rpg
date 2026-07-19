@@ -112,7 +112,8 @@ class TestEpisodicMemoryLinkApplicationServiceDualPath:
     """``EpisodicMemoryLinkApplicationService`` が Resolver 注入時に
     being_id 経路で link を書く。"""
 
-    def test_on_episode_committed_は_being_id_経路で_link_を作る(self) -> None:
+    def test_creates_episode_committed_being_id_link(self) -> None:
+        """on episode committed は being id 経路で link を作る。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
         being_id = setup.provision(1)
@@ -132,7 +133,7 @@ class TestEpisodicMemoryLinkApplicationServiceDualPath:
         # being_id 経路に書かれる
         assert len(setup.link_store.list_all_links_for_being(being_id)) == 1
 
-    def test_resolver_未注入なら_silent_no_op(self) -> None:
+    def test_resolver_uninjected_silent_op_2(self) -> None:
         """Phase 3 Step 3c-3: legacy 撤去後、Resolver 未注入は silent skip。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
@@ -158,7 +159,7 @@ class TestEpisodicMemoryLinkApplicationServiceDualPath:
 class TestEpisodicMemoryExploreToolExecutorDualPath:
     """``EpisodicMemoryExploreToolExecutor`` が being_id 経路で link を引く。"""
 
-    def test_resolver_未注入なら_INVALID_STATE(self) -> None:
+    def test_resolver_uninjected_invalid_state(self) -> None:
         """Phase 3 Step 3c-3: tool は LLM-visible なので fail-fast (= INVALID_STATE)。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
@@ -176,7 +177,8 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
         assert result.success is False
         assert result.error_code == "INVALID_STATE"
 
-    def test_being_id_経由で_書いた_link_が_explore_で_見える(self) -> None:
+    def test_being_id_via_link_explore(self) -> None:
+        """beingid 経由で書いた link が explore で見える。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
         being_id = setup.provision(1)
@@ -213,7 +215,7 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
     """``EpisodicPassiveRecallRetrievalService`` の spreading activation が
     being_id 経路で link を引く。"""
 
-    def test_resolver_未注入時は_全軸を_skip_して_完走する(self) -> None:
+    def test_resolver_uninjected_all_skip_completes(self) -> None:
         """Phase 3 Step 3e-3: episode_store も legacy 撤去後、Resolver 未注入時は
         temporal/cue/spreading すべての軸が空になる graceful fallback。turn は
         止まらず、prompt 強化が完全に痩せるだけ。"""
@@ -235,7 +237,8 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
         # 全軸 skip → 候補ゼロ
         assert ids == set()
 
-    def test_being_id_注入時は_spreading_が_being_id_経路で_動く(self) -> None:
+    def test_being_id_spreading_being_id_works(self) -> None:
+        """being id 注入時は spreading が being id 経路で 動く。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
         being_id = setup.provision(1)
@@ -270,7 +273,7 @@ class TestEpisodicSemanticClusterPromotionServiceMemoryLinkPath:
     """``EpisodicSemanticClusterPromotionService.on_after_tool_turn`` の link 走査が
     being_id keyed only で動くことを確認 (Phase 3 Step 3c-3)。"""
 
-    def test_resolver_未注入時は_silent_no_op(self) -> None:
+    def test_resolver_uninjected_silent_op(self) -> None:
         """Phase 3 Step 3c-3: Resolver 未注入なら link 走査も含めて silent no-op。"""
         from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
             EpisodicSemanticClusterPromotionService,
@@ -291,7 +294,7 @@ class TestEpisodicSemanticClusterPromotionServiceMemoryLinkPath:
         # 例外なく完了する (= silent no-op)
         promo.on_after_tool_turn(1, now=_NOW)
 
-    def test_resolver_注入時は_link_を_being_id_経路で_読む(self) -> None:
+    def test_resolver_link_being_id(self) -> None:
         """Resolver 注入 + Being provision で being_id 経路。"""
         from tests.application.llm._semantic_being_test_helpers import (
             make_semantic_being_setup,
@@ -330,7 +333,8 @@ class TestEpisodicSemanticClusterPromotionServiceMemoryLinkPath:
 class TestSpreadingActivationBeingIdParam:
     """``neighbor_priming_scores`` は being_id 必須 (Phase 3 Step 3c-3)。"""
 
-    def test_being_id_を_渡すと_being_id_経路で_link_を_たどる(self) -> None:
+    def test_being_id_being_id_link(self) -> None:
+        """beingid を渡すと beingid 経路で link をたどる。"""
         setup = make_memory_link_being_setup()
         being_id = setup.provision(1)
         setup.link_store.upsert_link_by_being(
@@ -345,7 +349,7 @@ class TestSpreadingActivationBeingIdParam:
         )
         assert "other" in result
 
-    def test_being_id_の_型違反は_TypeError(self) -> None:
+    def test_being_id_raises_type_error(self) -> None:
         """Phase 3 Step 3c-3: being_id は BeingId 型必須。"""
         setup = make_memory_link_being_setup()
         with pytest.raises(TypeError, match="being_id"):

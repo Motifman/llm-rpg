@@ -28,7 +28,8 @@ from ai_rpg_world.application.llm.services.world_noun_matcher import (
 class TestBasicMatching:
     """基本動作: 登録した名前を text 中から検出できる。"""
 
-    def test_単一スポット名が_1_箇所マッチする(self) -> None:
+    def test_single_spot_name_matches_one_location(self) -> None:
+        """単一スポット名が 1 箇所マッチする。"""
         m = (
             WorldNounMatcherBuilder()
             .add_spot("書架A", spot_id=3)
@@ -40,7 +41,8 @@ class TestBasicMatching:
         assert result[0].value == "3"
         assert result[0].matched_text == "書架A"
 
-    def test_同じパターンが複数箇所に出現すれば全件返る(self) -> None:
+    def test_returns_all_same_multiple(self) -> None:
+        """同じパターンが複数箇所に出現すれば全件返る。"""
         m = WorldNounMatcherBuilder().add_spot("書架A", spot_id=3).build()
         result = m.find_in_text("書架A も書架A も")
         # 2 箇所マッチする
@@ -49,7 +51,8 @@ class TestBasicMatching:
         # 順序は出現位置の昇順
         assert result[0].start < result[1].start
 
-    def test_異なるカテゴリの名前が混在しても全件マッチ(self) -> None:
+    def test_matches_all_names_from_different_categories(self) -> None:
+        """異なるカテゴリの名前が混在しても全件マッチ。"""
         m = (
             WorldNounMatcherBuilder()
             .add_spot("書架A", spot_id=3)
@@ -63,7 +66,8 @@ class TestBasicMatching:
         assert ("place_spot", "3") in cue_pairs
         assert ("object", "world_object_10") in cue_pairs
 
-    def test_登録されていない名前はマッチしない(self) -> None:
+    def test_name(self) -> None:
+        """登録されていない名前はマッチしない。"""
         m = WorldNounMatcherBuilder().add_spot("書架A", spot_id=3).build()
         result = m.find_in_text("書架B にいる")
         assert result == ()
@@ -76,7 +80,7 @@ class TestAhoCorasickFailureLink:
     保つ別 node に飛ぶ」こと。これが効くケースを試す。
     """
 
-    def test_あるパターンが別パターンの_suffix_でもマッチする(self) -> None:
+    def test_different_suffix(self) -> None:
         """パターン ``[bc, abc]`` で text ``xabc`` を検索すると、a→b→c で
         終端 node ``abc`` に到達するが、その node の output には failure 経由で
         ``bc`` も含まれる必要がある。"""
@@ -91,7 +95,7 @@ class TestAhoCorasickFailureLink:
         assert "2" in cue_values  # abc
         assert "1" in cue_values  # bc (failure link 経由)
 
-    def test_途中で別パターンに分岐できる(self) -> None:
+    def test_different(self) -> None:
         """``書架A`` と ``書庫`` を登録。``書架A も書庫も`` という text で
         両方検出される。"""
         m = (
@@ -104,7 +108,7 @@ class TestAhoCorasickFailureLink:
         values = {r.value for r in result}
         assert values == {"3", "5"}
 
-    def test_長いパターンの中にある短いパターンも検出される(self) -> None:
+    def test_documented_behavior(self) -> None:
         """``書架`` を登録、text ``書架A`` でもマッチする (substring match)。
         これは Aho-Corasick の語境界 unaware な挙動。シナリオ命名で
         ``書架`` と ``書架A`` を両方登録するなら両方マッチする (caller dedupe)。"""
@@ -117,20 +121,22 @@ class TestAhoCorasickFailureLink:
 class TestNormalization:
     """NFKC + casefold の正規化が効くこと。"""
 
-    def test_全角アルファベットは半角と同じ扱い(self) -> None:
+    def test_all_same_2(self) -> None:
         """``書架Ａ`` (全角A) と ``書架A`` (半角A) が同一視される。"""
         m = WorldNounMatcherBuilder().add_spot("書架A", spot_id=3).build()
         result = m.find_in_text("書架Ａ で待ってる")  # 全角 A
         assert len(result) == 1
         assert result[0].value == "3"
 
-    def test_英字の大文字小文字は同一視(self) -> None:
+    def test_same(self) -> None:
+        """英字の大文字小文字は同一視。"""
         m = WorldNounMatcherBuilder().add_spot("RoomA", spot_id=7).build()
         result = m.find_in_text("入った先は ROOMA だった")
         assert len(result) == 1
         assert result[0].value == "7"
 
-    def test_全角数字は半角数字と同一視(self) -> None:
+    def test_all_same(self) -> None:
+        """全角数字は半角数字と同一視。"""
         m = WorldNounMatcherBuilder().add_spot("S3", spot_id=3).build()
         result = m.find_in_text("S３ へ移動")  # 全角 3
         assert len(result) == 1
@@ -139,7 +145,8 @@ class TestNormalization:
 class TestAliases:
     """エイリアス登録による別表記吸収。"""
 
-    def test_エイリアスでも同じ_cue_value_が立つ(self) -> None:
+    def test_same_cue_value(self) -> None:
+        """エイリアスでも同じ cue value が立つ。"""
         m = (
             WorldNounMatcherBuilder()
             .add_spot("書架A", spot_id=3, aliases=("第三書架", "古文書庫"))
@@ -152,7 +159,7 @@ class TestAliases:
             # display は primary (= "書架A") に固定される
             assert result[0].matched_text in {"書架A", text}  # 元 text or primary
 
-    def test_空エイリアスは無視される(self) -> None:
+    def test_empty_alias_is_ignored(self) -> None:
         """空文字 / 空白だけのエイリアスは登録されない (無限マッチ防止)。"""
         m = (
             WorldNounMatcherBuilder()
@@ -167,25 +174,29 @@ class TestCueAxisValueFormat:
     """各 add_X メソッドが ``episodic_cue_rules`` 既存 cue と互換な
     (axis, value) を返す。"""
 
-    def test_add_spot_は_place_spot_str_id_を返す(self) -> None:
+    def test_returns_add_spot_place_spot_str_id(self) -> None:
+        """add spot は place spot str id を返す。"""
         m = WorldNounMatcherBuilder().add_spot("X", spot_id=42).build()
         result = m.find_in_text("X")
         assert result[0].axis == "place_spot"
         assert result[0].value == "42"
 
-    def test_add_character_は_entity_spot_graph_player_id_を返す(self) -> None:
+    def test_returns_add_character_entity_spot_graph_player_id(self) -> None:
+        """add character は entity spot graph player id を返す。"""
         m = WorldNounMatcherBuilder().add_character("リン", player_id=2).build()
         result = m.find_in_text("リン")
         assert result[0].axis == "entity"
         assert result[0].value == "spot_graph_player_2"
 
-    def test_add_world_object_は_object_world_object_id_を返す(self) -> None:
+    def test_returns_add_world_object_world_object_id(self) -> None:
+        """add world object は object world object id を返す。"""
         m = WorldNounMatcherBuilder().add_world_object("案内板", world_object_id=10).build()
         result = m.find_in_text("案内板")
         assert result[0].axis == "object"
         assert result[0].value == "world_object_10"
 
-    def test_add_item_は_object_item_instance_id_を返す(self) -> None:
+    def test_returns_add_item_object_item_instance_id(self) -> None:
+        """add item は object item instance id を返す。"""
         m = WorldNounMatcherBuilder().add_item("鍵", item_instance_id=100).build()
         result = m.find_in_text("鍵")
         assert result[0].axis == "object"
@@ -195,12 +206,14 @@ class TestCueAxisValueFormat:
 class TestNullMatcher:
     """NullWorldNounMatcher は常に空を返す (no-op safe default)。"""
 
-    def test_空登録の_builder_は_null_matcher_を返す(self) -> None:
+    def test_returns_empty_builder_null_matcher(self) -> None:
+        """空登録の builder は null matcher を返す。"""
         m = WorldNounMatcherBuilder().build()
         assert isinstance(m, NullWorldNounMatcher)
         assert m.find_in_text("何でも") == ()
 
-    def test_null_matcher_は_protocol_を満たす(self) -> None:
+    def test_null_matcher_protocol(self) -> None:
+        """null matcher は protocol を満たす。"""
         m: IWorldNounMatcher = NullWorldNounMatcher()
         assert m.find_in_text("any") == ()
 
@@ -208,11 +221,12 @@ class TestNullMatcher:
 class TestEdgeCases:
     """境界ケース。"""
 
-    def test_空_text_は_空タプル(self) -> None:
+    def test_empty_text_empty_tuple(self) -> None:
+        """空 text は空タプル。"""
         m = WorldNounMatcherBuilder().add_spot("書架A", spot_id=3).build()
         assert m.find_in_text("") == ()
 
-    def test_位置情報が_text_index_と整合(self) -> None:
+    def test_text_index(self) -> None:
         """同じ codepoint 長で正規化されるパターンなら start/end は元 text の
         index と一致する。"""
         m = WorldNounMatcherBuilder().add_spot("書架A", spot_id=3).build()
@@ -222,7 +236,7 @@ class TestEdgeCases:
         # text[result[0].start:result[0].end] が "書架A" になる
         assert text[result[0].start : result[0].end] == "書架A"
 
-    def test_NounMatch_の不変条件(self) -> None:
+    def test_noun_match(self) -> None:
         """空 axis / 空 value / end <= start は ValueError。"""
         with pytest.raises(ValueError):
             NounMatch(axis="", value="x", matched_text="x", start=0, end=1)
@@ -235,10 +249,12 @@ class TestEdgeCases:
 class TestProtocolConformance:
     """Aho-Corasick / Null の両方が ``IWorldNounMatcher`` Protocol を満たす。"""
 
-    def test_aho_corasick_は_protocol_に準拠(self) -> None:
+    def test_aho_corasick_protocol(self) -> None:
+        """aho corasick は protocol に準拠。"""
         m = WorldNounMatcherBuilder().add_spot("X", spot_id=1).build()
         assert isinstance(m, IWorldNounMatcher)
 
-    def test_null_は_protocol_に準拠(self) -> None:
+    def test_null_protocol(self) -> None:
+        """null は protocol に準拠。"""
         m = NullWorldNounMatcher()
         assert isinstance(m, IWorldNounMatcher)

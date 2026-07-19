@@ -48,7 +48,8 @@ def obj() -> SpotObject:
 class TestTimeOfDayIsNot:
     """TIME_OF_DAY_IS_NOT: 「夜以外なら成立」の検証。"""
 
-    def test_夜以外なら_成立_morning(self, svc, obj) -> None:
+    def test_morning(self, svc, obj) -> None:
+        """夜以外なら 成立 morning。"""
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT,
             required_time_of_day_phase="night",
@@ -62,7 +63,8 @@ class TestTimeOfDayIsNot:
         assert ok is True
         assert msg is None
 
-    def test_夜なら_拒否(self, svc, obj) -> None:
+    def test_documented_behavior_2(self, svc, obj) -> None:
+        """夜なら 拒否。"""
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT,
             required_time_of_day_phase="night",
@@ -76,7 +78,7 @@ class TestTimeOfDayIsNot:
         assert ok is False
         assert msg == "夜は釣りできない"
 
-    def test_provider_不在で_拒否(self, svc, obj) -> None:
+    def test_provider_2(self, svc, obj) -> None:
         """day_night 宣言が無いシナリオでこの condition を使うと fail する
         (silent skip を避けるための boundary フェイル)。"""
         cond = InteractionCondition(
@@ -92,7 +94,8 @@ class TestTimeOfDayIsNot:
         assert ok is False
         assert "day_night provider" in (msg or "")
 
-    def test_required_phase_欠落で_拒否(self, svc, obj) -> None:
+    def test_required_phase_missing(self, svc, obj) -> None:
+        """required phase 欠落で 拒否。"""
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT,
             required_time_of_day_phase=None,
@@ -108,7 +111,8 @@ class TestTimeOfDayIsNot:
 class TestTimeOfDayIs:
     """TIME_OF_DAY_IS: 「指定 phase のときだけ成立」の検証。"""
 
-    def test_一致なら_成立(self, svc, obj) -> None:
+    def test_matches_4(self, svc, obj) -> None:
+        """一致なら 成立。"""
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.TIME_OF_DAY_IS,
             required_time_of_day_phase="noon",
@@ -120,7 +124,8 @@ class TestTimeOfDayIs:
         )
         assert ok is True
 
-    def test_不一致なら_拒否(self, svc, obj) -> None:
+    def test_matches_3(self, svc, obj) -> None:
+        """不一致なら 拒否。"""
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.TIME_OF_DAY_IS,
             required_time_of_day_phase="noon",
@@ -136,7 +141,8 @@ class TestTimeOfDayIs:
 class TestWeatherIsNot:
     """WEATHER_IS_NOT: 「嵐以外なら成立」の検証。"""
 
-    def test_嵐以外なら_成立_CLEAR(self, svc, obj) -> None:
+    def test_clear(self, svc, obj) -> None:
+        """嵐以外なら 成立 CLEAR。"""
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.WEATHER_IS_NOT,
             required_weather_type="STORM",
@@ -148,7 +154,8 @@ class TestWeatherIsNot:
         )
         assert ok is True
 
-    def test_嵐なら_拒否(self, svc, obj) -> None:
+    def test_documented_behavior(self, svc, obj) -> None:
+        """嵐なら 拒否。"""
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.WEATHER_IS_NOT,
             required_weather_type="STORM",
@@ -162,7 +169,8 @@ class TestWeatherIsNot:
         assert ok is False
         assert msg == "嵐で危険"
 
-    def test_provider_不在で_拒否(self, svc, obj) -> None:
+    def test_provider(self, svc, obj) -> None:
+        """provider 不在で 拒否。"""
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.WEATHER_IS_NOT,
             required_weather_type="STORM",
@@ -179,7 +187,8 @@ class TestWeatherIsNot:
 class TestWeatherIs:
     """WEATHER_IS: 「指定 weather のときだけ成立」の検証。"""
 
-    def test_一致なら_成立(self, svc, obj) -> None:
+    def test_matches_2(self, svc, obj) -> None:
+        """一致なら 成立。"""
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.WEATHER_IS,
             required_weather_type="RAIN",
@@ -191,7 +200,8 @@ class TestWeatherIs:
         )
         assert ok is True
 
-    def test_不一致なら_拒否(self, svc, obj) -> None:
+    def test_matches(self, svc, obj) -> None:
+        """不一致なら 拒否。"""
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.WEATHER_IS,
             required_weather_type="RAIN",

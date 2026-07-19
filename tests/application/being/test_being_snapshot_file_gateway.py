@@ -37,24 +37,29 @@ def _snapshot(
 class TestSnapshotToDict:
     """snapshot_to_dict / dict_to_snapshot の挙動。"""
 
-    def test_round_trip_で_等価な_snapshot_が返る(self) -> None:
+    def test_returns_round_trip_snapshot(self) -> None:
+        """roundtrip で等価な snapshot が返る。"""
         original = _snapshot()
         restored = dict_to_snapshot(snapshot_to_dict(original))
         assert restored == original
 
-    def test_payload_None_でも_round_trip_できる(self) -> None:
+    def test_payload_none_round_trip(self) -> None:
+        """payload None でも round trip できる。"""
         original = _snapshot(memory_payload_json=None)
         assert dict_to_snapshot(snapshot_to_dict(original)) == original
 
-    def test_非_BeingSnapshot_は_TypeError(self) -> None:
+    def test_being_snapshot_raises_type_error(self) -> None:
+        """非 BeingSnapshot は TypeError。"""
         with pytest.raises(TypeError):
             snapshot_to_dict({"not": "snapshot"})  # type: ignore[arg-type]
 
-    def test_dict_でないと_TypeError(self) -> None:
+    def test_dict_raises_type_error(self) -> None:
+        """dict でないと TypeError。"""
         with pytest.raises(TypeError):
             dict_to_snapshot("bad")  # type: ignore[arg-type]
 
-    def test_不完全な_dict_は_BeingSnapshot_不変条件で弾かれる(self) -> None:
+    def test_all_dict_being_snapshot_rejected(self) -> None:
+        """不完全な dict は BeingSnapshot 不変条件で弾かれる。"""
         bad = {
             "being_id_value": "",  # 空文字 → 不変条件違反
             "identity_name": "n",
@@ -72,14 +77,15 @@ class TestSnapshotToDict:
 class TestFileGateway:
     """ローカルファイル I/O の round-trip。"""
 
-    def test_write_して_read_すると一致する(self, tmp_path: Path) -> None:
+    def test_write_read_matches(self, tmp_path: Path) -> None:
+        """write して read すると一致する。"""
         gateway = BeingSnapshotFileGateway()
         snapshot = _snapshot()
         path = tmp_path / "snap.json"
         gateway.write(snapshot, path)
         assert gateway.read(path) == snapshot
 
-    def test_書き出した_JSON_は_human_readable_な_dict(self, tmp_path: Path) -> None:
+    def test_written_json_human_readable_dict(self, tmp_path: Path) -> None:
         """ensure_ascii=False + indent=2 で読みやすい形式。"""
         gateway = BeingSnapshotFileGateway()
         path = tmp_path / "snap.json"
@@ -90,7 +96,8 @@ class TestFileGateway:
         assert "アダ" in raw
         assert data["snapshot_version"] == 2
 
-    def test_型違反は_TypeError(self, tmp_path: Path) -> None:
+    def test_value_raises_type_error(self, tmp_path: Path) -> None:
+        """型違反は TypeError。"""
         gateway = BeingSnapshotFileGateway()
         with pytest.raises(TypeError):
             gateway.write("bad", tmp_path / "x.json")  # type: ignore[arg-type]

@@ -62,8 +62,8 @@ def _make_event(*, target_visible: bool = True, target_incapacitated: bool = Fal
 class TestRegistryRouting:
     """registry 経由で `spot_graph` strategy に解決される。"""
 
-    def test_strategy_は_spot_graph(self) -> None:
-        """MonsterAttackedPlayerInSpotEvent → spot_graph。"""
+    def test_strategy_spot_graph(self) -> None:
+        """MonsterAttackedPlayerInSpotEvent は spot_graph strategy にルーティングされる。"""
         registry = ObservedEventRegistry()
         event = _make_event()
 
@@ -74,7 +74,7 @@ class TestRegistryRouting:
 class TestRecipientStrategy:
     """同スポット全員（被害者を含む）が配信先になる。"""
 
-    def test_被害者本人と同スポット第三者の両方が配信先(self) -> None:
+    def test_victim_and_same_spot_bystanders_receive_observation(self) -> None:
         """被害者 P1 と bystander P2 の両方が recipients に含まれる。"""
         registry = ObservedEventRegistry(
             event_to_strategy={MonsterAttackedPlayerInSpotEvent: "spot_graph"}
@@ -130,7 +130,7 @@ def _make_ctx() -> ObservationFormatterContext:
 class TestFormatterVictim:
     """被害者本人向けの prose。"""
 
-    def test_視認可で名前付き_damage_を含む(self) -> None:
+    def test_includes_name_damage(self) -> None:
         """target_visible=True なら「{monster}に襲われ {damage} のダメージを受けた」。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
 
@@ -143,7 +143,7 @@ class TestFormatterVictim:
         assert result.structured["target_player_id"] == PLAYER_VICTIM.value
         assert result.structured["damage"] == 8
 
-    def test_視認不可は暗闇プロセ(self) -> None:
+    def test_darkness(self) -> None:
         """target_visible=False なら「暗闇から何かに襲われた」。モンスター名は出さない。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
 
@@ -155,7 +155,7 @@ class TestFormatterVictim:
         assert "暗闇" in result.prose
         assert "灰色のオオカミ" not in result.prose
 
-    def test_target_incapacitated_で倒れた_suffix_が付く(self) -> None:
+    def test_target_incapacitated_suffix(self) -> None:
         """致命でダウンした場合、prose に「倒れた」suffix が追加される。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
 
@@ -171,7 +171,7 @@ class TestFormatterVictim:
 class TestFormatterBystander:
     """第三者プレイヤー向けの prose。"""
 
-    def test_第三者には_attacker_が_target_を攻撃したと出る(self) -> None:
+    def test_attacker_target_rendered(self) -> None:
         """recipient != victim なら「{monster}が{target_name}を攻撃した」。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
 

@@ -44,7 +44,7 @@ class _CapturingRecorder(ITraceRecorder):
 class TestMemoExecutorTraceRecording:
     """MemoToolExecutor の trace 統合挙動。"""
 
-    def test_memo_add_成功時に_MEMO_ADD_イベントを記録する(self) -> None:
+    def test_records_memo_add_success_memo_add_event(self) -> None:
         """memo_add 実行成功時に trace.record(MEMO_ADD) が呼ばれる。"""
         setup = make_memo_being_setup()
         setup.provision(1)
@@ -67,7 +67,7 @@ class TestMemoExecutorTraceRecording:
         assert ev.payload["content"] == "扉固定スイッチを押す"
         assert "memo_id" in ev.payload
 
-    def test_memo_done_成功時に_MEMO_DONE_イベントを記録する(self) -> None:
+    def test_records_memo_done_success_memo_done_event(self) -> None:
         """memo_done で完了したときに trace.record(MEMO_DONE) が呼ばれる。"""
         setup = make_memo_being_setup()
         being_id = setup.provision(1)
@@ -88,7 +88,7 @@ class TestMemoExecutorTraceRecording:
             for e in rec.events
         )
 
-    def test_memo_done_失敗時は_MEMO_DONE_イベントを記録しない(self) -> None:
+    def test_memo_done_failure_memo_done_event(self) -> None:
         """memo_id が存在しない時は MEMO_DONE event を出さない。"""
         setup = make_memo_being_setup()
         setup.provision(1)
@@ -104,7 +104,7 @@ class TestMemoExecutorTraceRecording:
         assert not result.success
         assert not any(e.kind == TraceEventKind.MEMO_DONE for e in rec.events)
 
-    def test_trace_recorder_未注入でもクラッシュしない(self) -> None:
+    def test_trace_recorder_uninjected_does_not_crash(self) -> None:
         """trace_recorder=None でも MemoToolExecutor は通常動作する。"""
         setup = make_memo_being_setup()
         setup.provision(1)

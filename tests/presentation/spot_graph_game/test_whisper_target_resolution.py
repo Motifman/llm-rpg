@@ -45,14 +45,14 @@ class _Manager(_WorldLlmWiring):
 class TestResolveWhisperTarget:
     """whisper target_label の lenient 解決。"""
 
-    def test_label_直接_でヒットする(self) -> None:
+    def test_label(self) -> None:
         """既存の "P1" 経路は回帰しない。"""
         m = _Manager()
         target = m._resolve_whisper_target("P1", _make_targets())
         assert target is not None
         assert target.player_id == 2
 
-    def test_プレイヤー名直書きで解決される(self) -> None:
+    def test_player_resolved(self) -> None:
         """Issue #269 観察: LLM が target_label に "リン" と名前を直書き
         してくるパターンを名前 (display_name) フォールバックで吸収する。"""
         m = _Manager()
@@ -60,22 +60,24 @@ class TestResolveWhisperTarget:
         assert target is not None
         assert target.player_id == 2
 
-    def test_別の名前でも対応する_player_id_に解決される(self) -> None:
+    def test_different_name_player_id_resolved(self) -> None:
+        """別の名前でも対応する player id に解決される。"""
         m = _Manager()
         target = m._resolve_whisper_target("カイト", _make_targets())
         assert target is not None
         assert target.player_id == 1
 
-    def test_空文字は_None(self) -> None:
+    def test_empty_string_none(self) -> None:
         """空 target_label は None (executor 側 / 呼び出し側で INVALID_WHISPER)。"""
         m = _Manager()
         assert m._resolve_whisper_target("", _make_targets()) is None
 
-    def test_存在しないラベル_名前は_None(self) -> None:
+    def test_label_name_none(self) -> None:
+        """存在しないラベル 名前は None。"""
         m = _Manager()
         assert m._resolve_whisper_target("存在しない人", _make_targets()) is None
 
-    def test_候補抽出経由で_P1_括弧つきを解決できる(self) -> None:
+    def test_candidate_via_p1_can_resolve(self) -> None:
         """\"P1 (リン)\" のような prompt 行貼り付けも吸収する。"""
         m = _Manager()
         target = m._resolve_whisper_target("P1 (リン)", _make_targets())

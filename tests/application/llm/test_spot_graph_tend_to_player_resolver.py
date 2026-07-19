@@ -50,7 +50,8 @@ def _make_context() -> ToolRuntimeContextDto:
 
 
 class TestTendToPlayerResolverSuccess:
-    def test_P2_短縮ラベルで_target_player_id_に_解決される(self) -> None:
+    def test_p2_label_target_player_id_resolved(self) -> None:
+        """P2 短縮ラベルで targetplayerid に解決される。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
             TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
@@ -62,7 +63,7 @@ class TestTendToPlayerResolverSuccess:
         assert result["target_display_name"] == "エイダ"
         assert result["inner_thought"] == "助ける"
 
-    def test_display_name_直指定でも_解決される(self) -> None:
+    def test_display_name_resolved(self) -> None:
         """target_player_label='エイダ' でも引ける (= 旧プロンプト経路の互換)。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -75,7 +76,7 @@ class TestTendToPlayerResolverSuccess:
 
 
 class TestTendToPlayerResolverErrors:
-    def test_monster_ラベルは_invalid_target_kind(self) -> None:
+    def test_monster_label_invalid_target_kind(self) -> None:
         """target_player_label='M1' (Monster) は player でないので弾く。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
@@ -86,7 +87,8 @@ class TestTendToPlayerResolverErrors:
             )
         assert exc.value.error_code == "INVALID_TARGET_KIND"
 
-    def test_未知のラベルは_invalid_target_label(self) -> None:
+    def test_unknown_label_invalid_target_label(self) -> None:
+        """未知のラベルは invalid target label。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
             resolver.resolve_args(
@@ -96,7 +98,8 @@ class TestTendToPlayerResolverErrors:
             )
         assert exc.value.error_code == "INVALID_TARGET_LABEL"
 
-    def test_空ラベルは_invalid_target_label(self) -> None:
+    def test_empty_label_invalid_target_label(self) -> None:
+        """空ラベルは invalid target label。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
             resolver.resolve_args(
@@ -106,7 +109,8 @@ class TestTendToPlayerResolverErrors:
             )
         assert exc.value.error_code == "INVALID_TARGET_LABEL"
 
-    def test_target_player_label_欠落は_invalid_target_label(self) -> None:
+    def test_target_player_label_missing_invalid_target_label(self) -> None:
+        """target player label 欠落は invalid target label。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
             resolver.resolve_args(
@@ -118,7 +122,7 @@ class TestTendToPlayerResolverErrors:
 
 
 class TestDispatch:
-    def test_TEND_TO_PLAYER_は_dispatch_対象(self) -> None:
+    def test_tend_to_player_is_dispatch_target(self) -> None:
         """resolver が新 tool を None で素通りさせていないことを保証する
         (PR #620 の attack 経路で起きた gap の同型問題を防ぐ)。"""
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (

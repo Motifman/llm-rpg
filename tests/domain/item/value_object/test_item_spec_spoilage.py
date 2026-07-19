@@ -27,18 +27,22 @@ def _make(spoils_after_ticks=None) -> ItemSpec:
 class TestItemSpecSpoilsAfterTicks:
     """spoils_after_ticks のバリデーション挙動。"""
 
-    def test_None_は_腐らないアイテムとして受理される(self) -> None:
+    def test_none_spoilage_is_accepted_as_unspoilable_item(self) -> None:
+        """None は腐らないアイテムとして受理される。"""
         spec = _make(spoils_after_ticks=None)
         assert spec.spoils_after_ticks is None
 
-    def test_正の整数なら受理される(self) -> None:
+    def test_documented_behavior(self) -> None:
+        """正の整数なら受理される。"""
         spec = _make(spoils_after_ticks=8)
         assert spec.spoils_after_ticks == 8
 
-    def test_0_は無意味なので弾く(self) -> None:
+    def test_rejects_zero(self) -> None:
+        """0 は無意味なので弾く。"""
         with pytest.raises(ItemSpecValidationException):
             _make(spoils_after_ticks=0)
 
-    def test_負の値は弾く(self) -> None:
+    def test_rejects_negative_value(self) -> None:
+        """負の値は弾く。"""
         with pytest.raises(ItemSpecValidationException):
             _make(spoils_after_ticks=-1)

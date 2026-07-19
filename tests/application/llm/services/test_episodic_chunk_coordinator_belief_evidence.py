@@ -159,7 +159,8 @@ def _trigger_chunk_close(
 class TestEpisodicChunkCoordinatorBeliefEvidenceSyncPath:
     """同期 LLM 補完経路 (chunk_subjective_fields_service 注入時) の転記。"""
 
-    def test_prediction_error_ありなら_evidence_が_1件積まれる(self) -> None:
+    def test_prediction_error_adds_one_evidence_record(self) -> None:
+        """prediction error ありなら evidence が 1件積まれる。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer_store)
         coord, buffer, action_store, being_id = _build_coord(
@@ -176,7 +177,8 @@ class TestEpisodicChunkCoordinatorBeliefEvidenceSyncPath:
         assert len(rows) == 1
         assert rows[0].text == "何も見つからなかった"
 
-    def test_prediction_error_なしなら_evidence_は_積まれない(self) -> None:
+    def test_prediction_error_evidence(self) -> None:
+        """predictionerror なしなら evidence は積まれない。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer_store)
         coord, buffer, action_store, being_id = _build_coord(
@@ -187,7 +189,7 @@ class TestEpisodicChunkCoordinatorBeliefEvidenceSyncPath:
 
         assert buffer_store.list_all_by_being(being_id) == []
 
-    def test_transcriber_未注入_flag_OFF_相当なら_何も積まない(self) -> None:
+    def test_transcriber_uninjected_flag_off(self) -> None:
         """belief_evidence_transcriber=None (既定) は既存動作と完全互換。"""
         coord, buffer, action_store, being_id = _build_coord(
             returns={
@@ -205,9 +207,10 @@ class TestEpisodicChunkCoordinatorBeliefEvidenceSyncPath:
 class TestEpisodicChunkCoordinatorBeliefAttributionSyncPath:
     """U4 (予測誤差統一設計 部品3): 同期経路での attribution + CONFIRMATION。"""
 
-    def test_belief_attribution_enabled_で_prediction_error_evidence_に_in_context_belief_ids_が添付される(
+    def test_belief_attribution_enabled_prediction_error_evidence_context_belief_ids(
         self,
     ) -> None:
+        """belief attribution enabled で prediction error evidence に in context belief ids が添付される。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer_store)
         coord, buffer, action_store, being_id = _build_coord(
@@ -232,9 +235,10 @@ class TestEpisodicChunkCoordinatorBeliefAttributionSyncPath:
         assert len(rows) == 1
         assert rows[0].in_context_belief_ids == ("sem-1",)
 
-    def test_belief_attribution_enabled_で_prediction_error_None_かつ_in_context_belief_あり_かつ_expected_result_ありなら_CONFIRMATION(
+    def test_belief_attribution_enabled_prediction_error_none_context_belief_expected_result_confirmation(
         self,
     ) -> None:
+        """belief attribution enabled で prediction error None かつ in context belief あり かつ expected result ありなら CONFIRMATION。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer_store)
         coord, buffer, action_store, being_id = _build_coord(
@@ -256,7 +260,7 @@ class TestEpisodicChunkCoordinatorBeliefAttributionSyncPath:
         assert rows[0].source_kind.value == "confirmation"
         assert rows[0].in_context_belief_ids == ("sem-1",)
 
-    def test_belief_attribution_enabled_が_False_既定なら_in_context_belief_ids_を計算せず添付しない(
+    def test_belief_attribution_enabled_false_default_context_belief_ids(
         self,
     ) -> None:
         """flag OFF (既定) では chunk_coordinator が attribution 自体を計算

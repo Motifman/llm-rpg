@@ -53,7 +53,7 @@ class TestDeathGraceStageThroughSimulationServiceTick:
             death_grace_stage=death_grace_stage,
         )
 
-    def test_down_直後の_tick_で_クラッシュしない(self) -> None:
+    def test_down_after_tick_does_not_crash(self) -> None:
         """r1_001 で SystemErrorException になった状況の再現。
 
         down 登録直後の 1 tick で ``TypeError`` が飛ばずに tick が完了する
@@ -72,7 +72,7 @@ class TestDeathGraceStageThroughSimulationServiceTick:
 
         assert outcome_registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
 
-    def test_grace_ticks_経過後に_実経路で_DEAD_確定する(self) -> None:
+    def test_grace_ticks_after_dead(self) -> None:
         """down → grace_ticks 経過 → overdue 検出 → DEAD 確定、を tick() 越しに。"""
         outcome_registry = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         grace_timer = PlayerDeathGraceTimer()
@@ -88,7 +88,7 @@ class TestDeathGraceStageThroughSimulationServiceTick:
         assert outcome_registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.DEAD
         assert grace_timer.is_pending(PlayerId(1)) is False
 
-    def test_revive_されれば_grace_経過後も_DEAD_確定しない(self) -> None:
+    def test_revive_grace_after_dead(self) -> None:
         """down → revive (cancel) → grace_ticks 経過、でも DEAD にならない。"""
         outcome_registry = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         grace_timer = PlayerDeathGraceTimer()
@@ -106,7 +106,7 @@ class TestDeathGraceStageThroughSimulationServiceTick:
 
         assert outcome_registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
 
-    def test_実験は_down_後も_複数_tick_継続する(self) -> None:
+    def test_down_after_multiple_tick(self) -> None:
         """down 発生が実験全体を止めないことの確認 (修正後は自然に満たされる)。"""
         outcome_registry = PlayerOutcomeRegistry.new_for_players([PlayerId(1), PlayerId(2)])
         grace_timer = PlayerDeathGraceTimer()

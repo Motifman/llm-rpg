@@ -137,7 +137,7 @@ def _make_orchestrator(graph, attacker, target):
 class TestRetaliationSuccess:
     """通常攻撃 (target 生存) 成立。"""
 
-    def test_event_発火_target_に_attacker_ref_MONSTER_が_記録される(self) -> None:
+    def test_event_trigger_target_attacker_ref_monster_recorded(self) -> None:
         """attack 成立で event 発火 + target.last_attacker_ref が attacker MONSTER を指す。"""
         attacker = _make_monster(_template(attack=5), 1)
         target = _make_monster(_template(attack=3, max_hp=20), 2)
@@ -178,7 +178,7 @@ class TestRetaliationSuccess:
 class TestRetaliationKill:
     """致命攻撃。predation と異なり hunger は回復しない。"""
 
-    def test_致命攻撃で_target_は_DEAD_だが_hunger_は_回復しない(self) -> None:
+    def test_target_dead_hunger(self) -> None:
         """attacker.attack >= target.hp で致命、attacker の hunger は変化しない。"""
         attacker_t = _template(attack=999)
         target_t = _template(attack=0, max_hp=10)
@@ -216,7 +216,7 @@ class TestRetaliationKill:
 class TestRetaliationFailure:
     """失敗系: target_dead / not_visible / zero_damage / cannot_attack。"""
 
-    def test_target_dead_で_executed_false(self) -> None:
+    def test_target_dead_executed_false(self) -> None:
         """既に死んでいる target は反撃対象にならない。"""
         attacker = _make_monster(_template(), 1)
         target = _make_monster(_template(), 2)
@@ -244,7 +244,7 @@ class TestRetaliationFailure:
         assert outcome.executed is False
         assert outcome.reason == "target_dead"
 
-    def test_attack_ゼロで_zero_damage(self) -> None:
+    def test_attack_zero_damage(self) -> None:
         """attack=0 のテンプレでは反撃が成立しない。"""
         attacker = _make_monster(_template(attack=0), 1)
         target = _make_monster(_template(), 2)
@@ -263,7 +263,7 @@ class TestRetaliationFailure:
         assert outcome.executed is False
         assert outcome.reason == "zero_damage"
 
-    def test_暗闇_dark_vision無しで_not_visible(self) -> None:
+    def test_darkness_dark_vision_not_visible(self) -> None:
         """DARK + dark_vision なしの attacker は反撃できない。"""
         attacker = _make_monster(_template(), 1)
         target = _make_monster(_template(), 2)

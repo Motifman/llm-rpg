@@ -99,7 +99,8 @@ def _make_resolver():
 class TestR1WindowOuterFilter:
     """``min_occurred_at`` 引数で sliding window 範囲外の episode のみ recall する。"""
 
-    def test_min_occurred_at_未指定なら_全_episode_が_対象(self) -> None:
+    def test_missing_min_occurred_at_allows_all_episodes(self) -> None:
+        """minoccurredat 未指定なら全 episode が対象。"""
         store = InMemorySubjectiveEpisodeStore()
         base = datetime(2026, 6, 1, tzinfo=timezone.utc)
         cue = EpisodicCue(axis="action", value="open", source=EpisodicCueSource.TOOL)
@@ -118,7 +119,8 @@ class TestR1WindowOuterFilter:
         ids = {c.episode.episode_id for c in result.candidates}
         assert ids == {"old", "recent"}
 
-    def test_min_occurred_at_より_新しい_episode_は_除外される(self) -> None:
+    def test_min_occurred_episode_excluded(self) -> None:
+        """minoccurredat より新しい episode は除外される。"""
         store = InMemorySubjectiveEpisodeStore()
         base = datetime(2026, 6, 1, tzinfo=timezone.utc)
         cue = EpisodicCue(axis="action", value="open", source=EpisodicCueSource.TOOL)
@@ -142,7 +144,7 @@ class TestR1WindowOuterFilter:
         ids = {c.episode.episode_id for c in result.candidates}
         assert ids == {"old"}
 
-    def test_境界自身_の_episode_も_除外される_strictly_older(self) -> None:
+    def test_boundary_episode_excluded_strictly_older(self) -> None:
         """``occurred_at == border`` の episode は recall から落とす。
 
         sliding window 最古 entry 自身が「直近に届いた observation」なので、
@@ -166,7 +168,7 @@ class TestR1WindowOuterFilter:
         )
         assert result.candidates == ()
 
-    def test_naive_と_aware_が_混在しても_UTC_正規化で_比較される(self) -> None:
+    def test_naive_aware_utc(self) -> None:
         """sliding window が naive datetime を返す経路 (= ``datetime.now()``) と、
         episode の occurred_at が aware UTC な経路の混在は実装で正規化される。"""
         store = InMemorySubjectiveEpisodeStore()
@@ -199,9 +201,10 @@ class TestR1WindowOuterFilter:
 class TestR2TemporalAxisFallback:
     """temporal 軸は ``situation_cues`` が空のときのみ fallback として動く。"""
 
-    def test_cue_が_立たない_idle_turn_では_temporal_軸が_直近_episode_を_出す(
+    def test_cue_idle_turn_temporal_episode(
         self,
     ) -> None:
+        """cue が立たない idleturn では temporal 軸が直近 episode を出す。"""
         store = InMemorySubjectiveEpisodeStore()
         base = datetime(2026, 6, 1, tzinfo=timezone.utc)
         store.put_by_being(_being, _episode(episode_id="t1", occurred_at=base, cues=()))
@@ -221,7 +224,7 @@ class TestR2TemporalAxisFallback:
         # 新しい順
         assert ids == ["t2", "t1"]
 
-    def test_cue_が_立つ_通常_turn_では_temporal_軸は_off(self) -> None:
+    def test_cue_turn_temporal_off(self) -> None:
         """cue が立っていれば temporal 軸は走らない (= 直近重複が出ない)。"""
         store = InMemorySubjectiveEpisodeStore()
         base = datetime(2026, 6, 1, tzinfo=timezone.utc)
@@ -251,7 +254,8 @@ class TestR2TemporalFallbackPinning:
     が「常時必ず何かの cue を立てる」設計に変わると、R2 fallback は永遠に
     走らない dead code になる。"""
 
-    def test_observation_prose_と_runtime_context_が_空なら_cues_は_空(self) -> None:
+    def test_empty_observation_prose_and_runtime_context_return_empty_cues(self) -> None:
+        """observationprose と runtimecontext が空なら cues は空。"""
         from ai_rpg_world.application.llm.contracts.dtos import (
             ToolRuntimeContextDto,
         )
@@ -274,11 +278,13 @@ class TestR2TemporalFallbackPinning:
 class TestSlidingWindowOldestEntryDatetime:
     """``get_oldest_entry_datetime`` の挙動 (sliding_window 系の新 API)。"""
 
-    def test_空_window_は_None_を_返す(self) -> None:
+    def test_returns_none_empty_window(self) -> None:
+        """空 window は None を返す。"""
         mem = DefaultSlidingWindowMemory()
         assert mem.get_oldest_entry_datetime(PlayerId(1)) is None
 
-    def test_1_件_append_された_window_の_最古は_その_entry_の_occurred_at(self) -> None:
+    def test_one_append_window_entry_occurred(self) -> None:
+        """1 件 append された window の最古はその entry の occurredat。"""
         mem = DefaultSlidingWindowMemory()
         ts = datetime(2026, 6, 1, tzinfo=timezone.utc)
         mem.append(
@@ -297,7 +303,8 @@ class TestSlidingWindowOldestEntryDatetime:
         )
         assert mem.get_oldest_entry_datetime(PlayerId(1)) == ts
 
-    def test_複数件_append_で_最古を_返す(self) -> None:
+    def test_returns_multiple_append(self) -> None:
+        """複数件 append で最古を返す。"""
         mem = DefaultSlidingWindowMemory()
         t1 = datetime(2026, 6, 1, tzinfo=timezone.utc)
         t2 = datetime(2026, 6, 5, tzinfo=timezone.utc)
@@ -332,11 +339,13 @@ class TestRollingSummaryOldestEntryDatetime:
         )
         return RollingSummaryShortTermMemory(l1_soft_cap=15, l1_hard_cap=25)
 
-    def test_空_window_は_None(self) -> None:
+    def test_empty_window_none(self) -> None:
+        """空 window は None。"""
         mem = self._mem()
         assert mem.get_oldest_entry_datetime(PlayerId(1)) is None
 
-    def test_L1_raw_に_複数件_あれば_最古を_返す(self) -> None:
+    def test_returns_l1_raw_multiple(self) -> None:
+        """L1raw に複数件あれば最古を返す。"""
         mem = self._mem()
         t1 = datetime(2026, 6, 1, tzinfo=timezone.utc)
         t2 = datetime(2026, 6, 5, tzinfo=timezone.utc)
@@ -362,7 +371,8 @@ class TestPromptBuilderDefenseAgainstBadOldestType:
     """``get_oldest_entry_datetime`` が datetime 以外を返したら、warning ログを
     残しつつ recall の時間下限フィルタを off に倒す (silent failure 防止)。"""
 
-    def test_文字列が返ったら_warning_して_None_扱い(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_emits_warning_for_none(self, caplog: pytest.LogCaptureFixture) -> None:
+        """文字列が返ったら warning して None 扱い。"""
         import logging
         from ai_rpg_world.application.llm.contracts.interfaces import (
             ISlidingWindowMemory,

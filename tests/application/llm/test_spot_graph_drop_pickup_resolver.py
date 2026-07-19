@@ -55,7 +55,7 @@ def _make_context() -> ToolRuntimeContextDto:
 class TestDropItemResolver:
     """drop_item: I1 (inventory_item) → slot_id / item_instance_id 解決と境界検証。"""
 
-    def test_I1_は_slot_id_と_item_instance_id_に解決される(self) -> None:
+    def test_i1_slot_id_item_instance_id_resolved(self) -> None:
         """所持アイテムラベルが代表 instance の slot/instance に解決される。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -68,7 +68,7 @@ class TestDropItemResolver:
         assert result["item_instance_id"] == 7
         assert result["target_display_name"] == "流木"
 
-    def test_drop_に_ground_item_ラベルを渡すと_INVALID_TARGET_KIND(self) -> None:
+    def test_drop_ground_item_label_invalid_target_kind(self) -> None:
         """G1 は地面アイテム kind なので drop の対象として拒否される。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
@@ -79,7 +79,7 @@ class TestDropItemResolver:
             )
         assert exc.value.error_code == "INVALID_TARGET_KIND"
 
-    def test_drop_に不在ラベルを渡すと_INVALID_TARGET_LABEL(self) -> None:
+    def test_drop_label_invalid_target_label(self) -> None:
         """ターゲット辞書に無いラベルは INVALID_TARGET_LABEL で弾かれる。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
@@ -90,7 +90,7 @@ class TestDropItemResolver:
             )
         assert exc.value.error_code == "INVALID_TARGET_LABEL"
 
-    def test_drop_に空ラベルを渡すと_INVALID_TARGET_LABEL(self) -> None:
+    def test_drop_empty_label_invalid_target_label(self) -> None:
         """空文字列は INVALID_TARGET_LABEL で弾かれる。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
@@ -105,7 +105,7 @@ class TestDropItemResolver:
 class TestPickupItemResolver:
     """pickup_item: G1 (ground_item) → item_instance_id 解決と境界検証。"""
 
-    def test_G1_は_item_instance_id_に解決される(self) -> None:
+    def test_g1_item_instance_id_resolved(self) -> None:
         """地面アイテムラベルが instance_id に解決される。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
@@ -117,7 +117,7 @@ class TestPickupItemResolver:
         assert result["item_instance_id"] == 3
         assert result["target_display_name"] == "流木"
 
-    def test_pickup_に_inventory_item_ラベルを渡すと_INVALID_TARGET_KIND(self) -> None:
+    def test_pickup_inventory_item_label_invalid_target_kind(self) -> None:
         """I1 は所持アイテム kind なので pickup の対象として拒否される。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
@@ -128,7 +128,8 @@ class TestPickupItemResolver:
             )
         assert exc.value.error_code == "INVALID_TARGET_KIND"
 
-    def test_pickup_に不在ラベルを渡すと_INVALID_TARGET_LABEL(self) -> None:
+    def test_pickup_label_invalid_target_label(self) -> None:
+        """pickup に不在ラベルを渡すと INVALID TARGET LABEL。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
             resolver.resolve_args(
@@ -138,7 +139,8 @@ class TestPickupItemResolver:
             )
         assert exc.value.error_code == "INVALID_TARGET_LABEL"
 
-    def test_pickup_に空ラベルを渡すと_INVALID_TARGET_LABEL(self) -> None:
+    def test_pickup_empty_label_invalid_target_label(self) -> None:
+        """pickup に空ラベルを渡すと INVALID TARGET LABEL。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
             resolver.resolve_args(

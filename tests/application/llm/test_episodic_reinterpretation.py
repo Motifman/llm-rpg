@@ -424,7 +424,7 @@ class TestEpisodicReinterpretationCoordinator:
         )
         assert [row.recall_id for row in pending] == ["r-b"]
 
-    def test_after_turn_completed_does_not_propagate_sidecar_store_failure(self) -> None:
+    def test_after_turn_completed_does_propagate_sidecar_store_failure(self) -> None:
         """再解釈 sidecar の store 例外は本体ターンへ伝播させない。"""
         from tests.application.llm._reinterpretation_being_test_helpers import (
             make_reinterpretation_being_setup,
@@ -469,9 +469,10 @@ class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
         episodes.put_by_being(being_id, _episode(episode_id="ep-a"))
         return episodes, setup, being_id
 
-    def test_flag_ON_で誤差付き_recall_は_prediction_outcome_error_を含む(
+    def test_includes_flag_recall_prediction_outcome_error(
         self,
     ) -> None:
+        """flag ON で誤差付き recall は prediction outcome error を含む。"""
         episodes, setup, being_id = self._stores()
         buffer = setup.recall_buffer
         buffer.append_by_being(
@@ -506,7 +507,8 @@ class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
         assert "実際には扉は開いていた" in user_content
         assert '"prediction_outcome_error"' in user_content
 
-    def test_flag_ON_でも誤差の無い_recall_には_キーが付かない(self) -> None:
+    def test_flag_recall_key(self) -> None:
+        """flag ON でも誤差の無い recall には キーが付かない。"""
         episodes, setup, being_id = self._stores()
         buffer = setup.recall_buffer
         buffer.append_by_being(
@@ -534,7 +536,7 @@ class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
         user_content = port.calls[0][1]["content"]
         assert '"prediction_outcome_error"' not in user_content
 
-    def test_flag_OFF_既定なら誤差があっても_system_prompt_と_payload_が導入前と_byte一致(
+    def test_flag_off_default_system_prompt_payload_before_byte_matches(
         self,
     ) -> None:
         """flag OFF (既定) は U9a 導入前と完全に一致する。"""

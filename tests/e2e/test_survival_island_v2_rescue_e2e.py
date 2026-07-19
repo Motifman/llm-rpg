@@ -139,7 +139,7 @@ def _signal_fire_object_label(runtime, player_id: PlayerId) -> str:
 class TestSurvivalIslandV2RescueE2E:
     """ada が summit で狼煙を上げ → tick 168 で RESCUED まで通る最短 path。"""
 
-    def test_step1_セッション起動で_ada_が_shipwreck_beach_に_spawn(
+    def test_step1_ada_shipwreck_beach_spawn(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
     ) -> None:
         """v2 シナリオを GameRuntimeManager 経由で立ち上げ、4 人が
@@ -151,9 +151,10 @@ class TestSurvivalIslandV2RescueE2E:
         present = graph.presence_at(SpotId.create(beach_int)).present_entity_ids
         assert len(present) == 4
 
-    def test_step2_ada_を_summit_に_teleport_できる(
+    def test_step2_ada_summit_teleport(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
     ) -> None:
+        """step2 ada を summit に teleport できる。"""
         state = _create_v2_session(monkeypatch, tmp_path)
         runtime = state.runtime
         ada = _ada_player_id(runtime)
@@ -164,9 +165,10 @@ class TestSurvivalIslandV2RescueE2E:
             SpotId.create(summit_int)
         ).present_entity_ids
 
-    def test_step3_必要アイテム_3_種を_ada_に_付与できる(
+    def test_step3_item_three_ada(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
     ) -> None:
+        """step3 必要アイテム 3 種を ada に付与できる。"""
         state = _create_v2_session(monkeypatch, tmp_path)
         runtime = state.runtime
         ada = _ada_player_id(runtime)
@@ -187,7 +189,7 @@ class TestSurvivalIslandV2RescueE2E:
         }
         assert expected.issubset(owned_spec_ids)
 
-    def test_step4_LLM_stub_経由で_light_signal_を_実行できる(
+    def test_step4_llm_stub_via_light_signal_line(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
     ) -> None:
         """LLM stub に light_signal の tool call を返させ、
@@ -221,7 +223,7 @@ class TestSurvivalIslandV2RescueE2E:
             f"current flags={runtime._world_flag_state.as_frozen_set()}"
         )
 
-    def test_step5_tick_168_到達で_ada_が_RESCUED_outcome_になる(
+    def test_step5_tick_168_ada_rescued_outcome(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
     ) -> None:
         """狼煙点火 → tick 168 (rescue_ship_first_arrive) → outcome_resolution

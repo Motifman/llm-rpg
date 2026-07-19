@@ -85,22 +85,25 @@ def _cue(value: str) -> EpisodicCue:
 class TestSemanticPassiveRecallBoundaries:
     """top_k と空入力の境界。"""
 
-    def test_top_k_が_0_なら_空_list(self) -> None:
+    def test_top_k_zero_empty_list(self) -> None:
         """disabled 経路: top_k <= 0 で必ず空。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="s1"))
         assert svc.retrieve(player_id=1, situation_cues=(), top_k=0, now=_NOW) == []
 
-    def test_top_k_が_負数_なら_空_list(self) -> None:
+    def test_top_k_empty_list(self) -> None:
+        """topk が負数なら空 list。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="s1"))
         assert svc.retrieve(player_id=1, situation_cues=(), top_k=-3, now=_NOW) == []
 
-    def test_store_が_空_なら_空_list(self) -> None:
+    def test_returns_empty_when_store_empty_list(self) -> None:
+        """store が空なら空 list。"""
         _setup, svc = _make_setup_and_svc()
         assert svc.retrieve(player_id=1, situation_cues=(_cue("3"),), top_k=5, now=_NOW) == []
 
-    def test_top_k_が_候補数_より大きい場合_存在数だけ_返す(self) -> None:
+    def test_returns_top_k_candidate(self) -> None:
+        """topk が候補数より大きい場合存在数だけ返す。"""
         setup, svc = _make_setup_and_svc()
         for i in range(3):
             setup.populate(1, _entry(entry_id=f"s{i}", text=f"t{i}"))
@@ -116,7 +119,7 @@ class TestSemanticPassiveRecallBoundaries:
 class TestSemanticPassiveRecallScoring:
     """recency / importance / relevance の各成分が独立に効く。"""
 
-    def test_新しい_entry_の_方が_recency_が_高く_top_に来る(self) -> None:
+    def test_entry_recency_top(self) -> None:
         """importance が同点なら作成が新しいほうが上位。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="old", created_at=_NOW - timedelta(days=180)))
@@ -124,7 +127,7 @@ class TestSemanticPassiveRecallScoring:
         result = svc.retrieve(player_id=1, situation_cues=(), top_k=2, now=_NOW)
         assert result[0].entry.entry_id == "new"
 
-    def test_importance_score_が_高い_entry_が_上位(self) -> None:
+    def test_importance_score_entry(self) -> None:
         """recency / relevance が同点なら importance が分ける。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="low", importance_score=2))
@@ -132,7 +135,7 @@ class TestSemanticPassiveRecallScoring:
         result = svc.retrieve(player_id=1, situation_cues=(), top_k=2, now=_NOW)
         assert result[0].entry.entry_id == "high"
 
-    def test_cue_が_tag_と一致する_entry_が_relevance_で_上位(self) -> None:
+    def test_cue_tag_matches_entry_relevance(self) -> None:
         """tag マッチがあれば relevance>0 で順位に反映される。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="no_tag", tags=()))
@@ -144,7 +147,7 @@ class TestSemanticPassiveRecallScoring:
         assert result[0].relevance > 0
         assert result[1].relevance == 0
 
-    def test_cue_が_本文に_含まれていれば_relevance_に_寄与(self) -> None:
+    def test_cue_text_relevance(self) -> None:
         """tag に無くても text に含まれていれば cheap lexical match で hit。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="text_match", text="北の洞窟は危険", tags=()))
@@ -154,13 +157,14 @@ class TestSemanticPassiveRecallScoring:
         )
         assert result[0].entry.entry_id == "text_match"
 
-    def test_cue_未指定_なら_relevance_は_全件_0(self) -> None:
+    def test_cue_unspecified_relevance_all_zero(self) -> None:
+        """cue 未指定なら relevance は全件 0。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="x", tags=("anything",)))
         result = svc.retrieve(player_id=1, situation_cues=(), top_k=1, now=_NOW)
         assert result[0].relevance == 0.0
 
-    def test_clock_skew_で_未来の_entry_でも_recency_は_1_0_でクランプ(self) -> None:
+    def test_clock_skew_entry_recency_one_zero(self) -> None:
         """now より後の created_at でも score は崩れず recency=1.0。"""
         setup, svc = _make_setup_and_svc()
         future = _NOW + timedelta(days=1)
@@ -177,21 +181,23 @@ class TestSemanticPassiveRecallScoring:
 class TestSemanticPassiveRecallActiveOnlyFilter:
     """U3a: belief journal 化により superseded / inactive な entry は想起に出ない。"""
 
-    def test_superseded_な_entry_は候補に出ない(self) -> None:
+    def test_superseded_entry_candidate_not_rendered(self) -> None:
+        """superseded な entry は候補に出ない。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="s1", status="superseded"))
         setup.populate(1, _entry(entry_id="s2"))
         result = svc.retrieve(player_id=1, situation_cues=(), top_k=10, now=_NOW)
         assert [c.entry.entry_id for c in result] == ["s2"]
 
-    def test_inactive_な_entry_は候補に出ない(self) -> None:
+    def test_inactive_entry_candidate_not_rendered(self) -> None:
+        """inactive な entry は候補に出ない。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="s1", status="inactive"))
         setup.populate(1, _entry(entry_id="s2"))
         result = svc.retrieve(player_id=1, situation_cues=(), top_k=10, now=_NOW)
         assert [c.entry.entry_id for c in result] == ["s2"]
 
-    def test_全件_active_なら既存挙動と件数が変わらない(self) -> None:
+    def test_all_active_existing_count(self) -> None:
         """既存 entry は全て status=active (フォールバック) なので想起件数は不変。"""
         setup, svc = _make_setup_and_svc()
         for i in range(3):
@@ -203,7 +209,8 @@ class TestSemanticPassiveRecallActiveOnlyFilter:
 class TestSemanticRecallCandidateTracePayload:
     """trace event 用 dict が必要なフィールドを持つ。"""
 
-    def test_to_trace_payload_が_必要キーを_含む(self) -> None:
+    def test_includes_trace_payload_key(self) -> None:
+        """totracepayload が必要キーを含む。"""
         entry = _entry(
             entry_id="sem-1",
             text="タカシは信頼できる",
@@ -227,10 +234,12 @@ class TestSemanticRecallCandidateTracePayload:
 class TestFormatSemanticRecallSection:
     """prompt 用 §「【関連する学び】」の本文整形。"""
 
-    def test_候補ゼロなら_空文字(self) -> None:
+    def test_candidate_empty_string(self) -> None:
+        """候補ゼロなら 空文字。"""
         assert format_semantic_recall_section([]) == ""
 
-    def test_候補が_箇条書きで_並ぶ(self) -> None:
+    def test_candidate(self) -> None:
+        """候補が 箇条書きで 並ぶ。"""
         entries = [
             SemanticRecallCandidate(
                 entry=_entry(entry_id=f"s{i}", text=f"学び{i}"),

@@ -48,11 +48,12 @@ def _bare_builder(*, ledger, recorder=None, tick: int = 0) -> DefaultPromptBuild
 class TestBeginPredictionContext:
     """ledger 未注入 / 注入時の 1 段目発行・破棄・NOTE emission。"""
 
-    def test_ledger_未注入なら_None_を返す(self) -> None:
+    def test_returns_none_ledger_uninjected(self) -> None:
+        """ledger 未注入なら None を返す。"""
         builder = _bare_builder(ledger=None)
         assert builder._begin_prediction_context(PlayerId(1)) is None
 
-    def test_ledger_注入時は_id_文字列を返し_pending_は空の_in_context_で始まる(
+    def test_ledger_id_string_pending_empty_context(
         self,
     ) -> None:
         """1 段目は id だけ発行する。in-context 集合は attach まで空。"""
@@ -66,7 +67,8 @@ class TestBeginPredictionContext:
         assert pending.episode_ids == ()
         assert pending.belief_ids == ()
 
-    def test_未消費のまま次の_build_で破棄されると_NOTE_trace_が出る(self) -> None:
+    def test_build_note_trace_rendered(self) -> None:
+        """未消費のまま次の build で破棄されると NOTE trace が出る。"""
         ledger = PredictionContextLedger()
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
@@ -83,7 +85,8 @@ class TestBeginPredictionContext:
         assert notes[0].tick == 7
         assert notes[0].payload["discarded_prediction_context_id"] == first_id
 
-    def test_consume_済みなら_次の_build_で_NOTE_は出ない(self) -> None:
+    def test_consume_build_note_not_rendered(self) -> None:
+        """consume 済みなら 次の build で NOTE は出ない。"""
         ledger = PredictionContextLedger()
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
@@ -96,7 +99,7 @@ class TestBeginPredictionContext:
         notes = [e for e in captured if e.kind == TraceEventKind.NOTE]
         assert notes == []
 
-    def test_recorder_未注入でも破棄は起きるが_NOTE_は出ない(self) -> None:
+    def test_recorder_uninjected_note_not_rendered(self) -> None:
         """trace 機構が無くても id の破棄自体 (ledger の状態遷移) は起きる。"""
         ledger = PredictionContextLedger()
         builder = _bare_builder(ledger=ledger, recorder=None)
@@ -106,7 +109,7 @@ class TestBeginPredictionContext:
         # 例外なく完走し、ledger には最新分だけが残る
         assert ledger.peek(PlayerId(1)).prediction_context_id == second_id
 
-    def test_他プレイヤーの_build_は互いに影響しない(self) -> None:
+    def test_other_player_build_does_not_affect(self) -> None:
         """player をまたいだ混線防止 (ledger のキー分離を builder 経由でも確認)。"""
         ledger = PredictionContextLedger()
         recorder = NullTraceRecorder()
@@ -123,7 +126,8 @@ class TestBeginPredictionContext:
 class TestAttachPredictionContext:
     """2 段目: 発行済み id に in-context 集合 (episode_ids / belief_ids) を後付け。"""
 
-    def test_begin_で発行した_id_に_in_context_集合が後付けされる(self) -> None:
+    def test_begin_line_id_context_after(self) -> None:
+        """begin で発行した id に in context 集合が後付けされる。"""
         ledger = PredictionContextLedger()
         builder = _bare_builder(ledger=ledger)
         pid = builder._begin_prediction_context(PlayerId(1))
@@ -138,7 +142,8 @@ class TestAttachPredictionContext:
         assert pending.episode_ids == ("ep-1", "ep-2")
         assert pending.belief_ids == ("belief-1",)
 
-    def test_ledger_未注入なら_no_op(self) -> None:
+    def test_ledger_uninjected_op(self) -> None:
+        """ledger 未注入なら no op。"""
         builder = _bare_builder(ledger=None)
         # 例外なく完走する (何も起きない)
         builder._attach_prediction_context(
@@ -148,7 +153,8 @@ class TestAttachPredictionContext:
             belief_ids=(),
         )
 
-    def test_id_None_なら_no_op(self) -> None:
+    def test_id_none_op(self) -> None:
+        """id None なら no op。"""
         ledger = PredictionContextLedger()
         builder = _bare_builder(ledger=ledger)
         builder._attach_prediction_context(

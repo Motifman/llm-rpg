@@ -24,7 +24,8 @@ from ai_rpg_world.infrastructure.repository.sqlite_world_graph_state_codec impor
 class TestSoundIntensityRoundTrip:
     """sound_intensity が dict 経由で round-trip する。"""
 
-    def test_MODERATE_の_round_trip(self) -> None:
+    def test_moderate_round_trip(self) -> None:
+        """MODERATE の round trip。"""
         atmosphere = SpotAtmosphere(
             lighting=LightingEnum.BRIGHT,
             sound_ambient="川のせせらぎ",
@@ -38,7 +39,8 @@ class TestSoundIntensityRoundTrip:
         assert restored.sound_intensity == SoundIntensityEnum.MODERATE
         assert restored.sound_ambient == "川のせせらぎ"
 
-    def test_default_SILENT_が_round_trip(self) -> None:
+    def test_default_silent_round_trip(self) -> None:
+        """default SILENT が round trip。"""
         atmosphere = SpotAtmosphere(lighting=LightingEnum.BRIGHT)
         d = _spot_atmosphere_to_dict(atmosphere)
         assert d["sound_intensity"] == "SILENT"
@@ -50,7 +52,8 @@ class TestSoundIntensityRoundTrip:
 class TestLegacyCompat:
     """旧スキーマ (sound_intensity フィールド無し) でも SILENT 復元。"""
 
-    def test_旧_dict_は_SILENT_で_復元される(self) -> None:
+    def test_legacy_dict_silent_restored(self) -> None:
+        """旧 dict は SILENT で復元される。"""
         legacy_dict = {
             "lighting": "BRIGHT",
             "sound_ambient": "古い音の説明",

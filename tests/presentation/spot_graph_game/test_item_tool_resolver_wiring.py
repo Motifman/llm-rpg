@@ -76,7 +76,8 @@ def _runtime_context(targets: Dict[str, Any]) -> ToolRuntimeContextDto:
 class TestResolveUseItem:
     """`SpotGraphArgumentResolver._resolve_use_item` の基本動作。"""
 
-    def test_item_label_を_item_spec_id_に_変換(self) -> None:
+    def test_item_label_item_spec_id(self) -> None:
+        """itemlabel を itemspecid に変換。"""
         resolver = SpotGraphArgumentResolver()
         ctx = _runtime_context({"I1": _inventory_target(item_spec_id=42)})
         out = resolver.resolve_args(
@@ -88,7 +89,8 @@ class TestResolveUseItem:
         assert out["item_spec_id"] == 42
         assert out["inner_thought"] == "食べたい"
 
-    def test_item_label_が_空文字なら_INVALID_TARGET_LABEL_例外(self) -> None:
+    def test_item_label_empty_string_invalid_target_label_raises_exception(self) -> None:
+        """itemlabel が空文字なら INVALIDTARGETLABEL 例外。"""
         resolver = SpotGraphArgumentResolver()
         ctx = _runtime_context({})
         with pytest.raises(ToolArgumentResolutionException) as ei:
@@ -97,7 +99,8 @@ class TestResolveUseItem:
             )
         assert ei.value.error_code == "INVALID_TARGET_LABEL"
 
-    def test_存在しない_label_は_例外(self) -> None:
+    def test_missing_label_raises_exception_2(self) -> None:
+        """存在しない label は例外。"""
         resolver = SpotGraphArgumentResolver()
         ctx = _runtime_context({"I1": _inventory_target()})
         with pytest.raises(ToolArgumentResolutionException):
@@ -105,7 +108,7 @@ class TestResolveUseItem:
                 TOOL_NAME_SPOT_GRAPH_USE_ITEM, {"item_label": "I99"}, ctx,
             )
 
-    def test_TOOL_NAME_SPOT_GRAPH_USE_ITEM_は_dispatch_対象(self) -> None:
+    def test_spot_graph_use_item_is_dispatch_target(self) -> None:
         """resolver が use_item を None で素通りさせていた regression を防ぐ。"""
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             _SPOT_GRAPH_TOOLS,
@@ -116,7 +119,8 @@ class TestResolveUseItem:
 class TestAdapterWithResolver:
     """`_adapt_executor_handler_with_resolver` が resolver と executor を繋ぐ。"""
 
-    def test_resolver_の_出力が_executor_に_渡る(self) -> None:
+    def test_resolver_executor(self) -> None:
+        """resolver の出力が executor に渡る。"""
         seen_args: Dict[str, Any] = {}
 
         def fake_executor(pid_int: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
@@ -136,7 +140,8 @@ class TestAdapterWithResolver:
         assert seen_args["item_spec_id"] == 42
         assert "item_label" not in seen_args
 
-    def test_resolver_例外は_LlmCommandResultDto_に_変換(self) -> None:
+    def test_resolver_llm_command_result_dto_raises_exception(self) -> None:
+        """resolver 例外は LlmCommandResultDto に変換。"""
         def fake_executor(pid_int: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
             pytest.fail("resolver 失敗時に executor が呼ばれてはいけない")
 
@@ -155,7 +160,7 @@ class TestAdapterWithResolver:
         assert result.remediation
         assert "I1" in result.remediation or "ラベル" in result.remediation
 
-    def test_resolver_が_None_を返したら_RESOLVER_DISPATCH_MISSING_を_返す(
+    def test_returns_resolver_dispatch_missing_returns_resolver_none_when(
         self,
     ) -> None:
         """resolver dispatch から外れている (設計違反) ケースは、raw args で
@@ -188,7 +193,7 @@ class TestDispatchTableUsesResolver:
     ことを直接検証する (regression test)。
     """
 
-    def test_全4_item_tool_に_resolver_aware_handler_が_登録(
+    def test_all_four_item_tool_resolver_aware_handler(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ) -> None:
         """use/drop/give/pickup の handler が resolver を呼ぶ動作になっている。
@@ -272,7 +277,7 @@ class TestResolveAttack:
     変換されない。
     """
 
-    def test_display_name_直指定で_monster_id_に_解決できる(self) -> None:
+    def test_display_name_monster_id_can_resolve(self) -> None:
         """target_label='大型カニ' (= prompt 表示の display_name) で attack 解決。"""
         resolver = SpotGraphArgumentResolver()
         ctx = _runtime_context({"M1": _monster_target(monster_id=10001)})
@@ -286,7 +291,7 @@ class TestResolveAttack:
         assert out["target_display_name"] == "大型カニ"
         assert out["inner_thought"] == "倒すしかない"
 
-    def test_短縮ラベル_M1_直指定でも_解決できる(self) -> None:
+    def test_label_m1_can_resolve(self) -> None:
         """target_label='M1' でも引ける (= 旧プロンプト経路の後方互換)。"""
         resolver = SpotGraphArgumentResolver()
         ctx = _runtime_context({"M1": _monster_target(monster_id=10001)})
@@ -298,7 +303,8 @@ class TestResolveAttack:
         assert out is not None
         assert out["monster_id"] == 10001
 
-    def test_存在しない_label_は_例外(self) -> None:
+    def test_missing_label_raises_exception(self) -> None:
+        """存在しない label は例外。"""
         resolver = SpotGraphArgumentResolver()
         ctx = _runtime_context({"M1": _monster_target()})
         with pytest.raises(ToolArgumentResolutionException) as ei:
@@ -309,7 +315,7 @@ class TestResolveAttack:
             )
         assert ei.value.error_code == "INVALID_TARGET_LABEL"
 
-    def test_inventory_ラベル_直指定で_attack_対象は_INVALID_TARGET_KIND(self) -> None:
+    def test_inventory_label_attack_target_invalid_target_kind(self) -> None:
         """monster でなく item の短縮ラベルを直渡すと型違いで弾かれる (= silent success 防止)。
 
         `target_label='I1'` だと targets dict に直接 hit するが kind が
@@ -340,7 +346,7 @@ class TestAttackDispatchUsesResolver:
     致命的バグ)。本テストが落ちる = resolver_targets から attack が消えた。
     """
 
-    def test_attack_handler_が_resolver_を_経由する(
+    def test_attack_handler_resolver_via(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ) -> None:
         """不正 label で attack を呼ぶと INVALID_TARGET_LABEL が返る (= resolver を通った証拠)。
@@ -371,7 +377,7 @@ class TestAttackDispatchUsesResolver:
             "set から TOOL_NAME_SPOT_GRAPH_ATTACK が抜けた可能性。"
         )
 
-    def test_resolver_targets_set_に_attack_が_含まれる(self) -> None:
+    def test_resolver_targets_set_attack_included(self) -> None:
         """runtime_manager の resolver_targets ハードコード set に attack が含まれる。
 
         実装ファイルを文字列検索する形式。`resolver_targets = frozenset({...

@@ -90,7 +90,8 @@ def _system_content(port: _StubSubjectivePort) -> str:
 class TestUnconsciousContextFlagOff:
     """unconscious_context_enabled=False (既定) のときの後方互換を保証する。"""
 
-    def test_provider_を注入していても_一切呼ばれない(self) -> None:
+    def test_does_not_call_provider_never(self) -> None:
+        """provider を注入していても 一切呼ばれない。"""
         enc = _make_encoding()
         draft = ChunkEpisodeDraftBuilder().build(enc)
         port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
@@ -107,7 +108,7 @@ class TestUnconsciousContextFlagOff:
 
         assert calls == []
 
-    def test_system_prompt_と_user_message_は_導入前と_byte一致(self) -> None:
+    def test_system_prompt_user_message_before_byte_matches(self) -> None:
         """salience_enabled のみのケースと完全一致すること (無意識コンテキスト
         節が一切追加されない)。"""
         enc = _make_encoding()
@@ -137,7 +138,8 @@ class TestUnconsciousContextFlagOff:
 class TestUnconsciousContextFlagOn:
     """unconscious_context_enabled=True のときの section 挿入・system prompt 追記。"""
 
-    def test_provider_が返したテキストが_section_として載る(self) -> None:
+    def test_provider_returned_section_included(self) -> None:
+        """provider が返したテキストが section として載る。"""
         enc = _make_encoding(player_id=7)
         draft = ChunkEpisodeDraftBuilder().build(enc)
         port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
@@ -166,7 +168,8 @@ class TestUnconsciousContextFlagOn:
         draft_idx = user_content.index("## ルール草案")
         assert persona_idx < unconscious_idx < draft_idx
 
-    def test_system_prompt_に_判定指示が追記される(self) -> None:
+    def test_system_prompt(self) -> None:
+        """systemprompt に判定指示が追記される。"""
         enc = _make_encoding()
         draft = ChunkEpisodeDraftBuilder().build(enc)
         port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
@@ -183,7 +186,8 @@ class TestUnconsciousContextFlagOn:
         # 既存の指示は残ったまま追記されている。
         assert "prediction_error" in sys_content
 
-    def test_provider_が空文字を返すと_section_は出ない(self) -> None:
+    def test_returns_section_not_rendered_provider_empty_string_when(self) -> None:
+        """provider が空文字を返すと section は出ない。"""
         enc = _make_encoding()
         draft = ChunkEpisodeDraftBuilder().build(enc)
         port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
@@ -197,7 +201,8 @@ class TestUnconsciousContextFlagOn:
         user_content = _user_content(port)
         assert "## いまの自分（信念と自己像）" not in user_content
 
-    def test_provider_が_None_を返すと_section_は出ない(self) -> None:
+    def test_returns_section_not_rendered_provider_none_when(self) -> None:
+        """provider が None を返すと section は出ない。"""
         enc = _make_encoding()
         draft = ChunkEpisodeDraftBuilder().build(enc)
         port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
@@ -211,7 +216,8 @@ class TestUnconsciousContextFlagOn:
         user_content = _user_content(port)
         assert "## いまの自分（信念と自己像）" not in user_content
 
-    def test_provider_が例外を投げても_chunk補完は継続する(self) -> None:
+    def test_provider_chunk_raises_exception(self) -> None:
+        """provider が例外を投げても chunk補完は継続する。"""
         enc = _make_encoding()
         draft = ChunkEpisodeDraftBuilder().build(enc)
         port = _StubSubjectivePort({"interpreted": "LLM_OK", "recall_text": "r"})
@@ -231,7 +237,8 @@ class TestUnconsciousContextFlagOn:
         user_content = _user_content(port)
         assert "## いまの自分（信念と自己像）" not in user_content
 
-    def test_provider未注入なら_flag_ONでも_sectionは出ない(self) -> None:
+    def test_provider_uninjected_flag_section_not_rendered(self) -> None:
+        """provider未注入なら flag ONでも sectionは出ない。"""
         enc = _make_encoding()
         draft = ChunkEpisodeDraftBuilder().build(enc)
         port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
@@ -246,7 +253,8 @@ class TestUnconsciousContextRuleFieldGuard:
     """確証バイアスの構造ガード: 無意識コンテキスト有効時も事実フィールドは
     LLM 出力で改変されない (belief に迎合した観測の書き換えを拒否する)。"""
 
-    def test_LLM_が事実フィールドを書き換えようとしても_ValueError_で弾かれる(self) -> None:
+    def test_llm_raises_value_error(self) -> None:
+        """LLM が事実フィールドを書き換えようとしても ValueError で弾かれる。"""
         enc = _make_encoding()
         draft = ChunkEpisodeDraftBuilder().build(enc)
 
@@ -285,14 +293,16 @@ class TestUnconsciousContextRuleFieldGuard:
 
 
 class TestUnconsciousContextTypeValidation:
-    def test_unconscious_context_provider_が_callable_でなければ_TypeError(self) -> None:
+    def test_unconscious_context_provider_callable_raises_type_error(self) -> None:
+        """unconscious context provider が callable でなければ TypeError。"""
         port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
         with pytest.raises(TypeError):
             EpisodicChunkSubjectiveFieldsService(
                 port, unconscious_context_provider="not-callable"  # type: ignore[arg-type]
             )
 
-    def test_unconscious_context_enabled_が_bool_でなければ_TypeError(self) -> None:
+    def test_unconscious_context_enabled_bool_raises_type_error(self) -> None:
+        """unconscious context enabled が bool でなければ TypeError。"""
         port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
         with pytest.raises(TypeError):
             EpisodicChunkSubjectiveFieldsService(

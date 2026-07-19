@@ -95,7 +95,8 @@ def _build_executor_with_item(state: dict) -> tuple[SpotGraphToolExecutor, Magic
 class TestSpoiledFoodDamage:
     """腐敗食を食べた時の挙動。"""
 
-    def test_腐敗食を食べると_apply_damage_が呼ばれる(self) -> None:
+    def test_calls_spoiled_food_apply_damage(self) -> None:
+        """腐敗食を食べると apply damage が呼ばれる。"""
         executor, status, _ = _build_executor_with_item({"spoiled": True})
 
         result = executor._use_item(player_id=1, args={"item_spec_id": 101})
@@ -103,7 +104,8 @@ class TestSpoiledFoodDamage:
         assert result.success is True
         status.apply_damage.assert_called_once_with(SPOILED_FOOD_DAMAGE_HP)
 
-    def test_腐敗食では_ConsumableUsedEvent_は発行されない(self) -> None:
+    def test_consumable_used_event_not_published(self) -> None:
+        """腐敗食では ConsumableUsedEvent は発行されない。"""
         executor, _, event_publisher = _build_executor_with_item({"spoiled": True})
 
         executor._use_item(player_id=1, args={"item_spec_id": 101})
@@ -112,7 +114,7 @@ class TestSpoiledFoodDamage:
         # は出さない (回復効果を捨てるため)
         event_publisher.publish.assert_not_called()
 
-    def test_腐敗食で_HP_0_になったら_status_events_が_publish_all_に乗る(self) -> None:
+    def test_hp_zero_status_events_publish_all_included(self) -> None:
         """silent failure fix: spoiled パスで apply_damage が PlayerDownedEvent
         を積んだとき、それが publish_all に流れて DEAD outcome 連鎖が起きる
         ことを保証する。修正前は status events が捨てられていた。
@@ -139,7 +141,8 @@ class TestSpoiledFoodDamage:
         all_published = [evt for call in publish_all_calls for evt in call.args[0]]
         assert downed in all_published
 
-    def test_腐敗食の_messageにダメージ表記が含まれる(self) -> None:
+    def test_message_included(self) -> None:
+        """腐敗食の messageにダメージ表記が含まれる。"""
         executor, _, _ = _build_executor_with_item({"spoiled": True})
 
         result = executor._use_item(player_id=1, args={"item_spec_id": 101})
@@ -151,14 +154,16 @@ class TestSpoiledFoodDamage:
 class TestFreshFoodPath:
     """新鮮食の通常経路 (Phase F の damage 追加で壊れていないことを確認)。"""
 
-    def test_新鮮食では_apply_damage_は呼ばれない(self) -> None:
+    def test_does_not_call_fresh_food_apply_damage(self) -> None:
+        """新鮮食では apply damage は呼ばれない。"""
         executor, status, _ = _build_executor_with_item({})
 
         executor._use_item(player_id=1, args={"item_spec_id": 101})
 
         status.apply_damage.assert_not_called()
 
-    def test_新鮮食では_ConsumableUsedEvent_が発行される(self) -> None:
+    def test_consumable_used_event_published(self) -> None:
+        """新鮮食では ConsumableUsedEvent が発行される。"""
         executor, _, event_publisher = _build_executor_with_item({})
 
         executor._use_item(player_id=1, args={"item_spec_id": 101})
@@ -170,7 +175,7 @@ class TestFreshFoodPath:
 class TestUseItemSilentFailures:
     """use_item の silent failure 回帰テスト。"""
 
-    def test_ItemUsedEvent_は_publish_all_経由で_event_publisher_に流れる(self) -> None:
+    def test_item_used_event_publish_all_via_event_publisher(self) -> None:
         """ItemAggregate.use() で積まれた ItemUsedEvent が publish されないと、
         durability ベースの観測やメトリクスが silent に落ちる。get_events を
         drain して publish_all に流すことを保証する。"""
@@ -188,7 +193,7 @@ class TestUseItemSilentFailures:
             f"ItemUsedEvent が publish_all に流れていない: {all_published!r}"
         )
 
-    def test_quantity_0_で消費したとき_inventory_save_が_item_delete_より先に呼ばれる(self) -> None:
+    def test_calls_quantity_zero_inventory_save_item_delete(self) -> None:
         """非アトミック削除の順序回帰: item_repository.delete を先にすると、
         delete 成功・inv save 失敗時に「slot に存在しない instance_id が残り続け
         以降の lookup が全部 None」となる silent failure を生む。順序を逆転

@@ -66,9 +66,10 @@ def spot_resolver():
 
 
 class TestConstructor:
-    def test_memory_が_IEncounterMemory_でなければ_TypeError(
+    def test_memory_ien_count_er_memory_raises_type_error(
         self, spot_resolver
     ) -> None:
+        """memory が IEncounterMemory でなければ TypeError。"""
         with pytest.raises(TypeError, match="memory"):
             SpotArrivalEncounterHandler(
                 memory="x",  # type: ignore[arg-type]
@@ -76,9 +77,10 @@ class TestConstructor:
                 spot_str_id_resolver=spot_resolver,
             )
 
-    def test_current_tick_provider_が_callable_でなければ_TypeError(
+    def test_current_tick_provider_callable_raises_type_error(
         self, memory, spot_resolver
     ) -> None:
+        """current tick provider が callable でなければ TypeError。"""
         with pytest.raises(TypeError, match="current_tick_provider"):
             SpotArrivalEncounterHandler(
                 memory=memory,
@@ -86,9 +88,10 @@ class TestConstructor:
                 spot_str_id_resolver=spot_resolver,
             )
 
-    def test_spot_str_id_resolver_が_callable_でなければ_TypeError(
+    def test_spot_str_id_resolver_callable_raises_type_error(
         self, memory
     ) -> None:
+        """spot str id resolver が callable でなければ TypeError。"""
         with pytest.raises(TypeError, match="spot_str_id_resolver"):
             SpotArrivalEncounterHandler(
                 memory=memory,
@@ -100,9 +103,10 @@ class TestConstructor:
 class TestHandle:
     """``EntityEnteredSpotEvent`` を受けて encounter を記録する。"""
 
-    def test_actor_の_spot_encounter_が_記録される(
+    def test_actor_spot_encounter_recorded(
         self, memory, spot_resolver
     ) -> None:
+        """actor の spotencounter が記録される。"""
         handler = SpotArrivalEncounterHandler(
             memory=memory,
             current_tick_provider=lambda: 42,
@@ -116,7 +120,7 @@ class TestHandle:
         assert record.is_first is True
         assert record.last_seen_tick == 42
 
-    def test_初回_spawn_event_from_spot_None_も_encounter_として記録(
+    def test_first_spawn_event_spot_none_encounter(
         self, memory, spot_resolver
     ) -> None:
         """from_spot_id=None (初回配置) も同じ経路で記録される。"""
@@ -132,7 +136,8 @@ class TestHandle:
         assert record is not None
         assert record.is_first is True
 
-    def test_再訪_event_は_count_が_進む(self, memory, spot_resolver) -> None:
+    def test_advances_event_count(self, memory, spot_resolver) -> None:
+        """再訪 event は count が進む。"""
         handler = SpotArrivalEncounterHandler(
             memory=memory,
             current_tick_provider=lambda: 10,
@@ -148,9 +153,10 @@ class TestHandle:
         assert record.first_seen_tick == 10
         assert record.last_seen_tick == 30
 
-    def test_spot_resolver_が_例外を_投げたら_skip(
+    def test_spot_resolver_skip_raises_exception(
         self, memory, caplog
     ) -> None:
+        """spotresolver が例外を投げたら skip。"""
         def _bad(spot_int):
             raise KeyError(spot_int)
 
@@ -164,9 +170,10 @@ class TestHandle:
         # 例外は外に出ない、record も立たない
         assert memory.get_records_for(PlayerId(1)) == {}
 
-    def test_current_tick_provider_が_例外を_投げたら_skip(
+    def test_current_tick_provider_skip_raises_exception(
         self, memory, spot_resolver
     ) -> None:
+        """currenttickprovider が例外を投げたら skip。"""
         def _bad_clock() -> int:
             raise RuntimeError("clock unavailable")
 
@@ -178,7 +185,7 @@ class TestHandle:
         handler.handle(_event(entity_int=1, spot_int=100))
         assert memory.get_records_for(PlayerId(1)) == {}
 
-    def test_handle_全体が_例外で_落ちない(
+    def test_handle_all_raises_exception(
         self, memory, spot_resolver
     ) -> None:
         """memory.observe が破壊された場合でも handle 自体は raise しない

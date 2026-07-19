@@ -57,7 +57,7 @@ def _make_dto(*entities: SpotGraphNearbyEntityEntry) -> PlayerCurrentStateDto:
 class TestNearbyEntityLabeling:
     """PR 6 後 (#404 後続): 名前直書き + PlayerToolRuntimeTargetDto 登録。"""
 
-    def test_居れば_名前で_行が出る(self) -> None:
+    def test_name_line_rendered(self) -> None:
         """PR 6: 旧 ``P1: リン`` → ``- リン`` に簡略化 (ラベル prefix を捨てる)。"""
         dto = _make_dto(
             SpotGraphNearbyEntityEntry(entity_id=2, display_name="リン"),
@@ -76,7 +76,8 @@ class TestNearbyEntityLabeling:
         assert targets["P1"].player_id == 2
         assert targets["P2"].player_id == 3
 
-    def test_display_name_が空でも_fallback_ラベルになる(self) -> None:
+    def test_display_name_empty_fallback_label(self) -> None:
+        """display name が空でも fallback ラベルになる。"""
         dto = _make_dto(
             SpotGraphNearbyEntityEntry(entity_id=2, display_name=""),
         )
@@ -89,7 +90,7 @@ class TestNearbyEntityLabeling:
 class TestNearbyEntityEmptySymmetric:
     """Issue #283: 不在のときも明示する (対称化)。"""
 
-    def test_他プレイヤー不在のときは_いない事実を明示する(self) -> None:
+    def test_other_player(self) -> None:
         """旧実装は section 自体を省略していたが、LLM が「いない」を確信
         できないと speech の誤用 (相手が同 spot に居る前提で SAY) が起きる。
         いない事実を明示する。"""
@@ -98,7 +99,7 @@ class TestNearbyEntityEmptySymmetric:
         assert "同じ場所にいるプレイヤー" in result.current_state_text
         assert "他のプレイヤーはこのスポットにいない" in result.current_state_text
 
-    def test_不在のときは_P_prefix_target_は登録されない(self) -> None:
+    def test_absent_entities_do_not_register_p_prefix_targets(self) -> None:
         """文面に '同じ場所にいるプレイヤー: (...)' は出すが、P-prefix の
         target dict は当然空。speech_speak の target_label として P1 等を
         提示しないことで「いない相手に whisper する」誤用を阻止。"""

@@ -31,7 +31,8 @@ from ai_rpg_world.domain.world_graph.value_object.reactive_object_state_binding 
 class TestReactiveBindingNarrativeFields:
     """`ReactiveObjectStateBinding` が narrative を保持できる。"""
 
-    def test_両方向_narrative_を_保持できる(self) -> None:
+    def test_narrative(self) -> None:
+        """両方向 narrative を保持できる。"""
         from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
             ScenarioEventCondition,
         )
@@ -48,7 +49,8 @@ class TestReactiveBindingNarrativeFields:
         assert b.narrative_on_true == "ベリーがまた生っている"
         assert b.narrative_on_false is None
 
-    def test_narrative_未指定なら_None_default(self) -> None:
+    def test_narrative_unspecified_none_default(self) -> None:
+        """narrative 未指定なら None default。"""
         from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
             ScenarioEventCondition,
         )
@@ -85,7 +87,8 @@ class TestSpotObjectStateChangedEventNarrativeField:
         )
         assert ev.narrative is None
 
-    def test_narrative_明示指定で_event_に_乗る(self) -> None:
+    def test_narrative_event_included(self) -> None:
+        """narrative 明示指定で event に乗る。"""
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
         from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
@@ -108,7 +111,7 @@ class TestScenarioLoaderParsesNarrative:
         Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
     )
 
-    def test_v2_の_全_harvest_binding_に_narrative_on_true_が_付与済み(self) -> None:
+    def test_v2_all_harvest_binding_narrative_true(self) -> None:
         """資源 cooldown の reset (false→true) は narrative が出る前提に揃える。
 
         これが無いと、採取資源の自然回復が agent に伝わらない (silent) ため、
@@ -126,7 +129,8 @@ class TestScenarioLoaderParsesNarrative:
             assert "True" not in b["narrative_on_true"]
             assert "False" not in b["narrative_on_true"]
 
-    def test_loader_が_narrative_を_読み込む(self) -> None:
+    def test_loader_narrative(self) -> None:
+        """loader が narrative を読み込む。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
         loaded = ScenarioLoader().load_from_file(str(self.SCENARIO_PATH))

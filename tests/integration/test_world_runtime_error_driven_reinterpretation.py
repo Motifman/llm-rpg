@@ -37,9 +37,10 @@ def _common_memory_config(**overrides):
 
 
 class TestWorldRuntimeErrorDrivenReinterpretationWiring:
-    def test_flag_ON_で_chunk_coordinator_と_再解釈coordinator_に届く(
+    def test_flag_chunk_coordinator(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flagON で chunkcoordinator と再解釈 coordinator に届く。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=_common_memory_config(error_driven_reinterpretation_enabled=True),
@@ -56,9 +57,10 @@ class TestWorldRuntimeErrorDrivenReinterpretationWiring:
         assert coordinator is not None
         assert coordinator._error_driven_reinterpretation_enabled is True
 
-    def test_flag_OFF_既定なら不活性で_chunk_coordinator_recall_buffer_store_はNone(
+    def test_flag_off_default_chunk_coordinator_recall_buffer_store_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flag OFF 既定なら不活性で chunk coordinator recall buffer store はNone。"""
         runtime = create_world_runtime(_SCENARIO_PATH, config=_common_memory_config())
         stack = runtime._episodic_stack
         assert stack is not None
@@ -68,7 +70,7 @@ class TestWorldRuntimeErrorDrivenReinterpretationWiring:
         assert coordinator is not None
         assert coordinator._error_driven_reinterpretation_enabled is False
 
-    def test_error_driven_ON_でも_reinterpretation_無効なら_coordinator_はNone(
+    def test_error_driven_reinterpretation_coordinator_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """LLM_EPISODIC_REINTERPRETATION_ENABLED が無ければ再解釈 coordinator

@@ -176,7 +176,8 @@ def _events_of_type(graph: SpotGraphAggregate, evt_type) -> list:
 class TestStartedFleeingEvent:
     """FLEE 遷移時に MonsterStartedFleeingInSpotEvent が 1 回発火する。"""
 
-    def test_ALWAYS_FLEE_反応で_event_発火(self) -> None:
+    def test_always_flee_event_trigger(self) -> None:
+        """ALWAYS FLEE 反応で event 発火。"""
         handler = _make_handler()
         monster = _monster(_template(reaction=ReactionPolicyEnum.ALWAYS_FLEE))
         monster.record_attacked_by_in_spot(
@@ -198,9 +199,10 @@ class TestStartedFleeingEvent:
 class TestStartedChasingEvent:
     """CHASE 遷移時に target id 付きで event 発火。"""
 
-    def test_player_attacker_への_CHASE_で_target_player_id_が_セットされる(
+    def test_player_attacker_chase_target_player_id(
         self,
     ) -> None:
+        """playerattacker への CHASE で targetplayerid がセットされる。"""
         handler = _make_handler()
         monster = _monster(_template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE))
         monster.record_attacked_by_in_spot(
@@ -222,9 +224,10 @@ class TestStartedChasingEvent:
         assert events[0].target_player_id.value == 7
         assert events[0].target_monster_id is None
 
-    def test_monster_attacker_への_CHASE_で_target_monster_id_が_セットされる(
+    def test_monster_attacker_chase_target_monster_id(
         self,
     ) -> None:
+        """monsterattacker への CHASE で targetmonsterid がセットされる。"""
         handler = _make_handler()
         monster = _monster(_template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE))
         monster.record_attacked_by_in_spot(
@@ -265,7 +268,7 @@ class TestAbandonedChaseEvent:
         graph.clear_events()
         return monster, graph
 
-    def test_grace_expired_で_event_発火(self) -> None:
+    def test_grace_expired_event_trigger(self) -> None:
         """flee_grace_ticks 切れの abandon。"""
         handler = _make_handler()
         # grace_ticks=3、開始 tick=10、現在 tick=15 で経過 5 > 3
@@ -281,7 +284,7 @@ class TestAbandonedChaseEvent:
         assert len(events) == 1
         assert events[0].reason == "grace_expired"
 
-    def test_max_ticks_exceeded_で_event_発火(self) -> None:
+    def test_max_ticks_exceeded_event_trigger(self) -> None:
         """chase_max_ticks 切れの abandon。"""
         handler = _make_handler()
         # grace_ticks=999 で grace を回避、chase_max_ticks=3
@@ -297,7 +300,7 @@ class TestAbandonedChaseEvent:
         assert len(events) == 1
         assert events[0].reason == "max_ticks_exceeded"
 
-    def test_search_disabled_テンプレ_で_search_expired_event_発火(self) -> None:
+    def test_search_disabled_search_expired_event_trigger(self) -> None:
         """`chase_search_ticks=0` のテンプレで last_observed 到着時に
         探索フェーズなしで即 IDLE → reason=search_expired として abandon。
 
@@ -323,7 +326,7 @@ class TestAbandonedChaseEvent:
         # last_observed=A、現 spot=A で search_ticks=0 なので search_expired
         assert events[0].reason == "search_expired"
 
-    def test_no_path_で_event_発火(self) -> None:
+    def test_path_event_trigger(self) -> None:
         """target が graph 上に居るが passable な経路が無い。"""
         handler = _make_handler(player=_player(player_id_value=7))
         monster = _monster(_template())

@@ -31,7 +31,7 @@ class _FakeDef:
 
 
 class TestExcludeSet:
-    def test_set_sub_location_は_除外対象に含まれる(self) -> None:
+    def test_set_sub_location_target_included(self) -> None:
         """脱出ランタイムでは set_sub_location は恒久的に UNSUPPORTED_TOOL を
         返す仕様のため、LLM に見せる必要が無い。"""
         assert (
@@ -39,7 +39,7 @@ class TestExcludeSet:
             in ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS
         )
 
-    def test_他の_spot_graph_系_tool_は_除外対象に含まれない(self) -> None:
+    def test_other_spot_graph_tool_target_not_included(self) -> None:
         """主要 tool が誤って除外されていないことの regression check。"""
         for name in (
             TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -50,7 +50,7 @@ class TestExcludeSet:
 
 
 class TestFilterFunction:
-    def test_除外対象を_除いた_definition_list_を_返す(self) -> None:
+    def test_returns_target_definition_list(self) -> None:
         """脱出ランタイムが LLM に渡す tool 一覧 (= ``tools_payload``) を
         生成する時に呼ばれるフィルタ。除外対象を取り除き、それ以外は順序を
         保ったまま通す。"""
@@ -68,14 +68,17 @@ class TestFilterFunction:
             TOOL_NAME_SPOT_GRAPH_WAIT,
         ]
 
-    def test_空_list_は_空_list_を_返す(self) -> None:
+    def test_returns_empty_list_empty_list(self) -> None:
+        """空 list は空 list を返す。"""
         assert filter_definitions_for_escape_llm([]) == []
 
-    def test_全部_除外対象なら_空_list(self) -> None:
+    def test_all_target_empty_list(self) -> None:
+        """全部 除外対象なら 空 list。"""
         defs = [_FakeDef(TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION)]
         assert filter_definitions_for_escape_llm(defs) == []
 
-    def test_除外対象が_無ければ_そのまま_返す(self) -> None:
+    def test_returns_excluded_targets_unchanged(self) -> None:
+        """除外対象が 無ければ そのまま 返す。"""
         defs = [
             _FakeDef(TOOL_NAME_SPOT_GRAPH_EXPLORE),
             _FakeDef(TOOL_NAME_SPOT_GRAPH_TRAVEL_TO),

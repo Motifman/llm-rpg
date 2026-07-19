@@ -87,13 +87,15 @@ def being() -> BeingId:
 class TestRecallBufferByBeing:
     """``InMemoryEpisodicRecallBufferStore`` の by_being API。"""
 
-    def test_append_と_pending_count(self, being: BeingId) -> None:
+    def test_append_pending_count(self, being: BeingId) -> None:
+        """append と pending count。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
         store.append_by_being(being, _obs(recall_id="r2", episode_id="e2"))
         assert store.pending_count_by_being(being) == 2
 
-    def test_peek_batch_は_episode_batched_順序を保つ(self, being: BeingId) -> None:
+    def test_preserves_peek_batch_episode_batched_order(self, being: BeingId) -> None:
+        """peek batch は episode batched 順序を保つ。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(
             being, _obs(recall_id="r1", episode_id="e1", recalled_at=_NOW)
@@ -113,7 +115,8 @@ class TestRecallBufferByBeing:
         assert result[0].recall_id == "r1"
         assert result[1].recall_id == "r2"
 
-    def test_peek_batch_は_batch_size_を_守る(self, being: BeingId) -> None:
+    def test_peek_batch_size(self, being: BeingId) -> None:
+        """peekbatch は batchsize を守る。"""
         store = InMemoryEpisodicRecallBufferStore()
         for i in range(5):
             store.append_by_being(
@@ -130,19 +133,21 @@ class TestRecallBufferByBeing:
         episodes = {r.episode_id for r in result}
         assert len(episodes) == 2
 
-    def test_mark_processed_は_pending_から_除く(self, being: BeingId) -> None:
+    def test_mark_processed_pending(self, being: BeingId) -> None:
+        """markprocessed は pending から除く。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
         store.append_by_being(being, _obs(recall_id="r2", episode_id="e2"))
         store.mark_processed_by_being(being, ("r1",))
         assert store.pending_count_by_being(being) == 1
 
-    def test_型違反は_TypeError(self) -> None:
+    def test_value_raises_type_error_4(self) -> None:
+        """型違反は TypeError。"""
         store = InMemoryEpisodicRecallBufferStore()
         with pytest.raises(TypeError, match="being_id"):
             store.append_by_being("not-being", _obs(recall_id="r", episode_id="e"))  # type: ignore[arg-type]
 
-    def test_batch_size_0_は_空_tuple(self, being: BeingId) -> None:
+    def test_batch_size_zero_empty_tuple(self, being: BeingId) -> None:
         """``batch_size <= 0`` は早期 return で空 tuple (= disabled 経路)。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
@@ -153,7 +158,7 @@ class TestRecallBufferByBeing:
             == ()
         )
 
-    def test_max_contexts_per_episode_0_は_空_tuple(self, being: BeingId) -> None:
+    def test_max_contexts_per_episode_zero_empty_tuple(self, being: BeingId) -> None:
         """``max_contexts_per_episode <= 0`` も早期 return で空 tuple。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
@@ -173,9 +178,10 @@ class TestRecallBufferByBeing:
 class TestRecallBufferStampPredictionOutcome:
     """U9a: ``stamp_prediction_outcome_by_being`` の挙動。"""
 
-    def test_一致する_prediction_context_id_の未処理_obs_に誤差が載る(
+    def test_matches_prediction_context_id_obs_included(
         self, being: BeingId
     ) -> None:
+        """一致する prediction context id の未処理 obs に誤差が載る。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(
             being,
@@ -185,9 +191,10 @@ class TestRecallBufferStampPredictionOutcome:
         got = store.list_pending_by_being(being)[0]
         assert got.prediction_outcome_error == "外れた: 実際は雨だった"
 
-    def test_別の_prediction_context_id_の_obs_には載らない(
+    def test_different_prediction_context_id_obs_not_included(
         self, being: BeingId
     ) -> None:
+        """別の prediction context id の obs には載らない。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(
             being,
@@ -202,7 +209,8 @@ class TestRecallBufferStampPredictionOutcome:
         assert rows["r1"].prediction_outcome_error == "外れた"
         assert rows["r2"].prediction_outcome_error is None
 
-    def test_既に誤差が刻まれた_obs_は上書きしない(self, being: BeingId) -> None:
+    def test_obs(self, being: BeingId) -> None:
+        """既に誤差が刻まれた obs は上書きしない。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(
             being,
@@ -217,7 +225,8 @@ class TestRecallBufferStampPredictionOutcome:
         got = store.list_pending_by_being(being)[0]
         assert got.prediction_outcome_error == "最初の誤差"
 
-    def test_一致するものが無ければ何もしない(self, being: BeingId) -> None:
+    def test_matches(self, being: BeingId) -> None:
+        """一致するものが無ければ何もしない。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(
             being,
@@ -227,7 +236,8 @@ class TestRecallBufferStampPredictionOutcome:
         got = store.list_pending_by_being(being)[0]
         assert got.prediction_outcome_error is None
 
-    def test_型違反は_TypeError(self, being: BeingId) -> None:
+    def test_value_raises_type_error_3(self, being: BeingId) -> None:
+        """型違反は TypeError。"""
         store = InMemoryEpisodicRecallBufferStore()
         with pytest.raises(TypeError, match="being_id"):
             store.stamp_prediction_outcome_by_being("not-being", "pc-1", "誤差")  # type: ignore[arg-type]
@@ -241,9 +251,10 @@ class TestRecallBufferListEpisodeIdsByPredictionContext:
     予測だったかを特定するために使う。
     """
 
-    def test_一致する_prediction_context_id_の_episode_id_を返す(
+    def test_returns_matches_prediction_context_id_episode_id(
         self, being: BeingId
     ) -> None:
+        """一致する prediction context id の episode id を返す。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(
             being,
@@ -252,9 +263,10 @@ class TestRecallBufferListEpisodeIdsByPredictionContext:
         got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
         assert got == ("e1",)
 
-    def test_複数_episode_が_同じ_prediction_context_id_に紐づく場合は全件返す(
+    def test_returns_all_multiple_episode_same_prediction_context_id(
         self, being: BeingId
     ) -> None:
+        """複数 episode が同じ predictioncontextid に紐づく場合は全件返す。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(
             being,
@@ -267,9 +279,10 @@ class TestRecallBufferListEpisodeIdsByPredictionContext:
         got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
         assert set(got) == {"e1", "e2"}
 
-    def test_同じ_episode_を複数_recall_しても重複排除される(
+    def test_same_episode_multiple_recall_deduplicates(
         self, being: BeingId
     ) -> None:
+        """同じ episode を複数 recall しても重複排除される。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(
             being,
@@ -282,9 +295,10 @@ class TestRecallBufferListEpisodeIdsByPredictionContext:
         got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
         assert got == ("e1",)
 
-    def test_別の_prediction_context_id_の_episode_は含まれない(
+    def test_different_prediction_context_id_episode_not_included(
         self, being: BeingId
     ) -> None:
+        """別の prediction context id の episode は含まれない。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(
             being,
@@ -297,7 +311,8 @@ class TestRecallBufferListEpisodeIdsByPredictionContext:
         got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
         assert got == ("e1",)
 
-    def test_一致するものが無ければ空tuple(self, being: BeingId) -> None:
+    def test_matches_empty_tuple(self, being: BeingId) -> None:
+        """一致するものが無ければ空tuple。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(
             being,
@@ -308,16 +323,18 @@ class TestRecallBufferListEpisodeIdsByPredictionContext:
         )
         assert got == ()
 
-    def test_型違反は_TypeError(self, being: BeingId) -> None:
+    def test_value_raises_type_error_2(self, being: BeingId) -> None:
+        """型違反は TypeError。"""
         store = InMemoryEpisodicRecallBufferStore()
         with pytest.raises(TypeError, match="being_id"):
             store.list_episode_ids_by_prediction_context_by_being(
                 "not-being", "pc-1"  # type: ignore[arg-type]
             )
 
-    def test_prediction_context_id_が空文字なら_ValueError(
+    def test_prediction_context_id_empty_string_raises_value_error(
         self, being: BeingId
     ) -> None:
+        """prediction context id が空文字なら ValueError。"""
         store = InMemoryEpisodicRecallBufferStore()
         with pytest.raises(ValueError):
             store.list_episode_ids_by_prediction_context_by_being(being, "")
@@ -326,7 +343,8 @@ class TestRecallBufferListEpisodeIdsByPredictionContext:
 class TestJournalByBeing:
     """``InMemoryEpisodicReinterpretationJournalStore`` の by_being API。"""
 
-    def test_put_active_と_get_active(self, being: BeingId) -> None:
+    def test_put_active_get_active(self, being: BeingId) -> None:
+        """put active と get active。"""
         store = InMemoryEpisodicReinterpretationJournalStore()
         e1 = _entry(entry_id="ent-1", episode_id="ep-1")
         store.put_active_by_being(being, e1)
@@ -334,9 +352,10 @@ class TestJournalByBeing:
         assert got is not None
         assert got.entry_id == "ent-1"
 
-    def test_新しい_active_を_保存すると_旧_active_は_superseded(
+    def test_saves_legacy_active_superseded_active(
         self, being: BeingId
     ) -> None:
+        """新しい active を保存すると旧 active は superseded。"""
         store = InMemoryEpisodicReinterpretationJournalStore()
         e1 = _entry(entry_id="old", episode_id="ep-1")
         e2 = _entry(
@@ -357,7 +376,8 @@ class TestJournalByBeing:
             e.status == EpisodicReinterpretationStatus.SUPERSEDED for e in hist
         )
 
-    def test_put_active_に_非_ACTIVE_を_渡すと_ValueError(self, being: BeingId) -> None:
+    def test_put_active_raises_value_error(self, being: BeingId) -> None:
+        """putactive に非 ACTIVE を渡すと ValueError。"""
         store = InMemoryEpisodicReinterpretationJournalStore()
         bad = _entry(
             entry_id="bad",
@@ -367,7 +387,8 @@ class TestJournalByBeing:
         with pytest.raises(ValueError, match="active"):
             store.put_active_by_being(being, bad)
 
-    def test_型違反は_TypeError(self) -> None:
+    def test_value_raises_type_error(self) -> None:
+        """型違反は TypeError。"""
         store = InMemoryEpisodicReinterpretationJournalStore()
         with pytest.raises(TypeError, match="being_id"):
             store.put_active_by_being(
@@ -383,14 +404,16 @@ class TestJournalByBeing:
 class TestRecallBufferReplaceAll:
     """Phase 4 Step 4-2a: list_pending_by_being / replace_all_pending_by_being。"""
 
-    def test_list_pending_は全件_古い順(self, being: BeingId) -> None:
+    def test_list_pending_returns_all_records_oldest_first(self, being: BeingId) -> None:
+        """list pending は全件 古い順。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
         store.append_by_being(being, _obs(recall_id="r2", episode_id="e2"))
         ids = [o.recall_id for o in store.list_pending_by_being(being)]
         assert ids == ["r1", "r2"]
 
-    def test_replace_all_pending_で一括置換(self, being: BeingId) -> None:
+    def test_replace_all_pending_replaces_existing_records(self, being: BeingId) -> None:
+        """replace all pending で一括置換。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(being, _obs(recall_id="old", episode_id="e1"))
         store.replace_all_pending_by_being(
@@ -399,7 +422,8 @@ class TestRecallBufferReplaceAll:
         ids = [o.recall_id for o in store.list_pending_by_being(being)]
         assert ids == ["new"]
 
-    def test_空リストで全クリア(self, being: BeingId) -> None:
+    def test_empty_replacement_clears_all_pending_records(self, being: BeingId) -> None:
+        """空リストで全クリア。"""
         store = InMemoryEpisodicRecallBufferStore()
         store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
         store.replace_all_pending_by_being(being, [])
@@ -474,14 +498,15 @@ class TestRecallBufferThreadSafety:
 class TestJournalReplaceAll:
     """Phase 4 Step 4-2a: list_all_by_being / replace_all_by_being。"""
 
-    def test_list_all_by_being_は全episode横断(self, being: BeingId) -> None:
+    def test_list_all_being_all_episode(self, being: BeingId) -> None:
+        """list all by being は全episode横断。"""
         store = InMemoryEpisodicReinterpretationJournalStore()
         store.put_active_by_being(being, _entry(entry_id="a", episode_id="ep-1"))
         store.put_active_by_being(being, _entry(entry_id="b", episode_id="ep-2"))
         ids = [e.entry_id for e in store.list_all_by_being(being)]
         assert set(ids) == {"a", "b"}
 
-    def test_replace_all_でactive_index_が再構築される(
+    def test_replace_all_active_index_built(
         self, being: BeingId
     ) -> None:
         """ACTIVE entry を持ち込めば get_active_by_being で引ける。"""
@@ -493,7 +518,8 @@ class TestJournalReplaceAll:
         assert got is not None
         assert got.entry_id == "new"
 
-    def test_replace_all_の空で_active_も消える(self, being: BeingId) -> None:
+    def test_replace_all_empty_active_removed(self, being: BeingId) -> None:
+        """replace all の空で active も消える。"""
         store = InMemoryEpisodicReinterpretationJournalStore()
         store.put_active_by_being(being, _entry(entry_id="a", episode_id="ep-1"))
         store.replace_all_by_being(being, [])

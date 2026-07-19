@@ -27,14 +27,16 @@ def loaded():
 class TestMetadata:
     """v2 識別子と暫定値。"""
 
-    def test_id_が_v2(self, loaded) -> None:
+    def test_id_v2(self, loaded) -> None:
+        """id が v2。"""
         assert loaded.metadata.id == "survival_island_v2"
 
-    def test_推定_tick_数は_8_日相当(self, loaded) -> None:
+    def test_tick_eight(self, loaded) -> None:
+        """推定 tick 数は 8 日相当。"""
         # 8 日 × 48 tick = 384 (体感を 1日 = 48 tick にした調整後)
         assert loaded.metadata.estimated_ticks == 384
 
-    def test_ticks_per_day_は_48(self, loaded) -> None:
+    def test_ticks_per_day_48(self, loaded) -> None:
         """1 tick = 0.5 時間 (1日 = 48 tick)。
         実験 #29 後続で「1日が短すぎて移動だけで夜になる」体感を緩和した。"""
         assert loaded.day_night_config is not None
@@ -44,14 +46,17 @@ class TestMetadata:
 class TestPlayers:
     """4 ペルソナ + 各人に persona_prompt が定義されている。"""
 
-    def test_プレイヤー数は_4(self, loaded) -> None:
+    def test_player_four(self, loaded) -> None:
+        """プレイヤー数は 4。"""
         assert len(loaded.player_spawns) == 4
 
-    def test_4_人の_string_id_は_設計通り(self, loaded) -> None:
+    def test_four_string_id(self, loaded) -> None:
+        """4 人の stringid は設計通り。"""
         ids = {p.string_id for p in loaded.player_spawns}
         assert ids == {"ada", "noah", "rio", "kai"}
 
-    def test_全プレイヤーに_persona_prompt_が_ある(self, loaded) -> None:
+    def test_all_player_persona_prompt(self, loaded) -> None:
+        """全プレイヤーに personaprompt がある。"""
         for p in loaded.player_spawns:
             assert p.persona_prompt is not None, f"{p.string_id} に persona_prompt が無い"
             # PR-S: 旧 §0 設計原則「生存最優先の決まり文句」は「全員生存ファースト
@@ -60,7 +65,7 @@ class TestPlayers:
             # のいずれかは含まれていることを保証する (= 生存への意識は失わない)。
             assert "生き残る" in p.persona_prompt or "生き延びる" in p.persona_prompt
 
-    def test_秘密の動機を裏付けるフレーバーが_initial_items_にある(self, loaded) -> None:
+    def test_initial_items(self, loaded) -> None:
         """設計 §4 の対応: 各人の秘密と物的証拠を関連付ける。"""
         spawn_items = {
             p.string_id: tuple(s.spec_id.value for s in p.initial_items)
@@ -74,14 +79,15 @@ class TestPlayers:
 class TestSpots:
     """観測拠点跡が追加されている。"""
 
-    def test_観測拠点跡_3_spot_が_存在(self, loaded) -> None:
+    def test_observation_base_ruins_has_three_spots(self, loaded) -> None:
+        """観測拠点跡 3spot が存在。"""
         spot_names = {n.name for n in loaded.graph.iter_spot_nodes()}
         # 廃屋 + 蔓に覆われた小道 + 湿地奥の小屋
         assert "観測拠点跡 (廃屋)" in spot_names
         assert "蔓に覆われた小道" in spot_names
         assert "湿地奥の小屋" in spot_names
 
-    def test_spot_総数は_25_以上(self, loaded) -> None:
+    def test_spot_25_more(self, loaded) -> None:
         """v1 の 22 spot に観測拠点跡 3 spot を追加した最低ライン。"""
         assert len(list(loaded.graph.iter_spot_nodes())) >= 25
 
@@ -89,7 +95,8 @@ class TestSpots:
 class TestItems:
     """フレーバーアイテム 6 種が追加されている。"""
 
-    def test_フレーバーアイテムが_全て_定義されている(self, loaded) -> None:
+    def test_all_flavor_items_are_defined(self, loaded) -> None:
+        """フレーバーアイテムが 全て 定義されている。"""
         item_ids = {d.string_id for d in loaded.item_spec_definitions}
         required_flavor = {
             "journal_first_half",
@@ -106,22 +113,26 @@ class TestItems:
 class TestOutcomeResolutionConfig:
     """v2 は個別 outcome 解決設定を持つ (Phase E-3b)。"""
 
-    def test_outcome_resolution_config_が_宣言されている(self, loaded) -> None:
+    def test_outcome_resolution_config_is_declared(self, loaded) -> None:
+        """outcomeresolutionconfig が宣言されている。"""
         config = loaded.outcome_resolution_config
         assert config is not None
 
-    def test_rescue_ticks_は_設計通り(self, loaded) -> None:
+    def test_rescue_ticks(self, loaded) -> None:
+        """rescueticks は設計通り。"""
         config = loaded.outcome_resolution_config
         # 1 day = 48 tick: 救助船 day 4 / day 6 / day 7 (= tick 192 / 288 / 336)
         # チャンスを 3 回に増やして難易度を下げた (実験 #29 後続調整)。
         assert config.rescue_at_ticks == (192, 288, 336)
 
-    def test_stranded_は_8日_tick_384(self, loaded) -> None:
+    def test_stranded_eight_tick_384(self, loaded) -> None:
+        """stranded は 8日 tick 384。"""
         config = loaded.outcome_resolution_config
         # 8 日 × 48 tick = 384
         assert config.stranded_at_tick == 384
 
-    def test_signal_flag_は_signal_fire_lit(self, loaded) -> None:
+    def test_signal_flag_signal_fire_lit(self, loaded) -> None:
+        """signal flag は signal fire lit。"""
         config = loaded.outcome_resolution_config
         assert config.signal_fire_flag == "signal_fire_lit"
 
@@ -129,7 +140,7 @@ class TestOutcomeResolutionConfig:
 class TestNoLegacyPlayerIds:
     """旧 v1 の player ID 残骸が無いこと。"""
 
-    def test_旧_ID_は_event_条件に残っていない(self, loaded) -> None:
+    def test_legacy_id_event(self, loaded) -> None:
         """rescue events 等で mira/ren/toma を参照していないか。"""
         legacy = {"mira", "ren", "toma"}
         for evt in loaded.scenario_events:

@@ -39,9 +39,10 @@ def _common_memory_config(**overrides):
 
 
 class TestWorldRuntimeRecallHitBoostWiring:
-    def test_flag_ON_で_chunk_coordinator_と_passive_recall_に届く(
+    def test_flag_chunk_coordinator_passive_recall(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flag ON で chunk coordinator と passive recall に届く。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=_common_memory_config(recall_hit_boost_enabled=True),
@@ -62,9 +63,10 @@ class TestWorldRuntimeRecallHitBoostWiring:
         )
         assert stack.passive_recall._hit_boost_strength > 0
 
-    def test_flag_OFF_既定なら不活性で_recall_success_store_はNone(
+    def test_flag_off_default_recall_success_store_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flag OFF 既定なら不活性で recall success store はNone。"""
         runtime = create_world_runtime(_SCENARIO_PATH, config=_common_memory_config())
         stack = runtime._episodic_stack
         assert stack is not None
@@ -74,7 +76,7 @@ class TestWorldRuntimeRecallHitBoostWiring:
         assert stack.chunk_coordinator._recall_hit_boost_enabled is False
         assert stack.passive_recall._recall_success_store is None
 
-    def test_recall_hit_boost_ON_でも_reinterpretation_無効なら_recall_success_storeは作られるが対象が無い(
+    def test_recall_success_store_exists_without_targets_when_reinterpretation_disabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """LLM_EPISODIC_REINTERPRETATION_ENABLED が無いと recall_buffer 自体が

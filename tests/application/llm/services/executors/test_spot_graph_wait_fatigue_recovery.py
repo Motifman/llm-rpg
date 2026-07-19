@@ -22,12 +22,12 @@ from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor im
 
 
 class TestFatigueRecoveryWaitValue:
-    def test_wait_の_疲労回復量は_20(self) -> None:
+    def test_wait_20(self) -> None:
         """重い行動 ``attack`` (+5) の 4 回分を一度に賄える強度。
         ``DEFAULT_NEED_RATES[FATIGUE] = 0`` と組み合わせて連続待機を不要にする。"""
         assert SpotGraphToolExecutor.FATIGUE_RECOVERY_WAIT == 20
 
-    def test_過去の弱い値_4_に_戻っていない_regression_check(self) -> None:
+    def test_value_four_regression_check(self) -> None:
         """PR-D で 4 → 10、本 PR で 10 → 20 に上げた。回帰で弱い値に
         戻ってしまうと Y_after_issue621 / Y_after_pr634 の「wait spam」体験
         に逆戻りするので明示的に弾く。"""

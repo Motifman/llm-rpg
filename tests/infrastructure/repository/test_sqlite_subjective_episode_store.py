@@ -108,7 +108,8 @@ class TestSqliteSubjectiveEpisodeStoreBasics:
 class TestSqliteSubjectiveEpisodeReplaceAll:
     """Phase 4 Step 4-2a: list_all_by_being / replace_all_by_being。"""
 
-    def test_replace_all_で全置換と_cue_index_再構築(self) -> None:
+    def test_replace_all_cue_index(self) -> None:
+        """replace all で全置換と cue index 再構築。"""
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
         being_id = BeingId("being_w1_p7")
@@ -126,7 +127,8 @@ class TestSqliteSubjectiveEpisodeReplaceAll:
             hits = store.list_by_cue_by_being(being_id, new_cue, limit=5)
             assert [e.episode_id for e in hits] == ["new"]
 
-    def test_他_being_は影響しない(self) -> None:
+    def test_other_being_does_not_affect(self) -> None:
+        """他 being は影響しない。"""
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
         a = BeingId("being_w1_p1")

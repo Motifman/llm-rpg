@@ -15,7 +15,7 @@ from ai_rpg_world.domain.world.value_object.world_id import WorldId
 class TestBeingAttachmentValidation:
     """BeingAttachment のバリデーション挙動。"""
 
-    def test_有効な_WorldId_と_PlayerId_で生成できる(self) -> None:
+    def test_world_id_player_id_can_create(self) -> None:
         """正しい型の引数でインスタンス化される。"""
         attachment = BeingAttachment(
             world_id=WorldId(1), player_id=PlayerId(2)
@@ -23,12 +23,12 @@ class TestBeingAttachmentValidation:
         assert attachment.world_id == WorldId(1)
         assert attachment.player_id == PlayerId(2)
 
-    def test_world_id_が_WorldId_でないと_ValidationException_を投げる(self) -> None:
+    def test_world_id_world_id_raises_validation_exception(self) -> None:
         """world_id が VO でなければドメイン例外。"""
         with pytest.raises(BeingAttachmentValidationException, match="world_id"):
             BeingAttachment(world_id=1, player_id=PlayerId(2))  # type: ignore[arg-type]
 
-    def test_player_id_が_PlayerId_でないと_ValidationException_を投げる(self) -> None:
+    def test_player_id_player_id_raises_validation_exception(self) -> None:
         """player_id が VO でなければドメイン例外。"""
         with pytest.raises(BeingAttachmentValidationException, match="player_id"):
             BeingAttachment(world_id=WorldId(1), player_id=2)  # type: ignore[arg-type]
@@ -37,13 +37,13 @@ class TestBeingAttachmentValidation:
 class TestBeingAttachmentEquality:
     """BeingAttachment の等価性挙動 (frozen dataclass)。"""
 
-    def test_同じ_world_と_player_なら等しい(self) -> None:
+    def test_same_world_player_equals(self) -> None:
         """両フィールド同値なら ``==`` が True。"""
         a = BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2))
         b = BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2))
         assert a == b
 
-    def test_world_が違うと等しくない(self) -> None:
+    def test_world_not_equal(self) -> None:
         """world_id が違えば等しくない。"""
         a = BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2))
         b = BeingAttachment(world_id=WorldId(99), player_id=PlayerId(2))

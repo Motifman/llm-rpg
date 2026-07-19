@@ -53,7 +53,7 @@ def _make_spoiled_event(spec_id: int, instance_id: int, spec_name: str):
 class TestSameDayAggregation:
     """同じ day 内で複数 tick に分散して腐っても 1 件にまとまる。"""
 
-    def test_同_day_3_tick_に_分散して_腐っても_flush_前は_emit_されない(
+    def test_day_three_tick_flush_before_emit(
         self, runtime,
     ) -> None:
         """tick 5, 6, 7 (= day 0) に 1 個ずつ腐っても、buffer に貯まるだけで
@@ -79,7 +79,7 @@ class TestSameDayAggregation:
         assert 101 in runtime._pending_spoiled
         assert len(runtime._pending_spoiled[101]["instance_ids"]) == 3
 
-    def test_day_境界で_flush_されて_1_件にまとまる(self, runtime) -> None:
+    def test_day_boundary_flushes_pending_events_into_one_summary(self, runtime) -> None:
         """同 day 内で 3 個腐り、advance_tick が day 境界を跨ぐと
         「今日は野いちごが3個腐った」が 1 回だけ emit される。"""
         captured = _capture_observations(runtime)
@@ -106,7 +106,7 @@ class TestSameDayAggregation:
         # buffer は空になっている
         assert not runtime._pending_spoiled
 
-    def test_複数_spec_が_混在しても_1_文に_まとめる(self, runtime) -> None:
+    def test_multiple_specs_are_combined_into_one_sentence(self, runtime) -> None:
         """野いちご 5 個 + 椰子の実 2 個を同 day に蓄積して flush。"""
         captured = _capture_observations(runtime)
         runtime.current_tick = lambda: 5  # type: ignore[method-assign]
@@ -134,7 +134,7 @@ class TestSameDayAggregation:
 class TestDayBoundaryFlush:
     """advance_tick で day が変わったら自動 flush。"""
 
-    def test_次の_day_の_腐敗が_来たら_前日分を_flush(self, runtime) -> None:
+    def test_day_before_flush(self, runtime) -> None:
         """tick 5 (day 0) に野いちご 2 個 → tick 50 (day 1) に椰子の実 1 個
         が来ると、day 1 の処理前に day 0 分が flush される。"""
         captured = _capture_observations(runtime)
@@ -163,12 +163,14 @@ class TestDayBoundaryFlush:
 class TestEmptyBuffer:
     """spoiled が空のとき / buffer が空のとき何もしない。"""
 
-    def test_空の_spoiled_を_渡しても_safe(self, runtime) -> None:
+    def test_empty_spoiled_safe(self, runtime) -> None:
+        """空の spoiled を渡しても safe。"""
         runtime._append_food_spoiled_batch_observation([])
         # buffer は空のまま
         assert not getattr(runtime, "_pending_spoiled", {})
 
-    def test_pending_が_None_でも_advance_tick_は_safe(self, runtime) -> None:
+    def test_advance_tick_is_safe_when_pending_is_none(self, runtime) -> None:
+        """pending が None でも advance tick は safe。"""
         # ここでは _pending_spoiled_day を作っていない状態で advance_tick
         from ai_rpg_world.domain.common.value_object import WorldTick
         runtime._simulation_service.tick = MagicMock(return_value=WorldTick(50))

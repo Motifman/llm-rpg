@@ -53,7 +53,8 @@ def _build_status_with_hunger(hunger_value: int, hp: int = 100) -> PlayerStatusA
 class TestStarvationDamageDisabled:
     """starvation_damage_per_tick=0 (デフォルト) なら既存挙動と同じ。"""
 
-    def test_default_では_HP_減らない(self) -> None:
+    def test_default_hp(self) -> None:
+        """default では HP 減らない。"""
         status = _build_status_with_hunger(hunger_value=100, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
@@ -67,7 +68,8 @@ class TestStarvationDamageDisabled:
 class TestStarvationDamageEnabled:
     """starvation_damage_per_tick=1 で HUNGER=max のプレイヤーが HP-1/tick。"""
 
-    def test_HUNGER_max_なら_HP_1_減る(self) -> None:
+    def test_hunger_max_hp_one_decreases(self) -> None:
+        """HUNGER max なら HP 1 減る。"""
         status = _build_status_with_hunger(hunger_value=99, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
@@ -79,7 +81,8 @@ class TestStarvationDamageEnabled:
         assert status.needs.get(NeedType.HUNGER).value == 100
         assert status.hp.value == 99
 
-    def test_HUNGER_max_未満なら_HP_減らない(self) -> None:
+    def test_hunger_max_below_hp(self) -> None:
+        """HUNGER max 未満なら HP 減らない。"""
         status = _build_status_with_hunger(hunger_value=50, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
@@ -90,7 +93,7 @@ class TestStarvationDamageEnabled:
         # HUNGER 50→51、まだ max ではないので HP は減らない
         assert status.hp.value == 100
 
-    def test_HP_0_で_PlayerDownedEvent_が_publish_される(self) -> None:
+    def test_hp_zero_player_downed_event_publish(self) -> None:
         """飢餓死: HP 1 + HUNGER 100 で 1 tick 走らせると PlayerDownedEvent が
         publisher.publish_all に乗る → DEAD outcome 連鎖の起点になる。"""
         status = _build_status_with_hunger(hunger_value=100, hp=1)
@@ -113,7 +116,8 @@ class TestStarvationDamageEnabled:
 class TestSetterInjection:
     """publisher を後付け注入できる (runtime 順序依存解消用)。"""
 
-    def test_set_event_publisher_で_後付け_bind_できる(self) -> None:
+    def test_set_event_publisher_after_bind(self) -> None:
+        """seteventpublisher で後付け bind できる。"""
         status = _build_status_with_hunger(hunger_value=100, hp=10)
         repo = MagicMock()
         repo.find_all.return_value = [status]

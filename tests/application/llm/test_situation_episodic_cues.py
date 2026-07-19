@@ -45,7 +45,7 @@ class TestSituationCueDeterminism:
 class TestSituationCueVocabulary:
     """保存側ルールと軸・語彙が揃うこと"""
 
-    def test_matches_tool_turn_when_no_tool_prefix(self) -> None:
+    def test_matches_tool_turn_when_tool_prefix(self) -> None:
         """
         tool / outcome / canonical を付けない tool_turn と situation を同一入力にすると cue 列が一致する。
         これにより局面 cue と `build_episodic_cues_for_tool_turn` の runtime+structured 部分が共有される。
@@ -75,7 +75,7 @@ class TestSituationCueVocabulary:
         )
         assert situation == tool_turn_equivalent
 
-    def test_without_latest_action_no_action_or_outcome_axes(self) -> None:
+    def test_without_latest_action_or_outcome_axes(self) -> None:
         """latest_action を渡さないときは action / outcome 軸を付与しない。"""
         rt = ToolRuntimeContextDto(targets={}, current_spot_id=1)
         cues = build_situation_episodic_cues(
@@ -173,7 +173,7 @@ class TestSituationCueObservationUnknownKeys:
 class TestSituationCueFreeTextProse:
     """Issue #283 後続: observation_prose + noun_matcher で自由文 cue 抽出。"""
 
-    def test_matcher_注入で_prose_に含まれる固有名詞から_cue_が立つ(self) -> None:
+    def test_matcher_prose_included_proper_noun_cue(self) -> None:
         """``WorldNounMatcher`` を渡せば prose 中の固有名詞が cue 化される。
         ``OBSERVATION_FREETEXT`` source で来るので structured cue と区別可能。"""
         from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
@@ -194,7 +194,7 @@ class TestSituationCueFreeTextProse:
             for c in cues
         )
 
-    def test_matcher_未指定なら自由文経路は無効_後方互換(self) -> None:
+    def test_matcher_unspecified_after_compatible(self) -> None:
         """noun_matcher を渡さなければ prose は走査されない (旧挙動)。"""
         cues = build_situation_episodic_cues(
             runtime_context=ToolRuntimeContextDto.empty(),
@@ -205,7 +205,7 @@ class TestSituationCueFreeTextProse:
         # place_spot:3 は立たない
         assert all(c.to_canonical() != "place_spot:3" for c in cues)
 
-    def test_prose_未指定なら自由文経路は無効(self) -> None:
+    def test_prose_unspecified(self) -> None:
         """``observation_prose=None`` なら matcher があってもスキップする。"""
         from ai_rpg_world.application.llm.services.world_noun_matcher import (
             WorldNounMatcherBuilder,
@@ -220,7 +220,7 @@ class TestSituationCueFreeTextProse:
         )
         assert all(c.to_canonical() != "place_spot:3" for c in cues)
 
-    def test_matcher_の例外は_cue_収集を止めない(self) -> None:
+    def test_matcher_cue_raises_exception(self) -> None:
         """matcher 実装が壊れて例外を投げても build は空 cue で続行する
         (prompt build を止めない)。"""
 
@@ -237,7 +237,7 @@ class TestSituationCueFreeTextProse:
         # 失敗しても tuple が返り、prose 由来 cue は単に欠落するだけ
         assert isinstance(cues, tuple)
 
-    def test_構造化_cue_と_自由文_cue_は重複除去される(self) -> None:
+    def test_cue_duplicate(self) -> None:
         """structured.spot_id_value=3 と prose 中の「書架A」が両方 place_spot:3
         を指せば、_validate_and_dedupe で 1 件に正規化される。"""
         from ai_rpg_world.application.llm.services.world_noun_matcher import (

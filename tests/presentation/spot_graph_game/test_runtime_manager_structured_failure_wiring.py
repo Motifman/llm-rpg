@@ -93,9 +93,10 @@ def _run_explore(wiring, player_id) -> LlmCommandResultDto:
 
 
 class TestStructuredFailureWiring:
-    def test_trigger_かつ_transcriber配線済_なら_being解決して転記を呼ぶ(
+    def test_calls_trigger_transcriber_wired_being(
         self, clean_runtime_env
     ) -> None:
+        """trigger かつ transcriber配線済 なら being解決して転記を呼ぶ。"""
         events: list[str] = []
         player_id = PlayerId(1)
         being_id = BeingId("being-1")
@@ -123,7 +124,7 @@ class TestStructuredFailureWiring:
             }
         ]
 
-    def test_transcriber未配線_flagOFF相当_なら_no_op(self, clean_runtime_env) -> None:
+    def test_transcriber_unwired_flag_off_op(self, clean_runtime_env) -> None:
         """SALIENCE_STRUCTURED_FAILURE_ENABLED が OFF のとき
         (= _structured_failure_transcriber が None) は being 解決すら
         試みず no-op になる。"""
@@ -144,7 +145,7 @@ class TestStructuredFailureWiring:
 
         assert resolver.calls == []
 
-    def test_trigger_None_なら_transcriber_を呼ばない(self, clean_runtime_env) -> None:
+    def test_trigger_none_transcriber_does_not_call(self, clean_runtime_env) -> None:
         """cross_tick_failure が未発火 (trigger=None) のときは、transcriber
         配線済みでも呼ばれない。"""
         events: list[str] = []
@@ -159,7 +160,7 @@ class TestStructuredFailureWiring:
 
         assert transcriber.calls == []
 
-    def test_being解決失敗_なら_転記を呼ばない(self, clean_runtime_env) -> None:
+    def test_being_resolution_failure_does_not_call(self, clean_runtime_env) -> None:
         """resolver が None を返す (Being 未 attach) 場合、転記をスキップする。"""
         events: list[str] = []
         player_id = PlayerId(1)

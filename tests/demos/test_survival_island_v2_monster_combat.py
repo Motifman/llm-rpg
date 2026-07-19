@@ -48,20 +48,20 @@ def _count_monsters(runtime) -> int:
 class TestInitialSpawn:
     """initial_placements に基づくモンスター配置。"""
 
-    def test_tick_0_では_条件無しの_1_体だけ_配置される(self, runtime) -> None:
+    def test_tick_zero_spawns_only_unconditional_monster(self, runtime) -> None:
         """v2 では 4 placement のうち 3 つに spawn_condition があるため、
         起動直後 (tick 0) は条件無し (feral_dog @ plane_wreck) のみ 1 体配置。
         残り 3 体は SpotGraphMonsterSpawnStageService が tick 駆動で出す。
         """
         assert _count_monsters(runtime) == 1
 
-    def test_tick_進行で_giant_crab_が_spawn_する(self, runtime) -> None:
+    def test_tick_line_giant_crab_spawn(self, runtime) -> None:
         """giant_crab @ tidal_pools は forbidden_flags=high_tide だが、
         tick 1 では high_tide flag 未セット → spawn される。"""
         runtime._simulation_service.tick()
         assert _count_monsters(runtime) >= 2  # feral_dog + giant_crab
 
-    def test_夜に進めると_全_4_体_配置される(self, runtime) -> None:
+    def test_advances_all_four(self, runtime) -> None:
         """48 tick / day, night phase は 0.66 から (= tick 32 以降)。
         33 tick 進めれば wolf / snake も spawn して計 4 体になる。"""
         sim = runtime._simulation_service
@@ -73,12 +73,13 @@ class TestInitialSpawn:
 class TestPlayerAttackTool:
     """LLM tool spot_graph_attack が動作することを確認。"""
 
-    def test_attack_orchestrator_が_runtime_に_配線されている(self, runtime) -> None:
+    def test_attack_orchestrator_runtime(self, runtime) -> None:
+        """attackorchestrator が runtime に配線されている。"""
         # behavior stage が active なら orchestrator も生きている
         sim = runtime._simulation_service
         assert sim._monster_behavior_stage is not None
 
-    def test_LLM_tool_catalog_に_spot_graph_attack_が_含まれる(self) -> None:
+    def test_llm_tool_catalog_spot_graph_attack_included(self) -> None:
         """tool catalog に attack tool が登録されていること (LLM が呼び出せる)。"""
         from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_ATTACK
         assert TOOL_NAME_SPOT_GRAPH_ATTACK.endswith("attack")
@@ -87,7 +88,7 @@ class TestPlayerAttackTool:
 class TestAttackEndToEnd:
     """orchestrator 直接呼び出しで戦闘の end-to-end を検証。"""
 
-    def test_player_attack_で_monster_HP_が_減る(self, runtime) -> None:
+    def test_player_attack_monster_hp_decreases(self, runtime) -> None:
         """ada を plane_wreck に移動 → feral_dog に攻撃 → HP 減少を確認。"""
         from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 
@@ -112,7 +113,7 @@ class TestAttackEndToEnd:
         orchestrator = adapter._service._orchestrator
         assert orchestrator is not None
 
-    def test_monster_behavior_tick_を_進めて_例外なく動く(self, runtime) -> None:
+    def test_monster_behavior_tick_runs_without_exception(self, runtime) -> None:
         """monster behavior service の tick が例外なく回ることを確認 (静的スモーク)。"""
         sim = runtime._simulation_service
         # 5 tick 進めて (まだ夜ではない)、何も crash しないこと
@@ -123,7 +124,8 @@ class TestAttackEndToEnd:
 class TestRewardConfiguration:
     """モンスター死亡時の報酬設定が読み込まれている。"""
 
-    def test_各テンプレートに_reward_info_が_ある(self, runtime) -> None:
+    def test_reward_info(self, runtime) -> None:
+        """各テンプレートに rewardinfo がある。"""
         for tpl_wrapper in runtime.scenario.monster_templates:
             reward = tpl_wrapper.template.reward_info
             assert reward is not None

@@ -70,7 +70,8 @@ def _ep(episode_id: str = "e1", player_id: int = 1) -> SubjectiveEpisode:
 class TestChunkCoordinatorPutEpisodeDualPath:
     """``EpisodicChunkCoordinator._put_episode`` の dispatch 動作。"""
 
-    def test_being_id_注入時は_by_being_経路(self) -> None:
+    def test_being_id_being_2(self) -> None:
+        """being id 注入時は by being 経路。"""
         store = MagicMock()
         # _put_episode の helper を直接たたく (構築コスト回避)
         builder = MagicMock()
@@ -89,7 +90,7 @@ class TestChunkCoordinatorPutEpisodeDualPath:
         store.put_by_being.assert_called_once_with(being_id, ep)
         store.put.assert_not_called()
 
-    def test_resolver_未注入時は_silent_skip(self) -> None:
+    def test_resolver_uninjected_silent_skip_2(self) -> None:
         """Phase 3 Step 3e-3: legacy 撤去後、Resolver 未注入は silent skip
         (= turn 副作用なので止めない)。warning log は呼出側で出す。"""
         store = MagicMock()
@@ -106,7 +107,8 @@ class TestChunkCoordinatorPutEpisodeDualPath:
 class TestInlineSchedulerPutDualPath:
     """``InlineEpisodicSubjectiveScheduler._put_episode`` の dispatch 動作。"""
 
-    def test_being_id_注入時は_by_being_経路(self) -> None:
+    def test_being_id_being(self) -> None:
+        """being id 注入時は by being 経路。"""
         scheduler = MagicMock()
         store = MagicMock()
         scheduler._store = store
@@ -121,7 +123,7 @@ class TestInlineSchedulerPutDualPath:
         InlineEpisodicSubjectiveScheduler._put_episode(scheduler, ep)
         store.put_by_being.assert_called_once_with(being_id, ep)
 
-    def test_resolver_未注入時は_silent_skip(self) -> None:
+    def test_resolver_uninjected_silent_skip(self) -> None:
         """Phase 3 Step 3e-3: scheduler も silent skip + warning log。"""
         scheduler = MagicMock()
         store = MagicMock()
@@ -137,7 +139,8 @@ class TestReinterpretationCoordinatorEpisodeLookupByBeing:
     """``EpisodicReinterpretationCoordinator._build_episode_items`` の
     episode lookup が being_id 経路で行われる。"""
 
-    def test_lookup_は_being_id_経路_(self) -> None:
+    def test_lookup_being_id(self) -> None:
+        """lookup は being id 経路。"""
         from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
             EpisodicReinterpretationCoordinator,
         )

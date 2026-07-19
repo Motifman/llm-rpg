@@ -35,14 +35,14 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
 class TestAttackDescriptionHasCombatHints:
     """attack description が戦闘のリアリティ情報を伝える。"""
 
-    def test_素手威力の弱さを言及する(self) -> None:
+    def test_documented_behavior_2(self) -> None:
         """「殴れば倒せる」誤読を防ぐため、素手のダメージが小さいことを書く。"""
         desc = ATTACK_DEFINITION.description
         assert (
             "素手" in desc or "武器" in desc
         ), "武器 / 素手 に関する情報が description に無い"
 
-    def test_相手HP_bucket表記への言及がある(self) -> None:
+    def test_target_hp_bucket(self) -> None:
         """`health_bucket` (健康/弱っている/瀕死) の観測を判断材料に使う旨。"""
         desc = ATTACK_DEFINITION.description
         assert (
@@ -52,14 +52,15 @@ class TestAttackDescriptionHasCombatHints:
             or "health" in desc.lower()
         ), "相手 HP の観測手段が説明されていない"
 
-    def test_逃走選択肢の言及がある(self) -> None:
+    def test_documented_behavior(self) -> None:
         """「攻撃 or 逃走」の判断枠組みを LLM に示す。"""
         desc = ATTACK_DEFINITION.description
         assert (
             "逃" in desc or "退" in desc or "travel_to" in desc
         ), "逃走 / travel_to への言及が無く、attack が唯一の対処と誤読される"
 
-    def test_description_は_static_で_placeholder_なし(self) -> None:
+    def test_description_static_placeholder(self) -> None:
+        """description は static で placeholder なし。"""
         desc = ATTACK_DEFINITION.description
         assert isinstance(desc, str)
         assert "{" not in desc, "placeholder の疑い"

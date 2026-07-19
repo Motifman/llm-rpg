@@ -143,7 +143,7 @@ def formatter(ctx):
 
 
 class TestEntityEnteredSpot:
-    def test_self_returns_none(self, formatter):
+    def test_self_returns_None(self, formatter):
         event = EntityEnteredSpotEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -196,7 +196,7 @@ class TestEntityEnteredSpot:
         # 共通フィールド (spot_id_value) は乗る
         assert result.structured["spot_id_value"] == SPOT_A.value
 
-    def test_initial_placement_self_returns_none(self, formatter):
+    def test_initial_placement_self_returns_None(self, formatter):
         event = EntityEnteredSpotEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -208,7 +208,7 @@ class TestEntityEnteredSpot:
 
 
 class TestEntityLeftSpot:
-    def test_self_returns_none(self, formatter):
+    def test_self_returns_None_2(self, formatter):
         event = EntityLeftSpotEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -271,7 +271,7 @@ class TestEntityLeftSpot:
         # connection_name は構造化にも乗らない
         assert "connection_name" not in result.structured
 
-    def test_left_falls_back_to_legacy_when_destination_unresolved(self):
+    def test_left_falls_back_legacy_when_destination_unresolved(self):
         """行き先名が「不明なスポット」のときは従来文言にフォールバック。"""
         ctx = _make_context(
             player_names={1: "探索者A", 2: "探索者B"},
@@ -292,7 +292,7 @@ class TestEntityLeftSpot:
 
 
 class TestSpotObjectInteracted:
-    def test_self_returns_none(self, formatter):
+    def test_self_returns_None_3(self, formatter):
         event = SpotObjectInteractedEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -336,12 +336,12 @@ class TestPlayerDroppedItem:
             item_name="流木",
         )
 
-    def test_actor_本人には_None_を返す(self, formatter):
+    def test_returns_none_actor_self_2(self, formatter):
         """recipient strategy で除外済みのはずだが二重ガード。"""
         event = self._make_event(entity_id=ENTITY_1)
         assert formatter.format(event, PLAYER_1) is None
 
-    def test_他者には_social_で_prose_を返す(self, formatter):
+    def test_returns_other_social_prose_2(self, formatter):
         """「探索者Aが流木を地面に置いた」が同室者に届く。"""
         event = self._make_event(entity_id=ENTITY_1)
         result = formatter.format(event, PLAYER_2)
@@ -366,11 +366,12 @@ class TestPlayerPickedUpItem:
             item_name="流木",
         )
 
-    def test_actor_本人には_None_を返す(self, formatter):
+    def test_returns_none_actor_self(self, formatter):
+        """actor 本人には None を返す。"""
         event = self._make_event(entity_id=ENTITY_2)
         assert formatter.format(event, PLAYER_2) is None
 
-    def test_他者には_social_で_prose_を返す(self, formatter):
+    def test_returns_other_social_prose(self, formatter):
         """「探索者Bが流木を拾い上げた」が同室者に届く。"""
         event = self._make_event(entity_id=ENTITY_2)
         result = formatter.format(event, PLAYER_1)
@@ -381,7 +382,7 @@ class TestPlayerPickedUpItem:
 
 
 class TestSpotExplored:
-    def test_self_returns_none(self, formatter):
+    def test_self_returns_None_4(self, formatter):
         event = SpotExploredEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -534,7 +535,7 @@ class TestConnectionStateChangedPositionAware:
         assert "遠くで" not in result.prose
         assert result.structured["recipient_position"] == "at_from"
 
-    def test_recipient_at_to_spot_gets_direct_prose(self):
+    def test_recipient_at_spot_gets_direct_prose(self):
         """to_spot にいる observer も直接観測扱い。"""
         ctx = self._build_ctx_with_position(SPOT_B)
         formatter = SpotGraphObservationFormatter(ctx)
@@ -571,7 +572,7 @@ class TestConnectionStateChangedPositionAware:
         assert "通行可能" not in result.prose
         assert result.structured["recipient_position"] == "adjacent"
 
-    def test_recipient_position_unknown_falls_back_to_direct_prose(self):
+    def test_recipient_position_unknown_falls_back_direct_prose(self):
         """位置不明 (graph 上に居ない / 引けない) は直接観測 fallback。"""
         ctx = self._build_ctx_with_position(None)  # 引けない
         formatter = SpotGraphObservationFormatter(ctx)
@@ -591,7 +592,7 @@ class TestConnectionStateChangedPositionAware:
 class TestSpotObjectStateChanged:
     """#356 後続: 内部 state vocab の漏洩を防ぐため narrative の有無で分岐。"""
 
-    def test_narrative_無しなら_silent_になる(self, formatter):
+    def test_narrative_silent(self, formatter):
         """narrative=None なら formatter は None を返す (observation 非発火)。
 
         旧挙動は state_delta から "locked が True から False に変わった" を
@@ -607,7 +608,7 @@ class TestSpotObjectStateChanged:
         )
         assert formatter.format(event, PLAYER_1) is None
 
-    def test_narrative_有りなら_その_narrative_が_prose_になる(self, formatter):
+    def test_narrative_prose(self, formatter):
         """著者が narrative を提供したら、そのまま prose に流れる。"""
         event = SpotObjectStateChangedEvent.create(
             aggregate_id=GRAPH_ID,
@@ -634,7 +635,7 @@ class TestSpotObjectStateChanged:
 class TestSpotObjectStateChangedActorExclusion:
     """Phase 4-E: actor_entity_id が自分のとき formatter が None を返す (二重ガード)。"""
 
-    def test_actor_self_returns_none(self, formatter):
+    def test_actor_self_returns_None(self, formatter):
         from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
         event = SpotObjectStateChangedEvent.create(
             aggregate_id=GRAPH_ID,
@@ -675,7 +676,7 @@ class TestSpotPlayerStateChangedInSpot:
             {"key": "disguised", "before": True, "after": False}
         ]
 
-    def test_renders_state_delta_when_no_message(self, formatter):
+    def test_renders_state_delta_when_message(self, formatter):
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
             SpotPlayerStateChangedInSpotEvent,
         )
@@ -695,7 +696,7 @@ class TestSpotPlayerStateChangedInSpot:
         assert "posture" in result.prose
         assert "kneeling" in result.prose
 
-    def test_actor_self_returns_none(self, formatter):
+    def test_actor_self_returns_None_2(self, formatter):
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
             SpotPlayerStateChangedInSpotEvent,
         )
@@ -713,5 +714,5 @@ class TestSpotPlayerStateChangedInSpot:
 
 
 class TestUnknownEvent:
-    def test_returns_none_for_unhandled_event(self, formatter):
+    def test_returns_None_for_unhandled_event(self, formatter):
         assert formatter.format("not an event", PLAYER_1) is None

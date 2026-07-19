@@ -48,7 +48,8 @@ def _put_player_traveling(
 class TestBusyInterruptCategorization:
     """_BUSY_FREE_TOOLS の境界を検証する (構造的テスト)。"""
 
-    def test_BUSY_FREE_TOOLS_に_想定の_tool_が含まれる(self) -> None:
+    def test_busy_free_tools_tool_included(self) -> None:
+        """BUSYFREETOOLS に想定の tool が含まれる。"""
         from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
             _WorldLlmWiring,
         )
@@ -57,7 +58,8 @@ class TestBusyInterruptCategorization:
         assert TOOL_NAME_SPOT_GRAPH_LISTEN in free
         assert TOOL_NAME_SPOT_GRAPH_WAIT in free
 
-    def test_重い_tool_は_BUSY_FREE_TOOLS_に_含まれない(self) -> None:
+    def test_tool_busy_free_tools_not_included(self) -> None:
+        """重い tool は BUSYFREETOOLS に含まれない。"""
         from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
             _WorldLlmWiring,
         )
@@ -73,9 +75,10 @@ class TestBusyInterruptCategorization:
 class TestMaybeInterruptBusy:
     """_maybe_interrupt_busy の挙動。"""
 
-    def test_traveling_中に_heavy_tool_で_中断される(
+    def test_traveling_heavy_tool(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """traveling 中に heavytool で中断される。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
@@ -94,9 +97,10 @@ class TestMaybeInterruptBusy:
         status = runtime._player_status_repo.find_by_id(PlayerId(player_id_value))
         assert status.spot_navigation_state.is_traveling is False
 
-    def test_traveling_中に_free_tool_は_中断されない(
+    def test_traveling_free_tool(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """traveling 中に freetool は中断されない。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
@@ -114,9 +118,10 @@ class TestMaybeInterruptBusy:
         status = runtime._player_status_repo.find_by_id(PlayerId(player_id_value))
         assert status.spot_navigation_state.is_traveling is True
 
-    def test_traveling_でない_なら_何もしない(
+    def test_traveling(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """traveling でない なら 何もしない。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
@@ -135,7 +140,7 @@ class TestMaybeInterruptBusy:
 class TestRestoreNavStateOnFailure:
     """Review HIGH 1 対応: tool が失敗したら travel を復元する。"""
 
-    def test_traveling_中に_travel_to_でも_中断される(
+    def test_traveling_travel(
         self, monkeypatch, tmp_path: Path
     ) -> None:
         """別の travel_to が来たら現在の travel を中断する。"""
@@ -153,9 +158,10 @@ class TestRestoreNavStateOnFailure:
         assert was_interrupted is True
         assert snapshot is not None and snapshot.is_traveling is True
 
-    def test_restore_nav_state_で_travel_状態が_復元される(
+    def test_restore_nav_state_travel_state_restored(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """restore nav state で travel 状態が 復元される。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)

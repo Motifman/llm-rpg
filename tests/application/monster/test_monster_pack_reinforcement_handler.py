@@ -168,7 +168,7 @@ def _events_of_type(graph: SpotGraphAggregate, evt_type) -> list:
 class TestPackReinforcementSuccess:
     """同 pack 仲間が殴られていれば CHASE で駆け付ける。"""
 
-    def test_隣接_spot_の_仲間が_殴られていれば_responder_は_CHASE_に_遷移(
+    def test_neighbor_spot_responder_chase(
         self,
     ) -> None:
         """victim=spot A、responder=spot B (1 hop 離れた仲間)。
@@ -207,7 +207,7 @@ class TestPackReinforcementSuccess:
         assert events[0].target_player_id is not None
         assert events[0].target_player_id.value == 7
 
-    def test_monster_attacker_の_pack_援護(self) -> None:
+    def test_monster_attacker_pack(self) -> None:
         """victim を殴ったのが他 monster の場合、target_monster_id が
         セットされる。"""
         attacker_monster = _make_monster(999, pack_id=None)
@@ -239,7 +239,8 @@ class TestPackReinforcementSuccess:
 class TestNoResponse:
     """援護に応答しない経路。"""
 
-    def test_pack_id_が_None_なら_応答しない(self) -> None:
+    def test_pack_id_none(self) -> None:
+        """pack id が None なら 応答しない。"""
         victim = _make_monster(101, pack_id=None)
         victim.record_attacked_by_in_spot(
             current_tick=WorldTick(9),
@@ -260,7 +261,7 @@ class TestNoResponse:
         assert result is False
         assert responder.is_chasing() is False
 
-    def test_pack_help_radius_0_テンプレ_なら_応答しない(self) -> None:
+    def test_pack_help_radius_zero(self) -> None:
         """援護機能無効テンプレ。"""
         victim = _make_monster(101)
         victim.record_attacked_by_in_spot(
@@ -282,7 +283,7 @@ class TestNoResponse:
         )
         assert result is False
 
-    def test_radius_を_超える_距離なら_応答しない(self) -> None:
+    def test_radius_exceeds(self) -> None:
         """victim=A、responder=C (2 hop)、radius=1 → 援護不可。"""
         victim = _make_monster(101)
         victim.record_attacked_by_in_spot(
@@ -304,7 +305,7 @@ class TestNoResponse:
         )
         assert result is False
 
-    def test_既に_CHASE_中の_monster_は_応答しない(self) -> None:
+    def test_monster_already_chasing_does_not_respond(self) -> None:
         """state 競合回避: 別 target を CHASE 中でも援護に切り替えない。"""
         victim = _make_monster(101)
         victim.record_attacked_by_in_spot(
@@ -331,7 +332,7 @@ class TestNoResponse:
         # 既存の CHASE 対象は変わらない
         assert responder.chase_attacker_ref().player_id == PlayerId(99)
 
-    def test_grace_切れの_victim_には_応答しない(self) -> None:
+    def test_grace_victim(self) -> None:
         """victim の被弾 tick が grace_ticks より古ければ援護対象外。"""
         victim = _make_monster(101, template=_template(flee_grace_ticks=3))
         victim.record_attacked_by_in_spot(
@@ -352,7 +353,7 @@ class TestNoResponse:
         )
         assert result is False
 
-    def test_max_pack_responders_0_テンプレ_なら_応答しない(self) -> None:
+    def test_max_pack_responders_zero(self) -> None:
         """max_pack_responders=0 単独 (radius>0) でも援護機能無効。"""
         victim = _make_monster(101)
         victim.record_attacked_by_in_spot(
@@ -376,7 +377,7 @@ class TestNoResponse:
         )
         assert result is False
 
-    def test_DEAD_の_victim_には_援護に_行かない(self) -> None:
+    def test_dead_victim_line(self) -> None:
         """status=DEAD の仲間は援護対象外 (防御コードのテスト)。"""
         from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import (
             MonsterLifecycleState,
@@ -410,7 +411,7 @@ class TestNoResponse:
         )
         assert result is False
 
-    def test_別_pack_の_monster_には_応答しない(self) -> None:
+    def test_monster_from_different_pack_does_not_respond(self) -> None:
         """別 pack の victim には反応しない。"""
         other_pack = PackId.create("rabbit_pack")
         victim = _make_monster(101, pack_id=other_pack)
@@ -435,7 +436,7 @@ class TestNoResponse:
 class TestMaxResponders:
     """victim の max_pack_responders 上限。"""
 
-    def test_既に_上限_数の_responder_が_CHASE_中なら_応答しない(self) -> None:
+    def test_responder_chase(self) -> None:
         """victim.max_pack_responders=2、既に 2 匹応答済み → 3 匹目は来ない。"""
         target_ref = AttackerRef.of_player(PlayerId(7))
         # max_pack_responders=2 の victim

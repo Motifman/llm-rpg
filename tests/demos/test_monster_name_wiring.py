@@ -27,7 +27,8 @@ SCENARIO_PATH = (
 class TestObservationFormatterMonsterNameWiring:
     """`create_world_runtime` が monster_repository を formatter に渡す。"""
 
-    def test_v2_の_obs_formatter_に_monster_repository_が_注入される(self) -> None:
+    def test_v2_obs_formatter_monster_repository_injected(self) -> None:
+        """v2 の obsformatter に monsterrepository が注入される。"""
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
         runtime = create_world_runtime(SCENARIO_PATH)
@@ -41,7 +42,7 @@ class TestObservationFormatterMonsterNameWiring:
             "monster_name は FALLBACK_MONSTER_LABEL (何かのモンスター) に化ける"
         )
 
-    def test_monster_name_lookup_で_template_名が_引ける(self) -> None:
+    def test_monster_name_lookup_template_can_lookup(self) -> None:
         """name_resolver.monster_name_by_monster_id が「野犬」等の実名を返す。"""
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
@@ -72,7 +73,8 @@ class TestObservationFormatterMonsterNameWiring:
 class TestForbiddenLibraryNoRegression:
     """monster を持たないシナリオでも正常に起動する (回帰防止)。"""
 
-    def test_forbidden_library_demo_は_monster_repository_None_で_OK(self) -> None:
+    def test_forbidden_library_monster_repository_none_ok(self) -> None:
+        """forbidden library demo は monster repository None で OK。"""
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
         scenario_path = SCENARIO_PATH.parent / "forbidden_library_demo.json"

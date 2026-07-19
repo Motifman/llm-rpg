@@ -21,7 +21,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 class TestGameEndShortCircuit:
     """ゲーム終了状態なら LLM ターンを一切回さない。"""
 
-    def test_game_ended_なら_run_scheduled_turns_は_すぐ_return(
+    def test_game_ended_run_scheduled_turns_return(
         self, monkeypatch, tmp_path: Path
     ) -> None:
         """check_game_end().is_ended=True なら pending を全消して即 return。"""
@@ -62,9 +62,10 @@ class TestGameEndShortCircuit:
 class TestSkipDeadPlayerTurn:
     """死亡 / outcome 確定したプレイヤーの個別 LLM ターンを skip。"""
 
-    def test_outcome_resolved_player_の_LLM_ターンは_回らない(
+    def test_outcome_resolved_player_llm(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """outcome resolved player の LLM ターンは 回らない。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
@@ -106,7 +107,7 @@ class TestSkipDeadPlayerTurn:
             f"for {len(all_players)} players"
         )
 
-    def test_can_player_act_helper_の_境界(
+    def test_can_player_act_helper_boundary(
         self, monkeypatch, tmp_path: Path
     ) -> None:
         """_can_player_act が outcome / is_down を正しく見る。"""

@@ -138,9 +138,10 @@ class TestReasoningTurnUsesAutoWithForceInstruction:
     プロンプトも不変 (prefix cache 維持)。
     """
 
-    def test_熟考ターンはauto_and_強制指示つき(
+    def test_auto(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """熟考ターンはauto and 強制指示つき。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(
@@ -160,9 +161,10 @@ class TestReasoningTurnUsesAutoWithForceInstruction:
 
         assert client.calls == [("auto", True, "low")]
 
-    def test_通常ターンはrequired_and_指示なし(
+    def test_required(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """通常ターンはrequired and 指示なし。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(
@@ -202,9 +204,10 @@ class TestReasoningStarvationFallback:
         state.runtime._emit_reflect_observation(pid, "空回りしている", "stalled")
         return state, rec, pid
 
-    def test_熟考invokeが例外なら_reasoningなしで降格再試行して行動成立(
+    def test_invoke_reasoning_raises_exception(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """熟考invokeが例外なら reasoningなしで降格再試行して行動成立。"""
         client = _ReasoningFailThenFallbackClient(fail_mode="raise")
         state, rec, pid = self._armed_session(monkeypatch, tmp_path, client)
 
@@ -222,9 +225,10 @@ class TestReasoningStarvationFallback:
         ]
         assert engaged == []
 
-    def test_熟考ターンがtool_callなしでも_reasoningなしで降格再試行(
+    def test_tool_call_reasoning_line(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """熟考ターンがtool callなしでも reasoningなしで降格再試行。"""
         client = _ReasoningFailThenFallbackClient(fail_mode="none")
         state, rec, pid = self._armed_session(monkeypatch, tmp_path, client)
 
@@ -247,9 +251,10 @@ class TestReasoningCommitOnNoToolCall:
     リトライしない = 餓死しない) で、AGENT_REASONING_ENGAGED trace も出ない。
     """
 
-    def test_熟考も降格もNO_TOOL_CALLなら_latch消費_engaged_traceなし(
+    def test_tool_call_latch_engaged_trace(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """熟考も降格もNO TOOL CALLなら latch消費 engaged traceなし。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(

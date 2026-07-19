@@ -14,7 +14,7 @@ from ai_rpg_world.application.llm.services.force_tool_call_instruction import (
 
 
 class TestAppendForceToolCallInstruction:
-    def test_末尾メッセージの本文に指示を足した新リストを返す(self) -> None:
+    def test_returns_last_text_list(self) -> None:
         """最後のメッセージ本文の末尾に指示が付き、元リスト・元 dict は変更されない。"""
         messages = [
             {"role": "system", "content": "あなたは冒険者だ。"},
@@ -32,12 +32,13 @@ class TestAppendForceToolCallInstruction:
         # 元は不変
         assert messages[-1]["content"] == "目の前に貝がある。"
 
-    def test_空リストなら指示メッセージ1件だけ返す(self) -> None:
+    def test_empty_tool_list_returns_only_instruction_message(self) -> None:
+        """空リストなら指示メッセージ1件だけ返す。"""
         result = append_force_tool_call_instruction([])
         assert len(result) == 1
         assert result[0]["content"] == FORCE_TOOL_CALL_INSTRUCTION
 
-    def test_本文がstrでないときは末尾に指示メッセージを足す(self) -> None:
+    def test_text_str_last(self) -> None:
         """content が str でない (structured 等) 稀なケースでは末尾に別メッセージを足す。"""
         messages = [{"role": "user", "content": [{"type": "text", "text": "x"}]}]
         result = append_force_tool_call_instruction(messages)

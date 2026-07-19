@@ -44,7 +44,7 @@ def _minimal_placement(template_id: str = "wild_dog", spot: str = "deep_forest")
 class TestParseMonsterTemplates:
     """templates 配下の JSON を MonsterTemplate に変換する経路。"""
 
-    def test_最小限の_template_が_MonsterTemplate_に変換される(self) -> None:
+    def test_min_template_monster_template(self) -> None:
         """name / race / faction / base_stats / reward / respawn が反映される。"""
         loader = ScenarioLoader()
         mapper = ScenarioIdMapper()
@@ -65,7 +65,7 @@ class TestParseMonsterTemplates:
         # id_mapper にも登録される
         assert mapper.contains("monster_template", "wild_dog")
 
-    def test_id_が空だと_ScenarioLoadError(self) -> None:
+    def test_id_empty_scenario_load_error(self) -> None:
         """template.id 必須 (作家ミス防止)。"""
         loader = ScenarioLoader()
         with pytest.raises(ScenarioLoadError):
@@ -74,7 +74,7 @@ class TestParseMonsterTemplates:
                 ScenarioIdMapper(),
             )
 
-    def test_race_が不正だと_ScenarioLoadError(self) -> None:
+    def test_race_invalid_scenario_load_error(self) -> None:
         """Race enum に無い名前は boundary で弾く。"""
         loader = ScenarioLoader()
         with pytest.raises(ScenarioLoadError):
@@ -83,7 +83,8 @@ class TestParseMonsterTemplates:
                 ScenarioIdMapper(),
             )
 
-    def test_faction_が不正だと_ScenarioLoadError(self) -> None:
+    def test_faction_invalid_scenario_load_error(self) -> None:
+        """faction が不正だと ScenarioLoadError。"""
         loader = ScenarioLoader()
         with pytest.raises(ScenarioLoadError):
             loader._parse_monsters_block(
@@ -91,7 +92,8 @@ class TestParseMonsterTemplates:
                 ScenarioIdMapper(),
             )
 
-    def test_base_stats_が_dict_でないと_ScenarioLoadError(self) -> None:
+    def test_base_stats_dict_scenario_load_error(self) -> None:
+        """base stats が dict でないと ScenarioLoadError。"""
         loader = ScenarioLoader()
         with pytest.raises(ScenarioLoadError):
             loader._parse_monsters_block(
@@ -103,7 +105,8 @@ class TestParseMonsterTemplates:
 class TestParseMonsterPlacements:
     """initial_placements を ScenarioMonsterPlacement に変換する経路。"""
 
-    def test_最小限の_placement_が変換される(self) -> None:
+    def test_min_placement(self) -> None:
+        """最小限の placement が変換される。"""
         loader = ScenarioLoader()
         _, placements = loader._parse_monsters_block(
             {
@@ -119,7 +122,7 @@ class TestParseMonsterPlacements:
         assert p.spot_string_id == "deep_forest"
         assert p.coordinate_x == 0
 
-    def test_coordinate_省略時は_xyz_0(self) -> None:
+    def test_coordinate_xyz_zero(self) -> None:
         """coordinate を渡さなくても (0,0,0) で構築できる。"""
         loader = ScenarioLoader()
         _, placements = loader._parse_monsters_block(
@@ -133,7 +136,8 @@ class TestParseMonsterPlacements:
         assert placements[0].coordinate_y == 0
         assert placements[0].coordinate_z == 0
 
-    def test_template_が空文字なら_ScenarioLoadError(self) -> None:
+    def test_template_empty_string_scenario_load_error(self) -> None:
+        """template が空文字なら ScenarioLoadError。"""
         loader = ScenarioLoader()
         with pytest.raises(ScenarioLoadError):
             loader._parse_monsters_block(
@@ -143,7 +147,8 @@ class TestParseMonsterPlacements:
                 ScenarioIdMapper(),
             )
 
-    def test_spot_が空文字なら_ScenarioLoadError(self) -> None:
+    def test_spot_empty_string_scenario_load_error(self) -> None:
+        """spot が空文字なら ScenarioLoadError。"""
         loader = ScenarioLoader()
         with pytest.raises(ScenarioLoadError):
             loader._parse_monsters_block(
@@ -157,13 +162,15 @@ class TestParseMonsterPlacements:
 class TestParseMonstersBlockOptional:
     """monsters セクション自体が無いシナリオは empty を返す。"""
 
-    def test_None_なら_空タプル(self) -> None:
+    def test_none_empty_tuple(self) -> None:
+        """None なら 空タプル。"""
         loader = ScenarioLoader()
         t, p = loader._parse_monsters_block(None, ScenarioIdMapper())
         assert t == ()
         assert p == ()
 
-    def test_空辞書なら_空タプル(self) -> None:
+    def test_empty_dict_empty_tuple(self) -> None:
+        """空辞書なら 空タプル。"""
         loader = ScenarioLoader()
         t, p = loader._parse_monsters_block({}, ScenarioIdMapper())
         assert t == ()

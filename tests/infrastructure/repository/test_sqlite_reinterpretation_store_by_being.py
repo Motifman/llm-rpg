@@ -95,16 +95,18 @@ def being() -> BeingId:
 class TestSqliteRecallBufferByBeing:
     """SQLite recall buffer の by_being API。"""
 
-    def test_append_と_pending_count(
+    def test_append_pending_count(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """append と pending count。"""
         store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
         store.append_by_being(being, _obs(recall_id="r2", episode_id="e2"))
         assert store.pending_count_by_being(being) == 2
 
-    def test_peek_batch_は_episode_batched(
+    def test_peek_batch_episode_batched(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """peek batch は episode batched。"""
         store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
         store.append_by_being(
             being,
@@ -117,15 +119,16 @@ class TestSqliteRecallBufferByBeing:
         assert result[0].recall_id == "r1"
         assert result[1].recall_id == "r2"
 
-    def test_mark_processed_は_pending_から_除く(
+    def test_mark_processed_pending(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """markprocessed は pending から除く。"""
         store.append_by_being(being, _obs(recall_id="r1", episode_id="e1"))
         store.append_by_being(being, _obs(recall_id="r2", episode_id="e2"))
         store.mark_processed_by_being(being, ("r1",))
         assert store.pending_count_by_being(being) == 1
 
-    def test_batch_size_0_は_空_tuple(
+    def test_batch_size_zero_empty_tuple(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
         """``batch_size <= 0`` は早期 return で空 tuple。"""
@@ -137,7 +140,7 @@ class TestSqliteRecallBufferByBeing:
             == ()
         )
 
-    def test_max_contexts_per_episode_0_は_空_tuple(
+    def test_max_contexts_per_episode_zero_empty_tuple(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
         """``max_contexts_per_episode <= 0`` も早期 return で空 tuple。"""
@@ -153,9 +156,10 @@ class TestSqliteRecallBufferByBeing:
 class TestSqliteRecallBufferStampPredictionOutcome:
     """U9a: SQLite 版 ``stamp_prediction_outcome_by_being``。"""
 
-    def test_一致する_prediction_context_id_の未処理_obs_に誤差が載る(
+    def test_matches_prediction_context_id_obs_included(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """一致する prediction context id の未処理 obs に誤差が載る。"""
         store.append_by_being(
             being,
             _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
@@ -164,9 +168,10 @@ class TestSqliteRecallBufferStampPredictionOutcome:
         got = store.list_pending_by_being(being)[0]
         assert got.prediction_outcome_error == "外れた"
 
-    def test_別の_prediction_context_id_の_obs_には載らない(
+    def test_different_prediction_context_id_obs_not_included(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """別の prediction context id の obs には載らない。"""
         store.append_by_being(
             being,
             _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
@@ -180,9 +185,10 @@ class TestSqliteRecallBufferStampPredictionOutcome:
         assert rows["r1"].prediction_outcome_error == "外れた"
         assert rows["r2"].prediction_outcome_error is None
 
-    def test_既に誤差が刻まれた_obs_は上書きしない(
+    def test_obs(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """既に誤差が刻まれた obs は上書きしない。"""
         store.append_by_being(
             being,
             _obs(
@@ -200,9 +206,10 @@ class TestSqliteRecallBufferStampPredictionOutcome:
 class TestSqliteListEpisodeIdsByPredictionContext:
     """U9b: SQLite 版 ``list_episode_ids_by_prediction_context_by_being``。"""
 
-    def test_一致する_prediction_context_id_の_episode_id_を返す(
+    def test_returns_matches_prediction_context_id_episode_id(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """一致する prediction context id の episode id を返す。"""
         store.append_by_being(
             being,
             _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
@@ -210,9 +217,10 @@ class TestSqliteListEpisodeIdsByPredictionContext:
         got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
         assert got == ("e1",)
 
-    def test_複数_episode_が_同じ_prediction_context_id_に紐づく場合は全件返す(
+    def test_returns_all_multiple_episode_same_prediction_context_id(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """複数 episode が同じ predictioncontextid に紐づく場合は全件返す。"""
         store.append_by_being(
             being,
             _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
@@ -224,9 +232,10 @@ class TestSqliteListEpisodeIdsByPredictionContext:
         got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
         assert set(got) == {"e1", "e2"}
 
-    def test_同じ_episode_を複数_recall_しても重複排除される(
+    def test_same_episode_multiple_recall_deduplicates(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """同じ episode を複数 recall しても重複排除される。"""
         store.append_by_being(
             being,
             _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
@@ -238,9 +247,10 @@ class TestSqliteListEpisodeIdsByPredictionContext:
         got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
         assert got == ("e1",)
 
-    def test_一致するものが無ければ空tuple(
+    def test_matches_empty_tuple(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """一致するものが無ければ空tuple。"""
         store.append_by_being(
             being,
             _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
@@ -254,17 +264,19 @@ class TestSqliteListEpisodeIdsByPredictionContext:
 class TestSqliteJournalByBeing:
     """SQLite journal の by_being API。"""
 
-    def test_put_active_と_get_active(
+    def test_put_active_get_active(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """put active と get active。"""
         e1 = _entry(entry_id="ent-1", episode_id="ep-1")
         store.put_active_by_being(being, e1)
         got = store.get_active_by_being(being, "ep-1")
         assert got is not None and got.entry_id == "ent-1"
 
-    def test_新しい_active_を_保存すると_旧_active_は_SUPERSEDED(
+    def test_saves_legacy_active_superseded_active(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """新しい active を保存すると旧 active は SUPERSEDED。"""
         e1 = _entry(entry_id="old", episode_id="ep-1")
         e2 = _entry(
             entry_id="new",
@@ -312,9 +324,10 @@ class TestSqliteV3DropLegacy:
 class TestSqliteRecallBufferReplaceAll:
     """Phase 4 Step 4-2a: list_pending_by_being / replace_all_pending_by_being。"""
 
-    def test_replace_all_pending_で全置換(
+    def test_replace_all_pending_replaces_existing_records(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """replace all pending で全置換。"""
         store.append_by_being(being, _obs(recall_id="old", episode_id="e1"))
         store.replace_all_pending_by_being(
             being, [_obs(recall_id="new", episode_id="e2")]
@@ -322,9 +335,10 @@ class TestSqliteRecallBufferReplaceAll:
         listed = store.list_pending_by_being(being)
         assert [o.recall_id for o in listed] == ["new"]
 
-    def test_他_being_は影響しない(
+    def test_other_being_does_not_affect(
         self, store: SqliteEpisodicReinterpretationStore
     ) -> None:
+        """他 being は影響しない。"""
         ada = BeingId("being_w1_p1")
         ben = BeingId("being_w1_p2")
         store.append_by_being(ada, _obs(recall_id="r-ada", episode_id="e1"))
@@ -337,15 +351,16 @@ class TestSqliteRecallBufferReplaceAll:
 class TestSqliteJournalReplaceAll:
     """Phase 4 Step 4-2a: list_all_by_being / replace_all_by_being。"""
 
-    def test_list_all_by_being_は全episode横断(
+    def test_list_all_being_all_episode(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
+        """list all by being は全episode横断。"""
         store.put_active_by_being(being, _entry(entry_id="a", episode_id="ep-1"))
         store.put_active_by_being(being, _entry(entry_id="b", episode_id="ep-2"))
         ids = [e.entry_id for e in store.list_all_by_being(being)]
         assert set(ids) == {"a", "b"}
 
-    def test_replace_all_で_active_get_に整合する(
+    def test_replace_all_active_get(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
     ) -> None:
         """status=ACTIVE の entry を replace で持ち込めば get_active_by_being で引ける。"""

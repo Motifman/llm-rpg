@@ -83,7 +83,7 @@ def _build_builder(
 class TestMonsterSectionPopulation:
     """build_snapshot で monsters_at_spot が埋まる。"""
 
-    def test_view_provider_経由で_monsters_at_spot_が埋まる(self) -> None:
+    def test_view_provider_populates_monsters_at_spot(self) -> None:
         """presence に居る monster_id 全てが view provider で解決され snapshot に載る。"""
         m1 = MonsterId.create(101)
         m2 = MonsterId.create(102)
@@ -105,7 +105,7 @@ class TestMonsterSectionPopulation:
         names = sorted(e.display_name for e in snap.monsters_at_spot)
         assert names == ["狼101", "狼102"]
 
-    def test_provider_が_none_を返した個体は除外される(self) -> None:
+    def test_provider_none_returned_excluded(self) -> None:
         """view 解決失敗（aggregate 未存在等）は snapshot から黙って除外。"""
         m1 = MonsterId.create(101)
         m2 = MonsterId.create(102)  # 解決失敗を装う
@@ -128,7 +128,7 @@ class TestMonsterSectionPopulation:
         assert len(snap.monsters_at_spot) == 1
         assert snap.monsters_at_spot[0].monster_id == 101
 
-    def test_view_provider_未注入では空(self) -> None:
+    def test_missing_view_provider_returns_empty_monsters_at_spot(self) -> None:
         """resolver を渡していない構成では monsters_at_spot は空（後方互換）。"""
         graph = _build_graph_mock(present_monster_ids=[MonsterId.create(101)])
         builder = _build_builder(graph=graph, monster_view_provider=None)
@@ -142,7 +142,7 @@ class TestMonsterSectionPopulation:
 class TestDarknessHidesMonsters:
     """暗闇（can_see=False）の挙動。"""
 
-    def test_暗闇では_monsters_at_spot_が空になる(self) -> None:
+    def test_darkness_hides_monsters_at_spot(self) -> None:
         """spot.atmosphere の lighting が DARK で光源が無い場合、monsters は隠す。"""
         from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
         from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum

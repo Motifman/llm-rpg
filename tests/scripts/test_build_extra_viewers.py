@@ -40,7 +40,8 @@ def _make_events() -> list:
 class TestEpisodicAggregation:
     """`aggregate_episodes` が chunk / subjective / recall を 1 episode に集約する。"""
 
-    def test_chunk_は_episode_object_に_なる(self) -> None:
+    def test_chunk_episode_object(self) -> None:
+        """chunk は episodeobject になる。"""
         episodes = aggregate_episodes(_make_events())
         assert len(episodes) == 1
         ep = episodes[0]
@@ -49,13 +50,15 @@ class TestEpisodicAggregation:
         assert ep.written_tick == 3
         assert ep.boundary_reason == "category_shift"
 
-    def test_subjective_fill_が_episode_に_乗る(self) -> None:
+    def test_subjective_fill_episode_included(self) -> None:
+        """subjectivefill が episode に乗る。"""
         episodes = aggregate_episodes(_make_events())
         ep = episodes[0]
         assert ep.subjective_latency_ms == 1200
         assert "ada は浜辺で" in (ep.subjective_snippet or "")
 
-    def test_recall_history_が_episode_に_乗る(self) -> None:
+    def test_recall_history_episode_included(self) -> None:
+        """recallhistory が episode に乗る。"""
         episodes = aggregate_episodes(_make_events())
         ep = episodes[0]
         assert len(ep.recalled_in) == 1
@@ -63,7 +66,8 @@ class TestEpisodicAggregation:
         assert rec["tick"] == 9
         assert rec["player_id"] == 2
 
-    def test_unknown_episode_の_recall_は_skip(self) -> None:
+    def test_unknown_episode_recall_skip(self) -> None:
+        """unknown episode の recall は skip。"""
         events = [
             {"kind": "episodic_recall", "tick": 1, "player_id": 1, "payload": {
                 "candidates": [{"episode_id": "missing"}],
@@ -77,7 +81,8 @@ class TestEpisodicAggregation:
 class TestEpisodicRender:
     """`render_episodic` が valid な HTML を生成する。"""
 
-    def test_html_に_player_tab_と_episode_card_が_出る(self) -> None:
+    def test_html_player_tab_episode_card_rendered(self) -> None:
+        """html に playertab と episodecard が出る。"""
         episodes = aggregate_episodes(_make_events())
         html_text = render_episodic(episodes, "test-run")
         assert "<!DOCTYPE html>" in html_text
@@ -91,7 +96,8 @@ class TestEpisodicRender:
 class TestTimelineExtract:
     """`extract_players` / `build_cells` の基本動作。"""
 
-    def test_player_id_と_name_を_抽出(self) -> None:
+    def test_player_id_name(self) -> None:
+        """playerid と name を抽出。"""
         players = extract_players(_make_events())
         assert len(players) == 2  # player 1 と 2
         names = {p["id"]: p["name"] for p in players}
@@ -99,7 +105,8 @@ class TestTimelineExtract:
         # player 2 は name 情報無し → fallback
         assert names[2].startswith("P")
 
-    def test_event_kind_を_cell_に_展開(self) -> None:
+    def test_event_kind_cell(self) -> None:
+        """eventkind を cell に展開。"""
         cells = build_cells(_make_events())
         # player 1 は action / observation / position_change / chunk_written = 4 cells
         # subjective_filled は cell に乗らない (詳細 viewer の役目)
@@ -120,7 +127,8 @@ class TestTimelineRender:
     - 発火 event がある tick だけ render する
     """
 
-    def test_html_に_player_header_と_tick_行が出る(self) -> None:
+    def test_html_player_header_tick_line_rendered(self) -> None:
+        """html に player header と tick 行が出る。"""
         html_text = render_timeline(_make_events(), "test-run")
         assert "<!DOCTYPE html>" in html_text
         assert "test-run" in html_text
@@ -134,19 +142,19 @@ class TestTimelineRender:
         assert 'data-kind="action"' in html_text
         assert 'data-kind="observation"' in html_text
 
-    def test_action_の内容が_セルに直書きされる(self) -> None:
+    def test_action(self) -> None:
         """spot_graph_explore action の tool 名が直接 HTML に出る (hover 不要)。"""
         html_text = render_timeline(_make_events(), "test-run")
         # _make_events() の action は tool=spot_graph_explore, inner=see around
         assert "explore" in html_text
 
-    def test_observation_の_prose_が_セルに直書きされる(self) -> None:
+    def test_observation_prose(self) -> None:
         """OBS の prose 文字列がセル内に表示される。"""
         html_text = render_timeline(_make_events(), "test-run")
         # _make_events() の observation prose は "hi"
         assert "hi" in html_text
 
-    def test_event_が無い_tick_は_render_しない(self) -> None:
+    def test_event_tick_render(self) -> None:
         """tick=0 (position_change のみ) / 1 (action) / 2 (observation) / 3 / 6 / 9
         以外の tick は HTML に現れない。tick=4,5,7,8 が無いことで empty skip を確認。"""
         html_text = render_timeline(_make_events(), "test-run")

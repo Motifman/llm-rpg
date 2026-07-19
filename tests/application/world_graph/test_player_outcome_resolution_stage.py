@@ -74,7 +74,8 @@ def _place_at(graph: SpotGraphAggregate, player_id: PlayerId, spot_id: SpotId) -
 class TestRescuePath:
     """signal_fire_lit + summit に居るプレイヤーが RESCUED に確定する。"""
 
-    def test_signal_lit_AND_at_summit_なら_RESCUED(self) -> None:
+    def test_signal_lit_summit_rescued(self) -> None:
+        """signal lit AND at summit なら RESCUED。"""
         graph = _make_graph_with_summit()
         _place_at(graph, PlayerId(1), SUMMIT)
         registry = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
@@ -84,7 +85,8 @@ class TestRescuePath:
 
         assert registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.RESCUED
 
-    def test_signal_未点火なら_RESCUED_されない(self) -> None:
+    def test_signal_rescued(self) -> None:
+        """signal 未点火なら RESCUED されない。"""
         graph = _make_graph_with_summit()
         _place_at(graph, PlayerId(1), SUMMIT)
         registry = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
@@ -94,7 +96,8 @@ class TestRescuePath:
 
         assert registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
 
-    def test_summit_に居ないプレイヤーは_RESCUED_されない(self) -> None:
+    def test_summit_player_rescued(self) -> None:
+        """summit に居ないプレイヤーは RESCUED されない。"""
         graph = _make_graph_with_summit()
         _place_at(graph, PlayerId(1), BEACH)
         registry = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
@@ -104,7 +107,8 @@ class TestRescuePath:
 
         assert registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
 
-    def test_既_DEAD_のプレイヤーは_RESCUED_に上書きされない(self) -> None:
+    def test_dead_player_rescued(self) -> None:
+        """既 DEAD のプレイヤーは RESCUED に上書きされない。"""
         graph = _make_graph_with_summit()
         _place_at(graph, PlayerId(1), SUMMIT)
         registry = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
@@ -119,7 +123,8 @@ class TestRescuePath:
 class TestStrandedPath:
     """tick 上限到達時に残 UNRESOLVED が STRANDED に。"""
 
-    def test_stranded_tick_到達で_UNRESOLVED_は_STRANDED(self) -> None:
+    def test_stranded_tick_unresolved_stranded(self) -> None:
+        """stranded tick 到達で UNRESOLVED は STRANDED。"""
         graph = _make_graph_with_summit()
         registry = PlayerOutcomeRegistry.new_for_players([PlayerId(1), PlayerId(2)])
         stage = _make_stage(registry, graph, frozenset(), [PlayerId(1), PlayerId(2)])
@@ -129,7 +134,8 @@ class TestStrandedPath:
         assert registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.STRANDED
         assert registry.get_outcome(PlayerId(2)) is PlayerOutcomeEnum.STRANDED
 
-    def test_既_RESCUED_は_STRANDED_に上書きされない(self) -> None:
+    def test_rescued_stranded(self) -> None:
+        """既 RESCUED は STRANDED に上書きされない。"""
         graph = _make_graph_with_summit()
         registry = PlayerOutcomeRegistry.new_for_players([PlayerId(1), PlayerId(2)])
         registry.set_outcome(PlayerId(1), PlayerOutcomeEnum.RESCUED)
@@ -144,7 +150,8 @@ class TestStrandedPath:
 class TestIdempotency:
     """rescue tick / stranded tick の二重発火が起きない。"""
 
-    def test_同じ_rescue_tick_を_2_回_run_しても_変化しない(self) -> None:
+    def test_same_rescue_tick_two_run(self) -> None:
+        """同じ rescue tick を 2 回 run しても 変化しない。"""
         graph = _make_graph_with_summit()
         _place_at(graph, PlayerId(1), SUMMIT)
         registry = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
@@ -158,7 +165,7 @@ class TestIdempotency:
 
         assert calls == [(1, "RESCUED")]
 
-    def test_tick_飛び_でも_過去の_rescue_tick_が_catch_up_される(self) -> None:
+    def test_tick_rescue_tick_catch_up(self) -> None:
         """tick=5 から tick=25 に飛んでも tick=10 / 20 の rescue 判定が走る。"""
         graph = _make_graph_with_summit()
         _place_at(graph, PlayerId(1), SUMMIT)

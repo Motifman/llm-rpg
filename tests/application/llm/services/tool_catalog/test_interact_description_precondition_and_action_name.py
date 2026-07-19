@@ -42,7 +42,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
 class TestInteractTopLevelDescriptionExplainsPrecondition:
     """top-level description が「前提条件で失敗しうる」概念を伝える。"""
 
-    def test_前提_または_precondition_を含む(self) -> None:
+    def test_includes_before_precondition(self) -> None:
         """「action が存在 = 呼べば成功」誤読を防ぐため、前提という概念を
         日本語または英語キーワードで明示する。"""
         desc = INTERACT_DEFINITION.description
@@ -51,7 +51,7 @@ class TestInteractTopLevelDescriptionExplainsPrecondition:
             "PRECONDITION_FAILED の繰り返しが止まらない"
         )
 
-    def test_INTERACTION_PRECONDITION_FAILED_を_明示する(self) -> None:
+    def test_interaction_precondition_failed(self) -> None:
         """失敗時に観測される error_code を description に書き、LLM が
         失敗ログを見たときに「これは前提不足だ」と即時判断できるようにする。"""
         desc = INTERACT_DEFINITION.description
@@ -59,7 +59,7 @@ class TestInteractTopLevelDescriptionExplainsPrecondition:
             "error_code 名を含めると、失敗を見た LLM が原因と結びつけられる"
         )
 
-    def test_現在の状況_section_への_誘導を含む(self) -> None:
+    def test_includes_section(self) -> None:
         """precondition と action 一覧は『現在の状況』section に出ているので、
         そこを読めば良いという誘導文を入れる。"""
         desc = INTERACT_DEFINITION.description
@@ -72,7 +72,7 @@ class TestInteractTopLevelDescriptionExplainsPrecondition:
 class TestInteractActionNameDescriptionGivesConcreteExamples:
     """action_name の description に具体例と「推測禁止」が入る。"""
 
-    def test_具体例の_action_name_を_3個_含む(self) -> None:
+    def test_includes_action_name_three(self) -> None:
         """``gather`` / ``search`` / ``examine`` のような典型 action 名を
         例示することで、日本語化 (「調べる」「採取」) を防ぐ。"""
         action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"][
@@ -88,7 +88,7 @@ class TestInteractActionNameDescriptionGivesConcreteExamples:
             "伝わる"
         )
 
-    def test_日本語禁止_または_英語_明示の_文言を含む(self) -> None:
+    def test_includes_japanese_english(self) -> None:
         """LLM が ``action_name='調べる'`` のような日本語値を渡す事故を
         明示的に潰す。"""
         action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"][
@@ -99,7 +99,7 @@ class TestInteractActionNameDescriptionGivesConcreteExamples:
         ), "「英語の動詞形」「日本語ではなく」のような禁止文がないと "
         "Y_after_pr634 で観測された日本語 action_name 事故が再現する"
 
-    def test_推測禁止_の_文言を含む(self) -> None:
+    def test_includes(self) -> None:
         """「思いつきで推測せず、必ず『現在の状況』から読み取る」という
         指示が含まれる。"""
         action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"][
@@ -114,12 +114,14 @@ class TestInteractActionNameDescriptionGivesConcreteExamples:
 class TestInteractDescriptionDoesNotBreakPrefixCache:
     """description / action_name は静的文字列を保つ (= cache 安全)。"""
 
-    def test_top_description_は_静的文字列(self) -> None:
+    def test_top_description_string(self) -> None:
+        """topdescription は静的文字列。"""
         desc = INTERACT_DEFINITION.description
         assert isinstance(desc, str)
         assert "{" not in desc, "placeholder の疑い"
 
-    def test_action_name_description_は_静的文字列(self) -> None:
+    def test_action_name_description_string(self) -> None:
+        """actionnamedescription は静的文字列。"""
         action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"][
             "description"
         ]

@@ -51,7 +51,8 @@ def _interior_with(obj: SpotObject) -> SpotInterior:
 class TestWritePlayerTextEffect:
     """WRITE_PLAYER_TEXT: interaction_parameters["text"] を state へ保存する。"""
 
-    def test_書き込むと_本文_書き手名_tick_が_state_に保存される(self) -> None:
+    def test_writing_sign_saves_text_author_and_tick_to_state(self) -> None:
+        """書き込むと 本文 書き手名 tick が state に保存される。"""
         svc = WorldGraphEffectService()
         sign = _sign()
         effect = InteractionEffect(
@@ -72,7 +73,8 @@ class TestWritePlayerTextEffect:
         assert new_state["sign_author_name"] == "アリス"
         assert new_state["sign_written_tick"] == 10
 
-    def test_2人目が書くと_1人目の内容が上書きされて消える(self) -> None:
+    def test_two_one_removed(self) -> None:
+        """2人目が書くと 1人目の内容が上書きされて消える。"""
         svc = WorldGraphEffectService()
         sign = _sign()
         effect = InteractionEffect(
@@ -104,7 +106,7 @@ class TestWritePlayerTextEffect:
         assert new_state["sign_author_name"] == "ボブ"
         assert new_state["sign_written_tick"] == 5
 
-    def test_text_が欠落していると_InteractionNotAllowedException_が投げられ_state_は変わらない(
+    def test_text_missing_interaction_not_allowed_exception_state(
         self,
     ) -> None:
         """「書いたつもりで書けていない」まま success=true で返る静かな失敗
@@ -130,9 +132,10 @@ class TestWritePlayerTextEffect:
         assert "text" in str(exc_info.value)
         assert "sign_text" not in sign.state
 
-    def test_空文字のtextは_InteractionNotAllowedException_が投げられ_state_は変わらない(
+    def test_empty_string_text_interaction_not_allowed_exception_state(
         self,
     ) -> None:
+        """空文字のtextは InteractionNotAllowedException が投げられ state は変わらない。"""
         svc = WorldGraphEffectService()
         sign = _sign()
         effect = InteractionEffect(
@@ -151,7 +154,7 @@ class TestWritePlayerTextEffect:
             )
         assert "sign_text" not in sign.state
 
-    def test_text_が非文字列だと_InteractionNotAllowedException_が投げられ_state_は変わらない(
+    def test_text_non_string_interaction_not_allowed_exception_state(
         self,
     ) -> None:
         """interact ツールの自由入力は JSON 経由なので数値や配列が渡る余地が
@@ -174,7 +177,8 @@ class TestWritePlayerTextEffect:
             )
         assert "sign_text" not in sign.state
 
-    def test_文字数上限を超えると切り詰められ_可視化される(self) -> None:
+    def test_exceeds(self) -> None:
+        """文字数上限を超えると切り詰められ 可視化される。"""
         svc = WorldGraphEffectService()
         sign = _sign()
         effect = InteractionEffect(
@@ -195,7 +199,8 @@ class TestWritePlayerTextEffect:
         assert len(new_state["sign_text"]) == SIGN_TEXT_MAX_LENGTH
         assert any("切り詰め" in m for m in result.messages)
 
-    def test_display_name_未指定なら既定のフォールバック名が保存される(self) -> None:
+    def test_display_name_unspecified_default_fallback_saved(self) -> None:
+        """display name 未指定なら既定のフォールバック名が保存される。"""
         svc = WorldGraphEffectService()
         sign = _sign()
         effect = InteractionEffect(
@@ -213,7 +218,7 @@ class TestWritePlayerTextEffect:
         new_state = result.new_interior.objects[0].state
         assert new_state["sign_author_name"]
 
-    def test_public_observable_effectとして第三者観測に乗る(self) -> None:
+    def test_public_observable_effect_observation_included(self) -> None:
         """既定 visibility は PUBLIC_OBSERVABLE (物理オブジェクトへの書き込みは見える)。"""
         svc = WorldGraphEffectService()
         sign = _sign()
@@ -232,7 +237,7 @@ class TestWritePlayerTextEffect:
         )
         assert len(result.public_observable_effects) == 1
 
-    def test_更新後のオブジェクトは看板_3keyがhidden_state_keysに入る(self) -> None:
+    def test_after_3key_hidden_state_keys(self) -> None:
         """PR-J: examine した本人だけが読める設計を守るため、書き込み確定時に
         sign_text / sign_author_name / sign_written_tick を hidden_state_keys へ
         自動で加える (シナリオ JSON 側の設定に頼らない)。"""
@@ -258,7 +263,7 @@ class TestWritePlayerTextEffect:
             "sign_written_tick",
         }
 
-    def test_更新後のvisible_stateには本文_書き手名_tickが含まれない(self) -> None:
+    def test_after_visible_state_text_tick_not_included(self) -> None:
         """visible_state() 経由で周囲プレイヤーのプロンプトに本文が乗らない
         ことを current_state_builder レベルの前提として保証する。"""
         svc = WorldGraphEffectService()
@@ -282,7 +287,7 @@ class TestWritePlayerTextEffect:
         assert "sign_author_name" not in visible
         assert "sign_written_tick" not in visible
 
-    def test_上書き後もhidden_state_keysが維持される(self) -> None:
+    def test_after_hidden_state_keys_preserved(self) -> None:
         """2人目が書き込んで上書きしても hidden 属性が消えないことを保証する。"""
         svc = WorldGraphEffectService()
         sign = _sign()
@@ -317,7 +322,7 @@ class TestWritePlayerTextEffect:
         }
         assert "sign_text" not in updated.visible_state()
 
-    def test_効果サマリのstate_deltaに本文_書き手名_tickが乗らない(self) -> None:
+    def test_state_delta_text_tick_not_included(self) -> None:
         """description には「書き込んだ」という行為の可視性は残すが、
         state_delta からは本文相当の 3 key を除外する。"""
         svc = WorldGraphEffectService()
@@ -348,7 +353,8 @@ class TestWritePlayerTextEffect:
 class TestShowPlayerTextEffect:
     """SHOW_PLAYER_TEXT: state から「『本文』 — 書き手名」形式の message を組む。"""
 
-    def test_書かれていれば本文と書き手名がmessageに現れる(self) -> None:
+    def test_text_message(self) -> None:
+        """書かれていれば本文と書き手名がmessageに現れる。"""
         svc = WorldGraphEffectService()
         sign = _sign({
             "sign_text": "北へ行くと水場がある",
@@ -367,7 +373,8 @@ class TestShowPlayerTextEffect:
         )
         assert result.messages == ("『北へ行くと水場がある』 — アリス",)
 
-    def test_未記入なら何も書かれていないと表示される(self) -> None:
+    def test_displayed(self) -> None:
+        """未記入なら何も書かれていないと表示される。"""
         svc = WorldGraphEffectService()
         sign = _sign()
         effect = InteractionEffect(
@@ -382,7 +389,8 @@ class TestShowPlayerTextEffect:
         )
         assert result.messages == ("何も書かれていない。",)
 
-    def test_読む行為はstateを変更せず第三者観測effectを積まない(self) -> None:
+    def test_line_state_observation_effect(self) -> None:
+        """読む行為はstateを変更せず第三者観測effectを積まない。"""
         svc = WorldGraphEffectService()
         sign = _sign({"sign_text": "メモ", "sign_author_name": "アリス"})
         effect = InteractionEffect(
@@ -407,7 +415,8 @@ class TestSpotInteractionServicePropagatesSignParams:
     """SpotInteractionService.execute_interaction 経由でも interaction_parameters /
     acting_player_display_name が effect_service まで伝搬することを保証する。"""
 
-    def test_write_action_経由でtextと書き手名がstateに書き込まれる(self) -> None:
+    def test_write_action_via_text_state(self) -> None:
+        """write action 経由でtextと書き手名がstateに書き込まれる。"""
         from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
             SpotInteractionService,
         )

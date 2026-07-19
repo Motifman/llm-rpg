@@ -106,7 +106,8 @@ class TestActiveEffectsCodec:
         assert dst_agg._active_effects[0].effect_type == StatusEffectType.ATTACK_UP
         assert dst_agg._active_effects[0].value == 1.2
 
-    def test_空_effects_でも_動く(self) -> None:
+    def test_empty_effects_works(self) -> None:
+        """空 effects でも 動く。"""
         agg = _make_status_agg(effects=[])
         repo = _repo_stub({PlayerId(1): agg})
         captured = PlayerActiveEffectsSubsystemCodec().capture(
@@ -116,7 +117,7 @@ class TestActiveEffectsCodec:
 
 
 class TestAttentionLevelCodec:
-    def test_capture_restore_round_trip(self) -> None:
+    def test_capture_restore_round_trip_2(self) -> None:
         src_agg = _make_status_agg(attention=AttentionLevel.FILTER_SOCIAL)
         captured = PlayerAttentionLevelSubsystemCodec().capture(
             _runtime_for_player(_repo_stub({PlayerId(1): src_agg}))
@@ -132,14 +133,16 @@ class TestAttentionLevelCodec:
 
 
 class TestPursuitStateCodec:
-    def test_pursuit_None_は_None_で_往復(self) -> None:
+    def test_pursuit_none_round_trips(self) -> None:
+        """pursuitNone は None で往復。"""
         src_agg = _make_status_agg()
         captured = PlayerPursuitStateSubsystemCodec().capture(
             _runtime_for_player(_repo_stub({PlayerId(1): src_agg}))
         )
         assert captured["entries"][0]["pursuit"] is None
 
-    def test_active_pursuit_を_往復(self) -> None:
+    def test_active_pursuit_round_trips(self) -> None:
+        """activepursuit を往復。"""
         pursuit = PursuitState(
             actor_id=WorldObjectId(1),
             target_id=WorldObjectId(2),
@@ -174,7 +177,8 @@ class TestPursuitStateCodec:
         assert restored.target_snapshot.coordinate.x == 10
         assert restored.last_known.observed_at_tick == WorldTick(7)
 
-    def test_failure_reason_の往復(self) -> None:
+    def test_failure_reason_round_trips(self) -> None:
+        """failure reason の往復。"""
         # PursuitState の invariant: target_snapshot か last_known 必須
         pursuit = PursuitState(
             actor_id=WorldObjectId(1),
@@ -198,7 +202,8 @@ class TestPursuitStateCodec:
 
 
 class TestSpotNavigationStateCodec:
-    def test_at_rest_を_往復(self) -> None:
+    def test_rest_round_trips(self) -> None:
+        """atrest を往復。"""
         sn = PlayerSpotNavigationState.at_rest(spot_id=SpotId(1))
         src_agg = _make_status_agg()
         src_agg._spot_navigation_state = sn
@@ -216,7 +221,8 @@ class TestSpotNavigationStateCodec:
         assert dst_agg._spot_navigation_state.current_spot_id == SpotId(1)
         assert dst_agg._spot_navigation_state.is_traveling is False
 
-    def test_traveling_state_を_往復(self) -> None:
+    def test_traveling_state_round_trips(self) -> None:
+        """travelingstate を往復。"""
         sn = PlayerSpotNavigationState(
             current_spot_id=SpotId(1),
             current_sub_location_id=None,
@@ -244,7 +250,8 @@ class TestSpotNavigationStateCodec:
         assert restored.ticks_remaining_on_current_leg == 2
         assert restored.leg_travel_ticks == (3, 5)
 
-    def test_None_state_を_往復(self) -> None:
+    def test_none_state_round_trips(self) -> None:
+        """Nonestate を往復。"""
         src_agg = _make_status_agg()
         src_agg._spot_navigation_state = None
         captured = PlayerSpotNavigationStateSubsystemCodec().capture(
@@ -263,7 +270,8 @@ class TestUnsupportedSchemaVersion:
             PlayerSpotNavigationStateSubsystemCodec,
         ],
     )
-    def test_未サポート_schema_version_は_例外(self, codec_cls) -> None:
+    def test_unsupported_schema_version_raises_exception(self, codec_cls) -> None:
+        """未サポート schemaversion は例外。"""
         codec = codec_cls()
         with pytest.raises(ValueError, match="schema_version"):
             codec.restore(SimpleNamespace(), {"schema_version": 999})

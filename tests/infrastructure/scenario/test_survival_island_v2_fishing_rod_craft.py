@@ -49,19 +49,22 @@ def _crafting_log(raw: dict) -> dict:
 class TestCraftingLogObject:
     """`crafting_log` object と craft_fishing_rod interaction の存在保証。"""
 
-    def test_campsite_に_crafting_log_object_が_存在(self, raw_scenario) -> None:
+    def test_campsite_crafting_log_object(self, raw_scenario) -> None:
+        """campsite に craftinglogobject が存在。"""
         cs = _campsite(raw_scenario)
         ids = [o["id"] for o in cs["interior"]["objects"]]
         assert "crafting_log" in ids
 
-    def test_craft_fishing_rod_interaction_が_存在(self, raw_scenario) -> None:
+    def test_craft_fishing_rod_interaction(self, raw_scenario) -> None:
+        """craftfishingrodinteraction が存在。"""
         log = _crafting_log(raw_scenario)
         action_names = [i["action_name"] for i in log["interactions"]]
         assert "craft_fishing_rod" in action_names
 
-    def test_preconditions_は_bone_knife_driftwood_vine_rope_の_3_件(
+    def test_preconditions_bone_knife_driftwood_vine_rope_three(
         self, raw_scenario,
     ) -> None:
+        """preconditions は bone knife driftwood vine rope の 3 件。"""
         log = _crafting_log(raw_scenario)
         interaction = next(
             i for i in log["interactions"] if i["action_name"] == "craft_fishing_rod"
@@ -72,9 +75,10 @@ class TestCraftingLogObject:
         }
         assert required == {"bone_knife", "driftwood", "vine_rope"}
 
-    def test_効果は_driftwood_と_vine_rope_を_消費し_fishing_rod_を_付与(
+    def test_driftwood_vine_rope_fishing_rod(
         self, raw_scenario,
     ) -> None:
+        """効果は driftwood と vinerope を消費し fishingrod を付与。"""
         log = _crafting_log(raw_scenario)
         interaction = next(
             i for i in log["interactions"] if i["action_name"] == "craft_fishing_rod"
@@ -90,7 +94,7 @@ class TestCraftingLogObject:
         assert sorted(removed) == ["driftwood", "vine_rope"]
         assert given == ["fishing_rod"]
 
-    def test_bone_knife_は_消費されない_道具扱い(self, raw_scenario) -> None:
+    def test_bone_knife_not_consumed(self, raw_scenario) -> None:
         """ナイフは precondition では要求するが、消費はしない (= 道具)。"""
         log = _crafting_log(raw_scenario)
         interaction = next(
@@ -106,9 +110,10 @@ class TestCraftingLogObject:
 class TestCampsiteDescriptionMentionsCrafting:
     """campsite description が crafting_log の存在を匂わせる (G2 hint)。"""
 
-    def test_campsite_description_に_加工_keyword_が_含まれる(
+    def test_campsite_description_keyword_included(
         self, raw_scenario,
     ) -> None:
+        """campsitedescription に加工 keyword が含まれる。"""
         cs = _campsite(raw_scenario)
         desc = cs["description"]
         # LLM が "ここで道具が作れる" と読み取れるか

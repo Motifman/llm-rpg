@@ -95,7 +95,7 @@ class TestCrossTickFailureDetection:
             current_tick_provider=tick_provider,
         )
 
-    def test_同一失敗が_window内で_3回_で警告が発火する(self) -> None:
+    def test_emits_warning_for_same_failure_window_three_times(self) -> None:
         """ベリー gather 3 連発 (tick 96/104/108) を模す。間に他 tool が挟まっても
         streak は切れているが、cross_tick 検出は起きる。"""
         buffer = _StubBuffer()
@@ -156,7 +156,7 @@ class TestCrossTickFailureDetection:
             == "INTERACTION_PRECONDITION_FAILED"
         )
 
-    def test_window外の失敗は_カウントされない(self) -> None:
+    def test_window_failure_count(self) -> None:
         """window (default 20) を跨いだ古い失敗はドロップされる。"""
         buffer = _StubBuffer()
         tick = _TickProvider(start=0)
@@ -178,7 +178,7 @@ class TestCrossTickFailureDetection:
             "各 tick で failure history には 1 件しか残らないはずなので 3 回に到達しない"
         )
 
-    def test_成功は_cross_tick_failure_としてはカウントされない(self) -> None:
+    def test_success_cross_tick_failure_count(self) -> None:
         """success=True は failure history に入らない (cross_tick_failure 側)。
         既存の連続 streak 側は success 情報を見ないので、同一 args 連発なら
         従来 warning は発火するが、その pattern は cross_tick_failure では
@@ -203,7 +203,7 @@ class TestCrossTickFailureDetection:
             for _, e in buffer.appended
         ), "success=True の呼び出しが cross_tick_failure カウントに入っている"
 
-    def test_異なる_error_code_は_別カウント(self) -> None:
+    def test_error_code_different_count(self) -> None:
         """同 tool + 同 args でも error_code が違えば別カウント (root cause
         違いとして扱う)。"""
         buffer = _StubBuffer()
@@ -228,7 +228,7 @@ class TestCrossTickFailureDetection:
             "PRECONDITION_FAILED は 2 回、ACTION_NOT_FOUND は 1 回で閾値未達"
         )
 
-    def test_同一パターン警告の再発火は_window_経過後に許可される(self) -> None:
+    def test_emits_warning_for_window(self) -> None:
         """code-review MEDIUM 1 反映: ``_cross_tick_last_warn`` の pruning が
         機能しているか。同一 pattern が window (default 20 tick) 経過後に
         再度 3 回反復した場合、再警告が発火する。"""
@@ -277,7 +277,7 @@ class TestCrossTickFailureDetection:
             " pruning されていない疑い)"
         )
 
-    def test_発火時に_CrossTickFailureTrigger_を返す(self) -> None:
+    def test_returns_trigger_cross_tick_failure_trigger(self) -> None:
         """U6 (STRUCTURED_FAILURE): 警告が実際に発火した回だけ
         ``CrossTickFailureTrigger`` を返す。呼び出し側 (presentation 層) が
         being を解決して BeliefEvidence へ転記するための最小情報。"""
@@ -309,7 +309,7 @@ class TestCrossTickFailureDetection:
             window=20,
         )
 
-    def test_閾値未達_かつ_streak警告未発火のときは_None_を返す(self) -> None:
+    def test_emits_warning_for_streak_none(self) -> None:
         """cross_tick も streak も発火しなかった呼び出しは None を返す
         (= 呼び出し側が誤って転記しないための契約)。"""
         buffer = _StubBuffer()
@@ -327,7 +327,7 @@ class TestCrossTickFailureDetection:
 
         assert result is None
 
-    def test_success_error_code_default_の呼び出しは_既存挙動を壊さない(self) -> None:
+    def test_success_error_code_default_call_existing(self) -> None:
         """新パラメータ ``success`` / ``error_code`` を渡さない旧 API 呼び出しは、
         (a) 失敗としてカウントされず、(b) 既存の連続 streak 検出は動く。"""
         buffer = _StubBuffer()

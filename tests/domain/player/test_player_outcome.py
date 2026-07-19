@@ -14,15 +14,18 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 class TestPlayerOutcomeEnum:
     """Enum の基本性質。"""
 
-    def test_UNRESOLVED_は_未確定として扱う(self) -> None:
+    def test_unresolved(self) -> None:
+        """UNRESOLVED は未確定として扱う。"""
         assert PlayerOutcomeEnum.UNRESOLVED.is_resolved is False
 
-    def test_RESCUED_DEAD_STRANDED_は_確定として扱う(self) -> None:
+    def test_rescued_dead_stranded(self) -> None:
+        """RESCUEDDEADSTRANDED は確定として扱う。"""
         assert PlayerOutcomeEnum.RESCUED.is_resolved is True
         assert PlayerOutcomeEnum.DEAD.is_resolved is True
         assert PlayerOutcomeEnum.STRANDED.is_resolved is True
 
-    def test_display_label_は日本語(self) -> None:
+    def test_display_label_japanese(self) -> None:
+        """display label は日本語。"""
         assert PlayerOutcomeEnum.RESCUED.display_label == "救助"
         assert PlayerOutcomeEnum.DEAD.display_label == "死亡"
         assert PlayerOutcomeEnum.STRANDED.display_label == "取り残され"
@@ -31,17 +34,18 @@ class TestPlayerOutcomeEnum:
 class TestRegistryInit:
     """initial 状態と問い合わせ。"""
 
-    def test_new_for_players_で_全員_UNRESOLVED(self) -> None:
+    def test_new_players_all_players_unresolved(self) -> None:
+        """newforplayers で全員 UNRESOLVED。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1), PlayerId(2)])
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
         assert reg.get_outcome(PlayerId(2)) is PlayerOutcomeEnum.UNRESOLVED
 
-    def test_未登録プレイヤーの_get_outcome_は_UNRESOLVED(self) -> None:
+    def test_unregistered_player_get_outcome_unresolved(self) -> None:
         """登録されていない id を引いても auto-init で UNRESOLVED が返る。"""
         reg = PlayerOutcomeRegistry()
         assert reg.get_outcome(PlayerId(99)) is PlayerOutcomeEnum.UNRESOLVED
 
-    def test_空_registry_の_all_resolved_は_True(self) -> None:
+    def test_empty_registry_all_resolved_true(self) -> None:
         """vacuous truth: 「全員」が空なら全員確定扱い。"""
         reg = PlayerOutcomeRegistry()
         assert reg.all_resolved() is True
@@ -50,13 +54,14 @@ class TestRegistryInit:
 class TestSetOutcome:
     """outcome の確定遷移。"""
 
-    def test_UNRESOLVED_から_DEAD_への遷移は変更扱い(self) -> None:
+    def test_unresolved_dead_treated_changed(self) -> None:
+        """UNRESOLVED から DEAD への遷移は変更扱い。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         changed = reg.set_outcome(PlayerId(1), PlayerOutcomeEnum.DEAD)
         assert changed is True
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.DEAD
 
-    def test_既に_resolved_なら_上書きされず_no_op(self) -> None:
+    def test_resolved_op(self) -> None:
         """RESCUED で確定したプレイヤーが後から DEAD event を受けても上書きしない。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         reg.set_outcome(PlayerId(1), PlayerOutcomeEnum.RESCUED)
@@ -64,7 +69,7 @@ class TestSetOutcome:
         assert changed is False
         assert reg.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.RESCUED
 
-    def test_UNRESOLVED_への遷移は_no_op(self) -> None:
+    def test_unresolved_op(self) -> None:
         """UNRESOLVED 設定は意味がないので silent に skip。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         changed = reg.set_outcome(PlayerId(1), PlayerOutcomeEnum.UNRESOLVED)
@@ -74,7 +79,8 @@ class TestSetOutcome:
 class TestCallback:
     """outcome 変化 callback の呼び出し挙動。"""
 
-    def test_変化時に_callback_が呼ばれる(self) -> None:
+    def test_calls_callback(self) -> None:
+        """変化時に callback が呼ばれる。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         calls: list[tuple] = []
         reg.register_callback(
@@ -85,7 +91,8 @@ class TestCallback:
 
         assert calls == [(1, "UNRESOLVED", "DEAD")]
 
-    def test_既_resolved_への_set_は_callback_を呼ばない(self) -> None:
+    def test_resolved_set_callback_does_not_call(self) -> None:
+        """既 resolved への set は callback を呼ばない。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         reg.set_outcome(PlayerId(1), PlayerOutcomeEnum.RESCUED)
         calls: list[tuple] = []
@@ -100,13 +107,15 @@ class TestCallback:
 class TestAggregateQueries:
     """all_resolved / unresolved_player_ids の整合性。"""
 
-    def test_全員確定したら_all_resolved_は_True(self) -> None:
+    def test_all_players_all_resolved_true(self) -> None:
+        """全員確定したら all resolved は True。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1), PlayerId(2)])
         reg.set_outcome(PlayerId(1), PlayerOutcomeEnum.RESCUED)
         reg.set_outcome(PlayerId(2), PlayerOutcomeEnum.DEAD)
         assert reg.all_resolved() is True
 
-    def test_1_人_未確定なら_unresolved_に出る(self) -> None:
+    def test_one_unresolved_rendered(self) -> None:
+        """1 人 未確定なら unresolved に出る。"""
         reg = PlayerOutcomeRegistry.new_for_players(
             [PlayerId(1), PlayerId(2), PlayerId(3)]
         )

@@ -46,26 +46,28 @@ def _build_executor(*, speech_service):
 class TestSayInlineHelper:
     """``_maybe_emit_say_inline`` の境界条件 (#404 後続)。"""
 
-    def test_speech_service_未注入なら_no_op(self) -> None:
+    def test_speech_service_uninjected_op(self) -> None:
         """speech_service=None で say_inline 指定 → 例外なく no-op。"""
         executor = _build_executor(speech_service=None)
         # 例外を投げないことを確認 (return value なし)
         executor._maybe_emit_say_inline(1, {"say_inline": "hello"})
 
-    def test_say_inline_未指定なら_speak_呼ばれない(self) -> None:
+    def test_does_not_call_say_inline_speak_2(self) -> None:
+        """say inline 未指定なら speak 呼ばれない。"""
         speech = MagicMock()
         executor = _build_executor(speech_service=speech)
         executor._maybe_emit_say_inline(1, {})
         speech.speak.assert_not_called()
 
-    def test_say_inline_空文字なら_speak_呼ばれない(self) -> None:
+    def test_does_not_call_say_inline_empty_string_speak(self) -> None:
+        """say inline 空文字なら speak 呼ばれない。"""
         speech = MagicMock()
         executor = _build_executor(speech_service=speech)
         executor._maybe_emit_say_inline(1, {"say_inline": ""})
         executor._maybe_emit_say_inline(1, {"say_inline": "   "})
         speech.speak.assert_not_called()
 
-    def test_say_inline_非文字列なら_speak_呼ばれない(self) -> None:
+    def test_does_not_call_say_inline_speak(self) -> None:
         """JSON で number 等が混入しても落ちない。"""
         speech = MagicMock()
         executor = _build_executor(speech_service=speech)
@@ -73,7 +75,8 @@ class TestSayInlineHelper:
         executor._maybe_emit_say_inline(1, {"say_inline": None})
         speech.speak.assert_not_called()
 
-    def test_say_inline_有効値で_SAY_channel_で_speak_される(self) -> None:
+    def test_say_inline_value_say_channel_speak(self) -> None:
+        """say inline 有効値で SAY channel で speak される。"""
         speech = MagicMock()
         executor = _build_executor(speech_service=speech)
         executor._maybe_emit_say_inline(1, {"say_inline": "先に行く"})
@@ -85,7 +88,7 @@ class TestSayInlineHelper:
         # whisper 用の target は None (= 同 spot 内 broadcast)
         assert cmd.target_player_id is None
 
-    def test_80_char_を超えると切り詰められる(self) -> None:
+    def test_80_char_exceeds(self) -> None:
         """LLM が schema を無視して長文を返した場合の防御。"""
         speech = MagicMock()
         executor = _build_executor(speech_service=speech)
@@ -94,7 +97,7 @@ class TestSayInlineHelper:
         cmd = speech.speak.call_args[0][0]
         assert len(cmd.content) == 80
 
-    def test_speak_が例外を投げても親_action_を倒さない(self) -> None:
+    def test_speak_exception_does_not_fail_parent_action(self) -> None:
         """fail-safe: travel/give が say_inline 由来で巻き戻るのを防ぐ。"""
         speech = MagicMock()
         speech.speak.side_effect = RuntimeError("speech boom")
@@ -106,7 +109,8 @@ class TestSayInlineHelper:
 class TestSayInlineToolDef:
     """tool catalog 定義に say_inline が含まれている (回帰検知)。"""
 
-    def test_travel_to_definition_に_say_inline_が_optional_で含まれる(self) -> None:
+    def test_travel_definition_say_inline_optional_included(self) -> None:
+        """travel to definition に say inline が optional で含まれる。"""
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             TRAVEL_TO_DEFINITION,
         )
@@ -117,7 +121,8 @@ class TestSayInlineToolDef:
         # 80 char 上限
         assert props["say_inline"]["maxLength"] == 80
 
-    def test_give_item_definition_に_say_inline_が_optional_で含まれる(self) -> None:
+    def test_give_item_definition_say_inline_optional_included(self) -> None:
+        """give item definition に say inline が optional で含まれる。"""
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             GIVE_ITEM_DEFINITION,
         )
@@ -125,7 +130,8 @@ class TestSayInlineToolDef:
         assert "say_inline" in props
         assert "say_inline" not in GIVE_ITEM_DEFINITION.parameters["required"]
 
-    def test_drop_item_definition_に_say_inline_が_optional_で含まれる(self) -> None:
+    def test_drop_item_definition_say_inline_optional_included(self) -> None:
+        """drop item definition に say inline が optional で含まれる。"""
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             DROP_ITEM_DEFINITION,
         )
@@ -133,7 +139,8 @@ class TestSayInlineToolDef:
         assert "say_inline" in props
         assert "say_inline" not in DROP_ITEM_DEFINITION.parameters["required"]
 
-    def test_pickup_item_definition_に_say_inline_が_optional_で含まれる(self) -> None:
+    def test_pickup_item_definition_say_inline_optional_included(self) -> None:
+        """pickup item definition に say inline が optional で含まれる。"""
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             PICKUP_ITEM_DEFINITION,
         )
@@ -144,7 +151,8 @@ class TestSayInlineToolDef:
     # PR-ι (say_inline 拡張): interact / attack / use_item / tend_to_player
     # にも say_inline を追加。物語のコミュニケーションを豊かにするため。
 
-    def test_interact_definition_に_say_inline_が_optional_で含まれる(self) -> None:
+    def test_interact_definition_say_inline_optional_included(self) -> None:
+        """interact definition に say inline が optional で含まれる。"""
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             INTERACT_DEFINITION,
         )
@@ -152,7 +160,8 @@ class TestSayInlineToolDef:
         assert "say_inline" in props
         assert "say_inline" not in INTERACT_DEFINITION.parameters["required"]
 
-    def test_attack_definition_に_say_inline_が_optional_で含まれる(self) -> None:
+    def test_attack_definition_say_inline_optional_included(self) -> None:
+        """attack definition に say inline が optional で含まれる。"""
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             ATTACK_DEFINITION,
         )
@@ -160,7 +169,8 @@ class TestSayInlineToolDef:
         assert "say_inline" in props
         assert "say_inline" not in ATTACK_DEFINITION.parameters["required"]
 
-    def test_use_item_definition_に_say_inline_が_optional_で含まれる(self) -> None:
+    def test_use_item_definition_say_inline_optional_included(self) -> None:
+        """use item definition に say inline が optional で含まれる。"""
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             USE_ITEM_DEFINITION,
         )
@@ -168,7 +178,8 @@ class TestSayInlineToolDef:
         assert "say_inline" in props
         assert "say_inline" not in USE_ITEM_DEFINITION.parameters["required"]
 
-    def test_tend_to_player_definition_に_say_inline_が_optional_で含まれる(self) -> None:
+    def test_tend_player_definition_say_inline_optional_included(self) -> None:
+        """tend to player definition に say inline が optional で含まれる。"""
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             TEND_TO_PLAYER_DEFINITION,
         )

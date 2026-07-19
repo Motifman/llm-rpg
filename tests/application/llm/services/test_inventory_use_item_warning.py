@@ -22,36 +22,42 @@ from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import 
 class TestFormatItemTypeTag:
     """``_format_item_type_tag`` が item_type 文字列を表示用タグに整形する挙動。"""
 
-    def test_consumable_は_食料_タグだけ(self) -> None:
+    def test_consumable(self) -> None:
         """消費可能なアイテムは「使用不可」を付けない。"""
         assert _format_item_type_tag("consumable") == " (食料)"
 
-    def test_material_は_素材_かつ_使用不可(self) -> None:
+    def test_material(self) -> None:
         """流木のような素材は use_item で使えないことを明示する。"""
         assert _format_item_type_tag("material") == " (素材・使用不可)"
 
-    def test_tool_は_道具_かつ_使用不可(self) -> None:
+    def test_tool(self) -> None:
+        """tool は道具かつ使用不可。"""
         assert _format_item_type_tag("tool") == " (道具・使用不可)"
 
-    def test_equipment_は_装備_かつ_使用不可(self) -> None:
+    def test_equipment(self) -> None:
+        """equipment は装備かつ使用不可。"""
         assert _format_item_type_tag("equipment") == " (装備・使用不可)"
 
-    def test_key_item_は_重要_かつ_使用不可(self) -> None:
+    def test_key_item_is_marked_important_and_unusable(self) -> None:
+        """keyitem は重要かつ使用不可。"""
         assert _format_item_type_tag("key_item") == " (重要・使用不可)"
 
-    def test_quest_は_任務品_かつ_使用不可(self) -> None:
+    def test_quest(self) -> None:
+        """quest は任務品かつ使用不可。"""
         assert _format_item_type_tag("quest") == " (任務品・使用不可)"
 
-    def test_cosmetic_は_装飾_かつ_使用不可(self) -> None:
+    def test_cosmetic(self) -> None:
+        """cosmetic は装飾かつ使用不可。"""
         assert _format_item_type_tag("cosmetic") == " (装飾・使用不可)"
 
-    def test_other_は_使用不可_だけ(self) -> None:
+    def test_other(self) -> None:
         """``other`` は日本語 type 名が無いので使用不可だけ表示する。"""
         assert _format_item_type_tag("other") == " (使用不可)"
 
-    def test_unknown_type_は_空文字_fallback(self) -> None:
+    def test_unknown_type_empty_string_fallback(self) -> None:
         """未知 type は何も表示しない (= 既存挙動)。"""
         assert _format_item_type_tag("unknown_xyz") == ""
 
-    def test_空文字_は_空文字_fallback(self) -> None:
+    def test_empty_string_empty_string_fallback(self) -> None:
+        """空文字は空文字 fallback。"""
         assert _format_item_type_tag("") == ""

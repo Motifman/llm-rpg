@@ -44,23 +44,24 @@ class TestNewlyAddedRemediationCodes:
             "INTERACTION_PRECONDITION_FAILED",
         ],
     )
-    def test_code_が_mapping_に_登録されている(self, code: str) -> None:
+    def test_code_mapping(self, code: str) -> None:
+        """code が mapping に登録されている。"""
         assert code in DEFAULT_REMEDIATION_BY_ERROR_CODE, (
             f"{code} が remediation_mapping に未登録。汎用フォールバック "
             "「エラー内容を確認し...」に落ちて LLM が対処を選べない"
         )
 
-    def test_EXHAUSTED_remediation_は_wait_食事等の回復を示唆する(self) -> None:
+    def test_exhausted_remediation_wait(self) -> None:
         """疲労限界で重い tool が block されているケース → 回復手段を示唆。"""
         msg = get_remediation("EXHAUSTED")
         assert "wait" in msg or "回復" in msg or "食事" in msg or "食べる" in msg
 
-    def test_INTERACTION_PRECONDITION_FAILED_remediation_は_object状態確認を示唆する(self) -> None:
+    def test_interaction_precondition_failed_remediation_object_state(self) -> None:
         """gather の枯渇 / 既に開けた箱の再操作 → object 状態の再確認を示唆。"""
         msg = get_remediation("INTERACTION_PRECONDITION_FAILED")
         assert "状態" in msg or "object" in msg.lower() or "オブジェクト" in msg
 
-    def test_UNSUPPORTED_TOOL_remediation_は_利用可能tool確認を示唆する(self) -> None:
+    def test_unsupported_tool_remediation_tool(self) -> None:
         """typo / 未配線 tool の呼び出し → 有効 tool 一覧の確認を示唆。"""
         msg = get_remediation("UNSUPPORTED_TOOL")
         assert (
@@ -69,12 +70,12 @@ class TestNewlyAddedRemediationCodes:
             or "利用可能" in msg
         )
 
-    def test_ATTACK_FAILED_remediation_は_対象状態確認を示唆する(self) -> None:
+    def test_attack_failed_remediation_target_state(self) -> None:
         """attack が失敗 → 対象状態 (死骸 / 逃走 / 距離) の確認を示唆。"""
         msg = get_remediation("ATTACK_FAILED")
         assert "対象" in msg or "状態" in msg or "モンスター" in msg
 
-    def test_INVALID_STATE_remediation_は_一時的な問題を示唆する(self) -> None:
+    def test_invalid_state_remediation(self) -> None:
         """内部整合性違反系。LLM は再試行するか別の tool を選ぶかの判断が必要。"""
         msg = get_remediation("INVALID_STATE")
         assert "一時" in msg or "再試" in msg or "別" in msg

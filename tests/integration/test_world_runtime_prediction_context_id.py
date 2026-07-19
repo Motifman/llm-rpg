@@ -29,7 +29,8 @@ _SCENARIO_PATH = (
 
 
 class TestWorldRuntimePredictionContextIdWiring:
-    def test_build_full_prompt_の直後の_do_wait_で_id_が_consume_される(self) -> None:
+    def test_build_full_prompt_after_do_wait_id_consume(self) -> None:
+        """build full prompt の直後の do wait で id が consume される。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=runtime_config(prediction_context_id_enabled=True),
@@ -55,7 +56,7 @@ class TestWorldRuntimePredictionContextIdWiring:
         assert len(entries) == 1
         assert entries[0].prediction_context_id == issued_id
 
-    def test_build_を挟まず_do_wait_だけを呼ぶと_id_は_None(self) -> None:
+    def test_calls_id_none_build_do_wait(self) -> None:
         """id は build 経由でしか発行されない。build を経ない action 記録は
         引き続き None (= 既存挙動と同じ)。"""
         runtime = create_world_runtime(
@@ -70,7 +71,7 @@ class TestWorldRuntimePredictionContextIdWiring:
         assert len(entries) == 1
         assert entries[0].prediction_context_id is None
 
-    def test_build_だけ呼んで_record_されないと次の_build_で破棄される(self) -> None:
+    def test_build_record_build(self) -> None:
         """no-tool ターン相当: build だけ 2 回連続で呼ぶと 1 回目の id は
         consume されないまま破棄される。"""
         runtime = create_world_runtime(
@@ -88,7 +89,7 @@ class TestWorldRuntimePredictionContextIdWiring:
 
 
 class TestPredictionContextIdDisabledByDefault:
-    def test_env_未設定なら_ledger_は_None_で_prediction_context_id_は常に_None(
+    def test_env_unset_ledger_none_prediction_context_id_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """共通規約 §0: 新機構は明示的に有効化しない限り動かさない。"""

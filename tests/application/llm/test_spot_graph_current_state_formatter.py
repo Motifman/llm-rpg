@@ -88,7 +88,7 @@ class TestPlayerStateSection:
 class TestObjectStateSection:
     """スポット内オブジェクトの state セクションの表示。"""
 
-    def test_旧_スポット内オブジェクトの状態_block_は_出力されない(self) -> None:
+    def test_legacy_spot_state_block_not_output(self) -> None:
         """PR-X (Y_after_pr639_640 後続): object の state は
         SpotGraphUiContextBuilder._build_object_section が「オブジェクト:」
         section 内 inline (``(key=value)``) で表示する方針に統一。
@@ -131,7 +131,7 @@ class TestObjectStateSection:
 class TestRenderValue:
     """_render_value のエッジケース。"""
 
-    def test_none_renders_as_null(self) -> None:
+    def test_None_renders_as_null(self) -> None:
         """None は文字列の "None" ではなく "null" として表示される。"""
         snap = _empty_snap(player_state={"target": None})
         text = SpotGraphCurrentStateFormatter().format(_make_dto(snap))

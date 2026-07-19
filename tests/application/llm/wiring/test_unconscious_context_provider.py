@@ -58,7 +58,8 @@ def _cue(value: str = "trap") -> tuple[EpisodicCue, ...]:
 
 
 class TestBeliefFormatting:
-    def test_belief_が_確信度付きで箇条書きになる(self) -> None:
+    def test_belief(self) -> None:
+        """belief が確信度付きで箇条書きになる。"""
         setup = make_semantic_being_setup()
         setup.provision(1)
         setup.populate(1, _entry(entry_id="b1", text="チェストはよく罠だ", confidence=0.85))
@@ -76,7 +77,8 @@ class TestBeliefFormatting:
 
         assert text == "- チェストはよく罠だ (確信度: 0.85)"
 
-    def test_belief_が無ければ空文字(self) -> None:
+    def test_belief_empty_string(self) -> None:
+        """belief が無ければ空文字。"""
         setup = make_semantic_being_setup()
         setup.provision(1)
         svc = SemanticPassiveRecallService(
@@ -91,9 +93,10 @@ class TestBeliefFormatting:
 
         assert provider(1, _cue()) == ""
 
-    def test_semantic_recall_service_が_None_なら_belief行は出ないが_L5行は出る(
+    def test_semantic_recall_service_none_belief_line_not_rendered_l5_line_rendered(
         self,
     ) -> None:
+        """semantic recall service が None なら belief行は出ないが L5行は出る。"""
         provider = build_unconscious_context_provider(
             semantic_recall_service_provider=lambda: None,
             long_summary_text_provider=lambda pid: "私について: 慎重",
@@ -103,7 +106,8 @@ class TestBeliefFormatting:
 
 
 class TestTopKCap:
-    def test_belief_は_top_k_件までしか出ない(self) -> None:
+    def test_belief_top_k_not_rendered(self) -> None:
+        """belief は top k 件までしか出ない。"""
         setup = make_semantic_being_setup()
         setup.provision(1)
         for i in range(8):
@@ -130,7 +134,8 @@ class TestTopKCap:
 
         assert len(text.splitlines()) == DEFAULT_UNCONSCIOUS_CONTEXT_BELIEF_TOP_K == 5
 
-    def test_top_k_を明示指定できる(self) -> None:
+    def test_top_k(self) -> None:
+        """top k を明示指定できる。"""
         setup = make_semantic_being_setup()
         setup.provision(1)
         for i in range(8):
@@ -158,7 +163,8 @@ class TestTopKCap:
 
         assert len(text.splitlines()) == 2
 
-    def test_top_k_が_0以下なら_ValueError(self) -> None:
+    def test_top_k_zero_raises_value_error(self) -> None:
+        """top k が 0以下なら ValueError。"""
         with pytest.raises(ValueError):
             build_unconscious_context_provider(
                 semantic_recall_service_provider=lambda: None, top_k=0
@@ -166,7 +172,8 @@ class TestTopKCap:
 
 
 class TestL5Appendix:
-    def test_L5テキストが末尾に足される(self) -> None:
+    def test_l5_last(self) -> None:
+        """L5テキストが末尾に足される。"""
         setup = make_semantic_being_setup()
         setup.provision(1)
         setup.populate(1, _entry(entry_id="b1", text="チェストはよく罠だ", confidence=0.5))
@@ -188,7 +195,8 @@ class TestL5Appendix:
             "私について: 慎重\nこの世界について: 罠が多い"
         )
 
-    def test_long_summary_text_provider_が空文字を返せばL5行は出ない(self) -> None:
+    def test_returns_l5_line_not_rendered_long_summary_text_provider_empty_string_when(self) -> None:
+        """long summary text provider が空文字を返せばL5行は出ない。"""
         provider = build_unconscious_context_provider(
             semantic_recall_service_provider=lambda: None,
             long_summary_text_provider=lambda pid: "",
@@ -196,7 +204,8 @@ class TestL5Appendix:
 
         assert provider(1, _cue()) == ""
 
-    def test_long_summary_text_provider_が_None_ならL5行を試みない(self) -> None:
+    def test_long_summary_text_provider_none_l5_line(self) -> None:
+        """long summary text provider が None ならL5行を試みない。"""
         provider = build_unconscious_context_provider(
             semantic_recall_service_provider=lambda: None,
         )
@@ -207,7 +216,8 @@ class TestL5Appendix:
 class TestDegradation:
     """belief / L5 取得の失敗は空文字に縮退し、chunk 補完を止めない。"""
 
-    def test_semantic_recall_service_provider_が例外を投げても空文字(self) -> None:
+    def test_semantic_recall_service_provider_empty_string_raises_exception(self) -> None:
+        """semantic recall service provider が例外を投げても空文字。"""
         def _raise() -> None:
             raise RuntimeError("resolver not ready")
 
@@ -217,7 +227,8 @@ class TestDegradation:
 
         assert provider(1, _cue()) == ""
 
-    def test_retrieve_が例外を投げても空文字に縮退する(self) -> None:
+    def test_retrieve_exception_falls_back_to_empty_string(self) -> None:
+        """retrieve が例外を投げても空文字に縮退する。"""
         class _RaisingService:
             def retrieve(self, **kwargs):
                 raise RuntimeError("store down")
@@ -228,7 +239,8 @@ class TestDegradation:
 
         assert provider(1, _cue()) == ""
 
-    def test_long_summary_text_provider_が例外を投げても_belief行は出る(self) -> None:
+    def test_long_summary_text_provider_belief_raises_exception(self) -> None:
+        """long summary text provider が例外を投げても belief行は出る。"""
         setup = make_semantic_being_setup()
         setup.provision(1)
         setup.populate(1, _entry(entry_id="b1", text="チェストはよく罠だ", confidence=0.5))

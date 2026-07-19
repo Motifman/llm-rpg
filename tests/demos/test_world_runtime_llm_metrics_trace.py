@@ -57,9 +57,10 @@ class _FakeLlmClient:
 class TestPhaseAMetricsSink:
     """Phase A 経由で LLM_CALL trace event が記録される。"""
 
-    def test_trace_recorder_があると_LLM_CALL_event_が_記録される(
+    def test_trace_recorder_llm_call_event_recorded(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """tracerecorder があると LLMCALLevent が記録される。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
@@ -96,7 +97,7 @@ class TestPhaseAMetricsSink:
         assert payload["reasoning_effort"] == "low"
         assert payload["tool_choice"] == "required"
 
-    def test_tick_は_sink_record_時点で_取得される(
+    def test_tick_is_captured_when_sink_records_metric(
         self, monkeypatch, tmp_path: Path
     ) -> None:
         """Review HIGH 2 対応: sink 構築時の固定 tick ではなく record 時の tick を使う。
@@ -147,9 +148,10 @@ class TestPhaseAMetricsSink:
             f"sink 構築時の tick ({tick_before}) が記録された (= stale)"
         )
 
-    def test_trace_recorder_が_None_なら_sink_は_None(
+    def test_trace_recorder_none_sink_none(
         self, monkeypatch, tmp_path: Path
     ) -> None:
+        """trace recorder が None なら sink は None。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)

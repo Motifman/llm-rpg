@@ -27,19 +27,20 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 class TestHabituationStrengthDefault:
     """デフォルト倍率は 2 (= penalty を 2 倍してスコアから引く)。"""
 
-    def test_デフォルト倍率は_2(self) -> None:
+    def test_default_two(self) -> None:
         """Y_after_issue621 で観測された「penalty が score を打ち消せない」を
         防ぐ最小強度として 2 を選んでいる。"""
         svc = EpisodicPassiveRecallRetrievalService(store=_StubStore())
         assert svc._habituation_strength == 2
 
-    def test_倍率を_明示しても_受け取る(self) -> None:
+    def test_documented_behavior(self) -> None:
+        """倍率を 明示しても 受け取る。"""
         svc = EpisodicPassiveRecallRetrievalService(
             store=_StubStore(), habituation_strength=3,
         )
         assert svc._habituation_strength == 3
 
-    def test_倍率_0_は_罰則無効化_経路として_許容(self) -> None:
+    def test_zero(self) -> None:
         """penalty を完全無効化したい (= 旧 #526 段階 2 直後の挙動を再現したい)
         場合の脱出口。"""
         svc = EpisodicPassiveRecallRetrievalService(
@@ -49,19 +50,21 @@ class TestHabituationStrengthDefault:
 
 
 class TestHabituationStrengthValidation:
-    def test_負の_strength_は_ValueError(self) -> None:
+    def test_negative_strength_raises_value_error(self) -> None:
+        """負の strength は ValueError。"""
         with pytest.raises(ValueError):
             EpisodicPassiveRecallRetrievalService(
                 store=_StubStore(), habituation_strength=-1,
             )
 
-    def test_strength_は_int(self) -> None:
+    def test_strength_int(self) -> None:
+        """strength は int。"""
         with pytest.raises(TypeError):
             EpisodicPassiveRecallRetrievalService(
                 store=_StubStore(), habituation_strength=1.5,  # type: ignore[arg-type]
             )
 
-    def test_bool_は_int_扱いされない(self) -> None:
+    def test_bool_int(self) -> None:
         """``isinstance(True, int) == True`` トラップ防止。"""
         with pytest.raises(TypeError):
             EpisodicPassiveRecallRetrievalService(

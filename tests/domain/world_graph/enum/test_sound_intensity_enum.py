@@ -19,13 +19,15 @@ from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
 class TestLevelOrdering:
     """level は 0 (静寂) - 3 (大音響) の整数で順序付け可能。"""
 
-    def test_level_は_期待値(self) -> None:
+    def test_level_value(self) -> None:
+        """level は期待値。"""
         assert SoundIntensityEnum.SILENT.level == 0
         assert SoundIntensityEnum.FAINT.level == 1
         assert SoundIntensityEnum.MODERATE.level == 2
         assert SoundIntensityEnum.LOUD.level == 3
 
-    def test_level_比較で_順序_を_扱える(self) -> None:
+    def test_level_order(self) -> None:
+        """level 比較で順序を扱える。"""
         # 直接比較ではなく level 整数経由で順序判定
         assert SoundIntensityEnum.LOUD.level > SoundIntensityEnum.SILENT.level
         assert SoundIntensityEnum.MODERATE.level > SoundIntensityEnum.FAINT.level
@@ -34,33 +36,39 @@ class TestLevelOrdering:
 class TestAttenuate:
     """1 hop ごとに 1 段階減衰、SILENT 以下にはならない。"""
 
-    def test_LOUD_1hop_は_MODERATE(self) -> None:
+    def test_loud_1hop_moderate(self) -> None:
+        """LOUD 1hop は MODERATE。"""
         assert (
             SoundIntensityEnum.LOUD.attenuate(1)
             == SoundIntensityEnum.MODERATE
         )
 
-    def test_LOUD_2hop_は_FAINT(self) -> None:
+    def test_loud_2hop_faint(self) -> None:
+        """LOUD 2hop は FAINT。"""
         assert SoundIntensityEnum.LOUD.attenuate(2) == SoundIntensityEnum.FAINT
 
-    def test_LOUD_3hop_は_SILENT(self) -> None:
+    def test_loud_3hop_silent(self) -> None:
+        """LOUD 3hop は SILENT。"""
         assert SoundIntensityEnum.LOUD.attenuate(3) == SoundIntensityEnum.SILENT
 
-    def test_LOUD_4hop_でも_SILENT_を_維持(self) -> None:
+    def test_loud_4hop_silent(self) -> None:
         """SILENT 以下にはならない (clamp)。"""
         assert SoundIntensityEnum.LOUD.attenuate(4) == SoundIntensityEnum.SILENT
 
-    def test_SILENT_は_何_hop_減衰しても_SILENT(self) -> None:
+    def test_silent_hop_silent(self) -> None:
+        """SILENT は何 hop 減衰しても SILENT。"""
         assert (
             SoundIntensityEnum.SILENT.attenuate(5)
             == SoundIntensityEnum.SILENT
         )
 
-    def test_hops_0_以下は_減衰なし(self) -> None:
+    def test_hops_zero_less(self) -> None:
+        """hops 0 以下は 減衰なし。"""
         assert SoundIntensityEnum.MODERATE.attenuate(0) == SoundIntensityEnum.MODERATE
         assert SoundIntensityEnum.MODERATE.attenuate(-1) == SoundIntensityEnum.MODERATE
 
-    def test_default_hops_は_1(self) -> None:
+    def test_default_hops_is_one(self) -> None:
+        """default hops は 1。"""
         assert (
             SoundIntensityEnum.LOUD.attenuate()
             == SoundIntensityEnum.MODERATE

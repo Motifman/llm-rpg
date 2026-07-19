@@ -139,7 +139,8 @@ def _object_state(runtime: Any, object_str_id: str) -> dict:
 class TestInteractParametersReachSignEffectThroughToolExecutor:
     """看板 (WRITE_PLAYER_TEXT) への貫通: ツール実行層 → do_interact → 効果適用。"""
 
-    def test_parameters_のtextが看板のstateまで届く(self, scenario_path: Path) -> None:
+    def test_parameters_text_state(self, scenario_path: Path) -> None:
+        """parameters のtextが看板のstateまで届く。"""
         runtime = create_world_runtime(scenario_path)
         executor = _build_executor(runtime)
         object_id = runtime.id_mapper.get_int("object", NOTICE_BOARD_OBJECT_ID)
@@ -160,7 +161,7 @@ class TestInteractParametersReachSignEffectThroughToolExecutor:
         # 書き手名も一緒に残る (= execute_interaction まで正しく到達した証拠)
         assert state["sign_author_name"]
 
-    def test_パズル用codeパラメータも同じ経路でstateまで届く(
+    def test_code_same_state(
         self, scenario_path: Path
     ) -> None:
         """暗証番号パネル (text_param_key=code) でも parameters が届く。
@@ -186,7 +187,7 @@ class TestInteractParametersReachSignEffectThroughToolExecutor:
         state = _object_state(runtime, CODE_LOCK_OBJECT_ID)
         assert state["sign_text"] == "1234"
 
-    def test_parameters未指定だとfailureとして返り本人に案内文言が見える(
+    def test_parameters_unspecified_failure_self(
         self, scenario_path: Path
     ) -> None:
         """PR-L: text 欠落を「成功扱い + 案内メッセージだけ」で返していた旧挙動
@@ -214,7 +215,7 @@ class TestInteractParametersReachSignEffectThroughToolExecutor:
         state = _object_state(runtime, NOTICE_BOARD_OBJECT_ID)
         assert "sign_text" not in state
 
-    def test_parameters_が不正型なら例外にならずNoneとして扱われてfailureになる(
+    def test_invalid_parameters_are_treated_as_none_and_fail_without_exception(
         self, scenario_path: Path
     ) -> None:
         """dict でない parameters (例: 文字列) は落とさず None 扱いにする。

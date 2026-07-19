@@ -30,7 +30,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
 class TestTendToPlayerDescriptionIsExplicitAboutDownOnly:
     """description が「down 状態の相手だけ」という制約を明示的に伝えるか。"""
 
-    def test_ダウン状態_を_明示する(self) -> None:
+    def test_downed_state(self) -> None:
         """旧文言「戦闘不能状態」だけでは LLM が疲労 100 と混同したので、
         「ダウン状態」または「ダウン」という明示的な状態タグを含める。
 
@@ -48,7 +48,7 @@ class TestTendToPlayerDescriptionIsExplicitAboutDownOnly:
             "内部フィールド名 status_effect は LLM 露出テキストには不要"
         )
 
-    def test_HP_0_を_明示する(self) -> None:
+    def test_hp_zero(self) -> None:
         """「倒れている」が比喩か機械的状態かを区別するため HP 0 / HP=0 を書く。"""
         desc = TEND_TO_PLAYER_DEFINITION.description
         assert "HP 0" in desc or "HP=0" in desc or "HP がゼロ" in desc, (
@@ -56,7 +56,7 @@ class TestTendToPlayerDescriptionIsExplicitAboutDownOnly:
             "down と読み替える誤発火が起きる"
         )
 
-    def test_疲労や空腹では_対象外_を_否定形で_明示する(self) -> None:
+    def test_description_explicitly_excludes_fatigue_and_hunger(self) -> None:
         """LLM が「顔色が悪い = 疲労限界 = 介抱対象」と読まないように、
         疲労や空腹は対象外であることを否定形で書く。"""
         desc = TEND_TO_PLAYER_DEFINITION.description
@@ -66,7 +66,7 @@ class TestTendToPlayerDescriptionIsExplicitAboutDownOnly:
             "LLM の prompt 上で衝突解決させる必要がある"
         )
 
-    def test_介抱_ではなく_蘇生_を_主動詞に使う(self) -> None:
+    def test_uses(self) -> None:
         """「介抱」は「看病・治療・世話」を含む広い動詞で誤読の温床なので、
         主動詞は「蘇生」(= 倒れた人を起こす) に寄せる。"""
         desc = TEND_TO_PLAYER_DEFINITION.description
@@ -79,7 +79,7 @@ class TestTendToPlayerDescriptionIsExplicitAboutDownOnly:
 class TestTendToPlayerDescriptionDoesNotBreakPrefixCache:
     """description は cache を壊さないよう静的文字列であり続ける。"""
 
-    def test_description_は_str_型で_動的補間されない(self) -> None:
+    def test_description_is_static_string(self) -> None:
         """f-string や format による動的差し込みが入っていないことを保証する。"""
         desc = TEND_TO_PLAYER_DEFINITION.description
         assert isinstance(desc, str)

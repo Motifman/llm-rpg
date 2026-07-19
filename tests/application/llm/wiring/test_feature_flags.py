@@ -66,32 +66,32 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
 class TestResolveEpisodicExploreRelatedEnabled:
     """``EPISODIC_EXPLORE_RELATED_ENABLED`` の env パース。"""
 
-    def test_env_未設定なら_default_OFF(self) -> None:
+    def test_env_unset_default_off_9(self) -> None:
         """env 未設定なら OFF (検証中の default 不活性方針)。"""
         assert resolve_episodic_explore_related_enabled(env={}) is False
 
-    def test_env_空文字なら_default_OFF(self) -> None:
+    def test_env_empty_string_default_off_2(self) -> None:
         """空文字は未設定扱い → default OFF。"""
         assert resolve_episodic_explore_related_enabled(
             env={ENV_EPISODIC_EXPLORE_RELATED_ENABLED: ""}
         ) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "True", "TRUE", "yes", "YES", "on", "On"])
-    def test_truthy_な値は_ON(self, raw: str) -> None:
+    def test_truthy_value_9(self, raw: str) -> None:
         """truthy リテラル ("1", "true", "yes", "on") は case-insensitive で ON。"""
         assert resolve_episodic_explore_related_enabled(
             env={ENV_EPISODIC_EXPLORE_RELATED_ENABLED: raw}
         ) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "no", "off", "FALSE", "Off"])
-    def test_falsy_リテラルは_OFF(self, raw: str) -> None:
+    def test_falsy_off(self, raw: str) -> None:
         """明示的に falsy ("0" / "false" / "no" / "off") を渡したら OFF。"""
         assert resolve_episodic_explore_related_enabled(
             env={ENV_EPISODIC_EXPLORE_RELATED_ENABLED: raw}
         ) is False
 
     @pytest.mark.parametrize("raw", ["random", "2", "yeah", "tru", "enable"])
-    def test_未知の値は_ValueError(self, raw: str) -> None:
+    def test_unknown_raises_value_error_13(self, raw: str) -> None:
         """truthy / falsy のどちらでもない値で silent fallback せず fail-fast (PR #434)。"""
         with pytest.raises(ValueError) as exc_info:
             resolve_episodic_explore_related_enabled(
@@ -101,7 +101,7 @@ class TestResolveEpisodicExploreRelatedEnabled:
         assert ENV_EPISODIC_EXPLORE_RELATED_ENABLED in msg
         assert raw in msg
 
-    def test_前後空白は_strip(self) -> None:
+    def test_around_blank_strip(self) -> None:
         """env var の値に空白混入があっても解釈できる。"""
         assert resolve_episodic_explore_related_enabled(
             env={ENV_EPISODIC_EXPLORE_RELATED_ENABLED: "  1  "}
@@ -111,7 +111,7 @@ class TestResolveEpisodicExploreRelatedEnabled:
 class TestLogEpisodicExploreRelatedState:
     """解決状態を INFO ログ 1 件で残す (run 再現性確保用)。"""
 
-    def test_ON_でも_OFF_でも_1件出る(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_off_one_rendered(self, caplog: pytest.LogCaptureFixture) -> None:
         """ENABLED / DISABLED の 2 ケースで INFO log が出る。"""
         with caplog.at_level(logging.INFO, logger="ai_rpg_world.application.llm.wiring.feature_flags"):
             log_episodic_explore_related_state(True)
@@ -124,17 +124,19 @@ class TestLogEpisodicExploreRelatedState:
 class TestResolveSemanticPassiveTopK:
     """``SEMANTIC_PASSIVE_TOP_K`` env パース (Phase 1c)。"""
 
-    def test_default_は_0(self) -> None:
+    def test_default_zero(self) -> None:
         """default は 0 (= prompt §learned 非表示)。検証中の安定設定。"""
         assert DEFAULT_SEMANTIC_PASSIVE_TOP_K == 0
         assert resolve_semantic_passive_top_k(env={}) == 0
 
-    def test_env_未設定なら_default_0(self) -> None:
+    def test_env_unset_default_zero(self) -> None:
+        """env 未設定なら default 0。"""
         assert resolve_semantic_passive_top_k(
             env={ENV_SEMANTIC_PASSIVE_TOP_K: ""}
         ) == 0
 
-    def test_有効な正整数なら_その値(self) -> None:
+    def test_value(self) -> None:
+        """有効な正整数なら その値。"""
         assert resolve_semantic_passive_top_k(
             env={ENV_SEMANTIC_PASSIVE_TOP_K: "3"}
         ) == 3
@@ -142,13 +144,13 @@ class TestResolveSemanticPassiveTopK:
             env={ENV_SEMANTIC_PASSIVE_TOP_K: "  5  "}
         ) == 5
 
-    def test_0_なら_0_を返す(self) -> None:
+    def test_returns_zero_0(self) -> None:
         """明示的に 0 を渡しても受理。"""
         assert resolve_semantic_passive_top_k(
             env={ENV_SEMANTIC_PASSIVE_TOP_K: "0"}
         ) == 0
 
-    def test_非数値なら_ValueError(self) -> None:
+    def test_case_raises_value_error_2(self) -> None:
         """typo / 非整数で silent fallback すると実験前提を壊すので fail-fast (PR #434)。"""
         with pytest.raises(ValueError) as exc_info:
             resolve_semantic_passive_top_k(
@@ -157,7 +159,7 @@ class TestResolveSemanticPassiveTopK:
         assert "SEMANTIC_PASSIVE_TOP_K" in str(exc_info.value)
         assert "non-integer" in str(exc_info.value)
 
-    def test_負数なら_ValueError(self) -> None:
+    def test_case_raises_value_error(self) -> None:
         """負の値を渡すのは意図がないと考え、fail-fast (PR #434)。"""
         with pytest.raises(ValueError) as exc_info:
             resolve_semantic_passive_top_k(
@@ -170,7 +172,8 @@ class TestResolveSemanticPassiveTopK:
 class TestLogSemanticPassiveTopKState:
     """解決結果を INFO ログ 1 件で残す。"""
 
-    def test_top_k_の値が_log_に_出る(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_top_k_value_log_rendered(self, caplog: pytest.LogCaptureFixture) -> None:
+        """topk の値が log に出る。"""
         with caplog.at_level(
             logging.INFO,
             logger="ai_rpg_world.application.llm.wiring.feature_flags",
@@ -184,24 +187,26 @@ class TestLogSemanticPassiveTopKState:
 class TestResolveSemanticSearchEnabled:
     """``SEMANTIC_SEARCH_ENABLED`` env パース (Phase 1d)。"""
 
-    def test_default_は_OFF(self) -> None:
+    def test_default_off_2(self) -> None:
+        """default は OFF。"""
         assert resolve_semantic_search_enabled(env={}) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "yes", "on", "ON", "True"])
-    def test_truthy_は_ON(self, raw: str) -> None:
+    def test_truthy_2(self, raw: str) -> None:
+        """truthy は ON。"""
         assert resolve_semantic_search_enabled(
             env={ENV_SEMANTIC_SEARCH_ENABLED: raw}
         ) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "no", "off", ""])
-    def test_falsy_リテラルまたは空文字は_OFF(self, raw: str) -> None:
+    def test_falsy_empty_string_off_2(self, raw: str) -> None:
         """明示的 falsy / 空文字は OFF。空文字は「未設定」扱いで default を返す。"""
         assert resolve_semantic_search_enabled(
             env={ENV_SEMANTIC_SEARCH_ENABLED: raw}
         ) is False
 
     @pytest.mark.parametrize("raw", ["random", "yeah", "tru", "2"])
-    def test_未知の値は_ValueError(self, raw: str) -> None:
+    def test_unknown_raises_value_error_12(self, raw: str) -> None:
         """typo / 未知の値で silent fallback せず fail-fast (PR #434)。"""
         with pytest.raises(ValueError):
             resolve_semantic_search_enabled(
@@ -212,9 +217,10 @@ class TestResolveSemanticSearchEnabled:
 class TestLogSemanticSearchState:
     """解決結果を INFO ログ 1 件で残す (Phase 1d)。"""
 
-    def test_ENABLED_でも_DISABLED_でも_log_に_出る(
+    def test_enabled_disabled_log_rendered_2(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """ENABLED でも DISABLED でも log に出る。"""
         with caplog.at_level(
             logging.INFO,
             logger="ai_rpg_world.application.llm.wiring.feature_flags",
@@ -229,23 +235,27 @@ class TestLogSemanticSearchState:
 class TestResolvePredictionContextIdEnabled:
     """``PREDICTION_CONTEXT_ID_ENABLED`` env パース (予測誤差統一設計 U1)。"""
 
-    def test_default_は_OFF(self) -> None:
+    def test_default_off(self) -> None:
+        """default は OFF。"""
         assert resolve_prediction_context_id_enabled(env={}) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "yes", "on", "ON", "True"])
-    def test_truthy_は_ON(self, raw: str) -> None:
+    def test_truthy(self, raw: str) -> None:
+        """truthy は ON。"""
         assert resolve_prediction_context_id_enabled(
             env={ENV_PREDICTION_CONTEXT_ID_ENABLED: raw}
         ) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "no", "off", ""])
-    def test_falsy_リテラルまたは空文字は_OFF(self, raw: str) -> None:
+    def test_falsy_empty_string_off(self, raw: str) -> None:
+        """falsy リテラルまたは空文字は OFF。"""
         assert resolve_prediction_context_id_enabled(
             env={ENV_PREDICTION_CONTEXT_ID_ENABLED: raw}
         ) is False
 
     @pytest.mark.parametrize("raw", ["random", "yeah", "tru", "2"])
-    def test_未知の値は_ValueError(self, raw: str) -> None:
+    def test_unknown_raises_value_error_11(self, raw: str) -> None:
+        """未知の値は ValueError。"""
         with pytest.raises(ValueError):
             resolve_prediction_context_id_enabled(
                 env={ENV_PREDICTION_CONTEXT_ID_ENABLED: raw}
@@ -255,9 +265,10 @@ class TestResolvePredictionContextIdEnabled:
 class TestLogPredictionContextIdState:
     """解決結果を INFO ログ 1 件で残す (予測誤差統一設計 U1)。"""
 
-    def test_ENABLED_でも_DISABLED_でも_log_に_出る(
+    def test_enabled_disabled_log_rendered(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """ENABLED でも DISABLED でも log に出る。"""
         with caplog.at_level(
             logging.INFO,
             logger="ai_rpg_world.application.llm.wiring.feature_flags",
@@ -272,20 +283,24 @@ class TestLogPredictionContextIdState:
 class TestResolveShortTermMemoryKind:
     """``SHORT_TERM_MEMORY_KIND`` env 解決 (Phase 2)。"""
 
-    def test_default_は_sliding_window(self) -> None:
+    def test_default_sliding_window(self) -> None:
+        """default は sliding window。"""
         assert resolve_short_term_memory_kind(env={}) == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
 
-    def test_env_空文字でも_default(self) -> None:
+    def test_env_empty_string_default_2(self) -> None:
+        """env 空文字でも default。"""
         assert resolve_short_term_memory_kind(
             env={ENV_SHORT_TERM_MEMORY_KIND: ""}
         ) == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
 
-    def test_有効な_sliding_window(self) -> None:
+    def test_sliding_window(self) -> None:
+        """有効な sliding window。"""
         assert resolve_short_term_memory_kind(
             env={ENV_SHORT_TERM_MEMORY_KIND: "sliding_window"}
         ) == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
 
-    def test_有効な_rolling_summary(self) -> None:
+    def test_rolling_summary(self) -> None:
+        """有効な rolling summary。"""
         assert resolve_short_term_memory_kind(
             env={ENV_SHORT_TERM_MEMORY_KIND: "rolling_summary"}
         ) == SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
@@ -295,7 +310,7 @@ class TestResolveShortTermMemoryKind:
             env={ENV_SHORT_TERM_MEMORY_KIND: "ROLLING_SUMMARY"}
         ) == SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
 
-    def test_未知の値は_ValueError(self) -> None:
+    def test_unknown_raises_value_error_10(self) -> None:
         """短縮形 (``rolling``) や typo を渡したら silent fallback せず即落とす。
 
         PR #433 経緯: ``rolling`` を渡したのに sliding_window で実験が走り、
@@ -316,9 +331,10 @@ class TestResolveShortTermMemoryKind:
 class TestLogShortTermMemoryKindState:
     """解決結果を INFO ログ 1 件で残す (Phase 2)。"""
 
-    def test_log_に_kind_の値が_出る(
+    def test_log_kind_value_rendered(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """log に kind の値が 出る。"""
         with caplog.at_level(
             logging.INFO,
             logger="ai_rpg_world.application.llm.wiring.feature_flags",
@@ -333,7 +349,7 @@ class TestLogShortTermMemoryKindState:
 class TestResolveShortTermMemorySchedulerMode:
     """``SHORT_TERM_MEMORY_SCHEDULER_MODE`` env 解決 (Phase 2.1)。"""
 
-    def test_default_は_thread_pool(self) -> None:
+    def test_default_thread_pool(self) -> None:
         """PR #467 以降の default は thread_pool (K run #466 で検証済)。
 
         旧 default = inline は Phase 2 互換用に env 明示で残る。
@@ -343,7 +359,8 @@ class TestResolveShortTermMemorySchedulerMode:
             == SCHEDULER_MODE_THREAD_POOL
         )
 
-    def test_env_空文字でも_default(self) -> None:
+    def test_env_empty_string_default(self) -> None:
+        """env 空文字でも default。"""
         assert (
             resolve_short_term_memory_scheduler_mode(
                 env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: ""}
@@ -351,22 +368,24 @@ class TestResolveShortTermMemorySchedulerMode:
             == SCHEDULER_MODE_THREAD_POOL
         )
 
-    def test_有効な_inline(self) -> None:
+    def test_inline(self) -> None:
+        """有効な inline。"""
         assert resolve_short_term_memory_scheduler_mode(
             env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: "inline"}
         ) == SCHEDULER_MODE_INLINE
 
-    def test_有効な_thread_pool(self) -> None:
+    def test_thread_pool(self) -> None:
+        """有効な thread pool。"""
         assert resolve_short_term_memory_scheduler_mode(
             env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: "thread_pool"}
         ) == SCHEDULER_MODE_THREAD_POOL
 
-    def test_case_insensitive(self) -> None:
+    def test_case_insensitive_2(self) -> None:
         assert resolve_short_term_memory_scheduler_mode(
             env={ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE: "Thread_Pool"}
         ) == SCHEDULER_MODE_THREAD_POOL
 
-    def test_未知の値は_ValueError(self) -> None:
+    def test_unknown_raises_value_error_9(self) -> None:
         """typo / 未知のモードで silent fallback せず即落とす (PR #434)。"""
         with pytest.raises(ValueError) as exc_info:
             resolve_short_term_memory_scheduler_mode(
@@ -382,9 +401,10 @@ class TestResolveShortTermMemorySchedulerMode:
 class TestLogShortTermMemorySchedulerModeState:
     """解決結果を INFO ログ 1 件で残す。"""
 
-    def test_log_に_mode_の値が_出る(
+    def test_log_mode_value_rendered(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """log に mode の値が 出る。"""
         with caplog.at_level(
             logging.INFO,
             logger="ai_rpg_world.application.llm.wiring.feature_flags",
@@ -399,27 +419,31 @@ class TestLogShortTermMemorySchedulerModeState:
 class TestResolveBeliefEvidenceEnabled:
     """U2 (証拠台帳統一設計): ``BELIEF_EVIDENCE_ENABLED`` の env パース。"""
 
-    def test_env_未設定なら_default_OFF(self) -> None:
+    def test_env_unset_default_off_8(self) -> None:
+        """env 未設定なら default OFF。"""
         assert resolve_belief_evidence_enabled(env={}) is False
 
-    def test_env_空文字なら_default_OFF(self) -> None:
+    def test_env_empty_string_default_off(self) -> None:
+        """env 空文字なら default OFF。"""
         assert resolve_belief_evidence_enabled(
             env={ENV_BELIEF_EVIDENCE_ENABLED: ""}
         ) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
-    def test_truthy_な値は_ON(self, raw: str) -> None:
+    def test_truthy_value_8(self, raw: str) -> None:
+        """truthy な値は ON。"""
         assert resolve_belief_evidence_enabled(
             env={ENV_BELIEF_EVIDENCE_ENABLED: raw}
         ) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
-    def test_falsy_な値は_OFF(self, raw: str) -> None:
+    def test_falsy_value_off_8(self, raw: str) -> None:
+        """falsy な値は OFF。"""
         assert resolve_belief_evidence_enabled(
             env={ENV_BELIEF_EVIDENCE_ENABLED: raw}
         ) is False
 
-    def test_未知の値は_ValueError(self) -> None:
+    def test_unknown_raises_value_error_8(self) -> None:
         """typo による silent fallback を防ぐ (PR #433 経緯と同じ規約)。"""
         with pytest.raises(ValueError):
             resolve_belief_evidence_enabled(
@@ -428,9 +452,10 @@ class TestResolveBeliefEvidenceEnabled:
 
 
 class TestLogBeliefEvidenceEnabledState:
-    def test_log_に_ENABLED_DISABLED_が出る(
+    def test_log_enabled_disabled_rendered(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """log に ENABLED DISABLED が出る。"""
         with caplog.at_level(
             logging.INFO,
             logger="ai_rpg_world.application.llm.wiring.feature_flags",
@@ -445,22 +470,26 @@ class TestLogBeliefEvidenceEnabledState:
 class TestResolveSalienceStructuredFailureEnabled:
     """U6: ``SALIENCE_STRUCTURED_FAILURE_ENABLED`` の env パース。"""
 
-    def test_env_未設定なら_default_OFF(self) -> None:
+    def test_env_unset_default_off_7(self) -> None:
+        """env 未設定なら default OFF。"""
         assert resolve_salience_structured_failure_enabled(env={}) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
-    def test_truthy_な値は_ON(self, raw: str) -> None:
+    def test_truthy_value_7(self, raw: str) -> None:
+        """truthy な値は ON。"""
         assert resolve_salience_structured_failure_enabled(
             env={ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED: raw}
         ) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
-    def test_falsy_な値は_OFF(self, raw: str) -> None:
+    def test_falsy_value_off_7(self, raw: str) -> None:
+        """falsy な値は OFF。"""
         assert resolve_salience_structured_failure_enabled(
             env={ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED: raw}
         ) is False
 
-    def test_未知の値は_ValueError(self) -> None:
+    def test_unknown_raises_value_error_7(self) -> None:
+        """未知の値は ValueError。"""
         with pytest.raises(ValueError):
             resolve_salience_structured_failure_enabled(
                 env={ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED: "yesplz"}
@@ -470,28 +499,33 @@ class TestResolveSalienceStructuredFailureEnabled:
 class TestResolveMemoDistillEnabled:
     """U5: ``MEMO_DISTILL_ENABLED`` の env パース。"""
 
-    def test_env_未設定なら_default_OFF(self) -> None:
+    def test_env_unset_default_off_6(self) -> None:
+        """env 未設定なら default OFF。"""
         assert resolve_memo_distill_enabled(env={}) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
-    def test_truthy_な値は_ON(self, raw: str) -> None:
+    def test_truthy_value_6(self, raw: str) -> None:
+        """truthy な値は ON。"""
         assert resolve_memo_distill_enabled(
             env={ENV_MEMO_DISTILL_ENABLED: raw}
         ) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
-    def test_falsy_な値は_OFF(self, raw: str) -> None:
+    def test_falsy_value_off_6(self, raw: str) -> None:
+        """falsy な値は OFF。"""
         assert resolve_memo_distill_enabled(
             env={ENV_MEMO_DISTILL_ENABLED: raw}
         ) is False
 
-    def test_未知の値は_ValueError(self) -> None:
+    def test_unknown_raises_value_error_6(self) -> None:
+        """未知の値は ValueError。"""
         with pytest.raises(ValueError):
             resolve_memo_distill_enabled(
                 env={ENV_MEMO_DISTILL_ENABLED: "yesplz"}
             )
 
-    def test_log_state_はレベル情報でログを出す(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_log_state_log_6(self, caplog: pytest.LogCaptureFixture) -> None:
+        """log state はレベル情報でログを出す。"""
         with caplog.at_level(logging.INFO):
             log_memo_distill_enabled_state(True)
             log_memo_distill_enabled_state(False)
@@ -502,28 +536,33 @@ class TestResolveMemoDistillEnabled:
 class TestResolveBeliefAttributionEnabled:
     """U4: ``BELIEF_ATTRIBUTION_ENABLED`` の env パース。"""
 
-    def test_env_未設定なら_default_OFF(self) -> None:
+    def test_env_unset_default_off_5(self) -> None:
+        """env 未設定なら default OFF。"""
         assert resolve_belief_attribution_enabled(env={}) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
-    def test_truthy_な値は_ON(self, raw: str) -> None:
+    def test_truthy_value_5(self, raw: str) -> None:
+        """truthy な値は ON。"""
         assert resolve_belief_attribution_enabled(
             env={ENV_BELIEF_ATTRIBUTION_ENABLED: raw}
         ) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
-    def test_falsy_な値は_OFF(self, raw: str) -> None:
+    def test_falsy_value_off_5(self, raw: str) -> None:
+        """falsy な値は OFF。"""
         assert resolve_belief_attribution_enabled(
             env={ENV_BELIEF_ATTRIBUTION_ENABLED: raw}
         ) is False
 
-    def test_未知の値は_ValueError(self) -> None:
+    def test_unknown_raises_value_error_5(self) -> None:
+        """未知の値は ValueError。"""
         with pytest.raises(ValueError):
             resolve_belief_attribution_enabled(
                 env={ENV_BELIEF_ATTRIBUTION_ENABLED: "yesplz"}
             )
 
-    def test_log_state_はレベル情報でログを出す(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_log_state_log_5(self, caplog: pytest.LogCaptureFixture) -> None:
+        """log state はレベル情報でログを出す。"""
         with caplog.at_level(logging.INFO):
             log_belief_attribution_enabled_state(True)
             log_belief_attribution_enabled_state(False)
@@ -535,28 +574,33 @@ class TestResolveBeliefAttributionEnabled:
 class TestResolveUnconsciousContextEnabled:
     """U7: ``UNCONSCIOUS_CONTEXT_ENABLED`` の env パース。"""
 
-    def test_env_未設定なら_default_OFF(self) -> None:
+    def test_env_unset_default_off_4(self) -> None:
+        """env 未設定なら default OFF。"""
         assert resolve_unconscious_context_enabled(env={}) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
-    def test_truthy_な値は_ON(self, raw: str) -> None:
+    def test_truthy_value_4(self, raw: str) -> None:
+        """truthy な値は ON。"""
         assert resolve_unconscious_context_enabled(
             env={ENV_UNCONSCIOUS_CONTEXT_ENABLED: raw}
         ) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
-    def test_falsy_な値は_OFF(self, raw: str) -> None:
+    def test_falsy_value_off_4(self, raw: str) -> None:
+        """falsy な値は OFF。"""
         assert resolve_unconscious_context_enabled(
             env={ENV_UNCONSCIOUS_CONTEXT_ENABLED: raw}
         ) is False
 
-    def test_未知の値は_ValueError(self) -> None:
+    def test_unknown_raises_value_error_4(self) -> None:
+        """未知の値は ValueError。"""
         with pytest.raises(ValueError):
             resolve_unconscious_context_enabled(
                 env={ENV_UNCONSCIOUS_CONTEXT_ENABLED: "yesplz"}
             )
 
-    def test_log_state_はレベル情報でログを出す(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_log_state_log_4(self, caplog: pytest.LogCaptureFixture) -> None:
+        """log state はレベル情報でログを出す。"""
         with caplog.at_level(logging.INFO):
             log_unconscious_context_enabled_state(True)
             log_unconscious_context_enabled_state(False)
@@ -568,28 +612,33 @@ class TestResolveUnconsciousContextEnabled:
 class TestResolveErrorDrivenReinterpretationEnabled:
     """U9a: ``ERROR_DRIVEN_REINTERPRETATION_ENABLED`` の env パース。"""
 
-    def test_env_未設定なら_default_OFF(self) -> None:
+    def test_env_unset_default_off_3(self) -> None:
+        """env 未設定なら default OFF。"""
         assert resolve_error_driven_reinterpretation_enabled(env={}) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
-    def test_truthy_な値は_ON(self, raw: str) -> None:
+    def test_truthy_value_3(self, raw: str) -> None:
+        """truthy な値は ON。"""
         assert resolve_error_driven_reinterpretation_enabled(
             env={ENV_ERROR_DRIVEN_REINTERPRETATION_ENABLED: raw}
         ) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
-    def test_falsy_な値は_OFF(self, raw: str) -> None:
+    def test_falsy_value_off_3(self, raw: str) -> None:
+        """falsy な値は OFF。"""
         assert resolve_error_driven_reinterpretation_enabled(
             env={ENV_ERROR_DRIVEN_REINTERPRETATION_ENABLED: raw}
         ) is False
 
-    def test_未知の値は_ValueError(self) -> None:
+    def test_unknown_raises_value_error_3(self) -> None:
+        """未知の値は ValueError。"""
         with pytest.raises(ValueError):
             resolve_error_driven_reinterpretation_enabled(
                 env={ENV_ERROR_DRIVEN_REINTERPRETATION_ENABLED: "yesplz"}
             )
 
-    def test_log_state_はレベル情報でログを出す(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_log_state_log_3(self, caplog: pytest.LogCaptureFixture) -> None:
+        """log state はレベル情報でログを出す。"""
         with caplog.at_level(logging.INFO):
             log_error_driven_reinterpretation_enabled_state(True)
             log_error_driven_reinterpretation_enabled_state(False)
@@ -601,28 +650,33 @@ class TestResolveErrorDrivenReinterpretationEnabled:
 class TestResolveRecallHitBoostEnabled:
     """U9b: ``RECALL_HIT_BOOST_ENABLED`` の env パース。"""
 
-    def test_env_未設定なら_default_OFF(self) -> None:
+    def test_env_unset_default_off_2(self) -> None:
+        """env 未設定なら default OFF。"""
         assert resolve_recall_hit_boost_enabled(env={}) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
-    def test_truthy_な値は_ON(self, raw: str) -> None:
+    def test_truthy_value_2(self, raw: str) -> None:
+        """truthy な値は ON。"""
         assert resolve_recall_hit_boost_enabled(
             env={ENV_RECALL_HIT_BOOST_ENABLED: raw}
         ) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
-    def test_falsy_な値は_OFF(self, raw: str) -> None:
+    def test_falsy_value_off_2(self, raw: str) -> None:
+        """falsy な値は OFF。"""
         assert resolve_recall_hit_boost_enabled(
             env={ENV_RECALL_HIT_BOOST_ENABLED: raw}
         ) is False
 
-    def test_未知の値は_ValueError(self) -> None:
+    def test_unknown_raises_value_error_2(self) -> None:
+        """未知の値は ValueError。"""
         with pytest.raises(ValueError):
             resolve_recall_hit_boost_enabled(
                 env={ENV_RECALL_HIT_BOOST_ENABLED: "yesplz"}
             )
 
-    def test_log_state_はレベル情報でログを出す(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_log_state_log_2(self, caplog: pytest.LogCaptureFixture) -> None:
+        """log state はレベル情報でログを出す。"""
         with caplog.at_level(logging.INFO):
             log_recall_hit_boost_enabled_state(True)
             log_recall_hit_boost_enabled_state(False)
@@ -634,28 +688,33 @@ class TestResolveRecallHitBoostEnabled:
 class TestResolveStateCollapseEvidenceEnabled:
     """PR-D: ``STATE_COLLAPSE_EVIDENCE_ENABLED`` の env パース。"""
 
-    def test_env_未設定なら_default_OFF(self) -> None:
+    def test_env_unset_default_off(self) -> None:
+        """env 未設定なら default OFF。"""
         assert resolve_state_collapse_evidence_enabled(env={}) is False
 
     @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
-    def test_truthy_な値は_ON(self, raw: str) -> None:
+    def test_truthy_value(self, raw: str) -> None:
+        """truthy な値は ON。"""
         assert resolve_state_collapse_evidence_enabled(
             env={ENV_STATE_COLLAPSE_EVIDENCE_ENABLED: raw}
         ) is True
 
     @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
-    def test_falsy_な値は_OFF(self, raw: str) -> None:
+    def test_falsy_value_off(self, raw: str) -> None:
+        """falsy な値は OFF。"""
         assert resolve_state_collapse_evidence_enabled(
             env={ENV_STATE_COLLAPSE_EVIDENCE_ENABLED: raw}
         ) is False
 
-    def test_未知の値は_ValueError(self) -> None:
+    def test_unknown_raises_value_error(self) -> None:
+        """未知の値は ValueError。"""
         with pytest.raises(ValueError):
             resolve_state_collapse_evidence_enabled(
                 env={ENV_STATE_COLLAPSE_EVIDENCE_ENABLED: "yesplz"}
             )
 
-    def test_log_state_はレベル情報でログを出す(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_log_state_log(self, caplog: pytest.LogCaptureFixture) -> None:
+        """log state はレベル情報でログを出す。"""
         with caplog.at_level(logging.INFO):
             log_state_collapse_evidence_enabled_state(True)
             log_state_collapse_evidence_enabled_state(False)

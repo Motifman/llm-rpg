@@ -60,16 +60,18 @@ def kai() -> PlayerId:
 class TestConstructor:
     """型の防衛 (silent failure 防止)。"""
 
-    def test_memory_が_IEncounterMemory_でなければ_TypeError(self) -> None:
+    def test_memory_ien_count_er_memory_raises_type_error(self) -> None:
+        """memory が IEncounterMemory でなければ TypeError。"""
         with pytest.raises(TypeError, match="memory"):
             EncounterObservationCollector(
                 memory="not a memory",  # type: ignore[arg-type]
                 current_tick_provider=lambda: 0,
             )
 
-    def test_current_tick_provider_が_callable_でなければ_TypeError(
+    def test_current_tick_provider_callable_raises_type_error(
         self, memory: InMemoryEncounterMemory
     ) -> None:
+        """current tick provider が callable でなければ TypeError。"""
         with pytest.raises(TypeError, match="current_tick_provider"):
             EncounterObservationCollector(
                 memory=memory,
@@ -80,9 +82,10 @@ class TestConstructor:
 class TestEntityEnteredSpot:
     """type=entity_entered_spot の観測から player encounter を抽出する。"""
 
-    def test_actor_を_player_encounter_として_記録する(
+    def test_records_actor_player_encounter(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
+        """actor を player encounter として 記録する。"""
         collector = EncounterObservationCollector(
             memory=memory, current_tick_provider=lambda: 42
         )
@@ -101,9 +104,10 @@ class TestEntityEnteredSpot:
         assert record.is_first is True
         assert record.last_seen_tick == 42
 
-    def test_2_度目_の_観測で_count_が_2_に_なる(
+    def test_two_observation_count_two(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
+        """2 度目の観測で count が 2 になる。"""
         collector = EncounterObservationCollector(
             memory=memory, current_tick_provider=lambda: 5
         )
@@ -117,9 +121,10 @@ class TestEntityEnteredSpot:
         assert record is not None
         assert record.count == 2
 
-    def test_actor_前後の_空白は_strip_される(
+    def test_actor_around_blank_strip(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
+        """actor 前後の 空白は strip される。"""
         collector = EncounterObservationCollector(
             memory=memory, current_tick_provider=lambda: 0
         )
@@ -132,9 +137,10 @@ class TestEntityEnteredSpot:
         # strip 後の名前で記録される
         assert memory.lookup(kai, EncounterKey.player("ノア")) is not None
 
-    def test_actor_欠落の_観測は_skip(
+    def test_actor_missing_observation_skip(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
+        """actor 欠落の 観測は skip。"""
         collector = EncounterObservationCollector(
             memory=memory, current_tick_provider=lambda: 0
         )
@@ -144,9 +150,10 @@ class TestEntityEnteredSpot:
         )
         assert memory.get_records_for(kai) == {}
 
-    def test_actor_が_str_でなければ_skip(
+    def test_actor_str_skip(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
+        """actor が str でなければ skip。"""
         collector = EncounterObservationCollector(
             memory=memory, current_tick_provider=lambda: 0
         )
@@ -162,9 +169,10 @@ class TestEntityEnteredSpot:
 class TestScenarioEvent:
     """type=scenario_event の観測から event encounter を抽出する。"""
 
-    def test_event_id_を_event_encounter_として_記録する(
+    def test_records_event_id_event_encounter(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
+        """event id を event encounter として 記録する。"""
         collector = EncounterObservationCollector(
             memory=memory, current_tick_provider=lambda: 96
         )
@@ -183,9 +191,10 @@ class TestScenarioEvent:
         assert record is not None
         assert record.first_seen_tick == 96
 
-    def test_event_id_欠落は_skip(
+    def test_event_id_missing_skip(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
+        """event id 欠落は skip。"""
         collector = EncounterObservationCollector(
             memory=memory, current_tick_provider=lambda: 0
         )
@@ -199,9 +208,10 @@ class TestScenarioEvent:
 class TestUnknownType:
     """PR3 のスコープ外の type は silent skip。"""
 
-    def test_未対応_type_は_何も記録しない(
+    def test_records_nothing_for_unsupported_type(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
+        """未対応 type は何も記録しない。"""
         collector = EncounterObservationCollector(
             memory=memory, current_tick_provider=lambda: 0
         )
@@ -211,18 +221,20 @@ class TestUnknownType:
         )
         assert memory.get_records_for(kai) == {}
 
-    def test_structured_が_空でも_落ちない(
+    def test_structured_empty_does_not_crash(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
+        """structured が空でも落ちない。"""
         collector = EncounterObservationCollector(
             memory=memory, current_tick_provider=lambda: 0
         )
         collector.on_observation(kai, _output(structured={}))
         assert memory.get_records_for(kai) == {}
 
-    def test_type_欠落でも_落ちない(
+    def test_type_missing_does_not_crash(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
+        """type 欠落でも 落ちない。"""
         collector = EncounterObservationCollector(
             memory=memory, current_tick_provider=lambda: 0
         )
@@ -236,12 +248,13 @@ class TestUnknownType:
 class TestCurrentTickFailures:
     """current_tick_provider が異常値を返すケース。"""
 
-    def test_provider_が_例外を_投げたら_log_して_skip(
+    def test_provider_log_skip_raises_exception(
         self,
         memory: InMemoryEncounterMemory,
         kai: PlayerId,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
+        """provider が例外を投げたら log して skip。"""
         def _bad_provider() -> int:
             raise RuntimeError("clock unavailable")
 
@@ -258,9 +271,10 @@ class TestCurrentTickFailures:
         # encounter は記録されない
         assert memory.get_records_for(kai) == {}
 
-    def test_provider_が_None_を_返したら_skip(
+    def test_returns_skip_provider_none_when(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
+        """provider が None を返したら skip。"""
         collector = EncounterObservationCollector(
             memory=memory,
             current_tick_provider=lambda: None,  # type: ignore[arg-type,return-value]
@@ -271,9 +285,10 @@ class TestCurrentTickFailures:
         )
         assert memory.get_records_for(kai) == {}
 
-    def test_provider_が_負の_int_を_返したら_skip(
+    def test_returns_skip_provider_negative_int_when(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
+        """provider が負の int を返したら skip。"""
         collector = EncounterObservationCollector(
             memory=memory, current_tick_provider=lambda: -1
         )
@@ -287,11 +302,12 @@ class TestCurrentTickFailures:
 class TestExceptionInMemoryObserve:
     """memory.observe が例外を投げても本流を止めない (= silent skip + log)。"""
 
-    def test_memory_observe_が_例外を_投げても_例外を_伝播させない(
+    def test_memory_observe_raises_exception(
         self,
         kai: PlayerId,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
+        """memoryobserve が例外を投げても例外を伝播させない。"""
         class _BrokenMemory(InMemoryEncounterMemory):
             def observe(self, *args, **kwargs):  # type: ignore[override]
                 raise RuntimeError("storage failure")

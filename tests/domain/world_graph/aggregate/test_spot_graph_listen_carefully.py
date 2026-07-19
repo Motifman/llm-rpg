@@ -91,7 +91,8 @@ def _events(graph: SpotGraphAggregate) -> list[SpotSoundHeardEvent]:
 class TestEmitListenCarefullySelfSpot:
     """自 spot の音を減衰なしで観測する。"""
 
-    def test_自_spot_MODERATE_の_event_が_減衰なしで_発火(self) -> None:
+    def test_spot_moderate_event_trigger(self) -> None:
+        """自 spotMODERATE の event が減衰なしで発火。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A, intensity=SoundIntensityEnum.MODERATE, ambient="泉"))
         eid = EntityId.create(7)
@@ -108,7 +109,8 @@ class TestEmitListenCarefullySelfSpot:
         assert ev.intensity == "MODERATE"
         assert ev.ambient_description == "泉"
 
-    def test_自_spot_SILENT_隣接なし_では_何も発火しない(self) -> None:
+    def test_spot_silent_neighbor_does_not_trigger(self) -> None:
+        """自 spot SILENT 隣接なし では 何も発火しない。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A))  # SILENT
         eid = EntityId.create(7)
@@ -122,7 +124,8 @@ class TestEmitListenCarefullySelfSpot:
 class TestEmitListenCarefullyAdjacent:
     """隣接 spot は attenuate(1) で観測する。"""
 
-    def test_LOUD_な_隣接_は_MODERATE_に_減衰して_発火(self) -> None:
+    def test_loud_neighbor_moderate_trigger(self) -> None:
+        """LOUD な隣接は MODERATE に減衰して発火。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A))  # 自 spot SILENT
         g.add_spot(_node(SPOT_B, intensity=SoundIntensityEnum.LOUD, ambient="戦闘音"))
@@ -141,7 +144,8 @@ class TestEmitListenCarefullyAdjacent:
         assert ev.intensity == "MODERATE"  # LOUD - 1 = MODERATE
         assert ev.ambient_description == "戦闘音"
 
-    def test_FAINT_な_隣接_は_減衰しきって_発火しない(self) -> None:
+    def test_faint_neighbor_does_not_trigger(self) -> None:
+        """FAINT な隣接は減衰しきって発火しない。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A))
         g.add_spot(_node(SPOT_B, intensity=SoundIntensityEnum.FAINT, ambient="虫"))
@@ -153,7 +157,7 @@ class TestEmitListenCarefullyAdjacent:
         g.emit_listen_carefully(eid)
         assert _events(g) == []  # FAINT - 1 = SILENT なので発火しない
 
-    def test_traversable_でなくても_permeability_が_高ければ_音は_届く(
+    def test_traversable_permeability(
         self,
     ) -> None:
         """barrier ACTIVE (traversable=False, permeability=1.0) は通行不可
@@ -189,7 +193,8 @@ class TestEmitListenCarefullyAdjacent:
 class TestEmitListenCarefullyDedup:
     """複数 connection が同一隣接 spot を指していても 1 件にまとまる。"""
 
-    def test_同一_spot_への_複数_connection_は_1_件に_dedup(self) -> None:
+    def test_same_spot_multiple_connection_one_dedup(self) -> None:
+        """同一 spot への 複数 connection は 1 件に dedup。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A))
         g.add_spot(_node(SPOT_B, intensity=SoundIntensityEnum.LOUD))
@@ -209,7 +214,8 @@ class TestEmitListenCarefullyDedup:
 class TestEmitListenCarefullyCombined:
     """自 spot と複数隣接 spot を組み合わせた典型ケース。"""
 
-    def test_自_spot_MODERATE_と_隣接_2件_両方_event_発火(self) -> None:
+    def test_spot_moderate_neighbor_two_event_trigger(self) -> None:
+        """自 spotMODERATE と隣接 2 件両方 event 発火。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A, intensity=SoundIntensityEnum.MODERATE, ambient="A音"))
         g.add_spot(_node(SPOT_B, intensity=SoundIntensityEnum.LOUD, ambient="B音"))
@@ -236,7 +242,8 @@ class TestEmitListenCarefullyCombined:
 class TestEmitListenCarefullyErrors:
     """前提条件違反は EntityNotInGraphException。"""
 
-    def test_未配置_entity_では_例外(self) -> None:
+    def test_entity_raises_exception(self) -> None:
+        """未配置 entity では 例外。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A))
 

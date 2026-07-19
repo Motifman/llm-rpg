@@ -38,9 +38,10 @@ def _common_memory_config(**overrides):
 
 
 class TestWorldRuntimeBeliefAttributionWiring:
-    def test_flag_ON_で_chunk_coordinator_と_固着coordinator_に_attribution_が届く(
+    def test_flag_chunk_coordinator_attribution(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flagON で chunkcoordinator と固着 coordinator に attribution が届く。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=_common_memory_config(belief_attribution_enabled=True),
@@ -57,9 +58,10 @@ class TestWorldRuntimeBeliefAttributionWiring:
         assert coordinator is not None
         assert "confirmation" in coordinator._system_prompt
 
-    def test_flag_OFF_なら_attribution_は_不活性で_confirmation節も出ない(
+    def test_flag_off_attribution_confirmation_not_rendered(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """flagOFF なら attribution は不活性で confirmation 節も出ない。"""
         runtime = create_world_runtime(_SCENARIO_PATH, config=_common_memory_config())
         stack = runtime._episodic_stack
         assert stack is not None
@@ -71,7 +73,7 @@ class TestWorldRuntimeBeliefAttributionWiring:
         # OFF なら固着 prompt は pre-U4 と byte 一致 (CONFIRMATION 節なし)。
         assert "confirmation" not in coordinator._system_prompt
 
-    def test_attribution_ON_でも_episodic_無効なら_stack_は_None(
+    def test_attribution_episodic_stack_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """LLM_EPISODIC_ENABLED が無ければそもそも stack を組まない

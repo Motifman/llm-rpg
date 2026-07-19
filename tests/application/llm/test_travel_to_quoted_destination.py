@@ -114,7 +114,7 @@ def _snap_two_edges() -> SpotGraphPlayerSnapshotDto:
 class TestPromptQuotesDestinationSpotName:
     """prompt 上で「渡すべき値」(spot 名) が ``""`` で囲まれる。"""
 
-    def test_prompt_に_destination_spot_名が_クオートで囲まれる(self) -> None:
+    def test_prompt_quotes_destination_spot_name(self) -> None:
         """LLM が arrow の右側 (= spot 名) を「渡すべき値」と読み取れるよう、
         spot 名のみ ``""`` で囲む。edge 名は囲まない (= 視覚的に区別)。"""
         result = SpotGraphUiContextBuilder().build(
@@ -124,7 +124,7 @@ class TestPromptQuotesDestinationSpotName:
         assert '"拠点"' in text, "spot 名 (右側) が \"\" で囲まれていない"
         assert '"森の入口"' in text, "2 件目の spot 名も \"\" で囲まれること"
 
-    def test_prompt_の_edge_名は_クオートで囲まれない(self) -> None:
+    def test_prompt_edge(self) -> None:
         """edge 名 (左側) は囲まない。``""`` の有無で「渡すべき値」を区別する。"""
         result = SpotGraphUiContextBuilder().build(
             "現在地: 浜辺", _make_dto(_snap_two_edges())
@@ -139,7 +139,7 @@ class TestPromptQuotesDestinationSpotName:
 class TestTravelToDescriptionExplainsQuoteConvention:
     """tool description が ``""`` 規約を伝える。"""
 
-    def test_destination_label_description_に_クオート規約が含まれる(self) -> None:
+    def test_destination_label_description_included(self) -> None:
         """『現在の状況の "..." で囲まれた spot 名をそのまま渡す』のような
         記述で、prompt 表記と引数の対応を明示する。"""
         desc = TRAVEL_TO_DEFINITION.parameters["properties"]["destination_label"][
@@ -152,7 +152,7 @@ class TestTravelToDescriptionExplainsQuoteConvention:
             "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
         ), "「\"\" で囲まれた値を渡す」規約が説明されていない"
 
-    def test_destination_label_description_は_静的文字列(self) -> None:
+    def test_destination_label_description_string(self) -> None:
         """description は static (prefix cache 安全)。"""
         desc = TRAVEL_TO_DEFINITION.parameters["properties"]["destination_label"][
             "description"
@@ -164,13 +164,13 @@ class TestTravelToDescriptionExplainsQuoteConvention:
 class TestNormalizeLabelCandidatesStripsQuotes:
     """LLM が ``""`` ごと渡してきた場合の strip フォールバック。"""
 
-    def test_前後の_ダブルクォートを_strip_する(self) -> None:
+    def test_around_strip(self) -> None:
         """``'"拠点"'`` のように quote ごと渡されても解決できるよう、
         normalize 段階で剥がす。"""
         candidates = _normalize_label_candidates('"拠点"')
         assert "拠点" in candidates, "quote 剥がしの候補がない"
 
-    def test_quote_なし入力は_そのまま含む(self) -> None:
+    def test_includes_quote(self) -> None:
         """既存挙動を壊さない: quote なしの入力は素通り。"""
         candidates = _normalize_label_candidates("拠点")
         assert "拠点" in candidates
@@ -185,7 +185,7 @@ class TestResolverFallsBackToEdgeName:
         )
         return result.tool_runtime_context
 
-    def test_edge_名を_渡しても_destination_spot_に_resolve_される(self) -> None:
+    def test_edge_destination_spot_resolve(self) -> None:
         """LLM が ``destination_label='浜辺の砂道'`` (= edge 名) を渡しても、
         その接続先 spot ``拠点`` (spot_id=2) に解決される。silent rescue。"""
         ctx = self._build_context()
@@ -194,13 +194,13 @@ class TestResolverFallsBackToEdgeName:
             "edge 名 fallback が機能していない。LLM の typical な誤りを救えない"
         )
 
-    def test_spot_名を_渡せば_従来通り_resolve_される(self) -> None:
+    def test_spot_resolve(self) -> None:
         """既存挙動を壊さない。"""
         ctx = self._build_context()
         target = resolve_destination_target("拠点", ctx)
         assert target.spot_id == 2
 
-    def test_quote_ごと_spot_名を_渡しても_resolve_される(self) -> None:
+    def test_quote_per_spot_resolve(self) -> None:
         """``destination_label='"拠点"'`` のように LLM が quote ごと渡しても OK。"""
         ctx = self._build_context()
         target = resolve_destination_target('"拠点"', ctx)
@@ -210,7 +210,7 @@ class TestResolverFallsBackToEdgeName:
 class TestShadowEntriesAreHiddenFromListing:
     """``list_destination_labels`` が shadow 候補を表示しない。"""
 
-    def test_候補列挙に_edge_名は_出てこない(self) -> None:
+    def test_candidate_column_edge(self) -> None:
         """error message での候補一覧には spot 名だけが出る。edge 名は
         内部の fallback 用なのでユーザに見せない (混乱を避ける)。"""
         result = SpotGraphUiContextBuilder().build(

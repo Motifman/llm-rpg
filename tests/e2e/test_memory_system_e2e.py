@@ -221,7 +221,8 @@ def _build_memory(
 class TestRollingSummaryE2E:
     """L1 → L4 → L5 一気通貫 (Inline scheduler)。"""
 
-    def test_15件で_L4_45件で_L5_60件で_L5世代2(self) -> None:
+    def test_fifteen_l4_45_l5_60_l5_two(self) -> None:
+        """15件で L4 45件で L5 60件で L5世代2。"""
         stub = _StubSummaryPort(
             l4_response={
                 "compressed_activity": "北東を探索",
@@ -280,7 +281,7 @@ class TestRollingSummaryE2EAsync:
     """同じシナリオを ThreadPool scheduler で実行し、shutdown 完了後に
     最終状態が同等になることを確認する。"""
 
-    def test_thread_pool_でも_最終的に_L4_3件_L5_1件(self) -> None:
+    def test_thread_pool_eventually_creates_three_l4_and_one_l5_records(self) -> None:
         """ThreadPool で 60 raw を流し、L4=4, L5=1 が完了するまで待つ。
 
         注意: ``mem.shutdown()`` を直接呼ぶと、L4 worker が L5 task を
@@ -332,9 +333,10 @@ class TestRollingSummaryFallbackChain:
     - WARNING ログが出る
     """
 
-    def test_L4_LLM_失敗時の_template_fallback_と_warning(
+    def test_emits_warning_for_l4_llm_template_fallback(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """L4 LLM 失敗時の template fallback と warning。"""
         stub = _StubSummaryPort(
             l4_response={
                 "compressed_activity": "should-not-appear-if-failing",
@@ -362,7 +364,8 @@ class TestPromptSectionsE2E:
     """``SectionBasedContextFormatStrategy`` に全 section を渡すと、
     Phase 0 / 1c / 2 / 3 の section が正しい順序で並ぶ。"""
 
-    def test_全部入り_stable_to_volatile_順序(self) -> None:
+    def test_all_stable_volatile_order(self) -> None:
+        """全部入り stable to volatile 順序。"""
         strategy = SectionBasedContextFormatStrategy()
         text = strategy.format(
             current_state_text="現在地: 海岸",
@@ -409,7 +412,7 @@ class TestPromptSectionsE2E:
             < idx["events"] < idx["inv"] < idx["memos"] < idx["mem"] < idx["current"]
         )
 
-    def test_L5_あり_L4_あり_で_両_section_が_見える(self) -> None:
+    def test_l5_l4_section(self) -> None:
         """RollingSummary が L4 / L5 両方を生成した後の text が正しく組み立つ。"""
         stub = _StubSummaryPort(
             l4_response={
@@ -452,7 +455,8 @@ class TestPromptSectionsE2E:
 class TestSemanticPassiveRecallE2E:
     """Phase 1c: semantic store の top-K が prompt §learned に出る。"""
 
-    def test_passive_recall_と_section_format_の_連動(self) -> None:
+    def test_passive_recall_section_format(self) -> None:
+        """passiverecall と sectionformat の連動。"""
         # Phase 3 Step 3b-3: semantic は being_id 経路必須。
         setup = make_semantic_being_setup()
         setup.provision(_PID.value)
@@ -509,7 +513,8 @@ class TestSemanticPassiveRecallE2E:
 class TestSemanticGistE2E:
     """Phase 1b: semantic gist 生成 (LLM 化された場合の経路)。"""
 
-    def test_LLM_gist_が_生成され_SemanticMemoryEntry_に_反映される(self) -> None:
+    def test_llm_gist_semantic_memory_entry(self) -> None:
+        """LLMgist が生成され SemanticMemoryEntry に反映される。"""
         stub = _StubSummaryPort(
             l4_response={"compressed_activity": "x", "emotional_summary": "", "unresolved": []},
             l5_response={"self_image": "x", "world_view": ""},
@@ -563,7 +568,7 @@ class TestMemoryE2ETraceObservability:
     silent failure 防止の最終確認。
     """
 
-    def test_scheduler_drop_時に_WARNING_ログ_が出る(
+    def test_scheduler_drop_warning_log_rendered(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """scheduler が False を返したら consumed 件数を WARNING で残す。"""
@@ -594,7 +599,7 @@ class TestMemoryE2ETraceObservability:
             "drop" in rec.message and "15" in rec.message for rec in caplog.records
         )
 
-    def test_thread_pool_例外時に_generation_failed_trace_が_出る(self) -> None:
+    def test_thread_pool_generation_failed_trace_raises_exception(self) -> None:
         """Phase 2.2: worker 例外で SHORT_TERM_SUMMARY_GENERATION_FAILED が出る。"""
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
@@ -635,7 +640,8 @@ class TestL5PersonaDriftSurvivesFailure:
     3. v1 と v2 で self_image / world_view が一致することを確認
     """
 
-    def test_LLM_失敗の連鎖でも_self_image_は_v1_の_ままで_延命(self) -> None:
+    def test_llm_failure_self_image_v1(self) -> None:
+        """LLM 失敗の連鎖でも selfimage は v1 のままで延命。"""
         class _FailingL5Port:
             """L5 だけ常に例外、L4 / gist は普通に動く port。"""
 

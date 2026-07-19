@@ -55,14 +55,14 @@ def _make_4phase_cycle(ticks_per_day: int = 12) -> DayNightCycleDef:
 class TestSpotGraphDayNightStageService:
     """tick による現在時刻の更新とフェーズ変化通知。"""
 
-    def test_初期状態は_starting_tick_の_TimeOfDay(self) -> None:
+    def test_initial_state_starting_tick_time_day(self) -> None:
         """構築直後の current_time_of_day は starting_tick から計算される。"""
         cycle = _make_4phase_cycle()
         stage = SpotGraphDayNightStageService(cycle=cycle)
         tod = stage.current_time_of_day()
         assert tod.phase_name == "morning"
 
-    def test_tick_進行で_TimeOfDay_が更新される(self) -> None:
+    def test_tick_line_time_day_updated(self) -> None:
         """run(tick) が走ると provider の返す TimeOfDay が新 tick のものになる。"""
         cycle = _make_4phase_cycle(ticks_per_day=12)
         stage = SpotGraphDayNightStageService(cycle=cycle)
@@ -71,7 +71,7 @@ class TestSpotGraphDayNightStageService:
         stage.run(WorldTick(9))  # 0.75 → night
         assert stage.current_time_of_day().phase_name == "night"
 
-    def test_フェーズ変化時に_callback_が_old_と_new_を渡して呼ばれる(self) -> None:
+    def test_calls_callback_old_new(self) -> None:
         """phase_changed_callback がフェーズ遷移時にのみ呼ばれる。"""
         cycle = _make_4phase_cycle(ticks_per_day=12)
         captured = []
@@ -92,7 +92,7 @@ class TestSpotGraphDayNightStageService:
         stage.run(WorldTick(6))
         assert captured == [("morning", "noon"), ("noon", "evening")]
 
-    def test_set_phase_changed_callback_で後付け注入できる(self) -> None:
+    def test_set_phase_changed_callback_can_injected_later(self) -> None:
         """二段構築 (world_runtime 経路) のために set でも注入可能。"""
         cycle = _make_4phase_cycle(ticks_per_day=12)
         stage = SpotGraphDayNightStageService(cycle=cycle)
@@ -103,7 +103,7 @@ class TestSpotGraphDayNightStageService:
         stage.run(WorldTick(3))
         assert captured == [("morning", "noon")]
 
-    def test_callback_None_でも_run_は壊れない(self) -> None:
+    def test_callback_none_run(self) -> None:
         """callback 無しの最小構成で例外を投げず動く。"""
         cycle = _make_4phase_cycle(ticks_per_day=12)
         stage = SpotGraphDayNightStageService(cycle=cycle)

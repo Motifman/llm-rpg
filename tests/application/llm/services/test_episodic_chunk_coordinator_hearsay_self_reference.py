@@ -144,7 +144,8 @@ def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> No
 class TestEpisodicChunkCoordinatorHearsaySelfReferenceSyncPath:
     """同期 LLM 補完経路 (chunk_subjective_fields_service 注入時) の自己言及フィルタ。"""
 
-    def test_player_name_provider_あれば本人speakerのclaimが弾かれる(self) -> None:
+    def test_player_name_provider_self_speaker_claim_rejected(self) -> None:
+        """player name provider あれば本人speakerのclaimが弾かれる。"""
         coord, buffer, action_store, episode_store, being_id = _build_coord(
             player_name_provider=lambda pid: _PLAYER_NAME,
         )
@@ -157,7 +158,7 @@ class TestEpisodicChunkCoordinatorHearsaySelfReferenceSyncPath:
         speakers = [c.speaker for c in episodes[0].heard_claims]
         assert speakers == ["リオ"]
 
-    def test_player_name_provider_未配線なら本人speakerも通す(self) -> None:
+    def test_player_name_provider_unwired_self_speaker(self) -> None:
         """provider が None のときは自己判定を行わず、安全側 (縮退) に倒れる
 
         (persona_block_provider と同じ「未配線なら従来通り」規約)。
@@ -178,7 +179,8 @@ class TestEpisodicChunkCoordinatorHearsaySelfReferenceSyncPath:
 class TestEpisodicChunkCoordinatorInitValidation:
     """player_name_provider の型ガード (persona_block_provider と同じ規約)。"""
 
-    def test_player_name_provider_が_callable_でなければ_TypeError(self) -> None:
+    def test_player_name_provider_callable_raises_type_error(self) -> None:
+        """player name provider が callable でなければ TypeError。"""
         import pytest
 
         buffer = DefaultObservationContextBuffer()

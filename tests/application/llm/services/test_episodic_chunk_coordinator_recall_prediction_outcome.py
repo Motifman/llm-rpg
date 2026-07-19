@@ -181,9 +181,10 @@ def _seed_recall_observation(
 class TestEpisodicChunkCoordinatorRecallPredictionOutcomeSyncPath:
     """同期 LLM 補完経路 (chunk_subjective_fields_service 注入時) の刻み。"""
 
-    def test_flag_ON_で_prediction_error_ありなら_recall_observation_に誤差が刻まれる(
+    def test_flag_prediction_error_recall_observation(
         self,
     ) -> None:
+        """flag ON で prediction error ありなら recall observation に誤差が刻まれる。"""
         recall_buffer = InMemoryEpisodicRecallBufferStore()
         coord, buffer, action_store, being_id = _build_coord(
             returns={
@@ -207,7 +208,8 @@ class TestEpisodicChunkCoordinatorRecallPredictionOutcomeSyncPath:
         obs = recall_buffer.list_pending_by_being(being_id)[0]
         assert obs.prediction_outcome_error == "何も見つからなかった"
 
-    def test_prediction_error_なしなら誤差は刻まれない(self) -> None:
+    def test_prediction_error(self) -> None:
+        """prediction error なしなら誤差は刻まれない。"""
         recall_buffer = InMemoryEpisodicRecallBufferStore()
         coord, buffer, action_store, being_id = _build_coord(
             returns={"interpreted": "I", "recall_text": "R"},
@@ -227,7 +229,7 @@ class TestEpisodicChunkCoordinatorRecallPredictionOutcomeSyncPath:
         obs = recall_buffer.list_pending_by_being(being_id)[0]
         assert obs.prediction_outcome_error is None
 
-    def test_flag_OFF_既定なら_prediction_error_ありでも刻まれない(self) -> None:
+    def test_flag_off_default_prediction_error(self) -> None:
         """error_driven_reinterpretation_enabled=False (既定) は導入前と一致。"""
         recall_buffer = InMemoryEpisodicRecallBufferStore()
         coord, buffer, action_store, being_id = _build_coord(
@@ -252,7 +254,7 @@ class TestEpisodicChunkCoordinatorRecallPredictionOutcomeSyncPath:
         obs = recall_buffer.list_pending_by_being(being_id)[0]
         assert obs.prediction_outcome_error is None
 
-    def test_recall_buffer_store_未配線なら例外を投げず完了する(self) -> None:
+    def test_unwired_recall_buffer_store_completes_without_exception(self) -> None:
         """recall_buffer_store=None (既定) は既存動作と完全互換。"""
         coord, buffer, action_store, _being_id = _build_coord(
             returns={
@@ -281,9 +283,10 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
     episode の hit_count が加算されることを保証する。
     """
 
-    def test_flag_ON_で的中かつexpected_resultありなら的中回数が加算される(
+    def test_flag_expected_result_count_incremented(
         self,
     ) -> None:
+        """flag ON で的中かつexpected resultありなら的中回数が加算される。"""
         from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
             InMemoryEpisodicRecallSuccessStore,
         )
@@ -310,7 +313,7 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
 
         assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 1
 
-    def test_prediction_error_ありなら加算されない(self) -> None:
+    def test_prediction_error_not_incremented(self) -> None:
         """外れたときは U9a の対象であり、的中側には加算しない。"""
         from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
             InMemoryEpisodicRecallSuccessStore,
@@ -342,7 +345,7 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
 
         assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 0
 
-    def test_expected_result_を伴う行動が無ければ加算されない(self) -> None:
+    def test_expected_result_action_not_incremented(self) -> None:
         """何もしなかっただけの的中で hit を水増ししない (U4 CONFIRMATION と同型)。"""
         from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
             InMemoryEpisodicRecallSuccessStore,
@@ -370,7 +373,7 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
 
         assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 0
 
-    def test_flag_OFF_既定なら的中でも加算されない(self) -> None:
+    def test_flag_off_default_not_incremented(self) -> None:
         """recall_hit_boost_enabled=False (既定) は導入前と一致。"""
         from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
             InMemoryEpisodicRecallSuccessStore,
@@ -398,7 +401,7 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
 
         assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 0
 
-    def test_recall_success_store_未配線なら例外を投げず完了する(self) -> None:
+    def test_unwired_recall_success_store_completes_without_exception(self) -> None:
         """recall_success_store=None (既定) は既存動作と完全互換。"""
         recall_buffer = InMemoryEpisodicRecallBufferStore()
         coord, buffer, action_store, being_id = _build_coord(

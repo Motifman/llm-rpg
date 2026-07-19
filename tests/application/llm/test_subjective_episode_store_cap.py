@@ -62,7 +62,8 @@ def _episode(pid: int, eid: str, occurred_at: datetime, cue_value: str) -> Subje
 class TestFifoEviction:
     """上限を超えた put で最古の episode が消える。"""
 
-    def test_上限を超えた_put_で_最古の_episode_が消える(self) -> None:
+    def test_over_put_episode_removed(self) -> None:
+        """上限を超えた put で最古の episode が消える。"""
         store = InMemorySubjectiveEpisodeStore(max_episodes_per_player=3)
         t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
         store.put_by_being(being_id, _episode(1, "e1", t0, "a"))
@@ -74,7 +75,8 @@ class TestFifoEviction:
         assert store.get_by_being(being_id, "e2") is not None
         assert store.get_by_being(being_id, "e4") is not None
 
-    def test_evict_された_episode_の_cue_も_index_から消える(self) -> None:
+    def test_evict_episode_cue_index_removed(self) -> None:
+        """evict された episode の cue も index から消える。"""
         store = InMemorySubjectiveEpisodeStore(max_episodes_per_player=2)
         t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
         store.put_by_being(being_id, _episode(1, "e1", t0, "topic_a"))
@@ -90,7 +92,7 @@ class TestFifoEviction:
         )
         assert results == []
 
-    def test_他の_Being_の_episode_は_evict_に巻き込まれない(self) -> None:
+    def test_other_being_episode_evict(self) -> None:
         """Phase 3 Step 3e-3: cap は Being 単位。別 Being の episode は影響を受けない。"""
         from ai_rpg_world.domain.being.value_object.being_id import BeingId as _BID
 

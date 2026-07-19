@@ -26,7 +26,7 @@ SCENARIO_PATH = (
 class TestUseItemInventoryIter:
     """#26 Bug 1: use_item executor が inv._inventory_slots を正しく iter する。"""
 
-    def test_inventory_slots_を_正しく_iter_して_use_item_が_動く(self) -> None:
+    def test_inventory_slots_iter_use_item_works(self) -> None:
         """PlayerInventoryAggregate には `slots` 属性は無く、
         `_inventory_slots: Dict[SlotId, Optional[ItemInstanceId]]` を持つ。
         executor が誤って `inv.slots` を iter していたため、全 use_item が
@@ -58,7 +58,7 @@ class TestUseItemInventoryIter:
         ids = [iid for _, iid in inv._inventory_slots.items() if iid is not None]
         assert len(ids) >= 1, "椰子の実が inventory に入っていない"
 
-    def test_use_item_executor_は_inv_slots_を_参照しない(self) -> None:
+    def test_use_item_executor_inv_slots(self) -> None:
         """executor のソースコードから旧 `inv.slots` 参照が消えていることを
         確認する (regression text-level check)。"""
         from pathlib import Path
@@ -83,7 +83,7 @@ class TestObjectNameResolverFallback:
     """#26 Bug 2: _resolve_object_name が spot_interior_repository fallback で
     "何か" 漏出を防ぐ。"""
 
-    def test_object_name_が_実名で_引ける(self) -> None:
+    def test_object_name_can_lookup(self) -> None:
         """v2 scenario の wreck_hold (船倉) を object_name 解決する。
         graph.get_spot(spot_id).interior は None だが、
         spot_interior_repository から引いて "船倉" を返す。"""
@@ -120,9 +120,10 @@ class TestInteractionNotFoundRemediation:
     """#26 Bug 3: ad-hoc action_name で `InteractionNotFoundException` が
     generic LLM_TOOL_EXECUTION_FAILED に化ける問題を防ぐ。"""
 
-    def test_存在しない_action_name_では_利用可能_action_一覧が_返る(
+    def test_returns_action_name_action(
         self, monkeypatch, tmp_path,
     ) -> None:
+        """存在しない action name では 利用可能 action 一覧が 返る。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
         from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
         from ai_rpg_world.application.llm.tool_constants import (

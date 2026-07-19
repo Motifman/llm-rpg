@@ -53,7 +53,7 @@ def repo() -> SqliteBeingRepository:
 class TestSqliteBeingRepositoryCrud:
     """SqliteBeingRepository の CRUD 挙動。"""
 
-    def test_save_して_find_by_id_で同等の_Being_が取り出せる(
+    def test_save_find_id_being(
         self, repo: SqliteBeingRepository
     ) -> None:
         """ラウンドトリップで identity / attachment / kinds が一致。"""
@@ -69,13 +69,13 @@ class TestSqliteBeingRepositoryCrud:
         assert loaded.attachment == original.attachment
         assert loaded.declared_memory_kinds == original.declared_memory_kinds
 
-    def test_存在しない_ID_の_find_by_id_は_None(
+    def test_id_find_id_none(
         self, repo: SqliteBeingRepository
     ) -> None:
         """未保存の ID では None。"""
         assert repo.find_by_id(BeingId("missing")) is None
 
-    def test_save_は同一_ID_を上書きする(self, repo: SqliteBeingRepository) -> None:
+    def test_save_same_id_overwrites(self, repo: SqliteBeingRepository) -> None:
         """同 being_id で save し直すと内容が更新される (upsert)。"""
         repo.save(_being("ada", name="アダ"))
         repo.save(_being("ada", name="アダ2"))
@@ -83,7 +83,7 @@ class TestSqliteBeingRepositoryCrud:
         assert loaded is not None
         assert loaded.identity.name == "アダ2"
 
-    def test_exists_は保存後_True_を返す(
+    def test_returns_exists_after_true(
         self, repo: SqliteBeingRepository
     ) -> None:
         """save 済みなら exists が True、未保存なら False。"""
@@ -91,7 +91,7 @@ class TestSqliteBeingRepositoryCrud:
         assert repo.exists(BeingId("ada")) is True
         assert repo.exists(BeingId("missing")) is False
 
-    def test_delete_は存在すれば_True_で削除し_未保存なら_False(
+    def test_delete_true_false(
         self, repo: SqliteBeingRepository
     ) -> None:
         """存在する Being は delete で削除、未保存は False。"""
@@ -104,7 +104,7 @@ class TestSqliteBeingRepositoryCrud:
 class TestSqliteBeingRepositoryAttachmentRoundtrip:
     """attachment の partial state を生じさせない永続化挙動。"""
 
-    def test_未_attach_の_Being_も_attachment_None_で復元される(
+    def test_attach_being_attachment_none_restored(
         self, repo: SqliteBeingRepository
     ) -> None:
         """attachment 未設定 Being は復元後も is_attached=False。"""
@@ -113,7 +113,7 @@ class TestSqliteBeingRepositoryAttachmentRoundtrip:
         assert loaded is not None
         assert loaded.is_attached is False
 
-    def test_attach_済み_Being_は_attachment_両フィールドで復元される(
+    def test_attach_being_attachment_restored(
         self, repo: SqliteBeingRepository
     ) -> None:
         """attached Being は復元後も world / player 両方が埋まる。"""
@@ -128,7 +128,7 @@ class TestSqliteBeingRepositoryAttachmentRoundtrip:
 class TestSqliteBeingRepositorySchema:
     """SQLite schema / migration 挙動。"""
 
-    def test_2回初期化しても_migration_は_1回だけ走る(
+    def test_two_initializations_run_migration_once(
         self, tmp_path: Path
     ) -> None:
         """同じ DB ファイルに再接続しても migration は冪等。"""
@@ -140,7 +140,7 @@ class TestSqliteBeingRepositorySchema:
         assert loaded is not None
         assert loaded.identity.name == "アダ"
 
-    def test_save_後の_snapshot_json_は_JSON_として読める(
+    def test_save_after_snapshot_json(
         self, repo: SqliteBeingRepository
     ) -> None:
         """SQL を直接叩いて payload が想定形であることを確認。"""
@@ -166,7 +166,7 @@ class TestSqliteBeingRepositorySchema:
 class TestSqliteBeingRepositoryMemoryPayload:
     """Phase 4 Step 4-1: memory_payload_json の永続化 round-trip。"""
 
-    def test_payload_dict_に_memory_payload_json_が乗る(self) -> None:
+    def test_payload_dict_memory_payload_json_included(self) -> None:
         """_snapshot_to_payload_dict が v2 snapshot の payload を落とさない。"""
         from ai_rpg_world.domain.being.value_object.being_snapshot import (
             BeingSnapshot,
@@ -193,7 +193,7 @@ class TestSqliteBeingRepositoryMemoryPayload:
         restored = _payload_dict_to_snapshot(json.loads(json.dumps(payload_dict)))
         assert restored == snapshot
 
-    def test_v1_行を読むときは_payload_は_None_になる(self) -> None:
+    def test_v1_line_payload_none(self) -> None:
         """v1 schema の snapshot_json には memory_payload_json キーがない。"""
         from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
             _payload_dict_to_snapshot,
@@ -216,7 +216,7 @@ class TestSqliteBeingRepositoryMemoryPayload:
 class TestSqliteBeingRepositoryFindAllAttachedTo:
     """find_all_attached_to の挙動 (= Phase 3 Step 2 で追加、JSON1 経由クエリ)。"""
 
-    def test_attach_中の_Being_が_1_件マッチする(
+    def test_one_attached_being_matches_query(
         self, repo: SqliteBeingRepository
     ) -> None:
         """正常系: ある (world, player) に attach 中の Being を 1 件返す。"""
@@ -226,14 +226,14 @@ class TestSqliteBeingRepositoryFindAllAttachedTo:
         assert result[0].being_id == BeingId("ada")
         assert result[0].is_attached is True
 
-    def test_未_attach_の_Being_はヒットしない(
+    def test_attach_being(
         self, repo: SqliteBeingRepository
     ) -> None:
         """attachment_world_id が NULL の行は WHERE で除外される。"""
         repo.save(_being("ada", attached=False))
         assert repo.find_all_attached_to(WorldId(1), PlayerId(2)) == []
 
-    def test_同_world_player_に_複数_Being_あれば全件返す(
+    def test_returns_all_world_player_multiple_being(
         self, repo: SqliteBeingRepository
     ) -> None:
         """異常状態検出は Resolver の責務なので、ここは全件返す。"""
@@ -255,7 +255,7 @@ class TestSqliteBeingRepositoryFindAllAttachedTo:
         result = repo.find_all_attached_to(WorldId(1), PlayerId(2))
         assert {b.being_id.value for b in result} == {"ada", "ben"}
 
-    def test_非_VO_を渡すと_TypeError(self, repo: SqliteBeingRepository) -> None:
+    def test_vo_raises_type_error(self, repo: SqliteBeingRepository) -> None:
         """型違反は TypeError で弾く。"""
         with pytest.raises(TypeError, match="world_id"):
             repo.find_all_attached_to(1, PlayerId(2))  # type: ignore[arg-type]
@@ -264,14 +264,14 @@ class TestSqliteBeingRepositoryFindAllAttachedTo:
 class TestSqliteBeingRepositoryTypeGuards:
     """型違反の弾き方。"""
 
-    def test_save_に非_Being_を渡すと_TypeError(
+    def test_save_being_raises_type_error(
         self, repo: SqliteBeingRepository
     ) -> None:
         """型違反は TypeError で弾く。"""
         with pytest.raises(TypeError):
             repo.save("not-a-being")  # type: ignore[arg-type]
 
-    def test_find_by_id_に非_BeingId_を渡すと_TypeError(
+    def test_find_by_id_being_id_raises_type_error(
         self, repo: SqliteBeingRepository
     ) -> None:
         """型違反は TypeError で弾く。"""

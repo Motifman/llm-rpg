@@ -43,13 +43,15 @@ def _load_first_item(scenario_dict: dict):
 class TestConsumeEffectParsing:
     """JSON shape ごとのパース挙動。"""
 
-    def test_consume_effect_未指定なら_None(self) -> None:
+    def test_consume_effect_unspecified_none(self) -> None:
+        """consume effect 未指定なら None。"""
         item_def = _load_first_item(_scenario_with_item(
             {"id": "wood", "name": "木", "description": "ただの木", "category": "MATERIAL"}
         ))
         assert item_def.consume_effect is None
 
-    def test_単一_dict_は_単一_ItemEffect_に解決される(self) -> None:
+    def test_single_dict_single_item_effect_resolved(self) -> None:
+        """単一 dict は単一 ItemEffect に解決される。"""
         item_def = _load_first_item(_scenario_with_item(
             {
                 "id": "water", "name": "水", "description": "飲み水", "category": "FOOD",
@@ -59,7 +61,8 @@ class TestConsumeEffectParsing:
         assert isinstance(item_def.consume_effect, HealEffect)
         assert item_def.consume_effect.amount == 3
 
-    def test_list_は_CompositeItemEffect_に解決される(self) -> None:
+    def test_list_composite_item_effect_resolved(self) -> None:
+        """list は CompositeItemEffect に解決される。"""
         item_def = _load_first_item(_scenario_with_item(
             {
                 "id": "fish", "name": "魚", "description": "魚", "category": "FOOD",
@@ -77,7 +80,8 @@ class TestConsumeEffectParsing:
         assert eff.effects[1].need_type_name == "HUNGER"
         assert eff.effects[1].amount == 30
 
-    def test_要素1個の_list_は_単一_ItemEffect_になる(self) -> None:
+    def test_element_one_list_single_item_effect(self) -> None:
+        """要素 1 個の list は単一 ItemEffect になる。"""
         item_def = _load_first_item(_scenario_with_item(
             {
                 "id": "berry", "name": "実", "description": "実", "category": "FOOD",
@@ -91,7 +95,8 @@ class TestConsumeEffectParsing:
 class TestConsumeEffectValidation:
     """エラー条件: 未知 type / 必須欠落。"""
 
-    def test_未知の_type_は_ValueError(self) -> None:
+    def test_unknown_type_raises_value_error(self) -> None:
+        """未知の type は ValueError。"""
         with pytest.raises(ValueError, match="unknown consume_effect type"):
             _load_first_item(_scenario_with_item(
                 {
@@ -100,7 +105,8 @@ class TestConsumeEffectValidation:
                 }
             ))
 
-    def test_satisfy_need_の_need_type_欠落で_ValueError(self) -> None:
+    def test_satisfy_need_type_missing_raises_value_error(self) -> None:
+        """satisfy need の need type 欠落で ValueError。"""
         with pytest.raises(ValueError, match="satisfy_need requires"):
             _load_first_item(_scenario_with_item(
                 {
@@ -109,7 +115,8 @@ class TestConsumeEffectValidation:
                 }
             ))
 
-    def test_type_欠落で_ValueError(self) -> None:
+    def test_type_missing_raises_value_error(self) -> None:
+        """type 欠落で ValueError。"""
         with pytest.raises(ValueError, match="missing 'type'"):
             _load_first_item(_scenario_with_item(
                 {
@@ -122,7 +129,8 @@ class TestConsumeEffectValidation:
 class TestReviveEffectParsing:
     """Issue #621 Phase 3a: `revive` type の consume_effect parse。"""
 
-    def test_revive_単一_dict_で_ReviveEffect_に_解決される(self) -> None:
+    def test_revive_single_dict_revive_effect_resolved(self) -> None:
+        """revive 単一 dict で ReviveEffect に解決される。"""
         item_def = _load_first_item(_scenario_with_item(
             {
                 "id": "first_aid", "name": "救急用品",
@@ -133,7 +141,7 @@ class TestReviveEffectParsing:
         assert isinstance(item_def.consume_effect, ReviveEffect)
         assert item_def.consume_effect.hp_rate == 0.4
 
-    def test_revive_と_heal_の_合成も_可能(self) -> None:
+    def test_revive_heal(self) -> None:
         """蘇生 + 追加 HP 回復のような composite。"""
         item_def = _load_first_item(_scenario_with_item(
             {
@@ -151,7 +159,8 @@ class TestReviveEffectParsing:
         assert eff.effects[0].hp_rate == 0.4
         assert isinstance(eff.effects[1], HealEffect)
 
-    def test_revive_の_hp_rate_未指定で_ValueError(self) -> None:
+    def test_revive_hp_rate_raises_value_error(self) -> None:
+        """revive の hp rate 未指定で ValueError。"""
         with pytest.raises((KeyError, ValueError)):
             _load_first_item(_scenario_with_item(
                 {
@@ -160,7 +169,7 @@ class TestReviveEffectParsing:
                 }
             ))
 
-    def test_revive_の_hp_rate_範囲外で_例外(self) -> None:
+    def test_revive_hp_rate_raises_exception(self) -> None:
         """ReviveEffect の __post_init__ が ItemEffectValidationException を投げる。"""
         from ai_rpg_world.domain.item.exception import ItemEffectValidationException
         with pytest.raises(ItemEffectValidationException):

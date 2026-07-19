@@ -46,7 +46,8 @@ def _move_to_spot(runtime, player_id: PlayerId, spot_string_id: str) -> None:
 class TestCrumblingBeamDamage:
     """廃屋の崩れた梁を潜ると HP -15。"""
 
-    def test_duck_under_で_HP_15_減る(self, runtime) -> None:
+    def test_duck_under_hp_fifteen_decreases(self, runtime) -> None:
+        """duck under で HP 15 減る。"""
         ada = PlayerId(runtime.scenario.player_spawns[0].player_id)
         # 廃屋にテレポート (沼地経由の道を歩かせると tick が進んでしまうので強制)
         _move_to_spot(runtime, ada, "observation_outpost_ruins")
@@ -58,7 +59,8 @@ class TestCrumblingBeamDamage:
         status_after = runtime._player_status_repo.find_by_id(ada)
         assert status_after.hp.value == hp_before - 15
 
-    def test_duck_under_で_chart_fragment_を獲得(self, runtime) -> None:
+    def test_duck_under_chart_fragment(self, runtime) -> None:
+        """duck under で chart fragment を獲得。"""
         ada = PlayerId(runtime.scenario.player_spawns[0].player_id)
         _move_to_spot(runtime, ada, "observation_outpost_ruins")
 
@@ -77,7 +79,8 @@ class TestCrumblingBeamDamage:
 class TestSlipperyCliffDamage:
     """岩礁海岸の濡れた縁を覗き込むと HP -5。"""
 
-    def test_peer_over_で_HP_5_減る(self, runtime) -> None:
+    def test_peer_over_hp_five_decreases(self, runtime) -> None:
+        """peer over で HP 5 減る。"""
         ada = PlayerId(runtime.scenario.player_spawns[0].player_id)
         _move_to_spot(runtime, ada, "rocky_shore")
         status_before = runtime._player_status_repo.find_by_id(ada)

@@ -56,7 +56,7 @@ def _make_event(*, target_incapacitated: bool = False, damage: int = 5):
 
 
 class TestRegistryRouting:
-    def test_strategy_は_spot_graph(self) -> None:
+    def test_strategy_spot_graph(self) -> None:
         """MonsterPredatedMonsterInSpotEvent → spot_graph 戦略。"""
         registry = ObservedEventRegistry()
         event = _make_event()
@@ -67,7 +67,7 @@ class TestRegistryRouting:
 class TestRecipientStrategy:
     """同スポット全プレイヤー配信。"""
 
-    def test_同スポット全員が配信先(self) -> None:
+    def test_spot_all_players(self) -> None:
         """actor / target どちらも monster なので player の self 除外なし。"""
         registry = ObservedEventRegistry(
             event_to_strategy={MonsterPredatedMonsterInSpotEvent: "spot_graph"}
@@ -111,7 +111,7 @@ def _make_ctx() -> ObservationFormatterContext:
 class TestFormatter:
     """致命 / 通常で prose 切替。"""
 
-    def test_通常攻撃の_prose(self) -> None:
+    def test_prose_2(self) -> None:
         """target_incapacitated=False で「{attacker}が{prey}に襲いかかった」。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
         result = formatter.format(_make_event(damage=3), PlayerId(1))
@@ -124,7 +124,7 @@ class TestFormatter:
         assert result.structured["target_incapacitated"] is False
         assert result.structured["damage"] == 3
 
-    def test_致命攻撃の_prose(self) -> None:
+    def test_prose(self) -> None:
         """target_incapacitated=True で「{attacker}が{prey}を仕留めた」。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
         result = formatter.format(

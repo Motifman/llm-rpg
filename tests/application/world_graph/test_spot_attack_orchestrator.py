@@ -120,7 +120,7 @@ def _make_orchestrator(graph: SpotGraphAggregate, monster, player):
 class TestExecuteMonsterAttack:
     """モンスター → プレイヤー攻撃の orchestration。"""
 
-    def test_成立で_event_発火と_3_集約_save(self) -> None:
+    def test_event_trigger_three_save_2(self) -> None:
         """成立で MonsterAttackedPlayerInSpotEvent が追加され、
         monster / player / graph がすべて save される。"""
         graph = _make_graph()
@@ -148,7 +148,7 @@ class TestExecuteMonsterAttack:
         player_repo.save.assert_called_once_with(player)
         spot_repo.save.assert_called_once_with(graph)
 
-    def test_暗闇_かつ_dark_vision有りで_target_visible_false(self) -> None:
+    def test_darkness_dark_vision_target_visible_false(self) -> None:
         """DARK + dark_vision あり → 攻撃成立、event.target_visible=False。"""
         graph = _make_graph(lighting=LightingEnum.DARK)
         monster = _make_monster(has_dark_vision=True)
@@ -170,7 +170,7 @@ class TestExecuteMonsterAttack:
         assert len(events) == 1
         assert events[0].target_visible is False
 
-    def test_不成立では_event_も_save_も無し(self) -> None:
+    def test_event_save(self) -> None:
         """cooldown 中など executed=False では何も追加されず save されない。"""
         graph = _make_graph()
         monster = _make_monster(can_attack=False)
@@ -194,7 +194,7 @@ class TestExecuteMonsterAttack:
         player_repo.save.assert_not_called()
         spot_repo.save.assert_not_called()
 
-    def test_target_incapacitated_が_event_に直接そのまま渡される(self) -> None:
+    def test_target_incapacitated_event(self) -> None:
         """`AttackOutcome.target_incapacitated=True` → event.target_incapacitated=True。
 
         Phase B で event の field 名を統一したため翻訳が不要になった
@@ -224,7 +224,7 @@ class TestExecuteMonsterAttack:
 class TestExecutePlayerAttack:
     """プレイヤー → モンスター攻撃の orchestration。"""
 
-    def test_成立で_event_発火と_3_集約_save(self) -> None:
+    def test_event_trigger_three_save(self) -> None:
         """成立で PlayerAttackedMonsterInSpotEvent が graph に追加される。"""
         # 実 MonsterAggregate を使う（apply_damage 経路を踏ませるため）
         from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (

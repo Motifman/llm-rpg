@@ -40,31 +40,31 @@ def _render_state_section(snap: SpotGraphPlayerSnapshotDto) -> list[str]:
 class TestOwnFatigueHintRendered:
     """own_fatigue_level に応じて _FATIGUE_OWN_HINT が prompt に出る挙動を保証する。"""
 
-    def test_ok_tier_では_hint_は出ない(self) -> None:
+    def test_ok_tier_hint_not_rendered(self) -> None:
         """疲労 ok (= 0-29) では hint は省略され、無駄なノイズが乗らない。"""
         lines = _render_state_section(_make_snapshot(own_fatigue_level="ok"))
         joined = "\n".join(lines)
         assert "→" not in joined
 
-    def test_tired_tier_でも_hint_は出ない(self) -> None:
+    def test_tired_tier_hint_not_rendered(self) -> None:
         """疲労 tired (= 30-59) も hint なし (= _FATIGUE_OWN_HINT に未登録)。"""
         lines = _render_state_section(_make_snapshot(own_fatigue_level="tired"))
         joined = "\n".join(lines)
         assert "→" not in joined
 
-    def test_fatigued_で_重い行動_hint_が出る(self) -> None:
+    def test_fatigued_action_hint_rendered(self) -> None:
         """fatigued (60-84) で「動きが鈍くなっている。重い行動は控えめに」が出る。"""
         lines = _render_state_section(_make_snapshot(own_fatigue_level="fatigued"))
         joined = "\n".join(lines)
         assert "動きが鈍" in joined or "重い行動は控えめ" in joined
 
-    def test_severe_で_早めに休む_hint_が出る(self) -> None:
+    def test_severe_hint_rendered(self) -> None:
         """severe (85-99) で「判断が鈍る・早めに休むこと」が出る。"""
         lines = _render_state_section(_make_snapshot(own_fatigue_level="severe"))
         joined = "\n".join(lines)
         assert "早めに休む" in joined
 
-    def test_exhausted_で_block_される_tool_の明示が出る(self) -> None:
+    def test_exhausted_block_tool_rendered(self) -> None:
         """exhausted (100) で「travel / attack / interact は実行できない」と
         block 対象が明示され、wait や食事での回復経路も併記される。
         Y_after_pr607 で agent がこの情報を読めず「動けない」と思い込んで
@@ -76,7 +76,7 @@ class TestOwnFatigueHintRendered:
         assert "interact" in joined
         assert "wait" in joined or "食事" in joined
 
-    def test_default_は_ok_扱い(self) -> None:
+    def test_default_ok(self) -> None:
         """own_fatigue_level field を default のまま使うと ok と同じ挙動。"""
         snap = SpotGraphPlayerSnapshotDto(
             current_spot_id=0,
@@ -88,7 +88,7 @@ class TestOwnFatigueHintRendered:
         lines = _render_state_section(snap)
         assert all("→" not in line for line in lines)
 
-    def test_未知の_tier_でも_落ちない(self) -> None:
+    def test_unknown_tier_does_not_crash(self) -> None:
         """不正な tier 文字列でも crash せず hint なしで終わる (= fallback)。"""
         lines = _render_state_section(_make_snapshot(own_fatigue_level="???"))
         joined = "\n".join(lines)

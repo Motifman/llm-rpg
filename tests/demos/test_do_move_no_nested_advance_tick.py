@@ -38,7 +38,7 @@ def runtime(monkeypatch: pytest.MonkeyPatch):
 class TestDoMoveNoNestedAdvanceTick:
     """``do_move`` は travel 開始だけで返り、world tick を進めない。"""
 
-    def test_do_move_は_world_tick_を進めない(self, runtime) -> None:
+    def test_do_move_world_tick_does_not_advance(self, runtime) -> None:
         """旧実装は 200 回まで advance_tick を回していた。新実装は 0 回。"""
         player_id = runtime.get_player_ids()[0]
         tick_before = runtime.current_tick()
@@ -51,7 +51,7 @@ class TestDoMoveNoNestedAdvanceTick:
             f"{tick_before} → {tick_after}"
         )
 
-    def test_do_move_直後は_is_traveling_True(self, runtime) -> None:
+    def test_do_move_after_traveling_true(self, runtime) -> None:
         """travel state が立ち、後続 tick で advance される下準備ができる。"""
         player_id = runtime.get_player_ids()[0]
         runtime.do_move(player_id, "reading_room")
@@ -62,7 +62,7 @@ class TestDoMoveNoNestedAdvanceTick:
         assert nav is not None
         assert nav.is_traveling, "do_move で is_traveling が立たない"
 
-    def test_advance_until_player_idle_で到着まで進む(self, runtime) -> None:
+    def test_advances_advance_until_player_idle(self, runtime) -> None:
         """外側ループ相当の advance_tick を回せば最終的に at_rest になる。"""
         player_id = runtime.get_player_ids()[0]
         runtime.do_move(player_id, "reading_room")
@@ -75,7 +75,7 @@ class TestDoMoveNoNestedAdvanceTick:
         assert nav is not None
         assert not nav.is_traveling
 
-    def test_同一_spot_指定は_no_op_で_world_tick_も進めない(self, runtime) -> None:
+    def test_same_spot_op_world_tick_does_not_advance(self, runtime) -> None:
         """既に居る spot を指定した場合も world tick は進まない。"""
         player_id = runtime.get_player_ids()[0]
         current_spot_name = runtime.get_player_spot_name(player_id)

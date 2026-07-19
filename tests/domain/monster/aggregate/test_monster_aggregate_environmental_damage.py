@@ -73,7 +73,8 @@ def _aggregate(*, max_hp: int = 20) -> MonsterAggregate:
 class TestNonLethal:
     """致命でないダメージで HP 減少 + Damaged event 発火。"""
 
-    def test_HP_減_event_発火(self) -> None:
+    def test_hp_event_trigger(self) -> None:
+        """HP 減 event 発火。"""
         agg = _aggregate(max_hp=20)
         agg.clear_events()
         agg.take_environmental_damage(damage=3, current_tick=WorldTick(10))
@@ -91,7 +92,8 @@ class TestNonLethal:
 class TestLethal:
     """致命ダメージで cause=ENVIRONMENT の MonsterDiedEvent。"""
 
-    def test_HP_削り切ると_cause_ENVIRONMENT_で死亡(self) -> None:
+    def test_hp_cause_environment_dead(self) -> None:
+        """HP 削り切ると cause ENVIRONMENT で死亡。"""
         agg = _aggregate(max_hp=5)
         agg.clear_events()
         agg.take_environmental_damage(damage=10, current_tick=WorldTick(20))
@@ -110,7 +112,8 @@ class TestLethal:
 class TestAlreadyDead:
     """DEAD 状態で呼ぶと例外。"""
 
-    def test_DEAD_状態で_take_environmental_damage_は_例外(self) -> None:
+    def test_dead_take_environmental_damage_raises_exception(self) -> None:
+        """DEAD 状態で takeenvironmentaldamage は例外。"""
         agg = _aggregate()
         # DEAD 状態に強制遷移
         agg._lifecycle_state = MonsterLifecycleState(

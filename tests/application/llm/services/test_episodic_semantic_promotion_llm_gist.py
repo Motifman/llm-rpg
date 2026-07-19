@@ -173,7 +173,7 @@ def _build_cluster(
 class TestEpisodicSemanticClusterPromotionLlmGist:
     """LLM gist 経路の有無で挙動が分岐する。"""
 
-    def test_gist_service_未注入なら_決定論_gist_を_使う(self) -> None:
+    def test_uses_gist_service_uninjected_gist(self) -> None:
         """default の挙動: text に concat、importance=5, tags=()。"""
         svc, sem_store = _build_cluster(gist_service=None)
         svc.on_after_tool_turn(player_id=1)
@@ -186,7 +186,7 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
         assert entry.importance_score == 5  # default
         assert entry.tags == ()  # default
 
-    def test_gist_service_成功なら_LLM_text_と_importance_と_tags_が乗る(self) -> None:
+    def test_gist_service_success_llm_text_importance_tags_included(self) -> None:
         """LLM 経路が生きていれば SemanticMemoryEntry に importance / tags が反映される。"""
         stub = _StubGistService(
             result=SemanticGistResult(
@@ -208,7 +208,7 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
         assert entry.importance_score == 8
         assert entry.tags == ("タカシ", "信頼")
 
-    def test_gist_service_が_例外なら_決定論_gist_に_fallback(
+    def test_gist_service_gist_fallback_raises_exception(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """LLM 失敗時 (API 例外 / ValueError) は決定論 gist に縮退し warning を出す。"""
@@ -231,7 +231,7 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
             "falling back to deterministic gist" in rec.message for rec in caplog.records
         )
 
-    def test_persona_resolver_が_落ちても_LLM_経路は_完走する(self) -> None:
+    def test_persona_resolver_llm_completes(self) -> None:
         """persona_resolver の例外は warning を出して空文字 persona で続行。"""
         stub = _StubGistService(
             result=SemanticGistResult(
@@ -251,7 +251,7 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
         assert len(entries) == 1
         assert entries[0].text == "ok"
 
-    def test_persona_resolver_未指定なら_default_の_player_X_名で_動く(self) -> None:
+    def test_persona_resolver_unspecified_default_player_x_works(self) -> None:
         """persona_resolver=None でも LLM gist は動く。"""
         stub = _StubGistService(
             result=SemanticGistResult(

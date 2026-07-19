@@ -45,7 +45,7 @@ def _phases() -> list:
 class TestParseDayNightConfig:
     """正常系: enabled / 省略 / 無効化の 3 パターン。"""
 
-    def test_enabled_な_day_night_は_DayNightCycleDef_に変換される(self) -> None:
+    def test_enabled_day_night_day_night_cycle_def(self) -> None:
         """JSON の phases が DayNightCycleDef.phases に正しく流し込まれる。"""
         loader = ScenarioLoader()
         env = _minimal_scenario({
@@ -64,13 +64,13 @@ class TestParseDayNightConfig:
         assert config.cycle.phases[0].name == "morning"
         assert config.cycle.phases[2].is_dark is True
 
-    def test_day_night_セクションが無ければ_None(self) -> None:
+    def test_day_night_none(self) -> None:
         """environment.day_night を JSON に書かないシナリオは config=None。"""
         loader = ScenarioLoader()
         config = loader._parse_day_night_config({})
         assert config is None
 
-    def test_enabled_false_でも_None(self) -> None:
+    def test_enabled_false_none(self) -> None:
         """明示的に enabled=false にしたシナリオも昼夜サイクル無し扱い。"""
         loader = ScenarioLoader()
         env = _minimal_scenario({
@@ -85,7 +85,7 @@ class TestParseDayNightConfig:
 class TestParseDayNightConfigValidation:
     """境界条件: 空フェーズ、不正な start_ratio、ticks_per_day=0 など。"""
 
-    def test_phases_が空だと_ScenarioLoadError(self) -> None:
+    def test_phases_empty_scenario_load_error(self) -> None:
         """空配列は boundary で弾く (DayNightCycleDef まで届かない)。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
             ScenarioLoadError,
@@ -99,7 +99,7 @@ class TestParseDayNightConfigValidation:
         with pytest.raises(ScenarioLoadError):
             loader._parse_day_night_config(env["environment"])
 
-    def test_phases_の_start_ratio_が降順だと_DayNightCycleValidation(self) -> None:
+    def test_phases_start_ratio_day_night_cycle_validation(self) -> None:
         """DayNightCycleDef.__post_init__ で弾かれる (boundary 失敗)。"""
         loader = ScenarioLoader()
         env = _minimal_scenario({
@@ -117,7 +117,7 @@ class TestParseDayNightConfigValidation:
         with pytest.raises(DayNightCycleValidationException):
             loader._parse_day_night_config(env["environment"])
 
-    def test_ticks_per_day_0_なら_DayNightCycleValidation(self) -> None:
+    def test_ticks_per_day_zero_day_night_cycle_validation(self) -> None:
         """ticks_per_day=0 はドメイン側の不変条件違反として弾かれる。"""
         loader = ScenarioLoader()
         env = _minimal_scenario({
@@ -128,7 +128,7 @@ class TestParseDayNightConfigValidation:
         with pytest.raises(DayNightCycleValidationException):
             loader._parse_day_night_config(env["environment"])
 
-    def test_phases_要素が_dict_でない場合_ScenarioLoadError(self) -> None:
+    def test_phases_element_dict_scenario_load_error(self) -> None:
         """配列要素が dict 以外なら boundary で弾く (KeyError 素通り防止)。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
             ScenarioLoadError,
@@ -142,7 +142,7 @@ class TestParseDayNightConfigValidation:
         with pytest.raises(ScenarioLoadError):
             loader._parse_day_night_config(env["environment"])
 
-    def test_phases_要素に_必須キーが欠落していると_ScenarioLoadError(self) -> None:
+    def test_phases_element_key_missing_scenario_load_error(self) -> None:
         """name / start_ratio / display_text / ambient_light / is_dark の欠落を boundary で弾く。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
             ScenarioLoadError,

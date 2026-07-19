@@ -62,7 +62,7 @@ def _make_aggregate(
 class TestHealthBucketing:
     """HP の比率を 3 段階バケットに丸める挙動。"""
 
-    def test_満タンは_healthy(self) -> None:
+    def test_healthy(self) -> None:
         """HP が満タンなら healthy バケット。"""
         lookup = MagicMock()
         lookup.find_by_id.return_value = _make_aggregate(hp=100, max_hp=100)
@@ -73,7 +73,7 @@ class TestHealthBucketing:
         assert view is not None
         assert view.health_bucket == HEALTH_HEALTHY
 
-    def test_半分以下は_wounded(self) -> None:
+    def test_less_wounded(self) -> None:
         """HP 50% は wounded（30%以上70%未満）。"""
         lookup = MagicMock()
         lookup.find_by_id.return_value = _make_aggregate(hp=50, max_hp=100)
@@ -81,7 +81,7 @@ class TestHealthBucketing:
 
         assert provider(MonsterId.create(101)).health_bucket == HEALTH_WOUNDED
 
-    def test_30パーセント未満は_dying(self) -> None:
+    def test_30_below_dying(self) -> None:
         """HP 20% は dying（瀕死）。"""
         lookup = MagicMock()
         lookup.find_by_id.return_value = _make_aggregate(hp=20, max_hp=100)
@@ -89,7 +89,7 @@ class TestHealthBucketing:
 
         assert provider(MonsterId.create(101)).health_bucket == HEALTH_DYING
 
-    def test_境界値_70パーセント以上は_healthy(self) -> None:
+    def test_boundary_value_70_more_healthy(self) -> None:
         """しきい値 0.70 ちょうどは healthy 側（healthy ≧ 0.70）。"""
         lookup = MagicMock()
         lookup.find_by_id.return_value = _make_aggregate(hp=70, max_hp=100)
@@ -97,7 +97,7 @@ class TestHealthBucketing:
 
         assert provider(MonsterId.create(101)).health_bucket == HEALTH_HEALTHY
 
-    def test_境界値_69パーセントは_wounded(self) -> None:
+    def test_boundary_value_69_wounded(self) -> None:
         """境界の少し下（HP 69%）は wounded。"""
         lookup = MagicMock()
         lookup.find_by_id.return_value = _make_aggregate(hp=69, max_hp=100)
@@ -105,7 +105,7 @@ class TestHealthBucketing:
 
         assert provider(MonsterId.create(101)).health_bucket == HEALTH_WOUNDED
 
-    def test_max_hp_ゼロは_healthy_扱い(self) -> None:
+    def test_max_hp_healthy_2(self) -> None:
         """max_hp=0 のテンプレ（HP を持たない概念モンスター）は healthy 表示。"""
         lookup = MagicMock()
         lookup.find_by_id.return_value = _make_aggregate(hp=0, max_hp=0)
@@ -117,7 +117,7 @@ class TestHealthBucketing:
 class TestBehaviorLabel:
     """behavior_state の日本語ラベル変換。"""
 
-    def test_idle_は落ち着いている(self) -> None:
+    def test_idle(self) -> None:
         """IDLE → 落ち着いている。"""
         lookup = MagicMock()
         lookup.find_by_id.return_value = _make_aggregate(behavior_value="IDLE")
@@ -125,7 +125,7 @@ class TestBehaviorLabel:
 
         assert view.behavior_label == "落ち着いている"
 
-    def test_chase_はこちらを追っている(self) -> None:
+    def test_chase(self) -> None:
         """CHASE → こちらを追っている。"""
         lookup = MagicMock()
         lookup.find_by_id.return_value = _make_aggregate(behavior_value="CHASE")
@@ -133,7 +133,7 @@ class TestBehaviorLabel:
 
         assert view.behavior_label == "こちらを追っている"
 
-    def test_未知の_state_はそのまま(self) -> None:
+    def test_unknown_state(self) -> None:
         """マップに無い state は元の文字列を返す（落ちない）。"""
         lookup = MagicMock()
         lookup.find_by_id.return_value = _make_aggregate(behavior_value="MYSTERY")
@@ -145,7 +145,7 @@ class TestBehaviorLabel:
 class TestDeadMonster:
     """死亡個体は別表記（is_dead=True, behavior は固定文言）。"""
 
-    def test_dead_status_は_is_dead_true(self) -> None:
+    def test_dead_status_dead_true(self) -> None:
         """status=DEAD のときは is_dead=True、health_bucket=dead。"""
         lookup = MagicMock()
         lookup.find_by_id.return_value = _make_aggregate(
@@ -164,7 +164,7 @@ class TestDeadMonster:
 class TestNotFound:
     """aggregate が見つからない場合は None。"""
 
-    def test_aggregate_none_は_view_none(self) -> None:
+    def test_aggregate_none_view_none(self) -> None:
         """find_by_id が None を返した場合は provider も None を返す。"""
         lookup = MagicMock()
         lookup.find_by_id.return_value = None
@@ -177,7 +177,7 @@ class TestNotFound:
 class TestNameFallback:
     """テンプレ名が空のときのフォールバック。"""
 
-    def test_空名は何かのモンスター(self) -> None:
+    def test_empty_monster_name_falls_back_to_generic_monster_label(self) -> None:
         """template.name が空文字なら "何かのモンスター" になる。"""
         lookup = MagicMock()
         lookup.find_by_id.return_value = _make_aggregate(name="   ")
@@ -194,15 +194,15 @@ class TestBucketHpDirect:
     動作を保証する。
     """
 
-    def test_value_ゼロは_dying(self) -> None:
+    def test_value_dying(self) -> None:
         """value=0, max_hp>0 のケースは dying（ガード動作）。"""
         assert _bucket_hp(0, 100) == HEALTH_DYING
 
-    def test_負の_value_も_dying(self) -> None:
+    def test_negative_value_dying(self) -> None:
         """value が負の異常値も dying に倒す（型安全のための保険）。"""
         assert _bucket_hp(-5, 100) == HEALTH_DYING
 
-    def test_max_hp_ゼロは_healthy(self) -> None:
+    def test_max_hp_healthy(self) -> None:
         """HP を持たない概念モンスターは healthy 表示で扱う。"""
         assert _bucket_hp(0, 0) == HEALTH_HEALTHY
 
@@ -210,7 +210,7 @@ class TestBucketHpDirect:
 class TestHealthBucketJpMapping:
     """共有定数 `HEALTH_BUCKET_JP` の網羅性。"""
 
-    def test_全ての_bucket_に日本語訳が存在する(self) -> None:
+    def test_all_bucket_japanese_translation(self) -> None:
         """4 つの bucket すべてが日本語マップに定義されている（drift 検知）。"""
         for bucket in (HEALTH_HEALTHY, HEALTH_WOUNDED, HEALTH_DYING, HEALTH_DEAD):
             assert bucket in HEALTH_BUCKET_JP

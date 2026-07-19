@@ -73,24 +73,27 @@ def _link(
 class TestSqliteMemoryLinkByBeingBasic:
     """upsert / get / list / count / remove の SQLite 永続化挙動。"""
 
-    def test_upsert_と_get(self, store: SqliteMemoryLinkStore, being: BeingId) -> None:
+    def test_upsert_get(self, store: SqliteMemoryLinkStore, being: BeingId) -> None:
+        """upsert と get。"""
         link = _link(episode_id_a="a", episode_id_b="b")
         store.upsert_link_by_being(being, link)
         got = store.get_link_by_being(being, "a", "b", MemoryLinkType.CO_RECALL)
         assert got is not None
         assert got.episode_id_a == "a" and got.episode_id_b == "b"
 
-    def test_同一_key_の_upsert_は_上書き(
+    def test_same_key_upsert(
         self, store: SqliteMemoryLinkStore, being: BeingId
     ) -> None:
+        """同一 key の upsert は上書き。"""
         store.upsert_link_by_being(being, _link(episode_id_a="a", episode_id_b="b", strength=0.3))
         store.upsert_link_by_being(being, _link(episode_id_a="a", episode_id_b="b", strength=0.95))
         got = store.get_link_by_being(being, "a", "b", MemoryLinkType.CO_RECALL)
         assert got is not None and got.strength == pytest.approx(0.95)
 
-    def test_list_for_episode_は_strength_降順で_limit_適用(
+    def test_list_episode_strength_limit(
         self, store: SqliteMemoryLinkStore, being: BeingId
     ) -> None:
+        """list for episode は strength 降順で limit 適用。"""
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="a", strength=0.3))
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="b", strength=0.9))
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="c", strength=0.6))
@@ -127,7 +130,8 @@ class TestSqliteMemoryLinkByBeingBasic:
 class TestSqliteMemoryLinkByBeingTypeGuard:
     """型違反は TypeError。"""
 
-    def test_being_id_型違反は_TypeError(self, store: SqliteMemoryLinkStore) -> None:
+    def test_being_id_raises_type_error(self, store: SqliteMemoryLinkStore) -> None:
+        """being id 型違反は TypeError。"""
         with pytest.raises(TypeError, match="being_id"):
             store.upsert_link_by_being(
                 "not-a-being",  # type: ignore[arg-type]
@@ -138,7 +142,8 @@ class TestSqliteMemoryLinkByBeingTypeGuard:
 class TestSqliteMemoryLinkReplaceAll:
     """Phase 4 Step 4-2a: replace_all_by_being の挙動 (snapshot restore primitive)。"""
 
-    def test_既存_link_を一括置換する(self, store) -> None:
+    def test_replace_all_replaces_existing_links(self, store) -> None:
+        """既存 link を一括置換する。"""
         b = BeingId("ada")
         store.upsert_link_by_being(b, _link(episode_id_a="ep-1", episode_id_b="ep-2"))
         new = _link(episode_id_a="ep-3", episode_id_b="ep-4")
@@ -147,7 +152,8 @@ class TestSqliteMemoryLinkReplaceAll:
         assert len(listed) == 1
         assert listed[0].episode_id_a == "ep-3"
 
-    def test_他_being_は影響しない(self, store) -> None:
+    def test_other_being_does_not_affect(self, store) -> None:
+        """他 being は影響しない。"""
         store.upsert_link_by_being(
             BeingId("ada"), _link(episode_id_a="ep-1", episode_id_b="ep-2")
         )
