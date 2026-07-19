@@ -14,6 +14,9 @@ import pytest
 
 from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _SCENARIO_PATH = (
@@ -24,16 +27,20 @@ _SCENARIO_PATH = (
 )
 
 
-def _enable_prereqs(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("SEMANTIC_SEARCH_ENABLED", "1")
-    monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
-    monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-    monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
+def _stagnation_config(**overrides):
+    values = dict(
+        episodic_enabled=True,
+        semantic_search_enabled=True,
+        belief_consolidation_enabled=True,
+        goal_reflect_enabled=True,
+        stagnation_pressure_enabled=True,
+    )
+    values.update(overrides)
+    return ResolvedLlmRuntimeConfig.for_tests(**values)
 
 
 def _being_id(runtime, player_id: int):
-    return runtime._aux_being_resolver.resolve_being_id(
+    return runtime.aux_being_resolver.resolve_being_id(
         runtime._aux_being_default_world_id, PlayerId(player_id)
     )
 
@@ -52,69 +59,60 @@ class _CapturingRecorder:
 class TestStagnationReasoningFailFast:
     """前提 flag が欠けたまま案A を ON にすると起動時に落ちる (静かな失敗を弾く)。"""
 
-    def test_pressure_off_で_reasoning_on_は_起動時に落ちる(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        monkeypatch.delenv("STAGNATION_PRESSURE_ENABLED", raising=False)
-        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
+    def test_pressure_off_で_reasoning_on_は_起動時に落ちる(self) -> None:
         with pytest.raises(ValueError, match="STAGNATION_PRESSURE_ENABLED"):
-            create_world_runtime(_SCENARIO_PATH)
+            create_world_runtime(
+                _SCENARIO_PATH,
+                config=_stagnation_config(
+                    stagnation_pressure_enabled=False,
+                    stagnation_reasoning_enabled=True,
+                ),
+            )
 
-    def test_goal_reflect_off_で_reasoning_on_は_起動時に落ちる(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-        monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
-        monkeypatch.delenv("GOAL_REFLECT_ENABLED", raising=False)
-        # pressure を ON にして「pressure 欠如」分岐を回避し、reflect 欠如分岐に
-        # 到達させる。案A の fail-fast は coordinator 構築より前 (flag 解決層) で
-        # 走るので、reflect を必要とする案A 側の check が先に立つ。
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
+    def test_goal_reflect_off_で_reasoning_on_は_起動時に落ちる(self) -> None:
         with pytest.raises(ValueError, match="GOAL_REFLECT_ENABLED"):
-            create_world_runtime(_SCENARIO_PATH)
+            create_world_runtime(
+                _SCENARIO_PATH,
+                config=_stagnation_config(
+                    goal_reflect_enabled=False,
+                    stagnation_reasoning_enabled=True,
+                ),
+            )
 
-    def test_episodic_off_で_reasoning_on_は_起動時に落ちる(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_episodic_off_で_reasoning_on_は_起動時に落ちる(self) -> None:
         """敵対的レビュー HIGH 1: LLM_EPISODIC_ENABLED を立て忘れたまま案A を ON に
         すると、従来は fail-fast も含む episodic ブロック丸ごとが skip され、熟考が
         一生焚かれない静かな失敗になっていた。episodic を前提にする案A の flag が
         ON なら、親 gate より前で LLM_EPISODIC_ENABLED を要求して落とす。"""
-        monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
-        monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
         with pytest.raises(ValueError, match="LLM_EPISODIC_ENABLED"):
-            create_world_runtime(_SCENARIO_PATH)
+            create_world_runtime(
+                _SCENARIO_PATH,
+                config=_stagnation_config(
+                    episodic_enabled=False,
+                    stagnation_reasoning_enabled=True,
+                ),
+            )
 
-    def test_episodic_off_で_pressure_on_は_起動時に落ちる(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_episodic_off_で_pressure_on_は_起動時に落ちる(self) -> None:
         """HIGH 1 (同じ親 gate 穴の共有): STAGNATION_PRESSURE も episodic 前提なので、
         episodic OFF のまま ON にすると起動時に落ちる。"""
-        monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
-        monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        monkeypatch.setenv("STAGNATION_PRESSURE_ENABLED", "1")
-        monkeypatch.delenv("STAGNATION_REASONING_ENABLED", raising=False)
         with pytest.raises(ValueError, match="LLM_EPISODIC_ENABLED"):
-            create_world_runtime(_SCENARIO_PATH)
+            create_world_runtime(
+                _SCENARIO_PATH,
+                config=_stagnation_config(episodic_enabled=False),
+            )
 
-    def test_episodic_off_で_goal_stagnation_evidence_on_は_起動時に落ちる(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_episodic_off_で_goal_stagnation_evidence_on_は_起動時に落ちる(self) -> None:
         """HIGH 1 (同じ親 gate 穴の共有): GOAL_STAGNATION_EVIDENCE も episodic 前提。"""
-        monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
-        monkeypatch.setenv("BELIEF_CONSOLIDATION_ENABLED", "1")
-        monkeypatch.setenv("GOAL_REFLECT_ENABLED", "1")
-        monkeypatch.setenv("GOAL_STAGNATION_EVIDENCE_ENABLED", "1")
         with pytest.raises(ValueError, match="LLM_EPISODIC_ENABLED"):
-            create_world_runtime(_SCENARIO_PATH)
+            create_world_runtime(
+                _SCENARIO_PATH,
+                config=_stagnation_config(
+                    episodic_enabled=False,
+                    stagnation_pressure_enabled=False,
+                    goal_stagnation_evidence_enabled=True,
+                ),
+            )
 
 
 class TestStagnationReasoningEffortDecision:
@@ -127,9 +125,10 @@ class TestStagnationReasoningEffortDecision:
     ) -> None:
         """band==strong で resolve は effort=low を返すが、ラッチはまだ armed のまま
         で trace も出ない (invoke 前に副作用を確定させない)。"""
-        _enable_prereqs(monkeypatch)
-        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_reasoning_enabled=True),
+        )
         recorder = _CapturingRecorder()
         runtime.set_trace_recorder(recorder)
         being_id = _being_id(runtime, 1)
@@ -152,9 +151,10 @@ class TestStagnationReasoningEffortDecision:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """invoke 成功後の commit で初めてラッチが落ち、AGENT_REASONING_ENGAGED が出る。"""
-        _enable_prereqs(monkeypatch)
-        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_reasoning_enabled=True),
+        )
         recorder = _CapturingRecorder()
         runtime.set_trace_recorder(recorder)
         being_id = _being_id(runtime, 1)
@@ -182,9 +182,10 @@ class TestStagnationReasoningEffortDecision:
     ) -> None:
         """invoke 失敗 (= commit されない) を模し、ラッチが armed のまま残ることで
         次行動でも resolve が effort=low を返す (熟考機会を焼失させない)。"""
-        _enable_prereqs(monkeypatch)
-        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_reasoning_enabled=True),
+        )
         being_id = _being_id(runtime, 1)
         for _ in range(3):
             runtime._stagnation_pressure_store.increment_by_being(being_id)
@@ -197,9 +198,10 @@ class TestStagnationReasoningEffortDecision:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """band が strong 未満なら熟考しない。かつ古いラッチはここで畳んで残さない。"""
-        _enable_prereqs(monkeypatch)
-        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_reasoning_enabled=True),
+        )
         being_id = _being_id(runtime, 1)
         runtime._stagnation_pressure_store.increment_by_being(being_id)  # count=1 (light)
         runtime._emit_reflect_observation(PlayerId(1), "停滞", "stalled")
@@ -211,9 +213,10 @@ class TestStagnationReasoningEffortDecision:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """achieved (前進) の気づきでは熟考ラッチを立てない。"""
-        _enable_prereqs(monkeypatch)
-        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_reasoning_enabled=True),
+        )
         being_id = _being_id(runtime, 1)
         for _ in range(3):
             runtime._stagnation_pressure_store.increment_by_being(being_id)
@@ -226,9 +229,10 @@ class TestStagnationReasoningEffortDecision:
         """餓死ループ修正: 熟考ターンの invoke が失敗したとき呼ぶ abandon は、
         latch を消費して「同条件での再試行」を止める。reasoning は実行成立して
         いないので AGENT_REASONING_ENGAGED trace は出さない。"""
-        _enable_prereqs(monkeypatch)
-        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_reasoning_enabled=True),
+        )
         recorder = _CapturingRecorder()
         runtime.set_trace_recorder(recorder)
         being_id = _being_id(runtime, 1)
@@ -253,9 +257,10 @@ class TestStagnationReasoningEffortDecision:
         """防御: ラッチが立っていない (consume False) 状態で commit を呼んでも、
         AGENT_REASONING_ENGAGED trace は出さない。二重 commit / 経路不整合で
         「熟考していないのに engaged」の偽陽性を出さないためのガード。"""
-        _enable_prereqs(monkeypatch)
-        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=_stagnation_config(stagnation_reasoning_enabled=True),
+        )
         recorder = _CapturingRecorder()
         runtime.set_trace_recorder(recorder)
         # arm せずにいきなり commit
@@ -272,9 +277,7 @@ class TestStagnationReasoningOffByDefault:
     def test_flag_off_なら_latch_none_で_effort_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _enable_prereqs(monkeypatch)
-        monkeypatch.delenv("STAGNATION_REASONING_ENABLED", raising=False)
-        runtime = create_world_runtime(_SCENARIO_PATH)
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_stagnation_config())
         assert runtime._stagnation_reasoning_latch is None
         being_id = _being_id(runtime, 1)
         for _ in range(3):

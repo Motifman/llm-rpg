@@ -20,7 +20,6 @@ U3b (固着パス): ``belief_evidence_buffer_store`` を注入すると
 from __future__ import annotations
 
 import logging
-import os
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -67,21 +66,6 @@ _logger = logging.getLogger(__name__)
 MIN_CLUSTER_SIZE = 3
 MIN_RECALL_COUNT = 3
 MIN_EFFECTIVE_STRENGTH = 0.5
-
-
-def _env_force_full_scan() -> bool:
-    v = (os.environ.get("EPISODIC_PROMOTION_FORCE_FULL_SCAN") or "").strip().lower()
-    return v in ("1", "true", "yes", "on")
-
-
-def _default_expansion_hops() -> int:
-    raw = (os.environ.get("EPISODIC_PROMOTION_EXPANSION_HOPS") or "").strip()
-    if not raw:
-        return 4
-    try:
-        return max(0, int(raw))
-    except ValueError:
-        return 4
 
 
 def _evidence_signature(episode_ids: Set[str]) -> str:
@@ -216,7 +200,8 @@ class EpisodicSemanticClusterPromotionService:
     link_store: MemoryLinkRepository
     semantic_store: SemanticMemoryRepository
     promotion_frontier: EpisodicPromotionFrontier | None = None
-    expansion_hops: int = field(default_factory=_default_expansion_hops)
+    expansion_hops: int = 4
+    force_full_scan: bool = False
     # Phase 1b: LLM gist (optional)。注入時のみ LLM 抽象化を試みる。
     gist_service: Optional[SemanticGistService] = None
     persona_resolver: Optional[Callable[[int], tuple[str, str]]] = None
@@ -284,8 +269,7 @@ class EpisodicSemanticClusterPromotionService:
         being_id = self._resolve_being_id(player_id)
         if being_id is None:
             return
-        force_full = _env_force_full_scan()
-        if force_full or self.promotion_frontier is None:
+        if self.force_full_scan or self.promotion_frontier is None:
             adj = _build_strong_adjacency(being_id, self.link_store, now)
         else:
             seeds = self.promotion_frontier.drain(player_id)

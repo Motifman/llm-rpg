@@ -78,7 +78,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TODO_LIST,
 )
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-    create_llm_client_from_env,
+    create_llm_client_from_config,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.intent.value_object.intent import Intent
@@ -91,6 +91,7 @@ from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import
 # の import は不要になった (SpotGraphToolExecutor._interact に移動)。
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.presentation.spot_graph_game.schemas import (
     CharacterCreateRequest,
     CharacterDetailResponse,
@@ -411,46 +412,9 @@ class _QueuedTurnTrigger:
 # する。LLM 呼び出しがブロッキング HTTP な間に他プレイヤーの呼び出しが進む
 # ので、4 人 × 2s ≈ 2s/tick に圧縮できる (シリアル時は 8s/tick)。
 #
-# env で workers を制御できる。0 / 未指定なら従来通り完全 serial。
-_LLM_PARALLEL_WORKERS_ENV = "LLM_TURN_PARALLEL_WORKERS"
-
-
-def _resolve_llm_parallel_workers(default: int = 0) -> int:
-    """env から並列度を読む。0 以下 / 不正値ならシリアル動作 (= 0)。"""
-    raw = os.environ.get(_LLM_PARALLEL_WORKERS_ENV)
-    if raw is None:
-        return default
-    try:
-        n = int(raw)
-    except ValueError:
-        return default
-    return max(0, n)
-
-
 # #346 Step 3 / #404: per-agent idle timer の沈黙上限。`note_player_activity`
 # 以降 N tick 何も起きなければ heartbeat 1 件で起こす。デフォルト 6 tick
-# (旧固定値 5 から +1 で安全寄り)。env で実験ごとに上げて沈黙許容を強める / 下げて
-# 古い挙動に戻すなど調整できる。
-_LLM_IDLE_TIMEOUT_TICKS_ENV = "LLM_IDLE_TIMEOUT_TICKS"
-_LLM_IDLE_TIMEOUT_TICKS_DEFAULT = 6
-
-
-def _resolve_llm_idle_timeout_ticks(
-    default: int = _LLM_IDLE_TIMEOUT_TICKS_DEFAULT,
-) -> int:
-    """env から idle timeout (= heartbeat interval) を読む。
-
-    不正値 / 1 未満は default に戻す。**設定上限は設けない** (運用で「丸 1 日
-    沈黙を許す」のような長期 idle も自由に試せるように)。
-    """
-    raw = os.environ.get(_LLM_IDLE_TIMEOUT_TICKS_ENV)
-    if raw is None:
-        return default
-    try:
-        n = int(raw)
-    except ValueError:
-        return default
-    return max(1, n)
+# (旧固定値 5 から +1 で安全寄り)。実験ごとの差分は runtime_config で固定する。
 
 
 class _LlmMetricsTraceSink:
@@ -654,7 +618,8 @@ class _WorldLlmTurnTrigger:
         if not to_run:
             return
 
-        workers = _resolve_llm_parallel_workers()
+        cfg = getattr(runtime, "_runtime_config", None)
+        workers = int(getattr(cfg, "llm_turn_parallel_workers", 0) or 0)
         if workers <= 1 or len(to_run) <= 1:
             # 旧シリアル経路: 並列化を OFF にした / プレイヤーが 1 人だけ。
             # 完全に従来挙動。
@@ -934,7 +899,7 @@ class _WorldLlmWiring:
 
     runtime: Any
     observation_buffer: Any
-    llm_client: Any = field(default_factory=create_llm_client_from_env)
+    llm_client: Any = field(default_factory=StubLlmClient)
     # 旧名 max_turns。trigger に passthrough する。意味は「自己 reschedule
     # チェインの連続上限」(= TRPG のターン数ではない)。詳細は
     # ``_WorldLlmTurnTrigger`` の docstring を参照。
@@ -2373,6 +2338,7 @@ class GameRuntimeManager:
 
     scenarios_dir: Path = field(default_factory=lambda: Path("data/scenarios"))
     characters_path: Path = field(default_factory=lambda: Path("data/characters.json"))
+    runtime_config: Optional[Any] = field(default=None, repr=False)
 
     _scenario_cache: Dict[str, Dict[str, Any]] = field(
         default_factory=dict, repr=False
@@ -2576,7 +2542,9 @@ class GameRuntimeManager:
             world_character = _character_to_prompt_input(detail)
 
         runtime = create_world_runtime(
-            scenario_path, world_character=world_character
+            scenario_path,
+            world_character=world_character,
+            config=self.runtime_config,
         )
         spawn_ids = frozenset(int(sp.player_id) for sp in runtime.scenario.player_spawns)
         llm_resolver = _WorldSpawnAllPlayersLlmResolver(spawn_player_ids=spawn_ids)
@@ -2588,7 +2556,9 @@ class GameRuntimeManager:
         # ため、最初に空の wiring を作り、それから scheduler / emitter を
         # 組み立てて wiring に注入する流れにする。
         llm_wiring = _WorldLlmWiring(
-            runtime=runtime, observation_buffer=runtime._obs_buffer
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            llm_client=create_llm_client_from_config(runtime._runtime_config),
         )
         turn_scheduler = ObservationTurnScheduler(
             turn_trigger=llm_wiring.llm_turn_trigger,
@@ -2619,7 +2589,9 @@ class GameRuntimeManager:
             appender,
             turn_scheduler,
             _heartbeat_llm_player_ids,
-            interval_ticks=_resolve_llm_idle_timeout_ticks(),
+            interval_ticks=int(
+                getattr(runtime._runtime_config, "llm_idle_timeout_ticks", 6)
+            ),
             is_traveling_provider=_is_traveling,
         )
         # ActionFailed 観測の wire: 失敗 DTO を当該プレイヤーへの観測に変換する。

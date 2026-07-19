@@ -215,15 +215,17 @@ class TestLiteLLMClientInvokeApiKey:
 class TestLiteLLMClientOpenAiCompatibleApiBase:
     """OPENAI_API_BASE を使うローカル vLLM / OpenAI 互換ルート"""
 
-    def test_invoke_reads_api_base_from_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """api_base が未指定だと環境変数 OPENAI_API_BASE を参照する"""
-        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
-        monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:9999/v1")
+    def test_invoke_uses_explicit_api_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """api_base は環境変数ではなく解決済み引数から受け取る。"""
         monkeypatch.setattr(
             "ai_rpg_world.infrastructure.llm.litellm_client._load_dotenv_if_available",
             lambda: None,
         )
-        client = LiteLLMClient(model="openai/from-env-base", api_key="k")
+        client = LiteLLMClient(
+            model="openai/from-env-base",
+            api_key="k",
+            api_base="http://127.0.0.1:9999/v1",
+        )
         assert client._api_base == "http://127.0.0.1:9999/v1"
 
     def test_invoke_sends_api_base_and_placeholder_key_when_key_empty(self):
@@ -424,16 +426,19 @@ class TestLiteLLMClientSelectiveRetry:
         assert slept == []
         assert exc_info.value.error_code == "LLM_AUTHENTICATION_ERROR"
 
-    def test_retry_attempts_env_override(
+    def test_retry_attempts_constructor_override(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """LLM_RATE_LIMIT_RETRY_ATTEMPTS env で retry 回数を上書きできる (実験再現性)。"""
-        monkeypatch.setenv("LLM_RATE_LIMIT_RETRY_ATTEMPTS", "1")
+        """retry 回数は解決済み引数で上書きできる。"""
         monkeypatch.setattr(
             "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
             lambda _s: None,
         )
-        client = LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x")
+        client = LiteLLMClient(
+            model="openai/gpt-5-mini",
+            api_key="sk-x",
+            rate_limit_retry_attempts=1,
+        )
         import litellm as _ll
 
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
@@ -714,7 +719,7 @@ class TestExtractTokenUsage:
 
 
 class TestLiteLLMClientOpenRouterProviderRouting:
-    """OpenRouter provider routing env (OPENROUTER_PROVIDER 等) の注入挙動。
+    """OpenRouter provider routing 設定の注入挙動。
 
     Gemma 4 31B のような複数 quantization (turbo=fp4 / fp8) を出す provider で、
     意図しない variant に routing されて tools / response_format が壊れるのを
@@ -739,25 +744,27 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             assert "provider" not in eb
             assert "quantizations" not in eb
 
-    def test_provider_だけ_設定で_order_と_allow_fallbacks_が入る(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """OPENROUTER_PROVIDER=DeepInfra → order=[DeepInfra], allow_fallbacks=False。"""
-        monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
-        client = LiteLLMClient(model="openrouter/google/gemma-4-31b-it", api_key="sk-x")
+    def test_provider_だけ_設定で_order_と_allow_fallbacks_が入る(self) -> None:
+        """provider=DeepInfra → order=[DeepInfra], allow_fallbacks=False。"""
+        client = LiteLLMClient(
+            model="openrouter/google/gemma-4-31b-it",
+            api_key="sk-x",
+            openrouter_provider="DeepInfra",
+        )
         routing = client.openrouter_routing
         assert routing == {
             "provider": {"order": ["DeepInfra"], "allow_fallbacks": False}
         }
 
-    def test_quantization_と_require_params_を_組み合わせると_全部入る(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """provider + quantization + require_params を同時に env で指定。"""
-        monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
-        monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
-        monkeypatch.setenv("OPENROUTER_REQUIRE_PARAMS", "true")
-        client = LiteLLMClient(model="openrouter/google/gemma-4-31b-it", api_key="sk-x")
+    def test_quantization_と_require_params_を_組み合わせると_全部入る(self) -> None:
+        """provider + quantization + require_params を同時に指定。"""
+        client = LiteLLMClient(
+            model="openrouter/google/gemma-4-31b-it",
+            api_key="sk-x",
+            openrouter_provider="DeepInfra",
+            openrouter_quantization="fp8",
+            openrouter_require_params=True,
+        )
         assert client.openrouter_routing == {
             "provider": {
                 "order": ["DeepInfra"],
@@ -767,45 +774,43 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             }
         }
 
-    def test_quantization_だけ_設定だと_provider_は_含まれない(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_quantization_だけ_設定だと_provider_は_含まれない(self) -> None:
         """provider 指定無しなら order / allow_fallbacks は付けない (=他 provider への
         fallback を残す)。quantization フィルタだけ効かせる用途。"""
-        monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
-        client = LiteLLMClient(model="openrouter/google/gemma-4-31b-it", api_key="sk-x")
+        client = LiteLLMClient(
+            model="openrouter/google/gemma-4-31b-it",
+            api_key="sk-x",
+            openrouter_quantization="fp8",
+        )
         assert client.openrouter_routing == {"provider": {"quantizations": ["fp8"]}}
 
-    def test_require_params_の_truthy_値を_受け付ける(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """OPENROUTER_REQUIRE_PARAMS は '1' / 'true' / 'yes' / 'on' を truthy として扱う。"""
-        for truthy in ("1", "true", "TRUE", "yes", "on"):
-            monkeypatch.setenv("OPENROUTER_REQUIRE_PARAMS", truthy)
-            client = LiteLLMClient(model="m", api_key="sk-x")
-            assert client.openrouter_routing == {
-                "provider": {"require_parameters": True}
-            }, f"truthy='{truthy}' should be parsed as True"
+    def test_require_params_True_で_require_parameters_が入る(self) -> None:
+        """truthy 解釈は設定 DTO 側で済ませ、クライアントは bool を受け取る。"""
+        client = LiteLLMClient(
+            model="m", api_key="sk-x", openrouter_require_params=True
+        )
+        assert client.openrouter_routing == {
+            "provider": {"require_parameters": True}
+        }
 
-    def test_require_params_の_falsy_値は_無視される(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """'false' / '0' / 空文字 / 'no' などは無視される (= env 未設定と同じ)。"""
-        for falsy in ("false", "0", "", "no", "off"):
-            monkeypatch.setenv("OPENROUTER_REQUIRE_PARAMS", falsy)
-            client = LiteLLMClient(model="m", api_key="sk-x")
-            # 他に何も設定していないので routing 全体が None になる
-            assert client.openrouter_routing is None, f"falsy='{falsy}'"
+    def test_require_params_False_なら_無視される(self) -> None:
+        """False なら他に routing 設定が無いため routing 全体が None になる。"""
+        client = LiteLLMClient(
+            model="m", api_key="sk-x", openrouter_require_params=False
+        )
+        assert client.openrouter_routing is None
 
     def test_completion_base_kwargs_に_extra_body_が_注入される(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """JSON 系経路は completion_base_kwargs() を踏むので、ここに入れば
         complete_*_json 全部に効く。"""
-        monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
-        monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
-        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
-        client = LiteLLMClient(model="openrouter/google/gemma-4-31b-it", api_key="sk-x")
+        client = LiteLLMClient(
+            model="openrouter/google/gemma-4-31b-it",
+            api_key="sk-x",
+            openrouter_provider="DeepInfra",
+            openrouter_quantization="fp8",
+        )
         kwargs = client.completion_base_kwargs()
         eb = kwargs.get("extra_body")
         # provider routing が入っている (本テストの主眼)
@@ -821,12 +826,11 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """tool_choice='required' 経路でも extra_body が litellm に流れる。"""
-        monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
-        monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
-        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-x",
+            openrouter_provider="DeepInfra",
+            openrouter_quantization="fp8",
         )
         with patch(
             "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
@@ -846,8 +850,9 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """外部から property 経由で取った dict を mutate しても内部状態は壊れない。"""
-        monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
-        client = LiteLLMClient(model="m", api_key="sk-x")
+        client = LiteLLMClient(
+            model="m", api_key="sk-x", openrouter_provider="DeepInfra"
+        )
         snapshot = client.openrouter_routing
         assert snapshot is not None
         snapshot["provider"]["order"] = ["Hacked"]
@@ -930,14 +935,13 @@ class TestLiteLLMClientOpenRouterCostTracking:
     def test_provider_routing_と_usage_include_が_同じ_extra_body_に_共存する(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """OPENROUTER_PROVIDER + api_base=openrouter の組み合わせで両方乗る。"""
-        monkeypatch.setenv("OPENROUTER_PROVIDER", "DeepInfra")
-        monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
-        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+        """provider routing + api_base=openrouter の組み合わせで両方乗る。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-or-x",
             api_base="https://openrouter.ai/api/v1",
+            openrouter_provider="DeepInfra",
+            openrouter_quantization="fp8",
         )
         kw = client.completion_base_kwargs()
         eb = kw["extra_body"]
@@ -1020,14 +1024,11 @@ class TestLiteLLMClientTimeout:
         )
         assert client._timeout_seconds == 30.0
 
-    def test_env_LLM_REQUEST_TIMEOUT_SECONDS_で_override_できる(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECONDS", "45")
-        client = LiteLLMClient(model="m", api_key="sk-x")
+    def test_constructor_で_timeout_を_override_できる(self) -> None:
+        client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=45.0)
         assert client._timeout_seconds == 45.0
 
-    def test_引数_env_どちらもあれば_引数が優先(
+    def test_timeout_引数がそのまま使われる(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECONDS", "10")
@@ -1036,13 +1037,10 @@ class TestLiteLLMClientTimeout:
         )
         assert client._timeout_seconds == 120.0
 
-    def test_env_が_非数値なら_ValueError(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """typo 防止 (silent fallback しない / PR #434 ポリシー継承)。"""
-        monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECONDS", "ten")
-        with pytest.raises(ValueError, match="LLM_REQUEST_TIMEOUT_SECONDS"):
-            LiteLLMClient(model="m", api_key="sk-x")
+    def test_timeout_非数値引数なら_ValueError(self) -> None:
+        """クライアント単体でも不正な timeout 引数は失敗する。"""
+        with pytest.raises(ValueError):
+            LiteLLMClient(model="m", api_key="sk-x", timeout_seconds="ten")  # type: ignore[arg-type]
 
     def test_completion_base_kwargs_に_timeout_が_含まれる(self) -> None:
         client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=60.0)
@@ -1061,7 +1059,7 @@ class TestLiteLLMClientTimeout:
 
 
 class TestLiteLLMClientReasoningEffort:
-    """``LLM_REASONING_EFFORT`` env による reasoning ON/OFF 制御の挙動を保証。
+    """``reasoning_effort`` 引数による reasoning ON/OFF 制御の挙動を保証。
 
     背景: deepseek-v4-flash 等の reasoning model は default で effort=high が
     乗り、output token を 5-15x 膨らませる。litellm 1.44 の OpenrouterConfig は
@@ -1074,8 +1072,7 @@ class TestLiteLLMClientReasoningEffort:
     def test_default_は_reasoning_none_と_thinking_disabled_を_注入する(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """env 未設定なら reasoning OFF + thinking disabled が extra_body に乗る。"""
-        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+        """未指定なら reasoning OFF + thinking disabled が extra_body に乗る。"""
         client = LiteLLMClient(model="m", api_key="sk-x")
         eb = client._build_extra_body()
         assert eb is not None
@@ -1087,8 +1084,7 @@ class TestLiteLLMClientReasoningEffort:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """effort=high のとき OpenRouter envelope だけ inject、native kill switch は不要。"""
-        monkeypatch.setenv("LLM_REASONING_EFFORT", "high")
-        client = LiteLLMClient(model="m", api_key="sk-x")
+        client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="high")
         eb = client._build_extra_body()
         assert eb is not None
         assert eb["reasoning"]["effort"] == "high"
@@ -1098,9 +1094,8 @@ class TestLiteLLMClientReasoningEffort:
     def test_空文字_指定で_reasoning_系_field_を_一切_注入しない(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """LLM_REASONING_EFFORT="" は古い model 互換用のエスケープハッチ。"""
-        monkeypatch.setenv("LLM_REASONING_EFFORT", "")
-        client = LiteLLMClient(model="m", api_key="sk-x")
+        """reasoning_effort="" は古い model 互換用のエスケープハッチ。"""
+        client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="")
         eb = client._build_extra_body()
         # extra_body 自体が None でなくてもよいが、reasoning/thinking は乗らない
         if eb is not None:
@@ -1111,15 +1106,13 @@ class TestLiteLLMClientReasoningEffort:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """typo 防止 (silent fallback しない / PR #434 ポリシー継承)。"""
-        monkeypatch.setenv("LLM_REASONING_EFFORT", "extreme")
-        with pytest.raises(ValueError, match="LLM_REASONING_EFFORT"):
-            LiteLLMClient(model="m", api_key="sk-x")
+        with pytest.raises(ValueError, match="reasoning_effort"):
+            LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="extreme")
 
     def test_invoke_が_extra_body_に_reasoning_block_を_渡す(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """invoke の litellm.completion 呼び出し時、extra_body に reasoning が乗る。"""
-        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
         client = LiteLLMClient(model="m", api_key="sk-x")
         with patch(
             "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
@@ -1135,10 +1128,12 @@ class TestLiteLLMClientReasoningEffort:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """provider routing + reasoning が同一 extra_body に並ぶ (どちらも保持)。"""
-        monkeypatch.setenv("OPENROUTER_PROVIDER", "Baidu")
-        monkeypatch.setenv("OPENROUTER_QUANTIZATION", "fp8")
-        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
-        client = LiteLLMClient(model="openrouter/x", api_key="sk-x")
+        client = LiteLLMClient(
+            model="openrouter/x",
+            api_key="sk-x",
+            openrouter_provider="Baidu",
+            openrouter_quantization="fp8",
+        )
         eb = client._build_extra_body()
         assert eb is not None
         # provider routing
@@ -1150,7 +1145,7 @@ class TestLiteLLMClientReasoningEffort:
 
 
 class TestLiteLLMClientWallTimeHardCap:
-    """``LLM_WALL_TIME_CAP_SECONDS`` env による wall-time hard cap の挙動を保証。
+    """``wall_cap_seconds`` 引数による wall-time hard cap の挙動を保証。
 
     背景: httpx の `Timeout(read=90)` は per-recv 単位の wait であり、サーバが
     時々 1byte でも返せば永遠に待ち続ける (PR #463 後続調査で確定)。H run で
@@ -1162,34 +1157,29 @@ class TestLiteLLMClientWallTimeHardCap:
     def test_default_wall_cap_は_timeout_seconds_プラス_5秒(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """env 未設定なら self._timeout_seconds + 5 が wall cap になる。"""
-        monkeypatch.delenv("LLM_WALL_TIME_CAP_SECONDS", raising=False)
+        """未指定なら self._timeout_seconds + 5 が wall cap になる。"""
         client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=60.0)
         assert client._wall_cap_seconds == 65.0
 
-    def test_env_で_wall_cap_を_短く_設定できる(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """LLM_WALL_TIME_CAP_SECONDS=45 で 45.0 秒に絞れる (全体律速を避ける用途)。"""
-        monkeypatch.setenv("LLM_WALL_TIME_CAP_SECONDS", "45")
-        client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=90.0)
+    def test_constructor_で_wall_cap_を_短く_設定できる(self) -> None:
+        """45.0 秒に絞れる (全体律速を避ける用途)。"""
+        client = LiteLLMClient(
+            model="m",
+            api_key="sk-x",
+            timeout_seconds=90.0,
+            wall_cap_seconds=45.0,
+        )
         assert client._wall_cap_seconds == 45.0
 
-    def test_env_の_非数値_は_ValueError(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """typo 防止 (silent fallback しない / PR #434 ポリシー継承)。"""
-        monkeypatch.setenv("LLM_WALL_TIME_CAP_SECONDS", "thirty")
-        with pytest.raises(ValueError, match="LLM_WALL_TIME_CAP_SECONDS"):
-            LiteLLMClient(model="m", api_key="sk-x")
+    def test_wall_cap_非数値引数は_ValueError(self) -> None:
+        """クライアント単体でも不正な wall cap 引数は失敗する。"""
+        with pytest.raises(ValueError):
+            LiteLLMClient(model="m", api_key="sk-x", wall_cap_seconds="thirty")  # type: ignore[arg-type]
 
-    def test_env_の_ゼロ以下_は_ValueError(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_wall_cap_ゼロ以下は_ValueError(self) -> None:
         """0 以下は意味がない (即 timeout = 1 回も呼べない) ので fail-fast。"""
-        monkeypatch.setenv("LLM_WALL_TIME_CAP_SECONDS", "0")
-        with pytest.raises(ValueError, match="must be > 0"):
-            LiteLLMClient(model="m", api_key="sk-x")
+        with pytest.raises(ValueError, match="must be greater than 0"):
+            LiteLLMClient(model="m", api_key="sk-x", wall_cap_seconds=0)
 
     def test_wall_cap_を_超えた_call_は_LitellmTimeout_に_packaged(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1203,8 +1193,7 @@ class TestLiteLLMClientWallTimeHardCap:
         import threading
 
         # 短い wall cap で test (0.3s で確実に切れる)
-        monkeypatch.setenv("LLM_WALL_TIME_CAP_SECONDS", "0.3")
-        client = LiteLLMClient(model="m", api_key="sk-x")
+        client = LiteLLMClient(model="m", api_key="sk-x", wall_cap_seconds=0.3)
 
         # Event.wait は monkeypatch されないので確実に N 秒 block する
         _block = threading.Event()
@@ -1231,8 +1220,7 @@ class TestLiteLLMClientWallTimeHardCap:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """wall cap 内に完走する call は普通に結果を返す。"""
-        monkeypatch.setenv("LLM_WALL_TIME_CAP_SECONDS", "5.0")
-        client = LiteLLMClient(model="m", api_key="sk-x")
+        client = LiteLLMClient(model="m", api_key="sk-x", wall_cap_seconds=5.0)
         with patch(
             "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion",
             return_value=_make_tool_call_response("ok", {}),
@@ -1253,12 +1241,11 @@ class TestLiteLLMClientWallTimeHardCap:
         = 「最大 wall = (cap × retry 回数 + sleep 合計)」 ではあるが、
         正常 call が cap に引きずられて切られることはない。
         """
-        monkeypatch.setenv("LLM_WALL_TIME_CAP_SECONDS", "1.0")
         monkeypatch.setattr(
             "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
             lambda _s: None,
         )
-        client = LiteLLMClient(model="m", api_key="sk-x")
+        client = LiteLLMClient(model="m", api_key="sk-x", wall_cap_seconds=1.0)
         import litellm as _ll
 
         # 1 回目 RateLimit → 2 回目で成功 (それぞれ 0.1s 程度の short call)

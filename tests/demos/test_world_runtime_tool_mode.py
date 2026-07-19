@@ -1,21 +1,23 @@
-"""``WorldRuntime`` の ``LLM_TOOL_MODE`` env 切替の挙動テスト (B-4)。
+"""``WorldRuntime`` の ``tool_mode`` 設定切替の挙動テスト (B-4)。
 
 検証:
-- 既定 (env 未設定 / ``default``) では TODO 系を含む従来構成
+- 既定 (``default``) では TODO 系を含む従来構成
 - ``pure_spot_graph`` では TODO 系を除外、spot_graph_* + speech のみ
 - speech 系 (say / whisper) はどちらの mode でも残る
-- 不正値は warning ログ + 既定 (TODO 含む) にフォールバック
-- 明示引数 ``include_todo_tools`` は env より優先
+- 不正値は ValueError で fail-fast
+- 明示引数 ``include_todo_tools`` は設定より優先
 """
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
+)
 
 
 _SCENARIO_PATH = (
@@ -31,58 +33,55 @@ def _tool_names(runtime) -> set[str]:
 
 
 class TestWorldRuntimeToolMode:
-    """``LLM_TOOL_MODE`` env による get_tool_definitions の切替挙動。"""
+    """``tool_mode`` 設定による get_tool_definitions の切替挙動。"""
 
-    def test_default_mode_includes_todo_tools(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """env 未設定なら TODO 系を含む従来構成。"""
-        monkeypatch.delenv("LLM_TOOL_MODE", raising=False)
+    def test_default_mode_includes_todo_tools(self) -> None:
+        """既定なら TODO 系を含む従来構成。"""
         rt = create_world_runtime(_SCENARIO_PATH)
         names = _tool_names(rt)
         assert "memo_add" in names
         assert "memo_list" in names
         assert "memo_done" in names
 
-    def test_default_mode_explicit_env_includes_todo_tools(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """LLM_TOOL_MODE=default は TODO 含む構成と同じ挙動。"""
-        monkeypatch.setenv("LLM_TOOL_MODE", "default")
-        rt = create_world_runtime(_SCENARIO_PATH)
+    def test_default_mode_explicit_config_includes_todo_tools(self) -> None:
+        """``tool_mode=default`` は TODO 含む構成と同じ挙動。"""
+        rt = create_world_runtime(
+            _SCENARIO_PATH,
+            config=ResolvedLlmRuntimeConfig.for_tests(tool_mode="default"),
+        )
         assert "memo_add" in _tool_names(rt)
 
-    def test_pure_spot_graph_mode_excludes_todo_tools(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """LLM_TOOL_MODE=pure_spot_graph で TODO 系が除外される。"""
-        monkeypatch.setenv("LLM_TOOL_MODE", "pure_spot_graph")
-        rt = create_world_runtime(_SCENARIO_PATH)
+    def test_pure_spot_graph_mode_excludes_todo_tools(self) -> None:
+        """``tool_mode=pure_spot_graph`` で TODO 系が除外される。"""
+        rt = create_world_runtime(
+            _SCENARIO_PATH,
+            config=ResolvedLlmRuntimeConfig.for_tests(tool_mode="pure_spot_graph"),
+        )
         names = _tool_names(rt)
         assert "memo_add" not in names
         assert "memo_list" not in names
         assert "memo_done" not in names
 
-    def test_pure_spot_graph_mode_keeps_speech_tools(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pure_spot_graph_mode_keeps_speech_tools(self) -> None:
         """speech 系 (say / whisper) は pure_spot_graph でも残る。
 
         エージェント間コミュニケーション観察のため speech は意図的に残す。
         """
-        monkeypatch.setenv("LLM_TOOL_MODE", "pure_spot_graph")
-        rt = create_world_runtime(_SCENARIO_PATH)
+        rt = create_world_runtime(
+            _SCENARIO_PATH,
+            config=ResolvedLlmRuntimeConfig.for_tests(tool_mode="pure_spot_graph"),
+        )
         names = _tool_names(rt)
         # Issue #264: SAY/WHISPER を統合、PR-DD (Y_after_pr639_640 後続) で
         # speech_speak → speak にリネーム。
         assert "speak" in names
 
-    def test_pure_spot_graph_mode_keeps_core_spot_tools(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pure_spot_graph_mode_keeps_core_spot_tools(self) -> None:
         """中核の spot_graph_* (explore / travel_to / interact / wait) は残る。"""
-        monkeypatch.setenv("LLM_TOOL_MODE", "pure_spot_graph")
-        rt = create_world_runtime(_SCENARIO_PATH)
+        rt = create_world_runtime(
+            _SCENARIO_PATH,
+            config=ResolvedLlmRuntimeConfig.for_tests(tool_mode="pure_spot_graph"),
+        )
         names = _tool_names(rt)
         for required in (
             "explore",
@@ -93,38 +92,30 @@ class TestWorldRuntimeToolMode:
         ):
             assert required in names, f"{required} should be present in pure mode"
 
-    def test_unknown_mode_falls_back_with_warning(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """未知の値は warning ログ + 既定 (TODO 含む) にフォールバック。"""
-        monkeypatch.setenv("LLM_TOOL_MODE", "unsupported_mode_value")
-        with caplog.at_level(
-            logging.WARNING, logger="demos.world_runtime.world_runtime"
-        ):
-            rt = create_world_runtime(_SCENARIO_PATH)
-        # TODO は含まれる (fallback)
-        assert "memo_add" in _tool_names(rt)
-        # warning が記録される
-        assert any("Unknown LLM_TOOL_MODE" in r.message for r in caplog.records)
+    def test_unknown_mode_fails_fast(self) -> None:
+        """未知の値は起動時に落ちる。実験条件の typo を silent fallback しない。"""
+        with pytest.raises(ValueError, match="tool_mode"):
+            create_world_runtime(
+                _SCENARIO_PATH,
+                config=ResolvedLlmRuntimeConfig.for_tests(
+                    tool_mode="unsupported_mode_value"
+                ),
+            )
 
-    def test_explicit_argument_overrides_env(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """factory の明示引数 ``include_todo_tools=False`` は env より優先。"""
-        monkeypatch.setenv("LLM_TOOL_MODE", "default")
+    def test_explicit_argument_overrides_config(self) -> None:
+        """factory の明示引数 ``include_todo_tools=False`` は設定より優先。"""
         rt = create_world_runtime(
-            _SCENARIO_PATH, include_todo_tools=False
+            _SCENARIO_PATH,
+            include_todo_tools=False,
+            config=ResolvedLlmRuntimeConfig.for_tests(tool_mode="default"),
         )
         assert "memo_add" not in _tool_names(rt)
 
-    def test_explicit_argument_true_keeps_todo_even_when_env_pure(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """明示引数 ``include_todo_tools=True`` は env=pure_spot_graph より優先。"""
-        monkeypatch.setenv("LLM_TOOL_MODE", "pure_spot_graph")
+    def test_explicit_argument_true_keeps_todo_even_when_config_pure(self) -> None:
+        """明示引数 ``include_todo_tools=True`` は pure_spot_graph 設定より優先。"""
         rt = create_world_runtime(
-            _SCENARIO_PATH, include_todo_tools=True
+            _SCENARIO_PATH,
+            include_todo_tools=True,
+            config=ResolvedLlmRuntimeConfig.for_tests(tool_mode="pure_spot_graph"),
         )
         assert "memo_add" in _tool_names(rt)

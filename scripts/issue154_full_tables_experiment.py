@@ -585,6 +585,9 @@ def _run_one(
     scenarios_dir: Path,
     progress: Callable[[str], None],
 ) -> tuple[Transcript, RunStats]:
+    from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+        ResolvedLlmRuntimeConfig,
+    )
     from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
         GameRuntimeManager,
     )
@@ -593,13 +596,11 @@ def _run_one(
         SessionCreateRequest,
     )
 
-    if tool_mode is None:
-        os.environ.pop("LLM_TOOL_MODE", None)
-    else:
-        os.environ["LLM_TOOL_MODE"] = tool_mode
-
-    os.environ.setdefault("LLM_CLIENT", "litellm")
     os.environ["SPOT_GRAPH_TICK_LOOP_ENABLED"] = "false"
+    config_values = {"LLM_CLIENT": "litellm"}
+    if tool_mode is not None:
+        config_values["LLM_TOOL_MODE"] = tool_mode
+    runtime_config = ResolvedLlmRuntimeConfig.from_mapping(values=config_values)
 
     tr = Transcript()
     stats = RunStats(label=label)
@@ -607,7 +608,11 @@ def _run_one(
 
     with TemporaryDirectory() as d:
         chars = Path(d) / "characters.json"
-        mgr = GameRuntimeManager(scenarios_dir=scenarios_dir, characters_path=chars)
+        mgr = GameRuntimeManager(
+            scenarios_dir=scenarios_dir,
+            characters_path=chars,
+            runtime_config=runtime_config,
+        )
         char = mgr.create_character(
             CharacterCreateRequest(name=f"Issue154-{label}キャラ")
         )
@@ -678,16 +683,9 @@ def main() -> int:
     def progress(msg: str) -> None:
         print(msg, file=sys.stderr, flush=True)
 
-    llm_base = ((os.environ.get("OPENAI_API_BASE") or "").strip())
-    llm_route = (
-        "vLLM/OpenAI-compat (OPENAI_API_BASE set)"
-        if llm_base
-        else "OPENAI_API_BASE unset (cloud/direct)"
-    )
     progress(
         "=== Issue #154 実験開始 "
-        f"max_ticks={max_ticks} backend=litellm route={llm_route} "
-        f"OPENAI_API_BASE={'set' if llm_base else 'unset'} ==="
+        f"max_ticks={max_ticks} backend=litellm ==="
     )
 
     runs, warning = _select_runs(ALL_RUNS, DEFAULT_RUN_KEYS, os.environ.get("ISSUE154_RUNS") or "")
@@ -718,14 +716,8 @@ def main() -> int:
         "tick の最大値は駆動回数より大きくなり得る。\n"
     )
     parts.append(f"- scenarios: `{scenarios_dir}`\n")
-    _model_env = (os.environ.get("LLM_MODEL") or "").strip()
-    resolved_model = _model_env or DEFAULT_LLM_MODEL
-    parts.append(f"- OPENAI_API_BASE: **{'configured' if llm_base else 'not configured'}**\n")
-    parts.append(
-        f"- LLM_MODEL: **`{resolved_model}`**"
-        + ("" if _model_env else "（環境変数未設定のため liteLLM 既定文字列が送られる）")
-        + "\n\n"
-    )
+    parts.append("- OPENAI_API_BASE: **process environment only**\n")
+    parts.append(f"- LLM_MODEL: **`{DEFAULT_LLM_MODEL}`**\n\n")
 
     # G1〜G4 サマリーセクション（冒頭に配置）
     parts.append("## G1 — ゲーム終了結果サマリー\n\n")

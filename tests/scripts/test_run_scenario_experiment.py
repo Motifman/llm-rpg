@@ -12,7 +12,7 @@ from ai_rpg_world.application.trace import (
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.run_scenario_experiment import _build_report  # noqa: E402
+from scripts.run_scenario_experiment import _build_report, main  # noqa: E402
 
 
 class TestBuildReport:
@@ -182,3 +182,144 @@ class TestMaxWorldTicksRename:
             },
         )
         assert "max world ticks: 30" in report
+
+
+class TestExperimentProfileManifest:
+    """実験 profile/config が解決済み成果物として保存されることを保証する。"""
+
+    def test_profile_を使うと_manifestとrun_startに解決済み設定が残る(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        """profile の env が cfg に反映され、runtime へ同じ cfg が渡る。"""
+        import scripts.run_scenario_experiment as runner
+
+        captured: dict = {}
+
+        def _fake_drive(**kwargs):
+            captured.update(kwargs)
+            return {
+                "outcome": "TIMEOUT",
+                "last_tick": 0,
+                "elapsed_sec": 0.0,
+                "max_world_ticks": kwargs["max_world_ticks"],
+                "snapshot_save_dir": (
+                    str(kwargs.get("snapshot_save_dir"))
+                    if kwargs.get("snapshot_save_dir")
+                    else None
+                ),
+                "snapshot_load_dir": None,
+            }
+
+        monkeypatch.setattr(runner, "_drive_scenario", _fake_drive)
+        monkeypatch.setattr(runner, "_emit_html", lambda *a, **kw: None)
+        out_dir = tmp_path / "out"
+        rc = main(
+            [
+                "--profile",
+                "smoke_stub",
+                "--out",
+                str(out_dir),
+                "--no-html",
+                "--no-progress-jsonl",
+                "--no-stderr-progress",
+            ]
+        )
+
+        assert rc == 0
+        cfg = captured["runtime_config"]
+        assert cfg.llm_client_kind == "stub"
+        assert cfg.episodic_enabled is False
+        # profile 使用時は runtime_config だけを見るので、外側 shell の値は混入しない。
+        assert cfg.belief_evidence_enabled is False
+
+        resolved = json.loads(
+            (out_dir / "experiment.config.resolved.json").read_text(encoding="utf-8")
+        )
+        assert resolved["profile"] == "smoke_stub"
+        assert resolved["runtime_config"]["llm_client_kind"] == "stub"
+        assert resolved["runtime_config"]["belief_evidence_enabled"] is False
+        assert "sk-secret" not in json.dumps(resolved, ensure_ascii=False)
+        assert resolved["scenario_sha256"]
+        assert resolved["git"]["dirty"] in (True, False)
+
+        first = json.loads(
+            (out_dir / "trace.jsonl").read_text(encoding="utf-8").splitlines()[0]
+        )
+        payload = first["payload"]
+        assert payload["experiment_profile"] == "smoke_stub"
+        assert payload["experiment_manifest_sha256"]
+        assert payload["belief_evidence_enabled"] is False
+
+    def test_experiment_config_のシナリオとmax_world_ticksを使える(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        """--scenario 未指定でも config source からシナリオと tick 数を解決できる。"""
+        import scripts.run_scenario_experiment as runner
+
+        scenario = tmp_path / "demo.json"
+        scenario.write_text("{}", encoding="utf-8")
+        config = tmp_path / "config.json"
+        config.write_text(
+            json.dumps(
+                {
+                    "profile": "local_test",
+                    "scenario": str(scenario),
+                    "max_world_ticks": 7,
+                    "runtime_config": {"LLM_CLIENT": "stub"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        captured: dict = {}
+
+        def _fake_drive(**kwargs):
+            captured.update(kwargs)
+            return {
+                "outcome": "TIMEOUT",
+                "last_tick": 0,
+                "elapsed_sec": 0.0,
+                "max_world_ticks": kwargs["max_world_ticks"],
+                "snapshot_save_dir": None,
+                "snapshot_load_dir": None,
+            }
+
+        monkeypatch.setattr(runner, "_drive_scenario", _fake_drive)
+        monkeypatch.setattr(runner, "_emit_html", lambda *a, **kw: None)
+
+        rc = main(
+            [
+                "--experiment-config",
+                str(config),
+                "--out",
+                str(tmp_path / "out"),
+                "--no-html",
+                "--no-progress-jsonl",
+                "--no-stderr-progress",
+            ]
+        )
+
+        assert rc == 0
+        assert captured["scenario_path"] == scenario
+        assert captured["max_world_ticks"] == 7
+
+    def test_manifest用_secret_mask_は再帰的に秘密値を伏せる(self) -> None:
+        """source に秘密値が混じっても manifest には生値を残さない。"""
+        import scripts.run_scenario_experiment as runner
+
+        masked = runner._mask_secret_values(
+            {
+                "runtime_config": {"OPENAI_API_KEY": "sk-secret"},
+                "nested": [{"token": "tok-secret"}, {"plain": "visible"}],
+            }
+        )
+
+        rendered = json.dumps(masked, ensure_ascii=False)
+        assert "sk-secret" not in rendered
+        assert "tok-secret" not in rendered
+        assert masked["runtime_config"]["OPENAI_API_KEY"] == "***"
+        assert masked["nested"][0]["token"] == "***"
+        assert masked["nested"][1]["plain"] == "visible"

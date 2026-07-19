@@ -26,14 +26,16 @@ scenario 固有の集計 (relay_puzzle の latch tick / kaito-rin marker など)
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TextIO
+from typing import Any, Dict, List, Mapping, Optional, TextIO
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 for p in (_REPO_ROOT, _REPO_ROOT / "src"):
@@ -48,6 +50,8 @@ from ai_rpg_world.application.trace import (  # noqa: E402
 from ai_rpg_world.application.trace.recorder import load_trace_events  # noqa: E402
 
 logger = logging.getLogger("run_scenario_experiment")
+
+_EXPERIMENT_PROFILE_DIR = _REPO_ROOT / "data" / "experiment_profiles"
 
 
 def _format_duration(seconds: float) -> str:
@@ -206,6 +210,175 @@ def _load_dotenv_safe() -> None:
         pass
 
 
+def _json_config_value(value: Any) -> str:
+    """profile の JSON 値を既存 resolver に渡せる文字列へ変換する。"""
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _load_experiment_config_source(
+    *,
+    profile: Optional[str],
+    config_path: Optional[Path],
+) -> tuple[dict[str, Any], Optional[Path]]:
+    """実験設定 source JSON を読む。未指定なら空設定。"""
+    if profile and config_path is not None:
+        raise ValueError("--profile and --experiment-config are mutually exclusive")
+    if profile:
+        path = _EXPERIMENT_PROFILE_DIR / f"{profile}.json"
+    else:
+        path = config_path
+    if path is None:
+        return {}, None
+    if not path.exists():
+        raise FileNotFoundError(f"experiment config not found: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"experiment config must be a JSON object: {path}")
+    return data, path
+
+
+def _runtime_config_mapping_from_source(
+    config_source: Mapping[str, Any],
+) -> dict[str, str]:
+    """source config の runtime_config セクションを resolver 用 mapping にする。
+
+    ここでは process env に書き戻さない。profile/config 使用時の実験設定は
+    この mapping → ResolvedLlmRuntimeConfig の 1 経路だけにする。
+    """
+    values = config_source.get("runtime_config", {})
+    if values is None:
+        values = {}
+    if not isinstance(values, dict):
+        raise ValueError("experiment config field 'runtime_config' must be an object")
+    rendered_values: dict[str, str] = {}
+    for key, value in values.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError(
+                "experiment config runtime_config keys must be non-empty strings"
+            )
+        rendered_values[key] = _json_config_value(value)
+    return rendered_values
+
+
+_SECRET_KEY_FRAGMENTS = ("API_KEY", "TOKEN", "SECRET", "PASSWORD")
+
+
+def _mask_secret_values(value: Any, *, key_name: str = "") -> Any:
+    """manifest に秘密値が残らないよう再帰的に伏せる。"""
+    normalized_key = key_name.upper()
+    if any(fragment in normalized_key for fragment in _SECRET_KEY_FRAGMENTS):
+        return "***"
+    if isinstance(value, dict):
+        return {
+            k: _mask_secret_values(v, key_name=str(k))
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_mask_secret_values(v) for v in value]
+    return value
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _run_git(args: list[str]) -> Optional[str]:
+    try:
+        out = subprocess.check_output(
+            ["git", *args],
+            cwd=_REPO_ROOT,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except Exception:
+        return None
+    return out.strip()
+
+
+def _git_metadata() -> dict[str, Any]:
+    status = _run_git(["status", "--porcelain"])
+    dirty_files: list[str] = []
+    if status:
+        dirty_files = [line[3:] for line in status.splitlines() if len(line) > 3]
+    diff = _run_git(["diff", "--binary"])
+    staged_diff = _run_git(["diff", "--cached", "--binary"])
+    combined_diff = (diff or "") + (staged_diff or "")
+    return {
+        "commit": _run_git(["rev-parse", "HEAD"]),
+        "branch": _run_git(["branch", "--show-current"]),
+        "dirty": bool(status),
+        "dirty_files": dirty_files,
+        "dirty_diff_sha256": (
+            hashlib.sha256(combined_diff.encode("utf-8")).hexdigest()
+            if combined_diff
+            else None
+        ),
+    }
+
+
+def _write_experiment_manifest(
+    *,
+    out_dir: Path,
+    argv: list[str],
+    scenario_path: Path,
+    trace_path: Path,
+    report_path: Path,
+    html_path: Path,
+    config_source: Mapping[str, Any],
+    config_source_path: Optional[Path],
+    runtime_config_source: Mapping[str, str],
+    resolved_config: Any,
+    max_world_ticks: int,
+    snapshot_save_dir: Optional[Path],
+    snapshot_load_dir: Optional[Path],
+    no_html: bool,
+    no_progress_jsonl: bool,
+) -> tuple[Path, str]:
+    source_payload = _mask_secret_values(dict(config_source))
+    source_path = out_dir / "experiment.config.source.json"
+    source_path.write_text(
+        json.dumps(source_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    resolved_payload = {
+        "schema_version": 1,
+        "profile": config_source.get("profile"),
+        "config_source_path": str(config_source_path) if config_source_path else None,
+        "argv": list(argv),
+        "cwd": str(Path.cwd()),
+        "out_dir": str(out_dir),
+        "scenario_path": str(scenario_path),
+        "scenario_sha256": _sha256_file(scenario_path),
+        "trace_path": str(trace_path),
+        "report_path": str(report_path),
+        "html_path": None if no_html else str(html_path),
+        "progress_jsonl_path": None if no_progress_jsonl else str(out_dir / "progress.jsonl"),
+        "max_world_ticks": int(max_world_ticks),
+        "snapshot_save_dir": str(snapshot_save_dir) if snapshot_save_dir else None,
+        "snapshot_load_dir": str(snapshot_load_dir) if snapshot_load_dir else None,
+        "runtime_config_source": _mask_secret_values(
+            dict(sorted(runtime_config_source.items()))
+        ),
+        "runtime_config": resolved_config.to_trace_dict(),
+        "git": _git_metadata(),
+    }
+    resolved_path = out_dir / "experiment.config.resolved.json"
+    resolved_path.write_text(
+        json.dumps(resolved_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    digest = _sha256_file(resolved_path)
+    return resolved_path, digest
+
+
 def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     """``WorldRuntime`` から ``ExperimentSnapshotSession`` 用の wiring stub を作る。
 
@@ -345,6 +518,7 @@ def _drive_scenario(
     max_world_ticks: int,
     recorder: JsonlTraceRecorder,
     progress: Any,
+    runtime_config: Optional[Any] = None,
     reporter: Optional[_ExperimentProgressReporter] = None,
     snapshot_save_dir: Optional[Path] = None,
     snapshot_load_dir: Optional[Path] = None,
@@ -370,7 +544,6 @@ def _drive_scenario(
         SessionCreateRequest,
     )
 
-    os.environ.setdefault("LLM_CLIENT", "litellm")
     os.environ["SPOT_GRAPH_TICK_LOOP_ENABLED"] = "false"
 
     world_id = scenario_path.stem
@@ -378,7 +551,11 @@ def _drive_scenario(
 
     with TemporaryDirectory() as d:
         chars = Path(d) / "characters.json"
-        mgr = GameRuntimeManager(scenarios_dir=scenarios_dir, characters_path=chars)
+        mgr = GameRuntimeManager(
+            scenarios_dir=scenarios_dir,
+            characters_path=chars,
+            runtime_config=runtime_config,
+        )
         char = mgr.create_character(
             CharacterCreateRequest(name=f"exp-{scenario_path.stem}")
         )
@@ -910,26 +1087,28 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "--scenario",
         type=Path,
-        required=True,
+        default=None,
         help="Path to scenario JSON (e.g. data/scenarios/relay_puzzle_demo.json)",
+    )
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default=None,
+        help="Experiment profile name from data/experiment_profiles/<name>.json",
+    )
+    parser.add_argument(
+        "--experiment-config",
+        type=Path,
+        default=None,
+        help="Path to an experiment config JSON file",
     )
     parser.add_argument(
         "--max-world-ticks",
         type=int,
-        default=int(
-            os.environ.get(
-                "EXPERIMENT_MAX_WORLD_TICKS",
-                # 旧 env 名 ``EXPERIMENT_MAX_TICKS`` も backstop で読む。
-                # 既存スクリプトが env 設定だけ更新し忘れた場合の silent failure
-                # (= 既定 30 に巻き戻る) を避ける移行期限定の互換層。
-                # CLAUDE.md の「後方互換を過度に守らない」に沿って、CLI flag /
-                # Makefile 変数の方は完全 rename にする。
-                os.environ.get("EXPERIMENT_MAX_TICKS", "30"),
-            )
-        ),
+        default=None,
         help=(
             "Stop when world_tick reaches this value (default 30, "
-            "env EXPERIMENT_MAX_WORLD_TICKS)"
+            "or experiment config max_world_ticks)"
         ),
     )
     parser.add_argument(
@@ -1002,8 +1181,36 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    try:
+        config_source, config_source_path = _load_experiment_config_source(
+            profile=args.profile,
+            config_path=args.experiment_config,
+        )
+        runtime_config_source = _runtime_config_mapping_from_source(config_source)
+    except (OSError, ValueError) as e:
+        parser.error(str(e))
+
+    scenario_arg = args.scenario
+    if scenario_arg is None:
+        raw_scenario = config_source.get("scenario")
+        if raw_scenario:
+            scenario_arg = Path(str(raw_scenario))
+    if scenario_arg is None:
+        parser.error(
+            "scenario is required. Pass --scenario or set 'scenario' in the experiment config."
+        )
+    args.scenario = scenario_arg
+
     if not args.scenario.exists():
         parser.error(f"scenario not found: {args.scenario}")
+
+    if args.max_world_ticks is None:
+        if config_source.get("max_world_ticks") is not None:
+            args.max_world_ticks = int(config_source["max_world_ticks"])
+        else:
+            args.max_world_ticks = int(
+                "30"
+            )
 
     out_dir = args.out
     if out_dir is None:
@@ -1014,27 +1221,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     report_path = out_dir / "report.md"
     html_path = out_dir / "trace.html"
 
-    # Phase 0 後続: prompt section 順序 (A/B 用) を実験ごとに env で固定する
-    # ため、起動時の解決結果を stdout と RUN_START に乗せて再現性を確保する。
-    # PR #448 (PR 3/6): env を読むのは ResolvedLlmRuntimeConfig.from_env() の
-    # 1 箇所だけに集約する (= 単一窓口)。run_start trace と実 wiring が同じ cfg
-    # instance から派生することを構造で保証 (PR #439 / #446 silent failure
-    # を構造で防ぐ)。
-    from ai_rpg_world.application.llm.services.context_format_strategy import (
-        ENV_PROMPT_SECTION_ORDER,
-    )
-    from ai_rpg_world.application.llm.wiring.feature_flags import (
-        ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
-        ENV_SEMANTIC_LLM_GIST_ENABLED,
-        ENV_SEMANTIC_PASSIVE_TOP_K,
-        ENV_SEMANTIC_SEARCH_ENABLED,
-        ENV_SHORT_TERM_MEMORY_KIND,
-        ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE,
-    )
+    # 実験設定は profile/config の runtime_config だけから解決する。
+    # 外側 shell の環境変数は読まない。
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
         ResolvedLlmRuntimeConfig,
     )
-    cfg = ResolvedLlmRuntimeConfig.from_env()
+    cfg = ResolvedLlmRuntimeConfig.from_mapping(values=runtime_config_source)
 
     print(
         f"[run] scenario={args.scenario.name} max_world_ticks={args.max_world_ticks}",
@@ -1042,37 +1234,37 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     print(
         f"[run] section_order={cfg.prompt_section_order} "
-        f"(override via {ENV_PROMPT_SECTION_ORDER}=stable_to_volatile|legacy)",
+        "(runtime_config.PROMPT_SECTION_ORDER)",
         flush=True,
     )
     print(
         f"[run] episodic_explore_related={'on' if cfg.episodic_explore_related_enabled else 'off'} "
-        f"(override via {ENV_EPISODIC_EXPLORE_RELATED_ENABLED}=1)",
+        "(runtime_config.EPISODIC_EXPLORE_RELATED_ENABLED)",
         flush=True,
     )
     print(
         f"[run] semantic_llm_gist={'on' if cfg.semantic_llm_gist_enabled else 'off'} "
-        f"(override via {ENV_SEMANTIC_LLM_GIST_ENABLED}=1)",
+        "(runtime_config.SEMANTIC_LLM_GIST_ENABLED)",
         flush=True,
     )
     print(
         f"[run] semantic_passive_top_k={cfg.semantic_passive_top_k} "
-        f"(override via {ENV_SEMANTIC_PASSIVE_TOP_K}=<int>)",
+        "(runtime_config.SEMANTIC_PASSIVE_TOP_K)",
         flush=True,
     )
     print(
         f"[run] semantic_search={'on' if cfg.semantic_search_enabled else 'off'} "
-        f"(override via {ENV_SEMANTIC_SEARCH_ENABLED}=1)",
+        "(runtime_config.SEMANTIC_SEARCH_ENABLED)",
         flush=True,
     )
     print(
         f"[run] short_term_memory_kind={cfg.short_term_memory_kind} "
-        f"(override via {ENV_SHORT_TERM_MEMORY_KIND}=sliding_window|rolling_summary)",
+        "(runtime_config.SHORT_TERM_MEMORY_KIND)",
         flush=True,
     )
     print(
         f"[run] short_term_memory_scheduler_mode={cfg.short_term_memory_scheduler_mode} "
-        f"(override via {ENV_SHORT_TERM_MEMORY_SCHEDULER_MODE}=inline|thread_pool)",
+        "(runtime_config.SHORT_TERM_MEMORY_SCHEDULER_MODE)",
         flush=True,
     )
     # OpenRouter provider routing: 設定されているときだけ表示
@@ -1085,6 +1277,28 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
     print(f"[out] {out_dir}", flush=True)
 
+    # profile が snapshot 保存を標準指定している場合は OUT/snapshots を使う。
+    if args.snapshot_save_dir is None and bool(config_source.get("snapshot_save")):
+        args.snapshot_save_dir = out_dir / "snapshots"
+
+    manifest_path, manifest_sha256 = _write_experiment_manifest(
+        out_dir=out_dir,
+        argv=list(sys.argv if argv is None else [sys.argv[0], *argv]),
+        scenario_path=args.scenario,
+        trace_path=trace_path,
+        report_path=report_path,
+        html_path=html_path,
+        config_source=config_source,
+        config_source_path=config_source_path,
+        runtime_config_source=runtime_config_source,
+        resolved_config=cfg,
+        max_world_ticks=args.max_world_ticks,
+        snapshot_save_dir=args.snapshot_save_dir,
+        snapshot_load_dir=args.snapshot_load_dir,
+        no_html=args.no_html,
+        no_progress_jsonl=args.no_progress_jsonl,
+    )
+
     with JsonlTraceRecorder(trace_path) as rec:
         # PR #448: trace payload は cfg.to_trace_dict() で一括出力 + scenario /
         # max_world_ticks を追加。**API key は cfg.to_trace_dict() 内で *** に
@@ -1096,6 +1310,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             # legacy 互換 (run_start を grep する既存スクリプト向け)
             model=cfg.llm_model,
             api_base=cfg.llm_api_base,
+            experiment_profile=config_source.get("profile"),
+            experiment_manifest_path=str(manifest_path),
+            experiment_manifest_sha256=manifest_sha256,
         )
         rec.record(TraceEventKind.RUN_START, **run_start_payload)
 
@@ -1128,6 +1345,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 max_world_ticks=args.max_world_ticks,
                 recorder=rec,
                 progress=progress,
+                runtime_config=cfg,
                 reporter=reporter,
                 snapshot_save_dir=args.snapshot_save_dir,
                 snapshot_load_dir=args.snapshot_load_dir,

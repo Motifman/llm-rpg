@@ -40,7 +40,6 @@ PR #330 で ``demos/world_runtime/world_episodic_wiring.py`` から application
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
@@ -126,10 +125,15 @@ _FALSE_TOKENS = frozenset({"0", "false", "no", "off"})
 def is_episodic_enabled(env: Optional[dict[str, str]] = None) -> bool:
     """``LLM_EPISODIC_ENABLED`` を読んで episodic pipeline 有効化を判定。
 
-    env を渡せばその dict を見る (テスト用)、None なら ``os.environ``。
+    env を渡せばその dict を見る。None は古い呼び出し経路の取りこぼしとして
+    失敗させる。
     未設定 / unknown 値は False (= 完全に off で従来動作)。
     """
-    source = env if env is not None else os.environ
+    if env is None:
+        raise TypeError(
+            "env mapping is required; use ResolvedLlmRuntimeConfig.from_mapping()"
+        )
+    source = env
     raw = source.get("LLM_EPISODIC_ENABLED", "")
     return raw.strip().lower() in _TRUE_TOKENS
 
@@ -150,7 +154,11 @@ def is_episodic_subjective_enabled(env: Optional[dict[str, str]] = None) -> bool
     - False 表現 (0/false/no/off): False
     - 不明な値: True (壊さず on 側に倒す)
     """
-    source = env if env is not None else os.environ
+    if env is None:
+        raise TypeError(
+            "env mapping is required; use ResolvedLlmRuntimeConfig.from_mapping()"
+        )
+    source = env
     raw = source.get("LLM_EPISODIC_SUBJECTIVE_ENABLED")
     if raw is None:
         return True
@@ -465,6 +473,10 @@ def build_episodic_stack(
     # への配線は build_episodic_stack がスケジューラを構築しないため呼び出し
     # 側 (world_runtime.py) の責務 (belief_evidence_transcriber と同じ分担)。
     pending_prediction_enabled: bool = False,
+    # semantic promotion の走査幅。実験条件なので ResolvedLlmRuntimeConfig
+    # から渡す。既定値はサービス側の従来値と同じ。
+    episodic_promotion_force_full_scan: bool = False,
+    episodic_promotion_expansion_hops: int = 4,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
@@ -535,6 +547,8 @@ def build_episodic_stack(
             belief_evidence_buffer_store=(
                 belief_evidence_buffer_store if belief_consolidation_enabled else None
             ),
+            episodic_promotion_force_full_scan=episodic_promotion_force_full_scan,
+            episodic_promotion_expansion_hops=episodic_promotion_expansion_hops,
         )
         # build_episodic_memory_stack が episode_store を解決して返す。以降は
         # 全コンポーネントがこの shared store を共有する (chunk write / recall /
