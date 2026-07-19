@@ -279,12 +279,32 @@ def _extract_issue621_chain(events: list[dict]) -> dict[str, int]:
     trace を文字列レベルで grep して、関連 event/tool の出現数を返す。
     """
     raw = "\n".join(json.dumps(e, ensure_ascii=False) for e in events)
+    # 実 trace の down は文字列 "PlayerDownedEvent" ではなく observation の
+    # structured.type=="player_downed" で表現される。self 視点 (role=="self") が
+    # 実際の down 1 件、social 視点 (actor=名前) は他プレイヤーがそれを観測した分。
+    # 文字列 count だけだと実 run の down を取り逃がして 0 と出す (実 run
+    # v3coop_stagnation_002 で P3/P4 が down したのに PlayerDownedEvent=0 だった)。
+    downed_self = 0
+    downed_observations = 0
+    for e in events:
+        if e.get("kind") != "observation":
+            continue
+        structured = e.get("payload", {}).get("structured") or {}
+        if structured.get("type") != "player_downed":
+            continue
+        downed_observations += 1
+        if structured.get("role") == "self":
+            downed_self += 1
     return {
         "PlayerDownedEvent": raw.count("PlayerDownedEvent"),
         "PlayerRevivedEvent": raw.count("PlayerRevivedEvent"),
         "tend_to_player": raw.count("tend_to_player"),
         "player_revived_post_hoc": raw.count("player_revived_post_hoc"),
         "is_down_true": raw.count('"is_down": true') + raw.count('"is_down":true'),
+        # structured 由来の実カウント (文字列 count の取り逃がしを補う)。
+        # player_downed_self が「実際に down したのべ件数」の権威ある指標。
+        "player_downed_self": downed_self,
+        "player_downed_observations": downed_observations,
     }
 
 
