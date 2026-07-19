@@ -41,3 +41,18 @@ class TestCreateLlmClientFromConfig:
 
         assert isinstance(client, StubLlmClient)
 
+    def test_config_missing_field_raises_instead_of_silent_stub(self) -> None:
+        """必須フィールドを持たない config は静かに stub 縮退せず AttributeError で落ちる。
+
+        getattr(config, ..., default) 縮退だと、フィールド名 typo や誤った型の
+        config を渡しても黙って StubLlmClient になってしまう。解決済み config を
+        受け取る契約を型と直接属性アクセスで固め、抜けは fail-fast にする。
+        """
+        import pytest
+
+        class _NotAConfig:
+            pass
+
+        with pytest.raises(AttributeError):
+            create_llm_client_from_config(_NotAConfig())
+
