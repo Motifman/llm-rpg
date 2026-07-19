@@ -8,7 +8,8 @@
 
 - **[docs/design_decisions.md](docs/design_decisions.md)** — 過去の実験で生まれた個別の設計判断 (プレフィックスキャッシュ不変 / 詰み回避 / ラベルから名前への切替 / 静かな失敗の構造的対処 / エージェントごとの待ち時間タイマー など)
 - **[docs/agent_design_principles.md](docs/agent_design_principles.md)** — 「ゲーム内で生きる AI エージェント」を作る上位方針 (疎結合 / 観測駆動 / 質感優先 / 自己の継続性 / 失敗の質感 / 静かな失敗の回避 / 他者からの可視性)
-- **[docs/experiment_config_management.md](docs/experiment_config_management.md)** — 実験設定管理の仕様 (profile/config 単一入口 / env 禁止 / run 成果物 / 新設定追加チェックリスト)
+- **[docs/experiment_config_management.md](docs/experiment_config_management.md)** — 実験設定管理の仕様 (profile/config 単一入口 / env 禁止 / 新設定追加チェックリスト)
+- **[docs/experiment_planning.md](docs/experiment_planning.md)** — 実験計画の書き方 (探索 / 観察 / 比較 run の使い分け、基準 run がない場合の扱い)
 
 「なぜこの形になっているか」を理解せずに変更すると過去に解決した問題が再発します。新しい判断を作ったら該当ファイルに追記してください。
 
