@@ -29,12 +29,20 @@ from ai_rpg_world.application.harvest.services.harvest_command_service import (
 
 @dataclass
 class _SpyPublisher:
-    """publish_all 呼出を記録する spy。"""
+    """publish_all 呼出を batch 単位で記録する spy。
 
-    events_published: List[Any] = field(default_factory=list)
+    ``batches`` は publish_all 1 回ごとに 1 要素。境界で何回 dispatch したかを固定できる。
+    ``events_published`` は全 batch を平坦化した便宜アクセサ。
+    """
+
+    batches: List[List[Any]] = field(default_factory=list)
 
     def publish_all(self, events) -> None:
-        self.events_published.extend(events)
+        self.batches.append(list(events))
+
+    @property
+    def events_published(self) -> List[Any]:
+        return [e for batch in self.batches for e in batch]
 
 
 class TestResourceHarvestedPublishedThroughFinish:
@@ -112,7 +120,21 @@ class TestResourceHarvestedPublishedThroughFinish:
 
         data_store = InMemoryDataStore()
         uow = InMemoryUnitOfWork()
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store, uow)
+
+        # save に渡された原本集約が保持していた event 型を記録する spy repo。
+        # collector 経由化が原本を clear していない (= save→_register_aggregate の
+        # 両経路供給が保たれる) ことを直接固定するため。
+        captured_saved_events: List[str] = []
+
+        class _CapturingPhysicalMapRepo(InMemoryPhysicalMapRepository):
+            def save(self, aggregate):  # type: ignore[override]
+                captured_saved_events.extend(
+                    type(e).__name__ for e in aggregate.get_events()
+                )
+                return super().save(aggregate)
+
+        physical_map_repo = _CapturingPhysicalMapRepo(data_store, uow)
+        self._captured_saved_events = captured_saved_events
         service = HarvestCommandService(
             physical_map_repo,
             InMemoryLootTableRepository(),
@@ -176,8 +198,8 @@ class TestResourceHarvestedPublishedThroughFinish:
         )
         return service
 
-    def test_finish_harvest_publishes_resource_harvested_event(self):
-        """finish_harvest 完了時に ResourceHarvestedEvent が publisher に届く。"""
+    def test_finish_harvest_publishes_resource_harvested_event_with_payload(self):
+        """finish_harvest が ResourceHarvestedEvent を 1 度の publish_all で payload 込みで届ける。"""
         from ai_rpg_world.application.harvest.contracts.commands import (
             FinishHarvestCommand,
             StartHarvestCommand,
@@ -194,9 +216,46 @@ class TestResourceHarvestedPublishedThroughFinish:
             FinishHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=105)
         )
 
-        assert any(
-            isinstance(e, ResourceHarvestedEvent) for e in spy.events_published
-        ), "ResourceHarvestedEvent が publisher 経路に届いていない"
+        # 境界で publish_all を 1 度だけ呼ぶ (多重 dispatch でない)
+        assert len(spy.batches) == 1
+        harvested = [
+            e for e in spy.batches[0] if isinstance(e, ResourceHarvestedEvent)
+        ]
+        assert len(harvested) == 1
+        ev = harvested[0]
+        # payload 退行の検出: object/actor/loot_table/obtained_items
+        assert getattr(ev.object_id, "value", ev.object_id) == 2
+        assert getattr(ev.actor_id, "value", ev.actor_id) == 1
+        assert getattr(ev.loot_table_id, "value", ev.loot_table_id) == 1
+        assert ev.obtained_items, "obtained_items が空 (採集物が payload に乗っていない)"
+        assert ev.obtained_items[0]["item_spec_id"] == 9
+
+    def test_finish_harvest_does_not_clear_original_before_save(self):
+        """save に渡す原本 physical_map は ResourceHarvestedEvent を保持したまま (両経路供給)。
+
+        collector に add しても原本を clear しないので、save→_register_aggregate が
+        UoW pending へ流す経路が保たれる。原本を clear すると save 時点で event が
+        消えており、この assert が落ちる。
+        """
+        from ai_rpg_world.application.harvest.contracts.commands import (
+            FinishHarvestCommand,
+            StartHarvestCommand,
+        )
+
+        spy = _SpyPublisher()
+        service = self._build_full_flow(spy)
+
+        service.start_harvest(
+            StartHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=100)
+        )
+        service.finish_harvest(
+            FinishHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=105)
+        )
+
+        assert "ResourceHarvestedEvent" in self._captured_saved_events, (
+            "save に渡された原本が ResourceHarvestedEvent を持っていない "
+            "(= publish 前に clear されており両経路供給が壊れている)"
+        )
 
 
 class TestEventPublisherInjection:
