@@ -477,6 +477,10 @@ def build_episodic_stack(
     # から渡す。既定値はサービス側の従来値と同じ。
     episodic_promotion_force_full_scan: bool = False,
     episodic_promotion_expansion_hops: int = 4,
+    # episode store の永続化先 (ResolvedLlmRuntimeConfig.subjective_episode_db_path)。
+    # None なら in-memory。semantic 有効時に build_episodic_memory_stack が store を
+    # 解決する経路 (episode_store 未指定) でだけ効く。
+    subjective_episode_db_path: Optional[str] = None,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
@@ -549,6 +553,7 @@ def build_episodic_stack(
             ),
             episodic_promotion_force_full_scan=episodic_promotion_force_full_scan,
             episodic_promotion_expansion_hops=episodic_promotion_expansion_hops,
+            subjective_episode_db_path=subjective_episode_db_path,
         )
         # build_episodic_memory_stack が episode_store を解決して返す。以降は
         # 全コンポーネントがこの shared store を共有する (chunk write / recall /

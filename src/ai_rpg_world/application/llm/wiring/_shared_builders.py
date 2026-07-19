@@ -81,6 +81,7 @@ def build_episodic_memory_stack(
     belief_evidence_buffer_store: Optional[Any] = None,
     episodic_promotion_force_full_scan: bool = False,
     episodic_promotion_expansion_hops: int = 4,
+    subjective_episode_db_path: Optional[str] = None,
 ) -> EpisodicMemoryStack:
     """共有 episode store と link / semantic / promotion を組み立てる。
 
@@ -101,7 +102,9 @@ def build_episodic_memory_stack(
       が ``BELIEF_CONSOLIDATION_ENABLED`` を見て渡すかどうかを決める
       (「配線と有効化の分離」既存パターン)。
     """
-    shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
+    shared_episode_store = resolve_default_episodic_episode_store(
+        episodic_episode_store, db_path=subjective_episode_db_path
+    )
     link_store, semantic_memory_store = default_link_and_semantic_stores_for_episode_store(
         shared_episode_store
     )

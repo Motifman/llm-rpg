@@ -409,6 +409,75 @@ class TestFromEnvFailFast:
             )
 
 
+class TestSubjectiveEpisodeDbPath:
+    """SUBJECTIVE_EPISODE_DB_PATH を単一窓口 (config) に載せる (二重入口撤去)。
+
+    従来は ``_default_episodic_episode_store`` が os.environ を直読みしており、
+    profile/config の外で episode store の永続化先が決まってしまっていた
+    (manifest にも残らない silent failure)。config フィールド化して解決経路を
+    from_mapping の 1 本に固定する。
+    """
+
+    def test_unset_is_none(self) -> None:
+        """未設定なら None (= in-memory episode store)。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
+        assert cfg.subjective_episode_db_path is None
+
+    def test_set_resolves_to_path_when_subjective_off(self) -> None:
+        """subjective OFF + episodic ON なら SUBJECTIVE_EPISODE_DB_PATH をそのまま解決する。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            values={
+                "LLM_EPISODIC_ENABLED": "1",
+                "LLM_EPISODIC_SUBJECTIVE_ENABLED": "0",
+                "SUBJECTIVE_EPISODE_DB_PATH": "  var/episodes.db  ",
+            }
+        )
+        assert cfg.subjective_episode_db_path == "var/episodes.db"
+
+    def test_recorded_in_trace_dict(self) -> None:
+        """解決した path は run_start trace / manifest に残る (再現性)。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            values={
+                "LLM_EPISODIC_ENABLED": "1",
+                "LLM_EPISODIC_SUBJECTIVE_ENABLED": "0",
+                "SUBJECTIVE_EPISODE_DB_PATH": "var/episodes.db",
+            }
+        )
+        assert cfg.to_trace_dict()["subjective_episode_db_path"] == "var/episodes.db"
+
+    def test_for_tests_default_none_and_override(self) -> None:
+        """for_tests の default は None、override 可。"""
+        assert ResolvedLlmRuntimeConfig.for_tests().subjective_episode_db_path is None
+        cfg = ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True,
+            episodic_subjective_enabled=False,
+            subjective_episode_db_path="var/x.db",
+        )
+        assert cfg.subjective_episode_db_path == "var/x.db"
+
+    def test_with_subjective_enabled_raises_value_error(self) -> None:
+        """subjective 経路は常に in-memory なので db_path 併用は静かな無視。fail-fast で落とす。"""
+        with pytest.raises(ValueError, match="SUBJECTIVE_EPISODE_DB_PATH"):
+            ResolvedLlmRuntimeConfig.from_mapping(
+                values={
+                    "LLM_EPISODIC_ENABLED": "1",
+                    "LLM_EPISODIC_SUBJECTIVE_ENABLED": "1",
+                    "SUBJECTIVE_EPISODE_DB_PATH": "var/episodes.db",
+                }
+            )
+
+    def test_without_episodic_raises_value_error(self) -> None:
+        """episodic OFF では episode store 自体を組まないので db_path は無視される。fail-fast で落とす。"""
+        with pytest.raises(ValueError, match="SUBJECTIVE_EPISODE_DB_PATH"):
+            ResolvedLlmRuntimeConfig.from_mapping(
+                values={
+                    "LLM_EPISODIC_ENABLED": "0",
+                    "LLM_EPISODIC_SUBJECTIVE_ENABLED": "0",
+                    "SUBJECTIVE_EPISODE_DB_PATH": "var/episodes.db",
+                }
+            )
+
+
 class TestFromMappingIgnoresOsEnviron:
     """引数省略時も環境変数を読まず、空設定の既定値になる。"""
 
@@ -421,6 +490,14 @@ class TestFromMappingIgnoresOsEnviron:
         cfg = ResolvedLlmRuntimeConfig.from_mapping()
         assert cfg.short_term_memory_kind == "sliding_window"
         assert cfg.prompt_section_order == "stable_to_volatile"
+
+    def test_subjective_episode_db_path_os_environ_ignored(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """SUBJECTIVE_EPISODE_DB_PATH が env にあっても config は読まない (二重入口撤去)。"""
+        monkeypatch.setenv("SUBJECTIVE_EPISODE_DB_PATH", "/tmp/leaked.db")
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
+        assert cfg.subjective_episode_db_path is None
 
 
 # ──────────────────────────────────────────────────────────────────
