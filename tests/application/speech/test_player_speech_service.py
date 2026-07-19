@@ -9,6 +9,7 @@ from ai_rpg_world.application.speech.services.player_speech_service import (
 )
 from ai_rpg_world.application.speech.exceptions import (
     SpeechCommandException,
+    SpeechSystemErrorException,
     PlayerNotFoundException,
     PlayerLocationNotSetException,
 )
@@ -165,6 +166,44 @@ class TestPlayerSpeechApplicationService:
             )
 
         pub.publish_all.assert_not_called()
+
+    def test_speak_clears_aggregate_events_after_publish(self):
+        """publish 後に status の未 publish イベントが残らない (再放出防止の要)。
+
+        Stage 3 で発火経路を DomainEventCollector 経由に移しても、集約が publish 済み
+        イベントを持ち越さないことを固定する。
+        """
+        status = _make_status(1, spot_id=1)
+        repo = MagicMock()
+        repo.find_by_id.return_value = status
+        pub = MagicMock()
+
+        svc = PlayerSpeechApplicationService(
+            player_status_repository=repo,
+            event_publisher=pub,
+        )
+        svc.speak(SpeakCommand(speaker_player_id=1, content="やあ", channel=SpeechChannel.SAY))
+
+        assert status.get_events() == []
+
+    def test_speak_publisher_exception_propagates(self):
+        """publisher が例外を投げたら speak は失敗する (握りつぶさない)。
+
+        speech は item_transfer と違い publisher 例外を swallow しない方針。Stage 3 の
+        collector 移行でこの方針が変わらないことを固定する。
+        """
+        status = _make_status(1, spot_id=1)
+        repo = MagicMock()
+        repo.find_by_id.return_value = status
+        pub = MagicMock()
+        pub.publish_all.side_effect = RuntimeError("publisher down")
+
+        svc = PlayerSpeechApplicationService(
+            player_status_repository=repo,
+            event_publisher=pub,
+        )
+        with pytest.raises(SpeechSystemErrorException):
+            svc.speak(SpeakCommand(speaker_player_id=1, content="やあ", channel=SpeechChannel.SAY))
 
     def test_speak_when_downed_raises(self):
         """ダウン状態のプレイヤーが発言すると SpeechCommandException"""
