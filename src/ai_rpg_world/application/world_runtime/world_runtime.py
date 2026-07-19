@@ -1463,7 +1463,12 @@ class WorldRuntime:
         latch = getattr(self, "_stagnation_reasoning_latch", None)
         if latch is None:
             return
-        latch.consume(player_id)
+        # 防御: ラッチが立っていなければ (= 既に消費済み / 経路不整合) trace を
+        # 出さない。二重 commit や想定外の呼び出しで「熟考していないのに engaged」
+        # の偽陽性を出さないためのガード。通常経路では resolve が effort を返した
+        # 直後に呼ばれるので armed のはず。
+        if not latch.consume(player_id):
+            return
         band = self._resolve_stagnation_band_value(player_id)
         self._emit_agent_reasoning_engaged_trace(player_id, band, effort)
 

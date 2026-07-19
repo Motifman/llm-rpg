@@ -220,6 +220,24 @@ class TestStagnationReasoningEffortDecision:
         runtime._emit_reflect_observation(PlayerId(1), "もう果たした", "achieved")
         assert runtime.resolve_turn_reasoning_effort(PlayerId(1)) is None
 
+    def test_commitはラッチ未武装なら_traceを出さない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """防御: ラッチが立っていない (consume False) 状態で commit を呼んでも、
+        AGENT_REASONING_ENGAGED trace は出さない。二重 commit / 経路不整合で
+        「熟考していないのに engaged」の偽陽性を出さないためのガード。"""
+        _enable_prereqs(monkeypatch)
+        monkeypatch.setenv("STAGNATION_REASONING_ENABLED", "1")
+        runtime = create_world_runtime(_SCENARIO_PATH)
+        recorder = _CapturingRecorder()
+        runtime.set_trace_recorder(recorder)
+        # arm せずにいきなり commit
+        runtime.commit_turn_reasoning_engaged(PlayerId(1), "low")
+        engaged = [
+            p for (k, p) in recorder.events if k == TraceEventKind.AGENT_REASONING_ENGAGED
+        ]
+        assert engaged == []
+
 
 class TestStagnationReasoningOffByDefault:
     """flag OFF のとき、ラッチは構築されず effort は常に None (既存挙動不変)。"""
