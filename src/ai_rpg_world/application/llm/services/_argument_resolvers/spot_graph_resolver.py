@@ -519,7 +519,10 @@ class SpotGraphArgumentResolver:
             )
         if target.item_instance_id is None:
             raise ToolArgumentResolutionException(
-                f"この名前から item_spec_id を解決できません: {label}",
+                (
+                    f"指定されたアイテム名は使用対象として扱えません: {label}。"
+                    "所持アイテム欄の \"\" 内の名前を指定してください。"
+                ),
                 "INVALID_TARGET_KIND",
             )
         return _with_inner_thought(
@@ -560,7 +563,10 @@ class SpotGraphArgumentResolver:
             )
         if item_target.inventory_slot_id is None:
             raise ToolArgumentResolutionException(
-                f"この名前から slot を解決できません: {item_label}",
+                (
+                    f"指定されたアイテム名は渡す対象として扱えません: {item_label}。"
+                    "所持アイテム欄の \"\" 内の名前を指定してください。"
+                ),
                 "INVALID_TARGET_KIND",
             )
 
@@ -666,10 +672,9 @@ class SpotGraphArgumentResolver:
     ) -> Dict[str, Any]:
         """所持アイテムラベル (I1 等) を slot_id / item_instance_id に解決する。
 
-        勘違いポイント: ラベルは「同 spec の集約表示」なので、解決後の
-        instance/slot は代表 instance を指す。LLM 視点で気になるのは
-        spec (= 種類) なので問題にならないが、コード側では一意 instance
-        を狙って drop することになる。
+        勘違いポイント: ラベルは「同じ種類の集約表示」なので、解決後の
+        内部 ID は代表 1 件を指す。LLM 視点で気になるのはアイテムの種類なので
+        問題にならないが、コード側では一意の所持品を狙って drop することになる。
         """
         label = args.get("item_label")
         # PR #441: display_name fallback
@@ -682,7 +687,7 @@ class SpotGraphArgumentResolver:
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )
-        # 地面アイテム (kind="ground_item") は drop の対象にならない
+        # その場に落ちているアイテム (kind="ground_item") は drop の対象にならない
         if target.kind != "inventory_item":
             raise ToolArgumentResolutionException(
                 f"この名前は所持アイテムではありません: {label}",
@@ -690,7 +695,10 @@ class SpotGraphArgumentResolver:
             )
         if target.inventory_slot_id is None or target.real_item_instance_id is None:
             raise ToolArgumentResolutionException(
-                f"この名前から slot/instance を解決できません: {label}",
+                (
+                    f"指定されたアイテム名は手放す対象として扱えません: {label}。"
+                    "所持アイテム欄の \"\" 内の名前を指定してください。"
+                ),
                 "INVALID_TARGET_KIND",
             )
         return _with_inner_thought(
@@ -711,7 +719,7 @@ class SpotGraphArgumentResolver:
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
-        """地面アイテムラベル (G1 等) を item_instance_id に解決する。"""
+        """その場に落ちているアイテムの名前を item_instance_id に解決する。"""
         label = args.get("ground_item_label")
         # PR #441: display_name fallback
         target = _resolve_target_with_display_name_fallback(
@@ -719,18 +727,21 @@ class SpotGraphArgumentResolver:
             runtime_context,
             kind="ground_item",
             expected_types=(InventoryToolRuntimeTargetDto,),
-            label_name="拾うアイテム名",
+            label_name="拾うものの名前",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )
         if target.kind != "ground_item":
             raise ToolArgumentResolutionException(
-                f"この名前は地面アイテムではありません: {label}",
+                f"この名前は今いる場所に落ちているものではありません: {label}",
                 "INVALID_TARGET_KIND",
             )
         if target.real_item_instance_id is None:
             raise ToolArgumentResolutionException(
-                f"この名前から instance を解決できません: {label}",
+                (
+                    f"指定された名前は拾う対象として扱えません: {label}。"
+                    "地面に落ちているもの欄の \"\" 内の名前を指定してください。"
+                ),
                 "INVALID_TARGET_KIND",
             )
         return _with_inner_thought(
@@ -780,18 +791,20 @@ class SpotGraphArgumentResolver:
             if e.error_code == "INVALID_TARGET_LABEL":
                 raise ToolArgumentResolutionException(
                     (
-                        f"'{label}' は現在の場所にいる候補ではありません。"
-                        "蘇生 tool は 同じ場所で倒れているプレイヤー のみに"
-                        "使えます。相手が別の場所にいるなら travel_to で"
-                        "移動してから、まだ倒れていないなら speech_speak "
-                        "などを検討してください。"
+                        f"{label} は現在の場所で介抱できる候補にいません。"
+                        "同じ場所で倒れているプレイヤーの名前を指定してください。"
+                        "相手が別の場所にいる場合は先に移動し、相手が倒れていない"
+                        "場合は話しかけるなど別の行動を選んでください。"
                     ),
                     "INVALID_TARGET_LABEL",
                 )
             raise
         if target.player_id is None:
             raise ToolArgumentResolutionException(
-                f"この名前から player_id を解決できません: {label}",
+                (
+                    f"指定された名前は介抱する相手として扱えません: {label}。"
+                    "同じ場所で倒れているプレイヤーの名前を指定してください。"
+                ),
                 "INVALID_TARGET_KIND",
             )
         return _with_inner_thought(

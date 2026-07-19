@@ -32,6 +32,28 @@ class TestGetRemediation:
         result = get_remediation("")
         assert result == "エラー内容を確認し、別の行動を選んでください。"
 
+    def test_invalid_target_kind_remediation_hides_internal_terms(self):
+        """INVALID_TARGET_KIND の対処法は LLM に内部用語や不自然な対象名を見せない"""
+        result = get_remediation("INVALID_TARGET_KIND")
+        forbidden = (
+            "地面アイテム",
+            "item_spec_id",
+            "slot",
+            "instance",
+            "player_id",
+            "monster_id",
+        )
+        assert "その場に落ちているものの名前" in result
+        assert not any(term in result for term in forbidden), result
+
+    def test_give_target_not_same_spot_remediation_uses_natural_movement_hint(self):
+        """give_item の相手不在対処法は tool 名や spot ではなく自然な移動指示にする"""
+        result = get_remediation("GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT")
+        assert "先に相手のいる場所へ移動" in result
+        assert "同じ場所にいる別の相手" in result
+        assert "travel_to" not in result
+        assert "spot" not in result
+
     def test_get_remediation_error_code_none_raises_type_error(self):
         """error_code が None のとき TypeError"""
         with pytest.raises(TypeError, match="error_code must be str"):

@@ -252,6 +252,44 @@ class TestGiveItemAllFail:
 class TestGiveItemGivesResolvedRequired:
     """gives_resolved が無い / 空だと INVALID_ARGUMENT。"""
 
+    def test_all_resolver_failures_return_natural_invalid_target_kind_remediation(self) -> None:
+        """resolver 段階で全件失敗しても、最終 remediation に内部用語を出さない。"""
+        stub = MagicMock()
+        executor = _make_executor(stub)
+
+        result = executor._give_item(
+            1,
+            {
+                "gives_resolved": [
+                    {
+                        "index": 0,
+                        "error_code": "INVALID_TARGET_KIND",
+                        "message": (
+                            "指定されたアイテム名は渡す対象として扱えません: 壊れた薬草。"
+                            "所持アイテム欄の \"\" 内の名前を指定してください。"
+                        ),
+                        "item_label": "壊れた薬草",
+                        "target_player_label": "リン",
+                    }
+                ],
+                "inner_thought": "test",
+            },
+        )
+
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_KIND"
+        assert result.remediation is not None
+        assert "その場に落ちているものの名前" in result.remediation
+        forbidden = (
+            "地面アイテム",
+            "item_spec_id",
+            "slot",
+            "instance",
+            "player_id",
+            "monster_id",
+        )
+        assert not any(term in result.remediation for term in forbidden), result.remediation
+
     def test_returns_empty_when_gives_resolved_invalid_argument(self) -> None:
         """gives resolved 空 なら INVALID ARGUMENT。"""
         stub = MagicMock()

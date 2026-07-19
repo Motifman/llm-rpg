@@ -199,6 +199,29 @@ class TestUseItemDescriptionExplainsQuoteConvention:
             or "ダブルクォート" in item_label_desc
         )
 
+    def test_drop_pickup_descriptions_hide_internal_terms(self) -> None:
+        """drop/pickup の LLM 向け説明文には内部用語や不自然な対象名を出さない。"""
+        descriptions = [
+            DROP_ITEM_DEFINITION.description,
+            DROP_ITEM_DEFINITION.parameters["properties"]["item_label"]["description"],
+            DROP_ITEM_DEFINITION.parameters["properties"]["stealth"]["description"],
+            PICKUP_ITEM_DEFINITION.description,
+            PICKUP_ITEM_DEFINITION.parameters["properties"]["ground_item_label"][
+                "description"
+            ],
+            PICKUP_ITEM_DEFINITION.parameters["properties"]["stealth"]["description"],
+        ]
+        forbidden = (
+            "地面アイテム",
+            "spec",
+            "instance",
+            "ordinal",
+            "witness_policy",
+            "ACTOR_ONLY",
+        )
+        for desc in descriptions:
+            assert not any(term in desc for term in forbidden), desc
+
 
 class TestDescriptionsAreStatic:
     """全 description が静的文字列 (prefix cache 安全)。"""
