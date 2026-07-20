@@ -4,17 +4,14 @@
 PR α (#214) で trace に ``position_change`` event が乗るようになったので、
 それを起点に空間 + event log を見せる viewer を作る。
 
-PR β (本 PR) の範囲:
+主な表示:
     - Cytoscape.js を inline 埋め込み (vendor ファイルを HTML に直書き)
     - scenario.json の spot graph topology からマップを描画
-    - 最終的なプレイヤー位置を表示 (静的)
-    - 全 event を tick 別の log として一覧表示
-
-PR γ (次) で追加予定:
-    - playback animation (時間軸に沿ってプレイヤーが動く)
+    - 時間軸に沿ってプレイヤー位置を再生
     - tick scrub bar
-    - memo state パネル
-    - event heatmap
+    - tick 別 event log
+    - category filter 付き Event timeline
+    - 折りたたみ式 memo state パネル
 
 使い方::
 
@@ -35,6 +32,7 @@ import json
 import logging
 import sys
 from collections import OrderedDict
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -168,6 +166,20 @@ _EVENT_TIMELINE_HIDDEN_KINDS = frozenset({
     "llm_call",
 })
 
+_EVENT_FILTER_CATEGORIES: tuple[tuple[str, str, bool], ...] = (
+    ("speech", "発言", True),
+    ("action", "行動", True),
+    ("action_result", "行動結果", True),
+    ("observation", "重要観測", True),
+    ("failure", "失敗", True),
+    ("memo", "メモ", False),
+    ("recall", "記憶想起", False),
+    ("belief", "信念", False),
+    ("goal", "目的", False),
+    ("system", "システム", False),
+    ("other", "その他", False),
+)
+
 
 def group_events_by_tick(
     events: List[TraceEvent],
@@ -187,6 +199,7 @@ def group_events_by_tick(
     by_tick: "OrderedDict[Optional[int], List[TraceEvent]]" = OrderedDict()
     # dedup key: (tick, prose, observation_type)
     seen_obs: set = set()
+    speech_obs_index: dict[tuple[Any, ...], tuple[Optional[int], int]] = {}
     for e in events:
         if hide_metrics_kinds and e.kind in _EVENT_TIMELINE_HIDDEN_KINDS:
             continue
@@ -194,6 +207,47 @@ def group_events_by_tick(
             payload = e.payload if isinstance(e.payload, dict) else {}
             structured = payload.get("structured") or {}
             obs_type = structured.get("type") if isinstance(structured, dict) else None
+            if obs_type == "player_spoke" and isinstance(structured, dict):
+                speech_key = (
+                    e.tick,
+                    structured.get("speaker_player_id"),
+                    structured.get("speaker"),
+                    structured.get("channel"),
+                    structured.get("content"),
+                )
+                recipient = e.player_id
+                recipient_info = {
+                    "player_id": recipient,
+                    "sound_clarity": structured.get("sound_clarity"),
+                    "source_connection_name": structured.get("source_connection_name"),
+                }
+                if speech_key in speech_obs_index:
+                    tick_key, row_idx = speech_obs_index[speech_key]
+                    existing = by_tick[tick_key][row_idx]
+                    existing_payload = dict(existing.payload)
+                    recipients = list(existing_payload.get("_viewer_recipients") or [])
+                    if recipient is not None and not any(
+                        isinstance(r, dict)
+                        and r.get("player_id") == recipient
+                        and r.get("sound_clarity") == recipient_info["sound_clarity"]
+                        and r.get("source_connection_name")
+                        == recipient_info["source_connection_name"]
+                        for r in recipients
+                    ):
+                        recipients.append(recipient_info)
+                    existing_payload["_viewer_recipients"] = recipients
+                    by_tick[tick_key][row_idx] = replace(
+                        existing, payload=existing_payload
+                    )
+                    continue
+                new_payload = dict(payload)
+                new_payload["_viewer_recipients"] = (
+                    [recipient_info] if recipient is not None else []
+                )
+                e = replace(e, payload=new_payload)
+                by_tick.setdefault(e.tick, []).append(e)
+                speech_obs_index[speech_key] = (e.tick, len(by_tick[e.tick]) - 1)
+                continue
             prose = payload.get("prose") or ""
             key = (e.tick, prose, obs_type)
             if key in seen_obs:
@@ -594,42 +648,29 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 </header>
 
 <main>
-  <section id="map-section">
-    <h2>Tactical map</h2>
-    <div id="cy"></div>
-  </section>
-
-  <section id="right-section">
+  <section id="timeline-section">
+    <div id="log-section">
+      <h2>Event timeline</h2>
+      {event_filter_html}
+      <div id="event-log">{event_log_html}</div>
+    </div>
     <div id="memo-panel-section">
       <h2>Objectives / Active memo
         <label class="toggle-label" title="memo パネルの表示・非表示を切り替え"
                style="font-size: 0.65rem; font-weight: normal; margin-left: 0.5rem;">
-          <input type="checkbox" id="toggle-memo-panel" checked>
+          <input type="checkbox" id="toggle-memo-panel">
           show
         </label>
       </h2>
-      <div id="memo-panel"><div class="placeholder">(no memo)</div></div>
-    </div>
-    <div id="log-section">
-      <h2>Event timeline</h2>
-      <div id="event-log">{event_log_html}</div>
+      <div id="memo-panel" style="display:none"><div class="placeholder">(no memo)</div></div>
     </div>
   </section>
-</main>
 
-<section id="trace-nav-section">
-  <h2>Trace navigator</h2>
-  <div id="moment-rail"></div>
-  <div id="heatmap-wrap">
-    <canvas id="heatmap" width="1200" height="92"></canvas>
-    <div class="heatmap-legend">
-      <span><span class="hm-dot a"></span>action</span>
-      <span><span class="hm-dot o"></span>observation</span>
-      <span><span class="hm-dot m"></span>memo</span>
-      <span><span class="hm-dot p"></span>position</span>
-    </div>
-  </div>
-</section>
+  <section id="map-section">
+    <h2>Tactical map</h2>
+    <div id="cy"></div>
+  </section>
+</main>
 
 <!-- Cytoscape.js (inline-embedded, no external CDN) -->
 <script>
@@ -836,16 +877,16 @@ header h1 {
 
 main {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.85fr);
+  grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr);
   gap: 0.85rem;
   padding: 1rem;
-  height: calc(100vh - 312px);
+  height: calc(100vh - 150px);
   min-height: 410px;
 }
 @media (max-width: 900px) {
   main { grid-template-columns: 1fr; height: auto; }
 }
-section, #right-section > div {
+section, #timeline-section > div {
   background: linear-gradient(180deg, rgba(18, 35, 42, 0.94), rgba(8, 17, 22, 0.94));
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -855,7 +896,7 @@ section, #right-section > div {
   box-shadow: 0 14px 26px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.03);
   overflow: hidden;
 }
-section h2, #right-section > div > h2 {
+section h2, #timeline-section > div > h2 {
   margin: 0;
   padding: 0.55rem 0.9rem;
   font-size: 0.84rem;
@@ -865,6 +906,15 @@ section h2, #right-section > div > h2 {
   color: #ffe0a0;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(90deg, rgba(30, 82, 89, 0.55), rgba(61, 36, 26, 0.25));
+}
+#timeline-section {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  display: grid;
+  grid-template-rows: minmax(180px, 1fr) auto;
+  gap: 0.85rem;
+  overflow: visible;
 }
 #map-section { display: flex; flex-direction: column; }
 #cy {
@@ -877,115 +927,6 @@ section h2, #right-section > div > h2 {
     linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px),
     #071318;
   background-size: auto, 34px 34px, 34px 34px, auto;
-}
-/* 実験 #26 user feedback: TRACE NAVIGATOR は普段あまり見ないため
-   折りたたみ可能にし、デフォルト collapsed。h2 クリックで展開。 */
-#trace-nav-section {
-  margin: 0 1rem 1rem;
-  min-height: 28px;
-  max-height: 36px;
-  overflow: hidden;
-  transition: max-height 0.2s ease-out;
-}
-#trace-nav-section.expanded {
-  min-height: 178px;
-  max-height: 200px;
-}
-#trace-nav-section h2 {
-  flex: 0 0 auto;
-  cursor: pointer;
-  user-select: none;
-}
-#trace-nav-section h2::before {
-  content: "▸ ";
-  font-size: 0.8rem;
-  color: var(--muted);
-  transition: transform 0.2s;
-}
-#trace-nav-section.expanded h2::before {
-  content: "▾ ";
-}
-#moment-rail {
-  position: relative;
-  height: 74px;
-  margin: 0.75rem 1rem 0.2rem;
-  border-top: 1px solid rgba(217, 170, 86, 0.45);
-}
-.moment-marker {
-  position: absolute;
-  top: -10px;
-  transform: translateX(-50%);
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 2px solid var(--gold);
-  background: #101d23;
-  cursor: pointer;
-  box-shadow: 0 0 12px rgba(217, 170, 86, 0.24);
-  padding: 0;
-}
-.moment-marker.current {
-  border-color: var(--cyan);
-  box-shadow: 0 0 20px rgba(53, 212, 230, 0.55);
-}
-.moment-marker.kind-failed { border-color: var(--coral); }
-.moment-marker.kind-memo, .moment-marker.kind-memo_done, .moment-marker.kind-hint { border-color: var(--green); }
-.moment-marker.kind-move { border-color: var(--orange); }
-.moment-marker.kind-end { border-color: #d8c16a; background: #3d2e15; }
-.moment-label {
-  position: absolute;
-  top: 19px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 104px;
-  text-align: center;
-  font-size: 0.66rem;
-  line-height: 1.15;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  pointer-events: none;
-}
-.moment-marker.lane-1 .moment-label { top: 34px; }
-.moment-marker.lane-2 .moment-label { top: 49px; }
-.moment-marker.lane-2 { top: -1px; }
-.moment-marker.edge-left .moment-label {
-  left: 0;
-  transform: none;
-  text-align: left;
-}
-.moment-marker.edge-right .moment-label {
-  left: auto;
-  right: 0;
-  transform: none;
-  text-align: right;
-}
-.moment-tick {
-  display: block;
-  color: var(--muted);
-  font-family: var(--font-mono);
-}
-#heatmap-wrap { padding: 0 1rem 0.55rem; background: rgba(0,0,0,0.10); }
-#heatmap { width: 100%; height: 76px; display: block; }
-.heatmap-legend { display: flex; gap: 0.85rem; font-size: 0.72rem; color: var(--muted); padding: 0.1rem 0 0 0; }
-.hm-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  vertical-align: middle;
-  margin-right: 0.25rem;
-}
-.hm-dot.a { background: var(--coral); }
-.hm-dot.o { background: var(--cyan); }
-.hm-dot.m { background: var(--green); }
-.hm-dot.p { background: var(--orange); }
-
-#right-section {
-  display: grid;
-  grid-template-rows: minmax(120px, 0.42fr) 1fr;
-  gap: 0.85rem;
-  min-height: 0;
 }
 #memo-panel-section { min-height: 0; }
 #memo-panel { padding: 0.55rem 0.75rem; overflow-y: auto; line-height: 1.5; }
@@ -1015,6 +956,25 @@ section h2, #right-section > div > h2 {
 #memo-panel .memo-meta { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
 #memo-panel .memo-meta.stale { color: #ffba67; font-weight: bold; }
 #memo-panel .placeholder { color: var(--muted); font-size: 0.85rem; padding: 0.5rem 0; }
+
+#event-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(217, 170, 86, 0.18);
+  background: rgba(4, 12, 16, 0.42);
+}
+.event-filter-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.74rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.event-filter-item input { accent-color: var(--cyan); }
 
 #event-log { flex: 1; overflow-y: auto; padding: 0.55rem 0.75rem; }
 .tick-block {
@@ -1046,6 +1006,8 @@ section h2, #right-section > div > h2 {
   gap: 0.4rem;
   align-items: baseline;
 }
+.event-row.filtered-hidden { display: none; }
+.tick-block.all-filtered { display: none; }
 .event-kind {
   flex-shrink: 0;
   width: 118px;
@@ -1083,6 +1045,19 @@ section h2, #right-section > div > h2 {
 .event-row.kind-episodic_chunk_written .event-body { color: #c5edaa; }
 .event-row.kind-episodic_recall .event-kind { color: #ffce63; }
 .event-row.kind-episodic_recall .event-body { color: #ffe3a3; }
+.event-row.category-speech .event-kind { color: #35d4e6; }
+.event-row.category-speech .event-body { color: #e5fbff; }
+.speech-channel, .speech-recipients {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+.event-inner-thought {
+  display: none;
+  color: #9bea91;
+  font-style: italic;
+  margin-left: 0.35rem;
+}
+body.show-inner-thoughts .event-inner-thought { display: inline; }
 .event-row .dim { color: #8fa0a3; font-style: italic; }
 
 
@@ -1113,9 +1088,6 @@ _VIEWER_JS_TEMPLATE = """
   const players = {players_json};
   const positionTimeline = {position_timeline_json};  // {{tick: {{player_id: spot_id}}}}
   const memoTimeline = {memo_timeline_json};          // {{tick: [memo records]}}
-  const heatmap = {heatmap_json};                     // {{ticks, action, observation, memo, position_change}}
-  const eventsByTick = {events_by_tick_json};         // {{tick: [{{kind, player_id, body}}]}}
-  const traceMoments = {moments_json};                // [{{tick, kind, label, detail, score, player_id}}]
   const speechTimeline = {speech_timeline_json};      // {{tick: [{{player_id, kind, text, source_tick}}]}}
   const maxTick = {max_tick};
   const STALE_AGE = 20;
@@ -1227,21 +1199,21 @@ _VIEWER_JS_TEMPLATE = """
         const padY = h * 0.05;
         return {{ x1: padX, y1: padY, x2: w - padX, y2: h - padY }};
       }})(),
-      idealEdgeLength: 140,
-      nodeRepulsion: 12000,
-      padding: 30,
+      idealEdgeLength: 95,
+      nodeRepulsion: 6500,
+      padding: 12,
       // 横方向の広がりを優先するため重力を弱める
-      gravity: 0.15,
+      gravity: 0.25,
     }},
   }});
   // layout 完了後に fit し直して container いっぱいに広げる
   cy.ready(() => {{
-    cy.fit(undefined, 50);
+    cy.fit(undefined, 22);
   }});
   // resize 時に再 fit (sidebar 開閉 / window リサイズで縦長になりがち)
   window.addEventListener('resize', () => {{
     if (cy && typeof cy.fit === 'function') {{
-      cy.fit(undefined, 50);
+      cy.fit(undefined, 22);
     }}
   }});
 
@@ -1388,18 +1360,6 @@ _VIEWER_JS_TEMPLATE = """
     }});
   }}
 
-  // ---------- trace nav collapse/expand (実験 #26 user feedback) ----------
-  // デフォルトは collapsed。h2 をクリックで expand/collapse トグル。
-  const traceNavSection = document.getElementById('trace-nav-section');
-  if (traceNavSection) {{
-    const navHeader = traceNavSection.querySelector('h2');
-    if (navHeader) {{
-      navHeader.addEventListener('click', () => {{
-        traceNavSection.classList.toggle('expanded');
-      }});
-    }}
-  }}
-
   // ---------- memo panel ----------
   const memoPanel = document.getElementById('memo-panel');
   function renderMemoPanel(tick) {{
@@ -1436,6 +1396,25 @@ _VIEWER_JS_TEMPLATE = """
     }})[ch]);
   }}
 
+  // ---------- event category filters ----------
+  function applyEventFilters() {{
+    const enabled = {{}};
+    document.querySelectorAll('.event-filter-checkbox').forEach(cb => {{
+      enabled[cb.dataset.filterCategory] = cb.checked;
+    }});
+    document.querySelectorAll('.event-row[data-category]').forEach(row => {{
+      const category = row.dataset.category || 'other';
+      row.classList.toggle('filtered-hidden', enabled[category] === false);
+    }});
+    document.querySelectorAll('.tick-block').forEach(block => {{
+      const visibleRows = block.querySelectorAll('.event-row:not(.filtered-hidden)');
+      block.classList.toggle('all-filtered', visibleRows.length === 0);
+    }});
+  }}
+  document.querySelectorAll('.event-filter-checkbox').forEach(cb => {{
+    cb.addEventListener('change', applyEventFilters);
+  }});
+
   // ---------- event log highlight ----------
   function updateEventLogHighlight(tick) {{
     const blocks = document.querySelectorAll('.tick-block');
@@ -1451,92 +1430,6 @@ _VIEWER_JS_TEMPLATE = """
     if (target) target.scrollIntoView({{ block: 'nearest', behavior: 'smooth' }});
   }}
 
-  // ---------- trace navigator moments ----------
-  const momentRail = document.getElementById('moment-rail');
-  function renderMomentRail() {{
-    if (!momentRail) return;
-    if (!traceMoments || traceMoments.length === 0) {{
-      momentRail.innerHTML = '<div style="color:#9daaa8;font-size:0.78rem">No detected bookmarks</div>';
-      return;
-    }}
-    const denom = Math.max(1, maxTick);
-    const placed = [];
-    momentRail.innerHTML = traceMoments.map(m => {{
-      const left = Math.max(0, Math.min(100, (m.tick / denom) * 100));
-      const crowded = placed.some(prev => Math.abs(prev - left) < 7);
-      const veryCrowded = placed.some(prev => Math.abs(prev - left) < 3.5);
-      const lane = veryCrowded ? 2 : (crowded ? 1 : 0);
-      placed.push(left);
-      const edge = left < 5 ? ' edge-left' : (left > 95 ? ' edge-right' : '');
-      const title = 't=' + m.tick + ' ' + escapeHtml(m.label) + (m.detail ? ' - ' + escapeHtml(m.detail) : '');
-      return '<button class="moment-marker kind-' + escapeHtml(m.kind) + ' lane-' + lane + edge + '" data-tick="' + m.tick + '" style="left:' + left + '%" title="' + title + '">' +
-        '<span class="moment-label">' + escapeHtml(m.label) + '<span class="moment-tick">t=' + m.tick + '</span></span>' +
-      '</button>';
-    }}).join('');
-    momentRail.querySelectorAll('.moment-marker').forEach(btn => {{
-      btn.addEventListener('click', () => {{ pause(); setTick(parseInt(btn.dataset.tick, 10), true); }});
-    }});
-  }}
-  function updateMomentRail(tick) {{
-    if (!momentRail) return;
-    momentRail.querySelectorAll('.moment-marker').forEach(btn => {{
-      const t = parseInt(btn.dataset.tick, 10);
-      btn.classList.toggle('current', t === tick);
-    }});
-  }}
-
-  // ---------- heatmap ----------
-  const canvas = document.getElementById('heatmap');
-  const ctx = canvas.getContext('2d');
-  function drawHeatmap(tick) {{
-    const w = canvas.width = canvas.clientWidth || canvas.width;
-    const h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-    const ticks = heatmap.ticks;
-    if (!ticks || ticks.length === 0) return;
-    const labelW = 92;
-    const plotW = Math.max(1, w - labelW);
-    const colW = plotW / ticks.length;
-    const rowH = h / 4;
-    const rows = [
-      {{ key: 'action', label: 'ACTION', color: '#f06d55' }},
-      {{ key: 'observation', label: 'OBS', color: '#35d4e6' }},
-      {{ key: 'memo', label: 'MEMO', color: '#7bd66f' }},
-      {{ key: 'position_change', label: 'MOVE', color: '#ee9b42' }},
-    ];
-    ctx.font = '11px Menlo, Consolas, monospace';
-    ctx.textBaseline = 'middle';
-    for (let i = 0; i < rows.length; i++) {{
-      const r = rows[i];
-      const y = i * rowH;
-      ctx.globalAlpha = 1.0;
-      ctx.fillStyle = 'rgba(244,234,210,0.72)';
-      ctx.fillText(r.label, 8, y + rowH / 2);
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-      ctx.strokeRect(labelW, y + 2, plotW - 1, rowH - 4);
-      const series = heatmap[r.key] || [];
-      const maxv = Math.max(1, ...series);
-      for (let t = 0; t < ticks.length; t++) {{
-        const v = series[t] || 0;
-        if (v === 0) continue;
-        const alpha = 0.2 + 0.8 * (v / maxv);
-        ctx.fillStyle = r.color;
-        ctx.globalAlpha = alpha;
-        ctx.fillRect(labelW + t * colW, y + 4, Math.max(1, colW - 0.5), rowH - 8);
-      }}
-    }}
-    ctx.globalAlpha = 1.0;
-    const cursorX = labelW + tick * colW + colW / 2;
-    ctx.strokeStyle = '#ffe0a0';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cursorX, 0);
-    ctx.lineTo(cursorX, h);
-    ctx.stroke();
-    ctx.fillStyle = '#ffe0a0';
-    ctx.fillText('t=' + tick, Math.min(w - 38, cursorX + 6), 9);
-  }}
-
   // ---------- main state setter ----------
   function setTick(tick, animate) {{
     tick = Math.max(0, Math.min(maxTick, tick));
@@ -1546,8 +1439,6 @@ _VIEWER_JS_TEMPLATE = """
     animatePlayersToTick(tick, animate !== false);
     renderMemoPanel(tick);
     updateEventLogHighlight(tick);
-    updateMomentRail(tick);
-    drawHeatmap(tick);
     // bubble は player marker のアニメーション後に位置を取りたいので
     // 短い delay で配置 (animate duration ~ 240ms に追従)
     setTimeout(() => renderSpeechBubbles(tick), animate !== false ? 240 : 0);
@@ -1591,6 +1482,7 @@ _VIEWER_JS_TEMPLATE = """
   if (toggleThoughts) {{
     toggleThoughts.addEventListener('change', e => {{
       showThoughts = !!e.target.checked;
+      document.body.classList.toggle('show-inner-thoughts', showThoughts);
       renderSpeechBubbles(currentTick);
     }});
   }}
@@ -1607,12 +1499,11 @@ _VIEWER_JS_TEMPLATE = """
 
   // ---------- bootstrap ----------
   cy.ready(function() {{
-    cy.fit(undefined, 30);
-    renderMomentRail();
+    cy.fit(undefined, 22);
+    applyEventFilters();
     setTick(0, false);
   }});
   window.addEventListener('resize', () => {{
-    drawHeatmap(currentTick);
     renderSpeechBubbles(currentTick);
   }});
 }})();
@@ -1650,8 +1541,6 @@ def render_viewer_html(
 
     position_timeline = build_position_timeline(events, spot_name_to_id=spot_name_to_id)
     memo_timeline = build_memo_state_timeline(events)
-    heatmap = compute_event_heatmap(events)
-    moments = compute_trace_moments(events)
     speech_timeline = build_speech_timeline(events)
 
     return _HTML_TEMPLATE.format(
@@ -1661,6 +1550,7 @@ def render_viewer_html(
         total_events=len(events),
         player_summary=html.escape(player_summary),
         css=_VIEWER_CSS,
+        event_filter_html=_build_event_filter_html(),
         event_log_html=_build_event_log_html(by_tick, players),
         cytoscape_js=cytoscape_js_src,
         viewer_js=_VIEWER_JS_TEMPLATE.format(
@@ -1668,9 +1558,6 @@ def render_viewer_html(
             players_json=json.dumps(players, ensure_ascii=False),
             position_timeline_json=json.dumps(position_timeline, ensure_ascii=False),
             memo_timeline_json=json.dumps(memo_timeline, ensure_ascii=False),
-            heatmap_json=json.dumps(heatmap, ensure_ascii=False),
-            events_by_tick_json=json.dumps({}, ensure_ascii=False),  # 現状未使用 (将来用)
-            moments_json=json.dumps(moments, ensure_ascii=False),
             speech_timeline_json=json.dumps(speech_timeline, ensure_ascii=False),
             max_tick=max_tick,
         ),
@@ -1687,15 +1574,25 @@ def _build_event_log_html(
     for tick, evs in by_tick.items():
         tick_label = "(no tick)" if tick is None else f"tick {tick}"
         rows: List[str] = []
+        visible_row_count = 0
         for e in evs:
             kind = e.kind
+            category = _event_timeline_category(e)
+            default_visible = _event_category_default_visible(category)
+            if default_visible:
+                visible_row_count += 1
             pname = (
                 name_by_pid.get(e.player_id, f"#{e.player_id}")
                 if e.player_id is not None
                 else "—"
             )
             body = _format_event_body(e)
-            classes = f"event-row kind-{html.escape(kind)}"
+            classes = (
+                f"event-row kind-{html.escape(kind)} "
+                f"category-{html.escape(category)}"
+            )
+            if not default_visible:
+                classes += " filtered-hidden"
             if (
                 kind == TraceEventKind.ACTION_RESULT
                 and isinstance(e.payload, dict)
@@ -1703,19 +1600,104 @@ def _build_event_log_html(
             ):
                 classes += " failed"
             rows.append(
-                f'<div class="{classes}">'
+                f'<div class="{classes}" data-category="{html.escape(category)}">'
                 f'<span class="event-kind">{html.escape(kind)}</span>'
                 f'<span class="event-player">{html.escape(str(pname))}</span>'
                 f'<span class="event-body">{body}</span>'
                 f"</div>"
             )
         tick_attr = "" if tick is None else f' data-tick="{int(tick)}"'
+        tick_classes = "tick-block" + (
+            " all-filtered" if rows and visible_row_count == 0 else ""
+        )
         parts.append(
-            f'<div class="tick-block"{tick_attr}>'
+            f'<div class="{tick_classes}"{tick_attr}>'
             f'<div class="tick-header">{html.escape(tick_label)}</div>'
             f"{''.join(rows)}</div>"
         )
     return "".join(parts)
+
+
+def _build_event_filter_html() -> str:
+    """Event timeline のカテゴリフィルタ UI を返す。"""
+    parts = ['<div id="event-filter-bar" aria-label="event filters">']
+    for category, label, default_visible in _EVENT_FILTER_CATEGORIES:
+        checked = " checked" if default_visible else ""
+        default_attr = "true" if default_visible else "false"
+        parts.append(
+            '<label class="event-filter-item">'
+            f'<input type="checkbox" class="event-filter-checkbox" '
+            f'data-filter-category="{html.escape(category)}" '
+            f'data-default-visible="{default_attr}"{checked}>'
+            f"{html.escape(label)}</label>"
+        )
+    parts.append("</div>")
+    return "".join(parts)
+
+
+def _event_category_default_visible(category: str) -> bool:
+    """カテゴリの初期表示設定を返す。"""
+    for key, _label, default_visible in _EVENT_FILTER_CATEGORIES:
+        if key == category:
+            return default_visible
+    return False
+
+
+def _event_timeline_category(e: TraceEvent) -> str:
+    """timeline 上の粗い表示カテゴリを返す。"""
+    payload = e.payload if isinstance(e.payload, dict) else {}
+    kind = str(e.kind)
+    if kind == TraceEventKind.ACTION_RESULT and payload.get("success") is False:
+        return "failure"
+    if _is_speak_action(e) or _is_player_spoke_observation(e):
+        return "speech"
+    if kind == TraceEventKind.ACTION:
+        return "action"
+    if kind == TraceEventKind.ACTION_RESULT:
+        return "action_result"
+    if kind == TraceEventKind.OBSERVATION:
+        return "observation"
+    if kind in {TraceEventKind.MEMO_ADD, TraceEventKind.MEMO_DONE, TraceEventKind.MEMO_HINT}:
+        return "memo"
+    if kind in {
+        TraceEventKind.EPISODIC_CHUNK_WRITTEN,
+        TraceEventKind.EPISODIC_RECALL,
+        "semantic_passive_recall",
+    }:
+        return "recall"
+    if kind.startswith("belief_"):
+        return "belief"
+    if kind.startswith("goal_") or "stagnation" in kind:
+        return "goal"
+    if kind in {
+        "prediction_outcome",
+        "side_handler_failed",
+        "SIDE_HANDLER_FAILED",
+        "llm_call",
+        "snapshot_save",
+        "snapshot_load",
+        "world_snapshot_save",
+        "world_snapshot_load",
+        "prompt_section_breakdown",
+    }:
+        return "system"
+    return "other"
+
+
+def _is_speak_action(e: TraceEvent) -> bool:
+    """speak 系 tool 呼び出しかどうかを返す。"""
+    if e.kind != TraceEventKind.ACTION or not isinstance(e.payload, dict):
+        return False
+    tool = str(e.payload.get("tool") or "").lower()
+    return tool in {"speak", "say"} or tool.startswith("speech_")
+
+
+def _is_player_spoke_observation(e: TraceEvent) -> bool:
+    """player_spoke 構造化観測かどうかを返す。"""
+    if e.kind != TraceEventKind.OBSERVATION or not isinstance(e.payload, dict):
+        return False
+    structured = e.payload.get("structured")
+    return isinstance(structured, dict) and structured.get("type") == "player_spoke"
 
 
 def _format_event_body(e: TraceEvent) -> str:
@@ -1725,18 +1707,65 @@ def _format_event_body(e: TraceEvent) -> str:
     def esc(s: Any) -> str:
         return html.escape(str(s))
 
+    def short(s: Any, limit: int = 90) -> str:
+        text = str(s or "")
+        return text if len(text) <= limit else text[: limit - 1] + "…"
+
     if e.kind == TraceEventKind.OBSERVATION:
+        structured = payload.get("structured")
+        if isinstance(structured, dict) and structured.get("type") == "player_spoke":
+            speaker = (
+                structured.get("speaker")
+                or structured.get("speaker_name")
+                or structured.get("speaker_player_id")
+                or payload.get("speaker_player_id")
+                or "?"
+            )
+            channel = structured.get("channel") or payload.get("channel") or "speak"
+            content = structured.get("content") or payload.get("content") or payload.get("prose") or ""
+            recipients = payload.get("_viewer_recipients")
+            recipient_part = ""
+            if isinstance(recipients, list) and recipients:
+                labels = ", ".join(_format_speech_recipient(r) for r in recipients[:6])
+                if len(recipients) > 6:
+                    labels += f", …(+{len(recipients) - 6})"
+                recipient_part = (
+                    f" <span class='speech-recipients'>届いた相手: {labels}</span>"
+                )
+            return (
+                f"発言 <span class='speech-channel'>[{esc(channel)}]</span> "
+                f"{esc(speaker)}: {esc(content)}{recipient_part}"
+            )
         prose = payload.get("prose") or ""
         return esc(prose)
     if e.kind == TraceEventKind.ACTION:
         tool = payload.get("tool") or "?"
         args = payload.get("arguments")
-        args_str = (
-            json.dumps(args, ensure_ascii=False)[:120]
-            if isinstance(args, (dict, list))
+        if _is_speak_action(e) and isinstance(args, dict):
+            content = args.get("content") or args.get("message") or ""
+            channel = args.get("channel") or tool
+            inner = args.get("inner_thought")
+            inner_part = (
+                f" <span class='event-inner-thought'>内心: {esc(short(inner, 120))}</span>"
+                if inner
+                else ""
+            )
+            return (
+                f"発言 <span class='speech-channel'>[{esc(channel)}]</span>: "
+                f"{esc(content)}{inner_part}"
+            )
+        args_str = _compact_payload_summary(args) if isinstance(args, (dict, list)) else ""
+        inner = args.get("inner_thought") if isinstance(args, dict) else None
+        inner_part = (
+            f" <span class='event-inner-thought'>内心: {esc(short(inner, 120))}</span>"
+            if inner
             else ""
         )
-        return f"<code>{esc(tool)}</code>" + (f" {esc(args_str)}" if args_str else "")
+        return (
+            f"<code>{esc(tool)}</code>"
+            + (f" {esc(args_str)}" if args_str else "")
+            + inner_part
+        )
     if e.kind == TraceEventKind.ACTION_RESULT:
         success = payload.get("success")
         mark = "OK" if success else "NG"
@@ -1759,23 +1788,19 @@ def _format_event_body(e: TraceEvent) -> str:
         # write 経路: どの境界理由で何が保存されたかの 1 行サマリ
         ep_short = (payload.get("episode_id") or "")[:6]
         reason = payload.get("boundary_reason") or "?"
-        cues = payload.get("cues") or []
-        cues_short = ", ".join(esc(c) for c in cues[:3])
-        if len(cues) > 3:
-            cues_short += f", … (+{len(cues) - 3})"
         snippet = (payload.get("recall_text_snippet") or "")[:60]
+        snippet_part = (
+            f" <span class='dim'>{esc(snippet)}</span>"
+            if snippet and "{" not in snippet and "}" not in snippet
+            else ""
+        )
         return (
             f"✎ chunk written id={esc(ep_short)}… "
-            f"reason={esc(reason)} cues=[{cues_short}] "
-            f"<span class='dim'>{esc(snippet)}</span>"
+            f"reason={esc(reason)}{snippet_part}"
         )
     if e.kind == TraceEventKind.EPISODIC_RECALL:
         # read 経路: 想起 candidate と発火 cue の 1 行サマリ
         cand_count = int(payload.get("candidate_count") or 0)
-        cues = payload.get("situation_cues") or []
-        cues_short = ", ".join(esc(c) for c in cues[:3])
-        if len(cues) > 3:
-            cues_short += f", … (+{len(cues) - 3})"
         candidates = payload.get("candidates") or []
         first_ep = ""
         if candidates:
@@ -1785,11 +1810,125 @@ def _format_event_body(e: TraceEvent) -> str:
                 f" first={esc(first_ep_id)}…: "
                 f"<span class='dim'>{esc(first_snippet)}</span>"
             )
-        return (
-            f"⟲ recall {cand_count} candidates cues=[{cues_short}]{first_ep}"
+        return f"⟲ recall {cand_count} candidates{first_ep}"
+    kind = str(e.kind)
+    if kind == "semantic_passive_recall":
+        cand_count = int(payload.get("candidate_count") or len(payload.get("candidates") or []))
+        top_k = payload.get("top_k")
+        first = _first_text_from_candidates(payload.get("candidates"))
+        first_part = (
+            f" first: <span class='dim'>{esc(short(first, 90))}</span>"
+            if first
+            else ""
         )
-    # fallback: 全 payload を 1 行 JSON
-    return f"<code>{esc(json.dumps(payload, ensure_ascii=False))}</code>"
+        return f"semantic recall: {cand_count} candidates" + (
+            f" / top_k={esc(top_k)}" if top_k is not None else ""
+        ) + first_part
+    if kind == "prediction_outcome":
+        outcome = (
+            payload.get("outcome")
+            or payload.get("prediction_error")
+            or payload.get("summary")
+            or payload.get("result")
+            or _compact_payload_summary(payload)
+        )
+        return f"prediction outcome: {esc(short(outcome, 140))}"
+    if kind.startswith("belief_"):
+        text = (
+            payload.get("belief")
+            or payload.get("text")
+            or payload.get("text_snippet")
+            or payload.get("evidence_text")
+            or payload.get("source_text")
+            or payload.get("summary")
+            or payload.get("belief_evidence")
+            or payload.get("evidence")
+            or _first_text_from_candidates(payload.get("decisions"))
+            or _compact_payload_summary(payload)
+        )
+        return f"belief: {esc(short(text, 140))}"
+    if kind.startswith("goal_") or "stagnation" in kind:
+        text = (
+            payload.get("goal")
+            or payload.get("summary")
+            or payload.get("reason")
+            or payload.get("band")
+            or _compact_payload_summary(payload)
+        )
+        return f"goal: {esc(short(text, 140))}"
+    if kind.lower() == "side_handler_failed":
+        handler = payload.get("handler") or "?"
+        event_type = payload.get("event_type") or "?"
+        player_id = payload.get("player_id")
+        err = payload.get("error_type") or "?"
+        player_part = f" player=#{esc(player_id)}" if player_id is not None else ""
+        return (
+            f"side handler failed: {esc(handler)} / {esc(event_type)}"
+            f"{player_part} ({esc(err)})"
+        )
+    return esc(_compact_payload_summary(payload))
+
+
+def _format_speech_recipient(value: Any) -> str:
+    """発言の受信者情報を短く表示する。"""
+    if not isinstance(value, dict):
+        return f"#{html.escape(str(value))}"
+    player_id = value.get("player_id")
+    label = f"#{html.escape(str(player_id))}" if player_id is not None else "#?"
+    clarity = value.get("sound_clarity")
+    if clarity:
+        label += f" {html.escape(str(clarity))}"
+    connection = value.get("source_connection_name")
+    if connection:
+        label += f" via {html.escape(str(connection))}"
+    return label
+
+
+def _first_text_from_candidates(value: Any) -> str:
+    """候補配列から人間が読む本文断片を 1 つ取り出す。"""
+    if not isinstance(value, list):
+        return ""
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        for key in (
+            "text_snippet",
+            "recall_text_snippet",
+            "summary",
+            "content",
+            "belief",
+            "new_text",
+            "revised_text",
+            "text",
+        ):
+            text = item.get(key)
+            if text:
+                return str(text)
+    return ""
+
+
+def _compact_payload_summary(value: Any) -> str:
+    """生 JSON を撒かず、payload を短い key=value 要約にする。"""
+    if isinstance(value, dict):
+        parts: List[str] = []
+        for key, item in value.items():
+            if key in {"situation_cues", "cues", "inner_thought"}:
+                continue
+            if isinstance(item, dict):
+                parts.append(f"{key}={len(item)} keys")
+            elif isinstance(item, list):
+                parts.append(f"{key}={len(item)} items")
+            else:
+                text = str(item)
+                if len(text) > 48:
+                    text = text[:47] + "…"
+                parts.append(f"{key}={text}")
+            if len(parts) >= 4:
+                break
+        return ", ".join(parts) if parts else "(no detail)"
+    if isinstance(value, list):
+        return f"{len(value)} items"
+    return str(value or "")
 
 
 # ---------------------------------------------------------------------------

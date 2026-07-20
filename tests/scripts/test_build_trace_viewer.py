@@ -262,6 +262,79 @@ class TestGroupEventsByTick:
         obs = [e for e in grouped[0] if e.kind == "observation"]
         assert len(obs) == 2
 
+    def test_player_spoke_observation_aggregates_recipients(self) -> None:
+        """同じ発言の受信者別 player_spoke 観測は 1 行に畳み、届いた相手を保持する。"""
+        events = [
+            TraceEvent(
+                seq=i,
+                timestamp="t",
+                kind="observation",
+                tick=0,
+                player_id=i,
+                payload={
+                    "prose": "エイダ: 合流しましょう",
+                    "structured": {
+                        "type": "player_spoke",
+                        "speaker_player_id": 1,
+                        "speaker": "エイダ",
+                        "channel": "say",
+                        "content": "合流しましょう",
+                    },
+                },
+            )
+            for i in (2, 3, 4)
+        ]
+        grouped = group_events_by_tick(events)
+        obs = [e for e in grouped[0] if e.kind == "observation"]
+        assert len(obs) == 1
+        assert [r["player_id"] for r in obs[0].payload["_viewer_recipients"]] == [2, 3, 4]
+
+    def test_player_spoke_observation_keeps_clarity_per_recipient(self) -> None:
+        """発言を 1 行に畳んでも、受信者ごとの聞こえ方と経路は失わない。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind="observation",
+                tick=0,
+                player_id=2,
+                payload={
+                    "prose": "エイダ: 合流しましょう",
+                    "structured": {
+                        "type": "player_spoke",
+                        "speaker_player_id": 1,
+                        "speaker": "エイダ",
+                        "channel": "shout",
+                        "content": "合流しましょう",
+                        "sound_clarity": "CLEAR",
+                    },
+                },
+            ),
+            TraceEvent(
+                seq=2,
+                timestamp="t",
+                kind="observation",
+                tick=0,
+                player_id=3,
+                payload={
+                    "prose": "エイダ: 合流しましょう",
+                    "structured": {
+                        "type": "player_spoke",
+                        "speaker_player_id": 1,
+                        "speaker": "エイダ",
+                        "channel": "shout",
+                        "content": "合流しましょう",
+                        "sound_clarity": "MUFFLED",
+                        "source_connection_name": "森の小道",
+                    },
+                },
+            ),
+        ]
+        grouped = group_events_by_tick(events)
+        out = _format_event_body(grouped[0][0])
+        assert "#2 CLEAR" in out
+        assert "#3 MUFFLED via 森の小道" in out
+
 
 class TestFormatEventBody:
     """個別 event の 1 行サマリ HTML。"""
@@ -272,6 +345,115 @@ class TestFormatEventBody:
         out = _format_event_body(e)
         assert "examine" in out
         assert "panel" in out
+
+    def test_speak_action_renders_content_without_raw_json(self) -> None:
+        """speak action は JSON 断片ではなく発言本文として表示する。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind=TraceEventKind.ACTION,
+            tick=1,
+            player_id=1,
+            payload={
+                "tool": "speak",
+                "arguments": {
+                    "channel": "say",
+                    "content": "水を探そう",
+                    "inner_thought": "焦っている",
+                },
+            },
+        )
+        out = _format_event_body(e)
+        assert "発言" in out
+        assert "水を探そう" in out
+        assert '{"channel"' not in out
+        assert "inner_thought" not in out
+
+    def test_player_spoke_observation_renders_speaker_and_content(self) -> None:
+        """player_spoke 観測は話者と本文を発言として表示する。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind=TraceEventKind.OBSERVATION,
+            tick=1,
+            player_id=2,
+            payload={
+                "prose": "エイダが言った: 「水を探そう」",
+                "structured": {
+                    "type": "player_spoke",
+                    "speaker": "エイダ",
+                    "channel": "say",
+                    "content": "水を探そう",
+                },
+            },
+        )
+        out = _format_event_body(e)
+        assert "エイダ" in out
+        assert "水を探そう" in out
+        assert "player_spoke" not in out
+
+    def test_semantic_passive_recall_uses_compact_summary(self) -> None:
+        """semantic_passive_recall は cue 配列ではなく件数と候補本文を表示する。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind="semantic_passive_recall",
+            tick=1,
+            player_id=1,
+            payload={
+                "situation_cues": ["place_spot:1", "entity:spot_graph_player_2"],
+                "top_k": 3,
+                "candidate_count": 1,
+                "candidates": [{"text_snippet": "山頂に狼煙台がある"}],
+            },
+        )
+        out = _format_event_body(e)
+        assert "semantic recall" in out
+        assert "1 candidates" in out
+        assert "山頂に狼煙台がある" in out
+        assert "situation_cues" not in out
+        assert "spot_graph_player" not in out
+
+    def test_belief_prediction_goal_events_do_not_fallback_to_raw_json(self) -> None:
+        """belief / prediction / goal 系は最低限の人間向け要約で表示する。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind="prediction_outcome",
+                tick=1,
+                player_id=1,
+                payload={"prediction_error": "水が無い", "prediction_context_ids": ["p1"]},
+            ),
+            TraceEvent(
+                seq=2,
+                timestamp="t",
+                kind="belief_evidence",
+                tick=1,
+                player_id=None,
+                payload={
+                    "being_id": "being_w1_p2",
+                    "evidence_id": "belief-evidence-1",
+                    "source_kind": "hearsay",
+                    "episode_ids": ["e1"],
+                    "text_snippet": "山頂に狼煙台がある",
+                },
+            ),
+            TraceEvent(
+                seq=3,
+                timestamp="t",
+                kind="goal_reflect",
+                tick=1,
+                player_id=1,
+                payload={"goal_id": "g1", "summary": "水を探す"},
+            ),
+        ]
+        rendered = [_format_event_body(e) for e in events]
+        assert "水が無い" in rendered[0]
+        assert "山頂に狼煙台がある" in rendered[1]
+        assert "being_w1_p2" not in rendered[1]
+        assert "水を探す" in rendered[2]
+        assert all("{" not in out for out in rendered)
 
     def test_action_result_failure_ng(self) -> None:
         """action result 失敗は NG マーク。"""
@@ -349,6 +531,63 @@ class TestRenderViewerHtml:
             cytoscape_js_src="/* fake */",
         )
         assert "WIN" in out
+
+    def test_event_filter_ui_and_default_categories(self) -> None:
+        """Event Timeline は category 別チェックボックスを持ち、ノイズ系は既定 OFF。"""
+        events = _sample_events() + [
+            TraceEvent(
+                seq=8,
+                timestamp="t",
+                kind="semantic_passive_recall",
+                tick=1,
+                player_id=1,
+                payload={"candidate_count": 0, "top_k": 3, "situation_cues": []},
+            )
+        ]
+        out = render_viewer_html(
+            title="x",
+            events=events,
+            scenario_topology={"spots": [], "connections": []},
+            cytoscape_js_src="/* fake */",
+        )
+        assert 'id="event-filter-bar"' in out
+        assert 'data-filter-category="speech"' in out
+        assert 'data-filter-category="recall"' in out
+        assert 'data-default-visible="false"' in out
+
+    def test_default_hidden_only_tick_is_hidden_in_initial_html(self) -> None:
+        """既定 OFF の event だけを含む tick は初期 HTML でも見出しごと畳む。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind="semantic_passive_recall",
+                tick=1,
+                player_id=1,
+                payload={"candidate_count": 0, "top_k": 3, "situation_cues": []},
+            )
+        ]
+        out = render_viewer_html(
+            title="x",
+            events=events,
+            scenario_topology={"spots": [], "connections": []},
+            cytoscape_js_src="/* fake */",
+        )
+        assert '<div class="tick-block all-filtered" data-tick="1">' in out
+
+    def test_trace_navigator_removed_and_memo_collapsed_by_default(self) -> None:
+        """下部 trace navigator は出力せず、memo は既定で畳む。"""
+        out = render_viewer_html(
+            title="x",
+            events=_sample_events(),
+            scenario_topology={"spots": [], "connections": []},
+            cytoscape_js_src="/* fake */",
+        )
+        assert 'id="trace-nav-section"' not in out
+        assert 'id="moment-rail"' not in out
+        assert 'id="heatmap"' not in out
+        assert 'id="toggle-memo-panel"' in out
+        assert 'id="toggle-memo-panel" checked' not in out
 
 
 class TestMainCli:
@@ -598,7 +837,7 @@ class TestTacticalThemeMarkers:
     """PR ε: viewer HTML が tactical 風テーマの要素を含む回帰防止。"""
 
     def test_html_tactical_element_included(self) -> None:
-        """HTML に tactical テーマ要素が含まれる。"""
+        """HTML に tactical テーマ要素が含まれ、不要な trace navigator は出ない。"""
         out = render_viewer_html(
             title="t",
             events=_sample_events(),
@@ -608,17 +847,12 @@ class TestTacticalThemeMarkers:
         # 設計トークン
         assert "--bg:" in out
         assert "--gold:" in out
-        # 新セクション
-        assert 'id="trace-nav-section"' in out
-        assert 'id="moment-rail"' in out
         # 新ラベル
         assert "Tactical map" in out
-        assert "Trace navigator" in out
         assert "Objectives / Active memo" in out
         # badge outcome chip
         assert "badge outcome" in out
-        # moment_rail へのデータ inline (合成 trace なので start + end は最低含まれる)
-        assert "traceMoments" in out
+        assert "Trace navigator" not in out
 
 
 class TestSpeechTimeline:
