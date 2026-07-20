@@ -5,6 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("datasets")
+pytest.importorskip("pyarrow")
+
 from datasets import load_dataset
 
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
