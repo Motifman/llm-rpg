@@ -282,6 +282,20 @@ def _mask_secret_values(value: Any, *, key_name: str = "") -> Any:
     return value
 
 
+def _prompt_dataset_runtime_config_payload(
+    resolved_config: "ResolvedLlmRuntimeConfig",
+) -> dict[str, Any]:
+    """prompt dataset の run metadata に保存する runtime_config を返す。
+
+    ``llm_api_key`` は replay 時に実行環境の秘密値から注入するため、prompt
+    dataset には placeholder も保存しない。
+    """
+
+    payload = resolved_config.to_trace_dict()
+    payload["llm_api_key"] = None
+    return payload
+
+
 def _sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -1316,7 +1330,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "profile": config_source.get("profile"),
                 "scenario_path": str(args.scenario),
                 "scenario_sha256": _sha256_file(args.scenario),
-                "runtime_config": cfg.to_trace_dict(),
+                "runtime_config": _prompt_dataset_runtime_config_payload(cfg),
             },
             failure_policy=cfg.prompt_dataset_capture_failure_policy,
         )

@@ -323,3 +323,19 @@ class TestExperimentProfileManifest:
         assert masked["runtime_config"]["OPENAI_API_KEY"] == "***"
         assert masked["nested"][0]["token"] == "***"
         assert masked["nested"][1]["plain"] == "visible"
+
+    def test_prompt_dataset_runtime_config_keeps_llm_api_key_none(self) -> None:
+        """prompt dataset の run metadata には API key placeholder も保存しない。"""
+        from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+            ResolvedLlmRuntimeConfig,
+        )
+        import scripts.run_scenario_experiment as runner
+
+        cfg = ResolvedLlmRuntimeConfig.for_tests(llm_api_key="sk-secret")
+
+        payload = runner._prompt_dataset_runtime_config_payload(cfg)
+
+        rendered = json.dumps(payload, ensure_ascii=False)
+        assert payload["llm_api_key"] is None
+        assert "sk-secret" not in rendered
+        assert "***" not in rendered
