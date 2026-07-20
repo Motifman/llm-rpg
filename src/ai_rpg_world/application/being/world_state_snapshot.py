@@ -31,10 +31,13 @@ world snapshot は ``source_scenario`` が異なる場合 **load を fail-fast**
 world state は **多くの subsystem** (player / spot / weather / monster / ...)
 の集合体で、それぞれが独立に進化する。なので **subsystem ごとに**
 ``schema_version`` を持たせ、未知 version は load 時に fail-fast。
+top-level ``schema_version=2`` は「実験再開で期待 subsystem key を strict に
+検査できる形式」を表す。旧 ``schema_version=1`` は通常 restore では
+後方互換として読むが、実験再開の strict restore では使わない。
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "source_scenario": "decay_demo",
   "captured_at": "2026-06-14T...",
   "world_tick": 30,
@@ -57,8 +60,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-CURRENT_WORLD_SNAPSHOT_VERSION: int = 1
-SUPPORTED_WORLD_SNAPSHOT_VERSIONS: frozenset[int] = frozenset({1})
+CURRENT_WORLD_SNAPSHOT_VERSION: int = 2
+SUPPORTED_WORLD_SNAPSHOT_VERSIONS: frozenset[int] = frozenset({1, 2})
 
 
 @dataclass(frozen=True)
@@ -130,6 +133,10 @@ class WorldStateSnapshotVersionError(Exception):
     """world snapshot の ``schema_version`` が現 codec で読めないとき。"""
 
 
+class WorldStateSnapshotCoverageError(Exception):
+    """world snapshot の subsystem key が期待範囲と一致しないとき。"""
+
+
 class WorldStateScenarioMismatchError(Exception):
     """world snapshot の ``source_scenario`` が現 scenario と異なるとき。
 
@@ -140,6 +147,7 @@ class WorldStateScenarioMismatchError(Exception):
 
 __all__ = [
     "WorldStateSnapshot",
+    "WorldStateSnapshotCoverageError",
     "WorldStateSnapshotVersionError",
     "WorldStateScenarioMismatchError",
     "CURRENT_WORLD_SNAPSHOT_VERSION",

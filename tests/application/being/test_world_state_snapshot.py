@@ -24,6 +24,7 @@ from ai_rpg_world.application.being.being_snapshot_file_gateway import (
 from ai_rpg_world.application.being.world_state_snapshot import (
     SUPPORTED_WORLD_SNAPSHOT_VERSIONS,
     WorldStateScenarioMismatchError,
+    WorldStateSnapshotCoverageError,
     WorldStateSnapshot,
     WorldStateSnapshotVersionError,
 )
@@ -42,7 +43,7 @@ class TestWorldStateSnapshotVO:
         assert s.source_scenario == "demo"
         assert s.world_tick == 0
         assert s.subsystems == {}
-        assert s.schema_version == 1
+        assert s.schema_version == 2
 
     def test_empty_source_scenario_raises_exception(self) -> None:
         """空 sourcescenario は例外。"""
@@ -138,6 +139,14 @@ class TestWorldStateSnapshotServiceCapture:
                 ]
             )
 
+    def test_expected_subsystem_keys_mismatch_constructor_error(self) -> None:
+        """期待 key と登録 codec が違う場合は構築時に例外にする。"""
+        with pytest.raises(WorldStateSnapshotCoverageError, match="expected"):
+            WorldStateSnapshotService(
+                subsystem_codecs=[_RecordingCodec("player_status")],
+                expected_subsystem_keys=["player_status", "world_tick"],
+            )
+
 
 class TestWorldStateSnapshotServiceRestore:
     """restore の挙動 (scenario / version / unknown subsystem)。"""
@@ -162,6 +171,37 @@ class TestWorldStateSnapshotServiceRestore:
         )
         with pytest.raises(WorldStateSnapshotVersionError):
             service.restore(SimpleNamespace(), snap, current_scenario="demo")
+
+    def test_strict_restore_legacy_schema_version_raises_exception(self) -> None:
+        """strict restore では旧 world snapshot schema を実験再開に使わない。"""
+        codec = _RecordingCodec("world_tick")
+        service = WorldStateSnapshotService(subsystem_codecs=[codec])
+        snap = WorldStateSnapshot(
+            source_scenario="demo",
+            world_tick=0,
+            schema_version=1,
+            subsystems={"world_tick": {"x": 1}},
+        )
+        with pytest.raises(WorldStateSnapshotVersionError, match="strict"):
+            service.restore(
+                SimpleNamespace(),
+                snap,
+                current_scenario="demo",
+                strict_subsystems=True,
+            )
+
+    def test_non_strict_restore_legacy_schema_version_works(self) -> None:
+        """通常 restore では旧 world snapshot schema を後方互換で読める。"""
+        codec = _RecordingCodec("world_tick")
+        service = WorldStateSnapshotService(subsystem_codecs=[codec])
+        snap = WorldStateSnapshot(
+            source_scenario="demo",
+            world_tick=0,
+            schema_version=1,
+            subsystems={"world_tick": {"x": 1}},
+        )
+        service.restore(SimpleNamespace(), snap, current_scenario="demo")
+        assert codec.restore_calls == [{"x": 1}]
 
     def test_scenario_matches_fail_fast(self) -> None:
         """scenario 不一致は fail fast。"""
@@ -192,6 +232,49 @@ class TestWorldStateSnapshotServiceRestore:
         assert any(
             "future_subsystem" in r.message for r in caplog.records
         )
+
+    def test_strict_unknown_subsystem_raises_exception(self) -> None:
+        """strict restore では未登録 subsystem を読み飛ばさず例外にする。"""
+        codec = _RecordingCodec("player_status")
+        service = WorldStateSnapshotService(subsystem_codecs=[codec])
+        snap = WorldStateSnapshot(
+            source_scenario="demo",
+            world_tick=0,
+            subsystems={
+                "player_status": {"x": 1},
+                "future_subsystem": {"y": 2},
+            },
+        )
+        with pytest.raises(
+            WorldStateSnapshotCoverageError, match="future_subsystem"
+        ):
+            service.restore(
+                SimpleNamespace(),
+                snap,
+                current_scenario="demo",
+                strict_subsystems=True,
+            )
+
+    def test_strict_missing_expected_subsystem_raises_exception(self) -> None:
+        """strict restore では期待 subsystem 欠落を例外にする。"""
+        codec = _RecordingCodec("player_status")
+        tick_codec = _RecordingCodec("world_tick")
+        service = WorldStateSnapshotService(
+            subsystem_codecs=[codec, tick_codec],
+            expected_subsystem_keys=["player_status", "world_tick"],
+        )
+        snap = WorldStateSnapshot(
+            source_scenario="demo",
+            world_tick=0,
+            subsystems={"player_status": {"x": 1}},
+        )
+        with pytest.raises(WorldStateSnapshotCoverageError, match="world_tick"):
+            service.restore(
+                SimpleNamespace(),
+                snap,
+                current_scenario="demo",
+                strict_subsystems=True,
+            )
 
     def test_registered_subsystem_keys_can_get(self) -> None:
         """registered subsystem keys を取れる。"""
