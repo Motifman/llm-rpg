@@ -48,6 +48,9 @@ def compute_stock_regen(
     副作用なし。何度呼んでも同じ入力なら同じ結果。
     """
     # 入力の防御的クランプ (壊れた state / 手書きシナリオ対策)。
+    # capacity 自体が負なら 0 扱いにしてから stock をクランプする
+    # (capacity<0 のまま min すると effective_stock が負値になり得る)。
+    capacity = max(0, capacity)
     base = max(0, min(stock, capacity))
 
     # 再生なし (静的プール) / 時刻が進んでいない / 逆行 (再開・時計巻き戻し) は

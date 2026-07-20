@@ -14,6 +14,13 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 from ai_rpg_world.domain.world_graph.value_object.trap_def import TrapDef
 
 
+# 備蓄プールの内部 bookkeeping state key。lazy 再生用の生値なので、第三者
+# プロンプトには常に出さない (visible_state で汎用除外する)。
+_STOCK_POOL_STATE_KEYS: FrozenSet[str] = frozenset(
+    {"stock", "stock_capacity", "stock_tick", "stock_refill_interval"}
+)
+
+
 @dataclass(frozen=True)
 class SpotObject:
     object_id: SpotObjectId
@@ -60,11 +67,12 @@ class SpotObject:
         プロンプトの「スポット内オブジェクトの状態」セクションを組み立てる
         builder から呼ばれる。effect 適用や永続化には影響しない。
         """
-        if not self.hidden_state_keys:
-            return dict(self.state)
-        return {
-            k: v for k, v in self.state.items() if k not in self.hidden_state_keys
-        }
+        # 備蓄プールの内部 bookkeeping key は常に除外する。生値のまま出すと
+        # `stock=0` 等の未整形値が漏れ、lazy 再生を計算しないので「0 なのに
+        # 採れる」矛盾が見える。per-object hidden_state_keys 設定に頼ると設定漏れ
+        # で漏れる (コード内既知回帰) ため、pool key は汎用除外する。
+        excluded = self.hidden_state_keys | _STOCK_POOL_STATE_KEYS
+        return {k: v for k, v in self.state.items() if k not in excluded}
 
     def with_visible(self, visible: bool) -> SpotObject:
         return replace(self, is_visible=visible)

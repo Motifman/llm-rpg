@@ -1863,9 +1863,15 @@ class WorldRuntime:
         spot_id = graph.get_entity_spot(eid)
         obj_label = self._object_display_name_at_player_spot(player_id, object_str_id)
         action_ja = self._interaction_action_label_ja(action_name)
+        # 備蓄プール (OBJECT_STOCK_AT_LEAST / CONSUME_OBJECT_STOCK) の lazy 再生は
+        # 現在 tick が無いと働かない。LLM の採取主経路 (spot_graph_interact →
+        # do_interact) はここを通るので、current_tick を必ず渡す。渡し忘れると
+        # 採取源が再生せず永久枯渇する (reactive_binding も pool 化で削除済み)。
+        from ai_rpg_world.domain.common.value_object import WorldTick
         result = self._interaction_service.execute_interaction(
             player_id, obj_id, action_name,
             interaction_parameters=interaction_parameters,
+            current_tick=WorldTick(self.current_tick()),
         )
         result_text = "; ".join(result.messages) if result.messages else "完了"
         graph = self._spot_graph_repo.find_graph()
