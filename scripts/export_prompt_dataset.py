@@ -11,9 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
-import pyarrow.parquet as pq
-from datasets import Dataset
-
 
 _TABLE_DIRS = {
     "default": "data",
@@ -298,9 +295,22 @@ def _request_kwargs(call: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _write_parquet(path: Path, rows: list[dict[str, Any]]) -> None:
+    Dataset, pq = _load_export_dependencies()
     path.parent.mkdir(parents=True, exist_ok=True)
     dataset = Dataset.from_list([_json_stringify_nested(row) for row in rows])
     pq.write_table(dataset.data.table, path, compression="zstd")
+
+
+def _load_export_dependencies() -> tuple[Any, Any]:
+    try:
+        from datasets import Dataset
+        import pyarrow.parquet as pq
+    except ImportError as exc:
+        raise SystemExit(
+            "prompt dataset export には optional dependency が必要です。"
+            ' `uv sync --extra export` または `pip install -e ".[export]"` を実行してください。'
+        ) from exc
+    return Dataset, pq
 
 
 def _json_stringify_nested(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -377,6 +387,8 @@ llm-rpg の実験 run から作った LLM tool-use prompt dataset。
 join key は `run_id`、`llm_call_id`、`system_prompt_id`、`toolset_id`。
 `turns.request.kwargs` の `content_ref` / `tools_ref` を sidecar と結合すると
 `reconstruct_request` で replay 用 request を復元できる。
+`turns` の `request` / `response` / `output` / `result` は replay 忠実性を保つため
+JSON 文字列カラムとして保存している。利用時は `json.loads` で復元する。
 
 ## Limitations
 

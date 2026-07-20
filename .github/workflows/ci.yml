@@ -24,7 +24,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install project
-        run: pip install -e .
+        run: pip install -e ".[export]"
 
       - name: Run tests
         run: pytest
