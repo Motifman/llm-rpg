@@ -22,6 +22,7 @@ from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.infrastructure.repository.spot_graph_persistence_exceptions import (
     SpotGraphConnectionRecordInvariantError,
     SpotGraphSnapshotNotInitializedError,
@@ -193,6 +194,33 @@ def test_sqlite_roundtrip_parallel_edges_preserves_pairing() -> None:
     loaded = SqliteSpotGraphRepository.for_standalone_connection(conn).find_graph()
 
     assert spot_graph_aggregate_to_json_dict(loaded) == spot_graph_aggregate_to_json_dict(graph)
+
+
+def test_sqlite_roundtrip_preserves_optional_spot_position() -> None:
+    """SpotNode.position は SQLite の集約 JSON に保存され、読み戻しても同じ座標を持つ。"""
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(77))
+    graph.add_spot(
+        SpotNode(
+            spot_id=SpotId.create(1),
+            name="海岸",
+            description="島の東側の海岸",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
+            position=SpotPosition(x=10.5, y=-4.0),
+        )
+    )
+    graph.add_spot(_node(2))
+    graph.clear_events()
+
+    payload = spot_graph_aggregate_to_json_dict(graph)
+    assert payload["spots"][0]["position"] == {"x": 10.5, "y": -4.0}
+    assert "position" not in payload["spots"][1]
+
+    loaded = loads_spot_graph_aggregate(dumps_spot_graph_aggregate(graph))
+
+    assert spot_graph_aggregate_to_json_dict(loaded) == payload
+    assert loaded.get_spot(SpotId.create(1)).position == SpotPosition(x=10.5, y=-4.0)
+    assert loaded.get_spot(SpotId.create(2)).position is None
 
 
 def test_find_graph_without_snapshot_raises_specific_exception() -> None:

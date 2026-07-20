@@ -42,6 +42,7 @@ from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtmosphere
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -209,12 +210,15 @@ def _spot_node_to_dict(node: SpotNode) -> dict[str, Any]:
     }
     if node.atmosphere is not None:
         d["atmosphere"] = _spot_atmosphere_to_dict(node.atmosphere)
+    if node.position is not None:
+        d["position"] = _spot_position_to_dict(node.position)
     return d
 
 
 def _spot_node_from_dict(d: dict[str, Any]) -> SpotNode:
     parent = SpotId.create(int(d["parent_id"])) if d.get("parent_id") is not None else None
     atmosphere = _spot_atmosphere_from_dict(d["atmosphere"]) if d.get("atmosphere") else None
+    position = _spot_position_from_dict(d["position"]) if d.get("position") is not None else None
     return SpotNode(
         spot_id=SpotId.create(int(d["spot_id"])),
         name=d["name"],
@@ -223,7 +227,16 @@ def _spot_node_from_dict(d: dict[str, Any]) -> SpotNode:
         parent_id=parent,
         interior=None,
         atmosphere=atmosphere,
+        position=position,
     )
+
+
+def _spot_position_to_dict(position: SpotPosition) -> dict[str, float]:
+    return {"x": float(position.x), "y": float(position.y)}
+
+
+def _spot_position_from_dict(d: dict[str, Any]) -> SpotPosition:
+    return SpotPosition(x=float(d["x"]), y=float(d["y"]))
 
 
 def _spot_atmosphere_to_dict(a: SpotAtmosphere) -> dict[str, Any]:
