@@ -149,6 +149,7 @@ class PromptDatasetCaptureSink:
             **_to_jsonable(self._run_metadata),
         }
         self._write_json(self.dataset_dir / "run.json", run_payload)
+        self._write_capture_status(capture_incomplete=False)
 
     def record_call(
         self,
@@ -388,6 +389,7 @@ class PromptDatasetCaptureSink:
             operation()
         except Exception:
             self._capture_incomplete = True
+            self._write_capture_status(capture_incomplete=True)
             if self.failure_policy == "fail":
                 raise
             _logger.warning(
@@ -395,6 +397,16 @@ class PromptDatasetCaptureSink:
                 "PROMPT_DATASET_CAPTURE_FAILURE_POLICY=warn",
                 exc_info=True,
             )
+
+    def _write_capture_status(self, *, capture_incomplete: bool) -> None:
+        self._write_json(
+            self.dataset_dir / "capture_status.json",
+            {
+                "schema_version": SCHEMA_VERSION,
+                "run_id": self.run_id,
+                "capture_incomplete": capture_incomplete,
+            },
+        )
 
     @staticmethod
     def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
