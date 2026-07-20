@@ -746,6 +746,10 @@ class _WorldLlmTurnTrigger:
                 player_status, "snapshot_needs_for_delta"
             ):
                 player_status.snapshot_needs_for_delta()
+                # HP の前 turn baseline も同じタイミングで更新する。次 turn の
+                # 「身体の状態」section で HP 増減 (前回 -12 等) を出すため。
+                if hasattr(player_status, "snapshot_hp_for_delta"):
+                    player_status.snapshot_hp_for_delta()
                 repo.save(player_status)
         except Exception:
             # snapshot 精度低下は致命ではない (差分が 0 になるだけ)

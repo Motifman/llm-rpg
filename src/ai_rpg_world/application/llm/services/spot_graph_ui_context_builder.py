@@ -665,9 +665,13 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         snap: SpotGraphPlayerSnapshotDto,
         lines: List[str],
     ) -> None:
-        if not snap.need_lines:
+        hp_line = getattr(snap, "hp_line", "") or ""
+        if not snap.need_lines and not hp_line:
             return
         lines.append("身体の状態:")
+        # HP は本人が真っ先に読むべき生存情報なので need より先に出す。
+        if hp_line:
+            lines.append(f"  {hp_line}")
         for line in snap.need_lines:
             lines.append(f"  {line}")
         # PR β (実験 #29 後続): own player の疲労 tier に応じた行動ヒント。
