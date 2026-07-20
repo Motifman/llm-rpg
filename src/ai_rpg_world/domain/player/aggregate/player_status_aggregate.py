@@ -150,6 +150,11 @@ class PlayerStatusAggregate(AggregateRoot):
         # snapshot 系には乗せない (= 長走再開で 1 turn 分だけ差分が空になる
         # だけで実害なし。連続性は失われない)。
         self._previous_need_values: Dict[NeedType, int] = {}
+        # HP trajectory: need と対称に「前回 turn の HP 値」を保持する。
+        # ``snapshot_hp_for_delta()`` を呼んだ時点の HP を入れ、
+        # ``compute_hp_delta()`` が現在値との差分を返す。None は snapshot 未取得
+        # (= 初回 turn / 長走再開直後の 1 turn) を表し、その場合 delta は 0。
+        self._previous_hp_value: "int | None" = None
         # Phase 4-D-2: プレイヤー個別の自由 state。status effect / disguise /
         # persistent flag / per-player branching 等、型固定フィールドが拾わない
         # 任意のキー/値を保持する。SpotObject.state / ItemInstance.state と
@@ -263,6 +268,26 @@ class PlayerStatusAggregate(AggregateRoot):
         各 turn で「前 turn の自分から見た差分」が表示される。
         """
         self._previous_need_values = {n.need_type: n.value for n in self._needs}
+
+    def compute_hp_delta(self) -> int:
+        """前回 ``snapshot_hp_for_delta()`` 時点からの HP 変化を返す。
+
+        ``+`` は回復、``-`` は被弾。snapshot がまだ無い (= 初回 turn) 場合は 0。
+        副作用なし: 何度呼んでも同じ結果。プロンプトの「身体の状態」section に
+        「HP: 消耗（48/100、前回 -12）」のような trajectory を出すための基盤。
+        need と違い HP は現状ステータス行が無く、エージェントは被弾観測を暗算で
+        積み上げるしかなかった (rolling summary の圧縮で累計がズレる) ため、
+        値 + 差分を明示して暗算依存を解消する狙い。
+        """
+        if self._previous_hp_value is None:
+            return 0
+        return self._hp.value - self._previous_hp_value
+
+    def snapshot_hp_for_delta(self) -> None:
+        """現在の HP 値を「前回値」として保存する。次回 ``compute_hp_delta()``
+        で参照される。想定タイミングは need と同じ prompt build 完了直前。
+        """
+        self._previous_hp_value = self._hp.value
 
     @property
     def state(self) -> Mapping[str, Any]:

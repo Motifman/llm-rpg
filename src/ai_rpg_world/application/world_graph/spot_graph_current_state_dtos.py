@@ -239,6 +239,12 @@ class SpotGraphPlayerSnapshotDto:
     # エージェントの欲求状態テキスト
     need_lines: Tuple[str, ...] = ()
 
+    # 行動者本人の HP 行 (値 + 前 turn からの増減)。空文字は「HP 行を出さない」。
+    # need_lines と同じ「身体の状態」section の先頭に描画する。従来は HP が
+    # プロンプトに一切出ておらず、エージェントは被弾観測を暗算で積み上げるしか
+    # なかった (rolling summary の圧縮で累計がズレる) 問題への対処。
+    hp_line: str = ""
+
     # PR #2 状態異常: 適用中の StatusEffect を読みやすい文字列行に変換したもの。
     # 「出血 (残り 9 tick)」のような表記で LLM に渡し、bandage を探す行動連鎖を
     # 取れるようにする。effects が空のときは () を返す。

@@ -114,6 +114,29 @@ class Hp:
             return 0.0
         return self.value / self.max_hp
 
+    def describe(self, delta: Union[int, None] = None) -> str:
+        """HPの状態を自然言語で返す（プロンプトの「身体の状態」用）。
+
+        ``AgentNeed.describe`` と対称の表示。値・最大値・危険度の tier を出し、
+        ``delta`` が非 0 のとき末尾に「前回 +N」/「前回 -N」を併記する。need と
+        違い HP は ``+`` が回復 (良い)、``-`` が被弾 (悪い) を意味する。0/None は
+        従来どおり併記なし。
+        """
+        pct = self.get_percentage()
+        if pct <= 0.15:
+            tier = "瀕死"
+        elif pct <= 0.35:
+            tier = "危険"
+        elif pct <= 0.6:
+            tier = "消耗"
+        else:
+            tier = "良好"
+        base = f"HP: {tier}（{self.value}/{self.max_hp}）"
+        if delta is None or delta == 0:
+            return base
+        sign = "+" if delta > 0 else ""
+        return f"{base}、前回 {sign}{delta}"
+
     def __str__(self) -> str:
         """文字列としてのHP"""
         return f"{self.value}/{self.max_hp}"

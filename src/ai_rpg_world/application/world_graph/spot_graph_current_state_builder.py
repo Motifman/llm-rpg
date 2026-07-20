@@ -513,9 +513,14 @@ class SpotGraphCurrentStateBuilder:
         # ``snapshot_needs_for_delta_after_prompt_build`` で本 build の末尾に
         # 呼ぶ (= 「prompt build 完了直前」を次回 baseline にする)。
         need_lines: tuple[str, ...] = ()
+        hp_line: str = ""
         if player is not None:
             deltas = player.compute_need_deltas()
             need_lines = player.needs.describe_all_with_deltas(deltas)
+            # HP を need と同じ「身体の状態」section に、値 + 前 turn からの
+            # 増減つきで出す。baseline の snapshot は need と同じく prompt build
+            # 完了直前 (runtime_manager) で snapshot_hp_for_delta() を呼ぶ。
+            hp_line = player.hp.describe(player.compute_hp_delta())
 
         # PR #2 状態異常 surface: active_effects を「出血 (残り 9 tick)」のような
         # 表記に変換して snapshot に載せる。current_tick_provider が未注入なら
@@ -561,6 +566,7 @@ class SpotGraphCurrentStateBuilder:
             ground_items=tuple(ground_items),
             time_of_day=self._build_time_of_day_entry(),
             need_lines=need_lines,
+            hp_line=hp_line,
             ground_item_lines=ground_lines,
             connection_lines=connection_lines,
             sub_location_lines=sub_lines,
