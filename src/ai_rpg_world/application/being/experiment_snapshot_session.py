@@ -92,6 +92,39 @@ from ai_rpg_world.domain.world.value_object.world_id import (
 
 logger = logging.getLogger(__name__)
 
+EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
+    # Phase 9-2
+    "world_tick",
+    "player_position",
+    "player_vitals",
+    "player_needs",
+    # Phase 9-2b
+    "player_inventory",
+    "player_growth",
+    "player_state_dict",
+    # Phase 9-3
+    "world_flags",
+    "scenario_event_progress",
+    "exploration_progress",
+    # Phase 9-3b
+    "spot_interior",
+    "item_instance",
+    # Phase 9-4a
+    "player_active_effects",
+    "player_attention_level",
+    "player_pursuit_state",
+    "player_spot_navigation_state",
+    # Phase 9-4b
+    "weather",
+    "day_night",
+    # Phase 9-4c
+    "sliding_window",
+    "observation_buffer",
+    "action_result_store",
+    # Encounter Memory
+    "encounter_memory",
+)
+
 
 def _empty_memo_store() -> Any:
     from ai_rpg_world.application.llm.services.in_memory_memo_store import (
@@ -481,6 +514,7 @@ class ExperimentSnapshotSession:
         # 増やしてここを差し替えるパターン。
         self._world_snapshot_service = WorldStateSnapshotService(
             subsystem_codecs=_default_world_subsystem_codecs(),
+            expected_subsystem_keys=EXPECTED_WORLD_SUBSYSTEM_KEYS,
         )
         self._world_gateway = WorldStateSnapshotFileGateway()
 
@@ -536,7 +570,10 @@ class ExperimentSnapshotSession:
             return None
         snapshot = self._world_gateway.read(input_dir)
         self._world_snapshot_service.restore(
-            runtime, snapshot, current_scenario=current_scenario
+            runtime,
+            snapshot,
+            current_scenario=current_scenario,
+            strict_subsystems=True,
         )
         return snapshot
 
@@ -731,5 +768,6 @@ class ExperimentSnapshotSession:
 __all__ = [
     "ExperimentSnapshotSession",
     "CaptureAllReport",
+    "EXPECTED_WORLD_SUBSYSTEM_KEYS",
     "RestoreAllReport",
 ]

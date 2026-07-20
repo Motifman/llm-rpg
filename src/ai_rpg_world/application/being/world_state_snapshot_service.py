@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Sequence
 
 from ai_rpg_world.application.being.world_state_snapshot import (
+    CURRENT_WORLD_SNAPSHOT_VERSION,
     SUPPORTED_WORLD_SNAPSHOT_VERSIONS,
     WorldStateScenarioMismatchError,
     WorldStateSnapshot,
+    WorldStateSnapshotCoverageError,
     WorldStateSnapshotVersionError,
 )
 
@@ -57,6 +59,7 @@ class WorldStateSnapshotService:
         self,
         *,
         subsystem_codecs: list[WorldSubsystemCodec] | None = None,
+        expected_subsystem_keys: Sequence[str] | None = None,
     ) -> None:
         codecs = list(subsystem_codecs or [])
         # 重複検出 (= 同じ subsystem_key を 2 つ登録するのは設計バグ)
@@ -69,6 +72,31 @@ class WorldStateSnapshotService:
                 )
             seen.add(key)
         self._codecs: list[WorldSubsystemCodec] = codecs
+        self._expected_subsystem_keys: tuple[str, ...] | None = (
+            tuple(expected_subsystem_keys)
+            if expected_subsystem_keys is not None
+            else None
+        )
+        if self._expected_subsystem_keys is not None:
+            expected_seen: set[str] = set()
+            for key in self._expected_subsystem_keys:
+                if not isinstance(key, str) or not key:
+                    raise ValueError(
+                        "expected_subsystem_keys must contain non-empty str "
+                        f"(got {key!r})"
+                    )
+                if key in expected_seen:
+                    raise ValueError(
+                        f"duplicate expected subsystem_key: {key!r}"
+                    )
+                expected_seen.add(key)
+            actual = tuple(c.subsystem_key for c in self._codecs)
+            if actual != self._expected_subsystem_keys:
+                raise WorldStateSnapshotCoverageError(
+                    "registered world subsystem keys do not match expected "
+                    f"keys: actual={list(actual)!r}, "
+                    f"expected={list(self._expected_subsystem_keys)!r}"
+                )
 
     def capture(
         self,
@@ -106,14 +134,18 @@ class WorldStateSnapshotService:
         snapshot: WorldStateSnapshot,
         *,
         current_scenario: str,
+        strict_subsystems: bool = False,
     ) -> None:
         """WorldStateSnapshot を runtime に書き戻す。
 
         - ``schema_version`` が未サポートなら ``WorldStateSnapshotVersionError``
         - ``source_scenario != current_scenario`` なら
           ``WorldStateScenarioMismatchError`` (= fail-fast)
-        - 1 subsystem の codec も登録されていない subsystem は無視 (= 後方
+        - 通常 mode では、codec が登録されていない subsystem は無視 (後方
           互換: 新 version で増えた subsystem を旧 code で読む場合の救済)
+        - ``strict_subsystems=True`` では、期待 key 欠落や未知 key を
+          ``WorldStateSnapshotCoverageError`` で止める。実験再開ではこちらを
+          使い、world state の静かな欠落を避ける。
         - 各 subsystem の restore は順次。失敗時は例外伝播 (= partial state
           を runtime に残さない方針)
         """
@@ -123,6 +155,17 @@ class WorldStateSnapshotService:
                 f"is not supported "
                 f"(supported: {sorted(SUPPORTED_WORLD_SNAPSHOT_VERSIONS)})"
             )
+        if (
+            strict_subsystems
+            and snapshot.schema_version != CURRENT_WORLD_SNAPSHOT_VERSION
+        ):
+            raise WorldStateSnapshotVersionError(
+                "strict world snapshot restore requires "
+                f"schema_version={CURRENT_WORLD_SNAPSHOT_VERSION} "
+                f"(got {snapshot.schema_version}). Older world snapshots may "
+                "lack required subsystem keys and are not safe for experiment "
+                "resume."
+            )
         if snapshot.source_scenario != current_scenario:
             raise WorldStateScenarioMismatchError(
                 f"world snapshot source_scenario={snapshot.source_scenario!r} "
@@ -131,9 +174,24 @@ class WorldStateSnapshotService:
                 f"events are tied to scenario), refusing to load."
             )
 
-        # 登録済 codec を順次呼ぶ。snapshot 側に登録外の subsystem がある場合
-        # は info ログを残して skip (= 後方互換性)。
         codec_by_key = {c.subsystem_key: c for c in self._codecs}
+        if strict_subsystems:
+            expected_keys = (
+                set(self._expected_subsystem_keys)
+                if self._expected_subsystem_keys is not None
+                else set(codec_by_key)
+            )
+            snapshot_keys = set(snapshot.subsystems)
+            missing = sorted(expected_keys - snapshot_keys)
+            unknown = sorted(snapshot_keys - set(codec_by_key))
+            if missing or unknown:
+                raise WorldStateSnapshotCoverageError(
+                    "world snapshot subsystem coverage mismatch: "
+                    f"missing={missing!r}, unknown={unknown!r}"
+                )
+
+        # 登録済 codec を順次呼ぶ。通常 mode で snapshot 側に登録外の
+        # subsystem がある場合は info ログを残して読み飛ばす (= 後方互換性)。
         for key, data in snapshot.subsystems.items():
             codec = codec_by_key.get(key)
             if codec is None:

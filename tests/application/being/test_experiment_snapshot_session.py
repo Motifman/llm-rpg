@@ -18,6 +18,8 @@ from ai_rpg_world.application.being.being_provisioning_service import (
 )
 from ai_rpg_world.application.being.experiment_snapshot_session import (
     ExperimentSnapshotSession,
+    EXPECTED_WORLD_SUBSYSTEM_KEYS,
+    _default_world_subsystem_codecs,
 )
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
     InMemoryMemoryLinkStore,
@@ -100,6 +102,15 @@ class TestConstructorGuards:
         )
         report = session.capture_all([PlayerId(1)])
         assert report.is_clean
+
+
+class TestWorldSubsystemCoverage:
+    """world snapshot の既定 subsystem 一覧を構造で固定する。"""
+
+    def test_default_world_subsystem_keys_match_expected_keys(self) -> None:
+        """既定 codec の key が期待一覧と同じ順序・同じ集合で登録される。"""
+        keys = [codec.subsystem_key for codec in _default_world_subsystem_codecs()]
+        assert keys == list(EXPECTED_WORLD_SUBSYSTEM_KEYS)
 
 
 class TestCaptureAll:
@@ -398,6 +409,40 @@ class TestScenarioMetadata:
                 runtime=SimpleNamespace(),
                 input_dir=tmp_path / "snap",
                 current_scenario="desert_world",
+            )
+
+    def test_world_snapshot_restore_strict_missing_subsystem_fail_fast(
+        self, tmp_path: Path
+    ) -> None:
+        """実験再開では world snapshot の subsystem 欠落を fail-fast にする。"""
+        from ai_rpg_world.application.being.being_snapshot_file_gateway import (
+            WorldStateSnapshotFileGateway,
+        )
+        from ai_rpg_world.application.being.world_state_snapshot import (
+            WorldStateSnapshot,
+            WorldStateSnapshotCoverageError,
+        )
+
+        wiring, _ = _make_wiring_stub()
+        session = ExperimentSnapshotSession(
+            wiring_result=wiring, snapshot_dir=tmp_path / "snap"
+        )
+        WorldStateSnapshotFileGateway().write(
+            WorldStateSnapshot(
+                source_scenario="demo",
+                world_tick=10,
+                subsystems={
+                    "world_tick": {"schema_version": 1, "world_tick": 10},
+                },
+            ),
+            tmp_path / "snap",
+        )
+
+        with pytest.raises(WorldStateSnapshotCoverageError, match="missing"):
+            session.restore_world_from_dir(
+                runtime=SimpleNamespace(),
+                input_dir=tmp_path / "snap",
+                current_scenario="demo",
             )
 
     def test_metadata_legacy_snapshot_restore_works(
