@@ -84,6 +84,7 @@ class _Edge:
     from_spot: str
     to_spot: str
     travel_ticks: int
+    is_bidirectional: bool
 
     @property
     def label(self) -> str:
@@ -100,13 +101,16 @@ def validate_spot_map(
     spots = _spot_ids(raw)
     spot_set = set(spots)
     edges = _edges(raw, spot_set, collector)
-    adjacency = _adjacency(spots, edges)
+    directed_adjacency = _directed_adjacency(spots, edges)
+    undirected_adjacency = _undirected_adjacency(spots, edges)
     start_spot_id = _resolve_start_spot(raw, spots, config, collector)
-    components = _connected_components(spots, adjacency)
-    reachable = _reachable_from(start_spot_id, adjacency) if start_spot_id else set()
+    components = _connected_components(spots, undirected_adjacency)
+    reachable = (
+        _reachable_from(start_spot_id, directed_adjacency) if start_spot_id else set()
+    )
     unreachable = sorted(spot_set - reachable) if start_spot_id else []
     cycle_rank = len(edges) - len(spots) + len(components)
-    articulation_spots = _articulation_spots(spots, adjacency)
+    articulation_spots = _articulation_spots(spots, undirected_adjacency)
     positions = _positions(raw)
     skipped_checks: list[dict[str, Any]] = []
 
@@ -138,6 +142,7 @@ def validate_spot_map(
         start_spot_id=start_spot_id,
         spots=spots,
         edges=edges,
+        adjacency=directed_adjacency,
     )
     _check_distance_dependent_rules(
         config=config,
@@ -244,21 +249,50 @@ def _edges(
             )
             continue
         try:
-            travel_ticks = int(conn.get("travel_ticks", 1))
+            raw_travel_ticks = conn.get("travel_ticks", 1)
+            if isinstance(raw_travel_ticks, bool):
+                raise TypeError
+            travel_ticks = int(raw_travel_ticks)
         except (TypeError, ValueError):
+            collector.add(
+                "INVALID_TRAVEL_TICKS",
+                "warning",
+                f"{edge_id} の travel_ticks が数値ではないため 1 として検査します",
+                connection=edge_id,
+                details={"raw_value": conn.get("travel_ticks")},
+            )
             travel_ticks = 1
+        is_bidirectional = conn.get("is_bidirectional", True)
+        if not isinstance(is_bidirectional, bool):
+            is_bidirectional = True
         edges.append(
             _Edge(
                 edge_id=edge_id,
                 from_spot=from_spot,
                 to_spot=to_spot,
                 travel_ticks=travel_ticks,
+                is_bidirectional=is_bidirectional,
             )
         )
     return edges
 
 
-def _adjacency(spots: Iterable[str], edges: Iterable[_Edge]) -> dict[str, list[tuple[str, str]]]:
+def _directed_adjacency(
+    spots: Iterable[str],
+    edges: Iterable[_Edge],
+) -> dict[str, list[tuple[str, str]]]:
+    adjacency: dict[str, list[tuple[str, str]]] = {spot_id: [] for spot_id in spots}
+    for edge in edges:
+        adjacency.setdefault(edge.from_spot, []).append((edge.to_spot, edge.edge_id))
+        if edge.is_bidirectional:
+            adjacency.setdefault(edge.to_spot, []).append((edge.from_spot, edge.edge_id))
+    return adjacency
+
+
+def _undirected_adjacency(
+    spots: Iterable[str],
+    edges: Iterable[_Edge],
+) -> dict[str, list[tuple[str, str]]]:
     adjacency: dict[str, list[tuple[str, str]]] = {spot_id: [] for spot_id in spots}
     for edge in edges:
         adjacency.setdefault(edge.from_spot, []).append((edge.to_spot, edge.edge_id))
@@ -367,10 +401,10 @@ def _check_key_spots(
     start_spot_id: Optional[str],
     spots: list[str],
     edges: list[_Edge],
+    adjacency: Mapping[str, list[tuple[str, str]]],
 ) -> None:
     if start_spot_id is None:
         return
-    adjacency = _adjacency(spots, edges)
     for requirement in config.key_spots:
         key_spot = requirement.spot_id
         if key_spot not in spot_set:

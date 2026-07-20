@@ -45,6 +45,12 @@ def _edge(edge_id: str, a: str, b: str, *, travel_ticks: int = 1) -> dict:
     }
 
 
+def _one_way_edge(edge_id: str, a: str, b: str, *, travel_ticks: int = 1) -> dict:
+    raw = _edge(edge_id, a, b, travel_ticks=travel_ticks)
+    raw["is_bidirectional"] = False
+    return raw
+
+
 class TestSpotMapValidatorGraphStructure:
     """接続情報だけで閉路・関節点・到達不能を検査する。"""
 
@@ -95,6 +101,20 @@ class TestSpotMapValidatorGraphStructure:
         assert "UNREACHABLE_SPOT" in {issue.code for issue in default_result.warnings}
         assert strict_result.ok is False
         assert "UNREACHABLE_SPOT" in {issue.code for issue in strict_result.errors}
+
+    def test_one_way_connection_does_not_make_reverse_route_reachable(self) -> None:
+        """is_bidirectional=false の接続は逆方向に到達できるものとして扱わない。"""
+        raw = _scenario(
+            spots=[_spot("camp"), _spot("cliff")],
+            connections=[_one_way_edge("cliff_to_camp", "cliff", "camp")],
+            players=[{"id": "p1", "name": "P1", "spawn_spot": "camp"}],
+        )
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is True
+        assert "UNREACHABLE_SPOT" in {issue.code for issue in result.warnings}
+        assert result.metrics["unreachable_spots"] == ["cliff"]
 
 
 class TestSpotMapValidatorKeySpots:
@@ -151,6 +171,28 @@ class TestSpotMapValidatorKeySpots:
         assert result.ok is False
         assert "KEY_SPOT_SINGLE_NODE_ROUTE" in {issue.code for issue in result.errors}
 
+    def test_key_spot_route_respects_one_way_connections(self) -> None:
+        """key_spot 2経路性は一方向接続を逆走できる経路として数えない。"""
+        raw = _scenario(
+            spots=[_spot("camp"), _spot("ridge"), _spot("signal")],
+            connections=[
+                _edge("camp_ridge", "camp", "ridge"),
+                _one_way_edge("signal_to_ridge", "signal", "ridge"),
+            ],
+            players=[{"id": "p1", "name": "P1", "spawn_spot": "camp"}],
+        )
+
+        result = validate_spot_map(
+            raw,
+            MapValidationConfig(
+                key_spots=(KeySpotRequirement("signal", severity="error"),)
+            ),
+        )
+
+        assert result.ok is False
+        assert "UNREACHABLE_SPOT" in {issue.code for issue in result.warnings}
+        assert "KEY_SPOT_SINGLE_EDGE_ROUTE" in {issue.code for issue in result.errors}
+
 
 class TestSpotMapValidatorPositions:
     """座標が全 spot に揃った場合だけ距離依存の検査を行う。"""
@@ -191,6 +233,27 @@ class TestSpotMapValidatorPositions:
                 "spot_count": 2,
             }
         ]
+
+    def test_invalid_travel_ticks_is_reported_before_distance_check_fallback(self) -> None:
+        """travel_ticks が数値でない接続は、1 とみなす前に warning として報告する。"""
+        raw = _scenario(
+            spots=[_spot("a", x=0, y=0), _spot("b", x=1, y=0)],
+            connections=[
+                {
+                    "id": "ab",
+                    "from": "a",
+                    "to": "b",
+                    "name": "ab",
+                    "travel_ticks": "fast",
+                    "is_bidirectional": True,
+                }
+            ],
+        )
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is True
+        assert "INVALID_TRAVEL_TICKS" in {issue.code for issue in result.warnings}
 
 
 class TestSpotMapValidatorExistingScenarios:
