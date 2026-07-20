@@ -155,8 +155,9 @@ class TestStockKeysHiddenFromPrompt:
         for k in ("stock", "stock_capacity", "stock_tick", "stock_refill_interval"):
             assert k not in vis
 
-    def test_non_pool_state_still_visible(self) -> None:
-        """pool 以外の state は従来どおり見える。"""
+    def test_stock_key_hidden_generically_other_state_visible(self) -> None:
+        """stock 系 key は pool 以外の object でも汎用除外され、それ以外の
+        state (opened 等) は従来どおり visible_state に残る。"""
         obj = SpotObject(
             object_id=OBJ_ID, name="扉", description="t",
             object_type=ObjectTypeEnum.RESOURCE,
