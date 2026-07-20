@@ -65,6 +65,7 @@ def _simple_object() -> SpotObject:
             InteractionDef(
                 action_name="read",
                 display_label="読む",
+                witness_observation_message="{actor}が石碑を読んだ。",
                 preconditions=(),
                 effects=(
                     InteractionEffect(
@@ -127,6 +128,8 @@ class TestInteractionEventPublication:
         assert interacted[0].spot_id == spot_id
         assert interacted[0].object_id == SpotObjectId.create(10)
         assert interacted[0].action_name == "read"
+        assert interacted[0].action_display_label == "読む"
+        assert interacted[0].witness_observation_message == "{actor}が石碑を読んだ。"
 
     def test_publishes_object_state_changed_event_with_actor_excluded(self):
         """Phase 4-E: PUBLIC_OBSERVABLE な CHANGE_OBJECT_STATE で

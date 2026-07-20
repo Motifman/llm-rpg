@@ -501,11 +501,15 @@ class SpotInteractionApplicationService:
                 WitnessPolicy as _WP,
             )
             witness_policy = _WP.SAME_SPOT
+            action_display_label = ""
+            witness_observation_message = ""
             new_obj = result.new_interior.get_object(object_id)
             if new_obj is not None:
                 for idef in new_obj.interactions:
                     if idef.action_name == action_name:
                         witness_policy = idef.witness_policy
+                        action_display_label = idef.display_label
+                        witness_observation_message = idef.witness_observation_message or ""
                         break
             interacted_event = SpotObjectInteractedEvent.create(
                 aggregate_id=graph.graph_id,
@@ -515,6 +519,8 @@ class SpotInteractionApplicationService:
                 object_id=object_id,
                 action_name=action_name,
                 result_message="；".join(result.messages) if result.messages else "",
+                action_display_label=action_display_label,
+                witness_observation_message=witness_observation_message,
                 witness_policy=witness_policy,
             )
             # Phase 4-E: PUBLIC_OBSERVABLE な効果サマリを同スポットの他プレイヤーに

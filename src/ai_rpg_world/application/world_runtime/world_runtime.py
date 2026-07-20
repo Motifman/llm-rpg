@@ -1863,6 +1863,16 @@ class WorldRuntime:
         spot_id = graph.get_entity_spot(eid)
         obj_label = self._object_display_name_at_player_spot(player_id, object_str_id)
         action_ja = self._interaction_action_label_ja(action_name)
+        action_display_label = ""
+        witness_observation_message = ""
+        interior = self._spot_interior_repo.find_by_spot_id(spot_id)
+        obj = interior.get_object(obj_id) if interior is not None else None
+        if obj is not None:
+            for idef in obj.interactions:
+                if idef.action_name == action_name:
+                    action_display_label = idef.display_label
+                    witness_observation_message = idef.witness_observation_message or ""
+                    break
         # 備蓄プール (OBJECT_STOCK_AT_LEAST / CONSUME_OBJECT_STOCK) の lazy 再生は
         # 現在 tick が無いと働かない。LLM の採取主経路 (spot_graph_interact →
         # do_interact) はここを通るので、current_tick を必ず渡す。渡し忘れると
@@ -1883,6 +1893,8 @@ class WorldRuntime:
             object_id=obj_id,
             action_name=action_name,
             result_message=result_text,
+            action_display_label=action_display_label,
+            witness_observation_message=witness_observation_message,
         ))
         self._process_graph_events()
         # SpotInteractionResultDto は現状 success フラグを持たない (messages から

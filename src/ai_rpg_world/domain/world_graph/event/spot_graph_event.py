@@ -115,6 +115,12 @@ class SpotObjectInteractedEvent(BaseDomainEvent[SpotGraphId, str]):
     object_id: SpotObjectId
     action_name: str
     result_message: str
+    # InteractionDef.display_label 由来の行動表示。目撃者向け文面が無い場合の
+    # prose fallback にだけ使う。本人向け result_message とは分離する。
+    action_display_label: str = ""
+    # InteractionDef.witness_observation_message 由来の目撃者専用 prose template。
+    # result_message のような「本人が得た中身」はここへ載せない。
+    witness_observation_message: str = ""
     # Phase G #1: 観測配信範囲。InteractionDef.witness_policy から伝搬する。
     # default SAME_SPOT で後方互換 (既存 caller は kw 引数を省略できる)。
     witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT

@@ -780,6 +780,15 @@ class ScenarioLoader:
             self._parse_interaction_effect(e, mapper) for e in raw.get("effects", [])
         )
         on_failure_observation = raw.get("on_failure_observation")
+        witness_observation_message = raw.get("witness_observation_message")
+        if (
+            witness_observation_message is not None
+            and not isinstance(witness_observation_message, str)
+        ):
+            raise ScenarioLoadError(
+                f"interaction[{raw.get('action_name')!r}].witness_observation_message "
+                f"must be a string, got {type(witness_observation_message).__name__}"
+            )
         # Phase G #1: witness_policy はオプション、デフォルト SAME_SPOT。
         # JSON で "ACTOR_ONLY" 等を文字列指定 → WitnessPolicy enum に変換。
         # 未知値は ScenarioLoadError で boundary fail (typo を早期検知)。
@@ -806,6 +815,7 @@ class ScenarioLoader:
             preconditions=preconds,
             effects=effects,
             on_failure_observation=on_failure_observation,
+            witness_observation_message=witness_observation_message,
             witness_policy=witness_policy,
         )
 
