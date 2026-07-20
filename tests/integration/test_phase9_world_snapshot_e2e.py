@@ -1,7 +1,8 @@
 """Phase 9 完成版 E2E テスト: 実 ``WorldRuntime`` で world snapshot 往復 (Issue #470)。
 
 Phase 9 全体 (9-1〜9-4c) で 21 subsystem の world snapshot が揃い、PR3 で
-Encounter Memory を加えて計 22 subsystem になった。本ファイルは **実
+Encounter Memory、PR #752 で pending_food_spoilage を加えて計 23 subsystem
+になった。本ファイルは **実
 WorldRuntime を立てて** snapshot → 復元の end-to-end を担保する。
 
 ## カバレッジ
@@ -117,14 +118,15 @@ def _normalize_world_json(path: Path) -> dict:
 
 
 class TestE2ECaptureRestoreRoundTrip:
-    """Phase 9 完成のテスト: 21 subsystem + Encounter Memory が round-trip で bit-identical。"""
+    """Phase 9 完成のテスト: 23 subsystem が round-trip で bit-identical。"""
 
     def test_capture_restore_round_trip_bit_identical(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """src で capture → dst で restore → recapture が bit-identical。
 
-        これにより全 22 subsystem (Phase 9-2〜9-4c + Encounter Memory PR3) の
+        これにより全 23 subsystem (Phase 9-2〜9-4c + Encounter Memory PR3
+        + pending_food_spoilage) の
         codec が正しく往復することを担保。
         """
         # --- src 環境
@@ -170,8 +172,10 @@ class TestE2ECaptureRestoreRoundTrip:
             "subsystem codec のいずれかで非対称な変換が起きている可能性。"
         )
 
-    def test_subsystems_all_22_included(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Phase 9 完成版 + PR3 で世界状態 snapshot に 22 subsystem が含まれる。"""
+    def test_subsystems_all_23_included(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Phase 9 完成版 + PR #752 で世界状態 snapshot に 23 subsystem が含まれる。"""
         runtime, session, _mgr = _build_runtime_session(tmp_path, monkeypatch)
         session.capture_world(
             runtime,
@@ -212,6 +216,8 @@ class TestE2ECaptureRestoreRoundTrip:
             "action_result_store",
             # Encounter Memory (PR3)
             "encounter_memory",
+            # PR #752
+            "pending_food_spoilage",
         }
         # set 比較 1 本で全 subsystem の存在を担保する。count assertion を
         # 別途持つと subsystem 追加時に 2 箇所修正が必要になり mechanical
