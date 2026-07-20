@@ -161,16 +161,60 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return None
         actor = self._resolve_entity_name(event.entity_id)
         obj_name = self._resolve_object_name(event.spot_id, event.object_id)
-        prose = f"{actor}が{obj_name}を操作した。"
+        prose, witness_source = self._format_object_interacted_prose(
+            event, actor=actor, obj_name=obj_name,
+        )
         structured = {
             "type": "spot_object_interacted",
             "actor": actor,
             "object_name": obj_name,
             "action_name": event.action_name,
+            "action_display_label": event.action_display_label,
+            "witness_observation_message": event.witness_observation_message,
+            "witness_observation_source": witness_source,
         }
         return ObservationOutput(
             prose=prose, structured=structured, observation_category="social",
         )
+
+    def _format_object_interacted_prose(
+        self, event: SpotObjectInteractedEvent, *, actor: str, obj_name: str,
+    ) -> tuple[str, str]:
+        """成功時の目撃者 prose を scenario 宣言 → 表示ラベル → 従来文の順で作る。"""
+        message = (event.witness_observation_message or "").strip()
+        action_display_label = (event.action_display_label or "").strip()
+        if message:
+            return (
+                self._render_witness_observation_message(
+                    message,
+                    actor=actor,
+                    obj_name=obj_name,
+                    action_display_label=action_display_label,
+                ),
+                "scenario",
+            )
+        if action_display_label:
+            return f"{actor}が「{action_display_label}」を行った。", "display_label"
+        return f"{actor}が{obj_name}を操作した。", "legacy"
+
+    def _render_witness_observation_message(
+        self, message: str, *, actor: str, obj_name: str, action_display_label: str,
+    ) -> str:
+        """scenario 宣言の目撃者文面に最小限の placeholder を展開する。"""
+        if "{" not in message:
+            return message
+        try:
+            return message.format(
+                actor=actor,
+                object=obj_name,
+                object_name=obj_name,
+                action=action_display_label,
+                action_display_label=action_display_label,
+            )
+        except (KeyError, IndexError, ValueError):
+            # 作家ミスで観測自体を落とすより、未展開の文面を出して trace 側から
+            # 気づける状態を優先する。scenario loader 側では型だけ fail-fast する。
+            return message
 
     def _format_interaction_failed(
         self, event: SpotObjectInteractionFailedEvent, recipient_id: PlayerId,

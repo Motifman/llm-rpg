@@ -480,6 +480,7 @@
               {
                 "action_name": "gather",
                 "display_label": "流木を拾う",
+                "witness_observation_message": "{actor}が流木を拾った。",
                 "preconditions": [
                   {
                     "condition_type": "OBJECT_STATE",
@@ -535,6 +536,7 @@
               {
                 "action_name": "search_debris",
                 "display_label": "漂着物を漁る",
+                "witness_observation_message": "{actor}が波打ち際の漂着物を漁った。",
                 "preconditions": [
                   {
                     "condition_type": "OBJECT_STATE",
@@ -583,6 +585,7 @@
               {
                 "action_name": "search",
                 "display_label": "船倉を漁る",
+                "witness_observation_message": "{actor}が難破船の船倉を漁った。",
                 "preconditions": [
                   {
                     "condition_type": "OBJECT_STATE",
@@ -894,6 +897,7 @@
               {
                 "action_name": "write_notice",
                 "display_label": "板切れに書き残す",
+                "witness_observation_message": "{actor}が板切れの掲示に何かを書き残した。",
                 "preconditions": [],
                 "effects": [
                   {
@@ -905,6 +909,7 @@
               {
                 "action_name": "read_notice",
                 "display_label": "板切れを読む",
+                "witness_observation_message": "{actor}が板切れの掲示を読んだ。",
                 "preconditions": [],
                 "effects": [
                   {
@@ -946,6 +951,7 @@
               {
                 "action_name": "gather_shellfish",
                 "display_label": "貝を採る",
+                "witness_observation_message": "{actor}が岩棚で貝を採った。",
                 "preconditions": [
                   {
                     "condition_type": "OBJECT_STOCK_AT_LEAST",
@@ -1019,6 +1025,7 @@
               {
                 "action_name": "fish_deep",
                 "display_label": "沖で釣りをする",
+                "witness_observation_message": "{actor}が沖へ釣り糸を垂らした。",
                 "preconditions": [
                   {
                     "condition_type": "HAS_ITEM",
@@ -1264,6 +1271,7 @@
               {
                 "action_name": "gather_coconut",
                 "display_label": "落ちた椰子の実を拾う",
+                "witness_observation_message": "{actor}が落ちた椰子の実を拾った。",
                 "preconditions": [
                   {
                     "condition_type": "OBJECT_STOCK_AT_LEAST",
@@ -1331,6 +1339,7 @@
               {
                 "action_name": "gather_dry_leaves",
                 "display_label": "枯れ葉を集める",
+                "witness_observation_message": "{actor}が乾いた枯れ葉を集めた。",
                 "preconditions": [
                   {
                     "condition_type": "OBJECT_STATE",
@@ -1532,6 +1541,7 @@
               {
                 "action_name": "gather_mushroom",
                 "display_label": "キノコを採る(北側)",
+                "witness_observation_message": "{actor}が北側のキノコを採った。",
                 "preconditions": [
                   {
                     "condition_type": "OBJECT_STATE",
@@ -1595,6 +1605,7 @@
               {
                 "action_name": "gather_mushroom",
                 "display_label": "キノコを採る(南側)",
+                "witness_observation_message": "{actor}が南側のキノコを採った。",
                 "preconditions": [
                   {
                     "condition_type": "OBJECT_STATE",
@@ -1667,6 +1678,7 @@
               {
                 "action_name": "fish_stream",
                 "display_label": "小川で釣りをする",
+                "witness_observation_message": "{actor}が小川で釣り糸を垂らした。",
                 "preconditions": [
                   {
                     "condition_type": "HAS_ITEM",
@@ -1971,6 +1983,7 @@
               {
                 "action_name": "carve_message",
                 "display_label": "石に刻む",
+                "witness_observation_message": "{actor}が石積みの目印に何かを刻んだ。",
                 "preconditions": [],
                 "effects": [
                   {
@@ -1982,6 +1995,7 @@
               {
                 "action_name": "read_carving",
                 "display_label": "刻まれた文字を読む",
+                "witness_observation_message": "{actor}が石積みの目印に刻まれた文字を読んだ。",
                 "preconditions": [],
                 "effects": [
                   {

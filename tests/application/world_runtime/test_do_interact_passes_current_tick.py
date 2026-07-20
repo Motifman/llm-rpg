@@ -15,6 +15,8 @@ from ai_rpg_world.application.world_runtime.world_runtime import WorldRuntime
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotObjectInteractedEvent
+from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
 
@@ -31,6 +33,19 @@ def _fake_runtime() -> MagicMock:
     graph.get_entity_spot.return_value = SpotId.create(1)
     graph._graph_id = SpotGraphId.create(1)
     rt._spot_graph_repo.find_graph.return_value = graph
+    obj = MagicMock()
+    obj.interactions = (
+        InteractionDef(
+            action_name="gather_shellfish",
+            display_label="貝を採る",
+            preconditions=(),
+            effects=(),
+            witness_observation_message="{actor}が岩棚で貝を採った。",
+        ),
+    )
+    interior = MagicMock()
+    interior.get_object.return_value = obj
+    rt._spot_interior_repo.find_by_spot_id.return_value = interior
     rt._interaction_service.execute_interaction.return_value = MagicMock(messages=[])
     rt.current_tick.return_value = 42
     rt._object_display_name_at_player_spot.return_value = "貝の岩棚"
@@ -46,3 +61,13 @@ class TestDoInteractPassesCurrentTick:
         WorldRuntime.do_interact(rt, PlayerId(1), "shellfish_rocks", "gather_shellfish")
         _, kwargs = rt._interaction_service.execute_interaction.call_args
         assert kwargs.get("current_tick") == WorldTick(42)
+
+    def test_interacted_event_carries_witness_observation_message(self) -> None:
+        """do_interact は成功イベントへ目撃者用文面と表示ラベルを載せる。"""
+        rt = _fake_runtime()
+        WorldRuntime.do_interact(rt, PlayerId(1), "shellfish_rocks", "gather_shellfish")
+
+        event = rt._spot_graph_repo.find_graph.return_value.add_event.call_args[0][0]
+        assert isinstance(event, SpotObjectInteractedEvent)
+        assert event.action_display_label == "貝を採る"
+        assert event.witness_observation_message == "{actor}が岩棚で貝を採った。"

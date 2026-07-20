@@ -29,6 +29,7 @@ from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
 )
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
+from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.discoverable_item import DiscoverableItem
 from ai_rpg_world.domain.world_graph.value_object.discovery_condition import DiscoveryCondition
@@ -402,6 +403,10 @@ def _interaction_def_to_dict(i: InteractionDef) -> dict[str, Any]:
     }
     if i.on_failure_observation is not None:
         out["on_failure_observation"] = i.on_failure_observation
+    if i.witness_observation_message is not None:
+        out["witness_observation_message"] = i.witness_observation_message
+    if i.witness_policy is not WitnessPolicy.SAME_SPOT:
+        out["witness_policy"] = i.witness_policy.value
     return out
 
 
@@ -412,6 +417,8 @@ def _interaction_def_from_dict(d: dict[str, Any]) -> InteractionDef:
         preconditions=tuple(_interaction_condition_from_dict(x) for x in d["preconditions"]),
         effects=tuple(_interaction_effect_from_dict(x) for x in d["effects"]),
         on_failure_observation=d.get("on_failure_observation"),
+        witness_observation_message=d.get("witness_observation_message"),
+        witness_policy=WitnessPolicy(d.get("witness_policy", WitnessPolicy.SAME_SPOT.value)),
     )
 
 

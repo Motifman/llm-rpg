@@ -320,6 +320,46 @@ class TestSpotObjectInteracted:
         assert "探索者A" in result.prose
         assert "古びたドア" in result.prose
         assert "ドアが開いた" not in result.prose
+        assert result.structured["witness_observation_source"] == "legacy"
+
+    def test_other_uses_declared_witness_message_without_result(self, formatter):
+        """宣言済みの目撃者文面を使い、本人向け result_message は他者観測に混ぜない。"""
+        event = SpotObjectInteractedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            object_id=OBJECT_1,
+            action_name="read",
+            result_message="秘密の暗号は 1234",
+            action_display_label="読む",
+            witness_observation_message="{actor}が掲示を読んだ。",
+        )
+        result = formatter.format(event, PLAYER_2)
+        assert result is not None
+        assert result.prose == "探索者Aが掲示を読んだ。"
+        assert "秘密の暗号" not in result.prose
+        assert result.structured["witness_observation_message"] == "{actor}が掲示を読んだ。"
+        assert result.structured["witness_observation_source"] == "scenario"
+        assert result.structured["action_display_label"] == "読む"
+
+    def test_other_falls_back_to_display_label_when_declared_message_is_absent(self, formatter):
+        """宣言文面が無い成功観測は display_label から行動名を出し、従来の操作文を避ける。"""
+        event = SpotObjectInteractedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            object_id=OBJECT_1,
+            action_name="gather",
+            result_message="流木を1つ得た",
+            action_display_label="流木を拾う",
+        )
+        result = formatter.format(event, PLAYER_2)
+        assert result is not None
+        assert result.prose == "探索者Aが「流木を拾う」を行った。"
+        assert "流木を1つ得た" not in result.prose
+        assert result.structured["witness_observation_source"] == "display_label"
 
 
 class TestPlayerDroppedItem:

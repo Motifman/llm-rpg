@@ -21,6 +21,10 @@ class InteractionDef:
             同じスポットに居る他プレイヤーへ届ける観測メッセージ。
             アクター本人にはツール結果として `failure_message` が返る。
             None の場合は失敗観測を発行しない。
+        witness_observation_message: 成功時に同じスポットの目撃者へ届ける
+            観測メッセージ。本人向けの `result_message` とは別で、掲示の
+            中身など行為者だけが得た情報を他者へ漏らさないための文面。
+            `{actor}` / `{object}` / `{action}` を formatter で展開できる。
         witness_policy: Phase G #1: 成功観測の配信範囲。
             - SAME_SPOT (デフォルト): 同 spot の他プレイヤーに観測が流れる
               (既存挙動と互換)
@@ -35,4 +39,5 @@ class InteractionDef:
     preconditions: Tuple[InteractionCondition, ...]
     effects: Tuple[InteractionEffect, ...]
     on_failure_observation: Optional[str] = None
+    witness_observation_message: Optional[str] = None
     witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT
