@@ -937,8 +937,10 @@
             "description": "潮溜まりの岩に貝が群がっている。手で剥がして採れる。",
             "object_type": "OTHER",
             "state": {
-              "available": true,
-              "last_harvest_tick": -100
+              "stock": 12,
+              "stock_capacity": 12,
+              "stock_tick": 0,
+              "stock_refill_interval": 6
             },
             "interactions": [
               {
@@ -946,11 +948,9 @@
                 "display_label": "貝を採る",
                 "preconditions": [
                   {
-                    "condition_type": "OBJECT_STATE",
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
                     "target_object": "shellfish_rocks",
-                    "required_state": {
-                      "available": true
-                    },
+                    "required_quantity": 3,
                     "failure_message": "近くの貝は採り尽くした。しばらく待てば次の引き潮で別の貝が現れる。"
                   }
                 ],
@@ -968,25 +968,22 @@
                     }
                   },
                   {
-                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "effect_type": "GIVE_ITEM",
                     "parameters": {
-                      "target_object": "shellfish_rocks",
-                      "state_updates": {
-                        "available": false
-                      }
+                      "item_spec": "shellfish"
                     }
                   },
                   {
-                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "effect_type": "CONSUME_OBJECT_STOCK",
                     "parameters": {
                       "target_object": "shellfish_rocks",
-                      "state_key": "last_harvest_tick"
+                      "amount": 3
                     }
                   },
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "岩から貝を二つ剥がし取った。"
+                      "message": "岩から貝を三つ剥がし取った。"
                     }
                   }
                 ]
@@ -1258,8 +1255,10 @@
             "description": "高く伸びた椰子の木。よく見ると地面に落ちた実が転がっている。",
             "object_type": "OTHER",
             "state": {
-              "available": true,
-              "last_harvest_tick": -100
+              "stock": 8,
+              "stock_capacity": 8,
+              "stock_tick": 0,
+              "stock_refill_interval": 5
             },
             "interactions": [
               {
@@ -1267,11 +1266,9 @@
                 "display_label": "落ちた椰子の実を拾う",
                 "preconditions": [
                   {
-                    "condition_type": "OBJECT_STATE",
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
                     "target_object": "coconut_palm",
-                    "required_state": {
-                      "available": true
-                    },
+                    "required_quantity": 2,
                     "failure_message": "落ちている椰子の実はもう拾った。風が吹けばまた落ちるだろう。"
                   }
                 ],
@@ -1283,25 +1280,22 @@
                     }
                   },
                   {
-                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "effect_type": "GIVE_ITEM",
                     "parameters": {
-                      "target_object": "coconut_palm",
-                      "state_updates": {
-                        "available": false
-                      }
+                      "item_spec": "coconut"
                     }
                   },
                   {
-                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "effect_type": "CONSUME_OBJECT_STOCK",
                     "parameters": {
                       "target_object": "coconut_palm",
-                      "state_key": "last_harvest_tick"
+                      "amount": 2
                     }
                   },
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "落ちた椰子の実を一つ拾った。"
+                      "message": "落ちた椰子の実を二つ拾った。"
                     }
                   }
                 ]
@@ -1402,8 +1396,10 @@
             "description": "東側の茂み。赤い実が密集している。",
             "object_type": "OTHER",
             "state": {
-              "available": true,
-              "last_harvest_tick": -100
+              "stock": 12,
+              "stock_capacity": 12,
+              "stock_tick": 0,
+              "stock_refill_interval": 6
             },
             "interactions": [
               {
@@ -1411,11 +1407,9 @@
                 "display_label": "ベリーを採る(東)",
                 "preconditions": [
                   {
-                    "condition_type": "OBJECT_STATE",
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
                     "target_object": "berry_bush_a",
-                    "required_state": {
-                      "available": true
-                    },
+                    "required_quantity": 3,
                     "failure_message": "東の茂みの実は採り尽くした。"
                   }
                 ],
@@ -1433,25 +1427,22 @@
                     }
                   },
                   {
-                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "effect_type": "GIVE_ITEM",
                     "parameters": {
-                      "target_object": "berry_bush_a",
-                      "state_updates": {
-                        "available": false
-                      }
+                      "item_spec": "wild_berry"
                     }
                   },
                   {
-                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "effect_type": "CONSUME_OBJECT_STOCK",
                     "parameters": {
                       "target_object": "berry_bush_a",
-                      "state_key": "last_harvest_tick"
+                      "amount": 3
                     }
                   },
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "東の茂みから熟した野いちごを二つ摘んだ。"
+                      "message": "東の茂みから熟した野いちごを三つ摘んだ。"
                     }
                   }
                 ]
@@ -1464,8 +1455,10 @@
             "description": "西側の茂み。やや小さめだが実は赤く熟している。",
             "object_type": "OTHER",
             "state": {
-              "available": true,
-              "last_harvest_tick": -100
+              "stock": 8,
+              "stock_capacity": 8,
+              "stock_tick": 0,
+              "stock_refill_interval": 6
             },
             "interactions": [
               {
@@ -1473,11 +1466,9 @@
                 "display_label": "ベリーを採る(西)",
                 "preconditions": [
                   {
-                    "condition_type": "OBJECT_STATE",
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
                     "target_object": "berry_bush_b",
-                    "required_state": {
-                      "available": true
-                    },
+                    "required_quantity": 2,
                     "failure_message": "西の茂みの実は採り尽くした。"
                   }
                 ],
@@ -1489,25 +1480,22 @@
                     }
                   },
                   {
-                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "effect_type": "GIVE_ITEM",
                     "parameters": {
-                      "target_object": "berry_bush_b",
-                      "state_updates": {
-                        "available": false
-                      }
+                      "item_spec": "wild_berry"
                     }
                   },
                   {
-                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "effect_type": "CONSUME_OBJECT_STOCK",
                     "parameters": {
                       "target_object": "berry_bush_b",
-                      "state_key": "last_harvest_tick"
+                      "amount": 2
                     }
                   },
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "西の茂みから野いちごを一つ摘んだ。"
+                      "message": "西の茂みから野いちごを二つ摘んだ。"
                     }
                   }
                 ]
@@ -3488,22 +3476,6 @@
         "narrative_on_true": "波が新たに流木を浜辺に打ち上げているのが見える。"
       },
       {
-        "target": "coconut_palm",
-        "predicate": {
-          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
-          "target_object": "coconut_palm",
-          "state_key": "last_harvest_tick",
-          "ticks_offset": 32
-        },
-        "on_true_state_updates": {
-          "available": true
-        },
-        "on_false_state_updates": {
-          "available": false
-        },
-        "narrative_on_true": "椰子の木に新しい実が熟しているのが目に入る。"
-      },
-      {
         "target": "fallen_leaves",
         "predicate": {
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
@@ -3518,54 +3490,6 @@
           "available": false
         },
         "narrative_on_true": "風が新しい枯れ葉を広場の縁に運んできた。"
-      },
-      {
-        "target": "berry_bush_a",
-        "predicate": {
-          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
-          "target_object": "berry_bush_a",
-          "state_key": "last_harvest_tick",
-          "ticks_offset": 40
-        },
-        "on_true_state_updates": {
-          "available": true
-        },
-        "on_false_state_updates": {
-          "available": false
-        },
-        "narrative_on_true": "ベリーの茂みに新しい実が生っているのが見える。"
-      },
-      {
-        "target": "berry_bush_b",
-        "predicate": {
-          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
-          "target_object": "berry_bush_b",
-          "state_key": "last_harvest_tick",
-          "ticks_offset": 40
-        },
-        "on_true_state_updates": {
-          "available": true
-        },
-        "on_false_state_updates": {
-          "available": false
-        },
-        "narrative_on_true": "もう一つのベリーの茂みにも新しい実が膨らんできた。"
-      },
-      {
-        "target": "shellfish_rocks",
-        "predicate": {
-          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
-          "target_object": "shellfish_rocks",
-          "state_key": "last_harvest_tick",
-          "ticks_offset": 48
-        },
-        "on_true_state_updates": {
-          "available": true
-        },
-        "on_false_state_updates": {
-          "available": false
-        },
-        "narrative_on_true": "潮が引いた岩場に新しい貝がへばりついているのが見える。"
       },
       {
         "target": "safe_mushroom_patch",
