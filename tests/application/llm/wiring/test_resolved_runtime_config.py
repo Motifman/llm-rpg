@@ -59,6 +59,31 @@ class TestFromEnvDefaults:
         assert cfg.stagnation_reasoning_enabled is False
         assert cfg.tool_mode == "default"
         assert cfg.scenario_random_seed is None
+        assert cfg.prompt_dataset_capture_enabled is False
+        assert cfg.prompt_dataset_capture_failure_policy == "fail"
+
+
+class TestPromptDatasetCaptureConfig:
+    """prompt dataset capture は Being ID を保存できる設定でだけ有効化できる。"""
+
+    def test_enabled_requires_episodic_enabled(self) -> None:
+        """capture 有効・episodic 無効なら being_id が取れないため fail-fast する。"""
+        with pytest.raises(ValueError, match="LLM_EPISODIC_ENABLED"):
+            ResolvedLlmRuntimeConfig.from_mapping(
+                values={"PROMPT_DATASET_CAPTURE_ENABLED": "1"}
+            )
+
+    def test_enabled_with_episodic_resolves_failure_policy(self) -> None:
+        """episodic 有効なら capture を有効化でき、保存失敗時方針も解決される。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            values={
+                "LLM_EPISODIC_ENABLED": "1",
+                "PROMPT_DATASET_CAPTURE_ENABLED": "1",
+                "PROMPT_DATASET_CAPTURE_FAILURE_POLICY": "warn",
+            }
+        )
+        assert cfg.prompt_dataset_capture_enabled is True
+        assert cfg.prompt_dataset_capture_failure_policy == "warn"
 
 
 class TestEpisodicReinterpretationEnabled:

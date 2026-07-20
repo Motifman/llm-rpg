@@ -68,6 +68,7 @@ class LlmCallMetrics:
     error_detail: str = ""
     reasoning_effort: Optional[str] = None
     tool_choice: str = ""
+    llm_call_id: Optional[str] = None
 
     @staticmethod
     def compute_tps(completion_tokens: int, wall_latency_ms: int) -> float:

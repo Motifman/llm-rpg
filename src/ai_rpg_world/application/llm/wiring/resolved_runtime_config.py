@@ -98,6 +98,8 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "OPENROUTER_REQUIRE_PARAMS",
     "PENDING_PREDICTION_ENABLED",
     "PREDICTION_CONTEXT_ID_ENABLED",
+    "PROMPT_DATASET_CAPTURE_ENABLED",
+    "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
     "PROMPT_SECTION_ORDER",
     "RECALL_HIT_BOOST_ENABLED",
     "SALIENCE_STRUCTURED_FAILURE_ENABLED",
@@ -278,6 +280,8 @@ class ResolvedLlmRuntimeConfig:
     tool_mode: str = "default"
     escape_llm_ssot_enabled: bool = False
     scenario_random_seed: Optional[int] = None
+    prompt_dataset_capture_enabled: bool = False
+    prompt_dataset_capture_failure_policy: str = "fail"
 
     # Episode store の永続化先 (``SUBJECTIVE_EPISODE_DB_PATH``)。None なら in-memory。
     # 実 path 指定時は SQLite 永続化。従来 ``_default_episodic_episode_store`` が
@@ -312,6 +316,17 @@ class ResolvedLlmRuntimeConfig:
             raise ValueError(
                 f"llm_reasoning_effort={self.llm_reasoning_effort!r} is not recognized. "
                 f"valid: {sorted(_VALID_REASONING_EFFORTS)}"
+            )
+        if self.prompt_dataset_capture_failure_policy not in {"fail", "warn"}:
+            raise ValueError(
+                "prompt_dataset_capture_failure_policy="
+                f"{self.prompt_dataset_capture_failure_policy!r} is not recognized. "
+                "valid: ['fail', 'warn']"
+            )
+        if self.prompt_dataset_capture_enabled and not self.episodic_enabled:
+            raise ValueError(
+                "PROMPT_DATASET_CAPTURE_ENABLED requires LLM_EPISODIC_ENABLED "
+                "because prompt dataset rows must include being_id"
             )
         if self.stagnation_reasoning_enabled and not self.stagnation_pressure_enabled:
             raise ValueError(
@@ -554,6 +569,12 @@ class ResolvedLlmRuntimeConfig:
             source.get("ESCAPE_LLM_SSOT"), default=False
         )
         scenario_random_seed = _resolve_optional_int(source, "SCENARIO_RANDOM_SEED")
+        prompt_dataset_capture_enabled = _parse_truthy(
+            source.get("PROMPT_DATASET_CAPTURE_ENABLED"), default=False
+        )
+        prompt_dataset_capture_failure_policy = (
+            source.get("PROMPT_DATASET_CAPTURE_FAILURE_POLICY") or "fail"
+        ).strip().lower()
         subjective_episode_db_path = _strip_or_none(
             source.get("SUBJECTIVE_EPISODE_DB_PATH")
         )
@@ -620,6 +641,8 @@ class ResolvedLlmRuntimeConfig:
             tool_mode=tool_mode,
             escape_llm_ssot_enabled=escape_llm_ssot_enabled,
             scenario_random_seed=scenario_random_seed,
+            prompt_dataset_capture_enabled=prompt_dataset_capture_enabled,
+            prompt_dataset_capture_failure_policy=prompt_dataset_capture_failure_policy,
             subjective_episode_db_path=subjective_episode_db_path,
         )
 
@@ -704,6 +727,8 @@ class ResolvedLlmRuntimeConfig:
             tool_mode="default",
             escape_llm_ssot_enabled=False,
             scenario_random_seed=None,
+            prompt_dataset_capture_enabled=False,
+            prompt_dataset_capture_failure_policy="fail",
             subjective_episode_db_path=None,
         )
         unknown = set(overrides) - set(defaults)

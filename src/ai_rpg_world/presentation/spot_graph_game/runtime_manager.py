@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import hashlib
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -17,6 +18,7 @@ from collections.abc import Iterator, Iterable
 from dataclasses import dataclass, field, replace as dataclass_replace
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMPlayerResolver
@@ -47,6 +49,10 @@ from ai_rpg_world.application.llm.services.tool_executor_helpers import (
 )
 from ai_rpg_world.application.llm.services.force_tool_call_instruction import (
     append_force_tool_call_instruction,
+)
+from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
+    PromptDatasetCallContext,
+    new_llm_call_id,
 )
 from ai_rpg_world.application.llm.services.subjective_args import (
     extract_subjective_action_fields,
@@ -485,6 +491,7 @@ class _LlmMetricsTraceSink:
                 error_detail=getattr(metrics, "error_detail", ""),
                 reasoning_effort=getattr(metrics, "reasoning_effort", None),
                 tool_choice=getattr(metrics, "tool_choice", ""),
+                llm_call_id=getattr(metrics, "llm_call_id", None),
                 # OpenRouter 経由のとき usage.cost (USD) が乗る。直結 / vLLM では 0.0。
                 # 実験 trace を見れば cost 合計が事後計算できる。
                 cost_usd=getattr(metrics, "cost_usd", 0.0),
@@ -517,6 +524,7 @@ class _LlmPhaseAResult:
     tools_payload: list
     tool_call: Optional[dict]
     exception: Optional[BaseException]
+    llm_call_id: Optional[str] = None
 
 
 @dataclass
@@ -910,6 +918,7 @@ class _WorldLlmWiring:
     runtime: Any
     observation_buffer: Any
     llm_client: Any = field(default_factory=StubLlmClient)
+    prompt_dataset_sink: Optional[Any] = None
     # 旧名 max_turns。trigger に passthrough する。意味は「自己 reschedule
     # チェインの連続上限」(= TRPG のターン数ではない)。詳細は
     # ``_WorldLlmTurnTrigger`` の docstring を参照。
@@ -1615,8 +1624,10 @@ class _WorldLlmWiring:
         # OFF・プロンプト byte 不変)。判断と AGENT_REASONING_ENGAGED trace は runtime
         # 側に閉じ込め、ここは effort を invoke に橋渡しし、失敗時の降格を扱う。
         reasoning_effort = self.runtime.resolve_turn_reasoning_effort(player_id)
+        last_llm_call_id: Optional[str] = None
 
-        def _invoke(effort):
+        def _invoke(effort, *, attempt_index: int, parent_attempt_id: Optional[str] = None):
+            nonlocal last_llm_call_id
             # 熟考ターン (effort != None) は tool_choice="auto" にする。DeepSeek は
             # thinking + tool_choice="required" を 400 (Thinking mode does not support
             # this tool_choice) で拒否するため。auto だと考察だけで行動しないことが
@@ -1629,10 +1640,25 @@ class _WorldLlmWiring:
             else:
                 messages = prompt["messages"]
                 tool_choice = "required"
+            prompt_capture_context = self._build_prompt_capture_context(
+                player_id=player_id,
+                prompt=prompt,
+                tool_choice=tool_choice,
+                reasoning_effort=effort,
+                attempt_index=attempt_index,
+                parent_attempt_id=parent_attempt_id,
+            )
+            if prompt_capture_context is not None:
+                last_llm_call_id = prompt_capture_context.context.llm_call_id
+            invoke_kwargs = {
+                "metrics_sink": metrics_sink,
+                "reasoning_effort": effort,
+            }
+            if prompt_capture_context is not None:
+                invoke_kwargs["prompt_capture_context"] = prompt_capture_context
             return self.llm_client.invoke(
                 messages, tools_payload, tool_choice,
-                metrics_sink=metrics_sink,
-                reasoning_effort=effort,
+                **invoke_kwargs,
             )
 
         def _result(tool_call, exception):
@@ -1642,6 +1668,7 @@ class _WorldLlmWiring:
                 tools_payload=tools_payload,
                 tool_call=tool_call,
                 exception=exception,
+                llm_call_id=last_llm_call_id,
             )
 
         def _fallback_without_reasoning():
@@ -1651,7 +1678,11 @@ class _WorldLlmWiring:
             # で失敗し続けて餓死する (実 run v3coop_stagnation_002 の P3)。
             self.runtime.abandon_turn_reasoning(player_id)
             try:
-                return _result(_invoke(None), None)
+                parent = last_llm_call_id
+                return _result(
+                    _invoke(None, attempt_index=1, parent_attempt_id=parent),
+                    None,
+                )
             except Exception as exc:  # noqa: BLE001 — 降格後も失敗なら通常の失敗として詰める
                 logger.exception(
                     "Phase A fallback (reasoning なし) invoke failed for player_id=%s",
@@ -1660,7 +1691,7 @@ class _WorldLlmWiring:
                 return _result(None, exc)
 
         try:
-            tool_call = _invoke(reasoning_effort)
+            tool_call = _invoke(reasoning_effort, attempt_index=0)
         except Exception as exc:  # KeyboardInterrupt / SystemExit / GeneratorExit は伝播
             if reasoning_effort is None:
                 logger.exception(
@@ -1714,6 +1745,7 @@ class _WorldLlmWiring:
                 success=False,
                 error_code="LLM_API_FAILED",
             )
+            self._record_prompt_dataset_turn_result(phase_a, result)
             return result
         prompt = phase_a.prompt
         messages = prompt["messages"]
@@ -1735,6 +1767,7 @@ class _WorldLlmWiring:
                 success=False,
                 error_code="NO_TOOL_CALL",
             )
+            self._record_prompt_dataset_turn_result(phase_a, result)
             return result
 
         name = str(tool_call.get("name", ""))
@@ -1920,6 +1953,7 @@ class _WorldLlmWiring:
         # 配線エラーは emitter 側で除外される。
         if not result.success:
             self._emit_action_failed_observation(player_id, name, arguments, result)
+        self._record_prompt_dataset_turn_result(phase_a, result)
         return result
 
     def _record_structured_failure_evidence(
@@ -2024,6 +2058,110 @@ class _WorldLlmWiring:
             runtime=self.runtime,
             player_id=player_id,
             tool_names=tool_names,
+        )
+
+    def _build_prompt_capture_context(
+        self,
+        *,
+        player_id: PlayerId,
+        prompt: dict,
+        tool_choice: str,
+        reasoning_effort: Optional[str],
+        attempt_index: int,
+        parent_attempt_id: Optional[str],
+    ) -> Optional[Any]:
+        """prompt dataset 有効時に 1 LLM 呼び出しの保存文脈を作る。"""
+
+        sink = self.prompt_dataset_sink
+        if sink is None:
+            return None
+        being_id = self._resolve_prompt_capture_being_id(player_id)
+        character_name = self._resolve_prompt_capture_character_name(player_id)
+        persona_snapshot = str(prompt.get("persona_snapshot") or "")
+        persona_source = persona_snapshot or character_name
+        persona_id = "persona:sha256:" + hashlib.sha256(
+            persona_source.encode("utf-8")
+        ).hexdigest()
+        world_tick: Optional[int]
+        try:
+            world_tick = int(self.runtime.current_tick())
+        except Exception:
+            world_tick = None
+        context = PromptDatasetCallContext(
+            llm_call_id=new_llm_call_id(),
+            run_id=sink.run_id,
+            world_id=self._resolve_prompt_capture_world_id(),
+            being_id=being_id,
+            player_id=int(player_id.value),
+            persona_id=persona_id,
+            character_name=character_name,
+            turn_index=world_tick or 0,
+            attempt_index=attempt_index,
+            parent_attempt_id=parent_attempt_id,
+            world_tick=world_tick,
+            time_of_day={"label": self._time_label()},
+            provenance=getattr(sink, "_run_metadata", {}),
+            reasoning_effort=reasoning_effort,
+            prompt_sections=[],
+        )
+        return SimpleNamespace(sink=sink, context=context)
+
+    def _resolve_prompt_capture_being_id(self, player_id: PlayerId) -> str:
+        resolver = getattr(self.runtime, "aux_being_resolver", None)
+        world_id = getattr(self.runtime, "aux_being_default_world_id", None)
+        if resolver is None or world_id is None:
+            raise RuntimeError(
+                "PROMPT_DATASET_CAPTURE_ENABLED requires aux Being resolver"
+            )
+        being_id = resolver.resolve_being_id(world_id, player_id)
+        if being_id is None:
+            raise RuntimeError(
+                "PROMPT_DATASET_CAPTURE_ENABLED requires being_id for "
+                f"player_id={player_id.value}"
+            )
+        return str(being_id.value)
+
+    def _resolve_prompt_capture_world_id(self) -> Optional[int]:
+        world_id = getattr(self.runtime, "aux_being_default_world_id", None)
+        value = getattr(world_id, "value", None)
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_prompt_capture_character_name(self, player_id: PlayerId) -> str:
+        for spawn in getattr(getattr(self.runtime, "scenario", None), "player_spawns", []):
+            try:
+                if int(spawn.player_id) == int(player_id.value):
+                    return str(getattr(spawn, "name", f"player_{player_id.value}"))
+            except Exception:
+                continue
+        return f"player_{player_id.value}"
+
+    def _record_prompt_dataset_turn_result(
+        self,
+        phase_a: _LlmPhaseAResult,
+        result: LlmCommandResultDto,
+    ) -> None:
+        sink = self.prompt_dataset_sink
+        if sink is None or phase_a.llm_call_id is None:
+            return
+        try:
+            world_tick = int(self.runtime.current_tick())
+        except Exception:
+            world_tick = None
+        sink.record_turn_result(
+            llm_call_id=phase_a.llm_call_id,
+            run_id=sink.run_id,
+            world_tick=world_tick,
+            player_id=int(phase_a.player_id.value),
+            result={
+                "action_success": bool(result.success),
+                "action_result_error_code": result.error_code,
+                "result_summary": result.message,
+                "remediation": result.remediation,
+                "was_no_op": bool(result.was_no_op),
+            },
         )
 
     # busy 中に "free" 扱いして中断を発火しない tool 群。

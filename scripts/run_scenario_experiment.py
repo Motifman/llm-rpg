@@ -282,6 +282,20 @@ def _mask_secret_values(value: Any, *, key_name: str = "") -> Any:
     return value
 
 
+def _prompt_dataset_runtime_config_payload(
+    resolved_config: "ResolvedLlmRuntimeConfig",
+) -> dict[str, Any]:
+    """prompt dataset の run metadata に保存する runtime_config を返す。
+
+    ``llm_api_key`` は replay 時に実行環境の秘密値から注入するため、prompt
+    dataset には placeholder も保存しない。
+    """
+
+    payload = resolved_config.to_trace_dict()
+    payload["llm_api_key"] = None
+    return payload
+
+
 def _sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -522,6 +536,7 @@ def _drive_scenario(
     reporter: Optional[_ExperimentProgressReporter] = None,
     snapshot_save_dir: Optional[Path] = None,
     snapshot_load_dir: Optional[Path] = None,
+    prompt_dataset_sink: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """シナリオを 1 セッション分回し、最終ステートを dict で返す。
 
@@ -564,6 +579,7 @@ def _drive_scenario(
         )
         state = mgr._sessions[summary.session_id]
         runtime = state.runtime
+        state.llm_wiring.prompt_dataset_sink = prompt_dataset_sink
         # Phase 1d: trace recorder を runtime に注入 (memo executor + LLM wiring 経路)
         runtime.set_trace_recorder(recorder)
 
@@ -1298,6 +1314,26 @@ def main(argv: Optional[List[str]] = None) -> int:
         no_html=args.no_html,
         no_progress_jsonl=args.no_progress_jsonl,
     )
+    prompt_dataset_sink = None
+    if cfg.prompt_dataset_capture_enabled:
+        from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
+            PromptDatasetCaptureSink,
+        )
+
+        prompt_dataset_sink = PromptDatasetCaptureSink(
+            run_dir=out_dir,
+            run_id=out_dir.name,
+            run_metadata={
+                "source_run_dir": str(out_dir),
+                "experiment_manifest_path": str(manifest_path),
+                "experiment_manifest_sha256": manifest_sha256,
+                "profile": config_source.get("profile"),
+                "scenario_path": str(args.scenario),
+                "scenario_sha256": _sha256_file(args.scenario),
+                "runtime_config": _prompt_dataset_runtime_config_payload(cfg),
+            },
+            failure_policy=cfg.prompt_dataset_capture_failure_policy,
+        )
 
     with JsonlTraceRecorder(trace_path) as rec:
         # PR #448: trace payload は cfg.to_trace_dict() で一括出力 + scenario /
@@ -1349,6 +1385,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 reporter=reporter,
                 snapshot_save_dir=args.snapshot_save_dir,
                 snapshot_load_dir=args.snapshot_load_dir,
+                prompt_dataset_sink=prompt_dataset_sink,
             )
         finally:
             # 例外で抜けても progress.jsonl は閉じる + stderr の改行を出す
