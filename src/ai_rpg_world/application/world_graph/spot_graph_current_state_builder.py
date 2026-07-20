@@ -518,8 +518,9 @@ class SpotGraphCurrentStateBuilder:
             deltas = player.compute_need_deltas()
             need_lines = player.needs.describe_all_with_deltas(deltas)
             # HP を need と同じ「身体の状態」section に、値 + 前 turn からの
-            # 増減つきで出す。baseline の snapshot は need と同じく prompt build
-            # 完了直前 (runtime_manager) で snapshot_hp_for_delta() を呼ぶ。
+            # 増減つきで出す。baseline の snapshot は need と同じく turn 終了時
+            # (runtime_manager._snapshot_needs_after_turn) で snapshot_hp_for_delta()
+            # を呼ぶ。よって delta は「前回の自分のターン終了時 → 今回 prompt」の変化。
             hp_line = player.hp.describe(player.compute_hp_delta())
 
         # PR #2 状態異常 surface: active_effects を「出血 (残り 9 tick)」のような

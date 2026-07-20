@@ -752,9 +752,11 @@ class _WorldLlmTurnTrigger:
                     player_status.snapshot_hp_for_delta()
                 repo.save(player_status)
         except Exception:
-            # snapshot 精度低下は致命ではない (差分が 0 になるだけ)
+            # snapshot 精度低下は致命ではない (差分が 0 になるだけ)。
+            # needs / hp の両 baseline 更新が同じ except に入るので、文言も
+            # どちらの失敗か特定しやすいよう body-state 全体を指す表現にする。
             logger.warning(
-                "snapshot_needs_for_delta failed for player_id=%s",
+                "snapshot body-state (needs/hp) delta failed for player_id=%s",
                 player_id_value,
                 exc_info=True,
             )
