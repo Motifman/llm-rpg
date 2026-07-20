@@ -47,8 +47,10 @@ class InteractionEffectTypeEnum(Enum):
     INCREMENT_OBJECT_STATE = "INCREMENT_OBJECT_STATE"
     # 備蓄プールを amount 個消費する。現在備蓄を lazy に算出 (経過 tick から
     # 再生) してから減算し、(stock, stock_tick) を object.state に書き戻す。
-    # OBJECT_STOCK_AT_LEAST precondition と対で使う。parameters: target_object
-    # (省略時 acting object) + amount (default 1)。
+    # OBJECT_STOCK_AT_LEAST precondition と対で使う。parameters: amount
+    # (default 1)。対象は _resolve_target_object と同じ規約で、object_id 指定が
+    # あればそれ、無ければ acting object (= interact している採取源自身)。
+    # 採取源は自分自身の stock を消費する self-interaction 用途を想定する。
     CONSUME_OBJECT_STOCK = "CONSUME_OBJECT_STOCK"
     # 動的 loot table 抽選。LootTableAggregate.roll() で確率に基づくアイテム
     # 選択を行う。parameters: loot_table_id (string id) + times (default 1)。

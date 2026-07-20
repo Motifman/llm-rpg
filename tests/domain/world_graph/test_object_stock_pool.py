@@ -63,14 +63,17 @@ class TestConsumeObjectStockEffect:
 
     def _consume(self, obj: SpotObject, amount: int, now: int) -> SpotObject:
         svc = WorldGraphEffectService()
+        # scenario と同じ経路: object_id を指定せず acting object (= interact
+        # している採取源自身) を消費する。実 execute でも acting_object は
+        # interact 対象の object になる。
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK,
-            parameters={"object_id": OBJ_ID.value, "amount": amount},
+            parameters={"amount": amount},
         )
         result = svc.apply_effects(
             effects=(effect,),
             interior=_interior(obj),
-            acting_object=None,
+            acting_object=obj,
             world_flags=frozenset(),
             current_tick=WorldTick(now),
         )
@@ -138,3 +141,27 @@ class TestObjectStockAtLeastCondition:
         ok_after, _ = self._can(obj, required=3, now=24)
         assert ok_before is False
         assert ok_after is True
+
+
+class TestStockKeysHiddenFromPrompt:
+    """備蓄プールの内部 bookkeeping key は visible_state から除外される。"""
+
+    def test_stock_pool_keys_not_in_visible_state(self) -> None:
+        """stock / stock_capacity / stock_tick / stock_refill_interval は
+        第三者プロンプト用 visible_state に出さない (生の内部値が漏れると
+        `stock=0` のような未整形値が見え、lazy 未計算で矛盾する)。"""
+        obj = _pool_object(stock=12, stock_capacity=12, stock_tick=0, stock_refill_interval=6)
+        vis = obj.visible_state()
+        for k in ("stock", "stock_capacity", "stock_tick", "stock_refill_interval"):
+            assert k not in vis
+
+    def test_non_pool_state_still_visible(self) -> None:
+        """pool 以外の state は従来どおり見える。"""
+        obj = SpotObject(
+            object_id=OBJ_ID, name="扉", description="t",
+            object_type=ObjectTypeEnum.RESOURCE,
+            state={"opened": True, "stock": 5}, interactions=(),
+        )
+        vis = obj.visible_state()
+        assert vis.get("opened") is True
+        assert "stock" not in vis
