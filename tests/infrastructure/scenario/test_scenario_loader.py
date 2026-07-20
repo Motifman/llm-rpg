@@ -7,9 +7,11 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
+from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     ScenarioLoadError,
     ScenarioLoader,
@@ -182,6 +184,30 @@ class TestScenarioLoaderMinimal:
                 assert node.atmosphere is not None
                 assert node.atmosphere.lighting == LightingEnum.BRIGHT
                 assert node.atmosphere.temperature == TemperatureEnum.NORMAL
+
+    def test_spot_position_is_optional_and_loaded_when_declared(self) -> None:
+        """spots[].position は任意で、宣言された spot だけ x/y 座標として読まれる。"""
+        raw = _minimal_scenario()
+        raw["spots"][0]["position"] = {"x": 12.5, "y": -3}
+
+        result = ScenarioLoader().load_from_dict(raw)
+
+        room_a = result.graph.get_spot(
+            SpotId.create(result.id_mapper.get_int("spot", "room_a"))
+        )
+        room_b = result.graph.get_spot(
+            SpotId.create(result.id_mapper.get_int("spot", "room_b"))
+        )
+        assert room_a.position == SpotPosition(x=12.5, y=-3.0)
+        assert room_b.position is None
+
+    def test_spot_position_requires_object_with_numeric_x_and_y(self) -> None:
+        """spots[].position が x/y 数値オブジェクトでない場合は scenario 読み込みで失敗する。"""
+        raw = _minimal_scenario()
+        raw["spots"][0]["position"] = {"x": 1, "y": True}
+
+        with pytest.raises(ScenarioLoadError, match="spots\\[room_a\\]\\.position\\.y"):
+            ScenarioLoader().load_from_dict(raw)
 
     def test_creates_connections(self) -> None:
         result = ScenarioLoader().load_from_dict(_minimal_scenario())

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from math import isfinite
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -82,6 +83,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import Scen
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtmosphere
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 
@@ -675,6 +677,7 @@ class ScenarioLoader:
             parent_str = spot_raw.get("parent_id")
             parent_id = SpotId.create(mapper.get_int("spot", parent_str)) if parent_str else None
             category = SpotCategoryEnum[spot_raw.get("category", "OTHER")]
+            position = self._parse_spot_position(sid_str, spot_raw.get("position"))
 
             node = SpotNode(
                 spot_id=spot_id,
@@ -685,6 +688,7 @@ class ScenarioLoader:
                 interior=None,
                 atmosphere=atmosphere,
                 is_outdoor=bool(spot_raw.get("is_outdoor", False)),
+                position=position,
             )
             graph.add_spot(node)
 
@@ -696,6 +700,29 @@ class ScenarioLoader:
 
         graph.clear_events()
         return graph, interiors
+
+    def _parse_spot_position(self, spot_id: str, raw: Any) -> Optional[SpotPosition]:
+        if raw is None:
+            return None
+        path = f"spots[{spot_id}].position"
+        if not isinstance(raw, Mapping):
+            raise ScenarioLoadError(f"{path} must be an object with numeric x/y")
+        unknown_keys = set(raw) - {"x", "y"}
+        if unknown_keys:
+            raise ScenarioLoadError(
+                f"{path} has unsupported keys: {sorted(unknown_keys)}"
+            )
+        x = self._parse_position_number(raw.get("x"), f"{path}.x")
+        y = self._parse_position_number(raw.get("y"), f"{path}.y")
+        return SpotPosition(x=x, y=y)
+
+    def _parse_position_number(self, raw: Any, path: str) -> float:
+        if not isinstance(raw, (int, float)) or isinstance(raw, bool):
+            raise ScenarioLoadError(f"{path} must be a number")
+        value = float(raw)
+        if not isfinite(value):
+            raise ScenarioLoadError(f"{path} must be a finite number")
+        return value
 
     def _parse_atmosphere(self, raw: Optional[Dict[str, Any]]) -> Optional[SpotAtmosphere]:
         if not raw:

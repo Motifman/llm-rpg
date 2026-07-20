@@ -8,6 +8,7 @@ from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyExcep
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtmosphere
+from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.trap_def import TrapDef
 
 
@@ -24,6 +25,7 @@ class SpotNode:
     atmosphere: Optional[SpotAtmosphere] = None
     is_outdoor: bool = False
     traps: Tuple[TrapDef, ...] = ()
+    position: Optional[SpotPosition] = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():

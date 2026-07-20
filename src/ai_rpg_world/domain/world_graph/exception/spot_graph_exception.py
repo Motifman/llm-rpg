@@ -138,6 +138,11 @@ class PassageValidationException(SpotGraphDomainException, ValidationException):
     error_code = "WORLD_GRAPH.PASSAGE_VALIDATION"
 
 
+class SpotPositionValidationException(SpotGraphDomainException, ValidationException):
+    """SpotPosition 値オブジェクトのバリデーション例外"""
+    error_code = "WORLD_GRAPH.SPOT_POSITION_VALIDATION"
+
+
 class SpotConnectionValidationException(SpotGraphDomainException, ValidationException):
     """SpotConnection エンティティのバリデーション例外"""
     error_code = "WORLD_GRAPH.SPOT_CONNECTION_VALIDATION"
@@ -155,4 +160,3 @@ class ReactiveObjectStateBindingValidationException(
 ):
     """ReactiveObjectStateBinding のバリデーション例外"""
     error_code = "WORLD_GRAPH.REACTIVE_OBJECT_STATE_BINDING_VALIDATION"
-
