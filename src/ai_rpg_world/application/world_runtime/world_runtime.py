@@ -3587,6 +3587,13 @@ def create_world_runtime(
         [PlayerId(spawn.player_id) for spawn in scenario.player_spawns]
     )
 
+    # 同 spot の DEAD (終局・復活不可) player を「(死亡している)」と区別表示する
+    # ため、DEAD 判定を state_builder に配線する。state_builder は outcome_registry
+    # より先に構築されるので、構築時ではなく setter で後付けする。
+    state_builder.set_dead_player_checker(
+        lambda pid: outcome_registry.get_outcome(pid) is PlayerOutcomeEnum.DEAD
+    )
+
     # Issue #621: ダウン → DEAD の 30 tick 猶予機構。
     # grace_timer は PlayerDownedEvent handler (= pending 登録) と
     # PlayerRevivedEvent handler (= pending 削除) の両方から触られる。
@@ -3776,7 +3783,10 @@ def create_world_runtime(
         actor_name = player_name_map.get(int(player_id), f"プレイヤー({int(player_id)})")
         label = new_outcome.display_label
         if new_outcome is PlayerOutcomeEnum.DEAD:
-            message = f"{actor_name}は倒れて動かなくなった。"
+            # 「倒れて動かなくなった」は蘇生可能なダウンと紛らわしく、仲間が
+            # 死者を救助対象にし続ける原因になった (観察: リオ 145 tick)。
+            # 婉曲を避け「死亡した」と直接的に伝え、復活不可であることを明示する。
+            message = f"{actor_name}は死亡した。もう蘇生できない。"
         elif new_outcome is PlayerOutcomeEnum.RESCUED:
             message = f"{actor_name}は救助された。"
         elif new_outcome is PlayerOutcomeEnum.STRANDED:

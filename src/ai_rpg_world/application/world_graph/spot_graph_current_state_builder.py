@@ -135,6 +135,7 @@ class SpotGraphCurrentStateBuilder:
         item_state_resolver: Optional[Callable[[int], Optional[dict]]] = None,
         current_tick_provider: Optional[Callable[[], int]] = None,
         stagnation_band_provider: Optional[StagnationBandProvider] = None,
+        dead_player_checker: Optional[Callable[[PlayerId], bool]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -157,6 +158,11 @@ class SpotGraphCurrentStateBuilder:
         # P-U3/P-U4 (停滞感の表出): 未注入 (None) なら自己・他者とも常に
         # STAGNATION_PRESSURE_BAND_NONE (= 何も描画しない、導入前と挙動一致)。
         self._stagnation_band_provider = stagnation_band_provider
+        # 同 spot の他 player が DEAD (終局・復活不可) かを返す checker。未注入なら
+        # 常に False (= 死亡表示を出さない、導入前と挙動一致)。outcome は
+        # PlayerStatusAggregate ではなく PlayerOutcomeRegistry 側にあるので、
+        # runtime 配線でそこを引く callable を渡す。
+        self._dead_player_checker = dead_player_checker
         self._perception = SpotPerceptionService()
 
     def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
@@ -204,6 +210,36 @@ class SpotGraphCurrentStateBuilder:
                 exc_info=True,
             )
             return STAGNATION_PRESSURE_BAND_NONE
+
+    def set_dead_player_checker(
+        self, checker: Optional[Callable[[PlayerId], bool]]
+    ) -> None:
+        """DEAD 判定 checker を後から差し込む。
+
+        PlayerOutcomeRegistry は create_world_runtime 内で state_builder より
+        後に生成されるため、構築時 (dead_player_checker=) では渡せず、registry
+        生成後にこの setter で配線する。
+        """
+        self._dead_player_checker = checker
+
+    def _resolve_is_dead(self, entity_id: int) -> bool:
+        """entity_id の player が終局 DEAD (復活不可) かを checker から引く。
+
+        checker 未注入 / 例外 / 非 player entity は常に False に縮退させる
+        (= 配線漏れで死亡表示が他の表示まで巻き込む事故を防ぐ safer fallback)。
+        """
+        if self._dead_player_checker is None:
+            return False
+        try:
+            return bool(self._dead_player_checker(PlayerId(entity_id)))
+        except Exception:
+            logger.warning(
+                "dead_player_checker raised unexpectedly for entity_id=%s; "
+                "falling back to not-dead",
+                entity_id,
+                exc_info=True,
+            )
+            return False
 
     def build_snapshot(self, player_id: int) -> SpotGraphPlayerSnapshotDto | None:
         """プレイヤーがグラフに載っていない場合は None。"""
@@ -485,10 +521,14 @@ class SpotGraphCurrentStateBuilder:
                 # P-U4 (停滞感の表出・他者): fatigue_level と対称に、同 spot の
                 # 他 player の停滞感バンドも常時 state として lift する。
                 other_stagnation_band = self._resolve_stagnation_band(int(other_eid))
+                # 終局 DEAD かを checker で判定 (未注入なら False)。表示で
+                # 「(死亡している)」を「(倒れて動かない)」と区別するために使う。
+                other_is_dead = self._resolve_is_dead(int(other_eid))
                 nearby_entities.append(SpotGraphNearbyEntityEntry(
                     entity_id=int(other_eid),
                     display_name=name,
                     is_down=other_is_down,
+                    is_dead=other_is_dead,
                     fatigue_level=other_fatigue_level,
                     stagnation_band=other_stagnation_band,
                 ))

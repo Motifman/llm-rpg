@@ -139,6 +139,10 @@ class SpotGraphNearbyEntityEntry:
     # 判断が破綻する。entity の現在 is_down 状態を snapshot に lift する。
     # status 未解決 (entity が player でない / repo に居ない) なら False。
     is_down: bool = False
+    # 同 spot の他 player が終局 DEAD (= 復活不可) か。is_down (蘇生可能) と区別し、
+    # 表示を「(死亡している)」に分けるために使う。DEAD が downed と同一表示だと
+    # 仲間が蘇生を試み続ける / 死者を救助対象にし続ける (観察: リオ 145 tick) ため。
+    is_dead: bool = False
     # PR β (実験 #29 後続): 同 spot の他 player の疲労 tier。
     # ``ok`` / ``tired`` / ``fatigued`` / ``severe`` / ``exhausted`` の 5 段階。
     # nearby_entities の prompt 表示で「(ぐったりしている)」等を出すために使う。
