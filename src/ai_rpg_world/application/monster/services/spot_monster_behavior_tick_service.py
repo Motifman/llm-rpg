@@ -445,8 +445,17 @@ class SpotMonsterBehaviorTickService:
     def _pick_target(
         self, graph: SpotGraphAggregate, spot_id: SpotId
     ) -> Optional[PlayerStatusAggregate]:
-        """同スポットに居るプレイヤーから ID 昇順で最初の生存者を返す。"""
+        """同スポットの生存プレイヤーからランダムに 1 人を標的として返す。
+
+        旧実装は ID 昇順の先頭 (= 常に最小 ID) を返す暫定ロジックだったが、
+        観察 (v3coop_postrefactor_001) で最小 ID の player が毎 tick 標的に
+        固定され、蘇生専用 tend と相まって「不死身の的」ループを生んだ。
+        生存者からのランダム選択に変え、特定 player への集中被弾を分散させる。
+        候補は entity_id 昇順に集めてから choice するので、固定 seed の
+        random_source を渡せばテストで決定的に検証できる。
+        """
         presence = graph.presence_at(spot_id)
+        living: list[PlayerStatusAggregate] = []
         for entity_id in sorted(
             presence.present_entity_ids, key=lambda e: e.value
         ):
@@ -457,8 +466,10 @@ class SpotMonsterBehaviorTickService:
                 continue
             if player.is_down:
                 continue
-            return player
-        return None
+            living.append(player)
+        if not living:
+            return None
+        return self._random.choice(living)
 
     # ------------------------------------------------------------------
     # 内部 - predation (Phase 3b)

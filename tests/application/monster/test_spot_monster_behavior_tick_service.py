@@ -1,7 +1,8 @@
 """SpotMonsterBehaviorTickService の統合テスト。
 
 検証範囲:
-- スポットに居る敵対モンスターが、同スポットの最初の生存プレイヤーに攻撃を当てる
+- スポットに居る敵対モンスターが、同スポットの生存プレイヤーに攻撃を当てる
+  (対象は生存者からのランダム選択。単一生存者ならその 1 人)
 - cooldown 中のモンスターは skip
 - 視認できないと攻撃せず event も発火しない
 - 攻撃成立時 MonsterAttackedPlayerInSpotEvent が SpotGraphAggregate に追加される
