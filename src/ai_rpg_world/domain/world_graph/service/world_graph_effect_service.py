@@ -15,6 +15,9 @@ from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
+from ai_rpg_world.domain.world_graph.service.stock_pool_regen import (
+    compute_stock_regen,
+)
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
     UnsupportedInteractionEffectException,
@@ -72,6 +75,8 @@ SIGN_HIDDEN_STATE_KEYS = frozenset(
 _DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
     InteractionEffectTypeEnum.CHANGE_OBJECT_STATE: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE: EffectVisibility.HIDDEN,
+    # 備蓄消費は内部 bookkeeping。観測は対の GIVE_ITEM / SHOW_MESSAGE 側で出る。
+    InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE: EffectVisibility.ACTOR_DIRECT,
     InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.REVEAL_OBJECT: EffectVisibility.PUBLIC_OBSERVABLE,
@@ -523,6 +528,57 @@ class WorldGraphEffectService:
                     kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
                     visibility=visibility,
                     description=f"{updated_target.name} の {state_key} が {new_value} に。",
+                    target_ref=updated_target.name,
+                    state_delta=_state_delta_entries(before_state, new_state),
+                )
+            )
+            _all = (
+                interior, acting_object, flags, grant, remove, messages,
+                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
+            )
+            return _all
+
+        if et == InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK:
+            # 備蓄プールを amount 個消費する。lazy 再生を算出してから減算し、
+            # (stock, stock_tick) を書き戻す。OBJECT_STOCK_AT_LEAST precondition
+            # が amount 以上を保証している前提だが、防御的に max(0, ...) で clamp。
+            amount = max(0, int(p.get("amount", 1)))
+            target = self._resolve_target_object(interior, acting_object, p)
+            if target is None:
+                _logger.warning(
+                    "CONSUME_OBJECT_STOCK: target object not resolvable "
+                    "(target_object=%r), skipping effect",
+                    p.get("target_object"),
+                )
+                return _all
+            st = target.state
+            now = int(current_tick.value) if current_tick is not None else int(
+                st.get("stock_tick", 0)
+            )
+            regen = compute_stock_regen(
+                stock=int(st.get("stock", 0)),
+                capacity=int(st.get("stock_capacity", 0)),
+                stock_tick=int(st.get("stock_tick", 0)),
+                refill_interval=int(st.get("stock_refill_interval", 0)),
+                now=now,
+            )
+            new_stock = max(0, regen.effective_stock - amount)
+            new_state = dict(target.state)
+            new_state["stock"] = new_stock
+            new_state["stock_tick"] = regen.canonical_tick
+            before_state = dict(target.state)
+            updated_target = target.with_state(new_state)
+            interior = interior.replace_object(updated_target)
+            if (
+                acting_object is not None
+                and updated_target.object_id == acting_object.object_id
+            ):
+                acting_object = updated_target
+            summaries.append(
+                AppliedEffectSummary(
+                    kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
+                    visibility=visibility,
+                    description=f"{updated_target.name} の備蓄が {new_stock} に。",
                     target_ref=updated_target.name,
                     state_delta=_state_delta_entries(before_state, new_state),
                 )
