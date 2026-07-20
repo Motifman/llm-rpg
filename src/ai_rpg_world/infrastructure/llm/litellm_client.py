@@ -17,7 +17,7 @@ import copy
 import os
 import re
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional
 
 import litellm
 from litellm import AuthenticationError as LitellmAuthenticationError
@@ -583,6 +583,7 @@ class LiteLLMClient(
         *,
         metrics_sink: Optional[LlmCallMetricsSink] = None,
         reasoning_effort: Optional[str] = None,
+        prompt_capture_context: Optional[Any] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         1 回の LLM 呼び出しを行い、tool_call があれば {"name": str, "arguments": dict} を返す。
@@ -648,6 +649,27 @@ class LiteLLMClient(
                 error_detail=str(e)[:_ERROR_DETAIL_MAX_CHARS],
                 reasoning_effort=reasoning_effort,
                 tool_choice=tool_choice,
+                llm_call_id=_extract_llm_call_id(prompt_capture_context),
+            )
+            self._record_prompt_capture(
+                prompt_capture_context,
+                request_kwargs=completion_kw if "completion_kw" in locals() else {},
+                response=None,
+                error=e,
+                output=None,
+                metrics={
+                    "wall_latency_ms": wall_latency_ms,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "cached_tokens": 0,
+                    "reasoning_tokens": 0,
+                    "cost_usd": 0.0,
+                    "success": False,
+                    "error_code": error_code,
+                    "error_detail": str(e)[:_ERROR_DETAIL_MAX_CHARS],
+                    "reasoning_effort": reasoning_effort,
+                    "tool_choice": tool_choice,
+                },
             )
             self._logger.exception("LiteLLM completion failed: %s", e)
             raise LlmApiCallException(
@@ -672,6 +694,26 @@ class LiteLLMClient(
             error_code=None if tool_call is not None else "NO_TOOL_CALL",
             reasoning_effort=reasoning_effort,
             tool_choice=tool_choice,
+            llm_call_id=_extract_llm_call_id(prompt_capture_context),
+        )
+        self._record_prompt_capture(
+            prompt_capture_context,
+            request_kwargs=completion_kw,
+            response=response,
+            error=None,
+            output=tool_call,
+            metrics={
+                "wall_latency_ms": wall_latency_ms,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "cached_tokens": cached_tokens,
+                "reasoning_tokens": reasoning_tokens,
+                "cost_usd": cost_usd,
+                "success": tool_call is not None,
+                "error_code": None if tool_call is not None else "NO_TOOL_CALL",
+                "reasoning_effort": reasoning_effort,
+                "tool_choice": tool_choice,
+            },
         )
         return tool_call
 
@@ -772,6 +814,7 @@ class LiteLLMClient(
         error_detail: str = "",
         reasoning_effort: Optional[str] = None,
         tool_choice: str = "",
+        llm_call_id: Optional[str] = None,
     ) -> None:
         if sink is None:
             return
@@ -790,11 +833,33 @@ class LiteLLMClient(
                 error_detail=error_detail,
                 reasoning_effort=reasoning_effort,
                 tool_choice=tool_choice,
+                llm_call_id=llm_call_id,
             )
             sink.record(metrics)
         except Exception:
             # メトリクス記録の失敗が LLM 呼び出し本体の挙動を倒さないよう吸収。
             self._logger.exception("metrics_sink.record failed")
+
+    def _record_prompt_capture(
+        self,
+        prompt_capture_context: Optional[Any],
+        *,
+        request_kwargs: Mapping[str, Any],
+        response: Any,
+        error: Optional[BaseException],
+        output: Optional[Mapping[str, Any]],
+        metrics: Mapping[str, Any],
+    ) -> None:
+        if prompt_capture_context is None:
+            return
+        prompt_capture_context.sink.record_call(
+            context=prompt_capture_context.context,
+            request_kwargs=request_kwargs,
+            response=response,
+            error=error,
+            output=output,
+            metrics=metrics,
+        )
 
     @staticmethod
     def _extract_cost_usd(response: Any) -> float:
@@ -960,3 +1025,13 @@ class LiteLLMClient(
         if not isinstance(arguments, dict):
             arguments = {}
         return {"name": name, "arguments": arguments}
+
+
+def _extract_llm_call_id(prompt_capture_context: Optional[Any]) -> Optional[str]:
+    """prompt dataset context から trace 結合用の llm_call_id を取り出す。"""
+
+    if prompt_capture_context is None:
+        return None
+    context = getattr(prompt_capture_context, "context", None)
+    value = getattr(context, "llm_call_id", None)
+    return str(value) if value else None

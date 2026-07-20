@@ -27,6 +27,7 @@ class ILLMClient(ABC):
         *,
         metrics_sink: Optional[Any] = None,
         reasoning_effort: Optional[str] = None,
+        prompt_capture_context: Optional[Any] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         LLM を呼び出し、選択された tool_call を返す。
@@ -39,6 +40,10 @@ class ILLMClient(ABC):
         ``reasoning_effort`` が渡されたら、その 1 呼び出しだけ reasoning (熟考) の
         予算段階を上書きする (案A: band-gated thinking)。``None`` なら既定のまま。
         stub 系は無視してよい。
+
+        ``prompt_capture_context`` が渡されたら、実装側は実際に外部 LLM 境界へ渡した
+        request と response を prompt dataset sink へ保存する。既定 ``None`` なら
+        完全に無効。
         """
         pass
 
