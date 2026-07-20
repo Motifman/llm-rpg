@@ -335,6 +335,123 @@ class TestGroupEventsByTick:
         assert "#2 CLEAR" in out
         assert "#3 MUFFLED via 森の小道" in out
 
+    def test_player_spoke_without_content_does_not_merge_unrelated_rows(self) -> None:
+        """content 欠落の古い player_spoke 観測は None key で別発言を混ぜない。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind="observation",
+                tick=1,
+                player_id=2,
+                payload={
+                    "prose": "エイダが言った: 「水を探そう」",
+                    "structured": {"type": "player_spoke", "speaker": "エイダ"},
+                },
+            ),
+            TraceEvent(
+                seq=2,
+                timestamp="t",
+                kind="observation",
+                tick=1,
+                player_id=3,
+                payload={
+                    "prose": "ノアが言った: 「火を起こそう」",
+                    "structured": {"type": "player_spoke", "speaker": "ノア"},
+                },
+            ),
+        ]
+        grouped = group_events_by_tick(events)
+        assert len(grouped[1]) == 2
+        bodies = [_format_event_body(e) for e in grouped[1]]
+        assert "水を探そう" in bodies[0]
+        assert "火を起こそう" in bodies[1]
+
+    def test_speak_action_owns_observations_and_success_result(self) -> None:
+        """speak action がある発言は 1 行に集約し、受信者 observation と
+        成功 action_result を重複表示しない。"""
+        content = "水を探そう"
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.ACTION,
+                tick=1,
+                player_id=1,
+                payload={"tool": "speak", "arguments": {"channel": "say", "content": content}},
+            ),
+            *[
+                TraceEvent(
+                    seq=i,
+                    timestamp="t",
+                    kind=TraceEventKind.OBSERVATION,
+                    tick=1,
+                    player_id=i,
+                    payload={
+                        "prose": f"エイダが言った: 「{content}」",
+                        "structured": {
+                            "type": "player_spoke",
+                            "speaker_player_id": 1,
+                            "speaker": "エイダ",
+                            "channel": "say",
+                            "content": content,
+                            "sound_clarity": "CLEAR",
+                        },
+                    },
+                )
+                for i in (2, 3, 4)
+            ],
+            TraceEvent(
+                seq=5,
+                timestamp="t",
+                kind=TraceEventKind.ACTION_RESULT,
+                tick=1,
+                player_id=1,
+                payload={
+                    "tool": "speak",
+                    "success": True,
+                    "result_summary": f"発言した: {content}",
+                },
+            ),
+        ]
+        grouped = group_events_by_tick(events)
+        assert [e.kind for e in grouped[1]] == [TraceEventKind.ACTION]
+        out = _format_event_body(grouped[1][0])
+        assert "水を探そう" in out
+        assert "#2 CLEAR" in out
+        assert "#3 CLEAR" in out
+        assert "#4 CLEAR" in out
+
+    def test_failed_speak_action_result_remains_visible(self) -> None:
+        """speak が失敗した action_result は復帰に必要なので隠さない。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.ACTION,
+                tick=1,
+                player_id=1,
+                payload={"tool": "speak", "arguments": {"channel": "say", "content": "水"}},
+            ),
+            TraceEvent(
+                seq=2,
+                timestamp="t",
+                kind=TraceEventKind.ACTION_RESULT,
+                tick=1,
+                player_id=1,
+                payload={
+                    "tool": "speak",
+                    "success": False,
+                    "result_summary": "声が届かなかった",
+                },
+            ),
+        ]
+        grouped = group_events_by_tick(events)
+        assert [e.kind for e in grouped[1]] == [
+            TraceEventKind.ACTION,
+            TraceEventKind.ACTION_RESULT,
+        ]
+
 
 class TestFormatEventBody:
     """個別 event の 1 行サマリ HTML。"""
@@ -554,6 +671,38 @@ class TestRenderViewerHtml:
         assert 'data-filter-category="speech"' in out
         assert 'data-filter-category="recall"' in out
         assert 'data-default-visible="false"' in out
+
+    def test_speech_row_uses_speech_label_and_normal_action_keeps_action_label(self) -> None:
+        """発話 action の左端は「発言」、通常 action の左端は action のまま。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.ACTION,
+                tick=1,
+                player_id=1,
+                payload={
+                    "tool": "speak",
+                    "arguments": {"channel": "say", "content": "水を探そう"},
+                },
+            ),
+            TraceEvent(
+                seq=2,
+                timestamp="t",
+                kind=TraceEventKind.ACTION,
+                tick=1,
+                player_id=1,
+                payload={"tool": "examine", "arguments": {"target": "浜"}},
+            )
+        ]
+        out = render_viewer_html(
+            title="x",
+            events=events,
+            scenario_topology={"spots": [], "connections": []},
+            cytoscape_js_src="/* fake */",
+        )
+        assert '<span class="event-kind">発言</span>' in out
+        assert '<span class="event-kind">action</span>' in out
 
     def test_default_hidden_only_tick_is_hidden_in_initial_html(self) -> None:
         """既定 OFF の event だけを含む tick は初期 HTML でも見出しごと畳む。"""

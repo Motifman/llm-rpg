@@ -196,6 +196,30 @@ def group_events_by_tick(
             observation を最初の 1 件だけ残す (= 4 player にブロードキャストされた
             同一 prose が 4 連続並ぶのを抑える)。
     """
+    # 発言は trace 上では 1) speak action、2) 受信者ごとの player_spoke
+    # observation、3) 成功 action_result の 3 系統に現れる。timeline に全部出すと
+    # 同じ発言が 3 重に見えるため、speak action が存在する場合はそれを代表行にし、
+    # 受信者情報だけ observation から集約する。
+    speech_action_keys: set[tuple[Any, ...]] = set()
+    speech_action_result_keys: set[tuple[Any, ...]] = set()
+    recipients_by_speech_key: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for e in events:
+        action_key = _speech_action_key(e)
+        if action_key is not None:
+            speech_action_keys.add(action_key)
+            result_key = _speech_action_result_match_key(e)
+            if result_key is not None:
+                speech_action_result_keys.add(result_key)
+            continue
+        obs_key = _player_spoke_observation_key(e)
+        if obs_key is not None:
+            recipient_info = _player_spoke_recipient_info(e)
+            if recipient_info is None:
+                continue
+            recipients = recipients_by_speech_key.setdefault(obs_key, [])
+            if not _speech_recipient_info_exists(recipients, recipient_info):
+                recipients.append(recipient_info)
+
     by_tick: "OrderedDict[Optional[int], List[TraceEvent]]" = OrderedDict()
     # dedup key: (tick, prose, observation_type)
     seen_obs: set = set()
@@ -203,36 +227,49 @@ def group_events_by_tick(
     for e in events:
         if hide_metrics_kinds and e.kind in _EVENT_TIMELINE_HIDDEN_KINDS:
             continue
+        action_key = _speech_action_key(e)
+        if action_key is not None:
+            recipients = recipients_by_speech_key.get(action_key)
+            if recipients:
+                e = replace(
+                    e,
+                    payload={
+                        **(e.payload if isinstance(e.payload, dict) else {}),
+                        "_viewer_recipients": list(recipients),
+                    },
+                )
+            by_tick.setdefault(e.tick, []).append(e)
+            continue
+        obs_key = _player_spoke_observation_key(e)
+        if obs_key is not None and obs_key in speech_action_keys:
+            # 対応する speak action がある場合、player_spoke observation は受信者
+            # 情報として action 行に畳み込む。action が無い古い trace では従来どおり
+            # observation 行を残す。
+            continue
+        result_key = _successful_speak_action_result_key(e)
+        if result_key is not None and result_key in speech_action_result_keys:
+            # speak 成功 result は「発言した: ...」の確認行で、発言本文と重複する。
+            # 失敗 result は復帰に必要なので隠さない。
+            continue
         if dedupe_observations and e.kind == "observation":
             payload = e.payload if isinstance(e.payload, dict) else {}
             structured = payload.get("structured") or {}
             obs_type = structured.get("type") if isinstance(structured, dict) else None
             if obs_type == "player_spoke" and isinstance(structured, dict):
-                speech_key = (
-                    e.tick,
-                    structured.get("speaker_player_id"),
-                    structured.get("speaker"),
-                    structured.get("channel"),
-                    structured.get("content"),
-                )
-                recipient = e.player_id
-                recipient_info = {
-                    "player_id": recipient,
-                    "sound_clarity": structured.get("sound_clarity"),
-                    "source_connection_name": structured.get("source_connection_name"),
-                }
-                if speech_key in speech_obs_index:
+                speech_key = obs_key
+                recipient_info = _player_spoke_recipient_info(e)
+                if speech_key is None:
+                    # 古い trace などで content が無い player_spoke は同一発言 key を
+                    # 作れない。None を key にして畳むと別発言まで混ざるので、通常
+                    # observation dedupe に落とす。
+                    pass
+                elif speech_key in speech_obs_index:
                     tick_key, row_idx = speech_obs_index[speech_key]
                     existing = by_tick[tick_key][row_idx]
                     existing_payload = dict(existing.payload)
                     recipients = list(existing_payload.get("_viewer_recipients") or [])
-                    if recipient is not None and not any(
-                        isinstance(r, dict)
-                        and r.get("player_id") == recipient
-                        and r.get("sound_clarity") == recipient_info["sound_clarity"]
-                        and r.get("source_connection_name")
-                        == recipient_info["source_connection_name"]
-                        for r in recipients
+                    if recipient_info is not None and not _speech_recipient_info_exists(
+                        recipients, recipient_info
                     ):
                         recipients.append(recipient_info)
                     existing_payload["_viewer_recipients"] = recipients
@@ -240,14 +277,15 @@ def group_events_by_tick(
                         existing, payload=existing_payload
                     )
                     continue
-                new_payload = dict(payload)
-                new_payload["_viewer_recipients"] = (
-                    [recipient_info] if recipient is not None else []
-                )
-                e = replace(e, payload=new_payload)
-                by_tick.setdefault(e.tick, []).append(e)
-                speech_obs_index[speech_key] = (e.tick, len(by_tick[e.tick]) - 1)
-                continue
+                if speech_key is not None:
+                    new_payload = dict(payload)
+                    new_payload["_viewer_recipients"] = (
+                        [recipient_info] if recipient_info is not None else []
+                    )
+                    e = replace(e, payload=new_payload)
+                    by_tick.setdefault(e.tick, []).append(e)
+                    speech_obs_index[speech_key] = (e.tick, len(by_tick[e.tick]) - 1)
+                    continue
             prose = payload.get("prose") or ""
             key = (e.tick, prose, obs_type)
             if key in seen_obs:
@@ -1578,6 +1616,7 @@ def _build_event_log_html(
         for e in evs:
             kind = e.kind
             category = _event_timeline_category(e)
+            kind_label = "発言" if category == "speech" else str(kind)
             default_visible = _event_category_default_visible(category)
             if default_visible:
                 visible_row_count += 1
@@ -1601,7 +1640,7 @@ def _build_event_log_html(
                 classes += " failed"
             rows.append(
                 f'<div class="{classes}" data-category="{html.escape(category)}">'
-                f'<span class="event-kind">{html.escape(kind)}</span>'
+                f'<span class="event-kind">{html.escape(kind_label)}</span>'
                 f'<span class="event-player">{html.escape(str(pname))}</span>'
                 f'<span class="event-body">{body}</span>'
                 f"</div>"
@@ -1700,6 +1739,101 @@ def _is_player_spoke_observation(e: TraceEvent) -> bool:
     return isinstance(structured, dict) and structured.get("type") == "player_spoke"
 
 
+def _speech_action_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
+    """timeline 上で同一発言を突き合わせる speak action key を返す。"""
+    if not _is_speak_action(e) or not isinstance(e.payload, dict):
+        return None
+    args = e.payload.get("arguments")
+    if not isinstance(args, dict):
+        return None
+    content = args.get("content") or args.get("message")
+    if not content:
+        return None
+    channel = args.get("channel") or e.payload.get("tool") or "speak"
+    return (e.tick, e.player_id, str(channel), str(content))
+
+
+def _speech_action_result_match_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
+    """speak action と成功 action_result を突き合わせる key を返す。
+
+    action 側の channel は "say"、action_result 側の tool は "speak" のように
+    別名になり得るため、result との照合では channel/tool を使わない。
+    """
+    if not _is_speak_action(e) or not isinstance(e.payload, dict):
+        return None
+    args = e.payload.get("arguments")
+    if not isinstance(args, dict):
+        return None
+    content = args.get("content") or args.get("message")
+    if not content:
+        return None
+    return (e.tick, e.player_id, str(content))
+
+
+def _player_spoke_observation_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
+    """timeline 上で同一発言を突き合わせる player_spoke observation key を返す。"""
+    if not _is_player_spoke_observation(e) or not isinstance(e.payload, dict):
+        return None
+    structured = e.payload.get("structured")
+    if not isinstance(structured, dict):
+        return None
+    content = structured.get("content") or e.payload.get("content")
+    if not content:
+        return None
+    channel = structured.get("channel") or e.payload.get("channel") or "speak"
+    speaker_player_id = structured.get("speaker_player_id") or e.payload.get("speaker_player_id")
+    return (e.tick, speaker_player_id, str(channel), str(content))
+
+
+def _player_spoke_recipient_info(e: TraceEvent) -> Optional[dict[str, Any]]:
+    """player_spoke observation から viewer 用の受信者情報を取り出す。"""
+    if not isinstance(e.payload, dict) or e.player_id is None:
+        return None
+    structured = e.payload.get("structured")
+    if not isinstance(structured, dict):
+        return None
+    return {
+        "player_id": e.player_id,
+        "sound_clarity": structured.get("sound_clarity"),
+        "source_connection_name": structured.get("source_connection_name"),
+    }
+
+
+def _speech_recipient_info_exists(
+    recipients: list[dict[str, Any]], recipient_info: dict[str, Any]
+) -> bool:
+    """同じ受信者・聞こえ方・経路の recipient が既にあるかを返す。"""
+    return any(
+        isinstance(r, dict)
+        and r.get("player_id") == recipient_info.get("player_id")
+        and r.get("sound_clarity") == recipient_info.get("sound_clarity")
+        and r.get("source_connection_name") == recipient_info.get("source_connection_name")
+        for r in recipients
+    )
+
+
+def _successful_speak_action_result_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
+    """対応する speak action と突き合わせる成功 action_result key を返す。"""
+    if e.kind != TraceEventKind.ACTION_RESULT or not isinstance(e.payload, dict):
+        return None
+    if e.payload.get("success") is not True:
+        return None
+    tool = str(e.payload.get("tool") or "").lower()
+    if not (tool in {"speak", "say"} or tool.startswith("speech_")):
+        return None
+    summary = str(e.payload.get("result_summary") or "")
+    prefix = "発言した:"
+    if not summary.startswith(prefix):
+        return None
+    content = summary[len(prefix):].strip()
+    # 「（あなたの声は...）」以降は delivery summary なので、action content との
+    # 突き合わせから除外する。
+    content = content.split("（あなたの声は", 1)[0].strip()
+    if not content:
+        return None
+    return (e.tick, e.player_id, content)
+
+
 def _format_event_body(e: TraceEvent) -> str:
     """event の payload を 1 行サマリに整形する (HTML escape 済み)。"""
     payload = e.payload if isinstance(e.payload, dict) else {}
@@ -1745,6 +1879,15 @@ def _format_event_body(e: TraceEvent) -> str:
             content = args.get("content") or args.get("message") or ""
             channel = args.get("channel") or tool
             inner = args.get("inner_thought")
+            recipients = payload.get("_viewer_recipients")
+            recipient_part = ""
+            if isinstance(recipients, list) and recipients:
+                labels = ", ".join(_format_speech_recipient(r) for r in recipients[:6])
+                if len(recipients) > 6:
+                    labels += f", …(+{len(recipients) - 6})"
+                recipient_part = (
+                    f" <span class='speech-recipients'>届いた相手: {labels}</span>"
+                )
             inner_part = (
                 f" <span class='event-inner-thought'>内心: {esc(short(inner, 120))}</span>"
                 if inner
@@ -1752,7 +1895,7 @@ def _format_event_body(e: TraceEvent) -> str:
             )
             return (
                 f"発言 <span class='speech-channel'>[{esc(channel)}]</span>: "
-                f"{esc(content)}{inner_part}"
+                f"{esc(content)}{recipient_part}{inner_part}"
             )
         args_str = _compact_payload_summary(args) if isinstance(args, (dict, list)) else ""
         inner = args.get("inner_thought") if isinstance(args, dict) else None
