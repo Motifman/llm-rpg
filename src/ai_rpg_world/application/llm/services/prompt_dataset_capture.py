@@ -87,7 +87,10 @@ def reconstruct_request(
     ``api_key`` は復元しない。replay 実行時に runtime secret から注入する。
     """
 
-    request = copy.deepcopy(call["request"]["kwargs"])
+    request_payload = call["request"]
+    if isinstance(request_payload, str):
+        request_payload = json.loads(request_payload)
+    request = copy.deepcopy(request_payload["kwargs"])
     messages = []
     for message in request.get("messages", []):
         if not isinstance(message, dict):
@@ -102,7 +105,10 @@ def reconstruct_request(
     request["messages"] = messages
     tools_ref = request.pop("tools_ref", None)
     if tools_ref is not None:
-        request["tools"] = copy.deepcopy(toolsets_by_id[tools_ref]["tools"])
+        tools = toolsets_by_id[tools_ref]["tools"]
+        if isinstance(tools, str):
+            tools = json.loads(tools)
+        request["tools"] = copy.deepcopy(tools)
     return request
 
 

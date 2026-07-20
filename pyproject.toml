@@ -29,6 +29,12 @@ dependencies = [
     "uvicorn[standard]==0.30.6",
 ]
 
+[project.optional-dependencies]
+export = [
+    "datasets>=5.0.0",
+    "pyarrow>=25.0.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
