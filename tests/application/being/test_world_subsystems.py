@@ -12,10 +12,14 @@ from typing import Any
 import pytest
 
 from ai_rpg_world.application.being.world_subsystems import (
+    PendingFoodSpoilageSubsystemCodec,
     PlayerNeedsSubsystemCodec,
     PlayerPositionSubsystemCodec,
     PlayerVitalsSubsystemCodec,
     WorldTickSubsystemCodec,
+)
+from ai_rpg_world.application.being.experiment_snapshot_session import (
+    _default_world_subsystem_codecs,
 )
 from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
 from ai_rpg_world.domain.player.value_object.agent_needs import AgentNeeds
@@ -27,6 +31,100 @@ from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
 )
+
+
+class TestPendingFoodSpoilageCodec:
+    """未通知の腐敗集約バッファが snapshot 再開後も失われないことを保証する。"""
+
+    def test_capture_restore_round_trip(self) -> None:
+        """当日分の未通知腐敗バッファを capture → restore で保持する。"""
+        codec = PendingFoodSpoilageSubsystemCodec()
+        src_runtime = SimpleNamespace(
+            _pending_spoiled={
+                7: {
+                    "spec_id": 7,
+                    "spec_name": "野いちご",
+                    "instance_ids": [101, 102],
+                },
+                3: {
+                    "spec_id": 3,
+                    "spec_name": "貝",
+                    "instance_ids": [201],
+                },
+            },
+            _pending_spoiled_day=2,
+        )
+
+        captured = codec.capture(src_runtime)
+        assert [entry["spec_id"] for entry in captured["entries"]] == [3, 7]
+        assert captured["entries"][1]["instance_ids"] == [101, 102]
+
+        dst_runtime = SimpleNamespace(_pending_spoiled={}, _pending_spoiled_day=None)
+        codec.restore(dst_runtime, captured)
+
+        assert dst_runtime._pending_spoiled_day == 2
+        assert dst_runtime._pending_spoiled == {
+            3: {
+                "spec_id": 3,
+                "spec_name": "貝",
+                "instance_ids": [201],
+            },
+            7: {
+                "spec_id": 7,
+                "spec_name": "野いちご",
+                "instance_ids": [101, 102],
+            },
+        }
+
+    def test_restored_buffer_flushes_food_spoiled_observation(self) -> None:
+        """restore 後の既存 flush 経路で、再開前に積まれた腐敗通知が配信される。"""
+        from ai_rpg_world.application.world_runtime.world_runtime import WorldRuntime
+
+        codec = PendingFoodSpoilageSubsystemCodec()
+        runtime = SimpleNamespace(_pending_spoiled={}, _pending_spoiled_day=None)
+        codec.restore(
+            runtime,
+            {
+                "schema_version": 1,
+                "pending_day": 4,
+                "entries": [
+                    {
+                        "spec_id": 7,
+                        "spec_name": "野いちご",
+                        "instance_ids": [101, 102],
+                    }
+                ],
+            },
+        )
+        emitted: list[tuple[PlayerId, Any]] = []
+        runtime.get_player_ids = lambda: [PlayerId(1), PlayerId(2)]
+        runtime._emit_observation_directly = (
+            lambda player_id, output: emitted.append((player_id, output))
+        )
+
+        WorldRuntime._flush_pending_food_spoiled(runtime)
+
+        assert [pid for pid, _ in emitted] == [PlayerId(1), PlayerId(2)]
+        assert emitted[0][1].structured == {
+            "type": "food_spoiled",
+            "aggregation": "daily",
+            "day": 4,
+            "spec_summary": [
+                {
+                    "item_spec_id": 7,
+                    "spec_name": "野いちご",
+                    "count": 2,
+                }
+            ],
+            "item_instance_ids": [101, 102],
+        }
+        assert runtime._pending_spoiled == {}
+        assert runtime._pending_spoiled_day is None
+
+    def test_default_world_subsystem_codecs_include_pending_food_spoilage(self) -> None:
+        """既定 world snapshot に未通知腐敗バッファ codec が登録される。"""
+        keys = [codec.subsystem_key for codec in _default_world_subsystem_codecs()]
+        assert keys[-1] == "pending_food_spoilage"
 
 
 class TestWorldTickCodec:
