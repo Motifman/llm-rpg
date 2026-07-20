@@ -844,3 +844,40 @@ source of truth。``check_game_end`` は ``scenario.win_conditions`` /
 実験条件を profile 化する作業中、ユーザから「API キー以外の env 入力経路は
 廃止したい。一つの値に複数経路があることで過去にも苦しんだ」と指摘された。
 そのため、後方互換よりも経路の単一化を優先する判断として固定した。
+
+## 29. 再開境界で未通知観測を勝手に flush しない
+
+**何を**: snapshot capture の直前に、日次集約などの未通知バッファを
+強制 flush しない。未通知バッファ自体を world snapshot の subsystem として
+保存・復元し、既存の tick 境界条件で後から配信する。
+
+**なぜこの形か**:
+
+- capture 前 flush は、連続 run なら日付境界で出る観測を snapshot 時刻に前倒し
+  してしまう。これは resume run と連続 run の観測時刻をずらす。
+- 観測駆動の LLM では、観測時刻のズレ自体が次の行動を変える。状態を保存する
+  ために観測の発生時刻を変えるのは、再開品質として筋が悪い。
+- 未通知バッファは「世界状態そのもの」ではなくても、未来に配信される予定の
+  観測であり、実験の解釈に影響する。
+
+**実装上の決まり**:
+
+- `WorldRuntime._pending_spoiled` / `_pending_spoiled_day` のような
+  未通知バッファは、専用 `WorldSubsystemCodec` で保存・復元する。
+- codec は flush を呼ばない。復元後、既存の `advance_tick` / 日付境界処理に
+  任せる。
+- 追加時は「capture → restore 後に既存 flush 経路で観測が失われない」ことを
+  テストで固定する。
+
+**どうしないと壊れるか**:
+
+- snapshot save が日付境界前に走ると、resume 後に「今日は X が腐った」という
+  未通知観測が消える。食料管理の観察 run では、LLM が腐敗に気づく機会が
+  静かに失われる。
+- 逆に capture 前 flush にすると、観測は消えないが時刻が変わり、連続 run と
+  resume run の比較可能性が落ちる。
+
+**どこで出てきたか**: `belief_goal_full` の 200 tick 観察前に
+snapshot/resume を主経路にできるかレビューした際、`_pending_spoiled` が
+snapshot 対象外であることが見つかった。食料・腐敗が今回の重要観察対象なので、
+flush ではなく codec による保存を採用した。

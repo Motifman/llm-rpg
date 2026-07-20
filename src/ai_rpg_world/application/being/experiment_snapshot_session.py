@@ -56,6 +56,7 @@ from ai_rpg_world.application.being.world_subsystems import (
     DayNightSubsystemCodec,
     ItemInstanceSubsystemCodec,
     ObservationBufferSubsystemCodec,
+    PendingFoodSpoilageSubsystemCodec,
     PlayerActiveEffectsSubsystemCodec,
     PlayerAttentionLevelSubsystemCodec,
     PlayerGrowthSubsystemCodec,
@@ -301,6 +302,10 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         # Encounter Memory (PR3 で runtime._encounter_memory を wiring 完了)。
         # familiarity 信号 (初対面 / 再会 / 初訪問 / 再訪) を永続化する。
         EncounterMemorySubsystemCodec(),
+        # 再開保証: 日次 flush 前の未通知腐敗バッファ。
+        # capture 前に flush すると連続 run と resume run で観測時刻がズレるため、
+        # バッファ自体を保存して既存 day boundary flush に任せる。
+        PendingFoodSpoilageSubsystemCodec(),
     ]
 
 

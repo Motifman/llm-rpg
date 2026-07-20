@@ -43,6 +43,9 @@ Phase 9-4c: 短期記憶 (= LLM agent の prompt context)
 Encounter Memory PR2: familiarity 信号
 - ``EncounterMemorySubsystemCodec`` — player ごとの (entity / spot / event-type)
   との初対面 / 再会 / 初訪問 / 再訪 の記録
+
+再開保証:
+- ``PendingFoodSpoilageSubsystemCodec`` — 日次 flush 前の未通知腐敗バッファ
 """
 
 from ai_rpg_world.application.being.world_subsystems.day_night_codec import (
@@ -71,6 +74,9 @@ from ai_rpg_world.application.being.world_subsystems.player_inventory_codec impo
 )
 from ai_rpg_world.application.being.world_subsystems.player_needs_codec import (
     PlayerNeedsSubsystemCodec,
+)
+from ai_rpg_world.application.being.world_subsystems.pending_food_spoilage_codec import (
+    PendingFoodSpoilageSubsystemCodec,
 )
 from ai_rpg_world.application.being.world_subsystems.player_position_codec import (
     PlayerPositionSubsystemCodec,
@@ -133,4 +139,6 @@ __all__ = [
     "ActionResultStoreSubsystemCodec",
     # Encounter Memory (PR2)
     "EncounterMemorySubsystemCodec",
+    # 再開保証
+    "PendingFoodSpoilageSubsystemCodec",
 ]
