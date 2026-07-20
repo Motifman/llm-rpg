@@ -35,3 +35,9 @@ class InteractionConditionTypeEnum(Enum):
     TIME_OF_DAY_IS_NOT = "TIME_OF_DAY_IS_NOT"
     WEATHER_IS = "WEATHER_IS"
     WEATHER_IS_NOT = "WEATHER_IS_NOT"
+    # 備蓄プール (stock pool): object.state の (stock / stock_capacity /
+    # stock_tick / stock_refill_interval) から現在備蓄を lazy に算出し、
+    # required_quantity 以上あるときだけ interaction を許可する。採取源が
+    # 「一度に取れる量 / 備蓄量 / 再生間隔」を持つモデル用 (毎 tick 更新せず、
+    # アクセス時に経過 tick から再生を計算する)。
+    OBJECT_STOCK_AT_LEAST = "OBJECT_STOCK_AT_LEAST"

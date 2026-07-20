@@ -22,6 +22,9 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_condition import I
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_execution_result import InteractionExecutionResult
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.service.stock_pool_regen import (
+    compute_stock_regen,
+)
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
 )
@@ -56,6 +59,9 @@ class SpotInteractionService:
         # 「provider 不在」として fail する (silent skip を避けるため明示的に拒否)。
         current_time_of_day_phase: Optional[str] = None,
         current_weather_type: Optional[str] = None,
+        # 備蓄プール (OBJECT_STOCK_AT_LEAST) の lazy 再生算出に使う現在 tick。
+        # None のときは再生なし (= 記録済み stock をそのまま使う) にフォールバック。
+        current_tick: Optional[WorldTick] = None,
     ) -> Tuple[bool, Optional[str]]:
         # Phase 4-B: 同一 instance を acting / target 両方として渡すのは
         # wiring バグ。precondition 段階で弾く（apply_effects と同じガード）。
@@ -73,8 +79,17 @@ class SpotInteractionService:
         # のに counts が無いと silent wrong answer になるので、その場合は
         # 早期に明示的なエラーで弾く（pre-release のため後方互換は不要）。
         if owned_item_spec_counts is None:
+            # counts が要るのは「所持アイテム数」を見る condition だけ。
+            # OBJECT_STOCK_AT_LEAST 等は required_quantity>1 を別用途 (備蓄量)
+            # で使い owned_item_spec_counts を参照しないので、対象から除く。
+            _item_count_conditions = (
+                InteractionConditionTypeEnum.HAS_ITEM,
+                InteractionConditionTypeEnum.HAS_ITEMS,
+            )
             needs_counts = any(
-                c.required_quantity > 1 for c in interaction.preconditions
+                c.required_quantity > 1
+                and c.condition_type in _item_count_conditions
+                for c in interaction.preconditions
             )
             if needs_counts:
                 raise ValueError(
@@ -95,6 +110,7 @@ class SpotInteractionService:
                 acting_player_status=acting_player_status,
                 current_time_of_day_phase=current_time_of_day_phase,
                 current_weather_type=current_weather_type,
+                current_tick=current_tick,
             )
             if not ok:
                 return False, msg
@@ -114,6 +130,7 @@ class SpotInteractionService:
         acting_player_status: Optional["PlayerStatusAggregate"] = None,
         current_time_of_day_phase: Optional[str] = None,
         current_weather_type: Optional[str] = None,
+        current_tick: Optional[WorldTick] = None,
     ) -> Tuple[bool, Optional[str]]:
         t = cond.condition_type
         if t == InteractionConditionTypeEnum.ALWAYS:
@@ -136,6 +153,26 @@ class SpotInteractionService:
             for k, v in cond.required_state.items():
                 if spot_object.state.get(k) != v:
                     return False, cond.failure_message or "オブジェクトの状態が条件を満たしません"
+            return True, None
+        if t == InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST:
+            # 備蓄プールの現在量を lazy に算出し、required_quantity 以上あるか判定。
+            # 備蓄設定は object.state に持つ (stock / stock_capacity / stock_tick /
+            # stock_refill_interval)。current_tick 未提供時は再生なし (記録済み
+            # stock をそのまま) にフォールバックする。
+            required = max(1, int(cond.required_quantity))
+            state = spot_object.state
+            now = int(current_tick.value) if current_tick is not None else int(
+                state.get("stock_tick", 0)
+            )
+            result = compute_stock_regen(
+                stock=int(state.get("stock", 0)),
+                capacity=int(state.get("stock_capacity", 0)),
+                stock_tick=int(state.get("stock_tick", 0)),
+                refill_interval=int(state.get("stock_refill_interval", 0)),
+                now=now,
+            )
+            if result.effective_stock < required:
+                return False, cond.failure_message or "備蓄が足りません。時間が経てば回復する"
             return True, None
         if t == InteractionConditionTypeEnum.FLAG_SET:
             if not cond.flag_name:
@@ -390,6 +427,7 @@ class SpotInteractionService:
             acting_player_status=acting_player_status,
             current_time_of_day_phase=current_time_of_day_phase,
             current_weather_type=current_weather_type,
+            current_tick=current_tick,
         )
         if not ok:
             raise InteractionNotAllowedException(reason or "Interaction not allowed")
