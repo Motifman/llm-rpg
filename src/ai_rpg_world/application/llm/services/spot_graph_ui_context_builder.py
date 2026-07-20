@@ -576,10 +576,19 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # speech / 受け渡しの対象として動かないことを LLM が認識できるよう
             # にする。OFF mode で過去の PlayerDownedEvent が観測 buffer から
             # 流れた後でも、snapshot から「あの人が床に転がっている」が読める。
-            suffix = " (倒れて動かない)" if entry.is_down else ""
+            # 死亡 (終局・復活不可) は蘇生可能なダウンと明確に区別する。
+            # is_dead を最優先し、婉曲でなく「死亡している」と直接的に出す
+            # (LLM が小さな語を読み落として蘇生を試み続けないように)。
+            is_dead = getattr(entry, "is_dead", False)
+            if is_dead:
+                suffix = " (死亡している)"
+            elif entry.is_down:
+                suffix = " (倒れて動かない)"
+            else:
+                suffix = ""
             # PR β (実験 #29 後続): 仲間の疲労状態を Observation でなく
-            # state として常時表示する。is_down 優先、それ以外で疲労を出す。
-            if not entry.is_down:
+            # state として常時表示する。死亡 / is_down 優先、それ以外で疲労を出す。
+            if not is_dead and not entry.is_down:
                 fatigue_suffix = _format_fatigue_suffix(entry.fatigue_level)
                 # P-U4 (停滞感の表出・他者): fatigue と併存させる。ゲージ値は
                 # 見せず、バンドに応じた様子の suffix だけを足す。
