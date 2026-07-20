@@ -123,6 +123,8 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     "action_result_store",
     # Encounter Memory
     "encounter_memory",
+    # PR #752: save→restore 境界で当日分の腐敗通知を失わない
+    "pending_food_spoilage",
 )
 
 
