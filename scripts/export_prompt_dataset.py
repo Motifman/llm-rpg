@@ -342,6 +342,7 @@ def _write_raw_archive(raw_dir: Path, loaded_runs: list[dict[str, Any]]) -> None
         dataset_dir = loaded["dataset_dir"]
         shutil.copyfile(dataset_dir / "run.json", run_raw_dir / "run.json")
         for name in (
+            "capture_status.json",
             "calls.jsonl",
             "turn_results.jsonl",
             "system_prompts.jsonl",

@@ -46,6 +46,7 @@ class TestExportPromptDataset:
         assert summary.runs_count == 1
         assert (out_dir / "README.md").is_file()
         assert (out_dir / "dataset_infos.json").is_file()
+        assert (out_dir / "raw" / "run-a" / "capture_status.json.gz").is_file()
         assert (out_dir / "raw" / "run-a" / "calls.jsonl.gz").is_file()
 
         turns = load_dataset(str(out_dir), download_mode="force_redownload")["train"]

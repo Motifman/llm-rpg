@@ -148,6 +148,64 @@ class TestPromptDatasetCaptureSink:
 
         assert _derive_tool_call(call["response"]["raw"]) == call["output"]
 
+    def test_capture_status_initially_false(self, tmp_path):
+        """sink 初期化時に capture_status.json へ incomplete=false を保存する。"""
+
+        PromptDatasetCaptureSink(
+            run_dir=tmp_path,
+            run_id="run1",
+            run_metadata={},
+        )
+
+        status = json.loads(
+            (tmp_path / "prompt_dataset" / "capture_status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        assert status["run_id"] == "run1"
+        assert status["capture_incomplete"] is False
+
+    def test_capture_status_true_when_warn_policy_capture_fails(self, tmp_path):
+        """warn 方針で capture が失敗すると capture_status.json に incomplete=true を残す。"""
+
+        sink = PromptDatasetCaptureSink(
+            run_dir=tmp_path,
+            run_id="run1",
+            run_metadata={},
+            failure_policy="warn",
+        )
+        context = PromptDatasetCallContext(
+            llm_call_id="call-1",
+            run_id="run1",
+            world_id=1,
+            being_id="being_w1_p1",
+            player_id=1,
+            persona_id="persona:sha256:test",
+            character_name="エイダ",
+            turn_index=1,
+        )
+
+        sink.record_call(
+            context=context,
+            request_kwargs={
+                "model": "stub",
+                "messages": [{"role": "system", "content": {"invalid": "dict"}}],
+                "tools": [],
+            },
+            response=None,
+            output=None,
+            metrics={},
+        )
+
+        status = json.loads(
+            (tmp_path / "prompt_dataset" / "capture_status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        assert status["capture_incomplete"] is True
+
 
 def _read_jsonl(path):
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
