@@ -1,0 +1,3919 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "survival_island_v4_coop",
+    "title": "無人島サバイバル v4 — 協力版（座標マップ）",
+    "description": "v3coop の島に座標(position)を与え、接続を網目化した版。拠点をハブに、墜落機を高地の斜面へ上げて東側からの山頂ルートを追加。救助日程・材料の量・山頂ルートを世界の断片に分散し、点火を 2 人がかりにした。4 人が知識と物資を共有しないと 5 日以内の救助に間に合わない。",
+    "theme": "survival",
+    "difficulty": "medium",
+    "estimated_ticks": 240,
+    "author": "demo",
+    "tags": [
+      "betrayal",
+      "coop",
+      "cooperation",
+      "info_asymmetry",
+      "long_term",
+      "phase2_v2",
+      "survival"
+    ],
+    "llm_public_intro": "嵐で難破した観光ツアー船から、4人だけが救命ボートで近くの無人島に流れ着いた。救命ボートは沖に流された。\n\n生存ルール (船員から聞いた言い伝え + 状況からの推測):\n- 通りかかる船は ごく稀 にしか現れない。5日 を過ぎれば食料も体力も尽き、もう誰も来ない。船がいつ通るかの正確な日取りは分からない — 高い場所から海を見張れば掴めるかもしれない。\n- 救助されるには 山頂の狼煙台 で火を上げ、その瞬間に 山頂 (summit) に居る必要がある。狼煙が見えても、麓に居れば船は気付かず通り過ぎる。\n- 狼煙には 流木・枯れ葉・火打ち石 が要るらしい。ただし、どれだけ要るのか・どう焚くのかを正確に知る者はまだいない。\n\n島の天候は荒れやすく、食料は腐り、水は限られている。隣の3人は今朝までの他人だ。誰が何を知り、何を持っているか — 話さなければ、何も共有されない。",
+    "llm_objective_text": "- 最終目標は『救助されること』。それ以外の活動 (食料確保・探索・道具収集) は全てこの最終目標のための手段である。\n- 救助の条件: 救助船が沖を通る瞬間に、山頂 (summit) の狼煙台に火が上がっていて、かつ自分自身が山頂に居る必要がある。狼煙が見えても麓に居れば置いていかれる。\n- 狼煙には 流木・枯れ葉・火打ち石 が要る。ただし必要な量、船が通る日取り、山頂への道筋など、この島には自分の足で確かめないと分からないことが多い。\n- 5 日を過ぎると食料と体力が尽き、もう救助は来ない。タイムリミットを常に意識する。\n- 4 人は初対面だ。見つけた手がかりも持ち物も、口に出して共有しない限り仲間には存在しないのと同じである。"
+  },
+  "item_specs": [
+    {
+      "id": "wild_berry",
+      "name": "野いちご",
+      "description": "酸味のある赤い実。生のまま食べられるが日持ちはしない。",
+      "category": "FOOD",
+      "spoils_after_ticks": 96,
+      "consume_effect": [
+        {
+          "type": "heal_hp",
+          "amount": 3
+        },
+        {
+          "type": "satisfy_need",
+          "need_type": "HUNGER",
+          "amount": 25
+        }
+      ],
+      "fatigue_recovery": 5
+    },
+    {
+      "id": "coconut",
+      "name": "椰子の実",
+      "description": "栄養価が高く水分も摂れる。落ちているものを拾える。",
+      "category": "FOOD",
+      "spoils_after_ticks": 240,
+      "consume_effect": [
+        {
+          "type": "heal_hp",
+          "amount": 5
+        },
+        {
+          "type": "satisfy_need",
+          "need_type": "HUNGER",
+          "amount": 45
+        }
+      ],
+      "fatigue_recovery": 10
+    },
+    {
+      "id": "shellfish",
+      "name": "貝",
+      "description": "干潟で採れる貝。生でも食べられるが火を通すと安全。",
+      "category": "FOOD",
+      "spoils_after_ticks": 48,
+      "consume_effect": [
+        {
+          "type": "heal_hp",
+          "amount": 4
+        },
+        {
+          "type": "satisfy_need",
+          "need_type": "HUNGER",
+          "amount": 35
+        }
+      ],
+      "fatigue_recovery": 5
+    },
+    {
+      "id": "raw_fish",
+      "name": "生の魚",
+      "description": "釣り上げたばかりの魚。生では食あたりの危険がある。",
+      "category": "FOOD",
+      "spoils_after_ticks": 64,
+      "consume_effect": [
+        {
+          "type": "heal_hp",
+          "amount": 5
+        },
+        {
+          "type": "satisfy_need",
+          "need_type": "HUNGER",
+          "amount": 50
+        }
+      ],
+      "fatigue_recovery": 8
+    },
+    {
+      "id": "cooked_fish",
+      "name": "焼き魚",
+      "description": "焚き火で焼いた魚。安全に食べられる。",
+      "category": "FOOD",
+      "spoils_after_ticks": 160,
+      "consume_effect": [
+        {
+          "type": "heal_hp",
+          "amount": 10
+        },
+        {
+          "type": "satisfy_need",
+          "need_type": "HUNGER",
+          "amount": 70
+        }
+      ],
+      "fatigue_recovery": 15
+    },
+    {
+      "id": "safe_mushroom",
+      "name": "食べられるキノコ",
+      "description": "白い傘の見覚えあるキノコ。食用。",
+      "category": "FOOD",
+      "spoils_after_ticks": 144,
+      "consume_effect": [
+        {
+          "type": "heal_hp",
+          "amount": 5
+        },
+        {
+          "type": "satisfy_need",
+          "need_type": "HUNGER",
+          "amount": 40
+        }
+      ],
+      "fatigue_recovery": 8
+    },
+    {
+      "id": "toxic_mushroom",
+      "name": "毒キノコ",
+      "description": "食用キノコによく似た見た目だが、よく見れば軸の色がやや赤い。食べると激しい嘔吐に襲われ、体力を奪われる。",
+      "category": "FOOD",
+      "spoils_after_ticks": 144,
+      "consume_effect": [
+        {
+          "type": "damage_hp",
+          "amount": 15
+        },
+        {
+          "type": "satisfy_need",
+          "need_type": "HUNGER",
+          "amount": 5
+        }
+      ]
+    },
+    {
+      "id": "fresh_water",
+      "name": "真水",
+      "description": "竹筒に汲んだ飲み水。",
+      "category": "FOOD",
+      "consume_effect": {
+        "type": "heal_hp",
+        "amount": 3
+      },
+      "fatigue_recovery": 5
+    },
+    {
+      "id": "driftwood",
+      "name": "流木",
+      "description": "浜辺に流れ着いた乾いた木材。焚き火と狼煙の燃料になる。",
+      "category": "MATERIAL"
+    },
+    {
+      "id": "dry_leaves",
+      "name": "枯れ葉の束",
+      "description": "火を起こすのに最適な乾いた枯れ葉。",
+      "category": "MATERIAL"
+    },
+    {
+      "id": "vine_rope",
+      "name": "蔓のロープ",
+      "description": "森や沼地で得た強靭な蔓。縛ったり昇り降りに使える。",
+      "category": "MATERIAL"
+    },
+    {
+      "id": "sharp_stone",
+      "name": "鋭い石",
+      "description": "刃のように使える石片。切ったり削ったりできる。",
+      "category": "MATERIAL"
+    },
+    {
+      "id": "flint",
+      "name": "火打ち石",
+      "description": "枯れ葉に火を移すための火打ち石。",
+      "category": "MATERIAL"
+    },
+    {
+      "id": "bone_knife",
+      "name": "骨のナイフ",
+      "description": "難破船の残骸から拾ったナイフ。獣を捌ける。",
+      "category": "KEY_ITEM"
+    },
+    {
+      "id": "fishing_rod",
+      "name": "釣竿",
+      "description": "古びた木製の釣竿。川や海で魚を釣れる。",
+      "category": "KEY_ITEM"
+    },
+    {
+      "id": "treasure_compass",
+      "name": "古い羅針盤",
+      "description": "洞窟の宝箱で見つけた羅針盤。曇った文字盤の縁に小さく「S.E.-7」と刻印されている。1996年の刻印日らしき数字も残る。",
+      "category": "LORE"
+    },
+    {
+      "id": "first_aid",
+      "name": "救急用品",
+      "description": "墜落機の残骸から見つけた古い包帯と薬。倒れている者を起こし、HPを大きく回復する (1回限り)。箱の内側にメモ書きで『使用は患者1名のみ、再使用厳禁』とある。",
+      "category": "KEY_ITEM",
+      "consume_effect": [
+        {
+          "type": "revive",
+          "hp_rate": 0.4
+        },
+        {
+          "type": "heal_hp",
+          "amount": 30
+        }
+      ]
+    },
+    {
+      "id": "journal_first_half",
+      "name": "古い手記 (前半)",
+      "description": "廃屋の机に残された業務日誌の前半。表紙に『観測点 S.E.-7 業務日誌 1996年4月-』と記され、気象記録・潮汐記録が几帳面な字で書かれている。最後のページの署名は擦れて『藤……』までしか読めない。",
+      "category": "LORE"
+    },
+    {
+      "id": "journal_second_half",
+      "name": "古い手記 (後半)",
+      "description": "廃屋裏の小屋で見つかった手記の続き。前半と同じ筆跡で書かれているが、後半は気象記録ではなく私的な独白に変わる。『連絡手段は途絶。1996年8月10日』『藤宮、息子に会いたい』で途絶える。",
+      "category": "LORE"
+    },
+    {
+      "id": "wedding_invitation",
+      "name": "結婚式の招待状",
+      "description": "上等な紙に印刷された招待状。日付は2026年6月16日 (ツアーの翌週)、ふたりの名前の片方は手書きで書き加えられている。",
+      "category": "LORE"
+    },
+    {
+      "id": "military_emblem",
+      "name": "古い徽章",
+      "description": "金属製の小さな徽章。元は所属を示す認識票だったらしいが、彫り込まれていた名前と番号は誰かが意図的にやすりで削り取っている。削り跡は新しく、まだ金属が光っている。",
+      "category": "LORE"
+    },
+    {
+      "id": "medicine_photo",
+      "name": "薬瓶の写真",
+      "description": "スマートフォンで撮ったらしい一枚の写真。半分ピントが合っていない薬瓶のラベルに『治験番号 ADX-419』『未承認』の朱印、欄外に手書きで『単回投与・反復禁』と読める。",
+      "category": "LORE"
+    },
+    {
+      "id": "chart_fragment",
+      "name": "海図の切れ端",
+      "description": "波に運ばれてきた海図の切れ端。緯度経度の格子は残るが、肝心の島が描かれているはずの一角はちぎれて欠けている。欠片の裏には鉛筆書きで『S.E.-7 / 観測点跡』と走り書きがある。",
+      "category": "LORE"
+    }
+  ],
+  "environment": {
+    "weather": {
+      "enabled": true,
+      "initial": {
+        "weather_type": "CLEAR",
+        "intensity": 0.0
+      },
+      "update_interval_ticks": 25,
+      "announce_changes": true
+    },
+    "day_night": {
+      "enabled": true,
+      "ticks_per_day": 48,
+      "starting_tick_in_day": 0,
+      "announce_changes": true,
+      "phases": [
+        {
+          "name": "predawn",
+          "start_ratio": 0.0,
+          "display_text": "未明",
+          "ambient_light": 0.1,
+          "is_dark": true
+        },
+        {
+          "name": "morning",
+          "start_ratio": 0.25,
+          "display_text": "朝",
+          "ambient_light": 0.9,
+          "is_dark": false
+        },
+        {
+          "name": "noon",
+          "start_ratio": 0.5,
+          "display_text": "昼",
+          "ambient_light": 1.0,
+          "is_dark": false
+        },
+        {
+          "name": "night",
+          "start_ratio": 0.75,
+          "display_text": "夜",
+          "ambient_light": 0.1,
+          "is_dark": true
+        }
+      ]
+    }
+  },
+  "monsters": {
+    "templates": [
+      {
+        "id": "island_wolf",
+        "name": "野犬",
+        "description": "島を彷徨う飢えた野犬。獣のような目で人を見つけては唸る。",
+        "race": "WOLF",
+        "faction": "ENEMY",
+        "base_stats": {
+          "max_hp": 30,
+          "max_mp": 0,
+          "attack": 15,
+          "defense": 4,
+          "speed": 6,
+          "critical_rate": 0.05,
+          "evasion_rate": 0.1
+        },
+        "reward": {
+          "exp": 10,
+          "gold": 0
+        },
+        "respawn": {
+          "interval_ticks": 80,
+          "auto": false
+        },
+        "vision_range": 4,
+        "flee_threshold": 0.15
+      },
+      {
+        "id": "swamp_snake",
+        "name": "大蛇",
+        "description": "湿地に潜む大蛇。鎌首をもたげて獲物を狙う。噛まれると毒が回る。",
+        "race": "TROLL",
+        "faction": "ENEMY",
+        "base_stats": {
+          "max_hp": 20,
+          "max_mp": 0,
+          "attack": 20,
+          "defense": 3,
+          "speed": 5,
+          "critical_rate": 0.15,
+          "evasion_rate": 0.2
+        },
+        "reward": {
+          "exp": 12,
+          "gold": 0
+        },
+        "respawn": {
+          "interval_ticks": 60,
+          "auto": false
+        },
+        "vision_range": 3,
+        "flee_threshold": 0.3
+      },
+      {
+        "id": "feral_dog",
+        "name": "廃拠点の野犬",
+        "description": "観測拠点の廃屋を縄張りにする獰猛な野犬。逃げない。",
+        "race": "WOLF",
+        "faction": "ENEMY",
+        "base_stats": {
+          "max_hp": 25,
+          "max_mp": 0,
+          "attack": 12,
+          "defense": 4,
+          "speed": 5,
+          "critical_rate": 0.05,
+          "evasion_rate": 0.1
+        },
+        "reward": {
+          "exp": 8,
+          "gold": 0
+        },
+        "respawn": {
+          "interval_ticks": 100,
+          "auto": false
+        },
+        "vision_range": 3,
+        "flee_threshold": 0.05
+      },
+      {
+        "id": "giant_crab",
+        "name": "大型カニ",
+        "description": "干潮時に岩礁帯から現れる大型のカニ。鈍重だが甲殻が硬く、近づくと挟まれる。",
+        "race": "BEAST",
+        "faction": "ENEMY",
+        "base_stats": {
+          "max_hp": 40,
+          "max_mp": 0,
+          "attack": 10,
+          "defense": 8,
+          "speed": 3,
+          "critical_rate": 0.05,
+          "evasion_rate": 0.05
+        },
+        "reward": {
+          "exp": 15,
+          "gold": 0
+        },
+        "respawn": {
+          "interval_ticks": 90,
+          "auto": false
+        },
+        "vision_range": 2,
+        "flee_threshold": 0.1
+      }
+    ],
+    "initial_placements": [
+      {
+        "template": "island_wolf",
+        "spot": "deep_forest",
+        "spawn_condition": {
+          "day_night_phases": [
+            "night"
+          ]
+        }
+      },
+      {
+        "template": "swamp_snake",
+        "spot": "swamp",
+        "spawn_condition": {
+          "day_night_phases": [
+            "night"
+          ]
+        }
+      },
+      {
+        "template": "feral_dog",
+        "spot": "plane_wreck"
+      },
+      {
+        "template": "giant_crab",
+        "spot": "tidal_pools",
+        "spawn_condition": {
+          "forbidden_flags": [
+            "high_tide"
+          ]
+        }
+      }
+    ]
+  },
+  "spots": [
+    {
+      "id": "shipwreck_beach",
+      "name": "難破船の浜",
+      "description": "嵐で打ち上げられた木造船の残骸が転がる、白い砂の浜辺。波音と海鳥の声。流木が至るところに散らばっている。波打ち際に小魚が跳ねるのが見えるが、素手では到底捕まえられそうにない。船員の言い伝えでは、この島の頂上に古い狼煙台があり、そこに火を灯せば通りがかりの船に救助を求められるという。 浜の東では、内陸の高みから流れてきた川が海に注いでいるのが見える。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "穏やかな波の音と海鳥の鳴き声",
+        "temperature": "WARM"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "driftwood_pile",
+            "name": "流木の山",
+            "description": "波打ち際に積まれた流木。乾いていてよく燃えそうだ。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "gather",
+                "display_label": "流木を拾う",
+                "witness_observation_message": "{actor}が流木を拾った。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "driftwood_pile",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "ちょうど取れる場所の流木はもう拾ってしまった。波がまた運んでくるだろう。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "driftwood"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "driftwood_pile",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "driftwood_pile",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "乾いた流木を一本拾い上げた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "tide_debris",
+            "name": "波が運んだ漂着物",
+            "description": "波打ち際の砂に半分埋もれた小さな漂着物。海藻と砂利の中から何か硬い物が顔を覗かせている。",
+            "object_type": "CHEST",
+            "state": {
+              "opened": false
+            },
+            "interactions": [
+              {
+                "action_name": "search_debris",
+                "display_label": "漂着物を漁る",
+                "witness_observation_message": "{actor}が波打ち際の漂着物を漁った。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "tide_debris",
+                    "required_state": {
+                      "opened": false
+                    },
+                    "failure_message": "ここの漂着物は調べ尽くした。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "flint"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "tide_debris",
+                      "state_updates": {
+                        "opened": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "海藻を払うと、火打ち石が一つ顔を出した。波が運んだものらしい。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "wreck_hold",
+            "name": "難破船の船倉",
+            "description": "斜めに横たわった船倉。中には濡れた工具箱の残骸がある。",
+            "object_type": "CHEST",
+            "state": {
+              "opened": false
+            },
+            "interactions": [
+              {
+                "action_name": "search",
+                "display_label": "船倉を漁る",
+                "witness_observation_message": "{actor}が難破船の船倉を漁った。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "wreck_hold",
+                    "required_state": {
+                      "opened": false
+                    },
+                    "failure_message": "船倉はもう漁り尽くした。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "bone_knife"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "vine_rope"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "wreck_hold",
+                      "state_updates": {
+                        "opened": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "工具箱から骨のナイフと丸めた蔓のロープを見つけた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 4.0,
+        "y": 2.0
+      }
+    },
+    {
+      "id": "campsite",
+      "name": "拠点",
+      "description": "浜辺と森の境にある平らな砂地。石を組んだ焚き火跡があり、3人で身を寄せて眠れる広さ。ここがおそらく拠点になる。脇には加工用の丸太もあり、骨のナイフがあれば簡単な道具を削り出せる。 脇を流れる川を遡れば、島の奥へ入れそうだ。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "遠い波音と森のざわめき",
+        "temperature": "WARM"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "fire_pit",
+            "name": "焚き火跡",
+            "description": "石を組んだ焚き火跡。流木と枯れ葉と火打ち石があれば火が起こせる。",
+            "object_type": "OTHER",
+            "state": {
+              "lit": false,
+              "last_lit_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "build_fire",
+                "display_label": "焚き火を起こす",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "fire_pit",
+                    "required_state": {
+                      "lit": false
+                    },
+                    "failure_message": "焚き火はもう燃えている。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "driftwood",
+                    "failure_message": "流木が足りない。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "dry_leaves",
+                    "failure_message": "枯れ葉が足りない。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "flint",
+                    "failure_message": "火打ち石が必要だ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {
+                      "item_spec": "driftwood"
+                    }
+                  },
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {
+                      "item_spec": "dry_leaves"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "fire_pit",
+                      "state_updates": {
+                        "lit": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "fire_pit",
+                      "state_key": "last_lit_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "枯れ葉に火打ち石で火種を移し、流木に火が回った。焚き火が燃え始めた。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "cook_fish",
+                "display_label": "魚を焼く",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "fire_pit",
+                    "required_state": {
+                      "lit": true
+                    },
+                    "failure_message": "焚き火が燃えていない。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "raw_fish",
+                    "failure_message": "焼ける魚を持っていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {
+                      "item_spec": "raw_fish"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "cooked_fish"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "魚を焚き火で香ばしく焼き上げた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "crafting_log",
+            "name": "加工用の丸太",
+            "description": "拠点の脇に置かれた平らな丸太。骨のナイフがあれば、ここで簡単な道具を削り出せる。流木と蔓のロープから釣竿を作れそうだ。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "craft_fishing_rod",
+                "display_label": "釣竿を削り出す",
+                "preconditions": [
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "bone_knife",
+                    "failure_message": "削るための骨のナイフが必要だ。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "driftwood",
+                    "failure_message": "竿になる流木が必要だ。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "vine_rope",
+                    "failure_message": "釣り糸代わりの蔓のロープが必要だ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {
+                      "item_spec": "driftwood"
+                    }
+                  },
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {
+                      "item_spec": "vine_rope"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "fishing_rod"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "流木を骨のナイフで削り、蔓のロープを糸代わりに結びつけて釣竿を作り上げた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "shelter_base",
+            "name": "簡素な避難所",
+            "description": "葉と流木で作りかけの避難所。雨風をしのぐにはまだ材料が足りない。",
+            "object_type": "OTHER",
+            "state": {
+              "built": false
+            },
+            "interactions": [
+              {
+                "action_name": "build_shelter",
+                "display_label": "避難所を組み立てる",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "shelter_base",
+                    "required_state": {
+                      "built": false
+                    },
+                    "failure_message": "避難所はもう組み上がっている。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "driftwood",
+                    "failure_message": "骨組みの流木が足りない。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "vine_rope",
+                    "failure_message": "縛るための蔓のロープが必要だ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {
+                      "item_spec": "driftwood"
+                    }
+                  },
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {
+                      "item_spec": "vine_rope"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "shelter_base",
+                      "state_updates": {
+                        "built": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "shelter_built",
+                      "value": true
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "流木の骨組みを蔓で縛り上げ、雨風をしのげる避難所ができた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "camp_notice_board",
+            "name": "板切れの掲示",
+            "description": "焚き火跡の脇に立てられた、平たい板切れ。誰でも短い言葉を書き残せそうだ。留守にしている仲間への伝言を、ここに置いていける。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "write_notice",
+                "display_label": "板切れに書き残す",
+                "witness_observation_message": "{actor}が板切れの掲示に何かを書き残した。",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "WRITE_PLAYER_TEXT",
+                    "parameters": {}
+                  }
+                ]
+              },
+              {
+                "action_name": "read_notice",
+                "display_label": "板切れを読む",
+                "witness_observation_message": "{actor}が板切れの掲示を読んだ。",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_PLAYER_TEXT",
+                    "parameters": {}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 4.0,
+        "y": 4.0
+      }
+    },
+    {
+      "id": "tidal_pools",
+      "name": "干潟",
+      "description": "潮が引くと現れる、岩と海水溜まりの広がり。岩の間に貝がへばりついている。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "波の引く音と水たまりのチャプチャプ",
+        "temperature": "WARM"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "shellfish_rocks",
+            "name": "貝の岩棚",
+            "description": "潮溜まりの岩に貝が群がっている。手で剥がして採れる。",
+            "object_type": "OTHER",
+            "state": {
+              "stock": 12,
+              "stock_capacity": 12,
+              "stock_tick": 0,
+              "stock_refill_interval": 6
+            },
+            "interactions": [
+              {
+                "action_name": "gather_shellfish",
+                "display_label": "貝を採る",
+                "witness_observation_message": "{actor}が岩棚で貝を採った。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
+                    "target_object": "shellfish_rocks",
+                    "required_quantity": 3,
+                    "failure_message": "近くの貝は採り尽くした。しばらく待てば次の引き潮で別の貝が現れる。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "shellfish"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "shellfish"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "shellfish"
+                    }
+                  },
+                  {
+                    "effect_type": "CONSUME_OBJECT_STOCK",
+                    "parameters": {
+                      "target_object": "shellfish_rocks",
+                      "amount": 3
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "岩から貝を三つ剥がし取った。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 6.0,
+        "y": 1.5
+      }
+    },
+    {
+      "id": "rocky_shore",
+      "name": "岩礁海岸",
+      "description": "黒い岩が海に突き出した荒い海岸。沖は深く、大型の魚が泳いでいる。嵐の日は波が高く危険だ。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "岩を砕く波音",
+        "temperature": "WARM"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "deep_fishing_point",
+            "name": "沖の釣り場",
+            "description": "岩から沖へ釣り糸を垂らせる場所。大物が掛かる。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "fish_deep",
+                "display_label": "沖で釣りをする",
+                "witness_observation_message": "{actor}が沖へ釣り糸を垂らした。",
+                "preconditions": [
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "fishing_rod",
+                    "failure_message": "釣竿がなければ届かない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "deep_fishing_point",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "魚はしばらく散ってしまった。少し待とう。"
+                  },
+                  {
+                    "condition_type": "TIME_OF_DAY_IS_NOT",
+                    "required_time_of_day_phase": "night",
+                    "failure_message": "夜の沖は暗くて魚が見えず、波も読めない。釣りができない。"
+                  },
+                  {
+                    "condition_type": "WEATHER_IS_NOT",
+                    "required_weather_type": "STORM",
+                    "failure_message": "嵐で波が高すぎる。沖で釣るのは危険だ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_FROM_LOOT_TABLE",
+                    "parameters": {
+                      "loot_table": "deep_fishing_loot",
+                      "times": 2
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "deep_fishing_point",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "deep_fishing_point",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "竿が大きくしなり、何かが掛かった。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "slippery_cliff_edge",
+            "name": "濡れた岩の縁",
+            "description": "波しぶきで濡れた岩の縁。覗き込めば沖の様子が見えるが、足場は不安定だ。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "peer_over",
+                "display_label": "縁から沖を覗き込む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "APPLY_DAMAGE",
+                    "parameters": {
+                      "damage": 5,
+                      "message": "足を滑らせ岩で擦り傷を作った (HP -5)。"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "沖を一望できたが、足を滑らせて尻もちをついた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "stone_outcrop",
+            "name": "鋭い石が露出した岩",
+            "description": "波に削られて刃のような断面を見せる石が幾つも転がっている。手で掴めば刃物のように使えそうだ。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "pick_sharp_stone",
+                "display_label": "鋭い石を拾う",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "stone_outcrop",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "あらかた拾ってしまった。波がまた削るまで待たないと、新しい刃片は見つからない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "sharp_stone",
+                      "quantity": 1
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "stone_outcrop",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "stone_outcrop",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "刃のように使えそうな石片を拾い上げた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 2.0,
+        "y": 2.0
+      }
+    },
+    {
+      "id": "hidden_cove",
+      "name": "隠し入江",
+      "description": "干潟の奥、岩陰に隠れた小さな入江。古い宝箱が砂に半分埋まっている。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "岩肌に当たる小波の音",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "buried_chest",
+            "name": "砂に埋もれた箱",
+            "description": "錆びついた古い木箱。蓋は風化していて手で開けられそうだ。",
+            "object_type": "CHEST",
+            "state": {
+              "opened": false
+            },
+            "interactions": [
+              {
+                "action_name": "open_chest",
+                "display_label": "箱を開ける",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "buried_chest",
+                    "required_state": {
+                      "opened": false
+                    },
+                    "failure_message": "箱はすでに空っぽだ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "flint"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "dry_leaves"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "buried_chest",
+                      "state_updates": {
+                        "opened": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "箱の中から火打ち石と乾いた枯れ葉の束を見つけた。誰かが備えとして残したのだろうか。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cove_carving",
+            "name": "岩肌の刻み跡",
+            "description": "入江の奥の岩肌に、誰かがナイフで彫った古い覚え書きが残っている。",
+            "object_type": "OTHER",
+            "state": {
+              "read": false
+            },
+            "interactions": [
+              {
+                "action_name": "read_carving",
+                "display_label": "刻み跡を読む",
+                "witness_observation_message": "{actor}が入江の岩肌の刻み跡を読んでいる。",
+                "preconditions": [
+                  {
+                    "condition_type": "ALWAYS"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "cove_carving",
+                      "state_updates": {
+                        "read": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "east_route_revealed",
+                      "value": true
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "刻まれていたのはこの島の道順だった。『山ハ川沿イガ本道。ダガ沼ヲ東ヘ抜ケ、墜チタ鉄ノ鳥ノ脇ヲ登レバ高地ノ泉ニ出ル。急グナラ此方（こちら）。泉ヨリ上ハ一本道也』。南東の隅から山頂へ回り込む、もう一つの登り口を示していた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 7.5,
+        "y": 1.0
+      }
+    },
+    {
+      "id": "forest_edge",
+      "name": "森の入口",
+      "description": "浜辺と森の境目。背の高い椰子の木が並び、下生えに見覚えのない植物が茂る。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "葉ずれの音と鳥の声",
+        "temperature": "WARM"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "coconut_palm",
+            "name": "椰子の木",
+            "description": "高く伸びた椰子の木。よく見ると地面に落ちた実が転がっている。",
+            "object_type": "OTHER",
+            "state": {
+              "stock": 8,
+              "stock_capacity": 8,
+              "stock_tick": 0,
+              "stock_refill_interval": 5
+            },
+            "interactions": [
+              {
+                "action_name": "gather_coconut",
+                "display_label": "落ちた椰子の実を拾う",
+                "witness_observation_message": "{actor}が落ちた椰子の実を拾った。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
+                    "target_object": "coconut_palm",
+                    "required_quantity": 2,
+                    "failure_message": "落ちている椰子の実はもう拾った。風が吹けばまた落ちるだろう。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "coconut"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "coconut"
+                    }
+                  },
+                  {
+                    "effect_type": "CONSUME_OBJECT_STOCK",
+                    "parameters": {
+                      "target_object": "coconut_palm",
+                      "amount": 2
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "落ちた椰子の実を二つ拾った。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 2.8,
+        "y": 5.0
+      }
+    },
+    {
+      "id": "forest_clearing",
+      "name": "森の広場",
+      "description": "木々が円形に開けた広場。木漏れ日が射し込んで明るい。獣道がいくつかの方向に伸びている。地面には乾いた枯れ葉が積もっている。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "風に揺れる葉のざわめき",
+        "temperature": "NORMAL"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "fallen_leaves",
+            "name": "積もった枯れ葉",
+            "description": "広場の縁に風が吹き寄せた乾いた枯れ葉の山。両手で集めれば火種に使えそうだ。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "gather_dry_leaves",
+                "display_label": "枯れ葉を集める",
+                "witness_observation_message": "{actor}が乾いた枯れ葉を集めた。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "fallen_leaves",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "ここの枯れ葉はもう集めた。風がまた運んでくるのを待つしかない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "dry_leaves"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "fallen_leaves",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "fallen_leaves",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "両手いっぱいに乾いた枯れ葉を集めた。火種に使える。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 2.5,
+        "y": 6.5
+      }
+    },
+    {
+      "id": "berry_grove",
+      "name": "ベリーの茂み",
+      "description": "野いちごの茂みが斜面一面に広がっている。熟した赤い実があちこちに見える。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "蜂の羽音",
+        "temperature": "WARM"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "berry_bush_a",
+            "name": "ベリーの茂み(東)",
+            "description": "東側の茂み。赤い実が密集している。",
+            "object_type": "OTHER",
+            "state": {
+              "stock": 12,
+              "stock_capacity": 12,
+              "stock_tick": 0,
+              "stock_refill_interval": 6
+            },
+            "interactions": [
+              {
+                "action_name": "harvest",
+                "display_label": "ベリーを採る(東)",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
+                    "target_object": "berry_bush_a",
+                    "required_quantity": 3,
+                    "failure_message": "東の茂みの実は採り尽くした。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "wild_berry"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "wild_berry"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "wild_berry"
+                    }
+                  },
+                  {
+                    "effect_type": "CONSUME_OBJECT_STOCK",
+                    "parameters": {
+                      "target_object": "berry_bush_a",
+                      "amount": 3
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "東の茂みから熟した野いちごを三つ摘んだ。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "berry_bush_b",
+            "name": "ベリーの茂み(西)",
+            "description": "西側の茂み。やや小さめだが実は赤く熟している。",
+            "object_type": "OTHER",
+            "state": {
+              "stock": 8,
+              "stock_capacity": 8,
+              "stock_tick": 0,
+              "stock_refill_interval": 6
+            },
+            "interactions": [
+              {
+                "action_name": "harvest",
+                "display_label": "ベリーを採る(西)",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
+                    "target_object": "berry_bush_b",
+                    "required_quantity": 2,
+                    "failure_message": "西の茂みの実は採り尽くした。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "wild_berry"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "wild_berry"
+                    }
+                  },
+                  {
+                    "effect_type": "CONSUME_OBJECT_STOCK",
+                    "parameters": {
+                      "target_object": "berry_bush_b",
+                      "amount": 2
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "西の茂みから野いちごを二つ摘んだ。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 2.0,
+        "y": 7.8
+      }
+    },
+    {
+      "id": "deep_forest",
+      "name": "深い森",
+      "description": "木々が密集して薄暗い森の奥。倒木の根元に白いキノコが生えている。よく似た形だが、注意深く見ないと食用と毒の区別がつかない。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "湿った落ち葉を踏む音、遠くで何かの鳴き声",
+        "temperature": "NORMAL"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "safe_mushroom_patch",
+            "name": "白いキノコの群落",
+            "description": "倒木の北側に生えた白い傘のキノコ。よく見れば軸は真っ白。これは食用だ。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100,
+              "harvest_count": 0
+            },
+            "interactions": [
+              {
+                "action_name": "gather_mushroom",
+                "display_label": "キノコを採る(北側)",
+                "witness_observation_message": "{actor}が北側のキノコを採った。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "safe_mushroom_patch",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "北側のキノコは採り尽くした。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "safe_mushroom"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "safe_mushroom_patch",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "safe_mushroom_patch",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "safe_mushroom_patch",
+                      "state_key": "harvest_count"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "白い軸のキノコを摘み取った。これは食べられるはずだ。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "toxic_mushroom_patch",
+            "name": "白いキノコの群落(南側)",
+            "description": "倒木の南側に生えたキノコ。一見すると北側と同じだが、軸の根元にうっすら赤みがある。食用と思って手を出すと痛い目に遭う。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "gather_mushroom",
+                "display_label": "キノコを採る(南側)",
+                "witness_observation_message": "{actor}が南側のキノコを採った。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "toxic_mushroom_patch",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "南側のキノコは採り尽くした。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "toxic_mushroom"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "toxic_mushroom_patch",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "toxic_mushroom_patch",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "南側のキノコを摘んだ。よく見ると軸の色が北のものとは少し違う気がする。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 5.2,
+        "y": 6.5
+      }
+    },
+    {
+      "id": "forest_stream",
+      "name": "森の小川",
+      "description": "苔むした岩の間を流れる細い小川。岸辺に座って釣りができる。水も飲めそうだが、上流の方がより澄んでいるだろう。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "せせらぎと小鳥の声",
+        "temperature": "NORMAL"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "stream_fishing_point",
+            "name": "釣り場",
+            "description": "岸辺の小さな岩棚。釣竿があれば魚が釣れる。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "fish_stream",
+                "display_label": "小川で釣りをする",
+                "witness_observation_message": "{actor}が小川で釣り糸を垂らした。",
+                "preconditions": [
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "fishing_rod",
+                    "failure_message": "釣竿が必要だ。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "stream_fishing_point",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "ここの魚はしばらく散ってしまった。"
+                  },
+                  {
+                    "condition_type": "TIME_OF_DAY_IS_NOT",
+                    "required_time_of_day_phase": "night",
+                    "failure_message": "夜は川面が見えず釣りにならない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "raw_fish"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "stream_fishing_point",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "stream_fishing_point",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "竿に魚が掛かった。引き上げて陸に上げた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 4.5,
+        "y": 8.2
+      }
+    },
+    {
+      "id": "tall_oak",
+      "name": "大樫の樹",
+      "description": "森の中で最も高くそびえる大樫。枝に手をかければよじ登れそうだ。樹上からなら島の地形がよく見えるはず。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "風に揺れる大樹のきしみ",
+        "temperature": "NORMAL"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "oak_climb",
+            "name": "大樫の枝",
+            "description": "登りやすい枝振り。上まで登れば視界が一気に開けるだろう。",
+            "object_type": "OTHER",
+            "state": {
+              "climbed": false
+            },
+            "interactions": [
+              {
+                "action_name": "climb",
+                "display_label": "樹に登る",
+                "preconditions": [
+                  {
+                    "condition_type": "ALWAYS"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "oak_climb",
+                      "state_updates": {
+                        "climbed": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "map_revealed",
+                      "value": true
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "枝の上から視界が開け、島の全容が見えた。川は拠点の脇の河口から始まり、川の上流、高地の泉へと続き、その先の山麓から山道が山頂へ伸びている。もう一本、東の沼の奥から斜面を這い上がる筋も見える — 墜落した機体のあたりから高地の泉へ繋がっているらしい。いずれにせよ、山頂へ立つには高地の泉を越えねばならない。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 3.5,
+        "y": 7.5
+      }
+    },
+    {
+      "id": "river_mouth",
+      "name": "河口",
+      "description": "森から流れ出た川が海に注ぐ河口。水は淡いがやや塩気が混ざる。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "川と海が交わる水音",
+        "temperature": "WARM"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "river_drink",
+            "name": "河口の水辺",
+            "description": "竹筒で水を汲めるが、河口の水は少し塩気がある。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "drink_water",
+                "display_label": "河口の水を汲む",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "river_drink",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "今汲んだばかりだ。少し時間を置こう。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "fresh_water"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "river_drink",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "river_drink",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "竹筒に河口の水を汲んだ。塩気は薄いが飲めるだろう。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 4.5,
+        "y": 5.5
+      }
+    },
+    {
+      "id": "river_upper",
+      "name": "川の上流",
+      "description": "森の奥から流れ落ちる清流の上流。水は澄み切っている。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "勢いよく流れる清流の音",
+        "temperature": "NORMAL"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": []
+      },
+      "position": {
+        "x": 6.3,
+        "y": 7.3
+      }
+    },
+    {
+      "id": "highland_spring",
+      "name": "高地の泉",
+      "description": "山の中腹に湧く泉。冷たく澄み切った水が絶え間なく湧き出ている。島で最も安全な水源だ。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "湧水の音と山風",
+        "temperature": "NORMAL"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "spring_source",
+            "name": "湧水の口",
+            "description": "岩の隙間から冷たい水が湧き出ている。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "drink_water",
+                "display_label": "湧水を汲む",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "spring_source",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "竹筒は満杯だ。少し待ってからもう一度。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "fresh_water"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "fresh_water"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "spring_source",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "spring_source",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "湧水を竹筒に二つ分汲んだ。冷たくて澄んでいる。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 7.0,
+        "y": 8.0
+      }
+    },
+    {
+      "id": "foothills",
+      "name": "山麓",
+      "description": "森を抜けた先の岩がちな斜面。山道が二手に分かれており、一方は崖沿いに、もう一方は洞窟へと続いている。分岐の目印に石が積まれており、誰かが上に文字を書き残せそうだ。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "山風と落石の音",
+        "temperature": "NORMAL"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "trail_cairn",
+            "name": "石積みの目印",
+            "description": "分岐点に積まれた石の目印。上に置かれた薄い石には、文字を刻み込めそうだ。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "carve_message",
+                "display_label": "石に刻む",
+                "witness_observation_message": "{actor}が石積みの目印に何かを刻んだ。",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "WRITE_PLAYER_TEXT",
+                    "parameters": {}
+                  }
+                ]
+              },
+              {
+                "action_name": "read_carving",
+                "display_label": "刻まれた文字を読む",
+                "witness_observation_message": "{actor}が石積みの目印に刻まれた文字を読んだ。",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_PLAYER_TEXT",
+                    "parameters": {}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 7.6,
+        "y": 9.1
+      }
+    },
+    {
+      "id": "cliff_lookout",
+      "name": "崖の見張り台",
+      "description": "切り立った崖の上から海を見渡せる場所。船の影を捜すならここが一番だ。嵐の日は近づくのも危険。ただし、この高さでも遠くの船にこちらの存在を気づかせるには弱い ── 救助を呼ぶならさらに上の山頂の狼煙台が要る。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "強い海風",
+        "temperature": "NORMAL"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "cliff_vantage",
+            "name": "見晴らしの岩",
+            "description": "海原を見下ろせる岩の出っ張り。",
+            "object_type": "OTHER",
+            "state": {
+              "watched": false
+            },
+            "interactions": [
+              {
+                "action_name": "scout_sea",
+                "display_label": "海を見渡す",
+                "preconditions": [
+                  {
+                    "condition_type": "ALWAYS"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "cliff_vantage",
+                      "state_updates": {
+                        "watched": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "沖の航路がよく見える。潮の流れと漂流物の筋から読むに、船がこの島の沖を通るのは 3日目 と 4日目 — それきりだ。その瞬間に狼煙が上がっていなければ、船は素通りする。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 9.2,
+        "y": 9.0
+      }
+    },
+    {
+      "id": "mountain_path",
+      "name": "山道",
+      "description": "崩れかけた石段が山頂へと続いている。足元の悪い箇所では蔓のロープがあれば心強い。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "風がうなる音",
+        "temperature": "NORMAL"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": []
+      },
+      "position": {
+        "x": 8.4,
+        "y": 9.6
+      }
+    },
+    {
+      "id": "cave_entry",
+      "name": "洞窟の入口",
+      "description": "山麓の岩肌にぽっかり空いた穴。中は暗いが奥に何かありそうだ。満潮時には海水が押し寄せて入れなくなる。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "風の通る低いうなり",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": []
+      },
+      "position": {
+        "x": 6.4,
+        "y": 9.2
+      }
+    },
+    {
+      "id": "cave_inner",
+      "name": "洞窟の内部",
+      "description": "湿った石灰岩の洞窟。中央に古びた木箱と、誰かが残した道具が転がっている。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "水滴が落ちる音",
+        "temperature": "COLD"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "old_chest",
+            "name": "古い宝箱",
+            "description": "金具が錆びついた木箱。何十年前のものだろうか。",
+            "object_type": "CHEST",
+            "state": {
+              "opened": false
+            },
+            "interactions": [
+              {
+                "action_name": "open_chest",
+                "display_label": "宝箱を開ける",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "old_chest",
+                    "required_state": {
+                      "opened": false
+                    },
+                    "failure_message": "宝箱はもう空だ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "fishing_rod"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "treasure_compass"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "old_chest",
+                      "state_updates": {
+                        "opened": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "宝箱から古びた釣竿と、文字盤に SE と刻まれた羅針盤を取り出した。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "signal_mural",
+            "name": "古い壁画",
+            "description": "壁に炭で描かれた古い絵。狼煙台らしき台と、その脇に立つ人影が見える。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine_mural",
+                "display_label": "壁画を調べる",
+                "preconditions": [
+                  {
+                    "condition_type": "ALWAYS"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "壁画には狼煙の焚き方が描かれている — 太い流木を 3 本、乾いた枯れ葉を 2 掴み、火打ち石で火花を落とす。狼煙台の脇には人影が 二人。一人が火を熾し、もう一人が体で風を防いでいる。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 5.8,
+        "y": 10.1
+      }
+    },
+    {
+      "id": "summit",
+      "name": "山頂",
+      "description": "島の最も高い場所。風が強く、雲が手の届くほど近い。古い石組みの狼煙台がある。ここに火を灯せば遠くの船からも見えるはずだ。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "強い山風",
+        "temperature": "COLD"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "signal_fire_pit",
+            "name": "狼煙台",
+            "description": "古い石組みの狼煙台。山頂の風は強く、組んだ薪はすぐに崩れる。一人が火を熾し、もう一人が風下を塞ぐ — 二人がかりでなければ点火できない。",
+            "object_type": "OTHER",
+            "state": {
+              "lit": false
+            },
+            "interactions": [
+              {
+                "action_name": "light_signal",
+                "display_label": "狼煙を上げる",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "signal_fire_pit",
+                    "required_state": {
+                      "lit": false
+                    },
+                    "failure_message": "狼煙はすでに燃え上がっている。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "driftwood",
+                    "failure_message": "流木が足りない。太いものが 3 本は要る。",
+                    "required_quantity": 3
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "dry_leaves",
+                    "failure_message": "枯れ葉が足りない。乾いたものを 2 掴みは要る。",
+                    "required_quantity": 2
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "flint",
+                    "failure_message": "火打ち石がない。これでは火花が出せない。",
+                    "required_quantity": 1
+                  },
+                  {
+                    "condition_type": "PLAYERS_AT_SPOT",
+                    "required_player_count": 2,
+                    "failure_message": "風が強すぎて、一人では火を守りきれない。誰かもう一人が山頂にいなければ点火できない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {
+                      "item_spec": "driftwood",
+                      "quantity": 3
+                    }
+                  },
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {
+                      "item_spec": "dry_leaves",
+                      "quantity": 2
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "signal_fire_pit",
+                      "state_updates": {
+                        "lit": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "signal_fire_lit",
+                      "value": true
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "signal_fire_pit",
+                      "state_key": "lit_at_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "枯れ葉に火打ち石で火種を移し、流木に火が回った。狼煙台から白い煙が立ち上り、空高くたなびく。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 8.7,
+        "y": 10.9
+      }
+    },
+    {
+      "id": "swamp",
+      "name": "沼地",
+      "description": "深い森の南、湿った泥と倒木が広がる沼。蔓が垂れ下がり、虫の羽音がやかましい。足元が悪いので長居は避けたい。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "蚊と蝿の羽音、ぬかるみを踏む音",
+        "temperature": "WARM"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "vine_thicket",
+            "name": "蔓の茂み",
+            "description": "強靭な蔓が枝に絡みついている。引き剥がせばロープになる。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "cut_vines",
+                "display_label": "蔓を切り取る",
+                "preconditions": [
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "bone_knife",
+                    "failure_message": "蔓は太く、ナイフがなければ切れない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "vine_thicket",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "近くの蔓は採り尽くした。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "vine_rope"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "vine_rope"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "vine_thicket",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "vine_thicket",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "骨のナイフで蔓を二本切り取った。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 6.0,
+        "y": 4.5
+      }
+    },
+    {
+      "id": "plane_wreck",
+      "name": "墜落機の残骸",
+      "description": "森の奥に半分埋もれた古い小型機の残骸。錆びた金属とコケに覆われている。コックピットには何か残っているかもしれない。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "金属がきしむ音と虫の羽音",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "cockpit",
+            "name": "コックピット",
+            "description": "斜めに傾いだコックピット。座席の下に古い救急箱が押し込まれている。",
+            "object_type": "CHEST",
+            "state": {
+              "opened": false
+            },
+            "interactions": [
+              {
+                "action_name": "search_cockpit",
+                "display_label": "コックピットを漁る",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "cockpit",
+                    "required_state": {
+                      "opened": false
+                    },
+                    "failure_message": "コックピットの中身はすでに取り尽くした。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "first_aid"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "flint"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "cockpit",
+                      "state_updates": {
+                        "opened": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "救急箱から包帯と薬、それに非常用の火打ち石を見つけた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 8.0,
+        "y": 6.3
+      }
+    },
+    {
+      "id": "outpost_overgrown_path",
+      "name": "蔓に覆われた小道",
+      "description": "沼地の奥、人の手が入った形跡のある古い小道。30年分の蔓と倒木で塞がれているが、足元には石組みの痕跡が残る。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "風が朽ちた木の間を抜ける音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": [
+          {
+            "id": "rusted_signpost",
+            "name": "錆びた標識",
+            "description": "倒れた標識。塗装は剥げているが、辛うじて『観測』の二文字が読める。",
+            "object_type": "SIGN",
+            "state": {
+              "examined": false
+            },
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "標識を調べる",
+                "witness_policy": "ACTOR_ONLY",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "rusted_signpost",
+                      "state_updates": {
+                        "examined": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "錆びた標識に『観測……所』と読める。30年は経過していそうな代物だ。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 7.0,
+        "y": 3.0
+      }
+    },
+    {
+      "id": "observation_outpost_ruins",
+      "name": "観測拠点跡 (廃屋)",
+      "description": "蔓に覆われた一階建ての廃屋。窓は割れ、屋根は半分崩れ、机と棚だけが残っている。誰かが30年前まで暮らしていた気配が残る。崩れた梁が頭上で軋み続けている。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "梁が軋む音と、遠くで揺れる風鈴のような金属音",
+        "temperature": "COLD"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "old_desk",
+            "name": "朽ちた机",
+            "description": "観測機材が並んでいたと思われる作業机。引き出しは固く、引き抜くと中から手記の前半が出てきた。",
+            "object_type": "CHEST",
+            "state": {
+              "opened": false
+            },
+            "interactions": [
+              {
+                "action_name": "search_desk",
+                "display_label": "机を漁る",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "old_desk",
+                    "required_state": {
+                      "opened": false
+                    },
+                    "failure_message": "机の中はすでに取り尽くした。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "journal_first_half"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "old_desk",
+                      "state_updates": {
+                        "opened": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "湿気で膨らんだ業務日誌の前半を取り出した。署名は擦れて読めない。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "wall_photo",
+            "name": "壁の写真",
+            "description": "壁に画鋲で留められた色あせた集合写真。観測員らしき数人が並んで写っているが、表情までは判別できない。",
+            "object_type": "SIGN",
+            "state": {
+              "examined": false
+            },
+            "interactions": [
+              {
+                "action_name": "examine_photo",
+                "display_label": "写真を見つめる",
+                "witness_policy": "ACTOR_ONLY",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "wall_photo",
+                      "state_updates": {
+                        "examined": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "若い男たちと、もうひとり年配の人物が並ぶ。撮影日は30年以上前のように見える。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "crumbling_beam",
+            "name": "崩れた梁",
+            "description": "天井から半分崩れ落ちた太い梁。下に潜れば棚の奥を覗き込めそうだが、梁全体が軋んで揺れている。",
+            "object_type": "OTHER",
+            "state": {
+              "shelf_searched": false
+            },
+            "interactions": [
+              {
+                "action_name": "duck_under",
+                "display_label": "梁の下に潜る",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "crumbling_beam",
+                    "required_state": {
+                      "shelf_searched": false
+                    },
+                    "failure_message": "梁の下はもう調べた。これ以上潜るのは無謀だ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "APPLY_DAMAGE",
+                    "parameters": {
+                      "damage": 15,
+                      "message": "梁が肩に落ちて鋭い痛みが走る (HP -15)。"
+                    }
+                  },
+                  {
+                    "effect_type": "APPLY_STATUS_EFFECT",
+                    "parameters": {
+                      "effect_type": "bleeding",
+                      "duration_ticks": 12,
+                      "value": 1.0,
+                      "message": "肩から血が滲み始めた。手当てしないと出血が続く。"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "chart_fragment"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "crumbling_beam",
+                      "state_updates": {
+                        "shelf_searched": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "梁の下、棚の奥から海図の切れ端を引きずり出した。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 8.5,
+        "y": 2.5
+      }
+    },
+    {
+      "id": "lone_hut",
+      "name": "湿地奥の小屋",
+      "description": "沼地のさらに奥、ひとり用の小屋。観測拠点の本館より小さく、隠れ家のような構えだ。雨漏りの跡が天井に残る。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "雨だれが床板を叩く残響",
+        "temperature": "COLD"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "broken_floorboard",
+            "name": "緩んだ床板",
+            "description": "他より一枚だけ浮いた床板。剥がせば下に何か隠されているかもしれない。",
+            "object_type": "CHEST",
+            "state": {
+              "opened": false
+            },
+            "interactions": [
+              {
+                "action_name": "pry_floorboard",
+                "display_label": "床板をこじ開ける",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "broken_floorboard",
+                    "required_state": {
+                      "opened": false
+                    },
+                    "failure_message": "床板の下はすでに調べ尽くした。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "bone_knife",
+                    "failure_message": "床板は固く釘付けされている。刃物がなければ剥がせない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "journal_second_half"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "broken_floorboard",
+                      "state_updates": {
+                        "opened": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "床板の下から、別の筆跡で書かれた手記の後半が出てきた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 9.5,
+        "y": 1.5
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "beach_to_campsite",
+      "from": "shipwreck_beach",
+      "to": "campsite",
+      "name": "浜辺の砂道",
+      "description": "難破船の浜から拠点へ続く砂道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.9
+      }
+    },
+    {
+      "id": "beach_to_tidal",
+      "from": "shipwreck_beach",
+      "to": "tidal_pools",
+      "name": "干潟への岩道",
+      "description": "波打ち際を歩いて干潟へ。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.9
+      }
+    },
+    {
+      "id": "beach_to_rocky",
+      "from": "shipwreck_beach",
+      "to": "rocky_shore",
+      "name": "岩礁への小道",
+      "description": "岩を越えて岩礁海岸へ。嵐の日は波が高く渡れなくなる。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "BARRIER",
+        "state": "INACTIVE",
+        "sound_permeability": 0.7
+      }
+    },
+    {
+      "id": "tidal_to_cove",
+      "from": "tidal_pools",
+      "to": "hidden_cove",
+      "name": "岩陰の細道",
+      "description": "干潟の奥、岩陰の細い道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.6
+      }
+    },
+    {
+      "id": "campsite_to_forest_edge",
+      "from": "campsite",
+      "to": "forest_edge",
+      "name": "森への入口",
+      "description": "拠点の北側、森の入口へ続く道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.8
+      }
+    },
+    {
+      "id": "campsite_to_river_mouth",
+      "from": "campsite",
+      "to": "river_mouth",
+      "name": "河口への道",
+      "description": "拠点の東、河口へ続く砂混じりの道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.9
+      }
+    },
+    {
+      "id": "forest_edge_to_clearing",
+      "from": "forest_edge",
+      "to": "forest_clearing",
+      "name": "森の小道",
+      "description": "森の入口から広場への小道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.7
+      }
+    },
+    {
+      "id": "clearing_to_berry",
+      "from": "forest_clearing",
+      "to": "berry_grove",
+      "name": "ベリーの茂みへの道",
+      "description": "広場から東のベリーの斜面へ。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.8
+      }
+    },
+    {
+      "id": "clearing_to_deep",
+      "from": "forest_clearing",
+      "to": "deep_forest",
+      "name": "深い森への獣道",
+      "description": "広場から北の深い森への暗い道。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.5
+      }
+    },
+    {
+      "id": "clearing_to_oak",
+      "from": "forest_clearing",
+      "to": "tall_oak",
+      "name": "大樫への小道",
+      "description": "広場から大樫へ。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.6
+      }
+    },
+    {
+      "id": "berry_to_stream",
+      "from": "berry_grove",
+      "to": "forest_stream",
+      "name": "茂みから小川への道",
+      "description": "ベリーの茂みから小川へ降りる道。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.7
+      }
+    },
+    {
+      "id": "deep_to_stream",
+      "from": "deep_forest",
+      "to": "forest_stream",
+      "name": "深い森から小川への小道",
+      "description": "深い森を抜けて小川へ。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.6
+      }
+    },
+    {
+      "id": "stream_to_upper",
+      "from": "forest_stream",
+      "to": "river_upper",
+      "name": "上流への小道",
+      "description": "小川を遡って上流へ。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.8
+      }
+    },
+    {
+      "id": "river_mouth_to_upper",
+      "from": "river_mouth",
+      "to": "river_upper",
+      "name": "河岸の道",
+      "description": "河口から川岸を遡って上流へ。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.8
+      }
+    },
+    {
+      "id": "upper_to_spring",
+      "from": "river_upper",
+      "to": "highland_spring",
+      "name": "湧水への登り道",
+      "description": "上流からさらに登って高地の泉へ。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.7
+      }
+    },
+    {
+      "id": "spring_to_foothills",
+      "from": "highland_spring",
+      "to": "foothills",
+      "name": "山麓への道",
+      "description": "泉から山麓への道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.8
+      }
+    },
+    {
+      "id": "foothills_to_path",
+      "from": "foothills",
+      "to": "mountain_path",
+      "name": "山道の登り口",
+      "description": "山麓から崩れかけた石段の山道へ。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.6
+      }
+    },
+    {
+      "id": "foothills_to_cave_entry",
+      "from": "foothills",
+      "to": "cave_entry",
+      "name": "洞窟への分岐",
+      "description": "山麓から洞窟入口への岩道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.5
+      }
+    },
+    {
+      "id": "cave_entry_to_inner",
+      "from": "cave_entry",
+      "to": "cave_inner",
+      "name": "洞窟の通路",
+      "description": "洞窟の奥へ続く狭い通路。満潮時は水没して通れない。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "BARRIER",
+        "state": "INACTIVE",
+        "sound_permeability": 0.4
+      }
+    },
+    {
+      "id": "path_to_lookout",
+      "from": "mountain_path",
+      "to": "cliff_lookout",
+      "name": "崖への小道",
+      "description": "山道から崖の見張り台へ。嵐の日は突風で危険。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "BARRIER",
+        "state": "INACTIVE",
+        "sound_permeability": 0.6
+      }
+    },
+    {
+      "id": "path_to_summit",
+      "from": "mountain_path",
+      "to": "summit",
+      "name": "山頂への最終登り",
+      "description": "山道から山頂へ続く最後の急斜面。蔓のロープがあると登りやすい。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.5
+      }
+    },
+    {
+      "id": "deep_to_swamp",
+      "from": "deep_forest",
+      "to": "swamp",
+      "name": "沼地への下り道",
+      "description": "深い森の南、湿地へ下る道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.6
+      }
+    },
+    {
+      "id": "swamp_to_wreck",
+      "from": "swamp",
+      "to": "plane_wreck",
+      "name": "墜落機への踏み分け道",
+      "description": "沼地の奥に隠された残骸への道。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.5
+      }
+    },
+    {
+      "id": "swamp_to_overgrown",
+      "from": "swamp",
+      "to": "outpost_overgrown_path",
+      "name": "蔓に塞がれた古道",
+      "description": "沼地の北側、塞がれた古い小道の入口。蔓を払えば通れそうだ。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.4
+      }
+    },
+    {
+      "id": "overgrown_to_ruins",
+      "from": "outpost_overgrown_path",
+      "to": "observation_outpost_ruins",
+      "name": "観測拠点跡への最後の道",
+      "description": "蔓を抜けた先に廃屋が見える。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.5
+      }
+    },
+    {
+      "id": "ruins_to_lone_hut",
+      "from": "observation_outpost_ruins",
+      "to": "lone_hut",
+      "name": "廃屋裏の細道",
+      "description": "廃屋の裏手、湿地の奥に小屋への細道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.5
+      }
+    },
+    {
+      "id": "campsite_to_swamp",
+      "from": "campsite",
+      "to": "swamp",
+      "name": "湿地への獣道",
+      "description": "拠点の裏手から沼地へ抜ける、ぬかるんだ獣道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.9
+      }
+    },
+    {
+      "id": "cove_to_ruins",
+      "from": "hidden_cove",
+      "to": "observation_outpost_ruins",
+      "name": "岩陰の小径",
+      "description": "隠し入江の岩陰から、東の廃観測拠点へ続く海沿いの細道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.9
+      }
+    },
+    {
+      "id": "river_mouth_to_swamp",
+      "from": "river_mouth",
+      "to": "swamp",
+      "name": "湿地の縁",
+      "description": "河口の湿った縁を伝って沼地へ回り込む道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.9
+      }
+    },
+    {
+      "id": "summit_to_cliff",
+      "from": "summit",
+      "to": "cliff_lookout",
+      "name": "稜線の道",
+      "description": "山頂と崖の見張り台を結ぶ、風の強い稜線。足を滑らせれば谷底だ。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.9
+      }
+    },
+    {
+      "id": "wreck_to_spring",
+      "from": "plane_wreck",
+      "to": "highland_spring",
+      "name": "斜面の踏み跡",
+      "description": "墜落機の残骸から高地の泉へ、急な斜面をよじ登る踏み跡。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.9
+      }
+    },
+    {
+      "id": "river_upper_to_deep_forest",
+      "from": "river_upper",
+      "to": "deep_forest",
+      "name": "川辺の茂み",
+      "description": "川の上流と深い森を隔てる茂みを抜ける道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.9
+      }
+    },
+    {
+      "id": "berry_to_oak",
+      "from": "berry_grove",
+      "to": "tall_oak",
+      "name": "木立の間道",
+      "description": "ベリーの茂みと大樫の樹の間を縫う小道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN",
+        "sound_permeability": 0.9
+      }
+    }
+  ],
+  "players": [
+    {
+      "id": "ada",
+      "name": "エイダ",
+      "spawn_spot": "shipwreck_beach",
+      "initial_items": [
+        "medicine_photo"
+      ],
+      "persona_prompt": "あなたは漂流した生存者の一人。生き延びることは大事だが、それは仲間との関係や自分の信条と切り離せない (誰かを助けるか・自分を優先するか・黙って動くか は、その都度の判断であって最初から答えが決まっているわけではない)。\n\n毎ターン状況確認に書かれた自分のHPと空腹度を読み取り、危険域に入る前に対処すること。HPが減ったり空腹度が高くなった時に、それを察知して動けるのはあなただけだ (観測として通知が来るとは限らない)。\n\nあなたはエイダ、40代の医師。冷静沈着で、状況の合理的な判定が早い。キノコや薬草の見分けがつく数少ない人間で、毒キノコと食用キノコの区別、薬の効能を識別できる。過去に「誰を救うか」を迫られた経験があり、再び同じ判断を強いられることを内心で恐れている。怪我人や弱った者を見ると、合理性以前に体が反応してしまう。手当ての約束を忘れて済ますことはない。\n\n秘密 (他者には開示していない): 持参した未承認薬の治験中である。写真に残るラベルがそれを裏付ける。もしこの島で救急用品を見つけたとしても、その有効成分は1人分しか効かない (一度きりの heal_hp 50)。誰に使うかを決めるのはあなた次第だが、自分の生存と倫理が衝突する瞬間が必ず来る。\n\n話し方: 落ち着いた敬体。「〜ですね」「〜と思います」。動揺を見せない。"
+    },
+    {
+      "id": "noah",
+      "name": "ノア",
+      "spawn_spot": "shipwreck_beach",
+      "initial_items": [
+        "military_emblem"
+      ],
+      "persona_prompt": "あなたは漂流した生存者の一人。生き延びることは大事だが、それは仲間との関係や自分の信条と切り離せない (誰かを助けるか・自分を優先するか・黙って動くか は、その都度の判断であって最初から答えが決まっているわけではない)。\n\n毎ターン状況確認に書かれた自分のHPと空腹度を読み取り、危険域に入る前に対処すること。HPが減ったり空腹度が高くなった時に、それを察知して動けるのはあなただけだ (観測として通知が来るとは限らない)。\n\nあなたはノア、20代の元自衛官。体力と判断力に自信があり、リーダーとして全員を生還させたいと考えている。指揮を取りたがる傾向がある。仲間が長く戻らない時、自分が動かないと気が済まない性分だ。誰かを置き去りにする決定には深く抵抗がある。\n\n秘密 (他者には開示していない): 実は除隊歴がある。原因はある任務での判断ミスで、結果的に部下を危険に晒した。徽章に刻まれていた所属と番号は、自分でやすりで削った。それを誰にも気付かれたくない。リーダーとして失格と思われることを何より恐れている。\n\n話し方: きびきびした常体。「やる」「行くぞ」「任せろ」。弱音は吐かない。"
+    },
+    {
+      "id": "rio",
+      "name": "リオ",
+      "spawn_spot": "shipwreck_beach",
+      "initial_items": [
+        "wedding_invitation",
+        "flint"
+      ],
+      "persona_prompt": "あなたは漂流した生存者の一人。生き延びることは大事だが、それは仲間との関係や自分の信条と切り離せない (誰かを助けるか・自分を優先するか・黙って動くか は、その都度の判断であって最初から答えが決まっているわけではない)。\n\n毎ターン状況確認に書かれた自分のHPと空腹度を読み取り、危険域に入る前に対処すること。HPが減ったり空腹度が高くなった時に、それを察知して動けるのはあなただけだ (観測として通知が来るとは限らない)。\n\nあなたはリオ、30代の建築技師。寡黙で実直、手が早く、工作と釣りが得意。災害現場の経験があり、ロープ・木材・火打ち石の扱いに慣れている。自分のペースを乱されることが嫌いだが、グループの作業効率は気にする。一人で先行しがちで、戻ってきた時に状況が変わっていると面食らう。\n\n秘密 (他者には開示していない): このツアーの翌週があなたの結婚式だった。招待状の日付がそれを示す。婚約者は今頃、行方不明の連絡で混乱しているはずだ。生きて帰る、それも早く帰る、という焦りがある。焦りが昂じて他者を犠牲にする判断 (食料の隠匿、限られた道具の独占) を取りうる自分を、あなた自身が一番警戒している。\n\n話し方: 短い常体。「悪い」「やっとく」「先行く」。必要以上に話さない。"
+    },
+    {
+      "id": "kai",
+      "name": "カイ",
+      "spawn_spot": "shipwreck_beach",
+      "initial_items": [
+        "vine_rope"
+      ],
+      "persona_prompt": "あなたは漂流した生存者の一人。生き延びることは大事だが、それは仲間との関係や自分の信条と切り離せない (誰かを助けるか・自分を優先するか・黙って動くか は、その都度の判断であって最初から答えが決まっているわけではない)。\n\n毎ターン状況確認に書かれた自分のHPと空腹度を読み取り、危険域に入る前に対処すること。HPが減ったり空腹度が高くなった時に、それを察知して動けるのはあなただけだ (観測として通知が来るとは限らない)。\n\nあなたはカイ、18歳の留学生。陽気で動きが速く、観察力がある。年齢の割に体力もある。年上に対しては素直に頼り、危機の場では空気を読まず一番に動いてしまうところがある。沈黙が苦手で、誰かが黙っていると話しかけたくなる。\n\n秘密 (他者には開示していない): あなたの祖父・藤宮 (ふじみや) はかつて『観測点 S.E.-7』と呼ばれる研究施設の観測員としてこの島に派遣されたまま、1996年に行方不明になった。家族はその話を封印し、あなただけが祖父の名前と『S.E.-7』という地点コードを知っている。観測拠点跡 (廃屋) は島の沼地奥にあるはず、というのも祖父の話から得た情報だ。誰にも告げずに、機会があれば祖父の手記や遺品を探したい。ただし「祖父を探す」が「自分が生きて帰る」より優先することはない。\n\n話し方: 軽い口調。「マジで」「いいよー」「やってみるね」。年長者には適度な敬語を混ぜる。"
+    }
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": []
+  },
+  "initial_flags": [],
+  "loot_tables": [
+    {
+      "id": "deep_fishing_loot",
+      "name": "沖の釣り (天候・時刻に依らない基本テーブル)",
+      "entries": [
+        {
+          "item_spec": "raw_fish",
+          "weight": 60,
+          "min_quantity": 1,
+          "max_quantity": 2
+        },
+        {
+          "item_spec": "shellfish",
+          "weight": 25,
+          "min_quantity": 1,
+          "max_quantity": 2
+        },
+        {
+          "item_spec": "driftwood",
+          "weight": 10
+        },
+        {
+          "item_spec": "chart_fragment",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "stream_fishing_loot",
+      "name": "川釣り (小物中心)",
+      "entries": [
+        {
+          "item_spec": "raw_fish",
+          "weight": 80,
+          "min_quantity": 1,
+          "max_quantity": 1
+        },
+        {
+          "item_spec": "shellfish",
+          "weight": 15
+        },
+        {
+          "item_spec": "vine_rope",
+          "weight": 5
+        }
+      ]
+    }
+  ],
+  "outcome_resolution": {
+    "rescue_at_ticks": [
+      144,
+      192
+    ],
+    "stranded_at_tick": 240,
+    "summit_spot": "summit",
+    "signal_fire_flag": "signal_fire_lit",
+    "starvation_damage_per_tick": 2
+  },
+  "scenario_events": [
+    {
+      "id": "storm_arrives",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {
+          "condition_type": "TICK_AT_LEAST",
+          "tick": 60
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "西の空に黒い雲が広がり、強い風が吹き始めた。嵐が来る。"
+          }
+        },
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "storm_warned",
+            "value": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "random_bird_call",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "TICK_AT_LEAST",
+          "tick": 10
+        },
+        {
+          "condition_type": "PROBABILITY",
+          "probability": 0.08
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "森の奥から鋭い鳥の鳴き声が聞こえた。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tide_rises",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {
+          "condition_type": "TICK_AT_LEAST",
+          "tick": 90
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "high_tide",
+            "value": true
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "潮が満ち、干潟の岩は水没した。洞窟の入口にも海水が押し寄せている。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tide_falls",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {
+          "condition_type": "TICK_AT_LEAST",
+          "tick": 150
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "high_tide",
+            "value": false
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "潮が引き、干潟と洞窟の入口が再び露わになった。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "rescue_ship_first_pass",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {
+          "condition_type": "TICK_AT_LEAST",
+          "tick": 144
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "FLAG_SET",
+              "flag_name": "signal_fire_lit"
+            }
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "遠く水平線を、一隻の船影が通り過ぎていく。狼煙は上がっていない。気付かれなかった。次の機会は明日 — それが最後だ。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "rescue_ship_first_arrive",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {
+          "condition_type": "TICK_AT_LEAST",
+          "tick": 144
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "signal_fire_lit"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "水平線の彼方に船影が現れ、こちらに向かってくる。狼煙に気付いたのだ。山頂に居る者だけが救助される。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "rescue_ship_late_arrive",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {
+          "condition_type": "TICK_AT_LEAST",
+          "tick": 192
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "signal_fire_lit"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "二度目、そして最後の救助船が水平線に姿を見せた。これを逃せばもう救助はない。山頂に居る者だけが救助される。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "outpost_discovered",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {
+          "condition_type": "OR",
+          "children": [
+            {
+              "condition_type": "PLAYER_AT_SPOT",
+              "player_id": "ada",
+              "spot_id": "observation_outpost_ruins"
+            },
+            {
+              "condition_type": "PLAYER_AT_SPOT",
+              "player_id": "noah",
+              "spot_id": "observation_outpost_ruins"
+            },
+            {
+              "condition_type": "PLAYER_AT_SPOT",
+              "player_id": "rio",
+              "spot_id": "observation_outpost_ruins"
+            },
+            {
+              "condition_type": "PLAYER_AT_SPOT",
+              "player_id": "kai",
+              "spot_id": "observation_outpost_ruins"
+            }
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "outpost_discovered",
+            "value": true
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "誰かが沼地奥の廃屋に踏み入った。崩れた屋根の下に、まだ机と棚が残っている。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "lone_hut_discovered",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {
+          "condition_type": "OR",
+          "children": [
+            {
+              "condition_type": "PLAYER_AT_SPOT",
+              "player_id": "ada",
+              "spot_id": "lone_hut"
+            },
+            {
+              "condition_type": "PLAYER_AT_SPOT",
+              "player_id": "noah",
+              "spot_id": "lone_hut"
+            },
+            {
+              "condition_type": "PLAYER_AT_SPOT",
+              "player_id": "rio",
+              "spot_id": "lone_hut"
+            },
+            {
+              "condition_type": "PLAYER_AT_SPOT",
+              "player_id": "kai",
+              "spot_id": "lone_hut"
+            }
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "lone_hut_discovered",
+            "value": true
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "廃屋の裏手、湿地の奥にひとり用の小屋がある。誰かが本館とは別に隠れていたかのような造りだ。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "rescue_ship_second_pass",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {
+          "condition_type": "TICK_AT_LEAST",
+          "tick": 192
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "FLAG_SET",
+              "flag_name": "signal_fire_lit"
+            }
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "最後の船も、狼煙のない島に気付かず去っていった。水平線には、もう何も見えない。"
+          }
+        }
+      ]
+    }
+  ],
+  "reactive_bindings": {
+    "objects": [
+      {
+        "target": "driftwood_pile",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "driftwood_pile",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 16
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "波が新たに流木を浜辺に打ち上げているのが見える。"
+      },
+      {
+        "target": "fallen_leaves",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "fallen_leaves",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 24
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "風が新しい枯れ葉を広場の縁に運んできた。"
+      },
+      {
+        "target": "safe_mushroom_patch",
+        "predicate": {
+          "condition_type": "AND",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "safe_mushroom_patch",
+              "state_key": "last_harvest_tick",
+              "ticks_offset": 60
+            },
+            {
+              "condition_type": "NOT",
+              "children": [
+                {
+                  "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+                  "target_object": "safe_mushroom_patch",
+                  "state_key": "harvest_count",
+                  "ticks_offset": 6
+                }
+              ]
+            }
+          ]
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "湿った苔の上に新しい食用キノコが顔を出しているのが見える。"
+      },
+      {
+        "target": "toxic_mushroom_patch",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "toxic_mushroom_patch",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 60
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "色鮮やかな毒キノコが群生し直しているのが見える。"
+      },
+      {
+        "target": "stream_fishing_point",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "stream_fishing_point",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 32
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "小川の淀みに魚影がまた集まってきた。"
+      },
+      {
+        "target": "deep_fishing_point",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "deep_fishing_point",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 40
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "沖の深場に大きな魚影が戻ってきたのが波越しに見える。"
+      },
+      {
+        "target": "river_drink",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "river_drink",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 12
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "河の濁りが収まり、水が再び澄んで見える。"
+      },
+      {
+        "target": "spring_source",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "spring_source",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 12
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "泉が再び満ちて、澄んだ水を湛えている。"
+      },
+      {
+        "target": "vine_thicket",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "vine_thicket",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 48
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "蔦が新しく伸びて、また切り取れそうに見える。"
+      },
+      {
+        "target": "stone_outcrop",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "stone_outcrop",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 36
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "波がまた岩を削り、新しい刃片が露出している。"
+      }
+    ],
+    "passages": [
+      {
+        "target": "beach_to_rocky",
+        "predicate": {
+          "condition_type": "WEATHER_IS",
+          "weather_type": "STORM"
+        },
+        "on_true_state": "ACTIVE",
+        "on_false_state": "INACTIVE"
+      },
+      {
+        "target": "path_to_lookout",
+        "predicate": {
+          "condition_type": "WEATHER_IS",
+          "weather_type": "STORM"
+        },
+        "on_true_state": "ACTIVE",
+        "on_false_state": "INACTIVE"
+      },
+      {
+        "target": "cave_entry_to_inner",
+        "predicate": {
+          "condition_type": "FLAG_SET",
+          "flag_name": "high_tide"
+        },
+        "on_true_state": "ACTIVE",
+        "on_false_state": "INACTIVE"
+      }
+    ]
+  }
+}
