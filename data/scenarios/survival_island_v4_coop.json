@@ -633,7 +633,8 @@
       "position": {
         "x": 4.0,
         "y": 2.0
-      }
+      },
+      "area_id": "shore"
     },
     {
       "id": "campsite",
@@ -929,7 +930,8 @@
       "position": {
         "x": 4.0,
         "y": 4.0
-      }
+      },
+      "area_id": "base"
     },
     {
       "id": "tidal_pools",
@@ -1009,7 +1011,8 @@
       "position": {
         "x": 6.0,
         "y": 1.5
-      }
+      },
+      "area_id": "shore"
     },
     {
       "id": "rocky_shore",
@@ -1188,7 +1191,8 @@
       "position": {
         "x": 2.0,
         "y": 2.0
-      }
+      },
+      "area_id": "shore"
     },
     {
       "id": "hidden_cove",
@@ -1306,7 +1310,8 @@
       "position": {
         "x": 7.5,
         "y": 1.0
-      }
+      },
+      "area_id": "shore"
     },
     {
       "id": "forest_edge",
@@ -1380,7 +1385,8 @@
       "position": {
         "x": 2.8,
         "y": 5.0
-      }
+      },
+      "area_id": "forest"
     },
     {
       "id": "forest_clearing",
@@ -1457,7 +1463,8 @@
       "position": {
         "x": 2.5,
         "y": 6.5
-      }
+      },
+      "area_id": "forest"
     },
     {
       "id": "berry_grove",
@@ -1589,7 +1596,8 @@
       "position": {
         "x": 2.0,
         "y": 7.8
-      }
+      },
+      "area_id": "forest"
     },
     {
       "id": "deep_forest",
@@ -1731,7 +1739,8 @@
       "position": {
         "x": 5.2,
         "y": 6.5
-      }
+      },
+      "area_id": "forest"
     },
     {
       "id": "forest_stream",
@@ -1818,7 +1827,8 @@
       "position": {
         "x": 4.5,
         "y": 8.2
-      }
+      },
+      "area_id": "river"
     },
     {
       "id": "tall_oak",
@@ -1882,7 +1892,8 @@
       "position": {
         "x": 3.5,
         "y": 7.5
-      }
+      },
+      "area_id": "forest"
     },
     {
       "id": "river_mouth",
@@ -1958,7 +1969,8 @@
       "position": {
         "x": 4.5,
         "y": 5.5
-      }
+      },
+      "area_id": "river"
     },
     {
       "id": "river_upper",
@@ -1977,7 +1989,8 @@
       "position": {
         "x": 6.3,
         "y": 7.3
-      }
+      },
+      "area_id": "river"
     },
     {
       "id": "highland_spring",
@@ -2059,7 +2072,8 @@
       "position": {
         "x": 7.0,
         "y": 8.0
-      }
+      },
+      "area_id": "mountain"
     },
     {
       "id": "foothills",
@@ -2112,7 +2126,8 @@
       "position": {
         "x": 7.6,
         "y": 9.1
-      }
+      },
+      "area_id": "mountain"
     },
     {
       "id": "cliff_lookout",
@@ -2169,7 +2184,8 @@
       "position": {
         "x": 9.2,
         "y": 9.0
-      }
+      },
+      "area_id": "mountain"
     },
     {
       "id": "mountain_path",
@@ -2188,7 +2204,8 @@
       "position": {
         "x": 8.4,
         "y": 9.6
-      }
+      },
+      "area_id": "mountain"
     },
     {
       "id": "cave_entry",
@@ -2206,7 +2223,8 @@
       "position": {
         "x": 6.4,
         "y": 9.2
-      }
+      },
+      "area_id": "mountain"
     },
     {
       "id": "cave_inner",
@@ -2305,7 +2323,8 @@
       "position": {
         "x": 5.8,
         "y": 10.1
-      }
+      },
+      "area_id": "mountain"
     },
     {
       "id": "summit",
@@ -2418,7 +2437,8 @@
       "position": {
         "x": 8.7,
         "y": 10.9
-      }
+      },
+      "area_id": "mountain"
     },
     {
       "id": "swamp",
@@ -2505,7 +2525,8 @@
       "position": {
         "x": 6.0,
         "y": 4.5
-      }
+      },
+      "area_id": "swamp"
     },
     {
       "id": "plane_wreck",
@@ -2578,7 +2599,8 @@
       "position": {
         "x": 8.0,
         "y": 6.3
-      }
+      },
+      "area_id": "swamp"
     },
     {
       "id": "outpost_overgrown_path",
@@ -2632,7 +2654,8 @@
       "position": {
         "x": 7.0,
         "y": 3.0
-      }
+      },
+      "area_id": "swamp"
     },
     {
       "id": "observation_outpost_ruins",
@@ -2797,7 +2820,8 @@
       "position": {
         "x": 8.5,
         "y": 2.5
-      }
+      },
+      "area_id": "swamp"
     },
     {
       "id": "lone_hut",
@@ -2869,7 +2893,8 @@
       "position": {
         "x": 9.5,
         "y": 1.5
-      }
+      },
+      "area_id": "swamp"
     }
   ],
   "connections": [
@@ -3915,5 +3940,47 @@
         "on_false_state": "INACTIVE"
       }
     ]
-  }
+  },
+  "areas": [
+    {
+      "id": "shore",
+      "name": "南岸",
+      "visible_name": "白い砂浜と海辺",
+      "prominence": 0.3
+    },
+    {
+      "id": "base",
+      "name": "拠点",
+      "visible_name": "拠点の焚き火跡",
+      "prominence": 0.0
+    },
+    {
+      "id": "forest",
+      "name": "森",
+      "visible_name": "深い森の緑",
+      "prominence": 0.45
+    },
+    {
+      "id": "river",
+      "name": "川筋",
+      "visible_name": "内陸へ延びる川筋",
+      "prominence": 0.3
+    },
+    {
+      "id": "mountain",
+      "name": "山岳",
+      "visible_name": "切り立った山影",
+      "prominence": 0.95,
+      "distant_descriptions": {
+        "far": "北東の遠くに切り立った山影が見える。",
+        "middle": "北東に山岳の高みが見える。"
+      }
+    },
+    {
+      "id": "swamp",
+      "name": "東の低湿地",
+      "visible_name": "湿った低地",
+      "prominence": 0.3
+    }
+  ]
 }

@@ -48,6 +48,17 @@ class TestSurvivalIslandV4Load:
         assert sum(1 for spot in spots if spot.position is not None) == 25
         assert len(loaded_v4.graph.all_connections()) == 66
 
+    def test_loads_six_areas_and_all_spots_have_area_id(self, loaded_v4) -> None:
+        """v4 は6区画の area 定義を持ち、全 spot がいずれかの area_id に属する。"""
+        areas = {area.area_id: area for area in loaded_v4.areas}
+        spots = list(loaded_v4.graph.iter_spot_nodes())
+
+        assert set(areas) == {"shore", "base", "forest", "river", "mountain", "swamp"}
+        assert all(spot.area_id in areas for spot in spots)
+        assert areas["mountain"].visible_name == "切り立った山影"
+        assert areas["mountain"].prominence == 0.95
+        assert areas["mountain"].position_source == "centroid"
+
 
 class TestSurvivalIslandV4MapValidation:
     """v4 の座標・接続品質を spot map validator で固定する。"""
@@ -67,6 +78,7 @@ class TestSurvivalIslandV4MapValidation:
         assert result.errors == []
         assert result.skipped_checks == []
         assert result.metrics["positioned_spot_count"] == 25
+        assert result.metrics["area_count"] == 6
         assert result.metrics["unreachable_spots"] == []
         assert result.metrics["cycle_rank"] == 9
         assert result.metrics["articulation_spots"] == [
@@ -80,6 +92,8 @@ class TestSurvivalIslandV4MapValidation:
         assert "TRAVEL_TICKS_DISTANCE_MISMATCH" not in {
             issue.code for issue in result.warnings
         }
+        assert "SPOT_AREA_ID_MISSING" not in {issue.code for issue in result.warnings}
+        assert "AREA_CENTROID_UNAVAILABLE" not in {issue.code for issue in result.errors}
 
 
 class TestSurvivalIslandV4CoveCarving:

@@ -26,6 +26,16 @@ from ai_rpg_world.infrastructure.scenario.spot_map_validator import (  # noqa: E
 
 _MARGIN = 24.0
 _TARGET_SPAN = 400.0
+_AREA_COLORS = (
+    "#7ccf91",
+    "#6fb7ff",
+    "#d8a14a",
+    "#b58cff",
+    "#f07878",
+    "#64d8cb",
+    "#c8d85a",
+    "#f08bd0",
+)
 
 
 @dataclass(frozen=True)
@@ -34,6 +44,21 @@ class _Spot:
     name: str
     x: Optional[float]
     y: Optional[float]
+    area_id: Optional[str] = None
+
+    @property
+    def is_positioned(self) -> bool:
+        return self.x is not None and self.y is not None
+
+
+@dataclass(frozen=True)
+class _Area:
+    area_id: str
+    name: str
+    visible_name: str
+    x: Optional[float]
+    y: Optional[float]
+    color: str
 
     @property
     def is_positioned(self) -> bool:
@@ -65,11 +90,14 @@ def render_spot_map_html(
     """scenario JSON 由来の dict から単体で開ける地図 HTML を生成する。"""
 
     spots = _spots(raw)
+    areas = _areas(raw, spots)
     connections = _connections(raw)
     spot_by_id = {spot.spot_id: spot for spot in spots}
     positioned = [spot for spot in spots if spot.is_positioned]
     unpositioned = [spot for spot in spots if not spot.is_positioned]
     screen_points = _screen_points(positioned)
+    area_screen_points = _area_screen_points(areas, positioned)
+    area_by_spot = _area_by_spot(spots, areas)
     validation = validate_spot_map(
         raw,
         MapValidationConfig(
@@ -85,10 +113,18 @@ def render_spot_map_html(
     body = "\n".join(
         [
             _render_edges(connections, spot_by_id, screen_points),
-            _render_spots(positioned, screen_points, key_spot_set, unreachable_spots),
+            _render_area_labels(areas, area_screen_points),
+            _render_spots(
+                positioned,
+                screen_points,
+                key_spot_set,
+                unreachable_spots,
+                area_by_spot,
+            ),
         ]
     )
     unpositioned_html = _render_unpositioned(unpositioned, total_count=len(spots))
+    area_legend_html = _render_area_legend(areas)
     summary_html = _render_summary(
         validation_ok=validation.ok,
         warning_count=len(validation.warnings),
@@ -115,6 +151,7 @@ def render_spot_map_html(
       --node: #f0eef5;
       --key: #ffd166;
       --bad: #ff6b6b;
+      --area-label: #fff1b8;
     }}
     body {{
       margin: 0;
@@ -160,6 +197,10 @@ def render_spot_map_html(
       stroke: #7a6db8;
       stroke-width: 3;
     }}
+    .spot-node.area-colored circle {{
+      fill: var(--area-color);
+      stroke: #24201c;
+    }}
     .spot-node.key-spot circle {{ fill: var(--key); stroke: #a86f00; }}
     .spot-node.unreachable-spot circle {{ fill: var(--bad); stroke: #8d2020; }}
     .spot-label {{
@@ -170,6 +211,24 @@ def render_spot_map_html(
       dominant-baseline: middle;
       pointer-events: none;
     }}
+    .area-label text {{
+      fill: var(--area-label);
+      font-size: 16px;
+      font-weight: 800;
+      text-anchor: middle;
+      paint-order: stroke;
+      stroke: #171313;
+      stroke-width: 5px;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }}
+    .area-label circle {{
+      fill: none;
+      stroke: var(--area-color);
+      stroke-width: 2;
+      stroke-dasharray: 5 4;
+      opacity: 0.8;
+    }}
     .legend {{ display: grid; gap: 8px; margin-top: 12px; color: var(--muted); }}
     .legend span {{ display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }}
     .legend .key {{ background: var(--key); }}
@@ -177,6 +236,10 @@ def render_spot_map_html(
     .legend .normal {{ background: var(--node); }}
     .summary {{ display: grid; gap: 6px; color: var(--muted); margin-bottom: 14px; }}
     .summary strong {{ color: var(--ink); }}
+    .area-legend {{ margin: 0 0 14px; }}
+    .area-legend ol {{ margin: 0; padding-left: 18px; }}
+    .area-legend li {{ margin: 5px 0; color: var(--ink); }}
+    .area-legend .swatch {{ display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }}
     .unpositioned-list {{ margin: 0; padding-left: 18px; color: var(--ink); }}
     .unpositioned-list li {{ margin: 5px 0; }}
     .empty-note {{ color: var(--muted); }}
@@ -203,6 +266,7 @@ def render_spot_map_html(
     </section>
     <aside class="panel">
       {summary_html}
+      {area_legend_html}
       {unpositioned_html}
     </aside>
   </main>
@@ -264,8 +328,71 @@ def _spots(raw: Mapping[str, Any]) -> list[_Spot]:
                 if not isinstance(raw_x, bool) and not isinstance(raw_y, bool):
                     x = float(raw_x)
                     y = float(raw_y)
-        out.append(_Spot(spot_id=spot_id, name=str(name or spot_id), x=x, y=y))
+        area_id = item.get("area_id")
+        out.append(
+            _Spot(
+                spot_id=spot_id,
+                name=str(name or spot_id),
+                x=x,
+                y=y,
+                area_id=area_id.strip()
+                if isinstance(area_id, str) and area_id.strip()
+                else None,
+            )
+        )
     return out
+
+
+def _areas(raw: Mapping[str, Any], spots: Sequence[_Spot]) -> list[_Area]:
+    out: list[_Area] = []
+    for index, item in enumerate(_list_value(raw, "areas")):
+        if not isinstance(item, Mapping):
+            continue
+        area_id = item.get("id")
+        name = item.get("name")
+        visible_name = item.get("visible_name")
+        if not isinstance(area_id, str) or not area_id.strip():
+            continue
+        if not isinstance(name, str) or not name.strip():
+            continue
+        if not isinstance(visible_name, str) or not visible_name.strip():
+            continue
+        x, y = _area_world_position(item, area_id.strip(), spots)
+        out.append(
+            _Area(
+                area_id=area_id.strip(),
+                name=name.strip(),
+                visible_name=visible_name.strip(),
+                x=x,
+                y=y,
+                color=_AREA_COLORS[index % len(_AREA_COLORS)],
+            )
+        )
+    return out
+
+
+def _area_world_position(
+    item: Mapping[str, Any],
+    area_id: str,
+    spots: Sequence[_Spot],
+) -> tuple[Optional[float], Optional[float]]:
+    position = item.get("position")
+    if isinstance(position, Mapping):
+        raw_x = position.get("x")
+        raw_y = position.get("y")
+        if _is_number(raw_x) and _is_number(raw_y):
+            return float(raw_x), float(raw_y)
+    members = [
+        spot
+        for spot in spots
+        if spot.area_id == area_id and spot.x is not None and spot.y is not None
+    ]
+    if not members:
+        return None, None
+    return (
+        sum(spot.x for spot in members if spot.x is not None) / len(members),
+        sum(spot.y for spot in members if spot.y is not None) / len(members),
+    )
 
 
 def _connections(raw: Mapping[str, Any]) -> list[_Connection]:
@@ -309,6 +436,46 @@ def _screen_points(spots: Sequence[_Spot]) -> dict[str, _ScreenPoint]:
             x=_MARGIN + (spot.x - min_x) * scale,
             y=_MARGIN + (max_y - spot.y) * scale,
         )
+    return out
+
+
+def _area_screen_points(
+    areas: Sequence[_Area],
+    positioned_spots: Sequence[_Spot],
+) -> dict[str, _ScreenPoint]:
+    if not positioned_spots:
+        return {}
+    xs = [spot.x for spot in positioned_spots if spot.x is not None]
+    ys = [spot.y for spot in positioned_spots if spot.y is not None]
+    min_x = min(xs)
+    max_x = max(xs)
+    min_y = min(ys)
+    max_y = max(ys)
+    span = max(max_x - min_x, max_y - min_y, 1.0)
+    scale = _TARGET_SPAN / span
+    out: dict[str, _ScreenPoint] = {}
+    for area in areas:
+        if area.x is None or area.y is None:
+            continue
+        out[area.area_id] = _ScreenPoint(
+            x=_MARGIN + (area.x - min_x) * scale,
+            y=_MARGIN + (max_y - area.y) * scale,
+        )
+    return out
+
+
+def _area_by_spot(
+    spots: Sequence[_Spot],
+    areas: Sequence[_Area],
+) -> dict[str, _Area]:
+    areas_by_id = {area.area_id: area for area in areas}
+    out: dict[str, _Area] = {}
+    for spot in spots:
+        if spot.area_id is None:
+            continue
+        area = areas_by_id.get(spot.area_id)
+        if area is not None:
+            out[spot.spot_id] = area
     return out
 
 
@@ -357,23 +524,58 @@ def _render_spots(
     screen_points: Mapping[str, _ScreenPoint],
     key_spots: set[str],
     unreachable_spots: set[str],
+    area_by_spot: Mapping[str, _Area],
 ) -> str:
     rows: list[str] = []
     for spot in spots:
         point = screen_points[spot.spot_id]
         classes = ["spot-node"]
+        style = ""
+        area = area_by_spot.get(spot.spot_id)
+        if area is not None:
+            classes.append("area-colored")
+            style = f' style="--area-color: {html.escape(area.color)}"'
         if spot.spot_id in key_spots:
             classes.append("key-spot")
         if spot.spot_id in unreachable_spots:
             classes.append("unreachable-spot")
         rows.append(
             f'<g class="{" ".join(classes)}" data-spot-id="{html.escape(spot.spot_id)}" '
-            f'data-screen-x="{point.x:.1f}" data-screen-y="{point.y:.1f}">'
+            f'data-screen-x="{point.x:.1f}" data-screen-y="{point.y:.1f}"{style}>'
             f'<circle cx="{point.x:.1f}" cy="{point.y:.1f}" r="28"></circle>'
             f'<text class="spot-label" x="{point.x:.1f}" y="{point.y:.1f}">{html.escape(spot.name)}</text>'
             "</g>"
         )
     return "\n        ".join(rows)
+
+
+def _render_area_labels(
+    areas: Sequence[_Area],
+    screen_points: Mapping[str, _ScreenPoint],
+) -> str:
+    rows: list[str] = []
+    for area in areas:
+        point = screen_points.get(area.area_id)
+        if point is None:
+            continue
+        rows.append(
+            f'<g class="area-label" style="--area-color: {html.escape(area.color)}">'
+            f'<circle cx="{point.x:.1f}" cy="{point.y:.1f}" r="42"></circle>'
+            f'<text x="{point.x:.1f}" y="{point.y - 48:.1f}">{html.escape(area.visible_name)}</text>'
+            "</g>"
+        )
+    return "\n        ".join(rows)
+
+
+def _render_area_legend(areas: Sequence[_Area]) -> str:
+    if not areas:
+        return ""
+    rows = "\n".join(
+        f'<li><span class="swatch" style="background: {html.escape(area.color)}"></span>'
+        f"{html.escape(area.visible_name)}</li>"
+        for area in areas
+    )
+    return f'<section class="area-legend"><h2>エリア</h2><ol>{rows}</ol></section>'
 
 
 def _render_unpositioned(spots: Sequence[_Spot], *, total_count: int) -> str:
@@ -407,6 +609,10 @@ def _render_summary(
 def _list_value(raw: Mapping[str, Any], key: str) -> list[Any]:
     value = raw.get(key)
     return value if isinstance(value, list) else []
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 if __name__ == "__main__":

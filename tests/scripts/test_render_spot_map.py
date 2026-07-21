@@ -16,12 +16,16 @@ def _scenario(
     spots: list[dict],
     connections: list[dict],
     players: list[dict] | None = None,
+    areas: list[dict] | None = None,
 ) -> dict:
-    return {
+    raw = {
         "spots": spots,
         "connections": connections,
         "players": players or [{"id": "p1", "name": "P1", "spawn_spot": spots[0]["id"]}],
     }
+    if areas is not None:
+        raw["areas"] = areas
+    return raw
 
 
 def _spot(spot_id: str, *, name: str | None = None, x: float | None = None, y: float | None = None) -> dict:
@@ -107,6 +111,55 @@ class TestRenderSpotMapHtml:
         assert "重要地点" in html
         assert "到達不能" in html
 
+    def test_area_overlay_uses_visible_name_without_rendering_area_id(self) -> None:
+        """area は visible_name でラベルと凡例に出し、内部 area_id は HTML に出さない。"""
+        raw = _scenario(
+            areas=[
+                {
+                    "id": "internal_mountain",
+                    "name": "山岳",
+                    "visible_name": "切り立った山影",
+                    "prominence": 0.95,
+                }
+            ],
+            spots=[
+                {**_spot("ridge", name="尾根", x=0, y=0), "area_id": "internal_mountain"},
+                {**_spot("summit", name="山頂", x=10, y=0), "area_id": "internal_mountain"},
+            ],
+            connections=[_edge("ridge_summit", "ridge", "summit")],
+        )
+
+        html = render_spot_map_html(raw, title="area")
+
+        assert "切り立った山影" in html
+        assert "area-label" in html
+        assert "area-legend" in html
+        assert "internal_mountain" not in html
+
+    def test_area_overlay_works_with_partially_unpositioned_spots(self) -> None:
+        """position 未設定 spot が混じっても、配置済み spot の area overlay と未配置一覧を両立する。"""
+        raw = _scenario(
+            areas=[
+                {
+                    "id": "shore_area",
+                    "name": "南岸",
+                    "visible_name": "白い砂浜と海辺",
+                    "prominence": 0.3,
+                }
+            ],
+            spots=[
+                {**_spot("beach", name="浜", x=0, y=0), "area_id": "shore_area"},
+                {**_spot("cove", name="入江"), "area_id": "shore_area"},
+            ],
+            connections=[_edge("beach_cove", "beach", "cove")],
+        )
+
+        html = render_spot_map_html(raw, title="partial-area")
+
+        assert "白い砂浜と海辺" in html
+        assert "未配置 spot: 1 / 2" in html
+        assert "shore_area" not in html
+
 
 def test_cli_writes_html_file_for_positionless_scenario(tmp_path: Path) -> None:
     """CLI は position 無し scenario でも未配置一覧つき HTML を出力して終了コード 0 を返す。"""
@@ -141,3 +194,29 @@ def test_survival_island_v3_without_positions_renders_unpositioned_list(tmp_path
     html = output_path.read_text(encoding="utf-8")
     assert "未配置 spot: 25 / 25" in html
     assert "shipwreck_beach" in html
+
+
+def test_survival_island_v4_with_areas_renders_full_area_map(tmp_path: Path) -> None:
+    """v4coop は未配置0の俯瞰図として、area の visible_name を地図内と凡例に出す。"""
+    output_path = tmp_path / "v4coop_map.html"
+    scenario_path = SCENARIO_DIR / "survival_island_v4_coop.json"
+
+    exit_code = main(
+        [
+            str(scenario_path),
+            "--output",
+            str(output_path),
+            "--start-spot",
+            "campsite",
+            "--key-spot",
+            "summit",
+        ]
+    )
+
+    assert exit_code == 0
+    html = output_path.read_text(encoding="utf-8")
+    assert "未配置 spot: 0 / 25" in html
+    assert "白い砂浜と海辺" in html
+    assert "切り立った山影" in html
+    assert "湿った低地" in html
+    assert "area-legend" in html
