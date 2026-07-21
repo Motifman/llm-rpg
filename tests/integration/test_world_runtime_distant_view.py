@@ -7,8 +7,9 @@ from typing import Any
 
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from tests.runtime_config_helpers import runtime_config
+from tests.runtime_config_helpers import episodic_config, runtime_config
 
 
 _SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "data" / "scenarios"
@@ -63,6 +64,35 @@ class TestDistantViewRuntimePrompt:
 
         assert "北東の遠くに切り立った山影が見える。" not in text
         assert "遠景:" not in text
+
+    def test_distant_view_is_prompt_only_and_not_written_to_observation_or_episode(
+        self,
+    ) -> None:
+        """遠景は prompt にだけ出て、recent observation と episode 記憶を汚さない。"""
+        runtime = create_world_runtime(_V4, config=episodic_config())
+        player_id = PlayerId(1)
+        distant_phrase = "北東の遠くに切り立った山影が見える。"
+
+        text = runtime.build_llm_context(player_id).current_state_text
+
+        assert distant_phrase in text
+        recent_observations = runtime._obs_buffer.get_observations(player_id)
+        recent_observation_text = "\n".join(
+            getattr(entry.output, "prose", "") for entry in recent_observations
+        )
+        assert distant_phrase not in recent_observation_text
+
+        stack = runtime._episodic_stack
+        assert stack is not None
+        episodes = stack.episode_store.list_recent_by_being(
+            BeingId("being_w1_p1"),
+            limit=20,
+        )
+        episode_text = "\n".join(
+            f"{episode.title}\n{episode.summary}\n{episode.recall_text}"
+            for episode in episodes
+        )
+        assert distant_phrase not in episode_text
 
 
 class TestDistantViewRuntimeTrace:
