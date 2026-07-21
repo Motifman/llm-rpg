@@ -24,6 +24,10 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         lines.append(f"現在地: {snap.current_spot_name}")
         if snap.current_spot_description.strip():
             lines.append(f"  {snap.current_spot_description.strip()}")
+        for distant_line in snap.distant_view_lines:
+            text = distant_line.strip()
+            if text:
+                lines.append(f"  {text}")
         if snap.travel_status_line:
             lines.append(snap.travel_status_line)
 

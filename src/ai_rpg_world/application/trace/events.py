@@ -177,6 +177,12 @@ class TraceEventKind:
     #   - shortlist_belief_ids: list[str] (LLM に提示した既存 belief の belief_id)
     #   - decisions: list[dict] (LLM 応答の decisions をそのまま)
     BELIEF_CONSOLIDATION = "belief_consolidation"
+    # 常時遠景の prompt 表示可視化。ambient 系なので既定では発火せず、
+    # DISTANT_VIEW_TRACE_ENABLED 等の明示設定時だけ prompt build ごとに残す。
+    # payload: spot_id / current_area_id / candidate_count / rendered_count /
+    # rendered_area_ids / skipped_reasons / thresholds
+    DISTANT_VIEW_RENDERED = "distant_view_rendered"
+    DISTANT_VIEW_SKIPPED = "distant_view_skipped"
     # 案A (band-gated thinking): 停滞感 band が strong の局面で、停滞 reflect の
     # 注入直後の行動に限り reasoning (熟考) を有効化した瞬間。「いつ・なぜ熟考を
     # 焚いたか」を trace から追えるようにする (tool-calling 経路では思考本文は
