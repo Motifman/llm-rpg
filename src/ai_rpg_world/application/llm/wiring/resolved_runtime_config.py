@@ -54,6 +54,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BELIEF_ATTRIBUTION_ENABLED",
     "BELIEF_CONSOLIDATION_ENABLED",
     "BELIEF_EVIDENCE_ENABLED",
+    "DISTANT_VIEW_TRACE_ENABLED",
     "EPISODIC_EXPLORE_RELATED_ENABLED",
     "EPISODIC_PROMOTION_EXPANSION_HOPS",
     "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
@@ -282,6 +283,7 @@ class ResolvedLlmRuntimeConfig:
     scenario_random_seed: Optional[int] = None
     prompt_dataset_capture_enabled: bool = False
     prompt_dataset_capture_failure_policy: str = "fail"
+    distant_view_trace_enabled: bool = False
 
     # Episode store の永続化先 (``SUBJECTIVE_EPISODE_DB_PATH``)。None なら in-memory。
     # 実 path 指定時は SQLite 永続化。従来 ``_default_episodic_episode_store`` が
@@ -575,6 +577,9 @@ class ResolvedLlmRuntimeConfig:
         prompt_dataset_capture_failure_policy = (
             source.get("PROMPT_DATASET_CAPTURE_FAILURE_POLICY") or "fail"
         ).strip().lower()
+        distant_view_trace_enabled = _parse_truthy(
+            source.get("DISTANT_VIEW_TRACE_ENABLED"), default=False
+        )
         subjective_episode_db_path = _strip_or_none(
             source.get("SUBJECTIVE_EPISODE_DB_PATH")
         )
@@ -643,6 +648,7 @@ class ResolvedLlmRuntimeConfig:
             scenario_random_seed=scenario_random_seed,
             prompt_dataset_capture_enabled=prompt_dataset_capture_enabled,
             prompt_dataset_capture_failure_policy=prompt_dataset_capture_failure_policy,
+            distant_view_trace_enabled=distant_view_trace_enabled,
             subjective_episode_db_path=subjective_episode_db_path,
         )
 
@@ -729,6 +735,7 @@ class ResolvedLlmRuntimeConfig:
             scenario_random_seed=None,
             prompt_dataset_capture_enabled=False,
             prompt_dataset_capture_failure_policy="fail",
+            distant_view_trace_enabled=False,
             subjective_episode_db_path=None,
         )
         unknown = set(overrides) - set(defaults)

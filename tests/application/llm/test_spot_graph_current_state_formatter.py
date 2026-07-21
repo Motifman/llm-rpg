@@ -85,6 +85,40 @@ class TestPlayerStateSection:
         assert "cursed=true" in text
 
 
+class TestDistantViewSection:
+    """常時遠景を現在地説明へ織り込む表示。"""
+
+    def test_renders_distant_view_after_current_spot_description(self) -> None:
+        """遠景文は現在地説明の直後に入り、独立見出しを作らない。"""
+        snap = _empty_snap(
+            current_spot_name="浜辺",
+            current_spot_description="白い砂と流木が散らばっている。",
+            distant_view_lines=("北東に切り立った山影が見える。",),
+        )
+
+        text = SpotGraphCurrentStateFormatter().format(_make_dto(snap))
+
+        lines = text.splitlines()
+        assert lines[:3] == [
+            "現在地: 浜辺",
+            "  白い砂と流木が散らばっている。",
+            "  北東に切り立った山影が見える。",
+        ]
+        assert "遠景:" not in text
+
+    def test_distant_view_does_not_render_internal_area_id(self) -> None:
+        """遠景本文には area_id を出さず、visible_name 由来の文だけを表示する。"""
+        snap = _empty_snap(
+            distant_view_lines=("北東に切り立った山影が見える。",),
+        )
+
+        text = SpotGraphCurrentStateFormatter().format(_make_dto(snap))
+
+        assert "切り立った山影" in text
+        assert "internal_mountain" not in text
+        assert "area_id" not in text
+
+
 class TestObjectStateSection:
     """スポット内オブジェクトの state セクションの表示。"""
 

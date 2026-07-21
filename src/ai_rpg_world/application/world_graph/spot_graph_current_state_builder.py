@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, FrozenSet, Optional
+from typing import Any, Callable, FrozenSet, Optional, Sequence
 
+from ai_rpg_world.application.world_graph.distant_view_service import (
+    DistantViewArea,
+    DistantViewConnection,
+    DistantViewResult,
+    DistantViewService,
+    DistantViewSpot,
+)
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphAgentStatusEntry,
     SpotGraphAtmosphereEntry,
@@ -136,6 +143,10 @@ class SpotGraphCurrentStateBuilder:
         current_tick_provider: Optional[Callable[[], int]] = None,
         stagnation_band_provider: Optional[StagnationBandProvider] = None,
         dead_player_checker: Optional[Callable[[PlayerId], bool]] = None,
+        areas: Sequence[Any] = (),
+        distant_view_service: Optional[DistantViewService] = None,
+        distant_view_trace_enabled: bool = False,
+        trace_recorder_provider: Optional[Callable[[], Any]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -163,6 +174,10 @@ class SpotGraphCurrentStateBuilder:
         # PlayerStatusAggregate ではなく PlayerOutcomeRegistry 側にあるので、
         # runtime 配線でそこを引く callable を渡す。
         self._dead_player_checker = dead_player_checker
+        self._areas = tuple(areas)
+        self._distant_view_service = distant_view_service or DistantViewService()
+        self._distant_view_trace_enabled = distant_view_trace_enabled
+        self._trace_recorder_provider = trace_recorder_provider
         self._perception = SpotPerceptionService()
 
     def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
@@ -241,6 +256,126 @@ class SpotGraphCurrentStateBuilder:
             )
             return False
 
+    def _build_distant_view_result(
+        self,
+        *,
+        graph,
+        current_spot_id,
+    ) -> DistantViewResult:
+        """現在地から見える常時遠景を計算する。
+
+        areas 未設定のシナリオは後方互換として何も出さない。計算例外は prompt 全体を
+        落とさず warning + skip に倒すが、trace 有効時には理由を残す。
+        """
+        try:
+            spots = tuple(
+                DistantViewSpot(
+                    spot_id=node.spot_id.value,
+                    area_id=node.area_id,
+                    x=(node.position.x if node.position is not None else None),
+                    y=(node.position.y if node.position is not None else None),
+                    is_outdoor=bool(node.is_outdoor),
+                )
+                for node in graph.iter_spot_nodes()
+            )
+            areas = tuple(
+                DistantViewArea(
+                    area_id=str(getattr(area, "area_id")),
+                    name=str(getattr(area, "name", "")),
+                    visible_name=str(getattr(area, "visible_name", "")),
+                    prominence=float(getattr(area, "prominence", 0.0)),
+                    x=(
+                        getattr(getattr(area, "position", None), "x", None)
+                    ),
+                    y=(
+                        getattr(getattr(area, "position", None), "y", None)
+                    ),
+                    distant_descriptions=dict(
+                        getattr(area, "distant_descriptions", {}) or {}
+                    ),
+                )
+                for area in self._areas
+            )
+            connections = tuple(
+                DistantViewConnection(
+                    from_spot_id=conn.from_spot_id.value,
+                    to_spot_id=conn.to_spot_id.value,
+                )
+                for conn in graph.iter_outgoing_connections_from(current_spot_id)
+            )
+            return self._distant_view_service.render(
+                current_spot_id=current_spot_id.value,
+                spots=spots,
+                areas=areas,
+                connections=connections,
+            )
+        except Exception:
+            logger.warning(
+                "distant view calculation failed for spot_id=%s; skipping",
+                getattr(current_spot_id, "value", current_spot_id),
+                exc_info=True,
+            )
+            return DistantViewResult(
+                lines=(), skipped_reasons=("calculation_failed",)
+            )
+
+    def _record_distant_view_trace(
+        self,
+        *,
+        player_id: int,
+        spot_id: int,
+        current_area_id: Optional[str],
+        result: DistantViewResult,
+    ) -> None:
+        """遠景の現在状態系 trace を明示フラグ有効時だけ記録する。"""
+        if not self._distant_view_trace_enabled:
+            return
+        if self._trace_recorder_provider is None:
+            return
+        recorder = self._trace_recorder_provider()
+        if recorder is None:
+            return
+        tick: Optional[int] = None
+        if self._current_tick_provider is not None:
+            try:
+                tick = int(self._current_tick_provider())
+            except Exception:
+                tick = None
+        try:
+            from ai_rpg_world.application.trace import TraceEventKind
+
+            kind = (
+                TraceEventKind.DISTANT_VIEW_RENDERED
+                if result.lines
+                else TraceEventKind.DISTANT_VIEW_SKIPPED
+            )
+            recorder.record(
+                kind,
+                tick=tick,
+                player_id=player_id,
+                spot_id=spot_id,
+                current_area_id=current_area_id,
+                candidate_count=result.candidate_count,
+                rendered_count=len(result.lines),
+                rendered_area_ids=list(result.rendered_area_ids),
+                skipped_reasons=list(result.skipped_reasons),
+                thresholds={
+                    "prominence": self._distant_view_service.prominence_threshold,
+                    "score": self._distant_view_service.score_threshold,
+                    "outdoor_visibility_range": (
+                        self._distant_view_service.outdoor_visibility_range
+                    ),
+                    "max_lines": self._distant_view_service.max_lines,
+                },
+            )
+        except Exception:
+            logger.warning(
+                "DISTANT_VIEW trace record failed for player_id=%s spot_id=%s; skipping",
+                player_id,
+                spot_id,
+                exc_info=True,
+            )
+
     def build_snapshot(self, player_id: int) -> SpotGraphPlayerSnapshotDto | None:
         """プレイヤーがグラフに載っていない場合は None。"""
         graph = self._spot_graph_repository.find_graph()
@@ -295,6 +430,17 @@ class SpotGraphCurrentStateBuilder:
             ))
             status = "通行可" if traversable else "通行不可（音は届く可能性あり）"
             connection_lines.append(f"- {conn.name} → {dest.name}（{status}）")
+
+        distant_view_result = self._build_distant_view_result(
+            graph=graph,
+            current_spot_id=spot_id,
+        )
+        self._record_distant_view_trace(
+            player_id=player_id,
+            spot_id=spot_id.value,
+            current_area_id=node.area_id,
+            result=distant_view_result,
+        )
 
         objects: list[SpotGraphObjectEntry] = []
         sub_locations: list[SpotGraphSubLocationEntry] = []
@@ -595,6 +741,7 @@ class SpotGraphCurrentStateBuilder:
             current_spot_name=node.name,
             current_spot_description=node.description,
             travel_status_line=travel_line,
+            distant_view_lines=distant_view_result.lines,
             connections=tuple(connections),
             objects=tuple(objects),
             sub_locations=tuple(sub_locations),

@@ -223,6 +223,9 @@ class SpotGraphPlayerSnapshotDto:
     current_spot_name: str
     current_spot_description: str
     travel_status_line: Optional[str]
+    # 常時遠景。現在状態の一部として毎ターン再生成され、observation/episode には
+    # 流さない。本文には area_id ではなく visible_name/name 由来の prose だけを載せる。
+    distant_view_lines: Tuple[str, ...] = ()
 
     connections: Tuple[SpotGraphConnectionEntry, ...] = ()
     objects: Tuple[SpotGraphObjectEntry, ...] = ()
