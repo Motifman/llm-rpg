@@ -212,6 +212,8 @@ def _spot_node_to_dict(node: SpotNode) -> dict[str, Any]:
         d["atmosphere"] = _spot_atmosphere_to_dict(node.atmosphere)
     if node.position is not None:
         d["position"] = _spot_position_to_dict(node.position)
+    if node.area_id is not None:
+        d["area_id"] = node.area_id
     return d
 
 
@@ -228,6 +230,7 @@ def _spot_node_from_dict(d: dict[str, Any]) -> SpotNode:
         interior=None,
         atmosphere=atmosphere,
         position=position,
+        area_id=d.get("area_id"),
     )
 
 

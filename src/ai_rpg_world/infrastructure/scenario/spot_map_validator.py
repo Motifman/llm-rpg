@@ -100,6 +100,9 @@ def validate_spot_map(
     collector = _IssueCollector()
     spots = _spot_ids(raw)
     spot_set = set(spots)
+    positions = _positions(raw)
+    area_ids = _check_areas(raw, positions, collector)
+    _check_spot_area_refs(raw, area_ids, collector)
     edges = _edges(raw, spot_set, collector)
     directed_adjacency = _directed_adjacency(spots, edges)
     undirected_adjacency = _undirected_adjacency(spots, edges)
@@ -111,7 +114,6 @@ def validate_spot_map(
     unreachable = sorted(spot_set - reachable) if start_spot_id else []
     cycle_rank = len(edges) - len(spots) + len(components)
     articulation_spots = _articulation_spots(spots, undirected_adjacency)
-    positions = _positions(raw)
     skipped_checks: list[dict[str, Any]] = []
 
     if unreachable:
@@ -161,6 +163,7 @@ def validate_spot_map(
         "articulation_spots": articulation_spots,
         "unreachable_spots": unreachable,
         "positioned_spot_count": len(positions),
+        "area_count": len(area_ids),
     }
     return MapValidationResult(
         ok=not collector.errors,
@@ -451,6 +454,162 @@ def _check_key_spots(
                 f"{key_spot} は単一 spot の喪失で到達不能になります",
                 spots=(start_spot_id, key_spot),
                 details={"blocking_spots": sorted(node_cut)},
+            )
+
+
+def _check_areas(
+    raw: Mapping[str, Any],
+    positions: Mapping[str, tuple[float, float]],
+    collector: _IssueCollector,
+) -> set[str]:
+    area_ids: set[str] = set()
+    seen: set[str] = set()
+    for index, area in enumerate(_list_value(raw, "areas")):
+        if not isinstance(area, Mapping):
+            collector.add(
+                "INVALID_AREA",
+                "error",
+                f"areas[{index}] は object である必要があります",
+            )
+            continue
+        area_id = area.get("id")
+        if not isinstance(area_id, str) or not area_id.strip():
+            collector.add(
+                "INVALID_AREA_ID",
+                "error",
+                f"areas[{index}].id は空でない文字列である必要があります",
+            )
+            continue
+        area_id = area_id.strip()
+        if area_id in seen:
+            collector.add(
+                "DUPLICATE_AREA_ID",
+                "error",
+                f"area id が重複しています: {area_id}",
+                details={"area_id": area_id},
+            )
+        seen.add(area_id)
+        area_ids.add(area_id)
+
+        visible_name = area.get("visible_name")
+        if not isinstance(visible_name, str) or not visible_name.strip():
+            collector.add(
+                "AREA_VISIBLE_NAME_EMPTY",
+                "error",
+                f"areas[{area_id}].visible_name は空でない文字列である必要があります",
+                details={"area_id": area_id},
+            )
+
+        prominence = area.get("prominence")
+        if not _is_number(prominence):
+            collector.add(
+                "AREA_PROMINENCE_INVALID",
+                "error",
+                f"areas[{area_id}].prominence は 0.0〜1.0 の数値である必要があります",
+                details={"area_id": area_id, "raw_value": prominence},
+            )
+        elif not 0.0 <= float(prominence) <= 1.0:
+            collector.add(
+                "AREA_PROMINENCE_OUT_OF_RANGE",
+                "error",
+                f"areas[{area_id}].prominence は 0.0〜1.0 の範囲である必要があります",
+                details={"area_id": area_id, "prominence": float(prominence)},
+            )
+
+        declared_position = area.get("position")
+        if declared_position is not None:
+            _check_area_declared_position(area_id, declared_position, collector)
+            continue
+
+        member_spots = _spot_ids_for_area(raw, area_id)
+        positioned_members = [spot_id for spot_id in member_spots if spot_id in positions]
+        if not member_spots or not positioned_members:
+            collector.add(
+                "AREA_CENTROID_UNAVAILABLE",
+                "error",
+                f"areas[{area_id}] は area.position が無く、所属 spot の position から重心を作れません",
+                spots=tuple(member_spots),
+                details={
+                    "area_id": area_id,
+                    "member_spot_count": len(member_spots),
+                    "positioned_member_spot_count": len(positioned_members),
+                },
+            )
+    return area_ids
+
+
+def _check_area_declared_position(
+    area_id: str,
+    raw_position: Any,
+    collector: _IssueCollector,
+) -> None:
+    if not isinstance(raw_position, Mapping):
+        collector.add(
+            "AREA_POSITION_INVALID",
+            "error",
+            f"areas[{area_id}].position は x/y 数値 object である必要があります",
+            details={"area_id": area_id},
+        )
+        return
+    x = raw_position.get("x")
+    y = raw_position.get("y")
+    if not _is_number(x) or not _is_number(y):
+        collector.add(
+            "AREA_POSITION_INVALID",
+            "error",
+            f"areas[{area_id}].position.x/y は有限の数値である必要があります",
+            details={"area_id": area_id, "raw_value": dict(raw_position)},
+        )
+
+
+def _spot_ids_for_area(raw: Mapping[str, Any], area_id: str) -> list[str]:
+    out: list[str] = []
+    for spot in _list_value(raw, "spots"):
+        if not isinstance(spot, Mapping):
+            continue
+        spot_id = spot.get("id")
+        if isinstance(spot_id, str) and spot.get("area_id") == area_id:
+            out.append(spot_id)
+    return out
+
+
+def _check_spot_area_refs(
+    raw: Mapping[str, Any],
+    area_ids: set[str],
+    collector: _IssueCollector,
+) -> None:
+    if not area_ids:
+        return
+    for spot in _list_value(raw, "spots"):
+        if not isinstance(spot, Mapping):
+            continue
+        spot_id = spot.get("id")
+        if not isinstance(spot_id, str):
+            continue
+        area_id = spot.get("area_id")
+        if area_id is None:
+            collector.add(
+                "SPOT_AREA_ID_MISSING",
+                "warning",
+                f"{spot_id} に area_id が設定されていません",
+                spots=(spot_id,),
+            )
+            continue
+        if not isinstance(area_id, str) or not area_id.strip():
+            collector.add(
+                "INVALID_SPOT_AREA_ID",
+                "error",
+                f"{spot_id} の area_id は空でない文字列である必要があります",
+                spots=(spot_id,),
+            )
+            continue
+        if area_id.strip() not in area_ids:
+            collector.add(
+                "UNKNOWN_SPOT_AREA_ID",
+                "error",
+                f"{spot_id} が存在しない area_id を参照しています: {area_id}",
+                spots=(spot_id,),
+                details={"area_id": area_id},
             )
 
 

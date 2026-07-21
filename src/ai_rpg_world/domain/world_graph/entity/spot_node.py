@@ -26,6 +26,7 @@ class SpotNode:
     is_outdoor: bool = False
     traps: Tuple[TrapDef, ...] = ()
     position: Optional[SpotPosition] = None
+    area_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
