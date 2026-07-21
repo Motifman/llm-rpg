@@ -172,16 +172,16 @@ class TestDefaultCurrentStateFormatter:
         assert "賑やかな市場が並ぶ中央広場。" in text
 
     def test_format_does_not_render_internal_area_id(self, formatter):
-        """area_id は内部参照なので出力せず、prompt には area_name だけを出す。"""
+        """area_id だけがある場合も内部参照なので prompt 本文には出力しない。"""
         dto = _minimal_current_state_dto(
-            area_name="浜辺",
+            area_name=None,
             current_location_description="南側の明るい浜。",
         )
         dto.area_id = 999
 
         text = formatter.format(dto)
 
-        assert "エリア: 浜辺" in text
+        assert "エリア:" not in text
         assert "area_id" not in text
         assert "999" not in text
 
