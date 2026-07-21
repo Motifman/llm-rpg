@@ -223,6 +223,33 @@ def test_sqlite_roundtrip_preserves_optional_spot_position() -> None:
     assert loaded.get_spot(SpotId.create(2)).position is None
 
 
+def test_sqlite_roundtrip_preserves_optional_spot_area_id() -> None:
+    """SpotNode.area_id は SQLite の集約 JSON に保存され、読み戻しても同じ値を持つ。"""
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(78))
+    graph.add_spot(
+        SpotNode(
+            spot_id=SpotId.create(1),
+            name="海岸",
+            description="島の東側の海岸",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
+            area_id="shore",
+        )
+    )
+    graph.add_spot(_node(2))
+    graph.clear_events()
+
+    payload = spot_graph_aggregate_to_json_dict(graph)
+    assert payload["spots"][0]["area_id"] == "shore"
+    assert "area_id" not in payload["spots"][1]
+
+    loaded = loads_spot_graph_aggregate(dumps_spot_graph_aggregate(graph))
+
+    assert spot_graph_aggregate_to_json_dict(loaded) == payload
+    assert loaded.get_spot(SpotId.create(1)).area_id == "shore"
+    assert loaded.get_spot(SpotId.create(2)).area_id is None
+
+
 def test_find_graph_without_snapshot_raises_specific_exception() -> None:
     repo = SqliteSpotGraphRepository.for_standalone_connection(_memory_connection())
     with pytest.raises(SpotGraphSnapshotNotInitializedError):

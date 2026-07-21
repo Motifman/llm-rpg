@@ -200,6 +200,24 @@ class ScenarioDayNightConfig:
 
 
 @dataclass(frozen=True)
+class AreaDef:
+    """シナリオ JSON で宣言された area 定義。
+
+    area は実行時 state を持たない軽い定義表で、spot のまとまりと遠景知覚の
+    単位を表す。`position` は宣言値または所属 spot の重心で解決済み。
+    """
+
+    area_id: str
+    name: str
+    visible_name: str
+    prominence: float
+    position: Optional[SpotPosition]
+    position_source: Optional[str] = None
+    description: str = ""
+    distant_descriptions: Mapping[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class ScenarioLootTableDefinition:
     """シナリオ JSON で宣言された LootTable 定義 (PR #1 動的 loot)。
 
@@ -360,6 +378,9 @@ class ScenarioLoadResult:
     # PR #1 動的 loot: scenario JSON で宣言された LootTable 定義群。
     # runtime で InMemoryLootTableRepository に詰めて effect_service に注入する。
     loot_tables: Tuple[ScenarioLootTableDefinition, ...] = ()
+    # 遠景知覚の土台: scenario JSON で宣言された area 定義群。
+    # 実行時 state を持たないため、SpotGraphAggregate の子集約にはしない。
+    areas: Tuple[AreaDef, ...] = ()
 
 
 class ScenarioLoader:
@@ -388,6 +409,7 @@ class ScenarioLoader:
         loot_tables = self._parse_loot_tables(raw.get("loot_tables", []), mapper)
         self._pre_register_ids(raw, mapper)
         graph, interiors = self._parse_spots_and_graph(raw, mapper)
+        areas = self._parse_areas(raw.get("areas", []), raw.get("spots", []))
         self._parse_connections(raw.get("connections", []), graph, mapper)
         players = self._parse_players(raw.get("players", []), mapper)
         win_conds = self._parse_end_conditions(raw.get("game_end_conditions", {}).get("win", []), mapper)
@@ -432,6 +454,7 @@ class ScenarioLoader:
             monster_placements=monster_placements,
             outcome_resolution_config=outcome_resolution_config,
             loot_tables=loot_tables,
+            areas=areas,
         )
 
     def _parse_loot_tables(
@@ -678,6 +701,7 @@ class ScenarioLoader:
             parent_id = SpotId.create(mapper.get_int("spot", parent_str)) if parent_str else None
             category = SpotCategoryEnum[spot_raw.get("category", "OTHER")]
             position = self._parse_spot_position(sid_str, spot_raw.get("position"))
+            area_id = self._parse_spot_area_id(sid_str, spot_raw.get("area_id"))
 
             node = SpotNode(
                 spot_id=spot_id,
@@ -689,6 +713,7 @@ class ScenarioLoader:
                 atmosphere=atmosphere,
                 is_outdoor=bool(spot_raw.get("is_outdoor", False)),
                 position=position,
+                area_id=area_id,
             )
             graph.add_spot(node)
 
@@ -723,6 +748,132 @@ class ScenarioLoader:
         if not isfinite(value):
             raise ScenarioLoadError(f"{path} must be a finite number")
         return value
+
+    def _parse_spot_area_id(self, spot_id: str, raw: Any) -> Optional[str]:
+        if raw is None:
+            return None
+        if not isinstance(raw, str) or not raw.strip():
+            raise ScenarioLoadError(f"spots[{spot_id}].area_id must be a non-empty string")
+        return raw.strip()
+
+    def _parse_areas(
+        self,
+        areas_raw: Any,
+        spots_raw: Any,
+    ) -> Tuple[AreaDef, ...]:
+        if areas_raw is None:
+            return ()
+        if not isinstance(areas_raw, Sequence) or isinstance(areas_raw, (str, bytes)):
+            raise ScenarioLoadError("areas must be a list")
+
+        spot_positions_by_area = self._spot_positions_by_area(spots_raw)
+        out: List[AreaDef] = []
+        seen: set[str] = set()
+        for index, raw_area in enumerate(areas_raw):
+            if not isinstance(raw_area, Mapping):
+                raise ScenarioLoadError(f"areas[{index}] must be an object")
+            area_id = raw_area.get("id")
+            if not isinstance(area_id, str) or not area_id.strip():
+                raise ScenarioLoadError(f"areas[{index}].id must be a non-empty string")
+            area_id = area_id.strip()
+            if area_id in seen:
+                raise ScenarioLoadError(f"areas[{area_id}].id is duplicated")
+            seen.add(area_id)
+
+            name = raw_area.get("name")
+            if not isinstance(name, str) or not name.strip():
+                raise ScenarioLoadError(f"areas[{area_id}].name must be a non-empty string")
+            visible_name = raw_area.get("visible_name")
+            if not isinstance(visible_name, str) or not visible_name.strip():
+                raise ScenarioLoadError(
+                    f"areas[{area_id}].visible_name must be a non-empty string"
+                )
+            prominence = self._parse_prominence(
+                raw_area.get("prominence"), f"areas[{area_id}].prominence"
+            )
+
+            declared_position = self._parse_area_position(area_id, raw_area.get("position"))
+            if declared_position is not None:
+                position = declared_position
+                position_source = "declared"
+            else:
+                position = self._area_centroid(spot_positions_by_area.get(area_id, ()))
+                position_source = "centroid" if position is not None else None
+
+            distant_descriptions = raw_area.get("distant_descriptions", {})
+            if distant_descriptions is None:
+                distant_descriptions = {}
+            if not isinstance(distant_descriptions, Mapping):
+                raise ScenarioLoadError(
+                    f"areas[{area_id}].distant_descriptions must be an object"
+                )
+            out.append(
+                AreaDef(
+                    area_id=area_id,
+                    name=name.strip(),
+                    visible_name=visible_name.strip(),
+                    prominence=prominence,
+                    position=position,
+                    position_source=position_source,
+                    description=str(raw_area.get("description", "") or ""),
+                    distant_descriptions={
+                        str(k): str(v) for k, v in distant_descriptions.items()
+                    },
+                )
+            )
+        return tuple(out)
+
+    def _parse_area_position(self, area_id: str, raw: Any) -> Optional[SpotPosition]:
+        if raw is None:
+            return None
+        path = f"areas[{area_id}].position"
+        if not isinstance(raw, Mapping):
+            raise ScenarioLoadError(f"{path} must be an object with numeric x/y")
+        unknown_keys = set(raw) - {"x", "y"}
+        if unknown_keys:
+            raise ScenarioLoadError(
+                f"{path} has unsupported keys: {sorted(unknown_keys)}"
+            )
+        x = self._parse_position_number(raw.get("x"), f"{path}.x")
+        y = self._parse_position_number(raw.get("y"), f"{path}.y")
+        return SpotPosition(x=x, y=y)
+
+    def _parse_prominence(self, raw: Any, path: str) -> float:
+        value = self._parse_position_number(raw, path)
+        if not 0.0 <= value <= 1.0:
+            raise ScenarioLoadError(f"{path} must be in [0.0, 1.0]")
+        return value
+
+    def _spot_positions_by_area(
+        self,
+        spots_raw: Any,
+    ) -> Dict[str, Tuple[SpotPosition, ...]]:
+        grouped: Dict[str, List[SpotPosition]] = {}
+        if not isinstance(spots_raw, Sequence) or isinstance(spots_raw, (str, bytes)):
+            return {}
+        for spot in spots_raw:
+            if not isinstance(spot, Mapping):
+                continue
+            area_id = spot.get("area_id")
+            if not isinstance(area_id, str) or not area_id.strip():
+                continue
+            position = self._parse_spot_position(
+                str(spot.get("id", "<unknown>")),
+                spot.get("position"),
+            )
+            if position is None:
+                continue
+            grouped.setdefault(area_id.strip(), []).append(position)
+        return {area_id: tuple(positions) for area_id, positions in grouped.items()}
+
+    @staticmethod
+    def _area_centroid(positions: Sequence[SpotPosition]) -> Optional[SpotPosition]:
+        if not positions:
+            return None
+        return SpotPosition(
+            x=sum(p.x for p in positions) / len(positions),
+            y=sum(p.y for p in positions) / len(positions),
+        )
 
     def _parse_atmosphere(self, raw: Optional[Dict[str, Any]]) -> Optional[SpotAtmosphere]:
         if not raw:

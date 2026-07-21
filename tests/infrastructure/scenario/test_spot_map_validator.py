@@ -256,6 +256,90 @@ class TestSpotMapValidatorPositions:
         assert "INVALID_TRAVEL_TICKS" in {issue.code for issue in result.warnings}
 
 
+class TestSpotMapValidatorAreas:
+    """area 定義と spot.area_id の整合性を検査する。"""
+
+    def test_area_duplicate_id_is_error(self) -> None:
+        """areas[].id が重複している場合は area 参照が曖昧なので error にする。"""
+        raw = _scenario(
+            spots=[_spot("a", x=0, y=0)],
+            connections=[],
+        )
+        raw["areas"] = [
+            {"id": "shore", "name": "浜", "visible_name": "浜辺", "prominence": 0.2},
+            {"id": "shore", "name": "別浜", "visible_name": "別浜", "prominence": 0.2},
+        ]
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is False
+        assert "DUPLICATE_AREA_ID" in {issue.code for issue in result.errors}
+
+    def test_area_visible_name_empty_and_prominence_range_are_errors(self) -> None:
+        """visible_name 空や prominence 範囲外は遠景文を作れないので error にする。"""
+        raw = _scenario(
+            spots=[_spot("a", x=0, y=0)],
+            connections=[],
+        )
+        raw["areas"] = [
+            {"id": "shore", "name": "浜", "visible_name": " ", "prominence": 1.5},
+        ]
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is False
+        assert {"AREA_VISIBLE_NAME_EMPTY", "AREA_PROMINENCE_OUT_OF_RANGE"} <= {
+            issue.code for issue in result.errors
+        }
+
+    def test_spot_unknown_area_id_is_error_and_missing_area_id_is_warning(self) -> None:
+        """spot.area_id が未知なら error、area 導入後の未設定 spot は warning として見える化する。"""
+        raw = _scenario(
+            spots=[
+                {**_spot("a", x=0, y=0), "area_id": "shore"},
+                {**_spot("b", x=1, y=0), "area_id": "missing"},
+                _spot("c", x=2, y=0),
+            ],
+            connections=[_edge("ab", "a", "b"), _edge("bc", "b", "c")],
+        )
+        raw["areas"] = [
+            {"id": "shore", "name": "浜", "visible_name": "浜辺", "prominence": 0.2},
+        ]
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is False
+        assert "UNKNOWN_SPOT_AREA_ID" in {issue.code for issue in result.errors}
+        assert "SPOT_AREA_ID_MISSING" in {issue.code for issue in result.warnings}
+
+    def test_area_centroid_unavailable_is_error(self) -> None:
+        """area.position が無く所属 spot の position も無い場合は重心を作れないので error にする。"""
+        raw = _scenario(
+            spots=[{**_spot("a"), "area_id": "shore"}],
+            connections=[],
+        )
+        raw["areas"] = [
+            {"id": "shore", "name": "浜", "visible_name": "浜辺", "prominence": 0.2},
+        ]
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is False
+        assert "AREA_CENTROID_UNAVAILABLE" in {issue.code for issue in result.errors}
+
+    def test_area_free_existing_scenario_does_not_warn_about_missing_area_id(self) -> None:
+        """areas が無い既存シナリオでは area_id 未設定 warning を出さず後方互換を保つ。"""
+        raw = _scenario(
+            spots=[_spot("a"), _spot("b")],
+            connections=[_edge("ab", "a", "b")],
+        )
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is True
+        assert "SPOT_AREA_ID_MISSING" not in {issue.code for issue in result.warnings}
+
+
 class TestSpotMapValidatorExistingScenarios:
     """既存シナリオは position 無しでも error なしで検査できる。"""
 

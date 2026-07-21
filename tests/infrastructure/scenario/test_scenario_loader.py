@@ -209,6 +209,82 @@ class TestScenarioLoaderMinimal:
         with pytest.raises(ScenarioLoadError, match="spots\\[room_a\\]\\.position\\.y"):
             ScenarioLoader().load_from_dict(raw)
 
+    def test_areas_default_to_empty_tuple_when_omitted(self) -> None:
+        """top-level areas を省略した既存シナリオは空 tuple として読み込まれる。"""
+        result = ScenarioLoader().load_from_dict(_minimal_scenario())
+
+        assert result.areas == ()
+
+    def test_area_position_is_centroid_of_member_spots_when_omitted(self) -> None:
+        """area.position 未宣言なら所属 spot の position 重心を AreaDef.position に入れる。"""
+        raw = _minimal_scenario()
+        raw["areas"] = [
+            {
+                "id": "inside",
+                "name": "屋内",
+                "visible_name": "建物",
+                "prominence": 0.4,
+            }
+        ]
+        raw["spots"][0]["area_id"] = "inside"
+        raw["spots"][0]["position"] = {"x": 0, "y": 2}
+        raw["spots"][1]["area_id"] = "inside"
+        raw["spots"][1]["position"] = {"x": 4, "y": 6}
+
+        result = ScenarioLoader().load_from_dict(raw)
+
+        assert len(result.areas) == 1
+        assert result.areas[0].area_id == "inside"
+        assert result.areas[0].position == SpotPosition(x=2.0, y=4.0)
+        assert result.areas[0].position_source == "centroid"
+
+    def test_area_declared_position_overrides_centroid(self) -> None:
+        """area.position が宣言されていれば所属 spot の重心より優先される。"""
+        raw = _minimal_scenario()
+        raw["areas"] = [
+            {
+                "id": "inside",
+                "name": "屋内",
+                "visible_name": "建物",
+                "prominence": 0.4,
+                "position": {"x": 10, "y": 20},
+            }
+        ]
+        raw["spots"][0]["area_id"] = "inside"
+        raw["spots"][0]["position"] = {"x": 0, "y": 0}
+        raw["spots"][1]["area_id"] = "inside"
+        raw["spots"][1]["position"] = {"x": 2, "y": 2}
+
+        result = ScenarioLoader().load_from_dict(raw)
+
+        assert result.areas[0].position == SpotPosition(x=10.0, y=20.0)
+        assert result.areas[0].position_source == "declared"
+
+    def test_spot_area_id_is_optional_and_loaded_when_declared(self) -> None:
+        """spots[].area_id は任意で、宣言された spot だけ SpotNode.area_id に保持される。"""
+        raw = _minimal_scenario()
+        raw["areas"] = [
+            {
+                "id": "inside",
+                "name": "屋内",
+                "visible_name": "建物",
+                "prominence": 0.4,
+            }
+        ]
+        raw["spots"][0]["area_id"] = "inside"
+        raw["spots"][0]["position"] = {"x": 0, "y": 0}
+
+        result = ScenarioLoader().load_from_dict(raw)
+
+        room_a = result.graph.get_spot(
+            SpotId.create(result.id_mapper.get_int("spot", "room_a"))
+        )
+        room_b = result.graph.get_spot(
+            SpotId.create(result.id_mapper.get_int("spot", "room_b"))
+        )
+        assert room_a.area_id == "inside"
+        assert room_b.area_id is None
+
     def test_creates_connections(self) -> None:
         result = ScenarioLoader().load_from_dict(_minimal_scenario())
         conns = result.graph.all_connections()
