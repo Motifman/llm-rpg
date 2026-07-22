@@ -1917,7 +1917,7 @@
               "available": true,
               "last_harvest_tick": -100
             },
-            "unavailable_hint": "(今は汲めない・時間を置けば戻る)",
+            "unavailable_hint": "今は汲めない・時間を置けば戻る",
             "interactions": [
               {
                 "action_name": "drink_water",
@@ -2015,7 +2015,7 @@
               "available": true,
               "last_harvest_tick": -100
             },
-            "unavailable_hint": "(今は汲めない・時間を置けば戻る)",
+            "unavailable_hint": "今は汲めない・時間を置けば戻る",
             "interactions": [
               {
                 "action_name": "drink_water",

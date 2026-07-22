@@ -28,7 +28,8 @@ _STOCK_POOL_STATE_KEYS: FrozenSet[str] = frozenset(
 # まま prompt に出すと「false」「42」のような、次の一手につながらない表示になる。
 _REACTIVE_AVAILABILITY_STATE_KEY = "available"
 _REACTIVE_LAST_HARVEST_TICK_STATE_KEY = "last_harvest_tick"
-_DEFAULT_UNAVAILABLE_HINT = "(今は採れない・時間を置けば戻る)"
+VISIBLE_STATE_TAGS_KEY = "__tags__"
+_DEFAULT_UNAVAILABLE_HINT = "今は採れない・時間を置けば戻る"
 
 
 @dataclass(frozen=True)
@@ -95,14 +96,17 @@ class SpotObject:
             | frozenset({_REACTIVE_LAST_HARVEST_TICK_STATE_KEY})
         )
         visible: Dict[str, Any] = {}
+        tags: list[str] = []
         for key, value in self.state.items():
             if key in excluded:
                 continue
             if key == _REACTIVE_AVAILABILITY_STATE_KEY:
                 if value is False:
-                    visible["状態"] = self.unavailable_hint or _DEFAULT_UNAVAILABLE_HINT
+                    tags.append(self.unavailable_hint or _DEFAULT_UNAVAILABLE_HINT)
                 continue
             visible[key] = value
+        if tags:
+            visible = {VISIBLE_STATE_TAGS_KEY: tuple(tags), **visible}
         return visible
 
     def with_visible(self, visible: bool) -> SpotObject:

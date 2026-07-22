@@ -264,7 +264,7 @@ def test_sqlite_roundtrip_preserves_object_unavailable_hint() -> None:
                 object_type=SpotObjectTypeEnum.OTHER,
                 state={"available": False},
                 interactions=(),
-                unavailable_hint="(今は汲めない・時間を置けば戻る)",
+                unavailable_hint="今は汲めない・時間を置けば戻る",
             ),
         ),
         ground_items=(),
@@ -272,12 +272,12 @@ def test_sqlite_roundtrip_preserves_object_unavailable_hint() -> None:
     )
 
     payload = spot_interior_to_json_dict(interior)
-    assert payload["objects"][0]["unavailable_hint"] == "(今は汲めない・時間を置けば戻る)"
+    assert payload["objects"][0]["unavailable_hint"] == "今は汲めない・時間を置けば戻る"
 
     loaded = loads_spot_interior(dumps_spot_interior(interior))
 
     assert spot_interior_to_json_dict(loaded) == payload
-    assert loaded.objects[0].unavailable_hint == "(今は汲めない・時間を置けば戻る)"
+    assert loaded.objects[0].unavailable_hint == "今は汲めない・時間を置けば戻る"
 
 
 def test_find_graph_without_snapshot_raises_specific_exception() -> None:

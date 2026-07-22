@@ -39,6 +39,7 @@ from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.entity.spot_object import VISIBLE_STATE_TAGS_KEY
 
 _logger = logging.getLogger(__name__)
 
@@ -199,6 +200,8 @@ def _format_object_state(state: Dict[str, Any]) -> str:
 
     PR-X (Y_after_pr639_640 後続): 空 dict → 空文字。1 個以上のエントリ
     があれば `` (key=value, key2=value2)`` の形式で prepend する。
+    ただし ``SpotObject.visible_state()`` が内部キー ``__tags__`` で返す
+    可用性ヒントは、LLM に key を見せず裸のタグとして表示する。
 
     値の変換は ``spot_graph_current_state_formatter._render_value`` に
     委譲する (bool→lowercase、None→"null"、その他 primitive→str)。
@@ -211,13 +214,23 @@ def _format_object_state(state: Dict[str, Any]) -> str:
 
     例:
       {}                             → ""
-      {"available": False}           → " (available=false)"
+      {"__tags__": ("今は採れない・時間を置けば戻る",)} → " (今は採れない・時間を置けば戻る)"
       {"opened": True, "count": 0}   → " (opened=true, count=0)"
       {"latch": None}                → " (latch=null)"
     """
     if not state:
         return ""
-    parts: List[str] = [f"{k}={_render_value(v)}" for k, v in state.items()]
+    parts: List[str] = []
+    for key, value in state.items():
+        if key == VISIBLE_STATE_TAGS_KEY:
+            if isinstance(value, (list, tuple)):
+                parts.extend(str(v) for v in value if str(v))
+            elif value:
+                parts.append(str(value))
+            continue
+        parts.append(f"{key}={_render_value(value)}")
+    if not parts:
+        return ""
     return f" ({', '.join(parts)})"
 
 

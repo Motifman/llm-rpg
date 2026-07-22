@@ -172,8 +172,8 @@ class TestSurvivalIslandV4WaterSources:
             for obj in interior.objects
         }
 
-        assert objects_by_name["河口の水辺"].unavailable_hint == "(今は汲めない・時間を置けば戻る)"
-        assert objects_by_name["湧水の口"].unavailable_hint == "(今は汲めない・時間を置けば戻る)"
+        assert objects_by_name["河口の水辺"].unavailable_hint == "今は汲めない・時間を置けば戻る"
+        assert objects_by_name["湧水の口"].unavailable_hint == "今は汲めない・時間を置けば戻る"
 
     def test_spring_source_drink_water_failure_message_is_cause_based(self, raw_v4) -> None:
         """湧水の口が再利用待ちのとき、満杯などの誤った原因ではなく時間待ちを伝える。"""

@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
+from ai_rpg_world.domain.world_graph.entity.spot_object import (
+    VISIBLE_STATE_TAGS_KEY,
+    SpotObject,
+)
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SpotObjectValidationException,
@@ -70,7 +73,7 @@ class TestVisibleState:
         obj = _make({"available": False, "opened": True})
 
         assert obj.visible_state() == {
-            "状態": "(今は採れない・時間を置けば戻る)",
+            VISIBLE_STATE_TAGS_KEY: ("今は採れない・時間を置けば戻る",),
             "opened": True,
         }
 
@@ -78,16 +81,20 @@ class TestVisibleState:
         """unavailable_hint があれば、available=false の表示に作者指定文を使う。"""
         obj = _make(
             {"available": False},
-            unavailable_hint="(今は汲めない・時間を置けば戻る)",
+            unavailable_hint="今は汲めない・時間を置けば戻る",
         )
 
-        assert obj.visible_state() == {"状態": "(今は汲めない・時間を置けば戻る)"}
+        assert obj.visible_state() == {
+            VISIBLE_STATE_TAGS_KEY: ("今は汲めない・時間を置けば戻る",)
+        }
 
     def test_hides_last_harvest_tick(self) -> None:
         """last_harvest_tick は再生判定用の内部 tick なので prompt 用 state には表示しない。"""
         obj = _make({"available": False, "last_harvest_tick": 42})
 
-        assert obj.visible_state() == {"状態": "(今は採れない・時間を置けば戻る)"}
+        assert obj.visible_state() == {
+            VISIBLE_STATE_TAGS_KEY: ("今は採れない・時間を置けば戻る",)
+        }
 
     def test_rejects_empty_unavailable_hint(self) -> None:
         """unavailable_hint が空白だけなら、次の一手が読める表示にならないため拒否する。"""

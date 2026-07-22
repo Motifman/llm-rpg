@@ -541,14 +541,14 @@ class TestScenarioLoaderMinimal:
         """object.unavailable_hint は ScenarioLoader 後も SpotObject に保持される。"""
         raw = _minimal_scenario()
         raw["spots"][0]["interior"]["objects"][0]["unavailable_hint"] = (
-            "(今は汲めない・時間を置けば戻る)"
+            "今は汲めない・時間を置けば戻る"
         )
 
         result = ScenarioLoader().load_from_dict(raw)
         interior = next(iter(result.interiors.values()))
         obj = interior.objects[0]
 
-        assert obj.unavailable_hint == "(今は汲めない・時間を置けば戻る)"
+        assert obj.unavailable_hint == "今は汲めない・時間を置けば戻る"
 
     def test_empty_object_unavailable_hint_raises(self) -> None:
         """object.unavailable_hint が空白なら、表示ヒントとして使えないため読み込みを拒否する。"""
