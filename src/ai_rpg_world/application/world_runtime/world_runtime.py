@@ -3184,6 +3184,7 @@ def create_world_runtime(
         current_tick_provider=_current_tick_provider,
         stagnation_band_provider=_resolve_stagnation_band_for_player,
         areas=scenario.areas,
+        distant_cues=scenario.distant_cues,
         distant_view_trace_enabled=config.distant_view_trace_enabled,
         trace_recorder_provider=lambda: getattr(runtime, "_trace_recorder", None),
     )

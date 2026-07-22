@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from math import atan2, degrees, hypot
-from typing import Mapping, Sequence
+from typing import Literal, Mapping, Sequence
 
 
 DEFAULT_PROMINENCE_THRESHOLD = 0.25
@@ -38,6 +38,20 @@ class DistantViewArea:
 
 
 @dataclass(frozen=True)
+class DistantViewCandidate:
+    """area / cue を共通の遠景候補として扱うための DTO。"""
+
+    candidate_id: str
+    kind: Literal["area", "cue"]
+    visible_name: str
+    prominence: float
+    x: float | None
+    y: float | None
+    descriptions: Mapping[str, str] = field(default_factory=dict)
+    origin_area_id: str | None = None
+
+
+@dataclass(frozen=True)
 class DistantViewConnection:
     """現在地から見た outgoing 接続。隣接 area 除外に使う。"""
 
@@ -51,13 +65,31 @@ class DistantViewResult:
 
     lines: tuple[str, ...]
     rendered_area_ids: tuple[str, ...] = ()
+    rendered_cue_ids: tuple[str, ...] = ()
     candidate_count: int = 0
+    active_cue_count: int = 0
     skipped_reasons: tuple[str, ...] = ()
+
+    def with_added_skipped_reasons(
+        self, reasons: Sequence[str]
+    ) -> "DistantViewResult":
+        """呼び出し側で解決した skipped reason を重複なく追加する。"""
+        if not reasons:
+            return self
+        merged = tuple(sorted(set(self.skipped_reasons) | set(reasons)))
+        return DistantViewResult(
+            lines=self.lines,
+            rendered_area_ids=self.rendered_area_ids,
+            rendered_cue_ids=self.rendered_cue_ids,
+            candidate_count=self.candidate_count,
+            active_cue_count=self.active_cue_count,
+            skipped_reasons=merged,
+        )
 
 
 @dataclass(frozen=True)
 class _Candidate:
-    area: DistantViewArea
+    source: DistantViewCandidate
     direction: str
     distance: float
     distance_band: str
@@ -112,28 +144,46 @@ class DistantViewService:
         spots: Sequence[DistantViewSpot],
         areas: Sequence[DistantViewArea],
         connections: Sequence[DistantViewConnection],
+        cues: Sequence[DistantViewCandidate] = (),
     ) -> DistantViewResult:
         """現在地から見える遠景文を返す。"""
-        if not areas:
+        source_candidates = _area_candidates(areas) + tuple(cues)
+        if not source_candidates:
             return DistantViewResult(lines=(), skipped_reasons=("no_areas",))
         if self._max_lines <= 0:
-            return DistantViewResult(lines=(), skipped_reasons=("max_lines_zero",))
+            return DistantViewResult(
+                lines=(),
+                active_cue_count=len(cues),
+                skipped_reasons=("max_lines_zero",),
+            )
 
         spots_by_id = {spot.spot_id: spot for spot in spots}
         current = spots_by_id.get(current_spot_id)
         if current is None:
-            return DistantViewResult(lines=(), skipped_reasons=("current_spot_missing",))
+            return DistantViewResult(
+                lines=(),
+                active_cue_count=len(cues),
+                skipped_reasons=("current_spot_missing",),
+            )
         if not current.is_outdoor:
-            return DistantViewResult(lines=(), skipped_reasons=("indoor",))
+            return DistantViewResult(
+                lines=(),
+                active_cue_count=len(cues),
+                skipped_reasons=("indoor",),
+            )
         if current.x is None or current.y is None:
             return DistantViewResult(
-                lines=(), skipped_reasons=("current_spot_position_missing",)
+                lines=(),
+                active_cue_count=len(cues),
+                skipped_reasons=("current_spot_position_missing",),
             )
 
         visibility_range = self._resolve_visibility_range(current)
         if visibility_range <= 0:
             return DistantViewResult(
-                lines=(), skipped_reasons=("visibility_range_zero",)
+                lines=(),
+                active_cue_count=len(cues),
+                skipped_reasons=("visibility_range_zero",),
             )
 
         current_area_id = current.area_id
@@ -145,32 +195,33 @@ class DistantViewService:
 
         candidates: list[_Candidate] = []
         skipped: set[str] = set()
-        for area in areas:
-            if current_area_id is not None and area.area_id == current_area_id:
+        for source in source_candidates:
+            origin_area_id = source.origin_area_id or source.candidate_id
+            if current_area_id is not None and origin_area_id == current_area_id:
                 skipped.add("current_area")
                 continue
-            if area.area_id in adjacent_area_ids:
+            if origin_area_id in adjacent_area_ids:
                 skipped.add("adjacent_area")
                 continue
-            if area.prominence < self._prominence_threshold:
+            if source.prominence < self._prominence_threshold:
                 skipped.add("low_prominence")
                 continue
-            if area.x is None or area.y is None:
+            if source.x is None or source.y is None:
                 skipped.add("area_position_missing")
                 continue
-            dx = area.x - current.x
-            dy = area.y - current.y
+            dx = source.x - current.x
+            dy = source.y - current.y
             distance = hypot(dx, dy)
             if distance <= 0:
                 skipped.add("zero_distance")
                 continue
-            score = area.prominence * min(1.0, visibility_range / max(distance, 1.0))
+            score = source.prominence * min(1.0, visibility_range / max(distance, 1.0))
             if score < self._score_threshold:
                 skipped.add("score_below_threshold")
                 continue
             candidates.append(
                 _Candidate(
-                    area=area,
+                    source=source,
                     direction=_direction_from_delta(dx, dy),
                     distance=distance,
                     distance_band=_distance_band(distance, visibility_range),
@@ -188,6 +239,7 @@ class DistantViewService:
             return DistantViewResult(
                 lines=(),
                 candidate_count=0,
+                active_cue_count=len(cues),
                 skipped_reasons=reasons,
             )
 
@@ -203,11 +255,22 @@ class DistantViewService:
             : self._max_lines
         ]
         lines = tuple(_candidate_to_line(candidate) for candidate in selected)
-        area_ids = tuple(candidate.area.area_id for candidate in selected)
+        area_ids = tuple(
+            candidate.source.candidate_id
+            for candidate in selected
+            if candidate.source.kind == "area"
+        )
+        cue_ids = tuple(
+            candidate.source.candidate_id
+            for candidate in selected
+            if candidate.source.kind == "cue"
+        )
         return DistantViewResult(
             lines=lines,
             rendered_area_ids=area_ids,
+            rendered_cue_ids=cue_ids,
             candidate_count=len(candidates),
+            active_cue_count=len(cues),
             skipped_reasons=tuple(sorted(skipped)),
         )
 
@@ -234,8 +297,24 @@ class DistantViewService:
 
 
 def _candidate_sort_key(candidate: _Candidate) -> tuple[float, float, str]:
-    """score 降順、距離昇順、area_id 昇順で安定化するためのキー。"""
-    return (-candidate.score, candidate.distance, candidate.area.area_id)
+    """score 降順、距離昇順、候補 ID 昇順で安定化するためのキー。"""
+    return (-candidate.score, candidate.distance, candidate.source.candidate_id)
+
+
+def _area_candidates(areas: Sequence[DistantViewArea]) -> tuple[DistantViewCandidate, ...]:
+    return tuple(
+        DistantViewCandidate(
+            candidate_id=area.area_id,
+            kind="area",
+            visible_name=area.visible_name or area.name,
+            prominence=area.prominence,
+            x=area.x,
+            y=area.y,
+            descriptions=area.distant_descriptions,
+            origin_area_id=area.area_id,
+        )
+        for area in areas
+    )
 
 
 _DIRECTIONS = (
@@ -264,10 +343,10 @@ def _distance_band(distance: float, visibility_range: float) -> str:
 
 
 def _candidate_to_line(candidate: _Candidate) -> str:
-    custom = candidate.area.distant_descriptions.get(candidate.distance_band)
+    custom = candidate.source.descriptions.get(candidate.distance_band)
     if custom:
         return _ensure_sentence(custom.strip())
-    name = candidate.area.visible_name or candidate.area.name
+    name = candidate.source.visible_name
     return f"{candidate.direction}に{name}が見える。"
 
 

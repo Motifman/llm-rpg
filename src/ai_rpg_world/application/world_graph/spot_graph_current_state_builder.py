@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, FrozenSet, Optional, Sequence
+from typing import Any, Callable, FrozenSet, Mapping, Optional, Sequence
 
 from ai_rpg_world.application.world_graph.distant_view_service import (
     DistantViewArea,
+    DistantViewCandidate,
     DistantViewConnection,
     DistantViewResult,
     DistantViewService,
@@ -40,6 +41,7 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISp
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.spot_perception_service import SpotPerceptionService
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
@@ -144,6 +146,7 @@ class SpotGraphCurrentStateBuilder:
         stagnation_band_provider: Optional[StagnationBandProvider] = None,
         dead_player_checker: Optional[Callable[[PlayerId], bool]] = None,
         areas: Sequence[Any] = (),
+        distant_cues: Sequence[Any] = (),
         distant_view_service: Optional[DistantViewService] = None,
         distant_view_trace_enabled: bool = False,
         trace_recorder_provider: Optional[Callable[[], Any]] = None,
@@ -175,6 +178,7 @@ class SpotGraphCurrentStateBuilder:
         # runtime 配線でそこを引く callable を渡す。
         self._dead_player_checker = dead_player_checker
         self._areas = tuple(areas)
+        self._distant_cues = tuple(distant_cues)
         self._distant_view_service = distant_view_service or DistantViewService()
         self._distant_view_trace_enabled = distant_view_trace_enabled
         self._trace_recorder_provider = trace_recorder_provider
@@ -296,6 +300,10 @@ class SpotGraphCurrentStateBuilder:
                 )
                 for area in self._areas
             )
+            active_cues, cue_skipped_reasons = self._resolve_active_distant_cues(
+                graph=graph,
+                areas_by_id={area.area_id: area for area in areas},
+            )
             connections = tuple(
                 DistantViewConnection(
                     from_spot_id=conn.from_spot_id.value,
@@ -308,16 +316,94 @@ class SpotGraphCurrentStateBuilder:
                 spots=spots,
                 areas=areas,
                 connections=connections,
-            )
+                cues=active_cues,
+            ).with_added_skipped_reasons(cue_skipped_reasons)
         except Exception:
             logger.warning(
                 "distant view calculation failed for spot_id=%s; skipping",
                 getattr(current_spot_id, "value", current_spot_id),
                 exc_info=True,
             )
-            return DistantViewResult(
-                lines=(), skipped_reasons=("calculation_failed",)
+            return DistantViewResult(lines=(), skipped_reasons=("calculation_failed",))
+
+    def _resolve_active_distant_cues(
+        self,
+        *,
+        graph,
+        areas_by_id: Mapping[str, DistantViewArea],
+    ) -> tuple[tuple[DistantViewCandidate, ...], tuple[str, ...]]:
+        """scenario.distant_cues から現在 active な遠景候補を解決する。"""
+        active: list[DistantViewCandidate] = []
+        skipped: set[str] = set()
+        for cue in self._distant_cues:
+            cue_id = str(getattr(cue, "cue_id", "<unknown>"))
+            source = getattr(cue, "source", None)
+            if source is None or getattr(source, "kind", None) != "object_state":
+                logger.warning(
+                    "distant cue source kind is unsupported at runtime: cue_id=%s",
+                    cue_id,
+                )
+                skipped.add("cue_source_unsupported")
+                continue
+            try:
+                object_id = getattr(source, "object_id")
+                obj = self._find_spot_object(graph, object_id)
+            except Exception:
+                logger.warning(
+                    "distant cue source object resolution failed: cue_id=%s",
+                    cue_id,
+                    exc_info=True,
+                )
+                skipped.add("cue_source_resolution_failed")
+                continue
+            if obj is None:
+                logger.warning(
+                    "distant cue source object is missing: cue_id=%s",
+                    cue_id,
+                )
+                skipped.add("cue_source_object_missing")
+                continue
+            state_key = str(getattr(source, "state_key", ""))
+            if obj.state.get(state_key) != getattr(source, "equals", None):
+                continue
+            origin_area_id = str(getattr(cue, "origin_area_id", ""))
+            area = areas_by_id.get(origin_area_id)
+            if area is None:
+                logger.warning(
+                    "distant cue origin area is missing: cue_id=%s area_id=%s",
+                    cue_id,
+                    origin_area_id,
+                )
+                skipped.add("cue_origin_area_missing")
+                continue
+            active.append(
+                DistantViewCandidate(
+                    candidate_id=cue_id,
+                    kind="cue",
+                    visible_name=str(getattr(cue, "visible_name", "")),
+                    prominence=float(getattr(cue, "prominence", 0.0)),
+                    x=area.x,
+                    y=area.y,
+                    descriptions=dict(
+                        getattr(cue, "ambient_descriptions", {}) or {}
+                    ),
+                    origin_area_id=origin_area_id,
+                )
             )
+        return tuple(active), tuple(sorted(skipped))
+
+    def _find_spot_object(self, graph, object_id: Any):  # noqa: ANN001, ANN201
+        """全 spot の interior から object_id に一致する object を探す。"""
+        if not isinstance(object_id, SpotObjectId):
+            object_id = SpotObjectId.create(int(getattr(object_id, "value", object_id)))
+        for node in graph.iter_spot_nodes():
+            interior = self._spot_interior_repository.find_by_spot_id(node.spot_id)
+            if interior is None:
+                continue
+            obj = interior.get_object(object_id)
+            if obj is not None:
+                return obj
+        return None
 
     def _record_distant_view_trace(
         self,
@@ -358,6 +444,8 @@ class SpotGraphCurrentStateBuilder:
                 candidate_count=result.candidate_count,
                 rendered_count=len(result.lines),
                 rendered_area_ids=list(result.rendered_area_ids),
+                rendered_cue_ids=list(result.rendered_cue_ids),
+                active_cue_count=result.active_cue_count,
                 skipped_reasons=list(result.skipped_reasons),
                 thresholds={
                     "prominence": self._distant_view_service.prominence_threshold,
