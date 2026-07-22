@@ -1117,8 +1117,16 @@ def _render_map_viewer_html(run_dir: Path, trace_path: Path, *, title: str) -> s
         load_scenario_topology,
         render_viewer_html,
     )
+    from scripts._viewer_vendor import VendorFetchError  # noqa: WPS433
 
-    asset = fetch_cytoscape()
+    try:
+        asset = fetch_cytoscape()
+    except VendorFetchError as e:
+        raise RuntimeError(
+            f"{e}。復旧手順: ネットワークに接続した状態で "
+            "`uv run python scripts/build_trace_viewer.py <run_dir>` を一度実行し、"
+            "Cytoscape vendor をキャッシュしてください。"
+        ) from e
     events = list(load_trace_events(trace_path))
     topology = load_scenario_topology(run_dir / "scenario.json")
     return render_viewer_html(

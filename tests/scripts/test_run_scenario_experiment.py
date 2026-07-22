@@ -15,6 +15,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 from scripts.run_scenario_experiment import (  # noqa: E402
     _build_report,
     _emit_html_artifacts,
+    _render_map_viewer_html,
     main,
 )
 
@@ -268,6 +269,35 @@ class TestEmitHtmlArtifacts:
         assert (tmp_path / "timeline.html").exists()
         out = capsys.readouterr().out
         assert "[html-error] viewer.html: cytoscape unavailable" in out
+
+    def test_map_viewer_vendor_fetch_error_includes_recovery_step(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        """Cytoscape 取得失敗時は vendor キャッシュ復旧手順をエラー文に含める。"""
+        import scripts.build_trace_viewer as build_trace_viewer
+        from scripts._viewer_vendor import VendorFetchError
+
+        trace_path = tmp_path / "trace.jsonl"
+        trace_path.write_text("", encoding="utf-8")
+        (tmp_path / "scenario.json").write_text("{}", encoding="utf-8")
+
+        def _raise_vendor_error(*args, **kwargs):
+            raise VendorFetchError("offline mode: vendor not cached")
+
+        monkeypatch.setattr(build_trace_viewer, "fetch_cytoscape", _raise_vendor_error)
+
+        try:
+            _render_map_viewer_html(tmp_path, trace_path, title="demo")
+        except RuntimeError as e:
+            message = str(e)
+        else:
+            raise AssertionError("vendor fetch failure must raise RuntimeError")
+
+        assert "offline mode: vendor not cached" in message
+        assert "scripts/build_trace_viewer.py <run_dir>" in message
+        assert "Cytoscape vendor をキャッシュ" in message
 
     def test_no_html_skips_all_html_artifacts(
         self,
