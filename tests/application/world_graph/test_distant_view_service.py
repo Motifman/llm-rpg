@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ai_rpg_world.application.world_graph.distant_view_service import (
     DistantViewArea,
+    DistantViewCandidate,
     DistantViewConnection,
     DistantViewService,
     DistantViewSpot,
@@ -44,6 +45,28 @@ def _area(
         x=x,
         y=y,
         distant_descriptions=distant_descriptions or {},
+    )
+
+
+def _cue(
+    cue_id: str,
+    visible_name: str,
+    *,
+    prominence: float,
+    x: float,
+    y: float,
+    ambient_descriptions: dict[str, str] | None = None,
+    origin_area_id: str | None = None,
+) -> DistantViewCandidate:
+    return DistantViewCandidate(
+        candidate_id=cue_id,
+        kind="cue",
+        visible_name=visible_name,
+        prominence=prominence,
+        x=x,
+        y=y,
+        descriptions=ambient_descriptions or {},
+        origin_area_id=origin_area_id,
     )
 
 
@@ -154,6 +177,71 @@ class TestDistantViewFiltering:
         )
 
         assert result.lines == ("北の遠くに山影が霞んでいる。",)
+
+    def test_active_cue_uses_same_direction_aggregation_as_static_area(self) -> None:
+        """active cue は area と同じ候補集合に入り、同方角では score が高い方だけが残る。"""
+        result = DistantViewService().render(
+            current_spot_id=1,
+            spots=(
+                _spot(1, area_id="base", x=0.0, y=0.0),
+                _spot(2, area_id="mountain", x=0.0, y=6.0),
+            ),
+            areas=(
+                _area("base", "拠点", prominence=0.0, x=0.0, y=0.0),
+                _area(
+                    "mountain",
+                    "切り立った山影",
+                    prominence=0.95,
+                    x=0.0,
+                    y=6.0,
+                    distant_descriptions={"far": "北の遠くに山影が霞んでいる。"},
+                ),
+            ),
+            cues=(
+                _cue(
+                    "summit_signal_smoke",
+                    "白い煙",
+                    prominence=1.0,
+                    x=0.0,
+                    y=6.0,
+                    ambient_descriptions={"far": "北の遠くに白い煙が見える。"},
+                ),
+            ),
+            connections=(),
+        )
+
+        assert result.lines == ("北の遠くに白い煙が見える。",)
+        assert result.rendered_area_ids == ()
+        assert result.rendered_cue_ids == ("summit_signal_smoke",)
+
+    def test_active_cue_from_outgoing_neighbor_area_is_excluded(self) -> None:
+        """active cue の origin area が outgoing 接続先なら、遠景候補から除外する。"""
+        result = DistantViewService().render(
+            current_spot_id=1,
+            spots=(
+                _spot(1, area_id="base", x=0.0, y=0.0),
+                _spot(2, area_id="mountain", x=0.0, y=6.0),
+            ),
+            areas=(
+                _area("base", "拠点", prominence=0.0, x=0.0, y=0.0),
+                _area("mountain", "切り立った山影", prominence=0.95, x=0.0, y=6.0),
+            ),
+            cues=(
+                _cue(
+                    "summit_signal_smoke",
+                    "白い煙",
+                    prominence=1.0,
+                    x=0.0,
+                    y=6.0,
+                    origin_area_id="mountain",
+                ),
+            ),
+            connections=(DistantViewConnection(from_spot_id=1, to_spot_id=2),),
+        )
+
+        assert result.lines == ()
+        assert result.rendered_cue_ids == ()
+        assert "adjacent_area" in result.skipped_reasons
 
 
 class TestDistantViewDirection:
