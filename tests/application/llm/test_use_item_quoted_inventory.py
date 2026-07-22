@@ -3,7 +3,7 @@
 
 Y_after_pr_all_200tick で観測された問題:
 - ``spot_graph_use_item`` の失敗 6 件はすべて ``INVALID_TARGET_LABEL``
-- inventory display は ``- 流木 x3 (素材・使用不可) (腐敗)`` のような
+- inventory display は ``- 流木 x3 (素材・そのままは食べられない。焚き火など interact の材料) (腐敗)`` のような
   装飾サフィックス付き。LLM がサフィックスごと item_label に含めて
   渡してしまうと resolver で hit しない
 
@@ -12,7 +12,7 @@ tool に渡す値) を、所持アイテム / 地面アイテム / 関連 4 tool
 
 ### 変更点
 
-1. **inventory 表示**: ``- "流木" x3 (素材・使用不可) (腐敗)`` のように
+1. **inventory 表示**: ``- "流木" x3 (素材・そのままは食べられない。焚き火など interact の材料) (腐敗)`` のように
    item 名のみを ``""`` で囲む。x3 / 種別タグ / 腐敗 タグは囲まない
 2. **ground_items 表示**: 同様に名前のみを ``""`` で囲む
 3. **tool description**: use_item / drop_item / pickup_item / give_item /
@@ -124,18 +124,19 @@ class TestPromptQuotesInventoryItemName:
         assert '"野いちご"' in text
 
     def test_inventory(self) -> None:
-        """``x3`` / ``(素材・使用不可)`` / ``(腐敗)`` は囲まない。
+        """``x3`` / 素材タグ / ``(腐敗)`` は囲まない。
         ``""`` の有無で「渡すべき値」と「補足情報」を視覚的に区別する。"""
         result = SpotGraphUiContextBuilder().build(
             "現在地: 拠点", _make_dto(_snap_with_inventory())
         )
         text = result.current_state_text
         assert '"x3"' not in text
-        assert '"(素材・使用不可)"' not in text
+        assert '"(素材・そのままは食べられない。焚き火など interact の材料)"' not in text
         assert '"(腐敗)"' not in text
         # 装飾そのものは表示されている (= 既存挙動を壊していない)
         assert "x3" in text
-        assert "素材" in text
+        assert "素材・そのままは食べられない。焚き火など interact の材料" in text
+        assert "使用不可" not in text
         assert "腐敗" in text
 
 

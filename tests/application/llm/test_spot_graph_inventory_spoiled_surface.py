@@ -153,7 +153,7 @@ class TestDtoDefaults:
 
 
 class TestInventoryItemTypeTag:
-    """``item_type`` を渡すと所持品行に「(食料)」「(道具)」等のタグが付与される (#404 後続)。
+    """``item_type`` を渡すと所持品行に「食料」「素材」等の用途タグが付与される。
 
     LLM が ITEM_NOT_CONSUMABLE で失敗 (=「使えない物を食べようとする」誤判断)
     するのを防ぐため、所持品リストの段階で type が見えるようにする。
@@ -178,31 +178,34 @@ class TestInventoryItemTypeTag:
         assert "(食料)" in line
 
     def test_material(self) -> None:
-        """PR-C: ``material`` は use_item できないため「使用不可」を明示する。"""
+        """``material`` はそのまま食べず、interact の材料にすることを明示する。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=2, name="流木", quantity=3, item_type="material",
             )
         )
-        assert "(素材・使用不可)" in line
+        assert "(素材・そのままは食べられない。焚き火など interact の材料)" in line
+        assert "使用不可" not in line
 
     def test_tool(self) -> None:
-        """tool は道具使用不可タグ。"""
+        """tool は近くのオブジェクトに interact して使う用途を示す。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=3, name="火打ち石", quantity=1, item_type="tool",
             )
         )
-        assert "(道具・使用不可)" in line
+        assert "(道具・そのままは食べられない。近くのオブジェクトに interact して使う)" in line
+        assert "使用不可" not in line
 
     def test_key_item_gets_important_and_unusable_tags(self) -> None:
-        """keyitem は重要使用不可タグ。"""
+        """keyitem は対応する場所やオブジェクトに interact して使う用途を示す。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=4, name="骨のナイフ", quantity=1, item_type="key_item",
             )
         )
-        assert "(重要・使用不可)" in line
+        assert "(重要品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)" in line
+        assert "使用不可" not in line
 
     def test_unknown_type(self) -> None:
         """fallback 動作: 未知文字列でもクラッシュせずタグ非表示。"""
@@ -216,16 +219,15 @@ class TestInventoryItemTypeTag:
             assert tag not in line
 
     def test_other_type(self) -> None:
-        """PR-C: ``other`` は日本語 type 名は無いが、use_item できないことだけ
-        明示する。Y_after_issue621 で「分類不能で使用不可」のフィードバックが
-        足りず、LLM が試行に走った例を防ぐ。"""
+        """``other`` は全否定にせず、食べ物ではないことと確認先を示す。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=6, name="布切れ", quantity=1, item_type="other",
             )
         )
-        assert "(使用不可)" in line
-        # 種別名は付かない
+        assert "(食べ物ではない。用途は周囲のオブジェクトや行動で確認)" in line
+        assert "使用不可" not in line
+        # 他の種別名は付かない
         for tag in ("(食料)", "(素材", "(道具", "(重要"):
             assert tag not in line
 
