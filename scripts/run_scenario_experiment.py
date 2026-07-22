@@ -4,7 +4,7 @@
 特徴:
     - シナリオ非依存: ``data/scenarios/*.json`` を ``--scenario`` で指定
     - trace 自動記録: ``JsonlTraceRecorder`` を内部で生成して runtime に inject
-    - HTML 自動生成: 実行後 ``scripts/trace_to_html.py`` を呼んで HTML を出力
+    - HTML 自動生成: 実行後に trace.html / viewer.html / episodic.html / timeline.html を出力
     - 汎用レポート: WIN/LOSE/tick/action 数/memo 数の最小集計を Markdown で
 
 scenario 固有の集計 (relay_puzzle の latch tick / kaito-rin marker など) は
@@ -21,6 +21,9 @@ scenario 固有の集計 (relay_puzzle の latch tick / kaito-rin marker など)
     #   var/runs/relay-foo/trace.jsonl
     #   var/runs/relay-foo/report.md
     #   var/runs/relay-foo/trace.html
+    #   var/runs/relay-foo/viewer.html
+    #   var/runs/relay-foo/episodic.html
+    #   var/runs/relay-foo/timeline.html
 """
 
 from __future__ import annotations
@@ -33,9 +36,10 @@ import os
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, TextIO
+from typing import Any, Callable, Dict, List, Mapping, Optional, TextIO
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 for p in (_REPO_ROOT, _REPO_ROOT / "src"):
@@ -1080,17 +1084,152 @@ def _build_report(
     lines.append("## 成果物")
     lines.append("")
     lines.append(f"- trace: `{trace_path}`")
-    lines.append(f"- HTML viewer: `{trace_path.with_suffix('.html')}`")
+    lines.append(f"- legacy HTML viewer: `{trace_path.with_suffix('.html')}`")
+    lines.append(f"- map trace viewer: `{trace_path.parent / 'viewer.html'}`")
+    lines.append(f"- episodic memory viewer: `{trace_path.parent / 'episodic.html'}`")
+    lines.append(f"- timeline viewer: `{trace_path.parent / 'timeline.html'}`")
     lines.append("")
     return "\n".join(lines)
 
 
-def _emit_html(trace_path: Path, html_path: Path, *, title: str) -> None:
-    """trace_to_html.py を呼んで HTML を出力。"""
+@dataclass(frozen=True)
+class HtmlArtifactResult:
+    """run 完了時に生成する HTML 成果物 1 件の結果。"""
+
+    name: str
+    path: Path
+    generated: bool
+    error: Optional[str] = None
+
+
+def _render_trace_html(trace_path: Path, *, title: str) -> str:
+    """trace_to_html.py の legacy HTML 文字列を返す。"""
     from scripts.trace_to_html import render_html  # noqa: WPS433
 
     events = list(load_trace_events(trace_path))
-    html_path.write_text(render_html(events, title=title), encoding="utf-8")
+    return render_html(events, title=title)
+
+
+def _render_map_viewer_html(run_dir: Path, trace_path: Path, *, title: str) -> str:
+    """地図つき trace viewer の HTML 文字列を返す。"""
+    from scripts.build_trace_viewer import (  # noqa: WPS433
+        fetch_cytoscape,
+        load_scenario_topology,
+        render_viewer_html,
+    )
+    from scripts._viewer_vendor import VendorFetchError  # noqa: WPS433
+
+    try:
+        asset = fetch_cytoscape()
+    except VendorFetchError as e:
+        raise RuntimeError(
+            f"{e}。復旧手順: ネットワークに接続した状態で "
+            "`uv run python scripts/build_trace_viewer.py <run_dir>` を一度実行し、"
+            "Cytoscape vendor をキャッシュしてください。"
+        ) from e
+    events = list(load_trace_events(trace_path))
+    topology = load_scenario_topology(run_dir / "scenario.json")
+    return render_viewer_html(
+        title=title,
+        events=events,
+        scenario_topology=topology,
+        cytoscape_js_src=asset.content,
+    )
+
+
+def _render_episodic_viewer_html(trace_path: Path, *, title: str) -> str:
+    """episodic.html の HTML 文字列を返す。"""
+    from scripts.build_episodic_viewer import (  # noqa: WPS433
+        aggregate_episodes,
+        load_events,
+    )
+    from scripts.build_episodic_viewer import render_html as render_episodic_html
+
+    events = load_events(trace_path)
+    episodes = aggregate_episodes(events)
+    return render_episodic_html(episodes, title)
+
+
+def _render_timeline_viewer_html(trace_path: Path, *, title: str) -> str:
+    """timeline.html の HTML 文字列を返す。"""
+    from scripts.build_timeline_viewer import load_events  # noqa: WPS433
+    from scripts.build_timeline_viewer import render_html as render_timeline_html
+
+    events = load_events(trace_path)
+    return render_timeline_html(events, title)
+
+
+def _write_html_artifact(
+    *,
+    name: str,
+    path: Path,
+    render: Callable[[], str],
+) -> HtmlArtifactResult:
+    """HTML 成果物を 1 件生成し、結果を stdout と warning に残す。"""
+    try:
+        html_text = render()
+        path.write_text(html_text, encoding="utf-8")
+    except Exception as e:
+        error = str(e)
+        logger.warning("failed to build %s: %s", name, error)
+        print(f"[html-error] {name}: {error}", flush=True)
+        return HtmlArtifactResult(name=name, path=path, generated=False, error=error)
+    print(f"[html] {name}: {path}", flush=True)
+    return HtmlArtifactResult(name=name, path=path, generated=True)
+
+
+def _emit_html_artifacts(
+    *,
+    run_dir: Path,
+    trace_path: Path,
+    trace_html_path: Path,
+    title: str,
+) -> List[HtmlArtifactResult]:
+    """run 完了時の HTML 成果物をまとめて生成する。
+
+    ``viewer.html`` は ``run_dir/scenario.json`` から地図を組み立てるため、
+    呼び出し側は scenario copy 後にこの関数を呼ぶ。各 Viewer の失敗は
+    実験データを巻き込まず、stdout と warning に残して次の生成へ進む。
+    """
+    artifacts: List[HtmlArtifactResult] = []
+    artifacts.append(
+        _write_html_artifact(
+            name="trace.html",
+            path=trace_html_path,
+            render=lambda: _render_trace_html(trace_path, title=title),
+        )
+    )
+    artifacts.append(
+        _write_html_artifact(
+            name="viewer.html",
+            path=run_dir / "viewer.html",
+            render=lambda: _render_map_viewer_html(run_dir, trace_path, title=title),
+        )
+    )
+    artifacts.append(
+        _write_html_artifact(
+            name="episodic.html",
+            path=run_dir / "episodic.html",
+            render=lambda: _render_episodic_viewer_html(trace_path, title=title),
+        )
+    )
+    artifacts.append(
+        _write_html_artifact(
+            name="timeline.html",
+            path=run_dir / "timeline.html",
+            render=lambda: _render_timeline_viewer_html(trace_path, title=title),
+        )
+    )
+    return artifacts
+
+
+def _emit_html(trace_path: Path, html_path: Path, *, title: str) -> None:
+    """trace_to_html.py を呼んで legacy HTML を出力。
+
+    既存テストや外部利用向けの互換 wrapper。通常 run では
+    ``_emit_html_artifacts`` を使い、3 Viewer も併せて生成する。
+    """
+    html_path.write_text(_render_trace_html(trace_path, title=title), encoding="utf-8")
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -1412,8 +1551,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         logger.warning("failed to copy scenario JSON into run dir: %s", e)
 
     if not args.no_html:
-        _emit_html(trace_path, html_path, title=f"{args.scenario.stem} run")
-        print(f"[html] {html_path}", flush=True)
+        _emit_html_artifacts(
+            run_dir=out_dir,
+            trace_path=trace_path,
+            trace_html_path=html_path,
+            title=f"{args.scenario.stem} run",
+        )
 
     print(f"[report] {report_path}", flush=True)
     print(f"[trace] {trace_path}", flush=True)
