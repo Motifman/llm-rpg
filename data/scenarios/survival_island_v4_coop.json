@@ -3955,6 +3955,10 @@
       },
       "visible_name": "白い煙",
       "prominence": 1.0,
+      "appear_event": {
+        "message": "{direction}の山の方から白い煙が上がった。",
+        "schedules_turn": true
+      },
       "ambient_descriptions": {
         "far": "北東の山の方に白い煙が見える。",
         "middle": "山の高みから白い煙が上がっている。"

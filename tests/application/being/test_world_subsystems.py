@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from ai_rpg_world.application.being.world_subsystems import (
+    DistantCueStateSubsystemCodec,
     PendingFoodSpoilageSubsystemCodec,
     PlayerNeedsSubsystemCodec,
     PlayerPositionSubsystemCodec,
@@ -124,7 +125,79 @@ class TestPendingFoodSpoilageCodec:
     def test_default_world_subsystem_codecs_include_pending_food_spoilage(self) -> None:
         """既定 world snapshot に未通知腐敗バッファ codec が登録される。"""
         keys = [codec.subsystem_key for codec in _default_world_subsystem_codecs()]
-        assert keys[-1] == "pending_food_spoilage"
+        assert "pending_food_spoilage" in keys
+
+
+class TestDistantCueStateCodec:
+    """動的遠景 cue の active 状態が snapshot 再開後も保たれることを保証する。"""
+
+    def test_capture_restore_round_trip(self) -> None:
+        """cue ごとの active/initialized/last_changed_tick を capture → restore で保持する。"""
+        codec = DistantCueStateSubsystemCodec()
+        src_runtime = SimpleNamespace(
+            _distant_cue_states={
+                "summit_signal_smoke": {
+                    "active": True,
+                    "initialized": True,
+                    "last_changed_tick": 42,
+                },
+                "ambient_only_mist": {
+                    "active": False,
+                    "initialized": True,
+                    "last_changed_tick": None,
+                },
+            }
+        )
+
+        captured = codec.capture(src_runtime)
+
+        assert captured["schema_version"] == 1
+        assert [entry["cue_id"] for entry in captured["entries"]] == [
+            "ambient_only_mist",
+            "summit_signal_smoke",
+        ]
+
+        dst_runtime = SimpleNamespace(_distant_cue_states={})
+        codec.restore(dst_runtime, captured)
+
+        assert dst_runtime._distant_cue_states == {
+            "ambient_only_mist": {
+                "active": False,
+                "initialized": True,
+                "last_changed_tick": None,
+            },
+            "summit_signal_smoke": {
+                "active": True,
+                "initialized": True,
+                "last_changed_tick": 42,
+            },
+        }
+
+    def test_default_world_subsystem_codecs_include_distant_cue_state(self) -> None:
+        """既定 world snapshot に distant_cue_state codec が登録される。"""
+        keys = [codec.subsystem_key for codec in _default_world_subsystem_codecs()]
+        assert "distant_cue_state" in keys
+        assert keys.index("distant_cue_state") > keys.index("pending_food_spoilage")
+
+    def test_restore_rejects_non_bool_state(self) -> None:
+        """active / initialized が bool でない snapshot は境界判定を壊すので拒否する。"""
+        runtime = SimpleNamespace(_distant_cue_states={})
+
+        with pytest.raises(ValueError, match="active"):
+            DistantCueStateSubsystemCodec().restore(
+                runtime,
+                {
+                    "schema_version": 1,
+                    "entries": [
+                        {
+                            "cue_id": "bad",
+                            "active": "false",
+                            "initialized": True,
+                            "last_changed_tick": None,
+                        }
+                    ],
+                },
+            )
 
 
 class TestWorldTickCodec:

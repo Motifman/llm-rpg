@@ -46,8 +46,12 @@ Encounter Memory PR2: familiarity 信号
 
 再開保証:
 - ``PendingFoodSpoilageSubsystemCodec`` — 日次 flush 前の未通知腐敗バッファ
+- ``DistantCueStateSubsystemCodec`` — 動的遠景 cue の false→true 境界検出状態
 """
 
+from ai_rpg_world.application.being.world_subsystems.distant_cue_state_codec import (
+    DistantCueStateSubsystemCodec,
+)
 from ai_rpg_world.application.being.world_subsystems.day_night_codec import (
     DayNightSubsystemCodec,
 )
@@ -141,4 +145,5 @@ __all__ = [
     "EncounterMemorySubsystemCodec",
     # 再開保証
     "PendingFoodSpoilageSubsystemCodec",
+    "DistantCueStateSubsystemCodec",
 ]

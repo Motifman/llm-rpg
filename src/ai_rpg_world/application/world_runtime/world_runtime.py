@@ -362,6 +362,13 @@ class WorldRuntime:
     # 現在 buffer に積まれている食料が属する day (= tick // ticks_per_day)。
     # None は「buffer 空 + 1 件もまだ来ていない」。
     _pending_spoiled_day: Optional[int] = field(default=None, repr=False)
+    # 段階3: 動的遠景 cue の false→true 境界検出状態。
+    # per-world の事実なので player ごとではなく runtime に保持し、snapshot
+    # で保存する。値は {"active": bool, "initialized": bool,
+    # "last_changed_tick": int | None}。
+    _distant_cue_states: Dict[str, Dict[str, Any]] = field(
+        default_factory=dict, repr=False
+    )
     # LLM 脱出用（セッション単位で構築）
     # _world_llm_system_prompt: 全プレイヤー共通の system prompt (legacy / 単体プレイ用)
     # _world_llm_system_prompts_by_player_id: Issue #264 第16回実験で発見された
