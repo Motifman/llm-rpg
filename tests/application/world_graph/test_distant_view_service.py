@@ -243,6 +243,69 @@ class TestDistantViewFiltering:
         assert result.rendered_cue_ids == ()
         assert "adjacent_area" in result.skipped_reasons
 
+    def test_evaluate_candidate_visibility_uses_same_spatial_rules_without_max_lines(
+        self,
+    ) -> None:
+        """単一 cue の配達可否は屋外・非局所・距離減衰を使い、表示上限には依存しない。"""
+        service = DistantViewService(max_lines=0)
+        visible = service.evaluate_candidate_visibility(
+            current_spot_id=1,
+            spots=(
+                _spot(1, area_id="base", x=0.0, y=0.0),
+                _spot(2, area_id="mountain", x=0.0, y=6.0),
+            ),
+            connections=(),
+            candidate=_cue(
+                "summit_signal_smoke",
+                "白い煙",
+                prominence=1.0,
+                x=0.0,
+                y=6.0,
+                origin_area_id="mountain",
+            ),
+        )
+
+        assert visible is not None
+        assert visible.direction == "北"
+        assert visible.distance_band == "far"
+        assert visible.score >= service.score_threshold
+
+    def test_evaluate_candidate_visibility_excludes_current_and_neighbor_area(
+        self,
+    ) -> None:
+        """単一 cue の配達可否でも現在地 area と outgoing 接続先 area は局所説明として除外する。"""
+        service = DistantViewService()
+        candidate = _cue(
+            "summit_signal_smoke",
+            "白い煙",
+            prominence=1.0,
+            x=0.0,
+            y=6.0,
+            origin_area_id="mountain",
+        )
+
+        current_area = service.evaluate_candidate_visibility(
+            current_spot_id=2,
+            spots=(
+                _spot(1, area_id="base", x=0.0, y=0.0),
+                _spot(2, area_id="mountain", x=0.0, y=6.0),
+            ),
+            connections=(),
+            candidate=candidate,
+        )
+        neighbor_area = service.evaluate_candidate_visibility(
+            current_spot_id=1,
+            spots=(
+                _spot(1, area_id="base", x=0.0, y=0.0),
+                _spot(2, area_id="mountain", x=0.0, y=6.0),
+            ),
+            connections=(DistantViewConnection(from_spot_id=1, to_spot_id=2),),
+            candidate=candidate,
+        )
+
+        assert current_area is None
+        assert neighbor_area is None
+
 
 class TestDistantViewDirection:
     """地理座標から8方位を丸める挙動を保証する。"""

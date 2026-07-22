@@ -88,12 +88,17 @@ class DistantViewResult:
 
 
 @dataclass(frozen=True)
-class _Candidate:
+class DistantViewVisibleCandidate:
+    """単一候補が現在地から見えると判定された結果。"""
+
     source: DistantViewCandidate
     direction: str
     distance: float
     distance_band: str
     score: float
+
+
+_Candidate = DistantViewVisibleCandidate
 
 
 class DistantViewService:
@@ -196,38 +201,22 @@ class DistantViewService:
         candidates: list[_Candidate] = []
         skipped: set[str] = set()
         for source in source_candidates:
-            origin_area_id = source.origin_area_id or source.candidate_id
-            if current_area_id is not None and origin_area_id == current_area_id:
-                skipped.add("current_area")
-                continue
-            if origin_area_id in adjacent_area_ids:
-                skipped.add("adjacent_area")
-                continue
-            if source.prominence < self._prominence_threshold:
-                skipped.add("low_prominence")
-                continue
-            if source.x is None or source.y is None:
-                skipped.add("area_position_missing")
-                continue
-            dx = source.x - current.x
-            dy = source.y - current.y
-            distance = hypot(dx, dy)
-            if distance <= 0:
-                skipped.add("zero_distance")
-                continue
-            score = source.prominence * min(1.0, visibility_range / max(distance, 1.0))
-            if score < self._score_threshold:
-                skipped.add("score_below_threshold")
-                continue
-            candidates.append(
-                _Candidate(
-                    source=source,
-                    direction=_direction_from_delta(dx, dy),
-                    distance=distance,
-                    distance_band=_distance_band(distance, visibility_range),
-                    score=score,
-                )
+            visible = self._evaluate_candidate_against_context(
+                current=current,
+                adjacent_area_ids=adjacent_area_ids,
+                visibility_range=visibility_range,
+                candidate=source,
             )
+            if visible is None:
+                reason = self._last_skip_reason(
+                    current=current,
+                    adjacent_area_ids=adjacent_area_ids,
+                    visibility_range=visibility_range,
+                    candidate=source,
+                )
+                skipped.add(reason)
+                continue
+            candidates.append(visible)
 
         if not candidates:
             if skipped:
@@ -273,6 +262,104 @@ class DistantViewService:
             active_cue_count=len(cues),
             skipped_reasons=tuple(sorted(skipped)),
         )
+
+    def evaluate_candidate_visibility(
+        self,
+        *,
+        current_spot_id: int,
+        spots: Sequence[DistantViewSpot],
+        connections: Sequence[DistantViewConnection],
+        candidate: DistantViewCandidate,
+    ) -> DistantViewVisibleCandidate | None:
+        """単一候補が現在地から見えるかを判定する。
+
+        動的 cue の出現イベント配達では、「ambient 表示枠に入ったか」ではなく
+        「その cue 自体が視認可能か」を使う。そのため max_lines や方角集約は
+        ここでは使わず、屋外・局所除外・目立ち度・距離減衰だけを共有する。
+        """
+        spots_by_id = {spot.spot_id: spot for spot in spots}
+        current = spots_by_id.get(current_spot_id)
+        if current is None:
+            return None
+        if not current.is_outdoor:
+            return None
+        if current.x is None or current.y is None:
+            return None
+        visibility_range = self._resolve_visibility_range(current)
+        if visibility_range <= 0:
+            return None
+        adjacent_area_ids = self._adjacent_area_ids(
+            current_spot_id=current_spot_id,
+            spots_by_id=spots_by_id,
+            connections=connections,
+        )
+        return self._evaluate_candidate_against_context(
+            current=current,
+            adjacent_area_ids=adjacent_area_ids,
+            visibility_range=visibility_range,
+            candidate=candidate,
+        )
+
+    def _evaluate_candidate_against_context(
+        self,
+        *,
+        current: DistantViewSpot,
+        adjacent_area_ids: set[str],
+        visibility_range: float,
+        candidate: DistantViewCandidate,
+    ) -> DistantViewVisibleCandidate | None:
+        origin_area_id = candidate.origin_area_id or candidate.candidate_id
+        if current.area_id is not None and origin_area_id == current.area_id:
+            return None
+        if origin_area_id in adjacent_area_ids:
+            return None
+        if candidate.prominence < self._prominence_threshold:
+            return None
+        if candidate.x is None or candidate.y is None:
+            return None
+        dx = candidate.x - current.x
+        dy = candidate.y - current.y
+        distance = hypot(dx, dy)
+        if distance <= 0:
+            return None
+        score = candidate.prominence * min(1.0, visibility_range / max(distance, 1.0))
+        if score < self._score_threshold:
+            return None
+        return DistantViewVisibleCandidate(
+            source=candidate,
+            direction=_direction_from_delta(dx, dy),
+            distance=distance,
+            distance_band=_distance_band(distance, visibility_range),
+            score=score,
+        )
+
+    def _last_skip_reason(
+        self,
+        *,
+        current: DistantViewSpot,
+        adjacent_area_ids: set[str],
+        visibility_range: float,
+        candidate: DistantViewCandidate,
+    ) -> str:
+        """render trace 用に単一候補が落ちた代表理由を返す。"""
+        origin_area_id = candidate.origin_area_id or candidate.candidate_id
+        if current.area_id is not None and origin_area_id == current.area_id:
+            return "current_area"
+        if origin_area_id in adjacent_area_ids:
+            return "adjacent_area"
+        if candidate.prominence < self._prominence_threshold:
+            return "low_prominence"
+        if candidate.x is None or candidate.y is None:
+            return "area_position_missing"
+        dx = candidate.x - current.x
+        dy = candidate.y - current.y
+        distance = hypot(dx, dy)
+        if distance <= 0:
+            return "zero_distance"
+        score = candidate.prominence * min(1.0, visibility_range / max(distance, 1.0))
+        if score < self._score_threshold:
+            return "score_below_threshold"
+        return "unknown"
 
     def _resolve_visibility_range(self, spot: DistantViewSpot) -> float:
         if not spot.is_outdoor:
