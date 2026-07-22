@@ -537,6 +537,27 @@ class TestScenarioLoaderMinimal:
                 return
         pytest.fail("No interior with objects found")
 
+    def test_object_unavailable_hint_is_loaded(self) -> None:
+        """object.unavailable_hint は ScenarioLoader 後も SpotObject に保持される。"""
+        raw = _minimal_scenario()
+        raw["spots"][0]["interior"]["objects"][0]["unavailable_hint"] = (
+            "今は汲めない・時間を置けば戻る"
+        )
+
+        result = ScenarioLoader().load_from_dict(raw)
+        interior = next(iter(result.interiors.values()))
+        obj = interior.objects[0]
+
+        assert obj.unavailable_hint == "今は汲めない・時間を置けば戻る"
+
+    def test_empty_object_unavailable_hint_raises(self) -> None:
+        """object.unavailable_hint が空白なら、表示ヒントとして使えないため読み込みを拒否する。"""
+        raw = _minimal_scenario()
+        raw["spots"][0]["interior"]["objects"][0]["unavailable_hint"] = "  "
+
+        with pytest.raises(ScenarioLoadError, match="unavailable_hint"):
+            ScenarioLoader().load_from_dict(raw)
+
     def test_parses_scenario_events(self) -> None:
         result = ScenarioLoader().load_from_dict(_minimal_scenario())
         assert len(result.scenario_events) == 1

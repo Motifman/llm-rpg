@@ -88,6 +88,11 @@ class SpotObjectIdValidationException(SpotGraphDomainException, ValidationExcept
     error_code = "WORLD_GRAPH.SPOT_OBJECT_ID_VALIDATION"
 
 
+class SpotObjectValidationException(SpotGraphDomainException, ValidationException):
+    """SpotObject エンティティのバリデーション例外"""
+    error_code = "WORLD_GRAPH.SPOT_OBJECT_VALIDATION"
+
+
 class UnknownSpotObjectException(SpotGraphDomainException, BusinessRuleException):
     """スポット内に存在しないオブジェクトを参照した"""
     error_code = "WORLD_GRAPH.UNKNOWN_SPOT_OBJECT"

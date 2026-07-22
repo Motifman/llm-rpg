@@ -43,6 +43,7 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphSubLocationEntry,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.world_graph.entity.spot_object import VISIBLE_STATE_TAGS_KEY
 
 
 def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
@@ -160,9 +161,7 @@ class TestObjectStateVisibleInPrompt:
     """object 状態を prompt に露出する (PR-X)。"""
 
     def test_state_empty_state_displayed(self) -> None:
-        """`visible_state = {'available': False}` のような state が
-        プロンプト上で ``(available=false)`` のように可視化される。
-        LLM が「もう採れない」を prompt から直接読めるようになる。"""
+        """available=false 由来のヒントは key=value でなく裸のタグとして表示される。"""
         snap = SpotGraphPlayerSnapshotDto(
             current_spot_id=1,
             current_spot_name="ベリーの茂み",
@@ -178,16 +177,44 @@ class TestObjectStateVisibleInPrompt:
                             action_name="harvest_berry", display_label="採取"
                         ),
                     ),
-                    state={"available": False},
+                    state={VISIBLE_STATE_TAGS_KEY: ("今は採れない・時間を置けば戻る",)},
                 ),
             ),
         )
         text = _build(snap)
-        # 状態タグが表示される
-        assert "available" in text.lower() or "採取済み" in text or "使用不可" in text, (
-            "state が空でないのに状態タグが表示されていない。LLM が"
-            "「もう採れない」を prompt から読めない"
+        assert '"東の茂み" (今は採れない・時間を置けば戻る)' in text
+        assert "available" not in text
+        assert "状態=" not in text
+        assert "((今は採れない・時間を置けば戻る))" not in text
+
+    def test_bare_hint_can_mix_with_key_value_state(self) -> None:
+        """可用性ヒントは裸タグ、他の state は従来どおり key=value として同じ括弧内に並ぶ。"""
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="泉",
+            current_spot_description="",
+            travel_status_line=None,
+            objects=(
+                SpotGraphObjectEntry(
+                    object_id=10,
+                    name="湧水の口",
+                    description="",
+                    interactions=(
+                        SpotGraphInteractionEntry(
+                            action_name="drink_water", display_label="水を汲む"
+                        ),
+                    ),
+                    state={
+                        VISIBLE_STATE_TAGS_KEY: ("今は汲めない・時間を置けば戻る",),
+                        "opened": True,
+                    },
+                ),
+            ),
         )
+        text = _build(snap)
+        assert '"湧水の口" (今は汲めない・時間を置けば戻る, opened=true)' in text
+        assert "状態=" not in text
+        assert "((今は汲めない・時間を置けば戻る" not in text
 
     def test_state_empty_not_displayed(self) -> None:
         """state 空の object は既存挙動と同じでシンプル表示。"""

@@ -387,7 +387,7 @@ def _discovery_condition_from_dict(d: dict[str, Any]) -> DiscoveryCondition:
 
 
 def _spot_object_to_dict(o: SpotObject) -> dict[str, Any]:
-    return {
+    out = {
         "object_id": int(o.object_id.value),
         "name": o.name,
         "description": o.description,
@@ -396,6 +396,9 @@ def _spot_object_to_dict(o: SpotObject) -> dict[str, Any]:
         "interactions": [_interaction_def_to_dict(i) for i in o.interactions],
         "is_visible": o.is_visible,
     }
+    if o.unavailable_hint is not None:
+        out["unavailable_hint"] = o.unavailable_hint
+    return out
 
 
 def _spot_object_from_dict(d: dict[str, Any]) -> SpotObject:
@@ -407,6 +410,7 @@ def _spot_object_from_dict(d: dict[str, Any]) -> SpotObject:
         state=dict(d.get("state", {})),
         interactions=tuple(_interaction_def_from_dict(x) for x in d["interactions"]),
         is_visible=bool(d.get("is_visible", True)),
+        unavailable_hint=d.get("unavailable_hint"),
     )
 
 
