@@ -35,7 +35,9 @@ from ai_rpg_world.infrastructure.repository.sqlite_spot_graph_repository import 
 from ai_rpg_world.infrastructure.repository.sqlite_spot_interior_repository import SqliteSpotInteriorRepository
 from ai_rpg_world.infrastructure.repository.sqlite_world_graph_state_codec import (
     dumps_spot_graph_aggregate,
+    dumps_spot_interior,
     loads_spot_graph_aggregate,
+    loads_spot_interior,
     spot_graph_aggregate_to_json_dict,
     spot_interior_to_json_dict,
 )
@@ -248,6 +250,34 @@ def test_sqlite_roundtrip_preserves_optional_spot_area_id() -> None:
     assert spot_graph_aggregate_to_json_dict(loaded) == payload
     assert loaded.get_spot(SpotId.create(1)).area_id == "shore"
     assert loaded.get_spot(SpotId.create(2)).area_id is None
+
+
+def test_sqlite_roundtrip_preserves_object_unavailable_hint() -> None:
+    """SpotObject.unavailable_hint は interior JSON に保存され、再開後も prompt 表示に使える。"""
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=SpotObjectId.create(1),
+                name="水場",
+                description="水が汲める。",
+                object_type=SpotObjectTypeEnum.OTHER,
+                state={"available": False},
+                interactions=(),
+                unavailable_hint="(今は汲めない・時間を置けば戻る)",
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    payload = spot_interior_to_json_dict(interior)
+    assert payload["objects"][0]["unavailable_hint"] == "(今は汲めない・時間を置けば戻る)"
+
+    loaded = loads_spot_interior(dumps_spot_interior(interior))
+
+    assert spot_interior_to_json_dict(loaded) == payload
+    assert loaded.objects[0].unavailable_hint == "(今は汲めない・時間を置けば戻る)"
 
 
 def test_find_graph_without_snapshot_raises_specific_exception() -> None:

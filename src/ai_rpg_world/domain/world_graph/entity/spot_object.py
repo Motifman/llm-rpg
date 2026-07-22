@@ -5,6 +5,9 @@ from typing import Any, Dict, FrozenSet, Optional, Tuple
 
 from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyException
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    SpotObjectValidationException,
+)
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.object_description_variant import (
     ObjectDescriptionVariant,
@@ -20,6 +23,13 @@ _STOCK_POOL_STATE_KEYS: FrozenSet[str] = frozenset(
     {"stock", "stock_capacity", "stock_tick", "stock_refill_interval"}
 )
 
+# 再利用待ちオブジェクトを表す内部 state key。`available` は条件判定用の
+# bool で、`last_harvest_tick` は再生時刻計算用の内部 tick。どちらも生値の
+# まま prompt に出すと「false」「42」のような、次の一手につながらない表示になる。
+_REACTIVE_AVAILABILITY_STATE_KEY = "available"
+_REACTIVE_LAST_HARVEST_TICK_STATE_KEY = "last_harvest_tick"
+_DEFAULT_UNAVAILABLE_HINT = "(今は採れない・時間を置けば戻る)"
+
 
 @dataclass(frozen=True)
 class SpotObject:
@@ -34,6 +44,9 @@ class SpotObject:
     trap: Optional[TrapDef] = None
     puzzle: Optional[PuzzleState] = None
     detail_read_by: FrozenSet[int] = frozenset()
+    # `available=false` のとき prompt 用 state に出す作者指定の復帰ヒント。
+    # state の実値は bool のまま保ち、表示だけを scenario 側で調整できるようにする。
+    unavailable_hint: Optional[str] = None
     # Phase 4-E: 第三者プロンプトに載せたくない state キー (例: trap_armed,
     # secret_solution)。`SpotGraphCurrentStateBuilder` が
     # `SpotGraphObjectEntry.state` を組み立てるときに除外する。
@@ -44,6 +57,11 @@ class SpotObject:
     def __post_init__(self) -> None:
         if not self.name.strip():
             raise SpotNameEmptyException("Spot object name cannot be empty")
+        if self.unavailable_hint is not None:
+            if not isinstance(self.unavailable_hint, str) or not self.unavailable_hint.strip():
+                raise SpotObjectValidationException(
+                    "Spot object unavailable_hint must be a non-empty string"
+                )
 
     def with_state(self, new_state: Dict[str, Any]) -> SpotObject:
         return replace(self, state=dict(new_state))
@@ -71,8 +89,21 @@ class SpotObject:
         # `stock=0` 等の未整形値が漏れ、lazy 再生を計算しないので「0 なのに
         # 採れる」矛盾が見える。per-object hidden_state_keys 設定に頼ると設定漏れ
         # で漏れる (コード内既知回帰) ため、pool key は汎用除外する。
-        excluded = self.hidden_state_keys | _STOCK_POOL_STATE_KEYS
-        return {k: v for k, v in self.state.items() if k not in excluded}
+        excluded = (
+            self.hidden_state_keys
+            | _STOCK_POOL_STATE_KEYS
+            | frozenset({_REACTIVE_LAST_HARVEST_TICK_STATE_KEY})
+        )
+        visible: Dict[str, Any] = {}
+        for key, value in self.state.items():
+            if key in excluded:
+                continue
+            if key == _REACTIVE_AVAILABILITY_STATE_KEY:
+                if value is False:
+                    visible["状態"] = self.unavailable_hint or _DEFAULT_UNAVAILABLE_HINT
+                continue
+            visible[key] = value
+        return visible
 
     def with_visible(self, visible: bool) -> SpotObject:
         return replace(self, is_visible=visible)

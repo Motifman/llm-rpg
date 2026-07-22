@@ -1135,6 +1135,12 @@ class ScenarioLoader:
             )
             for v in raw.get("description_variants", [])
         )
+        unavailable_hint = raw.get("unavailable_hint")
+        if unavailable_hint is not None:
+            if not isinstance(unavailable_hint, str) or not unavailable_hint.strip():
+                raise ScenarioLoadError(
+                    f"object {raw.get('id')}.unavailable_hint must be a non-empty string"
+                )
         return SpotObject(
             object_id=SpotObjectId.create(oid),
             name=raw["name"],
@@ -1144,6 +1150,7 @@ class ScenarioLoader:
             interactions=interactions,
             description_variants=variants,
             is_visible=bool(raw.get("is_visible", True)),
+            unavailable_hint=unavailable_hint,
         )
 
     def _parse_interaction_def(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionDef:
