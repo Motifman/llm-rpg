@@ -56,7 +56,7 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "TRADE_PAGE_NOT_SUPPORTED": "現在の SNS / Trade ページではこの操作は実行できません。対応するページに遷移してください。",
     "ATTACK_PRECONDITION_FAILED": "攻撃の前提条件 (クールダウン / 対象の生死 / 攻撃力など) を確認し、必要なら待機または別行動を選んでください。",
     "INVENTORY_NOT_FOUND": "プレイヤーのインベントリが見つかりません。プレイヤー初期化が完了しているか確認してください。",
-    "ITEM_NOT_CONSUMABLE": "そのアイテムは使用 (consume) できません。別のアイテムを指定するか、別ツールで操作してください。",
+    "ITEM_NOT_CONSUMABLE": "そのアイテムは食べ物ではないため use_item では使えません。素材や道具は、近くのオブジェクトに interact して使ってください (例: 焚き火跡に火打ち石で着火)。食べるなら所持アイテムの「食料」を選んでください。",
     "ACTIVE_APP_CONFLICT": "既に別アプリ (SNS / 取引所など) を開いています。exit してから再度 enter してください。",
     "INVALID_DIRECTION": "方向は 北 / 北東 / 東 / 南東 / 南 / 南西 / 西 / 北西 のいずれかを指定してください。",
     "PURSUIT_FAILED": "追跡対象が視界外か既に去っている可能性があります。対象を再確認してください。",

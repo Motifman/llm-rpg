@@ -121,24 +121,20 @@ _build_ordinal_disambiguator = build_ordinal_disambiguator
 # 実験 #29 後続: ItemType.value → LLM プロンプト向け日本語タグ。
 # 「食料/道具」程度の粒度で区別できれば use_item の誤判断 (ITEM_NOT_CONSUMABLE)
 # は減る想定。未知 type は空文字を返して何も表示しない (= silent fallback)。
-# PR-C (Y_after_issue621 後続): consumable 以外は ``use_item`` ツールで
-# 使えないため、種別タグに **「使用不可」** を明示する。Y_after_issue621 では
-# 流木 (material) に対して LLM が ``use_item`` を 7 回連続試行して全部失敗した。
-# 既存の ``(素材)`` だけのタグでは「これは use_item できないアイテム」だと
-# LLM が判断できなかった (= 飢餓で錯乱した時に「素材でも食えるかも」と試した)。
 #
-# 内部 error_code は ``ITEM_NOT_CONSUMABLE`` のまま (= 用語 grep 互換)、プレイヤー
-# 露出文言だけ「使用不可」(= use_item できない、の直接表現) に統一する。
-# 「消費不可」は player 視点で不自然なので避けた。
+# Issue #785-B: 旧タグの「使用不可」は「何にも使えない」と誤読され、
+# 実際には interact の材料である流木・火打ち石まで使われなくなった。
+# そのため、全否定語ではなく「食べ物ではない」「どこで使うか」を
+# prompt に出す。
 _ITEM_TYPE_DISPLAY = {
     "consumable": " (食料)",
-    "equipment": " (装備・使用不可)",
-    "material": " (素材・使用不可)",
-    "tool": " (道具・使用不可)",
-    "key_item": " (重要・使用不可)",
-    "quest": " (任務品・使用不可)",
-    "cosmetic": " (装飾・使用不可)",
-    "other": " (使用不可)",
+    "equipment": " (装備・身につける用途。食べ物ではない)",
+    "material": " (素材・そのままは食べられない。焚き火など interact の材料)",
+    "tool": " (道具・そのままは食べられない。近くのオブジェクトに interact して使う)",
+    "key_item": " (重要品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)",
+    "quest": " (任務品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)",
+    "cosmetic": " (装飾品・食べ物ではない)",
+    "other": " (食べ物ではない。用途は周囲のオブジェクトや行動で確認)",
 }
 
 
@@ -506,8 +502,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             act_str = f" [{', '.join(action_names)}]" if action_names else ""
             desc_part = f" — {entry.description}" if entry.description else ""
             # PR-X (Y_after_pr639_640 後続): visible state を prompt に露出。
-            # {'available': False} のような state が「使用不可」タグとして
-            # LLM に見え、PRECONDITION_FAILED ループを avoid できる。
+            # {'available': False} のような state は原因準拠の再利用待ち
+            # ヒントとして LLM に見え、PRECONDITION_FAILED ループを避けられる。
             state_part = _format_object_state(entry.state)
             # PR-FF (Y_after_pr639_640 後続): object 名を ``""`` で囲む
             # (PR #639/#640 で導入した quote 規約を全 section に拡張)。
@@ -781,10 +777,9 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # Phase D-3a: 腐敗食は (腐敗) を付ける。runtime 側で (spec, is_spoiled)
             # 単位で集約しているので、quantity と (腐敗) の関係は一意に決まる。
             spoiled_mark = " (腐敗)" if entry.is_spoiled else ""
-            # 実験 #29 後続: item_type を日本語タグで表示し、LLM が
-            # 「食べられる / 道具 / 素材」の区別をリストだけで判断できるよう
-            # にする。ITEM_NOT_CONSUMABLE (= 食料じゃないものを食べようとする
-            # ミス) を減らす目的。
+            # item_type を日本語タグで表示し、LLM が「食べられるもの」と
+            # 「近くのオブジェクトに interact して使う素材・道具」を
+            # リストだけで判断できるようにする。
             type_mark = _format_item_type_tag(entry.item_type)
             # ``""`` 規約 (PR #639 後続): item 名のみ ``""`` で囲み、
             # x{量} / 種別タグ / 腐敗 タグは囲まない。LLM は「``""`` 内の

@@ -61,6 +61,14 @@ class TestNewlyAddedRemediationCodes:
         msg = get_remediation("INTERACTION_PRECONDITION_FAILED")
         assert "状態" in msg or "object" in msg.lower() or "オブジェクト" in msg
 
+    def test_item_not_consumable_remediation_guides_interact_with_nearby_object(self) -> None:
+        """食料でない素材や道具を use_item した失敗では、近くのオブジェクトへの interact を促す。"""
+        msg = get_remediation("ITEM_NOT_CONSUMABLE")
+        assert "食べ物" in msg or "食料" in msg
+        assert "interact" in msg
+        assert "オブジェクト" in msg
+        assert "焚き火" in msg or "火打ち石" in msg
+
     def test_unsupported_tool_remediation_tool(self) -> None:
         """typo / 未配線 tool の呼び出し → 有効 tool 一覧の確認を示唆。"""
         msg = get_remediation("UNSUPPORTED_TOOL")
