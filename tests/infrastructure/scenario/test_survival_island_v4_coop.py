@@ -76,6 +76,9 @@ class TestSurvivalIslandV4Load:
         assert cue.visible_name == "白い煙"
         assert cue.prominence == 1.0
         assert cue.ambient_descriptions["far"] == "北東の山の方に白い煙が見える。"
+        assert cue.appear_event is not None
+        assert cue.appear_event.message == "{direction}の山の方から白い煙が上がった。"
+        assert cue.appear_event.schedules_turn is True
 
 
 class TestSurvivalIslandV4MapValidation:

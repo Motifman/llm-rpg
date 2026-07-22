@@ -377,6 +377,10 @@ class TestSpotMapValidatorDistantCues:
                 "origin": {"area_id": "mountain"},
                 "visible_name": "白い煙",
                 "prominence": 1.0,
+                "appear_event": {
+                    "message": "{direction}に{visible_name}が立ち上った。",
+                    "schedules_turn": True,
+                },
             }
         ]
 
@@ -387,6 +391,52 @@ class TestSpotMapValidatorDistantCues:
         assert not {
             issue.code for issue in result.errors if issue.code.startswith("DISTANT_CUE")
         }
+
+    def test_cue_appear_event_message_and_schedules_turn_are_validated(self) -> None:
+        """appear_event の message と schedules_turn は観測配達の意味を決めるので error で検査する。"""
+        raw = _scenario(
+            spots=[
+                {
+                    **_spot("summit", x=0, y=0),
+                    "area_id": "mountain",
+                    "interior": {
+                        "objects": [{"id": "signal_fire_pit", "name": "狼煙台"}]
+                    },
+                }
+            ],
+            connections=[],
+        )
+        raw["areas"] = [
+            {
+                "id": "mountain",
+                "name": "山岳",
+                "visible_name": "切り立った山影",
+                "prominence": 0.95,
+            }
+        ]
+        raw["distant_cues"] = [
+            {
+                "id": "bad_appear",
+                "source": {
+                    "kind": "object_state",
+                    "object_id": "signal_fire_pit",
+                    "state_key": "lit",
+                    "equals": True,
+                },
+                "origin": {"area_id": "mountain"},
+                "visible_name": "白い煙",
+                "prominence": 1.0,
+                "appear_event": {"message": "", "schedules_turn": "yes"},
+            }
+        ]
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is False
+        assert {
+            "DISTANT_CUE_APPEAR_EVENT_MESSAGE_EMPTY",
+            "DISTANT_CUE_APPEAR_EVENT_SCHEDULES_TURN_INVALID",
+        } <= {issue.code for issue in result.errors}
 
     def test_cue_unknown_object_and_area_are_errors(self) -> None:
         """cue が未知 object や未知 area を参照すると実行時に評価不能なので error にする。"""

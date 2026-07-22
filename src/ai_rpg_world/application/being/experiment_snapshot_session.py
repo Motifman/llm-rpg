@@ -54,6 +54,7 @@ from ai_rpg_world.application.being.world_state_snapshot_service import (
 from ai_rpg_world.application.being.world_subsystems import (
     ActionResultStoreSubsystemCodec,
     DayNightSubsystemCodec,
+    DistantCueStateSubsystemCodec,
     ItemInstanceSubsystemCodec,
     ObservationBufferSubsystemCodec,
     PendingFoodSpoilageSubsystemCodec,
@@ -125,6 +126,8 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     "encounter_memory",
     # PR #752: save→restore 境界で当日分の腐敗通知を失わない
     "pending_food_spoilage",
+    # 段階3: cue 出現イベントの false→true 境界を resume 後に再発火させない
+    "distant_cue_state",
 )
 
 
@@ -341,6 +344,8 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         # capture 前に flush すると連続 run と resume run で観測時刻がズレるため、
         # バッファ自体を保存して既存 day boundary flush に任せる。
         PendingFoodSpoilageSubsystemCodec(),
+        # 再開保証: 動的遠景 cue の active 境界検出状態。
+        DistantCueStateSubsystemCodec(),
     ]
 
 

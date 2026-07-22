@@ -736,7 +736,41 @@ def _check_distant_cues(
                 f"distant_cues[{cue_id}].ambient_descriptions は object である必要があります",
                 details={"cue_id": cue_id},
             )
+        appear_event = cue.get("appear_event")
+        if appear_event is not None:
+            _check_distant_cue_appear_event(cue_id, appear_event, collector)
     return len(cues)
+
+
+def _check_distant_cue_appear_event(
+    cue_id: str,
+    raw: Any,
+    collector: _IssueCollector,
+) -> None:
+    if not isinstance(raw, Mapping):
+        collector.add(
+            "INVALID_DISTANT_CUE_APPEAR_EVENT",
+            "error",
+            f"distant_cues[{cue_id}].appear_event は object である必要があります",
+            details={"cue_id": cue_id},
+        )
+        return
+    message = raw.get("message")
+    if not isinstance(message, str) or not message.strip():
+        collector.add(
+            "DISTANT_CUE_APPEAR_EVENT_MESSAGE_EMPTY",
+            "error",
+            f"distant_cues[{cue_id}].appear_event.message は空でない文字列である必要があります",
+            details={"cue_id": cue_id},
+        )
+    schedules_turn = raw.get("schedules_turn")
+    if not isinstance(schedules_turn, bool):
+        collector.add(
+            "DISTANT_CUE_APPEAR_EVENT_SCHEDULES_TURN_INVALID",
+            "error",
+            f"distant_cues[{cue_id}].appear_event.schedules_turn は bool である必要があります",
+            details={"cue_id": cue_id, "raw_value": schedules_turn},
+        )
 
 
 def _check_distant_cue_source(

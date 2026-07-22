@@ -235,6 +235,14 @@ class DistantCueSourceDef:
 
 
 @dataclass(frozen=True)
+class DistantCueAppearEventDef:
+    """動的兆候が false→true になった境界で配る観測の宣言。"""
+
+    message: str
+    schedules_turn: bool
+
+
+@dataclass(frozen=True)
 class DistantCueDef:
     """シナリオ JSON で宣言された汎用の遠望可能な兆候。
 
@@ -248,6 +256,7 @@ class DistantCueDef:
     visible_name: str
     prominence: float
     ambient_descriptions: Mapping[str, str] = field(default_factory=dict)
+    appear_event: Optional[DistantCueAppearEventDef] = None
 
 
 @dataclass(frozen=True)
@@ -932,6 +941,9 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     f"distant_cues[{cue_id}].ambient_descriptions must be an object"
                 )
+            appear_event = self._parse_distant_cue_appear_event(
+                cue_id, raw_cue.get("appear_event")
+            )
 
             out.append(
                 DistantCueDef(
@@ -943,9 +955,31 @@ class ScenarioLoader:
                     ambient_descriptions={
                         str(k): str(v) for k, v in ambient_descriptions.items()
                     },
+                    appear_event=appear_event,
                 )
             )
         return tuple(out)
+
+    def _parse_distant_cue_appear_event(
+        self,
+        cue_id: str,
+        raw: Any,
+    ) -> Optional[DistantCueAppearEventDef]:
+        path = f"distant_cues[{cue_id}].appear_event"
+        if raw is None:
+            return None
+        if not isinstance(raw, Mapping):
+            raise ScenarioLoadError(f"{path} must be an object")
+        message = raw.get("message")
+        if not isinstance(message, str) or not message.strip():
+            raise ScenarioLoadError(f"{path}.message must be a non-empty string")
+        schedules_turn = raw.get("schedules_turn")
+        if not isinstance(schedules_turn, bool):
+            raise ScenarioLoadError(f"{path}.schedules_turn must be bool")
+        return DistantCueAppearEventDef(
+            message=message.strip(),
+            schedules_turn=schedules_turn,
+        )
 
     def _parse_distant_cue_source(
         self,

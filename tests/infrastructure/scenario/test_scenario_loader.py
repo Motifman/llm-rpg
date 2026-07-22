@@ -245,6 +245,10 @@ class TestScenarioLoaderMinimal:
                 "origin": {"area_id": "inside"},
                 "visible_name": "白い煙",
                 "prominence": 1.0,
+                "appear_event": {
+                    "message": "{direction}に{visible_name}が立ち上った。",
+                    "schedules_turn": True,
+                },
                 "ambient_descriptions": {
                     "far": "遠くに白い煙が見える。",
                     "middle": "白い煙が上がっている。",
@@ -264,7 +268,103 @@ class TestScenarioLoaderMinimal:
         assert cue.origin_area_id == "inside"
         assert cue.visible_name == "白い煙"
         assert cue.prominence == 1.0
+        assert cue.appear_event is not None
+        assert cue.appear_event.message == "{direction}に{visible_name}が立ち上った。"
+        assert cue.appear_event.schedules_turn is True
         assert cue.ambient_descriptions["far"] == "遠くに白い煙が見える。"
+
+    def test_distant_cue_appear_event_is_optional(self) -> None:
+        """appear_event 未指定の distant cue は ambient 表示だけの cue として読み込まれる。"""
+        raw = _minimal_scenario()
+        raw["areas"] = [
+            {
+                "id": "inside",
+                "name": "屋内",
+                "visible_name": "建物",
+                "prominence": 0.4,
+                "position": {"x": 0, "y": 0},
+            }
+        ]
+        raw["distant_cues"] = [
+            {
+                "id": "ambient_only_smoke",
+                "source": {
+                    "kind": "object_state",
+                    "object_id": "chest",
+                    "state_key": "opened",
+                    "equals": True,
+                },
+                "origin": {"area_id": "inside"},
+                "visible_name": "煙",
+                "prominence": 0.5,
+            }
+        ]
+
+        result = ScenarioLoader().load_from_dict(raw)
+
+        assert result.distant_cues[0].appear_event is None
+
+    def test_distant_cue_appear_event_requires_message_and_schedules_turn(self) -> None:
+        """appear_event は記憶へ流す観測文なので空 message や非 bool schedules_turn を拒否する。"""
+        raw = _minimal_scenario()
+        raw["areas"] = [
+            {
+                "id": "inside",
+                "name": "屋内",
+                "visible_name": "建物",
+                "prominence": 0.4,
+                "position": {"x": 0, "y": 0},
+            }
+        ]
+        raw["distant_cues"] = [
+            {
+                "id": "bad_appear",
+                "source": {
+                    "kind": "object_state",
+                    "object_id": "chest",
+                    "state_key": "opened",
+                    "equals": True,
+                },
+                "origin": {"area_id": "inside"},
+                "visible_name": "煙",
+                "prominence": 0.5,
+                "appear_event": {"message": " ", "schedules_turn": "yes"},
+            }
+        ]
+
+        with pytest.raises(ScenarioLoadError, match="appear_event\\.message"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_distant_cue_appear_event_schedules_turn_must_be_bool(self) -> None:
+        """appear_event.schedules_turn は turn 割り込み制御なので bool 以外を拒否する。"""
+        raw = _minimal_scenario()
+        raw["areas"] = [
+            {
+                "id": "inside",
+                "name": "屋内",
+                "visible_name": "建物",
+                "prominence": 0.4,
+                "position": {"x": 0, "y": 0},
+            }
+        ]
+        raw["distant_cues"] = [
+            {
+                "id": "bad_schedule",
+                "source": {
+                    "kind": "object_state",
+                    "object_id": "chest",
+                    "state_key": "opened",
+                    "equals": True,
+                },
+                "origin": {"area_id": "inside"},
+                "visible_name": "煙",
+                "prominence": 0.5,
+                "appear_event": {"message": "煙が上がった。", "schedules_turn": "yes"},
+            }
+        ]
+
+        with pytest.raises(ScenarioLoadError, match="appear_event\\.schedules_turn"):
+            ScenarioLoader().load_from_dict(raw)
 
     def test_distant_cue_rejects_unsupported_source_kind(self) -> None:
         """段階2aでは object_state 以外の source.kind を fail-fast で拒否する。"""
