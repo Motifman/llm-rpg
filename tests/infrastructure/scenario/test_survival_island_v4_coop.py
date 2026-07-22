@@ -59,6 +59,24 @@ class TestSurvivalIslandV4Load:
         assert areas["mountain"].prominence == 0.95
         assert areas["mountain"].position_source == "centroid"
 
+    def test_loads_signal_smoke_distant_cue_from_object_state(self, loaded_v4) -> None:
+        """狼煙の遠景兆候は救助 flag ではなく signal_fire_pit.state.lit を source にする。"""
+        assert len(loaded_v4.distant_cues) == 1
+        cue = loaded_v4.distant_cues[0]
+
+        assert cue.cue_id == "summit_signal_smoke"
+        assert cue.source.kind == "object_state"
+        assert (
+            cue.source.object_id.value
+            == loaded_v4.id_mapper.get_int("object", "signal_fire_pit")
+        )
+        assert cue.source.state_key == "lit"
+        assert cue.source.equals is True
+        assert cue.origin_area_id == "mountain"
+        assert cue.visible_name == "白い煙"
+        assert cue.prominence == 1.0
+        assert cue.ambient_descriptions["far"] == "北東の山の方に白い煙が見える。"
+
 
 class TestSurvivalIslandV4MapValidation:
     """v4 の座標・接続品質を spot map validator で固定する。"""
@@ -79,6 +97,7 @@ class TestSurvivalIslandV4MapValidation:
         assert result.skipped_checks == []
         assert result.metrics["positioned_spot_count"] == 25
         assert result.metrics["area_count"] == 6
+        assert result.metrics["distant_cue_count"] == 1
         assert result.metrics["unreachable_spots"] == []
         assert result.metrics["cycle_rank"] == 9
         assert result.metrics["articulation_spots"] == [
@@ -94,6 +113,9 @@ class TestSurvivalIslandV4MapValidation:
         }
         assert "SPOT_AREA_ID_MISSING" not in {issue.code for issue in result.warnings}
         assert "AREA_CENTROID_UNAVAILABLE" not in {issue.code for issue in result.errors}
+        assert not {
+            issue.code for issue in result.errors if issue.code.startswith("DISTANT_CUE")
+        }
 
 
 class TestSurvivalIslandV4CoveCarving:

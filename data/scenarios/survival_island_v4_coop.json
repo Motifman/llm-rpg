@@ -3941,6 +3941,26 @@
       }
     ]
   },
+  "distant_cues": [
+    {
+      "id": "summit_signal_smoke",
+      "source": {
+        "kind": "object_state",
+        "object_id": "signal_fire_pit",
+        "state_key": "lit",
+        "equals": true
+      },
+      "origin": {
+        "area_id": "mountain"
+      },
+      "visible_name": "白い煙",
+      "prominence": 1.0,
+      "ambient_descriptions": {
+        "far": "北東の山の方に白い煙が見える。",
+        "middle": "山の高みから白い煙が上がっている。"
+      }
+    }
+  ],
   "areas": [
     {
       "id": "shore",

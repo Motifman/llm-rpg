@@ -103,6 +103,8 @@ def validate_spot_map(
     positions = _positions(raw)
     area_ids = _check_areas(raw, positions, collector)
     _check_spot_area_refs(raw, area_ids, collector)
+    object_ids = _object_ids(raw)
+    distant_cue_count = _check_distant_cues(raw, area_ids, object_ids, collector)
     edges = _edges(raw, spot_set, collector)
     directed_adjacency = _directed_adjacency(spots, edges)
     undirected_adjacency = _undirected_adjacency(spots, edges)
@@ -164,6 +166,7 @@ def validate_spot_map(
         "unreachable_spots": unreachable,
         "positioned_spot_count": len(positions),
         "area_count": len(area_ids),
+        "distant_cue_count": distant_cue_count,
     }
     return MapValidationResult(
         ok=not collector.errors,
@@ -573,6 +576,23 @@ def _spot_ids_for_area(raw: Mapping[str, Any], area_id: str) -> list[str]:
     return out
 
 
+def _object_ids(raw: Mapping[str, Any]) -> set[str]:
+    out: set[str] = set()
+    for spot in _list_value(raw, "spots"):
+        if not isinstance(spot, Mapping):
+            continue
+        interior = spot.get("interior")
+        if not isinstance(interior, Mapping):
+            continue
+        for obj in _list_value(interior, "objects"):
+            if not isinstance(obj, Mapping):
+                continue
+            object_id = obj.get("id")
+            if isinstance(object_id, str) and object_id.strip():
+                out.add(object_id.strip())
+    return out
+
+
 def _check_spot_area_refs(
     raw: Mapping[str, Any],
     area_ids: set[str],
@@ -611,6 +631,159 @@ def _check_spot_area_refs(
                 spots=(spot_id,),
                 details={"area_id": area_id},
             )
+
+
+def _check_distant_cues(
+    raw: Mapping[str, Any],
+    area_ids: set[str],
+    object_ids: set[str],
+    collector: _IssueCollector,
+) -> int:
+    cues = _list_value(raw, "distant_cues")
+    seen: set[str] = set()
+    for index, cue in enumerate(cues):
+        if not isinstance(cue, Mapping):
+            collector.add(
+                "INVALID_DISTANT_CUE",
+                "error",
+                f"distant_cues[{index}] は object である必要があります",
+            )
+            continue
+        cue_id_raw = cue.get("id")
+        if not isinstance(cue_id_raw, str) or not cue_id_raw.strip():
+            collector.add(
+                "INVALID_DISTANT_CUE_ID",
+                "error",
+                f"distant_cues[{index}].id は空でない文字列である必要があります",
+            )
+            continue
+        cue_id = cue_id_raw.strip()
+        if cue_id in seen:
+            collector.add(
+                "DUPLICATE_DISTANT_CUE_ID",
+                "error",
+                f"distant cue id が重複しています: {cue_id}",
+                details={"cue_id": cue_id},
+            )
+        seen.add(cue_id)
+
+        source = cue.get("source")
+        if not isinstance(source, Mapping):
+            collector.add(
+                "INVALID_DISTANT_CUE_SOURCE",
+                "error",
+                f"distant_cues[{cue_id}].source は object である必要があります",
+                details={"cue_id": cue_id},
+            )
+        else:
+            _check_distant_cue_source(cue_id, source, object_ids, collector)
+
+        origin = cue.get("origin")
+        if not isinstance(origin, Mapping):
+            collector.add(
+                "INVALID_DISTANT_CUE_ORIGIN",
+                "error",
+                f"distant_cues[{cue_id}].origin は object である必要があります",
+                details={"cue_id": cue_id},
+            )
+        else:
+            area_id = origin.get("area_id")
+            if not isinstance(area_id, str) or not area_id.strip():
+                collector.add(
+                    "DISTANT_CUE_ORIGIN_AREA_EMPTY",
+                    "error",
+                    f"distant_cues[{cue_id}].origin.area_id は空でない文字列である必要があります",
+                    details={"cue_id": cue_id},
+                )
+            elif area_id.strip() not in area_ids:
+                collector.add(
+                    "DISTANT_CUE_UNKNOWN_AREA",
+                    "error",
+                    f"distant_cues[{cue_id}] が存在しない area_id を参照しています: {area_id}",
+                    details={"cue_id": cue_id, "area_id": area_id},
+                )
+
+        visible_name = cue.get("visible_name")
+        if not isinstance(visible_name, str) or not visible_name.strip():
+            collector.add(
+                "DISTANT_CUE_VISIBLE_NAME_EMPTY",
+                "error",
+                f"distant_cues[{cue_id}].visible_name は空でない文字列である必要があります",
+                details={"cue_id": cue_id},
+            )
+
+        prominence = cue.get("prominence")
+        if not _is_number(prominence):
+            collector.add(
+                "DISTANT_CUE_PROMINENCE_INVALID",
+                "error",
+                f"distant_cues[{cue_id}].prominence は 0.0〜1.0 の数値である必要があります",
+                details={"cue_id": cue_id, "raw_value": prominence},
+            )
+        elif not 0.0 <= float(prominence) <= 1.0:
+            collector.add(
+                "DISTANT_CUE_PROMINENCE_OUT_OF_RANGE",
+                "error",
+                f"distant_cues[{cue_id}].prominence は 0.0〜1.0 の範囲である必要があります",
+                details={"cue_id": cue_id, "prominence": float(prominence)},
+            )
+
+        descriptions = cue.get("ambient_descriptions", {})
+        if descriptions is not None and not isinstance(descriptions, Mapping):
+            collector.add(
+                "DISTANT_CUE_AMBIENT_DESCRIPTIONS_INVALID",
+                "error",
+                f"distant_cues[{cue_id}].ambient_descriptions は object である必要があります",
+                details={"cue_id": cue_id},
+            )
+    return len(cues)
+
+
+def _check_distant_cue_source(
+    cue_id: str,
+    source: Mapping[str, Any],
+    object_ids: set[str],
+    collector: _IssueCollector,
+) -> None:
+    kind = source.get("kind")
+    if kind != "object_state":
+        collector.add(
+            "DISTANT_CUE_UNSUPPORTED_SOURCE_KIND",
+            "error",
+            f"distant_cues[{cue_id}].source.kind は object_state のみ対応しています",
+            details={"cue_id": cue_id, "kind": kind},
+        )
+        return
+    object_id = source.get("object_id")
+    if not isinstance(object_id, str) or not object_id.strip():
+        collector.add(
+            "DISTANT_CUE_OBJECT_ID_EMPTY",
+            "error",
+            f"distant_cues[{cue_id}].source.object_id は空でない文字列である必要があります",
+            details={"cue_id": cue_id},
+        )
+    elif object_id.strip() not in object_ids:
+        collector.add(
+            "DISTANT_CUE_UNKNOWN_OBJECT",
+            "error",
+            f"distant_cues[{cue_id}] が存在しない object_id を参照しています: {object_id}",
+            details={"cue_id": cue_id, "object_id": object_id},
+        )
+    state_key = source.get("state_key")
+    if not isinstance(state_key, str) or not state_key.strip():
+        collector.add(
+            "DISTANT_CUE_STATE_KEY_EMPTY",
+            "error",
+            f"distant_cues[{cue_id}].source.state_key は空でない文字列である必要があります",
+            details={"cue_id": cue_id},
+        )
+    if "equals" not in source:
+        collector.add(
+            "DISTANT_CUE_EQUALS_MISSING",
+            "error",
+            f"distant_cues[{cue_id}].source.equals は必須です",
+            details={"cue_id": cue_id},
+        )
 
 
 def _positions(raw: Mapping[str, Any]) -> dict[str, tuple[float, float]]:
