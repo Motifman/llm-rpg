@@ -12,7 +12,11 @@ from ai_rpg_world.application.trace import (
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.run_scenario_experiment import _build_report, main  # noqa: E402
+from scripts.run_scenario_experiment import (  # noqa: E402
+    _build_report,
+    _emit_html_artifacts,
+    main,
+)
 
 
 class TestBuildReport:
@@ -65,6 +69,10 @@ class TestBuildReport:
         assert "memo_add: 1" in report
         # position_change カウント (今回 0 件)
         assert "position_change: 0" in report
+        assert "legacy HTML viewer" in report
+        assert "map trace viewer" in report
+        assert "episodic memory viewer" in report
+        assert "timeline viewer" in report
         # プレイヤー別集計に 2 行 (新列 moves あり)
         assert "| 1 | 1 | 1 | 0 | 0 | 0 | 0 |" in report
         assert "| 2 | 1 | 0 | 1 | 1 | 0 | 0 |" in report
@@ -138,6 +146,171 @@ class TestBuildReport:
         )
         assert "action: 0" in report
         assert "memo_add: 0" in report
+
+
+class TestEmitHtmlArtifacts:
+    """run 完了時に生成する HTML 成果物の挙動を保証する。"""
+
+    def test_emits_legacy_and_three_viewers(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        capsys,
+    ) -> None:
+        """trace.html / viewer.html / episodic.html / timeline.html を同じ段で生成する。"""
+        import scripts.run_scenario_experiment as runner
+
+        trace_path = tmp_path / "trace.jsonl"
+        trace_path.write_text("", encoding="utf-8")
+
+        monkeypatch.setattr(
+            runner,
+            "_render_trace_html",
+            lambda trace_path, *, title: "<html>legacy</html>",
+        )
+        monkeypatch.setattr(
+            runner,
+            "_render_map_viewer_html",
+            lambda run_dir, trace_path, *, title: "<html>map</html>",
+        )
+        monkeypatch.setattr(
+            runner,
+            "_render_episodic_viewer_html",
+            lambda trace_path, *, title: "<html>episodic</html>",
+        )
+        monkeypatch.setattr(
+            runner,
+            "_render_timeline_viewer_html",
+            lambda trace_path, *, title: "<html>timeline</html>",
+        )
+
+        results = _emit_html_artifacts(
+            run_dir=tmp_path,
+            trace_path=trace_path,
+            trace_html_path=tmp_path / "trace.html",
+            title="demo run",
+        )
+
+        assert [r.name for r in results] == [
+            "trace.html",
+            "viewer.html",
+            "episodic.html",
+            "timeline.html",
+        ]
+        assert all(r.generated for r in results)
+        assert (
+            (tmp_path / "trace.html").read_text(encoding="utf-8")
+            == "<html>legacy</html>"
+        )
+        assert (tmp_path / "viewer.html").read_text(encoding="utf-8") == "<html>map</html>"
+        assert (
+            (tmp_path / "episodic.html").read_text(encoding="utf-8")
+            == "<html>episodic</html>"
+        )
+        assert (
+            (tmp_path / "timeline.html").read_text(encoding="utf-8")
+            == "<html>timeline</html>"
+        )
+        out = capsys.readouterr().out
+        assert "[html] trace.html:" in out
+        assert "[html] viewer.html:" in out
+        assert "[html] episodic.html:" in out
+        assert "[html] timeline.html:" in out
+
+    def test_viewer_failure_is_reported_without_stopping_other_outputs(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        capsys,
+    ) -> None:
+        """個別 Viewer 生成が失敗しても警告を出し、残りの HTML は生成する。"""
+        import scripts.run_scenario_experiment as runner
+
+        trace_path = tmp_path / "trace.jsonl"
+        trace_path.write_text("", encoding="utf-8")
+
+        monkeypatch.setattr(
+            runner,
+            "_render_trace_html",
+            lambda trace_path, *, title: "<html>legacy</html>",
+        )
+
+        def _raise_map(*args, **kwargs):
+            raise RuntimeError("cytoscape unavailable")
+
+        monkeypatch.setattr(runner, "_render_map_viewer_html", _raise_map)
+        monkeypatch.setattr(
+            runner,
+            "_render_episodic_viewer_html",
+            lambda trace_path, *, title: "<html>episodic</html>",
+        )
+        monkeypatch.setattr(
+            runner,
+            "_render_timeline_viewer_html",
+            lambda trace_path, *, title: "<html>timeline</html>",
+        )
+
+        results = _emit_html_artifacts(
+            run_dir=tmp_path,
+            trace_path=trace_path,
+            trace_html_path=tmp_path / "trace.html",
+            title="demo run",
+        )
+
+        by_name = {r.name: r for r in results}
+        assert by_name["viewer.html"].generated is False
+        assert by_name["viewer.html"].error == "cytoscape unavailable"
+        assert by_name["trace.html"].generated is True
+        assert by_name["episodic.html"].generated is True
+        assert by_name["timeline.html"].generated is True
+        assert not (tmp_path / "viewer.html").exists()
+        assert (tmp_path / "episodic.html").exists()
+        assert (tmp_path / "timeline.html").exists()
+        out = capsys.readouterr().out
+        assert "[html-error] viewer.html: cytoscape unavailable" in out
+
+    def test_no_html_skips_all_html_artifacts(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        """--no-html を指定すると legacy HTML と 3 Viewer を一括で生成しない。"""
+        import scripts.run_scenario_experiment as runner
+
+        def _fake_drive(**kwargs):
+            return {
+                "outcome": "TIMEOUT",
+                "last_tick": 0,
+                "elapsed_sec": 0.0,
+                "max_world_ticks": kwargs["max_world_ticks"],
+                "snapshot_save_dir": None,
+                "snapshot_load_dir": None,
+            }
+
+        def _fail_if_called(**kwargs):
+            raise AssertionError("--no-html must skip HTML artifact generation")
+
+        monkeypatch.setattr(runner, "_drive_scenario", _fake_drive)
+        monkeypatch.setattr(runner, "_emit_html_artifacts", _fail_if_called)
+
+        out_dir = tmp_path / "out"
+        rc = main(
+            [
+                "--profile",
+                "smoke_stub",
+                "--out",
+                str(out_dir),
+                "--no-html",
+                "--no-progress-jsonl",
+                "--no-stderr-progress",
+            ]
+        )
+
+        assert rc == 0
+        assert not (out_dir / "trace.html").exists()
+        assert not (out_dir / "viewer.html").exists()
+        assert not (out_dir / "episodic.html").exists()
+        assert not (out_dir / "timeline.html").exists()
 
 
 class TestMaxWorldTicksRename:
