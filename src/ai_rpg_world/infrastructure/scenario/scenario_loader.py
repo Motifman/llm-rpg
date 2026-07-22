@@ -85,7 +85,10 @@ from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraph
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
-from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import (
+    ScenarioIdMapper,
+    ScenarioIdMappingError,
+)
 
 
 SUPPORTED_FORMAT_VERSIONS = ("1.0",)
@@ -215,6 +218,36 @@ class AreaDef:
     position_source: Optional[str] = None
     description: str = ""
     distant_descriptions: Mapping[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class DistantCueSourceDef:
+    """遠景に出す動的兆候の発生条件。
+
+    段階2aでは object_state のみ対応する。world_flag / scenario_flag は
+    未対応の source.kind として loader 境界で fail-fast する。
+    """
+
+    kind: str
+    object_id: SpotObjectId
+    state_key: str
+    equals: Any
+
+
+@dataclass(frozen=True)
+class DistantCueDef:
+    """シナリオ JSON で宣言された汎用の遠望可能な兆候。
+
+    signal_fire 固有の概念は持たせず、object state が条件を満たしたときに
+    area 由来の遠景候補へ混ぜるための軽い定義表として扱う。
+    """
+
+    cue_id: str
+    source: DistantCueSourceDef
+    origin_area_id: str
+    visible_name: str
+    prominence: float
+    ambient_descriptions: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -381,6 +414,9 @@ class ScenarioLoadResult:
     # 遠景知覚の土台: scenario JSON で宣言された area 定義群。
     # 実行時 state を持たないため、SpotGraphAggregate の子集約にはしない。
     areas: Tuple[AreaDef, ...] = ()
+    # 遠景知覚の動的兆候: object state などを source とする定義群。
+    # 段階2aでは読み込み・検証だけを行い、prompt 反映は段階2bで接続する。
+    distant_cues: Tuple[DistantCueDef, ...] = ()
 
 
 class ScenarioLoader:
@@ -410,6 +446,11 @@ class ScenarioLoader:
         self._pre_register_ids(raw, mapper)
         graph, interiors = self._parse_spots_and_graph(raw, mapper)
         areas = self._parse_areas(raw.get("areas", []), raw.get("spots", []))
+        distant_cues = self._parse_distant_cues(
+            raw.get("distant_cues", []),
+            mapper,
+            {area.area_id for area in areas},
+        )
         self._parse_connections(raw.get("connections", []), graph, mapper)
         players = self._parse_players(raw.get("players", []), mapper)
         win_conds = self._parse_end_conditions(raw.get("game_end_conditions", {}).get("win", []), mapper)
@@ -455,6 +496,7 @@ class ScenarioLoader:
             outcome_resolution_config=outcome_resolution_config,
             loot_tables=loot_tables,
             areas=areas,
+            distant_cues=distant_cues,
         )
 
     def _parse_loot_tables(
@@ -843,6 +885,129 @@ class ScenarioLoader:
         if not 0.0 <= value <= 1.0:
             raise ScenarioLoadError(f"{path} must be in [0.0, 1.0]")
         return value
+
+    def _parse_distant_cues(
+        self,
+        raw: Any,
+        mapper: ScenarioIdMapper,
+        area_ids: set[str],
+    ) -> Tuple[DistantCueDef, ...]:
+        if raw is None:
+            return ()
+        if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
+            raise ScenarioLoadError("distant_cues must be a list")
+
+        out: List[DistantCueDef] = []
+        seen: set[str] = set()
+        for index, raw_cue in enumerate(raw):
+            if not isinstance(raw_cue, Mapping):
+                raise ScenarioLoadError(f"distant_cues[{index}] must be an object")
+            cue_id = raw_cue.get("id")
+            if not isinstance(cue_id, str) or not cue_id.strip():
+                raise ScenarioLoadError(
+                    f"distant_cues[{index}].id must be a non-empty string"
+                )
+            cue_id = cue_id.strip()
+            if cue_id in seen:
+                raise ScenarioLoadError(f"distant_cues[{cue_id}].id is duplicated")
+            seen.add(cue_id)
+
+            source = self._parse_distant_cue_source(cue_id, raw_cue.get("source"), mapper)
+            origin_area_id = self._parse_distant_cue_origin_area_id(
+                cue_id, raw_cue.get("origin"), area_ids
+            )
+
+            visible_name = raw_cue.get("visible_name")
+            if not isinstance(visible_name, str) or not visible_name.strip():
+                raise ScenarioLoadError(
+                    f"distant_cues[{cue_id}].visible_name must be a non-empty string"
+                )
+            prominence = self._parse_prominence(
+                raw_cue.get("prominence"), f"distant_cues[{cue_id}].prominence"
+            )
+            ambient_descriptions = raw_cue.get("ambient_descriptions", {})
+            if ambient_descriptions is None:
+                ambient_descriptions = {}
+            if not isinstance(ambient_descriptions, Mapping):
+                raise ScenarioLoadError(
+                    f"distant_cues[{cue_id}].ambient_descriptions must be an object"
+                )
+
+            out.append(
+                DistantCueDef(
+                    cue_id=cue_id,
+                    source=source,
+                    origin_area_id=origin_area_id,
+                    visible_name=visible_name.strip(),
+                    prominence=prominence,
+                    ambient_descriptions={
+                        str(k): str(v) for k, v in ambient_descriptions.items()
+                    },
+                )
+            )
+        return tuple(out)
+
+    def _parse_distant_cue_source(
+        self,
+        cue_id: str,
+        raw: Any,
+        mapper: ScenarioIdMapper,
+    ) -> DistantCueSourceDef:
+        path = f"distant_cues[{cue_id}].source"
+        if not isinstance(raw, Mapping):
+            raise ScenarioLoadError(f"{path} must be an object")
+        kind = raw.get("kind")
+        if kind != "object_state":
+            raise ScenarioLoadError(f"{path}.kind must be object_state")
+        object_id_raw = raw.get("object_id")
+        if not isinstance(object_id_raw, str) or not object_id_raw.strip():
+            raise ScenarioLoadError(f"{path}.object_id must be a non-empty string")
+        object_sid = object_id_raw.strip()
+        try:
+            object_id = SpotObjectId.create(mapper.get_int("object", object_sid))
+        except ScenarioIdMappingError as exc:
+            raise ScenarioLoadError(
+                f"{path}.object_id references unknown object: {object_sid}"
+            ) from exc
+        state_key = raw.get("state_key")
+        if not isinstance(state_key, str) or not state_key.strip():
+            raise ScenarioLoadError(f"{path}.state_key must be a non-empty string")
+        if "equals" not in raw:
+            raise ScenarioLoadError(f"{path}.equals is required")
+        equals = raw["equals"]
+        if not self._is_json_primitive(equals):
+            raise ScenarioLoadError(f"{path}.equals must be a JSON primitive")
+        return DistantCueSourceDef(
+            kind="object_state",
+            object_id=object_id,
+            state_key=state_key.strip(),
+            equals=equals,
+        )
+
+    def _parse_distant_cue_origin_area_id(
+        self,
+        cue_id: str,
+        raw: Any,
+        area_ids: set[str],
+    ) -> str:
+        path = f"distant_cues[{cue_id}].origin"
+        if not isinstance(raw, Mapping):
+            raise ScenarioLoadError(f"{path} must be an object")
+        area_id = raw.get("area_id")
+        if not isinstance(area_id, str) or not area_id.strip():
+            raise ScenarioLoadError(f"{path}.area_id must be a non-empty string")
+        area_id = area_id.strip()
+        if area_id not in area_ids:
+            raise ScenarioLoadError(f"{path}.area_id references unknown area: {area_id}")
+        return area_id
+
+    @staticmethod
+    def _is_json_primitive(value: Any) -> bool:
+        if value is None or isinstance(value, (str, bool)):
+            return True
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return isfinite(value)
+        return False
 
     def _spot_positions_by_area(
         self,

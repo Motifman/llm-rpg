@@ -340,6 +340,154 @@ class TestSpotMapValidatorAreas:
         assert "SPOT_AREA_ID_MISSING" not in {issue.code for issue in result.warnings}
 
 
+class TestSpotMapValidatorDistantCues:
+    """distant_cues 宣言が遠景候補として安全に使える形かを検査する。"""
+
+    def test_valid_object_state_cue_is_counted_without_errors(self) -> None:
+        """既知 object と既知 area を参照する object_state cue は error を出さない。"""
+        raw = _scenario(
+            spots=[
+                {
+                    **_spot("summit", x=0, y=0),
+                    "area_id": "mountain",
+                    "interior": {
+                        "objects": [{"id": "signal_fire_pit", "name": "狼煙台"}]
+                    },
+                }
+            ],
+            connections=[],
+        )
+        raw["areas"] = [
+            {
+                "id": "mountain",
+                "name": "山岳",
+                "visible_name": "切り立った山影",
+                "prominence": 0.95,
+            }
+        ]
+        raw["distant_cues"] = [
+            {
+                "id": "summit_signal_smoke",
+                "source": {
+                    "kind": "object_state",
+                    "object_id": "signal_fire_pit",
+                    "state_key": "lit",
+                    "equals": True,
+                },
+                "origin": {"area_id": "mountain"},
+                "visible_name": "白い煙",
+                "prominence": 1.0,
+            }
+        ]
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is True
+        assert result.metrics["distant_cue_count"] == 1
+        assert not {
+            issue.code for issue in result.errors if issue.code.startswith("DISTANT_CUE")
+        }
+
+    def test_cue_unknown_object_and_area_are_errors(self) -> None:
+        """cue が未知 object や未知 area を参照すると実行時に評価不能なので error にする。"""
+        raw = _scenario(spots=[_spot("summit", x=0, y=0)], connections=[])
+        raw["areas"] = [
+            {
+                "id": "mountain",
+                "name": "山岳",
+                "visible_name": "切り立った山影",
+                "prominence": 0.95,
+                "position": {"x": 0, "y": 0},
+            }
+        ]
+        raw["distant_cues"] = [
+            {
+                "id": "bad_smoke",
+                "source": {
+                    "kind": "object_state",
+                    "object_id": "missing_object",
+                    "state_key": "lit",
+                    "equals": True,
+                },
+                "origin": {"area_id": "missing_area"},
+                "visible_name": "白い煙",
+                "prominence": 1.0,
+            }
+        ]
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is False
+        assert {"DISTANT_CUE_UNKNOWN_OBJECT", "DISTANT_CUE_UNKNOWN_AREA"} <= {
+            issue.code for issue in result.errors
+        }
+
+    def test_cue_unsupported_source_kind_is_error(self) -> None:
+        """段階2aでは object_state 以外の source.kind を error として明示する。"""
+        raw = _scenario(spots=[_spot("summit", x=0, y=0)], connections=[])
+        raw["areas"] = [
+            {
+                "id": "mountain",
+                "name": "山岳",
+                "visible_name": "切り立った山影",
+                "prominence": 0.95,
+                "position": {"x": 0, "y": 0},
+            }
+        ]
+        raw["distant_cues"] = [
+            {
+                "id": "bad_smoke",
+                "source": {"kind": "world_flag", "flag_name": "signal_fire_lit"},
+                "origin": {"area_id": "mountain"},
+                "visible_name": "白い煙",
+                "prominence": 1.0,
+            }
+        ]
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is False
+        assert "DISTANT_CUE_UNSUPPORTED_SOURCE_KIND" in {
+            issue.code for issue in result.errors
+        }
+
+    def test_cue_visible_name_and_prominence_are_validated(self) -> None:
+        """visible_name 空や prominence 範囲外は prompt 文生成を壊すので error にする。"""
+        raw = _scenario(spots=[_spot("summit", x=0, y=0)], connections=[])
+        raw["areas"] = [
+            {
+                "id": "mountain",
+                "name": "山岳",
+                "visible_name": "切り立った山影",
+                "prominence": 0.95,
+                "position": {"x": 0, "y": 0},
+            }
+        ]
+        raw["distant_cues"] = [
+            {
+                "id": "bad_smoke",
+                "source": {
+                    "kind": "object_state",
+                    "object_id": "signal_fire_pit",
+                    "state_key": "",
+                    "equals": True,
+                },
+                "origin": {"area_id": "mountain"},
+                "visible_name": " ",
+                "prominence": 2.0,
+            }
+        ]
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is False
+        assert {
+            "DISTANT_CUE_STATE_KEY_EMPTY",
+            "DISTANT_CUE_VISIBLE_NAME_EMPTY",
+            "DISTANT_CUE_PROMINENCE_OUT_OF_RANGE",
+        } <= {issue.code for issue in result.errors}
+
+
 class TestSpotMapValidatorExistingScenarios:
     """既存シナリオは position 無しでも error なしで検査できる。"""
 

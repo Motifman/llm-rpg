@@ -215,6 +215,112 @@ class TestScenarioLoaderMinimal:
 
         assert result.areas == ()
 
+    def test_distant_cues_default_to_empty_tuple_when_omitted(self) -> None:
+        """top-level distant_cues を省略した既存シナリオは空 tuple として読み込まれる。"""
+        result = ScenarioLoader().load_from_dict(_minimal_scenario())
+
+        assert result.distant_cues == ()
+
+    def test_object_state_distant_cue_is_loaded(self) -> None:
+        """object_state source の distant cue は ID と表示文を保持して読み込まれる。"""
+        raw = _minimal_scenario()
+        raw["areas"] = [
+            {
+                "id": "inside",
+                "name": "屋内",
+                "visible_name": "建物",
+                "prominence": 0.4,
+                "position": {"x": 0, "y": 0},
+            }
+        ]
+        raw["distant_cues"] = [
+            {
+                "id": "summit_signal_smoke",
+                "source": {
+                    "kind": "object_state",
+                    "object_id": "chest",
+                    "state_key": "opened",
+                    "equals": True,
+                },
+                "origin": {"area_id": "inside"},
+                "visible_name": "白い煙",
+                "prominence": 1.0,
+                "ambient_descriptions": {
+                    "far": "遠くに白い煙が見える。",
+                    "middle": "白い煙が上がっている。",
+                },
+            }
+        ]
+
+        result = ScenarioLoader().load_from_dict(raw)
+
+        assert len(result.distant_cues) == 1
+        cue = result.distant_cues[0]
+        assert cue.cue_id == "summit_signal_smoke"
+        assert cue.source.kind == "object_state"
+        assert cue.source.object_id.value == result.id_mapper.get_int("object", "chest")
+        assert cue.source.state_key == "opened"
+        assert cue.source.equals is True
+        assert cue.origin_area_id == "inside"
+        assert cue.visible_name == "白い煙"
+        assert cue.prominence == 1.0
+        assert cue.ambient_descriptions["far"] == "遠くに白い煙が見える。"
+
+    def test_distant_cue_rejects_unsupported_source_kind(self) -> None:
+        """段階2aでは object_state 以外の source.kind を fail-fast で拒否する。"""
+        raw = _minimal_scenario()
+        raw["areas"] = [
+            {
+                "id": "inside",
+                "name": "屋内",
+                "visible_name": "建物",
+                "prominence": 0.4,
+                "position": {"x": 0, "y": 0},
+            }
+        ]
+        raw["distant_cues"] = [
+            {
+                "id": "cue",
+                "source": {"kind": "world_flag", "flag_name": "lit"},
+                "origin": {"area_id": "inside"},
+                "visible_name": "煙",
+                "prominence": 1.0,
+            }
+        ]
+
+        with pytest.raises(ScenarioLoadError, match="source.kind"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_distant_cue_prominence_must_be_in_range(self) -> None:
+        """distant cue の prominence は遠景優先度なので 0.0〜1.0 の範囲で検証する。"""
+        raw = _minimal_scenario()
+        raw["areas"] = [
+            {
+                "id": "inside",
+                "name": "屋内",
+                "visible_name": "建物",
+                "prominence": 0.4,
+                "position": {"x": 0, "y": 0},
+            }
+        ]
+        raw["distant_cues"] = [
+            {
+                "id": "cue",
+                "source": {
+                    "kind": "object_state",
+                    "object_id": "chest",
+                    "state_key": "opened",
+                    "equals": True,
+                },
+                "origin": {"area_id": "inside"},
+                "visible_name": "煙",
+                "prominence": 1.5,
+            }
+        ]
+
+        with pytest.raises(ScenarioLoadError, match="distant_cues\\[cue\\]\\.prominence"):
+            ScenarioLoader().load_from_dict(raw)
+
     def test_area_position_is_centroid_of_member_spots_when_omitted(self) -> None:
         """area.position 未宣言なら所属 spot の position 重心を AreaDef.position に入れる。"""
         raw = _minimal_scenario()
