@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
@@ -101,6 +101,35 @@ def _normalize_label_candidates(label: str) -> List[str]:
     return deduped
 
 
+def _candidate_display_names(
+    runtime_context: ToolRuntimeContextDto,
+    predicate: Callable[[ToolRuntimeTargetDto], bool],
+) -> List[str]:
+    """runtime target から LLM が次に指定できる表示名だけを順序保持で集める。
+
+    失敗文は次の一手を修正するために LLM が読む。内部ラベル (S1 / OBJ1 等)
+    ではなく prompt に露出している display_name だけを返し、同名は重複させない。
+    """
+    names: List[str] = []
+    seen: set[str] = set()
+    for target in runtime_context.targets.values():
+        if not predicate(target):
+            continue
+        name = target.display_name.strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    return names
+
+
+def _format_valid_candidates(candidate_label: str, candidates: List[str]) -> str:
+    """有効候補一覧を失敗文に埋め込む短い日本語へ整形する。"""
+    if not candidates:
+        return f"有効な{candidate_label}: ありません"
+    return f"有効な{candidate_label}: {' / '.join(candidates)}"
+
+
 def resolve_destination_target(
     label: str,
     runtime_context: ToolRuntimeContextDto,
@@ -151,8 +180,15 @@ def resolve_destination_target(
                 f"接続先名として使えない値です: {label}",
                 "INVALID_DESTINATION_KIND",
             )
+        candidates = _candidate_display_names(
+            runtime_context,
+            lambda target: isinstance(target, DestinationToolRuntimeTargetDto),
+        )
         raise ToolArgumentResolutionException(
-            f"指定された接続先名は現在の候補にありません: {label}",
+            (
+                f"指定された接続先名は現在の候補にありません: {label} → "
+                f"{_format_valid_candidates('接続先', candidates)}"
+            ),
             "INVALID_DESTINATION_LABEL",
         )
     if target.spot_id is None:
@@ -232,8 +268,15 @@ def _resolve_target_with_display_name_fallback(
                 f"{label_name}として使えない値です: {label}",
                 invalid_kind_code,
             )
+        candidates = _candidate_display_names(
+            runtime_context,
+            lambda target: target.kind == kind,
+        )
         raise ToolArgumentResolutionException(
-            f"指定された{label_name}は現在の候補にありません: {label}",
+            (
+                f"指定された{label_name}は現在の候補にありません: {label} → "
+                f"{_format_valid_candidates(label_name, candidates)}"
+            ),
             invalid_label_code,
         )
     return target
@@ -296,8 +339,15 @@ def resolve_sub_location_target(
             target = found
             break
     if target is None:
+        candidates = _candidate_display_names(
+            runtime_context,
+            lambda target: target.kind == "spot_graph_sub_location",
+        )
         raise ToolArgumentResolutionException(
-            f"指定されたサブロケーション名は現在の候補にありません: {label}",
+            (
+                f"指定されたサブロケーション名は現在の候補にありません: {label} → "
+                f"{_format_valid_candidates('サブロケーション', candidates)}"
+            ),
             "INVALID_TARGET_LABEL",
         )
     if target.sub_location_id is None:
@@ -578,8 +628,18 @@ class SpotGraphArgumentResolver:
             )
         player_target = resolve_player_target(target_player_label, runtime_context)
         if player_target is None or player_target.player_id is None:
+            candidates = _candidate_display_names(
+                runtime_context,
+                lambda target: (
+                    isinstance(target, PlayerToolRuntimeTargetDto)
+                    and target.player_id is not None
+                ),
+            )
             raise ToolArgumentResolutionException(
-                f"指定された相手の名前が現在の候補にありません: {target_player_label}",
+                (
+                    f"指定された相手の名前が現在の候補にありません: {target_player_label} → "
+                    f"{_format_valid_candidates('相手', candidates)}"
+                ),
                 "INVALID_TARGET_LABEL",
             )
 
