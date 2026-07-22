@@ -71,3 +71,11 @@ class TestDoInteractPassesCurrentTick:
         assert isinstance(event, SpotObjectInteractedEvent)
         assert event.action_display_label == "貝を採る"
         assert event.witness_observation_message == "{actor}が岩棚で貝を採った。"
+
+    def test_interact_success_runs_distant_cue_boundary_detection(self) -> None:
+        """do_interact 成功後は、object state 変更で active 化した cue を即時検出する。"""
+        rt = _fake_runtime()
+
+        WorldRuntime.do_interact(rt, PlayerId(1), "shellfish_rocks", "gather_shellfish")
+
+        rt._evaluate_distant_cue_appearances.assert_called_once()

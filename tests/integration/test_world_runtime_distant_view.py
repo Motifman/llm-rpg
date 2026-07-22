@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.application.being.experiment_snapshot_session import (
+    _default_world_subsystem_codecs,
+)
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -37,6 +41,16 @@ class _TraceRecorderSpy:
 
     def close(self) -> None:
         pass
+
+
+class _TurnSchedulerSpy:
+    """schedules_turn の伝播を記録する最小 spy。"""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[PlayerId, bool]] = []
+
+    def maybe_schedule(self, player_id: PlayerId, output) -> None:  # noqa: ANN001
+        self.calls.append((player_id, bool(output.schedules_turn)))
 
 
 class TestDistantViewRuntimePrompt:
@@ -257,6 +271,250 @@ class TestDistantViewRuntimeTrace:
         assert "distant cue source object is missing" in caplog.text
 
 
+class TestDistantCueAppearanceRuntime:
+    """動的 cue の false→true 境界だけが観測として配達されることを保証する。"""
+
+    def test_false_to_true_delivers_once_and_records_trace(self) -> None:
+        """狼煙 cue は false→true 境界で見える player へ1回だけ届き、継続 true では再発火しない。"""
+        runtime = create_world_runtime(_V4, config=episodic_config())
+        recorder = _TraceRecorderSpy()
+        scheduler = _TurnSchedulerSpy()
+        runtime.set_trace_recorder(recorder)
+        runtime._observation_turn_scheduler = scheduler
+        runtime._evaluate_distant_cue_appearances()
+        _set_signal_fire_lit(runtime, True)
+
+        runtime._evaluate_distant_cue_appearances()
+        runtime._evaluate_distant_cue_appearances()
+
+        observations = _distant_cue_observations(runtime, PlayerId(1))
+        assert len(observations) == 1
+        output = observations[0].output
+        assert output.prose == "北東の山の方から白い煙が上がった。"
+        assert output.observation_category == "environment"
+        assert output.schedules_turn is True
+        assert output.breaks_movement is False
+        assert output.structured == {
+            "type": "distant_cue_appeared",
+            "cue_id": "summit_signal_smoke",
+            "visible_name": "白い煙",
+            "origin_area_id": "mountain",
+            "direction": "北東",
+            "distance_band": "far",
+        }
+
+        changed = _trace_payloads(recorder, TraceEventKind.DISTANT_CUE_STATE_CHANGED)
+        delivered = _trace_payloads(recorder, TraceEventKind.DISTANT_CUE_DELIVERED)
+        assert len(changed) == 1
+        assert changed[0]["cue_id"] == "summit_signal_smoke"
+        assert changed[0]["old_active"] is False
+        assert changed[0]["new_active"] is True
+        assert changed[0]["visible_recipient_count"] == 4
+        assert len(delivered) == 4
+        assert scheduler.calls
+        assert {scheduled for _, scheduled in scheduler.calls} == {True}
+
+    def test_initial_true_is_baseline_and_does_not_deliver(self) -> None:
+        """初回評価時点ですでに true の cue は baseline として記録し、出現観測を配らない。"""
+        runtime = create_world_runtime(_V4, config=episodic_config())
+        recorder = _TraceRecorderSpy()
+        runtime.set_trace_recorder(recorder)
+        _set_signal_fire_lit(runtime, True)
+
+        runtime._evaluate_distant_cue_appearances()
+
+        assert _distant_cue_observations(runtime, PlayerId(1)) == []
+        assert _trace_payloads(recorder, TraceEventKind.DISTANT_CUE_STATE_CHANGED) == []
+        assert runtime._distant_cue_states["summit_signal_smoke"] == {
+            "active": True,
+            "initialized": True,
+            "last_changed_tick": None,
+        }
+
+    def test_delivers_only_to_players_who_can_see_the_origin_area(self) -> None:
+        """屋内・現在地 area・隣接 area の player には遠景出現観測を配らない。"""
+        runtime = create_world_runtime(_V4, config=episodic_config())
+        _teleport_player(runtime, 2, "summit")
+        _teleport_player(runtime, 3, "foothills")
+        _teleport_player(runtime, 4, "cave_inner")
+        runtime._evaluate_distant_cue_appearances()
+        _set_signal_fire_lit(runtime, True)
+
+        runtime._evaluate_distant_cue_appearances()
+
+        assert len(_distant_cue_observations(runtime, PlayerId(1))) == 1
+        assert _distant_cue_observations(runtime, PlayerId(2)) == []
+        assert _distant_cue_observations(runtime, PlayerId(3)) == []
+        assert _distant_cue_observations(runtime, PlayerId(4)) == []
+
+    def test_appear_event_observation_enters_observation_history(self) -> None:
+        """出現イベントは ambient ではなく観測なので、prompt build で直近出来事に入る。"""
+        runtime = create_world_runtime(_V4, config=episodic_config())
+        player_id = PlayerId(1)
+        runtime._evaluate_distant_cue_appearances()
+        _set_signal_fire_lit(runtime, True)
+        runtime._evaluate_distant_cue_appearances()
+
+        prompt = runtime.build_full_prompt(player_id)
+        user_message = prompt["messages"][1]["content"]
+
+        assert "北東の山の方から白い煙が上がった。" in user_message
+        recent = runtime._sliding_window.get_recent(player_id, 20)
+        assert any(
+            entry.output.structured.get("type") == "distant_cue_appeared"
+            for entry in recent
+        )
+
+    def test_restored_active_true_state_does_not_fire_again(self) -> None:
+        """snapshot restore 後に active=true と復元された cue は同じ出現を再発火しない。"""
+        runtime = create_world_runtime(_V4, config=episodic_config())
+        _set_signal_fire_lit(runtime, True)
+        _restore_distant_cue_state(
+            runtime,
+            {
+                "schema_version": 1,
+                "entries": [
+                    {
+                        "cue_id": "summit_signal_smoke",
+                        "active": True,
+                        "initialized": True,
+                        "last_changed_tick": 7,
+                    }
+                ],
+            },
+        )
+
+        runtime._evaluate_distant_cue_appearances()
+
+        assert _distant_cue_observations(runtime, PlayerId(1)) == []
+
+    def test_cue_without_appear_event_tracks_state_without_delivery_or_trace(self) -> None:
+        """appear_event 未指定 cue は境界状態だけを追い、観測配達と state_changed trace は出さない。"""
+        runtime = create_world_runtime(_V4, config=episodic_config())
+        cue = runtime.scenario.distant_cues[0]
+        runtime.scenario = replace(
+            runtime.scenario,
+            distant_cues=(
+                type(cue)(
+                    cue_id=cue.cue_id,
+                    source=cue.source,
+                    origin_area_id=cue.origin_area_id,
+                    visible_name=cue.visible_name,
+                    prominence=cue.prominence,
+                    ambient_descriptions=cue.ambient_descriptions,
+                    appear_event=None,
+                ),
+            ),
+        )
+        recorder = _TraceRecorderSpy()
+        runtime.set_trace_recorder(recorder)
+        runtime._evaluate_distant_cue_appearances()
+        _set_signal_fire_lit(runtime, True)
+
+        runtime._evaluate_distant_cue_appearances()
+
+        assert runtime._distant_cue_states["summit_signal_smoke"]["active"] is True
+        assert _distant_cue_observations(runtime, PlayerId(1)) == []
+        assert _trace_payloads(recorder, TraceEventKind.DISTANT_CUE_STATE_CHANGED) == []
+
+    def test_no_visible_recipients_still_records_state_changed_trace(self) -> None:
+        """誰にも見えない false→true でも、trace に visible_recipient_count=0 を残す。"""
+        runtime = create_world_runtime(_V4, config=episodic_config())
+        recorder = _TraceRecorderSpy()
+        runtime.set_trace_recorder(recorder)
+        for player_id in (1, 2, 3, 4):
+            _teleport_player(runtime, player_id, "summit")
+        runtime._evaluate_distant_cue_appearances()
+        _set_signal_fire_lit(runtime, True)
+
+        runtime._evaluate_distant_cue_appearances()
+
+        changed = _trace_payloads(recorder, TraceEventKind.DISTANT_CUE_STATE_CHANGED)
+        assert len(changed) == 1
+        assert changed[0]["visible_recipient_count"] == 0
+        assert changed[0]["delivery_skipped_reason"] == "no_visible_recipients"
+        assert _trace_payloads(recorder, TraceEventKind.DISTANT_CUE_DELIVERED) == []
+
+    def test_missing_source_object_records_debug_skipped_reason(self, caplog) -> None:
+        """境界検出側でも source object 解決不能を警告ログと debug trace に残す。"""
+        runtime = create_world_runtime(
+            _V4,
+            config=runtime_config(distant_view_trace_enabled=True),
+        )
+        summit_id = SpotId(runtime.id_mapper.get_int("spot", "summit"))
+        object_id = SpotObjectId.create(runtime.id_mapper.get_int("object", "signal_fire_pit"))
+        interior = runtime._spot_interior_repo.find_by_spot_id(summit_id)
+        assert interior is not None
+        runtime._spot_interior_repo.save(
+            summit_id,
+            type(interior)(
+                sub_locations=interior.sub_locations,
+                objects=tuple(
+                    obj for obj in interior.objects if obj.object_id != object_id
+                ),
+                ground_items=interior.ground_items,
+                discoverable_items=interior.discoverable_items,
+            ),
+        )
+        recorder = _TraceRecorderSpy()
+        runtime.set_trace_recorder(recorder)
+
+        with caplog.at_level(logging.WARNING):
+            runtime._evaluate_distant_cue_appearances()
+
+        payloads = _trace_payloads(recorder, TraceEventKind.DISTANT_VIEW_SKIPPED)
+        assert len(payloads) == 1
+        assert payloads[0]["cue_id"] == "summit_signal_smoke"
+        assert payloads[0]["skipped_reasons"] == ["cue_source_object_missing"]
+        assert "distant cue source object is missing" in caplog.text
+
+    def test_event_prose_does_not_leak_internal_ids_and_fixed_message_works(self) -> None:
+        """出現観測本文には cue_id/object_id/area_id を出さず、placeholder 無し固定文も使える。"""
+        runtime = create_world_runtime(_V4, config=episodic_config())
+        cue = runtime.scenario.distant_cues[0]
+        runtime.scenario = replace(
+            runtime.scenario,
+            distant_cues=(
+                type(cue)(
+                    cue_id=cue.cue_id,
+                    source=cue.source,
+                    origin_area_id=cue.origin_area_id,
+                    visible_name=cue.visible_name,
+                    prominence=cue.prominence,
+                    ambient_descriptions=cue.ambient_descriptions,
+                    appear_event=type(cue.appear_event)(
+                        message="山の方から煙が上がった。",
+                        schedules_turn=False,
+                    ),
+                ),
+            ),
+        )
+        scheduler = _TurnSchedulerSpy()
+        runtime._observation_turn_scheduler = scheduler
+        runtime._evaluate_distant_cue_appearances()
+        _set_signal_fire_lit(runtime, True)
+
+        runtime._evaluate_distant_cue_appearances()
+
+        output = _distant_cue_observations(runtime, PlayerId(1))[0].output
+        assert output.prose == "山の方から煙が上がった。"
+        assert "summit_signal_smoke" not in output.prose
+        assert "signal_fire_pit" not in output.prose
+        assert "mountain" not in output.prose
+        assert scheduler.calls
+        assert {scheduled for _, scheduled in scheduler.calls} == {False}
+
+    def test_post_tick_detection_fires_after_tick_driven_source_change(self) -> None:
+        """毎 tick の post-tick 検出で、interact 以外の state 変化も恒久的に取りこぼさない。"""
+        runtime = create_world_runtime(_V4, config=episodic_config())
+        runtime._evaluate_distant_cue_appearances()
+        _set_signal_fire_lit(runtime, True)
+
+        runtime.advance_tick()
+
+        assert len(_distant_cue_observations(runtime, PlayerId(1))) == 1
+
+
 def _set_signal_fire_lit(runtime, lit: bool) -> None:  # noqa: ANN001
     summit_id = SpotId(runtime.id_mapper.get_int("spot", "summit"))
     object_id = SpotObjectId.create(runtime.id_mapper.get_int("object", "signal_fire_pit"))
@@ -280,3 +538,24 @@ def _teleport_player(runtime, player_id: int, spot_id: str) -> None:  # noqa: AN
         pass
     graph.place_entity(entity_id, spot)
     runtime._spot_graph_repo.save(graph)
+
+
+def _distant_cue_observations(runtime, player_id: PlayerId):  # noqa: ANN001, ANN201
+    return [
+        entry
+        for entry in runtime._obs_buffer.get_observations(player_id)
+        if entry.output.structured.get("type") == "distant_cue_appeared"
+    ]
+
+
+def _trace_payloads(recorder: _TraceRecorderSpy, kind: str) -> list[dict[str, Any]]:
+    return [payload for event_kind, payload in recorder.events if event_kind == kind]
+
+
+def _restore_distant_cue_state(runtime, data: dict[str, Any]) -> None:  # noqa: ANN001
+    codec = next(
+        codec
+        for codec in _default_world_subsystem_codecs()
+        if codec.subsystem_key == "distant_cue_state"
+    )
+    codec.restore(runtime, data)

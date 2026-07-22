@@ -116,6 +116,14 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_builder impor
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphInventoryItemEntry,
 )
+from ai_rpg_world.application.world_graph.distant_view_service import (
+    DistantViewArea,
+    DistantViewCandidate,
+    DistantViewConnection,
+    DistantViewService,
+    DistantViewSpot,
+    DistantViewVisibleCandidate,
+)
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
 )
@@ -1904,6 +1912,7 @@ class WorldRuntime:
             witness_observation_message=witness_observation_message,
         ))
         self._process_graph_events()
+        self._evaluate_distant_cue_appearances()
         # SpotInteractionResultDto は現状 success フラグを持たない (messages から
         # しか判定できない)。fail 検出経路がドメイン側に出来るまで暫定で True 固定。
         self._record_action_result(
@@ -2196,6 +2205,320 @@ class WorldRuntime:
             presence = graph.presence_at(SpotId.create(event.target_spot_id))
             return [PlayerId(int(eid)) for eid in presence.present_entity_ids]
         return self.get_player_ids()
+
+    def _evaluate_distant_cue_appearances(self) -> None:
+        """動的遠景 cue の false→true 境界を検出し、見える player へ観測を配る。
+
+        初回評価時点で既に active な cue は baseline として記録するだけで配達しない。
+        これにより、シナリオ初期 true や snapshot resume 直後の再発火を防ぐ。
+        """
+        cues = tuple(getattr(self.scenario, "distant_cues", ()) or ())
+        if not cues:
+            return
+        for cue in cues:
+            cue_id = str(getattr(cue, "cue_id", "<unknown>"))
+            active = self._is_distant_cue_active(cue)
+            if active is None:
+                continue
+            state = self._distant_cue_states.get(
+                cue_id,
+                {"active": False, "initialized": False, "last_changed_tick": None},
+            )
+            initialized_before = bool(state.get("initialized", False))
+            old_active = bool(state.get("active", False))
+            if not initialized_before:
+                self._distant_cue_states[cue_id] = {
+                    "active": active,
+                    "initialized": True,
+                    "last_changed_tick": None,
+                }
+                continue
+            if old_active == active:
+                continue
+            self._distant_cue_states[cue_id] = {
+                "active": active,
+                "initialized": True,
+                "last_changed_tick": self.current_tick(),
+            }
+            appear_event = getattr(cue, "appear_event", None)
+            if not (active and not old_active and appear_event is not None):
+                continue
+            deliveries = self._visible_distant_cue_deliveries(cue)
+            for player_id, spot_id, visible in deliveries:
+                message = self._format_distant_cue_appear_message(
+                    str(getattr(appear_event, "message", "")),
+                    visible=visible,
+                )
+                output = ObservationOutput(
+                    prose=message,
+                    structured={
+                        "type": "distant_cue_appeared",
+                        "cue_id": cue_id,
+                        "visible_name": str(getattr(cue, "visible_name", "")),
+                        "origin_area_id": str(getattr(cue, "origin_area_id", "")),
+                        "direction": visible.direction,
+                        "distance_band": visible.distance_band,
+                    },
+                    observation_category="environment",
+                    schedules_turn=bool(getattr(appear_event, "schedules_turn", False)),
+                    breaks_movement=False,
+                )
+                self._emit_observation_directly(player_id, output)
+                self._record_distant_cue_delivered(
+                    cue=cue,
+                    player_id=player_id,
+                    spot_id=spot_id,
+                    visible=visible,
+                    schedules_turn=output.schedules_turn,
+                )
+            self._record_distant_cue_state_changed(
+                cue=cue,
+                old_active=old_active,
+                new_active=active,
+                initialized_before=initialized_before,
+                visible_recipient_count=len(deliveries),
+                delivery_skipped_reason=(
+                    "no_visible_recipients" if not deliveries else None
+                ),
+            )
+
+    def _is_distant_cue_active(self, cue: Any) -> Optional[bool]:
+        source = getattr(cue, "source", None)
+        cue_id = str(getattr(cue, "cue_id", "<unknown>"))
+        if source is None or getattr(source, "kind", None) != "object_state":
+            logger.warning(
+                "distant cue source kind is unsupported at runtime: cue_id=%s",
+                cue_id,
+            )
+            return None
+        obj = self._find_distant_cue_source_object(getattr(source, "object_id", None))
+        if obj is None:
+            logger.warning(
+                "distant cue source object is missing: cue_id=%s",
+                cue_id,
+            )
+            self._record_distant_cue_skipped(
+                cue=cue,
+                reason="cue_source_object_missing",
+            )
+            return None
+        state_key = str(getattr(source, "state_key", ""))
+        return obj.state.get(state_key) == getattr(source, "equals", None)
+
+    def _find_distant_cue_source_object(self, object_id: Any) -> Any:
+        try:
+            if not isinstance(object_id, SpotObjectId):
+                object_id = SpotObjectId.create(
+                    int(getattr(object_id, "value", object_id))
+                )
+        except Exception:
+            return None
+        graph = self._spot_graph_repo.find_graph()
+        for node in graph.iter_spot_nodes():
+            interior = self._spot_interior_repo.find_by_spot_id(node.spot_id)
+            if interior is None:
+                continue
+            obj = interior.get_object(object_id)
+            if obj is not None:
+                return obj
+        return None
+
+    def _visible_distant_cue_deliveries(
+        self,
+        cue: Any,
+    ) -> list[tuple[PlayerId, SpotId, DistantViewVisibleCandidate]]:
+        graph = self._spot_graph_repo.find_graph()
+        spots = self._distant_view_spots(graph)
+        areas_by_id = {area.area_id: area for area in self._distant_view_areas()}
+        origin_area_id = str(getattr(cue, "origin_area_id", ""))
+        area = areas_by_id.get(origin_area_id)
+        if area is None:
+            logger.warning(
+                "distant cue origin area is missing: cue_id=%s area_id=%s",
+                getattr(cue, "cue_id", "<unknown>"),
+                origin_area_id,
+            )
+            return []
+        candidate = DistantViewCandidate(
+            candidate_id=str(getattr(cue, "cue_id", "<unknown>")),
+            kind="cue",
+            visible_name=str(getattr(cue, "visible_name", "")),
+            prominence=float(getattr(cue, "prominence", 0.0)),
+            x=area.x,
+            y=area.y,
+            descriptions=dict(getattr(cue, "ambient_descriptions", {}) or {}),
+            origin_area_id=origin_area_id,
+        )
+        service = self._distant_view_service()
+        deliveries: list[tuple[PlayerId, SpotId, DistantViewVisibleCandidate]] = []
+        for player_id in self.get_player_ids():
+            entity_id = EntityId.create(int(player_id))
+            try:
+                current_spot_id = graph.get_entity_spot(entity_id)
+            except Exception:
+                continue
+            visible = service.evaluate_candidate_visibility(
+                current_spot_id=current_spot_id.value,
+                spots=spots,
+                connections=tuple(
+                    DistantViewConnection(
+                        from_spot_id=conn.from_spot_id.value,
+                        to_spot_id=conn.to_spot_id.value,
+                    )
+                    for conn in graph.iter_outgoing_connections_from(current_spot_id)
+                ),
+                candidate=candidate,
+            )
+            if visible is not None:
+                deliveries.append((player_id, current_spot_id, visible))
+        return deliveries
+
+    def _distant_view_spots(self, graph: Any) -> tuple[DistantViewSpot, ...]:
+        return tuple(
+            DistantViewSpot(
+                spot_id=node.spot_id.value,
+                area_id=node.area_id,
+                x=(node.position.x if node.position is not None else None),
+                y=(node.position.y if node.position is not None else None),
+                is_outdoor=bool(node.is_outdoor),
+            )
+            for node in graph.iter_spot_nodes()
+        )
+
+    def _distant_view_areas(self) -> tuple[DistantViewArea, ...]:
+        return tuple(
+            DistantViewArea(
+                area_id=str(getattr(area, "area_id")),
+                name=str(getattr(area, "name", "")),
+                visible_name=str(getattr(area, "visible_name", "")),
+                prominence=float(getattr(area, "prominence", 0.0)),
+                x=getattr(getattr(area, "position", None), "x", None),
+                y=getattr(getattr(area, "position", None), "y", None),
+                distant_descriptions=dict(
+                    getattr(area, "distant_descriptions", {}) or {}
+                ),
+            )
+            for area in getattr(self.scenario, "areas", ())
+        )
+
+    def _distant_view_service(self) -> DistantViewService:
+        service = getattr(self._state_builder, "_distant_view_service", None)
+        return service if isinstance(service, DistantViewService) else DistantViewService()
+
+    def _format_distant_cue_appear_message(
+        self,
+        template: str,
+        *,
+        visible: DistantViewVisibleCandidate,
+    ) -> str:
+        message = template or ""
+        replacements = {
+            "{direction}": visible.direction,
+            "{visible_name}": visible.source.visible_name,
+            "{distance_band}": visible.distance_band,
+        }
+        for placeholder, value in replacements.items():
+            message = message.replace(placeholder, value)
+        return message.strip()
+
+    def _record_distant_cue_state_changed(
+        self,
+        *,
+        cue: Any,
+        old_active: bool,
+        new_active: bool,
+        initialized_before: bool,
+        visible_recipient_count: int,
+        delivery_skipped_reason: Optional[str],
+    ) -> None:
+        recorder = self._trace_recorder
+        if recorder is None:
+            return
+        try:
+            from ai_rpg_world.application.trace import TraceEventKind
+
+            source = getattr(cue, "source", None)
+            recorder.record(
+                TraceEventKind.DISTANT_CUE_STATE_CHANGED,
+                tick=self.current_tick(),
+                cue_id=str(getattr(cue, "cue_id", "")),
+                old_active=old_active,
+                new_active=new_active,
+                initialized_before=initialized_before,
+                origin_area_id=str(getattr(cue, "origin_area_id", "")),
+                source_kind=str(getattr(source, "kind", "")),
+                source_state_key=str(getattr(source, "state_key", "")),
+                visible_recipient_count=visible_recipient_count,
+                delivery_skipped_reason=delivery_skipped_reason,
+            )
+        except Exception:
+            logger.warning(
+                "DISTANT_CUE_STATE_CHANGED trace record failed: cue_id=%s",
+                getattr(cue, "cue_id", "<unknown>"),
+                exc_info=True,
+            )
+
+    def _record_distant_cue_skipped(self, *, cue: Any, reason: str) -> None:
+        """debug profile のときだけ cue 境界検出の skipped 理由を trace に残す。"""
+        if not bool(getattr(self._state_builder, "_distant_view_trace_enabled", False)):
+            return
+        recorder = self._trace_recorder
+        if recorder is None:
+            return
+        try:
+            from ai_rpg_world.application.trace import TraceEventKind
+
+            recorder.record(
+                TraceEventKind.DISTANT_VIEW_SKIPPED,
+                tick=self.current_tick(),
+                cue_id=str(getattr(cue, "cue_id", "")),
+                origin_area_id=str(getattr(cue, "origin_area_id", "")),
+                skipped_reasons=[reason],
+                source_kind=str(getattr(getattr(cue, "source", None), "kind", "")),
+                source_state_key=str(
+                    getattr(getattr(cue, "source", None), "state_key", "")
+                ),
+            )
+        except Exception:
+            logger.warning(
+                "DISTANT_VIEW_SKIPPED trace record failed: cue_id=%s reason=%s",
+                getattr(cue, "cue_id", "<unknown>"),
+                reason,
+                exc_info=True,
+            )
+
+    def _record_distant_cue_delivered(
+        self,
+        *,
+        cue: Any,
+        player_id: PlayerId,
+        spot_id: SpotId,
+        visible: DistantViewVisibleCandidate,
+        schedules_turn: bool,
+    ) -> None:
+        recorder = self._trace_recorder
+        if recorder is None:
+            return
+        try:
+            from ai_rpg_world.application.trace import TraceEventKind
+
+            recorder.record(
+                TraceEventKind.DISTANT_CUE_DELIVERED,
+                tick=self.current_tick(),
+                player_id=int(player_id),
+                cue_id=str(getattr(cue, "cue_id", "")),
+                spot_id=spot_id.value,
+                direction=visible.direction,
+                distance_band=visible.distance_band,
+                schedules_turn=schedules_turn,
+            )
+        except Exception:
+            logger.warning(
+                "DISTANT_CUE_DELIVERED trace record failed: cue_id=%s player_id=%s",
+                getattr(cue, "cue_id", "<unknown>"),
+                int(player_id),
+                exc_info=True,
+            )
 
     def _time_label(self) -> str:
         """ゲーム内時刻ラベルを生成する。
@@ -3689,7 +4012,10 @@ def create_world_runtime(
         # runtime はまだ未代入なので lambda で lazy bind する (= 呼出時に
         # 名前解決される)。runtime = WorldRuntime(...) が直後で実行される
         # 順序になっており、tick 開始までには確実に bound される。
-        graph_event_flusher=lambda: runtime._process_graph_events(),
+        graph_event_flusher=lambda: (
+            runtime._process_graph_events(),
+            runtime._evaluate_distant_cue_appearances(),
+        ),
     )
 
     runtime = WorldRuntime(

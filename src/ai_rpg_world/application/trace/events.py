@@ -183,6 +183,16 @@ class TraceEventKind:
     # rendered_area_ids / skipped_reasons / thresholds
     DISTANT_VIEW_RENDERED = "distant_view_rendered"
     DISTANT_VIEW_SKIPPED = "distant_view_skipped"
+    # 動的遠景 cue の source 条件が false→true になった境界。
+    # ambient 系の DISTANT_VIEW_* と違い、世界状態変化そのものなので常時残す。
+    # payload: cue_id / old_active / new_active / initialized_before /
+    # origin_area_id / source_kind / source_state_key / visible_recipient_count /
+    # delivery_skipped_reason
+    DISTANT_CUE_STATE_CHANGED = "distant_cue_state_changed"
+    # 動的遠景 cue の出現観測を player に配達した瞬間。
+    # payload: cue_id / player_id / spot_id / direction / distance_band /
+    # schedules_turn
+    DISTANT_CUE_DELIVERED = "distant_cue_delivered"
     # 案A (band-gated thinking): 停滞感 band が strong の局面で、停滞 reflect の
     # 注入直後の行動に限り reasoning (熟考) を有効化した瞬間。「いつ・なぜ熟考を
     # 焚いたか」を trace から追えるようにする (tool-calling 経路では思考本文は
