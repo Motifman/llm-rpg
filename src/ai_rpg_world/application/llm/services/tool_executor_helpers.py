@@ -104,6 +104,9 @@ _SANITIZED_SYSTEM_ERROR_MESSAGE = (
     "システムエラーが発生しました。少し tick を進めてから再試行するか、"
     "別の tool を選んでください。"
 )
+_SANITIZED_DOMAIN_ERROR_MESSAGE = (
+    "入力を見直して、別の対象・別の操作を選んでください。"
+)
 
 
 def exception_result(e: Exception) -> LlmCommandResultDto:
@@ -114,14 +117,20 @@ def exception_result(e: Exception) -> LlmCommandResultDto:
 
     - **str(e) に日本語文字が 1 文字でも含まれる**: そのまま尊重
       (domain 層 / application 層で日本語 message を組んで raise した exception)
-    - **str(e) が空 or 純 ASCII**: 汎用日本語 fallback に置換
-      (Python 組み込み ``KeyError``/``ValueError`` や、domain 例外だが message
-       が英語のまま整備されていないケース ``ItemNotInSlotException("No item ...")``)
+    - **str(e) が空 or 純 ASCII かつ error_code が ``SYSTEM_ERROR``**:
+      予期しないシステム系の汎用日本語 fallback に置換
+      (Python 組み込み ``KeyError``/``ValueError`` など)
+    - **str(e) が空 or 純 ASCII かつ error_code が具体値**:
+      確定的な引数・状態エラーとして、待機再試行を促さない fallback に置換
+      (domain 例外だが message が英語のまま整備されていないケース
+      ``ItemNotInSlotException("No item ...")`` など)
 
     ``error_code`` 属性は message 判定と独立に採用する — ドメイン例外が英語
     message で raise されるケースでも、error_code / remediation で LLM に
     「何をすべきか」の日本語 hint は届く。message 本文は英語漏れを防ぐため
-    fallback に置換される。
+    fallback に置換される。ただし具体 ``error_code`` 付きの fallback では、
+    「少し tick を進めて再試行」のような遷移性を示唆しない。確定的な
+    引数・状態エラーを待てば直る問題と誤読させないため。
 
     ## なぜ「error_code の有無」で pass-through 判定しないか
 
@@ -136,8 +145,10 @@ def exception_result(e: Exception) -> LlmCommandResultDto:
     raw_message = str(e)
     if raw_message and _has_japanese_char(raw_message):
         message = raw_message
-    else:
+    elif error_code == "SYSTEM_ERROR":
         message = _SANITIZED_SYSTEM_ERROR_MESSAGE
+    else:
+        message = _SANITIZED_DOMAIN_ERROR_MESSAGE
     return LlmCommandResultDto(
         success=False,
         message=message,
