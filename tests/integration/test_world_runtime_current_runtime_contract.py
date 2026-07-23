@@ -703,6 +703,66 @@ def test_reason_first_step1_retries_once_then_returns_no_op_without_action(
     assert failed[-1]["final"] is True
 
 
+def test_reason_first_step1_retries_after_invoke_exception_and_continues_to_action(
+    clean_runtime_env: None,
+) -> None:
+    """step1 の一時的な LLM 例外は 1 回だけ再試行し、評価成功後は行動実行へ進む。"""
+    runtime = _ReasonFirstRuntime()
+    client = _SequencedLlmClient(
+        [
+            RuntimeError("temporary llm failure"),
+            {
+                "name": TOOL_NAME_ASSESS_SITUATION,
+                "arguments": {
+                    "inner_thought": "一度失敗したので状況を見直す。",
+                    "expected_result": "次は探索できる。",
+                },
+            },
+            {
+                "name": TOOL_NAME_SPOT_GRAPH_EXPLORE,
+                "arguments": {},
+            },
+        ]
+    )
+    wiring = _reason_first_wiring(runtime, client)
+    executed: list[dict[str, Any]] = []
+
+    def _handler(
+        player_id: PlayerId,
+        arguments: dict,
+        runtime_context,
+    ) -> LlmCommandResultDto:
+        executed.append(dict(arguments))
+        return LlmCommandResultDto(success=True, message="探索した。")
+
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = _handler
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.success is True
+    assert [call["call_phase"] for call in client.calls] == [
+        "assess_phase",
+        "assess_phase",
+        "action_phase",
+    ]
+    assert executed == [
+        {
+            "inner_thought": "一度失敗したので状況を見直す。",
+            "expected_result": "次は探索できる。",
+        }
+    ]
+    failed = [
+        payload for kind, payload in runtime.trace_recorder.records
+        if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+    ]
+    assert failed[0]["phase"] == "assess_phase"
+    assert failed[0]["reason"] == "invoke_exception"
+    assert failed[0]["final"] is False
+    kinds = [kind for kind, _ in runtime.trace_recorder.records]
+    assert TraceEventKind.REASON_FIRST_ASSESSED in kinds
+    assert TraceEventKind.REASON_FIRST_ACTION_SELECTED in kinds
+
+
 def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
     clean_runtime_env: None,
 ) -> None:
