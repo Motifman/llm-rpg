@@ -16,6 +16,9 @@ from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
 class SpotGraphInteractionEntry:
     action_name: str
     display_label: str
+    # prompt 表示専用の前提条件ヒント。tool 解決に使う action_name とは分ける。
+    # 例: ("夜不可", "嵐不可") → [fish_deep(夜不可・嵐不可)]
+    condition_hints: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -6,15 +6,25 @@ import heapq
 import json
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
+from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
+    SpotGraphUiContextBuilder,
+)
+from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
+from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
+    SpotGraphCurrentStateBuilder,
+)
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 from ai_rpg_world.infrastructure.scenario.spot_map_validator import (
     KeySpotRequirement,
     MapValidationConfig,
     validate_spot_map,
 )
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 _SCENARIOS = Path(__file__).resolve().parents[3] / "data" / "scenarios"
@@ -185,6 +195,31 @@ class TestSurvivalIslandV4WaterSources:
         assert condition["failure_message"] == "今汲んだばかりだ。少し時間を置こう。"
 
 
+class TestSurvivalIslandV4ActionConditionHints:
+    """v4 の時刻・天候制約つき action が prompt 上で事前に読めることを保証する。"""
+
+    def test_deep_fishing_prompt_shows_time_and_weather_hints_without_changing_tool_actions(
+        self,
+        loaded_v4,
+    ) -> None:
+        """沖の釣り場は [fish_deep(夜不可・嵐不可)] と表示し、tool 解決は fish_deep のまま保つ。"""
+        rocky_shore_id = SpotId(loaded_v4.id_mapper.get_int("spot", "rocky_shore"))
+        interior = loaded_v4.interiors[rocky_shore_id]
+        snapshot = _build_snapshot_for_spot(loaded_v4, rocky_shore_id, interior)
+        result = SpotGraphUiContextBuilder().build(
+            "survival_island_v4_coop",
+            _make_player_state(snapshot),
+        )
+
+        assert '[fish_deep(夜不可・嵐不可)]' in result.current_state_text
+        assert "night" not in result.current_state_text
+        assert "STORM" not in result.current_state_text
+        assert result.tool_runtime_context.targets["OBJ1"].display_name == "沖の釣り場"
+        assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
+            "fish_deep",
+        )
+
+
 class TestSurvivalIslandV4SurvivalEconomy:
     """v4 の移動時間変更が救助窓に対して破綻しないことを粗く固定する。"""
 
@@ -242,6 +277,56 @@ def _flag_reference_count(raw: Any, flag_name: str) -> int:
     if isinstance(raw, list):
         return sum(_flag_reference_count(item, flag_name) for item in raw)
     return 0
+
+
+def _build_snapshot_for_spot(loaded_v4, spot_id: SpotId, interior):
+    graph = MagicMock()
+    graph.get_entity_spot.return_value = spot_id
+    graph.get_spot.return_value = loaded_v4.graph.get_spot(spot_id)
+    graph.presence_at.return_value.present_entity_ids = frozenset()
+    graph.monster_presence_at.return_value.present_monster_ids = frozenset()
+    graph.iter_outgoing_connections_from.return_value = []
+
+    spot_graph_repo = MagicMock()
+    spot_graph_repo.find_graph.return_value = graph
+    spot_interior_repo = MagicMock()
+    spot_interior_repo.find_by_spot_id.return_value = interior
+    player_status_repo = MagicMock()
+    player_status_repo.find_by_id.return_value = None
+
+    snapshot = SpotGraphCurrentStateBuilder(
+        spot_graph_repository=spot_graph_repo,
+        spot_interior_repository=spot_interior_repo,
+        player_status_repository=player_status_repo,
+    ).build_snapshot(1)
+    assert snapshot is not None
+    return snapshot
+
+
+def _make_player_state(snapshot) -> PlayerCurrentStateDto:
+    return PlayerCurrentStateDto(
+        player_id=1,
+        player_name="P",
+        current_spot_id=snapshot.current_spot_id,
+        current_spot_name=snapshot.current_spot_name,
+        current_spot_description=snapshot.current_spot_description,
+        x=None,
+        y=None,
+        z=None,
+        current_player_count=0,
+        current_player_ids=set(),
+        connected_spot_ids=set(),
+        connected_spot_names=set(),
+        weather_type="晴れ",
+        weather_intensity=0.0,
+        current_terrain_type=None,
+        visible_objects=[],
+        view_distance=0,
+        available_moves=None,
+        total_available_moves=None,
+        attention_level=AttentionLevel.FULL,
+        spot_graph_snapshot=snapshot,
+    )
 
 
 def _shortest_path(raw: dict[str, Any], start: str, goal: str) -> tuple[int, list[str]]:

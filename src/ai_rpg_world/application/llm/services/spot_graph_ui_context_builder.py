@@ -230,6 +230,20 @@ def _format_object_state(state: Dict[str, Any]) -> str:
     return f" ({', '.join(parts)})"
 
 
+def _format_action_name_with_condition_hints(interaction: Any) -> str:
+    """action_name に表示専用の前提条件ヒントを添える。
+
+    ToolRuntimeTargetDto.available_interactions には action_name だけを渡すため、
+    ここで作る文字列は prompt 表示専用。
+    """
+    action_name = str(getattr(interaction, "action_name", ""))
+    hints = tuple(getattr(interaction, "condition_hints", ()) or ())
+    rendered_hints = tuple(str(h).strip() for h in hints if str(h).strip())
+    if not rendered_hints:
+        return action_name
+    return f"{action_name}({'・'.join(rendered_hints)})"
+
+
 class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     """スポットグラフのスナップショットにラベルを付与する UiContextBuilder。
 
@@ -499,7 +513,11 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # ``[gather(action_name="gather") / examine(action_name="examine")]``
             # は冗長で認知負荷が高く、LLM の action 誤発明を招いていた。
             action_names: list[str] = [inter.action_name for inter in entry.interactions]
-            act_str = f" [{', '.join(action_names)}]" if action_names else ""
+            action_labels: list[str] = [
+                _format_action_name_with_condition_hints(inter)
+                for inter in entry.interactions
+            ]
+            act_str = f" [{', '.join(action_labels)}]" if action_labels else ""
             desc_part = f" — {entry.description}" if entry.description else ""
             # PR-X (Y_after_pr639_640 後続): visible state を prompt に露出。
             # {'available': False} のような state は原因準拠の再利用待ち
