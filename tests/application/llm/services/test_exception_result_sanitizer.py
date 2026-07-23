@@ -55,7 +55,7 @@ class TestExceptionResultDomainException:
         """PR-δ v1 抜け穴修正: ``ItemNotInSlotException("No item in slot 3")``
         のように「error_code は日本語じゃないカテゴリだが message 側が
         整備されていない」ケースを塞ぐ。error_code / remediation は保持し、
-        message は英語漏れを防ぐため fallback に置換。"""
+        message は英語漏れを防ぎつつ、待機再試行を促さない fallback に置換。"""
         class MyDomainError(Exception):
             error_code = "PLAYER.ITEM_NOT_IN_SLOT"
 
@@ -65,8 +65,21 @@ class TestExceptionResultDomainException:
         # 英語 message は漏れない
         assert "No item" not in result.message
         assert "slot 3" not in result.message
-        # 汎用日本語 fallback
-        assert "システム" in result.message or "エラー" in result.message
+        assert result.message == "入力を見直して、別の対象・別の操作を選んでください。"
+        assert "再試行" not in result.message
+        assert "tick" not in result.message
+
+    def test_error_code_english_message_keeps_remediation_without_retry_fallback(self) -> None:
+        """具体 error_code 付きの英語 message は対処ヒントを保ち、待機再試行は促さない。"""
+        class MyDomainError(Exception):
+            error_code = "UNKNOWN_TOOL"
+
+        result = exception_result(MyDomainError("Unsupported tool foo"))
+        assert result.error_code == "UNKNOWN_TOOL"
+        assert result.message == "入力を見直して、別の対象・別の操作を選んでください。"
+        assert "再試行" not in result.message
+        assert "tick" not in result.message
+        assert result.remediation
 
 
 class TestExceptionResultEnglishFallback:
@@ -109,6 +122,15 @@ class TestExceptionResultJapaneseMessagePreserved:
         exc = RuntimeError("アイテムが見つかりませんでした。再度確認してください。")
         result = exception_result(exc)
         assert result.message == "アイテムが見つかりませんでした。再度確認してください。"
+
+    def test_error_code_japanese_message_preserved(self) -> None:
+        """具体 error_code 付きでも message が日本語なら fallback せず尊重する。"""
+        class MyDomainError(Exception):
+            error_code = "UNKNOWN_TOOL"
+
+        result = exception_result(MyDomainError("この tool は使えません。"))
+        assert result.error_code == "UNKNOWN_TOOL"
+        assert result.message == "この tool は使えません。"
 
     def test_japanese_3(self) -> None:
         """ひらがなだけでも 日本語判定 される。"""
