@@ -13,6 +13,7 @@ import os
 import hashlib
 import threading
 import uuid
+import copy
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Iterator, Iterable
 from dataclasses import dataclass, field, replace as dataclass_replace
@@ -69,7 +70,9 @@ from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
 from ai_rpg_world.application.llm.services.world_llm_prompt import (
     CharacterPromptInput,
 )
+from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_ASSESS_SITUATION,
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
@@ -526,6 +529,8 @@ class _LlmPhaseAResult:
     tool_call: Optional[dict]
     exception: Optional[BaseException]
     llm_call_id: Optional[str] = None
+    subjective_overrides: dict[str, Any] = field(default_factory=dict)
+    failure_result: Optional[LlmCommandResultDto] = None
 
 
 @dataclass
@@ -1581,6 +1586,47 @@ class _WorldLlmWiring:
         phase_a = self.run_phase_a(player_id)
         return self.run_phase_b(phase_a)
 
+    def _should_use_reason_first(self, player_id: PlayerId) -> bool:
+        """PR-3 の最小 gate。
+
+        本格 gate (loop_guard / 同一失敗直後 / stagnation strong) は後続 PR に
+        分ける。この PR では明示フラグだけを見て 2段階オーケストレーションを
+        単体で検証できるようにする。
+        """
+
+        flag = getattr(self.runtime, "reason_first_two_step_enabled", False)
+        if callable(flag):
+            try:
+                return bool(flag(player_id))
+            except Exception:
+                logger.exception("reason_first_two_step_enabled callable failed")
+                return False
+        return bool(flag)
+
+    def _build_tools_payload(
+        self, *, tool_schema_mode: str = "legacy"
+    ) -> list[dict[str, Any]]:
+        """runtime tool 定義を LLM API の tools payload へ変換する。"""
+
+        definitions = (
+            self.runtime.get_tool_definitions()
+            if tool_schema_mode == "legacy"
+            else self.runtime.get_tool_definitions(tool_schema_mode=tool_schema_mode)
+        )
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": definition.name,
+                    "description": definition.description,
+                    "parameters": definition.parameters,
+                },
+            }
+            for definition in filter_definitions_for_escape_llm(
+                definitions
+            )
+        ]
+
     def run_phase_a(self, player_id: PlayerId) -> _LlmPhaseAResult:
         """Phase A: snapshot 構築 + LLM 呼び出し。並列化可能。
 
@@ -1591,22 +1637,12 @@ class _WorldLlmWiring:
         - 例外は捕まえて結果に詰める (Phase B 側で LlmCommandResultDto 化)
         """
         prompt = self.runtime.build_full_prompt(player_id)
+        if self._should_use_reason_first(player_id):
+            return self._run_reason_first_phase_a(player_id, prompt)
         # PR-A: 脱出ランタイムで恒久的に UNSUPPORTED_TOOL になる tool は LLM に
         # 見せない。Y_after_issue621 trace で set_sub_location が 3 回叩かれて
         # 全部失敗していた問題を入口で塞ぐ。
-        tools_payload = [
-            {
-                "type": "function",
-                "function": {
-                    "name": definition.name,
-                    "description": definition.description,
-                    "parameters": definition.parameters,
-                },
-            }
-            for definition in filter_definitions_for_escape_llm(
-                self.runtime.get_tool_definitions()
-            )
-        ]
+        tools_payload = self._build_tools_payload()
         # 実験 #356 対応: LLM 1 呼び出しごとに metrics (wall_latency / tokens / TPS)
         # を trace に流す。Phase A の中で player_id / tick の context を sink に閉
         # じ込めて、後で集計スクリプトが per-agent / per-model 分布を出せるよう
@@ -1722,6 +1758,303 @@ class _WorldLlmWiring:
             self.runtime.commit_turn_reasoning_engaged(player_id, reasoning_effort)
         return _result(tool_call, None)
 
+    def _run_reason_first_phase_a(
+        self, player_id: PlayerId, prompt: dict
+    ) -> _LlmPhaseAResult:
+        """reason-first 2段階ターンの Phase A。
+
+        step1 は ``assess_situation`` を named tool_choice で強制する。成立した
+        評価だけを step2 末尾 prompt に追記し、step2 は同一 tool list で通常
+        action を required にする。契約違反時は行動実行へ進めない。
+        """
+
+        tools_payload = self._build_tools_payload(tool_schema_mode="reason_first")
+        tool_names = [
+            t.get("function", {}).get("name")
+            for t in tools_payload
+            if t.get("function", {}).get("name")
+        ]
+        metrics_sink = self._build_llm_metrics_sink(player_id, tool_names=tool_names)
+        last_llm_call_id: Optional[str] = None
+        assess_choice = {
+            "type": "function",
+            "function": {"name": TOOL_NAME_ASSESS_SITUATION},
+        }
+        self._record_reason_first_trace(
+            TraceEventKind.REASON_FIRST_STARTED,
+            player_id,
+            tool_count=len(tool_names),
+            retry_limit=1,
+        )
+
+        def _result(
+            tool_call: Optional[dict],
+            exception: Optional[BaseException],
+            *,
+            subjective_overrides: Optional[dict[str, Any]] = None,
+            failure_result: Optional[LlmCommandResultDto] = None,
+        ) -> _LlmPhaseAResult:
+            return _LlmPhaseAResult(
+                player_id=player_id,
+                prompt=prompt,
+                tools_payload=tools_payload,
+                tool_call=tool_call,
+                exception=exception,
+                llm_call_id=last_llm_call_id,
+                subjective_overrides=subjective_overrides or {},
+                failure_result=failure_result,
+            )
+
+        def _invoke(
+            messages: list[dict[str, Any]],
+            tool_choice: Any,
+            *,
+            attempt_index: int,
+            parent_attempt_id: Optional[str],
+            phase: str,
+        ) -> Optional[dict]:
+            nonlocal last_llm_call_id
+            prompt_capture_context = self._build_prompt_capture_context(
+                player_id=player_id,
+                prompt=prompt,
+                tool_choice=tool_choice,
+                reasoning_effort=None,
+                attempt_index=attempt_index,
+                parent_attempt_id=parent_attempt_id,
+                phase=phase,
+            )
+            if prompt_capture_context is not None:
+                last_llm_call_id = prompt_capture_context.context.llm_call_id
+            invoke_kwargs = {
+                "metrics_sink": metrics_sink,
+                "reasoning_effort": None,
+                "call_phase": phase,
+            }
+            if prompt_capture_context is not None:
+                invoke_kwargs["prompt_capture_context"] = prompt_capture_context
+            return self.llm_client.invoke(
+                messages,
+                tools_payload,
+                tool_choice,
+                **invoke_kwargs,
+            )
+
+        assessment: Optional[dict[str, str]] = None
+        parent_attempt_id: Optional[str] = None
+        for attempt_index in (0, 1):
+            try:
+                tool_call = _invoke(
+                    prompt["messages"],
+                    assess_choice,
+                    attempt_index=attempt_index,
+                    parent_attempt_id=parent_attempt_id,
+                    phase="assess_phase",
+                )
+            except Exception as exc:  # noqa: BLE001 — retry 後の fail-fast に変換する
+                logger.warning(
+                    "reason-first assess_phase invoke failed for player_id=%s",
+                    player_id.value,
+                    exc_info=True,
+                )
+                final = attempt_index == 1
+                self._record_reason_first_trace(
+                    TraceEventKind.REASON_FIRST_STEP_FAILED,
+                    player_id,
+                    phase="assess_phase",
+                    reason="invoke_exception",
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                    attempt_index=attempt_index,
+                    final=final,
+                )
+                if final:
+                    return _result(
+                        None,
+                        None,
+                        failure_result=self._reason_first_failed_result(
+                            "REASON_FIRST_STEP_FAILED"
+                        ),
+                    )
+                parent_attempt_id = last_llm_call_id
+                continue
+
+            parsed, failure_reason = self._parse_assessment_tool_call(tool_call)
+            if parsed is not None:
+                assessment = parsed
+                self._record_reason_first_trace(
+                    TraceEventKind.REASON_FIRST_ASSESSED,
+                    player_id,
+                    attempt_index=attempt_index,
+                    has_expected_result=bool(parsed.get("expected_result")),
+                )
+                break
+            final = attempt_index == 1
+            returned_tool = (
+                str(tool_call.get("name", "")) if isinstance(tool_call, dict) else None
+            )
+            self._record_reason_first_trace(
+                TraceEventKind.REASON_FIRST_STEP_FAILED,
+                player_id,
+                phase="assess_phase",
+                reason=failure_reason,
+                returned_tool=returned_tool,
+                attempt_index=attempt_index,
+                final=final,
+            )
+            if final:
+                return _result(
+                    None,
+                    None,
+                    failure_result=self._reason_first_failed_result(
+                        "REASON_FIRST_STEP_FAILED"
+                    ),
+                )
+            parent_attempt_id = last_llm_call_id
+
+        if assessment is None:
+            return _result(
+                None,
+                None,
+                failure_result=self._reason_first_failed_result(
+                    "REASON_FIRST_STEP_FAILED"
+                ),
+            )
+
+        action_messages = self._append_reason_first_assessment(
+            prompt["messages"], assessment
+        )
+        try:
+            action_tool_call = _invoke(
+                action_messages,
+                "required",
+                attempt_index=0,
+                parent_attempt_id=None,
+                phase="action_phase",
+            )
+        except Exception as exc:  # noqa: BLE001 — 既存 LLM_API_FAILED 経路へ渡す
+            logger.exception(
+                "reason-first action_phase invoke failed for player_id=%s",
+                player_id.value,
+            )
+            return _result(None, exc)
+
+        action_name = (
+            str(action_tool_call.get("name", ""))
+            if isinstance(action_tool_call, dict)
+            else ""
+        )
+        if action_name == TOOL_NAME_ASSESS_SITUATION:
+            self._record_reason_first_trace(
+                TraceEventKind.REASON_FIRST_STEP_FAILED,
+                player_id,
+                phase="action_phase",
+                reason="assessment_tool_returned_in_action_phase",
+                returned_tool=action_name,
+                attempt_index=0,
+                final=True,
+            )
+            return _result(
+                None,
+                None,
+                failure_result=self._reason_first_failed_result(
+                    "REASON_FIRST_ACTION_PHASE_INVALID_TOOL"
+                ),
+            )
+        if action_tool_call is not None:
+            self._record_reason_first_trace(
+                TraceEventKind.REASON_FIRST_ACTION_SELECTED,
+                player_id,
+                tool_name=action_name,
+            )
+        return _result(
+            action_tool_call,
+            None,
+            subjective_overrides=assessment,
+        )
+
+    def _parse_assessment_tool_call(
+        self, tool_call: Optional[dict]
+    ) -> tuple[Optional[dict[str, str]], str]:
+        if not isinstance(tool_call, dict):
+            return None, "no_tool_call"
+        if str(tool_call.get("name", "")) != TOOL_NAME_ASSESS_SITUATION:
+            return None, "unexpected_tool"
+        arguments = self._coerce_arguments(tool_call.get("arguments"))
+        inner_thought = str(arguments.get("inner_thought") or "").strip()
+        if not inner_thought:
+            return None, "missing_inner_thought"
+        assessment = {"inner_thought": inner_thought}
+        expected_result = str(arguments.get("expected_result") or "").strip()
+        if expected_result:
+            assessment["expected_result"] = expected_result
+        return assessment, ""
+
+    @staticmethod
+    def _append_reason_first_assessment(
+        messages: list[dict[str, Any]],
+        assessment: dict[str, str],
+    ) -> list[dict[str, Any]]:
+        copied = copy.deepcopy(messages)
+        lines = [
+            "【行動前の状況評価】",
+            f"- 考え: {assessment['inner_thought']}",
+        ]
+        expected_result = assessment.get("expected_result")
+        if expected_result:
+            lines.append(f"- 期待する結果: {expected_result}")
+        suffix = "\n\n" + "\n".join(lines)
+        if copied and copied[-1].get("role") == "user":
+            copied[-1] = dict(copied[-1])
+            copied[-1]["content"] = str(copied[-1].get("content", "")) + suffix
+            return copied
+        copied.append({"role": "user", "content": suffix.lstrip()})
+        return copied
+
+    @staticmethod
+    def _reason_first_failed_result(error_code: str) -> LlmCommandResultDto:
+        if error_code == "REASON_FIRST_ACTION_PHASE_INVALID_TOOL":
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    "行動選択段階で状況評価 tool が返されたため、このターンは"
+                    "行動しませんでした。"
+                ),
+                error_code=error_code,
+                remediation="行動段階では assess_situation ではなく、実行する行動 tool を1つ選んでください。",
+                should_reschedule=False,
+                was_no_op=True,
+            )
+        return LlmCommandResultDto(
+            success=False,
+            message=(
+                "行動前の状況評価が成立しなかったため、このターンは行動しませんでした。"
+            ),
+            error_code=error_code,
+            remediation="次のターンで状況を読み直し、実行する行動 tool を選び直してください。",
+            should_reschedule=False,
+            was_no_op=True,
+        )
+
+    def _record_reason_first_trace(
+        self, kind: str, player_id: PlayerId, **payload: Any
+    ) -> None:
+        trace_recorder = getattr(self.runtime, "trace_recorder", None)
+        if trace_recorder is None:
+            return
+        try:
+            tick = int(self.runtime.current_tick())
+        except Exception:
+            tick = None
+        try:
+            trace_recorder.record(
+                kind,
+                tick=tick,
+                player_id=int(player_id.value),
+                **payload,
+            )
+        except Exception:
+            logger.exception("trace_recorder.record(%s) failed", kind)
+
     def run_phase_b(self, phase_a: _LlmPhaseAResult) -> LlmCommandResultDto:
         """Phase B: Phase A の結果を受けて世界 mutation を適用する。
 
@@ -1729,6 +2062,23 @@ class _WorldLlmWiring:
         的に並ぶように、Phase A の to_run 順で呼ぶ)。
         """
         player_id = phase_a.player_id
+        if phase_a.failure_result is not None:
+            result = phase_a.failure_result
+            tool_name = (
+                "reason_first_action_phase_invalid"
+                if result.error_code == "REASON_FIRST_ACTION_PHASE_INVALID_TOOL"
+                else "reason_first_step_failed"
+            )
+            self.runtime._record_action_result(
+                player_id,
+                "reason-first 2段階ターン",
+                result.message,
+                tool_name=tool_name,
+                success=False,
+                error_code=result.error_code,
+            )
+            self._record_prompt_dataset_turn_result(phase_a, result)
+            return result
         if phase_a.exception is not None:
             # Phase A で LLM 呼び出しが落ちた場合の救済 path。
             result = LlmCommandResultDto(
@@ -1774,6 +2124,17 @@ class _WorldLlmWiring:
 
         name = str(tool_call.get("name", ""))
         arguments = self._coerce_arguments(tool_call.get("arguments"))
+        if phase_a.subjective_overrides:
+            arguments = {
+                **arguments,
+                **phase_a.subjective_overrides,
+            }
+            self._record_reason_first_trace(
+                TraceEventKind.REASON_FIRST_ASSESSMENT_INJECTED,
+                player_id,
+                tool_name=name,
+                injected_fields=sorted(phase_a.subjective_overrides.keys()),
+            )
         # Phase 1d: ACTION 自動 trace (実行前)。runtime に trace_recorder が
         # 注入されていれば記録。LlmAgentOrchestrator 経路を通らない world_runtime
         # 専用 wiring のための補完。
@@ -1869,7 +2230,6 @@ class _WorldLlmWiring:
                     result = dataclass_replace(result, message=augmented_message)
                     if trace_recorder is not None:
                         try:
-                            from ai_rpg_world.application.trace import TraceEventKind
                             trace_recorder.record(
                                 TraceEventKind.MEMO_HINT,
                                 tick=current_tick,
@@ -2067,7 +2427,7 @@ class _WorldLlmWiring:
         *,
         player_id: PlayerId,
         prompt: dict,
-        tool_choice: str,
+        tool_choice: Any,
         reasoning_effort: Optional[str],
         attempt_index: int,
         parent_attempt_id: Optional[str],

@@ -205,6 +205,18 @@ class TraceEventKind:
     #   - effort: str (開いた reasoning 予算。例 "low")
     #   - trigger: str (発火契機。"fresh_reflect")
     AGENT_REASONING_ENGAGED = "agent_reasoning_engaged"
+    # reason-first 2段階ターン: 行動前評価を named tool_call で先に取り、
+    # その評価を行動 tool 引数へ内部注入してから実行する経路の観測点。
+    # STARTED: 2段階経路を開始した瞬間。
+    # ASSESSED: step1 assess_situation が成立した瞬間。
+    # ASSESSMENT_INJECTED: step1 主観フィールドを step2 行動引数へ注入した瞬間。
+    # STEP_FAILED: step1 / step2 の契約違反で fail-fast した瞬間。
+    # ACTION_SELECTED: step2 が実行可能な行動 tool を返した瞬間。
+    REASON_FIRST_STARTED = "reason_first_started"
+    REASON_FIRST_ASSESSED = "reason_first_assessed"
+    REASON_FIRST_ASSESSMENT_INJECTED = "reason_first_assessment_injected"
+    REASON_FIRST_STEP_FAILED = "reason_first_step_failed"
+    REASON_FIRST_ACTION_SELECTED = "reason_first_action_selected"
     # U10a (予測誤差統一設計 部品6・pending prediction): chunk 主観補完が
     # pending_prediction を非 null で抽出し、PendingPrediction 化して
     # per-Being store に積んだ瞬間。抽出品質 (乱発していないか) を後から
