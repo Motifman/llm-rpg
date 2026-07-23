@@ -96,6 +96,74 @@ _STATUS_EFFECT_LABELS: dict[str, str] = {
     "paralysis": "麻痺",
 }
 
+_TIME_OF_DAY_PHASE_LABELS: dict[str, str] = {
+    "morning": "朝",
+    "noon": "昼",
+    "afternoon": "午後",
+    "evening": "夕暮れ",
+    "night": "夜",
+}
+
+_WEATHER_TYPE_LABELS: dict[str, str] = {
+    "CLEAR": "晴れ",
+    "CLOUDY": "曇り",
+    "RAIN": "雨",
+    "HEAVY_RAIN": "大雨",
+    "SNOW": "雪",
+    "BLIZZARD": "吹雪",
+    "FOG": "霧",
+    "STORM": "嵐",
+}
+
+
+def _label_time_of_day_phase(value: str) -> str:
+    """時刻帯の内部値を prompt 用の短い日本語へ変換する。未知値はそのまま出す。"""
+    return _TIME_OF_DAY_PHASE_LABELS.get(value, value)
+
+
+def _label_weather_type(value: str) -> str:
+    """天候の内部値を prompt 用の短い日本語へ変換する。未知値はそのまま出す。"""
+    return _WEATHER_TYPE_LABELS.get(value, value)
+
+
+def _interaction_condition_hints(interaction) -> tuple[str, ...]:
+    """interaction の時刻・天候制約を action 表示用の短いヒントにする。
+
+    HAS_ITEM / OBJECT_STATE は他の表示や remediation と重複するためここでは扱わない。
+    """
+    hints: list[str] = []
+    for cond in interaction.preconditions:
+        t = cond.condition_type
+        if t == InteractionConditionTypeEnum.TIME_OF_DAY_IS:
+            if cond.required_time_of_day_phase:
+                hints.append(
+                    f"{_label_time_of_day_phase(cond.required_time_of_day_phase)}のみ"
+                )
+            continue
+        if t == InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT:
+            if cond.required_time_of_day_phase:
+                hints.append(
+                    f"{_label_time_of_day_phase(cond.required_time_of_day_phase)}不可"
+                )
+            continue
+        if t == InteractionConditionTypeEnum.WEATHER_IS:
+            if cond.required_weather_type:
+                hints.append(f"{_label_weather_type(cond.required_weather_type)}のみ")
+            continue
+        if t == InteractionConditionTypeEnum.WEATHER_IS_NOT:
+            if cond.required_weather_type:
+                hints.append(f"{_label_weather_type(cond.required_weather_type)}不可")
+            continue
+    return tuple(hints)
+
+
+def _format_interaction_action_name_with_hints(interaction) -> str:
+    """fallback テキスト用に action_name と condition hints を同じ規則で整形する。"""
+    hints = _interaction_condition_hints(interaction)
+    if not hints:
+        return interaction.action_name
+    return f"{interaction.action_name}({'・'.join(hints)})"
+
 EntityNameResolver = Callable[[int], str]
 WeatherProvider = Callable[[], Optional[WeatherState]]
 WorldFlagsProvider = Callable[[], frozenset[str]]
@@ -624,6 +692,7 @@ class SpotGraphCurrentStateBuilder:
                         SpotGraphInteractionEntry(
                             action_name=i.action_name,
                             display_label=i.display_label,
+                            condition_hints=_interaction_condition_hints(i),
                         )
                         for i in obj.interactions
                         if not _has_failing_object_state_precondition(i, interior)
@@ -643,7 +712,7 @@ class SpotGraphCurrentStateBuilder:
                     # フォールバック行 (interactions DTO と整合): 同じく
                     # OBJECT_STATE 永続失敗の interaction は文面からも落とす。
                     actions = [
-                        i.action_name
+                        _format_interaction_action_name_with_hints(i)
                         for i in obj.interactions
                         if not _has_failing_object_state_precondition(i, interior)
                     ]

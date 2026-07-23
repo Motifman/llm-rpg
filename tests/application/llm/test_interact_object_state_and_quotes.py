@@ -134,6 +134,41 @@ class TestObjectSectionQuotesAndActionSimplification:
         assert "採取する" not in text
         assert "調べる" not in text
 
+    def test_action_condition_hints(self) -> None:
+        """時刻・天候の前提条件ヒントは action_name に短く添えて表示する。"""
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="岩礁",
+            current_spot_description="",
+            travel_status_line=None,
+            objects=(
+                SpotGraphObjectEntry(
+                    object_id=10,
+                    name="沖の釣り場",
+                    description="",
+                    interactions=(
+                        SpotGraphInteractionEntry(
+                            action_name="fish_deep",
+                            display_label="沖で釣りをする",
+                            condition_hints=("夜不可", "嵐不可"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
+        text = result.current_state_text
+        assert '[fish_deep(夜不可・嵐不可)]' in text
+        assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
+            "fish_deep",
+        )
+        assert all(
+            "夜不可" not in action and "嵐不可" not in action
+            for action in result.tool_runtime_context.targets[
+                "OBJ1"
+            ].available_interactions
+        )
+
     def test_action(self) -> None:
         """interactions が空の object は ``[]`` や ``[-]`` を出さず、シンプル
         に名前+説明だけを表示する。"""
