@@ -14,7 +14,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol
+from typing import Optional, Protocol
+
+from ai_rpg_world.application.llm.ports.llm_client_port import ToolChoice
 
 
 @dataclass(frozen=True)
@@ -71,7 +73,7 @@ class LlmCallMetrics:
     cost_usd: float = 0.0
     error_detail: str = ""
     reasoning_effort: Optional[str] = None
-    tool_choice: Any = ""
+    tool_choice: ToolChoice = ""
     phase: str = "one_step"
     llm_call_id: Optional[str] = None
 
