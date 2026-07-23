@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 )
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_ASSESS_SITUATION,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
@@ -316,6 +317,13 @@ def _tool_by_name(runtime, name: str):
     raise AssertionError(f"tool {name} not found")
 
 
+def _tool_by_name_from(definitions: list[ToolDefinitionDto], name: str) -> ToolDefinitionDto:
+    for definition in definitions:
+        if definition.name == name:
+            return definition
+    raise AssertionError(f"tool {name} not found")
+
+
 def test_reinterpretation_off_leaves_episodic_stack_without_coordinator(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
@@ -437,6 +445,68 @@ def test_expected_result_policy_required_makes_field_required(
     ):
         defn = _tool_by_name(runtime, name)
         assert "expected_result" in defn.parameters["required"], name
+
+
+def test_reason_first_tool_mode_adds_assessment_and_strips_action_subjective_fields(
+    clean_runtime_env: None,
+) -> None:
+    """reason_first toolset だけ assess_situation を足し、行動 tool の主観入力を外す。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="required")
+    )
+
+    legacy_names = [d.name for d in runtime.get_tool_definitions()]
+    reason_first_tools = runtime.get_tool_definitions(tool_schema_mode="reason_first")
+    reason_first_names = [d.name for d in reason_first_tools]
+
+    assert TOOL_NAME_ASSESS_SITUATION not in legacy_names
+    assert TOOL_NAME_ASSESS_SITUATION in reason_first_names
+
+    assess = _tool_by_name_from(reason_first_tools, TOOL_NAME_ASSESS_SITUATION)
+    assert "inner_thought" in assess.parameters["required"]
+    assert "expected_result" in assess.parameters["required"]
+
+    explore = _tool_by_name_from(reason_first_tools, TOOL_NAME_SPOT_GRAPH_EXPLORE)
+    assert "inner_thought" not in explore.parameters["properties"]
+    assert "expected_result" not in explore.parameters["properties"]
+    assert "inner_thought" not in explore.parameters.get("required", [])
+    assert "expected_result" not in explore.parameters.get("required", [])
+
+
+def test_reason_first_tool_mode_keeps_step1_and_step2_tool_lists_identical(
+    clean_runtime_env: None,
+) -> None:
+    """reason_first の2段階は同じ API から同一 tool list を得て prefix cache を守る。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="optional")
+    )
+
+    step1 = runtime.get_tool_definitions(tool_schema_mode="reason_first")
+    step2 = runtime.get_tool_definitions(tool_schema_mode="reason_first")
+
+    assert step1 == step2
+
+
+def test_reason_first_tool_mode_preserves_goal_revision_fields(
+    clean_runtime_env: None,
+) -> None:
+    """reason_first でも goal_update / goal_outcome は行動 tool から落とさない。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True,
+            expected_result_policy="required",
+            goal_store_enabled=True,
+            goal_revision_enabled=True,
+        )
+    )
+
+    explore = _tool_by_name_from(
+        runtime.get_tool_definitions(tool_schema_mode="reason_first"),
+        TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    )
+
+    assert "goal_update" in explore.parameters["properties"]
+    assert "goal_outcome" in explore.parameters["properties"]
 
 
 def test_world_runtime_build_full_prompt_uses_shared_default_prompt_builder(

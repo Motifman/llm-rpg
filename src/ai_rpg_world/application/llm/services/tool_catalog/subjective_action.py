@@ -9,7 +9,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     EMOTION_HINT_VALUES,
     ToolDefinitionDto,
 )
+from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_ASSESS_SITUATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PREFIX_TODO,
 )
@@ -27,6 +29,11 @@ SUBJECTIVE_ACTION_FIELDS = (
 SUBJECTIVE_ACTION_TEXT_FIELDS = (
     "inner_thought",
     "intention",
+    "expected_result",
+)
+
+REASON_FIRST_ACTION_OWNED_FIELDS = (
+    "inner_thought",
     "expected_result",
 )
 
@@ -156,6 +163,46 @@ def with_goal_update_schema(definition: ToolDefinitionDto) -> ToolDefinitionDto:
     )
 
 
+def assess_situation_definition(*, expected_result_policy: str) -> ToolDefinitionDto:
+    """reason-first の評価段階で使う ``assess_situation`` 定義を返す。
+
+    ``expected_result`` は既存の ``EXPECTED_RESULT_POLICY`` と同じ意味を保つ。
+    off なら露出しない。optional なら書けるが必須ではない。required なら
+    必須にする。ここでは行動を実行せず、後続の行動 tool が実行を担う。
+    """
+    if expected_result_policy not in {"off", "optional", "required"}:
+        raise ValueError(
+            "expected_result_policy must be one of: off, optional, required"
+        )
+
+    properties: Dict[str, Any] = {
+        "inner_thought": deepcopy(
+            SUBJECTIVE_ACTION_FIELD_PROPERTIES["inner_thought"]
+        ),
+    }
+    required = ["inner_thought"]
+    if expected_result_policy != "off":
+        properties["expected_result"] = deepcopy(
+            SUBJECTIVE_ACTION_FIELD_PROPERTIES["expected_result"]
+        )
+        if expected_result_policy == "required":
+            required.append("expected_result")
+
+    return ToolDefinitionDto(
+        name=TOOL_NAME_ASSESS_SITUATION,
+        description=(
+            "行動 tool を呼ぶ前に、現在の状況・失敗履歴・次の方針を短く評価する。"
+            "ここでは行動を実行しない。"
+        ),
+        parameters={
+            "type": "object",
+            "properties": properties,
+            "required": required,
+        },
+        category=ToolCategory.META_COGNITIVE,
+    )
+
+
 def is_subjective_action_tool(tool_name: str) -> bool:
     """世界へ作用する主観入力付き tool かどうか。"""
 
@@ -166,6 +213,39 @@ def is_subjective_action_tool(tool_name: str) -> bool:
     if tool_name.startswith(TOOL_NAME_PREFIX_TODO):
         return False
     return bool(tool_name)
+
+
+def strip_reason_first_action_subjective_schema(
+    definition: ToolDefinitionDto,
+) -> ToolDefinitionDto:
+    """reason-first の行動段階から step1 所有の主観フィールドだけを外す。
+
+    2 段階ターンでは ``inner_thought`` / ``expected_result`` を
+    ``assess_situation`` で先に生成し、行動 tool には書かせない。一方で
+    ``goal_update`` / ``goal_outcome`` は行動に紐づく既存フィールドなので残す。
+    """
+    if not isinstance(definition, ToolDefinitionDto):
+        raise TypeError("definition must be ToolDefinitionDto")
+    parameters = deepcopy(definition.parameters)
+    properties = dict(parameters.get("properties") or {})
+    for field_name in REASON_FIRST_ACTION_OWNED_FIELDS:
+        properties.pop(field_name, None)
+    parameters["properties"] = properties
+    required = [
+        field_name
+        for field_name in list(parameters.get("required") or [])
+        if field_name not in REASON_FIRST_ACTION_OWNED_FIELDS
+    ]
+    if required:
+        parameters["required"] = required
+    else:
+        parameters.pop("required", None)
+    return ToolDefinitionDto(
+        name=definition.name,
+        description=definition.description,
+        parameters=parameters,
+        category=definition.category,
+    )
 
 
 def with_subjective_action_schema(definition: ToolDefinitionDto) -> ToolDefinitionDto:
