@@ -179,13 +179,29 @@ def _fallback_persona_block(display_name: str) -> str:
     ).build(persona)
 
 
-def _expected_result_rule_line(expected_result_policy: str) -> str:
+def _expected_result_rule_line(
+    expected_result_policy: str, *, tool_schema_mode: str = "legacy"
+) -> str:
     """expected_result 露出 policy に応じた行動ルール行 (#526 v0)。
 
     off では空文字 (= 行が増えず prompt 不変)。optional/required では、
     expected_result が「願望・目的ではなく行動前の予測」であることと、後で予測と
     実際のズレが振り返られることを伝える。
     """
+    if tool_schema_mode == "reason_first":
+        if expected_result_policy == "required":
+            return (
+                "- 2段階ターンでは `assess_situation` で `expected_result` に、"
+                "次に選ぶ行動で『何が分かる・何が起きると思うか』の予測を必ず書く"
+                "（願望や目的ではなく、行動前の予測。後でこの予測と実際の結果のズレを振り返る）。"
+            )
+        if expected_result_policy == "optional":
+            return (
+                "- 2段階ターンでは、予測を持てるときは `assess_situation` の "
+                "`expected_result` に『何が起きると思うか』を書いてよい"
+                "（願望や目的ではなく、行動前の予測。後でこの予測と実際の結果のズレを振り返る）。"
+            )
+        return ""
     if expected_result_policy == "required":
         return (
             "- 探索・移動・相互作用・待機の各ツールでは `expected_result` に、"
@@ -209,6 +225,7 @@ def build_world_system_prompt(
     participant_names: tuple[str, ...],
     enable_string_seed_of_thought: bool = False,
     expected_result_policy: str = "off",
+    tool_schema_mode: str = "legacy",
     has_goal: bool = True,
 ) -> str:
     """脱出ゲーム用システムプロンプト（1ターン1ツール・文面の意味づけ）。
@@ -229,7 +246,14 @@ def build_world_system_prompt(
     expected_result_policy:
         ``"off"`` (既定) なら予測関連の行動ルールは増えず prompt 不変。``"optional"`` /
         ``"required"`` のとき、expected_result を書く指示行を 行動ルール に追加する (#526 v0)。
+
+    tool_schema_mode:
+        ``"legacy"`` (既定) なら従来通り各行動 tool が ``inner_thought`` を受け取る。
+        ``"reason_first"`` なら ``assess_situation`` が主観入力を先に受け取り、
+        後続の行動 tool は実行対象だけを選ぶ。
     """
+    if tool_schema_mode not in {"legacy", "reason_first"}:
+        raise ValueError("tool_schema_mode must be 'legacy' or 'reason_first'")
     participants = "\n".join(f"  - {n}" for n in participant_names) or "  - （他の探索者はいない）"
     time_pressure = limited_action_and_time_pressure_text(has_goal=has_goal)
     # 層2: 目的の枠付け。has_goal=True は従来どおり「勝利条件 (最終目的)」前提。
@@ -248,7 +272,9 @@ def build_world_system_prompt(
         )
     # #526 v0: policy != off のときだけ予測ルール行を足す。off では先頭に改行も
     # 付けず、prompt を従来と完全一致させる (prefix cache 不変)。
-    expected_result_rule = _expected_result_rule_line(expected_result_policy)
+    expected_result_rule = _expected_result_rule_line(
+        expected_result_policy, tool_schema_mode=tool_schema_mode
+    )
     expected_result_rule_block = (
         f"\n{expected_result_rule}" if expected_result_rule else ""
     )
@@ -256,6 +282,21 @@ def build_world_system_prompt(
         "- 当シナリオで同席の他者がいない（上記のとおり自己のみ）なら、囁き・他者の発話の観測は生じないことが多い。"
         if len(participant_names) == 0
         else "- 上記の名は、同局面に同席する他の探索者である（自身の識別は上記【ペルソナ】の名前。シナリオに応じて複数）。"
+    )
+    subjective_rule = (
+        "- 2段階ターンでは、まず `assess_situation` で `inner_thought` に、"
+        "上記【ペルソナ】の口調に揃えた **あなた自身の頭の中の独白** を短い一文で必ず含める。"
+        "その後の行動 tool では、`assess_situation` の評価に従って実行する行動だけを選ぶ。"
+        "読者・観測者に見せるための演技や情景描写ではなく、いま頭の中で実際に考えている言葉そのものを書く。"
+        "未発見の事実を知った体で書かない。"
+        if tool_schema_mode == "reason_first"
+        else (
+            "- 各ツール呼び出しでは `inner_thought` に、上記【ペルソナ】の口調に揃えた "
+            "**あなた自身の頭の中の独白** を短い一文で必ず含める。"
+            "読者・観測者に見せるための演技や情景描写ではなく、いま頭の中で"
+            "実際に考えている言葉そのものを書く。未発見の事実を知った体で書かない"
+            "（厳密な定義は各ツールの `inner_thought` 引数の説明に従う）。"
+        )
     )
     body = f"""あなたは次のペルソナとして行動するキャラクターである。
 
@@ -277,7 +318,7 @@ def build_world_system_prompt(
 
 【行動ルール（全キャラクター共通）】
 - 世界と相互作用する唯一の手段は、LLM への tool calling（関数呼び出し）である。
-- 各ツール呼び出しでは `inner_thought` に、上記【ペルソナ】の口調に揃えた **あなた自身の頭の中の独白** を短い一文で必ず含める。読者・観測者に見せるための演技や情景描写ではなく、いま頭の中で実際に考えている言葉そのものを書く。未発見の事実を知った体で書かない（厳密な定義は各ツールの `inner_thought` 引数の説明に従う）。{expected_result_rule_block}
+{subjective_rule}{expected_result_rule_block}
 - 1回の応答で選べるのは 1 つのツールだけとする（サーバーは先頭の tool_call だけを実行しうる。必ず 1 つに絞る）。
 - ラベル（接続先・オブジェクト・相手プレイヤー等）は、続きの文面内の「現在地と周囲」等に表示されたものだけを使う。
 - 未発見の事実を、すでに知っているかのように断言しない。
@@ -293,5 +334,3 @@ def build_world_system_prompt(
     if enable_string_seed_of_thought:
         return body.rstrip() + "\n\n" + _ESCAPE_STRING_SEED_OF_THOUGHT_BLOCK + "\n"
     return body
-
-

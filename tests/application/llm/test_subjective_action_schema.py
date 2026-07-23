@@ -11,6 +11,8 @@ from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import
     SUBJECTIVE_ACTION_FIELD_PROPERTIES,
     SUBJECTIVE_ACTION_FIELDS,
     SUBJECTIVE_ACTION_TEXT_FIELDS,
+    assess_situation_definition,
+    strip_reason_first_action_subjective_schema,
     with_expected_result_schema,
     with_subjective_action_schema,
 )
@@ -127,6 +129,89 @@ class TestWithExpectedResultSchema:
         with_expected_result_schema(original, required=True)
         assert "expected_result" not in original.parameters["properties"]
         assert "expected_result" not in original.parameters["required"]
+
+
+class TestStripReasonFirstActionSubjectiveSchema:
+    """reason-first の行動段階では LLM に主観フィールドを書かせない。"""
+
+    def _action_tool(self) -> ToolDefinitionDto:
+        return ToolDefinitionDto(
+            name="interact",
+            description="何かに作用する",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "object_label": {"type": "string"},
+                    "inner_thought": {"type": "string"},
+                    "expected_result": {"type": "string"},
+                    "goal_update": {"type": ["string", "null"]},
+                    "goal_outcome": {
+                        "type": ["string", "null"],
+                        "enum": ["achieved", "abandoned", None],
+                    },
+                },
+                "required": [
+                    "object_label",
+                    "inner_thought",
+                    "expected_result",
+                ],
+            },
+            category=ToolCategory.WORLD_ACTION,
+        )
+
+    def test_removes_only_inner_thought_and_expected_result(self) -> None:
+        """reason-first action schema は step1 が所有する2項目だけを落とす。"""
+        stripped = strip_reason_first_action_subjective_schema(self._action_tool())
+        props = stripped.parameters["properties"]
+        required = stripped.parameters["required"]
+
+        assert "inner_thought" not in props
+        assert "expected_result" not in props
+        assert "inner_thought" not in required
+        assert "expected_result" not in required
+        assert "object_label" in props
+        assert "object_label" in required
+        # 目的の見直し系は step2 の行動に紐づくため残す。
+        assert "goal_update" in props
+        assert "goal_outcome" in props
+
+    def test_does_not_mutate_input_definition(self) -> None:
+        """入力定義は破壊せず、legacy toolset の schema を汚さない。"""
+        original = self._action_tool()
+        strip_reason_first_action_subjective_schema(original)
+
+        assert "inner_thought" in original.parameters["properties"]
+        assert "expected_result" in original.parameters["properties"]
+        assert "inner_thought" in original.parameters["required"]
+        assert "expected_result" in original.parameters["required"]
+
+
+class TestAssessSituationDefinition:
+    """assess_situation が reason-first の主観入力を policy 通りに受け取る。"""
+
+    def test_expected_result_policy_off_exposes_only_inner_thought(self) -> None:
+        """policy=off では expected_result を schema に出さない。"""
+        definition = assess_situation_definition(expected_result_policy="off")
+
+        assert definition.name == "assess_situation"
+        assert definition.category is ToolCategory.META_COGNITIVE
+        assert "inner_thought" in definition.parameters["required"]
+        assert "expected_result" not in definition.parameters["properties"]
+        assert "実行しない" in definition.description
+
+    def test_expected_result_policy_optional_exposes_but_does_not_require(self) -> None:
+        """policy=optional では expected_result は書けるが必須ではない。"""
+        definition = assess_situation_definition(expected_result_policy="optional")
+
+        assert "expected_result" in definition.parameters["properties"]
+        assert "expected_result" not in definition.parameters["required"]
+
+    def test_expected_result_policy_required_requires_prediction(self) -> None:
+        """policy=required では assess_situation 側で予測を必須にする。"""
+        definition = assess_situation_definition(expected_result_policy="required")
+
+        assert "expected_result" in definition.parameters["properties"]
+        assert "expected_result" in definition.parameters["required"]
 
 
 class TestWithGoalUpdateSchema:

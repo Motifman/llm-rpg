@@ -142,6 +142,8 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 )
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+    assess_situation_definition,
+    strip_reason_first_action_subjective_schema,
     with_expected_result_schema,
     GOAL_OUTCOME_ABANDONED,
     GOAL_OUTCOME_ACHIEVED,
@@ -808,7 +810,9 @@ class WorldRuntime:
             tick_budget_remaining=self._compute_tick_budget_remaining(),
         )
 
-    def get_tool_definitions(self) -> List[ToolDefinitionDto]:
+    def get_tool_definitions(
+        self, *, tool_schema_mode: str = "legacy"
+    ) -> List[ToolDefinitionDto]:
         """LLM に渡されるツール定義（OpenAI tools 形式）を返す。
 
         ``_include_todo_tools=False`` の場合は TODO 系 (todo_add / todo_list /
@@ -820,13 +824,30 @@ class WorldRuntime:
         ``memory_recall_episodes`` (= LLM が能動的に過去 episode を呼び戻す
         tool) も併せて含める。``_episodic_stack=None`` 時は出さない (= 学習
         パイプラインが無い実験 run と区別する)。
+
+        ``tool_schema_mode="legacy"`` は従来互換。``"reason_first"`` では
+        ``assess_situation`` を加え、行動 tool から step1 所有の
+        ``inner_thought`` / ``expected_result`` だけを外す。reason-first の
+        step1 / step2 は同じ mode を指定して同一 tool list を渡す。
         """
+        if tool_schema_mode not in {"legacy", "reason_first"}:
+            raise ValueError("tool_schema_mode must be 'legacy' or 'reason_first'")
         spot = [
             self._with_goal_update_if_enabled(
                 self._with_expected_result_if_enabled(defn)
             )
             for defn, _ in get_spot_graph_specs()
         ]
+        if tool_schema_mode == "reason_first":
+            spot = [
+                strip_reason_first_action_subjective_schema(defn)
+                for defn in spot
+            ]
+            spot.append(
+                assess_situation_definition(
+                    expected_result_policy=self._expected_result_policy
+                )
+            )
         if not self._include_todo_tools:
             return spot
         # Issue #526 後続: tool を expose するタイミングで auxiliary stack を
