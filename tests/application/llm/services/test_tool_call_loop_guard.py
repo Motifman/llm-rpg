@@ -180,6 +180,47 @@ class TestToolCallLoopGuardServiceArgumentSensitivity:
         assert len(entries) == 1
         assert entries[0].output.structured["consecutive_count"] == 2
 
+    def test_streak_warning_names_target_and_orders_next_action(self) -> None:
+        """連続同一行動の警告は対象名を出し、同じ行動を避ける指示形にする。"""
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        pid = _pid(1)
+        for _ in range(2):
+            svc.record_and_check(
+                pid,
+                TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+                {"destination_label": "山頂"},
+            )
+
+        entries = buf.get_observations(pid)
+        assert len(entries) == 1
+        prose = entries[0].output.prose
+        assert "対象: 山頂" in prose
+        assert "以外の行動を選ぶこと" in prose
+        assert "必ず失敗" not in prose
+
+    def test_streak_warning_summarizes_give_item_recipients(self) -> None:
+        """give_item の警告は gives 配列内の相手名を対象として短く表示する。"""
+        buf = DefaultObservationContextBuffer()
+        svc = ToolCallLoopGuardService(
+            buf,
+            clock=_fixed_clock,
+            thresholds={"give_item": 2},
+        )
+        pid = _pid(1)
+        args = {
+            "gives": [
+                {"item_label": "流木", "target_player_label": "エイダ"},
+                {"item_label": "真水", "target_player_label": "ノア"},
+            ]
+        }
+        for _ in range(2):
+            svc.record_and_check(pid, "give_item", args)
+
+        entries = buf.get_observations(pid)
+        assert len(entries) == 1
+        assert "対象: エイダ ほか" in entries[0].output.prose
+
     def test_emits_warning_for_speech_speak_same_arguments_two(self) -> None:
         """speech_speak は threshold=2 (Issue #269 第17回 R2 で 3 連続失敗が
         拾われなかった対策)。同一 channel + content + target_label の 2 回目

@@ -19,10 +19,12 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.llm_argument_fingerprint import (
     build_argument_fingerprint,
 )
@@ -72,22 +74,24 @@ DEFAULT_CROSS_TICK_FAILURE_THRESHOLD: int = 3
 
 
 _CROSS_TICK_WARNING_TEMPLATES: tuple[str, ...] = (
-    "⚠ 直近 {window} tick 以内で `{tool_name}` を同じ引数・同じ失敗 "
-    "(`{error_code}`) で {count} 回試みています。連続してはいませんが、"
-    "同じ壁に何度も当たっている状態です。この失敗理由は状況が変わらない"
-    "限り解消しません。目的自体を見直すか、別の対象・別の手段を検討して"
-    "ください。",
-    "同じ失敗 (`{error_code}`) を伴う `{tool_name}` を、間に別行動を挟みつつ "
-    "{count} 回繰り返しました。表面上は行動が変わっていても、実質的な"
-    "アプローチが変わっていないのかもしれません。観測を読み直し、"
-    "この失敗の前提条件を満たすには何が必要か整理し直してください。",
-    "`{tool_name}` の失敗 (`{error_code}`) が {count} 回目です。tick を跨いで"
-    "散発的に試していますが、結果が同じなら状況も変わっていない可能性が"
-    "高いです。周囲を再確認するか、この目的を別ルートで達成する方法を"
-    "考えてみてください。",
+    "⚠ あなたは直近 {window} tick 以内で {action_summary} を同じ失敗 "
+    "(`{error_code}`) で {count} 回繰り返している。"
+    "対処のヒント: {remediation} この行動は状況が変わるまで必ず失敗する。"
+    "次は {action_summary} 以外の行動を選ぶこと。別の対象、別の場所、待機、"
+    "所持品の使用、仲間への相談のいずれかに切り替えること。",
+    "⚠ {action_summary} は直近 {window} tick 以内に {count} 回、同じ理由 "
+    "(`{error_code}`) で失敗している。対処のヒント: {remediation} "
+    "状況が変わっていないなら再試行してはいけない。次の行動では、この対象・"
+    "この手段を避け、観測を読み直して別ルートを選ぶこと。時間経過で解ける"
+    "類なら待機してから後で再試行すること。",
+    "⚠ これは確定した反復失敗です: {action_summary} / `{error_code}` / "
+    "{count} 回。対処のヒント: {remediation} 今すぐ同じ行動を止めること。"
+    "移動する、別対象を選ぶ、必要条件を満たす、または仲間に状況を伝える"
+    "行動を選ぶこと。",
 )
 """cross_tick_failure 警告 prose のテンプレート。
-``{tool_name}`` / ``{error_code}`` / ``{count}`` / ``{window}`` を format 対象とする。
+``{action_summary}`` / ``{error_code}`` / ``{count}`` / ``{window}`` /
+``{remediation}`` を format 対象とする。
 """
 
 
@@ -95,26 +99,96 @@ _CROSS_TICK_WARNING_TEMPLATES: tuple[str, ...] = (
 # 警告」のパターンを学習して文面ごと無視するようになる可能性があるので、
 # 警告を再発火するたびに文面を変える。warn_index % len(templates) で
 # deterministic に選ぶ (テスト容易性 + 実走での「予測しづらさ」の両立)。
-# templates は { consecutive } { tool_name } を含む format 文字列。
+# templates は {consecutive} {action_summary} を含む format 文字列。
 _WARNING_TEMPLATES: tuple[str, ...] = (
-    "⚠ 直近 {consecutive} ターン連続で `{tool_name}` を同じ引数で実行しています。"
-    "状況に変化が無いまま同じ行動を繰り返している可能性があります。"
-    "観測内容を再確認し、別の行動 (speech で相手に状況を伝える、別の場所に移動する、"
-    "別の対象を examine する、等) を検討してください。",
-    "気が付けば `{tool_name}` を {consecutive} 回連続で同じやり方で試みています。"
-    "現状を変えるには別の角度のアプローチが必要かもしれません。"
-    "周囲の状況や手持ちアイテムを見直してください。",
-    "{consecutive} 回続けて同じ `{tool_name}` を選択していますが、結果が変わって"
-    "いる兆候はありますか？ いったん立ち止まり、目的を達成する別の手段を考えて"
-    "みてください (会話で情報を求める / 場所を移す / 対象を変える等)。",
-    "あなたは {consecutive} 連続で `{tool_name}` に固執しています。同じ行為を"
-    "重ねても望む結果が出ないなら、それは戦略の見直しの合図です。"
-    "別の選択肢を試してみてください。",
-    "立て続けに {consecutive} 回 `{tool_name}` を実行している点が気になります。"
-    "同じ刺激を繰り返しているうちは、世界の側も同じ反応しか返さないものです。"
-    "今までと違う行動を試す好機ではないでしょうか。",
+    "⚠ 直近 {consecutive} ターン連続で {action_summary} を同じ引数で実行している。"
+    "同じ入力を続けても状況は広がらない。次は {action_summary} 以外の行動を"
+    "選ぶこと。移動、別対象、所持品、会話、待機のいずれかに切り替えること。",
+    "⚠ あなたは {action_summary} に {consecutive} 回連続で固着している。"
+    "次のターンで同じ行動を選んではいけない。現在の観測を読み直し、目的を"
+    "進める別の手段を選ぶこと。",
+    "⚠ {consecutive} 回続けて {action_summary} を選んでいる。世界から新しい"
+    "反応を得るには入力を変える必要がある。次は対象・場所・手段のどれかを"
+    "必ず変えること。",
+    "⚠ 同じ行動の連続を検出した: {action_summary} × {consecutive}。"
+    "このまま繰り返さないこと。周囲を確認する、別の候補を選ぶ、仲間に伝える、"
+    "必要なら待つ、のいずれかを実行すること。",
+    "⚠ {action_summary} を {consecutive} 連続で実行している。これは行動の停滞です。"
+    "次の行動では同じツールと同じ対象を使わず、別の選択肢を試すこと。",
 )
-"""警告 prose のテンプレート。{tool_name} と {consecutive} を含む format 文字列。"""
+"""警告 prose のテンプレート。{action_summary} と {consecutive} を含む format 文字列。"""
+
+
+_TARGET_ARG_KEYS: tuple[str, ...] = (
+    "object_label",
+    "destination_label",
+    "target_player_label",
+    "item_label",
+    "ground_item_label",
+    "sub_location_label",
+    "target_label",
+    "inventory_item_label",
+)
+"""loop_guard 警告で対象名として出せる代表的な tool 引数 key。"""
+
+
+def _parse_argument_fingerprint(fingerprint: str) -> Dict[str, Any]:
+    """fingerprint JSON を復元する。壊れた値は空 dict として扱う。"""
+    if not isinstance(fingerprint, str):
+        return {}
+    try:
+        parsed = json.loads(fingerprint)
+    except Exception:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return parsed
+
+
+def _stringify_target_value(value: Any) -> Optional[str]:
+    """LLM 向けに対象値を短い文字列へ変換する。"""
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    return None
+
+
+def _extract_target_summary_from_args(args: Dict[str, Any]) -> Optional[str]:
+    """tool 引数から loop_guard 警告に出す対象名を抽出する。
+
+    ``give_item`` は ``gives`` 配列に対象が入るため、相手名を優先して短く
+    まとめる。その他の tool は代表的な label 引数を優先順に見る。
+    """
+    gives = args.get("gives")
+    if isinstance(gives, list):
+        names: List[str] = []
+        for entry in gives:
+            if not isinstance(entry, dict):
+                continue
+            name = _stringify_target_value(entry.get("target_player_label"))
+            if name is not None and name not in names:
+                names.append(name)
+        if len(names) == 1:
+            return names[0]
+        if len(names) > 1:
+            return f"{names[0]} ほか"
+
+    for key in _TARGET_ARG_KEYS:
+        value = _stringify_target_value(args.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _build_action_summary(tool_name: str, fingerprint: str) -> str:
+    """tool 名と fingerprint から、LLM 向けの短い行動説明を作る。"""
+    args = _parse_argument_fingerprint(fingerprint)
+    target_summary = _extract_target_summary_from_args(args)
+    if target_summary is None:
+        return f"`{tool_name}`"
+    return f"`{tool_name}`（対象: {target_summary}）"
 
 
 @dataclass(frozen=True)
@@ -547,10 +621,12 @@ class ToolCallLoopGuardService:
             warn_index % len(_CROSS_TICK_WARNING_TEMPLATES)
         ]
         prose = template.format(
+            action_summary=_build_action_summary(tool_name, fingerprint),
             tool_name=tool_name,
             error_code=error_code,
             count=count,
             window=window,
+            remediation=get_remediation(error_code),
         )
         output = ObservationOutput(
             prose=prose,
@@ -586,7 +662,11 @@ class ToolCallLoopGuardService:
         # 文面が固定にならないようにする (LLM が同じ警告をパターン学習で
         # 無視するのを防ぐ)。
         template = _WARNING_TEMPLATES[warn_index % len(_WARNING_TEMPLATES)]
-        prose = template.format(tool_name=tool_name, consecutive=consecutive)
+        prose = template.format(
+            tool_name=tool_name,
+            action_summary=_build_action_summary(tool_name, fingerprint),
+            consecutive=consecutive,
+        )
         output = ObservationOutput(
             prose=prose,
             structured={
