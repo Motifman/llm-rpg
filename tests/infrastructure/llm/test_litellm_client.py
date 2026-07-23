@@ -160,6 +160,21 @@ class TestLiteLLMClientInvoke:
             assert call_kw["api_key"] == "sk-dummy"
             assert "api_base" not in call_kw
 
+    def test_invoke_passes_named_tool_choice_dict_litellm(self, client):
+        """named tool_choice dict は文字列に潰さず、そのまま litellm.completion に渡す。"""
+        named_choice = {
+            "type": "function",
+            "function": {"name": "assess_situation"},
+        }
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response(
+                "assess_situation", {"inner_thought": "見る"}
+            )
+
+            client.invoke(messages=[], tools=[], tool_choice=named_choice)
+
+            assert m_litellm.completion.call_args.kwargs["tool_choice"] == named_choice
+
     def test_invoke_parses_invalid_json_arguments_as_empty_dict(self, client):
         """arguments が不正 JSON のときは arguments を {} として返す"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
@@ -563,6 +578,21 @@ class TestLiteLLMClientInvokeExceptions:
         assert m.error_detail == ""
         assert m.reasoning_effort == "low"
         assert m.tool_choice == "required"
+
+    def test_success_metrics_includes_call_phase(self, client):
+        """LLM 呼び出し区分を metrics に載せ、2段階ターンの各呼び出しを trace で区別する。"""
+        sink = _RecordingSink()
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("wait", {})
+            client.invoke(
+                messages=[],
+                tools=[],
+                tool_choice="required",
+                metrics_sink=sink,
+                call_phase="assess_phase",
+            )
+        assert len(sink.records) == 1
+        assert sink.records[0].phase == "assess_phase"
 
 
 class TestLiteLLMClientJsonCompletion:

@@ -112,3 +112,28 @@ class TestMetricsDataclass:
             cost_usd=0.0000089,
         )
         assert m.cost_usd == pytest.approx(0.0000089)
+
+    def test_phase_defaults_to_one_step(self) -> None:
+        """呼び出し区分未指定なら既存 1段階ターンを示す one_step として扱う。"""
+        m = LlmCallMetrics(
+            model="test/model",
+            wall_latency_ms=1000,
+            prompt_tokens=500,
+            completion_tokens=20,
+            tps=20.0,
+            success=True,
+        )
+        assert m.phase == "one_step"
+
+    def test_phase_can_be_set_explicitly(self) -> None:
+        """2段階ターン用に assess_phase / action_phase を呼び出し単位で保持できる。"""
+        m = LlmCallMetrics(
+            model="test/model",
+            wall_latency_ms=1000,
+            prompt_tokens=500,
+            completion_tokens=20,
+            tps=20.0,
+            success=True,
+            phase="assess_phase",
+        )
+        assert m.phase == "assess_phase"

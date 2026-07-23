@@ -34,7 +34,7 @@ from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port imp
 from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
 )
-from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
+from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient, ToolChoice
 from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
     ISemanticGistCompletionPort,
 )
@@ -579,11 +579,12 @@ class LiteLLMClient(
         self,
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
-        tool_choice: str = "required",
+        tool_choice: ToolChoice = "required",
         *,
         metrics_sink: Optional[LlmCallMetricsSink] = None,
         reasoning_effort: Optional[str] = None,
         prompt_capture_context: Optional[Any] = None,
+        call_phase: str = "one_step",
     ) -> Optional[Dict[str, Any]]:
         """
         1 回の LLM 呼び出しを行い、tool_call があれば {"name": str, "arguments": dict} を返す。
@@ -597,6 +598,9 @@ class LiteLLMClient(
         上書きして reasoning の effort を変える (案A: band-gated thinking)。``None``
         なら既定のまま (既存挙動)。未知値は ``ValueError``。tool-calling 経路では
         reasoning 本文は返らないが、reasoning_token 数は usage 経由で metrics に載る。
+
+        ``call_phase`` は観測用。既存の 1段階呼び出しは ``one_step``、reason-first
+        2段階ターンでは呼び出し側が ``assess_phase`` / ``action_phase`` を指定する。
         """
         self._assert_can_call_litellm()
         if reasoning_effort is None:
@@ -649,6 +653,7 @@ class LiteLLMClient(
                 error_detail=str(e)[:_ERROR_DETAIL_MAX_CHARS],
                 reasoning_effort=reasoning_effort,
                 tool_choice=tool_choice,
+                phase=call_phase,
                 llm_call_id=_extract_llm_call_id(prompt_capture_context),
             )
             self._record_prompt_capture(
@@ -669,6 +674,7 @@ class LiteLLMClient(
                     "error_detail": str(e)[:_ERROR_DETAIL_MAX_CHARS],
                     "reasoning_effort": reasoning_effort,
                     "tool_choice": tool_choice,
+                    "phase": call_phase,
                 },
             )
             self._logger.exception("LiteLLM completion failed: %s", e)
@@ -694,6 +700,7 @@ class LiteLLMClient(
             error_code=None if tool_call is not None else "NO_TOOL_CALL",
             reasoning_effort=reasoning_effort,
             tool_choice=tool_choice,
+            phase=call_phase,
             llm_call_id=_extract_llm_call_id(prompt_capture_context),
         )
         self._record_prompt_capture(
@@ -713,6 +720,7 @@ class LiteLLMClient(
                 "error_code": None if tool_call is not None else "NO_TOOL_CALL",
                 "reasoning_effort": reasoning_effort,
                 "tool_choice": tool_choice,
+                "phase": call_phase,
             },
         )
         return tool_call
@@ -813,7 +821,8 @@ class LiteLLMClient(
         cost_usd: float = 0.0,
         error_detail: str = "",
         reasoning_effort: Optional[str] = None,
-        tool_choice: str = "",
+        tool_choice: ToolChoice = "",
+        phase: str = "one_step",
         llm_call_id: Optional[str] = None,
     ) -> None:
         if sink is None:
@@ -833,6 +842,7 @@ class LiteLLMClient(
                 error_detail=error_detail,
                 reasoning_effort=reasoning_effort,
                 tool_choice=tool_choice,
+                phase=phase,
                 llm_call_id=llm_call_id,
             )
             sink.record(metrics)
