@@ -29,6 +29,7 @@ class TestPromptDatasetCaptureSink:
             character_name="エイダ",
             turn_index=1,
             world_tick=1,
+            phase="assess_phase",
         )
         request_kwargs = {
             "model": "stub",
@@ -92,10 +93,45 @@ class TestPromptDatasetCaptureSink:
 
         assert restored["messages"] == request_kwargs["messages"]
         assert restored["tools"] == request_kwargs["tools"]
+        assert call["phase"] == "assess_phase"
         assert "api_key" not in call["request"]["kwargs"]
         assert call["request"]["request_hash"] == compute_request_hash(
             call["request"]["kwargs"]
         )
+
+    def test_call_phase_defaults_to_one_step(self, tmp_path):
+        """呼び出し区分未指定の既存経路は one_step として calls.jsonl に保存される。"""
+
+        sink = PromptDatasetCaptureSink(
+            run_dir=tmp_path,
+            run_id="run1",
+            run_metadata={},
+        )
+        context = PromptDatasetCallContext(
+            llm_call_id="call-1",
+            run_id="run1",
+            world_id=1,
+            being_id="being_w1_p1",
+            player_id=1,
+            persona_id="persona:sha256:test",
+            character_name="エイダ",
+            turn_index=1,
+        )
+        sink.record_call(
+            context=context,
+            request_kwargs={
+                "model": "stub",
+                "messages": [{"role": "user", "content": "周囲を見る"}],
+                "tools": [],
+                "tool_choice": "required",
+            },
+            response={"choices": []},
+            output=None,
+            metrics={"success": False},
+        )
+
+        call = _read_jsonl(tmp_path / "prompt_dataset" / "calls.jsonl")[0]
+        assert call["phase"] == "one_step"
 
     def test_output_is_derivable_from_raw_response(self, tmp_path):
         """保存した response.raw から、便宜 field の output と同じ tool_call を再導出できる。"""

@@ -15,6 +15,9 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 
+ToolChoice = str | Dict[str, Any]
+
+
 class ILLMClient(ABC):
     """LLM 呼び出しクライアント。"""
 
@@ -23,11 +26,12 @@ class ILLMClient(ABC):
         self,
         messages: List[Dict[str, str]],
         tools: List[Dict[str, Any]],
-        tool_choice: str = "required",
+        tool_choice: ToolChoice = "required",
         *,
         metrics_sink: Optional[Any] = None,
         reasoning_effort: Optional[str] = None,
         prompt_capture_context: Optional[Any] = None,
+        call_phase: str = "one_step",
     ) -> Optional[Dict[str, Any]]:
         """
         LLM を呼び出し、選択された tool_call を返す。
@@ -44,8 +48,12 @@ class ILLMClient(ABC):
         ``prompt_capture_context`` が渡されたら、実装側は実際に外部 LLM 境界へ渡した
         request と response を prompt dataset sink へ保存する。既定 ``None`` なら
         完全に無効。
+
+        ``call_phase`` は prompt dataset / metrics / trace 上の区別用。通常の
+        1段階ターンは ``one_step``、reason-first 2段階ターンでは
+        ``assess_phase`` / ``action_phase`` を呼び出し側が指定する。
         """
         pass
 
 
-__all__ = ["ILLMClient"]
+__all__ = ["ILLMClient", "ToolChoice"]

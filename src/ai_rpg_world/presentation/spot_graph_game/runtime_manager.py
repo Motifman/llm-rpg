@@ -491,6 +491,7 @@ class _LlmMetricsTraceSink:
                 error_detail=getattr(metrics, "error_detail", ""),
                 reasoning_effort=getattr(metrics, "reasoning_effort", None),
                 tool_choice=getattr(metrics, "tool_choice", ""),
+                phase=getattr(metrics, "phase", "one_step"),
                 llm_call_id=getattr(metrics, "llm_call_id", None),
                 # OpenRouter 経由のとき usage.cost (USD) が乗る。直結 / vLLM では 0.0。
                 # 実験 trace を見れば cost 合計が事後計算できる。
@@ -1647,6 +1648,7 @@ class _WorldLlmWiring:
                 reasoning_effort=effort,
                 attempt_index=attempt_index,
                 parent_attempt_id=parent_attempt_id,
+                phase="one_step",
             )
             if prompt_capture_context is not None:
                 last_llm_call_id = prompt_capture_context.context.llm_call_id
@@ -2069,6 +2071,7 @@ class _WorldLlmWiring:
         reasoning_effort: Optional[str],
         attempt_index: int,
         parent_attempt_id: Optional[str],
+        phase: str = "one_step",
     ) -> Optional[Any]:
         """prompt dataset 有効時に 1 LLM 呼び出しの保存文脈を作る。"""
 
@@ -2099,6 +2102,7 @@ class _WorldLlmWiring:
             attempt_index=attempt_index,
             parent_attempt_id=parent_attempt_id,
             world_tick=world_tick,
+            phase=phase,
             time_of_day={"label": self._time_label()},
             provenance=getattr(sink, "_run_metadata", {}),
             reasoning_effort=reasoning_effort,

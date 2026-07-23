@@ -6,7 +6,7 @@ ILLMClient のスタブ実装（テスト・開発用）。
 
 from typing import Any, Dict, List, Optional
 
-from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
+from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient, ToolChoice
 
 
 class StubLlmClient(ILLMClient):
@@ -40,11 +40,12 @@ class StubLlmClient(ILLMClient):
         self,
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
-        tool_choice: str = "required",
+        tool_choice: ToolChoice = "required",
         *,
         metrics_sink: Optional[Any] = None,
         reasoning_effort: Optional[str] = None,
         prompt_capture_context: Optional[Any] = None,
+        call_phase: str = "one_step",
     ) -> Optional[Dict[str, Any]]:
         # stub は metrics_sink / reasoning_effort を受け取るが何もしない (テスト互換、
         # 実 client が出す計測値や reasoning 制御を fake する必要がない場合の default)。
@@ -66,6 +67,7 @@ class StubLlmClient(ILLMClient):
                 error_code=getattr(
                     self._exception_to_raise, "error_code", "STUB_LLM_EXCEPTION"
                 ),
+                call_phase=call_phase,
             )
             raise self._exception_to_raise
         self._record_prompt_capture(
@@ -76,6 +78,7 @@ class StubLlmClient(ILLMClient):
             output=self._tool_call_to_return,
             success=self._tool_call_to_return is not None,
             error_code=None if self._tool_call_to_return is not None else "NO_TOOL_CALL",
+            call_phase=call_phase,
         )
         return self._tool_call_to_return
 
@@ -89,6 +92,7 @@ class StubLlmClient(ILLMClient):
         output: Optional[Dict[str, Any]],
         success: bool,
         error_code: Optional[str],
+        call_phase: str,
     ) -> None:
         if prompt_capture_context is None:
             return
@@ -107,6 +111,7 @@ class StubLlmClient(ILLMClient):
                 "cost_usd": 0.0,
                 "success": success,
                 "error_code": error_code,
+                "phase": call_phase,
             },
         )
 

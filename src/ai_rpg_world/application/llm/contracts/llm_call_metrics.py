@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 
 
 @dataclass(frozen=True)
@@ -49,6 +49,10 @@ class LlmCallMetrics:
             trace で区別し、reasoning 指定が失敗と相関するかを見るため。
         tool_choice: この呼び出しの tool_choice ("required" / "auto" 等)。
             reasoning との組合せ起因の provider 拒否を trace から切り分けるため。
+            named tool_choice の場合は OpenAI 形式の dict をそのまま保持する。
+        phase: 呼び出し区分。既存 1段階ターンは "one_step"。reason-first
+            2段階ターンでは "assess_phase" / "action_phase" を入れ、同一 turn 内の
+            2 呼び出しを trace / prompt dataset で区別する。
         cost_usd: 1 呼び出し分の USD コスト。provider 側が usage に乗せて返した値を
             そのまま使う (= モデル価格表をコード側で持たない / 値段改定の追従不要)。
             OpenRouter は ``extra_body.usage.include=true`` を付けると ``usage.cost``
@@ -67,7 +71,8 @@ class LlmCallMetrics:
     cost_usd: float = 0.0
     error_detail: str = ""
     reasoning_effort: Optional[str] = None
-    tool_choice: str = ""
+    tool_choice: Any = ""
+    phase: str = "one_step"
     llm_call_id: Optional[str] = None
 
     @staticmethod

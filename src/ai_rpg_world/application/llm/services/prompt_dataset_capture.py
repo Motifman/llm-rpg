@@ -43,6 +43,7 @@ class PromptDatasetCallContext:
     attempt_index: int = 0
     parent_attempt_id: Optional[str] = None
     world_tick: Optional[int] = None
+    phase: str = "one_step"
     time_of_day: Optional[dict[str, Any]] = None
     provenance: Optional[dict[str, Any]] = None
     reasoning_effort: Optional[str] = None
@@ -237,6 +238,7 @@ class PromptDatasetCaptureSink:
             "turn_index": context.turn_index,
             "attempt_index": context.attempt_index,
             "parent_attempt_id": context.parent_attempt_id,
+            "phase": context.phase,
             "timestamp_utc": _utc_now_iso(),
             "world_tick": context.world_tick,
             "time_of_day": _to_jsonable(context.time_of_day),
