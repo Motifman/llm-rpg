@@ -156,6 +156,32 @@ class TestCrossTickFailureDetection:
             == "INTERACTION_PRECONDITION_FAILED"
         )
 
+    def test_cross_tick_warning_names_target_orders_next_action_and_echoes_remediation(self) -> None:
+        """同一失敗の反復警告は対象名・命令形・対処ヒントを含む。"""
+        buffer = _StubBuffer()
+        tick = _TickProvider(start=0)
+        svc = self._make(buffer, tick)
+        pid = PlayerId(3)
+        args = {"object_label": "湧水の口", "action_name": "drink_water"}
+
+        for t in [0, 5, 10]:
+            tick.tick = t
+            svc.record_and_check(
+                pid,
+                TOOL_NAME_SPOT_GRAPH_INTERACT,
+                args,
+                success=False,
+                error_code="INTERACTION_PRECONDITION_FAILED",
+            )
+
+        entry = buffer.appended[0][1]
+        prose = entry.output.prose
+        assert "対象: 湧水の口" in prose
+        assert "状況が変わるまで必ず失敗する" in prose
+        assert "以外の行動を選ぶこと" in prose
+        assert "対処のヒント:" in prose
+        assert "対象オブジェクトの現在の状態" in prose
+
     def test_window_failure_count(self) -> None:
         """window (default 20) を跨いだ古い失敗はドロップされる。"""
         buffer = _StubBuffer()
