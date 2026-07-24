@@ -34,6 +34,8 @@ class ItemSpecReadModel:
     spoils_after_ticks: Optional[int] = None
     # PR β (実験 #29 後続): 疲労回復量。0 (default) なら回復なし。
     fatigue_recovery: int = 0
+    # Issue #794 D: 作者が item spec に書く一般用途ヒント。None なら非表示。
+    usage_hint: Optional[str] = None
 
     @classmethod
     def create_from_item_spec(
@@ -52,6 +54,7 @@ class ItemSpecReadModel:
         is_light_source: bool = False,
         spoils_after_ticks: Optional[int] = None,
         fatigue_recovery: int = 0,
+        usage_hint: Optional[str] = None,
     ) -> "ItemSpecReadModel":
         """ItemSpecからReadModelを作成"""
         return cls(
@@ -69,6 +72,7 @@ class ItemSpecReadModel:
             is_light_source=is_light_source,
             spoils_after_ticks=spoils_after_ticks,
             fatigue_recovery=fatigue_recovery,
+            usage_hint=usage_hint,
         )
 
     @property
@@ -104,4 +108,5 @@ class ItemSpecReadModel:
             is_light_source=self.is_light_source,
             spoils_after_ticks=self.spoils_after_ticks,
             fatigue_recovery=self.fatigue_recovery,
+            usage_hint=self.usage_hint,
         )

@@ -137,6 +137,9 @@ class ItemSpecDefinition:
     # PR β (実験 #29 後続): 疲労回復量。0 (default) なら効果なし。
     # use_item 成功時に PlayerStatusAggregate.recover_fatigue() が呼ばれる。
     fatigue_recovery: int = 0
+    # Issue #794 D: item の一般用途。具体的な spot / object 名ではなく、
+    # 「どういう用途で、どういう種類の場所が要るか」を作者が書く。
+    usage_hint: str = ""
 
 
 @dataclass(frozen=True)
@@ -723,6 +726,14 @@ class ScenarioLoader:
                 raise ValueError(
                     f"item '{sid}': fatigue_recovery must be non-negative, got {fatigue_recovery}"
                 )
+            usage_hint_raw = item.get("usage_hint", "")
+            if not isinstance(usage_hint_raw, str):
+                raise ValueError(
+                    f"item '{sid}': usage_hint must be string, got {usage_hint_raw!r}"
+                )
+            usage_hint = usage_hint_raw.strip()
+            if "usage_hint" in item and not usage_hint:
+                raise ValueError(f"item '{sid}': usage_hint must not be blank")
             defs.append(ItemSpecDefinition(
                 string_id=sid,
                 spec_id=ItemSpecId.create(numeric),
@@ -733,6 +744,7 @@ class ScenarioLoader:
                 spoils_after_ticks=spoils_after_ticks,
                 consume_effect=consume_effect,
                 fatigue_recovery=fatigue_recovery,
+                usage_hint=usage_hint,
             ))
         return defs
 

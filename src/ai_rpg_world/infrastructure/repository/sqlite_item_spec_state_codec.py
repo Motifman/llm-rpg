@@ -35,6 +35,7 @@ def build_item_spec(*, row: object, effect_rows: Iterable[object]) -> ItemSpec:
         is_placeable=bool(row["is_placeable"]),
         placeable_object_type=row["placeable_object_type"],
         consume_effect=effect,
+        usage_hint=_non_empty_text(row["usage_hint"]),
     )
 
 
@@ -74,6 +75,7 @@ def item_spec_to_payload(item_spec: ItemSpec) -> dict[str, Any]:
         "is_placeable": item_spec.is_placeable,
         "placeable_object_type": item_spec.placeable_object_type,
         "consume_effect": _effect_to_payload(item_spec.consume_effect),
+        "usage_hint": item_spec.usage_hint or "",
     }
 
 
@@ -93,7 +95,13 @@ def payload_to_item_spec(payload: dict[str, Any]) -> ItemSpec:
         is_placeable=bool(payload.get("is_placeable", False)),
         placeable_object_type=payload.get("placeable_object_type"),
         consume_effect=_payload_to_effect(payload.get("consume_effect")),
+        usage_hint=_non_empty_text(payload.get("usage_hint")),
     )
+
+
+def _non_empty_text(value: object) -> str | None:
+    text = str(value or "").strip()
+    return text or None
 
 
 def _build_effect_tree(rows: list[object]) -> ItemEffect | None:

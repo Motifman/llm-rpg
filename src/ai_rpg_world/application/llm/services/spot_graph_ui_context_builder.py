@@ -191,6 +191,18 @@ def _format_item_type_tag(item_type: str) -> str:
     return _ITEM_TYPE_DISPLAY.get(item_type, "")
 
 
+def _format_item_usage_hint(usage_hint: str) -> str:
+    """ItemSpec の作者文による用途ヒントを所持品行向けに整形する。
+
+    ここでは HAS_ITEM 条件から具体 spot / object を機械導出しない。渡された
+    作者文だけを表示し、空なら何も出さない。
+    """
+    text = str(usage_hint or "").strip()
+    if not text:
+        return ""
+    return f" (用途: {text})"
+
+
 def _format_object_state(state: Dict[str, Any]) -> str:
     """SpotGraphObjectEntry.visible_state を prompt 表示用の tag に整形。
 
@@ -799,11 +811,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # 「近くのオブジェクトに interact して使う素材・道具」を
             # リストだけで判断できるようにする。
             type_mark = _format_item_type_tag(entry.item_type)
+            usage_mark = _format_item_usage_hint(entry.usage_hint)
             # ``""`` 規約 (PR #639 後続): item 名のみ ``""`` で囲み、
             # x{量} / 種別タグ / 腐敗 タグは囲まない。LLM は「``""`` 内の
             # 値が item_label に渡すべき値」と読み取れる。
             lines.append(
-                f"  - \"{disambiguated_name}\"{qty}{type_mark}{spoiled_mark}"
+                f"  - \"{disambiguated_name}\"{qty}{type_mark}{usage_mark}{spoiled_mark}"
             )
             # 後方互換: 既存 use_item は target.item_instance_id に item_spec_id を
             # 入れる慣習 (名前と内容が乖離しているが、リスクを取らないため触らない)。

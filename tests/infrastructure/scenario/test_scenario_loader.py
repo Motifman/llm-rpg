@@ -511,6 +511,23 @@ class TestScenarioLoaderMinimal:
         assert len(result.item_spec_definitions) == 1
         assert result.item_spec_definitions[0].name == "鍵"
 
+    def test_parses_item_usage_hint(self) -> None:
+        """item_specs[].usage_hint は作者が書いた用途文として読み込まれる。"""
+        scenario = _minimal_scenario()
+        scenario["item_specs"][0]["usage_hint"] = "火を扱う場所で interact して使う"
+
+        result = ScenarioLoader().load_from_dict(scenario)
+
+        assert result.item_spec_definitions[0].usage_hint == "火を扱う場所で interact して使う"
+
+    def test_rejects_blank_item_usage_hint(self) -> None:
+        """usage_hint が空白だけなら、シナリオ境界で作家ミスとして弾く。"""
+        scenario = _minimal_scenario()
+        scenario["item_specs"][0]["usage_hint"] = "   "
+
+        with pytest.raises(ValueError, match="usage_hint"):
+            ScenarioLoader().load_from_dict(scenario)
+
     def test_parses_players(self) -> None:
         result = ScenarioLoader().load_from_dict(_minimal_scenario())
         assert len(result.player_spawns) == 1

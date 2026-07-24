@@ -3108,6 +3108,8 @@ def create_world_runtime(
             consume_effect=item_def.consume_effect,
             # PR β: 疲労回復量。loader 経由で JSON から。0 なら効果なし。
             fatigue_recovery=item_def.fatigue_recovery,
+            # Issue #794 D: item spec 作者文の一般用途ヒント。
+            usage_hint=item_def.usage_hint or None,
         )
         item_spec_repo.save(spec)
 
@@ -3431,7 +3433,15 @@ def create_world_runtime(
                 # 表示できるようにする。ItemType.value は "consumable" 等の
                 # 小文字列。enum 経由なので未設定リスクはない。
                 item_type_value = item.item_spec.item_type.value
-                seen_groups[key] = [name, 0, slot_id, iid.value, item_type_value]
+                usage_hint_value = item.item_spec.usage_hint or ""
+                seen_groups[key] = [
+                    name,
+                    0,
+                    slot_id,
+                    iid.value,
+                    item_type_value,
+                    usage_hint_value,
+                ]
             seen_groups[key][1] += 1
         return tuple(
             SpotGraphInventoryItemEntry(
@@ -3442,6 +3452,7 @@ def create_world_runtime(
                 item_instance_id=info[3],
                 is_spoiled=is_spoiled,
                 item_type=info[4],
+                usage_hint=info[5],
             )
             for (sid, is_spoiled), info in seen_groups.items()
         )
