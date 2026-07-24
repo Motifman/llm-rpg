@@ -28,6 +28,9 @@ from ai_rpg_world.application.llm.services.action_result_store import (
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
     PromptDatasetCaptureSink,
 )
+from ai_rpg_world.application.llm.services.in_memory_stagnation_reasoning_latch import (
+    InMemoryStagnationReasoningLatch,
+)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -349,6 +352,7 @@ class _GatedReasonFirstRuntime(_ReasonFirstRuntime):
         super().__init__()
         self.reason_first_two_step_enabled = True
         self.stagnation_band = "none"
+        self._stagnation_reasoning_latch = InMemoryStagnationReasoningLatch()
 
     def _resolve_stagnation_band_value(self, player_id: PlayerId) -> str:
         return self.stagnation_band
@@ -740,7 +744,61 @@ def test_reason_first_gates_on_stagnation_strong_and_skips_band_reasoning(
     """停滞 strong では reason-first を優先し、熟考付き1段階の effort 解決は呼ばない。"""
     runtime = _GatedReasonFirstRuntime()
     runtime.stagnation_band = "strong"
-    client = _reason_first_success_client()
+    player_id = PlayerId(1)
+    runtime._stagnation_reasoning_latch.arm(player_id)
+    client = _SequencedLlmClient(
+        [
+            {
+                "name": TOOL_NAME_ASSESS_SITUATION,
+                "arguments": {
+                    "inner_thought": "反復失敗を避けて別手を選ぶ。",
+                    "expected_result": "新しい展開になる。",
+                },
+            },
+            {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
+            {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
+        ]
+    )
+    wiring = _reason_first_wiring(runtime, client)
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
+    )
+
+    result = wiring.run_turn(player_id)
+
+    assert result.success is True
+    assert [call["call_phase"] for call in client.calls] == ["assess_phase", "action_phase"]
+    assert runtime.reasoning_effort_calls == 0
+    assert runtime._stagnation_reasoning_latch.is_armed(player_id) is False
+    started = [
+        payload
+        for kind, payload in runtime.trace_recorder.records
+        if kind == TraceEventKind.REASON_FIRST_STARTED
+    ]
+    assert started[-1]["gate_reason"] == "stagnation_strong"
+
+    second_result = wiring.run_turn(player_id)
+
+    assert second_result.success is True
+    assert [call["call_phase"] for call in client.calls] == [
+        "assess_phase",
+        "action_phase",
+        "one_step",
+    ]
+    assert runtime.reasoning_effort_calls == 1
+
+
+def test_reason_first_does_not_gate_on_stagnation_strong_without_fresh_reflect_latch(
+    clean_runtime_env: None,
+) -> None:
+    """band が strong でも reflect 注入直後のラッチが無ければ1段階のまま。"""
+    runtime = _GatedReasonFirstRuntime()
+    runtime.stagnation_band = "strong"
+    client = _SequencedLlmClient(
+        [{"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}]
+    )
     wiring = _reason_first_wiring(runtime, client)
     wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
         lambda player_id, arguments, runtime_context: LlmCommandResultDto(
@@ -751,17 +809,8 @@ def test_reason_first_gates_on_stagnation_strong_and_skips_band_reasoning(
     result = wiring.run_turn(PlayerId(1))
 
     assert result.success is True
-    assert [call["call_phase"] for call in client.calls] == [
-        "assess_phase",
-        "action_phase",
-    ]
-    assert runtime.reasoning_effort_calls == 0
-    started = [
-        payload
-        for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STARTED
-    ]
-    assert started[-1]["gate_reason"] == "stagnation_strong"
+    assert [call["call_phase"] for call in client.calls] == ["one_step"]
+    assert runtime.reasoning_effort_calls == 1
 
 
 def test_reason_first_gates_on_recent_same_failure_from_action_result_store(
@@ -845,6 +894,7 @@ def test_reason_first_gated_turn_writes_assess_and_action_phase_prompt_dataset_r
     """gated reason-first 発火時は prompt dataset に assess/action の2 phase を保存する。"""
     runtime = _GatedReasonFirstRuntime()
     runtime.stagnation_band = "strong"
+    runtime._stagnation_reasoning_latch.arm(PlayerId(1))
     runtime.aux_being_resolver = _AuxBeingResolverStub()
     runtime.aux_being_default_world_id = WorldId(1)
     client = _reason_first_success_client()

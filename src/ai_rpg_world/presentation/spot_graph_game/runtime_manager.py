@@ -1628,7 +1628,7 @@ class _WorldLlmWiring:
             return _ReasonFirstGateDecision(True, "loop_guard_warning")
         if self._has_recent_same_failure(player_id):
             return _ReasonFirstGateDecision(True, "recent_same_failure")
-        if self._is_stagnation_band_strong(player_id):
+        if self._is_stagnation_reason_first_armed(player_id):
             return _ReasonFirstGateDecision(True, "stagnation_strong")
         return _ReasonFirstGateDecision(False, "no_trigger")
 
@@ -1669,7 +1669,25 @@ class _WorldLlmWiring:
             return None
         return (tool_name, error_code, identity)
 
-    def _is_stagnation_band_strong(self, player_id: PlayerId) -> bool:
+    def _is_stagnation_reason_first_armed(self, player_id: PlayerId) -> bool:
+        """停滞 reflect 注入直後の一発ラッチと band strong が揃ったときだけ True。
+
+        band-gated reasoning と同じ入力を使うが、band だけを見ると停滞中の
+        毎 turn で reason-first が発火してしまう。ここでは既存ラッチも peek し、
+        「reflect 注入直後の 1 行動だけ」に頻度を揃える。
+        """
+
+        latch = getattr(self.runtime, "_stagnation_reasoning_latch", None)
+        is_armed = getattr(latch, "is_armed", None)
+        if not callable(is_armed):
+            return False
+        try:
+            armed = bool(is_armed(player_id))
+        except Exception:
+            logger.exception("reason-first gate: stagnation latch check failed")
+            return False
+        if not armed:
+            return False
         resolver = getattr(self.runtime, "_resolve_stagnation_band_value", None)
         if not callable(resolver):
             return False
@@ -1678,6 +1696,23 @@ class _WorldLlmWiring:
         except Exception:
             logger.exception("reason-first gate: stagnation band resolution failed")
             return False
+
+    def _consume_stagnation_reason_first_latch(self, player_id: PlayerId) -> None:
+        """reason-first が停滞ラッチを使ったとき、一発権を消費する。
+
+        reason-first 経路では ``resolve_turn_reasoning_effort`` を呼ばないため、
+        band-gated reasoning 側の commit/abandon 消費に乗らない。ここで消費し、
+        strong band が続いても同じ reflect から毎 turn 2段階へ入らないようにする。
+        """
+
+        latch = getattr(self.runtime, "_stagnation_reasoning_latch", None)
+        consume = getattr(latch, "consume", None)
+        if not callable(consume):
+            return
+        try:
+            consume(player_id)
+        except Exception:
+            logger.exception("reason-first gate: stagnation latch consume failed")
 
     def _build_tools_payload(
         self, *, tool_schema_mode: str = "legacy"
@@ -1866,6 +1901,8 @@ class _WorldLlmWiring:
             tool_count=len(tool_names),
             retry_limit=1,
         )
+        if gate_reason == "stagnation_strong":
+            self._consume_stagnation_reason_first_latch(player_id)
 
         def _result(
             tool_call: Optional[dict],
