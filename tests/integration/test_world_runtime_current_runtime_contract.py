@@ -8,8 +8,10 @@ today's behavior before further runtime convergence work.
 from __future__ import annotations
 
 from dataclasses import replace
+import copy
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -27,6 +29,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
+from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
 )
@@ -264,6 +267,84 @@ class _ContractRuntime:
         )
 
 
+class _TraceRecorderSpy:
+    def __init__(self) -> None:
+        self.records: list[tuple[str, dict[str, Any]]] = []
+
+    def record(self, kind: str, **kwargs: Any) -> None:
+        self.records.append((kind, dict(kwargs)))
+
+
+class _ReasonFirstRuntime(_ContractRuntime):
+    def __init__(self) -> None:
+        super().__init__()
+        self.reason_first_two_step_enabled = True
+        self.trace_recorder = _TraceRecorderSpy()
+        self.tool_schema_modes: list[str] = []
+
+    def get_tool_definitions(
+        self, *, tool_schema_mode: str = "legacy"
+    ) -> list[ToolDefinitionDto]:
+        self.tool_schema_modes.append(tool_schema_mode)
+        tools = [
+            ToolDefinitionDto(
+                name=TOOL_NAME_SPOT_GRAPH_EXPLORE,
+                description="explore",
+                parameters={"type": "object", "properties": {}, "required": []},
+            )
+        ]
+        if tool_schema_mode == "reason_first":
+            tools.append(
+                ToolDefinitionDto(
+                    name=TOOL_NAME_ASSESS_SITUATION,
+                    description="assess",
+                    parameters={
+                        "type": "object",
+                        "properties": {
+                            "inner_thought": {"type": "string"},
+                            "expected_result": {"type": "string"},
+                        },
+                        "required": ["inner_thought", "expected_result"],
+                    },
+                )
+            )
+        return tools
+
+    def resolve_turn_reasoning_effort(self, player_id: PlayerId) -> None:
+        return None
+
+
+class _SequencedLlmClient:
+    def __init__(self, responses: list[dict | BaseException | None]) -> None:
+        self._responses = list(responses)
+        self.calls: list[dict[str, Any]] = []
+
+    def invoke(
+        self,
+        messages,
+        tools,
+        tool_choice="required",
+        *,
+        metrics_sink=None,
+        reasoning_effort=None,
+        prompt_capture_context=None,
+        call_phase="one_step",
+    ):
+        self.calls.append(
+            {
+                "messages": copy.deepcopy(messages),
+                "tools": copy.deepcopy(tools),
+                "tool_choice": copy.deepcopy(tool_choice),
+                "reasoning_effort": reasoning_effort,
+                "call_phase": call_phase,
+            }
+        )
+        response = self._responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return copy.deepcopy(response)
+
+
 def _phase_a(
     player_id: PlayerId,
     *,
@@ -288,6 +369,18 @@ def _wiring_for_contract_runtime(runtime: _ContractRuntime) -> _WorldLlmWiring:
         observation_buffer=runtime._obs_buffer,
         llm_client=StubLlmClient(None),
     )
+
+
+def _reason_first_wiring(
+    runtime: _ReasonFirstRuntime,
+    client: _SequencedLlmClient,
+) -> _WorldLlmWiring:
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        llm_client=client,
+    )
+    return wiring
 
 
 def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
@@ -507,6 +600,209 @@ def test_reason_first_tool_mode_preserves_goal_revision_fields(
 
     assert "goal_update" in explore.parameters["properties"]
     assert "goal_outcome" in explore.parameters["properties"]
+
+
+def test_reason_first_two_step_injects_assessment_before_action_execution(
+    clean_runtime_env: None,
+) -> None:
+    """reason_first 有効時は評価 tool を先に強制し、評価内容を行動引数へ内部注入する。"""
+    runtime = _ReasonFirstRuntime()
+    client = _SequencedLlmClient(
+        [
+            {
+                "name": TOOL_NAME_ASSESS_SITUATION,
+                "arguments": {
+                    "inner_thought": "水源は一度失敗したので周囲を見直す。",
+                    "expected_result": "新しい発見があるはずだ。",
+                },
+            },
+            {
+                "name": TOOL_NAME_SPOT_GRAPH_EXPLORE,
+                "arguments": {},
+            },
+        ]
+    )
+    wiring = _reason_first_wiring(runtime, client)
+    captured_arguments: dict[str, Any] = {}
+
+    def _handler(
+        player_id: PlayerId,
+        arguments: dict,
+        runtime_context,
+    ) -> LlmCommandResultDto:
+        captured_arguments.update(arguments)
+        return LlmCommandResultDto(success=True, message="探索した。")
+
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = _handler
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.success is True
+    assert [call["call_phase"] for call in client.calls] == [
+        "assess_phase",
+        "action_phase",
+    ]
+    assert client.calls[0]["tool_choice"] == {
+        "type": "function",
+        "function": {"name": TOOL_NAME_ASSESS_SITUATION},
+    }
+    assert client.calls[1]["tool_choice"] == "required"
+    assert [
+        tool["function"]["name"] for tool in client.calls[0]["tools"]
+    ] == [
+        tool["function"]["name"] for tool in client.calls[1]["tools"]
+    ]
+    assert TOOL_NAME_ASSESS_SITUATION in {
+        tool["function"]["name"] for tool in client.calls[1]["tools"]
+    }
+    assert "水源は一度失敗したので周囲を見直す。" in client.calls[1]["messages"][-1]["content"]
+    assert captured_arguments["inner_thought"] == "水源は一度失敗したので周囲を見直す。"
+    assert captured_arguments["expected_result"] == "新しい発見があるはずだ。"
+    kinds = [kind for kind, _ in runtime.trace_recorder.records]
+    assert TraceEventKind.REASON_FIRST_STARTED in kinds
+    assert TraceEventKind.REASON_FIRST_ASSESSED in kinds
+    assert TraceEventKind.REASON_FIRST_ACTION_SELECTED in kinds
+    assert TraceEventKind.REASON_FIRST_ASSESSMENT_INJECTED in kinds
+
+
+def test_reason_first_step1_retries_once_then_returns_no_op_without_action(
+    clean_runtime_env: None,
+) -> None:
+    """step1 が評価 tool 以外を返し続けたら 1 回だけ再試行し、行動実行へ進まない。"""
+    runtime = _ReasonFirstRuntime()
+    client = _SequencedLlmClient(
+        [
+            {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
+            {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
+        ]
+    )
+    wiring = _reason_first_wiring(runtime, client)
+    executed: list[str] = []
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: executed.append("executed")
+        or LlmCommandResultDto(success=True, message="実行された。")
+    )
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.success is False
+    assert result.error_code == "REASON_FIRST_STEP_FAILED"
+    assert result.was_no_op is True
+    assert executed == []
+    assert [call["call_phase"] for call in client.calls] == [
+        "assess_phase",
+        "assess_phase",
+    ]
+    assert len(runtime.action_results) == 1
+    assert runtime.action_results[0]["tool_name"] == "reason_first_step_failed"
+    failed = [
+        payload for kind, payload in runtime.trace_recorder.records
+        if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+    ]
+    assert failed[-1]["phase"] == "assess_phase"
+    assert failed[-1]["final"] is True
+
+
+def test_reason_first_step1_retries_after_invoke_exception_and_continues_to_action(
+    clean_runtime_env: None,
+) -> None:
+    """step1 の一時的な LLM 例外は 1 回だけ再試行し、評価成功後は行動実行へ進む。"""
+    runtime = _ReasonFirstRuntime()
+    client = _SequencedLlmClient(
+        [
+            RuntimeError("temporary llm failure"),
+            {
+                "name": TOOL_NAME_ASSESS_SITUATION,
+                "arguments": {
+                    "inner_thought": "一度失敗したので状況を見直す。",
+                    "expected_result": "次は探索できる。",
+                },
+            },
+            {
+                "name": TOOL_NAME_SPOT_GRAPH_EXPLORE,
+                "arguments": {},
+            },
+        ]
+    )
+    wiring = _reason_first_wiring(runtime, client)
+    executed: list[dict[str, Any]] = []
+
+    def _handler(
+        player_id: PlayerId,
+        arguments: dict,
+        runtime_context,
+    ) -> LlmCommandResultDto:
+        executed.append(dict(arguments))
+        return LlmCommandResultDto(success=True, message="探索した。")
+
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = _handler
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.success is True
+    assert [call["call_phase"] for call in client.calls] == [
+        "assess_phase",
+        "assess_phase",
+        "action_phase",
+    ]
+    assert executed == [
+        {
+            "inner_thought": "一度失敗したので状況を見直す。",
+            "expected_result": "次は探索できる。",
+        }
+    ]
+    failed = [
+        payload for kind, payload in runtime.trace_recorder.records
+        if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+    ]
+    assert failed[0]["phase"] == "assess_phase"
+    assert failed[0]["reason"] == "invoke_exception"
+    assert failed[0]["final"] is False
+    kinds = [kind for kind, _ in runtime.trace_recorder.records]
+    assert TraceEventKind.REASON_FIRST_ASSESSED in kinds
+    assert TraceEventKind.REASON_FIRST_ACTION_SELECTED in kinds
+
+
+def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
+    clean_runtime_env: None,
+) -> None:
+    """step2 が誤って評価 tool を返したら不正として止め、評価 tool を実行しない。"""
+    runtime = _ReasonFirstRuntime()
+    client = _SequencedLlmClient(
+        [
+            {
+                "name": TOOL_NAME_ASSESS_SITUATION,
+                "arguments": {
+                    "inner_thought": "まず評価する。",
+                    "expected_result": "探索する。",
+                },
+            },
+            {
+                "name": TOOL_NAME_ASSESS_SITUATION,
+                "arguments": {
+                    "inner_thought": "まだ評価する。",
+                    "expected_result": "何もしない。",
+                },
+            },
+        ]
+    )
+    wiring = _reason_first_wiring(runtime, client)
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.success is False
+    assert result.error_code == "REASON_FIRST_ACTION_PHASE_INVALID_TOOL"
+    assert result.was_no_op is True
+    assert len(client.calls) == 2
+    assert client.calls[1]["call_phase"] == "action_phase"
+    assert len(runtime.action_results) == 1
+    assert runtime.action_results[0]["tool_name"] == "reason_first_action_phase_invalid"
+    failed = [
+        payload for kind, payload in runtime.trace_recorder.records
+        if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+    ]
+    assert failed[-1]["phase"] == "action_phase"
+    assert failed[-1]["returned_tool"] == TOOL_NAME_ASSESS_SITUATION
 
 
 def test_world_runtime_build_full_prompt_uses_shared_default_prompt_builder(
