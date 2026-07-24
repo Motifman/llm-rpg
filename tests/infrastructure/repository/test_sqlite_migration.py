@@ -145,7 +145,7 @@ class TestInitGameDbSchema:
         )
         applied = {row[0]: row[1] for row in cur.fetchall()}
         assert applied == {
-            "game_write": 28,
+            "game_write": 29,
             "global_market_listing_read_model": 1,
             "personal_trade_listing_read_model": 1,
             "trade_detail_read_model": 1,
@@ -173,3 +173,19 @@ class TestInitGameDbSchema:
         assert "behavior_chase_attacker_ref_player_id" in column_names
         assert "behavior_chase_attacker_ref_monster_id" in column_names
         assert "behavior_chase_started_at_tick" in column_names
+
+    def test_migration_v29_adds_item_usage_hint_column(self) -> None:
+        """v29 適用後、game_item_specs に作者定義の usage_hint 列がある。"""
+        from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
+            init_game_write_schema,
+        )
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        init_game_write_schema(conn)
+        conn.commit()
+
+        cur = conn.execute("PRAGMA table_info(game_item_specs)")
+        columns = {row["name"]: row for row in cur.fetchall()}
+        assert columns["usage_hint"]["notnull"] == 1
+        assert columns["usage_hint"]["dflt_value"] == "''"

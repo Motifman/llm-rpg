@@ -168,13 +168,15 @@
       "id": "driftwood",
       "name": "流木",
       "description": "浜辺に流れ着いた乾いた木材。焚き火と狼煙の燃料になる。",
-      "category": "MATERIAL"
+      "category": "MATERIAL",
+      "usage_hint": "火を起こす材料。焚き火跡や狼煙台のような場所で interact の材料になる"
     },
     {
       "id": "dry_leaves",
       "name": "枯れ葉の束",
       "description": "火を起こすのに最適な乾いた枯れ葉。",
-      "category": "MATERIAL"
+      "category": "MATERIAL",
+      "usage_hint": "火を起こす材料。焚き火跡や狼煙台のような場所で interact の材料になる"
     },
     {
       "id": "vine_rope",
@@ -192,7 +194,8 @@
       "id": "flint",
       "name": "火打ち石",
       "description": "枯れ葉に火を移すための火打ち石。",
-      "category": "MATERIAL"
+      "category": "MATERIAL",
+      "usage_hint": "火を起こす道具。焚き火跡や狼煙台のような火を扱う場所で interact して使う"
     },
     {
       "id": "bone_knife",

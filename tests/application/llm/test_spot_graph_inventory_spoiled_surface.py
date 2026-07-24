@@ -151,6 +151,11 @@ class TestDtoDefaults:
         entry = SpotGraphInventoryItemEntry(item_spec_id=1, name="x", quantity=1)
         assert entry.item_type == ""
 
+    def test_inventory_entry_usage_hint_default_empty_string(self) -> None:
+        """旧呼び出し側 (usage_hint を渡さない) は用途ヒントなしで従来表示になる。"""
+        entry = SpotGraphInventoryItemEntry(item_spec_id=1, name="x", quantity=1)
+        assert entry.usage_hint == ""
+
 
 class TestInventoryItemTypeTag:
     """``item_type`` を渡すと所持品行に「食料」「素材」等の用途タグが付与される。
@@ -244,3 +249,61 @@ class TestInventoryItemTypeTag:
         )
         assert "(食料)" in line
         assert "(腐敗)" in line
+
+
+class TestInventoryUsageHint:
+    """usage_hint は所持品行に作者文として添えられ、内部 ID は出さない。"""
+
+    def _last_line(self, entry: SpotGraphInventoryItemEntry) -> str:
+        snap = _empty_snapshot(inventory_items=(entry,))
+        builder = SpotGraphUiContextBuilder()
+        allocator = LabelAllocator()
+        collector = RuntimeTargetCollector()
+        lines: list[str] = []
+        builder._build_inventory_section(snap, allocator, collector, lines)
+        return lines[-1]
+
+    def test_usage_hint_displayed(self) -> None:
+        """usage_hint があれば item 名の外側に用途文として表示される。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=900,
+                name="火打ち石",
+                quantity=1,
+                item_type="quest",
+                usage_hint="火を起こす道具。火を扱う場所で interact して使う",
+            )
+        )
+
+        assert '"火打ち石"' in line
+        assert "火を起こす道具。火を扱う場所で interact して使う" in line
+
+    def test_usage_hint_unset_keeps_existing_inventory_line(self) -> None:
+        """usage_hint 未設定なら所持品行は既存の種別タグ表示だけに留まる。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=901, name="火打ち石", quantity=1, item_type="quest",
+            )
+        )
+
+        assert "用途:" not in line
+        assert line == (
+            '  - "火打ち石" '
+            "(任務品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)"
+        )
+
+    def test_usage_hint_does_not_render_internal_ids(self) -> None:
+        """用途ヒント付きでも item_spec_id / object_id / spot_id は prompt に漏れない。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=902,
+                name="枯れ葉",
+                quantity=2,
+                usage_hint="火を起こす材料。火を扱う場所で interact の材料になる",
+            )
+        )
+
+        assert "902" not in line
+        assert "item_spec_id" not in line
+        assert "object_id" not in line
+        assert "spot_id" not in line

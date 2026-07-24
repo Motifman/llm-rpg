@@ -115,6 +115,9 @@ class SpotGraphInventoryItemEntry:
     # 誤判断) を減らす。
     # default "" で旧呼び出し側との後方互換を保つ (タグなし表示)。
     item_type: str = ""
+    # Issue #794 D: item spec 作者文の一般用途ヒント。具体 spot / object 名では
+    # なく、所持品欄で「どういう用途か」だけを伝える。空なら非表示。
+    usage_hint: str = ""
 
 
 @dataclass(frozen=True)

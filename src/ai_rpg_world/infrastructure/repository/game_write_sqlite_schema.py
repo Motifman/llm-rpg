@@ -1912,6 +1912,18 @@ def _migration_v28(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v29(connection: sqlite3.Connection) -> None:
+    """Issue #794 D: item spec の作者定義 usage_hint を静的マスタへ追加。
+
+    `name` / `item_type` と同じ静的定義なので、SQLite の静的マスタにも保存する。
+    既存行は空文字にし、prompt 側では空文字を非表示として扱う。
+    """
+    connection.execute(
+        "ALTER TABLE game_item_specs "
+        "ADD COLUMN usage_hint TEXT NOT NULL DEFAULT ''"
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -1941,6 +1953,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=26, apply=_migration_v26),
     SqliteMigration(version=27, apply=_migration_v27),
     SqliteMigration(version=28, apply=_migration_v28),
+    SqliteMigration(version=29, apply=_migration_v29),
 )
 
 

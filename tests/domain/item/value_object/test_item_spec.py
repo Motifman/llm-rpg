@@ -38,6 +38,33 @@ class TestItemSpec:
         assert sample_item_spec.is_equipment()
         assert sample_item_spec.get_equipment_type() == EquipmentType.WEAPON
 
+    def test_create_with_usage_hint(self):
+        """usage_hint を渡すと、作者が書いた用途文を ItemSpec に保持する。"""
+        spec = ItemSpec(
+            item_spec_id=ItemSpecId(101),
+            name="火打ち石",
+            item_type=ItemType.QUEST,
+            rarity=Rarity.COMMON,
+            description="火花を出す石",
+            max_stack_size=MaxStackSize(1),
+            usage_hint="火を起こす道具。火を扱う場所で interact して使う",
+        )
+
+        assert spec.usage_hint == "火を起こす道具。火を扱う場所で interact して使う"
+
+    def test_usage_hint_rejects_whitespace_only(self):
+        """usage_hint が空白だけなら、用途文を出したつもりで空表示になるのを防ぐ。"""
+        with pytest.raises(ItemSpecValidationException):
+            ItemSpec(
+                item_spec_id=ItemSpecId(102),
+                name="火打ち石",
+                item_type=ItemType.QUEST,
+                rarity=Rarity.COMMON,
+                description="火花を出す石",
+                max_stack_size=MaxStackSize(1),
+                usage_hint="   ",
+            )
+
     def test_create_with_durability_max_valid_stack_size(self):
         """耐久度最大値付きItemSpec作成のテスト（有効なスタックサイズ）"""
         template_id = ItemSpecId(2)
