@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import copy
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,12 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.services.action_result_store import (
+    DefaultActionResultStore,
+)
+from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
+    PromptDatasetCaptureSink,
+)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -40,6 +47,8 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
     SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
     _WorldLlmWiring,
@@ -204,6 +213,7 @@ class _LoopGuardSpy:
 class _ContractRuntime:
     def __init__(self, events: list[str] | None = None) -> None:
         self._obs_buffer = DefaultObservationContextBuffer()
+        self._action_result_store = DefaultActionResultStore()
         self.events = events if events is not None else []
         self.action_results: list[dict] = []
         self.trace_recorder = None
@@ -248,9 +258,22 @@ class _ContractRuntime:
         expected_result: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
+        argument_fingerprint: str | None = None,
     ) -> None:
         # 実 escape _record_action_result (U2) と同じ subjective kwargs を受ける。
         self.events.extend(["append", "chunk", "promotion"])
+        self._action_result_store.append(
+            player_id,
+            action_summary,
+            result_summary,
+            success=success,
+            error_code=error_code,
+            tool_name=tool_name,
+            argument_fingerprint=argument_fingerprint,
+            expected_result=expected_result,
+            intention=intention,
+            emotion_hint=emotion_hint,
+        )
         self.action_results.append(
             {
                 "player_id": player_id,
@@ -275,12 +298,18 @@ class _TraceRecorderSpy:
         self.records.append((kind, dict(kwargs)))
 
 
+class _AuxBeingResolverStub:
+    def resolve_being_id(self, world_id: WorldId, player_id: PlayerId) -> BeingId:
+        return BeingId(f"being_w{world_id.value}_p{player_id.value}")
+
+
 class _ReasonFirstRuntime(_ContractRuntime):
     def __init__(self) -> None:
         super().__init__()
-        self.reason_first_two_step_enabled = True
+        self.reason_first_two_step_enabled = lambda player_id: True
         self.trace_recorder = _TraceRecorderSpy()
         self.tool_schema_modes: list[str] = []
+        self.reasoning_effort_calls = 0
 
     def get_tool_definitions(
         self, *, tool_schema_mode: str = "legacy"
@@ -311,7 +340,18 @@ class _ReasonFirstRuntime(_ContractRuntime):
         return tools
 
     def resolve_turn_reasoning_effort(self, player_id: PlayerId) -> None:
+        self.reasoning_effort_calls += 1
         return None
+
+
+class _GatedReasonFirstRuntime(_ReasonFirstRuntime):
+    def __init__(self) -> None:
+        super().__init__()
+        self.reason_first_two_step_enabled = True
+        self.stagnation_band = "none"
+
+    def _resolve_stagnation_band_value(self, player_id: PlayerId) -> str:
+        return self.stagnation_band
 
 
 class _SequencedLlmClient:
@@ -342,6 +382,38 @@ class _SequencedLlmClient:
         response = self._responses.pop(0)
         if isinstance(response, BaseException):
             raise response
+        if prompt_capture_context is not None:
+            prompt_capture_context.sink.record_call(
+                context=prompt_capture_context.context,
+                request_kwargs={
+                    "model": "stub",
+                    "messages": copy.deepcopy(messages),
+                    "tools": copy.deepcopy(tools),
+                    "tool_choice": copy.deepcopy(tool_choice),
+                },
+                response={
+                    "choices": [
+                        {
+                            "message": {
+                                "tool_calls": [
+                                    {
+                                        "function": {
+                                            "name": response.get("name"),
+                                            "arguments": json.dumps(
+                                                response.get("arguments", {}),
+                                                ensure_ascii=False,
+                                            ),
+                                        }
+                                    }
+                                ]
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ]
+                },
+                output=copy.deepcopy(response),
+                metrics={"success": True},
+            )
         return copy.deepcopy(response)
 
 
@@ -602,6 +674,214 @@ def test_reason_first_tool_mode_preserves_goal_revision_fields(
     assert "goal_outcome" in explore.parameters["properties"]
 
 
+def _reason_first_success_client() -> _SequencedLlmClient:
+    return _SequencedLlmClient(
+        [
+            {
+                "name": TOOL_NAME_ASSESS_SITUATION,
+                "arguments": {
+                    "inner_thought": "反復失敗を避けて別手を選ぶ。",
+                    "expected_result": "新しい展開になる。",
+                },
+            },
+            {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
+        ]
+    )
+
+
+def test_reason_first_feature_flag_off_keeps_one_step_even_with_strong_stagnation(
+    clean_runtime_env: None,
+) -> None:
+    """flag OFF では停滞 strong でも reason-first へ入らず、既存 1段階経路を使う。"""
+    runtime = _GatedReasonFirstRuntime()
+    runtime.reason_first_two_step_enabled = False
+    runtime.stagnation_band = "strong"
+    client = _SequencedLlmClient(
+        [{"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}]
+    )
+    wiring = _reason_first_wiring(runtime, client)
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
+    )
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.success is True
+    assert [call["call_phase"] for call in client.calls] == ["one_step"]
+    assert runtime.reasoning_effort_calls == 1
+
+
+def test_reason_first_feature_flag_on_without_existing_trigger_keeps_one_step(
+    clean_runtime_env: None,
+) -> None:
+    """flag ON だけでは常時2段階にせず、既存の反復失敗・停滞状態が無ければ1段階のまま。"""
+    runtime = _GatedReasonFirstRuntime()
+    client = _SequencedLlmClient(
+        [{"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}]
+    )
+    wiring = _reason_first_wiring(runtime, client)
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
+    )
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.success is True
+    assert [call["call_phase"] for call in client.calls] == ["one_step"]
+
+
+def test_reason_first_gates_on_stagnation_strong_and_skips_band_reasoning(
+    clean_runtime_env: None,
+) -> None:
+    """停滞 strong では reason-first を優先し、熟考付き1段階の effort 解決は呼ばない。"""
+    runtime = _GatedReasonFirstRuntime()
+    runtime.stagnation_band = "strong"
+    client = _reason_first_success_client()
+    wiring = _reason_first_wiring(runtime, client)
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
+    )
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.success is True
+    assert [call["call_phase"] for call in client.calls] == [
+        "assess_phase",
+        "action_phase",
+    ]
+    assert runtime.reasoning_effort_calls == 0
+    started = [
+        payload
+        for kind, payload in runtime.trace_recorder.records
+        if kind == TraceEventKind.REASON_FIRST_STARTED
+    ]
+    assert started[-1]["gate_reason"] == "stagnation_strong"
+
+
+def test_reason_first_gates_on_recent_same_failure_from_action_result_store(
+    clean_runtime_env: None,
+) -> None:
+    """直近2件が同じ失敗なら既存 ActionResultStore だけを読んで reason-first に入る。"""
+    runtime = _GatedReasonFirstRuntime()
+    player_id = PlayerId(1)
+    for _ in range(2):
+        runtime._action_result_store.append(
+            player_id,
+            "drink_water 湧水の口",
+            "今は汲めない。",
+            success=False,
+            error_code="OBJECT_CONDITION_NOT_MET",
+            tool_name="drink_water",
+            argument_fingerprint='{"object_label":"湧水の口"}',
+        )
+    client = _reason_first_success_client()
+    wiring = _reason_first_wiring(runtime, client)
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
+    )
+
+    result = wiring.run_turn(player_id)
+
+    assert result.success is True
+    assert [call["call_phase"] for call in client.calls] == [
+        "assess_phase",
+        "action_phase",
+    ]
+    started = [
+        payload
+        for kind, payload in runtime.trace_recorder.records
+        if kind == TraceEventKind.REASON_FIRST_STARTED
+    ]
+    assert started[-1]["gate_reason"] == "recent_same_failure"
+
+
+def test_reason_first_gates_on_loop_guard_warning_signal_once(
+    clean_runtime_env: None,
+) -> None:
+    """loop_guard が警告を出した直後の1ターンだけ gate signal を消費して2段階に入る。"""
+    runtime = _GatedReasonFirstRuntime()
+    client = _reason_first_success_client()
+    wiring = _reason_first_wiring(runtime, client)
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
+    )
+    player_id = PlayerId(1)
+    for _ in range(4):
+        wiring.tool_call_loop_guard.record_and_check(
+            player_id,
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
+            {"object_label": "湧水の口"},
+        )
+
+    result = wiring.run_turn(player_id)
+
+    assert result.success is True
+    assert [call["call_phase"] for call in client.calls] == [
+        "assess_phase",
+        "action_phase",
+    ]
+    started = [
+        payload
+        for kind, payload in runtime.trace_recorder.records
+        if kind == TraceEventKind.REASON_FIRST_STARTED
+    ]
+    assert started[-1]["gate_reason"] == "loop_guard_warning"
+
+
+def test_reason_first_gated_turn_writes_assess_and_action_phase_prompt_dataset_rows(
+    clean_runtime_env: None,
+    tmp_path: Path,
+) -> None:
+    """gated reason-first 発火時は prompt dataset に assess/action の2 phase を保存する。"""
+    runtime = _GatedReasonFirstRuntime()
+    runtime.stagnation_band = "strong"
+    runtime.aux_being_resolver = _AuxBeingResolverStub()
+    runtime.aux_being_default_world_id = WorldId(1)
+    client = _reason_first_success_client()
+    sink = PromptDatasetCaptureSink(
+        run_dir=tmp_path,
+        run_id="run-reason-first",
+        run_metadata={"profile": "test"},
+    )
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        llm_client=client,
+        prompt_dataset_sink=sink,
+    )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
+    )
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.success is True
+    calls_path = tmp_path / "prompt_dataset" / "calls.jsonl"
+    rows = [
+        json.loads(line)
+        for line in calls_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert [row["phase"] for row in rows] == ["assess_phase", "action_phase"]
+    assert rows[0]["request"]["kwargs"]["tool_choice"] == {
+        "type": "function",
+        "function": {"name": TOOL_NAME_ASSESS_SITUATION},
+    }
+    assert rows[1]["request"]["kwargs"]["tool_choice"] == "required"
+
+
 def test_reason_first_two_step_injects_assessment_before_action_execution(
     clean_runtime_env: None,
 ) -> None:
@@ -812,7 +1092,7 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="required")
     )
-    runtime.reason_first_two_step_enabled = True
+    runtime.reason_first_two_step_enabled = lambda player_id: True
     player_id = runtime.get_player_ids()[0]
     client = _SequencedLlmClient(
         [
@@ -855,7 +1135,7 @@ def test_reason_first_without_assessment_prediction_records_none_through_shared_
             expected_result_policy=expected_result_policy
         )
     )
-    runtime.reason_first_two_step_enabled = True
+    runtime.reason_first_two_step_enabled = lambda player_id: True
     player_id = runtime.get_player_ids()[0]
     client = _SequencedLlmClient(
         [

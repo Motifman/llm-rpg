@@ -217,6 +217,17 @@ class CrossTickFailureTrigger:
 
 
 @dataclass(frozen=True)
+class LoopGuardGateSignal:
+    """loop_guard が実際に警告を発火した事実を Phase A gate へ渡す短命 signal。"""
+
+    pattern: str
+    tool_name: str
+    fingerprint: str
+    error_code: Optional[str] = None
+    tick: Optional[int] = None
+
+
+@dataclass(frozen=True)
 class _FailureRecord:
     """1 回の失敗記録 (cross_tick_failure 検出用、PR-AA)。
 
@@ -333,6 +344,9 @@ class ToolCallLoopGuardService:
         ] = {}
         # cross_tick 警告の文面インデックス (rotation)。
         self._cross_tick_warn_count: Dict[int, int] = {}
+        # reason-first gate 用の短命 signal。loop_guard が警告を実際に出した
+        # 直後の Phase A で 1 回だけ消費する。
+        self._last_gate_signal: Dict[int, LoopGuardGateSignal] = {}
 
     def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
         """use 時に最新の trace_recorder を取得する。
@@ -460,7 +474,24 @@ class ToolCallLoopGuardService:
             except Exception:
                 # trace 失敗は loop guard 本来の責務を止めない
                 pass
+        self._last_gate_signal[key] = LoopGuardGateSignal(
+            pattern="streak",
+            tool_name=tool_name,
+            fingerprint=fingerprint,
+            tick=self._get_current_tick_or_none(),
+        )
         return cross_tick_trigger
+
+    def consume_gate_signal(self, player_id: PlayerId) -> Optional[LoopGuardGateSignal]:
+        """直近の loop_guard 警告 signal を 1 回だけ取り出す。
+
+        reason-first gating は「loop_guard が実際に発火した直後」だけを使う。
+        ここで消費することで、1 つの警告から何ターンも 2段階に入り続ける
+        ことを防ぐ。
+        """
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        return self._last_gate_signal.pop(player_id.value, None)
 
     def peek_streak(self, player_id: PlayerId) -> Optional[tuple[str, int]]:
         """現在連続している ``(tool_name, count)`` を非破壊で覗き見る。
@@ -562,6 +593,13 @@ class ToolCallLoopGuardService:
                 warn_index=warn_index,
                 game_time_label=game_time_label,
             ),
+        )
+        self._last_gate_signal[key] = LoopGuardGateSignal(
+            pattern="cross_tick_failure",
+            tool_name=tool_name,
+            fingerprint=fingerprint,
+            error_code=error_code,
+            tick=current_tick,
         )
         # trace 側にも残す (既存 LOOP_GUARD_WARNING kind を使い、pattern
         # フィールドで区別可能にする)。

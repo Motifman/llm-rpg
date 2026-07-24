@@ -61,6 +61,7 @@ class TestFromEnvDefaults:
         assert cfg.scenario_random_seed is None
         assert cfg.prompt_dataset_capture_enabled is False
         assert cfg.prompt_dataset_capture_failure_policy == "fail"
+        assert cfg.reason_first_two_step_enabled is False
 
 
 class TestPromptDatasetCaptureConfig:
@@ -84,6 +85,36 @@ class TestPromptDatasetCaptureConfig:
         )
         assert cfg.prompt_dataset_capture_enabled is True
         assert cfg.prompt_dataset_capture_failure_policy == "warn"
+
+
+class TestReasonFirstTwoStepConfig:
+    """reason-first 2段階ターンの有効化 flag を単一窓口で解決する。"""
+
+    def test_unset_false(self) -> None:
+        """REASON_FIRST_TWO_STEP_ENABLED 未設定なら既存 1段階 turn のまま。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
+        assert cfg.reason_first_two_step_enabled is False
+
+    def test_truthy_true(self) -> None:
+        """REASON_FIRST_TWO_STEP_ENABLED=1 で gated reason-first を有効化する。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            values={"REASON_FIRST_TWO_STEP_ENABLED": "1"}
+        )
+        assert cfg.reason_first_two_step_enabled is True
+
+    def test_invalid_value_fail_fast(self) -> None:
+        """typo は silent に OFF へ落とさず ValueError で止める。"""
+        with pytest.raises(ValueError, match="REASON_FIRST_TWO_STEP_ENABLED"):
+            ResolvedLlmRuntimeConfig.from_mapping(
+                values={"REASON_FIRST_TWO_STEP_ENABLED": "maybe"}
+            )
+
+    def test_trace_dict_includes_flag(self) -> None:
+        """run_start / manifest から reason-first 有効化条件を後で確認できる。"""
+        cfg = ResolvedLlmRuntimeConfig.for_tests(
+            reason_first_two_step_enabled=True
+        )
+        assert cfg.to_trace_dict()["reason_first_two_step_enabled"] is True
 
 
 class TestEpisodicReinterpretationEnabled:
