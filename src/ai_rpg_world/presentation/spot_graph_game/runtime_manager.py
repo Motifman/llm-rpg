@@ -533,6 +533,14 @@ class _LlmPhaseAResult:
     failure_result: Optional[LlmCommandResultDto] = None
 
 
+@dataclass(frozen=True)
+class _ReasonFirstGateDecision:
+    """Phase A 入口で reason-first 2段階を使うかの判定結果。"""
+
+    enabled: bool
+    reason: str
+
+
 @dataclass
 class _WorldLlmTurnTrigger:
     """Queues LLM turns and runs them against the session runtime.
@@ -1586,22 +1594,125 @@ class _WorldLlmWiring:
         phase_a = self.run_phase_a(player_id)
         return self.run_phase_b(phase_a)
 
-    def _should_use_reason_first(self, player_id: PlayerId) -> bool:
-        """PR-3 の最小 gate。
+    def _resolve_reason_first_gate(
+        self, player_id: PlayerId
+    ) -> _ReasonFirstGateDecision:
+        """reason-first 2段階 turn の Phase A gate を解決する。
 
-        本格 gate (loop_guard / 同一失敗直後 / stagnation strong) は後続 PR に
-        分ける。この PR では明示フラグだけを見て 2段階オーケストレーションを
-        単体で検証できるようにする。
+        bool flag は「gated reason-first を有効化する」だけで、常時 2段階には
+        しない。発火条件は既存 shared state に限定する:
+
+        - loop_guard が直前に警告を注入した
+        - 直近 2 件の action result が同一失敗
+        - stagnation band が strong
+
+        callable は PR-3/4 の契約テスト用 override として残す。実 run では
+        ``ResolvedLlmRuntimeConfig.reason_first_two_step_enabled`` 由来の bool を使う。
         """
 
         flag = getattr(self.runtime, "reason_first_two_step_enabled", False)
         if callable(flag):
             try:
-                return bool(flag(player_id))
+                enabled = bool(flag(player_id))
             except Exception:
                 logger.exception("reason_first_two_step_enabled callable failed")
-                return False
-        return bool(flag)
+                return _ReasonFirstGateDecision(False, "callable_failed")
+            return _ReasonFirstGateDecision(
+                enabled, "callable_override" if enabled else "callable_disabled"
+            )
+        if not bool(flag):
+            return _ReasonFirstGateDecision(False, "feature_disabled")
+
+        signal = self.tool_call_loop_guard.consume_gate_signal(player_id)
+        if signal is not None:
+            return _ReasonFirstGateDecision(True, "loop_guard_warning")
+        if self._has_recent_same_failure(player_id):
+            return _ReasonFirstGateDecision(True, "recent_same_failure")
+        if self._is_stagnation_reason_first_armed(player_id):
+            return _ReasonFirstGateDecision(True, "stagnation_strong")
+        return _ReasonFirstGateDecision(False, "no_trigger")
+
+    def _has_recent_same_failure(self, player_id: PlayerId) -> bool:
+        """ActionResultStore の直近2件が同一失敗なら True。
+
+        新しい検知器は作らず、Phase B が既に保存している共有 action result を
+        読むだけに留める。成功が最新なら False になるため、古い失敗で
+        reason-first が発火し続けることはない。
+        """
+
+        store = getattr(self.runtime, "_action_result_store", None)
+        get_recent = getattr(store, "get_recent", None)
+        if not callable(get_recent):
+            return False
+        try:
+            recent = list(get_recent(player_id, 2))
+        except Exception:
+            logger.exception("reason-first gate: action_result_store.get_recent failed")
+            return False
+        if len(recent) < 2:
+            return False
+        latest, previous = recent[0], recent[1]
+        if getattr(latest, "success", True) or getattr(previous, "success", True):
+            return False
+        latest_key = self._action_failure_key(latest)
+        previous_key = self._action_failure_key(previous)
+        return latest_key is not None and latest_key == previous_key
+
+    @staticmethod
+    def _action_failure_key(entry: Any) -> Optional[tuple[str, str, str]]:
+        tool_name = str(getattr(entry, "tool_name", "") or "").strip()
+        error_code = str(getattr(entry, "error_code", "") or "").strip()
+        fingerprint = str(getattr(entry, "argument_fingerprint", "") or "").strip()
+        action_summary = str(getattr(entry, "action_summary", "") or "").strip()
+        identity = fingerprint or action_summary
+        if not tool_name or not error_code or not identity:
+            return None
+        return (tool_name, error_code, identity)
+
+    def _is_stagnation_reason_first_armed(self, player_id: PlayerId) -> bool:
+        """停滞 reflect 注入直後の一発ラッチと band strong が揃ったときだけ True。
+
+        band-gated reasoning と同じ入力を使うが、band だけを見ると停滞中の
+        毎 turn で reason-first が発火してしまう。ここでは既存ラッチも peek し、
+        「reflect 注入直後の 1 行動だけ」に頻度を揃える。
+        """
+
+        latch = getattr(self.runtime, "_stagnation_reasoning_latch", None)
+        is_armed = getattr(latch, "is_armed", None)
+        if not callable(is_armed):
+            return False
+        try:
+            armed = bool(is_armed(player_id))
+        except Exception:
+            logger.exception("reason-first gate: stagnation latch check failed")
+            return False
+        if not armed:
+            return False
+        resolver = getattr(self.runtime, "_resolve_stagnation_band_value", None)
+        if not callable(resolver):
+            return False
+        try:
+            return str(resolver(player_id)) == "strong"
+        except Exception:
+            logger.exception("reason-first gate: stagnation band resolution failed")
+            return False
+
+    def _consume_stagnation_reason_first_latch(self, player_id: PlayerId) -> None:
+        """reason-first が停滞ラッチを使ったとき、一発権を消費する。
+
+        reason-first 経路では ``resolve_turn_reasoning_effort`` を呼ばないため、
+        band-gated reasoning 側の commit/abandon 消費に乗らない。ここで消費し、
+        strong band が続いても同じ reflect から毎 turn 2段階へ入らないようにする。
+        """
+
+        latch = getattr(self.runtime, "_stagnation_reasoning_latch", None)
+        consume = getattr(latch, "consume", None)
+        if not callable(consume):
+            return
+        try:
+            consume(player_id)
+        except Exception:
+            logger.exception("reason-first gate: stagnation latch consume failed")
 
     def _build_tools_payload(
         self, *, tool_schema_mode: str = "legacy"
@@ -1637,8 +1748,11 @@ class _WorldLlmWiring:
         - 例外は捕まえて結果に詰める (Phase B 側で LlmCommandResultDto 化)
         """
         prompt = self.runtime.build_full_prompt(player_id)
-        if self._should_use_reason_first(player_id):
-            return self._run_reason_first_phase_a(player_id, prompt)
+        reason_first_gate = self._resolve_reason_first_gate(player_id)
+        if reason_first_gate.enabled:
+            return self._run_reason_first_phase_a(
+                player_id, prompt, gate_reason=reason_first_gate.reason
+            )
         # PR-A: 脱出ランタイムで恒久的に UNSUPPORTED_TOOL になる tool は LLM に
         # 見せない。Y_after_issue621 trace で set_sub_location が 3 回叩かれて
         # 全部失敗していた問題を入口で塞ぐ。
@@ -1759,7 +1873,7 @@ class _WorldLlmWiring:
         return _result(tool_call, None)
 
     def _run_reason_first_phase_a(
-        self, player_id: PlayerId, prompt: dict
+        self, player_id: PlayerId, prompt: dict, *, gate_reason: str
     ) -> _LlmPhaseAResult:
         """reason-first 2段階ターンの Phase A。
 
@@ -1783,9 +1897,12 @@ class _WorldLlmWiring:
         self._record_reason_first_trace(
             TraceEventKind.REASON_FIRST_STARTED,
             player_id,
+            gate_reason=gate_reason,
             tool_count=len(tool_names),
             retry_limit=1,
         )
+        if gate_reason == "stagnation_strong":
+            self._consume_stagnation_reason_first_latch(player_id)
 
         def _result(
             tool_call: Optional[dict],

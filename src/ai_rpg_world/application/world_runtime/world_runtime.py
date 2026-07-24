@@ -408,6 +408,10 @@ class WorldRuntime:
     # 案A (band-gated thinking): 停滞 reflect 注入 → 次行動での熟考を橋渡しする
     # 一発ラッチ。transient (session 内制御信号) なので snapshot 非対象。
     _stagnation_reasoning_latch: Optional[Any] = field(default=None, repr=False)
+    # reason-first 2段階 turn の有効化。True でも常時 2 段階ではなく、
+    # presentation runtime_manager の Phase A 入口で既存 shared state を読んで
+    # gated 発火する。下流 execution / episode / prediction 経路は mode 非分岐。
+    reason_first_two_step_enabled: bool = field(default=False, repr=False)
     # P6 (目的の見直し): GOAL_REVISION_ENABLED の解決結果と、goal_update を
     # 反映する applier。flag OFF / goal store 無しなら applier は None。
     _goal_revision_enabled: bool = field(default=False, repr=False)
@@ -4095,6 +4099,7 @@ def create_world_runtime(
         ),
         # Prediction (#526 v0): expected_result 露出 policy を config から設定。
         _expected_result_policy=config.expected_result_policy,
+        reason_first_two_step_enabled=config.reason_first_two_step_enabled,
         _runtime_config=config,
     )
     scenario_event_stage.set_message_callback(

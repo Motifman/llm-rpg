@@ -103,6 +103,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
     "PROMPT_SECTION_ORDER",
     "RECALL_HIT_BOOST_ENABLED",
+    "REASON_FIRST_TWO_STEP_ENABLED",
     "SALIENCE_STRUCTURED_FAILURE_ENABLED",
     "SCENARIO_RANDOM_SEED",
     "SEMANTIC_LLM_GIST_ENABLED",
@@ -284,6 +285,9 @@ class ResolvedLlmRuntimeConfig:
     prompt_dataset_capture_enabled: bool = False
     prompt_dataset_capture_failure_policy: str = "fail"
     distant_view_trace_enabled: bool = False
+    # reason-first 2段階ターン。True でも常時発火ではなく、Phase A 入口で
+    # 既存の loop_guard / action_result / stagnation state を読んだ gated 発火にする。
+    reason_first_two_step_enabled: bool = False
 
     # Episode store の永続化先 (``SUBJECTIVE_EPISODE_DB_PATH``)。None なら in-memory。
     # 実 path 指定時は SQLite 永続化。従来 ``_default_episodic_episode_store`` が
@@ -580,6 +584,12 @@ class ResolvedLlmRuntimeConfig:
         distant_view_trace_enabled = _parse_truthy(
             source.get("DISTANT_VIEW_TRACE_ENABLED"), default=False
         )
+        try:
+            reason_first_two_step_enabled = _parse_truthy(
+                source.get("REASON_FIRST_TWO_STEP_ENABLED"), default=False
+            )
+        except ValueError as exc:
+            raise ValueError(f"REASON_FIRST_TWO_STEP_ENABLED: {exc}") from exc
         subjective_episode_db_path = _strip_or_none(
             source.get("SUBJECTIVE_EPISODE_DB_PATH")
         )
@@ -649,6 +659,7 @@ class ResolvedLlmRuntimeConfig:
             prompt_dataset_capture_enabled=prompt_dataset_capture_enabled,
             prompt_dataset_capture_failure_policy=prompt_dataset_capture_failure_policy,
             distant_view_trace_enabled=distant_view_trace_enabled,
+            reason_first_two_step_enabled=reason_first_two_step_enabled,
             subjective_episode_db_path=subjective_episode_db_path,
         )
 
@@ -736,6 +747,7 @@ class ResolvedLlmRuntimeConfig:
             prompt_dataset_capture_enabled=False,
             prompt_dataset_capture_failure_policy="fail",
             distant_view_trace_enabled=False,
+            reason_first_two_step_enabled=False,
             subjective_episode_db_path=None,
         )
         unknown = set(overrides) - set(defaults)
