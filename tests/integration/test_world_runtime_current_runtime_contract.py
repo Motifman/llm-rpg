@@ -805,6 +805,81 @@ def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
     assert failed[-1]["returned_tool"] == TOOL_NAME_ASSESS_SITUATION
 
 
+def test_reason_first_prediction_uses_shared_action_recording_path(
+    clean_runtime_env: None,
+) -> None:
+    """reason_first の予測は内部注入後、legacy と同じ action 記録経路で保存される。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="required")
+    )
+    runtime.reason_first_two_step_enabled = True
+    player_id = runtime.get_player_ids()[0]
+    client = _SequencedLlmClient(
+        [
+            {
+                "name": TOOL_NAME_ASSESS_SITUATION,
+                "arguments": {
+                    "inner_thought": "周囲を見れば出口の手がかりが増える。",
+                    "expected_result": "出口の手がかりが見つかる。",
+                },
+            },
+            {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
+        ]
+    )
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        llm_client=client,
+    )
+
+    result = wiring.run_turn(player_id)
+
+    assert result.success is True
+    entry = runtime._action_result_store.get_recent(player_id, 1)[0]
+    assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_EXPLORE
+    assert entry.expected_result == "出口の手がかりが見つかる。"
+    assert [call["call_phase"] for call in client.calls] == [
+        "assess_phase",
+        "action_phase",
+    ]
+
+
+@pytest.mark.parametrize("expected_result_policy", ["off", "optional"])
+def test_reason_first_without_assessment_prediction_records_none_through_shared_path(
+    clean_runtime_env: None,
+    expected_result_policy: str,
+) -> None:
+    """reason_first でも予測が無い評価なら、共有 action 記録経路の expected_result は None のまま。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(
+            expected_result_policy=expected_result_policy
+        )
+    )
+    runtime.reason_first_two_step_enabled = True
+    player_id = runtime.get_player_ids()[0]
+    client = _SequencedLlmClient(
+        [
+            {
+                "name": TOOL_NAME_ASSESS_SITUATION,
+                "arguments": {"inner_thought": "まず周囲を確認する。"},
+            },
+            {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
+        ]
+    )
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        llm_client=client,
+    )
+
+    result = wiring.run_turn(player_id)
+
+    assert result.success is True
+    entry = runtime._action_result_store.get_recent(player_id, 1)[0]
+    assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_EXPLORE
+    assert entry.expected_result is None
+
+
 def test_world_runtime_build_full_prompt_uses_shared_default_prompt_builder(
     clean_runtime_env: None,
 ) -> None:
