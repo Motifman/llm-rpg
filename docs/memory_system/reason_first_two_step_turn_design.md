@@ -36,7 +36,7 @@ v4coop_distant_001 (200 tick 実 LLM run) の捕捉プロンプトを再投入�
 
 | 案 | schema fidelity | prefix cache | 実装/解析 | 判断 |
 |---|---|---|---|---|
-| **A. 2 段階 native FC** | 高 | 高 | 中 | **本線** |
+| **A. 2 段階 native FC** | 高 | 中〜高 | 中 | **本線** |
 | B. 入れ子ラップ (1 tool に analysis + action を内包) | 中〜高 (provider 依存) | 高 (1 コール) | 高 (合成 schema・自前 dispatch・repair) | latency 許容不能が確定した時の最適化候補として棚上げ |
 | C. json_schema / json_object 1 コール | 低 (DeepSeek 固定では実測崩れ) | 高 | 中 | 不採用 |
 | D. system 指示で inner_thought 先頭誘導 + 1 コール | 行動は高 / 順序保証は低 | 高 | 低 | 不採用 (内部順序を保証できない) |
@@ -45,18 +45,26 @@ v4coop_distant_001 (200 tick 実 LLM run) の捕捉プロンプトを再投入�
 
 ```
 step1 (assess_situation)
-  tools        = 全 tool (18 + assess_situation) を渡す   ← prefix cache のため step2 と同一
+  tools        = 行動 tool + assess_situation を渡す
   tool_choice  = {"type":"function","function":{"name":"assess_situation"}}  ← 名指し強制
   出力         = inner_thought (必須) + expected_result (予測。config の required 設定に従う)
   ※ ここでは行動を実行しない。description に明記する。
 
 step2 (行動選択)
   messages     = step1 と同じ + 末尾 user メッセージに「直前の自己評価」を append
-  tools        = 全 tool (18 + assess_situation) を渡す   ← step1 と同一
+  tools        = 行動 tool のみを渡す (assess_situation は除外)
   tool_choice  = "required"
   行動 tool から inner_thought / expected_result を剥がす (reason_first toolset のみ。step1 が所有)
-  step2 が assess_situation を返したら action_phase invalid として実行しない (保険)
+  step2 が assess_situation を返したら action_phase invalid として実行しない (悪性クライアント / provider 変換崩れへの保険)
 ```
+
+実 run `v4coop_reasonfirst_001` では、step2 にも `assess_situation` を含めた旧設計だと
+action_phase で 10/11 回 `assess_situation` が再選択され、fail-fast により no-op になった。
+したがって、step1/step2 の tool list を完全同一にしてターン内 prefix cache を最大化する方針は
+正しさを損ねる。step2 から `assess_situation` を除外し、正しさを優先する。
+
+reason-first は gated で稀にだけ発火するため、ターン内 prefix cache の損失は受け入れる。
+一方で action_phase 同士は同じ行動 tool list を使うため、複数ターン間の prefix cache は維持できる。
 
 ### tool schema は mode 別 (重要 / 穴 1)
 
@@ -65,8 +73,9 @@ step2 (行動選択)
 
 - **legacy / one_step**: 従来通り action tool に `inner_thought` と policy に応じた `expected_result`
   を持たせる。既存 `get_tool_definitions()` の**デフォルト挙動は変えない**。
-- **reason_first**: `assess_situation` + 主観フィールドを剥がした action tool を使う。
-- reason_first の step1 / step2 には**完全同一の tool リスト**を渡す (prefix cache)。
+- **reason_first assess_phase**: `assess_situation` + 主観フィールドを剥がした action tool を使う。
+- **reason_first action_phase**: 主観フィールドを剥がした action tool だけを使う。
+  `assess_situation` は渡さない。
 
 system prompt の `expected_result` / `inner_thought` 指示文も、reason_first mode で矛盾しないよう
 必要なら mode 別に生成する。
@@ -194,16 +203,16 @@ episode / prediction / trace) は one_step と同じ経路を通す。新しい�
 
 - **PR-1 reason-first 用 tool schema 基盤**: `assess_situation` tool 定義追加 (inner_thought 必須 +
   expected_result は policy)。action tool から主観フィールドを剥がす helper。`get_tool_definitions`
-  の**デフォルト挙動は変えず** mode (legacy / reason_first) で toolset を分ける。step1/step2 の
-  tool list が完全同一になること。system prompt 指示文の mode 別化 (必要なら)。
+  の**デフォルト挙動は変えず** mode (legacy / reason_first) で toolset を分ける。system prompt
+  指示文の mode 別化 (必要なら)。
 - **PR-2 named tool_choice と phase 観測の低レイヤ配線**: `ILLMClient.invoke` の tool_choice 型を
   `str|dict` に拡張 (LiteLLMClient / StubLlmClient)。LlmCallMetrics / prompt dataset に phase
   (assess_phase / action_phase / one_step) を載せる。既定は one_step で既存互換。
 - **PR-3 2 段階オーケストレーション + fail-fast**: runtime_manager phase A を one_step / reason_first
   に分岐。step1 named → assess 以外なら 1 retry → 駄目なら step2 に進まず no-op + trace。step2 は
-  同一 tool + 末尾 append + required。step2 が assess_situation を返しても実行しない。**step2 action
-  args へ step1 主観を内部注入**して既存 executor へ。trace (STARTED / ASSESSED / INJECTED /
-  STEP_FAILED / ACTION_SELECTED)。
+  `assess_situation` を除いた action tool + 末尾 append + required。step2 が assess_situation を
+  返しても実行しない。**step2 action args へ step1 主観を内部注入**して既存 executor へ。trace
+  (STARTED / ASSESSED / INJECTED / STEP_FAILED / ACTION_SELECTED)。
 - **PR-4 予測誤差学習の収束確認**: pending prediction の expected_result が step1 由来になることを、
   mode 別 recording 経路を増やさずに固定する。one_step 経路は不変。policy off/optional/required
   境界のテストと、reason_first / one_step が同じ run_phase_b / executor / ActionResult / episode /
