@@ -51,6 +51,7 @@ from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionE
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
 from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
@@ -604,6 +605,38 @@ class TestDefaultRecipientStrategy:
         ids = strategy.resolve(event)
         id_values = {pid.value for pid in ids}
         assert id_values == {99}  # 本人のみ
+
+    def test_create_resolver_uses_spot_graph_position_for_downed_witnesses(
+        self, status_repo
+    ):
+        """spot_graph 注入時の downed 目撃者解決は、古い status 位置でなく graph 位置に従う。"""
+        from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+
+        status_repo.save(_make_status(1, spot_id=1))
+        status_repo.save(_make_status(2, spot_id=1))
+        status_repo.save(_make_status(3, spot_id=1))
+        graph = MagicMock()
+        graph.entity_spot_mapping.return_value = {
+            EntityId.create(1): SpotId(5),
+            EntityId.create(2): SpotId(5),
+            EntityId.create(3): SpotId(9),
+        }
+        graph.get_entity_spot.return_value = SpotId(5)
+        spot_graph_repo = MagicMock()
+        spot_graph_repo.find_graph.return_value = graph
+        resolver = create_observation_recipient_resolver(
+            player_status_repository=status_repo,
+            spot_graph_repository=spot_graph_repo,
+        )
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=None,
+        )
+
+        ids = resolver.resolve(event)
+
+        assert {pid.value for pid in ids} == {1, 2}
 
 
 class TestWorldObjectToPlayerResolver:
