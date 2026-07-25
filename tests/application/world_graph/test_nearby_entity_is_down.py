@@ -81,7 +81,7 @@ class TestNearbyEntityIsDown:
         assert "倒れて動かない" not in dto.current_state_text
 
     def test_documented_behavior(self) -> None:
-        """混在時は 該当する人のみ 接尾辞。"""
+        """混在時はダウンした人だけに「倒れて動かない」が付き、通常の人には付かない。"""
         snap = _snap(
             nearby_entities=(
                 SpotGraphNearbyEntityEntry(
@@ -95,8 +95,11 @@ class TestNearbyEntityIsDown:
         builder = SpotGraphUiContextBuilder()
         dto = builder.build(current_state_text="(base)\n", current_state=_wrap(snap))
         text = dto.current_state_text
-        # エイダだけ接尾辞、ノアは無し
+        # エイダだけにダウン接尾辞が付く。
         assert '"エイダ" (倒れて動かない)' in text
-        # ノアの行は "ノア" で終わって "倒れて" が続かない
-        # PR-FF (Y_after_pr639_640): entity 名は ``""`` で囲まれる
-        assert '"ノア"\n' in text or text.endswith('"ノア"')
+        # ノア行には P1-D の give_item 手がかりは付くが、ダウン接尾辞は付かない。
+        assert (
+            '"ノア" (give_item で所持アイテムを直接渡せる相手)' in text
+        )
+        noah_line = next(line for line in text.splitlines() if '"ノア"' in line)
+        assert "倒れて動かない" not in noah_line
