@@ -41,3 +41,11 @@ class InteractionConditionTypeEnum(Enum):
     # 「一度に取れる量 / 備蓄量 / 再生間隔」を持つモデル用 (毎 tick 更新せず、
     # アクセス時に経過 tick から再生を計算する)。
     OBJECT_STOCK_AT_LEAST = "OBJECT_STOCK_AT_LEAST"
+    # 対人インタラクション: 行為の対象が「行動不能」(倒れている or 死んでいる)
+    # であることを要求する。持ち物を奪う・引きずるなど、相手が抵抗できない
+    # 状態でのみ成立する行為のための条件。
+    #
+    # 「起きて動いている相手からは奪えない」を宣言で書けるようにする。常時
+    # スリが成立すると窃盗が作業になって質感が薄れるので、奪う前に倒す必要が
+    # 生まれる形にする (設計判断はユーザ確定)。
+    TARGET_PLAYER_IS_INCAPACITATED = "TARGET_PLAYER_IS_INCAPACITATED"

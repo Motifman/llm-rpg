@@ -45,7 +45,7 @@ class SpotInteractionService:
     def can_interact(
         self,
         interaction: InteractionDef,
-        spot_object: SpotObject,
+        spot_object: Optional[SpotObject],
         owned_item_spec_ids: FrozenSet[ItemSpecId],
         world_flags: FrozenSet[str],
         *,
@@ -55,6 +55,9 @@ class SpotInteractionService:
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
         acting_player_status: Optional["PlayerStatusAggregate"] = None,
+        # 対人 interaction の対象プレイヤー。acting_item / target_item の
+        # 並置と同型で、対象側の条件 (行動不能かどうか等) を評価するために使う。
+        target_player_status: Optional["PlayerStatusAggregate"] = None,
         # PR4: 時間帯 / 天候 condition の評価用。None なら該当 condition は
         # 「provider 不在」として fail する (silent skip を避けるため明示的に拒否)。
         current_time_of_day_phase: Optional[str] = None,
@@ -108,6 +111,7 @@ class SpotInteractionService:
                 acting_item_aggregate=acting_item_aggregate,
                 target_item_aggregate=target_item_aggregate,
                 acting_player_status=acting_player_status,
+                target_player_status=target_player_status,
                 current_time_of_day_phase=current_time_of_day_phase,
                 current_weather_type=current_weather_type,
                 current_tick=current_tick,
@@ -119,7 +123,7 @@ class SpotInteractionService:
     def _evaluate_condition(
         self,
         cond: InteractionCondition,
-        spot_object: SpotObject,
+        spot_object: Optional[SpotObject],
         world_flags: FrozenSet[str],
         *,
         spot_presence_count: int = 1,
@@ -128,6 +132,9 @@ class SpotInteractionService:
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
         acting_player_status: Optional["PlayerStatusAggregate"] = None,
+        # 対人 interaction の対象プレイヤー。acting_item / target_item の
+        # 並置と同型で、対象側の条件 (行動不能かどうか等) を評価するために使う。
+        target_player_status: Optional["PlayerStatusAggregate"] = None,
         current_time_of_day_phase: Optional[str] = None,
         current_weather_type: Optional[str] = None,
         current_tick: Optional[WorldTick] = None,
@@ -147,7 +154,33 @@ class SpotInteractionService:
                     else "必要なアイテムを持っていません"
                 )
             return True, None
+        if t == InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED:
+            # 対象が行動不能 (倒れている or 死んでいる) であることを要求する。
+            #
+            # 「死んでいる」は蘇生不可の終局状態で、集約単体からは判定できない
+            # (PlayerOutcomeRegistry が持つ)。ここでは HP 0 = 行動不能として扱う。
+            # 死亡は HP 0 の部分集合なので、この判定で両方を覆える。
+            if target_player_status is None:
+                # 対象が渡っていないのに対象の条件が書かれている。provider 不在を
+                # silent pass せず拒否する既存規約に合わせる。
+                return False, (
+                    cond.failure_message
+                    or "この行為には対象プレイヤーが必要です"
+                )
+            if not target_player_status.is_down:
+                return False, (
+                    cond.failure_message
+                    or "相手は動いている。この行為はできない"
+                )
+            return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STATE:
+            if spot_object is None:
+                # 対人 interaction のように対象オブジェクトを持たない文脈。
+                # 黙って True にすると「条件を書いたのに素通り」になるので拒否する。
+                return False, (
+                    cond.failure_message
+                    or "この行為には対象オブジェクトが必要な条件が書かれています"
+                )
             if cond.required_state is None:
                 return False, cond.failure_message or "OBJECT_STATE に required_state がありません"
             for k, v in cond.required_state.items():
@@ -155,6 +188,11 @@ class SpotInteractionService:
                     return False, cond.failure_message or "オブジェクトの状態が条件を満たしません"
             return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST:
+            if spot_object is None:
+                return False, (
+                    cond.failure_message
+                    or "この行為には対象オブジェクトが必要な条件が書かれています"
+                )
             # 備蓄プールの現在量を lazy に算出し、required_quantity 以上あるか判定。
             # 備蓄設定は object.state に持つ (stock / stock_capacity / stock_tick /
             # stock_refill_interval)。current_tick 未提供時は再生なし (記録済み
