@@ -630,10 +630,8 @@ def test_reason_first_tool_mode_adds_assessment_and_strips_action_subjective_fie
 
     assert TOOL_NAME_ASSESS_SITUATION not in legacy_names
     assert TOOL_NAME_ASSESS_SITUATION in reason_first_names
-    assert [
-        name for name in reason_first_names
-        if name != TOOL_NAME_ASSESS_SITUATION
-    ] == legacy_names
+    assert reason_first_names[-1] == TOOL_NAME_ASSESS_SITUATION
+    assert reason_first_names[:-1] == legacy_names
 
     assess = _tool_by_name_from(reason_first_tools, TOOL_NAME_ASSESS_SITUATION)
     assert "inner_thought" in assess.parameters["required"]
@@ -675,7 +673,9 @@ def test_reason_first_action_phase_omits_assessment_tool_and_keeps_action_schema
         for tool in wiring._build_tools_payload(tool_schema_mode="legacy")
     ]
     assert TOOL_NAME_ASSESS_SITUATION in assess_tools
+    assert assess_tools[-1] == TOOL_NAME_ASSESS_SITUATION
     assert TOOL_NAME_ASSESS_SITUATION not in action_tools
+    assert assess_tools[:-1] == action_tools
     assert action_tools == legacy_tools
     action_explore = next(
         tool

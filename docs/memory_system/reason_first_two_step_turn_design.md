@@ -36,7 +36,7 @@ v4coop_distant_001 (200 tick 実 LLM run) の捕捉プロンプトを再投入�
 
 | 案 | schema fidelity | prefix cache | 実装/解析 | 判断 |
 |---|---|---|---|---|
-| **A. 2 段階 native FC** | 高 | 中〜高 | 中 | **本線** |
+| **A. 2 段階 native FC** | 高 | 高 | 中 | **本線** |
 | B. 入れ子ラップ (1 tool に analysis + action を内包) | 中〜高 (provider 依存) | 高 (1 コール) | 高 (合成 schema・自前 dispatch・repair) | latency 許容不能が確定した時の最適化候補として棚上げ |
 | C. json_schema / json_object 1 コール | 低 (DeepSeek 固定では実測崩れ) | 高 | 中 | 不採用 |
 | D. system 指示で inner_thought 先頭誘導 + 1 コール | 行動は高 / 順序保証は低 | 高 | 低 | 不採用 (内部順序を保証できない) |
@@ -45,14 +45,14 @@ v4coop_distant_001 (200 tick 実 LLM run) の捕捉プロンプトを再投入�
 
 ```
 step1 (assess_situation)
-  tools        = 行動 tool + assess_situation を渡す
+  tools        = 行動 tool + assess_situation を渡す (assess_situation は末尾)
   tool_choice  = {"type":"function","function":{"name":"assess_situation"}}  ← 名指し強制
   出力         = inner_thought (必須) + expected_result (予測。config の required 設定に従う)
   ※ ここでは行動を実行しない。description に明記する。
 
 step2 (行動選択)
   messages     = step1 と同じ + 末尾 user メッセージに「直前の自己評価」を append
-  tools        = 行動 tool のみを渡す (assess_situation は除外)
+  tools        = 行動 tool のみを渡す (末尾の assess_situation だけを除外)
   tool_choice  = "required"
   行動 tool から inner_thought / expected_result を剥がす (reason_first toolset のみ。step1 が所有)
   step2 が assess_situation を返したら action_phase invalid として実行しない (悪性クライアント / provider 変換崩れへの保険)
@@ -63,8 +63,11 @@ action_phase で 10/11 回 `assess_situation` が再選択され、fail-fast に
 したがって、step1/step2 の tool list を完全同一にしてターン内 prefix cache を最大化する方針は
 正しさを損ねる。step2 から `assess_situation` を除外し、正しさを優先する。
 
-reason-first は gated で稀にだけ発火するため、ターン内 prefix cache の損失は受け入れる。
-一方で action_phase 同士は同じ行動 tool list を使うため、複数ターン間の prefix cache は維持できる。
+ただし、`assess_situation` を tool リストの中間に置いたまま除外すると、後続の memo 系 tool まで
+配列位置がずれて、不要に prefix cache を捨てる。そこで `get_tool_definitions(tool_schema_mode="reason_first")`
+は `spot + memo + [assess_situation]` を返す。action_phase は末尾の `assess_situation` だけを
+名前で落とすため、先頭の `spot + memo` は assess_phase と action_phase で一致する。正しさのために
+step2 から評価 tool は外しつつ、行動 tool ブロックの cache は維持する。
 
 ### tool schema は mode 別 (重要 / 穴 1)
 
@@ -111,11 +114,11 @@ tool call arguments を持つ 1 ターンとして扱われる。
 
 ### prefix cache 維持 (重要)
 
-- **両コールに同一の system prompt と同一の全 tool リストを渡す**。tool 定義ブロックが不変なので、
-  step2 は step1 の prefix をほぼ丸ごと cache 再利用でき、未 cache は末尾に append する反省テキスト
-  だけになる。
+- **両コールに同一の system prompt を渡し、行動 tool ブロックの先頭順序を揃える**。step1 は
+  `spot + memo + [assess_situation]`、step2 は末尾の `assess_situation` だけを落とした `spot + memo`
+  を渡す。評価 tool を外して再選択を防ぎつつ、先頭の行動 tool ブロックは cache 再利用できる。
 - step1 で「reflect だけを渡す」設計は **prefix cache を壊す** (tool ブロックが 2 コールで変わる) ので
-  採らない。名指し強制で「全 tool を渡しつつ 1 本だけ呼ばせる」ことは probe 済みで成立する
+  採らない。名指し強制で「行動 tool も渡しつつ 1 本だけ呼ばせる」ことは probe 済みで成立する
   (下記)。
 - **反省テキストは必ずプロンプト最後尾** (末尾 user メッセージの末尾) に append する。前方に挟むと
   cache 分岐点が前倒しになる。
