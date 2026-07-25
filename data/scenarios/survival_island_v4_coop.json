@@ -931,8 +931,10 @@
                 "preconditions": [],
                 "effects": [
                   {
-                    "effect_type": "SHOW_PLAYER_TEXT",
-                    "parameters": {}
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "板切れには先に流れ着いた誰かの走り書きが残っている——「狼煙ハ一人デハ守レヌ。頂ハ風ガ強イ。二人デ火ヲ囲メ」"
+                    }
                   }
                 ]
               }
@@ -2179,8 +2181,10 @@
                 "preconditions": [],
                 "effects": [
                   {
-                    "effect_type": "SHOW_PLAYER_TEXT",
-                    "parameters": {}
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "石にたどたどしく彫られた覚え書き——「頂ノ狼煙ニ細切レノ流木ハ役立タヌ。三本ハ焚カネバ煙ハ谷ヲ越エヌ」"
+                    }
                   }
                 ]
               }
@@ -2438,7 +2442,7 @@
                   {
                     "condition_type": "HAS_ITEM",
                     "required_item": "driftwood",
-                    "failure_message": "流木が足りない。太いものが 3 本は要る。",
+                    "failure_message": "流木が足りない。3 本は要る。",
                     "required_quantity": 3
                   },
                   {
