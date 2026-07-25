@@ -383,6 +383,12 @@ def resolve_object_target(
     fallback を追加 (実験 #438 で全 interact が INVALID_TARGET_LABEL で失敗
     した silent failure の root fix)。
     """
+    # NOTE: ここだけ ``expected_types`` を渡していないのは意図的で、書き忘れでは
+    # ない。object は他の target と違い専用の DTO サブクラスを持たず、基底の
+    # ``ToolRuntimeTargetDto`` のまま登録される。したがって isinstance では
+    # 絞れないので、代わりに ``world_object_id`` フィールドの有無で「object と
+    # して扱えるか」を判定している。統一時にここへ ``expected_types`` を足そうと
+    # しても、渡すべきクラスが存在しない。
     target = _resolve_target_with_display_name_fallback(
         label,
         runtime_context,
