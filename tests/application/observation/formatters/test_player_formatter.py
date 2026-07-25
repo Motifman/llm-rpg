@@ -3,6 +3,9 @@
 import pytest
 from unittest.mock import MagicMock
 
+# observation.contracts.interfaces と prompt_builder_config の循環 import を避けるため、
+# observation formatter を直接 import する単体テストでは prompt_builder を先に初期化する。
+from ai_rpg_world.application.llm.services import prompt_builder as _prompt_builder  # noqa: F401
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
@@ -144,7 +147,7 @@ class TestPlayerObservationFormatterPlayerDowned:
     """PlayerDownedEvent のフォーマットテスト"""
 
     def test_self_without_killer_returns_downed_prose(self):
-        """本人・killer なし: 「戦闘不能になりました。」"""
+        """本人・killer なしは戦闘に限定せず「倒れて動けなくなりました。」と出す。"""
         ctx = _make_context()
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
@@ -153,7 +156,8 @@ class TestPlayerObservationFormatterPlayerDowned:
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
-        assert "戦闘不能" in out.prose
+        assert "倒れて動けなくなりました" in out.prose
+        assert "戦闘不能" not in out.prose
         assert out.breaks_movement is True
         assert out.schedules_turn is True
 
@@ -188,6 +192,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         self,
         recipient_spot,
         killer_spot,
+        victim_spot=None,
         killer_name: str = "Alice",
         victim_name: str = "Victor",
     ):
@@ -234,6 +239,8 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
                 return recipient_spot
             if v == 2:  # killer
                 return killer_spot
+            if v == 1:  # victim
+                return victim_spot
             return None
 
         graph.get_entity_spot.side_effect = _get_entity_spot
@@ -249,7 +256,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
     def test_third_party_same_spot_as_killer_includes_killer_name(self):
         """observer が killer と同 spot に居れば killer 名が prose に出る。"""
         ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(5)
+            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
         )
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
@@ -262,11 +269,12 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         assert "Alice" in out.prose
         assert "倒され" in out.prose
         assert out.structured["killer_visible_to_recipient"] is True
+        assert out.schedules_turn is True
 
     def test_third_party_different_spot_from_killer_hides_killer_name(self):
         """observer が killer と別 spot なら killer 名は prose に出ない。"""
         ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(99)
+            recipient_spot=SpotId(5), killer_spot=SpotId(99), victim_spot=SpotId(5)
         )
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
@@ -276,16 +284,18 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         )
         out = formatter.format(event, PlayerId(100))
         assert out is not None
-        # victim の事実 prose
-        assert "戦闘不能" in out.prose
+        # victim の事実 prose は戦闘に限定しない。
+        assert "Victorが倒れて動けなくなりました" in out.prose
+        assert "戦闘不能" not in out.prose
         # killer 名は秘匿
         assert "Alice" not in out.prose
         assert out.structured["killer_visible_to_recipient"] is False
         # structured には killer_id を残す (機械可読、解析用)
         assert out.structured["killer_player_id"] == 2
+        assert out.schedules_turn is True
 
     def test_third_party_position_unknown_hides_killer_name(self):
-        """位置不明 (graph 未注入 等) は安全側に倒し killer 名を出さない。"""
+        """位置不明 (graph 未注入 等) は安全側に倒し、詳細でなく気配文にする。"""
         ctx = self._make_ctx_with_positions(
             recipient_spot=None, killer_spot=None
         )
@@ -297,14 +307,36 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         )
         out = formatter.format(event, PlayerId(100))
         assert out is not None
-        assert "戦闘不能" in out.prose
+        assert "遠くで誰かが倒れた気配" in out.prose
         assert "Alice" not in out.prose
         assert out.structured["killer_visible_to_recipient"] is False
+        assert out.schedules_turn is True
+
+    def test_remote_player_downed_uses_distant_prose_without_actor_name(self):
+        """別 spot の down 観測は詳細目撃でなく、名前を伏せた遠隔の気配文になる。"""
+        ctx = self._make_ctx_with_positions(
+            recipient_spot=SpotId(9), killer_spot=None, victim_spot=SpotId(5)
+        )
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=None,
+        )
+
+        out = formatter.format(event, PlayerId(100))
+
+        assert out is not None
+        assert "遠くで誰かが倒れた気配" in out.prose
+        assert "Victor" not in out.prose
+        assert out.schedules_turn is True
+        assert out.breaks_movement is False
+        assert out.structured["proximity"] == "remote_or_unknown"
 
     def test_third_party_killer_still_outputs_victim_prose(self):
         """killer 不明 (event.killer_player_id=None) は victim 名のみで prose 出す。"""
         ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(5)
+            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
         )
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
@@ -314,7 +346,8 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         )
         out = formatter.format(event, PlayerId(100))
         assert out is not None
-        assert "戦闘不能" in out.prose
+        assert "Victorが倒れて動けなくなりました" in out.prose
+        assert "戦闘不能" not in out.prose
         assert out.structured["killer_visible_to_recipient"] is False
 
 
@@ -335,6 +368,68 @@ class TestPlayerObservationFormatterPlayerRevived:
         assert out is not None
         assert "復帰" in out.prose
         assert out.structured.get("type") == "player_revived"
+
+    def test_other_same_spot_returns_actor_revived_prose_and_schedules_turn(self):
+        """同 spot の他者復帰は actor 名付きで届き、反応のため起床する。"""
+        ctx = TestPlayerObservationFormatterPlayerDownedKillerVisibility()._make_ctx_with_positions(
+            recipient_spot=SpotId(5), killer_spot=None, victim_spot=SpotId(5)
+        )
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerRevivedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            hp_recovered=50,
+            total_hp=100,
+        )
+
+        out = formatter.format(event, PlayerId(100))
+
+        assert out is not None
+        assert "Victorが復帰しました" in out.prose
+        assert out.schedules_turn is True
+        assert out.structured["proximity"] == "same_spot"
+
+    def test_other_remote_revived_uses_distant_prose_and_schedules_turn(self):
+        """別 spot の復帰観測は名前を伏せた遠隔の気配文で届き、反応のため起床する。"""
+        ctx = TestPlayerObservationFormatterPlayerDownedKillerVisibility()._make_ctx_with_positions(
+            recipient_spot=SpotId(9), killer_spot=None, victim_spot=SpotId(5)
+        )
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerRevivedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            hp_recovered=50,
+            total_hp=100,
+        )
+
+        out = formatter.format(event, PlayerId(100))
+
+        assert out is not None
+        assert "遠くで誰かが動けるようになった気配" in out.prose
+        assert "Victor" not in out.prose
+        assert out.schedules_turn is True
+        assert out.structured["proximity"] == "remote_or_unknown"
+
+    def test_other_unknown_position_revived_uses_distant_prose(self):
+        """位置不明の復帰観測も、名前を断定せず遠隔の気配文に倒す。"""
+        ctx = TestPlayerObservationFormatterPlayerDownedKillerVisibility()._make_ctx_with_positions(
+            recipient_spot=None, killer_spot=None, victim_spot=None
+        )
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerRevivedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            hp_recovered=50,
+            total_hp=100,
+        )
+
+        out = formatter.format(event, PlayerId(100))
+
+        assert out is not None
+        assert "遠くで誰かが動けるようになった気配" in out.prose
+        assert "Victor" not in out.prose
+        assert out.schedules_turn is True
+        assert out.structured["proximity"] == "remote_or_unknown"
 
 
 class TestPlayerObservationFormatterPlayerLevelUp:

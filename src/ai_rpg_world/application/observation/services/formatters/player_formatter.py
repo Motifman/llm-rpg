@@ -109,7 +109,7 @@ class PlayerObservationFormatter:
         )
         if is_self:
             # 本人視点では誰に倒されたかは当然分かる。
-            prose = "戦闘不能になりました。"
+            prose = "倒れて動けなくなりました。"
             if killer_name:
                 prose = f"{killer_name}に倒されました。"
             structured = {"type": "player_downed", "role": "self", "killer_player_id": killer_id}
@@ -119,6 +119,21 @@ class PlayerObservationFormatter:
                 observation_category="self_only",
                 schedules_turn=True,
                 breaks_movement=True,
+            )
+        victim_same_spot = self._is_same_spot(recipient_id, event.aggregate_id)
+        if victim_same_spot is not True:
+            structured = {
+                "type": "player_downed",
+                "actor": self._context.name_resolver.player_name(event.aggregate_id),
+                "killer_player_id": killer_id,
+                "killer_visible_to_recipient": False,
+                "proximity": "remote_or_unknown",
+            }
+            return ObservationOutput(
+                prose="遠くで誰かが倒れた気配がした。",
+                structured=structured,
+                observation_category="social",
+                schedules_turn=True,
             )
         # Issue #185: 第三者観測の killer 視認チェック。
         # killer の位置が recipient と同じ spot のときだけ killer 名を出す。
@@ -139,7 +154,7 @@ class PlayerObservationFormatter:
         if killer_visible and killer_name:
             prose = f"{actor_name}が{killer_name}に倒されました。"
         else:
-            prose = f"{actor_name}が戦闘不能になりました。"
+            prose = f"{actor_name}が倒れて動けなくなりました。"
         structured = {
             "type": "player_downed",
             "actor": actor_name,
@@ -147,9 +162,13 @@ class PlayerObservationFormatter:
             # prose で出すかどうかは観測可能性で判定する (上述)。
             "killer_player_id": killer_id,
             "killer_visible_to_recipient": killer_visible,
+            "proximity": "same_spot" if victim_same_spot else "remote_or_unknown",
         }
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social"
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
         )
 
     def _format_player_revived(
@@ -169,11 +188,34 @@ class PlayerObservationFormatter:
                 schedules_turn=True,
             )
         actor_name = self._context.name_resolver.player_name(event.aggregate_id)
-        prose = f"{actor_name}が復帰しました。"
-        structured = {"type": "player_revived", "actor": actor_name}
+        same_spot = self._is_same_spot(recipient_id, event.aggregate_id)
+        if same_spot is not True:
+            prose = "遠くで誰かが動けるようになった気配がした。"
+            proximity = "remote_or_unknown"
+        else:
+            prose = f"{actor_name}が復帰しました。"
+            proximity = "same_spot" if same_spot else "remote_or_unknown"
+        structured = {
+            "type": "player_revived",
+            "actor": actor_name,
+            "proximity": proximity,
+        }
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social"
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
         )
+
+    def _is_same_spot(
+        self, recipient_id: PlayerId, actor_id: PlayerId
+    ) -> Optional[bool]:
+        """recipient と actor が同じ spot にいるかを返す。位置不明なら None。"""
+        recipient_spot = self._context.lookup_recipient_spot(recipient_id)
+        actor_spot = self._context.lookup_recipient_spot(actor_id)
+        if recipient_spot is None or actor_spot is None:
+            return None
+        return recipient_spot == actor_spot
 
     def _format_player_level_up(
         self, event: PlayerLevelUpEvent, recipient_id: PlayerId

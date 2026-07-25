@@ -4,6 +4,9 @@ import pytest
 from datetime import datetime
 from unittest.mock import MagicMock
 
+# observation.contracts.interfaces と prompt_builder_config の循環 import を避けるため、
+# observation service を直接 import する単体テストでは prompt_builder を先に初期化する。
+from ai_rpg_world.application.llm.services import prompt_builder as _prompt_builder  # noqa: F401
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
     create_observation_recipient_resolver,
     ObservationRecipientResolver,
@@ -56,9 +59,11 @@ from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.player.event.status_events import (
+    PlayerDownedEvent,
     PlayerLocationChangedEvent,
     PlayerLevelUpEvent,
     PlayerGoldEarnedEvent,
+    PlayerRevivedEvent,
 )
 from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -564,12 +569,12 @@ class TestDefaultRecipientStrategy:
     def test_player_downed_event_self_spot_other_player_broadcast(
         self, strategy, status_repo
     ):
-        """ダウンしたプレイヤー本人だけでなく、同 spot に居る目撃者にも観測が届く。
+        """ダウンは位置に関わらず全 known player に届く。
 
-        旧実装は `add(aggregate_id)` のみで、4 人協力シナリオで「エイダが
-        倒れた」が他 3 人に届かないバグになっていた (#343 第24回実験 OFF run)。
+        同 spot 目撃者だけに限定すると、単独で倒れた player の異常を誰も
+        知らず、ハートビート頼みになる。prose の詳細度は formatter 側で
+        位置に応じて分ける。
         """
-        from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
         status_repo.save(_make_status(1, spot_id=10))  # downed
         status_repo.save(_make_status(2, spot_id=10))  # same spot
         status_repo.save(_make_status(3, spot_id=10))  # same spot
@@ -585,18 +590,18 @@ class TestDefaultRecipientStrategy:
         assert 1 in id_values  # 本人
         assert 2 in id_values  # 目撃者
         assert 3 in id_values  # 目撃者
-        assert 4 not in id_values  # 別 spot なので届かない
+        assert 4 in id_values  # 遠隔者にも気配として届く
 
-    def test_player_downed_event_spot_self(
+    def test_player_downed_event_unknown_status_still_reaches_known_players(
         self, strategy, status_repo
     ):
-        """downed 本人が status_repo に居ない場合は spot 解決できないため本人だけが audience。
+        """downed 本人が status_repo に居なくても、既知 player には異変を共有する。
 
-        spot 不明時に audience を全員にバラまくと、別 spot の人にまで「ダウン
-        した」が届く安全側でない fallback になるので、ここは fail-closed にする。
+        P1-E 後半では down を全 being 共有するため、位置不明でも本人だけに
+        閉じない。prose 側は遠隔・位置不明として気配文に倒す。
         """
-        from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
-        # status_repo には誰も居ない
+        status_repo.save(_make_status(1, spot_id=10))
+        status_repo.save(_make_status(2, spot_id=20))
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(99),
             aggregate_type="PlayerStatusAggregate",
@@ -604,14 +609,30 @@ class TestDefaultRecipientStrategy:
         )
         ids = strategy.resolve(event)
         id_values = {pid.value for pid in ids}
-        assert id_values == {99}  # 本人のみ
+        assert id_values == {99, 1, 2}
 
-    def test_create_resolver_uses_spot_graph_position_for_downed_witnesses(
+    def test_player_revived_event_reaches_all_known_players(
+        self, strategy, status_repo
+    ):
+        """復帰も位置に関わらず全 known player に届く。"""
+        status_repo.save(_make_status(1, spot_id=10))
+        status_repo.save(_make_status(2, spot_id=20))
+        status_repo.save(_make_status(3, spot_id=30))
+        event = PlayerRevivedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            hp_recovered=30,
+            total_hp=100,
+        )
+
+        ids = strategy.resolve(event)
+
+        assert {pid.value for pid in ids} == {1, 2, 3}
+
+    def test_create_resolver_delivers_downed_to_all_known_players_with_spot_graph(
         self, status_repo
     ):
-        """spot_graph 注入時の downed 目撃者解決は、古い status 位置でなく graph 位置に従う。"""
-        from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
-
+        """spot_graph 注入時も downed は全 known player に共有される。"""
         status_repo.save(_make_status(1, spot_id=1))
         status_repo.save(_make_status(2, spot_id=1))
         status_repo.save(_make_status(3, spot_id=1))
@@ -636,7 +657,7 @@ class TestDefaultRecipientStrategy:
 
         ids = resolver.resolve(event)
 
-        assert {pid.value for pid in ids} == {1, 2}
+        assert {pid.value for pid in ids} == {1, 2, 3}
 
 
 class TestWorldObjectToPlayerResolver:

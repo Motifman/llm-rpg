@@ -292,14 +292,15 @@ class TestObservationFormatter:
         assert out.observation_category == "social"
 
     def test_format_player_downed_self_breaks_movement(self, formatter):
-        """PlayerDownedEvent 本人向けは breaks_movement=True（ダメージで割り込み）"""
+        """PlayerDownedEvent 本人向けは非戦闘表現を出し、breaks_movement=True にする。"""
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerStatusAggregate",
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
-        assert "戦闘不能" in out.prose
+        assert "倒れて動けなくなりました" in out.prose
+        assert "戦闘不能" not in out.prose
         assert out.breaks_movement is True
 
     def test_format_movement_interruption_stays_distinct_from_pursuit_lifecycle_end(self, formatter):
