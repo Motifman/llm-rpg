@@ -282,6 +282,68 @@ class SpotGraphAggregate(AggregateRoot):
         pres = self._presences.get(spot_id, SpotPresence.empty(spot_id))
         self._presences[spot_id] = pres.remove(entity_id)
 
+    def teleport_entity(self, entity_id: EntityId, to_spot_id: SpotId) -> None:
+        """接続を辿らずに別スポットへ移す。Left → Entered の順でイベントを発行。
+
+        `TELEPORT_ENTITY` 効果 (隠し通路・ベント・魔法陣) のためのドメイン操作。
+        `move_entity` との違いは ConnectionId を取らず、通行判定 (`can_pass`)
+        も行わないこと。「接続として存在しない経路で移動する」のがテレポートの
+        定義なので、通行条件を課すと意味が無くなる。
+
+        イベントは move_entity と同じ Left → Entered を発火する。これにより
+        「出発スポットに居た者は消えるのを見る」「到着スポットに居た者は現れる
+        のを見る」が既存の観測経路にそのまま乗る。誰も居ないスポットから誰も
+        居ないスポットへ飛べば誰にも観測されない (= 秘密の移動)。
+
+        現在地と同じスポットを指定した場合は何もしない。出発していないのに
+        出発イベントを流すと、同席者に幽霊のような出入りが観測されるため。
+
+        注意 (複数 tick 移動との関係): `PlayerSpotNavigationState` は本集約とは
+        別に「どの接続を辿っている途中か」を保持する。移動中の entity をここで
+        飛ばすと、次の `advance_spot_travel_one_tick` が「接続の始点に居ない」
+        として `EntityNotAtSpotException` を投げる。現在この経路は踏めない
+        (interact は行為者自身しか飛ばせず、移動中のプレイヤーはターンが
+        回らない) が、他者を飛ばす効果や trap 由来のテレポートを足すときは、
+        呼び出し側で移動状態を先に解消すること。この症状は
+        tests/domain/world_graph/aggregate/test_spot_graph_teleport_entity.py の
+        ``TestTeleportVersusConnectionMovement`` が固定する。
+        """
+        if entity_id not in self._entity_spot:
+            raise EntityNotInGraphException(f"Entity not placed: {entity_id}")
+        if to_spot_id not in self._spots:
+            raise SpotNotInGraphException(f"Unknown spot: {to_spot_id}")
+
+        from_spot = self._entity_spot[entity_id]
+        if from_spot == to_spot_id:
+            return
+
+        old_pres = self._presences.get(from_spot, SpotPresence.empty(from_spot))
+        self._presences[from_spot] = old_pres.remove(entity_id)
+
+        dest_pres = self._presences.get(to_spot_id, SpotPresence.empty(to_spot_id))
+        self._presences[to_spot_id] = dest_pres.add(entity_id)
+        self._entity_spot[entity_id] = to_spot_id
+
+        self.add_event(
+            EntityLeftSpotEvent.create(
+                aggregate_id=self._graph_id,
+                aggregate_type="SpotGraphAggregate",
+                entity_id=entity_id,
+                spot_id=from_spot,
+                to_spot_id=to_spot_id,
+            )
+        )
+        self.add_event(
+            EntityEnteredSpotEvent.create(
+                aggregate_id=self._graph_id,
+                aggregate_type="SpotGraphAggregate",
+                entity_id=entity_id,
+                spot_id=to_spot_id,
+                from_spot_id=from_spot,
+            )
+        )
+        self._maybe_emit_spot_sound_heard(entity_id, to_spot_id)
+
     def move_entity(
         self,
         entity_id: EntityId,

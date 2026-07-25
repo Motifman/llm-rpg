@@ -881,3 +881,48 @@ source of truth。``check_game_end`` は ``scenario.win_conditions`` /
 snapshot/resume を主経路にできるかレビューした際、`_pending_spoiled` が
 snapshot 対象外であることが見つかった。食料・腐敗が今回の重要観察対象なので、
 flush ではなく codec による保存を採用した。
+
+## 30. テレポートの秘匿性は visibility ではなく「誰が居たか」で決まる
+
+`TELEPORT_ENTITY` 効果 (隠し通路・ベント・魔法陣) を実装するにあたり、移動が
+第三者に見えるかどうかを何で決めるかを選んだ。
+
+**採用**: 出発スポットと到着スポットの presence だけで決まる。`teleport_entity`
+は `move_entity` と同じ `EntityLeftSpotEvent` / `EntityEnteredSpotEvent` を
+発火し、既存の観測経路がそれぞれのスポットの居合わせた者へ配る。誰も居なければ
+誰にも観測されない = 秘密の移動が成立する。
+
+**棄却**: `InteractionEffect.visibility` (ACTOR_DIRECT / PUBLIC_OBSERVABLE /
+HIDDEN) で制御する案。物理的にその場に居る者が「消えた人」を見落とす表現は
+不自然で、`HIDDEN` を許すと「目の前から人が消えたのに誰も気づかない」世界に
+なる。他の効果 (ダメージ・状態異常) は身体の内側で起きるので visibility が
+意味を持つが、移動は外形的な事実である。
+
+ただし visibility を書いても黙って無視されると「HIDDEN にしたから見られない」
+と誤解したまま秘密の移動を期待されるので、`TELEPORT_ENTITY` に visibility を
+書いたシナリオは **読み込み時に `ScenarioLoadError` で落とす**。効かない設定を
+黙って受け取らない。
+
+同じ理由で、行き先 (`parameters.target_spot`) を欠いた `TELEPORT_ENTITY` も
+読み込み時に落とす。domain 側は `spot_id <= 0` なら spec を作らない実装なので、
+放置すると「書いたのに何も起きない」静かな失敗になる。`target_spot` を effect の
+直下 (parameters の外) に書いた場合も同様に無言で消えるため、両方を弾く。
+
+### 現在地と同じスポットへのテレポートは no-op
+
+出発していないのに `EntityLeftSpotEvent` を流すと、同席者に幽霊のような出入りが
+観測される。例外にはしない (ランダム転送などで正当に起こりうるため)。
+
+### 複数 tick 移動との衝突は未解決 (既知の制約)
+
+`PlayerSpotNavigationState` は本集約とは別に「どの接続を辿っている途中か」を
+保持する。移動中の entity をテレポートさせると、次の `advance_spot_travel_one_tick`
+が「接続の始点に居ない」として `EntityNotAtSpotException` を投げる。
+
+現在この経路は踏めない。`teleport_entity` の呼び出し元は interact だけで、
+行為者自身しか飛ばせず、移動中のプレイヤーはターンが回らないためである。ただし
+この不変条件は別の層 (ターン割り当て) が担保しており、`teleport_entity` 自身は
+何も知らない。**他者を飛ばす効果や trap 由来のテレポートを足すときは、呼び出し
+側で移動状態を先に解消すること。** 症状は
+`tests/domain/world_graph/aggregate/test_spot_graph_teleport_entity.py` の
+`TestTeleportVersusConnectionMovement` が固定している。

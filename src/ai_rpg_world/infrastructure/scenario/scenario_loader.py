@@ -1372,8 +1372,32 @@ class ScenarioLoader:
             params["loot_table_id"] = mapper.get_int(
                 "loot_table", params.pop("loot_table"),
             )
+        effect_type = InteractionEffectTypeEnum[raw["effect_type"]]
+        # TELEPORT_ENTITY は行き先が無いと domain 側で「spot_id <= 0 なら spec を
+        # 作らない」に落ち、書いたのに何も起きない静かな失敗になる。行き先は
+        # ``parameters.target_spot`` に書く決まりで、effect の直下に書いても
+        # params には載らない (= 無言で消える) ため、ここで弾いて起動時に気づける
+        # ようにする。
+        if effect_type is InteractionEffectTypeEnum.TELEPORT_ENTITY:
+            if "spot_id" not in params:
+                raise ScenarioLoadError(
+                    "TELEPORT_ENTITY effect requires parameters.target_spot "
+                    "(移動先の spot id)。effect の直下ではなく parameters の中に "
+                    f"書いてください: {raw!r}"
+                )
+            # TELEPORT_ENTITY の観測は「出発スポットと到着スポットに誰が居たか」
+            # だけで決まる (EntityLeftSpotEvent / EntityEnteredSpotEvent)。
+            # visibility を書いても移動の見え方は変わらないので、書けば効くと
+            # 誤解したまま HIDDEN な移動を期待されるより、読み込み時に落とす。
+            if visibility is not None:
+                raise ScenarioLoadError(
+                    "TELEPORT_ENTITY effect does not support 'visibility'. "
+                    "移動が見えるかは出発・到着スポットに誰が居たかだけで決まる "
+                    "(誰も居なければ誰にも観測されない)。"
+                    f"visibility を外してください: {raw!r}"
+                )
         return InteractionEffect(
-            effect_type=InteractionEffectTypeEnum[raw["effect_type"]],
+            effect_type=effect_type,
             parameters=params,
             visibility=visibility,
         )
