@@ -2980,19 +2980,36 @@ class _WorldLlmWiring:
         target_label: str,
         targets: dict[str, Any],
     ) -> Optional[Any]:
-        """[delegating] 本家 resolver の ``resolve_player_target`` への薄い
-        ラッパー。後方互換用に残す (callers + tests が直接呼んでいる)。
+        """本家 resolver の ``resolve_player_target`` を呼び、解決できなければ
 
-        Issue #276: 旧実装で `_normalize_label_candidates` を使った独自経路
-        だったが、resolver 側に統合した。
+        None を返す。
+
+        ``resolve_player_target`` は失敗を例外で返すようになったが、whisper は
+        ``INVALID_WHISPER`` + 有効な target_label 一覧 + 対処法という **専用の
+        失敗文面** を持っており、そちらの方が LLM にとって有益である。そこで
+        ここで例外を捕まえて None に変換し、呼び出し側 (`_handle_speech`) が
+        専用文面を組み立てる。
+
+        None への変換をこの 1 箇所に閉じ込めるのが要点で、「暗黙に None が
+        返る」のではなく「ここで明示的に変換している」ことをコード上で見える
+        ようにしている。``_handle_speech`` は resolver 例外を
+        ``LlmCommandResultDto`` に変換するアダプタを通さず生で登録されている
+        ため、例外をそのまま投げると広い except に落ちて
+        ``LLM_TOOL_EXECUTION_FAILED`` + スタックトレースに劣化する。
         """
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             resolve_player_target,
         )
+        from ai_rpg_world.application.llm.services._resolver_helpers import (
+            ToolArgumentResolutionException,
+        )
         # 既存呼び出しは targets 単体を渡してくるので、runtime_context を
         # 偽装する単純な namespace で fallback の resolver API に合わせる。
         rtc = type("_RTCStub", (), {"targets": targets})()
-        return resolve_player_target(target_label, rtc)  # type: ignore[arg-type]
+        try:
+            return resolve_player_target(target_label, rtc)  # type: ignore[arg-type]
+        except ToolArgumentResolutionException:
+            return None
 
     def _build_audience_summary(
         self,

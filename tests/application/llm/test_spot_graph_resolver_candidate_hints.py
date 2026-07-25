@@ -181,7 +181,9 @@ def test_give_item_unknown_recipient_lists_valid_player_names_in_partial_failure
     failure = result["gives_resolved"][0]
     message = failure["message"]
     assert failure["error_code"] == "INVALID_TARGET_LABEL"
-    assert "指定された相手の名前が現在の候補にありません: カイ" in message
-    assert "有効な相手: エイダ / ノア" in message
+    # 文面は resolve_target への一本化で共通ヘルパ側の表現に揃った
+    # (「相手」→「相手の名前」)。候補一覧が出るという保証自体は不変。
+    assert "指定された相手の名前は現在の候補にありません: カイ" in message
+    assert "有効な相手の名前: エイダ / ノア" in message
     _assert_no_internal_labels(message)
 
