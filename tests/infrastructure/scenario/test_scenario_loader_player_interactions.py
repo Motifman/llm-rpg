@@ -119,3 +119,53 @@ class TestPlayerInteractionsParsing:
                 _scenario_with_player_interactions(actor_only)
             )
         assert "TARGET_PLAYER" in str(exc_info.value)
+
+
+class TestUnwiredTargetPlayerEffectsAreRejected:
+    """対象に効くと宣言できても実際には効かない効果は、起動時に落とす。
+
+    ``EffectTarget`` は 8 種の効果に ``TARGET_PLAYER`` を許しているが、実際に
+    対象へ適用されるのはアイテムの授受だけである。ダメージ等はバケットが
+    行為者ぶんしかないので、宣言しても**行為者に効く**。これは「相手を刺した
+    つもりが自分が傷ついた」という、成功として返る最悪の誤動作になる。
+
+    配線が済むまでは loader で落とす。宣言できるのに効かない状態を残すと、
+    実 run で初めて気付くことになる。
+    """
+
+    @pytest.mark.parametrize(
+        "effect_type",
+        ["APPLY_DAMAGE", "SATISFY_NEED", "CHANGE_PLAYER_STATE"],
+    )
+    def test_unwired_effect_type_is_rejected(self, effect_type: str) -> None:
+        """未配線の効果に target=TARGET_PLAYER を書くと ScenarioLoadError。"""
+        scenario = _scenario_with_player_interactions(
+            _take_def(
+                effects=[
+                    {
+                        "effect_type": effect_type,
+                        "target": "TARGET_PLAYER",
+                        "parameters": {},
+                    }
+                ]
+            )
+        )
+        with pytest.raises(ScenarioLoadError) as e:
+            ScenarioLoader().load_from_dict(scenario)
+        assert effect_type in str(e.value)
+
+    def test_item_transfer_to_target_is_still_allowed(self) -> None:
+        """配線済みのアイテム授受は、これまでどおり宣言できる。"""
+        scenario = _scenario_with_player_interactions(
+            _take_def(
+                effects=[
+                    {
+                        "effect_type": "REMOVE_ITEM",
+                        "target": "TARGET_PLAYER",
+                        "parameters": {"item_spec_id_parameter": "item_spec_id"},
+                    }
+                ]
+            )
+        )
+        result = ScenarioLoader().load_from_dict(scenario)
+        assert result.player_interactions[0].action_name == "take"

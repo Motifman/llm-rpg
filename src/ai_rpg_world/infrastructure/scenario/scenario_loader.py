@@ -1367,11 +1367,26 @@ class ScenarioLoader:
     # 効くものと、素材合成のように行為者の手元でしか成立しないものは除く。
     _TARGET_PLAYER_CAPABLE_EFFECTS = frozenset(
         {
+            InteractionEffectTypeEnum.GIVE_ITEM,
+            InteractionEffectTypeEnum.REMOVE_ITEM,
+        }
+    )
+
+    # 「人に対して起きる効果」ではあるが、対象へ適用する配線がまだ無いもの。
+    #
+    # 宣言を許すと **行為者に効く**。ダメージ / 欲求 / state のバケットは
+    # 行為者ぶんしか無く、``effect.target`` を見ずに積まれるためである。
+    # 「相手を刺したつもりが自分が傷ついた」という、成功として返る最悪の
+    # 誤動作になるので、配線が済むまでは読み込み時に落とす。
+    #
+    # ダメージ系を通すには、対象の ``PlayerDownedEvent`` を回収してキル判定を
+    # 確定させる必要がある (docs/memory_system/interpersonal_interaction_design.md
+    # の H-1)。これは別 PR。
+    _TARGET_PLAYER_NOT_WIRED_YET = frozenset(
+        {
             InteractionEffectTypeEnum.APPLY_DAMAGE,
             InteractionEffectTypeEnum.APPLY_STATUS_EFFECT,
             InteractionEffectTypeEnum.SATISFY_NEED,
-            InteractionEffectTypeEnum.GIVE_ITEM,
-            InteractionEffectTypeEnum.REMOVE_ITEM,
             InteractionEffectTypeEnum.TELEPORT_ENTITY,
             InteractionEffectTypeEnum.CHANGE_PLAYER_STATE,
             InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK,
@@ -1425,6 +1440,13 @@ class ScenarioLoader:
             # 読み込みが失敗すること自体は変わらないが、loader の他のエラーと
             # 文面の質が揃っていない。統一は別 PR で。
             return target
+        if effect_type in self._TARGET_PLAYER_NOT_WIRED_YET:
+            raise ScenarioLoadError(
+                f"{effect_type.name} with target=TARGET_PLAYER is declared but not "
+                "wired yet; 宣言しても対象ではなく行為者に効いてしまうため、"
+                "配線が済むまで受け付けません: "
+                f"{raw!r}"
+            )
         if effect_type not in self._TARGET_PLAYER_CAPABLE_EFFECTS:
             capable = ", ".join(
                 sorted(e.name for e in self._TARGET_PLAYER_CAPABLE_EFFECTS)
