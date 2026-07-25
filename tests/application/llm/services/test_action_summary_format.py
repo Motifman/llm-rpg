@@ -16,7 +16,7 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
 
 
 _FULL_ARGS = {
-    "object_label": "OBJ1",
+    "target_label": "OBJ1",
     "action_name": "inspect",
     "inner_thought": "何か手がかりがあるはずだ",
     "intention": "祭壇の封印の手がかりを探す",
@@ -31,7 +31,7 @@ class TestFormatActionSummaryForDisplay:
     def test_hides_subjective_noise_keeps_inner_thought_and_outcome_args(self) -> None:
         """intention/expected_result/emotion_hint は出ず、inner_thought と outcome は残る。"""
         out = format_action_summary_for_display("interact", _FULL_ARGS)
-        assert "object_label" in out
+        assert "target_label" in out
         assert "OBJ1" in out
         assert "action_name" in out
         # inner_thought は常時表示の挙動を維持するため残す
@@ -85,7 +85,7 @@ class TestFormatActionSummaryForDisplay:
         """loop_guard 用 fingerprint は raw args から計算され、表示整形に影響されない。"""
         fp_full = build_argument_fingerprint(_FULL_ARGS)
         fp_outcome_only = build_argument_fingerprint(
-            {"object_label": "OBJ1", "action_name": "inspect"}
+            {"target_label": "OBJ1", "action_name": "inspect"}
         )
         # narrative strip 後は同一 = 表示をどう整形しても loop_guard は不変
         assert fp_full == fp_outcome_only

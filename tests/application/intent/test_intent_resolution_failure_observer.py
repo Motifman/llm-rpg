@@ -178,7 +178,7 @@ class TestEndToEndWithActionFailedEmitter:
         service.submit_and_resolve_immediately(
             player_id=11,
             tool_name="interact",
-            arguments={"object_label": "ghost"},
+            arguments={"target_label": "ghost"},
         )
 
         observations = buffer.get_observations(PlayerId(11))

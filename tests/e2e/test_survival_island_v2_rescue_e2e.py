@@ -114,7 +114,7 @@ def _ada_player_id(runtime) -> PlayerId:
     raise AssertionError("ada が scenario に存在しない")
 
 
-def _signal_fire_object_label(runtime, player_id: PlayerId) -> str:
+def _signal_fire_target_label(runtime, player_id: PlayerId) -> str:
     """summit に居る player の runtime_context から signal_fire_pit のラベルを引く。
 
     OBJ ラベル (例: OBJ1) は build_full_prompt 時に各 player ごとに割り当て
@@ -200,11 +200,11 @@ class TestSurvivalIslandV2RescueE2E:
         _teleport(runtime, int(ada), "summit")
         _grant_items(runtime, ada, ("driftwood", "dry_leaves", "flint"))
 
-        signal_label = _signal_fire_object_label(runtime, ada)
+        signal_label = _signal_fire_target_label(runtime, ada)
         stub = StubLlmClient(tool_call_to_return={
             "name": TOOL_NAME_SPOT_GRAPH_INTERACT,
             "arguments": {
-                "object_label": signal_label,
+                "target_label": signal_label,
                 "action_name": "light_signal",
                 "inner_thought": "救助を呼ぶ。",
             },
@@ -238,11 +238,11 @@ class TestSurvivalIslandV2RescueE2E:
         # stub の invoke 呼び出し回数を spy して、light_signal が **正確に**
         # 必要なだけ叩かれたことを確認する (code-review HIGH 対応)。
         # 余分な呼び出しが入った場合に検知する。
-        signal_label = _signal_fire_object_label(runtime, ada)
+        signal_label = _signal_fire_target_label(runtime, ada)
         stub = StubLlmClient(tool_call_to_return={
             "name": TOOL_NAME_SPOT_GRAPH_INTERACT,
             "arguments": {
-                "object_label": signal_label,
+                "target_label": signal_label,
                 "action_name": "light_signal",
                 "inner_thought": "助けを呼ぶ",
             },

@@ -119,10 +119,15 @@ INTERACT_DEFINITION = ToolDefinitionDto(
     parameters={
         "type": "object",
         "properties": {
-            "object_label": {
+            # 引数名が ``object_label`` ではなく種別中立な ``target_label`` なのは、
+            # 対人 interaction (docs/memory_system/interpersonal_interaction_design.md
+            # §3.3) で対象が物体だけではなくなるため。引数名は LLM から見て
+            # 「何を渡せるか」の広告そのものなので、種別を足す前に名前を先に
+            # 中立化しておく。現時点で解決できるのは引き続き物体だけ。
+            "target_label": {
                 "type": "string",
                 "description": (
-                    "オブジェクトの名前 (例: 焚き火跡)。"
+                    "対象の名前 (例: 焚き火跡)。"
                     "『現在の状況』のオブジェクト section では "
                     "``- \"焚き火跡\" (available=true) — 説明 [gather, examine]`` "
                     "のように、渡すべき object 名のみが ``\"\"`` で囲まれて表示される。"
@@ -149,7 +154,7 @@ INTERACT_DEFINITION = ToolDefinitionDto(
             "say_inline": _SAY,
             "inner_thought": _IT,
         },
-        "required": ["object_label", "action_name", "inner_thought"],
+        "required": ["target_label", "action_name", "inner_thought"],
     },
 )
 

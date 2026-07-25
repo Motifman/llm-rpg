@@ -94,7 +94,7 @@ def _player_id(runtime, string_id: str) -> PlayerId:
     raise AssertionError(f"{string_id} が scenario に存在しない")
 
 
-def _signal_fire_object_label(runtime, player_id: PlayerId) -> str:
+def _signal_fire_target_label(runtime, player_id: PlayerId) -> str:
     signal_world_obj_id = _id_int(runtime, "object", "signal_fire_pit")
     prompt = runtime.build_full_prompt(player_id)
     ctx = prompt["tool_runtime_context"]
@@ -108,12 +108,12 @@ def _signal_fire_object_label(runtime, player_id: PlayerId) -> str:
 
 def _run_light_signal_turn(state, runtime, actor: PlayerId):
     """actor に light_signal の tool call を 1 ターン実行させる。"""
-    label = _signal_fire_object_label(runtime, actor)
+    label = _signal_fire_target_label(runtime, actor)
     stub = StubLlmClient(
         tool_call_to_return={
             "name": TOOL_NAME_SPOT_GRAPH_INTERACT,
             "arguments": {
-                "object_label": label,
+                "target_label": label,
                 "action_name": "light_signal",
                 "inner_thought": "狼煙を上げる。",
             },

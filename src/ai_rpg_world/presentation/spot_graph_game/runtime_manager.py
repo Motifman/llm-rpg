@@ -1260,8 +1260,8 @@ class _WorldLlmWiring:
             # (`resolve_destination_target` 同一関数を再利用) が変換する。
             TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
             # PR-θ3 (経路統合): interact も resolver 経由で
-            # `object_label='OBJ1'` を `object_id` に解決する。旧 handler と
-            # 同じく resolver 例外時の「有効な object_label 一覧」 message は
+            # `target_label='OBJ1'` を `object_id` に解決する。旧 handler と
+            # 同じく resolver 例外時の「有効な target_label 一覧」 message は
             # invalid_label_failure_builder で構築する。
             TOOL_NAME_SPOT_GRAPH_INTERACT,
         })
@@ -1350,11 +1350,11 @@ class _WorldLlmWiring:
         """PR-θ3 (経路統合): interact の resolver 例外を旧 _handle_interact
         相当の tool-specific 失敗 dto に変換する。
 
-        旧 handler は resolver 例外時に「有効な object_label 一覧を含む
-        message + object_label 用の remediation」を組み立てていた。
+        旧 handler は resolver 例外時に「有効な target_label 一覧を含む
+        message + target_label 用の remediation」を組み立てていた。
         """
         targets = getattr(runtime_context, "targets", {}) or {}
-        label = str(arguments.get("object_label", ""))
+        label = str(arguments.get("target_label", ""))
         valid_objects = _list_object_labels(targets)
         error_code = getattr(exc, "error_code", "INVALID_TARGET_LABEL")
         if error_code == "INVALID_ARGUMENT":
@@ -1363,22 +1363,41 @@ class _WorldLlmWiring:
                 message=str(exc),
                 error_code=error_code,
                 remediation=(
-                    "action_name には、object_label で指定したオブジェクト行の "
+                    "action_name には、target_label で指定したオブジェクト行の "
                     "[] 内に表示されている操作名を 1 つ指定してください。"
                     "日本語の説明文ではなく、表示された action_name をそのまま使ってください。"
+                ),
+                should_reschedule=is_reschedulable_error_code(error_code),
+            )
+        # 旧引数名 ``object_label`` で呼ばれたときに「見つかりません: (空文字)」
+        # という無意味な文面を返さない。名前を変えた以上、LLM が旧名を書くのは
+        # 起こりうる誤りであり、何が悪かったのかを明示できないと同じ失敗を
+        # 繰り返す (failure_helpers の設計動機と同じ)。
+        if not label.strip() and "object_label" in arguments:
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    "引数名が違います: この tool の対象は object_label ではなく "
+                    f"target_label で指定します。有効な target_label: "
+                    f"{valid_objects or '(この場所に interactable なオブジェクトなし)'}"
+                ),
+                error_code=error_code,
+                remediation=(
+                    "object_label に書いた値をそのまま target_label に移して"
+                    "呼び直してください。"
                 ),
                 should_reschedule=is_reschedulable_error_code(error_code),
             )
         return LlmCommandResultDto(
             success=False,
             message=(
-                f"オブジェクト名が見つかりません: {label}。"
-                f"有効な object_label: "
+                f"対象の名前が見つかりません: {label}。"
+                f"有効な target_label: "
                 f"{valid_objects or '(この場所に interactable なオブジェクトなし)'}"
             ),
             error_code=error_code,
             remediation=(
-                "object_label には「現在の状況」のオブジェクト欄で "
+                "target_label には「現在の状況」のオブジェクト欄で "
                 "\"\" に囲まれているオブジェクト名を指定してください。"
                 "action_name は同じ行の [] 内に表示された操作名から選んでください。"
             ),
@@ -2852,7 +2871,7 @@ class _WorldLlmWiring:
     # label→object_id resolve は SpotGraphArgumentResolver._resolve_interact
     # が resolver stage で行い、新経路には object_id (int) が届く。
     # resolver_targets に TOOL_NAME_SPOT_GRAPH_INTERACT を含めた。resolver
-    # 例外時の「有効な object_label 一覧」message は
+    # 例外時の「有効な target_label 一覧」message は
     # _build_interact_invalid_label_failure が組み立てる。
     # LLM 向け remediation helper (interact_remediation_for_reason /
     # list_object_interactions) は application 層 (interact_helpers.py) に

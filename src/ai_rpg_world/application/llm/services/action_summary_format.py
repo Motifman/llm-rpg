@@ -4,7 +4,7 @@
 
 ``_format_action_summary`` (full orchestrator) と ``runtime_manager`` (escape の失敗 /
 wait / listen 等の経路) は raw tool args 全体を ``json.dumps`` して action_summary に
-していた。結果 ``object_label`` / ``action_name`` のような outcome args が、
+していた。結果 ``target_label`` / ``action_name`` のような outcome args が、
 ``intention`` / ``expected_result`` / ``emotion_hint`` の主観入力の生 JSON に埋もれて
 読みにくかった。
 

@@ -539,11 +539,11 @@ class TestObjectStateNotDuplicatedInFormatter:
 
 
 class TestInteractDescriptionMentionsQuoteRegime:
-    """INTERACT_DEFINITION の object_label description が quote 規約に触れる。"""
+    """INTERACT_DEFINITION の target_label description が quote 規約に触れる。"""
 
-    def test_object_label_description_included(self) -> None:
+    def test_target_label_description_included(self) -> None:
         """objectlabeldescription にクオート規約が含まれる。"""
-        desc = INTERACT_DEFINITION.parameters["properties"]["object_label"][
+        desc = INTERACT_DEFINITION.parameters["properties"]["target_label"][
             "description"
         ]
         assert "\"" in desc
@@ -553,7 +553,7 @@ class TestInteractDescriptionMentionsQuoteRegime:
 
     def test_description_string(self) -> None:
         """description は静的文字列。"""
-        desc = INTERACT_DEFINITION.parameters["properties"]["object_label"][
+        desc = INTERACT_DEFINITION.parameters["properties"]["target_label"][
             "description"
         ]
         assert isinstance(desc, str)

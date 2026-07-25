@@ -330,7 +330,7 @@ class TestToolCallLoopGuardServiceWarningResume:
             svc.record_and_check(
                 pid,
                 TOOL_NAME_SPOT_GRAPH_INTERACT,
-                {"object_label": "OBJ1", "action_name": "examine"},
+                {"target_label": "OBJ1", "action_name": "examine"},
             )
         entries = buf.get_observations(pid)
         assert len(entries) == 2

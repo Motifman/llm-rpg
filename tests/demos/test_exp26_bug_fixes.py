@@ -136,7 +136,7 @@ class TestInteractionNotFoundRemediation:
         stub = StubLlmClient(tool_call_to_return={
             "name": TOOL_NAME_SPOT_GRAPH_INTERACT,
             "arguments": {
-                "object_label": "OBJ1",
+                "target_label": "OBJ1",
                 "action_name": "search_made_up",
                 "inner_thought": "t",
             },

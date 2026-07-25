@@ -1,7 +1,7 @@
 """失敗 DTO に有効ラベルを埋め込んで LLM が失敗から学べるようにする挙動 (F1/F2)。
 
 Issue #154 のデモで Gemma 4 / gpt-5-mini ともに display name (例: ``"操作盤"``) を
-``object_label`` に渡し続けて INVALID_TARGET_LABEL を繰り返した。失敗 message に
+``target_label`` に渡し続けて INVALID_TARGET_LABEL を繰り返した。失敗 message に
 有効ラベル一覧 + remediation を載せて学習可能にする。
 
 F1 対象:
@@ -126,7 +126,7 @@ class TestListTargetsHelpers:
 class TestInvalidTargetLabelMessage:
     """INVALID_TARGET_LABEL (spot_graph_interact) の learnable message。"""
 
-    def test_failure_message_enumerates_valid_object_labels(
+    def test_failure_message_enumerates_valid_target_labels(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
@@ -141,7 +141,7 @@ class TestInvalidTargetLabelMessage:
         stub = StubLlmClient(
             tool_call_to_return={
                 "name": "interact",
-                "arguments": {"object_label": "存在しない架空のオブジェクト_X", "action_name": "電源を入れる"},
+                "arguments": {"target_label": "存在しない架空のオブジェクト_X", "action_name": "電源を入れる"},
             }
         )
         state = _create_relay_session(monkeypatch, tmp_path, stub)
@@ -155,22 +155,50 @@ class TestInvalidTargetLabelMessage:
         # F1: 有効候補名が含まれる
         assert '"操作盤"' in result.message
         assert "OBJ1" not in result.message
-        # F1: remediation が object_label に表示名を指定すると明示
+        # F1: remediation が target_label に表示名を指定すると明示
         assert result.remediation is not None
-        assert "object_label" in result.remediation
+        assert "target_label" in result.remediation
         assert "オブジェクト名" in result.remediation
         assert "OBJ1" not in result.remediation
+
+    def test_old_argument_name_object_label_is_reported_as_wrong_argument(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """旧引数名 ``object_label`` で呼ぶと、引数名が違うことを名指しで返す。
+
+        対象引数は ``object_label`` から ``target_label`` へ改名された。旧名で
+        呼ばれると対象が空文字のまま解決に失敗するので、素朴に組み立てると
+        「対象の名前が見つかりません: 」という何も伝えない文面になり、LLM は
+        同じ誤りを繰り返す。
+        """
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": "interact",
+                "arguments": {"object_label": "操作盤", "action_name": "examine"},
+            }
+        )
+        state = _create_relay_session(monkeypatch, tmp_path, stub)
+        target_pid = state.runtime.get_player_ids()[0]
+        result = state.llm_wiring.run_turn(target_pid)
+
+        assert result.success is False
+        assert "target_label" in result.message
+        assert "object_label" in result.message
+        assert result.remediation is not None
+        assert "target_label" in result.remediation
 
     def test_missing_action_name_reports_action_name_not_object_name(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """object_label が正しく action_name だけ欠けると、操作名不足として返す。"""
+        """target_label が正しく action_name だけ欠けると、操作名不足として返す。"""
         stub = StubLlmClient(
             tool_call_to_return={
                 "name": "interact",
-                "arguments": {"object_label": "操作盤", "action_name": ""},
+                "arguments": {"target_label": "操作盤", "action_name": ""},
             }
         )
         state = _create_relay_session(monkeypatch, tmp_path, stub)
@@ -322,8 +350,8 @@ class TestExploreEmptyMessageAugmented:
         # F2: 単純な「新しい発見はなかった」だけではなく、可視オブジェクトを列挙
         assert '"操作盤"' in result.message
         assert "OBJ1" not in result.message
-        # 「object_label に指定」のヒントも含まれる
-        assert "object_label" in result.message
+        # 「target_label に指定」のヒントも含まれる
+        assert "target_label" in result.message
 
     def test_empty_discoveries_says_current_spot_is_exhausted_when_no_discoverable_remains(
         self,

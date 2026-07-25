@@ -1,7 +1,7 @@
 """Executor 横断で使う「失敗 DTO の learnable 化」ヘルパー群。
 
 Issue #154 のデモ実走で観測されたように、LLM は失敗 message に有効値が
-列挙されていないと同じ間違い (例: ``object_label="操作盤"``) を繰り返す。
+列挙されていないと同じ間違い (例: ``target_label="操作盤"``) を繰り返す。
 ここでは:
 
 - ``ToolRuntimeContextDto.targets`` から kind 別に有効ラベル一覧を組み立てる
@@ -75,7 +75,7 @@ def list_targets_of_kind(
 
 
 def list_object_labels(targets: Dict[str, ToolRuntimeTargetDto]) -> str:
-    """interact 系の object_label 候補を列挙。"""
+    """interact 系の target_label 候補を列挙 (現時点では物体のみ)。"""
     return list_targets_of_kind(targets, "spot_graph_object")
 
 
@@ -141,7 +141,7 @@ def build_unknown_label_failure(
     有効候補一覧を併記し、LLM が次の試行で正しい表示名を選べるようにする。
 
     Args:
-        label_kind: ``"object_label"`` / ``"destination_label"`` /
+        label_kind: ``"target_label"`` / ``"destination_label"`` /
             ``"target_label"`` 等、LLM が使う argument 名
         given_label: LLM が渡してきた (解決できなかった) 値
         valid_labels_summary: ``list_*_labels`` 系ヘルパーの出力。空のとき
