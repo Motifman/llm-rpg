@@ -4466,6 +4466,13 @@ def create_world_runtime(
     _caregiver_name_by_pid = {
         int(spawn.player_id): spawn.name for spawn in scenario.player_spawns
     }
+    # 倒れている間に自分が対象になった行為の預かり先。倒れている player は
+    # observation の宛先から外れる (Phase 4) ので、その瞬間には配れない。
+    # 復活時に post hoc summary へ載せる。
+    from ai_rpg_world.application.player.services.downed_incident_log import (
+        DownedIncidentLog,
+    )
+    downed_incident_log = DownedIncidentLog()
     pipeline_event_publisher.register_handler(
         PlayerRevivedEvent,
         PlayerRevivedPostHocObservationHandler(
@@ -4473,6 +4480,24 @@ def create_world_runtime(
             observation_appender=observation_appender,
             current_tick_provider=lambda: int(runtime.current_tick()),
             caregiver_name_resolver=lambda pid, _d=_caregiver_name_by_pid: (
+                _d.get(int(pid))
+            ),
+            downed_incident_log=downed_incident_log,
+        ),
+    )
+    # 対人行為の対象が倒れていたら、被害を復活まで預かる。
+    from ai_rpg_world.application.player.handlers.targeted_while_down_recorder import (
+        TargetedWhileDownRecorder,
+    )
+    from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+        PlayerInteractedWithPlayerEvent,
+    )
+    pipeline_event_publisher.register_handler(
+        PlayerInteractedWithPlayerEvent,
+        TargetedWhileDownRecorder(
+            incident_log=downed_incident_log,
+            player_status_repository=player_status_repo,
+            actor_name_resolver=lambda pid, _d=_caregiver_name_by_pid: (
                 _d.get(int(pid))
             ),
         ),

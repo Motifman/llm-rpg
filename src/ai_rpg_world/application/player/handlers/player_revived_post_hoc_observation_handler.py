@@ -30,6 +30,9 @@ from ai_rpg_world.application.observation.contracts.dtos import ObservationOutpu
 from ai_rpg_world.application.observation.services.observation_appender import (
     ObservationAppender,
 )
+from ai_rpg_world.application.player.services.downed_incident_log import (
+    DownedIncidentLog,
+)
 from ai_rpg_world.application.player.services.player_death_grace_timer import (
     PlayerDeathGraceTimer,
 )
@@ -51,6 +54,7 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
         observation_appender: ObservationAppender,
         current_tick_provider: Callable[[], int],
         caregiver_name_resolver: CaregiverNameResolver,
+        downed_incident_log: Optional[DownedIncidentLog] = None,
     ) -> None:
         if not isinstance(grace_timer, PlayerDeathGraceTimer):
             raise TypeError("grace_timer must be PlayerDeathGraceTimer")
@@ -67,13 +71,22 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
         self._appender = observation_appender
         self._current_tick_provider = current_tick_provider
         self._caregiver_name_resolver = caregiver_name_resolver
+        # 倒れている間に自分を対象として行われた行為の預かり先。未注入なら
+        # 「何もされなかった」と同じ扱いで、従来どおりの目覚め文になる。
+        self._downed_incident_log = downed_incident_log
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def handle(self, event: PlayerRevivedEvent) -> None:
         revived_pid = event.aggregate_id
+        incidents = self._drain_incidents(revived_pid)
         prose = self._build_prose(revived_pid, event)
+        if incidents:
+            prose = f"{prose} {self._build_incident_phrase(incidents)}"
         structured = {
             "kind": "player_revived_post_hoc",
+            # 倒れている間に自分が対象になった行為。prose だけだと trace で
+            # 集計できないので構造化側にも残す。
+            "incidents_while_down": list(incidents),
             "caregiver_player_id": (
                 int(event.caregiver_player_id)
                 if event.caregiver_player_id is not None
@@ -103,6 +116,32 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
                 "post hoc observation append failed for player_id=%s",
                 int(revived_pid),
             )
+
+    def _drain_incidents(self, revived_pid: PlayerId) -> tuple:
+        """倒れている間に受けた行為を取り出す。log 未注入なら空。
+
+        log 側の障害で revive 全体を倒さない。被害の申し送りが欠けるのは
+        痛いが、意識が戻らない方が致命的である。
+        """
+        if self._downed_incident_log is None:
+            return ()
+        try:
+            return self._downed_incident_log.drain(revived_pid)
+        except Exception:
+            self._logger.exception(
+                "downed incident drain failed for player_id=%s", int(revived_pid),
+            )
+            return ()
+
+    @staticmethod
+    def _build_incident_phrase(incidents: tuple) -> str:
+        """「倒れている間にされたこと」を 1 文にまとめる。
+
+        断定形で書く。「〜かもしれない」と濁すと、荷が減った事実に対して
+        エージェントが行動を起こしにくくなる。
+        """
+        body = "、".join(incidents)
+        return f"意識を失っている間の形跡がある: {body}。"
 
     def _build_prose(
         self, revived_pid: PlayerId, event: PlayerRevivedEvent,
