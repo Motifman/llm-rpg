@@ -305,6 +305,7 @@ class TestSpotObjectInteracted:
         assert formatter.format(event, PLAYER_1) is None
 
     def test_other_returns_social_without_result(self, formatter):
+        """interact の目撃者観測は同席者の次ターンを積むため schedules_turn=True。"""
         event = SpotObjectInteractedEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -321,6 +322,7 @@ class TestSpotObjectInteracted:
         assert "古びたドア" in result.prose
         assert "ドアが開いた" not in result.prose
         assert result.structured["witness_observation_source"] == "legacy"
+        assert result.schedules_turn is True
 
     def test_other_uses_declared_witness_message_without_result(self, formatter):
         """宣言済みの目撃者文面を使い、本人向け result_message は他者観測に混ぜない。"""
@@ -433,6 +435,7 @@ class TestSpotExplored:
         assert formatter.format(event, PLAYER_1) is None
 
     def test_other_returns_social_without_discoveries(self, formatter):
+        """explore の目撃者観測は同席者の次ターンを積むため schedules_turn=True。"""
         event = SpotExploredEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -446,6 +449,7 @@ class TestSpotExplored:
         assert "探索者A" in result.prose
         assert "探索" in result.prose
         assert "sub-loc-1" not in result.prose
+        assert result.schedules_turn is True
 
 
 class TestConnectionStateChanged:

@@ -182,7 +182,10 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             "actor": actor,
         }
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social",
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
         )
 
     def _format_prepared_action(
