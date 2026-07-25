@@ -39,6 +39,7 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import EntityNotInGraphException
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
+from ai_rpg_world.domain.world_graph.service.stock_pool_regen import compute_stock_regen
 from ai_rpg_world.domain.world_graph.service.spot_perception_service import SpotPerceptionService
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
@@ -82,6 +83,54 @@ def _object_state_precondition_failure_hints(interaction, interior) -> tuple[str
                 message = str(cond.failure_message).strip()
                 hints.append(message or "現在は条件を満たしていない")
                 break
+    return tuple(hints)
+
+
+def _object_stock_precondition_failure_hints(
+    interaction,
+    interior,
+    *,
+    current_tick: Optional[int],
+) -> tuple[str, ...]:
+    """現在失敗している OBJECT_STOCK_AT_LEAST の failure_message を返す。
+
+    備蓄の現在値は domain 側と同じ ``compute_stock_regen`` で遅延算出する。
+    """
+    hints: list[str] = []
+    for cond in interaction.preconditions:
+        if cond.condition_type != InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST:
+            continue
+        if cond.target_object_id is None:
+            continue
+        target = interior.get_object(cond.target_object_id)
+        if target is None:
+            continue
+        state = target.state
+        try:
+            required = max(1, int(cond.required_quantity))
+            now = (
+                int(current_tick)
+                if current_tick is not None
+                else int(state.get("stock_tick", 0))
+            )
+            result = compute_stock_regen(
+                stock=int(state.get("stock", 0)),
+                capacity=int(state.get("stock_capacity", 0)),
+                stock_tick=int(state.get("stock_tick", 0)),
+                refill_interval=int(state.get("stock_refill_interval", 0)),
+                now=now,
+            )
+        except (TypeError, ValueError):
+            logger.warning(
+                "invalid object stock state for interaction hint: action_name=%s object_id=%s",
+                getattr(interaction, "action_name", None),
+                getattr(cond.target_object_id, "value", cond.target_object_id),
+                exc_info=True,
+            )
+            continue
+        if result.effective_stock < required:
+            message = str(cond.failure_message).strip()
+            hints.append(message or "備蓄が足りません。時間が経てば回復する")
     return tuple(hints)
 
 
@@ -134,7 +183,12 @@ def _label_weather_type(value: str) -> str:
     return _WEATHER_TYPE_LABELS.get(value, value)
 
 
-def _interaction_condition_hints(interaction, interior=None) -> tuple[str, ...]:
+def _interaction_condition_hints(
+    interaction,
+    interior=None,
+    *,
+    current_tick: Optional[int] = None,
+) -> tuple[str, ...]:
     """interaction の時刻・天候制約を action 表示用の短いヒントにする。
 
     HAS_ITEM は他の表示や remediation と重複するためここでは扱わない。
@@ -166,12 +220,28 @@ def _interaction_condition_hints(interaction, interior=None) -> tuple[str, ...]:
             continue
     if interior is not None:
         hints.extend(_object_state_precondition_failure_hints(interaction, interior))
+        hints.extend(
+            _object_stock_precondition_failure_hints(
+                interaction,
+                interior,
+                current_tick=current_tick,
+            )
+        )
     return tuple(hints)
 
 
-def _format_interaction_action_name_with_hints(interaction, interior=None) -> str:
+def _format_interaction_action_name_with_hints(
+    interaction,
+    interior=None,
+    *,
+    current_tick: Optional[int] = None,
+) -> str:
     """fallback テキスト用に action_name と condition hints を同じ規則で整形する。"""
-    hints = _interaction_condition_hints(interaction, interior)
+    hints = _interaction_condition_hints(
+        interaction,
+        interior,
+        current_tick=current_tick,
+    )
     if not hints:
         return interaction.action_name
     return f"{interaction.action_name}({'・'.join(hints)})"
@@ -582,6 +652,16 @@ class SpotGraphCurrentStateBuilder:
             return None
 
         node = graph.get_spot(spot_id)
+        current_tick: Optional[int] = None
+        if self._current_tick_provider is not None:
+            try:
+                current_tick = int(self._current_tick_provider())
+            except Exception:
+                logger.warning(
+                    "current_tick_provider raised unexpectedly; "
+                    "stock condition hints use recorded stock_tick",
+                    exc_info=True,
+                )
         player = self._player_status_repository.find_by_id(PlayerId(player_id))
         travel_line: str | None = None
         agent_status = SpotGraphAgentStatusEntry()
@@ -729,7 +809,11 @@ class SpotGraphCurrentStateBuilder:
                         SpotGraphInteractionEntry(
                             action_name=i.action_name,
                             display_label=i.display_label,
-                            condition_hints=_interaction_condition_hints(i, interior),
+                            condition_hints=_interaction_condition_hints(
+                                i,
+                                interior,
+                                current_tick=current_tick,
+                            ),
                         )
                         for i in obj.interactions
                     )
@@ -748,7 +832,11 @@ class SpotGraphCurrentStateBuilder:
                     # フォールバック行 (interactions DTO と整合): 同じ条件ヒントを
                     # 使い、OBJECT_STATE 失敗 action も理由付きで残す。
                     actions = [
-                        _format_interaction_action_name_with_hints(i, interior)
+                        _format_interaction_action_name_with_hints(
+                            i,
+                            interior,
+                            current_tick=current_tick,
+                        )
                         for i in obj.interactions
                     ]
                     act = " / ".join(actions) if actions else "—"
