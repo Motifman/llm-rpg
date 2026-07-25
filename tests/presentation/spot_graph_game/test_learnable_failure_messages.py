@@ -16,10 +16,14 @@ F2 対象:
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeTargetDto
+from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
+    SpotGraphToolExecutor,
+)
 from ai_rpg_world.application.llm.services.llm_client_stub import (
     StubLlmClient,
 )
@@ -320,3 +324,48 @@ class TestExploreEmptyMessageAugmented:
         assert "OBJ1" not in result.message
         # 「object_label に指定」のヒントも含まれる
         assert "object_label" in result.message
+
+    def test_empty_discoveries_says_current_spot_is_exhausted_when_no_discoverable_remains(
+        self,
+    ) -> None:
+        """探索で見つかるものが尽きた spot では、ここでの探索枯渇だけを明示する。"""
+        executor = SpotGraphToolExecutor.__new__(SpotGraphToolExecutor)
+        executor._runtime = SimpleNamespace(
+            do_explore=lambda player_id, **kwargs: SimpleNamespace(
+                discovery_descriptions=(),
+                has_remaining_discoverable_items=False,
+            )
+        )
+        runtime_context = SimpleNamespace(
+            targets={
+                "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
+            }
+        )
+
+        result = executor._explore(1, {"inner_thought": "周囲を探す"}, runtime_context)
+
+        assert result.success is True
+        assert "この場所で新たに探索で見つかるものはもう無い" in result.message
+        assert "別の場所" not in result.message
+        assert '"操作盤"' in result.message
+
+    def test_empty_discoveries_does_not_say_exhausted_when_discoverable_remains(self) -> None:
+        """条件未達の discoverable が残っている spot では、枯渇したと誤って言わない。"""
+        executor = SpotGraphToolExecutor.__new__(SpotGraphToolExecutor)
+        executor._runtime = SimpleNamespace(
+            do_explore=lambda player_id, **kwargs: SimpleNamespace(
+                discovery_descriptions=(),
+                has_remaining_discoverable_items=True,
+            )
+        )
+        runtime_context = SimpleNamespace(
+            targets={
+                "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
+            }
+        )
+
+        result = executor._explore(1, {"inner_thought": "周囲を探す"}, runtime_context)
+
+        assert result.success is True
+        assert "この場所で新たに探索で見つかるものはもう無い" not in result.message
+        assert '"操作盤"' in result.message

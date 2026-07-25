@@ -48,6 +48,9 @@ class SpotExplorationService:
             new_interior=new_interior,
             discovery_descriptions=tuple(descriptions),
             item_spec_ids_newly_discovered=tuple(discovered_specs),
+            has_remaining_discoverable_items=any(
+                not item.is_discovered for item in new_interior.discoverable_items
+            ),
         )
 
     def _meets_condition(

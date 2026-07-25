@@ -30,6 +30,7 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 class SpotExplorationResultDto:
     discovery_descriptions: Tuple[str, ...]
     item_spec_ids_granted: Tuple[ItemSpecId, ...]
+    has_remaining_discoverable_items: bool = False
 
 
 class SpotExplorationApplicationService:
@@ -112,4 +113,5 @@ class SpotExplorationApplicationService:
         return SpotExplorationResultDto(
             discovery_descriptions=result.discovery_descriptions,
             item_spec_ids_granted=tuple(result.item_spec_ids_newly_discovered),
+            has_remaining_discoverable_items=result.has_remaining_discoverable_items,
         )

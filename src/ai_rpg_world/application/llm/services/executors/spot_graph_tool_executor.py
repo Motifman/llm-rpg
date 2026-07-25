@@ -522,6 +522,9 @@ class SpotGraphToolExecutor:
                 # F2: 「新しい発見はなかった」だけだと LLM が「部屋に何もない」と
                 # 誤解し interact しなくなる癖がある。runtime_context.targets
                 # から可視 object を併記する。
+                exhausted_hint = ""
+                if not getattr(result, "has_remaining_discoverable_items", False):
+                    exhausted_hint = "この場所で新たに探索で見つかるものはもう無い。"
                 targets = (
                     getattr(runtime_context, "targets", {}) or {}
                     if runtime_context is not None
@@ -531,11 +534,16 @@ class SpotGraphToolExecutor:
                 if visible_objects:
                     message = (
                         "新しい発見はなかった。"
+                        f"{exhausted_hint}"
                         f"既に見えているオブジェクト: {visible_objects}"
                         " (interact するにはこのオブジェクトの名前を object_label に指定する)"
                     )
                 else:
-                    message = "新しい発見はなかった (この場所に interactable なオブジェクトは無い)"
+                    message = (
+                        "新しい発見はなかった。"
+                        f"{exhausted_hint}"
+                        "(この場所に interactable なオブジェクトは無い)"
+                    )
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_EXPLORE,
                 args,

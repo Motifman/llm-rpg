@@ -14,3 +14,4 @@ class ExplorationResult:
     new_interior: SpotInterior
     discovery_descriptions: Tuple[str, ...]
     item_spec_ids_newly_discovered: Tuple[ItemSpecId, ...]
+    has_remaining_discoverable_items: bool = False
