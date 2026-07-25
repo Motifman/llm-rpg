@@ -109,7 +109,7 @@ class PlayerObservationFormatter:
         )
         if is_self:
             # 本人視点では誰に倒されたかは当然分かる。
-            prose = "戦闘不能になりました。"
+            prose = "倒れて動けなくなりました。"
             if killer_name:
                 prose = f"{killer_name}に倒されました。"
             structured = {"type": "player_downed", "role": "self", "killer_player_id": killer_id}
@@ -154,7 +154,7 @@ class PlayerObservationFormatter:
         if killer_visible and killer_name:
             prose = f"{actor_name}が{killer_name}に倒されました。"
         else:
-            prose = f"{actor_name}が戦闘不能になりました。"
+            prose = f"{actor_name}が倒れて動けなくなりました。"
         structured = {
             "type": "player_downed",
             "actor": actor_name,
