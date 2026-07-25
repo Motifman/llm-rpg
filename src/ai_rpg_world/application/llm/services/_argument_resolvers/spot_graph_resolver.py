@@ -345,12 +345,34 @@ def resolve_target(
                 return hit
             kind_mismatch = True
             continue
-        for kind in accept_kinds:
-            found = _find_target_by_display_name(
-                runtime_context, kind=kind, display_name=candidate
+        # 表示名の探索は種別を順に見るので、素朴に最初の一致を返すと
+        # 「物体『リン』とプレイヤー『リン』が同席している」ときに先に見た
+        # 種別が常に勝つ。刺したつもりが物体を調べていた、のような成功として
+        # 返る誤動作になるので、種別を跨いだ一致は全部集めてから判断する。
+        # (`build_ordinal_disambiguator` はセクションごとに別々の名前リストへ
+        #  適用されるため、種別横断の衝突には `#N` が付かない。)
+        found_across_kinds = [
+            f
+            for f in (
+                _find_target_by_display_name(
+                    runtime_context, kind=kind, display_name=candidate
+                )
+                for kind in accept_kinds
             )
-            if found is not None:
-                return found
+            if f is not None
+        ]
+        if len(found_across_kinds) > 1:
+            raise ToolArgumentResolutionException(
+                (
+                    f"{label_name}「{candidate}」は複数の対象と一致します。"
+                    "短縮ラベル ("
+                    + "、".join(f.label for f in found_across_kinds)
+                    + ") のいずれかで指定し直してください。"
+                ),
+                "AMBIGUOUS_TARGET_LABEL",
+            )
+        if found_across_kinds:
+            return found_across_kinds[0]
 
     if kind_mismatch:
         raise ToolArgumentResolutionException(
@@ -1024,9 +1046,20 @@ class SpotGraphArgumentResolver:
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
-        target = resolve_object_target(
+        """``target_label`` を物体 ID か対象プレイヤー ID に解決する。
+
+        対人 interaction は専用ツールを増やさず ``interact`` に載せる
+        (docs/memory_system/interpersonal_interaction_design.md §3.3)。対象名の
+        指定作法が物体と人で揃うので、LLM は行為したいものの名前を書くだけで
+        済む。解決した種別に応じて ``object_id`` か ``target_player_id`` の
+        **どちらか一方だけ**を埋める。両方埋めると executor 側が物体への操作
+        なのか対人操作なのか判別できなくなる。
+        """
+        target = resolve_target(
             args.get("target_label"),  # type: ignore[arg-type]
             runtime_context,
+            accept_kinds=("spot_graph_object", "spot_graph_player"),
+            label_name="対象の名前",
         )
         action = args.get("action_name", "")
         if not isinstance(action, str) or not action.strip():
@@ -1034,7 +1067,30 @@ class SpotGraphArgumentResolver:
                 "action_name が指定されていません。",
                 "INVALID_ARGUMENT",
             )
+        if target.kind == "spot_graph_player":
+            if target.player_id is None:
+                raise ToolArgumentResolutionException(
+                    f"対象プレイヤーとして扱えない名前です: {args.get('target_label')}",
+                    "INVALID_TARGET_KIND",
+                )
+            return _with_inner_thought(
+                {
+                    "object_id": None,
+                    "target_player_id": target.player_id,
+                    "action_name": action.strip(),
+                },
+                args,
+            )
+        if target.world_object_id is None:
+            raise ToolArgumentResolutionException(
+                f"オブジェクトとして解決できない名前です: {args.get('target_label')}",
+                "INVALID_TARGET_KIND",
+            )
         return _with_inner_thought(
-            {"object_id": target.world_object_id, "action_name": action.strip()},
+            {
+                "object_id": target.world_object_id,
+                "target_player_id": None,
+                "action_name": action.strip(),
+            },
             args,
         )
