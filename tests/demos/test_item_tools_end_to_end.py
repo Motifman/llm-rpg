@@ -83,6 +83,23 @@ def _player_id(runtime, str_id: str) -> PlayerId:
     raise AssertionError(f"player {str_id} が scenario に存在しない")
 
 
+def _owns_spec(runtime, pid: PlayerId, spec_str_id: str) -> bool:
+    """`pid` が `spec_str_id` のアイテムを持っているか。
+
+    「inventory が空か」ではなく **その品を持っているか** で見る。シナリオが
+    宣言した初期所持品が起動時に配られるようになったため、空を前提にすると
+    無関係な持ち物で落ちる (かつては配布漏れで偶然空だった)。
+    """
+    from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+        collect_owned_item_spec_ids_from_inventory,
+    )
+
+    spec_id = ItemSpecId.create(runtime.scenario.id_mapper.get_int("item_spec", spec_str_id))
+    inv = runtime._player_inventory_repo.find_by_id(pid)
+    assert inv is not None
+    return spec_id in collect_owned_item_spec_ids_from_inventory(inv, runtime._item_repo)
+
+
 def _label_for_item(runtime, pid: PlayerId, item_spec_str: str) -> str:
     """ada の prompt context から指定 spec のアイテム label (I1/I2/...) を引く。"""
     target_spec_id = runtime.id_mapper.get_int("item_spec", item_spec_str)
@@ -128,8 +145,9 @@ class TestUseItemEndToEnd:
         # inventory から該当アイテムが消えていること
         inv = runtime._player_inventory_repo.find_by_id(ada)
         assert inv is not None
-        occupied = [iid for _, iid in inv._inventory_slots.items() if iid is not None]
-        assert len(occupied) == 0, "use_item 成功後も inventory に残っている"
+        assert not _owns_spec(runtime, ada, "coconut"), (
+            "use_item 成功後も coconut が inventory に残っている"
+        )
 
     def test_returns_item_label_invalid_target_label(self, session) -> None:
         """resolver 経路が壊れていれば INVALID_ARGUMENT (= 実験 #25 の症状) に化ける。"""
@@ -248,13 +266,9 @@ class TestGiveItemEndToEnd:
             f"give_item 失敗: {result.error_code} {result.message[:160]}"
         )
         # noah の inventory に coconut が入っている
-        noah_inv = runtime._player_inventory_repo.find_by_id(noah)
-        noah_iids = [iid for _, iid in noah_inv._inventory_slots.items() if iid is not None]
-        assert len(noah_iids) >= 1
+        assert _owns_spec(runtime, noah, "coconut")
         # ada の inventory から消えている
-        ada_inv = runtime._player_inventory_repo.find_by_id(ada)
-        ada_iids = [iid for _, iid in ada_inv._inventory_slots.items() if iid is not None]
-        assert len(ada_iids) == 0
+        assert not _owns_spec(runtime, ada, "coconut")
 
     def test_give_dead_target_returns_learnable_failure(self, session) -> None:
         """死亡済みの相手へ give_item すると、日本語理由を返して所有は移らない。"""
@@ -285,14 +299,8 @@ class TestGiveItemEndToEnd:
         assert result.success is False
         assert result.error_code == "GIVE_ITEM_TARGET_DEAD"
         assert "死亡しており受け取れない" in result.message
-        ada_inv = runtime._player_inventory_repo.find_by_id(ada)
-        noah_inv = runtime._player_inventory_repo.find_by_id(noah)
-        assert any(
-            iid is not None for _, iid in ada_inv._inventory_slots.items()
-        )
-        assert all(
-            iid is None for _, iid in noah_inv._inventory_slots.items()
-        )
+        assert _owns_spec(runtime, ada, "coconut"), "拒否されたのに ada から消えている"
+        assert not _owns_spec(runtime, noah, "coconut"), "拒否されたのに noah へ移っている"
 
     def test_give_down_target_returns_learnable_failure(self, session) -> None:
         """倒れている相手へ give_item すると、日本語理由を返して所有は移らない。"""
@@ -325,14 +333,8 @@ class TestGiveItemEndToEnd:
         assert result.success is False
         assert result.error_code == "GIVE_ITEM_TARGET_DOWN"
         assert "倒れていて受け取れない" in result.message
-        ada_inv = runtime._player_inventory_repo.find_by_id(ada)
-        noah_inv = runtime._player_inventory_repo.find_by_id(noah)
-        assert any(
-            iid is not None for _, iid in ada_inv._inventory_slots.items()
-        )
-        assert all(
-            iid is None for _, iid in noah_inv._inventory_slots.items()
-        )
+        assert _owns_spec(runtime, ada, "coconut"), "拒否されたのに ada から消えている"
+        assert not _owns_spec(runtime, noah, "coconut"), "拒否されたのに noah へ移っている"
 
 
 # ---------------------------------------------------------------------------
