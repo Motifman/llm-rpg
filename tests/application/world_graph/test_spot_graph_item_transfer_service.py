@@ -13,6 +13,8 @@ import pytest
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     ItemTransferException,
     SpotGraphItemTransferService,
+    TargetIsDeadError,
+    TargetIsDownError,
 )
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
@@ -26,6 +28,8 @@ from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
 from ai_rpg_world.domain.player.exception.player_exceptions import (
     ItemNotInSlotException,
 )
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.service.player_outcome_registry import PlayerOutcomeRegistry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
@@ -43,11 +47,17 @@ from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
     InMemoryPlayerInventoryRepository,
 )
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+    InMemoryPlayerStatusRepository,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
+)
+from tests.domain.player.aggregate.test_player_status_aggregate import (
+    create_test_status_aggregate,
 )
 
 
@@ -124,6 +134,23 @@ def transfer_service():
         "item_repo": item_repo,
         "instance_id": instance_id,
     }
+
+
+@pytest.fixture
+def transfer_service_with_target_state(transfer_service):
+    """give_item の対象生死・ダウン状態を参照できる構成。"""
+    deps = transfer_service
+    status_repo = InMemoryPlayerStatusRepository()
+    status_repo.save(create_test_status_aggregate(player_id=PLAYER_ID.value))
+    status_repo.save(create_test_status_aggregate(player_id=OTHER_PLAYER_ID.value))
+    outcome_registry = PlayerOutcomeRegistry.new_for_players(
+        [PLAYER_ID, OTHER_PLAYER_ID]
+    )
+    deps["service"].set_player_status_repository(status_repo)
+    deps["service"].set_player_outcome_registry(outcome_registry)
+    deps["status_repo"] = status_repo
+    deps["outcome_registry"] = outcome_registry
+    return deps
 
 
 class TestSpotGraphItemTransferServiceDrop:
@@ -317,6 +344,44 @@ class TestSpotGraphItemTransferServiceGive:
         assert b_inv.get_item_instance_id_by_slot(SlotId(0)) == deps["instance_id"]
         assert result.item_instance_id == deps["instance_id"]
         assert any("流木" in m for m in result.messages)
+
+    def test_cannot_give_item_to_dead_target(
+        self, transfer_service_with_target_state
+    ):
+        """死亡済みの相手にはアイテムを渡せず、送り手の所持品は維持される。"""
+        deps = transfer_service_with_target_state
+        self._add_other_player_to_spot(deps, OTHER_PLAYER_ID)
+        deps["outcome_registry"].set_outcome(
+            OTHER_PLAYER_ID, PlayerOutcomeEnum.DEAD
+        )
+
+        with pytest.raises(TargetIsDeadError):
+            deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(0))
+
+        a_inv = deps["inventory_repo"].find_by_id(PLAYER_ID)
+        b_inv = deps["inventory_repo"].find_by_id(OTHER_PLAYER_ID)
+        assert a_inv.get_item_instance_id_by_slot(SlotId(0)) == deps["instance_id"]
+        assert b_inv.get_item_instance_id_by_slot(SlotId(0)) is None
+
+    def test_cannot_give_item_to_down_target(
+        self, transfer_service_with_target_state
+    ):
+        """倒れている相手にはアイテムを渡せず、送り手の所持品は維持される。"""
+        deps = transfer_service_with_target_state
+        self._add_other_player_to_spot(deps, OTHER_PLAYER_ID)
+        deps["status_repo"].save(
+            create_test_status_aggregate(
+                player_id=OTHER_PLAYER_ID.value, is_down=True
+            )
+        )
+
+        with pytest.raises(TargetIsDownError):
+            deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(0))
+
+        a_inv = deps["inventory_repo"].find_by_id(PLAYER_ID)
+        b_inv = deps["inventory_repo"].find_by_id(OTHER_PLAYER_ID)
+        assert a_inv.get_item_instance_id_by_slot(SlotId(0)) == deps["instance_id"]
+        assert b_inv.get_item_instance_id_by_slot(SlotId(0)) is None
 
     def test_self_item_transfer_exception(self, transfer_service):
         """A → A は弾く。"""

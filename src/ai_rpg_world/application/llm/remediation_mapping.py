@@ -70,6 +70,8 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "GIVE_ITEM_TARGET_IS_SELF": "自分自身は指定できません。gives 配列の target_player_label に別のプレイヤー名を指定してください。",
     "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT": "渡したい相手が同じ場所にいません。先に相手のいる場所へ移動してから、または同じ場所にいる別の相手を選んでから再度渡してください。",
     "GIVE_ITEM_TARGET_INVENTORY_FULL": "相手のインベントリが満杯で受け取れません。相手が別アイテムを drop するのを待つか、別の相手に渡してください。",
+    "GIVE_ITEM_TARGET_DEAD": "死亡している相手はアイテムを受け取れません。生存していて同じ場所にいる別の相手を選んでください。",
+    "GIVE_ITEM_TARGET_DOWN": "倒れている相手はアイテムを受け取れません。先に tend_to_player で手当てするか、生存して動ける別の相手を選んでください。",
     # PR-ε (Y_after_pr639_640 audit 後続): drop / pickup 系の頻発失敗を汎用
     # ITEM_TRANSFER_FAILED から分離し、LLM が次アクションを判断できる粒度に
     "ITEM_TRANSFER_SLOT_IS_EMPTY": "指定したスロットに何も入っていません。inspect_target で自分のインベントリを確認し、実際にアイテムが入っているスロットを指定してください。",

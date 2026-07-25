@@ -74,6 +74,8 @@ from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service impor
     ItemTransferException,
     SpotGraphItemTransferService,
     TargetInventoryFullError,
+    TargetIsDeadError,
+    TargetIsDownError,
     TargetIsSelfError,
     TargetNotInSameSpotError,
 )
@@ -1058,6 +1060,7 @@ class SpotGraphToolExecutor:
         - ``TargetNotInSameSpotError`` → GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT
           (executor 側で相手名 / 現在地名を埋め直す)
         - ``TargetInventoryFullError`` → GIVE_ITEM_TARGET_INVENTORY_FULL
+        - ``TargetIsDeadError`` / ``TargetIsDownError`` → 対象が受け取れない
         - その他 ``ItemTransferException`` → ITEM_TRANSFER_FAILED
         バッチのため各 entry の失敗は個別に message に集約する。
         """
@@ -1143,6 +1146,16 @@ class SpotGraphToolExecutor:
                 ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
                 if first_ng_code is None:
                     first_ng_code = "GIVE_ITEM_TARGET_INVENTORY_FULL"
+            except TargetIsDeadError:
+                msg = f"{target_disp}は死亡しており受け取れない。"
+                ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
+                if first_ng_code is None:
+                    first_ng_code = "GIVE_ITEM_TARGET_DEAD"
+            except TargetIsDownError:
+                msg = f"{target_disp}は倒れていて受け取れない。"
+                ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
+                if first_ng_code is None:
+                    first_ng_code = "GIVE_ITEM_TARGET_DOWN"
             except ItemTransferException as e:
                 # PR-ε: SlotIsEmptyError などの新設 subclass は
                 # error_code class attribute を持つので、それを LLM に返す。

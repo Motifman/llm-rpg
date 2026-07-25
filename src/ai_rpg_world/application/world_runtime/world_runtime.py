@@ -3442,6 +3442,7 @@ def create_world_runtime(
         player_inventory_repository=player_inventory_repo,
         spot_interior_repository=spot_interior_repo,
         item_repository=item_repo,
+        player_status_repository=player_status_repo,
     )
     # player_name_map は interaction_service の resolver 用に既に構築済み
     # (上記 SpotInteractionApplicationService 呼び出しの直前)。ここでは
@@ -4119,6 +4120,7 @@ def create_world_runtime(
     state_builder.set_dead_player_checker(
         lambda pid: outcome_registry.get_outcome(pid) is PlayerOutcomeEnum.DEAD
     )
+    item_transfer_service.set_player_outcome_registry(outcome_registry)
 
     # Issue #621: ダウン → DEAD の 30 tick 猶予機構。
     # grace_timer は PlayerDownedEvent handler (= pending 登録) と

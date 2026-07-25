@@ -90,6 +90,23 @@ class TestNearbyEntityLabeling:
         )
         assert "他のプレイヤーはこのスポットにいない" not in result.current_state_text
 
+    def test_dead_or_down_players_do_not_show_give_item_affordance(self) -> None:
+        """死亡・ダウン中の同席者には、直接渡せる相手という affordance を出さない。"""
+        dto = _make_dto(
+            SpotGraphNearbyEntityEntry(
+                entity_id=2, display_name="リン", is_dead=True
+            ),
+            SpotGraphNearbyEntityEntry(
+                entity_id=3, display_name="カイト", is_down=True
+            ),
+        )
+
+        result = SpotGraphUiContextBuilder().build("base", dto)
+
+        assert '- "リン" (死亡している)' in result.current_state_text
+        assert '- "カイト" (倒れて動かない)' in result.current_state_text
+        assert "give_item で所持アイテムを直接渡せる相手" not in result.current_state_text
+
     def test_display_name_empty_fallback_label(self) -> None:
         """display name が空でも fallback ラベルになる。"""
         dto = _make_dto(

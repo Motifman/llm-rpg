@@ -18,6 +18,8 @@ Y_after_pr639_640 の分析で、give_item の失敗が全て ``ITEM_TRANSFER_FA
   相手が別 spot にいる → 距離 (spot 名) を可能なら message に含める
 - ``TargetInventoryFullError`` (GIVE_ITEM_TARGET_INVENTORY_FULL):
   相手のインベントリ満杯 → drop 依頼などの次アクションを示唆
+- ``TargetIsDeadError`` / ``TargetIsDownError``:
+  死亡・ダウン中で受け取れない相手を弾く
 - ``ItemNotInSlotError``: (既存の domain player error として存在) 元 slot が空
 
 これら以外の「内部エラー」(inventory not found / item aggregate not found)
@@ -56,11 +58,24 @@ def test_target_inventory_full_error_item_transfer_exception_class() -> None:
     assert issubclass(TargetInventoryFullError, ItemTransferException)
 
 
+def test_target_dead_or_down_error_item_transfer_exception_class() -> None:
+    """TargetIsDeadError / TargetIsDownError は ItemTransferException の子 class。"""
+    from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
+        ItemTransferException,
+        TargetIsDeadError,
+        TargetIsDownError,
+    )
+    assert issubclass(TargetIsDeadError, ItemTransferException)
+    assert issubclass(TargetIsDownError, ItemTransferException)
+
+
 def test_domain_error_llm_error_code() -> None:
     """error_code は class 属性として持ち、LLM の action feedback で
     remediation mapping と結び付く。"""
     from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
         TargetInventoryFullError,
+        TargetIsDeadError,
+        TargetIsDownError,
         TargetIsSelfError,
         TargetNotInSameSpotError,
     )
@@ -73,6 +88,8 @@ def test_domain_error_llm_error_code() -> None:
         TargetInventoryFullError.error_code
         == "GIVE_ITEM_TARGET_INVENTORY_FULL"
     )
+    assert TargetIsDeadError.error_code == "GIVE_ITEM_TARGET_DEAD"
+    assert TargetIsDownError.error_code == "GIVE_ITEM_TARGET_DOWN"
 
 
 def test_target_self_error_message_japanese_llm() -> None:
