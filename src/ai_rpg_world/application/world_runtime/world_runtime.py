@@ -29,6 +29,9 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
+from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+    grant_initial_items_to_inventory,
+)
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -3306,6 +3309,27 @@ def create_world_runtime(
         )
         player_status_repo.save(status)
         player_inventory_repo.save(PlayerInventoryAggregate(player_id=pid))
+        # シナリオが宣言した初期所持品を実際に渡す。
+        #
+        # ここが長らく抜けていた。loader は initial_items を parse して
+        # player_spawns に載せ、grant_initial_items_to_inventory も存在した
+        # のに、**本番経路から一度も呼ばれていなかった**。宣言は読まれるだけ
+        # で誰にも配られず、実 run では全員が手ぶらで始まっていた。
+        # 各テストが自分で helper を呼んでフィクスチャを作っていたため、
+        # テストからも見えなかった。
+        #
+        # snapshot からの再開でも二重にならない。PlayerInventorySubsystemCodec
+        # の restore は restore_from_data + save で inventory 集約を丸ごと
+        # 置き換えるので、ここで配ったぶんは復元時に上書きされる
+        # (tests/demos/test_initial_items_are_granted_at_startup.py が固定)。
+        if spawn.initial_items:
+            grant_initial_items_to_inventory(
+                pid,
+                spawn.initial_items,
+                item_repo,
+                item_spec_repo,
+                player_inventory_repo,
+            )
 
         eid = EntityId.create(spawn.player_id)
         if not graph.presence_at(spawn.spawn_spot_id).is_present(eid):
