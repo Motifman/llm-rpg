@@ -204,6 +204,44 @@ class TestObjectSectionQuotesAndActionSimplification:
             ].available_interactions
         )
 
+    def test_failed_object_stock_condition_hint_is_prompt_only(self) -> None:
+        """OBJECT_STOCK_AT_LEAST 失敗理由は prompt の action 表示だけに付く。"""
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="干潟",
+            current_spot_description="",
+            travel_status_line=None,
+            objects=(
+                SpotGraphObjectEntry(
+                    object_id=10,
+                    name="貝の干潟",
+                    description="貝を採れる場所。",
+                    interactions=(
+                        SpotGraphInteractionEntry(
+                            action_name="gather_shellfish",
+                            display_label="貝を採る",
+                            condition_hints=("貝は採り尽くした。時間が経てば戻る。",),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
+
+        assert (
+            "[gather_shellfish(貝は採り尽くした。時間が経てば戻る。)]"
+            in result.current_state_text
+        )
+        assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
+            "gather_shellfish",
+        )
+        assert all(
+            "貝は採り尽くした" not in action
+            for action in result.tool_runtime_context.targets[
+                "OBJ1"
+            ].available_interactions
+        )
+
     def test_action(self) -> None:
         """interactions が空の object は ``[]`` や ``[-]`` を出さず、シンプル
         に名前+説明だけを表示する。"""

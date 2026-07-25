@@ -21,7 +21,11 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_def import Interac
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 
-def _build_builder(interior: SpotInterior) -> SpotGraphCurrentStateBuilder:
+def _build_builder(
+    interior: SpotInterior,
+    *,
+    current_tick: int = 0,
+) -> SpotGraphCurrentStateBuilder:
     graph = MagicMock()
     graph.get_entity_spot.return_value = SpotId(1)
     spot_node = MagicMock()
@@ -44,6 +48,7 @@ def _build_builder(interior: SpotInterior) -> SpotGraphCurrentStateBuilder:
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         player_status_repository=player_status_repo,
+        current_tick_provider=lambda: current_tick,
     )
 
 
@@ -164,3 +169,92 @@ def test_failing_object_state_precondition_remains_with_failure_reason_hint() ->
     assert snap is not None
     assert snap.objects[0].interactions[0].action_name == "open_chest"
     assert snap.objects[0].interactions[0].condition_hints == ("箱はすでに空っぽだ。",)
+
+
+def test_failing_object_stock_precondition_remains_with_failure_reason_hint() -> None:
+    """OBJECT_STOCK_AT_LEAST が未達なら action を残し、枯渇理由を表示ヒントにする。"""
+    object_id = SpotObjectId.create(10)
+    interaction = InteractionDef(
+        action_name="gather_shellfish",
+        display_label="貝を採る",
+        preconditions=(
+            InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST,
+                target_object_id=object_id,
+                required_quantity=2,
+                failure_message="貝は採り尽くした。時間が経てば戻る。",
+            ),
+        ),
+        effects=(),
+    )
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=object_id,
+                name="干潟",
+                description="貝を探せる。",
+                object_type=SpotObjectTypeEnum.OTHER,
+                state={
+                    "stock": 0,
+                    "stock_capacity": 3,
+                    "stock_tick": 0,
+                    "stock_refill_interval": 10,
+                },
+                interactions=(interaction,),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    snap = _build_builder(interior, current_tick=5).build_snapshot(1)
+
+    assert snap is not None
+    assert snap.objects[0].interactions[0].action_name == "gather_shellfish"
+    assert snap.objects[0].interactions[0].condition_hints == (
+        "貝は採り尽くした。時間が経てば戻る。",
+    )
+
+
+def test_recovered_object_stock_precondition_does_not_show_failure_hint() -> None:
+    """遅延再生後に必要数へ届く備蓄には、枯渇ヒントを出さない。"""
+    object_id = SpotObjectId.create(10)
+    interaction = InteractionDef(
+        action_name="gather_shellfish",
+        display_label="貝を採る",
+        preconditions=(
+            InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST,
+                target_object_id=object_id,
+                required_quantity=2,
+                failure_message="貝は採り尽くした。時間が経てば戻る。",
+            ),
+        ),
+        effects=(),
+    )
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=object_id,
+                name="干潟",
+                description="貝を探せる。",
+                object_type=SpotObjectTypeEnum.OTHER,
+                state={
+                    "stock": 0,
+                    "stock_capacity": 3,
+                    "stock_tick": 0,
+                    "stock_refill_interval": 10,
+                },
+                interactions=(interaction,),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    snap = _build_builder(interior, current_tick=20).build_snapshot(1)
+
+    assert snap is not None
+    assert snap.objects[0].interactions[0].condition_hints == ()
