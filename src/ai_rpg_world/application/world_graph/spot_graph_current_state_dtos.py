@@ -161,6 +161,16 @@ class SpotGraphNearbyEntityEntry:
     # 見せず、バンドだけを渡す設計 (docs/memory_system 系の停滞感 UX 判断)。
     # fatigue_level と対称に「常時見えている」state として扱う。
     stagnation_band: str = STAGNATION_PRESSURE_BAND_NONE
+    # 行動不能 (is_down / is_dead) の相手が持っているものの表示名。
+    #
+    # 実 run のボトルネックが背景にある。山頂で仲間が倒れ、その荷物 (狼煙に要る
+    # 流木) を回収できずに救助が失敗した。回収の手段を足す前に「誰が何を持った
+    # まま倒れているのか」が見えないことを解く。
+    #
+    # 行動不能の相手についてのみ埋める。起きて動いている相手の持ち物まで常時
+    # 見えると窃盗が作業になって質感が薄れるので、奪う前に倒す必要が生まれる
+    # 形にする (ユーザ確定)。
+    carried_item_names: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

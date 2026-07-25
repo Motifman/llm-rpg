@@ -643,6 +643,24 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 if not is_dead and not entry.is_down
                 else ""
             )
+            # 行動不能 (死亡 / ダウン) の相手が持っているものを見せる。
+            #
+            # 実 run では、山頂で倒れた仲間が狼煙に要る流木を持ったままで、
+            # それが見えないまま救助に失敗した。「誰が何を持ったまま倒れて
+            # いるのか」が読めれば、起こしに行くか荷を引き受けるかを選べる。
+            #
+            # 何も持っていない場合も明示する。表示が無いだけだと「持っていない」
+            # のか「見えていない」のか区別がつかず、確かめるために 1 ターン
+            # 無駄にする。
+            #
+            # 起きて動いている相手には出さない。常時見えると窃盗が作業になり、
+            # 奪う前に倒す必要が生まれる形の方が筋が良い (ユーザ確定)。
+            carried_suffix = ""
+            if is_dead or entry.is_down:
+                carried = tuple(getattr(entry, "carried_item_names", ()) or ())
+                carried_suffix = (
+                    f" 〔{'、'.join(carried)}〕" if carried else " 〔手ぶら〕"
+                )
             # PR4 (Encounter Memory): familiarity 注記 (= 「初めて会った」)。
             # display_name (= 表示名 / 安定名) で encounter を引く。is_down /
             # fatigue suffix と併存させたいので suffix の後に追加する。
@@ -655,7 +673,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # 「``""`` 内が渡すべき値」規約を満たす。
             lines.append(
                 f"  - \"{disambiguated_name}\""
-                f"{suffix}{give_item_suffix}{familiarity_suffix}"
+                f"{suffix}{carried_suffix}{give_item_suffix}{familiarity_suffix}"
             )
             collector.add(
                 label,
