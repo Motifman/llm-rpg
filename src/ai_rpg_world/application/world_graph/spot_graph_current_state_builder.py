@@ -394,6 +394,43 @@ class SpotGraphCurrentStateBuilder:
         """
         self._dead_player_checker = checker
 
+    def _carried_item_names_of_fallen(
+        self, entity_id: int, *, is_incapacitated: bool
+    ) -> tuple:
+        """行動不能な相手が持っているものの表示名を返す。
+
+        起きて動いている相手には空を返す。持ち物が常時見えると窃盗が作業に
+        なって質感が薄れるので、奪う前に倒す必要が生まれる形にする (ユーザ確定)。
+
+        inventory builder が注入されていない構成 (minimal wiring / 一部テスト)
+        では空に縮退する。ここは「見せる情報が増えない」だけで、行動が黙って
+        失敗する類の縮退ではない。
+        """
+        if not is_incapacitated or self._inventory_builder is None:
+            return ()
+        try:
+            entries = self._inventory_builder(PlayerId(entity_id))
+        except Exception:
+            logger.warning(
+                "inventory_builder raised while listing carried items of "
+                "fallen player entity_id=%s; showing nothing",
+                entity_id,
+                exc_info=True,
+            )
+            return ()
+        # 数量を併記する。狼煙に流木が何本要るか、という判断に効くため
+        # (自分の所持品欄も同じく数量つきで出ている)。
+        names: list[str] = []
+        seen: set[str] = set()
+        for entry in entries or ():
+            name = str(getattr(entry, "name", "") or "").strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            quantity = getattr(entry, "quantity", 1)
+            names.append(f"{name} x{quantity}" if quantity and quantity > 1 else name)
+        return tuple(names)
+
     def _resolve_is_dead(self, entity_id: int) -> bool:
         """entity_id の player が終局 DEAD (復活不可) かを checker から引く。
 
@@ -958,6 +995,10 @@ class SpotGraphCurrentStateBuilder:
                     is_dead=other_is_dead,
                     fatigue_level=other_fatigue_level,
                     stagnation_band=other_stagnation_band,
+                    carried_item_names=self._carried_item_names_of_fallen(
+                        int(other_eid),
+                        is_incapacitated=other_is_down or other_is_dead,
+                    ),
                 ))
 
         inventory_items: tuple[SpotGraphInventoryItemEntry, ...] = ()
