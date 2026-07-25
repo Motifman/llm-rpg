@@ -28,6 +28,18 @@ def _scenario_with_player_interactions(*defs: dict) -> dict:
 
 
 def _take_def(**overrides) -> dict:
+    """「倒れた相手から 1 つ奪う」の完全形。
+
+    fixture であると同時に、シナリオ作者がそのまま写せる canonical な例に
+    しておく。奪うは **2 つの効果の対**で書く — 対象から REMOVE_ITEM し、
+    行為者へ GIVE_ITEM する。片方だけだと物が消えるか湧くかになる。
+
+    品目は ``interaction_parameters`` から実行時に決める。参照するキーは
+    条件が ``item_spec_id_parameter_key``、効果が
+    ``parameters.item_spec_id_parameter`` で、どちらも同じキーを指す。LLM は
+    品目を**名前**で渡し (``parameters={"item": "太い流木"}``)、名前から
+    spec id への解決は application 層が対象のインベントリを見て行う。
+    """
     base = {
         "action_name": "take",
         "display_label": "持ち物を奪う",
@@ -35,14 +47,24 @@ def _take_def(**overrides) -> dict:
             {
                 "condition_type": "TARGET_PLAYER_IS_INCAPACITATED",
                 "failure_message": "相手は起きている。奪えない。",
-            }
+            },
+            {
+                "condition_type": "TARGET_HAS_ITEM",
+                "item_spec_id_parameter_key": "item_spec_id",
+                "failure_message": "相手はそれを持っていない。",
+            },
         ],
         "effects": [
             {
                 "effect_type": "REMOVE_ITEM",
                 "target": "TARGET_PLAYER",
-                "parameters": {"from_parameter": "item_label"},
-            }
+                "parameters": {"item_spec_id_parameter": "item_spec_id"},
+            },
+            {
+                "effect_type": "GIVE_ITEM",
+                "target": "ACTOR",
+                "parameters": {"item_spec_id_parameter": "item_spec_id"},
+            },
         ],
     }
     base.update(overrides)
