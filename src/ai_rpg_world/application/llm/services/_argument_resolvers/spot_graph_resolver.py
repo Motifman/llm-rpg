@@ -242,6 +242,14 @@ def _resolve_target_with_display_name_fallback(
             f"{label_name}が指定されていません。",
             invalid_label_code,
         )
+    # NOTE: 本ヘルパを ``resolve_target`` の上に載せ替えようとして失敗した経緯を
+    # 残す。``kind`` と ``expected_types`` の **不一致が意図的に使われている**
+    # 呼び出し元がある (pickup_item は ``kind="ground_item"`` +
+    # ``expected_types=(InventoryToolRuntimeTargetDto,)`` で「所持アイテムとして
+    # 解決させてから ground_item でないことを自前の文面で弾く」)。
+    # ``resolve_target`` は直接 lookup も ``accept_kinds`` で絞るので、載せ替えると
+    # この経路が汎用文面に落ち、「今いる場所に落ちているものではありません」という
+    # 具体的な案内が消える。統合は呼び出し元の意味論を整理してから行う。
     target: Optional[ToolRuntimeTargetDto] = None
     kind_mismatch = False
     for c in _normalize_label_candidates(label):
@@ -280,6 +288,86 @@ def _resolve_target_with_display_name_fallback(
             invalid_label_code,
         )
     return target
+
+
+def resolve_target(
+    label: str,
+    runtime_context: ToolRuntimeContextDto,
+    *,
+    accept_kinds: tuple,
+    label_name: str,
+    invalid_label_code: str = "INVALID_TARGET_LABEL",
+    invalid_kind_code: str = "INVALID_TARGET_KIND",
+) -> ToolRuntimeTargetDto:
+    """名前から対象を引く唯一の入口。複数の種別を同じ規約で受け付ける。
+
+    対人インタラクションでは 1 つの引数に object と player の両方が入るため、
+    種別ごとに分かれていた解決を 1 本にまとめる。
+
+    それ以前の問題として、**同じ仕事なのに失敗の返し方が食い違っていた**。
+    ``resolve_object_target`` は例外を投げるのに ``resolve_player_target`` は
+    ``None`` を返しており、後者は呼び出し側が None を握り潰せば静かな失敗に
+    なる。本関数は **常に例外で失敗を返す**。
+
+    失敗は 2 種類に分ける。原因が違えば LLM が次に取る手も違うため。
+
+    - ``INVALID_TARGET_LABEL``: その名前が候補に無い → 名前を直す
+      (**受け付ける全種別の候補一覧を文面に含める**)
+    - ``INVALID_TARGET_KIND``: 内部ラベル (``O1`` 等) で直接引けたが種別が違う
+      → 別の対象を選ぶ
+
+    表示名が別種別のものと一致した場合は ``INVALID_TARGET_KIND`` にせず
+    ``INVALID_TARGET_LABEL`` にする。KIND の文面には候補一覧が付かないため、
+    「その名前は別の種類だ」と正確に言う代わりに「では何が書けるのか」を
+    失うことになり、LLM が次の一手を選べなくなるため。
+
+    候補一覧は ``accept_kinds`` の**全種別**から集める。object だけ / player
+    だけを挙げると「他に何を書けばよいか」が分からず同じ失敗を繰り返す。
+
+    Args:
+        accept_kinds: 受け付ける ``ToolRuntimeTargetDto.kind`` の tuple
+        label_name: エラーメッセージに含める日本語名 (例: ``"対象の名前"``)
+
+    Raises:
+        ToolArgumentResolutionException: 解決できないとき
+    """
+    if not isinstance(label, str) or not label.strip():
+        raise ToolArgumentResolutionException(
+            f"{label_name}が指定されていません。",
+            invalid_label_code,
+        )
+
+    kind_mismatch = False
+    for candidate in _normalize_label_candidates(label):
+        hit = runtime_context.targets.get(candidate)
+        if hit is not None:
+            if hit.kind in accept_kinds:
+                return hit
+            kind_mismatch = True
+            continue
+        for kind in accept_kinds:
+            found = _find_target_by_display_name(
+                runtime_context, kind=kind, display_name=candidate
+            )
+            if found is not None:
+                return found
+
+    if kind_mismatch:
+        raise ToolArgumentResolutionException(
+            f"{label_name}として使えない値です: {label}",
+            invalid_kind_code,
+        )
+    candidates = _candidate_display_names(
+        runtime_context,
+        lambda target: target.kind in accept_kinds,
+    )
+    raise ToolArgumentResolutionException(
+        (
+            f"指定された{label_name}は現在の候補にありません: {label} → "
+            f"{_format_valid_candidates(label_name, candidates)}"
+        ),
+        invalid_label_code,
+    )
 
 
 def resolve_object_target(
@@ -361,30 +449,31 @@ def resolve_sub_location_target(
 def resolve_player_target(
     label: str,
     runtime_context: ToolRuntimeContextDto,
-) -> Optional[ToolRuntimeTargetDto]:
-    """whisper target_label を spot_graph_player target に解決する。
+) -> ToolRuntimeTargetDto:
+    """target_label を spot_graph_player target に解決する。
 
-    Issue #269 + #276: 「P1」のラベル / 「リン」の display_name / 「P1 (リン)」
-    の連結形のいずれでも引ける。見つからなければ None (空文字も None)。
+    「P1」のラベル / 「リン」の display_name / 「P1 (リン)」の連結形のいずれでも
+    引ける (Issue #269 + #276)。
 
-    world_runtime の ``_handle_speech`` whisper 経路で使う。本家側からは現状
-    呼ばれていないが、後続で whisper resolver を統合する際の seed。
+    かつては同等のループを手書きし、**見つからなければ `None` を返して**いた。
+    兄弟の ``resolve_object_target`` は例外を投げるので、同じ「名前から対象を
+    引く」仕事なのに失敗の返し方が食い違っており、呼び出し側が None を握り
+    潰せば静かな失敗になる状態だった。``resolve_target`` に寄せて **例外で
+    失敗を返す** ようにした。
+
+    None が欲しい呼び出し元 (whisper のように独自の失敗文面を組み立てたい側)
+    は、例外を捕まえて自分で変換する。「暗黙に None」ではなく「明示的に
+    変換している」ことがコード上で見えるようにするため。
+
+    Raises:
+        ToolArgumentResolutionException: 解決できないとき
     """
-    if not label:
-        return None
-    direct = runtime_context.targets.get(label)
-    if direct is not None and direct.player_id is not None:
-        return direct
-    for c in _normalize_label_candidates(label):
-        hit = runtime_context.targets.get(c)
-        if hit is not None and hit.player_id is not None:
-            return hit
-        for t in runtime_context.targets.values():
-            if getattr(t, "kind", None) != "spot_graph_player":
-                continue
-            if t.display_name == c and t.player_id is not None:
-                return t
-    return None
+    return resolve_target(
+        label,
+        runtime_context,
+        accept_kinds=("spot_graph_player",),
+        label_name="相手の名前",
+    )
 
 
 def _find_target_by_display_name(
@@ -626,21 +715,14 @@ class SpotGraphArgumentResolver:
                 "渡す相手の名前が指定されていません。",
                 "INVALID_TARGET_LABEL",
             )
+        # resolve_player_target は解決できなければ例外を投げる (候補一覧つき)。
+        # 以前はここで None を受けて同等の例外へ変換していたが、二重に候補を
+        # 組み立てる必要は無くなった。
         player_target = resolve_player_target(target_player_label, runtime_context)
-        if player_target is None or player_target.player_id is None:
-            candidates = _candidate_display_names(
-                runtime_context,
-                lambda target: (
-                    isinstance(target, PlayerToolRuntimeTargetDto)
-                    and target.player_id is not None
-                ),
-            )
+        if player_target.player_id is None:
             raise ToolArgumentResolutionException(
-                (
-                    f"指定された相手の名前が現在の候補にありません: {target_player_label} → "
-                    f"{_format_valid_candidates('相手', candidates)}"
-                ),
-                "INVALID_TARGET_LABEL",
+                f"この名前は渡す相手として扱えません: {target_player_label}",
+                "INVALID_TARGET_KIND",
             )
 
         return _with_inner_thought(
