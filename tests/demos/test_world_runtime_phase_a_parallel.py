@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-import time
+import threading
 
 import pytest
 
@@ -73,27 +73,42 @@ class TestPhaseAParallelExecution:
     """Phase A の LLM 呼び出しが ThreadPoolExecutor で並列化されること。
 
     Phase B (世界 mutation) も実行に時間がかかるため、E2E で run_scheduled_turns
-    全体の wall time を測ると Phase B のシリアル時間で速度差が薄まる。ここでは
-    run_phase_a を 4 並列で直接呼んで wall time を観察する (LLM 呼び出し自体の
-    並列化を分離して計測)。
+    全体を見ると Phase B のシリアル処理で信号が薄まる。ここでは run_phase_a を
+    4 並列で直接呼び、LLM stub 側で同時に invoke へ入った数を記録する。
     """
 
     def test_calls_four_run_phase_four_column(
         self, monkeypatch, tmp_path: Path
     ) -> None:
-        """run phase a を 4 並列で呼ぶと 4倍速に近づく。"""
+        """run phase a を 4 並列で呼ぶと LLM 呼び出しが実際に重なって走る。"""
         from concurrent.futures import ThreadPoolExecutor
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
-        class _SlowStubLlmClient:
-            """各 invoke で 100ms スリープしてから wait を返す stub。"""
+        class _OverlappingStubLlmClient:
+            """invoke に同時入場した最大数を記録する stub。"""
+
+            def __init__(self, expected_calls: int) -> None:
+                self._expected_calls = expected_calls
+                self._condition = threading.Condition()
+                self._active = 0
+                self._entered = 0
+                self.max_active = 0
 
             def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None) -> dict:
-                time.sleep(0.1)
+                with self._condition:
+                    self._active += 1
+                    self._entered += 1
+                    self.max_active = max(self.max_active, self._active)
+                    self._condition.notify_all()
+                    self._condition.wait_for(
+                        lambda: self._entered >= self._expected_calls,
+                        timeout=1.0,
+                    )
+                    self._active -= 1
+                    self._condition.notify_all()
                 return {"name": "wait", "arguments": {"reason": "test"}}
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
-        state.llm_wiring.llm_client = _SlowStubLlmClient()
         wiring = state.llm_wiring
         player_ids = [
             PlayerId(int(sp.player_id))
@@ -106,27 +121,13 @@ class TestPhaseAParallelExecution:
         for pid in set(sample):
             wiring.run_phase_a(pid)  # warm-up: drain buffer + lazy init
 
-        # serial: 4 連続呼び出し → ~400ms
-        t0 = time.monotonic()
-        for pid in sample:
-            wiring.run_phase_a(pid)
-        serial_elapsed = time.monotonic() - t0
+        llm_client = _OverlappingStubLlmClient(expected_calls=len(sample))
+        state.llm_wiring.llm_client = llm_client
 
-        # parallel: ThreadPool で 4 並列 → ~100ms
-        t0 = time.monotonic()
         with ThreadPoolExecutor(max_workers=4) as ex:
             list(ex.map(wiring.run_phase_a, sample))
-        parallel_elapsed = time.monotonic() - t0
 
-        speedup = serial_elapsed / parallel_elapsed if parallel_elapsed > 0 else 0
-        # review MEDIUM 2: CI runner が 1 vCPU の場合 thread scheduling overhead で
-        # 2x 程度まで落ちることがある。理論値 4x の半分で十分 "parallel が
-        # 効いている" を示せる閾値にする (regression detection が目的)。
-        assert speedup >= 2.0, (
-            f"Phase A parallelization speedup too low: "
-            f"serial={serial_elapsed:.3f}s parallel={parallel_elapsed:.3f}s "
-            f"speedup={speedup:.2f}x (expected >= 2x)"
-        )
+        assert llm_client.max_active == len(sample)
 
 
 class TestPhaseAExceptionHandling:
