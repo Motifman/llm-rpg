@@ -167,6 +167,13 @@ class TestUseItemDescriptionExplainsQuoteConvention:
             "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
         ), "use_item の item_label に \"\" 規約が説明されていない"
 
+    def test_use_item_description_says_it_does_not_give_to_others(self) -> None:
+        """use_item は自分が使う行為で、相手へ渡すには give_item が必要だと説明する。"""
+        desc = USE_ITEM_DEFINITION.description
+        assert "自分" in desc
+        assert "相手には渡らない" in desc
+        assert "渡すには give_item" in desc
+
     def test_drop_item_label_included(self) -> None:
         """dropitem の itemlabel にクオート規約が含まれる。"""
         desc = self._item_label_desc(DROP_ITEM_DEFINITION)

@@ -633,6 +633,11 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 # 見せず、バンドに応じた様子の suffix だけを足す。
                 stagnation_suffix = _format_stagnation_suffix(entry.stagnation_band)
                 suffix = fatigue_suffix + stagnation_suffix
+            # P1-D (#785 後続): 同席者は give_item の有効な相手でもある。
+            # 発話の相手として名前が見えても、所持アイテムを直接渡せる手がかり
+            # として読まれず、食料や回復アイテムの共有が行動候補に上がらない
+            # 失敗があったため、同席者行に明示する。
+            give_item_suffix = " (give_item で所持アイテムを直接渡せる相手)"
             # PR4 (Encounter Memory): familiarity 注記 (= 「初めて会った」)。
             # display_name (= 表示名 / 安定名) で encounter を引く。is_down /
             # fatigue suffix と併存させたいので suffix の後に追加する。
@@ -644,7 +649,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # whisper / give_item / tend_to_player の target_label 系で
             # 「``""`` 内が渡すべき値」規約を満たす。
             lines.append(
-                f"  - \"{disambiguated_name}\"{suffix}{familiarity_suffix}"
+                f"  - \"{disambiguated_name}\""
+                f"{suffix}{give_item_suffix}{familiarity_suffix}"
             )
             collector.add(
                 label,

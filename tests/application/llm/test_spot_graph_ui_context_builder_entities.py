@@ -76,6 +76,20 @@ class TestNearbyEntityLabeling:
         assert targets["P1"].player_id == 2
         assert targets["P2"].player_id == 3
 
+    def test_same_spot_players_show_give_item_affordance(self) -> None:
+        """同席者の行には、所持アイテムを直接渡せる相手であることを明示する。"""
+        dto = _make_dto(
+            SpotGraphNearbyEntityEntry(entity_id=2, display_name="リン"),
+        )
+
+        result = SpotGraphUiContextBuilder().build("base", dto)
+
+        assert (
+            '- "リン" (give_item で所持アイテムを直接渡せる相手)'
+            in result.current_state_text
+        )
+        assert "他のプレイヤーはこのスポットにいない" not in result.current_state_text
+
     def test_display_name_empty_fallback_label(self) -> None:
         """display name が空でも fallback ラベルになる。"""
         dto = _make_dto(

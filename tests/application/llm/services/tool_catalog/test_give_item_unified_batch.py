@@ -132,6 +132,14 @@ class TestGiveItemDescriptionExplainsBatchFormat:
             or "1つ" in desc
         )
 
+    def test_description_explains_sharing_food_or_healing_items(self) -> None:
+        """give_item は素材だけでなく、食料や回復アイテムを分ける手段だと説明する。"""
+        desc = GIVE_ITEM_DEFINITION.description
+        assert "飢えた" in desc
+        assert "負傷した" in desc
+        assert "食料" in desc
+        assert "回復アイテム" in desc
+
     def test_description_string(self) -> None:
         """description は静的文字列。"""
         desc = GIVE_ITEM_DEFINITION.description
