@@ -13,12 +13,14 @@ from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
 )
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
+from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.service.stock_pool_regen import (
     compute_stock_regen,
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionEffectValidationException,
     InteractionNotAllowedException,
     UnsupportedInteractionEffectException,
 )
@@ -219,6 +221,10 @@ class WorldGraphEffectService:
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
         acting_player_status: Optional["PlayerStatusAggregate"] = None,
+        # 対人 interaction の対象プレイヤー。``target=TARGET_PLAYER`` の effect
+        # が「誰に」効くかを決める。渡さないまま TARGET_PLAYER の effect が来た
+        # ら、行為者へフォールバックせず例外で止める (§静かな失敗の回避)。
+        target_player_status: Optional["PlayerStatusAggregate"] = None,
         # PR-F: interact ツールの自由入力 parameters (パズル用に既存の経路)。
         # WRITE_PLAYER_TEXT が interaction_parameters["text"] を読むために
         # 必要になった、effect 適用段への配線。
@@ -244,6 +250,11 @@ class WorldGraphEffectService:
         messages: List[str] = []
         grant: List[ItemSpecId] = []
         remove: List[ItemSpecId] = []
+        # 対象プレイヤーぶんのバケット。``summaries`` と同じく、返り値タプルに
+        # は載せず in-place append で集める (行為者ぶんの grant / remove が
+        # タプル経由なのは歴史的経緯で、増やす理由が無い)。
+        target_grant: List[ItemSpecId] = []
+        target_remove: List[ItemSpecId] = []
 
         damage_specs: List[DamageSpec] = []
         status_effect_specs: List[StatusEffectSpec] = []
@@ -300,7 +311,9 @@ class WorldGraphEffectService:
                 flags=flags,
                 grant=grant,
                 remove=remove,
-
+                target_grant=target_grant,
+                target_remove=target_remove,
+                target_player_status=target_player_status,
                 messages=messages,
                 damage_specs=damage_specs,
                 status_effect_specs=status_effect_specs,
@@ -349,7 +362,8 @@ class WorldGraphEffectService:
             messages=tuple(messages),
             item_spec_ids_to_grant=tuple(grant),
             item_spec_ids_to_remove=tuple(remove),
-
+            target_item_spec_ids_to_grant=tuple(target_grant),
+            target_item_spec_ids_to_remove=tuple(target_remove),
             damage_specs=tuple(damage_specs),
             status_effect_specs=tuple(status_effect_specs),
             teleport_specs=tuple(teleport_specs),
@@ -366,6 +380,31 @@ class WorldGraphEffectService:
             hidden_effects=hidden,
         )
 
+    @staticmethod
+    def _item_bucket_for(
+        effect: InteractionEffect,
+        *,
+        actor_bucket: List[ItemSpecId],
+        target_bucket: List[ItemSpecId],
+        target_player_status: Optional[PlayerStatusAggregate],
+    ) -> List[ItemSpecId]:
+        """アイテム授受 effect を、行為者ぶんと対象ぶんのどちらに積むか決める。
+
+        ``target=TARGET_PLAYER`` なのに対象プレイヤーが渡されていない呼び出し
+        は、行為者バケットへフォールバックさせずに例外で止める。フォールバック
+        すると「奪ったつもりで自分の持ち物が消える」という、成功として返る
+        誤動作になる。
+        """
+        if effect.target is not EffectTarget.TARGET_PLAYER:
+            return actor_bucket
+        if target_player_status is None:
+            raise InteractionEffectValidationException(
+                f"target=TARGET_PLAYER の {effect.effect_type.value} が、対象"
+                "プレイヤーの無い呼び出しに来ました。対人 interaction 以外で"
+                "TARGET_PLAYER を指定しているか、対象の解決が漏れています。"
+            )
+        return target_bucket
+
     def _apply_effect(
         self,
         *,
@@ -375,7 +414,11 @@ class WorldGraphEffectService:
         flags: set[str],
         grant: List[ItemSpecId],
         remove: List[ItemSpecId],
-
+        # 対象プレイヤーぶんのバケット。返り値タプルには載せず in-place append
+        # で集める (``summaries`` と同じ扱い)。
+        target_grant: List[ItemSpecId],
+        target_remove: List[ItemSpecId],
+        target_player_status: Optional[PlayerStatusAggregate],
         messages: List[str],
         damage_specs: List[DamageSpec],
         status_effect_specs: List[StatusEffectSpec],
@@ -432,8 +475,12 @@ class WorldGraphEffectService:
         if et == InteractionEffectTypeEnum.GIVE_ITEM:
             sid = self._item_spec_from_param(p.get("item_spec_id"))
             quantity = self._read_quantity(p)
+            bucket = self._item_bucket_for(
+                effect, actor_bucket=grant, target_bucket=target_grant,
+                target_player_status=target_player_status,
+            )
             for _ in range(quantity):
-                grant.append(sid)
+                bucket.append(sid)
             return _all
 
         if et == InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE:
@@ -474,8 +521,12 @@ class WorldGraphEffectService:
         if et == InteractionEffectTypeEnum.REMOVE_ITEM:
             sid = self._item_spec_from_param(p.get("item_spec_id"))
             quantity = self._read_quantity(p)
+            bucket = self._item_bucket_for(
+                effect, actor_bucket=remove, target_bucket=target_remove,
+                target_player_status=target_player_status,
+            )
             for _ in range(quantity):
-                remove.append(sid)
+                bucket.append(sid)
             return _all
 
         if et == InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE:

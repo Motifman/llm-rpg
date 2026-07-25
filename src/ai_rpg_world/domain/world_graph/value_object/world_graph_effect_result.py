@@ -30,6 +30,12 @@ class WorldGraphEffectResult:
     messages: Tuple[str, ...]
     item_spec_ids_to_grant: Tuple[ItemSpecId, ...]
     item_spec_ids_to_remove: Tuple[ItemSpecId, ...]
+    # 対人 interaction で「対象プレイヤーの持ち物」に対して適用する分。
+    # 行為者ぶんと同じバケットに混ぜてはいけない。奪う (take) は「対象から
+    # REMOVE_ITEM、行為者に GIVE_ITEM」の 2 効果で書くので、混ざると自分から
+    # 自分へ移す no-op になり、しかも成功として返る (静かな失敗)。
+    target_item_spec_ids_to_grant: Tuple[ItemSpecId, ...] = ()
+    target_item_spec_ids_to_remove: Tuple[ItemSpecId, ...] = ()
     # クロスドメイン効果（application 層が combat/player ドメインへ適用する）
     damage_specs: Tuple[DamageSpec, ...] = ()
     status_effect_specs: Tuple[StatusEffectSpec, ...] = ()
