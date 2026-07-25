@@ -166,6 +166,7 @@ class TestPlayerAudienceQueryServicePlayersAtSpot:
         """spot_graph 注入時の current_spot_of は status.current_spot_id ではなく graph を返す。"""
         status_repo.save(_make_status(1, spot_id=1))
         graph = MagicMock()
+        graph.entity_spot_mapping.return_value = {EntityId.create(1): SpotId(7)}
         graph.get_entity_spot.return_value = SpotId(7)
         spot_graph_repo = MagicMock()
         spot_graph_repo.find_graph.return_value = graph
@@ -178,6 +179,25 @@ class TestPlayerAudienceQueryServicePlayersAtSpot:
 
         assert result == SpotId(7)
         graph.get_entity_spot.assert_called_once_with(EntityId.create(1))
+
+    def test_current_spot_of_returns_none_when_player_is_not_placed_on_graph(
+        self, status_repo
+    ):
+        """status に存在しても graph 上に未配置なら、current_spot_of は None を返す。"""
+        status_repo.save(_make_status(1, spot_id=1))
+        graph = MagicMock()
+        graph.entity_spot_mapping.return_value = {}
+        spot_graph_repo = MagicMock()
+        spot_graph_repo.find_graph.return_value = graph
+        service = PlayerAudienceQueryService(
+            player_status_repository=status_repo,
+            spot_graph_repository=spot_graph_repo,
+        )
+
+        result = service.current_spot_of(PlayerId(1))
+
+        assert result is None
+        graph.get_entity_spot.assert_not_called()
 
 
 class TestPlayerAudienceQueryServiceAllKnownPlayers:

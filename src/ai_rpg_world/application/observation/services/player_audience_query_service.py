@@ -68,5 +68,8 @@ class PlayerAudienceQueryService(IPlayerAudienceQueryPort):
             return None
         if self._spot_graph_repository is not None:
             graph = self._spot_graph_repository.find_graph()
-            return graph.get_entity_spot(EntityId.create(int(player_id.value)))
+            entity_id = EntityId.create(int(player_id.value))
+            if entity_id not in graph.entity_spot_mapping():
+                return None
+            return graph.get_entity_spot(entity_id)
         return status.current_spot_id
