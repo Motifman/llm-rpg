@@ -17,10 +17,13 @@ from __future__ import annotations
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 
 from tests.demos._world_runtime_helpers import (
     FORBIDDEN_LIBRARY_PATH as _FORBIDDEN_LIBRARY,
+    create_world_runtime_session as _create_world_runtime_session,
     name_to_spot_id as _name_to_spot_id,
     teleport as _teleport,
 )
@@ -127,3 +130,34 @@ class TestWorldRuntimeSpeechViaDomainEvent:
             "秘密の話" in e.output.structured.get("content", "")
             for e in rin_entries
         ), "whisper が宛先リンに届いていない"
+
+    def test_whisper_to_dead_target_is_rejected_before_speech_event(
+        self,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        """死者への whisper は届かないため、tool 実行時点で INVALID_WHISPER にする。"""
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": "speak",
+                "arguments": {
+                    "channel": "whisper",
+                    "content": "聞こえるか",
+                    "target_label": "P1",
+                },
+            }
+        )
+        state = _create_world_runtime_session(monkeypatch, tmp_path, stub)
+        runtime = state.runtime
+        reading_room_id = _name_to_spot_id(runtime, "閲覧室")
+        _teleport(runtime, 1, reading_room_id)
+        runtime._player_outcome_registry.set_outcome(
+            PlayerId(2), PlayerOutcomeEnum.DEAD
+        )
+
+        result = state.llm_wiring.run_turn(PlayerId(1))
+
+        assert result.success is False
+        assert result.error_code == "INVALID_WHISPER"
+        assert "死亡しており" in result.message
+        assert "囁きは届きません" in result.message

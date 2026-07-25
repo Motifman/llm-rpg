@@ -2935,6 +2935,29 @@ class _WorldLlmWiring:
                     ),
                 )
             target_player_id_obj = PlayerId(target.player_id)
+            outcome_registry = getattr(self.runtime, "_player_outcome_registry", None)
+            if outcome_registry is not None:
+                from ai_rpg_world.domain.player.enum.player_outcome_enum import (
+                    PlayerOutcomeEnum,
+                )
+
+                if (
+                    outcome_registry.get_outcome(target_player_id_obj)
+                    is PlayerOutcomeEnum.DEAD
+                ):
+                    target_name = getattr(target, "display_name", "") or "相手"
+                    return LlmCommandResultDto(
+                        success=False,
+                        message=(
+                            f"囁きを送れませんでした: {target_name}は死亡しており、"
+                            "囁きは届きません。"
+                        ),
+                        error_code="INVALID_WHISPER",
+                        remediation=(
+                            "channel=whisper は生存している同じスポット内の相手にだけ"
+                            "届きます。別の相手を選ぶか、say / shout を使ってください。"
+                        ),
+                    )
 
         self.runtime.do_speech(player_id, content, channel_enum, target_player_id_obj)
 

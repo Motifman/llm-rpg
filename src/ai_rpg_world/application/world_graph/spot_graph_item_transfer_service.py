@@ -28,8 +28,15 @@ from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceI
 from ai_rpg_world.domain.player.exception.player_exceptions import (
     ItemNotInSlotException,
 )
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
+)
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
+from ai_rpg_world.domain.player.service.player_outcome_registry import (
+    PlayerOutcomeRegistry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
@@ -209,6 +216,26 @@ class TargetInventoryFullError(ItemTransferException):
         self.item_name = item_name
 
 
+class TargetIsDeadError(ItemTransferException):
+    """give_item の相手が死亡済みで、受け取れない。"""
+
+    error_code = "GIVE_ITEM_TARGET_DEAD"
+
+    def __init__(self, *, target_name: str = "相手") -> None:
+        super().__init__(f"{target_name}は死亡しており受け取れない。")
+        self.target_name = target_name
+
+
+class TargetIsDownError(ItemTransferException):
+    """give_item の相手が倒れていて、受け取れない。"""
+
+    error_code = "GIVE_ITEM_TARGET_DOWN"
+
+    def __init__(self, *, target_name: str = "相手") -> None:
+        super().__init__(f"{target_name}は倒れていて受け取れない。")
+        self.target_name = target_name
+
+
 @dataclass(frozen=True)
 class ItemTransferResult:
     """drop/pickup の結果。messages はランナー/UI 用、instance_id は監査用。"""
@@ -235,6 +262,8 @@ class SpotGraphItemTransferService:
         player_inventory_repository: PlayerInventoryRepository,
         spot_interior_repository: ISpotInteriorRepository,
         item_repository: ItemRepository,
+        player_status_repository: Optional[PlayerStatusRepository] = None,
+        player_outcome_registry: Optional[PlayerOutcomeRegistry] = None,
         event_publisher: Optional[object] = None,
     ) -> None:
         # spot-graph 世界では「プレイヤーがどこに居るか」は
@@ -245,9 +274,23 @@ class SpotGraphItemTransferService:
         self._player_inventory_repository = player_inventory_repository
         self._spot_interior_repository = spot_interior_repository
         self._item_repository = item_repository
+        self._player_status_repository = player_status_repository
+        self._player_outcome_registry = player_outcome_registry
         # event_publisher は publish_all([event]) を持つ duck-typed オブジェクト。
         # 注入されない構成では event を発火せず、機械的な状態遷移だけ行う。
         self._event_publisher = event_publisher
+
+    def set_player_status_repository(
+        self, player_status_repository: Optional[PlayerStatusRepository]
+    ) -> None:
+        """target の down 状態を確認する repository を後付けで注入する。"""
+        self._player_status_repository = player_status_repository
+
+    def set_player_outcome_registry(
+        self, player_outcome_registry: Optional[PlayerOutcomeRegistry]
+    ) -> None:
+        """target の DEAD outcome を確認する registry を後付けで注入する。"""
+        self._player_outcome_registry = player_outcome_registry
 
     def set_event_publisher(self, event_publisher: Optional[object]) -> None:
         """event_publisher を後付けで注入する (二段構築用)。
@@ -421,6 +464,23 @@ class SpotGraphItemTransferService:
             spot_id=spot_id,
         )
 
+    def _is_target_dead(self, player_id: PlayerId) -> bool:
+        """DEAD outcome の相手は give_item の受け取り対象にできない。"""
+        registry = self._player_outcome_registry
+        if registry is None:
+            return False
+        return registry.get_outcome(player_id) is PlayerOutcomeEnum.DEAD
+
+    def _is_target_down(self, player_id: PlayerId) -> bool:
+        """is_down の相手は give_item の受け取り対象にできない。"""
+        repository = self._player_status_repository
+        if repository is None:
+            return False
+        status = repository.find_by_id(player_id)
+        if status is None:
+            return False
+        return bool(getattr(status, "is_down", False))
+
     def give_item(
         self,
         from_player_id: PlayerId,
@@ -455,6 +515,10 @@ class SpotGraphItemTransferService:
             raise ItemTransferException(
                 f"inventory not found for recipient {to_player_id.value}"
             )
+        if self._is_target_dead(to_player_id):
+            raise TargetIsDeadError()
+        if self._is_target_down(to_player_id):
+            raise TargetIsDownError()
 
         item_instance_id = from_inv.get_item_instance_id_by_slot(slot_id)
         if item_instance_id is None:

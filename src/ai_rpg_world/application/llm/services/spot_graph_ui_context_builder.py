@@ -636,8 +636,13 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # P1-D (#785 後続): 同席者は give_item の有効な相手でもある。
             # 発話の相手として名前が見えても、所持アイテムを直接渡せる手がかり
             # として読まれず、食料や回復アイテムの共有が行動候補に上がらない
-            # 失敗があったため、同席者行に明示する。
-            give_item_suffix = " (give_item で所持アイテムを直接渡せる相手)"
+            # 失敗があったため、同席者行に明示する。ただし死亡 / ダウン中の
+            # 相手は give_item の対象にできないので affordance を出さない。
+            give_item_suffix = (
+                " (give_item で所持アイテムを直接渡せる相手)"
+                if not is_dead and not entry.is_down
+                else ""
+            )
             # PR4 (Encounter Memory): familiarity 注記 (= 「初めて会った」)。
             # display_name (= 表示名 / 安定名) で encounter を引く。is_down /
             # fatigue suffix と併存させたいので suffix の後に追加する。

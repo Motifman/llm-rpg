@@ -34,6 +34,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_item_specs_to_inventory,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -203,6 +204,18 @@ class TestDropItemEndToEnd:
 # give_item: 同 spot の player に渡す
 # ---------------------------------------------------------------------------
 class TestGiveItemEndToEnd:
+    def _player_target_label(self, runtime, actor: PlayerId, target_pid: PlayerId) -> str:
+        """actor の prompt context から target_pid の player label を引く。"""
+        prompt = runtime.build_full_prompt(actor)
+        ctx = prompt["tool_runtime_context"]
+        for label, target in ctx.targets.items():
+            if (
+                getattr(target, "kind", None) == "spot_graph_player"
+                and getattr(target, "player_id", None) == int(target_pid)
+            ):
+                return label
+        raise AssertionError(f"player_id={int(target_pid)} の label が見つからない")
+
     def test_give_success_target_player(self, session) -> None:
         """give 成功で対象 player に所有が移る。"""
         runtime = session.runtime
@@ -213,18 +226,7 @@ class TestGiveItemEndToEnd:
         _grant(runtime, ada, "coconut")
         item_label = _label_for_item(runtime, ada, "coconut")
 
-        # noah の player_label を ada の context から探す
-        prompt = runtime.build_full_prompt(ada)
-        ctx = prompt["tool_runtime_context"]
-        target_player_label = None
-        for label, target in ctx.targets.items():
-            if (getattr(target, "kind", None) == "spot_graph_player"
-                and getattr(target, "player_id", None) == int(noah)):
-                target_player_label = label
-                break
-        assert target_player_label is not None, (
-            "noah の player label が ada の context に見つからない"
-        )
+        target_player_label = self._player_target_label(runtime, ada, noah)
 
         # PR-α (Y_after_pr639_640 後続): give_item は batch-always に統合。
         # 単発でも ``gives: [...]`` 配列で渡す (要素数 1)。
@@ -253,6 +255,84 @@ class TestGiveItemEndToEnd:
         ada_inv = runtime._player_inventory_repo.find_by_id(ada)
         ada_iids = [iid for _, iid in ada_inv._inventory_slots.items() if iid is not None]
         assert len(ada_iids) == 0
+
+    def test_give_dead_target_returns_learnable_failure(self, session) -> None:
+        """死亡済みの相手へ give_item すると、日本語理由を返して所有は移らない。"""
+        runtime = session.runtime
+        ada = _player_id(runtime, "ada")
+        noah = _player_id(runtime, "noah")
+        _teleport(runtime, int(ada), "shipwreck_beach")
+        _teleport(runtime, int(noah), "shipwreck_beach")
+        _grant(runtime, ada, "coconut")
+        runtime._player_outcome_registry.set_outcome(noah, PlayerOutcomeEnum.DEAD)
+        item_label = _label_for_item(runtime, ada, "coconut")
+        target_player_label = self._player_target_label(runtime, ada, noah)
+
+        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
+            "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            "arguments": {
+                "gives": [
+                    {
+                        "item_label": item_label,
+                        "target_player_label": target_player_label,
+                    },
+                ],
+            },
+        })
+
+        result = session.llm_wiring.run_turn(ada)
+
+        assert result.success is False
+        assert result.error_code == "GIVE_ITEM_TARGET_DEAD"
+        assert "死亡しており受け取れない" in result.message
+        ada_inv = runtime._player_inventory_repo.find_by_id(ada)
+        noah_inv = runtime._player_inventory_repo.find_by_id(noah)
+        assert any(
+            iid is not None for _, iid in ada_inv._inventory_slots.items()
+        )
+        assert all(
+            iid is None for _, iid in noah_inv._inventory_slots.items()
+        )
+
+    def test_give_down_target_returns_learnable_failure(self, session) -> None:
+        """倒れている相手へ give_item すると、日本語理由を返して所有は移らない。"""
+        runtime = session.runtime
+        ada = _player_id(runtime, "ada")
+        noah = _player_id(runtime, "noah")
+        _teleport(runtime, int(ada), "shipwreck_beach")
+        _teleport(runtime, int(noah), "shipwreck_beach")
+        _grant(runtime, ada, "coconut")
+        status = runtime._player_status_repo.find_by_id(noah)
+        status.apply_damage(999)
+        runtime._player_status_repo.save(status)
+        item_label = _label_for_item(runtime, ada, "coconut")
+        target_player_label = self._player_target_label(runtime, ada, noah)
+
+        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
+            "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            "arguments": {
+                "gives": [
+                    {
+                        "item_label": item_label,
+                        "target_player_label": target_player_label,
+                    },
+                ],
+            },
+        })
+
+        result = session.llm_wiring.run_turn(ada)
+
+        assert result.success is False
+        assert result.error_code == "GIVE_ITEM_TARGET_DOWN"
+        assert "倒れていて受け取れない" in result.message
+        ada_inv = runtime._player_inventory_repo.find_by_id(ada)
+        noah_inv = runtime._player_inventory_repo.find_by_id(noah)
+        assert any(
+            iid is not None for _, iid in ada_inv._inventory_slots.items()
+        )
+        assert all(
+            iid is None for _, iid in noah_inv._inventory_slots.items()
+        )
 
 
 # ---------------------------------------------------------------------------
