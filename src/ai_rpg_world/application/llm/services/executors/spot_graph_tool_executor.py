@@ -538,7 +538,7 @@ class SpotGraphToolExecutor:
                         "新しい発見はなかった。"
                         f"{exhausted_hint}"
                         f"既に見えているオブジェクト: {visible_objects}"
-                        " (interact するにはこのオブジェクトの名前を object_label に指定する)"
+                        " (interact するにはこのオブジェクトの名前を target_label に指定する)"
                     )
                 else:
                     message = (

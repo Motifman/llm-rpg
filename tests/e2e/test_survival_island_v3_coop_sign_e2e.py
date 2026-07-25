@@ -8,7 +8,7 @@
 `execute_interaction` を実際の v3_coop scenario 上で叩き、拠点 (campsite) の
 「板切れの掲示」で不在の仲間へ書き置きが届く経路を確認する。
 
-（LLM ツールの `interact` は `object_label` / `action_name` の解決を挟む
+（LLM ツールの `interact` は `target_label` / `action_name` の解決を挟む
 入口の都合上、本テストは application service を直接叩く — これは既存の
 `test_sign_object_app_integration.py` と同じ方針で、v3_coop という実際の
 scenario 上で成立することを確認する点が異なる。）

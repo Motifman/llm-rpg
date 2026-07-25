@@ -102,7 +102,7 @@ class TestCrossTickFailureDetection:
         tick = _TickProvider(start=96)
         svc = self._make(buffer, tick)
         pid = PlayerId(3)
-        args = {"object_label": "東の茂み", "action_name": "harvest_berry"}
+        args = {"target_label": "東の茂み", "action_name": "harvest_berry"}
 
         # 1 回目 (streak=1、cross_tick=1)
         svc.record_and_check(
@@ -162,7 +162,7 @@ class TestCrossTickFailureDetection:
         tick = _TickProvider(start=0)
         svc = self._make(buffer, tick)
         pid = PlayerId(3)
-        args = {"object_label": "湧水の口", "action_name": "drink_water"}
+        args = {"target_label": "湧水の口", "action_name": "drink_water"}
 
         for t in [0, 5, 10]:
             tick.tick = t
@@ -188,7 +188,7 @@ class TestCrossTickFailureDetection:
         tick = _TickProvider(start=0)
         svc = self._make(buffer, tick)
         pid = PlayerId(3)
-        args = {"object_label": "東の茂み", "action_name": "harvest_berry"}
+        args = {"target_label": "東の茂み", "action_name": "harvest_berry"}
 
         # 3 回失敗を 25 tick 間隔で置く (window=20 だと最も古い 2 件は消える)
         for i, t in enumerate([0, 25, 50]):
@@ -213,7 +213,7 @@ class TestCrossTickFailureDetection:
         tick = _TickProvider(start=0)
         svc = self._make(buffer, tick)
         pid = PlayerId(3)
-        args = {"object_label": "東の茂み", "action_name": "harvest_berry"}
+        args = {"target_label": "東の茂み", "action_name": "harvest_berry"}
         # cross_tick 側閾値 3 に達しないよう 2 回だけ
         for t in [0, 5]:
             tick.tick = t
@@ -236,7 +236,7 @@ class TestCrossTickFailureDetection:
         tick = _TickProvider(start=0)
         svc = self._make(buffer, tick)
         pid = PlayerId(3)
-        args = {"object_label": "東の茂み", "action_name": "harvest_berry"}
+        args = {"target_label": "東の茂み", "action_name": "harvest_berry"}
         for t, ec in [
             (0, "INTERACTION_PRECONDITION_FAILED"),
             (5, "INTERACTION_ACTION_NOT_FOUND"),
@@ -262,7 +262,7 @@ class TestCrossTickFailureDetection:
         tick = _TickProvider(start=0)
         svc = self._make(buffer, tick)
         pid = PlayerId(3)
-        args = {"object_label": "東の茂み", "action_name": "harvest_berry"}
+        args = {"target_label": "東の茂み", "action_name": "harvest_berry"}
 
         def fail_at(t: int) -> None:
             tick.tick = t
@@ -311,7 +311,7 @@ class TestCrossTickFailureDetection:
         tick = _TickProvider(start=0)
         svc = self._make(buffer, tick)
         pid = PlayerId(3)
-        args = {"object_label": "東の茂み", "action_name": "harvest_berry"}
+        args = {"target_label": "東の茂み", "action_name": "harvest_berry"}
 
         results = []
         for t in [0, 5, 10]:
@@ -346,7 +346,7 @@ class TestCrossTickFailureDetection:
         result = svc.record_and_check(
             pid,
             TOOL_NAME_SPOT_GRAPH_INTERACT,
-            {"object_label": "東の茂み", "action_name": "harvest_berry"},
+            {"target_label": "東の茂み", "action_name": "harvest_berry"},
             success=False,
             error_code="INTERACTION_PRECONDITION_FAILED",
         )
@@ -366,7 +366,7 @@ class TestCrossTickFailureDetection:
             svc.record_and_check(
                 pid,
                 TOOL_NAME_SPOT_GRAPH_INTERACT,
-                {"object_label": "A", "action_name": "gather"},
+                {"target_label": "A", "action_name": "gather"},
             )
         # cross_tick_failure は発火しない (success 情報がないため failure と
         # 見なせない)。だが同 args を連続 4 回 (INTERACT の threshold=4) 呼べば

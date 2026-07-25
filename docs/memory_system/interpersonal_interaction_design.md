@@ -204,13 +204,32 @@ interact(target_label, action_name, parameters?, say_inline?, inner_thought)
 > 文言の変更は実測で確かめるべき類なので、まず現行形式のまま出し、
 > `INTERACTION_ACTION_NOT_FOUND` の比率で判断する。
 
-**リネームの範囲**: `object_label` は 100 箇所 / 29 ファイルに出る。特に
-`_build_interact_invalid_label_failure` は `arguments["object_label"]` を読み、
-`_list_object_labels` でオブジェクトしか列挙しないので、ここを直さないと
-「見つかりません: (空)」になり §3.4 の親切な文面も出ない。`failure_helpers`
-と `action_summary_format` も追随が要る。プレフィックスキャッシュ (設計判断
- #1) には抵触しない (tick 間の不変性の話であり、リネームは 1 回きりの静的変更)
-が、過去 run との prompt 比較可能性は切れる。
+**リネームの範囲 (実施済み)**: 当初「100 箇所 / 29 ファイル」と見積もったが、
+これは過大だった。実際は `src` に 29 箇所 / 7 ファイル、`tests` に 62 箇所 /
+17 ファイルで、うち**引数を実際に読み書きしている箇所は 6 つ**しかなく、
+残りはコメントと docstring だった。
+
+書き換えが必要だった実質的な箇所:
+
+| 箇所 | 内容 |
+|---|---|
+| `tool_catalog/spot_graph.py` | schema の property 名と `required` |
+| `spot_graph_resolver._resolve_interact` | `args.get(...)` |
+| `runtime_manager._build_interact_invalid_label_failure` | `arguments.get(...)` と文面 |
+| `spot_graph_tool_executor` | explore 空振り時の「interact するには〜」ヒント |
+| `tool_call_loop_guard._TARGET_ARG_KEYS` | 旧 key を削除 (`target_label` は既にあった) |
+
+`_list_object_labels` は**名前を変えていない**。この関数は実際に物体だけを
+列挙しており、本 PR の時点でも対象種別は物体だけなので、名前は事実に合って
+いる。プレイヤーを列挙するようになる PR で改名する。
+
+旧名で呼ばれたときは「対象の名前が見つかりません: (空)」という何も伝えない
+文面になるので、`_build_interact_invalid_label_failure` に**引数名違いを名指し
+する分岐**を足した。
+
+プレフィックスキャッシュ (設計判断 #1) には抵触しない (tick 間の不変性の話で
+あり、リネームは 1 回きりの静的変更) が、過去 run との prompt 比較可能性は
+切れる。
 
 ### 3.4 ID 解決を 1 本にまとめる (前提となるリファクタリング)
 

@@ -120,7 +120,10 @@ _WARNING_TEMPLATES: tuple[str, ...] = (
 
 
 _TARGET_ARG_KEYS: tuple[str, ...] = (
-    "object_label",
+    # ``object_label`` は interact の対象引数が ``target_label`` に改名された
+    # 時点で、どの tool からも渡らなくなったので消した (``target_label`` は
+    # 下に既にある)。使われない key を残すと「対応済みに見えて実は死んでいる
+    # spec」になる。
     "destination_label",
     "target_player_label",
     "item_label",
@@ -568,7 +571,7 @@ class ToolCallLoopGuardService:
         # ないようにする)。抑制 window は failure window と同じ幅で十分。
         last_warns = self._cross_tick_last_warn.setdefault(key, {})
         # code-review MEDIUM 1 反映: window より古い warn 記録は drop する。
-        # unique fingerprint (= object_label が変わるたび別 key) が積み上がる
+        # unique fingerprint (= target_label が変わるたび別 key) が積み上がる
         # 長走 run で、_cross_tick_last_warn が単調増大しないようにする。
         expired = [
             p for p, t in last_warns.items() if (current_tick - t) >= window

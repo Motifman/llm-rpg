@@ -858,7 +858,7 @@ def test_reason_first_gates_on_recent_same_failure_from_action_result_store(
             success=False,
             error_code="OBJECT_CONDITION_NOT_MET",
             tool_name="drink_water",
-            argument_fingerprint='{"object_label":"湧水の口"}',
+            argument_fingerprint='{"target_label":"湧水の口"}',
         )
     client = _reason_first_success_client()
     wiring = _reason_first_wiring(runtime, client)
@@ -900,7 +900,7 @@ def test_reason_first_gates_on_loop_guard_warning_signal_once(
         wiring.tool_call_loop_guard.record_and_check(
             player_id,
             TOOL_NAME_SPOT_GRAPH_INTERACT,
-            {"object_label": "湧水の口"},
+            {"target_label": "湧水の口"},
         )
 
     result = wiring.run_turn(player_id)

@@ -374,10 +374,10 @@ def resolve_object_target(
     label: str,
     runtime_context: ToolRuntimeContextDto,
 ) -> ToolRuntimeTargetDto:
-    """interact 用の object_label を target に解決する。
+    """interact 用の target_label を target に解決する。
 
     Issue #276 経路二重化解消: world_runtime の ``_handle_interact`` と本家
-    ``_resolve_interact`` の object_label → world_object_id 解決を共通化。
+    ``_resolve_interact`` の target_label → world_object_id 解決を共通化。
 
     PR #441: PR #421 / #425 の「名前直書き」refactor に追従し、display_name
     fallback を追加 (実験 #438 で全 interact が INVALID_TARGET_LABEL で失敗
@@ -1025,7 +1025,7 @@ class SpotGraphArgumentResolver:
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
         target = resolve_object_target(
-            args.get("object_label"),  # type: ignore[arg-type]
+            args.get("target_label"),  # type: ignore[arg-type]
             runtime_context,
         )
         action = args.get("action_name", "")

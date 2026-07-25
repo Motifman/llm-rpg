@@ -97,7 +97,7 @@ def test_interact_not_found_lists_valid_object_names() -> None:
     with pytest.raises(ToolArgumentResolutionException) as exc:
         resolver.resolve_args(
             TOOL_NAME_SPOT_GRAPH_INTERACT,
-            {"object_label": "大樫の樹", "action_name": "gather"},
+            {"target_label": "大樫の樹", "action_name": "gather"},
             context,
         )
 
