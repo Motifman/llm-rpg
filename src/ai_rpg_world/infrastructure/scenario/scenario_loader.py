@@ -1396,11 +1396,59 @@ class ScenarioLoader:
                     "(誰も居なければ誰にも観測されない)。"
                     f"visibility を外してください: {raw!r}"
                 )
+        # CHANGE_ATMOSPHERE も同型の静かな失敗を持つ。対象 spot が無いと domain 側
+        # は spec を作らず、enum 名の綴りを間違えても実行時まで気づけない。
+        if effect_type is InteractionEffectTypeEnum.CHANGE_ATMOSPHERE:
+            self._validate_change_atmosphere_params(params, raw)
         return InteractionEffect(
             effect_type=effect_type,
             parameters=params,
             visibility=visibility,
         )
+
+    @staticmethod
+    def _validate_change_atmosphere_params(
+        params: Dict[str, Any], raw: Dict[str, Any]
+    ) -> None:
+        """CHANGE_ATMOSPHERE の対象 spot と enum 値を読み込み時に検証する。
+
+        domain 側は ``spot_id <= 0`` なら spec を作らず、``lighting`` /
+        ``temperature`` の文字列も application 層で enum へ引き当てるまで
+        妥当性が分からない。放置すると「JSON に書いたのに照明が落ちない」
+        「綴りを間違えたまま気づかない」静かな失敗になるので、ここで弾く。
+        """
+        if "spot_id" not in params:
+            raise ScenarioLoadError(
+                "CHANGE_ATMOSPHERE effect requires parameters.target_spot "
+                "(環境を変える spot id)。effect の直下ではなく parameters の中に "
+                f"書いてください: {raw!r}"
+            )
+
+        for key, enum_cls in (
+            ("lighting", LightingEnum),
+            ("temperature", TemperatureEnum),
+        ):
+            value = params.get(key)
+            if value is None:
+                continue
+            if value not in enum_cls.__members__:
+                allowed = ", ".join(sorted(enum_cls.__members__))
+                raise ScenarioLoadError(
+                    f"CHANGE_ATMOSPHERE effect has unknown {key} {value!r}. "
+                    f"使える値: {allowed}: {raw!r}"
+                )
+
+        changed = [
+            key
+            for key in ("lighting", "temperature", "hazard_level", "hazard_description")
+            if params.get(key) is not None
+        ]
+        if not changed:
+            raise ScenarioLoadError(
+                "CHANGE_ATMOSPHERE effect changes nothing. "
+                "lighting / temperature / hazard_level / hazard_description の "
+                f"いずれかを parameters に書いてください: {raw!r}"
+            )
 
     def _parse_scenario_events(
         self,

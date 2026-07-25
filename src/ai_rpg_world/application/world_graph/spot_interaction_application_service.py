@@ -52,6 +52,8 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
@@ -330,6 +332,28 @@ class SpotInteractionApplicationService:
         # 宛先が最終位置になる。
         for teleport in result.teleport_specs:
             graph.teleport_entity(entity_id, SpotId.create(teleport.target_spot_id))
+
+        # CHANGE_ATMOSPHERE: 明るさ・気温・危険度の変化を実際に適用する。
+        # teleport と同じく、以前はここに消費者が居らず spec を捨てていたため
+        # 「JSON に書いても照明が落ちない」dead code だった。lighting /
+        # temperature の文字列は loader が enum 名として検証済みなので、ここでは
+        # 変換して渡すだけでよい (未知の値は読み込み時に落ちている)。
+        for atmosphere in result.atmosphere_update_specs:
+            graph.update_spot_atmosphere(
+                SpotId.create(atmosphere.spot_id),
+                lighting=(
+                    LightingEnum[atmosphere.lighting]
+                    if atmosphere.lighting is not None
+                    else None
+                ),
+                temperature=(
+                    TemperatureEnum[atmosphere.temperature]
+                    if atmosphere.temperature is not None
+                    else None
+                ),
+                hazard_level=atmosphere.hazard_level,
+                hazard_description=atmosphere.hazard_description,
+            )
 
         if result.item_spec_ids_to_grant:
             grant_item_specs_to_inventory(

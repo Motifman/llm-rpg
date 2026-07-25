@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Callable, Iterable, Optional
 
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
@@ -23,6 +24,8 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
     PassageChangeCauseEnum,
 )
@@ -171,6 +174,37 @@ class SpotGraphScenarioEventStageService:
                 # Issue #183: scenario_event は世界タイマ / scripted trigger 由来。
                 # 起点に明確な actor が居ないため None。
                 actor_entity_id=None,
+            )
+
+        # CHANGE_ATMOSPHERE: interaction 経由と同じ効果を scenario_event からも
+        # 適用する。停電や気温低下は「誰かが操作した結果」だけでなく「時刻や
+        # 条件で世界の側が変わる」形でも起きるので、こちらの入口を塞いだままだと
+        # ON_TICK で照明を落とす表現が書けない。
+        for spec in effect_result.atmosphere_update_specs:
+            graph.update_spot_atmosphere(
+                SpotId.create(spec.spot_id),
+                lighting=(
+                    LightingEnum[spec.lighting] if spec.lighting is not None else None
+                ),
+                temperature=(
+                    TemperatureEnum[spec.temperature]
+                    if spec.temperature is not None
+                    else None
+                ),
+                hazard_level=spec.hazard_level,
+                hazard_description=spec.hazard_description,
+            )
+
+        # 未消費の spec を黙って捨てない。scenario_event には行為者が居ないため、
+        # TELEPORT_ENTITY (誰を飛ばすのか決まらない) はこの経路では意味を持てない。
+        # 書いたのに何も起きないまま気づけない状態を避けるため警告を残す。
+        if effect_result.teleport_specs:
+            logging.getLogger(__name__).warning(
+                "scenario_event %s declares TELEPORT_ENTITY but scenario events have "
+                "no acting player; the teleport is ignored "
+                "(移動させたい対象が決まらないため、この効果は scenario_events では"
+                "使えません。interaction 側に書いてください)",
+                getattr(event, "event_id", "<unknown>"),
             )
 
         for spec in effect_result.destroy_connection_specs:

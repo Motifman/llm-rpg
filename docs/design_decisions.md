@@ -959,4 +959,55 @@ HIDDEN) で制御する案。物理的にその場に居る者が「消えた人
 側で移動状態を先に解消すること。** 症状は
 `tests/domain/world_graph/aggregate/test_spot_graph_teleport_entity.py` の
 `TestTeleportVersusConnectionMovement` が固定している。
-||||||| b16e0089
+
+## 32. 環境変化 (CHANGE_ATMOSPHERE) は部分更新にする
+
+`CHANGE_ATMOSPHERE` 効果 (停電・気温変化・危険度上昇) の適用にあたり、
+`SpotAtmosphere` をまるごと置き換えるか、指定項目だけ差し替えるかを選んだ。
+
+**採用**: 部分更新。`update_spot_atmosphere` は渡された項目だけを差し替え、
+指定しなかった項目 (`sound_ambient` / `smell` / `sound_intensity` など) は元の
+値を保つ。停電で明るさだけ変えたいときに環境音や匂いまで既定値へ巻き戻ると、
+その spot の描写が静かに壊れるため。`SpotNode` も `SpotAtmosphere` も frozen
+なので `dataclasses.replace` を二段重ねる。
+
+**棄却**: spec の内容でまるごと差し替える案。シナリオ作者が「明るさだけ変えた
+つもり」で全部を消す事故が避けられない。
+
+### 未設定 spot の既定は BRIGHT
+
+`atmosphere` を持たない spot に `hazard_level` だけを指定した場合、明るさは
+既定の `BRIGHT` が入る。「未設定 = 明るい」を安全側の既定とする — 暗いと視認
+(`monster_visibility_service`) や戦闘の判定が変わるので、書かれていない spot を
+勝手に暗くしない。
+
+なお `hazard_description` を `None` に戻す (クリアする) 用途には非対応。
+部分更新は「渡した項目だけ差し替える」ため、`None` は「指定なし」と区別できない。
+クリアが必要になったら別途 sentinel を設計する。
+
+### イベントは発火しない
+
+環境変化の観測は interaction 側の `AppliedEffectSummary(kind=ATMOSPHERE_UPDATE)`
+が `SpotPublicEffectObservedEvent` として同 spot の第三者へ届ける。集約側でも
+イベントを出すと同じ変化が二重に観測される (#812 で直した interact の二重発火と
+同型)。
+
+### 読み込み時に弾くもの
+
+`#31` (テレポート) と同じ方針で、書いたのに何も起きない経路を loader で塞ぐ。
+
+- `parameters.target_spot` が無い: domain 側は `spot_id <= 0` なら spec を作らない
+- `lighting` / `temperature` が enum 名として未知: 綴り間違いが実行時まで気づけない
+- 変更項目が 1 つも無い: 何も変えない宣言は書き忘れとみなす
+
+いずれも `ScenarioLoadError`。効かない設定を黙って受け取らない。
+
+### interaction と scenario_events の両方から適用する
+
+停電や気温低下は「誰かが操作した結果」だけでなく「時刻や条件で世界の側が変わる」
+形でも起きる。`SpotGraphScenarioEventStageService` でも `atmosphere_update_specs`
+を消費し、ON_TICK で照明を落とす表現を書けるようにした。
+
+一方 `TELEPORT_ENTITY` は scenario_events では意味を持てない (行為者が居ないので
+誰を飛ばすか決まらない)。黙って捨てると気づけないので、この経路で宣言された
+場合は警告ログを残す。
