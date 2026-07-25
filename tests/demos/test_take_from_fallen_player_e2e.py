@@ -317,3 +317,53 @@ class TestTheftIsObserved:
         prose = self._theft_observations(rt, _BYSTANDER)[0].output.prose
         assert "カイト" in prose and "リン" in prose
         assert "持ち物を奪う" in prose
+
+
+class TestVictimLearnsOnWaking:
+    """奪われた本人が、意識を取り戻したときに何をされたか読める。
+
+    倒れている player は observation の宛先から一律に外れる (#621 Phase 4)。
+    奪えるのは倒れている相手だけなので、被害者はその瞬間には観測できない。
+    気を失っている間の出来事を知覚しないのは筋が通るが、起きたあとも永久に
+    分からないままだと荷が減った理由を本人が説明できない。
+    """
+
+    def _post_hoc_prose(self, rt, player_id: PlayerId) -> str:
+        return "\n".join(
+            e.output.prose or ""
+            for e in rt._obs_buffer.get_observations(player_id)
+            if e.output.structured.get("kind") == "player_revived_post_hoc"
+        )
+
+    def _revive(self, rt, player_id: PlayerId) -> None:
+        status = rt._player_status_repo.find_by_id(player_id)
+        status.revive(hp_recovery_rate=0.4, caregiver_player_id=_ACTOR)
+        events = list(status.get_events())
+        status.clear_events()
+        rt._player_status_repo.save(status)
+        rt._speech_event_publisher.publish_all(events)
+
+    def test_the_victim_reads_what_was_done_to_them(self, runtime) -> None:
+        """目覚めの観測に、誰に何をされたかが出る。"""
+        _, item_name = _give_victim_an_item(runtime)
+        _knock_out(runtime, _VICTIM)
+        runtime.do_interact_with_player(
+            _ACTOR, _VICTIM, "take",
+            interaction_parameters={"item": item_name},
+        )
+
+        self._revive(runtime, _VICTIM)
+
+        prose = self._post_hoc_prose(runtime, _VICTIM)
+        assert "持ち物を奪う" in prose, prose
+        assert "形跡" in prose
+
+    def test_waking_without_incidents_says_nothing_extra(self, runtime) -> None:
+        """何もされずに起きたときは、余計な文が付かない。"""
+        _knock_out(runtime, _VICTIM)
+
+        self._revive(runtime, _VICTIM)
+
+        prose = self._post_hoc_prose(runtime, _VICTIM)
+        assert prose, "目覚めの観測そのものは出る"
+        assert "形跡" not in prose
