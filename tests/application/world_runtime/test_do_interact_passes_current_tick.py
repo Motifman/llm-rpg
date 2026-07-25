@@ -62,15 +62,31 @@ class TestDoInteractPassesCurrentTick:
         _, kwargs = rt._interaction_service.execute_interaction.call_args
         assert kwargs.get("current_tick") == WorldTick(42)
 
-    def test_interacted_event_carries_witness_observation_message(self) -> None:
-        """do_interact は成功イベントへ目撃者用文面と表示ラベルを載せる。"""
+    def test_do_interact_does_not_add_duplicate_interacted_event(self) -> None:
+        """do_interact は SpotObjectInteractedEvent を自分では積まない (二重発火の防止)。
+
+        成功イベントの組み立ては ``SpotInteractionApplicationService`` 側に一本化
+        されている。かつては do_interact でも 2 件目を積んでいたが、その event は
+        ``witness_policy`` を渡しておらず既定の SAME_SPOT になるため、ACTOR_ONLY
+        の秘匿行為が同スポットの第三者に漏れ、SAME_SPOT では同じ観測が 2 件届いて
+        いた。目撃者用文面と表示ラベルが正規経路の event に載ることは
+        tests/application/world_graph/test_spot_graph_event_publication.py の
+        ``test_publishes_spot_object_interacted_event`` が固定している。
+        """
         rt = _fake_runtime()
         WorldRuntime.do_interact(rt, PlayerId(1), "shellfish_rocks", "gather_shellfish")
 
-        event = rt._spot_graph_repo.find_graph.return_value.add_event.call_args[0][0]
-        assert isinstance(event, SpotObjectInteractedEvent)
-        assert event.action_display_label == "貝を採る"
-        assert event.witness_observation_message == "{actor}が岩棚で貝を採った。"
+        add_event = rt._spot_graph_repo.find_graph.return_value.add_event
+        interacted = [
+            call.args[0]
+            for call in add_event.call_args_list
+            if call.args and isinstance(call.args[0], SpotObjectInteractedEvent)
+        ]
+        assert interacted == [], (
+            "do_interact が SpotObjectInteractedEvent を積んでいる。"
+            "witness_policy を持たない 2 件目が復活すると ACTOR_ONLY が貫通する。"
+            f"events={interacted}"
+        )
 
     def test_interact_success_runs_distant_cue_boundary_detection(self) -> None:
         """do_interact 成功後は、object state 変更で active 化した cue を即時検出する。"""

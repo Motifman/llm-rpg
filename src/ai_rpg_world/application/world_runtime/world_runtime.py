@@ -1983,24 +1983,16 @@ class WorldRuntime:
         intention: Optional[str] = None,
         emotion_hint: Optional[str] = None,
     ) -> SpotInteractionResultDto:
-        from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotObjectInteractedEvent
         obj_int = self.id_mapper.get_int("object", object_str_id)
         obj_id = SpotObjectId.create(obj_int)
-        graph = self._spot_graph_repo.find_graph()
-        eid = EntityId.create(int(player_id))
-        spot_id = graph.get_entity_spot(eid)
         obj_label = self._object_display_name_at_player_spot(player_id, object_str_id)
         action_ja = self._interaction_action_label_ja(action_name)
-        action_display_label = ""
-        witness_observation_message = ""
-        interior = self._spot_interior_repo.find_by_spot_id(spot_id)
-        obj = interior.get_object(obj_id) if interior is not None else None
-        if obj is not None:
-            for idef in obj.interactions:
-                if idef.action_name == action_name:
-                    action_display_label = idef.display_label
-                    witness_observation_message = idef.witness_observation_message or ""
-                    break
+        # NOTE: graph / entity_id / spot_id / display_label /
+        # witness_observation_message をここで引き直していたが、それらは 2 件目の
+        # SpotObjectInteractedEvent を組み立てるためだけに使われていた。その発火は
+        # 下記 NOTE のとおり削除したので、引き直しも不要になった (canonical な
+        # 解決は SpotInteractionApplicationService 側が行う)。obj_label /
+        # action_ja は _record_action_result 用なので残す。
         # 備蓄プール (OBJECT_STOCK_AT_LEAST / CONSUME_OBJECT_STOCK) の lazy 再生は
         # 現在 tick が無いと働かない。LLM の採取主経路 (spot_graph_interact →
         # do_interact) はここを通るので、current_tick を必ず渡す。渡し忘れると
@@ -2012,18 +2004,17 @@ class WorldRuntime:
             current_tick=WorldTick(self.current_tick()),
         )
         result_text = "; ".join(result.messages) if result.messages else "完了"
-        graph = self._spot_graph_repo.find_graph()
-        graph.add_event(SpotObjectInteractedEvent.create(
-            aggregate_id=graph._graph_id,
-            aggregate_type="SpotGraphAggregate",
-            entity_id=eid,
-            spot_id=spot_id,
-            object_id=obj_id,
-            action_name=action_name,
-            result_message=result_text,
-            action_display_label=action_display_label,
-            witness_observation_message=witness_observation_message,
-        ))
+        # NOTE: ここで SpotObjectInteractedEvent を積んではいけない。
+        # `SpotInteractionApplicationService.execute_interaction` が既に同じ
+        # event を **witness_policy つきで** 組み立てて publish している
+        # (event_publisher は create_world_runtime で無条件に注入される)。
+        # かつてはここでも 2 件目を積んでいたが、その event は witness_policy を
+        # 渡しておらず既定の SAME_SPOT になるため、
+        #   - ACTOR_ONLY を宣言した interaction が同スポットの第三者に漏れる
+        #     (= 秘匿行為が成立しない)
+        #   - SAME_SPOT の interaction では同じ観測が 2 件届く (= 目撃の水増し)
+        # という 2 つの破綻を起こしていた。回帰は
+        # tests/demos/test_world_runtime_interact_witness_policy.py が固定する。
         self._process_graph_events()
         self._evaluate_distant_cue_appearances()
         # SpotInteractionResultDto は現状 success フラグを持たない (messages から
