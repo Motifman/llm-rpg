@@ -74,7 +74,7 @@ class TestPhaseAParallelExecution:
 
     Phase B (世界 mutation) も実行に時間がかかるため、E2E で run_scheduled_turns
     全体を見ると Phase B のシリアル処理で信号が薄まる。ここでは run_phase_a を
-    4 並列で直接呼び、LLM stub 側で同時に invoke へ入った数を記録する。
+    4 並列で直接呼び、LLM stub 側の barrier を全員が通過できることを確認する。
     """
 
     def test_calls_four_run_phase_four_column(
@@ -84,28 +84,18 @@ class TestPhaseAParallelExecution:
         from concurrent.futures import ThreadPoolExecutor
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
-        class _OverlappingStubLlmClient:
-            """invoke に同時入場した最大数を記録する stub。"""
+        class _BarrierStubLlmClient:
+            """invoke に入った全 worker が barrier を通過したことを記録する stub。"""
 
             def __init__(self, expected_calls: int) -> None:
-                self._expected_calls = expected_calls
-                self._condition = threading.Condition()
-                self._active = 0
-                self._entered = 0
-                self.max_active = 0
+                self._barrier = threading.Barrier(expected_calls)
+                self._lock = threading.Lock()
+                self.passed_calls = 0
 
             def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None) -> dict:
-                with self._condition:
-                    self._active += 1
-                    self._entered += 1
-                    self.max_active = max(self.max_active, self._active)
-                    self._condition.notify_all()
-                    self._condition.wait_for(
-                        lambda: self._entered >= self._expected_calls,
-                        timeout=1.0,
-                    )
-                    self._active -= 1
-                    self._condition.notify_all()
+                self._barrier.wait(timeout=5.0)
+                with self._lock:
+                    self.passed_calls += 1
                 return {"name": "wait", "arguments": {"reason": "test"}}
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
@@ -121,13 +111,13 @@ class TestPhaseAParallelExecution:
         for pid in set(sample):
             wiring.run_phase_a(pid)  # warm-up: drain buffer + lazy init
 
-        llm_client = _OverlappingStubLlmClient(expected_calls=len(sample))
+        llm_client = _BarrierStubLlmClient(expected_calls=len(sample))
         state.llm_wiring.llm_client = llm_client
 
         with ThreadPoolExecutor(max_workers=4) as ex:
             list(ex.map(wiring.run_phase_a, sample))
 
-        assert llm_client.max_active == len(sample)
+        assert llm_client.passed_calls == len(sample)
 
 
 class TestPhaseAExceptionHandling:
