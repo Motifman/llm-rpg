@@ -48,6 +48,9 @@ from ai_rpg_world.domain.world_graph.value_object.passage import (
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
+from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtmosphere
 from ai_rpg_world.domain.world_graph.value_object.spot_presence import SpotPresence
 
 
@@ -164,6 +167,50 @@ class SpotGraphAggregate(AggregateRoot):
         self._spots[node.spot_id] = node
         if node.spot_id not in self._presences:
             self._presences[node.spot_id] = SpotPresence.empty(node.spot_id)
+
+    def update_spot_atmosphere(
+        self,
+        spot_id: SpotId,
+        *,
+        lighting: Optional[LightingEnum] = None,
+        temperature: Optional[TemperatureEnum] = None,
+        hazard_level: Optional[int] = None,
+        hazard_description: Optional[str] = None,
+    ) -> None:
+        """spot の環境 (明るさ・気温・危険度) を部分的に書き換える。
+
+        `CHANGE_ATMOSPHERE` 効果 (停電・気温変化・危険度上昇) のためのドメイン
+        操作。`SpotNode` も `SpotAtmosphere` も frozen なので、指定された項目
+        だけ差し替えた新しい値へ置き換える。**指定しなかった項目は元の値を
+        保つ** — 停電で明るさだけ変えたいときに環境音や匂いまで既定値へ
+        巻き戻ると、その spot の描写が静かに壊れるため。
+
+        atmosphere を持たない spot に対しては、既定値の `SpotAtmosphere` を
+        土台にして指定項目を載せる。
+
+        イベントは発火しない。環境変化の観測は interaction 側の
+        `AppliedEffectSummary(kind=ATMOSPHERE_UPDATE)` が
+        `SpotPublicEffectObservedEvent` として届けるので、ここで重ねると
+        同じ変化が二重に観測される。
+        """
+        if spot_id not in self._spots:
+            raise SpotNotInGraphException(f"Unknown spot: {spot_id}")
+
+        node = self._spots[spot_id]
+        current = node.atmosphere or SpotAtmosphere(lighting=LightingEnum.BRIGHT)
+        overrides = {
+            key: value
+            for key, value in (
+                ("lighting", lighting),
+                ("temperature", temperature),
+                ("hazard_level", hazard_level),
+                ("hazard_description", hazard_description),
+            )
+            if value is not None
+        }
+        self._spots[spot_id] = replace(
+            node, atmosphere=replace(current, **overrides)
+        )
 
     def add_connection(
         self,
