@@ -3760,6 +3760,9 @@ def create_world_runtime(
         distant_view_trace_enabled=config.distant_view_trace_enabled,
         trace_recorder_provider=lambda: getattr(runtime, "_trace_recorder", None),
         visible_monster_observer=_observe_visible_monster_for_player,
+        # 同席者行に「この相手に何ができるか」を出す。出さないと対人行為は
+        # 宣言されていても LLM から発見できない。
+        player_action_names_provider=player_interaction_service.available_action_names,
     )
 
     # ── 観測パイプライン構築 ──
