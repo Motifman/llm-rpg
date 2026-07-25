@@ -4,6 +4,10 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
     SpotInteractionApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_graph_world_services import create_spot_graph_world_services
+from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+    count_owned_item_instances_by_spec,
+    grant_item_specs_to_inventory,
+)
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -109,14 +113,12 @@ def _switch_interior() -> SpotInterior:
 
 
 class _StubItemSpecRepo:
-    """ItemSpecId(101) のみ返すスタブ（GIVE_ITEM テスト用）。"""
+    """任意の ItemSpecId を返すスタブ（GIVE_ITEM / 探索報酬テスト用）。"""
 
     def find_by_id(self, item_spec_id: ItemSpecId):
-        if item_spec_id != ItemSpecId(101):
-            return None
         return ItemSpec(
-            item_spec_id=ItemSpecId(101),
-            name="Test",
+            item_spec_id=item_spec_id,
+            name=f"Test {item_spec_id.value}",
             item_type=ItemType.CONSUMABLE,
             rarity=Rarity.COMMON,
             description="test",
@@ -276,3 +278,132 @@ def test_exploration_discovers_and_grants_item() -> None:
     inv2 = inv_repo.find_by_id(PlayerId(1))
     assert inv2 is not None
     assert any(inv2.get_item_instance_id_by_slot(SlotId(i)) is not None for i in range(inv2.max_slots))
+
+
+def test_exploration_search_count_two_discovers_once_on_second_search() -> None:
+    """SEARCH_COUNT=2 の discoverable は1回目では出ず、2回目に一度だけ付与される。"""
+    from ai_rpg_world.application.world_graph.spot_exploration_application_service import (
+        SpotExplorationApplicationService,
+    )
+    from ai_rpg_world.application.world_graph.spot_exploration_progress_store import (
+        InMemorySpotExplorationProgressStore,
+    )
+
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+    graph.add_spot(_node(1))
+    graph.place_entity(EntityId.create(1), SpotId.create(1))
+    graph.clear_events()
+
+    d = DiscoverableItem(
+        item_spec_id=ItemSpecId(101),
+        discovery_condition=DiscoveryCondition(
+            condition_type=DiscoveryConditionTypeEnum.SEARCH_COUNT,
+            required_search_count=2,
+        ),
+        is_discovered=False,
+        description="2回探して見つけた",
+    )
+    interior = SpotInterior.empty().replace_discoverable_items((d,))
+    graph_repo = InMemorySpotGraphRepository(graph)
+    interior_repo = InMemorySpotInteriorRepository({SpotId.create(1): interior})
+    store = InMemoryDataStore()
+    player_repo = InMemoryPlayerStatusRepository(store)
+    inv_repo = InMemoryPlayerInventoryRepository(store)
+    player_repo.save(create_test_status_aggregate(player_id=1))
+    inv_repo.save(PlayerInventoryAggregate.create_new_inventory(PlayerId(1)))
+    item_repo = InMemoryItemRepository(store)
+    item_spec_repo = _StubItemSpecRepo()
+
+    exp_svc = SpotExplorationApplicationService(
+        spot_graph_repository=graph_repo,
+        spot_interior_repository=interior_repo,
+        player_inventory_repository=inv_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+        world_flag_state=MutableWorldFlagState(),
+        exploration_progress_store=InMemorySpotExplorationProgressStore(),
+    )
+
+    first = exp_svc.explore_once(PlayerId(1))
+    second = exp_svc.explore_once(PlayerId(1))
+    third = exp_svc.explore_once(PlayerId(1))
+
+    assert first.item_spec_ids_granted == ()
+    assert first.discovery_descriptions == ()
+    assert second.item_spec_ids_granted == (ItemSpecId(101),)
+    assert second.discovery_descriptions == ("2回探して見つけた",)
+    assert third.item_spec_ids_granted == ()
+
+    inv = inv_repo.find_by_id(PlayerId(1))
+    assert inv is not None
+    assert count_owned_item_instances_by_spec(inv, item_repo) == {ItemSpecId(101): 1}
+
+
+def test_exploration_has_item_condition_requires_owned_item_and_discovers_once() -> None:
+    """HAS_ITEM 条件の discoverable は必要 item 所持時だけ出て、一度発見したら再付与しない。"""
+    from ai_rpg_world.application.world_graph.spot_exploration_application_service import (
+        SpotExplorationApplicationService,
+    )
+    from ai_rpg_world.application.world_graph.spot_exploration_progress_store import (
+        InMemorySpotExplorationProgressStore,
+    )
+
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+    graph.add_spot(_node(1))
+    graph.place_entity(EntityId.create(1), SpotId.create(1))
+    graph.clear_events()
+
+    required_spec = ItemSpecId(200)
+    discovered_spec = ItemSpecId(101)
+    d = DiscoverableItem(
+        item_spec_id=discovered_spec,
+        discovery_condition=DiscoveryCondition(
+            condition_type=DiscoveryConditionTypeEnum.HAS_ITEM,
+            required_item_spec_id=required_spec,
+        ),
+        is_discovered=False,
+        description="道具を使って見つけた",
+    )
+    interior = SpotInterior.empty().replace_discoverable_items((d,))
+    graph_repo = InMemorySpotGraphRepository(graph)
+    interior_repo = InMemorySpotInteriorRepository({SpotId.create(1): interior})
+    store = InMemoryDataStore()
+    player_repo = InMemoryPlayerStatusRepository(store)
+    inv_repo = InMemoryPlayerInventoryRepository(store)
+    player_repo.save(create_test_status_aggregate(player_id=1))
+    inv_repo.save(PlayerInventoryAggregate.create_new_inventory(PlayerId(1)))
+    item_repo = InMemoryItemRepository(store)
+    item_spec_repo = _StubItemSpecRepo()
+
+    exp_svc = SpotExplorationApplicationService(
+        spot_graph_repository=graph_repo,
+        spot_interior_repository=interior_repo,
+        player_inventory_repository=inv_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+        world_flag_state=MutableWorldFlagState(),
+        exploration_progress_store=InMemorySpotExplorationProgressStore(),
+    )
+
+    without_item = exp_svc.explore_once(PlayerId(1))
+    grant_item_specs_to_inventory(
+        PlayerId(1),
+        (required_spec,),
+        item_repo,
+        item_spec_repo,
+        inv_repo,
+    )
+    with_item = exp_svc.explore_once(PlayerId(1))
+    repeated = exp_svc.explore_once(PlayerId(1))
+
+    assert without_item.item_spec_ids_granted == ()
+    assert with_item.item_spec_ids_granted == (discovered_spec,)
+    assert with_item.discovery_descriptions == ("道具を使って見つけた",)
+    assert repeated.item_spec_ids_granted == ()
+
+    inv = inv_repo.find_by_id(PlayerId(1))
+    assert inv is not None
+    assert count_owned_item_instances_by_spec(inv, item_repo) == {
+        required_spec: 1,
+        discovered_spec: 1,
+    }

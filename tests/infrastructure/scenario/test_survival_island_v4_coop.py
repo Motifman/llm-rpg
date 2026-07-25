@@ -214,6 +214,83 @@ class TestSurvivalIslandV4FoodEconomy:
         assert spoilage_by_id["coconut"] == 240
 
 
+class TestSurvivalIslandV4ExplorePayoff:
+    """v4 の explore が主要 spot で空振りし続けないよう discoverable_items を配置する。"""
+
+    def test_major_spots_define_discoverable_items_with_small_payoff_scope(
+        self,
+        raw_v4,
+    ) -> None:
+        """8 spot に食料・水・火素材・道具素材の一度きり探索報酬を置き、強報酬は除外する。"""
+        expected = {
+            ("shipwreck_beach", "driftwood"): ("SEARCH_COUNT", 1, None),
+            ("tidal_pools", "shellfish"): ("SEARCH_COUNT", 1, None),
+            ("rocky_shore", "sharp_stone"): ("SEARCH_COUNT", 2, None),
+            ("forest_clearing", "dry_leaves"): ("SEARCH_COUNT", 1, None),
+            ("forest_stream", "fresh_water"): ("SEARCH_COUNT", 1, None),
+            ("tall_oak", "vine_rope"): ("SEARCH_COUNT", 2, None),
+            ("swamp", "vine_rope"): ("HAS_ITEM", 1, "bone_knife"),
+            ("cave_entry", "flint"): ("SEARCH_COUNT", 2, None),
+        }
+
+        for (spot_id, item_spec), (
+            condition_type,
+            required_search_count,
+            required_item,
+        ) in expected.items():
+            item = _find_discoverable_item(raw_v4, spot_id, item_spec)
+            condition = item["discovery_condition"]
+            assert condition["condition_type"] == condition_type
+            assert condition.get("required_search_count", 1) == required_search_count
+            if required_item is None:
+                assert "required_item" not in condition
+            else:
+                assert condition["required_item"] == required_item
+            assert item["description"].strip()
+
+        all_discoverable_specs = {
+            item["item_spec"]
+            for spot in raw_v4["spots"]
+            for item in (spot.get("interior") or {}).get("discoverable_items", [])
+        }
+        assert all_discoverable_specs.isdisjoint(
+            {"first_aid", "fishing_rod", "treasure_compass"}
+        )
+
+    def test_loader_resolves_v4_discoverable_items(self, loaded_v4) -> None:
+        """ScenarioLoader 後も discoverable_items が SpotInterior に残り、探索で使える状態になる。"""
+        id_mapper = loaded_v4.id_mapper
+
+        rocky_shore_id = SpotId(id_mapper.get_int("spot", "rocky_shore"))
+        cave_entry_id = SpotId(id_mapper.get_int("spot", "cave_entry"))
+        swamp_id = SpotId(id_mapper.get_int("spot", "swamp"))
+
+        rocky_items = loaded_v4.interiors[rocky_shore_id].discoverable_items
+        cave_items = loaded_v4.interiors[cave_entry_id].discoverable_items
+        swamp_items = loaded_v4.interiors[swamp_id].discoverable_items
+
+        assert any(
+            item.item_spec_id.value == id_mapper.get_int("item_spec", "sharp_stone")
+            and item.discovery_condition.condition_type.value == "SEARCH_COUNT"
+            and item.discovery_condition.required_search_count == 2
+            for item in rocky_items
+        )
+        assert any(
+            item.item_spec_id.value == id_mapper.get_int("item_spec", "flint")
+            and item.discovery_condition.condition_type.value == "SEARCH_COUNT"
+            and item.discovery_condition.required_search_count == 2
+            for item in cave_items
+        )
+        assert any(
+            item.item_spec_id.value == id_mapper.get_int("item_spec", "vine_rope")
+            and item.discovery_condition.condition_type.value == "HAS_ITEM"
+            and item.discovery_condition.required_item_spec_id is not None
+            and item.discovery_condition.required_item_spec_id.value
+            == id_mapper.get_int("item_spec", "bone_knife")
+            for item in swamp_items
+        )
+
+
 class TestSurvivalIslandV4ActionConditionHints:
     """v4 の時刻・天候制約つき action が prompt 上で事前に読めることを保証する。"""
 
@@ -284,6 +361,18 @@ def _find_interaction(
         if interaction["action_name"] == action_name:
             return interaction
     raise AssertionError(f"interaction not found: {spot_id}/{object_id}.{action_name}")
+
+
+def _find_discoverable_item(
+    raw: dict[str, Any],
+    spot_id: str,
+    item_spec: str,
+) -> dict[str, Any]:
+    interior = _find_spot(raw, spot_id).get("interior") or {}
+    for item in interior.get("discoverable_items", []):
+        if item["item_spec"] == item_spec:
+            return item
+    raise AssertionError(f"discoverable item not found: {spot_id}/{item_spec}")
 
 
 def _flag_reference_count(raw: Any, flag_name: str) -> int:
