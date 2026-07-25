@@ -30,6 +30,7 @@ from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.event.status_events import (
+    PlayerDownedEvent,
     PlayerGoldEarnedEvent,
     PlayerLocationChangedEvent,
 )
@@ -144,6 +145,24 @@ class TestObservationPipelineNormal:
         assert len(result) == 1
         assert result[0][0] == PlayerId(1)
         assert "現在地" in result[0][1].prose
+
+    def test_player_downed_remote_recipient_gets_scheduled_observation(
+        self, pipeline, status_repo
+    ):
+        """別 spot の player が倒れても既知 player に届き、反応用に schedules_turn=True になる。"""
+        status_repo.save(_make_status(1, spot_id=1))
+        status_repo.save(_make_status(2, spot_id=2))
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+        )
+
+        result = pipeline.run(event)
+
+        by_player = {pid.value: output for pid, output in result}
+        assert set(by_player) == {1, 2}
+        assert by_player[2].schedules_turn is True
+        assert "遠くで誰かが倒れた気配" in by_player[2].prose
 
     def test_excludes_none_output_from_formatter(self):
         """formatter が None を返した場合は結果に含めない（境界）"""
