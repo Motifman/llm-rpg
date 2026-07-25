@@ -126,3 +126,41 @@ def test_unknown_time_and_weather_values_are_not_silently_dropped() -> None:
         "blue_hourのみ",
         "METEOR_SHOWERのみ",
     )
+
+
+def test_failing_object_state_precondition_remains_with_failure_reason_hint() -> None:
+    """OBJECT_STATE が現在失敗していても action を残し、失敗理由を表示ヒントにする。"""
+    interaction = InteractionDef(
+        action_name="open_chest",
+        display_label="箱を開ける",
+        preconditions=(
+            InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.OBJECT_STATE,
+                target_object_id=SpotObjectId.create(10),
+                required_state={"opened": False},
+                failure_message="箱はすでに空っぽだ。",
+            ),
+        ),
+        effects=(),
+    )
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=SpotObjectId.create(10),
+                name="古い箱",
+                description="ふたの開いた箱。",
+                object_type=SpotObjectTypeEnum.OTHER,
+                state={"opened": True},
+                interactions=(interaction,),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    snap = _build_builder(interior).build_snapshot(1)
+
+    assert snap is not None
+    assert snap.objects[0].interactions[0].action_name == "open_chest"
+    assert snap.objects[0].interactions[0].condition_hints == ("箱はすでに空っぽだ。",)

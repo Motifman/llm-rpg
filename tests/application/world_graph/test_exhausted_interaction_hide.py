@@ -1,9 +1,10 @@
-"""永続失敗 (= 取り尽くした) interaction を snapshot から落とす挙動 (#343)。
+"""永続失敗 (= 取り尽くした) interaction の現在失敗を検出する挙動。
 
 第24回実験 OFF run で `search_cockpit` を 19 回 retry した silent failure に
 対する構造的修正の単体テスト。OBJECT_STATE precondition が現在失敗している
-interaction は available_actions から落ちる。HAS_ITEM 等のプレイヤー / 環境
-依存条件は隠さない (探索の手掛かりを残す)。
+interaction は、現在では action を隠さず失敗理由ヒントを添えて表示する。
+このファイルでは、そのヒント付与の前提になる OBJECT_STATE 失敗検出だけを
+保証する。HAS_ITEM 等のプレイヤー / 環境依存条件は対象外。
 """
 
 from __future__ import annotations
@@ -59,8 +60,8 @@ def _make_interaction(condition_type, **kwargs) -> InteractionDef:
     )
 
 
-class TestObjectStatePreconditionFailureHidesInteraction:
-    """OBJECT_STATE が現在失敗 → interaction は隠す (= cockpit retry の停止)。"""
+class TestObjectStatePreconditionFailureDetection:
+    """OBJECT_STATE が現在失敗しているかを検出する。"""
 
     def test_object_state_value_does_not_match_true(self) -> None:
         """OBJECT STATE が現在の値と一致しないなら true。"""
