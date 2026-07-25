@@ -2762,6 +2762,17 @@ class WorldRuntime:
         個別結果を返す。集団勝敗の概念は v2 シナリオで廃止。
         """
         registry = self._player_outcome_registry
+        if self._should_end_on_all_down() and self._all_players_unable_to_act(registry):
+            snapshot = registry.snapshot()
+            return GameEndResult(
+                is_ended=True,
+                result=None,
+                reason=(
+                    "行動可能プレイヤーがいない "
+                    "(全員 down または outcome 確定済み)"
+                ),
+                player_outcomes=snapshot,
+            )
         if not registry.all_resolved():
             return GameEndResult(
                 is_ended=False, result=None,
@@ -2774,6 +2785,22 @@ class WorldRuntime:
             reason=f"全 {len(snapshot)} プレイヤーの outcome が確定",
             player_outcomes=snapshot,
         )
+
+    def _should_end_on_all_down(self) -> bool:
+        """END_ON_ALL_DOWN が有効なら全員行動不能で outcome モードを即終了する。"""
+        cfg = getattr(self, "_runtime_config", None)
+        return bool(getattr(cfg, "end_on_all_down", False))
+
+    def _all_players_unable_to_act(self, registry: Any) -> bool:
+        """全 player が outcome 確定済み、または unresolved でも down 済みかを返す。"""
+        for player_id in self.get_player_ids():
+            outcome = registry.get_outcome(player_id)
+            if outcome.is_resolved:
+                continue
+            status = self._player_status_repo.find_by_id(player_id)
+            if status is None or getattr(status, "is_down", False) is not True:
+                return False
+        return True
 
     def _check_game_end_collective_mode(self) -> GameEndResult:
         """v1 / 既存シナリオ用の集団 win/lose 判定。挙動は従来通り。"""
