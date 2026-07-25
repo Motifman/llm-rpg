@@ -171,6 +171,58 @@ class TestSurvivalIslandV4CoveCarving:
         ]
 
 
+class TestSurvivalIslandV4SignalHints:
+    """狼煙の人数・素材要件を探索で読める形にし、存在しない素材への誤誘導を防ぐ。"""
+
+    def test_notice_board_read_message_hints_two_person_signal_fire(self, raw_v4) -> None:
+        """拠点の板切れを読むと、山頂の狼煙は二人で守る必要があると物語内文面で分かる。"""
+        interaction = _find_interaction(raw_v4, "campsite", "camp_notice_board", "read_notice")
+
+        assert interaction["effects"] == [
+            {
+                "effect_type": "SHOW_MESSAGE",
+                "parameters": {
+                    "message": (
+                        "板切れには先に流れ着いた誰かの走り書きが残っている——"
+                        "「狼煙ハ一人デハ守レヌ。頂ハ風ガ強イ。二人デ火ヲ囲メ」"
+                    )
+                },
+            }
+        ]
+
+    def test_foothills_carving_read_message_hints_three_driftwood_requirement(
+        self, raw_v4
+    ) -> None:
+        """山麓の石積みを読むと、狼煙には流木が三本必要だと物語内文面で分かる。"""
+        interaction = _find_interaction(raw_v4, "foothills", "trail_cairn", "read_carving")
+
+        assert interaction["effects"] == [
+            {
+                "effect_type": "SHOW_MESSAGE",
+                "parameters": {
+                    "message": (
+                        "石にたどたどしく彫られた覚え書き——"
+                        "「頂ノ狼煙ニ細切レノ流木ハ役立タヌ。三本ハ焚カネバ煙ハ谷ヲ越エヌ」"
+                    )
+                },
+            }
+        ]
+
+    def test_light_signal_driftwood_failure_does_not_suggest_nonexistent_thick_wood(
+        self, raw_v4
+    ) -> None:
+        """light_signal の流木不足文面は、存在しない太い流木という別素材を示唆しない。"""
+        interaction = _find_interaction(raw_v4, "summit", "signal_fire_pit", "light_signal")
+        driftwood_condition = next(
+            condition
+            for condition in interaction["preconditions"]
+            if condition.get("required_item") == "driftwood"
+        )
+
+        assert driftwood_condition["failure_message"] == "流木が足りない。3 本は要る。"
+        assert "太い" not in driftwood_condition["failure_message"]
+
+
 class TestSurvivalIslandV4WaterSources:
     """v4 の水源 interaction が失敗時に原因と復帰条件を読める文面を返すことを保証する。"""
 
