@@ -45,6 +45,9 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
     InteractionNotFoundException,
 )
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    PlayerInteractedWithPlayerEvent,
+)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
@@ -91,6 +94,7 @@ class PlayerInteractionApplicationService:
         player_interactions: Tuple[InteractionDef, ...],
         interaction_service: Optional[SpotInteractionService] = None,
         effect_service: Optional[WorldGraphEffectService] = None,
+        event_publisher: Optional[Any] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_inventory_repository = player_inventory_repository
@@ -102,9 +106,18 @@ class PlayerInteractionApplicationService:
         self._interaction = interaction_service or SpotInteractionService(
             self._effect_service
         )
+        self._event_publisher = event_publisher
         self._by_action_name: Dict[str, InteractionDef] = {
             idef.action_name: idef for idef in player_interactions
         }
+
+    def set_event_publisher(self, event_publisher: Any) -> None:
+        """event_publisher を後付けで注入する (二段構築用)。
+
+        publisher は runtime 本体に依存して構築されるので、本 service より
+        後になる。``SpotInteractionApplicationService`` と同じ約束。
+        """
+        self._event_publisher = event_publisher
 
     def available_action_names(self) -> Tuple[str, ...]:
         """宣言されている対人 action 名を宣言順で返す (prompt の候補表示用)。"""
@@ -209,6 +222,19 @@ class PlayerInteractionApplicationService:
 
         self._world_flag_state.replace_from_interaction(result.new_flags)
 
+        # 受け取る側に空きがあるか、**何も動かす前に**確かめる。
+        #
+        # PlayerInventoryAggregate.acquire_item は満杯のとき黙って捨てる
+        # (overflow event を積むだけで例外にしない)。先に取り上げてから渡すと
+        # 「対象からは消えて行為者には入らない」= アイテムが世界から消滅し、
+        # しかも成功として返るので誰も気づけない。
+        self._require_free_slots(
+            actor_player_id, len(result.item_spec_ids_to_grant), "あなた"
+        )
+        self._require_free_slots(
+            target_player_id, len(result.target_item_spec_ids_to_grant), "相手"
+        )
+
         # 先に対象から取り上げ、次に行為者へ渡す。順序を逆にすると、対象が
         # 持っていなかった場合に「行為者は受け取ったが対象は失っていない」
         # という複製が一瞬成立してしまう。
@@ -223,6 +249,37 @@ class PlayerInteractionApplicationService:
 
         if result.acting_player_state_changed and actor_status is not None:
             self._player_status_repository.save(actor_status)
+
+        # 観測を伴わない対人行為は作らない。state だけ変わって誰にも何も
+        # 見えないと、被害者は次のターンに持ち物が消えていることに気づく
+        # だけになり、trace からも効果を確認できない。
+        #
+        # publisher 未注入は配線漏れだが、ここで落とすと実験そのものが
+        # 止まる。警告を残して行為自体は成立させる (観測が消えたことは
+        # 警告で追える)。
+        if self._event_publisher is None:
+            _logger.warning(
+                "PlayerInteractionApplicationService に event_publisher が "
+                "注入されていないため、対人行為 %r の観測が誰にも届きません",
+                action_name,
+            )
+        else:
+            self._event_publisher.publish_all([
+                PlayerInteractedWithPlayerEvent.create(
+                    aggregate_id=graph.graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    entity_id=EntityId.create(int(actor_player_id)),
+                    target_entity_id=EntityId.create(int(target_player_id)),
+                    spot_id=actor_spot,
+                    action_name=action_name,
+                    result_message="; ".join(result.messages),
+                    action_display_label=idef.display_label or "",
+                    witness_observation_message=(
+                        idef.witness_observation_message or ""
+                    ),
+                    witness_policy=idef.witness_policy,
+                )
+            ])
 
         return PlayerInteractionResultDto(
             action_name=action_name,
@@ -276,14 +333,57 @@ class PlayerInteractionApplicationService:
         return {**interaction_parameters, self.ITEM_SPEC_ID_KEY: spec_id.value}
 
     def _find_spec_id_by_name(self, inventory, name: str):
-        """対象の所持品から表示名が一致する item spec id を引く。"""
-        for spec_id in collect_owned_item_spec_ids_from_inventory(
-            inventory, self._item_repository
-        ):
-            spec = self._item_spec_repository.find_by_id(spec_id)
-            if spec is not None and getattr(spec, "name", None) == name:
-                return spec_id
-        return None
+        """対象の所持品から表示名が一致する item spec id を引く。
+
+        同名の別 spec が複数あるときは、どれか 1 つを選ばずに例外で止める。
+        ``collect_owned_item_spec_ids_from_inventory`` が返すのは frozenset で
+        反復順が保証されないため、素朴に最初の一致を返すと **実行ごとに違う
+        物を奪う**。対象名の解決 (``resolve_target``) で種別横断の同名衝突を
+        拒否したのと同じ理由で、ここでも黙って選ばない。
+        """
+        matches = [
+            spec_id
+            for spec_id in collect_owned_item_spec_ids_from_inventory(
+                inventory, self._item_repository
+            )
+            if self._spec_name(spec_id) == name
+        ]
+        if len(matches) > 1:
+            raise InteractionNotAllowedException(
+                f"「{name}」に当てはまるものが相手の持ち物に複数ある。"
+                "どれを指すのか決められないので、別の物を指定すること。"
+            )
+        return matches[0] if matches else None
+
+    def _spec_name(self, spec_id) -> Optional[str]:
+        spec = self._item_spec_repository.find_by_id(spec_id)
+        return getattr(spec, "name", None) if spec is not None else None
+
+    def _require_free_slots(
+        self, player_id: PlayerId, needed: int, who: str
+    ) -> None:
+        """受け取りに必要な空きスロットが無ければ、前提条件の不成立で止める。
+
+        ``InteractionNotAllowedException`` を使うのは、これが配線の壊れでは
+        なく**普通に起きる状況**だからである。executor が
+        ``INTERACTION_PRECONDITION_FAILED`` に変換するので、LLM は「先に何かを
+        置いてから奪う」という次の手を選べる。
+        """
+        if needed <= 0:
+            return
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
+        inv = self._require_inventory(player_id)
+        free = sum(
+            1
+            for i in range(inv.max_slots)
+            if inv.get_item_instance_id_by_slot(SlotId(i)) is None
+        )
+        if free < needed:
+            raise InteractionNotAllowedException(
+                f"{who}の手が塞がっている (空き {free} / 必要 {needed})。"
+                "先に何かを置くか使うかしてから試すこと。"
+            )
 
     def _require_inventory(self, player_id: PlayerId):
         inv = self._player_inventory_repository.find_by_id(player_id)

@@ -28,6 +28,7 @@ _RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
 
 _ACTOR = PlayerId(1)
 _VICTIM = PlayerId(2)
+_BYSTANDER = PlayerId(3)
 
 _TAKE_DEF = {
     "action_name": "take",
@@ -56,6 +57,43 @@ _TAKE_DEF = {
         },
     ],
 }
+
+
+def _scenario_dict(extra_players=()) -> dict:
+    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario["player_interactions"] = [_TAKE_DEF]
+    scenario["players"] = list(scenario["players"]) + list(extra_players)
+    return scenario
+
+
+def _runtime_from(scenario: dict, tmp_path: Path, *, gather: tuple):
+    """``gather`` の player を全員 actor と同じスポットに揃えた runtime。"""
+    path = tmp_path / "relay_with_take.json"
+    path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
+    rt = create_world_runtime(path)
+    graph = rt._spot_graph_repo.find_graph()
+    actor_spot = graph.get_entity_spot(EntityId.create(int(_ACTOR)))
+    for pid in gather:
+        graph.unplace_entity(EntityId.create(int(pid)))
+        graph.place_entity(EntityId.create(int(pid)), actor_spot)
+    rt._spot_graph_repo.save(graph)
+    return rt
+
+
+@pytest.fixture()
+def runtime_with_bystander(tmp_path: Path):
+    """奪う二人に加えて、起きている第三者が同席している runtime。"""
+    scenario = _scenario_dict(
+        extra_players=[
+            {
+                "id": "player_c",
+                "name": "ミナ",
+                "spawn_spot": "corridor",
+                "initial_items": [],
+            }
+        ]
+    )
+    return _runtime_from(scenario, tmp_path, gather=(_VICTIM, _BYSTANDER))
 
 
 @pytest.fixture()
@@ -159,3 +197,123 @@ class TestTakeFromFallenPlayer:
                 _ACTOR, _VICTIM, "take",
                 interaction_parameters={"item": "存在しない架空の道具"},
             )
+
+
+class TestActorInventoryFull:
+    """行為者の手が塞がっているときに、奪った物を消滅させない。"""
+
+    def _fill_inventory(self, rt, player_id: PlayerId) -> None:
+        from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+            grant_item_specs_to_inventory,
+        )
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
+        inv = rt._player_inventory_repo.find_by_id(player_id)
+        spec = list(rt._item_spec_repo.find_all())[0]
+        free = sum(
+            1
+            for i in range(inv.max_slots)
+            if inv.get_item_instance_id_by_slot(SlotId(i)) is None
+        )
+        grant_item_specs_to_inventory(
+            player_id,
+            (spec.item_spec_id,) * free,
+            rt._item_repo,
+            rt._item_spec_repo,
+            rt._player_inventory_repo,
+        )
+
+    def test_full_actor_inventory_fails_before_taking_anything(self, runtime) -> None:
+        """空きが無ければ、対象から取り上げる前に前提条件で落とす。
+
+        ``acquire_item`` は満杯のとき黙って捨てる (overflow event を積むだけで
+        例外にしない)。先に取り上げてから渡そうとすると、**対象からは消えて
+        行為者には入らない** = アイテムが世界から消滅する。しかも成功として
+        返るので誰も気づけない。
+        """
+        spec_id, item_name = _give_victim_an_item(runtime)
+        _knock_out(runtime, _VICTIM)
+        self._fill_inventory(runtime, _ACTOR)
+
+        with pytest.raises(InteractionNotAllowedException):
+            runtime.do_interact_with_player(
+                _ACTOR, _VICTIM, "take",
+                interaction_parameters={"item": item_name},
+            )
+        # 対象の持ち物は減っていない
+        assert spec_id in _owned_spec_ids(runtime, _VICTIM)
+
+
+class TestTheftIsObserved:
+    """奪う行為が、同席している第三者に届く。
+
+    観測を伴わない対人行為は作らない。state だけ変わって誰にも何も見えないと、
+    trace からも効果を確認できず、他のエージェントが反応する機会も無い
+    (agent_design_principles.md「他者からの可視性」)。
+
+    **被害者本人には届かない。** 倒れている player は observation の宛先から
+    一律に外されている (Issue #621 Phase 4: ターンが回らず観測を消化できず、
+    復活時に buffer を clear する仕様と整合させるため)。奪えるのは倒れている
+    相手だけなので、被害者は構造的に受け取れない。気を失っている間の出来事を
+    知覚しないのは筋が通っているが、「起きたら荷が減っている理由が分からない」
+    ままではある。復活時に何が起きたかを渡す経路は別途必要で、本 PR では
+    扱わない (設計 doc の notify_target と同じ回)。
+    """
+
+    def _theft_observations(self, rt, player_id: PlayerId) -> list:
+        return [
+            e
+            for e in rt._obs_buffer.get_observations(player_id)
+            if e.output.structured.get("type") == "player_interacted_with_player"
+        ]
+
+    def test_a_standing_bystander_observes_the_theft(
+        self, runtime_with_bystander
+    ) -> None:
+        """同席して起きている第三者に、奪う行為が 1 件届く。"""
+        rt = runtime_with_bystander
+        _, item_name = _give_victim_an_item(rt)
+        _knock_out(rt, _VICTIM)
+
+        rt.do_interact_with_player(
+            _ACTOR, _VICTIM, "take",
+            interaction_parameters={"item": item_name},
+        )
+
+        observed = self._theft_observations(rt, _BYSTANDER)
+        assert len(observed) == 1
+        assert observed[0].output.schedules_turn is True, (
+            "目撃しても turn が回らないと、反応する機会そのものが無い"
+        )
+
+    def test_the_actor_does_not_observe_their_own_theft(
+        self, runtime_with_bystander
+    ) -> None:
+        """行為者本人には目撃観測を返さない (tool 結果で既に受け取っている)。"""
+        rt = runtime_with_bystander
+        _, item_name = _give_victim_an_item(rt)
+        _knock_out(rt, _VICTIM)
+
+        rt.do_interact_with_player(
+            _ACTOR, _VICTIM, "take",
+            interaction_parameters={"item": item_name},
+        )
+
+        assert self._theft_observations(rt, _ACTOR) == []
+
+    def test_the_bystander_prose_names_both_sides(
+        self, runtime_with_bystander
+    ) -> None:
+        """目撃 prose に、誰が誰に何をしたかが出る。"""
+        rt = runtime_with_bystander
+        _, item_name = _give_victim_an_item(rt)
+        _knock_out(rt, _VICTIM)
+
+        rt.do_interact_with_player(
+            _ACTOR, _VICTIM, "take",
+            interaction_parameters={"item": item_name},
+        )
+
+        prose = self._theft_observations(rt, _BYSTANDER)[0].output.prose
+        assert "カイト" in prose and "リン" in prose
+        assert "持ち物を奪う" in prose

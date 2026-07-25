@@ -127,6 +127,35 @@ class SpotObjectInteractedEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class PlayerInteractedWithPlayerEvent(BaseDomainEvent[SpotGraphId, str]):
+    """プレイヤーが、同じ場所にいる別のプレイヤーを対象に行為を行った。
+
+    ``SpotObjectInteractedEvent`` の対人版。物体版と分けているのは、
+    ``ObservedEventRegistry`` が型の完全一致で strategy を引くためと、
+    目撃者向けの prose に「対象が誰か」が要るため。
+
+    観測を伴わない対人行為は作らない。state だけ変わって誰にも何も見えない
+    と、被害者は次のターンに持ち物が消えていることに気づくだけになり、
+    trace からも効果を確認できない (agent_design_principles.md
+    「他者からの可視性」)。
+
+    ``witness_policy`` は物体版と同じ意味。秘匿して奪う行為を書けるように
+    ACTOR_ONLY も選べる。
+    """
+
+    entity_id: EntityId
+    target_entity_id: EntityId
+    spot_id: SpotId
+    action_name: str
+    result_message: str
+    # InteractionDef.display_label 由来。目撃者向け文面が無いときの fallback。
+    action_display_label: str = ""
+    # InteractionDef.witness_observation_message 由来の目撃者専用 prose。
+    witness_observation_message: str = ""
+    witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT
+
+
+@dataclass(frozen=True)
 class PlayerDroppedItemEvent(BaseDomainEvent[SpotGraphId, str]):
     """プレイヤーがインベントリから現在地の地面にアイテムを置いた。
 

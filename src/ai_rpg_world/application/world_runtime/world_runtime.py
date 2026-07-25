@@ -4525,6 +4525,7 @@ def create_world_runtime(
     # chore (#240 後続): 旧コードは private field への直接代入だったが、
     # set_event_publisher 経由に正規化。
     interaction_service.set_event_publisher(pipeline_event_publisher)
+    player_interaction_service.set_event_publisher(pipeline_event_publisher)
     # PR4: TIME_OF_DAY_IS / WEATHER_IS condition の評価用 provider 注入。
     # 「夜は釣りできない」「嵐の日は沖の釣り場へ行けない」のような
     # 行動制限条件を interaction precondition から評価できるようにする。

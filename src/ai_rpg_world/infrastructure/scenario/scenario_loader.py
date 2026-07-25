@@ -1238,6 +1238,21 @@ class ScenarioLoader:
         item_spec_id = ItemSpecId.create(mapper.get_int("item_spec", item_sid)) if item_sid else None
         obj_sid = raw.get("target_object")
         obj_id = SpotObjectId.create(mapper.get_int("object", obj_sid)) if obj_sid else None
+        # 対象所持条件は、判定する品目の出所が要る。どちらも無いと条件は
+        # 永久に不成立になり、interaction が黙って使えなくなる。実 run で
+        # 「なぜか一度も成功しない」として初めて気付くことになるので、
+        # 読み込み時に落とす。
+        parameter_key = self._parse_item_spec_id_parameter_key(raw)
+        if (
+            raw.get("condition_type") in ("TARGET_HAS_ITEM", "TARGET_HAS_NO_ITEM")
+            and parameter_key is None
+            and item_spec_id is None
+        ):
+            raise ScenarioLoadError(
+                f"{raw.get('condition_type')} requires either required_item or "
+                "item_spec_id_parameter_key; どちらも無いと条件は常に不成立に"
+                f"なります: {raw!r}"
+            )
         # 脱出ゲーム拡張フィールド
         required_items_raw = raw.get("required_items")
         required_item_spec_ids = None
@@ -1268,7 +1283,7 @@ class ScenarioLoader:
             required_weather_type=raw.get("required_weather_type"),
             # 対人 interaction: TARGET_HAS_ITEM / TARGET_HAS_NO_ITEM が判定
             # する品目を、interaction_parameters のどのキーから取るか。
-            item_spec_id_parameter_key=self._parse_item_spec_id_parameter_key(raw),
+            item_spec_id_parameter_key=parameter_key,
         )
 
     @staticmethod

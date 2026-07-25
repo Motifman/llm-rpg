@@ -169,3 +169,43 @@ class TestUnwiredTargetPlayerEffectsAreRejected:
         )
         result = ScenarioLoader().load_from_dict(scenario)
         assert result.player_interactions[0].action_name == "take"
+
+
+class TestTargetHasItemRequiresAnItemSource:
+    """判定する品目を書き忘れた対象所持条件は、読み込み時に落とす。
+
+    ``required_item`` も ``item_spec_id_parameter_key`` も無いと、条件は永久に
+    不成立になり interaction が黙って使えなくなる。実 run で「なぜか一度も
+    成功しない」として初めて気付くことになる。
+    """
+
+    def test_condition_without_any_item_source_fails_to_load(self) -> None:
+        """どちらも書かないと ScenarioLoadError。"""
+        scenario = _scenario_with_player_interactions(
+            _take_def(
+                preconditions=[
+                    {
+                        "condition_type": "TARGET_HAS_ITEM",
+                        "failure_message": "相手はそれを持っていない。",
+                    }
+                ]
+            )
+        )
+        with pytest.raises(ScenarioLoadError) as e:
+            ScenarioLoader().load_from_dict(scenario)
+        assert "TARGET_HAS_ITEM" in str(e.value)
+
+    def test_runtime_key_alone_is_enough(self) -> None:
+        """``item_spec_id_parameter_key`` だけでも読み込める。"""
+        scenario = _scenario_with_player_interactions(
+            _take_def(
+                preconditions=[
+                    {
+                        "condition_type": "TARGET_HAS_ITEM",
+                        "item_spec_id_parameter_key": "item_spec_id",
+                    }
+                ]
+            )
+        )
+        result = ScenarioLoader().load_from_dict(scenario)
+        assert result.player_interactions[0].action_name == "take"

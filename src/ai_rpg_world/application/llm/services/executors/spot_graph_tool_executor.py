@@ -696,10 +696,12 @@ class SpotGraphToolExecutor:
         if self._runtime is None or not hasattr(
             self._runtime, "do_interact_with_player"
         ):
-            # シナリオが player_interactions を宣言していない構成では、対人
-            # 経路そのものが組み立てられていない。黙って物体経路へ流すと
-            # 「オブジェクトが見つからない」という無関係な文面になるので、
-            # 何が足りないのかを名指しする。
+            # 対人経路を持たない runtime (テスト double / 旧構成) 向けの
+            # 安全網。``create_world_runtime`` は常に service を組み立てるので
+            # 本番では通らない。シナリオが player_interactions を宣言して
+            # いない場合は available_action_names() が空になり、
+            # INTERACTION_ACTION_NOT_FOUND 側で「人に対して使える操作:
+            # (なし)」と返る (こちらではない)。
             return LlmCommandResultDto(
                 success=False,
                 message=(
