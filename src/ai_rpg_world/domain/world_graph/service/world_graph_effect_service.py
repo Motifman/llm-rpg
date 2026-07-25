@@ -257,6 +257,7 @@ class WorldGraphEffectService:
         target_remove: List[ItemSpecId] = []
 
         damage_specs: List[DamageSpec] = []
+        target_damage_specs: List[DamageSpec] = []
         status_effect_specs: List[StatusEffectSpec] = []
         teleport_specs: List[TeleportSpec] = []
         atmosphere_update_specs: List[AtmosphereUpdateSpec] = []
@@ -313,6 +314,7 @@ class WorldGraphEffectService:
                 remove=remove,
                 target_grant=target_grant,
                 target_remove=target_remove,
+                target_damage_specs=target_damage_specs,
                 target_player_status=target_player_status,
                 messages=messages,
                 damage_specs=damage_specs,
@@ -365,6 +367,7 @@ class WorldGraphEffectService:
             target_item_spec_ids_to_grant=tuple(target_grant),
             target_item_spec_ids_to_remove=tuple(target_remove),
             damage_specs=tuple(damage_specs),
+            target_damage_specs=tuple(target_damage_specs),
             status_effect_specs=tuple(status_effect_specs),
             teleport_specs=tuple(teleport_specs),
             atmosphere_update_specs=tuple(atmosphere_update_specs),
@@ -379,6 +382,29 @@ class WorldGraphEffectService:
             public_observable_effects=public_observable,
             hidden_effects=hidden,
         )
+
+    @staticmethod
+    def _damage_bucket_for(
+        effect: InteractionEffect,
+        *,
+        actor_bucket: List[DamageSpec],
+        target_bucket: List[DamageSpec],
+        target_player_status: Optional[PlayerStatusAggregate],
+    ) -> List[DamageSpec]:
+        """ダメージを行為者ぶんと対象ぶんのどちらに積むか決める。
+
+        ``_item_bucket_for`` と同じ約束。対象不在の ``TARGET_PLAYER`` を
+        行為者へ倒すと「相手を刺したつもりが自分が傷ついた」になる。
+        """
+        if effect.target is not EffectTarget.TARGET_PLAYER:
+            return actor_bucket
+        if target_player_status is None:
+            raise InteractionEffectValidationException(
+                "target=TARGET_PLAYER の APPLY_DAMAGE が、対象プレイヤーの無い"
+                "呼び出しに来ました。対人 interaction 以外で TARGET_PLAYER を"
+                "指定しているか、対象の解決が漏れています。"
+            )
+        return target_bucket
 
     @staticmethod
     def _item_bucket_for(
@@ -418,6 +444,7 @@ class WorldGraphEffectService:
         # で集める (``summaries`` と同じ扱い)。
         target_grant: List[ItemSpecId],
         target_remove: List[ItemSpecId],
+        target_damage_specs: List[DamageSpec],
         target_player_status: Optional[PlayerStatusAggregate],
         messages: List[str],
         damage_specs: List[DamageSpec],
@@ -704,7 +731,15 @@ class WorldGraphEffectService:
             damage_val = int(p.get("damage", 0))
             msg = str(p.get("message", ""))
             if damage_val > 0:
-                damage_specs.append(
+                # 宛先はアイテム授受と同じ約束で振り分ける。対象不在の
+                # TARGET_PLAYER は行為者へフォールバックさせず例外で止める。
+                dmg_bucket = self._damage_bucket_for(
+                    effect,
+                    actor_bucket=damage_specs,
+                    target_bucket=target_damage_specs,
+                    target_player_status=target_player_status,
+                )
+                dmg_bucket.append(
                     DamageSpec(damage=damage_val, message=msg, visibility=visibility)
                 )
                 summaries.append(

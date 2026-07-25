@@ -155,9 +155,11 @@ class TestUnwiredTargetPlayerEffectsAreRejected:
     実 run で初めて気付くことになる。
     """
 
+    # APPLY_DAMAGE は対人ダメージ PR で配線したのでここから外した。
+    # 残っているのは、宣言しても対象ではなく行為者に効いてしまうもの。
     @pytest.mark.parametrize(
         "effect_type",
-        ["APPLY_DAMAGE", "SATISFY_NEED", "CHANGE_PLAYER_STATE"],
+        ["SATISFY_NEED", "CHANGE_PLAYER_STATE", "APPLY_STATUS_EFFECT"],
     )
     def test_unwired_effect_type_is_rejected(self, effect_type: str) -> None:
         """未配線の効果に target=TARGET_PLAYER を書くと ScenarioLoadError。"""

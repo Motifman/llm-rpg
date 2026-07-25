@@ -1384,6 +1384,7 @@ class ScenarioLoader:
         {
             InteractionEffectTypeEnum.GIVE_ITEM,
             InteractionEffectTypeEnum.REMOVE_ITEM,
+            InteractionEffectTypeEnum.APPLY_DAMAGE,
         }
     )
 
@@ -1399,7 +1400,6 @@ class ScenarioLoader:
     # の H-1)。これは別 PR。
     _TARGET_PLAYER_NOT_WIRED_YET = frozenset(
         {
-            InteractionEffectTypeEnum.APPLY_DAMAGE,
             InteractionEffectTypeEnum.APPLY_STATUS_EFFECT,
             InteractionEffectTypeEnum.SATISFY_NEED,
             InteractionEffectTypeEnum.TELEPORT_ENTITY,

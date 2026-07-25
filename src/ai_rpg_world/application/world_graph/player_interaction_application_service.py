@@ -170,6 +170,10 @@ class PlayerInteractionApplicationService:
             actor_status = self._player_status_repository.find_by_id(actor_player_id)
             target_status = self._player_status_repository.find_by_id(target_player_id)
 
+        # 効果を当てる前に対象の状態を控える。適用後に問い合わせると、
+        # 昏倒させた一撃そのものが「倒れている間にされたこと」に化ける。
+        target_was_down = bool(getattr(target_status, "is_down", False))
+
         owned = collect_owned_item_spec_ids_from_inventory(
             actor_inv, self._item_repository
         )
@@ -250,6 +254,40 @@ class PlayerInteractionApplicationService:
         if result.acting_player_state_changed and actor_status is not None:
             self._player_status_repository.save(actor_status)
 
+        # 対象へのダメージ。H-1 (設計 doc) の罠がここにある。
+        #
+        # HP 0 になると対象の集約が PlayerDownedEvent を内部に積む。これを
+        # publish しないと PlayerDownedOutcomeHandler が走らず、**倒したのに
+        # DEAD outcome が確定しない**。倒れた本人も蘇生猶予に入らないので、
+        # 実験の勝敗判定が静かに壊れる。
+        #
+        # 順序は物体経路 (Phase G #3) と同じ「publisher ガード内で drain →
+        # clear → save」。save が先だと event を持ったまま永続化され、後続の
+        # find→get_events で陳腐化イベントが二重に流れる。
+        status_events_from_damage: list = []
+        # 行為者自身へのダメージ (反動 / 代償)。target=ACTOR の APPLY_DAMAGE を
+        # 受け付けておいて何も起こさないと、作者は書いたつもりのまま気付けない。
+        if result.damage_specs and actor_status is not None:
+            for spec in result.damage_specs:
+                if spec.damage <= 0:
+                    continue
+                actor_status.apply_damage(spec.damage)
+            if self._event_publisher is not None:
+                status_events_from_damage.extend(actor_status.get_events())
+                actor_status.clear_events()
+            self._player_status_repository.save(actor_status)
+        if result.target_damage_specs and target_status is not None:
+            for spec in result.target_damage_specs:
+                if spec.damage <= 0:
+                    continue
+                target_status.apply_damage(
+                    spec.damage, killer_player_id=actor_player_id
+                )
+            if self._event_publisher is not None:
+                status_events_from_damage.extend(target_status.get_events())
+                target_status.clear_events()
+            self._player_status_repository.save(target_status)
+
         # 観測を伴わない対人行為は作らない。state だけ変わって誰にも何も
         # 見えないと、被害者は次のターンに持ち物が消えていることに気づく
         # だけになり、trace からも効果を確認できない。
@@ -265,6 +303,7 @@ class PlayerInteractionApplicationService:
             )
         else:
             self._event_publisher.publish_all([
+                *status_events_from_damage,
                 PlayerInteractedWithPlayerEvent.create(
                     aggregate_id=graph.graph_id,
                     aggregate_type="SpotGraphAggregate",
@@ -278,6 +317,7 @@ class PlayerInteractionApplicationService:
                         idef.witness_observation_message or ""
                     ),
                     witness_policy=idef.witness_policy,
+                    target_was_down=target_was_down,
                 )
             ])
 

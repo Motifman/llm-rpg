@@ -153,6 +153,13 @@ class PlayerInteractedWithPlayerEvent(BaseDomainEvent[SpotGraphId, str]):
     # InteractionDef.witness_observation_message 由来の目撃者専用 prose。
     witness_observation_message: str = ""
     witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT
+    # **行為が始まった時点で**対象が倒れていたか。
+    #
+    # 「いま倒れているか」を後から集約に問い合わせると、対象を昏倒させた
+    # 一撃そのものが「倒れている間にされたこと」に化ける (致死の一撃は必ず
+    # そうなる)。倒された事実は PlayerDownedEvent 由来の観測で本人に即座に
+    # 届くので、目覚めの申し送りにも入れると同じ一撃が二重に語られる。
+    target_was_down: bool = False
 
 
 @dataclass(frozen=True)
