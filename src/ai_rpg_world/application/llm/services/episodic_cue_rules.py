@@ -43,6 +43,10 @@ _SAFE_SEGMENT_RE = re.compile(r"[^a-z0-9_]+")
 MAX_EPISODIC_CUES = 32
 # tile_area は冗長になりやすいため個別上限（action/outcome より後ろで列挙し、ここで打ち切る）
 MAX_TILE_AREA_CUES = 24
+# topic は semantic passive recall の relevance 用の検索入力側 cue。episode
+# 保存側の索引には入れず、episodic recall の件数上限にも数えない。
+TOPIC_CUE_AXIS = "topic"
+MAX_TOPIC_CUES = 32
 # value は索引キーとして短く保つ（canonical は axis:value のため value 側のみが対象）
 MAX_CUE_VALUE_CHARS = 96
 
@@ -113,6 +117,8 @@ def build_situation_episodic_cues(
     observation_prose: str | None = None,
     noun_matcher: "IWorldNounMatcher | None" = None,
     additional_freetexts: Sequence[str] | None = None,
+    semantic_topic_words: Sequence[str] | None = None,
+    include_topic_cues: bool = False,
     encounter_memory: "IEncounterMemory | None" = None,
     encounter_player_id: PlayerId | None = None,
     encounter_current_tick: int | None = None,
@@ -120,7 +126,11 @@ def build_situation_episodic_cues(
 ) -> tuple[EpisodicCue, ...]:
     """
     受動想起用の「現在局面」に相当する cue 列を、保存時 `build_episodic_cues_for_tool_turn` と
-    同じ軸・語彙・正規化で返す（挿入順も固定）。
+    同じ軸・語彙・正規化で返す（挿入順も固定）。ただし semantic passive
+    recall 用の ``topic`` 軸は semantic passive recall の検索入力側専用であり、
+    ``include_topic_cues=True`` を明示した呼び出しでだけ追加する。保存側や
+    episodic passive recall の呼び出しでは既定の ``False`` のままにし、
+    episode 索引や temporal fallback を動かさない。
 
     `ToolRuntimeContextDto` と直近観測 structured に加え、`latest_action` があれば
     直近ツール名・成否（§0.2）を action / outcome 軸で足し、チャンク保存側の cue と揃えて想起しやすくする。
@@ -140,6 +150,13 @@ def build_situation_episodic_cues(
     した entity / spot / event を ``ENCOUNTER`` source の cue として追加する。
     構造化 spawn / arrival 観測しか無い場面でも entity / spot cue を立てて、
     過去 episode が recall されるようにするための経路。
+
+    P2-①: ``include_topic_cues=True`` のときだけ、``semantic_topic_words`` と
+    runtime target の表示名から ``topic`` 軸の日本語 cue を足す。これは
+    semantic passive recall の検索入力専用であり、episode 保存側
+    ``build_episodic_cues_for_tool_turn`` や chunk 保存、episodic passive
+    recall には載せない。既存 episode とマッチさせず、episodic recall の
+    temporal fallback も阻害しないため。
 
     None の入力や未知フィールドは黙って無視する。
     """
@@ -169,6 +186,14 @@ def build_situation_episodic_cues(
             )
         )
     validated = _validate_and_dedupe(collected)
+    if include_topic_cues:
+        topic_words = list(semantic_topic_words or ())
+        if runtime_context is not None:
+            topic_words.extend(_semantic_topic_words_from_runtime_targets(runtime_context.targets))
+        topic_cues = _validate_topic_cues(topic_words)
+        if topic_cues:
+            existing = {c.to_canonical() for c in validated}
+            validated.extend(c for c in topic_cues if c.to_canonical() not in existing)
     return tuple(validated)
 
 
@@ -389,6 +414,67 @@ def _cues_from_runtime_targets(targets: Mapping[str, ToolRuntimeTargetDto]) -> l
             val = _sanitize_id_segment("chest_world_object", cid)
             out.append(EpisodicCue(axis="object", value=val, source=src))
     return out
+
+
+def _semantic_topic_words_from_runtime_targets(
+    targets: Mapping[str, ToolRuntimeTargetDto],
+) -> list[str]:
+    """runtime target の表示名を semantic relevance 用 topic 語として取り出す。
+
+    保存側 cue ではなく、現在状況 query 側だけに使う。label / id ではなく
+    prompt に出る表示名を使い、内部識別子が semantic entry の日本語 text/tag と
+    噛み合わない問題を避ける。
+    """
+    out: list[str] = []
+    for label in sorted(targets.keys()):
+        target = targets[label]
+        if not isinstance(target, ToolRuntimeTargetDto):
+            continue
+        display_name = _normalize_topic_word(target.display_name)
+        if display_name is not None:
+            out.append(display_name)
+    return out
+
+
+def _validate_topic_cues(words: Sequence[str]) -> list[EpisodicCue]:
+    """topic cue を別枠で重複除去する。
+
+    ``MAX_EPISODIC_CUES`` は episodic 索引参加 cue の上限なので、topic は
+    その件数枠から外す。ただし無制限増加は避けるため topic 側にも独立上限
+    を置く。
+    """
+    seen: set[str] = set()
+    out: list[EpisodicCue] = []
+    for raw in words:
+        word = _normalize_topic_word(raw)
+        if word is None:
+            continue
+        cue = EpisodicCue(
+            axis=TOPIC_CUE_AXIS,
+            value=word,
+            source=EpisodicCueSource.RUNTIME_CONTEXT,
+        )
+        key = cue.to_canonical()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(cue)
+        if len(out) >= MAX_TOPIC_CUES:
+            break
+    return out
+
+
+def _normalize_topic_word(raw: object | None) -> str | None:
+    """日本語 topic 語を cue value として扱える短い文字列に整える。"""
+    if raw is None or not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    if not text:
+        return None
+    text = text.strip(" \t\r\n\"'「」『』（）()[]【】")
+    if not text:
+        return None
+    return _truncate_value(text)
 
 
 def _cues_from_recent_encounters(

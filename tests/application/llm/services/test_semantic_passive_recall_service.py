@@ -77,6 +77,12 @@ def _cue(value: str) -> EpisodicCue:
     )
 
 
+def _topic(value: str) -> EpisodicCue:
+    return EpisodicCue(
+        axis="topic", value=value, source=EpisodicCueSource.RUNTIME_CONTEXT
+    )
+
+
 # ──────────────────────────────────────────────────────────────────
 # Boundaries: top_k / empty / disabled
 # ──────────────────────────────────────────────────────────────────
@@ -156,6 +162,32 @@ class TestSemanticPassiveRecallScoring:
             player_id=1, situation_cues=(_cue("北の洞窟"),), top_k=2, now=_NOW
         )
         assert result[0].entry.entry_id == "text_match"
+
+    def test_topic_cue_matches_japanese_belief_tag(self) -> None:
+        """topic 軸の日本語 cue が belief tag に当たり、semantic relevance を立てる。"""
+        setup, svc = _make_setup_and_svc()
+        setup.populate(1, _entry(entry_id="fire", tags=("火打ち石",)))
+        setup.populate(1, _entry(entry_id="other", tags=("水",)))
+        result = svc.retrieve(
+            player_id=1,
+            situation_cues=(_cue("world_object_7"), _topic("火打ち石")),
+            top_k=2,
+            now=_NOW,
+        )
+        assert result[0].entry.entry_id == "fire"
+        assert result[0].relevance > 0
+
+    def test_id_only_cue_does_not_match_japanese_belief_without_topic(self) -> None:
+        """ID 形式の cue だけなら日本語 belief には当たらず、relevance は従来どおり 0。"""
+        setup, svc = _make_setup_and_svc()
+        setup.populate(1, _entry(entry_id="fire", tags=("火打ち石",)))
+        result = svc.retrieve(
+            player_id=1,
+            situation_cues=(_cue("world_object_7"),),
+            top_k=1,
+            now=_NOW,
+        )
+        assert result[0].relevance == 0.0
 
     def test_cue_unspecified_relevance_all_zero(self) -> None:
         """cue 未指定なら relevance は全件 0。"""

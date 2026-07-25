@@ -430,6 +430,48 @@ class TestChunkEpisodeDraftBuilderRuntimeContext:
         canons = {c.to_canonical() for c in ep.cues}
         assert "place_spot:5" in canons, f"current_spot_id が cue 化されていない: {canons}"
 
+    def test_runtime_context_provider_does_not_save_topic_cues(self) -> None:
+        """chunk episode 保存側は表示名 topic を保存せず、episodic 索引に混ぜない。"""
+        from ai_rpg_world.application.llm.contracts.dtos import (
+            ToolRuntimeContextDto,
+            WorldObjectToolRuntimeTargetDto,
+        )
+
+        t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
+        obs = ObservationEntry(
+            occurred_at=t0,
+            output=ObservationOutput(
+                prose="古い焚き火跡を見た。",
+                structured={},
+                observation_category="environment",
+            ),
+        )
+        act = ActionResultEntry(
+            occurred_at=t0 + timedelta(minutes=1),
+            action_summary="memo_add",
+            result_summary="ok",
+            tool_name="memo_add",
+        )
+        inp = build_chunk_encoding_input(PlayerId(1), (obs,), (act,))
+        context = ToolRuntimeContextDto(
+            targets={
+                "O1": WorldObjectToolRuntimeTargetDto(
+                    label="O1",
+                    kind="world_object",
+                    display_name="古い焚き火跡",
+                    world_object_id=77,
+                )
+            },
+            current_spot_id=5,
+        )
+
+        ep = ChunkEpisodeDraftBuilder(
+            runtime_context_provider=lambda pid: context
+        ).build(inp)
+
+        assert all(c.axis != "topic" for c in ep.cues)
+        assert "topic:古い焚き火跡" not in {c.to_canonical() for c in ep.cues}
+
     def test_runtime_context_provider_episode_raises_exception(self) -> None:
         """provider が例外を投げても chunk write 自体は止めない (graceful)。
         cue は付かないが episode は成立する。"""

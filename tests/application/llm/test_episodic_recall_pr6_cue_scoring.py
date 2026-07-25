@@ -115,6 +115,46 @@ class TestR3CrossBucketScoring:
         # 残り 2 件はそれぞれ単一マッチ。順序は問わない (round-robin の結果)
         assert set(ids[1:]) == {"p1", "p2"}
 
+    def test_topic_query_cue_does_not_change_existing_episode_ranking(self) -> None:
+        """topic cue は保存済み episode に存在しないため、episodic の順位を変えない。"""
+        store = InMemorySubjectiveEpisodeStore()
+        base = datetime(2026, 5, 1, tzinfo=timezone.utc)
+        a = EpisodicCue(axis="a", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
+        b = EpisodicCue(axis="b", value="2", source=EpisodicCueSource.RUNTIME_CONTEXT)
+        topic = EpisodicCue(
+            axis="topic",
+            value="火打ち石",
+            source=EpisodicCueSource.RUNTIME_CONTEXT,
+        )
+        store.put_by_being(
+            being_id, _episode(episode_id="p1", occurred_at=base + timedelta(days=3), cues=(a,))
+        )
+        store.put_by_being(
+            being_id, _episode(episode_id="p2", occurred_at=base + timedelta(days=2), cues=(b,))
+        )
+        store.put_by_being(
+            being_id, _episode(episode_id="p3", occurred_at=base + timedelta(days=1), cues=(a, b))
+        )
+        res, wid = _make_resolver_and_being()
+        svc = EpisodicPassiveRecallRetrievalService(
+            store, being_attachment_resolver=res, default_world_id=wid
+        )
+        baseline = svc.retrieve(
+            player_id=7,
+            situation_cues=(a, b),
+            limit_per_axis=10,
+            max_candidates=3,
+        )
+        with_topic = svc.retrieve(
+            player_id=7,
+            situation_cues=(a, b, topic),
+            limit_per_axis=10,
+            max_candidates=3,
+        )
+        assert [c.episode.episode_id for c in with_topic.candidates] == [
+            c.episode.episode_id for c in baseline.candidates
+        ]
+
     def test_max_cap_2_prefers_multi_match_over_recent_single(self) -> None:
         """max_candidates=2 で打ち切られても、最新の単一マッチより multi-match が残る。"""
         store = InMemorySubjectiveEpisodeStore()
