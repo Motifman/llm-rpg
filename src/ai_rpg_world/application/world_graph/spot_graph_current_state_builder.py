@@ -190,6 +190,7 @@ TimeOfDayProvider = Callable[[], Optional[TimeOfDay]]
 # 名前解決と内部 state の可視化（HP バケット化・behavior の日本語化）を application 層で行う。
 # None を返した場合は builder 側で当該個体を snapshot から黙って除外する（既に死んで掃除されたケース等）。
 MonsterViewProvider = Callable[[MonsterId], Optional[SpotGraphMonsterEntry]]
+VisibleMonsterObserver = Callable[[int, SpotGraphMonsterEntry], None]
 # P-U3/P-U4 (停滞感の表出): player_id (int) → 停滞感バンド (``none`` /
 # ``light`` / ``strong``、P-U2 の resolve_stagnation_pressure_band と同型)。
 # 自己 (own_stagnation_band) と他者 (nearby_entities の stagnation_band) の
@@ -230,6 +231,7 @@ class SpotGraphCurrentStateBuilder:
         distant_view_service: Optional[DistantViewService] = None,
         distant_view_trace_enabled: bool = False,
         trace_recorder_provider: Optional[Callable[[], Any]] = None,
+        visible_monster_observer: Optional[VisibleMonsterObserver] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -262,6 +264,7 @@ class SpotGraphCurrentStateBuilder:
         self._distant_view_service = distant_view_service or DistantViewService()
         self._distant_view_trace_enabled = distant_view_trace_enabled
         self._trace_recorder_provider = trace_recorder_provider
+        self._visible_monster_observer = visible_monster_observer
         self._perception = SpotPerceptionService()
 
     def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
@@ -544,6 +547,31 @@ class SpotGraphCurrentStateBuilder:
                 exc_info=True,
             )
 
+    def _notify_visible_monsters(
+        self,
+        player_id: int,
+        monsters_at_spot: Sequence[SpotGraphMonsterEntry],
+    ) -> None:
+        """snapshot に見えている monster を観測 hook へ渡す。
+
+        初回判定や observation 生成は runtime 側の責務にし、builder は
+        「肉眼で見えた」という事実だけを通知する。hook の失敗で prompt
+        構築を壊さないよう、例外は warning に落とす。
+        """
+        observer = self._visible_monster_observer
+        if observer is None:
+            return
+        for entry in monsters_at_spot:
+            try:
+                observer(player_id, entry)
+            except Exception:
+                logger.warning(
+                    "visible_monster_observer failed for player_id=%s monster_id=%s",
+                    player_id,
+                    entry.monster_id,
+                    exc_info=True,
+                )
+
     def build_snapshot(self, player_id: int) -> SpotGraphPlayerSnapshotDto | None:
         """プレイヤーがグラフに載っていない場合は None。"""
         graph = self._spot_graph_repository.find_graph()
@@ -796,6 +824,7 @@ class SpotGraphCurrentStateBuilder:
                     )
                     continue
                 monsters_at_spot.append(view)
+        self._notify_visible_monsters(player_id, monsters_at_spot)
 
         nearby_entities: list[SpotGraphNearbyEntityEntry] = []
         for other_eid in presence.present_entity_ids:

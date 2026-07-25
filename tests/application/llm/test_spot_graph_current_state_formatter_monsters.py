@@ -74,6 +74,23 @@ class TestMonsterSection:
         assert "落ち着いている" in text
         assert "傷を負っている" in text
 
+    def test_includes_monster_appearance_when_present(self) -> None:
+        """appearance がある個体は、状態行とは別に見た目の説明も出る。"""
+        dto = _make_dto(
+            SpotGraphMonsterEntry(
+                monster_id=101,
+                display_name="大型のカニ",
+                behavior_label="落ち着いている",
+                health_bucket="healthy",
+                appearance="干潮時に岩礁帯から現れる。近づくと鋏で挟む。",
+            )
+        )
+
+        text = SpotGraphCurrentStateFormatter().format(dto)
+
+        assert "大型のカニ" in text
+        assert "干潮時に岩礁帯から現れる。近づくと鋏で挟む。" in text
+
     def test_corpse(self) -> None:
         """is_dead=True の個体は「死骸」表記になる。"""
         dto = _make_dto(

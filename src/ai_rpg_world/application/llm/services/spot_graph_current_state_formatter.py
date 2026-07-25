@@ -105,6 +105,9 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
                     lines.append(
                         f"- {entry.display_name}（{entry.behavior_label}・{health_label}）"
                     )
+                appearance = str(getattr(entry, "appearance", "") or "").strip()
+                if appearance:
+                    lines.append(f"  見た目: {appearance}")
 
         # Phase 4-E: 自分の自由 state (毒・呪い・隠しフラグも含む全項目)。
         # 第三者には流れない HIDDEN も本人プロンプトには載せて自己認識させる。

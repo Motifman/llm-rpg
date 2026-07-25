@@ -38,13 +38,15 @@ class _HpStub:
 
 
 class _TemplateStub:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, description: str = "") -> None:
         self.name = name
+        self.description = description
 
 
 def _make_aggregate(
     *,
     name: str = "灰色のオオカミ",
+    description: str = "",
     hp: int = 100,
     max_hp: int = 100,
     behavior_value: str = "IDLE",
@@ -52,7 +54,7 @@ def _make_aggregate(
 ):
     """テスト用の最小限な MonsterAggregate モック。"""
     agg = MagicMock()
-    agg.template = _TemplateStub(name)
+    agg.template = _TemplateStub(name, description)
     agg.hp = _HpStub(hp, max_hp)
     agg.behavior_state = _BehaviorStub(behavior_value)
     agg.status = status
@@ -184,6 +186,32 @@ class TestNameFallback:
         view = build_monster_view_provider(lookup)(MonsterId.create(101))
 
         assert view.display_name == "何かのモンスター"
+
+
+class TestAppearance:
+    """テンプレートの description を LLM 向けの見た目として view に載せる。"""
+
+    def test_template_description_populates_appearance(self) -> None:
+        """MonsterTemplate.description があれば appearance にそのまま入る。"""
+        lookup = MagicMock()
+        lookup.find_by_id.return_value = _make_aggregate(
+            description="岩陰から横歩きで現れる大型のカニ。"
+        )
+
+        view = build_monster_view_provider(lookup)(MonsterId.create(101))
+
+        assert view is not None
+        assert view.appearance == "岩陰から横歩きで現れる大型のカニ。"
+
+    def test_blank_template_description_is_empty_appearance(self) -> None:
+        """description が空白だけなら appearance は空文字になり prompt に出ない。"""
+        lookup = MagicMock()
+        lookup.find_by_id.return_value = _make_aggregate(description="   ")
+
+        view = build_monster_view_provider(lookup)(MonsterId.create(101))
+
+        assert view is not None
+        assert view.appearance == ""
 
 
 class TestBucketHpDirect:
