@@ -23,6 +23,9 @@ from ai_rpg_world.application.observation.services.observation_pipeline import (
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
     ObservationRecipientResolver,
 )
+from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
+    ObservationTurnScheduler,
+)
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
 )
@@ -167,6 +170,22 @@ def _build_pipeline(graph: SpotGraphAggregate) -> ObservationPipeline:
     )
 
 
+def _schedule_outputs(
+    results: list[tuple[PlayerId, ObservationOutput]],
+) -> MagicMock:
+    """pipeline の出力を scheduler に渡し、schedule_turn 呼び出しを検証できるようにする。"""
+    turn_trigger = MagicMock()
+    llm_player_resolver = MagicMock()
+    llm_player_resolver.is_llm_controlled.return_value = True
+    scheduler = ObservationTurnScheduler(
+        turn_trigger=turn_trigger,
+        llm_player_resolver=llm_player_resolver,
+    )
+    for player_id, output in results:
+        scheduler.maybe_schedule(player_id, output)
+    return turn_trigger
+
+
 class TestPipelineEntityEntered:
     def test_actor_excluded_others_at_spot_receive(self):
         """P1 がスポットAに入室 → 同じスポットの P2 のみ受信、P1 は除外、P3 は別スポット。"""
@@ -209,7 +228,7 @@ class TestPipelineEntityLeft:
 
 class TestPipelineObjectInteracted:
     def test_actor_excluded_others_see_action(self):
-        """P1 がドアを操作 → P2 が「探索者Aが古びたドアを操作した」を受信。"""
+        """P1 がドアを操作 → 同席者 P2 が目撃し、次ターンが積まれる。"""
         graph = _build_graph()
         pipeline = _build_pipeline(graph)
         event = SpotObjectInteractedEvent.create(
@@ -228,10 +247,32 @@ class TestPipelineObjectInteracted:
         _, output = results[0]
         assert "古びたドア" in output.prose
         assert "ドアが開いた" not in output.prose
+        assert output.schedules_turn is True
+        turn_trigger = _schedule_outputs(results)
+        turn_trigger.schedule_turn.assert_called_once_with(P2)
+
+    def test_solo_actor_object_interaction_does_not_schedule_turn(self):
+        """同席者がいない spot で interact しても目撃者観測が無く、turn は積まれない。"""
+        graph = _build_graph()
+        pipeline = _build_pipeline(graph)
+        event = SpotObjectInteractedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=E3,
+            spot_id=SPOT_B,
+            object_id=OBJ_1,
+            action_name="open",
+            result_message="何かが起きた",
+        )
+        results = pipeline.run(event)
+        assert results == []
+        turn_trigger = _schedule_outputs(results)
+        turn_trigger.schedule_turn.assert_not_called()
 
 
 class TestPipelineExplored:
     def test_actor_excluded_others_see_exploration(self):
+        """P1 が探索 → 同席者 P2 が目撃し、次ターンが積まれる。"""
         graph = _build_graph()
         pipeline = _build_pipeline(graph)
         event = SpotExploredEvent.create(
@@ -248,6 +289,25 @@ class TestPipelineExplored:
         _, output = results[0]
         assert "探索" in output.prose
         assert "sub-1" not in output.prose
+        assert output.schedules_turn is True
+        turn_trigger = _schedule_outputs(results)
+        turn_trigger.schedule_turn.assert_called_once_with(P2)
+
+    def test_solo_actor_exploration_does_not_schedule_turn(self):
+        """同席者がいない spot で explore しても目撃者観測が無く、turn は積まれない。"""
+        graph = _build_graph()
+        pipeline = _build_pipeline(graph)
+        event = SpotExploredEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=E3,
+            spot_id=SPOT_B,
+            discoveries=("sub-1",),
+        )
+        results = pipeline.run(event)
+        assert results == []
+        turn_trigger = _schedule_outputs(results)
+        turn_trigger.schedule_turn.assert_not_called()
 
 
 class TestPipelineConnectionChanged:
