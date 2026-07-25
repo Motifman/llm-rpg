@@ -163,7 +163,20 @@ class PlayerInteractionApplicationService:
         owned_counts = count_owned_item_instances_by_spec(
             actor_inv, self._item_repository
         )
+        target_owned = collect_owned_item_spec_ids_from_inventory(
+            target_inv, self._item_repository
+        )
         spot_presence_count = len(graph.presence_at(actor_spot).present_entity_ids)
+
+        # LLM は「太い流木を奪う」のように**名前**で品目を指す (倒れた相手の
+        # 持ち物は prompt に出ている: PR #824)。domain 側は spec id しか扱わ
+        # ないので、名前 → spec id の解決はここで済ませて
+        # ``interaction_parameters`` に入れておく。見つからないときは入れない
+        # ままにして、``TARGET_HAS_ITEM`` に「相手はそれを持っていない」と
+        # 言わせる (ここで例外にすると LLM が学習できない失敗になる)。
+        resolved_parameters = self._with_resolved_item_spec_id(
+            interaction_parameters, target_inv
+        )
 
         ok, reason = self._interaction.can_interact(
             idef,
@@ -171,10 +184,11 @@ class PlayerInteractionApplicationService:
             owned,
             self._world_flag_state.as_frozen_set(),
             spot_presence_count=spot_presence_count,
-            interaction_parameters=interaction_parameters,
+            interaction_parameters=resolved_parameters,
             owned_item_spec_counts=owned_counts,
             acting_player_status=actor_status,
             target_player_status=target_status,
+            target_owned_item_spec_ids=target_owned,
             current_tick=current_tick,
         )
         if not ok:
@@ -190,7 +204,7 @@ class PlayerInteractionApplicationService:
             current_tick=current_tick,
             acting_player_status=actor_status,
             target_player_status=target_status,
-            interaction_parameters=interaction_parameters,
+            interaction_parameters=resolved_parameters,
         )
 
         self._world_flag_state.replace_from_interaction(result.new_flags)
@@ -228,6 +242,48 @@ class PlayerInteractionApplicationService:
                 s.value for s in result.target_item_spec_ids_to_remove
             ),
         )
+
+    #: LLM が奪う品目を名指しするときに使う ``interaction_parameters`` のキー。
+    #: 解決後の spec id は ``ITEM_SPEC_ID_KEY`` に入れ、シナリオ側の
+    #: ``item_spec_id_parameter`` / ``item_spec_id_parameter_key`` はこちらを指す。
+    ITEM_NAME_KEY = "item"
+    ITEM_SPEC_ID_KEY = "item_spec_id"
+
+    def _with_resolved_item_spec_id(
+        self,
+        interaction_parameters: Optional[Dict[str, Any]],
+        target_inventory,
+    ) -> Optional[Dict[str, Any]]:
+        """``parameters["item"]`` (品目名) を対象の所持から spec id へ解決する。
+
+        見つからなければ何も足さない。「相手はその名前のものを持っていない」
+        は普通に起きる状況なので、ここで例外にすると LLM が学習できない失敗に
+        なる。条件 (``TARGET_HAS_ITEM``) 側が不成立として言葉で返す。
+
+        既に ``item_spec_id`` が入っている呼び出し (テストや将来の別経路) は
+        そのまま尊重して上書きしない。
+        """
+        if not interaction_parameters:
+            return interaction_parameters
+        if self.ITEM_SPEC_ID_KEY in interaction_parameters:
+            return interaction_parameters
+        raw_name = interaction_parameters.get(self.ITEM_NAME_KEY)
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            return interaction_parameters
+        spec_id = self._find_spec_id_by_name(target_inventory, raw_name.strip())
+        if spec_id is None:
+            return interaction_parameters
+        return {**interaction_parameters, self.ITEM_SPEC_ID_KEY: spec_id.value}
+
+    def _find_spec_id_by_name(self, inventory, name: str):
+        """対象の所持品から表示名が一致する item spec id を引く。"""
+        for spec_id in collect_owned_item_spec_ids_from_inventory(
+            inventory, self._item_repository
+        ):
+            spec = self._item_spec_repository.find_by_id(spec_id)
+            if spec is not None and getattr(spec, "name", None) == name:
+                return spec_id
+        return None
 
     def _require_inventory(self, player_id: PlayerId):
         inv = self._player_inventory_repository.find_by_id(player_id)

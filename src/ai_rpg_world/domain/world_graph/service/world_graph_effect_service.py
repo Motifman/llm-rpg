@@ -473,7 +473,7 @@ class WorldGraphEffectService:
             return _all
 
         if et == InteractionEffectTypeEnum.GIVE_ITEM:
-            sid = self._item_spec_from_param(p.get("item_spec_id"))
+            sid = self._resolve_item_spec_for_transfer(p, interaction_parameters, "GIVE_ITEM")
             quantity = self._read_quantity(p)
             bucket = self._item_bucket_for(
                 effect, actor_bucket=grant, target_bucket=target_grant,
@@ -519,7 +519,7 @@ class WorldGraphEffectService:
             return _all
 
         if et == InteractionEffectTypeEnum.REMOVE_ITEM:
-            sid = self._item_spec_from_param(p.get("item_spec_id"))
+            sid = self._resolve_item_spec_for_transfer(p, interaction_parameters, "REMOVE_ITEM")
             quantity = self._read_quantity(p)
             bucket = self._item_bucket_for(
                 effect, actor_bucket=remove, target_bucket=target_remove,
@@ -1208,6 +1208,40 @@ class WorldGraphEffectService:
         except (TypeError, ValueError):
             return 1
         return max(0, n)
+
+    @staticmethod
+    def _resolve_item_spec_for_transfer(
+        effect_params: dict,
+        interaction_parameters: Optional[dict],
+        effect_type_name: str,
+    ) -> ItemSpecId:
+        """アイテム授受 effect が扱う品目を決める。
+
+        ``item_spec_id_parameter`` が書かれていれば ``interaction_parameters``
+        の該当キーから実行時に決め、無ければ定義に固定された
+        ``item_spec_id`` を使う。倒れた相手の持ち物は prompt に見えている
+        (PR #824) ので、奪う品目は LLM が名指しできる必要がある。定義に固定
+        すると品目のぶんだけ action を並べることになり、設計 doc §3.2 で
+        棄却した「同じ行為の複製」になる。
+
+        実行時指定なのに参照キーが無い場合は例外にする。黙って 0 個付与に
+        すると「奪ったのに何も手に入らない」が成功として返る。この経路まで
+        来るのは ``TARGET_HAS_ITEM`` が先に弾くはずの状態なので、配線の
+        壊れとして扱う。
+        """
+        key = effect_params.get("item_spec_id_parameter")
+        if key is None:
+            return WorldGraphEffectService._item_spec_from_param(
+                effect_params.get("item_spec_id")
+            )
+        raw = (interaction_parameters or {}).get(key)
+        if raw is None:
+            raise InteractionEffectValidationException(
+                f"{effect_type_name} が参照する interaction_parameters[{key!r}] が"
+                "ありません。対象品目を実行時に決める効果は、先に "
+                "TARGET_HAS_ITEM 等で存在を確かめてください。"
+            )
+        return WorldGraphEffectService._item_spec_from_param(raw)
 
     @staticmethod
     def _item_spec_from_param(val: Any) -> ItemSpecId:

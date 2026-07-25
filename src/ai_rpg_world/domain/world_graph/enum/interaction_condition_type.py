@@ -49,3 +49,14 @@ class InteractionConditionTypeEnum(Enum):
     # スリが成立すると窃盗が作業になって質感が薄れるので、奪う前に倒す必要が
     # 生まれる形にする (設計判断はユーザ確定)。
     TARGET_PLAYER_IS_INCAPACITATED = "TARGET_PLAYER_IS_INCAPACITATED"
+    # 対人インタラクション: 対象プレイヤーの所持を見る。``HAS_ITEM`` は行為者の
+    # 所持しか見ないので、奪う (take) を書くとこれが要る。相手が持っていない
+    # のを内部エラーで落とすと、LLM から見て学習できない失敗になる
+    # (「相手はそれを持っていない」は普通に起きる状況である)。
+    #
+    # 判定する品目は ``target_item_spec_id`` で固定するか、
+    # ``item_spec_id_parameter_key`` で ``interaction_parameters`` のキーを
+    # 指して実行時に決める。後者は「見えている持ち物から LLM が名指しする」
+    # 経路で使う。
+    TARGET_HAS_ITEM = "TARGET_HAS_ITEM"
+    TARGET_HAS_NO_ITEM = "TARGET_HAS_NO_ITEM"
