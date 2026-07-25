@@ -312,6 +312,62 @@ def _gather_additional_freetexts_for_recall(
     return out
 
 
+def _gather_semantic_topic_words_for_recall(current_state_dto: Any | None) -> list[str]:
+    """現在状態 DTO から semantic relevance 用の日本語 topic 語を抽出する。
+
+    ID ではなく、prompt に出る名前・状態語だけを使う。戻り値は
+    ``build_situation_episodic_cues`` の検索入力側 topic cue になり、episode
+    保存側の cue には混ぜない。
+    """
+    out: list[str] = []
+
+    def add(raw: Any | None) -> None:
+        if not isinstance(raw, str):
+            return
+        text = raw.strip()
+        if text:
+            out.append(text)
+
+    if current_state_dto is None:
+        return out
+
+    add(getattr(current_state_dto, "current_spot_name", None))
+    for area_name in getattr(current_state_dto, "area_names", None) or ():
+        add(area_name)
+
+    for obj in getattr(current_state_dto, "visible_objects", None) or ():
+        add(getattr(obj, "display_name", None))
+
+    for item in getattr(current_state_dto, "inventory_items", None) or ():
+        add(getattr(item, "display_name", None))
+
+    snap = getattr(current_state_dto, "spot_graph_snapshot", None)
+    if snap is None:
+        return out
+
+    add(getattr(snap, "current_spot_name", None))
+    for obj in getattr(snap, "objects", None) or ():
+        add(getattr(obj, "name", None))
+    for item in getattr(snap, "inventory_items", None) or ():
+        add(getattr(item, "name", None))
+    for item in getattr(snap, "ground_items", None) or ():
+        add(getattr(item, "name", None))
+    for entity in getattr(snap, "nearby_entities", None) or ():
+        add(getattr(entity, "display_name", None))
+    for monster in getattr(snap, "monsters_at_spot", None) or ():
+        add(getattr(monster, "display_name", None))
+
+    for line in getattr(snap, "need_lines", None) or ():
+        if not isinstance(line, str):
+            continue
+        if line.startswith("空腹") and ("高い" in line or "危険" in line):
+            out.extend(("空腹", "食料"))
+        if line.startswith("疲労") and ("高い" in line or "危険" in line):
+            out.extend(("疲労", "休息"))
+
+    return out
+
+
 def _format_afterglow_section(
     afterglow_index: Optional[tuple[Any, ...]],
 ) -> str:
@@ -1066,6 +1122,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 current_state_text=current_state_text,
                 recent_events_text=recent_events_text,
                 player_info=player_info,
+                current_state_dto=current_state_dto,
                 prediction_context_id=prediction_context_id,
             )
         )
@@ -1079,6 +1136,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             observations=observations,
             action_results=action_results,
             ui_context=ui_context,
+            current_state_dto=current_state_dto,
         )
 
         # 6c. 進行中のメモ (Issue #188 Phase 1a): LLM が memo_add で context に
@@ -1285,6 +1343,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         current_state_text: str,
         recent_events_text: str,
         player_info: SystemPromptPlayerInfoDto,
+        current_state_dto: Optional[Any] = None,
         prediction_context_id: Optional[str] = None,
     ) -> tuple[str, Optional[int], tuple[str, ...]]:
         """受動想起ブロックを実行し、(関連する記憶テキスト, 候補件数, episode_id 群) を返す。
@@ -1545,6 +1604,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         observations: List[ObservationEntry],
         action_results: List[Any],
         ui_context: Any,
+        current_state_dto: Optional[Any] = None,
     ) -> tuple[str, tuple[str, ...]]:
         """Phase 1c: semantic memory の状況連想 top-K を §「【関連する学び】」用に整形する。
 
@@ -1576,6 +1636,8 @@ class DefaultPromptBuilder(IPromptBuilder):
             observation_prose=observation_prose,
             noun_matcher=self._noun_matcher,
             additional_freetexts=additional_freetexts,
+            semantic_topic_words=_gather_semantic_topic_words_for_recall(current_state_dto),
+            include_topic_cues=True,
             encounter_memory=self._encounter_memory_for_recall,
             encounter_player_id=player_id,
             encounter_current_tick=encounter_tick,
