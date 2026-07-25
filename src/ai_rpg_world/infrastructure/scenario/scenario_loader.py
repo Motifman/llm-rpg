@@ -426,6 +426,9 @@ class ScenarioLoadResult:
     reactive_passage_bindings: Tuple[ReactivePassageBinding, ...] = ()
     reactive_object_state_bindings: Tuple[ReactiveObjectStateBinding, ...] = ()
     synchronized_action_groups: Tuple[SynchronizedActionGroup, ...] = ()
+    # 対人行為の定義。シナリオ直下に 1 回だけ書き、どこで使えるかは前提条件で
+    # 表現する (spot object に紐づけると同じ行為の複数回定義が要るため)。
+    player_interactions: Tuple[InteractionDef, ...] = ()
     monster_templates: Tuple[ScenarioMonsterTemplate, ...] = ()
     monster_placements: Tuple[ScenarioMonsterPlacement, ...] = ()
     # Phase E-3b: プレイヤー個別 outcome 解決設定 (RESCUED / STRANDED 自動判定)。
@@ -491,6 +494,9 @@ class ScenarioLoader:
         reactive_object_bindings = self._parse_reactive_object_state_bindings(
             raw.get("reactive_bindings", {}), mapper,
         )
+        player_interactions = self._parse_player_interactions(
+            raw.get("player_interactions", []), mapper,
+        )
         sync_groups = self._parse_synchronized_action_groups(
             raw.get("synchronized_action_groups", []), mapper,
         )
@@ -514,6 +520,7 @@ class ScenarioLoader:
             reactive_passage_bindings=reactive_bindings,
             reactive_object_state_bindings=reactive_object_bindings,
             synchronized_action_groups=sync_groups,
+            player_interactions=player_interactions,
             monster_templates=monster_templates,
             monster_placements=monster_placements,
             outcome_resolution_config=outcome_resolution_config,
@@ -1857,6 +1864,56 @@ class ScenarioLoader:
                 )
             )
         return tuple(out)
+
+    def _parse_player_interactions(
+        self, raw_list: Any, mapper: ScenarioIdMapper,
+    ) -> Tuple[InteractionDef, ...]:
+        """シナリオ直下の ``player_interactions`` をパースする。
+
+        対人行為は spot object ではなくシナリオに 1 回だけ宣言し、「どこで
+        使えるか」は前提条件 (spot / 明るさ / 持ち物 / 役割) で表現する。
+        紐付けを成立条件の代用にすると、同じ行為を複数の場所で使うのに複数回
+        定義が要り、「暗い場所ならどこでも」のような動的な条件も書けない。
+        """
+        if not raw_list:
+            return ()
+        if not isinstance(raw_list, list):
+            raise ScenarioLoadError("player_interactions must be a list")
+
+        parsed: list[InteractionDef] = []
+        seen_action_names: set[str] = set()
+        for i, raw in enumerate(raw_list):
+            if not isinstance(raw, dict):
+                raise ScenarioLoadError(
+                    f"player_interactions[{i}] must be an object"
+                )
+            action_name = raw.get("action_name")
+            if not isinstance(action_name, str) or not action_name.strip():
+                raise ScenarioLoadError(
+                    f"player_interactions[{i}] requires a non-empty action_name"
+                )
+            action_name = action_name.strip()
+            if action_name in seen_action_names:
+                # LLM は action_name で行為を指定するので、重複すると
+                # 「どちらが実行されたか分からない」状態になる。
+                raise ScenarioLoadError(
+                    f"duplicate player_interaction action_name: {action_name!r}"
+                )
+            seen_action_names.add(action_name)
+
+            idef = self._parse_interaction_def(raw, mapper)
+            if not any(
+                e.target is EffectTarget.TARGET_PLAYER for e in idef.effects
+            ):
+                # 対象への効果を 1 つも持たない定義は書き間違い。放置すると
+                # 「相手を選んだのに自分に効く」という最も分かりにくい失敗になる。
+                raise ScenarioLoadError(
+                    f"player_interaction {action_name!r} has no effect with "
+                    "target=TARGET_PLAYER. 対人行為は相手に効く効果を 1 つ以上"
+                    "持つ必要があります"
+                )
+            parsed.append(idef)
+        return tuple(parsed)
 
     def _parse_synchronized_action_groups(
         self, raw: Any, mapper: ScenarioIdMapper,
