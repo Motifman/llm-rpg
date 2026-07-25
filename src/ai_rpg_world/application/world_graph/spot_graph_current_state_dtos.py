@@ -175,6 +175,7 @@ class SpotGraphMonsterEntry:
     - `behavior_label`: idle/alert/hostile/fleeing 等を日本語化した短い表記
     - `health_bucket`: 数値 HP は隠し、`healthy`/`wounded`/`dying` の 3 段階に丸める。
       現実世界での観測（姿勢・出血・荒い呼吸）に近づける狙い
+    - `appearance`: テンプレート description 由来の見た目。空なら表示しない。
     - `is_dead`: 死体の場合に True。生存個体とは表記を分ける
     """
 
@@ -182,6 +183,7 @@ class SpotGraphMonsterEntry:
     display_name: str
     behavior_label: str
     health_bucket: str
+    appearance: str = ""
     is_dead: bool = False
 
 

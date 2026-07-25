@@ -165,3 +165,20 @@ class TestMonsterLabeling:
 
         assert "こちらを追っている" in result.current_state_text
         assert "瀕死" in result.current_state_text
+
+    def test_appearance_is_rendered_under_monster_row(self) -> None:
+        """appearance がある個体は、ラベルなしの見た目行を併記する。"""
+        dto = _make_dto(
+            SpotGraphMonsterEntry(
+                monster_id=101,
+                display_name="大型のカニ",
+                behavior_label="落ち着いている",
+                health_bucket="healthy",
+                appearance="干潮時に岩礁帯から現れる。近づくと鋏で挟む。",
+            )
+        )
+
+        result = SpotGraphUiContextBuilder().build("base", dto)
+
+        assert '- "大型のカニ"' in result.current_state_text
+        assert "干潮時に岩礁帯から現れる。近づくと鋏で挟む。" in result.current_state_text

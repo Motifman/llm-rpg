@@ -704,6 +704,9 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # PR-FF: モンスター名を ``""`` で囲む (attack target_label が
             # 「``""`` 内が渡すべき値」規約を満たす)。
             lines.append(f"  - \"{disambiguated_name}\"（{desc}）")
+            appearance = str(getattr(entry, "appearance", "") or "").strip()
+            if appearance:
+                lines.append(f"    見た目: {appearance}")
             collector.add(
                 label,
                 MonsterToolRuntimeTargetDto(

@@ -61,6 +61,7 @@ def _build_builder(
     *,
     graph,
     monster_view_provider=None,
+    visible_monster_observer=None,
 ):
     spot_graph_repo = MagicMock()
     spot_graph_repo.find_graph.return_value = graph
@@ -77,6 +78,7 @@ def _build_builder(
         spot_interior_repository=spot_interior_repo,
         player_status_repository=player_status_repo,
         monster_view_provider=monster_view_provider,
+        visible_monster_observer=visible_monster_observer,
     )
 
 
@@ -175,3 +177,74 @@ class TestDarknessHidesMonsters:
 
         assert snap is not None
         assert snap.monsters_at_spot == ()
+
+
+class TestVisibleMonsterObserver:
+    """snapshot 構築時に、肉眼で見えたモンスターを observer へ通知する。"""
+
+    def test_visible_monster_observer_called_once_per_visible_entry(self) -> None:
+        """見えている monster だけを player_id と view DTO 付きで observer に渡す。"""
+        m1 = MonsterId.create(101)
+        graph = _build_graph_mock(present_monster_ids=[m1])
+        observed: list[tuple[int, int, str]] = []
+
+        def provider(mid: MonsterId):
+            return SpotGraphMonsterEntry(
+                monster_id=mid.value,
+                display_name="大型のカニ",
+                behavior_label="落ち着いている",
+                health_bucket="healthy",
+            )
+
+        def observer(player_id: int, entry: SpotGraphMonsterEntry) -> None:
+            observed.append((player_id, entry.monster_id, entry.display_name))
+
+        builder = _build_builder(
+            graph=graph,
+            monster_view_provider=provider,
+            visible_monster_observer=observer,
+        )
+
+        snap = builder.build_snapshot(PLAYER_ID)
+
+        assert snap is not None
+        assert observed == [(PLAYER_ID, 101, "大型のカニ")]
+
+    def test_darkness_does_not_notify_visible_monster_observer(self) -> None:
+        """暗闇で snapshot に載らない monster は observer にも通知しない。"""
+        from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+        from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
+        from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import (
+            SpotAtmosphere,
+        )
+
+        m1 = MonsterId.create(101)
+        graph = _build_graph_mock(present_monster_ids=[m1])
+        graph.get_spot.return_value.atmosphere = SpotAtmosphere(
+            lighting=LightingEnum.DARK,
+            sound_ambient=None,
+            temperature=TemperatureEnum.NORMAL,
+            smell=None,
+        )
+        observed: list[int] = []
+
+        def provider(mid: MonsterId):
+            return SpotGraphMonsterEntry(
+                monster_id=mid.value,
+                display_name="大型のカニ",
+                behavior_label="落ち着いている",
+                health_bucket="healthy",
+            )
+
+        builder = _build_builder(
+            graph=graph,
+            monster_view_provider=provider,
+            visible_monster_observer=lambda _pid, entry: observed.append(
+                entry.monster_id
+            ),
+        )
+
+        snap = builder.build_snapshot(PLAYER_ID)
+
+        assert snap is not None
+        assert observed == []

@@ -115,6 +115,7 @@ def build_monster_view_provider(
             return None
         template = agg.template
         name = (template.name or "").strip() or "何かのモンスター"
+        appearance = str(getattr(template, "description", "") or "").strip()
 
         is_dead = agg.status == MonsterStatusEnum.DEAD
         if is_dead:
@@ -125,6 +126,7 @@ def build_monster_view_provider(
                 # 一番素直なので固定文言を採用。
                 behavior_label="動かない",
                 health_bucket=HEALTH_DEAD,
+                appearance=appearance,
                 is_dead=True,
             )
 
@@ -137,6 +139,7 @@ def build_monster_view_provider(
             display_name=name,
             behavior_label=behavior_label,
             health_bucket=health_bucket,
+            appearance=appearance,
             is_dead=False,
         )
 

@@ -3626,6 +3626,37 @@ def create_world_runtime(
         spec = spec_union.to_item_spec() if hasattr(spec_union, "to_item_spec") else spec_union
         return spec.name
 
+    def _observe_visible_monster_for_player(player_id: int, entry: Any) -> None:
+        """初めて見た monster を observation として player に届ける。
+
+        current state の常時表示とは別に、入室時に初めて目に入った質感を
+        episode へ流すための hook。Encounter Memory で一度きりにし、
+        追加の per-player store は増やさない。
+        """
+        key = EncounterKey(kind="object", identifier=f"monster_{entry.monster_id}")
+        pid = PlayerId(player_id)
+        if encounter_memory.lookup(pid, key) is not None:
+            return
+        encounter_memory.observe(pid, key, _current_tick_provider())
+        appearance = str(getattr(entry, "appearance", "") or "").strip()
+        appearance_suffix = f" {appearance}" if appearance else ""
+        output = ObservationOutput(
+            prose=(
+                f"{entry.display_name}が同じ場所にいることに気づいた。"
+                f"{appearance_suffix}"
+            ).strip(),
+            structured={
+                "type": "monster_encountered",
+                "monster_id": int(entry.monster_id),
+                "display_name": str(entry.display_name),
+                "appearance": appearance,
+            },
+            observation_category="environment",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
+        runtime._emit_observation_directly(pid, output)
+
     # PR #2 状態異常 surface: 残り tick 表示のため current_tick_provider を
     # state_builder に渡す。time_provider 自体の構築は下方なので、ここでは
     # ホルダー経由で遅延参照する (構築順を入れ替えると他依存が崩れるため)。
@@ -3668,6 +3699,7 @@ def create_world_runtime(
         distant_cues=scenario.distant_cues,
         distant_view_trace_enabled=config.distant_view_trace_enabled,
         trace_recorder_provider=lambda: getattr(runtime, "_trace_recorder", None),
+        visible_monster_observer=_observe_visible_monster_for_player,
     )
 
     # ── 観測パイプライン構築 ──
