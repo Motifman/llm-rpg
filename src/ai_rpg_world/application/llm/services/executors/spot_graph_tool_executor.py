@@ -81,10 +81,16 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
 )
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.value_object.item_effect import (
+    CompositeItemEffect,
+    ItemEffect,
+    SatisfyNeedEffect,
+)
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPlayerPreparedActionEvent,
@@ -102,6 +108,24 @@ from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group impo
 # 10 は base_stats.max_hp=100 (現状の survival demo) に対して 10% 程度で、
 # 1 度の事故では致命的にならないが、繰り返せば確実に死ぬバランス。
 SPOILED_FOOD_DAMAGE_HP = 10
+SPOILED_FOOD_HUNGER_RETENTION_RATIO = 0.5
+
+
+def _extract_hunger_satisfaction_amount(effect: ItemEffect | None) -> int:
+    """consume_effect から HUNGER の satisfy_need 量だけを取り出す。
+
+    腐敗食では HP 回復などは適用しないが、食べ物として腹に入った分だけ
+    空腹回復を部分適用する。そのため HUNGER 以外の効果はここで無視する。
+    """
+    if effect is None:
+        return 0
+    if isinstance(effect, SatisfyNeedEffect):
+        if effect.need_type_name != NeedType.HUNGER.value:
+            return 0
+        return effect.amount
+    if isinstance(effect, CompositeItemEffect):
+        return sum(_extract_hunger_satisfaction_amount(sub) for sub in effect.effects)
+    return 0
 
 
 class SpotGraphToolExecutor:
@@ -722,10 +746,16 @@ class SpotGraphToolExecutor:
             name = item_instance.item_spec.name
             if is_spoiled:
                 # Phase F: 腐敗食 → ConsumableUsedEvent を出さず、直接ダメージを
-                # PlayerStatusAggregate に適用する。回復効果は捨てる (handler 経路
-                # を通さない)。damage 量は当面ハードコード (10)。per-item config
-                # は別 PR で。
+                # PlayerStatusAggregate に適用する。HP 回復等は捨てるが、食べ物
+                # として腹に入った分だけ HUNGER 回復は半分だけ残す。damage 量は
+                # 当面ハードコード (10)。per-item config は別 PR で。
                 damage = SPOILED_FOOD_DAMAGE_HP
+                retained_hunger = int(
+                    _extract_hunger_satisfaction_amount(
+                        item_instance.item_spec.consume_effect
+                    )
+                    * SPOILED_FOOD_HUNGER_RETENTION_RATIO
+                )
                 # 防御: 最小 wiring (テスト等) で _player_status_repository=None
                 # でインスタンス化された場合に AttributeError を投げないよう
                 # ガード。本ガードに当たるのは構成ミス相当で、damage は適用
@@ -742,6 +772,8 @@ class SpotGraphToolExecutor:
                 status = self._player_status_repository.find_by_id(PlayerId(player_id))
                 if status is not None:
                     status.apply_damage(damage)
+                    if retained_hunger > 0:
+                        status.satisfy_need(NeedType.HUNGER, retained_hunger)
                     self._player_status_repository.save(status)
                     # Phase G silent-failure fix: apply_damage が HP 0 にした
                     # 場合 aggregate は PlayerDownedEvent を積む。event_publisher
@@ -757,7 +789,7 @@ class SpotGraphToolExecutor:
                             self._event_publisher.publish_all(status_events)
                 base = (
                     f"{name}を食べてしまった。腐っていた——胃の奥が灼ける。"
-                    f"（{damage} ダメージ）"
+                    f"（{damage} ダメージ。それでも少し空腹は和らいだ）"
                 )
                 # PR-ι: 使いながらの一言 (silent fail-safe)
                 self._maybe_emit_say_inline(player_id, args)
