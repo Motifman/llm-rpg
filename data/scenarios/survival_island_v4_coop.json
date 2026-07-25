@@ -631,6 +631,16 @@
               }
             ]
           }
+        ],
+        "discoverable_items": [
+          {
+            "item_spec": "driftwood",
+            "description": "砂に半分埋もれた乾いた流木を見つけた。火を起こす材料になりそうだ。",
+            "discovery_condition": {
+              "condition_type": "SEARCH_COUNT",
+              "required_search_count": 1
+            }
+          }
         ]
       },
       "position": {
@@ -1009,6 +1019,16 @@
               }
             ]
           }
+        ],
+        "discoverable_items": [
+          {
+            "item_spec": "shellfish",
+            "description": "岩陰を探ると、手頃な貝をいくつか見つけた。",
+            "discovery_condition": {
+              "condition_type": "SEARCH_COUNT",
+              "required_search_count": 1
+            }
+          }
         ]
       },
       "position": {
@@ -1188,6 +1208,16 @@
                 ]
               }
             ]
+          }
+        ],
+        "discoverable_items": [
+          {
+            "item_spec": "sharp_stone",
+            "description": "波に削られた岩の隙間から、刃のように鋭い石片を見つけた。",
+            "discovery_condition": {
+              "condition_type": "SEARCH_COUNT",
+              "required_search_count": 2
+            }
           }
         ]
       },
@@ -1460,6 +1490,16 @@
                 ]
               }
             ]
+          }
+        ],
+        "discoverable_items": [
+          {
+            "item_spec": "dry_leaves",
+            "description": "倒木の陰に雨を避けて乾いた枯れ葉が残っていた。火種に使える。",
+            "discovery_condition": {
+              "condition_type": "SEARCH_COUNT",
+              "required_search_count": 1
+            }
           }
         ]
       },
@@ -1825,6 +1865,16 @@
               }
             ]
           }
+        ],
+        "discoverable_items": [
+          {
+            "item_spec": "fresh_water",
+            "description": "岩のくぼみに澄んだ水が溜まっているのを見つけた。少しなら持ち運べそうだ。",
+            "discovery_condition": {
+              "condition_type": "SEARCH_COUNT",
+              "required_search_count": 1
+            }
+          }
         ]
       },
       "position": {
@@ -1889,6 +1939,16 @@
                 ]
               }
             ]
+          }
+        ],
+        "discoverable_items": [
+          {
+            "item_spec": "vine_rope",
+            "description": "根元に絡んだ丈夫な蔓を見つけた。乾いていて縄として使えそうだ。",
+            "discovery_condition": {
+              "condition_type": "SEARCH_COUNT",
+              "required_search_count": 2
+            }
           }
         ]
       },
@@ -2223,7 +2283,17 @@
         "temperature": "NORMAL"
       },
       "interior": {
-        "objects": []
+        "objects": [],
+        "discoverable_items": [
+          {
+            "item_spec": "flint",
+            "description": "洞窟の入口の岩肌を探ると、火花を散らしそうな硬い石を見つけた。",
+            "discovery_condition": {
+              "condition_type": "SEARCH_COUNT",
+              "required_search_count": 2
+            }
+          }
+        ]
       },
       "position": {
         "x": 6.4,
@@ -2524,6 +2594,16 @@
                 ]
               }
             ]
+          }
+        ],
+        "discoverable_items": [
+          {
+            "item_spec": "vine_rope",
+            "description": "骨のナイフで泥に絡んだ太い蔓を切り出した。丈夫なロープになりそうだ。",
+            "discovery_condition": {
+              "condition_type": "HAS_ITEM",
+              "required_item": "bone_knife"
+            }
           }
         ]
       },
