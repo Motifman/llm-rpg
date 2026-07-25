@@ -47,6 +47,7 @@ from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.entity.sub_location import SubLocation
+from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import DiscoveryConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
@@ -1325,7 +1326,97 @@ class ScenarioLoader:
             )
         return value
 
-    def _parse_interaction_effect(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionEffect:
+    # ``target=TARGET_PLAYER`` を受け付ける効果。ここに無い効果に対象を書いても
+    # 意味を持たないので読み込み時に落とす (黙って ACTOR として動かすと、作者は
+    # 対象へ効いたつもりのまま気づけない)。
+    #
+    # 選定の基準は「その効果が人に対して起きるか」。物体・通路・天候・世界フラグに
+    # 効くものと、素材合成のように行為者の手元でしか成立しないものは除く。
+    _TARGET_PLAYER_CAPABLE_EFFECTS = frozenset(
+        {
+            InteractionEffectTypeEnum.APPLY_DAMAGE,
+            InteractionEffectTypeEnum.APPLY_STATUS_EFFECT,
+            InteractionEffectTypeEnum.SATISFY_NEED,
+            InteractionEffectTypeEnum.GIVE_ITEM,
+            InteractionEffectTypeEnum.REMOVE_ITEM,
+            InteractionEffectTypeEnum.TELEPORT_ENTITY,
+            InteractionEffectTypeEnum.CHANGE_PLAYER_STATE,
+            InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK,
+        }
+    )
+
+    def _parse_effect_target(
+        self, raw: Dict[str, Any], *, actor_context: str
+    ) -> EffectTarget:
+        """``effects[].target`` を検証して返す。既定は行為者。
+
+        3 種類の書き間違いを読み込み時に落とす。
+
+        - 未知の値 (``"TARGET_PLAYERS"`` の綴り間違いが ``ACTOR`` に落ちると
+          自分に致死ダメージが入る)
+        - 対象を取れない効果への指定
+        - 行為者が存在しない文脈での指定
+        """
+        raw_target = raw.get("target")
+        if raw_target is None:
+            return EffectTarget.ACTOR
+        if isinstance(raw_target, EffectTarget):
+            target = raw_target
+        else:
+            try:
+                target = EffectTarget(raw_target)
+            except (ValueError, TypeError):
+                allowed = ", ".join(sorted(m.value for m in EffectTarget))
+                raise ScenarioLoadError(
+                    f"unknown effect target {raw_target!r}. "
+                    f"使える値: {allowed}: {raw!r}"
+                )
+        if target is EffectTarget.ACTOR:
+            return target
+
+        if actor_context != "interaction":
+            raise ScenarioLoadError(
+                f"{actor_context} effects cannot use target=TARGET_PLAYER. "
+                f"{actor_context} には行為者が存在せず、誰を対象にするか決まりません。"
+                f"対人行為は interaction 側に書いてください: {raw!r}"
+            )
+
+        effect_type_str = raw.get("effect_type", "")
+        try:
+            effect_type = InteractionEffectTypeEnum[effect_type_str]
+        except KeyError:
+            # 未知の effect_type はこの関数の責務ではないので判断しない。
+            # NOTE: 後段の ``InteractionEffectTypeEnum[raw["effect_type"]]`` は
+            # try/except に包まれておらず、素の KeyError が load_from_dict から
+            # 漏れる (ScenarioLoadError にはならない)。本 PR 以前からの挙動で、
+            # 読み込みが失敗すること自体は変わらないが、loader の他のエラーと
+            # 文面の質が揃っていない。統一は別 PR で。
+            return target
+        if effect_type not in self._TARGET_PLAYER_CAPABLE_EFFECTS:
+            capable = ", ".join(
+                sorted(e.name for e in self._TARGET_PLAYER_CAPABLE_EFFECTS)
+            )
+            raise ScenarioLoadError(
+                f"{effect_type.name} does not support target=TARGET_PLAYER. "
+                f"対象を取れる効果: {capable}: {raw!r}"
+            )
+        return target
+
+    def _parse_interaction_effect(
+        self,
+        raw: Dict[str, Any],
+        mapper: ScenarioIdMapper,
+        *,
+        actor_context: str = "interaction",
+    ) -> InteractionEffect:
+        """効果 1 件をパースする。
+
+        ``actor_context`` は「この効果が誰の行為として適用されるか」を表す。
+        ``interaction`` 以外 (scenario_event / synchronized_action_group) には
+        行為者が存在せず、``target=TARGET_PLAYER`` を書いても誰を対象にするか
+        決まらない。書けるのに何も起きない状態を残さないため、その文脈では
+        読み込み時に落とす。
+        """
         params = dict(raw.get("parameters", {}))
         effect_type_str = raw.get("effect_type", "")
         # Phase 4-E: visibility は parameters dict ではなく first-class 属性で
@@ -1347,6 +1438,7 @@ class ScenarioLoader:
                 # ここは「読み込めなかった」状態を残さず None に倒し
                 # 既定値が使われるようにする。
                 visibility = None
+        target = self._parse_effect_target(raw, actor_context=actor_context)
         # CHANGE_OBJECT_STATE は state_updates を正式名とする。
         # 過去シナリオ互換で new_state が来た場合は正規化して受け入れる。
         # 他の effect (CHANGE_PASSAGE_STATE 等) では new_state は別の意味で
@@ -1404,6 +1496,7 @@ class ScenarioLoader:
             effect_type=effect_type,
             parameters=params,
             visibility=visibility,
+            target=target,
         )
 
     @staticmethod
@@ -1468,7 +1561,9 @@ class ScenarioLoader:
                 for i, c in enumerate(raw.get("conditions", []))
             )
             effects = tuple(
-                self._parse_interaction_effect(e, mapper)
+                self._parse_interaction_effect(
+                    e, mapper, actor_context="scenario_event",
+                )
                 for e in raw.get("effects", [])
             )
             parsed.append(
@@ -1800,11 +1895,15 @@ class ScenarioLoader:
                     f"synchronized_action_groups[{i}].required_action_ids must be a list"
                 )
             on_complete = tuple(
-                self._parse_interaction_effect(e, mapper)
+                self._parse_interaction_effect(
+                    e, mapper, actor_context="synchronized_action_group",
+                )
                 for e in g.get("on_complete", [])
             )
             on_timeout = tuple(
-                self._parse_interaction_effect(e, mapper)
+                self._parse_interaction_effect(
+                    e, mapper, actor_context="synchronized_action_group",
+                )
                 for e in g.get("on_timeout", [])
             )
             out.append(
