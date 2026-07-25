@@ -6,6 +6,7 @@ scenario_format_version "1.0" に対応。
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from math import isfinite
 from pathlib import Path
@@ -178,6 +179,15 @@ class PlayerSpawnConfig:
     # text block にまとめて入れる想定。秘密はそのプレイヤーの prompt にしか
     # 入らないので natural な info asymmetry になる。
     persona_prompt: Optional[str] = None
+    # 目的層 G6: このプレイヤー個別の初期目的文。goal store の seed に使われる。
+    # None なら `metadata.llm_objective_text` (シナリオ共通) へフォールバックする
+    # ので、既存シナリオの挙動は変わらない。persona_prompt と同じく、秘密の動機を
+    # 含む目的をそのプレイヤーの prompt にだけ入れられる (= 情報の非対称性)。
+    objective: Optional[str] = None
+    # 目的層 G6: このプレイヤーの初期目的を改訂不可にするか。None なら従来どおり
+    # シナリオ全体の性質 (`_scenario_has_goal`) から導出する。明示すればそれが
+    # 優先され、「勝敗条件つきシナリオでもこの 1 人だけは立て直せる」が書ける。
+    goal_locked: Optional[bool] = None
 
 
 @dataclass(frozen=True)
@@ -2228,6 +2238,12 @@ class ScenarioLoader:
                 # 前後 whitespace を削るが内側の改行は保持する (多行プロンプトを許容)
                 stripped = persona_raw.strip()
                 persona_prompt = stripped if stripped else None
+            objective = self._parse_player_objective(
+                p.get("objective"), owner_id=p["id"],
+            )
+            goal_locked = self._parse_player_goal_locked(
+                p.get("goal_locked"), owner_id=p["id"],
+            )
             spawns.append(PlayerSpawnConfig(
                 string_id=p["id"],
                 player_id=pid,
@@ -2236,8 +2252,56 @@ class ScenarioLoader:
                 initial_items=items,
                 initial_state=initial_state,
                 persona_prompt=persona_prompt,
+                objective=objective,
+                goal_locked=goal_locked,
             ))
         return spawns
+
+    @staticmethod
+    def _parse_player_objective(raw: Any, *, owner_id: str) -> Optional[str]:
+        """``players[].objective`` を検証して正規化する (目的層 G6)。
+
+        persona_prompt と同じ規約: 前後の whitespace は削るが内側の改行は
+        保持する (箇条書きの目的文を許容するため)。空文字・空白のみは None に
+        畳んで「未指定」と同じ扱いにする — 空文字で seed すると GoalEntry の
+        VO 不変条件に弾かれて静かに目的が消えるため、入口で潰す。
+        """
+        if raw is None:
+            return None
+        if not isinstance(raw, str):
+            raise ValueError(
+                f"player '{owner_id}': objective must be a string, "
+                f"got {type(raw).__name__}"
+            )
+        stripped = raw.strip()
+        if not stripped:
+            # 空白のみを黙って None に畳むと「個別目的を書いたつもりが共通目的で
+            # seed される」静かな失敗になる。共通目的文が非空の通常シナリオでは
+            # fail-fast にも掛からないので、ここで痕跡を残すしかない。
+            logging.getLogger(__name__).warning(
+                "player '%s': objective is whitespace-only; treating it as unset "
+                "and falling back to metadata.llm_objective_text",
+                owner_id,
+            )
+            return None
+        return stripped
+
+    @staticmethod
+    def _parse_player_goal_locked(raw: Any, *, owner_id: str) -> Optional[bool]:
+        """``players[].goal_locked`` を検証する (目的層 G6)。
+
+        None (未指定) はシナリオ全体の性質から導出する意味なので、False とは
+        区別して保持する。bool 以外は誤記として弾く — 0 / 1 / "true" を暗黙に
+        受けると「locked のつもりが unlocked」の取り違えが静かに通るため。
+        """
+        if raw is None:
+            return None
+        if not isinstance(raw, bool):
+            raise ValueError(
+                f"player '{owner_id}': goal_locked must be a boolean, "
+                f"got {type(raw).__name__}"
+            )
+        return raw
 
     @staticmethod
     def _parse_player_initial_state(
