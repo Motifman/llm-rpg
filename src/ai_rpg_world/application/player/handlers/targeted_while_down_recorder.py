@@ -49,10 +49,12 @@ class TargetedWhileDownRecorder(EventHandler[PlayerInteractedWithPlayerEvent]):
     def handle(self, event: PlayerInteractedWithPlayerEvent) -> None:
         try:
             target_pid = PlayerId(int(event.target_entity_id))
-            status = self._player_status_repository.find_by_id(target_pid)
-            if status is None or not getattr(status, "is_down", False):
-                # 起きている相手への行為は、通常の観測経路で本人に届く。
-                # ここで二重に記録すると目覚めの文に無関係な履歴が混ざる。
+            # **行為が始まった時点で**倒れていたかで判定する。集約に「いま
+            # 倒れているか」を問い合わせると、昏倒させた一撃そのものが
+            # 「倒れている間にされたこと」に化ける (致死の一撃は必ずそうなる)。
+            # 倒された事実は PlayerDownedEvent 由来の観測で本人に即座に届く
+            # ので、目覚めの申し送りにも入れると同じ一撃が二重に語られる。
+            if not getattr(event, "target_was_down", False):
                 return
             self._log.record(target_pid, self._describe(event))
         except Exception:

@@ -4653,6 +4653,9 @@ def create_world_runtime(
     # handler まで届いたか」を外から確かめる唯一の手掛かりで、publish された
     # ことと handler が走ったことは別物 (registry 登録漏れで静かに落ちる)。
     runtime._death_grace_timer = death_grace_timer
+    # 「倒れている間にされたこと」の預かり先。何が記録された / されなかったか
+    # を外から確かめられないと、致死の一撃が誤って混ざる類の破綻を固定できない。
+    runtime._downed_incident_log = downed_incident_log
     runtime._observation_appender = observation_appender
 
     # Issue #283 後続: episodic memory pipeline の on/off。

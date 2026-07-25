@@ -170,6 +170,10 @@ class PlayerInteractionApplicationService:
             actor_status = self._player_status_repository.find_by_id(actor_player_id)
             target_status = self._player_status_repository.find_by_id(target_player_id)
 
+        # 効果を当てる前に対象の状態を控える。適用後に問い合わせると、
+        # 昏倒させた一撃そのものが「倒れている間にされたこと」に化ける。
+        target_was_down = bool(getattr(target_status, "is_down", False))
+
         owned = collect_owned_item_spec_ids_from_inventory(
             actor_inv, self._item_repository
         )
@@ -261,6 +265,17 @@ class PlayerInteractionApplicationService:
         # clear → save」。save が先だと event を持ったまま永続化され、後続の
         # find→get_events で陳腐化イベントが二重に流れる。
         status_events_from_damage: list = []
+        # 行為者自身へのダメージ (反動 / 代償)。target=ACTOR の APPLY_DAMAGE を
+        # 受け付けておいて何も起こさないと、作者は書いたつもりのまま気付けない。
+        if result.damage_specs and actor_status is not None:
+            for spec in result.damage_specs:
+                if spec.damage <= 0:
+                    continue
+                actor_status.apply_damage(spec.damage)
+            if self._event_publisher is not None:
+                status_events_from_damage.extend(actor_status.get_events())
+                actor_status.clear_events()
+            self._player_status_repository.save(actor_status)
         if result.target_damage_specs and target_status is not None:
             for spec in result.target_damage_specs:
                 if spec.damage <= 0:
@@ -269,7 +284,7 @@ class PlayerInteractionApplicationService:
                     spec.damage, killer_player_id=actor_player_id
                 )
             if self._event_publisher is not None:
-                status_events_from_damage = list(target_status.get_events())
+                status_events_from_damage.extend(target_status.get_events())
                 target_status.clear_events()
             self._player_status_repository.save(target_status)
 
@@ -302,6 +317,7 @@ class PlayerInteractionApplicationService:
                         idef.witness_observation_message or ""
                     ),
                     witness_policy=idef.witness_policy,
+                    target_was_down=target_was_down,
                 )
             ])
 

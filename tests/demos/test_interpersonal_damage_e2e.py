@@ -134,3 +134,80 @@ class TestDownedEventIsDelivered:
         assert not any(
             isinstance(e, PlayerDownedEvent) for e in status.get_events()
         ), "publish 済みの PlayerDownedEvent が集約に残っている"
+
+
+class TestFellingBlowIsNotAnIncidentWhileDown:
+    """倒した一撃を「倒れている間にされたこと」として記録しない。
+
+    殴られ始めた時点では立っていたので、目覚めの「意識を失っている間の形跡」
+    に混ぜるのは事実と違う。しかも倒された事実は PlayerDownedEvent 由来の
+    観測で本人に即座に届くので、同じ一撃が二重に語られることになる。
+
+    判定は「その行為の時点で倒れていたか」であって「いま倒れているか」では
+    ない。後者で判定すると、致死の一撃は必ず前者に化ける。
+    """
+
+    def test_the_knockout_blow_is_not_logged_as_happening_while_down(
+        self, runtime
+    ) -> None:
+        """立っている相手を倒した一撃は、被害記録に残らない。"""
+        recorded: list = []
+        log = runtime._downed_incident_log
+        original = log.record
+        log.record = lambda pid, desc: (recorded.append((int(pid), desc)), original(pid, desc))[1]
+
+        runtime.do_interact_with_player(_ACTOR, _VICTIM, "strike_down")
+
+        assert recorded == [], f"倒した一撃が被害記録に混ざっている: {recorded}"
+
+    def test_striking_an_already_downed_target_is_logged(self, runtime) -> None:
+        """既に倒れている相手への追撃は、被害記録に残る。
+
+        こちらは本人が観測できないので、起きたときに伝える必要がある。
+        """
+        runtime.do_interact_with_player(_ACTOR, _VICTIM, "strike_down")
+        recorded: list = []
+        log = runtime._downed_incident_log
+        original = log.record
+        log.record = lambda pid, desc: (recorded.append((int(pid), desc)), original(pid, desc))[1]
+
+        runtime.do_interact_with_player(_ACTOR, _VICTIM, "strike_down")
+
+        assert recorded, "倒れている相手への追撃が記録されていない"
+
+
+class TestSelfDamageIsNotSilentlyIgnored:
+    """対人 action に書いた「行為者自身へのダメージ」も効く。"""
+
+    def test_actor_targeted_damage_applies_to_the_actor(self, tmp_path) -> None:
+        """target=ACTOR の APPLY_DAMAGE が行為者の HP を減らす。
+
+        反動や代償のある行為 (殴れば自分の拳も痛む) を書けるようにする。
+        受け取っておいて何も起きないのが最悪で、作者は書いたつもりのまま
+        気付けない。
+        """
+        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario["player_interactions"] = [{
+            "action_name": "reckless_strike",
+            "display_label": "捨て身で殴る",
+            "preconditions": [{"condition_type": "ALWAYS"}],
+            "effects": [
+                {"effect_type": "APPLY_DAMAGE", "target": "TARGET_PLAYER",
+                 "parameters": {"damage": 5}},
+                {"effect_type": "APPLY_DAMAGE", "target": "ACTOR",
+                 "parameters": {"damage": 3, "message": "拳が裂けた。"}},
+            ],
+        }]
+        path = tmp_path / "reckless.json"
+        path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
+        rt = create_world_runtime(path)
+        graph = rt._spot_graph_repo.find_graph()
+        spot = graph.get_entity_spot(EntityId.create(int(_ACTOR)))
+        graph.unplace_entity(EntityId.create(int(_VICTIM)))
+        graph.place_entity(EntityId.create(int(_VICTIM)), spot)
+        rt._spot_graph_repo.save(graph)
+
+        before = rt._player_status_repo.find_by_id(_ACTOR).hp.value
+        rt.do_interact_with_player(_ACTOR, _VICTIM, "reckless_strike")
+
+        assert rt._player_status_repo.find_by_id(_ACTOR).hp.value == before - 3
