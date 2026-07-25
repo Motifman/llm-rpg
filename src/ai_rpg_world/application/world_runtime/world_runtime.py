@@ -831,8 +831,11 @@ class WorldRuntime:
 
         ``tool_schema_mode="legacy"`` は従来互換。``"reason_first"`` では
         ``assess_situation`` を加え、行動 tool から step1 所有の
-        ``inner_thought`` / ``expected_result`` だけを外す。reason-first の
-        step1 / step2 は同じ mode を指定して同一 tool list を渡す。
+        ``inner_thought`` / ``expected_result`` だけを外す。
+
+        reason_first では ``assess_situation`` を必ず末尾に置く。action_phase
+        は末尾の評価 tool だけを落とすため、先頭の行動 tool 定義ブロックを
+        assess_phase とバイト単位で揃えやすくする。
         """
         if tool_schema_mode not in {"legacy", "reason_first"}:
             raise ValueError("tool_schema_mode must be 'legacy' or 'reason_first'")
@@ -842,18 +845,19 @@ class WorldRuntime:
             )
             for defn, _ in get_spot_graph_specs()
         ]
+        assessment_tool: ToolDefinitionDto | None = None
         if tool_schema_mode == "reason_first":
             spot = [
                 strip_reason_first_action_subjective_schema(defn)
                 for defn in spot
             ]
-            spot.append(
-                assess_situation_definition(
-                    expected_result_policy=self._expected_result_policy
-                )
+            assessment_tool = assess_situation_definition(
+                expected_result_policy=self._expected_result_policy
             )
         if not self._include_todo_tools:
-            return spot
+            if assessment_tool is None:
+                return spot
+            return spot + [assessment_tool]
         # Issue #526 後続: tool を expose するタイミングで auxiliary stack を
         # 確実に wire しておく (= 「定義は出すが handler が無い」状態を防ぐ)。
         # idempotent なので毎回呼んで OK。
@@ -871,7 +875,10 @@ class WorldRuntime:
                 recall_by_handle_enabled=recall_by_handle_enabled,
             )
         ]
-        return spot + memo
+        tools = spot + memo
+        if assessment_tool is not None:
+            tools.append(assessment_tool)
+        return tools
 
     # Prediction (#526 v0): expected_result 露出の対象 tool。記録経路 (do_* →
     # _record_action_result) に subjective を配線済みの core action だけに限定する

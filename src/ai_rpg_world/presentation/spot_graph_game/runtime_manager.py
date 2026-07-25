@@ -531,6 +531,7 @@ class _LlmPhaseAResult:
     llm_call_id: Optional[str] = None
     subjective_overrides: dict[str, Any] = field(default_factory=dict)
     failure_result: Optional[LlmCommandResultDto] = None
+    reason_first_turn_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -1878,17 +1879,34 @@ class _WorldLlmWiring:
         """reason-first 2段階ターンの Phase A。
 
         step1 は ``assess_situation`` を named tool_choice で強制する。成立した
-        評価だけを step2 末尾 prompt に追記し、step2 は同一 tool list で通常
-        action を required にする。契約違反時は行動実行へ進めない。
+        評価だけを step2 末尾 prompt に追記し、step2 は評価 tool を除いた
+        action tool list で通常 action を required にする。契約違反時は行動
+        実行へ進めない。
         """
 
-        tools_payload = self._build_tools_payload(tool_schema_mode="reason_first")
-        tool_names = [
+        assess_tools_payload = self._build_tools_payload(tool_schema_mode="reason_first")
+        action_tools_payload = [
+            tool
+            for tool in assess_tools_payload
+            if tool.get("function", {}).get("name") != TOOL_NAME_ASSESS_SITUATION
+        ]
+        assess_tool_names = [
             t.get("function", {}).get("name")
-            for t in tools_payload
+            for t in assess_tools_payload
             if t.get("function", {}).get("name")
         ]
-        metrics_sink = self._build_llm_metrics_sink(player_id, tool_names=tool_names)
+        action_tool_names = [
+            t.get("function", {}).get("name")
+            for t in action_tools_payload
+            if t.get("function", {}).get("name")
+        ]
+        assess_metrics_sink = self._build_llm_metrics_sink(
+            player_id, tool_names=assess_tool_names
+        )
+        action_metrics_sink = self._build_llm_metrics_sink(
+            player_id, tool_names=action_tool_names
+        )
+        reason_first_turn_id = f"reason-first-{uuid.uuid4().hex}"
         last_llm_call_id: Optional[str] = None
         assess_choice = {
             "type": "function",
@@ -1897,8 +1915,10 @@ class _WorldLlmWiring:
         self._record_reason_first_trace(
             TraceEventKind.REASON_FIRST_STARTED,
             player_id,
+            reason_first_turn_id=reason_first_turn_id,
             gate_reason=gate_reason,
-            tool_count=len(tool_names),
+            assess_phase_tool_count=len(assess_tool_names),
+            action_phase_tool_count=len(action_tool_names),
             retry_limit=1,
         )
         if gate_reason == "stagnation_strong":
@@ -1914,18 +1934,21 @@ class _WorldLlmWiring:
             return _LlmPhaseAResult(
                 player_id=player_id,
                 prompt=prompt,
-                tools_payload=tools_payload,
+                tools_payload=action_tools_payload,
                 tool_call=tool_call,
                 exception=exception,
                 llm_call_id=last_llm_call_id,
                 subjective_overrides=subjective_overrides or {},
                 failure_result=failure_result,
+                reason_first_turn_id=reason_first_turn_id,
             )
 
         def _invoke(
             messages: list[dict[str, Any]],
+            tools_payload: list[dict[str, Any]],
             tool_choice: Any,
             *,
+            metrics_sink: Any,
             attempt_index: int,
             parent_attempt_id: Optional[str],
             phase: str,
@@ -1962,7 +1985,9 @@ class _WorldLlmWiring:
             try:
                 tool_call = _invoke(
                     prompt["messages"],
+                    assess_tools_payload,
                     assess_choice,
+                    metrics_sink=assess_metrics_sink,
                     attempt_index=attempt_index,
                     parent_attempt_id=parent_attempt_id,
                     phase="assess_phase",
@@ -1977,6 +2002,8 @@ class _WorldLlmWiring:
                 self._record_reason_first_trace(
                     TraceEventKind.REASON_FIRST_STEP_FAILED,
                     player_id,
+                    reason_first_turn_id=reason_first_turn_id,
+                    gate_reason=gate_reason,
                     phase="assess_phase",
                     reason="invoke_exception",
                     error_type=type(exc).__name__,
@@ -2001,6 +2028,7 @@ class _WorldLlmWiring:
                 self._record_reason_first_trace(
                     TraceEventKind.REASON_FIRST_ASSESSED,
                     player_id,
+                    reason_first_turn_id=reason_first_turn_id,
                     attempt_index=attempt_index,
                     has_expected_result=bool(parsed.get("expected_result")),
                 )
@@ -2012,6 +2040,8 @@ class _WorldLlmWiring:
             self._record_reason_first_trace(
                 TraceEventKind.REASON_FIRST_STEP_FAILED,
                 player_id,
+                reason_first_turn_id=reason_first_turn_id,
+                gate_reason=gate_reason,
                 phase="assess_phase",
                 reason=failure_reason,
                 returned_tool=returned_tool,
@@ -2043,7 +2073,9 @@ class _WorldLlmWiring:
         try:
             action_tool_call = _invoke(
                 action_messages,
+                action_tools_payload,
                 "required",
+                metrics_sink=action_metrics_sink,
                 attempt_index=0,
                 parent_attempt_id=None,
                 phase="action_phase",
@@ -2064,9 +2096,12 @@ class _WorldLlmWiring:
             self._record_reason_first_trace(
                 TraceEventKind.REASON_FIRST_STEP_FAILED,
                 player_id,
+                reason_first_turn_id=reason_first_turn_id,
+                gate_reason=gate_reason,
                 phase="action_phase",
                 reason="assessment_tool_returned_in_action_phase",
                 returned_tool=action_name,
+                action_phase_tool_count=len(action_tool_names),
                 attempt_index=0,
                 final=True,
             )
@@ -2081,7 +2116,10 @@ class _WorldLlmWiring:
             self._record_reason_first_trace(
                 TraceEventKind.REASON_FIRST_ACTION_SELECTED,
                 player_id,
+                reason_first_turn_id=reason_first_turn_id,
+                gate_reason=gate_reason,
                 tool_name=action_name,
+                action_phase_tool_count=len(action_tool_names),
             )
         return _result(
             action_tool_call,
@@ -2119,6 +2157,10 @@ class _WorldLlmWiring:
         expected_result = assessment.get("expected_result")
         if expected_result:
             lines.append(f"- 期待する結果: {expected_result}")
+        lines.append(
+            "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。"
+            "inner_thought / expected_result は再生成しない。"
+        )
         suffix = "\n\n" + "\n".join(lines)
         if copied and copied[-1].get("role") == "user":
             copied[-1] = dict(copied[-1])
@@ -2249,6 +2291,7 @@ class _WorldLlmWiring:
             self._record_reason_first_trace(
                 TraceEventKind.REASON_FIRST_ASSESSMENT_INJECTED,
                 player_id,
+                reason_first_turn_id=phase_a.reason_first_turn_id,
                 tool_name=name,
                 injected_fields=sorted(phase_a.subjective_overrides.keys()),
             )

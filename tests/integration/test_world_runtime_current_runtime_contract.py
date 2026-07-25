@@ -630,6 +630,8 @@ def test_reason_first_tool_mode_adds_assessment_and_strips_action_subjective_fie
 
     assert TOOL_NAME_ASSESS_SITUATION not in legacy_names
     assert TOOL_NAME_ASSESS_SITUATION in reason_first_names
+    assert reason_first_names[-1] == TOOL_NAME_ASSESS_SITUATION
+    assert reason_first_names[:-1] == legacy_names
 
     assess = _tool_by_name_from(reason_first_tools, TOOL_NAME_ASSESS_SITUATION)
     assert "inner_thought" in assess.parameters["required"]
@@ -642,18 +644,47 @@ def test_reason_first_tool_mode_adds_assessment_and_strips_action_subjective_fie
     assert "expected_result" not in explore.parameters.get("required", [])
 
 
-def test_reason_first_tool_mode_keeps_step1_and_step2_tool_lists_identical(
+def test_reason_first_action_phase_omits_assessment_tool_and_keeps_action_schema(
     clean_runtime_env: None,
 ) -> None:
-    """reason_first の2段階は同じ API から同一 tool list を得て prefix cache を守る。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="optional")
+    """action_phase は評価 tool を渡さず、行動 tool だけを主観欄なしで渡す。"""
+    runtime = _ReasonFirstRuntime()
+    client = _reason_first_success_client()
+    wiring = _reason_first_wiring(runtime, client)
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
     )
 
-    step1 = runtime.get_tool_definitions(tool_schema_mode="reason_first")
-    step2 = runtime.get_tool_definitions(tool_schema_mode="reason_first")
+    result = wiring.run_turn(PlayerId(1))
 
-    assert step1 == step2
+    assert result.success is True
+    assess_tools = [
+        tool["function"]["name"]
+        for tool in client.calls[0]["tools"]
+    ]
+    action_tools = [
+        tool["function"]["name"]
+        for tool in client.calls[1]["tools"]
+    ]
+    legacy_tools = [
+        tool["function"]["name"]
+        for tool in wiring._build_tools_payload(tool_schema_mode="legacy")
+    ]
+    assert TOOL_NAME_ASSESS_SITUATION in assess_tools
+    assert assess_tools[-1] == TOOL_NAME_ASSESS_SITUATION
+    assert TOOL_NAME_ASSESS_SITUATION not in action_tools
+    assert assess_tools[:-1] == action_tools
+    assert action_tools == legacy_tools
+    action_explore = next(
+        tool
+        for tool in client.calls[1]["tools"]
+        if tool["function"]["name"] == TOOL_NAME_SPOT_GRAPH_EXPLORE
+    )
+    properties = action_explore["function"]["parameters"].get("properties", {})
+    assert "inner_thought" not in properties
+    assert "expected_result" not in properties
 
 
 def test_reason_first_tool_mode_preserves_goal_revision_fields(
@@ -930,6 +961,26 @@ def test_reason_first_gated_turn_writes_assess_and_action_phase_prompt_dataset_r
         "function": {"name": TOOL_NAME_ASSESS_SITUATION},
     }
     assert rows[1]["request"]["kwargs"]["tool_choice"] == "required"
+    toolsets = {
+        row["toolset_id"]: row
+        for row in (
+            json.loads(line)
+            for line in (tmp_path / "prompt_dataset" / "toolsets.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if line.strip()
+        )
+    }
+    assess_tool_names = [
+        tool["function"]["name"]
+        for tool in toolsets[rows[0]["request"]["kwargs"]["tools_ref"]]["tools"]
+    ]
+    action_tool_names = [
+        tool["function"]["name"]
+        for tool in toolsets[rows[1]["request"]["kwargs"]["tools_ref"]]["tools"]
+    ]
+    assert TOOL_NAME_ASSESS_SITUATION in assess_tool_names
+    assert TOOL_NAME_ASSESS_SITUATION not in action_tool_names
 
 
 def test_reason_first_two_step_injects_assessment_before_action_execution(
@@ -977,15 +1028,14 @@ def test_reason_first_two_step_injects_assessment_before_action_execution(
         "function": {"name": TOOL_NAME_ASSESS_SITUATION},
     }
     assert client.calls[1]["tool_choice"] == "required"
-    assert [
-        tool["function"]["name"] for tool in client.calls[0]["tools"]
-    ] == [
-        tool["function"]["name"] for tool in client.calls[1]["tools"]
-    ]
     assert TOOL_NAME_ASSESS_SITUATION in {
+        tool["function"]["name"] for tool in client.calls[0]["tools"]
+    }
+    assert TOOL_NAME_ASSESS_SITUATION not in {
         tool["function"]["name"] for tool in client.calls[1]["tools"]
     }
     assert "水源は一度失敗したので周囲を見直す。" in client.calls[1]["messages"][-1]["content"]
+    assert "実行する行動 tool を1つ選ぶ" in client.calls[1]["messages"][-1]["content"]
     assert captured_arguments["inner_thought"] == "水源は一度失敗したので周囲を見直す。"
     assert captured_arguments["expected_result"] == "新しい発見があるはずだ。"
     kinds = [kind for kind, _ in runtime.trace_recorder.records]
@@ -993,6 +1043,17 @@ def test_reason_first_two_step_injects_assessment_before_action_execution(
     assert TraceEventKind.REASON_FIRST_ASSESSED in kinds
     assert TraceEventKind.REASON_FIRST_ACTION_SELECTED in kinds
     assert TraceEventKind.REASON_FIRST_ASSESSMENT_INJECTED in kinds
+    reason_first_payloads = [
+        payload
+        for kind, payload in runtime.trace_recorder.records
+        if str(kind).startswith("reason_first_")
+    ]
+    turn_ids = {
+        payload.get("reason_first_turn_id")
+        for payload in reason_first_payloads
+    }
+    assert len(turn_ids) == 1
+    assert next(iter(turn_ids))
 
 
 def test_reason_first_step1_retries_once_then_returns_no_op_without_action(
@@ -1133,6 +1194,9 @@ def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
     ]
     assert failed[-1]["phase"] == "action_phase"
     assert failed[-1]["returned_tool"] == TOOL_NAME_ASSESS_SITUATION
+    assert failed[-1]["gate_reason"] == "callable_override"
+    assert failed[-1]["action_phase_tool_count"] == 1
+    assert failed[-1]["reason_first_turn_id"]
 
 
 def test_reason_first_prediction_uses_shared_action_recording_path(
