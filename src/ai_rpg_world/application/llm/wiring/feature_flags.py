@@ -881,14 +881,21 @@ def resolve_goal_store_enabled(
 
     ``GOAL_STORE_ENABLED=1`` で ON、未設定 / その他は OFF。
 
-    OFF (既定) のとき: 従来どおり ``objective_text_provider`` は
-    ``scenario.metadata.llm_objective_text`` の固定文字列を返す (goal store は
-    構築されず snapshot は空 in-memory fallback)。
+    OFF (既定) のとき: 従来どおり ``objective_text_provider`` は静的な目的文を
+    返す (goal store は構築されず snapshot は空 in-memory fallback)。
 
-    ON にすると: run 開始時にシナリオ目的文を ``locked=True, origin="scenario"``
-    で goal store に seed し、``objective_text_provider`` は store の active 目的を
-    描画する。**locked 初期値なら描画結果は従来の静的テキストと同一** なので、
-    既存シナリオの挙動は不変 (質感テストで固定)。目的の見直し・清算 (G2/G4) は
+    その静的な目的文は目的層 G6 以降、``players[].objective`` があればその文、
+    無ければ ``scenario.metadata.llm_objective_text`` で、**本 flag の ON/OFF に
+    依らずプレイヤーごとに解決される**
+    (``WorldRuntime._resolve_player_objective_text``)。個別目的を書いていない
+    既存シナリオでは従来どおり全員が共通の固定文字列になる。
+
+    ON にすると: run 開始時に上で解決した目的文を ``origin="scenario"`` で goal
+    store に seed し、``objective_text_provider`` は store の active 目的を
+    描画する。**seed 直後の描画結果は従来の静的テキストと同一** なので、
+    既存シナリオの挙動は不変 (質感テストで固定)。seed 時の ``locked`` は
+    ``players[].goal_locked`` があればその値、無ければシナリオが勝敗条件を
+    持つか (``_scenario_has_goal``) に従う。目的の見直し・清算 (G2/G4) は
     本 flag のスコープ外。
     """
     return _parse_bool_env(ENV_GOAL_STORE_ENABLED, env=env, default=False)

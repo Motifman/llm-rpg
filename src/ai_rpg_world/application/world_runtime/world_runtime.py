@@ -1326,17 +1326,91 @@ class WorldRuntime:
         - scenario A の objective を scenario B で再利用すると LLM が別ゲームを
           始めてしまう (= cross-scenario silent failure)
         - シナリオ作者に「LLM ゴール文」を明示的に書かせる強制力
+
+        目的層 G6: ``players[].objective`` で全員に個別目的が宣言されている
+        シナリオでは「誰も目的を持たない」事態が起きないので、共通目的文が
+        空でも許す。逆に 1 人でも欠けていれば従来どおり fail-fast する
+        (一部だけ目的があり、残りが無言で目的なしになる静かな失敗を防ぐ)。
         """
         text = (self.scenario.metadata.llm_objective_text or "").strip()
         if not text:
-            scenario_id = self.scenario.metadata.id or "<unknown>"
-            raise ValueError(
-                f"scenario {scenario_id!r} has empty metadata.llm_objective_text; "
-                "LLM の objective section に埋め込む勝利条件文を scenario JSON の "
-                "metadata.llm_objective_text に追加してください "
-                "(例: \"- 山頂の狼煙台で火を上げ、救助船 (4日目/6日目/7日目) を待つ\")"
-            )
+            missing = self._players_missing_objective()
+            if missing:
+                scenario_id = self.scenario.metadata.id or "<unknown>"
+                raise ValueError(
+                    f"scenario {scenario_id!r} has empty metadata.llm_objective_text "
+                    f"and these players have no players[].objective: {missing}; "
+                    "LLM の objective section に埋め込む勝利条件文を scenario JSON の "
+                    "metadata.llm_objective_text に追加するか、全プレイヤーに "
+                    "players[].objective を書いてください "
+                    "(例: \"- 山頂の狼煙台で火を上げ、救助船 (4日目/6日目/7日目) を待つ\")"
+                )
         return text
+
+    def _players_missing_objective(self) -> List[str]:
+        """``players[].objective`` を持たないプレイヤーの string_id を返す。
+
+        共通目的文が空のときの fail-fast 判定に使う (目的層 G6)。spawn が
+        1 人もいないシナリオでは「全員に個別目的がある」とは言えないので、
+        番兵を返して従来どおり fail-fast させる。
+        """
+        spawns = self.scenario.player_spawns
+        if not spawns:
+            return ["<no player_spawns>"]
+        return [
+            spawn.string_id
+            for spawn in spawns
+            if not (spawn.objective or "").strip()
+        ]
+
+    def _resolve_player_objective_text(
+        self, player_id: PlayerId, scenario_text: str
+    ) -> str:
+        """目的層 G6: そのプレイヤーの初期目的文を解決する。
+
+        優先順は persona_prompt と揃える: ``players[].objective`` があれば
+        それ、無ければシナリオ共通の ``metadata.llm_objective_text``。
+        既存シナリオ (全員 objective なし) では常に scenario_text を返すので
+        挙動は変わらない。
+
+        spawn が見つからない player_id で呼ばれた場合は共通目的文へ縮退するが、
+        黙って他人の目的を渡すことになるので warning を残す。現行の呼び出し元は
+        すべて ``get_player_ids()`` (= player_spawns 由来) なので通常は起きない。
+        """
+        for spawn in self.scenario.player_spawns:
+            if spawn.player_id != player_id.value:
+                continue
+            objective = (spawn.objective or "").strip()
+            return objective if objective else scenario_text
+        self._warn_unknown_player_spawn(player_id, "objective")
+        return scenario_text
+
+    def _warn_unknown_player_spawn(self, player_id: PlayerId, field: str) -> None:
+        """player_spawns に無い player_id で目的解決が呼ばれたことを記録する。"""
+        logging.getLogger(__name__).warning(
+            "player_id=%s is not present in scenario.player_spawns; "
+            "falling back to the shared %s. 個別目的が無視されている可能性がある",
+            player_id.value,
+            field,
+        )
+
+    def _resolve_player_goal_locked(self, player_id: PlayerId) -> bool:
+        """目的層 G6: そのプレイヤーの初期目的を locked にするかを解決する。
+
+        ``players[].goal_locked`` が明示されていればそれを優先し、未指定なら
+        従来どおり ``_scenario_has_goal(self.scenario)`` に従う (挙動不変)。
+
+        spawn が見つからない player_id で呼ばれた場合はシナリオ由来の値へ縮退
+        するが、``_resolve_player_objective_text`` と同じ理由で warning を残す。
+        """
+        for spawn in self.scenario.player_spawns:
+            if spawn.player_id != player_id.value:
+                continue
+            if spawn.goal_locked is not None:
+                return spawn.goal_locked
+            return _scenario_has_goal(self.scenario)
+        self._warn_unknown_player_spawn(player_id, "goal_locked")
+        return _scenario_has_goal(self.scenario)
 
     def _resolve_objective_via_goal_store(
         self, player_id: PlayerId, fallback_text: str
@@ -1401,7 +1475,7 @@ class WorldRuntime:
                 player_id=int(player_id.value),
                 text=fallback_text,
                 status=GOAL_STATUS_ACTIVE,
-                locked=_scenario_has_goal(self.scenario),
+                locked=self._resolve_player_goal_locked(player_id),
                 origin=GOAL_ORIGIN_SCENARIO,
                 created_tick=tick if isinstance(tick, int) else 0,
                 created_at=datetime.now(timezone.utc),
@@ -1597,7 +1671,11 @@ class WorldRuntime:
                     if active is not None:
                         return active.text
         try:
-            return self._resolve_scenario_llm_objective_text()
+            # 目的層 G6: 縮退先も player ごとに解決する。ここが共通文のままだと、
+            # 個別目的を持つプレイヤーが seed 前に「他人の目的」で監査される。
+            return self._resolve_player_objective_text(
+                player_id, self._resolve_scenario_llm_objective_text()
+            )
         except Exception:
             return None
 
@@ -1713,8 +1791,11 @@ class WorldRuntime:
         # 配線側で行い、ここでは provider 設置だけ (prompt builder 構築が LLM
         # 有効時にしか走らないため、store 構築をここに置くと flag が効かない)。
         sections = PromptSectionProviders(
+            # 目的層 G6: fallback は player ごとに解決する。players[].objective が
+            # あればその人だけ別の目的文で seed され、無ければ従来どおり
+            # シナリオ共通文になる。
             objective_text_provider=lambda pid: self._resolve_objective_via_goal_store(
-                pid, resolved_objective_text
+                pid, self._resolve_player_objective_text(pid, resolved_objective_text)
             ),
             inventory_text_provider=lambda pid: self._format_inventory_evidence(pid),
             memo_store=self._todo_store,
