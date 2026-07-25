@@ -331,6 +331,7 @@ class WorldRuntime:
     _exploration_progress: InMemorySpotExplorationProgressStore
     _movement_service: SpotGraphMovementApplicationService
     _interaction_service: SpotInteractionApplicationService
+    _player_interaction_service: "PlayerInteractionApplicationService"
     _exploration_service: SpotExplorationApplicationService
     _item_transfer_service: SpotGraphItemTransferService
     _state_builder: SpotGraphCurrentStateBuilder
@@ -2030,6 +2031,55 @@ class WorldRuntime:
         )
         return result
 
+    def available_player_action_names(self) -> tuple:
+        """人を対象にできる action 名 (シナリオ直下 ``player_interactions``)。"""
+        svc = getattr(self, "_player_interaction_service", None)
+        return svc.available_action_names() if svc is not None else ()
+
+    def do_interact_with_player(
+        self, actor_player_id: PlayerId, target_player_id: PlayerId, action_name: str,
+        *,
+        interaction_parameters: Optional[Dict[str, Any]] = None,
+        expected_result: Optional[str] = None,
+        intention: Optional[str] = None,
+        emotion_hint: Optional[str] = None,
+    ):
+        """同じ場所にいるプレイヤーを対象にした interaction を実行する。
+
+        ``do_interact`` (物体) と対になる。行為の宣言はシナリオ直下の
+        ``player_interactions`` にあり、場所の制約は前提条件で書く
+        (docs/memory_system/interpersonal_interaction_design.md §3.2)。
+        """
+        from ai_rpg_world.domain.common.value_object import WorldTick
+        svc = self._player_interaction_service
+        result = svc.execute(
+            actor_player_id,
+            target_player_id,
+            action_name,
+            interaction_parameters=interaction_parameters,
+            current_tick=WorldTick(self.current_tick()),
+        )
+        self._process_graph_events()
+        target_label = next(
+            (
+                s.name
+                for s in self.scenario.player_spawns
+                if int(s.player_id) == int(target_player_id)
+            ),
+            f"プレイヤー({int(target_player_id)})",
+        )
+        action_ja = self._interaction_action_label_ja(action_name)
+        self._record_action_result(
+            actor_player_id,
+            f"「{target_label}」に対して{action_ja}を行った",
+            "; ".join(result.messages) if result.messages else "完了",
+            tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
+            expected_result=expected_result,
+            intention=intention,
+            emotion_hint=emotion_hint,
+        )
+        return result
+
     def do_drop_item(
         self, player_id: PlayerId, slot_id_value: int,
     ) -> ItemTransferResult:
@@ -3422,6 +3472,24 @@ def create_world_runtime(
             int(pid), f"プレイヤー({int(pid)})"
         ),
     )
+    # 対人 interaction。シナリオが player_interactions を宣言していなければ
+    # action 名が空の service になり、executor が「この世界では人を対象にした
+    # 操作が定義されていません」と名指しで返す (物体経路へ流して無関係な
+    # 「オブジェクトが見つからない」を出さない)。
+    from ai_rpg_world.application.world_graph.player_interaction_application_service import (
+        PlayerInteractionApplicationService,
+    )
+    player_interaction_service = PlayerInteractionApplicationService(
+        spot_graph_repository=spot_graph_repo,
+        player_inventory_repository=player_inventory_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+        player_status_repository=player_status_repo,
+        world_flag_state=world_flag_state,
+        player_interactions=scenario.player_interactions,
+        interaction_service=_interaction_domain_service,
+        effect_service=_effect_service,
+    )
     exploration_service = SpotExplorationApplicationService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -4206,6 +4274,7 @@ def create_world_runtime(
         _exploration_progress=exploration_progress,
         _movement_service=movement_service,
         _interaction_service=interaction_service,
+        _player_interaction_service=player_interaction_service,
         _exploration_service=exploration_service,
         _item_transfer_service=item_transfer_service,
         _state_builder=state_builder,

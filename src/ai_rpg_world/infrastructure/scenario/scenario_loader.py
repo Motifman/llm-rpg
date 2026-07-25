@@ -1266,7 +1266,33 @@ class ScenarioLoader:
             # phase 名はシナリオ宣言依存のため固定値リストを持たない)。
             required_time_of_day_phase=raw.get("required_time_of_day_phase"),
             required_weather_type=raw.get("required_weather_type"),
+            # 対人 interaction: TARGET_HAS_ITEM / TARGET_HAS_NO_ITEM が判定
+            # する品目を、interaction_parameters のどのキーから取るか。
+            item_spec_id_parameter_key=self._parse_item_spec_id_parameter_key(raw),
         )
+
+    @staticmethod
+    def _parse_item_spec_id_parameter_key(raw: Dict[str, Any]) -> Optional[str]:
+        """``item_spec_id_parameter_key`` を検証して返す。
+
+        対象所持条件でしか意味を持たないフィールドなので、他の condition_type
+        に書かれていたら黙って無視せず落とす。無視すると「書いたのに効かない」
+        宣言がシナリオに残り、実 run で初めて気付くことになる。
+        """
+        key = raw.get("item_spec_id_parameter_key")
+        if key is None:
+            return None
+        if not isinstance(key, str) or not key.strip():
+            raise ScenarioLoadError(
+                "item_spec_id_parameter_key must be a non-empty string"
+            )
+        cond_type = raw.get("condition_type")
+        if cond_type not in ("TARGET_HAS_ITEM", "TARGET_HAS_NO_ITEM"):
+            raise ScenarioLoadError(
+                "item_spec_id_parameter_key is only valid on TARGET_HAS_ITEM / "
+                f"TARGET_HAS_NO_ITEM (got condition_type={cond_type!r})"
+            )
+        return key.strip()
 
     @staticmethod
     def _parse_need_type(raw: Dict[str, Any]) -> Optional[str]:

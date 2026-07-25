@@ -583,6 +583,10 @@ class SpotGraphToolExecutor:
         blocked = self._is_exhausted_and_block(player_id, TOOL_NAME_SPOT_GRAPH_INTERACT)
         if blocked is not None:
             return blocked
+        # resolver は object_id と target_player_id のどちらか一方だけを埋める
+        # (排他)。人が対象なら対人経路へ回す。
+        if args.get("target_player_id") is not None:
+            return self._interact_with_player(player_id, args)
         try:
             oid = int(args.get("object_id", 0))
             action = str(args.get("action_name", "")).strip()
@@ -669,6 +673,95 @@ class SpotGraphToolExecutor:
                     "「使える操作」(例: gather / examine 等の定義済 action) を"
                     "そのまま指定してください。汎用名 (search / interact) は"
                     "通常 scenario に存在しません。"
+                ),
+            )
+        except Exception as e:
+            return exception_result(e)
+
+    def _interact_with_player(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        """``interact`` の対象がプレイヤーだったときの実行。
+
+        物体経路 (``_interact``) と対になる。失敗コードは物体側と同じものを
+        使う — LLM から見れば同じ tool の同じ失敗であり、コードを分けると
+        remediation を 2 系統で保守することになる。
+        """
+        action = str(args.get("action_name", "")).strip()
+        if not action:
+            return build_invalid_arg_failure(
+                arg_name="action_name",
+                detail="非空の文字列を指定してください",
+            )
+        if self._runtime is None or not hasattr(
+            self._runtime, "do_interact_with_player"
+        ):
+            # シナリオが player_interactions を宣言していない構成では、対人
+            # 経路そのものが組み立てられていない。黙って物体経路へ流すと
+            # 「オブジェクトが見つからない」という無関係な文面になるので、
+            # 何が足りないのかを名指しする。
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    "この世界では人を対象にした操作が定義されていません。"
+                    "オブジェクトを対象にしてください。"
+                ),
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
+        try:
+            target_player_id = int(args.get("target_player_id"))
+        except (TypeError, ValueError):
+            return build_invalid_arg_failure(
+                arg_name="target_player_id",
+                detail="対象プレイヤーの解決に失敗しました",
+            )
+        raw_parameters = args.get("parameters")
+        interaction_parameters = (
+            raw_parameters if isinstance(raw_parameters, dict) else None
+        )
+        try:
+            result = self._runtime.do_interact_with_player(
+                PlayerId(player_id),
+                PlayerId(target_player_id),
+                action,
+                interaction_parameters=interaction_parameters,
+                **extract_subjective_action_fields(args),
+            )
+            self._maybe_emit_say_inline(player_id, args)
+            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_INTERACT_DEFAULT)
+            msg = "; ".join(result.messages) if result.messages else "完了"
+            return with_inner_thought_empty_warning(
+                TOOL_NAME_SPOT_GRAPH_INTERACT,
+                args,
+                LlmCommandResultDto(
+                    success=True,
+                    message=append_inner_thought_to_message(msg, args),
+                ),
+            )
+        except InteractionNotAllowedException as exc:
+            reason = str(exc) or "前提条件を満たさない"
+            return LlmCommandResultDto(
+                success=False,
+                message=f"行動が拒否された: {reason}",
+                error_code="INTERACTION_PRECONDITION_FAILED",
+                remediation=interact_remediation_for_reason(reason),
+            )
+        except InteractionNotFoundException:
+            available = ", ".join(
+                self._runtime.available_player_action_names()
+            ) or "(なし)"
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"人を対象にした '{action}' という操作はありません。"
+                    f"人に対して使える操作: {available}"
+                ),
+                error_code="INTERACTION_ACTION_NOT_FOUND",
+                remediation=(
+                    "action_name には、同席しているプレイヤーの行末に表示された"
+                    "操作名をそのまま指定してください。物体用の操作名は人には"
+                    "使えません。"
                 ),
             )
         except Exception as e:
