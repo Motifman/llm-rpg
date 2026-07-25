@@ -195,6 +195,25 @@ class TestSurvivalIslandV4WaterSources:
         assert condition["failure_message"] == "今汲んだばかりだ。少し時間を置こう。"
 
 
+class TestSurvivalIslandV4FoodEconomy:
+    """v4 の食料腐敗期限が 200 tick 観察で過度に厳しすぎない値になっていることを保証する。"""
+
+    def test_food_spoilage_ticks_are_softened_for_long_run_observation(self, loaded_v4) -> None:
+        """主な食料は 200 tick 観察中に即腐敗しすぎないよう、腐敗までの tick が緩和されている。"""
+        spoilage_by_id = {
+            item.string_id: item.spoils_after_ticks
+            for item in loaded_v4.item_spec_definitions
+        }
+
+        assert spoilage_by_id["shellfish"] == 144
+        assert spoilage_by_id["raw_fish"] == 144
+        assert spoilage_by_id["wild_berry"] == 192
+        assert spoilage_by_id["safe_mushroom"] == 216
+        assert spoilage_by_id["toxic_mushroom"] == 216
+        assert spoilage_by_id["cooked_fish"] == 240
+        assert spoilage_by_id["coconut"] == 240
+
+
 class TestSurvivalIslandV4ActionConditionHints:
     """v4 の時刻・天候制約つき action が prompt 上で事前に読めることを保証する。"""
 

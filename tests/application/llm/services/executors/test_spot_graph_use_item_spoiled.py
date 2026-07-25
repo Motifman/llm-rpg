@@ -17,11 +17,16 @@ from ai_rpg_world.application.world_graph.spot_graph_world_services import (
 )
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.item.value_object.item_effect import HealEffect
+from ai_rpg_world.domain.item.value_object.item_effect import (
+    CompositeItemEffect,
+    HealEffect,
+    SatisfyNeedEffect,
+)
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
+from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 
 
 SPEC_ID = ItemSpecId.create(101)
@@ -35,7 +40,12 @@ def _fish_spec() -> ItemSpec:
         rarity=Rarity.COMMON,
         description="魚",
         max_stack_size=MaxStackSize(1),
-        consume_effect=HealEffect(amount=5),
+        consume_effect=CompositeItemEffect(
+            (
+                HealEffect(amount=5),
+                SatisfyNeedEffect(need_type_name="HUNGER", amount=35),
+            )
+        ),
     )
 
 
@@ -95,14 +105,23 @@ def _build_executor_with_item(state: dict) -> tuple[SpotGraphToolExecutor, Magic
 class TestSpoiledFoodDamage:
     """腐敗食を食べた時の挙動。"""
 
-    def test_calls_spoiled_food_apply_damage(self) -> None:
-        """腐敗食を食べると apply damage が呼ばれる。"""
+    def test_calls_spoiled_food_apply_damage_and_partial_hunger_recovery(self) -> None:
+        """腐敗食は10ダメージを受けるが、空腹回復だけは通常効果の半分が入る。"""
         executor, status, _ = _build_executor_with_item({"spoiled": True})
 
         result = executor._use_item(player_id=1, args={"item_spec_id": 101})
 
         assert result.success is True
         status.apply_damage.assert_called_once_with(SPOILED_FOOD_DAMAGE_HP)
+        status.satisfy_need.assert_called_once_with(NeedType.HUNGER, 17)
+
+    def test_spoiled_food_does_not_apply_heal_hp_effect(self) -> None:
+        """腐敗食では consume_effect の heal_hp は適用せず、空腹の一部回復だけを直接適用する。"""
+        executor, status, _ = _build_executor_with_item({"spoiled": True})
+
+        executor._use_item(player_id=1, args={"item_spec_id": 101})
+
+        status.heal_hp.assert_not_called()
 
     def test_consumable_used_event_not_published(self) -> None:
         """腐敗食では ConsumableUsedEvent は発行されない。"""
@@ -149,6 +168,7 @@ class TestSpoiledFoodDamage:
 
         assert "腐っていた" in result.message
         assert f"{SPOILED_FOOD_DAMAGE_HP}" in result.message
+        assert "少し空腹" in result.message
 
 
 class TestFreshFoodPath:
@@ -161,6 +181,7 @@ class TestFreshFoodPath:
         executor._use_item(player_id=1, args={"item_spec_id": 101})
 
         status.apply_damage.assert_not_called()
+        status.satisfy_need.assert_not_called()
 
     def test_consumable_used_event_published(self) -> None:
         """新鮮食では ConsumableUsedEvent が発行される。"""
