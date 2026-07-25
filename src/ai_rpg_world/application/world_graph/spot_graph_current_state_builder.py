@@ -302,6 +302,10 @@ class SpotGraphCurrentStateBuilder:
         distant_view_trace_enabled: bool = False,
         trace_recorder_provider: Optional[Callable[[], Any]] = None,
         visible_monster_observer: Optional[VisibleMonsterObserver] = None,
+        # 人を対象にできる action 名を返す provider (シナリオ直下
+        # ``player_interactions``)。未注入なら空 = 同席者行に action を出さない
+        # (対人行為を宣言していない世界での挙動と一致)。
+        player_action_names_provider: Optional[Callable[[], Sequence[str]]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -335,7 +339,26 @@ class SpotGraphCurrentStateBuilder:
         self._distant_view_trace_enabled = distant_view_trace_enabled
         self._trace_recorder_provider = trace_recorder_provider
         self._visible_monster_observer = visible_monster_observer
+        self._player_action_names_provider = player_action_names_provider
         self._perception = SpotPerceptionService()
+
+    def _resolve_player_action_names(self) -> tuple:
+        """同席者行に出す対人 action 名。provider 未注入なら空。
+
+        provider が落ちても現在状態の生成そのものは止めない。action 候補が
+        出ないぶん対人行為が発見されなくなるが、prompt 全体を失うより軽い。
+        """
+        if self._player_action_names_provider is None:
+            return ()
+        try:
+            return tuple(self._player_action_names_provider() or ())
+        except Exception:
+            logger.warning(
+                "player_action_names_provider が失敗したため、同席者行の"
+                "対人 action 候補を省略する",
+                exc_info=True,
+            )
+            return ()
 
     def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
         """シナリオが昼夜サイクルを宣言していれば snapshot に現在時刻を載せる。
@@ -1070,6 +1093,7 @@ class SpotGraphCurrentStateBuilder:
             atmosphere=atmosphere,
             weather=weather,
             nearby_entities=tuple(nearby_entities),
+            player_action_names=self._resolve_player_action_names(),
             monsters_at_spot=tuple(monsters_at_spot),
             inventory_items=inventory_items,
             ground_items=tuple(ground_items),

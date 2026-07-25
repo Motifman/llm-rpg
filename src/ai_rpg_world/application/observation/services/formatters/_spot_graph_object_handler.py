@@ -21,6 +21,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
     PlayerPickedUpItemEvent,
+    PlayerInteractedWithPlayerEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
     SpotObjectStateChangedEvent,
@@ -41,6 +42,8 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
     ) -> Optional[ObservationOutput]:
         if isinstance(event, SpotObjectInteractedEvent):
             return self._format_object_interacted(event, recipient_player_id)
+        if isinstance(event, PlayerInteractedWithPlayerEvent):
+            return self._format_player_interacted(event, recipient_player_id)
         if isinstance(event, SpotObjectInteractionFailedEvent):
             return self._format_interaction_failed(event, recipient_player_id)
         if isinstance(event, ConnectionStateChangedEvent):
@@ -179,6 +182,73 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             observation_category="social",
             schedules_turn=True,
         )
+
+    def _format_player_interacted(
+        self, event: "PlayerInteractedWithPlayerEvent", recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """対人行為の目撃 / 被害の観測を作る。
+
+        行為者本人には返さない (本人は tool 結果で結果を受け取っている)。
+        **対象本人には返す** — 自分が何をされたのかは、第三者の目撃より先に
+        知る必要がある。倒れている間の出来事でも、起きたときに何が起きたのか
+        を読めなければ、持ち物が減った理由が永久に分からない。
+        """
+        if self._is_self(event.entity_id, recipient_id):
+            return None
+        actor = self._resolve_entity_name(event.entity_id)
+        target = self._resolve_entity_name(event.target_entity_id)
+        is_target = self._is_self(event.target_entity_id, recipient_id)
+        message = (event.witness_observation_message or "").strip()
+        label = (event.action_display_label or "").strip()
+        if message:
+            prose, source = self._render_player_witness_message(
+                message, actor=actor, target=target, action_display_label=label
+            ), "scenario"
+        elif label:
+            prose, source = (
+                f"{actor}が{target}に「{label}」を行った。", "display_label",
+            )
+        else:
+            prose, source = f"{actor}が{target}に何かをした。", "legacy"
+        if is_target:
+            # 対象本人には「誰かが自分に何かをした」と分かる形で届ける。
+            prose = f"{prose} (あなたが対象だった)"
+        return ObservationOutput(
+            prose=prose,
+            structured={
+                "type": "player_interacted_with_player",
+                "actor": actor,
+                "target": target,
+                "action_name": event.action_name,
+                "action_display_label": event.action_display_label,
+                "is_target": is_target,
+                "witness_observation_source": source,
+            },
+            observation_category="social",
+            # 被害者も目撃者も起きる。起きないと「持ち物が消えた」ことに
+            # 反応する機会そのものが無い。
+            schedules_turn=True,
+        )
+
+    @staticmethod
+    def _render_player_witness_message(
+        message: str, *, actor: str, target: str, action_display_label: str,
+    ) -> str:
+        """対人行為の目撃者文面に placeholder を展開する。"""
+        if "{" not in message:
+            return message
+        try:
+            return message.format(
+                actor=actor,
+                target=target,
+                target_name=target,
+                action=action_display_label,
+                action_display_label=action_display_label,
+            )
+        except (KeyError, IndexError, ValueError):
+            # 未知の placeholder は作家の書き間違い。展開せず素の文面を返す
+            # (観測そのものを落とすより、崩れた文面でも届く方が良い)。
+            return message
 
     def _format_object_interacted_prose(
         self, event: SpotObjectInteractedEvent, *, actor: str, obj_name: str,

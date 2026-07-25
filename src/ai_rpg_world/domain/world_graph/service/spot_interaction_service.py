@@ -45,7 +45,7 @@ class SpotInteractionService:
     def can_interact(
         self,
         interaction: InteractionDef,
-        spot_object: SpotObject,
+        spot_object: Optional[SpotObject],
         owned_item_spec_ids: FrozenSet[ItemSpecId],
         world_flags: FrozenSet[str],
         *,
@@ -55,6 +55,14 @@ class SpotInteractionService:
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
         acting_player_status: Optional["PlayerStatusAggregate"] = None,
+        # 対人 interaction の対象プレイヤー。acting_item / target_item の
+        # 並置と同型で、対象側の条件 (行動不能かどうか等) を評価するために使う。
+        target_player_status: Optional["PlayerStatusAggregate"] = None,
+        # 対人 interaction の対象プレイヤーの所持アイテム。TARGET_HAS_ITEM /
+        # TARGET_HAS_NO_ITEM の判定材料。None は「渡っていない」で、対象の
+        # 所持条件は silent pass させず拒否する (渡し忘れで、持っていない相手
+        # から奪えてしまうのを防ぐ)。
+        target_owned_item_spec_ids: Optional[FrozenSet[ItemSpecId]] = None,
         # PR4: 時間帯 / 天候 condition の評価用。None なら該当 condition は
         # 「provider 不在」として fail する (silent skip を避けるため明示的に拒否)。
         current_time_of_day_phase: Optional[str] = None,
@@ -108,6 +116,8 @@ class SpotInteractionService:
                 acting_item_aggregate=acting_item_aggregate,
                 target_item_aggregate=target_item_aggregate,
                 acting_player_status=acting_player_status,
+                target_player_status=target_player_status,
+                target_owned_item_spec_ids=target_owned_item_spec_ids,
                 current_time_of_day_phase=current_time_of_day_phase,
                 current_weather_type=current_weather_type,
                 current_tick=current_tick,
@@ -116,10 +126,35 @@ class SpotInteractionService:
                 return False, msg
         return True, None
 
+    @staticmethod
+    def _condition_item_spec_id(
+        cond: InteractionCondition,
+        interaction_parameters: Optional[dict],
+    ) -> Optional[ItemSpecId]:
+        """対象所持条件が判定する品目を決める。
+
+        ``item_spec_id_parameter_key`` が書かれていれば実行時指定
+        (``interaction_parameters`` の該当キー) を優先し、無ければ定義に
+        固定された ``target_item_spec_id`` を使う。実行時指定でキーが欠けて
+        いる / 数値でない場合は ``None`` を返し、呼び出し側が前提条件の
+        不成立として扱う (例外にしない — 「相手がそれを持っていない」は
+        普通に起きる状況である)。
+        """
+        key = cond.item_spec_id_parameter_key
+        if key is None:
+            return cond.target_item_spec_id
+        raw = (interaction_parameters or {}).get(key)
+        if raw is None:
+            return None
+        try:
+            return ItemSpecId.create(int(raw))
+        except (TypeError, ValueError):
+            return None
+
     def _evaluate_condition(
         self,
         cond: InteractionCondition,
-        spot_object: SpotObject,
+        spot_object: Optional[SpotObject],
         world_flags: FrozenSet[str],
         *,
         spot_presence_count: int = 1,
@@ -128,6 +163,10 @@ class SpotInteractionService:
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
         acting_player_status: Optional["PlayerStatusAggregate"] = None,
+        # 対人 interaction の対象プレイヤー。acting_item / target_item の
+        # 並置と同型で、対象側の条件 (行動不能かどうか等) を評価するために使う。
+        target_player_status: Optional["PlayerStatusAggregate"] = None,
+        target_owned_item_spec_ids: Optional[FrozenSet[ItemSpecId]] = None,
         current_time_of_day_phase: Optional[str] = None,
         current_weather_type: Optional[str] = None,
         current_tick: Optional[WorldTick] = None,
@@ -147,7 +186,58 @@ class SpotInteractionService:
                     else "必要なアイテムを持っていません"
                 )
             return True, None
+        if t in (
+            InteractionConditionTypeEnum.TARGET_HAS_ITEM,
+            InteractionConditionTypeEnum.TARGET_HAS_NO_ITEM,
+        ):
+            if target_owned_item_spec_ids is None:
+                # 対象の所持が渡っていないのに対象の所持条件が書かれている。
+                # 黙って成立させると、持っていない相手から奪えてしまう。
+                return False, (
+                    cond.failure_message or "この行為には対象プレイヤーが必要です"
+                )
+            spec_id = self._condition_item_spec_id(cond, interaction_parameters)
+            if spec_id is None:
+                # 実行時指定なのに参照キーが無い = 「相手の持ち物にその名前が
+                # 見当たらなかった」。前提条件の不成立として返す。
+                return False, (
+                    cond.failure_message or "相手はそれを持っていない"
+                )
+            owns = spec_id in target_owned_item_spec_ids
+            wants_owned = t == InteractionConditionTypeEnum.TARGET_HAS_ITEM
+            if owns is not wants_owned:
+                return False, cond.failure_message or (
+                    "相手はそれを持っていない" if wants_owned
+                    else "相手はそれを持っている"
+                )
+            return True, None
+        if t == InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED:
+            # 対象が行動不能 (倒れている or 死んでいる) であることを要求する。
+            #
+            # 「死んでいる」は蘇生不可の終局状態で、集約単体からは判定できない
+            # (PlayerOutcomeRegistry が持つ)。ここでは HP 0 = 行動不能として扱う。
+            # 死亡は HP 0 の部分集合なので、この判定で両方を覆える。
+            if target_player_status is None:
+                # 対象が渡っていないのに対象の条件が書かれている。provider 不在を
+                # silent pass せず拒否する既存規約に合わせる。
+                return False, (
+                    cond.failure_message
+                    or "この行為には対象プレイヤーが必要です"
+                )
+            if not target_player_status.is_down:
+                return False, (
+                    cond.failure_message
+                    or "相手は動いている。この行為はできない"
+                )
+            return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STATE:
+            if spot_object is None:
+                # 対人 interaction のように対象オブジェクトを持たない文脈。
+                # 黙って True にすると「条件を書いたのに素通り」になるので拒否する。
+                return False, (
+                    cond.failure_message
+                    or "この行為には対象オブジェクトが必要な条件が書かれています"
+                )
             if cond.required_state is None:
                 return False, cond.failure_message or "OBJECT_STATE に required_state がありません"
             for k, v in cond.required_state.items():
@@ -155,6 +245,11 @@ class SpotInteractionService:
                     return False, cond.failure_message or "オブジェクトの状態が条件を満たしません"
             return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST:
+            if spot_object is None:
+                return False, (
+                    cond.failure_message
+                    or "この行為には対象オブジェクトが必要な条件が書かれています"
+                )
             # 備蓄プールの現在量を lazy に算出し、required_quantity 以上あるか判定。
             # 備蓄設定は object.state に持つ (stock / stock_capacity / stock_tick /
             # stock_refill_interval)。current_tick 未提供時は再生なし (記録済み

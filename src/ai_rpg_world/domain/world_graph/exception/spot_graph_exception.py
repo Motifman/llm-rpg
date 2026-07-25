@@ -113,6 +113,16 @@ class UnsupportedInteractionEffectException(SpotGraphDomainException, BusinessRu
     error_code = "WORLD_GRAPH.UNSUPPORTED_INTERACTION_EFFECT"
 
 
+class InteractionEffectValidationException(SpotGraphDomainException, ValidationException):
+    """interaction effect の指定が、適用時の文脈と噛み合っていない。
+
+    ``target=TARGET_PLAYER`` の effect が、対象プレイヤーを渡していない
+    呼び出しに来た場合など。行為者へフォールバックさせると「奪ったつもりで
+    自分の持ち物が消える」ような、成功として返る誤動作になるので拒否する。
+    """
+    error_code = "WORLD_GRAPH.INTERACTION_EFFECT_VALIDATION"
+
+
 class SpotTravelUnreachableException(SpotGraphDomainException, BusinessRuleException):
     """指定スポットへの経路が存在しない（または到達不能）"""
     error_code = "WORLD_GRAPH.SPOT_TRAVEL_UNREACHABLE"

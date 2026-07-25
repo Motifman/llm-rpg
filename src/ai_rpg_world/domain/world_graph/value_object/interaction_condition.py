@@ -39,3 +39,11 @@ class InteractionCondition:
     #     ("CLEAR" / "RAIN" / "STORM" / "FOG")
     required_time_of_day_phase: Optional[str] = None
     required_weather_type: Optional[str] = None
+    # 対人インタラクション: 判定する品目を実行時に決めるとき、
+    # ``interaction_parameters`` のどのキーを見るかを指す。
+    # ``TARGET_HAS_ITEM`` / ``TARGET_HAS_NO_ITEM`` で意味を持つ。
+    #
+    # 固定の ``target_item_spec_id`` だと、奪える品目のぶんだけ action を並べる
+    # ことになり、設計 doc §3.2 で棄却した「同じ行為の複製」になる。倒れた相手
+    # の持ち物は prompt に見えている (PR #824) ので、LLM が名指しできる形にする。
+    item_spec_id_parameter_key: Optional[str] = None

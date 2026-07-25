@@ -41,3 +41,22 @@ class InteractionConditionTypeEnum(Enum):
     # 「一度に取れる量 / 備蓄量 / 再生間隔」を持つモデル用 (毎 tick 更新せず、
     # アクセス時に経過 tick から再生を計算する)。
     OBJECT_STOCK_AT_LEAST = "OBJECT_STOCK_AT_LEAST"
+    # 対人インタラクション: 行為の対象が「行動不能」(倒れている or 死んでいる)
+    # であることを要求する。持ち物を奪う・引きずるなど、相手が抵抗できない
+    # 状態でのみ成立する行為のための条件。
+    #
+    # 「起きて動いている相手からは奪えない」を宣言で書けるようにする。常時
+    # スリが成立すると窃盗が作業になって質感が薄れるので、奪う前に倒す必要が
+    # 生まれる形にする (設計判断はユーザ確定)。
+    TARGET_PLAYER_IS_INCAPACITATED = "TARGET_PLAYER_IS_INCAPACITATED"
+    # 対人インタラクション: 対象プレイヤーの所持を見る。``HAS_ITEM`` は行為者の
+    # 所持しか見ないので、奪う (take) を書くとこれが要る。相手が持っていない
+    # のを内部エラーで落とすと、LLM から見て学習できない失敗になる
+    # (「相手はそれを持っていない」は普通に起きる状況である)。
+    #
+    # 判定する品目は ``target_item_spec_id`` で固定するか、
+    # ``item_spec_id_parameter_key`` で ``interaction_parameters`` のキーを
+    # 指して実行時に決める。後者は「見えている持ち物から LLM が名指しする」
+    # 経路で使う。
+    TARGET_HAS_ITEM = "TARGET_HAS_ITEM"
+    TARGET_HAS_NO_ITEM = "TARGET_HAS_NO_ITEM"

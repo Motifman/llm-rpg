@@ -671,9 +671,20 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # PR-FF: 他プレイヤー名を ``""`` で囲む (quote 規約の拡張)。
             # whisper / give_item / tend_to_player の target_label 系で
             # 「``""`` 内が渡すべき値」規約を満たす。
+            # 人を対象にできる action を、物体行の ``[gather, examine]`` と
+            # 同じ書式で出す。ここを出さないと、対人行為を実装しても LLM から
+            # は発見できない (宣言はあるのに一度も使われない)。
+            #
+            # 前提条件の成否は実行時に決まるので、ここでは候補としてだけ出す。
+            # 物体行が「今は使えない action も並べる」のと同じ扱い。
+            player_actions = tuple(getattr(snap, "player_action_names", ()) or ())
+            action_suffix = (
+                f" [{', '.join(player_actions)}]" if player_actions else ""
+            )
             lines.append(
                 f"  - \"{disambiguated_name}\""
                 f"{suffix}{carried_suffix}{give_item_suffix}{familiarity_suffix}"
+                f"{action_suffix}"
             )
             collector.add(
                 label,

@@ -95,3 +95,47 @@ class TestFallenPlayerCarriedItems:
             _entry(is_dead=True, carried_item_names=("太い流木",))
         )
         assert "死亡している" in text
+
+
+class TestPlayerActionAffordance:
+    """同席者行に「この相手に何ができるか」が出る。
+
+    出さないと、対人行為をシナリオが宣言し実行経路も通っていても、LLM から
+    は発見できない (宣言はあるのに一度も使われない)。物体行の
+    ``[gather, examine]`` と同じ書式に揃える。
+    """
+
+    def _render_with_actions(self, actions, **entry_kwargs) -> str:
+        builder = SpotGraphUiContextBuilder()
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="山頂",
+            current_spot_description="d",
+            travel_status_line=None,
+            nearby_entities=(_entry(**entry_kwargs),),
+            player_action_names=actions,
+        )
+        lines: list[str] = []
+        builder._build_entity_section(
+            snap, LabelAllocator(), RuntimeTargetCollector(), lines
+        )
+        return "\n".join(lines)
+
+    def test_declared_actions_are_listed_on_the_player_row(self) -> None:
+        """シナリオが宣言した対人 action が、相手の行末に並ぶ。"""
+        text = self._render_with_actions(("take", "tend"), is_down=True)
+        assert "[take, tend]" in text
+
+    def test_no_actions_adds_nothing(self) -> None:
+        """対人行為を宣言していない世界では、行に何も足さない。"""
+        text = self._render_with_actions(())
+        assert "[" not in text
+
+    def test_actions_are_listed_for_standing_players_too(self) -> None:
+        """起きている相手にも候補は出す。
+
+        成否は前提条件が実行時に決める。候補を隠すと「奪うには先に倒す」と
+        いう筋道自体が読めなくなる。
+        """
+        text = self._render_with_actions(("take",))
+        assert "[take]" in text

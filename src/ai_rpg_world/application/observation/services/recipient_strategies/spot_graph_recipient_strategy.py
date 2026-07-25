@@ -42,6 +42,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotSoundHeardEvent,
     TimeOfDayChangedEvent,
     SpotExploredEvent,
+    PlayerInteractedWithPlayerEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
     SpotPlayerPreparedActionEvent,
@@ -98,6 +99,18 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             # 行為者本人は別経路 (ツール結果 result_message) で結果を受け取る
             # ので observation を出さなくて構わない。「壁の写真を見つめる」
             # のような私的な閲覧行為で他者に気付かれずに済む。
+            if event.witness_policy == WitnessPolicy.SAME_SPOT:
+                self._resolve_at_spot_excluding_actor(
+                    event.spot_id, event.entity_id, add
+                )
+        elif isinstance(event, PlayerInteractedWithPlayerEvent):
+            # 対人行為。物体版と違い、**対象本人は配信先に含める**。
+            # 自分が何をされたのかは第三者の目撃より先に知る必要がある。
+            # 倒れている間の出来事でも、起きたときに読めなければ持ち物が
+            # 減った理由が永久に分からない。
+            #
+            # ACTOR_ONLY (秘匿して奪う) のときは対象にも届けない。気づかれ
+            # ずに盗るという行為が成立しなくなるため。
             if event.witness_policy == WitnessPolicy.SAME_SPOT:
                 self._resolve_at_spot_excluding_actor(
                     event.spot_id, event.entity_id, add

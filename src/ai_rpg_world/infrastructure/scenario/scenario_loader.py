@@ -426,6 +426,9 @@ class ScenarioLoadResult:
     reactive_passage_bindings: Tuple[ReactivePassageBinding, ...] = ()
     reactive_object_state_bindings: Tuple[ReactiveObjectStateBinding, ...] = ()
     synchronized_action_groups: Tuple[SynchronizedActionGroup, ...] = ()
+    # 対人行為の定義。シナリオ直下に 1 回だけ書き、どこで使えるかは前提条件で
+    # 表現する (spot object に紐づけると同じ行為の複数回定義が要るため)。
+    player_interactions: Tuple[InteractionDef, ...] = ()
     monster_templates: Tuple[ScenarioMonsterTemplate, ...] = ()
     monster_placements: Tuple[ScenarioMonsterPlacement, ...] = ()
     # Phase E-3b: プレイヤー個別 outcome 解決設定 (RESCUED / STRANDED 自動判定)。
@@ -491,6 +494,9 @@ class ScenarioLoader:
         reactive_object_bindings = self._parse_reactive_object_state_bindings(
             raw.get("reactive_bindings", {}), mapper,
         )
+        player_interactions = self._parse_player_interactions(
+            raw.get("player_interactions", []), mapper,
+        )
         sync_groups = self._parse_synchronized_action_groups(
             raw.get("synchronized_action_groups", []), mapper,
         )
@@ -514,6 +520,7 @@ class ScenarioLoader:
             reactive_passage_bindings=reactive_bindings,
             reactive_object_state_bindings=reactive_object_bindings,
             synchronized_action_groups=sync_groups,
+            player_interactions=player_interactions,
             monster_templates=monster_templates,
             monster_placements=monster_placements,
             outcome_resolution_config=outcome_resolution_config,
@@ -1231,6 +1238,21 @@ class ScenarioLoader:
         item_spec_id = ItemSpecId.create(mapper.get_int("item_spec", item_sid)) if item_sid else None
         obj_sid = raw.get("target_object")
         obj_id = SpotObjectId.create(mapper.get_int("object", obj_sid)) if obj_sid else None
+        # 対象所持条件は、判定する品目の出所が要る。どちらも無いと条件は
+        # 永久に不成立になり、interaction が黙って使えなくなる。実 run で
+        # 「なぜか一度も成功しない」として初めて気付くことになるので、
+        # 読み込み時に落とす。
+        parameter_key = self._parse_item_spec_id_parameter_key(raw)
+        if (
+            raw.get("condition_type") in ("TARGET_HAS_ITEM", "TARGET_HAS_NO_ITEM")
+            and parameter_key is None
+            and item_spec_id is None
+        ):
+            raise ScenarioLoadError(
+                f"{raw.get('condition_type')} requires either required_item or "
+                "item_spec_id_parameter_key; どちらも無いと条件は常に不成立に"
+                f"なります: {raw!r}"
+            )
         # 脱出ゲーム拡張フィールド
         required_items_raw = raw.get("required_items")
         required_item_spec_ids = None
@@ -1259,7 +1281,33 @@ class ScenarioLoader:
             # phase 名はシナリオ宣言依存のため固定値リストを持たない)。
             required_time_of_day_phase=raw.get("required_time_of_day_phase"),
             required_weather_type=raw.get("required_weather_type"),
+            # 対人 interaction: TARGET_HAS_ITEM / TARGET_HAS_NO_ITEM が判定
+            # する品目を、interaction_parameters のどのキーから取るか。
+            item_spec_id_parameter_key=parameter_key,
         )
+
+    @staticmethod
+    def _parse_item_spec_id_parameter_key(raw: Dict[str, Any]) -> Optional[str]:
+        """``item_spec_id_parameter_key`` を検証して返す。
+
+        対象所持条件でしか意味を持たないフィールドなので、他の condition_type
+        に書かれていたら黙って無視せず落とす。無視すると「書いたのに効かない」
+        宣言がシナリオに残り、実 run で初めて気付くことになる。
+        """
+        key = raw.get("item_spec_id_parameter_key")
+        if key is None:
+            return None
+        if not isinstance(key, str) or not key.strip():
+            raise ScenarioLoadError(
+                "item_spec_id_parameter_key must be a non-empty string"
+            )
+        cond_type = raw.get("condition_type")
+        if cond_type not in ("TARGET_HAS_ITEM", "TARGET_HAS_NO_ITEM"):
+            raise ScenarioLoadError(
+                "item_spec_id_parameter_key is only valid on TARGET_HAS_ITEM / "
+                f"TARGET_HAS_NO_ITEM (got condition_type={cond_type!r})"
+            )
+        return key.strip()
 
     @staticmethod
     def _parse_need_type(raw: Dict[str, Any]) -> Optional[str]:
@@ -1334,11 +1382,26 @@ class ScenarioLoader:
     # 効くものと、素材合成のように行為者の手元でしか成立しないものは除く。
     _TARGET_PLAYER_CAPABLE_EFFECTS = frozenset(
         {
+            InteractionEffectTypeEnum.GIVE_ITEM,
+            InteractionEffectTypeEnum.REMOVE_ITEM,
+        }
+    )
+
+    # 「人に対して起きる効果」ではあるが、対象へ適用する配線がまだ無いもの。
+    #
+    # 宣言を許すと **行為者に効く**。ダメージ / 欲求 / state のバケットは
+    # 行為者ぶんしか無く、``effect.target`` を見ずに積まれるためである。
+    # 「相手を刺したつもりが自分が傷ついた」という、成功として返る最悪の
+    # 誤動作になるので、配線が済むまでは読み込み時に落とす。
+    #
+    # ダメージ系を通すには、対象の ``PlayerDownedEvent`` を回収してキル判定を
+    # 確定させる必要がある (docs/memory_system/interpersonal_interaction_design.md
+    # の H-1)。これは別 PR。
+    _TARGET_PLAYER_NOT_WIRED_YET = frozenset(
+        {
             InteractionEffectTypeEnum.APPLY_DAMAGE,
             InteractionEffectTypeEnum.APPLY_STATUS_EFFECT,
             InteractionEffectTypeEnum.SATISFY_NEED,
-            InteractionEffectTypeEnum.GIVE_ITEM,
-            InteractionEffectTypeEnum.REMOVE_ITEM,
             InteractionEffectTypeEnum.TELEPORT_ENTITY,
             InteractionEffectTypeEnum.CHANGE_PLAYER_STATE,
             InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK,
@@ -1392,6 +1455,13 @@ class ScenarioLoader:
             # 読み込みが失敗すること自体は変わらないが、loader の他のエラーと
             # 文面の質が揃っていない。統一は別 PR で。
             return target
+        if effect_type in self._TARGET_PLAYER_NOT_WIRED_YET:
+            raise ScenarioLoadError(
+                f"{effect_type.name} with target=TARGET_PLAYER is declared but not "
+                "wired yet; 宣言しても対象ではなく行為者に効いてしまうため、"
+                "配線が済むまで受け付けません: "
+                f"{raw!r}"
+            )
         if effect_type not in self._TARGET_PLAYER_CAPABLE_EFFECTS:
             capable = ", ".join(
                 sorted(e.name for e in self._TARGET_PLAYER_CAPABLE_EFFECTS)
@@ -1857,6 +1927,56 @@ class ScenarioLoader:
                 )
             )
         return tuple(out)
+
+    def _parse_player_interactions(
+        self, raw_list: Any, mapper: ScenarioIdMapper,
+    ) -> Tuple[InteractionDef, ...]:
+        """シナリオ直下の ``player_interactions`` をパースする。
+
+        対人行為は spot object ではなくシナリオに 1 回だけ宣言し、「どこで
+        使えるか」は前提条件 (spot / 明るさ / 持ち物 / 役割) で表現する。
+        紐付けを成立条件の代用にすると、同じ行為を複数の場所で使うのに複数回
+        定義が要り、「暗い場所ならどこでも」のような動的な条件も書けない。
+        """
+        if not raw_list:
+            return ()
+        if not isinstance(raw_list, list):
+            raise ScenarioLoadError("player_interactions must be a list")
+
+        parsed: list[InteractionDef] = []
+        seen_action_names: set[str] = set()
+        for i, raw in enumerate(raw_list):
+            if not isinstance(raw, dict):
+                raise ScenarioLoadError(
+                    f"player_interactions[{i}] must be an object"
+                )
+            action_name = raw.get("action_name")
+            if not isinstance(action_name, str) or not action_name.strip():
+                raise ScenarioLoadError(
+                    f"player_interactions[{i}] requires a non-empty action_name"
+                )
+            action_name = action_name.strip()
+            if action_name in seen_action_names:
+                # LLM は action_name で行為を指定するので、重複すると
+                # 「どちらが実行されたか分からない」状態になる。
+                raise ScenarioLoadError(
+                    f"duplicate player_interaction action_name: {action_name!r}"
+                )
+            seen_action_names.add(action_name)
+
+            idef = self._parse_interaction_def(raw, mapper)
+            if not any(
+                e.target is EffectTarget.TARGET_PLAYER for e in idef.effects
+            ):
+                # 対象への効果を 1 つも持たない定義は書き間違い。放置すると
+                # 「相手を選んだのに自分に効く」という最も分かりにくい失敗になる。
+                raise ScenarioLoadError(
+                    f"player_interaction {action_name!r} has no effect with "
+                    "target=TARGET_PLAYER. 対人行為は相手に効く効果を 1 つ以上"
+                    "持つ必要があります"
+                )
+            parsed.append(idef)
+        return tuple(parsed)
 
     def _parse_synchronized_action_groups(
         self, raw: Any, mapper: ScenarioIdMapper,

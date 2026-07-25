@@ -253,6 +253,14 @@ class SpotGraphPlayerSnapshotDto:
     # 現在時刻 (昼夜フェーズ) — シナリオが day_night を宣言していなければ None
     time_of_day: Optional[SpotGraphTimeOfDayEntry] = None
     nearby_entities: Tuple[SpotGraphNearbyEntityEntry, ...] = ()
+    # 人を対象にできる action 名 (シナリオ直下 ``player_interactions``)。
+    # 物体行の ``[gather, examine]`` と同じく同席者行の末尾に出して、「この
+    # 相手に何ができるか」を読めるようにする。ここを出さないと、対人行為を
+    # 実装しても LLM から発見できない (宣言はあるのに使われない)。
+    #
+    # 宣言はシナリオに 1 回だけなので相手ごとに違う値にはならない。前提条件の
+    # 成否は実行時に決まるので、ここでは候補としてだけ出す。
+    player_action_names: Tuple[str, ...] = ()
     monsters_at_spot: Tuple[SpotGraphMonsterEntry, ...] = ()
     inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
     # 現在地の地面に落ちているアイテム (drop された / モンスター死亡時ドロップ /

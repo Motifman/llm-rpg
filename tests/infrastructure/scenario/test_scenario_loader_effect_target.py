@@ -73,13 +73,18 @@ class TestEffectTargetParsing:
         assert effect.target is EffectTarget.ACTOR
 
     def test_target_player_is_parsed(self) -> None:
-        """target に TARGET_PLAYER を書くと EffectTarget.TARGET_PLAYER になる。"""
+        """target に TARGET_PLAYER を書くと EffectTarget.TARGET_PLAYER になる。
+
+        例に使うのは配線済みの効果でなければならない。未配線の効果
+        (APPLY_DAMAGE 等) は宣言しても行為者に効いてしまうので、loader が
+        別途落とす。
+        """
         effect = _first_effect(
             _scenario_with_object_effect(
                 {
-                    "effect_type": "APPLY_DAMAGE",
+                    "effect_type": "REMOVE_ITEM",
                     "target": "TARGET_PLAYER",
-                    "parameters": {"damage": 1},
+                    "parameters": {"item_spec_id": "iron_sword"},
                 }
             )
         )
