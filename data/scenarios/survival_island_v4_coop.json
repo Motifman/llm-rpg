@@ -1,5 +1,34 @@
 {
   "scenario_format_version": "1.0",
+  "player_interactions": [
+    {
+      "action_name": "take",
+      "display_label": "持ち物を奪う",
+      "preconditions": [
+        {
+          "condition_type": "TARGET_PLAYER_IS_INCAPACITATED",
+          "failure_message": "相手は動いている。奪えない。"
+        },
+        {
+          "condition_type": "TARGET_HAS_ITEM",
+          "item_spec_id_parameter_key": "item_spec_id",
+          "failure_message": "相手はそれを持っていない。"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "REMOVE_ITEM",
+          "target": "TARGET_PLAYER",
+          "parameters": { "item_spec_id_parameter": "item_spec_id" }
+        },
+        {
+          "effect_type": "GIVE_ITEM",
+          "target": "ACTOR",
+          "parameters": { "item_spec_id_parameter": "item_spec_id" }
+        }
+      ]
+    }
+  ],
   "metadata": {
     "id": "survival_island_v4_coop",
     "title": "無人島サバイバル v4 — 協力版（座標マップ）",
