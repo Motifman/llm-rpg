@@ -38,6 +38,10 @@ class WorldGraphEffectResult:
     target_item_spec_ids_to_remove: Tuple[ItemSpecId, ...] = ()
     # クロスドメイン効果（application 層が combat/player ドメインへ適用する）
     damage_specs: Tuple[DamageSpec, ...] = ()
+    # 対人 interaction で「対象プレイヤー」に適用するダメージ。行為者ぶんと
+    # 混ぜてはいけない。混ぜると「相手を刺したつもりが自分が傷ついた」という、
+    # 成功として返る誤動作になる。
+    target_damage_specs: Tuple[DamageSpec, ...] = ()
     status_effect_specs: Tuple[StatusEffectSpec, ...] = ()
     teleport_specs: Tuple[TeleportSpec, ...] = ()
     atmosphere_update_specs: Tuple[AtmosphereUpdateSpec, ...] = ()

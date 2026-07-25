@@ -4649,6 +4649,10 @@ def create_world_runtime(
 
     runtime._speech_service = speech_service
     runtime._speech_event_publisher = pipeline_event_publisher
+    # 蘇生猶予タイマーを runtime から読めるようにする。「PlayerDownedEvent が
+    # handler まで届いたか」を外から確かめる唯一の手掛かりで、publish された
+    # ことと handler が走ったことは別物 (registry 登録漏れで静かに落ちる)。
+    runtime._death_grace_timer = death_grace_timer
     runtime._observation_appender = observation_appender
 
     # Issue #283 後続: episodic memory pipeline の on/off。
