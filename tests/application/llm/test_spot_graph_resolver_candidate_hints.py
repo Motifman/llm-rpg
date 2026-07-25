@@ -103,8 +103,10 @@ def test_interact_not_found_lists_valid_object_names() -> None:
 
     message = str(exc.value)
     assert exc.value.error_code == "INVALID_TARGET_LABEL"
-    assert "指定されたオブジェクト名は現在の候補にありません: 大樫の樹" in message
-    assert "有効なオブジェクト名: 大樫の枝 / 岩の隙間" in message
+    # interact の対象は物体だけではなくなったので、文面は「オブジェクト名」
+    # ではなく種別中立な「対象の名前」で語る。
+    assert "指定された対象の名前は現在の候補にありません: 大樫の樹" in message
+    assert "有効な対象の名前: 大樫の枝 / 岩の隙間" in message
     _assert_no_internal_labels(message)
 
 

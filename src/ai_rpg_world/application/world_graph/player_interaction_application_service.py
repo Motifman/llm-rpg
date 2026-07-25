@@ -1,0 +1,271 @@
+"""同じ場所にいるプレイヤーを対象にした interaction を実行する。
+
+物体への interaction (``SpotInteractionApplicationService``) と対になる。
+対象が物体ではなく人であることを除けば、前提条件の評価も効果の適用も同じ
+仕組みを使う — 条件は ``SpotInteractionService.can_interact``、効果は
+``WorldGraphEffectService.apply_effects``。前提条件の判定を対人用に書き直す
+と 5 系統目の独立実装になり、条件が増えるたびに追従漏れが起きる。
+
+定義はシナリオ直下の ``player_interactions`` に 1 回だけ書く。物体に紐付ける
+と同じ行為を場所ごとに複製することになり、場所の制約は前提条件で書けば足りる
+(docs/memory_system/interpersonal_interaction_design.md §3.2)。
+
+**本サービスの守備範囲はアイテムの授受まで**。ダメージ / 状態異常 / 欲求への
+対人適用は、対象の ``PlayerDownedEvent`` を回収しないとキル判定が確定しない
+という別の問題 (設計 doc H-1) を抱えるので、別の PR で扱う。宣言だけできて
+効かない状態を作らないよう、未配線の効果は loader が起動時に弾く。
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from typing import Any, Dict, Optional, Tuple
+
+from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+    collect_owned_item_spec_ids_from_inventory,
+    count_owned_item_instances_by_spec,
+    grant_item_specs_to_inventory,
+    remove_one_item_of_spec_from_inventory,
+)
+from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.player.repository.player_inventory_repository import (
+    PlayerInventoryRepository,
+)
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
+    InteractionNotFoundException,
+)
+from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
+    ISpotGraphRepository,
+)
+from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
+    SpotInteractionService,
+)
+from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
+    WorldGraphEffectService,
+)
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
+
+_logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PlayerInteractionResultDto:
+    """対人 interaction の実行結果。"""
+
+    action_name: str
+    actor_player_id: int
+    target_player_id: int
+    messages: Tuple[str, ...]
+    # 行為者が受け取った / 失った item spec id (観測や trace 用)
+    actor_granted_spec_ids: Tuple[int, ...] = ()
+    actor_removed_spec_ids: Tuple[int, ...] = ()
+    # 対象が受け取った / 失った item spec id
+    target_granted_spec_ids: Tuple[int, ...] = ()
+    target_removed_spec_ids: Tuple[int, ...] = ()
+
+
+class PlayerInteractionApplicationService:
+    """シナリオ直下に宣言された対人 interaction を実行する。"""
+
+    def __init__(
+        self,
+        *,
+        spot_graph_repository: ISpotGraphRepository,
+        player_inventory_repository: PlayerInventoryRepository,
+        item_repository: ItemRepository,
+        item_spec_repository: ItemSpecRepository,
+        player_status_repository: Optional[PlayerStatusRepository],
+        world_flag_state: MutableWorldFlagState,
+        player_interactions: Tuple[InteractionDef, ...],
+        interaction_service: Optional[SpotInteractionService] = None,
+        effect_service: Optional[WorldGraphEffectService] = None,
+    ) -> None:
+        self._spot_graph_repository = spot_graph_repository
+        self._player_inventory_repository = player_inventory_repository
+        self._item_repository = item_repository
+        self._item_spec_repository = item_spec_repository
+        self._player_status_repository = player_status_repository
+        self._world_flag_state = world_flag_state
+        self._effect_service = effect_service or WorldGraphEffectService()
+        self._interaction = interaction_service or SpotInteractionService(
+            self._effect_service
+        )
+        self._by_action_name: Dict[str, InteractionDef] = {
+            idef.action_name: idef for idef in player_interactions
+        }
+
+    def available_action_names(self) -> Tuple[str, ...]:
+        """宣言されている対人 action 名を宣言順で返す (prompt の候補表示用)。"""
+        return tuple(self._by_action_name.keys())
+
+    def execute(
+        self,
+        actor_player_id: PlayerId,
+        target_player_id: PlayerId,
+        action_name: str,
+        *,
+        interaction_parameters: Optional[Dict[str, Any]] = None,
+        current_tick: Optional[WorldTick] = None,
+    ) -> PlayerInteractionResultDto:
+        """対人 interaction を 1 件実行する。
+
+        Raises:
+            InteractionNotFoundException: その action がシナリオに無い
+            InteractionNotAllowedException: 前提条件を満たさない
+            ApplicationException: 同じ場所にいない / 自分自身を対象にした等
+        """
+        idef = self._by_action_name.get(action_name)
+        if idef is None:
+            raise InteractionNotFoundException(
+                f"対人 action が定義されていません: {action_name}"
+            )
+        if int(actor_player_id) == int(target_player_id):
+            # 自分を対象にした対人行為は、成立しても意味が無いうえに
+            # 「対象から奪って自分に渡す」が no-op になって成功として返る。
+            raise ApplicationException(
+                "自分自身を対象にはできません。",
+                player_id=int(actor_player_id),
+            )
+
+        graph = self._spot_graph_repository.find_graph()
+        actor_spot = graph.get_entity_spot(EntityId.create(int(actor_player_id)))
+        target_spot = graph.get_entity_spot(EntityId.create(int(target_player_id)))
+        if actor_spot != target_spot:
+            raise ApplicationException(
+                "相手が同じ場所にいません。",
+                player_id=int(actor_player_id),
+            )
+
+        actor_inv = self._require_inventory(actor_player_id)
+        target_inv = self._require_inventory(target_player_id)
+
+        actor_status = None
+        target_status = None
+        if self._player_status_repository is not None:
+            actor_status = self._player_status_repository.find_by_id(actor_player_id)
+            target_status = self._player_status_repository.find_by_id(target_player_id)
+
+        owned = collect_owned_item_spec_ids_from_inventory(
+            actor_inv, self._item_repository
+        )
+        owned_counts = count_owned_item_instances_by_spec(
+            actor_inv, self._item_repository
+        )
+        spot_presence_count = len(graph.presence_at(actor_spot).present_entity_ids)
+
+        ok, reason = self._interaction.can_interact(
+            idef,
+            None,
+            owned,
+            self._world_flag_state.as_frozen_set(),
+            spot_presence_count=spot_presence_count,
+            interaction_parameters=interaction_parameters,
+            owned_item_spec_counts=owned_counts,
+            acting_player_status=actor_status,
+            target_player_status=target_status,
+            current_tick=current_tick,
+        )
+        if not ok:
+            raise InteractionNotAllowedException(reason or "この行為はできない")
+
+        result = self._effect_service.apply_effects(
+            # 対人 interaction は物体を触らないので、空の interior を渡す。
+            # effect 側が interior を書き換えても捨てる (下で使わない)。
+            interior=SpotInterior((), (), (), ()),
+            acting_object=None,
+            effects=idef.effects,
+            world_flags=self._world_flag_state.as_frozen_set(),
+            current_tick=current_tick,
+            acting_player_status=actor_status,
+            target_player_status=target_status,
+            interaction_parameters=interaction_parameters,
+        )
+
+        self._world_flag_state.replace_from_interaction(result.new_flags)
+
+        # 先に対象から取り上げ、次に行為者へ渡す。順序を逆にすると、対象が
+        # 持っていなかった場合に「行為者は受け取ったが対象は失っていない」
+        # という複製が一瞬成立してしまう。
+        self._remove_from(
+            target_player_id, result.target_item_spec_ids_to_remove, "対象"
+        )
+        self._remove_from(
+            actor_player_id, result.item_spec_ids_to_remove, "行為者"
+        )
+        self._grant_to(target_player_id, result.target_item_spec_ids_to_grant)
+        self._grant_to(actor_player_id, result.item_spec_ids_to_grant)
+
+        if result.acting_player_state_changed and actor_status is not None:
+            self._player_status_repository.save(actor_status)
+
+        return PlayerInteractionResultDto(
+            action_name=action_name,
+            actor_player_id=int(actor_player_id),
+            target_player_id=int(target_player_id),
+            messages=tuple(result.messages),
+            actor_granted_spec_ids=tuple(
+                s.value for s in result.item_spec_ids_to_grant
+            ),
+            actor_removed_spec_ids=tuple(
+                s.value for s in result.item_spec_ids_to_remove
+            ),
+            target_granted_spec_ids=tuple(
+                s.value for s in result.target_item_spec_ids_to_grant
+            ),
+            target_removed_spec_ids=tuple(
+                s.value for s in result.target_item_spec_ids_to_remove
+            ),
+        )
+
+    def _require_inventory(self, player_id: PlayerId):
+        inv = self._player_inventory_repository.find_by_id(player_id)
+        if inv is None:
+            raise ApplicationException(
+                f"インベントリが見つかりません: {player_id}",
+                player_id=int(player_id),
+            )
+        return inv
+
+    def _grant_to(self, player_id: PlayerId, spec_ids) -> None:
+        if not spec_ids:
+            return
+        grant_item_specs_to_inventory(
+            player_id,
+            tuple(spec_ids),
+            self._item_repository,
+            self._item_spec_repository,
+            self._player_inventory_repository,
+        )
+
+    def _remove_from(self, player_id: PlayerId, spec_ids, who: str) -> None:
+        """指定プレイヤーの所持品から spec_ids を 1 個ずつ取り除く。
+
+        取り除けないときは黙って飛ばさず例外にする。前提条件で所持を確認した
+        うえで来ているので、ここで足りないのは何かが壊れている状態であり、
+        飛ばすと「奪えたはずが何も起きていないのに成功と返る」ことになる。
+        """
+        if not spec_ids:
+            return
+        inv = self._require_inventory(player_id)
+        for spec_id in spec_ids:
+            if not remove_one_item_of_spec_from_inventory(
+                inv, spec_id, self._item_repository
+            ):
+                raise ApplicationException(
+                    f"{who}の所持品から取り除けませんでした "
+                    f"(spec_id={spec_id.value}); 前提条件との不一致",
+                    player_id=int(player_id),
+                )
+        self._player_inventory_repository.save(inv)
