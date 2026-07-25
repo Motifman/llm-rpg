@@ -320,6 +320,17 @@ class SpotInteractionApplicationService:
                 actor_entity_id=entity_id,
             )
 
+        # TELEPORT_ENTITY: 接続を辿らない移動を実際に適用する。
+        # 以前はここに消費者が居らず、TeleportSpec を組み立てるだけで捨てて
+        # いたため、シナリオ JSON に TELEPORT_ENTITY を書いても何も起きない
+        # dead code だった (隠し通路・ベント・魔法陣が表現できない原因)。
+        # graph の mutate なので passage と同じ区画に置き、下の
+        # `graph.get_events()` 抽出より前に済ませる (Left / Entered を同じ
+        # publish_all に乗せるため)。複数宣言された場合は順に適用し、最後の
+        # 宛先が最終位置になる。
+        for teleport in result.teleport_specs:
+            graph.teleport_entity(entity_id, SpotId.create(teleport.target_spot_id))
+
         if result.item_spec_ids_to_grant:
             grant_item_specs_to_inventory(
                 player_id,
@@ -624,13 +635,15 @@ class SpotInteractionApplicationService:
                     )
                 )
             elif summary.kind == AppliedEffectKind.TELEPORT:
-                # TELEPORT_ENTITY effect は spec を生成するだけで実際の
-                # entity 移動はまだ実装されていない (dead code)。entity が
-                # 実際に消える瞬間は EntityLeftSpotEvent が担う設計のはずな
-                # ので、ここで重複発火しない。実装が入った時点で再評価する。
+                # TELEPORT_ENTITY の entity 移動は `graph.teleport_entity` で
+                # 適用済み。移動の観測は EntityLeftSpotEvent /
+                # EntityEnteredSpotEvent が出発・到着の両スポットへ配るので、
+                # ここで SpotPublicEffectObservedEvent を重ねると同じ移動が
+                # 二重に観測される。よって発火しない (visibility が
+                # PUBLIC_OBSERVABLE でも同じ)。
                 _logger.debug(
-                    "PR3: TELEPORT summary observed but entity movement is not "
-                    "wired yet; skipping observation event"
+                    "TELEPORT summary is delivered via EntityLeft/EnteredSpotEvent; "
+                    "skipping duplicate observation event"
                 )
             else:
                 # PASSAGE_STATE_UPDATE / CONNECTION_CREATED / CONNECTION_DESTROYED
