@@ -3,6 +3,9 @@
 import pytest
 from unittest.mock import MagicMock
 
+# observation.contracts.interfaces と prompt_builder_config の循環 import を避けるため、
+# observation service を直接 import する単体テストでは prompt_builder を先に初期化する。
+from ai_rpg_world.application.llm.services import prompt_builder as _prompt_builder  # noqa: F401
 from ai_rpg_world.application.observation.services.player_audience_query_service import (
     PlayerAudienceQueryService,
 )
@@ -26,6 +29,7 @@ from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import (
     InMemoryDataStore,
 )
@@ -131,6 +135,69 @@ class TestPlayerAudienceQueryServicePlayersAtSpot:
         result = service.players_at_spot(SpotId(2))
         assert len(result) == 2
         assert {p.value for p in result} == {2, 3}
+
+    def test_spot_graph_repository_takes_precedence_over_stale_status_position(
+        self, status_repo
+    ):
+        """spot_graph 注入時は status の古い spot でなく、graph 上の nav_state で同席判定する。"""
+        status_repo.save(_make_status(1, spot_id=1))
+        status_repo.save(_make_status(2, spot_id=1))
+        status_repo.save(_make_status(3, spot_id=1))
+        graph = MagicMock()
+        graph.entity_spot_mapping.return_value = {
+            EntityId.create(1): SpotId(5),
+            EntityId.create(2): SpotId(5),
+            EntityId.create(3): SpotId(9),
+        }
+        spot_graph_repo = MagicMock()
+        spot_graph_repo.find_graph.return_value = graph
+        service = PlayerAudienceQueryService(
+            player_status_repository=status_repo,
+            spot_graph_repository=spot_graph_repo,
+        )
+
+        result = service.players_at_spot(SpotId(5))
+
+        assert {p.value for p in result} == {1, 2}
+
+    def test_current_spot_of_uses_spot_graph_position_when_available(
+        self, status_repo
+    ):
+        """spot_graph 注入時の current_spot_of は status.current_spot_id ではなく graph を返す。"""
+        status_repo.save(_make_status(1, spot_id=1))
+        graph = MagicMock()
+        graph.entity_spot_mapping.return_value = {EntityId.create(1): SpotId(7)}
+        graph.get_entity_spot.return_value = SpotId(7)
+        spot_graph_repo = MagicMock()
+        spot_graph_repo.find_graph.return_value = graph
+        service = PlayerAudienceQueryService(
+            player_status_repository=status_repo,
+            spot_graph_repository=spot_graph_repo,
+        )
+
+        result = service.current_spot_of(PlayerId(1))
+
+        assert result == SpotId(7)
+        graph.get_entity_spot.assert_called_once_with(EntityId.create(1))
+
+    def test_current_spot_of_returns_none_when_player_is_not_placed_on_graph(
+        self, status_repo
+    ):
+        """status に存在しても graph 上に未配置なら、current_spot_of は None を返す。"""
+        status_repo.save(_make_status(1, spot_id=1))
+        graph = MagicMock()
+        graph.entity_spot_mapping.return_value = {}
+        spot_graph_repo = MagicMock()
+        spot_graph_repo.find_graph.return_value = graph
+        service = PlayerAudienceQueryService(
+            player_status_repository=status_repo,
+            spot_graph_repository=spot_graph_repo,
+        )
+
+        result = service.current_spot_of(PlayerId(1))
+
+        assert result is None
+        graph.get_entity_spot.assert_not_called()
 
 
 class TestPlayerAudienceQueryServiceAllKnownPlayers:

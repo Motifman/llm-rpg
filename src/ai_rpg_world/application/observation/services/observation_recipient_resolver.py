@@ -135,6 +135,7 @@ def create_observation_recipient_resolver(
         world_object_resolver = NullWorldObjectToPlayerResolver()
     player_audience_query = PlayerAudienceQueryService(
         player_status_repository=player_status_repository,
+        spot_graph_repository=spot_graph_repository,
     )
     strategies: List[IRecipientResolutionStrategy] = [
         ConversationRecipientStrategy(
