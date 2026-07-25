@@ -57,12 +57,18 @@ def _has_failing_object_state_precondition(interaction, interior) -> bool:
     第24回実験 (#343) で cockpit を 19 回 retry した silent failure の対策。
     OBJECT_STATE は「取り尽くした」「もう空だ」のような永続失敗を持つ唯一の
     precondition 種別。HAS_ITEM / TIME_OF_DAY / WEATHER 等のプレイヤー / 環境
-    依存は対象外 (将来満たされ得るので隠さない)。
+    依存は対象外。
 
-    True を返したら interaction は snapshot から落とす想定。reactive_binding
-    で state が戻ったら次 tick で再表示されるので、respawn / cooldown 系の
-    interaction は影響を受けない。
+    現在は action を隠すためではなく、失敗理由ヒントを prompt に添えるための
+    判定に使う。action 自体を落とすと、LLM が存在しない操作名を発明する原因に
+    なるため。
     """
+    return bool(_object_state_precondition_failure_hints(interaction, interior))
+
+
+def _object_state_precondition_failure_hints(interaction, interior) -> tuple[str, ...]:
+    """現在失敗している OBJECT_STATE precondition の failure_message を返す。"""
+    hints: list[str] = []
     for cond in interaction.preconditions:
         if cond.condition_type != InteractionConditionTypeEnum.OBJECT_STATE:
             continue
@@ -73,8 +79,10 @@ def _has_failing_object_state_precondition(interaction, interior) -> bool:
             continue
         for key, required_value in cond.required_state.items():
             if target.state.get(key) != required_value:
-                return True
-    return False
+                message = str(cond.failure_message).strip()
+                hints.append(message or "現在は条件を満たしていない")
+                break
+    return tuple(hints)
 
 
 # PR #2 状態異常 surface: StatusEffectType.value → 日本語ラベル。
@@ -126,10 +134,12 @@ def _label_weather_type(value: str) -> str:
     return _WEATHER_TYPE_LABELS.get(value, value)
 
 
-def _interaction_condition_hints(interaction) -> tuple[str, ...]:
+def _interaction_condition_hints(interaction, interior=None) -> tuple[str, ...]:
     """interaction の時刻・天候制約を action 表示用の短いヒントにする。
 
-    HAS_ITEM / OBJECT_STATE は他の表示や remediation と重複するためここでは扱わない。
+    HAS_ITEM は他の表示や remediation と重複するためここでは扱わない。
+    OBJECT_STATE は現在失敗している場合だけ failure_message を添え、action
+    候補自体は残す。候補集合を消すと存在しない操作名の発明につながるため。
     """
     hints: list[str] = []
     for cond in interaction.preconditions:
@@ -154,12 +164,14 @@ def _interaction_condition_hints(interaction) -> tuple[str, ...]:
             if cond.required_weather_type:
                 hints.append(f"{_label_weather_type(cond.required_weather_type)}不可")
             continue
+    if interior is not None:
+        hints.extend(_object_state_precondition_failure_hints(interaction, interior))
     return tuple(hints)
 
 
-def _format_interaction_action_name_with_hints(interaction) -> str:
+def _format_interaction_action_name_with_hints(interaction, interior=None) -> str:
     """fallback テキスト用に action_name と condition hints を同じ規則で整形する。"""
-    hints = _interaction_condition_hints(interaction)
+    hints = _interaction_condition_hints(interaction, interior)
     if not hints:
         return interaction.action_name
     return f"{interaction.action_name}({'・'.join(hints)})"
@@ -680,22 +692,18 @@ class SpotGraphCurrentStateBuilder:
                 for obj in interior.objects:
                     if not obj.is_visible:
                         continue
-                    # 第24回実験 #343 対策: cockpit の OBJECT_STATE 永続失敗 (= 取り尽くした)
-                    # interaction が snapshot に出続けて search_cockpit を 19 回 retry した。
-                    # interaction の OBJECT_STATE precondition が「現在 失敗」しているなら、
-                    # 可能行動から落とす。reactive_binding で state が戻れば自動で再表示される
-                    # (= 採取の respawn 等は影響を受けない、tick が進むと再び見える)。
-                    # HAS_ITEM / TIME_OF_DAY / WEATHER 等の「プレイヤー側 / 環境側」失敗は
-                    # 残す: 「flint を持っていれば狼煙を上げられる」の探索の手掛かりが
-                    # 消えるのを防ぐため。
+                    # P0-1: OBJECT_STATE precondition が現在失敗していても action
+                    # は落とさない。落とすと「操作名一覧が空なのに説明は操作を
+                    # 誘う」状態になり、LLM が存在しない action_name を発明する。
+                    # 代わりに failure_message を condition_hints として添え、候補
+                    # 集合を保ったまま「今は通らない理由」を見せる。
                     interactions = tuple(
                         SpotGraphInteractionEntry(
                             action_name=i.action_name,
                             display_label=i.display_label,
-                            condition_hints=_interaction_condition_hints(i),
+                            condition_hints=_interaction_condition_hints(i, interior),
                         )
                         for i in obj.interactions
-                        if not _has_failing_object_state_precondition(i, interior)
                     )
                     # Phase 4-E: スポットに居る全員から見える state を載せる。
                     # `obj.visible_state()` が hidden_state_keys を除外して返す。
@@ -709,12 +717,11 @@ class SpotGraphCurrentStateBuilder:
                         interactions=interactions,
                         state=visible_state,
                     ))
-                    # フォールバック行 (interactions DTO と整合): 同じく
-                    # OBJECT_STATE 永続失敗の interaction は文面からも落とす。
+                    # フォールバック行 (interactions DTO と整合): 同じ条件ヒントを
+                    # 使い、OBJECT_STATE 失敗 action も理由付きで残す。
                     actions = [
-                        _format_interaction_action_name_with_hints(i)
+                        _format_interaction_action_name_with_hints(i, interior)
                         for i in obj.interactions
-                        if not _has_failing_object_state_precondition(i, interior)
                     ]
                     act = " / ".join(actions) if actions else "—"
                     obj_lines.append(f"- {obj.name} [ {act} ]")

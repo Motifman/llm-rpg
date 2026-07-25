@@ -169,6 +169,41 @@ class TestObjectSectionQuotesAndActionSimplification:
             ].available_interactions
         )
 
+    def test_failed_object_state_condition_hint_is_prompt_only(self) -> None:
+        """OBJECT_STATE 失敗理由は prompt の action 表示だけに付き、tool 候補は action_name のまま残る。"""
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="船倉",
+            current_spot_description="",
+            travel_status_line=None,
+            objects=(
+                SpotGraphObjectEntry(
+                    object_id=10,
+                    name="古い箱",
+                    description="ふたの開いた箱。",
+                    interactions=(
+                        SpotGraphInteractionEntry(
+                            action_name="open_chest",
+                            display_label="箱を開ける",
+                            condition_hints=("箱はすでに空っぽだ。",),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
+
+        assert '[open_chest(箱はすでに空っぽだ。)]' in result.current_state_text
+        assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
+            "open_chest",
+        )
+        assert all(
+            "箱はすでに空っぽ" not in action
+            for action in result.tool_runtime_context.targets[
+                "OBJ1"
+            ].available_interactions
+        )
+
     def test_action(self) -> None:
         """interactions が空の object は ``[]`` や ``[-]`` を出さず、シンプル
         に名前+説明だけを表示する。"""
