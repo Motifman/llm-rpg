@@ -556,6 +556,9 @@
       }
     }
   ],
+  "meeting": {
+    "enabled": true
+  },
   "player_interactions": [
     {
       "action_name": "strike_down",
