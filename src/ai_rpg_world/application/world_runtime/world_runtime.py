@@ -20,6 +20,11 @@ from typing import Any, Callable, ClassVar, Dict, FrozenSet, List, Optional, Tup
 
 logger = logging.getLogger(__name__)
 
+
+class ToolExposureConfigurationError(RuntimeError):
+    """runtime config が要求する LLM ツールを配線できないときの起動時エラー。"""
+
+
 from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
     STAGNATION_PRESSURE_BAND_NONE,
     resolve_stagnation_pressure_band,
@@ -154,6 +159,9 @@ from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import
     with_goal_update_schema,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MEMORY_EXPLORE_RELATED,
+    TOOL_NAME_MEMORY_RECALL_EPISODES,
+    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -434,6 +442,18 @@ class WorldRuntime:
     # 回避のため lazy import + ``Any`` 注釈にしている (= 既存の lazy executor
     # 配線と同じパターン)。
     _memory_recall_tool_executor: Optional[Any] = field(default=None, repr=False)
+    # 能動的にリンク済みエピソードを辿る ``memory_explore_related`` tool の
+    # executor。``EPISODIC_EXPLORE_RELATED_ENABLED`` が true かつ link store
+    # 一式が組めるときだけ LLM に露出する。
+    _memory_explore_related_tool_executor: Optional[Any] = field(
+        default=None, repr=False
+    )
+    # semantic 記憶を能動検索する ``memory_search_semantic`` tool の executor。
+    # ``SEMANTIC_SEARCH_ENABLED`` が true かつ semantic store が組めるときだけ
+    # LLM に露出する。
+    _semantic_memory_search_tool_executor: Optional[Any] = field(
+        default=None, repr=False
+    )
     # PR-D: afterglow handle から本文を引き戻す ``memory_recall_by_handle``
     # tool の executor。slot / afterglow / episode_store + 現 tick provider を
     # 統合する必要があるため、``_wire_auxiliary_tool_stack`` で構築。
@@ -828,11 +848,16 @@ class WorldRuntime:
         todo_complete) を除外し、spot_graph_* + speech (say / whisper) のみ
         を返す。LLM が「TODO 操作の連打」に逃げない条件で挙動を比較するため
         の純スポットグラフモード (B-4 / Issue #155 の判断材料)。
+        この粗いモードでは個別の記憶ツール露出フラグも評価せず、補助ツール
+        全体を隠す。
 
-        Issue #526 後続: episodic_stack が wire されていれば
-        ``memory_recall_episodes`` (= LLM が能動的に過去 episode を呼び戻す
-        tool) も併せて含める。``_episodic_stack=None`` 時は出さない (= 学習
-        パイプラインが無い実験 run と区別する)。
+        ツール露出の強制点はこのメソッドに集約する。シナリオ由来の
+        ``prepare_action`` 導出露出と、設定由来の記憶系ツール露出を同じ場所で
+        決めることで、「なぜ tool が LLM に出ないか」の追跡点を分散させない。
+
+        記憶系ツールは、該当 runtime config が true かつ実行器が組めた場合だけ
+        露出する。config true なのに前提配線が無い場合は fail-fast する。
+        比較実験で「有効にしたつもりが黙って無効」になる静かな失敗を避けるため。
 
         ``tool_schema_mode="legacy"`` は従来互換。``"reason_first"`` では
         ``assess_situation`` を加え、行動 tool から step1 所有の
@@ -874,7 +899,36 @@ class WorldRuntime:
         # idempotent なので毎回呼んで OK。
         if self._episodic_stack is not None:
             self._wire_auxiliary_tool_stack()
-        episodic_recall_enabled = self._memory_recall_tool_executor is not None
+        cfg = self._runtime_config
+        episodic_recall_requested = bool(
+            getattr(cfg, "episodic_recall_enabled", False)
+        )
+        episodic_explore_related_requested = bool(
+            getattr(cfg, "episodic_explore_related_enabled", False)
+        )
+        semantic_search_requested = bool(
+            getattr(cfg, "semantic_search_enabled", False)
+        )
+        episodic_recall_enabled = self._resolve_requested_memory_tool_enabled(
+            requested=episodic_recall_requested,
+            executor=self._memory_recall_tool_executor,
+            tool_name=TOOL_NAME_MEMORY_RECALL_EPISODES,
+            flag_name="EPISODIC_RECALL_ENABLED",
+        )
+        episodic_explore_related_enabled = (
+            self._resolve_requested_memory_tool_enabled(
+                requested=episodic_explore_related_requested,
+                executor=self._memory_explore_related_tool_executor,
+                tool_name=TOOL_NAME_MEMORY_EXPLORE_RELATED,
+                flag_name="EPISODIC_EXPLORE_RELATED_ENABLED",
+            )
+        )
+        semantic_search_enabled = self._resolve_requested_memory_tool_enabled(
+            requested=semantic_search_requested,
+            executor=self._semantic_memory_search_tool_executor,
+            tool_name=TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+            flag_name="SEMANTIC_SEARCH_ENABLED",
+        )
         recall_by_handle_enabled = (
             self._memory_recall_by_handle_tool_executor is not None
         )
@@ -882,6 +936,8 @@ class WorldRuntime:
             defn
             for defn, _ in get_memory_specs(
                 todo_enabled=True,
+                episodic_explore_related_enabled=episodic_explore_related_enabled,
+                semantic_search_enabled=semantic_search_enabled,
                 episodic_recall_enabled=episodic_recall_enabled,
                 recall_by_handle_enabled=recall_by_handle_enabled,
             )
@@ -890,6 +946,30 @@ class WorldRuntime:
         if assessment_tool is not None:
             tools.append(assessment_tool)
         return tools
+
+    @staticmethod
+    def _resolve_requested_memory_tool_enabled(
+        *,
+        requested: bool,
+        executor: Optional[Any],
+        tool_name: str,
+        flag_name: str,
+    ) -> bool:
+        """設定 true の記憶ツールに実行器が無ければ起動時に落とす。
+
+        false のときは実行器があっても expose しない。true のときに実行器が
+        無いまま黙って false へ縮退すると、比較実験で「条件を変えたつもりが
+        変わっていない」静かな失敗になる。
+        """
+        if not requested:
+            return False
+        if executor is None:
+            raise ToolExposureConfigurationError(
+                f"{flag_name}=true requires an executor for {tool_name}, "
+                "but the runtime memory stack is not wired. Enable the required "
+                "episodic/semantic prerequisites or turn the flag off."
+            )
+        return True
 
     # Prediction (#526 v0): expected_result 露出の対象 tool。記録経路 (do_* →
     # _record_action_result) に subjective を配線済みの core action だけに限定する
@@ -1155,12 +1235,13 @@ class WorldRuntime:
         self._wire_memory_recall_executor_if_possible()
 
     def _wire_memory_recall_executor_if_possible(self) -> None:
-        """Issue #526 後続: memory_recall_episodes tool を idempotent に組み立てる。
+        """記憶系の能動ツール executor を idempotent に組み立てる。
 
         episodic_stack が無いと episode store / noun_matcher にアクセス
-        できないため、その場合は executor を作らない (= tool は LLM 側
-        に出さない)。``_aux_being_resolver`` / ``_aux_being_default_world_id``
-        は ``_wire_auxiliary_tool_stack`` 内で先に初期化される前提。
+        できないため、その場合は executor を作らない。LLM への露出可否は
+        ``get_tool_definitions`` で runtime config と executor の AND として
+        決める。``_aux_being_resolver`` / ``_aux_being_default_world_id`` は
+        ``_wire_auxiliary_tool_stack`` 内で先に初期化される前提。
 
         PR-D fix: 旧実装は冒頭で ``_memory_recall_tool_executor`` の有無で
         早期 return していたが、それだと PR-D で追加した
@@ -1188,6 +1269,41 @@ class WorldRuntime:
                 noun_matcher=self._episodic_stack.noun_matcher,
                 time_provider=utc_now,
             )
+
+        if self._memory_explore_related_tool_executor is None:
+            link_store = getattr(self._episodic_stack, "memory_link_store", None)
+            link_service = getattr(self._episodic_stack, "link_service", None)
+            if link_store is not None and link_service is not None:
+                from ai_rpg_world.application.llm.services.executors.episodic_memory_explore_tool_executor import (
+                    EpisodicMemoryExploreToolExecutor,
+                )
+
+                self._memory_explore_related_tool_executor = (
+                    EpisodicMemoryExploreToolExecutor(
+                        episode_store=self._episodic_stack.episode_store,
+                        link_store=link_store,
+                        link_service=link_service,
+                        being_attachment_resolver=self._aux_being_resolver,
+                        default_world_id=self._aux_being_default_world_id,
+                    )
+                )
+
+        if self._semantic_memory_search_tool_executor is None:
+            semantic_store = getattr(
+                self._episodic_stack, "semantic_memory_store", None
+            )
+            if semantic_store is not None:
+                from ai_rpg_world.application.llm.services.executors.semantic_memory_search_tool_executor import (
+                    SemanticMemorySearchToolExecutor,
+                )
+
+                self._semantic_memory_search_tool_executor = (
+                    SemanticMemorySearchToolExecutor(
+                        semantic_store,
+                        being_attachment_resolver=self._aux_being_resolver,
+                        default_world_id=self._aux_being_default_world_id,
+                    )
+                )
 
         # PR-D: memory_recall_by_handle (afterglow handle → 本文 + slot 再注入)。
         # afterglow_store + slot_store が両方揃っていなければ意味がないので
@@ -1247,27 +1363,28 @@ class WorldRuntime:
         self._aux_being_provisioning.ensure_attached(player_id)
         assert self._todo_tool_executor is not None
         handlers: Dict[str, Any] = dict(self._todo_tool_executor.get_handlers())
-        if self._memory_recall_tool_executor is not None:
-            recall_handlers = self._memory_recall_tool_executor.get_handlers()
+
+        def _merge_handlers(next_handlers: Dict[str, Any]) -> None:
             # サイレント上書き防止: 将来 executor が増えたとき同名 tool が
             # 出ると後勝ちで挙動が変わるため、明示的に衝突を検出する。
-            overlap = handlers.keys() & recall_handlers.keys()
+            overlap = handlers.keys() & next_handlers.keys()
             if overlap:
                 raise RuntimeError(
                     f"tool handler name collision in aux stack: {sorted(overlap)}"
                 )
-            handlers.update(recall_handlers)
+            handlers.update(next_handlers)
+
+        if self._memory_recall_tool_executor is not None:
+            _merge_handlers(self._memory_recall_tool_executor.get_handlers())
+        if self._memory_explore_related_tool_executor is not None:
+            _merge_handlers(
+                self._memory_explore_related_tool_executor.get_handlers()
+            )
+        if self._semantic_memory_search_tool_executor is not None:
+            _merge_handlers(self._semantic_memory_search_tool_executor.get_handlers())
         # PR-D: recall_by_handle も同じ aux 経路で動かす。
         if self._memory_recall_by_handle_tool_executor is not None:
-            by_handle_handlers = (
-                self._memory_recall_by_handle_tool_executor.get_handlers()
-            )
-            overlap = handlers.keys() & by_handle_handlers.keys()
-            if overlap:
-                raise RuntimeError(
-                    f"tool handler name collision in aux stack: {sorted(overlap)}"
-                )
-            handlers.update(by_handle_handlers)
+            _merge_handlers(self._memory_recall_by_handle_tool_executor.get_handlers())
         handler = handlers.get(name)
         if handler is None:
             return LlmCommandResultDto(
@@ -5314,11 +5431,17 @@ def create_world_runtime(
         # belief top-K を読むには semantic_memory_store が要るため、
         # SEMANTIC_PASSIVE_TOP_K=0 のまま UNCONSCIOUS_CONTEXT_ENABLED だけ ON
         # にしても semantic スタックが組まれないと belief が一切取れない。
+        # 能動記憶ツール (memory_search_semantic / memory_explore_related) も
+        # semantic_memory_store / memory_link_store を前提とするため、露出フラグ
+        # が ON のときは同じスタックを組む。tool 定義の露出自体は
+        # get_tool_definitions() が config と executor の AND で決める。
         _semantic_enabled = (
             _semantic_top_k > 0
             or _semantic_gist_enabled
             or _belief_consolidation_enabled
             or _unconscious_context_enabled
+            or config.semantic_search_enabled
+            or config.episodic_explore_related_enabled
         )
         _semantic_gist_service = None
         _semantic_persona_resolver = None
