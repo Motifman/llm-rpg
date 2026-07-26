@@ -499,9 +499,9 @@ class TestResolveSalienceStructuredFailureEnabled:
 class TestResolveMemoDistillEnabled:
     """U5: ``MEMO_DISTILL_ENABLED`` の env パース。"""
 
-    def test_env_unset_default_off_6(self) -> None:
-        """env 未設定なら default OFF。"""
-        assert resolve_memo_distill_enabled(env={}) is False
+    def test_env_unset_default_on_6(self) -> None:
+        """env 未設定なら default ON。"""
+        assert resolve_memo_distill_enabled(env={}) is True
 
     @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
     def test_truthy_value_6(self, raw: str) -> None:

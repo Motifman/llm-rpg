@@ -55,6 +55,7 @@ class TestFromEnvDefaults:
         assert cfg.semantic_search_enabled is False
         assert cfg.episodic_reinterpretation_enabled is False
         assert cfg.belief_evidence_enabled is False
+        assert cfg.memo_distill_enabled is True
         assert cfg.goal_reflect_enabled is False
         assert cfg.stagnation_reasoning_enabled is False
         assert cfg.tool_mode == "default"

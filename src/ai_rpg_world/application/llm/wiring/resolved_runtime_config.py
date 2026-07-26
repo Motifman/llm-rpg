@@ -738,7 +738,7 @@ class ResolvedLlmRuntimeConfig:
             belief_consolidation_enabled=False,
             belief_attribution_enabled=False,
             salience_structured_failure_enabled=False,
-            memo_distill_enabled=False,
+            memo_distill_enabled=True,
             unconscious_context_enabled=False,
             error_driven_reinterpretation_enabled=False,
             recall_hit_boost_enabled=False,

@@ -5106,7 +5106,9 @@ def create_world_runtime(
         # 加えない。
         _error_gated_encoding_enabled = config.error_gated_encoding_enabled
         log_error_gated_encoding_enabled_state(_error_gated_encoding_enabled)
-        # U5: MEMO_DISTILL 転記 (default OFF)。他 3 flag 同様、同じ evidence
+        # U5: MEMO_DISTILL 転記 (default ON)。memo を手帳で終わらせず
+        # semantic evidence へ蒸留するため、明示 OFF でだけ止める。
+        # 他 3 flag 同様、同じ evidence
         # buffer を共有するので ON なら buffer store を作る条件に加える。
         _memo_distill_enabled = config.memo_distill_enabled
         log_memo_distill_enabled_state(_memo_distill_enabled)
