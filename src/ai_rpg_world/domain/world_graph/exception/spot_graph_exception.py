@@ -175,3 +175,10 @@ class ReactiveObjectStateBindingValidationException(
 ):
     """ReactiveObjectStateBinding のバリデーション例外"""
     error_code = "WORLD_GRAPH.REACTIVE_OBJECT_STATE_BINDING_VALIDATION"
+
+
+class GameEndConditionValidationException(
+    SpotGraphDomainException, ValidationException
+):
+    """GameEndCondition のバリデーション例外"""
+    error_code = "WORLD_GRAPH.GAME_END_CONDITION_VALIDATION"

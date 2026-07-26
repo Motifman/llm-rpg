@@ -874,7 +874,7 @@
   ],
   "game_end_conditions": {
     "win": [
-      {"type": "FLAG_SET", "flag_name": "rescue_completed", "description": "山頂に狼煙が上がり、全員揃って救助船を待つ。"}
+      {"type": "FLAG_SET", "target_flag": "rescue_completed", "description": "山頂に狼煙が上がり、全員揃って救助船を待つ。"}
     ],
     "lose": [
       {"type": "TICK_LIMIT", "tick_limit": 140, "description": "14日(140 tick)以内に救助されなければ脱出失敗。"}
