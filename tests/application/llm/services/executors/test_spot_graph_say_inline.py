@@ -23,15 +23,21 @@ from ai_rpg_world.application.llm.services.tool_catalog.say_inline import (
     SAY_INLINE_MAX_LENGTH,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
+    TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
+    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
@@ -122,6 +128,10 @@ class TestSayInlineHelper:
         executor._maybe_emit_say_inline(1, {"say_inline": long_text})
         cmd = speech.speak.call_args[0][0]
         assert len(cmd.content) == SAY_INLINE_MAX_LENGTH
+
+    def test_cap_holds_a_typical_coordination_utterance(self) -> None:
+        """実測の段取り発話が専用ターンへ戻らないよう、上限は speak 中央値 104 字を超える。"""
+        assert SAY_INLINE_MAX_LENGTH >= 104
 
     def test_speak_exception_does_not_fail_parent_action(self) -> None:
         """fail-safe: travel/give が say_inline 由来で巻き戻るのを防ぐ。"""
@@ -297,11 +307,25 @@ class TestSayInlineToolDef:
             TOOL_NAME_SPOT_GRAPH_USE_ITEM,
             TOOL_NAME_SPOT_GRAPH_WAIT,
         }
+        expected_without_say_inline = {
+            TOOL_NAME_SPEECH,
+            TOOL_NAME_SPOT_GRAPH_LISTEN,
+            TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
+            TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
+            TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
+            TOOL_NAME_SPOT_GRAPH_VOTE,
+        }
         definitions = [definition for definition, _ in get_spot_graph_specs()]
+        all_tool_names = {definition.name for definition in definitions}
         actual_with_say_inline = {
             definition.name
             for definition in definitions
             if "say_inline" in definition.parameters["properties"]
         }
+        actual_without_say_inline = all_tool_names - actual_with_say_inline
+
         assert actual_with_say_inline == expected_with_say_inline
+        assert actual_without_say_inline == expected_without_say_inline
+        assert expected_with_say_inline | expected_without_say_inline == all_tool_names
+        assert expected_with_say_inline & expected_without_say_inline == set()
         assert len(actual_with_say_inline) == 10
