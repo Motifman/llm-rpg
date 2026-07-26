@@ -61,6 +61,10 @@
     "LLM_TOOL_MODE": "default",
     "ESCAPE_LLM_SSOT": false,
     "SCENARIO_RANDOM_SEED": 42,
-    "MEMO_TOOLS_ENABLED": false
+    "MEMO_TOOLS_ENABLED": false,
+    "DISTANT_VIEW_TRACE_ENABLED": true,
+    "PROMPT_DATASET_CAPTURE_ENABLED": true,
+    "PROMPT_DATASET_CAPTURE_FAILURE_POLICY": "warn",
+    "END_ON_ALL_DOWN": true
   }
 }
