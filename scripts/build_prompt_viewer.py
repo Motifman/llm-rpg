@@ -249,9 +249,12 @@ def _render_body(content: str) -> str:
                 rendered.append(f'<span class="line">{escaped}</span>')
         body = "\n".join(rendered)
         heading = html.escape(title) if title else "(見出しなし)"
-        marked = " data-marked=\"1\"" if any(_line_class(x) for x in lines) else ""
+        # 注目行を含む section だけ開いて出す。全 section を open にすると
+        # 465 call x 10 見出し ぶんの pre が一度に描画されて実用にならない。
+        is_marked = any(_line_class(x) for x in lines)
+        attrs = ' data-marked="1" open' if is_marked else ""
         parts.append(
-            f'<details class="section" open{marked}>'
+            f'<details class="section"{attrs}>'
             f"<summary>{heading}</summary>"
             f'<pre class="section-body">{body}</pre>'
             f"</details>"
@@ -321,21 +324,23 @@ def _render_call(index: int, call: PromptCall) -> str:
         f'<span class="chip chip-{html.escape(label)}">{html.escape(label)}</span>'
         for label in call.highlights
     )
+    # call 自体を details にして既定で閉じる。465 call ぶんの prompt 本文を
+    # 一度に開くと描画が重すぎて読めないため、一覧から 1 件ずつ開く形にする。
     return f"""
-<article class="call" id="call-{index}"
+<details class="call" id="call-{index}"
          data-player="{html.escape(str(call.player_id))}"
          data-phase="{html.escape(call.phase)}"
          data-tool="{html.escape(call.tool_name)}"
          data-tick="{html.escape(str(tick))}"
          data-highlights="{html.escape('|'.join(call.highlights))}">
-  <header class="call-head">
+  <summary class="call-head">
     <span class="tick">t{html.escape(str(tick))}</span>
     <span class="who">{html.escape(call.character_name or f'P{call.player_id}')}</span>
     <span class="phase phase-{html.escape(call.phase)}">{html.escape(call.phase)}</span>
     <span class="tool">{html.escape(call.tool_name or '-')}</span>
     <span class="chips">{chips}</span>
     <span class="meta">{latency_text} / prompt {prompt_tokens} (cached {cached})</span>
-  </header>
+  </summary>
   <div class="call-body">
     <section class="pane">
       <h3>送信した user message <small>{len(call.user_content)} 文字</small></h3>
@@ -350,7 +355,7 @@ def _render_call(index: int, call: PromptCall) -> str:
       {_render_system(call)}
     </section>
   </div>
-</article>"""
+</details>"""
 
 
 _CSS = """
@@ -423,11 +428,14 @@ header.top .sub { color: var(--text-dim); font-size: 0.82rem; font-variant-numer
 main { padding: 1.1rem 1.2rem 4rem; display: flex; flex-direction: column; gap: 0.9rem; }
 .call { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .call[hidden] { display: none; }
+.call[open] { border-color: var(--accent); }
 .call-head {
   display: flex; flex-wrap: wrap; gap: 0.5rem 0.8rem; align-items: center;
   padding: 0.55rem 0.9rem; background: var(--surface-2);
-  border-bottom: 1px solid var(--line); font-size: 0.84rem;
+  font-size: 0.84rem; cursor: pointer; list-style: none;
 }
+.call-head::-webkit-details-marker { display: none; }
+.call[open] .call-head { border-bottom: 1px solid var(--line); }
 .tick { font-family: var(--mono); color: var(--accent); font-weight: 700; }
 .who { font-weight: 650; }
 .phase { font-size: 0.74rem; padding: 0.08rem 0.42rem; border-radius: 999px;
@@ -503,9 +511,9 @@ for (const el of [q, fPlayer, fPhase, fTool, fMark]) {
   el.addEventListener('input', apply);
 }
 document.getElementById('fold').addEventListener('click', () => {
-  const open = document.querySelectorAll('.call:not([hidden]) details.section[open]').length > 0;
-  document.querySelectorAll('.call:not([hidden]) details.section')
-    .forEach(d => { d.open = !open; });
+  const shown = calls.filter(c => !c.hidden);
+  const anyOpen = shown.some(c => c.open);
+  shown.forEach(c => { c.open = !anyOpen; });
 });
 apply();
 """
@@ -547,7 +555,7 @@ def render_html(calls: Sequence[PromptCall], *, run_id: str, profile: str) -> st
     <select id="f-tool">{options(tools, '全 tool')}</select>
     <label><input type="checkbox" id="f-mark"> ハイライトのみ</label>
     <input type="search" id="q" placeholder="本文を検索 (例: 山影)">
-    <button id="fold" type="button">全部折る / 開く</button>
+    <button id="fold" type="button">表示中を全部開く / 閉じる</button>
     <span id="count"></span>
   </div>
 </header>

@@ -210,11 +210,19 @@ class TestRenderBody:
 
 
 class TestRenderHtml:
-    def test_page_contains_one_article_per_call(self, tmp_path) -> None:
-        """call 1 件につき 1 つの article を出し、件数が落ちない。"""
+    def test_page_contains_one_block_per_call(self, tmp_path) -> None:
+        """call 1 件につき 1 ブロックを出し、件数が落ちない。"""
         run_dir = _write(tmp_path, [_call(llm_call_id="a"), _call(llm_call_id="b")])
         page = render_html(_load_calls(run_dir), run_id="r", profile="p")
-        assert page.count('<article class="call"') == 2
+        assert page.count('<details class="call"') == 2
+
+    def test_calls_are_collapsed_by_default(self, tmp_path) -> None:
+        """call は既定で閉じる。465 call ぶんの prompt 本文を一度に開くと
+        描画が重すぎて読めないため、一覧から 1 件ずつ開く形にする。"""
+        run_dir = _write(tmp_path, [_call()])
+        page = render_html(_load_calls(run_dir), run_id="r", profile="p")
+        assert '<details class="call" id="call-0"' in page
+        assert '<details class="call" open' not in page
 
     def test_filters_offer_every_observed_player_phase_and_tool(self, tmp_path) -> None:
         """絞り込みの選択肢は実際に出現した player / phase / tool から作る。"""
@@ -265,3 +273,19 @@ class TestToolNamesOf:
         """名前を取れない行では空 list を返し、呼び出し側が「解決できなかった」と
         表示できるようにする (= 捏造しない)。"""
         assert _tool_names_of({}) == []
+
+
+class TestSectionFolding:
+    """本文 section の既定の開閉が、読める重さと注目箇所の見つけやすさを両立する挙動。"""
+
+    def test_marked_section_is_open_so_the_notable_line_is_visible(self) -> None:
+        """注目行を含む section は開いて出す。絞り込んだあと更に開く手間を省く。"""
+        out = _render_body("【身体の状態】\n  → 同じことばかり繰り返している焦りが拭えない。")
+        assert 'data-marked="1" open' in out
+
+    def test_plain_section_is_closed_to_keep_the_page_light(self) -> None:
+        """注目行の無い section は閉じて出す。全 section を開くと 465 call x
+        10 見出しぶんの本文が一度に描画されて実用にならない。"""
+        out = _render_body("【現在地と周囲】\n現在地: 干潟")
+        assert "<details class=\"section\">" in out
+        assert "open" not in out
