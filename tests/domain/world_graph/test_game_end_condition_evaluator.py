@@ -68,11 +68,25 @@ def test_tick_limit_lose() -> None:
     assert r.is_ended and r.result == GameResultEnum.LOSE
 
 
-def test_invalid_flag_set_condition_raises_domain_exception() -> None:
-    """FLAG_SET に target_flag が無い条件が評価器へ届いたら、未達扱いせず大きく失敗する。"""
-    ev = GameEndConditionEvaluator()
-    g = SpotGraphAggregate.empty(SpotGraphId.create(1))
-    cond = GameEndCondition(condition_type=GameEndConditionTypeEnum.FLAG_SET)
-
+def test_invalid_flag_set_condition_raises_domain_exception_on_construction() -> None:
+    """FLAG_SET に target_flag が無い条件は、評価前の構築時点で拒否される。"""
     with pytest.raises(GameEndConditionValidationException, match="target_flag"):
-        ev.evaluate(g, cond, frozenset({"escaped"}), [PlayerId(1)])
+        GameEndCondition(condition_type=GameEndConditionTypeEnum.FLAG_SET)
+
+
+@pytest.mark.parametrize(
+    ("condition_type", "kwargs", "message"),
+    [
+        (GameEndConditionTypeEnum.TICK_LIMIT, {}, "tick_limit"),
+        (GameEndConditionTypeEnum.ALL_AT_SPOT, {}, "target_spot_id"),
+        (GameEndConditionTypeEnum.ANY_AT_SPOT, {}, "target_spot_id"),
+    ],
+)
+def test_required_game_end_condition_fields_are_rejected_on_construction(
+    condition_type: GameEndConditionTypeEnum,
+    kwargs: dict,
+    message: str,
+) -> None:
+    """条件型ごとの必須フィールド欠落は、値オブジェクトの構築時点で拒否される。"""
+    with pytest.raises(GameEndConditionValidationException, match=message):
+        GameEndCondition(condition_type=condition_type, **kwargs)
