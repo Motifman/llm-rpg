@@ -70,7 +70,7 @@ def test_get_spot_graph_specs_exposes_the_expected_tools() -> None:
         "travel_to", "set_sub_location", "explore", "interact",
         "prepare_action", "use_item", "drop_item", "pickup_item",
         "give_item", "attack", "listen", "wait", "tend_to_player",
-        "vote", "speak",
+        "vote", "report_body", "speak",
     }
     # PR-CC: spot_graph_ prefix 廃止 → bare 名
     # PR-DD: speech_speak → speak

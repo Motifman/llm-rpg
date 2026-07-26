@@ -191,3 +191,6 @@ TOOL_NAME_SPOT_GRAPH_GIVE_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "give_item"
 TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER = TOOL_NAME_PREFIX_SPOT_GRAPH + "tend_to_player"
 #: 会議中だけ出す投票 tool (会議と投票 PR 6)。
 TOOL_NAME_SPOT_GRAPH_VOTE = TOOL_NAME_PREFIX_SPOT_GRAPH + "vote"
+#: 倒れている相手を見つけたと知らせ、会議を招集する tool (会議と投票 PR 8)。
+#: 自由時間だけ出す。既に話し合っている最中には出さない。
+TOOL_NAME_SPOT_GRAPH_REPORT_BODY = TOOL_NAME_PREFIX_SPOT_GRAPH + "report_body"
