@@ -72,7 +72,7 @@ class TestEmergencyButton:
         """同じ人は二度押せない。理由が文で返る。"""
         runtime.call_emergency_meeting(_KUZE)
         runtime.end_meeting(reason="vote_concluded")
-        _pass_ticks(runtime, runtime._game_phase_store.MEETING_COOLDOWN_TICKS + 1)
+        _pass_ticks(runtime, runtime._game_phase_store.meeting_cooldown_ticks + 1)
 
         result = runtime.call_emergency_meeting(_KUZE)
 
@@ -83,7 +83,7 @@ class TestEmergencyButton:
         """別の人の持ち札は残っている。"""
         runtime.call_emergency_meeting(_KUZE)
         runtime.end_meeting(reason="vote_concluded")
-        _pass_ticks(runtime, runtime._game_phase_store.MEETING_COOLDOWN_TICKS + 1)
+        _pass_ticks(runtime, runtime._game_phase_store.meeting_cooldown_ticks + 1)
 
         assert runtime.call_emergency_meeting(_MORI).success is True
 
@@ -105,7 +105,7 @@ class TestCooldown:
         """既定 tick 経てば押せる。"""
         runtime.call_emergency_meeting(_KUZE)
         runtime.end_meeting(reason="vote_concluded")
-        _pass_ticks(runtime, runtime._game_phase_store.MEETING_COOLDOWN_TICKS)
+        _pass_ticks(runtime, runtime._game_phase_store.meeting_cooldown_ticks)
 
         assert runtime.call_emergency_meeting(_MORI).success is True
 

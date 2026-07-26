@@ -462,6 +462,13 @@ class ScenarioLoadResult:
     # 比較可能性が切れていた。同時行動 (prepare_action) と同じく、宣言した
     # シナリオにだけ出す。
     meeting_enabled: bool = False
+    # 会議の調整値。None は既定 (GamePhaseStore のクラス定数) を使う。
+    # シナリオごとに変えられないと、機構の確認用に短く回す run で会議 1 回
+    # に run の大半を持っていかれる。
+    meeting_tick_limit: Optional[int] = None
+    meeting_silence_limit_ticks: Optional[int] = None
+    meeting_cooldown_ticks: Optional[int] = None
+    emergency_buttons_per_player: Optional[int] = None
 
 
 class ScenarioLoader:
@@ -527,6 +534,7 @@ class ScenarioLoader:
         )
 
         meeting_enabled = self._parse_meeting_enabled(raw)
+        meeting_tuning = self._parse_meeting_tuning(raw)
 
         return ScenarioLoadResult(
             graph=graph,
@@ -552,7 +560,47 @@ class ScenarioLoader:
             areas=areas,
             distant_cues=distant_cues,
             meeting_enabled=meeting_enabled,
+            **meeting_tuning,
         )
+
+    @staticmethod
+    def _parse_meeting_tuning(raw: Dict[str, Any]) -> Dict[str, Optional[int]]:
+        """`meeting` block の調整値を読む。書かれていない項目は None (既定)。
+
+        **1 以上の整数だけを通す。** 0 や負を許すと、会議が始まった瞬間に
+        打ち切られたり、クールダウンが効かなくなったりする。読み込み時に
+        止めないと、run が終わるまで「なぜか会議が成立しない」で悩む。
+        """
+        block = raw.get("meeting")
+        keys = (
+            "tick_limit",
+            "silence_limit_ticks",
+            "cooldown_ticks",
+            "emergency_buttons_per_player",
+        )
+        if not isinstance(block, dict):
+            return {f"meeting_{k}": None for k in keys[:3]} | {
+                "emergency_buttons_per_player": None
+            }
+        parsed: Dict[str, Optional[int]] = {}
+        for key in keys:
+            value = block.get(key)
+            if value is not None:
+                if not isinstance(value, int) or isinstance(value, bool):
+                    raise ScenarioLoadError(
+                        f"meeting.{key} は整数で指定してください"
+                    )
+                if value < 1:
+                    raise ScenarioLoadError(
+                        f"meeting.{key} は 1 以上である必要があります: {value}"
+                    )
+            field = (
+                key
+                if key == "emergency_buttons_per_player"
+                else f"meeting_{key}"
+            )
+            parsed[field] = value
+        return parsed
 
     @staticmethod
     def _parse_meeting_enabled(raw: Dict[str, Any]) -> bool:

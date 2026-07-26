@@ -73,7 +73,7 @@ class TestWorldCooldown:
 
         assert (
             store.is_meeting_on_cooldown(
-                tick=20 + GamePhaseStore.MEETING_COOLDOWN_TICKS
+                tick=20 + GamePhaseStore.DEFAULT_MEETING_COOLDOWN_TICKS
             )
             is False
         )
