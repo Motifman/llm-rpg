@@ -1,0 +1,23 @@
+{
+  "profile": "station_drill_stub",
+  "description": "station_drill の配線と trace 観測点だけを実 LLM 無しで確認する。profile / fail-fast / 観測点の抜けをここで潰してから実 run に進む。",
+  "scenario": "data/scenarios/station_drill.json",
+  "max_world_ticks": 3,
+  "snapshot_save": false,
+  "runtime_config": {
+    "LLM_CLIENT": "stub",
+    "LLM_TURN_PARALLEL_WORKERS": 0,
+    "LLM_IDLE_TIMEOUT_TICKS": 6,
+    "SHORT_TERM_MEMORY_KIND": "sliding_window",
+    "SHORT_TERM_MEMORY_SCHEDULER_MODE": "thread_pool",
+    "LLM_EPISODIC_ENABLED": false,
+    "LLM_EPISODIC_SUBJECTIVE_ENABLED": true,
+    "EPISODIC_PROMOTION_FORCE_FULL_SCAN": false,
+    "EPISODIC_PROMOTION_EXPANSION_HOPS": 4,
+    "PROMPT_SECTION_ORDER": "stable_to_volatile",
+    "LLM_EXPECTED_RESULT_POLICY": "off",
+    "LLM_TOOL_MODE": "default",
+    "ESCAPE_LLM_SSOT": false,
+    "SCENARIO_RANDOM_SEED": 42
+  }
+}
