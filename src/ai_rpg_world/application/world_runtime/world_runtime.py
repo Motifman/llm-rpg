@@ -2934,15 +2934,62 @@ class WorldRuntime:
         player_ids = self.get_player_ids()
         from ai_rpg_world.domain.common.value_object import WorldTick
         tick = WorldTick(self._tick)
+        # 陣営条件 (SURVIVING_PLAYERS_WITH_STATE_AT_MOST) の判定材料。
+        # 役割は PlayerStatusAggregate.state、生死は outcome registry が持つ。
+        # 渡さないと評価器が例外を投げる (黙って未成立にしない)。
+        #
+        # 毎 tick 全員分を引くので、陣営条件を使わないシナリオでは集めない。
+        from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
+            GameEndConditionTypeEnum,
+        )
+        needs_faction_inputs = any(
+            c.condition_type
+            is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST
+            for c in (*self.scenario.win_conditions, *self.scenario.lose_conditions)
+        )
+        player_states = (
+            self._collect_player_states(player_ids) if needs_faction_inputs else None
+        )
+        player_outcomes = (
+            self._collect_player_outcomes(player_ids) if needs_faction_inputs else None
+        )
         for wc in self.scenario.win_conditions:
-            result = self._game_end_evaluator.evaluate(graph, wc, flags, player_ids, tick)
+            result = self._game_end_evaluator.evaluate(
+                graph, wc, flags, player_ids, tick,
+                player_states=player_states, player_outcomes=player_outcomes,
+            )
             if result.is_ended:
                 return result
         for lc in self.scenario.lose_conditions:
-            result = self._game_end_evaluator.evaluate(graph, lc, flags, player_ids, tick)
+            result = self._game_end_evaluator.evaluate(
+                graph, lc, flags, player_ids, tick,
+                player_states=player_states, player_outcomes=player_outcomes,
+            )
             if result.is_ended:
                 return result
         return GameEndResult(is_ended=False, result=None, reason="ゲーム続行中")
+
+    def _collect_player_states(self, player_ids) -> Dict[int, Dict[str, Any]]:
+        """陣営条件が役割を読むための state 表を作る。"""
+        states: Dict[int, Dict[str, Any]] = {}
+        for pid in player_ids:
+            status = self._player_status_repo.find_by_id(pid)
+            states[int(pid)] = dict(status.state) if status is not None else {}
+        return states
+
+    def _collect_player_outcomes(self, player_ids) -> Dict[int, Any]:
+        """陣営条件が生死を読むための outcome 表を作る。
+
+        registry が未配線のシナリオでは全員 UNRESOLVED として扱う。陣営条件を
+        書いていないシナリオではこの表自体が参照されないので影響しない。
+        """
+        from ai_rpg_world.domain.player.enum.player_outcome_enum import (
+            PlayerOutcomeEnum,
+        )
+        registry = self._player_outcome_registry
+        if registry is None:
+            return {int(pid): PlayerOutcomeEnum.UNRESOLVED for pid in player_ids}
+        return {int(pid): registry.get_outcome(pid) for pid in player_ids}
 
     def get_player_spot_name(self, player_id: PlayerId) -> str:
         graph = self._spot_graph_repo.find_graph()

@@ -688,7 +688,16 @@
         "description": "救難信号が届いた。"
       }
     ],
-    "lose": []
+    "lose": [
+      {
+        "type": "SURVIVING_PLAYERS_WITH_STATE_AT_MOST",
+        "required_state": {
+          "role": "crew"
+        },
+        "max_surviving": 0,
+        "description": "生き残った隊員が居なくなった。"
+      }
+    ]
   },
   "initial_flags": []
 }
