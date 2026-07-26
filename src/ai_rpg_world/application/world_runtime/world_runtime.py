@@ -897,10 +897,30 @@ class WorldRuntime:
             assessment_tool = assess_situation_definition(
                 expected_result_policy=self._expected_result_policy
             )
+        # フェーズで出し分ける (会議と投票 PR 3)。
+        #
+        # 会議中は物理的な行為の tool を **そもそも出さない**。前提条件で弾く
+        # 形にすると、全 interaction に「会議中は不可」を書いて回ることになり、
+        # LLM から見ても「選べるのに必ず失敗する手」が並ぶ (#860 で潰した形の
+        # 再生産)。
+        #
+        # 並びは [全フェーズ共通] → [自由時間のみ] にする。会議で落ちるのが
+        # 後ろのブロックだけになり、先頭の共通部分は prefix cache に残る
+        # (reason-first が assess_situation を末尾に置いたのと同じ技法)。
+        # design_decisions #1 が禁じているのは「毎 tick 変わる動的注入」で、
+        # フェーズ境界での変化は対象外 (コストの判断であって正しさの判断では
+        # ない) だが、被害は抑えられるなら抑える。
+        common_spot = [d for d in spot if d.name in self._PHASE_COMMON_SPOT_TOOLS]
+        free_roam_only_spot = [
+            d for d in spot if d.name not in self._PHASE_COMMON_SPOT_TOOLS
+        ]
+        if self._game_phase_store.is_meeting():
+            free_roam_only_spot = []
         if not self._include_todo_tools:
+            tools = common_spot + free_roam_only_spot
             if assessment_tool is None:
-                return spot
-            return spot + [assessment_tool]
+                return tools
+            return tools + [assessment_tool]
         # Issue #526 後続: tool を expose するタイミングで auxiliary stack を
         # 確実に wire しておく (= 「定義は出すが handler が無い」状態を防ぐ)。
         # idempotent なので毎回呼んで OK。
@@ -949,10 +969,17 @@ class WorldRuntime:
                 recall_by_handle_enabled=recall_by_handle_enabled,
             )
         ]
-        tools = spot + memo
+        tools = common_spot + memo + free_roam_only_spot
         if assessment_tool is not None:
             tools.append(assessment_tool)
         return tools
+
+    #: フェーズを問わず出す spot tool。会議中に残すのはこれだけ。
+    #:
+    #: 話す手段が無いと会議そのものが成立しない。listen と wait は「黙って
+    #: 様子を見る」を潰さないために残す (棄権や保留を選べることは
+    #: agent_design_principles の「取れる手段の質」に効く)。
+    _PHASE_COMMON_SPOT_TOOLS = frozenset({"speak", "listen", "wait"})
 
     @staticmethod
     def _resolve_requested_memory_tool_enabled(
