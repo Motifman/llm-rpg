@@ -597,6 +597,263 @@ def _extract_give_item(events: list[dict]) -> dict[str, Any]:
     return {"total": succ + fail, "success": succ, "fail": fail}
 
 
+#: 行動を「何に時間を使ったか」で束ねた分類。
+#:
+#: run 002 (山頂到達 2 人) と 003 (到達 0 人) の差は、個別ツールの回数では
+#: なく「世界を変える行動に何割使ったか」で最も鮮明に出た。個別ヒストグラム
+#: (= _extract_per_player の tool histogram) だと speak 259 回という数字は
+#: 見えるが、それが全体の 4 割だという構図が見えない。
+#:
+#: 分類は 1 ツール 1 カテゴリ。どこにも属さないツールは "unclassified" に
+#: 落として件数を必ず出す (= 黙って総数から消えない)。新しいツールを足した
+#: ときに分類漏れが数字として見えることが、この分類の一番の価値。
+ACTION_BUDGET_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "conversation": ("speak", "listen"),
+    "memo": ("memo_add", "memo_done", "memo_list"),
+    "recall": (
+        "memory_recall_episodes",
+        "memory_recall_by_handle",
+        "memo_recall_by_handle",
+        "memory_search_semantic",
+        "memory_explore_related",
+    ),
+    "movement": ("travel_to",),
+    "exploration": ("explore",),
+    "world_change": (
+        "interact",
+        "interact_with_player",
+        "use_item",
+        "give_item",
+        "pickup_item",
+        "drop_item",
+        "take",
+        "attack",
+        "tend_to_player",
+        "prepare_action",
+        "report_body",
+        "vote",
+    ),
+    "idle": ("wait",),
+}
+
+#: 「世界の状態を実際に動かした」と見なすカテゴリ。
+#:
+#: 会話・記帳・想起は自分の内部か他者の頭の中しか変えない。目標 (山頂到達)
+#: へ効くのは移動・探索・世界操作だけなので、この 3 つの合計を 1 つの率に
+#: まとめる。003 は 40.5%、002 は 49.8% だった。
+_WORLD_CHANGING_CATEGORIES = ("movement", "exploration", "world_change")
+
+
+def _tool_to_budget_category(tool: str) -> str:
+    for category, tools in ACTION_BUDGET_CATEGORIES.items():
+        if tool in tools:
+            return category
+    return "unclassified"
+
+
+def _extract_action_budget(events: list[dict]) -> dict[str, Any]:
+    """action を用途別カテゴリに束ね、件数・割合と「世界を変える行動」率を出す。
+
+    「固まって喋り続けて目標に向かわない」を 1 つの数字で捉えるための指標。
+    分類外のツールは "unclassified" として件数と実名を残すので、ツール追加時
+    の分類漏れが分析結果の中で見える。
+    """
+    per_category: Counter[str] = Counter()
+    per_tool: Counter[str] = Counter()
+    per_player_category: dict[int, Counter[str]] = defaultdict(Counter)
+    unclassified_tools: Counter[str] = Counter()
+
+    for e in events:
+        if e.get("kind") != "action":
+            continue
+        tool = e.get("payload", {}).get("tool")
+        if not tool:
+            continue
+        category = _tool_to_budget_category(tool)
+        per_category[category] += 1
+        per_tool[tool] += 1
+        if category == "unclassified":
+            unclassified_tools[tool] += 1
+        pid = e.get("player_id")
+        if pid is not None:
+            per_player_category[pid][category] += 1
+
+    total = sum(per_category.values())
+    if total == 0:
+        return {
+            "total_actions": 0,
+            "per_category": {},
+            "per_category_share": {},
+            "world_changing_actions": 0,
+            "world_changing_share": 0.0,
+            "unclassified_tools": {},
+            "per_player_share": {},
+        }
+
+    world_changing = sum(per_category[c] for c in _WORLD_CHANGING_CATEGORIES)
+    return {
+        "total_actions": total,
+        "per_category": dict(per_category.most_common()),
+        "per_category_share": {
+            c: round(100.0 * n / total, 1) for c, n in per_category.most_common()
+        },
+        "world_changing_actions": world_changing,
+        "world_changing_share": round(100.0 * world_changing / total, 1),
+        "unclassified_tools": dict(unclassified_tools.most_common()),
+        "per_player_share": {
+            str(pid): {
+                c: round(100.0 * n / sum(counts.values()), 1)
+                for c, n in counts.most_common()
+            }
+            for pid, counts in sorted(per_player_category.items())
+        },
+    }
+
+
+def _extract_speak_chains(events: list[dict]) -> dict[str, Any]:
+    """``speak`` の直後に同じ player が何をしたかを数え、speak 連鎖の長さを出す。
+
+    「合意をいつでも取り直せるから取り直す」を捉える指標。speak → speak の
+    比率が高いほど、会話が次の行動に繋がらず会話自体に閉じている。003 は
+    49.0%、山頂に到達した 002 は 37.0% だった。
+    """
+    by_player: dict[int, list[str]] = defaultdict(list)
+    for e in events:
+        if e.get("kind") != "action":
+            continue
+        tool = e.get("payload", {}).get("tool")
+        pid = e.get("player_id")
+        if not tool or pid is None:
+            continue
+        by_player[pid].append(tool)
+
+    next_tool: Counter[str] = Counter()
+    speak_followed = 0
+    longest_run: dict[int, int] = {}
+
+    for pid, seq in by_player.items():
+        run = 0
+        best = 0
+        for i, tool in enumerate(seq):
+            if tool == "speak":
+                run += 1
+                best = max(best, run)
+                if i + 1 < len(seq):
+                    next_tool[seq[i + 1]] += 1
+                    speak_followed += 1
+            else:
+                run = 0
+        longest_run[pid] = best
+
+    speak_to_speak = next_tool.get("speak", 0)
+    return {
+        "speak_with_following_action": speak_followed,
+        "next_action_after_speak": dict(next_tool.most_common()),
+        "speak_to_speak": speak_to_speak,
+        "speak_to_speak_share": (
+            round(100.0 * speak_to_speak / speak_followed, 1)
+            if speak_followed
+            else 0.0
+        ),
+        "longest_consecutive_speak_per_player": {
+            str(pid): n for pid, n in sorted(longest_run.items())
+        },
+    }
+
+
+#: 「もう戻ってこない」と見なす outcome。
+#:
+#: DEAD だけでなく EJECTED も含める。追放された player の位置も carry-forward
+#: で残り続けるので、分散を膨らませる効果は死亡と同じ。
+_TERMINAL_OUTCOMES = frozenset({"DEAD", "EJECTED"})
+
+
+def _find_first_death_tick(events: list[dict]) -> int | None:
+    """最初に player が復帰不能な outcome に落ちた tick を返す。
+
+    死亡は ``observation`` の ``payload.structured.type ==
+    "player_outcome_resolved"`` で ``new_outcome`` が DEAD / EJECTED になる形で
+    出る。同じ死亡が複数 player の観測として重複して出るため、最小 tick だけ
+    を採る。1 人も落ちなかった run では None。
+    """
+    ticks = [
+        e["tick"]
+        for e in events
+        if e.get("kind") == "observation"
+        and e.get("tick") is not None
+        and (e.get("payload", {}).get("structured") or {}).get("type")
+        == "player_outcome_resolved"
+        and str(
+            (e.get("payload", {}).get("structured") or {}).get("new_outcome", "")
+        ).upper()
+        in _TERMINAL_OUTCOMES
+    ]
+    return min(ticks) if ticks else None
+
+
+def _extract_spatial_dispersion(events: list[dict]) -> dict[str, Any]:
+    """tick ごとに生存 player が何箇所に分かれていたかの分布と平均を出す。
+
+    位置は ``position_change`` の carry-forward で復元する。死亡した player の
+    位置はその後も残るため分散を膨らませる。それを切り分けられるように、
+    最初の死亡より前だけで再計算した値も併せて返す。
+
+    003 は平均 1.57 (最初の 100 tick では 1.16 = 84 tick で全員同じ場所)、
+    002 は 3.17 だった。
+    """
+    by_pid = _reconstruct_player_positions(events)
+    ticks = _all_ticks_seen(events)
+    if not by_pid or not ticks:
+        return {
+            "tick_count": 0,
+            "mean_distinct_spots": 0.0,
+            "distinct_spot_histogram": {},
+            "first_death_tick": None,
+            "before_first_death": None,
+        }
+
+    first_death_tick = _find_first_death_tick(events)
+
+    cursors = {pid: 0 for pid in by_pid}
+    current: dict[int, str] = {}
+    per_tick_distinct: list[tuple[int, int]] = []
+
+    for tick in ticks:
+        for pid, seq in by_pid.items():
+            i = cursors[pid]
+            while i < len(seq) and seq[i][0] <= tick:
+                current[pid] = seq[i][1]
+                i += 1
+            cursors[pid] = i
+        if current:
+            per_tick_distinct.append((tick, len(set(current.values()))))
+
+    def _summarise(rows: list[tuple[int, int]]) -> dict[str, Any]:
+        if not rows:
+            return {"tick_count": 0, "mean_distinct_spots": 0.0, "histogram": {}}
+        counts = [n for _, n in rows]
+        hist = Counter(counts)
+        return {
+            "tick_count": len(rows),
+            "mean_distinct_spots": round(sum(counts) / len(counts), 2),
+            "histogram": {str(k): hist[k] for k in sorted(hist)},
+        }
+
+    overall = _summarise(per_tick_distinct)
+    before_death = (
+        _summarise([r for r in per_tick_distinct if r[0] < first_death_tick])
+        if first_death_tick is not None
+        else None
+    )
+    return {
+        "tick_count": overall["tick_count"],
+        "mean_distinct_spots": overall["mean_distinct_spots"],
+        "distinct_spot_histogram": overall["histogram"],
+        "first_death_tick": first_death_tick,
+        "before_first_death": before_death,
+    }
+
+
 def compute_metrics(run_dir: Path) -> dict[str, Any]:
     events = _load_events(run_dir)
     return {
@@ -615,6 +872,9 @@ def compute_metrics(run_dir: Path) -> dict[str, Any]:
         "coop_hearsay_by_speaker": _extract_hearsay_evidence_by_speaker(events),
         "coop_pending_prediction": _extract_pending_prediction_verdicts(events),
         "coop_give_item": _extract_give_item(events),
+        "action_budget": _extract_action_budget(events),
+        "speak_chains": _extract_speak_chains(events),
+        "spatial_dispersion": _extract_spatial_dispersion(events),
         "total_events": len(events),
     }
 
