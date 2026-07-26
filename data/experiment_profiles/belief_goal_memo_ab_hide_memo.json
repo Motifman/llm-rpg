@@ -1,7 +1,7 @@
 {
   "profile": "belief_goal_memo_ab_hide_memo",
   "description": "memo A/B 実験 B。belief_goal_full と同じ記憶本体を保ち、memo tool だけを隠して行動枠を返す。",
-  "scenario": "data/scenarios/survival_island_v3_coop.json",
+  "scenario": "data/scenarios/survival_island_v4_coop.json",
   "max_world_ticks": 200,
   "snapshot_save": true,
   "runtime_config": {

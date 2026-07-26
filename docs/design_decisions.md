@@ -1055,6 +1055,11 @@ docs/memory_system/short_term_memory_design.md が想定していた「memo = �
 `SEMANTIC_SEARCH_ENABLED=false` / `EPISODIC_EXPLORE_RELATED_ENABLED=false` は両腕で維持し、
 能動想起ツールの増加を memo 実験に混ぜない。
 
+memo A/B の scenario は `survival_island_v4_coop.json` に固定する。v4 第3回 run との
+比較可能性を保つためであり、v3 には position / area / distant cue が無く #35 の
+「拠点から山影が見える」変更が効かないためである。run 時の `SCENARIO=` 上書きには
+頼らず、profile を読めば実験条件が分かる状態にする。
+
 ## 35. `is_outdoor` 未宣言の屋内扱いは validator で見える化する
 
 `SpotNode.is_outdoor` は既定 false のまま維持する。洞窟・廃屋・小屋など、空や
@@ -1074,4 +1079,3 @@ v4 ではこの変更により、次の本命 run で拠点から「切り立っ
 既定値は変えず、`validate_spot_map` が屋内扱い spot と `is_outdoor` 未宣言 spot を
 info / metrics に出す。シナリオ作者が map 検査時に「本当に屋内扱いでよいか」を確認
 できるようにし、既存シナリオの意味を反転させない。
-
