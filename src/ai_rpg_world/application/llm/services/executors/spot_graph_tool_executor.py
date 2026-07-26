@@ -434,7 +434,7 @@ class SpotGraphToolExecutor:
             self._runtime.do_move(
                 PlayerId(player_id), destination_str_id, **subjective
             )
-            # 新経路の付加価値: 立ち去り際の一言 (say_inline)。失敗しても
+            # 新経路の付加価値: 行動しながらの一言 (say_inline)。失敗しても
             # travel 結果は変えない (silent fail-safe)。
             self._maybe_emit_say_inline(player_id, args)
             # PR β: travel は 1 leg = 1 fatigue。
@@ -473,7 +473,7 @@ class SpotGraphToolExecutor:
     ) -> None:
         """``say_inline`` (任意短発話) を SAY channel で発火する。
 
-        実験 #29 後続: 移動 / アイテム系ツールに 「立ち去り際の一言」 を
+        実験 #29 後続: 行動ツールに「行動しながらの一言」を
         付けられるようにするためのヘルパ。
 
         条件:
@@ -481,8 +481,7 @@ class SpotGraphToolExecutor:
         - speech_service が注入されている
 
         失敗 (例外 / speech_service 未注入 / 空文字) は全部 silent で、
-        親アクションの結果には影響させない。長 speech が欲しい人は
-        speech_speak を使う。
+        親アクションの結果には影響させない。
         """
         if self._speech_service is None:
             return
@@ -492,7 +491,7 @@ class SpotGraphToolExecutor:
         content = raw.strip()
         if not content:
             return
-        # 80 char 上限は tool schema 側で maxLength として宣言済みだが、
+        # 文字数上限は tool schema 側で maxLength として宣言済みだが、
         # 防御的にここでも切り詰める (LLM が JSON を雑に返した場合の保険)。
         # レビュー反映 (#422 MEDIUM-1): 定数は module-level import に揃えた。
         # `len()` は Unicode コードポイント基準。サロゲートペア絵文字は
@@ -563,7 +562,8 @@ class SpotGraphToolExecutor:
         2. discovery_descriptions を組み立て
         3. 発見なしの場合、可視 object 一覧を併記 (F2: LLM が「部屋に何もない」
            と誤解して interact しなくなる癖の対策)
-        4. inner_thought 空警告 (旧 handler と揃える)
+        4. say_inline emit
+        5. inner_thought 空警告 (旧 handler と揃える)
         """
         if self._runtime is None:
             return LlmCommandResultDto(
@@ -603,6 +603,7 @@ class SpotGraphToolExecutor:
                         f"{exhausted_hint}"
                         "(この場所に interactable なオブジェクトは無い)"
                     )
+            self._maybe_emit_say_inline(player_id, args)
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_EXPLORE,
                 args,
@@ -1400,7 +1401,7 @@ class SpotGraphToolExecutor:
             )
 
         # 1 件でも成功したら success=True とし、say_inline を発火する
-        # (受け渡しが少なくとも 1 件成立したので、立ち去り際の一言は自然)
+        # (受け渡しが少なくとも 1 件成立したので、行動しながらの一言は自然)
         self._maybe_emit_say_inline(player_id, args)
         parts = ok_lines + ng_lines
         msg = "give_item 結果:\n" + "\n".join(parts)
@@ -1586,6 +1587,7 @@ class SpotGraphToolExecutor:
             )
             # PR β: wait は微回復 (専用 rest tool は作らない設計)。
             self._recover_fatigue_safe(player_id, self.FATIGUE_RECOVERY_WAIT)
+            self._maybe_emit_say_inline(player_id, args)
             suffix = f"（理由: {reason}）" if reason else ""
             base = f"今ターンは行動を控えた: tick={tick}{suffix}"
             return with_inner_thought_empty_warning(
