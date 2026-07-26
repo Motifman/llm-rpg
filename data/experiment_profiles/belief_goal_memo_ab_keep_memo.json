@@ -1,7 +1,7 @@
 {
   "profile": "belief_goal_memo_ab_keep_memo",
   "description": "memo A/B 実験 A。belief_goal_full と同じ条件で memo tool を露出し、memo_done は MEMO_DISTILL で semantic 記憶へ蒸留する。",
-  "scenario": "data/scenarios/survival_island_v3_coop.json",
+  "scenario": "data/scenarios/survival_island_v4_coop.json",
   "max_world_ticks": 200,
   "snapshot_save": true,
   "runtime_config": {

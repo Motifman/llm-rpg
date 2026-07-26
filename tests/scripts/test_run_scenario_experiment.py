@@ -8,6 +8,13 @@ from ai_rpg_world.application.trace import (
     JsonlTraceRecorder,
     TraceEventKind,
 )
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
+)
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
@@ -15,6 +22,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 from scripts.run_scenario_experiment import (  # noqa: E402
     _build_report,
     _emit_html_artifacts,
+    _runtime_config_mapping_from_source,
     _render_map_viewer_html,
     main,
 )
@@ -428,6 +436,37 @@ class TestExperimentProfileManifest:
         assert keep_config["MEMO_TOOLS_ENABLED"] is True
         assert hide_config["MEMO_TOOLS_ENABLED"] is False
 
+    def test_memo_ab_profiles_use_v4_scenario_for_run003_comparison(self) -> None:
+        """memo A/B の2腕は run 003 と同じ v4 scenario を明示し、上書き忘れを防ぐ。"""
+        for profile_name in (
+            "belief_goal_memo_ab_keep_memo",
+            "belief_goal_memo_ab_hide_memo",
+        ):
+            profile = self._load_profile(profile_name)
+
+            assert profile["scenario"] == "data/scenarios/survival_island_v4_coop.json"
+
+    def test_memo_ab_profiles_render_mountain_view_from_hidden_cove(self) -> None:
+        """memo A/B の profile から組んだ runtime は、拠点の隠し入江で山影を見せる。"""
+        for profile_name in (
+            "belief_goal_memo_ab_keep_memo",
+            "belief_goal_memo_ab_hide_memo",
+        ):
+            profile = self._load_profile(profile_name)
+            cfg = ResolvedLlmRuntimeConfig.from_mapping(
+                _runtime_config_mapping_from_source(profile)
+            )
+            runtime = create_world_runtime(
+                _REPO_ROOT / profile["scenario"],
+                config=cfg,
+            )
+            player_id = PlayerId(1)
+            _teleport_player(runtime, int(player_id.value), "hidden_cove")
+
+            text = runtime.build_llm_context(player_id).current_state_text
+
+            assert "切り立った山影が見える" in text
+
     def test_memo_ab_profiles_keep_active_search_tools_off(self) -> None:
         """memo A/B では能動検索 2 tool を false に保ち、既存の episodic recall だけを残す。"""
         for profile_name in (
@@ -604,3 +643,16 @@ class TestExperimentProfileManifest:
         assert payload["llm_api_key"] is None
         assert "sk-secret" not in rendered
         assert "***" not in rendered
+
+
+def _teleport_player(runtime, player_id: int, spot_id: str) -> None:  # noqa: ANN001
+    """prompt 確認用に player の位置だけを spot graph 上で移す。"""
+    graph = runtime._spot_graph_repo.find_graph()
+    entity_id = EntityId.create(player_id)
+    spot = SpotId.create(runtime.id_mapper.get_int("spot", spot_id))
+    try:
+        graph.unplace_entity(entity_id)
+    except Exception:
+        pass
+    graph.place_entity(entity_id, spot)
+    runtime._spot_graph_repo.save(graph)
