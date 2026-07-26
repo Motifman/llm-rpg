@@ -189,3 +189,5 @@ TOOL_NAME_SPOT_GRAPH_GIVE_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "give_item"
 # Issue #621 Phase 3b: 同 spot に倒れた仲間を介抱して revive する tool。
 # アイテム (= first_aid) を持っていなくても物理的に起こす経路。
 TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER = TOOL_NAME_PREFIX_SPOT_GRAPH + "tend_to_player"
+#: 会議中だけ出す投票 tool (会議と投票 PR 6)。
+TOOL_NAME_SPOT_GRAPH_VOTE = TOOL_NAME_PREFIX_SPOT_GRAPH + "vote"

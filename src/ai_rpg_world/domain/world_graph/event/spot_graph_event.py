@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, Literal, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, Literal, Optional, Tuple, Mapping
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -193,6 +193,32 @@ class GamePhaseChangedEvent(BaseDomainEvent[SpotGraphId, str]):
     trigger: str = ""
     #: 招集した人の表示名。世界都合の遷移では空。
     initiator_display_name: str = ""
+
+
+@dataclass(frozen=True)
+class MeetingVoteResolvedEvent(BaseDomainEvent[SpotGraphId, str]):
+    """会議の投票が締め切られ、集計が出た。
+
+    **追放の有無にかかわらず発火する。** 同点や棄権最多では世界に何も起き
+    ないのでドメインイベントが自然には出ず、この経路は実装から漏れる
+    (設計 doc §6.4)。漏れると「誰も追放されなかった」のか「誰かが追放された
+    が自分は見ていなかった」のかを区別できない。
+
+    誰が誰に入れたかまで載せるのは、**投票行動そのものが次の会議の材料に
+    なる**ため。集計だけにすると社会的推論の材料が一段減る。
+
+    名前で持つのは、観測が prompt にそのまま出る文だから。id を載せても
+    受け手が解決できない。
+    """
+
+    #: 追放された人の表示名。誰も追放されなければ空。
+    ejected_display_name: str = ""
+    #: 指名された人ごとの得票数。
+    counts_by_display_name: Mapping[str, int] = field(default_factory=dict)
+    #: 棄権の数。
+    skip_count: int = 0
+    #: 投票者 -> 投票先 (棄権は空文字)。
+    ballots_by_display_name: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

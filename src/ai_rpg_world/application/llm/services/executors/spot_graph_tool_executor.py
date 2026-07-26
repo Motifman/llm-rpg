@@ -38,6 +38,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+    TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
@@ -369,6 +370,7 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
             TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER: self._tend_to_player,
+            TOOL_NAME_SPOT_GRAPH_VOTE: self._vote,
         }
 
     def _travel_to(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
@@ -1610,6 +1612,20 @@ class SpotGraphToolExecutor:
     # 「travel_to で退避せよ」を LLM に届ける。無敵時間 (grace period) の
     # 本格実装 (StatusEffect 経由の monster attack skip) は別 PR で行う。
     TEND_REVIVE_HP_RATE = 0.6
+
+    def _vote(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None
+    ) -> LlmCommandResultDto:
+        """`spot_graph_vote` の handler。
+
+        resolver が ``target_player_id`` まで解決済み。None は棄権。
+        会議中かどうかは runtime が判定する。toolset から外すだけでは悪性
+        クライアントや provider の変換崩れで届きうるので、実行側でも弾く
+        (設計 doc H-6)。
+        """
+        raw = args.get("target_player_id")
+        target = PlayerId(int(raw)) if raw is not None else None
+        return self._runtime.cast_vote(PlayerId(player_id), target)
 
     def _tend_to_player(
         self, player_id: int, args: Dict[str, Any], runtime_context: Any = None

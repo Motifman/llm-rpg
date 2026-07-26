@@ -549,6 +549,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+    TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
@@ -649,6 +650,8 @@ class SpotGraphArgumentResolver:
             return self._resolve_give_item(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER:
             return self._resolve_tend_to_player(args, runtime_context)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_VOTE:
+            return self._resolve_vote(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
             return self._resolve_use_item(args, runtime_context)
         return None
@@ -926,6 +929,31 @@ class SpotGraphArgumentResolver:
             },
             args,
         )
+
+    def _resolve_vote(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """`spot_graph_vote` の target_player_label を player_id に解決する。
+
+        **空ラベルは棄権**なので、解決せずそのまま通す。ここで「名前が無い」
+        と弾くと棄権できなくなり、「情報が足りないので保留」という正当な
+        判断を潰す (agent_design_principles の「取れる手段の質」)。
+        """
+        label = args.get("target_player_label")
+        if not isinstance(label, str) or not label.strip():
+            return {**args, "target_player_id": None}
+        target = _resolve_target_with_display_name_fallback(
+            label,
+            runtime_context,
+            kind="spot_graph_player",
+            expected_types=(PlayerToolRuntimeTargetDto,),
+            label_name="投票する相手の名前",
+            invalid_label_code="INVALID_TARGET_LABEL",
+            invalid_kind_code="INVALID_TARGET_KIND",
+        )
+        return {**args, "target_player_id": target.player_id}
 
     def _resolve_tend_to_player(
         self,
