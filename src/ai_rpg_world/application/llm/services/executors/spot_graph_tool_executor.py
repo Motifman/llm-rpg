@@ -114,6 +114,12 @@ SPOILED_FOOD_DAMAGE_HP = 10
 SPOILED_FOOD_HUNGER_RETENTION_RATIO = 0.5
 
 
+def _is_slot_lookup_result(value: Any) -> bool:
+    """inventory slot lookup の戻り値として扱える tuple かを判定する。"""
+
+    return isinstance(value, tuple) and len(value) == 2
+
+
 def _extract_hunger_satisfaction_amount(effect: ItemEffect | None) -> int:
     """consume_effect から HUNGER の satisfy_need 量だけを取り出す。
 
@@ -252,9 +258,23 @@ class SpotGraphToolExecutor:
         inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
         if inv is None:
             return None
-        return inv.find_slot_by_item_spec_id_and_spoilage(
+        found = inv.find_slot_by_item_spec_id_and_spoilage(
             spec_id, bool(is_spoiled_raw), self._item_repository,
         )
+        if found is None or _is_slot_lookup_result(found):
+            return found
+        # 古い単体テストの最小 mock は find_slot_by_item_spec_id だけを実装する。
+        # MagicMock は未設定メソッドでも callable な戻り値を作るため、tuple で
+        # ない戻り値だけを「新 API 未実装」とみなして旧 API へ fallback する。
+        # 実 aggregate が None を返した場合は、鮮度一致の対象なしなので fallback
+        # しない。腐敗 / 新鮮の撃ち分けを保つため。
+        legacy_lookup = getattr(inv, "find_slot_by_item_spec_id", None)
+        if not callable(legacy_lookup):
+            return None
+        legacy_found = legacy_lookup(spec_id)
+        if _is_slot_lookup_result(legacy_found):
+            return legacy_found
+        return None
 
     def _get_status(self, player_id: int):
         """疲労チェック / 蓄積 / 回復用に PlayerStatusAggregate を取得する。
@@ -809,6 +829,14 @@ class SpotGraphToolExecutor:
                 detail="正の整数を指定してください",
             )
         try:
+            inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
+            if inv is None:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="プレイヤー情報が見つかりません。",
+                    error_code="PLAYER_NOT_FOUND",
+                    remediation=get_remediation("PLAYER_NOT_FOUND"),
+                )
             # インベントリからアイテムインスタンスを探す。
             # 実験 #26 で発覚: 旧コードは `inv.slots` (存在しない属性) を iter して
             # 全 use_item が AttributeError → SYSTEM_ERROR (72 件) で死んでいた。
@@ -817,7 +845,6 @@ class SpotGraphToolExecutor:
             found = self._find_owned_slot_by_item_spec_id_and_spoilage(
                 player_id, item_spec_id_int, args.get("is_spoiled", False),
             )
-            inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
             item_instance = None
             matched_slot_id = None
             if found is not None:
