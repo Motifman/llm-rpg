@@ -39,6 +39,8 @@ def test_cli_returns_zero_when_only_warnings(tmp_path: Path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is True
     assert payload["warnings"]
+    assert payload["infos"][0]["code"] == "INDOOR_SPOTS"
+    assert payload["infos"][0]["spots"] == ["a", "b"]
 
 
 def test_cli_returns_one_when_error_exists(tmp_path: Path, capsys) -> None:

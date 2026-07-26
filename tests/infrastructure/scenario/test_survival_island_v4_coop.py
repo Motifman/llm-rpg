@@ -111,6 +111,20 @@ class TestSurvivalIslandV4MapValidation:
         assert result.metrics["positioned_spot_count"] == 25
         assert result.metrics["area_count"] == 6
         assert result.metrics["distant_cue_count"] == 1
+        assert result.metrics["indoor_spots"] == [
+            "cave_entry",
+            "cave_inner",
+            "lone_hut",
+            "observation_outpost_ruins",
+            "plane_wreck",
+        ]
+        assert result.metrics["is_outdoor_undeclared_spots"] == [
+            "cave_entry",
+            "cave_inner",
+            "lone_hut",
+            "observation_outpost_ruins",
+            "plane_wreck",
+        ]
         assert result.metrics["unreachable_spots"] == []
         assert result.metrics["cycle_rank"] == 9
         assert result.metrics["articulation_spots"] == [
