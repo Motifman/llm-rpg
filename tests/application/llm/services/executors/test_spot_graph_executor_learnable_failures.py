@@ -22,6 +22,11 @@ from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor im
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
 )
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
+    PlayerInventoryAggregate,
+)
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
 
 def _build_executor() -> SpotGraphToolExecutor:
@@ -114,6 +119,46 @@ class TestUseItemInvalidArgs:
         executor = _build_executor()
         result = executor._use_item(player_id=1, args={"item_spec_id": "foo"})
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
+
+
+class TestUseItemInventoryResolutionFailures:
+    """use_item の解決段階で、想定内の失敗と配線ミスを区別して返す。"""
+
+    def test_missing_owned_item_is_item_not_found_not_system_error(self) -> None:
+        """指定名のアイテムを持っていないときは、SYSTEM_ERROR ではなく ITEM_NOT_FOUND で返る。"""
+        executor = _build_executor()
+        inv = MagicMock(spec=PlayerInventoryAggregate)
+        inv.find_slot_by_item_spec_id_and_spoilage.return_value = None
+        executor._player_inventory_repository.find_by_id.return_value = inv
+
+        result = executor._use_item(player_id=1, args={"item_spec_id": 1})
+
+        _assert_learnable_failure(result, "ITEM_NOT_FOUND")
+        assert "持っていません" in result.message
+        assert result.error_code != "SYSTEM_ERROR"
+
+    def test_unexpected_item_lookup_exception_is_traced_without_leaking_to_message(self) -> None:
+        """item_repository の配線ミスは LLM には汎用文、trace には例外型と発生段階を残す。"""
+        executor = _build_executor()
+        inv = MagicMock(spec=PlayerInventoryAggregate)
+        inv.find_slot_by_item_spec_id_and_spoilage.return_value = (
+            SlotId(1),
+            ItemInstanceId(7001),
+        )
+        executor._player_inventory_repository.find_by_id.return_value = inv
+        executor._item_repository.find_by_id.side_effect = RuntimeError(
+            "internal wiring token=secret"
+        )
+
+        result = executor._use_item(player_id=1, args={"item_spec_id": 1})
+
+        _assert_learnable_failure(result, "SYSTEM_ERROR")
+        assert "internal wiring" not in result.message
+        assert "token=secret" not in result.message
+        assert result.trace_payload is not None
+        assert result.trace_payload["tool_exception_location"] == "_use_item"
+        assert result.trace_payload["tool_exception_stage"] == "item_lookup"
+        assert result.trace_payload["tool_exception_type"] == "RuntimeError"
 
 
 class TestPrepareActionValidationLeak:
