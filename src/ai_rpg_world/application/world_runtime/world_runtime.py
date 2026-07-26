@@ -3988,7 +3988,9 @@ def create_world_runtime(
         # の「使える操作」列挙は識別子が要るので、そちらは
         # ``available_action_names`` を使い続ける
         # (world_runtime.available_player_action_names)。
-        player_action_names_provider=player_interaction_service.available_action_labels,
+        player_action_labels_provider=(
+            player_interaction_service.available_action_labels_for
+        ),
     )
 
     # ── 観測パイプライン構築 ──

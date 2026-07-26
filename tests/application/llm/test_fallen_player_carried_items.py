@@ -98,11 +98,15 @@ class TestFallenPlayerCarriedItems:
 
 
 class TestPlayerActionAffordance:
-    """同席者行に「この相手に何ができるか」が出る。
+    """同席者行に「**この相手に**何ができるか」が出る。
 
     出さないと、対人行為をシナリオが宣言し実行経路も通っていても、LLM から
     は発見できない (宣言はあるのに一度も使われない)。物体行の
     ``[gather, examine]`` と同じ書式に揃える。
+
+    一覧は **行ごと** に持つ。以前は snapshot 単位の 1 本のタプルで全員の行に
+    同じ一覧を出していたが、倒れている相手にしか使えない take が立っている
+    相手の行にも並び、v4 第 3 回 run で take が 16 回すべて失敗した。
     """
 
     def _render_with_actions(self, actions, **entry_kwargs) -> str:
@@ -112,8 +116,9 @@ class TestPlayerActionAffordance:
             current_spot_name="山頂",
             current_spot_description="d",
             travel_status_line=None,
-            nearby_entities=(_entry(**entry_kwargs),),
-            player_action_names=actions,
+            nearby_entities=(
+                _entry(available_action_labels=actions, **entry_kwargs),
+            ),
         )
         lines: list[str] = []
         builder._build_entity_section(
@@ -122,20 +127,47 @@ class TestPlayerActionAffordance:
         return "\n".join(lines)
 
     def test_declared_actions_are_listed_on_the_player_row(self) -> None:
-        """シナリオが宣言した対人 action が、相手の行末に並ぶ。"""
+        """その相手に使える対人 action が、行末に並ぶ。"""
         text = self._render_with_actions(("take", "tend"), is_down=True)
         assert "[take, tend]" in text
 
     def test_no_actions_adds_nothing(self) -> None:
-        """対人行為を宣言していない世界では、行に何も足さない。"""
+        """使える action が無い相手の行には、何も足さない。"""
         text = self._render_with_actions(())
         assert "[" not in text
 
-    def test_actions_are_listed_for_standing_players_too(self) -> None:
-        """起きている相手にも候補は出す。
+    def test_each_row_shows_only_its_own_actions(self) -> None:
+        """行ごとに別の一覧を出せる。
 
-        成否は前提条件が実行時に決める。候補を隠すと「奪うには先に倒す」と
-        いう筋道自体が読めなくなる。
+        **以前はここで「起きている相手にも候補は出す」を仕様として固定して
+        いた。** 「成否は実行時に決まるので候補は隠さない」という理屈だった
+        が、実 run では逆に働いた。使えない候補が並ぶと、LLM はそれを試して
+        失敗し続ける (take 16 回全失敗)。医師が仲間の腕を診ようとして take を
+        誤射する、という壊れ方もした。
+
+        候補を出す目的は発見可能性であって、**使えない相手の行に出すことは
+        その目的に寄与しない**。使える相手の行に出れば足りる。
         """
-        text = self._render_with_actions(("take",))
-        assert "[take]" in text
+        builder = SpotGraphUiContextBuilder()
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="山頂",
+            current_spot_description="d",
+            travel_status_line=None,
+            nearby_entities=(
+                _entry(display_name="倒れた人", is_down=True,
+                       available_action_labels=("take",)),
+                _entry(entity_id=99, display_name="立っている人",
+                       available_action_labels=()),
+            ),
+        )
+        lines: list[str] = []
+        builder._build_entity_section(
+            snap, LabelAllocator(), RuntimeTargetCollector(), lines
+        )
+        text = "\n".join(lines)
+
+        downed_line = next(line for line in lines if "倒れた人" in line)
+        standing_line = next(line for line in lines if "立っている人" in line)
+        assert "[take]" in downed_line
+        assert "[take]" not in standing_line

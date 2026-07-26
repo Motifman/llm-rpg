@@ -73,10 +73,20 @@ class TestHintsReachTheCoLocatedPlayerRow:
     """同席者行に、条件つきの action 候補が出る。"""
 
     def test_row_shows_the_conditions_alongside_the_action(self, runtime) -> None:
-        """相手の行末に ``strike_down(暗い場所のみ・ナイフが要る)`` が並ぶ。"""
-        snapshot = runtime._state_builder.build_snapshot(int(_ACTOR))
+        """相手の行末に ``strike_down(暗い場所のみ・ナイフが要る)`` が並ぶ。
 
-        assert "strike_down(暗い場所のみ・ナイフが要る)" in snapshot.player_action_names
+        ラベルは **行ごと** に持つ (snapshot 単位の 1 本のタプルではない)。
+        全員に同じ一覧を出すと、使えない相手の行にも並んでしまう。
+        """
+        snapshot = runtime._state_builder.build_snapshot(int(_ACTOR))
+        target_entry = next(
+            e for e in snapshot.nearby_entities if int(e.entity_id) == int(_VICTIM)
+        )
+
+        assert (
+            "strike_down(暗い場所のみ・ナイフが要る)"
+            in target_entry.available_action_labels
+        )
 
 
 class TestIdentifierPathStaysBare:
