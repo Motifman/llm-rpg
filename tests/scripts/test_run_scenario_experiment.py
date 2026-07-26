@@ -390,33 +390,61 @@ class TestMaxWorldTicksRename:
 class TestExperimentProfileManifest:
     """実験 profile/config が解決済み成果物として保存されることを保証する。"""
 
+    @staticmethod
+    def _load_profile(profile_name: str) -> dict:
+        return json.loads(
+            (
+                _REPO_ROOT
+                / "data"
+                / "experiment_profiles"
+                / f"{profile_name}.json"
+            ).read_text(encoding="utf-8")
+        )
+
     def test_belief_profiles_keep_active_search_tools_off_for_memo_ab(self) -> None:
         """belief_goal_full と ablation_base は能動検索 2 tool を意図して OFF に揃える。"""
         for profile_name in ("belief_goal_full", "ablation_base"):
-            profile = json.loads(
-                (
-                    _REPO_ROOT
-                    / "data"
-                    / "experiment_profiles"
-                    / f"{profile_name}.json"
-                ).read_text(encoding="utf-8")
-            )
+            profile = self._load_profile(profile_name)
             runtime_config = profile["runtime_config"]
 
             assert runtime_config["SEMANTIC_SEARCH_ENABLED"] is False
             assert runtime_config["EPISODIC_EXPLORE_RELATED_ENABLED"] is False
             assert runtime_config["EPISODIC_RECALL_ENABLED"] is True
 
+    def test_memo_ab_profiles_differ_only_by_memo_tool_exposure(self) -> None:
+        """memo A/B の2腕は MEMO_TOOLS_ENABLED 以外の runtime_config を揃える。"""
+        keep = self._load_profile("belief_goal_memo_ab_keep_memo")
+        hide = self._load_profile("belief_goal_memo_ab_hide_memo")
+        keep_config = keep["runtime_config"]
+        hide_config = hide["runtime_config"]
+
+        differing_keys = {
+            key
+            for key in set(keep_config) | set(hide_config)
+            if keep_config.get(key) != hide_config.get(key)
+        }
+
+        assert differing_keys == {"MEMO_TOOLS_ENABLED"}
+        assert keep_config["MEMO_TOOLS_ENABLED"] is True
+        assert hide_config["MEMO_TOOLS_ENABLED"] is False
+
+    def test_memo_ab_profiles_keep_active_search_tools_off(self) -> None:
+        """memo A/B では能動検索 2 tool を false に保ち、既存の episodic recall だけを残す。"""
+        for profile_name in (
+            "belief_goal_memo_ab_keep_memo",
+            "belief_goal_memo_ab_hide_memo",
+        ):
+            profile = self._load_profile(profile_name)
+            runtime_config = profile["runtime_config"]
+
+            assert runtime_config["SEMANTIC_SEARCH_ENABLED"] is False
+            assert runtime_config["EPISODIC_EXPLORE_RELATED_ENABLED"] is False
+            assert runtime_config["EPISODIC_RECALL_ENABLED"] is True
+            assert runtime_config["MEMO_DISTILL_ENABLED"] is True
+
     def test_smoke_stub_does_not_set_active_search_tool_flags(self) -> None:
         """smoke_stub は能動検索 2 tool を明示せず、既定 false のままにする。"""
-        profile = json.loads(
-            (
-                _REPO_ROOT
-                / "data"
-                / "experiment_profiles"
-                / "smoke_stub.json"
-            ).read_text(encoding="utf-8")
-        )
+        profile = self._load_profile("smoke_stub")
         runtime_config = profile["runtime_config"]
 
         assert "SEMANTIC_SEARCH_ENABLED" not in runtime_config

@@ -900,6 +900,7 @@ class WorldRuntime:
         if self._episodic_stack is not None:
             self._wire_auxiliary_tool_stack()
         cfg = self._runtime_config
+        memo_tools_enabled = bool(getattr(cfg, "memo_tools_enabled", True))
         episodic_recall_requested = bool(
             getattr(cfg, "episodic_recall_enabled", False)
         )
@@ -936,6 +937,7 @@ class WorldRuntime:
             defn
             for defn, _ in get_memory_specs(
                 todo_enabled=True,
+                memo_enabled=memo_tools_enabled,
                 episodic_explore_related_enabled=episodic_explore_related_enabled,
                 semantic_search_enabled=semantic_search_enabled,
                 episodic_recall_enabled=episodic_recall_enabled,
@@ -968,8 +970,16 @@ class WorldRuntime:
                 f"{flag_name}=true requires an executor for {tool_name}, "
                 "but the runtime memory stack is not wired. Enable the required "
                 "episodic/semantic prerequisites or turn the flag off."
-            )
+        )
         return True
+
+    def _memo_tools_enabled(self) -> bool:
+        """memo ツールを LLM に露出する設定か。
+
+        露出を切る実験腕では、tool 定義だけでなく prompt の未完了 memo section
+        も同時に止める。存在しない memo_done への誘導を残さないため。
+        """
+        return bool(getattr(self._runtime_config, "memo_tools_enabled", True))
 
     # Prediction (#526 v0): expected_result 露出の対象 tool。記録経路 (do_* →
     # _record_action_result) に subjective を配線済みの core action だけに限定する
@@ -1939,7 +1949,7 @@ class WorldRuntime:
                 pid, self._resolve_player_objective_text(pid, resolved_objective_text)
             ),
             inventory_text_provider=lambda pid: self._format_inventory_evidence(pid),
-            memo_store=self._todo_store,
+            memo_store=self._todo_store if self._memo_tools_enabled() else None,
         )
         limits = PromptLimits(
             tile_map_enabled=False,

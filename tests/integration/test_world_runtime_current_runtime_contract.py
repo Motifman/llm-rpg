@@ -33,6 +33,9 @@ from ai_rpg_world.application.llm.services.in_memory_stagnation_reasoning_latch 
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
+    TOOL_NAME_MEMO_ADD,
+    TOOL_NAME_MEMO_DONE,
+    TOOL_NAME_MEMO_LIST,
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
     TOOL_NAME_MEMORY_RECALL_EPISODES,
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
@@ -84,6 +87,7 @@ def clean_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "SHORT_TERM_MEMORY_KIND",
         "PROMPT_SECTION_ORDER",
         "LLM_TOOL_MODE",
+        "MEMO_TOOLS_ENABLED",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -108,6 +112,14 @@ def _user_prompt_text(prompt: dict) -> str:
         m.get("content", "")
         for m in prompt.get("messages", [])
         if m.get("role") == "user"
+    )
+
+
+def _system_prompt_text(prompt: dict) -> str:
+    return "\n".join(
+        m.get("content", "")
+        for m in prompt.get("messages", [])
+        if m.get("role") == "system"
     )
 
 
@@ -1515,6 +1527,89 @@ def test_memory_tool_flag_true_without_executor_fails_during_wiring_validation(
     message = str(exc_info.value)
     assert "SEMANTIC_SEARCH_ENABLED" in message
     assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in message
+
+
+def test_memo_tools_default_visible_in_get_tool_definitions(
+    clean_runtime_env: None,
+) -> None:
+    """既定では既存 run 互換で memo_add / memo_list / memo_done を LLM に露出する。"""
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
+
+    tool_names = {definition.name for definition in runtime.get_tool_definitions()}
+
+    assert {TOOL_NAME_MEMO_ADD, TOOL_NAME_MEMO_LIST, TOOL_NAME_MEMO_DONE} <= tool_names
+    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
+
+
+def test_memo_tools_flag_false_hides_only_memo_tools(
+    clean_runtime_env: None,
+) -> None:
+    """MEMO_TOOLS_ENABLED=false は memo tool だけを隠し、記憶本体と他 tool は残す。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True,
+            episodic_recall_enabled=True,
+            semantic_passive_top_k=3,
+            memo_tools_enabled=False,
+        )
+    )
+
+    tool_names = {definition.name for definition in runtime.get_tool_definitions()}
+
+    assert TOOL_NAME_MEMO_ADD not in tool_names
+    assert TOOL_NAME_MEMO_LIST not in tool_names
+    assert TOOL_NAME_MEMO_DONE not in tool_names
+    assert TOOL_NAME_MEMORY_RECALL_EPISODES in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
+    assert runtime._episodic_stack is not None
+    assert runtime._episodic_stack.passive_recall is not None
+    assert runtime._episodic_stack.semantic_passive_recall is not None
+
+
+def test_memo_tools_flag_false_hides_active_memo_section_from_prompt(
+    clean_runtime_env: None,
+) -> None:
+    """memo tool 非露出時は未完了 memo section も消し、使えない memo_done へ誘導しない。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True,
+            memo_tools_enabled=False,
+        )
+    )
+    runtime._wire_auxiliary_tool_stack()
+    being_id = runtime.aux_being_resolver.resolve_being_id(
+        runtime.aux_being_default_world_id,
+        PlayerId(1),
+    )
+    assert being_id is not None
+    runtime._todo_store.add_by_being(being_id, "山頂で狼煙を上げる")
+
+    prompt = runtime.build_full_prompt(PlayerId(1))
+    system_text = _system_prompt_text(prompt)
+    user_text = _user_prompt_text(prompt)
+
+    assert TOOL_NAME_MEMO_ADD not in system_text
+    assert TOOL_NAME_MEMO_LIST not in system_text
+    assert TOOL_NAME_MEMO_DONE not in system_text
+    assert "【進行中のメモ】" not in user_text
+    assert "山頂で狼煙を上げる" not in user_text
+
+
+def test_memo_tools_flag_false_disables_memo_completion_hint_service(
+    clean_runtime_env: None,
+) -> None:
+    """memo tool 非露出時は memo 完了 hint も作らず、存在しない memo_done を促さない。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(memo_tools_enabled=False)
+    )
+
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        llm_client=StubLlmClient(None),
+    )
+
+    assert wiring.memo_completion_hint_service is None
 
 
 def test_pure_spot_graph_mode_hides_memory_tools_before_individual_flags(
