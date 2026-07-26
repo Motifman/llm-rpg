@@ -74,6 +74,10 @@ def _validate_template_strict(template: str) -> None:
 class DefaultSystemPromptBuilder(ISystemPromptBuilder):
     """SystemPromptPlayerInfoDto からシステムプロンプト文字列を生成する。
 
+    実験 run の spot graph 経路は WorldSystemPromptBuilder を使うため、この builder の
+    include_memo_tools は主に demo script / 既定テンプレート経路向けの保険である。
+    tool を隠した構成で、存在しない memo tool の説明だけが残る混乱を避ける。
+
     Issue #227 後続レビュー Prompt MEDIUM-7:
         __init__ で template 内の `{{var}}` を全て scan し、未知変数を発見したら
         即時 ValueError を投げる (strict mode)。これにより typo は construction
