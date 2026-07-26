@@ -453,6 +453,15 @@ class ScenarioLoadResult:
     # 遠景知覚の動的兆候: object state などを source とする定義群。
     # 段階2aでは読み込み・検証だけを行い、prompt 反映は段階2bで接続する。
     distant_cues: Tuple[DistantCueDef, ...] = ()
+    # 会議機構を使うシナリオかどうか (会議と投票)。宣言の無いシナリオでは
+    # 招集も投票も tool として出さず、runtime 側でも拒否する。
+    #
+    # 既定を False にしているのは、**比較実験の土台を黙って動かさない**ため。
+    # #874 で report_body を無条件に出したとき、会議と無関係な
+    # survival_island_v4_coop の tool 一覧が 16 → 17 に増え、過去 run との
+    # 比較可能性が切れていた。同時行動 (prepare_action) と同じく、宣言した
+    # シナリオにだけ出す。
+    meeting_enabled: bool = False
 
 
 class ScenarioLoader:
@@ -517,6 +526,8 @@ class ScenarioLoader:
             outcome_resolution_config, win_conds, lose_conds,
         )
 
+        meeting_enabled = self._parse_meeting_enabled(raw)
+
         return ScenarioLoadResult(
             graph=graph,
             interiors=interiors,
@@ -540,7 +551,30 @@ class ScenarioLoader:
             loot_tables=loot_tables,
             areas=areas,
             distant_cues=distant_cues,
+            meeting_enabled=meeting_enabled,
         )
+
+    @staticmethod
+    def _parse_meeting_enabled(raw: Dict[str, Any]) -> bool:
+        """`meeting` block の有無と `enabled` から会議機構の on/off を決める。
+
+        block そのものが無ければ off。block を書いたなら既定は on とする
+        (書いておいて既定 off だと、宣言したのに何も起きない静かな失敗になる)。
+        明示的に `"enabled": false` と書いた場合だけ off に落とす。
+        """
+        block = raw.get("meeting")
+        if block is None:
+            return False
+        if not isinstance(block, dict):
+            raise ScenarioLoadError(
+                "meeting は object で指定してください。"
+            )
+        enabled = block.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ScenarioLoadError(
+                "meeting.enabled は真偽値で指定してください。"
+            )
+        return enabled
 
     def _parse_loot_tables(
         self,
