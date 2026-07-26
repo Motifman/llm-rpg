@@ -530,6 +530,8 @@ class PlayerCurrentStateDto:
     # 会議中だけ入る 1 行。自由時間と、会議機構を宣言していない
     # シナリオでは None (= 行ごと出ない)。
     meeting_status_line: Optional[str] = None
+    # 作業 (FLAGS_SET_AT_LEAST) の進み具合。宣言の無いシナリオでは None。
+    task_progress_line: Optional[str] = None
     # ゲーム内 SNS アプリを開いている（認証ではない UI メタファ）。ツール一覧の SNS/Trade 露出に利用。
     # active_game_app が真実。後方互換のため __post_init__ で整える。
     is_sns_mode_active: bool = False
