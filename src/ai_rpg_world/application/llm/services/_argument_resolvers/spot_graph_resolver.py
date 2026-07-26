@@ -709,7 +709,8 @@ class SpotGraphArgumentResolver:
         内部 helper。``_resolve_give_item`` (batch-always) が gives 配列の
         各 entry に対して呼び出す。
 
-        - item_label (I1 等): drop と同じく InventoryToolRuntimeTargetDto (kind="inventory_item")
+        - item_label (I1 等): use_item と同じく item_spec_id に解決する。
+          slot は executor が実行時に引き直す。
         - target_player_label (P1 等 / 名前): resolve_player_target で player_id を取り出す
         """
         item_label = args.get("item_label")
@@ -728,7 +729,7 @@ class SpotGraphArgumentResolver:
                 f"この名前は所持アイテムではありません: {item_label}",
                 "INVALID_TARGET_KIND",
             )
-        if item_target.inventory_slot_id is None:
+        if item_target.item_instance_id is None:
             raise ToolArgumentResolutionException(
                 (
                     f"指定されたアイテム名は渡す対象として扱えません: {item_label}。"
@@ -755,7 +756,7 @@ class SpotGraphArgumentResolver:
 
         return _with_inner_thought(
             {
-                "slot_id": item_target.inventory_slot_id,
+                "item_spec_id": item_target.item_instance_id,
                 "target_player_id": player_target.player_id,
                 "target_display_name": player_target.display_name,
                 "item_display_name": item_target.display_name,
@@ -811,7 +812,7 @@ class SpotGraphArgumentResolver:
                 )
                 resolved.append({
                     "index": i,
-                    "slot_id": resolved_entry["slot_id"],
+                    "item_spec_id": resolved_entry["item_spec_id"],
                     "target_player_id": resolved_entry["target_player_id"],
                     "target_display_name": resolved_entry["target_display_name"],
                     "item_display_name": resolved_entry["item_display_name"],
@@ -840,11 +841,11 @@ class SpotGraphArgumentResolver:
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
-        """所持アイテムラベル (I1 等) を slot_id / item_instance_id に解決する。
+        """所持アイテムラベル (I1 等) を item_spec_id に解決する。
 
-        勘違いポイント: ラベルは「同じ種類の集約表示」なので、解決後の
-        内部 ID は代表 1 件を指す。LLM 視点で気になるのはアイテムの種類なので
-        問題にならないが、コード側では一意の所持品を狙って drop することになる。
+        ラベルは「同じ種類の集約表示」なので、resolver 時点で代表 slot を
+        固定すると同名複数個の連続 drop / give で古い slot を掴む。
+        use_item と同じく executor が実行時に slot を引き直す。
         """
         label = args.get("item_label")
         # PR #441: display_name fallback
@@ -863,7 +864,7 @@ class SpotGraphArgumentResolver:
                 f"この名前は所持アイテムではありません: {label}",
                 "INVALID_TARGET_KIND",
             )
-        if target.inventory_slot_id is None or target.real_item_instance_id is None:
+        if target.item_instance_id is None:
             raise ToolArgumentResolutionException(
                 (
                     f"指定されたアイテム名は手放す対象として扱えません: {label}。"
@@ -873,8 +874,7 @@ class SpotGraphArgumentResolver:
             )
         return _with_inner_thought(
             {
-                "slot_id": target.inventory_slot_id,
-                "item_instance_id": target.real_item_instance_id,
+                "item_spec_id": target.item_instance_id,
                 "target_display_name": target.display_name,
                 # Phase C: stealth フラグを bool として executor に渡す
                 # (executor 側で WitnessPolicy に変換する)。LLM が省略したら

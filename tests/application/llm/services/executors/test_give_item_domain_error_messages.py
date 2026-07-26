@@ -28,6 +28,7 @@ from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service impor
     TargetIsSelfError,
     TargetNotInSameSpotError,
 )
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
 
 def _make_executor(transfer_stub) -> Any:
@@ -48,13 +49,13 @@ def _make_executor(transfer_stub) -> Any:
 
 def _resolved_entry(
     *,
-    slot_id: int = 1,
+    item_spec_id: int = 101,
     target_player_id: int = 2,
     target_display_name: str = "ノア",
     item_display_name: str = "野いちご",
 ) -> Dict[str, Any]:
     return {
-        "slot_id": slot_id,
+        "item_spec_id": item_spec_id,
         "target_player_id": target_player_id,
         "target_display_name": target_display_name,
         "item_display_name": item_display_name,
@@ -71,6 +72,7 @@ class TestGiveItemTargetIsSelf:
         stub = MagicMock()
         stub.give_item.side_effect = TargetIsSelfError()
         executor = _make_executor(stub)
+        executor._find_owned_slot_by_item_spec_id = MagicMock(return_value=(SlotId(1), object()))
 
         result = executor._give_item(
             1,
@@ -95,6 +97,7 @@ class TestGiveItemTargetNotInSameSpot:
         stub = MagicMock()
         stub.give_item.side_effect = TargetNotInSameSpotError()
         executor = _make_executor(stub)
+        executor._find_owned_slot_by_item_spec_id = MagicMock(return_value=(SlotId(1), object()))
 
         result = executor._give_item(
             1,
@@ -122,6 +125,7 @@ class TestGiveItemTargetInventoryFull:
         stub = MagicMock()
         stub.give_item.side_effect = TargetInventoryFullError()
         executor = _make_executor(stub)
+        executor._find_owned_slot_by_item_spec_id = MagicMock(return_value=(SlotId(1), object()))
 
         result = executor._give_item(
             1,
@@ -162,6 +166,7 @@ class TestGiveItemSlotIsEmpty:
         stub = MagicMock()
         stub.give_item.side_effect = SlotIsEmptyError(slot_id=5)
         executor = _make_executor(stub)
+        executor._find_owned_slot_by_item_spec_id = MagicMock(return_value=(SlotId(5), object()))
 
         result = executor._give_item(
             1,
@@ -178,9 +183,11 @@ class TestGiveItemSlotIsEmpty:
         assert result.success is False
         # 汎用 ITEM_TRANSFER_FAILED ではなく、専用 error_code が届く
         assert result.error_code == "ITEM_TRANSFER_SLOT_IS_EMPTY"
-        # remediation も専用文言 (「指定したスロットに何も入っていません」等)
+        # remediation も agent が指定できる item_label の確認へ誘導する
         assert result.remediation is not None
-        assert "スロット" in result.remediation
+        assert "所持品" in result.remediation
+        assert "スロット" not in result.message
+        assert "スロット番号を指定" not in result.message
 
 
 class TestGiveItemPartialSuccess:
@@ -195,6 +202,9 @@ class TestGiveItemPartialSuccess:
             TargetIsSelfError(),                # 2 件目 NG
         ]
         executor = _make_executor(stub)
+        executor._find_owned_slot_by_item_spec_id = MagicMock(
+            side_effect=[(SlotId(1), object()), (SlotId(2), object())]
+        )
 
         result = executor._give_item(
             1,
@@ -205,7 +215,7 @@ class TestGiveItemPartialSuccess:
                         item_display_name="野いちご",
                     ),
                     _resolved_entry(
-                        slot_id=2,
+                        item_spec_id=102,
                         target_display_name="自分",
                         item_display_name="流木",
                     ),
@@ -220,6 +230,12 @@ class TestGiveItemPartialSuccess:
         assert "自分" in result.message
         assert "OK" in result.message
         assert "NG" in result.message
+        assert result.trace_payload == {
+            "give_item_total_count": 2,
+            "give_item_success_count": 1,
+            "give_item_failure_count": 1,
+            "give_item_partial_failure": True,
+        }
 
 
 class TestGiveItemAllFail:
@@ -233,6 +249,9 @@ class TestGiveItemAllFail:
             TargetNotInSameSpotError(),        # 2 件目 NG
         ]
         executor = _make_executor(stub)
+        executor._find_owned_slot_by_item_spec_id = MagicMock(
+            side_effect=[(SlotId(1), object()), (SlotId(2), object())]
+        )
 
         result = executor._give_item(
             1,

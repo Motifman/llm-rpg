@@ -201,18 +201,17 @@ def test_drop_pickup_domain_error_llm_error_code() -> None:
 
 
 def test_slot_empty_error_message_japanese() -> None:
-    """LLM が「slot を確認してから再試行」できるよう、日本語で inspect_target
-    等を促す message にする。内部 ID (slot 番号) はコンテキストとして
-    含めても OK だが、英語 identifier は避ける。"""
+    """SlotIsEmptyError は、agent が指定できない slot 番号ではなく所持品名の確認を促す。"""
     from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
         SlotIsEmptyError,
     )
     exc = SlotIsEmptyError(slot_id=3)
     msg = str(exc)
-    # 対象 slot が分かる
-    assert "3" in msg
-    # 何をすべきか (inventory 確認) が読める
-    assert "inventory" in msg.lower() or "スロット" in msg or "確認" in msg
+    # 何をすべきか (所持品確認) が読める
+    assert "所持品" in msg
+    assert "確認" in msg
+    assert "スロット" not in msg
+    assert "スロット番号を指定" not in msg
     # 英語だけの文にしない
     assert any("぀" <= ch <= "ヿ" or "一" <= ch <= "鿿" for ch in msg)
 

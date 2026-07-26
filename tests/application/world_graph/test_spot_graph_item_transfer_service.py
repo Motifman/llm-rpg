@@ -174,17 +174,15 @@ class TestSpotGraphItemTransferServiceDrop:
         assert any("流木" in m for m in result.messages)
 
     def test_raises_drop_empty_slot_empty_error(self, transfer_service):
-        """PR-ε: 空スロット drop は LLM 頻発ミス。専用 SlotIsEmptyError
-        (ItemTransferException の subclass) に更新され、LLM 向け日本語
-        message + error_code を持つ。"""
+        """空 slot drop は SlotIsEmptyError だが、LLM 向け文言に slot 指定を促さない。"""
         from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
             SlotIsEmptyError,
         )
         deps = transfer_service
         with pytest.raises(SlotIsEmptyError) as excinfo:
             deps["service"].drop_item(PLAYER_ID, SlotId(5))  # 5 番スロットは空
-        # slot_id が message に埋まっている
-        assert "5" in str(excinfo.value)
+        assert "所持品" in str(excinfo.value)
+        assert "スロット" not in str(excinfo.value)
 
     def test_raises_drop_player_item_transfer_exception(self, transfer_service):
         """SpotGraphAggregate に place_entity されてないプレイヤーで drop すると境界例外。

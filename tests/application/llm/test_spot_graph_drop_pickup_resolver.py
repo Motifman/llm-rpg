@@ -1,7 +1,7 @@
 """SpotGraphArgumentResolver の `spot_graph_drop_item` / `pickup_item` 解決パスを検証する。
 
 検証範囲:
-- drop: item_label="I1" (inventory_item kind) → slot_id / item_instance_id に解決
+- drop: item_label="I1" (inventory_item kind) → item_spec_id に解決し slot は実行時に引く
 - drop: ground_item kind ラベルを渡すと INVALID_TARGET_KIND で弾く
 - drop: 不在ラベルは INVALID_TARGET_LABEL
 - pickup: ground_item_label="G1" (ground_item kind) → item_instance_id に解決
@@ -76,10 +76,10 @@ def _assert_llm_facing_message_has_no_internal_terms(message: str) -> None:
 
 
 class TestDropItemResolver:
-    """drop_item: I1 (inventory_item) → slot_id / item_instance_id 解決と境界検証。"""
+    """drop_item: I1 (inventory_item) → item_spec_id 解決と境界検証。"""
 
-    def test_i1_slot_id_item_instance_id_resolved(self) -> None:
-        """所持アイテムラベルが内部実行に必要な ID に解決される。"""
+    def test_i1_item_spec_id_resolved_without_prompt_time_slot(self) -> None:
+        """所持アイテムラベルは item_spec_id に解決し、slot_id は prompt 構築時に固定しない。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
@@ -87,8 +87,9 @@ class TestDropItemResolver:
             _make_context(),
         )
         assert result is not None
-        assert result["slot_id"] == 2
-        assert result["item_instance_id"] == 7
+        assert result["item_spec_id"] == 9
+        assert "slot_id" not in result
+        assert "item_instance_id" not in result
         assert result["target_display_name"] == "流木"
 
     def test_drop_ground_item_label_invalid_target_kind(self) -> None:

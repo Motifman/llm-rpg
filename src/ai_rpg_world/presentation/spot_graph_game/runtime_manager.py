@@ -2452,6 +2452,7 @@ class _WorldLlmWiring:
             apply_goal_update(player_id, arguments)
         if trace_recorder is not None:
             try:
+                trace_payload = dict(result.trace_payload or {})
                 trace_recorder.record(
                     "action_result",
                     tick=current_tick,
@@ -2460,6 +2461,7 @@ class _WorldLlmWiring:
                     success=result.success,
                     error_code=result.error_code,
                     result_summary=result.message,
+                    **trace_payload,
                 )
             except Exception:
                 logger.exception("trace_recorder.record(action_result) failed")

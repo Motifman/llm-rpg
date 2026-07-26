@@ -100,6 +100,16 @@ def _owns_spec(runtime, pid: PlayerId, spec_str_id: str) -> bool:
     return spec_id in collect_owned_item_spec_ids_from_inventory(inv, runtime._item_repo)
 
 
+class _CapturingTraceRecorder:
+    """run_turn が emit した trace payload を確認するための最小 recorder。"""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[object, dict]] = []
+
+    def record(self, kind, **payload) -> None:
+        self.events.append((kind, payload))
+
+
 def _label_for_item(runtime, pid: PlayerId, item_spec_str: str) -> str:
     """ada の prompt context から指定 spec のアイテム label (I1/I2/...) を引く。"""
     target_spec_id = runtime.id_mapper.get_int("item_spec", item_spec_str)
@@ -217,6 +227,30 @@ class TestDropItemEndToEnd:
             f"drop_item 失敗: {result.error_code} {result.message[:120]}"
         )
 
+    def test_drop_same_named_item_twice_resolves_slot_at_execution_time(self, session) -> None:
+        """同名アイテムを2個持つとき、古い item_label を使う連続 drop でも毎回 slot を引き直す。"""
+        runtime = session.runtime
+        ada = _player_id(runtime, "ada")
+        _teleport(runtime, int(ada), "shipwreck_beach")
+        _grant(runtime, ada, "coconut")
+        _grant(runtime, ada, "coconut")
+        item_label = _label_for_item(runtime, ada, "coconut")
+
+        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
+            "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+            "arguments": {"item_label": item_label, "inner_thought": "1個置く"},
+        })
+        first = session.llm_wiring.run_turn(ada)
+        assert first.success is True, first.message
+
+        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
+            "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+            "arguments": {"item_label": item_label, "inner_thought": "もう1個置く"},
+        })
+        second = session.llm_wiring.run_turn(ada)
+        assert second.success is True, second.message
+        assert not _owns_spec(runtime, ada, "coconut")
+
 
 # ---------------------------------------------------------------------------
 # give_item: 同 spot の player に渡す
@@ -269,6 +303,109 @@ class TestGiveItemEndToEnd:
         assert _owns_spec(runtime, noah, "coconut")
         # ada の inventory から消えている
         assert not _owns_spec(runtime, ada, "coconut")
+
+    def test_give_same_named_items_to_three_players_resolves_slot_for_each_entry(self, session) -> None:
+        """同名アイテム x3 を1回の give_item で3人へ配ると、各 entry で slot を引き直して全件成功する。"""
+        runtime = session.runtime
+        ada = _player_id(runtime, "ada")
+        noah = _player_id(runtime, "noah")
+        rio = _player_id(runtime, "rio")
+        kai = _player_id(runtime, "kai")
+        for pid in (ada, noah, rio, kai):
+            _teleport(runtime, int(pid), "shipwreck_beach")
+        for _ in range(3):
+            _grant(runtime, ada, "coconut")
+        item_label = _label_for_item(runtime, ada, "coconut")
+        labels = [
+            self._player_target_label(runtime, ada, noah),
+            self._player_target_label(runtime, ada, rio),
+            self._player_target_label(runtime, ada, kai),
+        ]
+
+        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
+            "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            "arguments": {
+                "gives": [
+                    {"item_label": item_label, "target_player_label": labels[0]},
+                    {"item_label": item_label, "target_player_label": labels[1]},
+                    {"item_label": item_label, "target_player_label": labels[2]},
+                ],
+                "inner_thought": "全員に分ける",
+            },
+        })
+
+        result = session.llm_wiring.run_turn(ada)
+
+        assert result.success is True, result.message
+        assert "NG" not in result.message
+        assert result.trace_payload == {
+            "give_item_total_count": 3,
+            "give_item_success_count": 3,
+            "give_item_failure_count": 0,
+            "give_item_partial_failure": False,
+        }
+        assert not _owns_spec(runtime, ada, "coconut")
+        assert _owns_spec(runtime, noah, "coconut")
+        assert _owns_spec(runtime, rio, "coconut")
+        assert _owns_spec(runtime, kai, "coconut")
+
+    def test_give_more_targets_than_owned_items_reports_partial_failure_without_slot_instruction(self, session) -> None:
+        """所持数を超えて同名アイテムを配ると、配れた分は成功し超過分だけ失敗として trace に残る。"""
+        runtime = session.runtime
+        ada = _player_id(runtime, "ada")
+        noah = _player_id(runtime, "noah")
+        rio = _player_id(runtime, "rio")
+        kai = _player_id(runtime, "kai")
+        for pid in (ada, noah, rio, kai):
+            _teleport(runtime, int(pid), "shipwreck_beach")
+        for _ in range(2):
+            _grant(runtime, ada, "coconut")
+        recorder = _CapturingTraceRecorder()
+        runtime.set_trace_recorder(recorder)
+        item_label = _label_for_item(runtime, ada, "coconut")
+        labels = [
+            self._player_target_label(runtime, ada, noah),
+            self._player_target_label(runtime, ada, rio),
+            self._player_target_label(runtime, ada, kai),
+        ]
+
+        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
+            "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            "arguments": {
+                "gives": [
+                    {"item_label": item_label, "target_player_label": labels[0]},
+                    {"item_label": item_label, "target_player_label": labels[1]},
+                    {"item_label": item_label, "target_player_label": labels[2]},
+                ],
+                "inner_thought": "足りる分だけ分ける",
+            },
+        })
+
+        result = session.llm_wiring.run_turn(ada)
+
+        assert result.success is True
+        assert result.trace_payload == {
+            "give_item_total_count": 3,
+            "give_item_success_count": 2,
+            "give_item_failure_count": 1,
+            "give_item_partial_failure": True,
+        }
+        action_result_events = [
+            payload
+            for kind, payload in recorder.events
+            if str(kind) == "action_result" and payload.get("tool") == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM
+        ]
+        assert action_result_events
+        assert action_result_events[-1]["give_item_success_count"] == 2
+        assert action_result_events[-1]["give_item_failure_count"] == 1
+        assert action_result_events[-1]["give_item_partial_failure"] is True
+        assert "NG" in result.message
+        assert "スロット" not in result.message
+        assert "スロット番号を指定" not in result.message
+        assert not _owns_spec(runtime, ada, "coconut")
+        assert _owns_spec(runtime, noah, "coconut")
+        assert _owns_spec(runtime, rio, "coconut")
+        assert not _owns_spec(runtime, kai, "coconut")
 
     def test_give_dead_target_returns_learnable_failure(self, session) -> None:
         """死亡済みの相手へ give_item すると、日本語理由を返して所有は移らない。"""
