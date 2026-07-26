@@ -95,14 +95,30 @@ class TestDownedCrewDoesNotEndTheRun:
 class TestWinConditionStillWorks:
     """勝ち筋を潰していない。"""
 
-    def test_distress_signal_still_wins(self, runtime) -> None:
-        """救難信号のフラグが立てば勝利で終わる。
+    def test_finishing_the_work_still_wins(self, runtime) -> None:
+        """点検と救難が揃えば勝利で終わる。
 
         敗北条件を足したときに勝利条件が評価されなくなっていないかを見る。
+
+        **勝ち筋の形が変わったのでテストも変えた。** 以前は救難信号 1 つで
+        勝てたが、それだと手分けする理由が生まれない (一人が最短で無線室へ
+        向かえば終わる)。今は 5 つのうち 4 つを要求する。
         """
-        runtime._world_flag_state.add("distress_sent")
+        for flag in ("task_antenna", "task_fuel", "task_supplies", "distress_sent"):
+            runtime._world_flag_state.add(flag)
 
         result = runtime.check_game_end()
 
         assert result.is_ended is True
         assert result.result == GameResultEnum.WIN
+
+    def test_the_distress_signal_alone_is_not_enough(self, runtime) -> None:
+        """救難信号だけでは終わらない。
+
+        一人勝ちの経路が残っていないことを固定する。勝利条件は複数書くと
+        OR で評価されるので、独立した条件として残すと作業を足しても
+        意味が無くなる。
+        """
+        runtime._world_flag_state.add("distress_sent")
+
+        assert runtime.check_game_end().is_ended is False

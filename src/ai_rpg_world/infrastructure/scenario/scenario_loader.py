@@ -682,8 +682,21 @@ class ScenarioLoader:
         for spot in raw.get("spots", []):
             mapper.register("spot", spot["id"])
             interior = spot.get("interior", {})
+            seen_object_ids: set = set()
             for obj in interior.get("objects", []):
-                mapper.register("object", obj["id"])
+                object_id = obj["id"]
+                # **同じ spot に同じ id の object を 2 つ書くのを止める。**
+                # 黙って通すと、後から書いたほうの interaction が実行時に
+                # 「そんな操作は無い」で落ちる。JSON には確かに書いてあるので、
+                # 原因にたどり着くまでが長い (実際にこれで詰まった)。
+                if object_id in seen_object_ids:
+                    raise ScenarioLoadError(
+                        f"spot '{spot['id']}' に object id '{object_id}' が"
+                        "重複しています。後から書いたほうの interaction は"
+                        "実行時に見つからなくなります"
+                    )
+                seen_object_ids.add(object_id)
+                mapper.register("object", object_id)
             for sub in interior.get("sub_locations", []):
                 mapper.register("sub_location", sub["id"])
         for conn in raw.get("connections", []):

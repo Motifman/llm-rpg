@@ -948,8 +948,17 @@ class TestGameEndConditionScenarioData:
                         f"{path.name}: {cond.condition_type.value} target_spot is missing"
                     )
 
-    def test_darkened_station_distress_flag_satisfies_win_condition(self) -> None:
-        """darkened_station は distress_sent が立つと勝利条件が成立する。"""
+    def test_darkened_station_needs_more_than_the_distress_signal(self) -> None:
+        """darkened_station は救難信号だけでは勝てない。
+
+        以前は `distress_sent` 単独で勝てた。それだと**手分けする理由が
+        生まれない** (一人が最短で無線室へ向かえば終わる)。点検と救難を
+        合わせた 5 つのうち 4 つを要求するようにした。
+
+        勝利条件は複数書くと **OR** で評価される。つまり救難信号を独立した
+        条件として残すと、いくら作業を足しても一人勝ちの経路が消えない。
+        だから救難信号は 5 つのうちの 1 つとして畳んである。
+        """
         result = ScenarioLoader().load_from_file(SCENARIO_DIR / "darkened_station.json")
         condition = result.win_conditions[0]
 
@@ -957,6 +966,23 @@ class TestGameEndConditionScenarioData:
             result.graph,
             condition,
             frozenset({"distress_sent"}),
+            player_ids=(),
+        )
+
+        assert evaluated.is_ended is False
+
+    def test_darkened_station_wins_when_four_of_five_are_done(self) -> None:
+        """5 つのうち 4 つが終われば勝利条件が成立する。
+
+        全部を要求すると、1 人倒れただけで詰む。余白を 1 つ残す。
+        """
+        result = ScenarioLoader().load_from_file(SCENARIO_DIR / "darkened_station.json")
+        condition = result.win_conditions[0]
+
+        evaluated = GameEndConditionEvaluator().evaluate(
+            result.graph,
+            condition,
+            frozenset({"task_antenna", "task_fuel", "task_supplies", "distress_sent"}),
             player_ids=(),
         )
 
