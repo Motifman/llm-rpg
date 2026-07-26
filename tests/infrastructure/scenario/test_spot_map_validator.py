@@ -340,6 +340,31 @@ class TestSpotMapValidatorAreas:
         assert "SPOT_AREA_ID_MISSING" not in {issue.code for issue in result.warnings}
 
 
+class TestSpotMapValidatorIndoorSpots:
+    """is_outdoor 未宣言で屋内扱いになる spot を validator の info と metrics で見える化する。"""
+
+    def test_reports_indoor_spots_without_changing_validation_success(self) -> None:
+        """屋内扱い spot は error/warning ではなく info と metrics に出て、作者が確認できる。"""
+        raw = _scenario(
+            spots=[
+                {**_spot("beach"), "is_outdoor": True},
+                _spot("cove"),
+                {**_spot("cave"), "is_outdoor": False},
+            ],
+            connections=[_edge("beach_cove", "beach", "cove"), _edge("cove_cave", "cove", "cave")],
+        )
+
+        result = validate_spot_map(raw)
+
+        assert result.ok is True
+        assert result.metrics["indoor_spot_count"] == 2
+        assert result.metrics["indoor_spots"] == ["cave", "cove"]
+        assert result.metrics["is_outdoor_undeclared_spots"] == ["cove"]
+        issue = next(issue for issue in result.infos if issue.code == "INDOOR_SPOTS")
+        assert issue.spots == ("cave", "cove")
+        assert issue.details["undeclared_is_outdoor_spots"] == ["cove"]
+
+
 class TestSpotMapValidatorDistantCues:
     """distant_cues 宣言が遠景候補として安全に使える形かを検査する。"""
 

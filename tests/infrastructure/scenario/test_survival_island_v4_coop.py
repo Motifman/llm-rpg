@@ -111,6 +111,20 @@ class TestSurvivalIslandV4MapValidation:
         assert result.metrics["positioned_spot_count"] == 25
         assert result.metrics["area_count"] == 6
         assert result.metrics["distant_cue_count"] == 1
+        assert result.metrics["indoor_spots"] == [
+            "cave_entry",
+            "cave_inner",
+            "lone_hut",
+            "observation_outpost_ruins",
+            "plane_wreck",
+        ]
+        assert result.metrics["is_outdoor_undeclared_spots"] == [
+            "cave_entry",
+            "cave_inner",
+            "lone_hut",
+            "observation_outpost_ruins",
+            "plane_wreck",
+        ]
         assert result.metrics["unreachable_spots"] == []
         assert result.metrics["cycle_rank"] == 9
         assert result.metrics["articulation_spots"] == [
@@ -129,6 +143,18 @@ class TestSurvivalIslandV4MapValidation:
         assert not {
             issue.code for issue in result.errors if issue.code.startswith("DISTANT_CUE")
         }
+
+    def test_v3_and_v4_hidden_cove_are_not_indoor_by_default(self, raw_v4) -> None:
+        """memo A/B 既定の v3 と本命 v4 の隠し入江は、どちらも屋内扱いで山影を隠さない。"""
+        raw_v3 = json.loads(_V3_PATH.read_text(encoding="utf-8"))
+
+        v3_result = validate_spot_map(raw_v3)
+        v4_result = validate_spot_map(raw_v4)
+
+        assert "hidden_cove" not in v3_result.metrics["indoor_spots"]
+        assert "hidden_cove" not in v3_result.metrics["is_outdoor_undeclared_spots"]
+        assert "hidden_cove" not in v4_result.metrics["indoor_spots"]
+        assert "hidden_cove" not in v4_result.metrics["is_outdoor_undeclared_spots"]
 
 
 class TestSurvivalIslandV4CoveCarving:
