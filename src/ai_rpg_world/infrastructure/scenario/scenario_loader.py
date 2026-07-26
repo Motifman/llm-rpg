@@ -513,6 +513,9 @@ class ScenarioLoader:
         outcome_resolution_config = self._parse_outcome_resolution_config(
             raw.get("outcome_resolution"), mapper,
         )
+        self._reject_end_conditions_with_outcome_resolution(
+            outcome_resolution_config, win_conds, lose_conds,
+        )
 
         return ScenarioLoadResult(
             graph=graph,
@@ -2806,6 +2809,34 @@ class ScenarioLoader:
             f"(got {type(raw).__name__})"
         )
 
+    @staticmethod
+    def _reject_end_conditions_with_outcome_resolution(
+        outcome_resolution_config: Any,
+        win_conditions: List[GameEndCondition],
+        lose_conditions: List[GameEndCondition],
+    ) -> None:
+        """outcome_resolution と game_end_conditions の同時宣言を落とす。
+
+        ``outcome_resolution`` を宣言したシナリオでは、runtime は
+        「全員の outcome が確定したら終わり」だけを見る経路に分岐し、
+        **win_conditions / lose_conditions を一切評価しない**
+        (`WorldRuntime.check_game_end`)。
+
+        両方書けてしまうと、勝敗条件を書いたのに永久に成立しない状態になる。
+        しかもその状態は「まだゲームが続いている」と区別が付かないので、
+        実 run が最後まで走り切ってから気付くことになる。読み込み時に落とす。
+        """
+        if outcome_resolution_config is None:
+            return
+        if not win_conditions and not lose_conditions:
+            return
+        raise ScenarioLoadError(
+            "outcome_resolution を宣言したシナリオでは game_end_conditions "
+            "(win / lose) は評価されません。どちらか一方にしてください "
+            "(outcome_resolution モードは全員の outcome 確定だけを終了条件に"
+            "します)"
+        )
+
     def _parse_end_conditions(
         self,
         raw: Any,
@@ -2826,6 +2857,8 @@ class ScenarioLoader:
                 target_spot_id=target_spot,
                 target_flag=item.get("target_flag"),
                 tick_limit=item.get("tick_limit"),
+                required_state=item.get("required_state"),
+                max_surviving=item.get("max_surviving"),
             ))
         return conditions
 
@@ -2852,6 +2885,27 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     "game_end_conditions の TICK_LIMIT には tick_limit が必要です"
                     f" [index={index}]"
+                )
+            return
+        if ctype is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST:
+            required_state = item.get("required_state")
+            if not isinstance(required_state, dict) or not required_state:
+                raise ScenarioLoadError(
+                    f"game_end_conditions の {ctype.value} には required_state が"
+                    "必要です (誰を数えるかが決まりません)"
+                    f" [index={index}]"
+                )
+            max_surviving = item.get("max_surviving")
+            if not isinstance(max_surviving, int) or isinstance(max_surviving, bool):
+                raise ScenarioLoadError(
+                    f"game_end_conditions の {ctype.value} には整数の max_surviving が"
+                    "必要です (0 を既定にすると書き忘れと全滅指定を区別できません)"
+                    f" [index={index}]"
+                )
+            if max_surviving < 0:
+                raise ScenarioLoadError(
+                    f"game_end_conditions の {ctype.value} の max_surviving は 0 以上"
+                    f"である必要があります: {max_surviving} [index={index}]"
                 )
             return
         if ctype in (
