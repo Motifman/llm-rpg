@@ -3789,7 +3789,13 @@ def create_world_runtime(
         visible_monster_observer=_observe_visible_monster_for_player,
         # 同席者行に「この相手に何ができるか」を出す。出さないと対人行為は
         # 宣言されていても LLM から発見できない。
-        player_action_names_provider=player_interaction_service.available_action_names,
+        #
+        # 渡すのは **表示用ラベル** (= 前提条件のヒント付き)。素の action 名
+        # では「暗い場所でだけ襲える」ことが失敗するまで分からない。executor
+        # の「使える操作」列挙は識別子が要るので、そちらは
+        # ``available_action_names`` を使い続ける
+        # (world_runtime.available_player_action_names)。
+        player_action_names_provider=player_interaction_service.available_action_labels,
     )
 
     # ── 観測パイプライン構築 ──
