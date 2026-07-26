@@ -116,7 +116,6 @@ uv run pytest                                      # 全テスト
 uv run pytest tests/domain/guild -v                # 一部だけ
 uv run pytest --cov=src --cov-report=term-missing  # カバレッジつき
 # マーカー: -m unit | integration | slow | asyncio
-# quality は通常の pytest / CI から除外される手動点検用。実行する場合は -m quality を明示する
 ```
 
 `make test` / `make test-cov` も同じ pytest を叩く薄いラッパーです。テスト駆動の
