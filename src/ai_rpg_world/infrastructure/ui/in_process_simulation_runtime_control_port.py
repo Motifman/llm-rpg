@@ -39,6 +39,7 @@ class InProcessSimulationRuntimeControlPort(ISimulationRuntimeControlPort):
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._state_changed = threading.Event()
+        self._pause_observed = threading.Event()
         self._lock = threading.Lock()
         self._tick_advanced_callback = tick_advanced_callback
 
@@ -48,6 +49,10 @@ class InProcessSimulationRuntimeControlPort(ISimulationRuntimeControlPort):
                 return
             self._stop_event.clear()
             self._state_changed.clear()
+            if self._paused:
+                self._pause_observed.clear()
+            else:
+                self._pause_observed.set()
             self._thread = threading.Thread(
                 target=self._run_loop,
                 name="ai-rpg-world-simulation-loop",
@@ -58,6 +63,7 @@ class InProcessSimulationRuntimeControlPort(ISimulationRuntimeControlPort):
     def stop(self) -> None:
         self._stop_event.set()
         self._state_changed.set()
+        self._pause_observed.set()
         thread = self._thread
         if thread is not None:
             thread.join(timeout=2.0)
@@ -65,11 +71,18 @@ class InProcessSimulationRuntimeControlPort(ISimulationRuntimeControlPort):
     def pause(self) -> None:
         with self._lock:
             self._paused = True
+            self._pause_observed.clear()
+            thread = self._thread
         self._state_changed.set()
+        if thread is None or not thread.is_alive():
+            self._pause_observed.set()
+            return
+        self._pause_observed.wait()
 
     def resume(self) -> None:
         with self._lock:
             self._paused = False
+            self._pause_observed.clear()
         self._state_changed.set()
 
     def set_speed_multiplier(self, speed_multiplier: float) -> None:
@@ -78,21 +91,33 @@ class InProcessSimulationRuntimeControlPort(ISimulationRuntimeControlPort):
         self._state_changed.set()
 
     def _run_loop(self) -> None:
-        while not self._stop_event.is_set():
-            with self._lock:
-                paused = self._paused
-                speed_multiplier = self._speed_multiplier
-            if paused:
-                self._state_changed.wait(timeout=0.25)
-                self._state_changed.clear()
-                continue
+        try:
+            while not self._stop_event.is_set():
+                with self._lock:
+                    paused = self._paused
+                    speed_multiplier = self._speed_multiplier
+                if paused:
+                    self._pause_observed.set()
+                    self._state_changed.wait(timeout=0.25)
+                    self._state_changed.clear()
+                    continue
 
-            wait_seconds = max(self._tick_interval_ms / 1000.0 / speed_multiplier, 0.01)
-            interrupted = self._state_changed.wait(timeout=wait_seconds)
-            self._state_changed.clear()
-            if interrupted or self._stop_event.is_set():
-                continue
-            self._advance_once()
+                wait_seconds = max(
+                    self._tick_interval_ms / 1000.0 / speed_multiplier,
+                    0.01,
+                )
+                interrupted = self._state_changed.wait(timeout=wait_seconds)
+                self._state_changed.clear()
+                if interrupted or self._stop_event.is_set():
+                    continue
+                with self._lock:
+                    paused = self._paused
+                if paused:
+                    self._pause_observed.set()
+                    continue
+                self._advance_once()
+        finally:
+            self._pause_observed.set()
 
     def _advance_once(self) -> None:
         current_tick = self._time_provider.advance_tick().value
