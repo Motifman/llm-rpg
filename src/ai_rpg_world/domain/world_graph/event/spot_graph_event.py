@@ -13,6 +13,7 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
     PassageChangeCauseEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
@@ -170,6 +171,28 @@ class PlayerInteractedWithPlayerEvent(BaseDomainEvent[SpotGraphId, str]):
     # prose。秘匿行為では「誰にやられたか」を伏せたいことがあるので、目撃者
     # 向け文面とは別に書けるようにする。
     target_observation_message: str = ""
+
+
+@dataclass(frozen=True)
+class GamePhaseChangedEvent(BaseDomainEvent[SpotGraphId, str]):
+    """世界のモード (自由時間 / 会議) が切り替わった。
+
+    **世界全体のイベント**なので、場所を問わず全プレイヤーに配信する
+    (``TimeOfDayChangedEvent`` と同じ扱い)。会議が始まったことが届かない
+    プレイヤーが居ると、その人は会議に参加できないまま議論が進む。
+
+    ``initiator_display_name`` を載せるのは、**誰が招集したか自体が推理の
+    材料になる**ため。緊急ボタンを押した人は疑いの的にも信頼の的にもなる。
+    世界が勝手に始めた遷移 (沈黙による終了など) では空文字にする。
+    """
+
+    old_phase: GamePhase
+    new_phase: GamePhase
+    #: この遷移の理由。招集なら ``emergency_button`` / ``body_report``、
+    #: 会議の終了なら ``vote_concluded`` / ``silence`` / ``tick_limit``。
+    trigger: str = ""
+    #: 招集した人の表示名。世界都合の遷移では空。
+    initiator_display_name: str = ""
 
 
 @dataclass(frozen=True)

@@ -41,6 +41,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerPickedUpItemEvent,
     SpotSoundHeardEvent,
     TimeOfDayChangedEvent,
+    GamePhaseChangedEvent,
     SpotExploredEvent,
     PlayerInteractedWithPlayerEvent,
     SpotObjectInteractedEvent,
@@ -148,6 +149,12 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             self._resolve_at_spot_excluding_actor(
                 event.spot_id, event.entity_id, add
             )
+        elif isinstance(event, GamePhaseChangedEvent):
+            # 世界のモード変化は全プレイヤーに届ける。会議が始まったことが
+            # 届かない人が居ると、その人だけ議論に参加できないまま進む。
+            # 倒れている player は resolve() 末尾の一括除外で落ちる
+            # (ターンが回らないので観測を消化できない: Issue #621 Phase 4)。
+            self._resolve_all_players(add)
         elif isinstance(event, TimeOfDayChangedEvent):
             # 昼夜サイクルのフェーズ変化は世界全体のイベント。屋内 / 屋外を
             # 区別せず、全プレイヤーに観測として届ける (屋内でも空の色や

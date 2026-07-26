@@ -28,7 +28,9 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPlayerStateChangedInSpotEvent,
     SpotPublicEffectObservedEvent,
     TimeOfDayChangedEvent,
+    GamePhaseChangedEvent,
 )
+from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
 )
@@ -68,7 +70,56 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_item_given(event, recipient_player_id)
         if isinstance(event, TimeOfDayChangedEvent):
             return self._format_time_of_day_changed(event, recipient_player_id)
+        if isinstance(event, GamePhaseChangedEvent):
+            return self._format_game_phase_changed(event, recipient_player_id)
         return None
+
+    _MEETING_TRIGGER_PROSE = {
+        "emergency_button": "{who}が緊急招集をかけた。全員が集まる。",
+        "body_report": "{who}が倒れている者を見つけたと知らせた。全員が集まる。",
+    }
+    _MEETING_END_PROSE = {
+        "vote_concluded": "話し合いが終わった。各自の持ち場に戻る。",
+        "silence": "誰も口を開かなくなった。話し合いは流れた。",
+        "tick_limit": "時間切れだ。話し合いは打ち切られた。",
+    }
+
+    def _format_game_phase_changed(
+        self, event: "GamePhaseChangedEvent", recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """世界のモード変化を全員に届ける。
+
+        誰が招集したかを出すのは、**それ自体が推理の材料になる**ため。
+        緊急ボタンを押した人は疑いの的にも信頼の的にもなる。
+
+        ``schedules_turn`` と ``breaks_movement`` を立てるのは必須である。
+        前者が False だと会議が始まっても誰も起きず沈黙上限で即終了し、
+        後者が False だと会議中に歩き続けるプレイヤーが出る
+        (設計 doc H-4 / H-2)。
+        """
+        who = (event.initiator_display_name or "").strip()
+        if event.new_phase is GamePhase.MEETING:
+            template = self._MEETING_TRIGGER_PROSE.get(
+                event.trigger, "招集がかかった。全員が集まる。"
+            )
+            prose = template.format(who=who) if who else "招集がかかった。全員が集まる。"
+        else:
+            prose = self._MEETING_END_PROSE.get(
+                event.trigger, "話し合いが終わった。各自の持ち場に戻る。"
+            )
+        return ObservationOutput(
+            prose=prose,
+            structured={
+                "type": "game_phase_changed",
+                "old_phase": event.old_phase.value,
+                "new_phase": event.new_phase.value,
+                "trigger": event.trigger,
+                "initiator_display_name": who,
+            },
+            observation_category="social",
+            schedules_turn=True,
+            breaks_movement=True,
+        )
 
     def _format_time_of_day_changed(
         self, event: TimeOfDayChangedEvent, recipient_id: PlayerId,
