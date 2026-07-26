@@ -1274,10 +1274,16 @@ class WorldRuntime:
             link_store = getattr(self._episodic_stack, "memory_link_store", None)
             link_service = getattr(self._episodic_stack, "link_service", None)
             afterglow_store = getattr(self._episodic_stack, "afterglow_store", None)
+            recall_slot_store = getattr(
+                self._episodic_stack,
+                "recall_slot_store",
+                None,
+            )
             if (
                 link_store is not None
                 and link_service is not None
                 and afterglow_store is not None
+                and recall_slot_store is not None
             ):
                 from ai_rpg_world.application.llm.services.executors.episodic_memory_explore_tool_executor import (
                     EpisodicMemoryExploreToolExecutor,
@@ -1289,6 +1295,7 @@ class WorldRuntime:
                         link_store=link_store,
                         link_service=link_service,
                         afterglow_store=afterglow_store,
+                        slot_store=recall_slot_store,
                         being_attachment_resolver=self._aux_being_resolver,
                         default_world_id=self._aux_being_default_world_id,
                     )

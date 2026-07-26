@@ -13,6 +13,9 @@ from ai_rpg_world.application.llm.services.afterglow_store import (
     make_afterglow_handle,
     resolve_episode_id_prefix_from_handle,
 )
+from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+    IEpisodicRecallSlotStore,
+)
 from ai_rpg_world.domain.being.service.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
@@ -43,6 +46,7 @@ class EpisodicMemoryExploreToolExecutor:
     link_store: MemoryLinkRepository
     link_service: EpisodicMemoryLinkApplicationService
     afterglow_store: Optional[IAfterglowStore] = None
+    slot_store: Optional[IEpisodicRecallSlotStore] = None
     # Phase 3 Step 3c-3: legacy player_id 経路は撤去済。constructor 上は
     # Optional のまま (= 既存テスト互換) だが、tool 実行時に未注入 / Being
     # 未 provision なら ``INVALID_STATE`` で fail-fast する。tool は LLM-visible
@@ -84,7 +88,7 @@ class EpisodicMemoryExploreToolExecutor:
     ) -> LlmCommandResultDto:
         handle_raw = arguments.get("handle")
         try:
-            resolve_episode_id_prefix_from_handle(handle_raw or "")
+            handle_prefix = resolve_episode_id_prefix_from_handle(handle_raw or "")
         except (TypeError, ValueError) as e:
             return LlmCommandResultDto(
                 success=False,
@@ -114,23 +118,26 @@ class EpisodicMemoryExploreToolExecutor:
                 ),
                 error_code="INVALID_STATE",
             )
-        if self.afterglow_store is None:
+        if self.afterglow_store is None and self.slot_store is None:
             return LlmCommandResultDto(
                 success=False,
                 message=(
                     "EpisodicMemoryExploreToolExecutor requires afterglow_store "
-                    "to resolve prompt handles."
+                    "or slot_store to resolve prompt handles."
                 ),
                 error_code="INVALID_STATE",
             )
-        entry = self.afterglow_store.find_by_handle(being_id, str(handle_raw))
-        if entry is None:
+        eid = self._resolve_episode_id_from_handle(
+            being_id,
+            str(handle_raw),
+            handle_prefix,
+        )
+        if eid is None:
             return LlmCommandResultDto(
                 success=False,
                 message=self._unknown_handle_message(being_id),
                 error_code="INVALID_ARGUMENT",
             )
-        eid = entry.episode_id
         links = self.link_store.list_links_for_episode_by_being(
             being_id, eid, now=now, limit=256
         )
@@ -169,13 +176,52 @@ class EpisodicMemoryExploreToolExecutor:
             message=json.dumps(payload, ensure_ascii=False),
         )
 
-    def _unknown_handle_message(self, being_id: BeingId) -> str:
-        if self.afterglow_store is None:
-            return "指定された handle は見つかりません。"
-        handles = [
-            make_afterglow_handle(entry.episode_id)
-            for entry in self.afterglow_store.get_index(being_id)
+    def _resolve_episode_id_from_handle(
+        self,
+        being_id: BeingId,
+        handle: str,
+        handle_prefix: str,
+    ) -> Optional[str]:
+        """prompt handle を episode_id に戻す。
+
+        まず afterglow を見る。``memory_recall_by_handle`` は本文を読んだ後に
+        afterglow から消し、recall slot に格上げするため、見つからなければ slot
+        も見る。これで「見出しを見る → 本文を読む → 関連を辿る」という自然な順序が
+        失敗しない。
+        """
+        if self.afterglow_store is not None:
+            entry = self.afterglow_store.find_by_handle(being_id, handle)
+            if entry is not None:
+                return entry.episode_id
+        if self.slot_store is None:
+            return None
+        candidates = [
+            entry
+            for entry in self.slot_store.get_slot(being_id)
+            if entry.episode_id.startswith(handle_prefix)
         ]
+        if not candidates:
+            return None
+        candidates.sort(key=lambda entry: entry.entered_tick, reverse=True)
+        return candidates[0].episode_id
+
+    def _unknown_handle_message(self, being_id: BeingId) -> str:
+        handles: list[str] = []
+        seen: set[str] = set()
+
+        def add_handle(episode_id: str) -> None:
+            handle = make_afterglow_handle(episode_id)
+            if handle in seen:
+                return
+            seen.add(handle)
+            handles.append(handle)
+
+        if self.afterglow_store is not None:
+            for entry in self.afterglow_store.get_index(being_id):
+                add_handle(entry.episode_id)
+        if self.slot_store is not None:
+            for entry in self.slot_store.get_slot(being_id):
+                add_handle(entry.episode_id)
         if not handles:
             return (
                 "指定された handle は見つかりません。"

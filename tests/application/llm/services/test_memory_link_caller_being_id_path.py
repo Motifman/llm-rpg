@@ -34,6 +34,10 @@ from ai_rpg_world.application.llm.services.afterglow_store import (
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
 )
+from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+    InMemoryEpisodicRecallSlotStore,
+    RecallSlotEntry,
+)
 from ai_rpg_world.application.llm.services.episodic_spreading_activation import (
     neighbor_priming_scores,
 )
@@ -187,6 +191,7 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
         """prompt に出る handle で、同じ episode を起点に関連記憶を辿れる。"""
         episodes = InMemorySubjectiveEpisodeStore()
         afterglow_store = InMemoryAfterglowStore()
+        slot_store = InMemoryEpisodicRecallSlotStore()
         setup = make_memory_link_being_setup()
         being_id = setup.provision(1)
         # Phase 3 Step 3e-2: executor が get_by_being で episode を引くため
@@ -217,6 +222,7 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
             link_store=setup.link_store,
             link_service=svc,
             afterglow_store=afterglow_store,
+            slot_store=slot_store,
             being_attachment_resolver=setup.resolver,
             default_world_id=setup.world_id,
         )
@@ -229,10 +235,68 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
         ids = [r["episode_id"] for r in payload["related_episodes"]]
         assert "other" in ids
 
+    def test_handle_consumed_by_recall_by_handle_can_still_explore_from_slot(
+        self,
+    ) -> None:
+        """本文を読んで afterglow から消えた handle でも、recall slot 経由で関連記憶を辿れる。"""
+        episodes = InMemorySubjectiveEpisodeStore()
+        afterglow_store = InMemoryAfterglowStore()
+        slot_store = InMemoryEpisodicRecallSlotStore()
+        setup = make_memory_link_being_setup()
+        being_id = setup.provision(1)
+        episodes.put_by_being(being_id, _ep(episode_id="seed"))
+        episodes.put_by_being(being_id, _ep(episode_id="other"))
+        afterglow_store.apply_decision(
+            being_id,
+            (
+                AfterglowEntry(
+                    episode_id="seed",
+                    heading="種になった記憶",
+                    entered_tick=1,
+                    source=AfterglowSource.WEAK_RECALL,
+                ),
+            ),
+        )
+        afterglow_store.remove(being_id, "seed")
+        slot_store.force_insert(
+            being_id,
+            RecallSlotEntry(episode_id="seed", entered_tick=2),
+            capacity=4,
+        )
+        setup.link_store.upsert_link_by_being(
+            being_id, _link(a="seed", b="other", strength=0.9)
+        )
+        svc = EpisodicMemoryLinkApplicationService(
+            episodes,
+            setup.link_store,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
+        )
+        executor = EpisodicMemoryExploreToolExecutor(
+            episode_store=episodes,
+            link_store=setup.link_store,
+            link_service=svc,
+            afterglow_store=afterglow_store,
+            slot_store=slot_store,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
+        )
+
+        result = executor.get_handlers()[TOOL_NAME_MEMORY_EXPLORE_RELATED](
+            1,
+            {"handle": make_afterglow_handle("seed"), "top_k": 5},
+        )
+
+        assert result.success is True
+        payload = json.loads(result.message)
+        ids = [r["episode_id"] for r in payload["related_episodes"]]
+        assert "other" in ids
+
     def test_unknown_handle_returns_available_handles(self) -> None:
         """存在しない handle は SYSTEM_ERROR ではなく、有効な handle 一覧付きで失敗する。"""
         episodes = InMemorySubjectiveEpisodeStore()
         afterglow_store = InMemoryAfterglowStore()
+        slot_store = InMemoryEpisodicRecallSlotStore()
         setup = make_memory_link_being_setup()
         being_id = setup.provision(1)
         afterglow_store.apply_decision(
@@ -257,6 +321,7 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
             link_store=setup.link_store,
             link_service=svc,
             afterglow_store=afterglow_store,
+            slot_store=slot_store,
             being_attachment_resolver=setup.resolver,
             default_world_id=setup.world_id,
         )
