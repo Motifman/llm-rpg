@@ -2165,6 +2165,85 @@ class WorldRuntime:
         )
         return result
 
+    # ── フェーズ遷移 (会議と投票) ──
+
+    def begin_meeting(
+        self,
+        *,
+        initiator_player_id: Optional[PlayerId] = None,
+        trigger: str = "emergency_button",
+    ):
+        """会議を始め、全員に観測として配る。
+
+        store の更新と event の publish を 1 か所に閉じる。片方だけ行うと
+        「世界は会議中なのに誰もそれを知らない」「観測は届いたのに世界は
+        自由時間のまま」のどちらかになる。
+
+        既に会議中なら ``GamePhaseTransitionException`` を投げ、**状態も
+        観測も動かさない**。1 tick 内で 2 人が緊急ボタンを押すのは実際に
+        起こりうるので、2 人目のぶんまで配ると同じ会議が二度始まったように
+        読める。
+        """
+        return self._transition_phase(
+            lambda tick: self._game_phase_store.begin_meeting(
+                tick=tick, trigger=trigger
+            ),
+            trigger=trigger,
+            initiator_player_id=initiator_player_id,
+        )
+
+    def end_meeting(self, *, reason: str = "vote_concluded"):
+        """会議を終えて自由時間へ戻し、全員に観測として配る。
+
+        終わったことが届かないと、いつまで発言してよいのか分からない。
+        """
+        return self._transition_phase(
+            lambda tick: self._game_phase_store.end_meeting(
+                tick=tick, reason=reason
+            ),
+            trigger=reason,
+            initiator_player_id=None,
+        )
+
+    def _transition_phase(
+        self,
+        apply: Any,
+        *,
+        trigger: str,
+        initiator_player_id: Optional[PlayerId],
+    ):
+        """遷移を適用して event を publish する。
+
+        遷移が拒否された場合は例外がそのまま抜け、publish には進まない
+        (状態が動いていないのに観測だけ配るのを防ぐ)。
+        """
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            GamePhaseChangedEvent,
+        )
+
+        old_phase = self._game_phase_store.current.phase
+        state = apply(int(self.current_tick()))
+
+        who = ""
+        if initiator_player_id is not None:
+            try:
+                who = self.get_player_name(initiator_player_id)
+            except Exception:
+                who = ""
+        if self._speech_event_publisher is not None:
+            graph = self._spot_graph_repo.find_graph()
+            self._speech_event_publisher.publish_all([
+                GamePhaseChangedEvent.create(
+                    aggregate_id=graph.graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    old_phase=old_phase,
+                    new_phase=state.phase,
+                    trigger=trigger,
+                    initiator_display_name=who,
+                )
+            ])
+        return state
+
     def available_player_action_names(self) -> tuple:
         """人を対象にできる action 名 (シナリオ直下 ``player_interactions``)。"""
         svc = getattr(self, "_player_interaction_service", None)
