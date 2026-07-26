@@ -1012,3 +1012,24 @@ HIDDEN) で制御する案。物理的にその場に居る者が「消えた人
 一方 `TELEPORT_ENTITY` は scenario_events では意味を持てない (行為者が居ないので
 誰を飛ばすか決まらない)。黙って捨てると気づけないので、この経路で宣言された
 場合は警告ログを残す。
+
+## 33. 能動想起ツールは測定条件が整うまで profile 側で OFF にする
+
+`SEMANTIC_SEARCH_ENABLED` と `EPISODIC_EXPLORE_RELATED_ENABLED` は、もともと
+「`memory_search_semantic` / `memory_explore_related` を LLM に露出する」
+設定として profile に書かれていた。しかし実験 runtime 側の露出制御が未配線で、
+過去 run ではどちらのツールも一度も LLM に提示されていなかった。つまり true と
+宣言していたが、実験条件としては実質 OFF だった。
+
+#851 で露出制御が実際に効くようになったため、profile の true をそのまま残すと
+次の run から突然 2 つの能動想起ツールが増える。これは正しい実装挙動ではあるが、
+直近 run との比較条件を変え、さらに memo ツール表示制御の A/B 実験と干渉する。
+どちらもターンを消費する能動想起であり、memo を減らして行動枠を返す効果を測る
+局面では逆方向の圧力になる。
+
+そのため `belief_goal_full` と `ablation_base` では、当面
+`SEMANTIC_SEARCH_ENABLED=false` / `EPISODIC_EXPLORE_RELATED_ENABLED=false`
+に明示する。これは「宣言したのに効いていなかった」状態から「意図して切っている」
+状態へ移すための変更である。`EPISODIC_RECALL_ENABLED` は run 003 で実際に使われた
+既存条件なので true のまま維持する。能動検索・関連探索は、後でまとまりとして
+評価するときに profile で再度有効化する。

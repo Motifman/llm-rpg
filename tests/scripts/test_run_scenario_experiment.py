@@ -390,6 +390,38 @@ class TestMaxWorldTicksRename:
 class TestExperimentProfileManifest:
     """実験 profile/config が解決済み成果物として保存されることを保証する。"""
 
+    def test_belief_profiles_keep_active_search_tools_off_for_memo_ab(self) -> None:
+        """belief_goal_full と ablation_base は能動検索 2 tool を意図して OFF に揃える。"""
+        for profile_name in ("belief_goal_full", "ablation_base"):
+            profile = json.loads(
+                (
+                    _REPO_ROOT
+                    / "data"
+                    / "experiment_profiles"
+                    / f"{profile_name}.json"
+                ).read_text(encoding="utf-8")
+            )
+            runtime_config = profile["runtime_config"]
+
+            assert runtime_config["SEMANTIC_SEARCH_ENABLED"] is False
+            assert runtime_config["EPISODIC_EXPLORE_RELATED_ENABLED"] is False
+            assert runtime_config["EPISODIC_RECALL_ENABLED"] is True
+
+    def test_smoke_stub_does_not_set_active_search_tool_flags(self) -> None:
+        """smoke_stub は能動検索 2 tool を明示せず、既定 false のままにする。"""
+        profile = json.loads(
+            (
+                _REPO_ROOT
+                / "data"
+                / "experiment_profiles"
+                / "smoke_stub.json"
+            ).read_text(encoding="utf-8")
+        )
+        runtime_config = profile["runtime_config"]
+
+        assert "SEMANTIC_SEARCH_ENABLED" not in runtime_config
+        assert "EPISODIC_EXPLORE_RELATED_ENABLED" not in runtime_config
+
     def test_uses_manifest_run_start_resolved_config_remains_profile(
         self,
         tmp_path: Path,
