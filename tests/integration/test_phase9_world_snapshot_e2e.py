@@ -45,6 +45,7 @@ import pytest
 
 from ai_rpg_world.application.being.experiment_snapshot_session import (
     ExperimentSnapshotSession,
+    EXPECTED_WORLD_SUBSYSTEM_KEYS,
 )
 from ai_rpg_world.application.being.world_state_snapshot import (
     WorldStateScenarioMismatchError,
@@ -173,10 +174,24 @@ class TestE2ECaptureRestoreRoundTrip:
             "subsystem codec のいずれかで非対称な変換が起きている可能性。"
         )
 
-    def test_subsystems_all_24_included(
+    def test_captured_subsystems_match_the_expected_set(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Phase 9 完成版 + 段階3で世界状態 snapshot に 24 subsystem が含まれる。"""
+        """world.json に載る subsystem が EXPECTED_WORLD_SUBSYSTEM_KEYS と一致する。
+
+        期待集合をここに写経していたが、subsystem を 1 つ足すたびに
+        「codec 一覧」「EXPECTED_WORLD_SUBSYSTEM_KEYS」「この写し」の
+        **3 箇所**を直す必要があり、写しが増える分だけ drift の余地が
+        増えていた。写しは元の定数と同じ主張を 2 回書いているだけで、
+        安全性は増やさない。
+
+        本テストが守るのは「**実際に書き出されたファイルの中身**が期待と
+        一致すること」であって、期待集合そのものの正しさではない
+        (それは codec 登録側のガードが持つ)。なので定数と比べれば足りる。
+
+        テスト名から件数も外した。件数は set 比較の結果に含まれるうえ、
+        名前に埋めると subsystem を足すたびにリネームが要る。
+        """
         runtime, session, _mgr = _build_runtime_session(tmp_path, monkeypatch)
         session.capture_world(
             runtime,
@@ -186,47 +201,8 @@ class TestE2ECaptureRestoreRoundTrip:
         data = json.loads(
             (tmp_path / "snapshots" / "world.json").read_text(encoding="utf-8")
         )
-        expected_subsystems = {
-            # Phase 9-2
-            "world_tick",
-            "player_position",
-            "player_vitals",
-            "player_needs",
-            # Phase 9-2b
-            "player_inventory",
-            "player_growth",
-            "player_state_dict",
-            # Phase 9-3
-            "world_flags",
-            "scenario_event_progress",
-            "exploration_progress",
-            # Phase 9-3b
-            "spot_interior",
-            "item_instance",
-            # Phase 9-4a
-            "player_active_effects",
-            "player_attention_level",
-            "player_pursuit_state",
-            "player_spot_navigation_state",
-            # Phase 9-4b
-            "weather",
-            "day_night",
-            # Phase 9-4c
-            "sliding_window",
-            "observation_buffer",
-            "action_result_store",
-            # Encounter Memory (PR3)
-            "encounter_memory",
-            # PR #752
-            "pending_food_spoilage",
-            # 段階3
-            "distant_cue_state",
-        }
-        # set 比較 1 本で全 subsystem の存在を担保する。count assertion を
-        # 別途持つと subsystem 追加時に 2 箇所修正が必要になり mechanical
-        # な負担が増えるため、set 比較に集約する (= count は len(set) と
-        # 暗黙に等価)。
-        assert set(data["subsystems"].keys()) == expected_subsystems
+
+        assert set(data["subsystems"].keys()) == set(EXPECTED_WORLD_SUBSYSTEM_KEYS)
 
     def test_round_trip_with_mutated_non_initial_state(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

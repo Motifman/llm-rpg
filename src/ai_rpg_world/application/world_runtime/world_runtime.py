@@ -118,6 +118,7 @@ from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import
     SpotGraphTravelStageService,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
@@ -391,6 +392,12 @@ class WorldRuntime:
     # "last_changed_tick": int | None}。
     _distant_cue_states: Dict[str, Dict[str, Any]] = field(
         default_factory=dict, repr=False
+    )
+    # 世界のフェーズ (自由時間 / 会議)。per-world。会議・投票の土台
+    # (docs/memory_system/meeting_and_voting_design.md §2.1)。
+    # 常にちょうど 1 つのフェーズを持ち、排他は store の遷移メソッドが守る。
+    _game_phase_store: "GamePhaseStore" = field(
+        default_factory=lambda: GamePhaseStore(), repr=False
     )
     # LLM 脱出用（セッション単位で構築）
     # _world_llm_system_prompt: 全プレイヤー共通の system prompt (legacy / 単体プレイ用)

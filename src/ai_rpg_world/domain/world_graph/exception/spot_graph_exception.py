@@ -182,3 +182,18 @@ class GameEndConditionValidationException(
 ):
     """GameEndCondition のバリデーション例外"""
     error_code = "WORLD_GRAPH.GAME_END_CONDITION_VALIDATION"
+
+
+class GamePhaseTransitionException(
+    SpotGraphDomainException, BusinessRuleException
+):
+    """フェーズ遷移の不変条件違反。
+
+    「会議中にもう一度招集する」「自由時間で会議を終わらせる」のように、
+    現在のフェーズから起こしえない遷移を要求されたときに投げる。
+
+    1 tick 内で全プレイヤーが並列に行動するので、2 人が同じ tick に緊急
+    ボタンを押すことは実際に起こりうる。application 層はこれを捕まえて
+    「会議はもう始まっている」という学習可能な失敗に変換する。
+    """
+    error_code = "WORLD_GRAPH.GAME_PHASE_TRANSITION"

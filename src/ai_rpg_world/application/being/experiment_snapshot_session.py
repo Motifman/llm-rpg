@@ -55,6 +55,7 @@ from ai_rpg_world.application.being.world_subsystems import (
     ActionResultStoreSubsystemCodec,
     DayNightSubsystemCodec,
     DistantCueStateSubsystemCodec,
+    GamePhaseSubsystemCodec,
     ItemInstanceSubsystemCodec,
     ObservationBufferSubsystemCodec,
     PendingFoodSpoilageSubsystemCodec,
@@ -128,6 +129,9 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     "pending_food_spoilage",
     # 段階3: cue 出現イベントの false→true 境界を resume 後に再発火させない
     "distant_cue_state",
+    # 会議と投票: 世界のフェーズ。開始 tick と最終活動 tick を失うと、
+    # 再開のたびに会議の tick 上限と沈黙上限の起点がリセットされる。
+    "game_phase",
 )
 
 
@@ -346,6 +350,10 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         PendingFoodSpoilageSubsystemCodec(),
         # 再開保証: 動的遠景 cue の active 境界検出状態。
         DistantCueStateSubsystemCodec(),
+        # 再開保証: 世界のフェーズ (自由時間 / 会議)。開始 tick と最終活動
+        # tick を失うと、再開のたびに会議の tick 上限と沈黙上限の起点が
+        # リセットされて会議が延びる。
+        GamePhaseSubsystemCodec(),
     ]
 
 
