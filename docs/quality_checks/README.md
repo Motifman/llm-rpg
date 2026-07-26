@@ -14,8 +14,9 @@ material:
 - baseline ドキュメント (= ここに置く `.md` ファイル) は、その prompt
   を読んで「何が拾えていて何が拾えていないか」を 1 段落で記録する
 
-CI には乗せません (= pytest mark `quality` で分離)。改善 PR ごとに
-1 回回して、所感を該当ドキュメントに追記する運用です。
+CI と通常の `uv run pytest` には乗せません (= pytest mark `quality` を
+`pytest.ini` の既定 `addopts` で除外)。改善 PR ごとに意図して 1 回回して、
+所感を該当ドキュメントに追記する運用です。
 
 ## シナリオ一覧
 
@@ -30,6 +31,9 @@ CI には乗せません (= pytest mark `quality` で分離)。改善 PR ごと�
 ```bash
 # シナリオを 1 つ走らせて prompt dump を生成
 uv run pytest tests/quality/test_yesterday_v1.py -m quality
+
+# quality は既定で除外されるため、パス指定だけでは実行されない
+uv run pytest tests/quality/test_yesterday_v1.py
 
 # 結果は docs/quality_checks/yesterday_v1_<variant>.prompt.txt に
 # 上書き保存される。git diff で「前回 PR から prompt がどう変わったか」
