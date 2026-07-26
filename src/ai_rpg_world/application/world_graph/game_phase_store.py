@@ -14,7 +14,7 @@ world snapshot 側 (`GamePhaseSubsystemCodec`) に載せる。
 
 from __future__ import annotations
 
-from typing import List, Sequence, Tuple
+from typing import List, Sequence, Set, Tuple
 
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -32,6 +32,13 @@ class GamePhaseStore:
     #: snapshot が膨らみ続ける。分析に要るのは直近の遷移なので古い方から捨てる。
     MAX_HISTORY = 64
 
+    #: 会議が終わってから、次に緊急ボタンで招集できるようになるまでの tick。
+    #:
+    #: 個人の使用回数を 1 回にすると個人単位のクールダウンは一度も発動しない
+    #: (2 回目が無いので)。連続招集を防ぐ役目は世界共通のこちらが持つ。
+    #: 死体発見による招集は対象外 (死体は世界の事実であって濫用ではない)。
+    MEETING_COOLDOWN_TICKS = 20
+
     def __init__(self, *, initial_tick: int = 0) -> None:
         initial = GamePhaseState(
             phase=GamePhase.FREE_ROAM,
@@ -41,6 +48,12 @@ class GamePhaseStore:
         )
         self._current: GamePhaseState = initial
         self._history: List[GamePhaseState] = [initial]
+        #: 緊急ボタンを使い切った player_id。誰が持ち札を切ったかが情報に
+        #: なるので、共有カウンタではなく人ごとに持つ。
+        self._used_emergency_buttons: Set[int] = set()
+        #: 既に報告された死体 (対象の player_id)。塞がないと同じ死体で
+        #: 何度でも会議を開ける。
+        self._reported_bodies: Set[int] = set()
 
     @property
     def current(self) -> GamePhaseState:
@@ -51,6 +64,51 @@ class GamePhaseStore:
     def history(self) -> Tuple[GamePhaseState, ...]:
         """遷移した順の履歴 (初期状態を含む)。"""
         return tuple(self._history)
+
+    @property
+    def used_emergency_buttons(self) -> Tuple[int, ...]:
+        """緊急ボタンを使い切った player_id (snapshot 用)。"""
+        return tuple(sorted(self._used_emergency_buttons))
+
+    @property
+    def reported_bodies(self) -> Tuple[int, ...]:
+        """既に報告された死体の player_id (snapshot 用)。"""
+        return tuple(sorted(self._reported_bodies))
+
+    def has_emergency_button(self, player_id) -> bool:
+        """その player がまだ緊急ボタンを持っているか。"""
+        return int(player_id) not in self._used_emergency_buttons
+
+    def consume_emergency_button(self, player_id) -> None:
+        """緊急ボタンを 1 回ぶん使う。"""
+        self._used_emergency_buttons.add(int(player_id))
+
+    def is_body_reported(self, target_player_id) -> bool:
+        """その死体が既に報告済みか。"""
+        return int(target_player_id) in self._reported_bodies
+
+    def mark_body_reported(self, target_player_id) -> None:
+        """その死体を報告済みにする。"""
+        self._reported_bodies.add(int(target_player_id))
+
+    def is_meeting_on_cooldown(self, *, tick: int) -> bool:
+        """会議直後で、まだ緊急ボタンによる招集ができないか。
+
+        起点は会議の **終わり**。始まりから測ると、長引いた会議ほど次の
+        招集が早く解禁されてしまう。
+
+        終了 tick は現在の区間から導く。会議のあとの自由時間は
+        ``trigger`` に終了理由が入っており、``started_at_tick`` がその
+        終了 tick そのものになる。世界の初期状態だけ ``trigger`` が None
+        なので、「まだ一度も会議をしていない」と区別できる (専用の
+        フィールドを増やさずに済む)。
+        """
+        if self._current.phase is not GamePhase.FREE_ROAM:
+            return False
+        if self._current.trigger is None:
+            return False
+        elapsed = tick - self._current.started_at_tick
+        return elapsed < self.MEETING_COOLDOWN_TICKS
 
     def is_meeting(self) -> bool:
         """会議中か。toolset の選択と tool の fail-fast が参照する。"""
@@ -101,7 +159,12 @@ class GamePhaseStore:
         return max(0, tick - self._current.last_activity_tick)
 
     def replace_all(
-        self, *, current: GamePhaseState, history: Sequence[GamePhaseState]
+        self,
+        *,
+        current: GamePhaseState,
+        history: Sequence[GamePhaseState],
+        used_emergency_buttons: Sequence[int] = (),
+        reported_bodies: Sequence[int] = (),
     ) -> None:
         """snapshot 復元用に中身を丸ごと置き換える。
 
@@ -112,6 +175,10 @@ class GamePhaseStore:
         self._history = list(history)[-self.MAX_HISTORY :]
         if not self._history:
             self._history = [current]
+        # 制限の状態も置き換える。残らないと、再開のたびに全員の持ち札が
+        # 復活し、同じ死体をまた報告できてしまう。
+        self._used_emergency_buttons = {int(pid) for pid in used_emergency_buttons}
+        self._reported_bodies = {int(pid) for pid in reported_bodies}
 
     def _transition_to(
         self, phase: GamePhase, *, tick: int, trigger: str

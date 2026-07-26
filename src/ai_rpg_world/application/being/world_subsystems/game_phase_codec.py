@@ -65,11 +65,21 @@ class GamePhaseSubsystemCodec(WorldSubsystemCodec):
     def capture(self, runtime: Any) -> dict[str, Any]:
         store = getattr(runtime, "_game_phase_store", None)
         if store is None:
-            return {"schema_version": SCHEMA_VERSION, "current": None, "history": []}
+            return {
+                "schema_version": SCHEMA_VERSION,
+                "current": None,
+                "history": [],
+                "used_emergency_buttons": [],
+                "reported_bodies": [],
+            }
         return {
             "schema_version": SCHEMA_VERSION,
             "current": _encode(store.current),
             "history": [_encode(entry) for entry in store.history],
+            # 招集の制限も保存する。落とすと再開のたびに全員の緊急ボタンが
+            # 復活し、同じ死体をまた報告できてしまう。
+            "used_emergency_buttons": list(store.used_emergency_buttons),
+            "reported_bodies": list(store.reported_bodies),
         }
 
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
@@ -89,6 +99,10 @@ class GamePhaseSubsystemCodec(WorldSubsystemCodec):
         store.replace_all(
             current=_decode(current_raw),
             history=[_decode(entry) for entry in data.get("history", [])],
+            used_emergency_buttons=[
+                int(pid) for pid in data.get("used_emergency_buttons", [])
+            ],
+            reported_bodies=[int(pid) for pid in data.get("reported_bodies", [])],
         )
 
 
