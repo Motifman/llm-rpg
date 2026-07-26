@@ -1033,3 +1033,24 @@ HIDDEN) で制御する案。物理的にその場に居る者が「消えた人
 状態へ移すための変更である。`EPISODIC_RECALL_ENABLED` は run 003 で実際に使われた
 既存条件なので true のまま維持する。能動検索・関連探索は、後でまとまりとして
 評価するときに profile で再度有効化する。
+
+## 34. memo A/B は「蒸留ありの手帳」と「手帳なし」を比較する
+
+v4 第3回 run では `memo_add` / `memo_done` / `memo_list` が全行動の約15%を
+占めた。memo section の文字量は小さい一方、1ターン1ツール制約では memo を書いた
+ターンに移動・探索・会話ができない。記憶システムが強くなった状態で、この手帳枠が
+まだ必要かを測るため、`belief_goal_full` を基準にした A/B profile を分ける。
+
+採用する腕は2本にする。A は `belief_goal_memo_ab_keep_memo` で、
+`MEMO_TOOLS_ENABLED=true` のまま memo tool を露出し、`MEMO_DISTILL_ENABLED=true`
+により `memo_done` を semantic 記憶の `BeliefEvidence` へ蒸留する。これは
+docs/memory_system/short_term_memory_design.md が想定していた「memo = 目標・計画層」
+を実際に動かす腕である。B は `belief_goal_memo_ab_hide_memo` で、
+`MEMO_TOOLS_ENABLED=false` により memo tool と未完了 memo section、memo 完了 hint を
+隠す。記憶本体 (episodic / semantic / passive recall / rolling summary) は止めない。
+
+`ablation_base` は stagnation reasoning を落とした比較土台であり、memo A/B とは目的が
+違う。したがって memo A/B の2 profile は `belief_goal_full` 系として置き、互いの差分は
+`MEMO_TOOLS_ENABLED` の1キーだけにする。#33 で OFF にした
+`SEMANTIC_SEARCH_ENABLED=false` / `EPISODIC_EXPLORE_RELATED_ENABLED=false` は両腕で維持し、
+能動想起ツールの増加を memo 実験に混ぜない。

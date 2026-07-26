@@ -547,6 +547,37 @@ def log_memo_distill_enabled_state(enabled: bool) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────
+# Memo tool exposure
+# ──────────────────────────────────────────────────────────────────
+
+
+ENV_MEMO_TOOLS_ENABLED = "MEMO_TOOLS_ENABLED"
+
+
+def resolve_memo_tools_enabled(
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """memo_add / memo_list / memo_done を LLM に露出するか。
+
+    未設定なら ON。``MEMO_TOOLS_ENABLED=0`` で明示的に OFF。
+
+    memo は既存 run で長く使われてきた手帳 tool なので、既定は互換性を優先
+    して ON にする。OFF は memo 廃止 A/B 実験の腕として使い、memo section
+    と memo 完了 hint も同時に止める。
+    """
+    return _parse_bool_env(ENV_MEMO_TOOLS_ENABLED, env=env, default=True)
+
+
+def log_memo_tools_enabled_state(enabled: bool) -> None:
+    """wiring 構築時に解決結果を 1 度ログる。"""
+    _logger.info(
+        "%s resolved to %s",
+        ENV_MEMO_TOOLS_ENABLED,
+        "ENABLED" if enabled else "DISABLED",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────
 # Semantic memory: attribution + CONFIRMATION (U4)
 # ──────────────────────────────────────────────────────────────────
 
