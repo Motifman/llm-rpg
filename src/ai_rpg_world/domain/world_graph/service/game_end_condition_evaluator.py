@@ -52,7 +52,8 @@ class GameEndConditionEvaluator:
             state = player_states.get(key) or {}
             if any(state.get(k) != v for k, v in required_state.items()):
                 continue
-            if player_outcomes.get(key) is PlayerOutcomeEnum.DEAD:
+            outcome = player_outcomes.get(key)
+            if outcome is not None and outcome.is_eliminated:
                 continue
             surviving += 1
 
