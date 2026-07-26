@@ -3306,6 +3306,15 @@ def create_world_runtime(
                 current_coordinate=Coordinate(0, 0, 0),
             ),
             spot_navigation_state=PlayerSpotNavigationState.at_rest(spawn.spawn_spot_id),
+            # シナリオが宣言した初期 state (役割・印など) をそのまま載せる。
+            #
+            # ここも長らく抜けていた。loader は players[].initial_state を
+            # 検証までして player_spawns に載せていたのに、**本番経路から
+            # 一度も読まれていなかった** (initial_items と同じ形の穴)。
+            # 適用されないと PLAYER_STATE_IS / TARGET_PLAYER_STATE_IS を
+            # 使う宣言はシナリオからは永久に成立せず、しかも失敗文は作者が
+            # 書いた文言が返るので原因が文言の裏に隠れる。
+            state=dict(spawn.initial_state) if spawn.initial_state else None,
         )
         player_status_repo.save(status)
         player_inventory_repo.save(PlayerInventoryAggregate(player_id=pid))
