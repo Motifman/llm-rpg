@@ -617,7 +617,23 @@ class WorldRuntime:
             current_day = tick.value // max(1, ticks_per_day)
             if pending_day != current_day:
                 self._flush_pending_food_spoiled()
+        self._maybe_close_meeting_on_timeout(tick.value)
         return tick.value
+
+    def _maybe_close_meeting_on_timeout(self, tick: int) -> None:
+        """沈黙上限 / tick 上限に達した会議を閉じる。
+
+        会議が終わらないと、以降の run は移動も採取もできないまま tick を
+        消費する。しかも「議論が続いている」ように見えるので、trace を読む
+        まで気付けない。
+
+        **打ち切りでも、投じられた票は集計する。** 捨てると「投票したのに
+        何も起きなかった」になり、投票そのものが無意味に見える。
+        """
+        reason = self._game_phase_store.meeting_timeout_reason(tick=tick)
+        if reason is None:
+            return
+        self._resolve_meeting_vote(end_reason=reason)
 
     def set_trace_recorder(self, recorder: Any) -> None:
         """シナリオ実行 trace の recorder を後から差し込む (Phase 1d 配線)。
@@ -742,6 +758,14 @@ class WorldRuntime:
                 target_player_id=target_id,
             )
         )
+        # 会議中の発言は沈黙上限の起点を進める。ここを忘れると、活発に議論
+        # していても開始からの経過だけで打ち切られる。
+        self._note_meeting_activity()
+
+    def _note_meeting_activity(self) -> None:
+        """発言があったことを会議に記録する (沈黙上限の起点を進める)。"""
+        if self._game_phase_store.is_meeting():
+            self._game_phase_store.note_activity(tick=int(self.current_tick()))
 
     def do_say(self, speaker_player_id: PlayerId, content: str) -> None:
         """[deprecated] do_speech(channel=SAY) を呼び出す薄い shim。新規コードは
@@ -2261,7 +2285,7 @@ class WorldRuntime:
         store = self._game_phase_store
         return all(store.has_voted(pid) for pid in self.eligible_voters())
 
-    def _resolve_meeting_vote(self) -> None:
+    def _resolve_meeting_vote(self, *, end_reason: str = "vote_concluded") -> None:
         """票を集計し、追放を確定させ、結果を全員に配って会議を閉じる。
 
         **追放の有無にかかわらず結果を配る** (設計 doc §6.4)。同点や棄権最多
@@ -2280,7 +2304,7 @@ class WorldRuntime:
         if result.ejected_player_id is not None:
             self.eject_player(result.ejected_player_id)
         self._publish_vote_result(result)
-        self.end_meeting(reason="vote_concluded")
+        self.end_meeting(reason=end_reason)
 
     def _publish_vote_result(self, result) -> None:
         """集計結果を全員に観測として配る。"""
