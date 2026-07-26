@@ -62,6 +62,9 @@ from ai_rpg_world.application.world_graph.interaction_condition_hint_text import
     declarative_condition_hints,
     format_action_name_with_hints,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
+    InteractionConditionTypeEnum,
+)
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 
 _logger = logging.getLogger(__name__)
@@ -165,6 +168,70 @@ class PlayerInteractionApplicationService:
         ``available_action_labels`` を使うこと。
         """
         return tuple(self._by_action_name.keys())
+
+    def available_action_labels_for(
+        self, *, target_is_incapacitated: bool
+    ) -> Tuple[str, ...]:
+        """**その相手にいま使える** action の表示ラベルを返す。
+
+        絞り込みに使ってよいのは、その行に既に見えている事実だけである。
+        見えていない事実で絞ると、**ラベルの有無そのものが情報漏れになる**。
+
+        **この不変条件は引数の形で強制してある。** 本メソッドとその先の
+        ``_is_offerable`` は「その行に見えている公開事実」しか受け取らない。
+        対象の役割や隠れた状態はここまで届かないので、それで絞る分岐を
+        書こうとしても判定材料が無い。テストで守るより一段強い形になっている
+        (この点は claude のレビューで指摘されるまで、私自身も強度を認識して
+        いなかった)。
+
+        **引数を増やすときは、それが公開事実かを必ず確認すること。** 秘匿の
+        状態をここへ渡した時点で、この保証は静かに消える。
+
+        | 対象の状態 | 公開性 | 扱い |
+        |---|---|---|
+        | 行動不能 (is_down / is_dead) | 行に出ている | 絞り込みに使う |
+        | 役割 (TARGET_PLAYER_STATE_IS) | 秘匿 | 使わない |
+        | 対象の所持 (TARGET_HAS_ITEM) | 行動不能なら行に出ている | いまは使わない |
+
+        対象の所持を使わないのは、``item_spec_id_parameter_key`` 形式だと
+        判定する品目が実行時にしか決まらないため。「何も持っていない相手に
+        take が出る」は残るが、〔手ぶら〕が同じ行に出ているので読み取れる。
+        """
+        return tuple(
+            self._format_label(action_name, idef)
+            for action_name, idef in self._by_action_name.items()
+            if self._is_offerable(
+                idef, target_is_incapacitated=target_is_incapacitated
+            )
+        )
+
+    @staticmethod
+    def _is_offerable(idef: InteractionDef, *, target_is_incapacitated: bool) -> bool:
+        """公開の対象状態だけを見て、その行に出してよいかを決める。
+
+        該当条件が無ければ「出す」に倒れる。新しい対象状態の条件型が増えても
+        既定で出る方向になるので、秘匿の観点では安全側である。ただし
+        「公開なのでゲートできる」条件型が増えたとき、誰も気づかないまま
+        絞られずに残る (claude のレビュー指摘 / LOW)。条件型ごとに公開性
+        クラスを宣言させる検査を別途入れる。
+        """
+        for cond in idef.preconditions:
+            t = cond.condition_type
+            if (
+                t is InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED
+                and not target_is_incapacitated
+            ):
+                return False
+        return True
+
+    def _format_label(self, action_name: str, idef: InteractionDef) -> str:
+        return format_action_name_with_hints(
+            action_name,
+            declarative_condition_hints(
+                idef,
+                item_spec_name_resolver=self._resolve_item_spec_name_for_hint,
+            ),
+        )
 
     def available_action_labels(self) -> Tuple[str, ...]:
         """同席者行に出す**表示用**の action 文字列を宣言順で返す。

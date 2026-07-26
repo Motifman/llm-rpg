@@ -677,7 +677,13 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             #
             # 前提条件の成否は実行時に決まるので、ここでは候補としてだけ出す。
             # 物体行が「今は使えない action も並べる」のと同じ扱い。
-            player_actions = tuple(getattr(snap, "player_action_names", ()) or ())
+            # **その相手にいま使える** action だけを出す。snapshot 単位の
+            # 1 本のタプルだと全員の行に同じ一覧が並び、倒れている相手にしか
+            # 使えない take が立っている相手の行にも出る (v4 第 3 回 run で
+            # take 16 回全失敗の原因)。
+            player_actions = tuple(
+                getattr(entry, "available_action_labels", ()) or ()
+            )
             action_suffix = (
                 f" [{', '.join(player_actions)}]" if player_actions else ""
             )

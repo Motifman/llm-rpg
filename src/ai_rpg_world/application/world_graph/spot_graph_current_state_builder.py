@@ -40,6 +40,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import Entit
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.stock_pool_regen import compute_stock_regen
+from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
     declarative_condition_hints,
@@ -269,7 +270,7 @@ class SpotGraphCurrentStateBuilder:
         # 人を対象にできる action 名を返す provider (シナリオ直下
         # ``player_interactions``)。未注入なら空 = 同席者行に action を出さない
         # (対人行為を宣言していない世界での挙動と一致)。
-        player_action_names_provider: Optional[Callable[[], Sequence[str]]] = None,
+        player_action_labels_provider: Optional[Callable[..., Sequence[str]]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -303,7 +304,7 @@ class SpotGraphCurrentStateBuilder:
         self._distant_view_trace_enabled = distant_view_trace_enabled
         self._trace_recorder_provider = trace_recorder_provider
         self._visible_monster_observer = visible_monster_observer
-        self._player_action_names_provider = player_action_names_provider
+        self._player_action_labels_provider = player_action_labels_provider
         self._perception = SpotPerceptionService()
         # 実効照明は前提条件 (SPOT_LIGHTING_IS) と同じ resolver で求める。
         # 2 か所に同じ合成ロジックを置くと、片方だけ直したときに「prompt は
@@ -316,23 +317,41 @@ class SpotGraphCurrentStateBuilder:
             perception=self._perception,
         )
 
-    def _resolve_player_action_names(self) -> tuple:
-        """同席者行に出す対人 action 名。provider 未注入なら空。
+    def _resolve_player_action_labels(self, *, is_incapacitated: bool) -> tuple:
+        """その相手に**いま使える**対人 action ラベル。provider 未注入なら空。
+
+        絞り込みの入力は、その行に既に見えている事実だけにする
+        (`is_down` / `is_dead`)。見えていない事実で絞ると、ラベルの有無
+        そのものが情報漏れになる。
 
         provider が落ちても現在状態の生成そのものは止めない。action 候補が
         出ないぶん対人行為が発見されなくなるが、prompt 全体を失うより軽い。
         """
-        if self._player_action_names_provider is None:
-            return ()
-        try:
-            return tuple(self._player_action_names_provider() or ())
-        except Exception:
-            logger.warning(
-                "player_action_names_provider が失敗したため、同席者行の"
-                "対人 action 候補を省略する",
-                exc_info=True,
-            )
-            return ()
+        labels: list[str] = []
+        if self._player_action_labels_provider is not None:
+            try:
+                labels.extend(
+                    self._player_action_labels_provider(
+                        target_is_incapacitated=is_incapacitated
+                    )
+                    or ()
+                )
+            except Exception:
+                logger.warning(
+                    "player_action_labels_provider が失敗したため、同席者行の"
+                    "対人 action 候補を省略する",
+                    exc_info=True,
+                )
+        # 組み込みの対人 tool も同じ行に出す。
+        #
+        # ここに出るのがシナリオ宣言の interaction だけだと、行の [...] を
+        # 「この人にできることの全集合」と読んだエージェントが「take しか
+        # 定義されていない」と結論する (v4 第 3 回 run で実際に起きた)。
+        # tend_to_player は倒れている相手にしか使えないので、同じ公開事実で
+        # ゲートできる。
+        if is_incapacitated:
+            labels.append(TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER)
+        return tuple(labels)
 
     def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
         """シナリオが昼夜サイクルを宣言していれば snapshot に現在時刻を載せる。
@@ -979,6 +998,9 @@ class SpotGraphCurrentStateBuilder:
                         int(other_eid),
                         is_incapacitated=other_is_down or other_is_dead,
                     ),
+                    available_action_labels=self._resolve_player_action_labels(
+                        is_incapacitated=other_is_down or other_is_dead,
+                    ),
                 ))
 
         inventory_items: tuple[SpotGraphInventoryItemEntry, ...] = ()
@@ -1050,7 +1072,6 @@ class SpotGraphCurrentStateBuilder:
             atmosphere=atmosphere,
             weather=weather,
             nearby_entities=tuple(nearby_entities),
-            player_action_names=self._resolve_player_action_names(),
             monsters_at_spot=tuple(monsters_at_spot),
             inventory_items=inventory_items,
             ground_items=tuple(ground_items),
