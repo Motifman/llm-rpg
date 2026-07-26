@@ -152,3 +152,39 @@ class TestFailureModes:
         payload = codec.capture(_StubRuntime(None))
         codec.restore(_StubRuntime(None), payload)  # 例外が出ないこと
         assert payload["current"] is None
+
+
+class TestTriggerLimitsSurviveRestore:
+    """招集の制限も再開後に残る。
+
+    落とすと、再開のたびに全員の緊急ボタンが復活し、同じ死体をまた報告
+    できてしまう。**回数制限は「持ち札を切る判断」を作るためのもの**なので、
+    再開で戻ると判断そのものが無意味になる。
+    """
+
+    def test_used_emergency_buttons_survive(self) -> None:
+        """使い切ったボタンが復活しない。"""
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        store = GamePhaseStore()
+        store.consume_emergency_button(PlayerId(2))
+
+        assert _round_trip(store).has_emergency_button(PlayerId(2)) is False
+
+    def test_unused_buttons_stay_available(self) -> None:
+        """使っていない人のボタンは残る。"""
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        store = GamePhaseStore()
+        store.consume_emergency_button(PlayerId(2))
+
+        assert _round_trip(store).has_emergency_button(PlayerId(3)) is True
+
+    def test_reported_bodies_survive(self) -> None:
+        """報告済みの死体が未報告に戻らない。"""
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        store = GamePhaseStore()
+        store.mark_body_reported(PlayerId(4))
+
+        assert _round_trip(store).is_body_reported(PlayerId(4)) is True
