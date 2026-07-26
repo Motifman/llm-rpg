@@ -67,3 +67,10 @@ class InteractionEffectTypeEnum(Enum):
     # 未記入なら「何も書かれていない」。SHOW_MESSAGE と同じく messages に
     # 追加するだけで、state は変更しない (読む行為自体は他者に観測されない)。
     SHOW_PLAYER_TEXT = "SHOW_PLAYER_TEXT"
+    # 会議と投票: 緊急招集ボタン。押した事実だけを domain が記録し、実際の
+    # 集合とフェーズ遷移は application 層が行う。
+    #
+    # 場所に置く object の interaction にしたのは、**押しに行く必要がある**
+    # ことを表現したいため。tool にすると、どこからでも呼べる「会議を開く
+    # 権利」になってしまい、ボタンの前まで移動するという行為が消える。
+    CALL_MEETING = "CALL_MEETING"

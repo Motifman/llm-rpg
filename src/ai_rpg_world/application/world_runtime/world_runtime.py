@@ -5342,6 +5342,11 @@ def create_world_runtime(
         weather_provider=lambda: weather_holder.get("state"),
     )
     interaction_service.set_effective_lighting_resolver(_effective_lighting_resolver)
+    # CALL_MEETING effect を実際の招集につなぐ。宣言していないシナリオでは
+    # runtime 側が MEETING_NOT_AVAILABLE で拒否するので、ここは常に差してよい。
+    interaction_service.set_meeting_caller(
+        lambda player_id: runtime.call_emergency_meeting(player_id)
+    )
     player_interaction_service.set_effective_lighting_resolver(
         _effective_lighting_resolver
     )

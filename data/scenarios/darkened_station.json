@@ -147,6 +147,33 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "emergency_button",
+            "name": "緊急招集ボタン",
+            "description": "長机の端に据えられた赤いボタン。透明なカバーが被せてある。押せば観測所じゅうに音が鳴り、全員がここへ集まることになっている。一人一度きりだと決められている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "press_emergency_button",
+                "display_label": "緊急招集ボタンを押す",
+                "witness_observation_message": "{actor}が緊急招集ボタンを押した。",
+                "preconditions": [
+                  {
+                    "condition_type": "ALWAYS"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CALL_MEETING",
+                    "parameters": {
+                      "trigger": "emergency_button"
+                    }
+                  }
+                ]
+              }
+            ]
           }
         ]
       }

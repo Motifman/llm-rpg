@@ -148,6 +148,15 @@ class SpotInteractionApplicationService:
         """
         self._weather_type_provider = provider
 
+    def set_meeting_caller(self, caller: Optional[Any]) -> None:
+        """CALL_MEETING effect を実際の招集につなぐ callback を差す。
+
+        誰を集めるか / フェーズをどう遷移させるかは application 層の判断な
+        ので、domain の effect service には持たせない。runtime 組み立て時に
+        `runtime.call_emergency_meeting` を差す。
+        """
+        self._meeting_caller = caller
+
     def set_event_publisher(self, event_publisher: Any) -> None:
         """event_publisher を後付けで注入する (二段構築用)。
 
@@ -348,6 +357,32 @@ class SpotInteractionApplicationService:
         # `graph.get_events()` 抽出より前に済ませる (Left / Entered を同じ
         # publish_all に乗せるため)。複数宣言された場合は順に適用し、最後の
         # 宛先が最終位置になる。
+        # CALL_MEETING: 緊急招集ボタン。
+        #
+        # **配線が無いときは静かに捨てない。** TELEPORT_ENTITY はまさに
+        # 「spec を組み立てるだけで消費者が居ない」状態で放置され、シナリオに
+        # 書いても何も起きない dead code になっていた (上のコメント参照)。
+        # 同じ轍を踏まないよう、宣言されたのに招集できない構成は例外で止める。
+        meeting_messages: list[str] = []
+        if result.meeting_call_triggers:
+            caller = getattr(self, "_meeting_caller", None)
+            if caller is None:
+                raise ApplicationException(
+                    "CALL_MEETING が宣言されていますが、招集の配線 "
+                    "(set_meeting_caller) がありません。"
+                )
+            for _trigger in result.meeting_call_triggers:
+                outcome = caller(player_id)
+                # **拒否されたら黙って飲み込まない。** ボタンは持ち札 1 回 /
+                # クールダウンつきなので、押しても始まらないことがある。
+                # 何も返さないと「押した。以上」だけが残り、なぜ集まらな
+                # かったのかが本人にも分からない (#860 で潰した
+                # 「使えない候補を試し続ける」の再生産)。
+                if outcome is not None and not getattr(outcome, "success", True):
+                    refusal = getattr(outcome, "message", "")
+                    if refusal:
+                        meeting_messages.append(refusal)
+
         for teleport in result.teleport_specs:
             graph.teleport_entity(entity_id, SpotId.create(teleport.target_spot_id))
 
@@ -595,7 +630,7 @@ class SpotInteractionApplicationService:
             )
 
         return SpotInteractionResultDto(
-            messages=result.messages,
+            messages=(*result.messages, *meeting_messages),
             direct_effects=result.direct_effects,
         )
 
