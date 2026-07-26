@@ -18,9 +18,10 @@ trace event を見せるもので、**実際に送信した messages そのも�
     python scripts/build_prompt_viewer.py var/runs/v4coop_memo_keep_004
     python scripts/build_prompt_viewer.py var/runs/x --output var/runs/x/prompt.html
 
-制約: capture は system prompt 本文を保存しない (``system_prompt_id`` の
-参照のみ)。本 viewer は user message を主対象とし、system は id と
-バイト数だけ出す。
+system prompt と toolset は calls.jsonl 側では id 参照になっているが、同じ
+dataset dir の ``system_prompts.jsonl`` / ``toolsets.jsonl`` に本文が入って
+いるので、それを引いて実際に送った内容を出す。参照先が欠けている場合は
+「解決できなかった」と明示する (= 空欄と区別する)。
 """
 
 from __future__ import annotations
@@ -65,18 +66,49 @@ class PromptCall:
     tool_name: str
     tool_arguments: Dict[str, Any]
     system_prompt_id: str
-    system_chars: int
+    system_content: str
+    toolset_id: str
+    tool_names: List[str]
     user_content: str
     metrics: Dict[str, Any]
     highlights: List[str] = field(default_factory=list)
 
 
+def _load_side_table(path: Path, key: str) -> Dict[str, Dict[str, Any]]:
+    """``system_prompts.jsonl`` / ``toolsets.jsonl`` を id 引きの dict にする。
+
+    ファイルが無い run (古い capture) では空 dict を返す。呼び出し側は
+    「参照を解決できなかった」として表示に出すため、ここでは失敗させない。
+    """
+    if not path.exists():
+        return {}
+    table: Dict[str, Dict[str, Any]] = {}
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            row_id = row.get(key)
+            if isinstance(row_id, str) and row_id:
+                table[row_id] = row
+    return table
+
+
 def _load_calls(run_dir: Path) -> List[PromptCall]:
-    path = run_dir / "prompt_dataset" / "calls.jsonl"
+    dataset_dir = run_dir / "prompt_dataset"
+    path = dataset_dir / "calls.jsonl"
     if not path.exists():
         raise FileNotFoundError(
             f"{path} が無い。PROMPT_DATASET_CAPTURE_ENABLED=true で走らせた run を指定する。"
         )
+    system_prompts = _load_side_table(
+        dataset_dir / "system_prompts.jsonl", "system_prompt_id"
+    )
+    toolsets = _load_side_table(dataset_dir / "toolsets.jsonl", "toolset_id")
     calls: List[PromptCall] = []
     with path.open(encoding="utf-8") as f:
         for line_no, line in enumerate(f, start=1):
@@ -91,27 +123,67 @@ def _load_calls(run_dir: Path) -> List[PromptCall]:
                     file=sys.stderr,
                 )
                 continue
-            calls.append(_to_call(raw))
+            calls.append(_to_call(raw, system_prompts, toolsets))
     calls.sort(key=lambda c: (c.world_tick if c.world_tick is not None else -1))
     return calls
 
 
-def _to_call(raw: Dict[str, Any]) -> PromptCall:
+def _tool_names_of(row: Dict[str, Any]) -> List[str]:
+    """toolsets.jsonl の 1 行から tool 名の一覧を取り出す。
+
+    ``tool_names`` が入っていればそれを使い、無ければ ``tools`` の
+    function.name から組む (schema 差異に耐えるため両方見る)。
+    """
+    names = row.get("tool_names")
+    if isinstance(names, list) and names:
+        return [str(n) for n in names]
+    tools = row.get("tools")
+    if isinstance(tools, str):
+        try:
+            tools = json.loads(tools)
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(tools, list):
+        return []
+    out: List[str] = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        name = (tool.get("function") or {}).get("name") or tool.get("name")
+        if name:
+            out.append(str(name))
+    return out
+
+
+def _to_call(
+    raw: Dict[str, Any],
+    system_prompts: Optional[Dict[str, Dict[str, Any]]] = None,
+    toolsets: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> PromptCall:
     prompt = raw.get("prompt") or {}
     messages = prompt.get("messages") or []
-    system_chars = 0
+    system_content = ""
     user_content = ""
     for message in messages:
         role = message.get("role")
         content = message.get("content") or ""
         if role == "system":
-            system_chars = len(content)
-            if content:
-                # capture が system 本文を残すようになったら user 側に混ぜず
-                # 別枠で扱いたいので、ここでは長さだけ拾う。
-                pass
+            system_content = content
         elif role == "user":
             user_content = content
+    system_prompt_id = str(prompt.get("system_prompt_id") or "")
+    toolset_id = str(prompt.get("toolset_id") or "")
+    # calls.jsonl 側の system は参照化されて空になっている。同じ dataset dir の
+    # system_prompts.jsonl に本文があるので、そちらを優先して使う。
+    if not system_content and system_prompt_id and system_prompts:
+        row = system_prompts.get(system_prompt_id)
+        if row:
+            system_content = str(row.get("content") or "")
+    tool_names: List[str] = []
+    if toolset_id and toolsets:
+        row = toolsets.get(toolset_id)
+        if row:
+            tool_names = _tool_names_of(row)
     output = raw.get("output") or {}
     call = PromptCall(
         llm_call_id=str(raw.get("llm_call_id") or ""),
@@ -121,8 +193,10 @@ def _to_call(raw: Dict[str, Any]) -> PromptCall:
         phase=str(raw.get("phase") or ""),
         tool_name=str(output.get("name") or ""),
         tool_arguments=output.get("arguments") or {},
-        system_prompt_id=str(prompt.get("system_prompt_id") or ""),
-        system_chars=system_chars,
+        system_prompt_id=system_prompt_id,
+        system_content=system_content,
+        toolset_id=toolset_id,
+        tool_names=tool_names,
         user_content=user_content,
         metrics=raw.get("metrics") or {},
     )
@@ -203,6 +277,39 @@ def _render_output(call: PromptCall) -> str:
     )
 
 
+def _render_tool_names(call: PromptCall) -> str:
+    """その call で実際に使えた tool 名を出す。
+
+    「その手が選べたのか、そもそも出ていなかったのか」を prompt 側で切り分け
+    られるようにする。露出漏れの調査で毎回必要になる情報。
+    """
+    if not call.tool_names:
+        return (
+            '<p class="sysnote">toolset を解決できなかった。<br>'
+            f'<code>{html.escape(call.toolset_id or "-")}</code></p>'
+        )
+    chosen = call.tool_name
+    chips = "".join(
+        f'<span class="toolchip{" chosen" if n == chosen else ""}">{html.escape(n)}</span>'
+        for n in call.tool_names
+    )
+    return f'<div class="toolset">{chips}</div>'
+
+
+def _render_system(call: PromptCall) -> str:
+    if not call.system_content:
+        return (
+            '<p class="sysnote">system prompt を解決できなかった '
+            "(system_prompts.jsonl が無いか id が一致しない)。<br>"
+            f'<code>{html.escape(call.system_prompt_id or "-")}</code></p>'
+        )
+    return (
+        '<details class="section"><summary>system prompt を開く</summary>'
+        f'<pre class="section-body">{html.escape(call.system_content)}</pre>'
+        "</details>"
+    )
+
+
 def _render_call(index: int, call: PromptCall) -> str:
     tick = call.world_tick if call.world_tick is not None else "-"
     metrics = call.metrics
@@ -237,12 +344,10 @@ def _render_call(index: int, call: PromptCall) -> str:
     <section class="pane">
       <h3>LLM の出力</h3>
       {_render_output(call)}
-      <h3>system prompt</h3>
-      <p class="sysnote">
-        本文は capture されていない (id 参照のみ)。<br>
-        <code>{html.escape(call.system_prompt_id or '-')}</code><br>
-        記録されている本文長: {call.system_chars} 文字
-      </p>
+      <h3>使えた tool <small>{len(call.tool_names)} 種</small></h3>
+      {_render_tool_names(call)}
+      <h3>system prompt <small>{len(call.system_content)} 文字</small></h3>
+      {_render_system(call)}
     </section>
   </div>
 </article>"""
@@ -357,6 +462,10 @@ table.args { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
 table.args th { text-align: left; vertical-align: top; padding: 0.24rem 0.5rem 0.24rem 0;
   color: var(--text-dim); font-weight: 600; white-space: nowrap; }
 table.args td { padding: 0.24rem 0; word-break: break-word; }
+.toolset { display: flex; flex-wrap: wrap; gap: 0.22rem; margin-bottom: 0.3rem; }
+.toolchip { font-family: var(--mono); font-size: 0.7rem; padding: 0.06rem 0.34rem;
+  border: 1px solid var(--line); border-radius: 5px; color: var(--text-dim); }
+.toolchip.chosen { border-color: var(--accent); color: var(--accent); font-weight: 700; }
 .sysnote { font-size: 0.74rem; color: var(--text-dim); }
 .sysnote code { font-family: var(--mono); font-size: 0.7rem; word-break: break-all; }
 .empty { color: var(--text-dim); font-size: 0.8rem; font-style: italic; }

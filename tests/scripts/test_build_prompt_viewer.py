@@ -16,6 +16,7 @@ from scripts.build_prompt_viewer import (
     HIGHLIGHT_RULES,
     _load_calls,
     _render_body,
+    _tool_names_of,
     render_html,
 )
 
@@ -44,13 +45,21 @@ def _call(
                 {"role": "user", "content": user},
             ],
             "system_prompt_id": "system_prompt:sha256:abc",
+            "toolset_id": "toolset:sha256:def",
         },
         "output": {"name": tool, "arguments": arguments or {"inner_thought": "見て回る"}},
         "metrics": {"wall_latency_ms": 1200, "prompt_tokens": 900, "cached_tokens": 400},
     }
 
 
-def _write(tmp_path: Path, calls: list[dict], *, profile: str = "p") -> Path:
+def _write(
+    tmp_path: Path,
+    calls: list[dict],
+    *,
+    profile: str = "p",
+    system_prompts: list[dict] | None = None,
+    toolsets: list[dict] | None = None,
+) -> Path:
     run_dir = tmp_path / "run"
     ds = run_dir / "prompt_dataset"
     ds.mkdir(parents=True)
@@ -58,6 +67,14 @@ def _write(tmp_path: Path, calls: list[dict], *, profile: str = "p") -> Path:
         for c in calls:
             f.write(json.dumps(c, ensure_ascii=False) + "\n")
     (ds / "run.json").write_text(json.dumps({"profile": profile}), encoding="utf-8")
+    if system_prompts is not None:
+        with (ds / "system_prompts.jsonl").open("w", encoding="utf-8") as f:
+            for row in system_prompts:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    if toolsets is not None:
+        with (ds / "toolsets.jsonl").open("w", encoding="utf-8") as f:
+            for row in toolsets:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
     return run_dir
 
 
@@ -71,15 +88,46 @@ class TestLoadCalls:
         assert calls[0].tool_name == "speak"
         assert calls[0].tool_arguments == {"inner_thought": "見て回る"}
 
-    def test_system_content_length_is_kept_even_when_body_is_stripped(
+    def test_system_body_is_resolved_from_the_side_table(self, tmp_path) -> None:
+        """calls.jsonl の system は参照化されて空なので、system_prompts.jsonl から
+        本文を引いて実際に送った内容を復元する。"""
+        run_dir = _write(
+            tmp_path,
+            [_call(system_content="")],
+            system_prompts=[
+                {
+                    "system_prompt_id": "system_prompt:sha256:abc",
+                    "content": "あなたは次のペルソナとして行動する。",
+                }
+            ],
+        )
+        call = _load_calls(run_dir)[0]
+        assert call.system_content == "あなたは次のペルソナとして行動する。"
+
+    def test_unresolvable_system_reference_is_left_empty_not_faked(
         self, tmp_path
     ) -> None:
-        """capture は system 本文を落として id 参照だけ残すため、長さ 0 でも
-        system_prompt_id を保持して「本文が無い」と表示できる状態にする。"""
+        """参照先が無い run では本文を捏造せず空のままにし、id を保持して
+        「解決できなかった」と表示できる状態にする。"""
         run_dir = _write(tmp_path, [_call(system_content="")])
         call = _load_calls(run_dir)[0]
-        assert call.system_chars == 0
+        assert call.system_content == ""
         assert call.system_prompt_id == "system_prompt:sha256:abc"
+
+    def test_tool_names_are_resolved_from_the_toolset_table(self, tmp_path) -> None:
+        """その call で使えた tool 名を toolsets.jsonl から引く。「その手が
+        選べたのか、そもそも出ていなかったのか」を prompt 側で切り分けるため。"""
+        run_dir = _write(
+            tmp_path,
+            [_call()],
+            toolsets=[
+                {
+                    "toolset_id": "toolset:sha256:def",
+                    "tool_names": ["speak", "explore", "travel_to"],
+                }
+            ],
+        )
+        assert _load_calls(run_dir)[0].tool_names == ["speak", "explore", "travel_to"]
 
     def test_calls_are_sorted_by_world_tick(self, tmp_path) -> None:
         """記録順がばらけていても tick 昇順に並べ替えて時系列で読めるようにする。"""
@@ -194,3 +242,26 @@ class TestRenderHtml:
         page = render_html(_load_calls(run_dir), run_id="r", profile="p")
         assert "prefers-color-scheme: dark" in page
         assert '[data-theme="light"]' in page
+
+
+class TestToolNamesOf:
+    """_tool_names_of が toolsets.jsonl の形の違いを吸収する挙動を保証する。"""
+
+    def test_prefers_the_precomputed_tool_names_list(self) -> None:
+        """``tool_names`` があればそれをそのまま使う。"""
+        assert _tool_names_of({"tool_names": ["speak", "wait"]}) == ["speak", "wait"]
+
+    def test_falls_back_to_function_names_in_tools(self) -> None:
+        """``tool_names`` が無い行では ``tools`` の function.name から組み立てる。"""
+        row = {"tools": [{"function": {"name": "explore"}}, {"function": {"name": "speak"}}]}
+        assert _tool_names_of(row) == ["explore", "speak"]
+
+    def test_accepts_tools_stored_as_a_json_string(self) -> None:
+        """``tools`` が JSON 文字列で入っている場合も解いて名前を取り出す。"""
+        row = {"tools": json.dumps([{"function": {"name": "wait"}}])}
+        assert _tool_names_of(row) == ["wait"]
+
+    def test_returns_empty_when_nothing_is_resolvable(self) -> None:
+        """名前を取れない行では空 list を返し、呼び出し側が「解決できなかった」と
+        表示できるようにする (= 捏造しない)。"""
+        assert _tool_names_of({}) == []
