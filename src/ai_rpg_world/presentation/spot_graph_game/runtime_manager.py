@@ -136,6 +136,40 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
 
 logger = logging.getLogger(__name__)
 
+_ACTION_RESULT_TRACE_RESERVED_KEYS = frozenset(
+    {
+        "tick",
+        "player_id",
+        "tool",
+        "success",
+        "error_code",
+        "result_summary",
+    }
+)
+
+
+def _action_result_extra_trace_payload(
+    trace_payload: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    """tool 側の trace_payload を action_result trace 用に安全化する。
+
+    ``action_result`` trace は tick / player_id / tool などを明示引数で渡す。
+    tool 側 payload に同名キーがあると ``record(..., **payload)`` が
+    TypeError になり、行全体が消える。元 payload は ``tool_trace_payload``
+    にネストして必ず残し、直下には予約名と衝突しないキーだけを互換用に残す。
+    """
+    raw = dict(trace_payload or {})
+    if not raw:
+        return {}
+    safe = {
+        key: value
+        for key, value in raw.items()
+        if key not in _ACTION_RESULT_TRACE_RESERVED_KEYS
+        and key != "tool_trace_payload"
+    }
+    safe["tool_trace_payload"] = raw
+    return safe
+
 
 def _character_to_prompt_input(
     character: Optional[CharacterDetailResponse],
@@ -2452,7 +2486,9 @@ class _WorldLlmWiring:
             apply_goal_update(player_id, arguments)
         if trace_recorder is not None:
             try:
-                trace_payload = dict(result.trace_payload or {})
+                trace_payload = _action_result_extra_trace_payload(
+                    result.trace_payload
+                )
                 trace_recorder.record(
                     "action_result",
                     tick=current_tick,

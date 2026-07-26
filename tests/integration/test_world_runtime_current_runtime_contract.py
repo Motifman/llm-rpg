@@ -1567,6 +1567,118 @@ def test_phase_b_runs_loop_guard_after_escape_recording_hooks(
     assert events == ["append", "chunk", "promotion", "loop_guard"]
 
 
+def test_phase_b_records_tool_trace_payload_in_action_result_trace(
+    clean_runtime_env: None,
+) -> None:
+    """tool が返した trace_payload は runtime_manager 経由の action_result trace に残る。"""
+    player_id = PlayerId(1)
+    runtime = _ContractRuntime()
+    runtime.trace_recorder = _TraceRecorderSpy()
+    wiring = _wiring_for_contract_runtime(runtime)
+
+    def _handler(
+        player_id: PlayerId,
+        arguments: dict,
+        runtime_context,
+    ) -> LlmCommandResultDto:
+        return LlmCommandResultDto(
+            success=False,
+            message="システムエラーが発生しました。",
+            error_code="SYSTEM_ERROR",
+            trace_payload={
+                "tool_exception_location": "_use_item",
+                "tool_exception_stage": "slot_resolution",
+                "tool_exception_type": "RuntimeError",
+            },
+        )
+
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = _handler
+
+    wiring.run_phase_b(
+        _phase_a(
+            player_id,
+            tool_call={
+                "name": TOOL_NAME_SPOT_GRAPH_EXPLORE,
+                "arguments": {"inner_thought": "試す"},
+            },
+        )
+    )
+
+    action_results = [
+        payload
+        for kind, payload in runtime.trace_recorder.records
+        if kind == TraceEventKind.ACTION_RESULT
+    ]
+    assert len(action_results) == 1
+    payload = action_results[0]
+    assert payload["tool_exception_stage"] == "slot_resolution"
+    assert payload["tool_exception_type"] == "RuntimeError"
+    assert payload["tool_trace_payload"] == {
+        "tool_exception_location": "_use_item",
+        "tool_exception_stage": "slot_resolution",
+        "tool_exception_type": "RuntimeError",
+    }
+
+
+def test_phase_b_keeps_action_result_trace_when_tool_trace_payload_uses_reserved_keys(
+    clean_runtime_env: None,
+) -> None:
+    """trace_payload が予約名を含んでも action_result trace 行は消えない。"""
+    player_id = PlayerId(1)
+    runtime = _ContractRuntime()
+    runtime.trace_recorder = _TraceRecorderSpy()
+    wiring = _wiring_for_contract_runtime(runtime)
+
+    def _handler(
+        player_id: PlayerId,
+        arguments: dict,
+        runtime_context,
+    ) -> LlmCommandResultDto:
+        return LlmCommandResultDto(
+            success=False,
+            message="システムエラーが発生しました。",
+            error_code="SYSTEM_ERROR",
+            trace_payload={
+                "tick": 999,
+                "player_id": 999,
+                "tool": "payload_tool",
+                "success": True,
+                "error_code": "PAYLOAD_ERROR",
+                "result_summary": "payload summary",
+                "tool_exception_stage": "effect_application",
+            },
+        )
+
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = _handler
+
+    wiring.run_phase_b(
+        _phase_a(
+            player_id,
+            tool_call={
+                "name": TOOL_NAME_SPOT_GRAPH_EXPLORE,
+                "arguments": {"inner_thought": "試す"},
+            },
+        )
+    )
+
+    action_results = [
+        payload
+        for kind, payload in runtime.trace_recorder.records
+        if kind == TraceEventKind.ACTION_RESULT
+    ]
+    assert len(action_results) == 1
+    payload = action_results[0]
+    assert payload["tick"] == 7
+    assert payload["player_id"] == 1
+    assert payload["tool"] == TOOL_NAME_SPOT_GRAPH_EXPLORE
+    assert payload["success"] is False
+    assert payload["error_code"] == "SYSTEM_ERROR"
+    assert payload["result_summary"] == "システムエラーが発生しました。"
+    assert "tool_exception_stage" in payload
+    assert payload["tool_trace_payload"]["tick"] == 999
+    assert payload["tool_trace_payload"]["error_code"] == "PAYLOAD_ERROR"
+
+
 @pytest.mark.parametrize(
     "tool_name",
     [
