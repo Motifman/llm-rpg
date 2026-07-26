@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
@@ -23,6 +24,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
     PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
+    ToolRuntimeTargetDto,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
@@ -31,7 +33,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.services.action_episode_draft_builder import (
-    _actor_from_structured,
+    _actor_from_observation_structured,
 )
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     compute_template_interpreted,
@@ -41,7 +43,9 @@ from ai_rpg_world.application.llm.services.episodic_cue_rules import (
     _coerce_non_bool_int,
     build_episodic_cues_for_tool_turn,
     build_situation_episodic_cues,
+    is_secret_target_actor_observation,
     merge_ordered_episodic_cues,
+    secret_target_actor_player_id,
 )
 from ai_rpg_world.application.llm.services.world_noun_matcher import (
     IWorldNounMatcher,
@@ -112,7 +116,7 @@ def _who_from_observations(entries: tuple[ObservationEntry, ...]) -> tuple[str, 
     markers: list[str] = []
     for o in sorted(entries, key=lambda x: _as_utc(x.occurred_at)):
         structured = o.output.structured if isinstance(o.output.structured, dict) else {}
-        aa = _actor_from_structured(structured.get("actor"))
+        aa = _actor_from_observation_structured(structured)
         if aa is not None:
             markers.append(aa)
     seen: dict[str, None] = {}
@@ -124,8 +128,27 @@ def _who_from_observations(entries: tuple[ObservationEntry, ...]) -> tuple[str, 
     return tuple(ordered)
 
 
+def _secret_target_player_suppression(
+    entries: tuple[ObservationEntry, ...],
+) -> tuple[frozenset[int], bool]:
+    """chunk 内の秘匿観測が指す actor player_id と安全側全抑止の有無を返す。"""
+    suppressed: set[int] = set()
+    for o in entries:
+        structured = o.output.structured if isinstance(o.output.structured, dict) else {}
+        if not is_secret_target_actor_observation(structured):
+            continue
+        actor_player_id = secret_target_actor_player_id(structured)
+        if actor_player_id is None:
+            return frozenset(), True
+        suppressed.add(actor_player_id)
+    return frozenset(suppressed), False
+
+
 def _co_present_from_runtime_context(
     runtime_context: Optional[ToolRuntimeContextDto],
+    *,
+    suppressed_player_ids: frozenset[int] = frozenset(),
+    suppress_all_player_names: bool = False,
 ) -> tuple[str, ...]:
     """chunk write 時の runtime_context から「同席プレイヤー名」を集める。
 
@@ -139,7 +162,7 @@ def _co_present_from_runtime_context(
     ``None`` (provider 未注入 / 「context が取れない」明示) のときは空タプル
     (= PR-M 導入前と一致する安全な縮退)。
     """
-    if runtime_context is None:
+    if runtime_context is None or suppress_all_player_names:
         return ()
     seen: dict[str, None] = {}
     ordered: list[str] = []
@@ -147,12 +170,40 @@ def _co_present_from_runtime_context(
         target = runtime_context.targets[label]
         if not isinstance(target, PlayerToolRuntimeTargetDto):
             continue
+        if isinstance(target.player_id, int) and target.player_id in suppressed_player_ids:
+            continue
         name = target.display_name.strip() if isinstance(target.display_name, str) else ""
         if not name or name in seen:
             continue
         seen[name] = None
         ordered.append(name)
     return tuple(ordered)
+
+
+def _without_player_targets(
+    runtime_context: Optional[ToolRuntimeContextDto],
+    *,
+    suppressed_player_ids: frozenset[int] = frozenset(),
+    suppress_all_player_targets: bool = False,
+) -> Optional[ToolRuntimeContextDto]:
+    """runtime_context から秘匿 actor の人物 target だけを除いた派生 context を作る。"""
+    if runtime_context is None:
+        return None
+    filtered = {
+        label: target
+        for label, target in runtime_context.targets.items()
+        if (
+            not isinstance(target, ToolRuntimeTargetDto)
+            or not isinstance(target.player_id, int)
+            or (
+                not suppress_all_player_targets
+                and target.player_id not in suppressed_player_ids
+            )
+        )
+    }
+    if len(filtered) == len(runtime_context.targets):
+        return runtime_context
+    return replace(runtime_context, targets=filtered)
 
 
 def _tool_name_segment(entry: ActionResultEntry) -> str:
@@ -261,6 +312,8 @@ def _build_chunk_cues(
     *,
     noun_matcher: Optional[IWorldNounMatcher] = None,
     runtime_context: Optional[ToolRuntimeContextDto] = None,
+    suppressed_player_ids: frozenset[int] = frozenset(),
+    suppress_all_player_targets: bool = False,
 ) -> tuple[EpisodicCue, ...]:
     """chunk から episode に貼る cue 列を組み立てる。
 
@@ -280,13 +333,22 @@ def _build_chunk_cues(
     閉じる設計 (= 場面が大きく変わる前に必ず閉じる) のため、実用上
     「chunk のひとまとめの場面」に対する近似として妥当。
     """
+    cue_runtime_context = (
+        _without_player_targets(
+            runtime_context,
+            suppressed_player_ids=suppressed_player_ids,
+            suppress_all_player_targets=suppress_all_player_targets,
+        )
+        if suppress_all_player_targets or suppressed_player_ids
+        else runtime_context
+    )
     parts: list[tuple[EpisodicCue, ...]] = []
     for o in sorted(_all_observation_entries(inp), key=lambda x: _as_utc(x.occurred_at)):
         st = o.output.structured if isinstance(o.output.structured, dict) else None
         prose = o.output.prose if isinstance(o.output.prose, str) and o.output.prose.strip() else None
         parts.append(
             build_situation_episodic_cues(
-                runtime_context=runtime_context,
+                runtime_context=cue_runtime_context,
                 observation_structured=st,
                 observation_prose=prose,
                 noun_matcher=noun_matcher,
@@ -303,7 +365,7 @@ def _build_chunk_cues(
             build_episodic_cues_for_tool_turn(
                 tool_name=_tool_name_segment(e),
                 canonical_arguments=None,
-                runtime_context=runtime_context,
+                runtime_context=cue_runtime_context,
                 command_result=res,
                 observation_structured=None,
             )
@@ -376,6 +438,9 @@ class ChunkEpisodeDraftBuilder:
         # Issue #311 後続: aware/naive 混在で max() が落ちないよう正規化キーで選ぶ
         occurred_at = max(acts, key=lambda e: _as_utc(e.occurred_at)).occurred_at
         obs_for_place_who = _all_observation_entries(inp)
+        suppressed_player_ids, suppress_all_player_targets = (
+            _secret_target_player_suppression(obs_for_place_who)
+        )
         what = _compose_what(acts)
         # draft 時点で `recall_text` / `interpreted` をテンプレで埋めておく。
         #
@@ -417,7 +482,11 @@ class ChunkEpisodeDraftBuilder:
             # PR-M: chunk write 時に同席していた他プレイヤー名を co_present に
             # 刻む。約束清算の共在ゲートが who (動いた人) だけでなく co_present
             # (その場に居た人) も照合できるようにするため。
-            co_present=_co_present_from_runtime_context(runtime_context),
+            co_present=_co_present_from_runtime_context(
+                runtime_context,
+                suppressed_player_ids=suppressed_player_ids,
+                suppress_all_player_names=suppress_all_player_targets,
+            ),
             what=what,
             why=_compose_why(acts),
             observed=observed,
@@ -432,6 +501,8 @@ class ChunkEpisodeDraftBuilder:
                 inp,
                 noun_matcher=self._noun_matcher,
                 runtime_context=runtime_context,
+                suppressed_player_ids=suppressed_player_ids,
+                suppress_all_player_targets=suppress_all_player_targets,
             ),
             recall_text=compute_template_recall(observed, what),
             recall_count=0,

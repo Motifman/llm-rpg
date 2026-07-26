@@ -3,6 +3,7 @@
 from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
     ToolRuntimeContextDto,
+    ToolRuntimeTargetDto,
     WorldObjectToolRuntimeTargetDto,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
@@ -209,6 +210,134 @@ class TestUnknownAndNoneIgnored:
             command_result=LlmCommandResultDto(success=True, message=""),
         )
         assert not any(c.axis == "emotion" for c in cues)
+
+
+class TestSecretTargetActorCue:
+    """秘匿された対象本人向け観測が、犯人の実名 entity cue へ紐付かないこと。"""
+
+    def test_secret_target_observation_uses_anonymous_actor_cue(self) -> None:
+        """対象専用文面を使った被害者観測では、actor 実名ではなく匿名 actor cue を保存する。"""
+        cues = build_episodic_cues_for_tool_turn(
+            tool_name="interact_with_player",
+            canonical_arguments=None,
+            runtime_context=ToolRuntimeContextDto.empty(),
+            command_result=LlmCommandResultDto(success=True, message=""),
+            observation_structured={
+                "type": "player_interacted_with_player",
+                "actor": "spot_graph_player_1",
+                "target": "リン",
+                "is_target": True,
+                "witness_observation_source": "scenario_target",
+            },
+        )
+        canon = {c.to_canonical() for c in cues}
+        assert "entity:actor_spot_graph_player_1" not in canon
+        assert "entity:actor_unknown_secret_target" in canon
+
+    def test_witness_observation_keeps_actor_cue(self) -> None:
+        """第三者の目撃観測では、従来どおり actor 実名 cue を保存する。"""
+        cues = build_episodic_cues_for_tool_turn(
+            tool_name="interact_with_player",
+            canonical_arguments=None,
+            runtime_context=ToolRuntimeContextDto.empty(),
+            command_result=LlmCommandResultDto(success=True, message=""),
+            observation_structured={
+                "type": "player_interacted_with_player",
+                "actor": "spot_graph_player_1",
+                "target": "リン",
+                "is_target": False,
+                "witness_observation_source": "scenario",
+            },
+        )
+        canon = {c.to_canonical() for c in cues}
+        assert "entity:actor_spot_graph_player_1" in canon
+        assert "entity:actor_unknown_secret_target" not in canon
+
+    def test_non_secret_target_observation_keeps_actor_cue(self) -> None:
+        """対象本人向けでも秘匿文面でなければ、actor cue を過剰に消さない。"""
+        cues = build_episodic_cues_for_tool_turn(
+            tool_name="interact_with_player",
+            canonical_arguments=None,
+            runtime_context=ToolRuntimeContextDto.empty(),
+            command_result=LlmCommandResultDto(success=True, message=""),
+            observation_structured={
+                "type": "player_interacted_with_player",
+                "actor": "spot_graph_player_1",
+                "target": "リン",
+                "is_target": True,
+                "witness_observation_source": "scenario",
+            },
+        )
+        canon = {c.to_canonical() for c in cues}
+        assert "entity:actor_spot_graph_player_1" in canon
+        assert "entity:actor_unknown_secret_target" not in canon
+
+    def test_secret_target_observations_share_one_anonymous_cue_across_actors(self) -> None:
+        """秘匿被害は actor が違っても同じ匿名 actor cue で束ねられる。"""
+        def _canon_for_actor(actor: str) -> set[str]:
+            cues = build_episodic_cues_for_tool_turn(
+                tool_name="poison",
+                canonical_arguments=None,
+                runtime_context=ToolRuntimeContextDto.empty(),
+                command_result=LlmCommandResultDto(success=True, message=""),
+                observation_structured={
+                    "type": "player_interacted_with_player",
+                    "actor": actor,
+                    "target": "リン",
+                    "is_target": True,
+                    "witness_observation_source": "scenario_target",
+                },
+            )
+            return {c.to_canonical() for c in cues if c.axis == "entity"}
+
+        assert _canon_for_actor("spot_graph_player_1") == _canon_for_actor("spot_graph_player_3")
+
+    def test_secret_target_observation_suppresses_runtime_player_target_cue(self) -> None:
+        """秘匿被害では runtime target に犯人が見えていても人物 cue に保存しない。
+
+        object など人物以外の runtime cue は残し、秘匿のために場所・対象物文脈まで
+        捨てない。
+        """
+        cues = build_episodic_cues_for_tool_turn(
+            tool_name="interact_with_player",
+            canonical_arguments=None,
+            runtime_context=ToolRuntimeContextDto(
+                targets={
+                    "P1": ToolRuntimeTargetDto(
+                        label="P1",
+                        kind="spot_graph_player",
+                        display_name="カイ",
+                        player_id=1,
+                    ),
+                    "P2": ToolRuntimeTargetDto(
+                        label="P2",
+                        kind="spot_graph_player",
+                        display_name="セナ",
+                        player_id=2,
+                    ),
+                    "O1": ToolRuntimeTargetDto(
+                        label="O1",
+                        kind="world_object",
+                        display_name="古い端末",
+                        world_object_id=42,
+                    ),
+                }
+            ),
+            command_result=LlmCommandResultDto(success=True, message=""),
+            observation_structured={
+                "type": "player_interacted_with_player",
+                "actor": "spot_graph_player_1",
+                "target": "リン",
+                "is_target": True,
+                "witness_observation_source": "scenario_target",
+            },
+        )
+        canon = {c.to_canonical() for c in cues}
+        assert "entity:spot_graph_player_1" not in canon
+        assert "entity:spot_graph_player_2" in canon
+        assert "entity:actor_spot_graph_player_1" not in canon
+        assert "entity:actor_unknown_secret_target" in canon
+        assert "object:world_object_42" in canon
 
 
 class TestDedupeAndCaps:
