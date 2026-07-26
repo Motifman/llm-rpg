@@ -76,9 +76,10 @@ _ALLOWED_UNCONSUMED: dict[tuple[str, str], str] = {
         "同上。loader 内部の id 写像専用"
     ),
     ("AreaDef", "description"): (
-        "**要判断**。作者が書けるが、どこにも表示されない。現在どのシナリオも"
-        "宣言していないので実害は出ていないが、書けば黙って無視される。"
-        "表示するか loader で弾くかを別途決める"
+        "作者向けの覚書。設計 doc (spot_graph_distant_view_design.md) の"
+        "表示文の優先順は distant_descriptions → visible_name の 2 段で、"
+        "description は最初から含まれていない。metadata.description と同じ"
+        "「人間向けで prompt に出さない」枠"
     ),
 }
 

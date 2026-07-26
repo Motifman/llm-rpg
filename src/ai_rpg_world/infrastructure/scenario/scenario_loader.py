@@ -222,6 +222,16 @@ class AreaDef:
 
     area は実行時 state を持たない軽い定義表で、spot のまとまりと遠景知覚の
     単位を表す。`position` は宣言値または所属 spot の重心で解決済み。
+
+    `description` は **作者向けの覚書** で prompt には出さない
+    (`metadata.description` と同じ扱い)。遠景に出す文は
+    `distant_descriptions[距離帯]` → `visible_name` からの定型文の順で決まる
+    (docs/spot_graph_distant_view_design.md)。エージェントに見せたい文を
+    ここに書いても表示されない。読まれない理由が書いていなかったため、
+    配線漏れと見分けが付かなくなっていた。
+
+    `position_source` も同様に読まれない。`position` が宣言由来か重心算出かを
+    記録する派生値で、作者が書くものではない。
     """
 
     area_id: str
