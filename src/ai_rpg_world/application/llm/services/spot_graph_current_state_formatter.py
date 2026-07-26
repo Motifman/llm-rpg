@@ -78,6 +78,11 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         if dto.meeting_status_line:
             lines.append(dto.meeting_status_line)
 
+        # 作業の進み。会議と同じく、観測ではなく現在状態に置く。作業は
+        # 別々の部屋で進むので、他人のぶんは観測として届かない。
+        if dto.task_progress_line:
+            lines.append(dto.task_progress_line)
+
         # シナリオに TICK_LIMIT lose_condition があれば「残り猶予」だけ伝える。
         # 勝利条件には触れない (171a: meta-info のみ。導線はシナリオ責務で別途整備)。
         if dto.tick_budget_remaining is not None:

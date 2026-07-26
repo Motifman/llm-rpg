@@ -826,6 +826,48 @@ class WorldRuntime:
         base_text = self._formatter.format(dto)
         return self._ui_context_builder.build(base_text, dto)
 
+    def _compute_task_progress_line(self) -> Optional[str]:
+        """作業の進み具合を 1 行で返す。作業条件が無いシナリオでは None。
+
+        本家のタスクバーにあたる。クルーにとって**勝ち筋が進んでいるかの
+        唯一の指標**で、インポスターが作業のふりをしても増えない。
+
+        engine 側の事情としても要る。作業は別々の部屋に置かれるので、
+        **他人が何を終わらせたかは観測として届かない**。進みが見えないと、
+        各エージェントは自分がやったぶんしか知らないまま「まだ全然進んで
+        いない」と誤認し続ける。
+
+        **総数だけを出す。** 誰が終わらせたかを出すと偽装が成立しない
+        (作業のふりをしても即座に割れる)。どの作業が残っているかも出さない。
+        作業は場所と紐づくので、消去法で「あそこに誰が居たか」が割れる。
+        """
+        from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
+            GameEndConditionTypeEnum,
+        )
+
+        flags = self._world_flag_state.as_frozen_set()
+        parts: List[str] = []
+        for cond in self.scenario.win_conditions:
+            if cond.condition_type is not GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST:
+                continue
+            declared = tuple(cond.required_flags or ())
+            if not declared:
+                continue
+            done = sum(1 for name in declared if name in flags)
+            need = int(cond.min_set_count or len(declared))
+            remaining = max(0, need - done)
+            text = f"作業の進み: {done}/{len(declared)}"
+            if remaining > 0:
+                # 総数だけだと、あと何個で勝てるのかが読めない。締切と同じで
+                # 「あといくつか」が分からないと配分を決められない。
+                text += f" (あと {remaining})"
+            else:
+                text += " (必要数に到達)"
+            parts.append(text)
+        if not parts:
+            return None
+        return " / ".join(parts)
+
     def _compute_meeting_status_line(self) -> Optional[str]:
         """会議中なら、状況を 1 行にまとめて返す。自由時間なら None。
 
@@ -914,6 +956,7 @@ class WorldRuntime:
             current_game_time_label=time_label,
             tick_budget_remaining=self._compute_tick_budget_remaining(),
             meeting_status_line=self._compute_meeting_status_line(),
+            task_progress_line=self._compute_task_progress_line(),
         )
 
     def get_tool_definitions(
