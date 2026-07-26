@@ -335,23 +335,41 @@ disambiguate する構造変更が要る。**実装量は §3.4 のリファク�
 `ObservedEventRegistry` は event 型 → strategy の 1 対 1 写像で、
 `is_observed` は完全型一致判定である。継承で逃げる手も無い。
 
-ただし**新 event が本当に要るのは `ACTOR_ONLY` かつ `notify_target=true` の
-組み合わせだけ**。
+**実装時に判明 — 新 event は要らなかった。** 本節は「対人行為が
+`SpotObjectInteractedEvent` に相乗りしている」前提で書かれていたが、PR 2 で
+専用の `PlayerInteractedWithPlayerEvent` を新設済みだった。配信先の分岐は
+その event の `witness_policy` と `notify_target` を見るだけで足り、
+`ACTOR_ONLY` + `notify_target=true` のために型を増やす必要はない。
 
-- 公然の対人行為 (`SAME_SPOT` + notify) は `MonsterAttackedPlayerInSpotEvent`
-  と同じ「被害者本人を含む同スポット全員」パターンで足りる
-- 対象 1 人だけへの配信も `SpotSoundHeardEvent` 用の
-  `_resolve_known_player_entity` に前例がある
+実装した配信規則:
 
-**致死打には原理的に届かない。** `is_down` の player は recipient から
-構造的に除外されるので、`notify_target=true` でも致死打では対象に何も届かない。
-「死んだ本人に自分の死の観測を届けるか」を H-4 とあわせて明示的に決める
-(私は届けない方に賛成だが、決めないと silent 規則に飲まれる)。
+| `witness_policy` | `notify_target` | 配信先 |
+|---|---|---|
+| `SAME_SPOT` | 不問 | 同スポットの行為者以外 (対象を含む) |
+| `ACTOR_ONLY` | `false` | 誰にも届かない |
+| `ACTOR_ONLY` | `true` | **対象本人だけ** |
 
-**実装上の注意 2 つ。** 新 event は `_EVENT_TO_STRATEGY` に**明示登録が必須**
-(完全型一致なので登録漏れは例外もログも出さず配信 0 件)。`is_down` 除外は
-分岐ではなく `resolve()` 最終行の一括後処理なので、例外を作るならその行を
-変える。
+`SAME_SPOT` 側で `notify_target` を見ないのは意図的。対象は既に「同スポット
+の他プレイヤー」として足されているので、そこで足すと二重になる。
+
+**対象が読む文面は別に書ける。** `target_observation_message` を足した。
+目撃者向けの文面をそのまま対象に見せると、失敗した暗殺がその場で犯人を
+特定してしまい `ACTOR_ONLY` を選んだ意味が消える。ただし**伏せるかどうかは
+シナリオが決める**ことにした。エンジンは「対象専用の文面を書ける」ところ
+までを持ち、匿名化の哲学を持たない。省略時は目撃者向け文面に
+「(あなたが対象だった)」を添える既存の形に倒れる。
+
+**致死打には届けない (決定)。** `is_down` の player は recipient から構造的に
+除外される (Issue #621 Phase 4: ターンが回らず観測を消化できない)。
+`notify_target=true` でもこの規則は曲げない。消化されない観測を積むだけに
+なるうえ、倒れている間にされたことは目覚めたときに `DownedIncidentLog`
+経由でまとめて読める (PR #831)。**「死んだ本人に自分の死の観測を届けるか」
+の答えは「届けない」**で、代わりに蘇生時にまとめて渡す。
+
+**`EXPLICIT_TARGETS` の予告は消した。** `WitnessPolicy` の docstring に
+「将来 EXPLICIT_TARGETS を足す」と書かれていたが、同じ問題を
+`notify_target` が直交する軸で解いたので予告ごと削除した。1 つの問題に
+2 つの仕組みの計画が残るのが最悪の状態である。
 
 ### 3.8 対象が解決できないときは明示的に失敗させる
 

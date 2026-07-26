@@ -1183,7 +1183,13 @@ class ScenarioLoader:
             unavailable_hint=unavailable_hint,
         )
 
-    def _parse_interaction_def(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionDef:
+    def _parse_interaction_def(
+        self,
+        raw: Dict[str, Any],
+        mapper: ScenarioIdMapper,
+        *,
+        allow_target_notification: bool = False,
+    ) -> InteractionDef:
         from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 
         preconds = tuple(
@@ -1223,6 +1229,9 @@ class ScenarioLoader:
                     f"interaction[{raw.get('action_name')!r}].witness_policy "
                     f"must be one of {{{valid}}}, got {witness_policy_raw!r}"
                 ) from exc
+        notify_target, target_observation_message = self._parse_target_notification(
+            raw, allow_target_notification=allow_target_notification
+        )
         return InteractionDef(
             action_name=raw["action_name"],
             display_label=raw["display_label"],
@@ -1231,7 +1240,51 @@ class ScenarioLoader:
             on_failure_observation=on_failure_observation,
             witness_observation_message=witness_observation_message,
             witness_policy=witness_policy,
+            notify_target=notify_target,
+            target_observation_message=target_observation_message,
         )
+
+    @staticmethod
+    def _parse_target_notification(
+        raw: Dict[str, Any], *, allow_target_notification: bool,
+    ) -> Tuple[bool, Optional[str]]:
+        """``notify_target`` / ``target_observation_message`` を検証して返す。
+
+        物体 interaction には対象プレイヤーが居ないので、書かれていたら落とす。
+        黙って無視すると「対象に伝わるつもりで書いた宣言」が効かないまま残り、
+        実 run で「なぜか相手が気づかない」としてしか現れない。
+        """
+        action_name = raw.get("action_name")
+        notify_raw = raw.get("notify_target")
+        message_raw = raw.get("target_observation_message")
+        if notify_raw is None and message_raw is None:
+            return False, None
+        if not allow_target_notification:
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}]: notify_target / "
+                "target_observation_message は対人 interaction "
+                "(シナリオ直下の player_interactions) でのみ指定できます"
+            )
+        if notify_raw is not None and not isinstance(notify_raw, bool):
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}].notify_target must be a boolean, "
+                f"got {type(notify_raw).__name__}"
+            )
+        if message_raw is not None and not isinstance(message_raw, str):
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}].target_observation_message must be "
+                f"a string, got {type(message_raw).__name__}"
+            )
+        notify_target = bool(notify_raw)
+        if message_raw is not None and not notify_target:
+            # 文面だけ書いて notify_target を立て忘れると、その文面はどこにも
+            # 出ない。ACTOR_ONLY では対象に何も届かないままになる。
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}]: target_observation_message を"
+                "書くなら notify_target=true が要ります "
+                "(立てないと対象本人にはこの文面が届きません)"
+            )
+        return notify_target, message_raw
 
     def _parse_interaction_condition(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionCondition:
         item_sid = raw.get("required_item")
@@ -2042,7 +2095,9 @@ class ScenarioLoader:
                 )
             seen_action_names.add(action_name)
 
-            idef = self._parse_interaction_def(raw, mapper)
+            idef = self._parse_interaction_def(
+                raw, mapper, allow_target_notification=True
+            )
             if not any(
                 e.target is EffectTarget.TARGET_PLAYER for e in idef.effects
             ):

@@ -409,6 +409,10 @@ class PlayerInteractionApplicationService:
                     ),
                     witness_policy=idef.witness_policy,
                     target_was_down=target_was_down,
+                    notify_target=idef.notify_target,
+                    target_observation_message=(
+                        idef.target_observation_message or ""
+                    ),
                 )
             ])
 

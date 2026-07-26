@@ -211,8 +211,22 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         else:
             prose, source = f"{actor}が{target}に何かをした。", "legacy"
         if is_target:
-            # 対象本人には「誰かが自分に何かをした」と分かる形で届ける。
-            prose = f"{prose} (あなたが対象だった)"
+            target_message = (
+                getattr(event, "target_observation_message", "") or ""
+            ).strip()
+            if target_message:
+                # 対象専用の文面がある場合はそちらを使う。秘匿行為で
+                # 「誰にやられたか」を伏せるために、目撃者向けとは別に
+                # 書けるようにしてある (可視性の 3 軸目)。
+                prose, source = self._render_player_witness_message(
+                    target_message,
+                    actor=actor,
+                    target=target,
+                    action_display_label=label,
+                ), "scenario_target"
+            else:
+                # 対象本人には「誰かが自分に何かをした」と分かる形で届ける。
+                prose = f"{prose} (あなたが対象だった)"
         return ObservationOutput(
             prose=prose,
             structured={

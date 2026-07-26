@@ -109,12 +109,20 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             # 倒れている間の出来事でも、起きたときに読めなければ持ち物が
             # 減った理由が永久に分からない。
             #
-            # ACTOR_ONLY (秘匿して奪う) のときは対象にも届けない。気づかれ
-            # ずに盗るという行為が成立しなくなるため。
+            # ACTOR_ONLY (秘匿して奪う) のときは既定で対象にも届けない。
+            # 気づかれずに盗るという行為が成立しなくなるため。
+            #
+            # ただし notify_target を宣言した行為だけは、第三者に伏せたまま
+            # 対象本人に届ける (可視性の 3 軸目)。「毒を盛られた本人だけが
+            # 異変に気づく」は、この組み合わせでしか書けない。
             if event.witness_policy == WitnessPolicy.SAME_SPOT:
                 self._resolve_at_spot_excluding_actor(
                     event.spot_id, event.entity_id, add
                 )
+            elif getattr(event, "notify_target", False):
+                # SAME_SPOT 側でこの分岐に入らないのは意図的。対象は既に
+                # 「同スポットの他プレイヤー」として足されている。
+                add(PlayerId(int(event.target_entity_id)))
         elif isinstance(event, SpotObjectInteractionFailedEvent):
             # 失敗観測は同じスポットの他プレイヤーにのみ届ける（actor 本人には
             # ツール結果として個別メッセージが返るので除外）。

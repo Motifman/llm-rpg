@@ -32,6 +32,20 @@ class InteractionDef:
               壁の写真を見つめる等)。設計 §1 / §5 の「秘匿行為」を成立させる
             on_failure_observation 自体は本フィールドの影響を受けない
             (failure_message は別 channel)。本フィールドは成功 event の配信のみを制御
+        notify_target: 可視性の 3 軸目。対人 interaction で「対象本人に
+            行為が届くか」だけを決める。``witness_policy`` (第三者に届くか) と
+            ``EffectVisibility`` (効果が届くか) では表現できない。
+            - False (デフォルト): 既存挙動
+            - True: ACTOR_ONLY でも対象本人にだけ観測が届く。「毒を盛られた
+              本人だけが異変に気づく」はこの組み合わせでしか書けない
+            SAME_SPOT では対象は既に「同スポットの他プレイヤー」として
+            含まれるので、本フィールドの有無で配信先は変わらない。
+            物体 interaction には対象プレイヤーが居ないので意味を持たない
+            (loader が読み込み時に落とす)。
+        target_observation_message: 対象本人にだけ見せる観測メッセージ。
+            秘匿行為では「誰にやられたか」を伏せたいことがあるので、目撃者
+            向けの ``witness_observation_message`` とは別に書ける。
+            省略時は目撃者向けの文面に「(あなたが対象だった)」を添える。
     """
 
     action_name: str
@@ -41,3 +55,5 @@ class InteractionDef:
     on_failure_observation: Optional[str] = None
     witness_observation_message: Optional[str] = None
     witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT
+    notify_target: bool = False
+    target_observation_message: Optional[str] = None
