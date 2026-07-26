@@ -826,6 +826,47 @@ class WorldRuntime:
         base_text = self._formatter.format(dto)
         return self._ui_context_builder.build(base_text, dto)
 
+    def _compute_meeting_status_line(self) -> Optional[str]:
+        """会議中なら、状況を 1 行にまとめて返す。自由時間なら None。
+
+        入れる情報は 3 つ。
+
+        - 話し合いの最中であること (= 移動や採取ができない理由)
+        - 打ち切りまでの残り tick。**締切が見えないと「もう投票すべきか」を
+          判断できない。** 本家の会議に見えるタイマーがあるのと同じ役割
+        - 誰が呼んだか。議論の出発点になり、会議のあいだ何度も参照される
+
+        沈黙による終了までの残りは出さない。発言のたびに戻るので、締切と
+        して読むと誤解を招く (「あと 2 tick」と出た次のターンに 6 に戻る)。
+        """
+        store = self._game_phase_store
+        if not store.is_meeting():
+            return None
+        current = store.current
+        elapsed = int(self.current_tick()) - current.started_at_tick
+        remaining = max(0, store.MEETING_TICK_LIMIT - elapsed)
+        parts = ["話し合いの最中。全員がこの場に集まっている"]
+        initiator = self._meeting_initiator_display_name()
+        if initiator:
+            parts.append(f"呼びかけたのは{initiator}")
+        parts.append(f"打ち切りまで残り {remaining} tick")
+        return "。".join(parts) + "。"
+
+    def _meeting_initiator_display_name(self) -> Optional[str]:
+        """招集者の表示名。引けなければ None (その節だけ落ちる)。
+
+        名前の解決は `get_player_name` に寄せる。フェーズ変化の観測で使って
+        いるのと同じ経路にしておかないと、観測では「クゼが呼びかけた」なのに
+        現在状態では別の呼び方、という食い違いが起きる。
+        """
+        initiator_id = self._game_phase_store.current.initiator_player_id
+        if initiator_id is None:
+            return None
+        try:
+            return self.get_player_name(PlayerId(initiator_id)) or None
+        except Exception:
+            return None
+
     def _compute_tick_budget_remaining(self) -> Optional[int]:
         """シナリオの lose_conditions に TICK_LIMIT があれば残り tick を返す。
 
@@ -872,6 +913,7 @@ class WorldRuntime:
             spot_graph_snapshot=snap,
             current_game_time_label=time_label,
             tick_budget_remaining=self._compute_tick_budget_remaining(),
+            meeting_status_line=self._compute_meeting_status_line(),
         )
 
     def get_tool_definitions(
@@ -2631,7 +2673,13 @@ class WorldRuntime:
         """
         return self._transition_phase(
             lambda tick: self._game_phase_store.begin_meeting(
-                tick=tick, trigger=trigger
+                tick=tick,
+                trigger=trigger,
+                initiator_player_id=(
+                    int(initiator_player_id)
+                    if initiator_player_id is not None
+                    else None
+                ),
             ),
             trigger=trigger,
             initiator_player_id=initiator_player_id,
