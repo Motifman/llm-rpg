@@ -18,8 +18,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
-
 from ai_rpg_world.application.trace import NullTraceRecorder
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.application.llm.tool_constants import (
@@ -83,18 +81,14 @@ def _episode(episode_id: str) -> SubjectiveEpisode:
 
 
 class TestWorldRuntimeMemoDistillRewire:
-    def test_transcriber_wired_after_build(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_transcriber_wired_after_build(self) -> None:
         runtime = create_world_runtime(_SCENARIO_PATH, config=_memo_distill_config())
         assert runtime._memo_distill_transcriber is not None
         assert runtime._todo_tool_executor is not None
         # memo executor 実体にも届いている。
         assert runtime._todo_tool_executor._memo_distill_transcriber is not None
 
-    def test_transcriber_survives_set_trace_recorder_rebuild(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_transcriber_survives_set_trace_recorder_rebuild(self) -> None:
         """set_trace_recorder は _todo_tool_executor を作り直すが、
 
         memo_distill transcriber は再適用されて生き残る (回帰の核心)。"""
@@ -113,9 +107,7 @@ class TestWorldRuntimeMemoDistillRewire:
         # それでも transcriber は再適用されている (修正が効いている)。
         assert executor_after._memo_distill_transcriber is not None
 
-    def test_flag_off_keeps_transcriber_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_flag_off_keeps_transcriber_none(self) -> None:
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=episodic_config(memo_distill_enabled=False),
@@ -124,10 +116,7 @@ class TestWorldRuntimeMemoDistillRewire:
         if runtime._todo_tool_executor is not None:
             assert runtime._todo_tool_executor._memo_distill_transcriber is None
 
-    def test_memo_done_creates_memo_distill_belief_evidence(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
+    def test_memo_done_creates_memo_distill_belief_evidence(self) -> None:
         """runtime 配線後の memo_done が MEMO_DISTILL の BeliefEvidence を実際に積む。"""
         runtime = create_world_runtime(_SCENARIO_PATH, config=_memo_distill_config())
         assert runtime._todo_tool_executor is not None
