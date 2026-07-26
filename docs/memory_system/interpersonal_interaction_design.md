@@ -478,11 +478,20 @@ interaction が永久に実行不能**になる。「全 `InteractionConditionTy
 メンバに分岐があること」を assert するテストを入れた
 (`tests/domain/world_graph/test_interaction_place_conditions.py`)。
 
-**PR 3 で残した宿題**: 同席者行 (`[strike_down, tend]`) には条件ヒントが付か
-ない。物体行の `gather(夜のみ)` に相当する表示が対人 action には無いので、
-「暗い場所でだけ襲える」ことは**失敗して初めて**分かる。失敗文で学べるので
-致命的ではないが、§3.3 が描いた
-`strike_down(暗い場所・ナイフが要る)` の形にはまだ届いていない。
+**PR 3 の宿題 (解消済み)**: 同席者行に条件ヒントが付かない件は後続 PR で
+塞いだ。宣言だけから決まる条件 (明るさ / 時刻 / 天候 / 所持品) を
+`declarative_condition_hints` に集約し、物体行と同席者行が同じ関数を使う。
+§3.3 が描いた `strike_down(暗い場所のみ・ナイフが要る)` の形になっている。
+
+このとき **表示用ラベルと識別子を分けた**。`available_action_labels()` が
+ヒント付き、`available_action_names()` が素の名前で、後者は executor の
+「人に対して使える操作: ...」列挙が使う。ここを一本化すると、LLM が
+`strike_down(暗い場所のみ)` をそのまま `action_name` として渡し、「そんな
+操作は無い」の往復になる。
+
+`HAS_ITEM` は物体行では出さず対人行にだけ出す。物体行は所持品不足が
+remediation に出るので重複するが、対人 action にはその重複が無く、何を持て
+ば成立するのかが失敗するまで prompt のどこにも出ない。
 
 **永続化**: `player_interactions` は静的なのでシナリオ再読込で復元でき、
 SQLite codec の変更は不要。per-Being store も増えないので checklist #27 の

@@ -1,0 +1,91 @@
+"""条件ヒントが同席者行まで届き、識別子の経路には混ざらないことを保証する。
+
+サービスがラベルを返せても、state builder → UI builder のどこかで素の名前に
+戻っていれば LLM には届かない。逆に、executor の「使える操作」列挙にラベルが
+混ざると、LLM が ``strike_down(暗い場所のみ)`` をそのまま action_name として
+渡す往復が生まれる。**両方向**を固定する。
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+
+_ACTOR = PlayerId(1)
+_VICTIM = PlayerId(2)
+
+_STRIKE_DOWN = {
+    "action_name": "strike_down",
+    "display_label": "背後から襲う",
+    "preconditions": [
+        {
+            "condition_type": "SPOT_LIGHTING_IS",
+            "required_lighting": "DARK",
+            "failure_message": "明るすぎる。誰かに見られる。",
+        },
+        {
+            "condition_type": "HAS_ITEM",
+            "required_item": "knife",
+            "failure_message": "素手では無理だ。",
+        },
+    ],
+    "effects": [{
+        "effect_type": "APPLY_DAMAGE",
+        "target": "TARGET_PLAYER",
+        "parameters": {"damage": 999},
+    }],
+}
+
+
+@pytest.fixture()
+def runtime(tmp_path: Path):
+    """暗所限定・ナイフ必須の対人 action を宣言し、二人を同席させた runtime。"""
+    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario["item_specs"].append({
+        "id": "knife",
+        "name": "ナイフ",
+        "description": "よく研がれている。",
+        "category": "TOOL",
+    })
+    scenario["player_interactions"] = [_STRIKE_DOWN]
+    path = tmp_path / "relay_with_strike.json"
+    path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
+
+    rt = create_world_runtime(path)
+    graph = rt._spot_graph_repo.find_graph()
+    spot = graph.get_entity_spot(EntityId.create(int(_ACTOR)))
+    graph.unplace_entity(EntityId.create(int(_VICTIM)))
+    graph.place_entity(EntityId.create(int(_VICTIM)), spot)
+    rt._spot_graph_repo.save(graph)
+    return rt
+
+
+class TestHintsReachTheCoLocatedPlayerRow:
+    """同席者行に、条件つきの action 候補が出る。"""
+
+    def test_row_shows_the_conditions_alongside_the_action(self, runtime) -> None:
+        """相手の行末に ``strike_down(暗い場所のみ・ナイフが要る)`` が並ぶ。"""
+        snapshot = runtime._state_builder.build_snapshot(int(_ACTOR))
+
+        assert "strike_down(暗い場所のみ・ナイフが要る)" in snapshot.player_action_names
+
+
+class TestIdentifierPathStaysBare:
+    """識別子を出す経路にはヒントを混ぜない。"""
+
+    def test_available_player_action_names_has_no_decoration(self, runtime) -> None:
+        """executor が列挙する操作名は素のままである。
+
+        ここに装飾が混ざると、LLM は装飾ごと action_name として渡し、
+        「そんな操作は無い」を繰り返す。
+        """
+        assert runtime.available_player_action_names() == ("strike_down",)

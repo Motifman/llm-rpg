@@ -58,6 +58,10 @@ from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
+    declarative_condition_hints,
+    format_action_name_with_hints,
+)
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 
 _logger = logging.getLogger(__name__)
@@ -154,8 +158,49 @@ class PlayerInteractionApplicationService:
         self._event_publisher = event_publisher
 
     def available_action_names(self) -> Tuple[str, ...]:
-        """宣言されている対人 action 名を宣言順で返す (prompt の候補表示用)。"""
+        """宣言されている対人 action 名を宣言順で返す。
+
+        こちらは**識別子**。executor が「人に対して使える操作: ...」を
+        列挙する経路で使う。表示用のヒント付き文字列は
+        ``available_action_labels`` を使うこと。
+        """
         return tuple(self._by_action_name.keys())
+
+    def available_action_labels(self) -> Tuple[str, ...]:
+        """同席者行に出す**表示用**の action 文字列を宣言順で返す。
+
+        前提条件のうち宣言だけから決まるもの (明るさ / 時刻 / 天候 / 所持品)
+        を ``strike_down(暗い場所のみ・ナイフが要る)`` の形で添える。物体行の
+        ``gather(夜のみ)`` と同じ書式に揃えてある。
+
+        添えないと「暗い場所でだけ襲える」ことは**失敗して初めて**分かる。
+        失敗文からも学べるが、行動 1 回とターン 1 つを必ず捨てることになる。
+        """
+        return tuple(
+            format_action_name_with_hints(
+                action_name,
+                declarative_condition_hints(
+                    idef,
+                    item_spec_name_resolver=self._resolve_item_spec_name_for_hint,
+                ),
+            )
+            for action_name, idef in self._by_action_name.items()
+        )
+
+    def _resolve_item_spec_name_for_hint(self, spec_id) -> Optional[str]:
+        """所持条件のヒント用に品目名を引く。引けなければ None。
+
+        名前が出せないだけで action 候補ごと消すと、宣言した行為が LLM から
+        発見できなくなる。ヒントの欠落より候補の消失のほうが重い。
+        """
+        if self._item_spec_repository is None:
+            return None
+        try:
+            spec = self._item_spec_repository.find_by_id(spec_id)
+        except Exception:
+            return None
+        name = getattr(spec, "name", None) if spec is not None else None
+        return str(name) if name else None
 
     def execute(
         self,

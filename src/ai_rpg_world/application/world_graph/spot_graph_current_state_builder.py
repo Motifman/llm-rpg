@@ -41,6 +41,10 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISp
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.stock_pool_regen import compute_stock_regen
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
+    declarative_condition_hints,
+    format_action_name_with_hints,
+)
 from ai_rpg_world.domain.world_graph.service.spot_perception_service import SpotPerceptionService
 from ai_rpg_world.application.world_graph.spot_effective_lighting_resolver import (
     SpotEffectiveLightingResolver,
@@ -157,95 +161,27 @@ _STATUS_EFFECT_LABELS: dict[str, str] = {
     "paralysis": "麻痺",
 }
 
-_TIME_OF_DAY_PHASE_LABELS: dict[str, str] = {
-    "morning": "朝",
-    "noon": "昼",
-    "afternoon": "午後",
-    "evening": "夕暮れ",
-    "night": "夜",
-}
-
-_WEATHER_TYPE_LABELS: dict[str, str] = {
-    "CLEAR": "晴れ",
-    "CLOUDY": "曇り",
-    "RAIN": "雨",
-    "HEAVY_RAIN": "大雨",
-    "SNOW": "雪",
-    "BLIZZARD": "吹雪",
-    "FOG": "霧",
-    "STORM": "嵐",
-}
-
-
-def _label_time_of_day_phase(value: str) -> str:
-    """時刻帯の内部値を prompt 用の短い日本語へ変換する。未知値はそのまま出す。"""
-    return _TIME_OF_DAY_PHASE_LABELS.get(value, value)
-
-
-def _label_weather_type(value: str) -> str:
-    """天候の内部値を prompt 用の短い日本語へ変換する。未知値はそのまま出す。"""
-    return _WEATHER_TYPE_LABELS.get(value, value)
-
-
-_LIGHTING_LABELS = {
-    "BRIGHT": "明るい場所",
-    "DIM": "薄暗い場所",
-    "DARK": "暗い場所",
-    "PITCH_BLACK": "真っ暗な場所",
-}
-
-
-def _label_lighting(value: str) -> str:
-    """明るさの内部値を prompt 用の短い日本語へ変換する。未知値はそのまま出す。"""
-    return _LIGHTING_LABELS.get(value, value)
-
-
 def _interaction_condition_hints(
     interaction,
     interior=None,
     *,
     current_tick: Optional[int] = None,
 ) -> tuple[str, ...]:
-    """interaction の時刻・天候制約を action 表示用の短いヒントにする。
+    """物体 action 表示用のヒントを組む。
 
-    HAS_ITEM は他の表示や remediation と重複するためここでは扱わない。
-    OBJECT_STATE は現在失敗している場合だけ failure_message を添え、action
-    候補自体は残す。候補集合を消すと存在しない操作名の発明につながるため。
+    宣言だけから決まるぶん (時刻 / 天候 / 明るさ) は
+    ``declarative_condition_hints`` に委譲する。同席者行の対人 action も
+    同じ関数を使うので、書式と語彙が経路ごとにずれない。
+
+    HAS_ITEM は他の表示や remediation と重複するため物体行では出さない
+    (= resolver を渡さない)。OBJECT_STATE は現在失敗している場合だけ
+    failure_message を添え、action 候補自体は残す。候補集合を消すと存在
+    しない操作名の発明につながるため。
 
     ``AT_SPOT_IS`` も扱わない。物体の action 候補は「その物体が在るスポット」
     でしか表示されないので、場所を添えても常に自明な情報になる。
     """
-    hints: list[str] = []
-    for cond in interaction.preconditions:
-        t = cond.condition_type
-        if t == InteractionConditionTypeEnum.TIME_OF_DAY_IS:
-            if cond.required_time_of_day_phase:
-                hints.append(
-                    f"{_label_time_of_day_phase(cond.required_time_of_day_phase)}のみ"
-                )
-            continue
-        if t == InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT:
-            if cond.required_time_of_day_phase:
-                hints.append(
-                    f"{_label_time_of_day_phase(cond.required_time_of_day_phase)}不可"
-                )
-            continue
-        if t == InteractionConditionTypeEnum.WEATHER_IS:
-            if cond.required_weather_type:
-                hints.append(f"{_label_weather_type(cond.required_weather_type)}のみ")
-            continue
-        if t == InteractionConditionTypeEnum.WEATHER_IS_NOT:
-            if cond.required_weather_type:
-                hints.append(f"{_label_weather_type(cond.required_weather_type)}不可")
-            continue
-        if t == InteractionConditionTypeEnum.SPOT_LIGHTING_IS:
-            if cond.required_lighting:
-                hints.append(f"{_label_lighting(cond.required_lighting)}のみ")
-            continue
-        if t == InteractionConditionTypeEnum.SPOT_LIGHTING_IS_NOT:
-            if cond.required_lighting:
-                hints.append(f"{_label_lighting(cond.required_lighting)}不可")
-            continue
+    hints: list[str] = list(declarative_condition_hints(interaction))
     if interior is not None:
         hints.extend(_object_state_precondition_failure_hints(interaction, interior))
         hints.extend(
