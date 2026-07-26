@@ -94,6 +94,9 @@ class SpotInteractionApplicationService:
         # 書き手名を解決する resolver。`Callable[[PlayerId], str]` を渡す。
         # None (未注入) の場合はフォールバック名 (`"プレイヤー({id})"`) を使う。
         player_display_name_resolver: Optional[Callable[[PlayerId], str]] = None,
+        # PR 3: SPOT_LIGHTING_IS の判定に使う実効照明 resolver。未注入なら
+        # 照明条件は成立しない (silent pass させない)。
+        effective_lighting_resolver: Optional[Any] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -113,6 +116,11 @@ class SpotInteractionApplicationService:
             Tuple[int, int, str, str], int
         ] = {}
         self._player_display_name_resolver = player_display_name_resolver
+        self._effective_lighting_resolver = effective_lighting_resolver
+
+    def set_effective_lighting_resolver(self, resolver: Optional[Any]) -> None:
+        """PR 3: 実効照明 resolver を後付け bind する (二段構築用)。"""
+        self._effective_lighting_resolver = resolver
 
     def set_player_display_name_resolver(
         self, resolver: Optional[Callable[[PlayerId], str]]
@@ -272,6 +280,14 @@ class SpotInteractionApplicationService:
         if not acting_player_display_name:
             acting_player_display_name = f"プレイヤー({int(player_id)})"
 
+        # PR 3: SPOT_LIGHTING_IS の判定材料。resolver 未注入 / 解決失敗は
+        # None のままにして、照明条件を成立させない。
+        current_effective_lighting = None
+        if self._effective_lighting_resolver is not None:
+            current_effective_lighting = self._effective_lighting_resolver.resolve(
+                spot_id
+            )
+
         try:
             result = self._interaction.execute_interaction(
                 interior,
@@ -289,6 +305,8 @@ class SpotInteractionApplicationService:
                 current_weather_type=current_weather_type,
                 spot_presence_count=spot_presence_count,
                 acting_player_display_name=acting_player_display_name,
+                current_effective_lighting=current_effective_lighting,
+                current_spot_id=spot_id,
             )
         except InteractionNotAllowedException as exc:
             # 前提条件で拒否された。#356 後続: 旧コードは scenario JSON で

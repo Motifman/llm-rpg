@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
@@ -47,3 +48,12 @@ class InteractionCondition:
     # ことになり、設計 doc §3.2 で棄却した「同じ行為の複製」になる。倒れた相手
     # の持ち物は prompt に見えている (PR #824) ので、LLM が名指しできる形にする。
     item_spec_id_parameter_key: Optional[str] = None
+    # 場所条件 (PR 3) 用フィールド。対応する condition_type のときだけ意味を持つ:
+    #   SPOT_LIGHTING_IS{_NOT} → required_lighting ("BRIGHT" / "DIM" / "DARK" /
+    #     "PITCH_BLACK")。既存の TIME_OF_DAY / WEATHER と同じ「単一値 + _IS_NOT」
+    #     に揃える。設計 doc の草案にあった配列形 (["DARK", "PITCH_BLACK"]) は
+    #     採らない。条件を 2 行並べれば同じことが書ける一方、配列形だけが
+    #     他の条件と作法が違うと、シナリオ作者もパーサも分岐が増える。
+    #   AT_SPOT_IS{_NOT} → required_spot_id
+    required_lighting: Optional[str] = None
+    required_spot_id: Optional[SpotId] = None

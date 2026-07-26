@@ -9,10 +9,12 @@ from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
     InteractionNotFoundException,
@@ -70,6 +72,13 @@ class SpotInteractionService:
         # 備蓄プール (OBJECT_STOCK_AT_LEAST) の lazy 再生算出に使う現在 tick。
         # None のときは再生なし (= 記録済み stock をそのまま使う) にフォールバック。
         current_tick: Optional[WorldTick] = None,
+        # PR 3: 場所条件の評価用。いずれも None なら該当 condition は拒否する
+        # (provider 不在を silent pass させない — TIME_OF_DAY と同じ判断)。
+        #   current_effective_lighting: SpotPerceptionService で合成済みの照明。
+        #     spot の静的 atmosphere ではなく、昼夜・天候・光源持ちまで含む値。
+        #   current_spot_id: 行為者の現在地。
+        current_effective_lighting: Optional[LightingEnum] = None,
+        current_spot_id: Optional[SpotId] = None,
     ) -> Tuple[bool, Optional[str]]:
         # Phase 4-B: 同一 instance を acting / target 両方として渡すのは
         # wiring バグ。precondition 段階で弾く（apply_effects と同じガード）。
@@ -121,6 +130,8 @@ class SpotInteractionService:
                 current_time_of_day_phase=current_time_of_day_phase,
                 current_weather_type=current_weather_type,
                 current_tick=current_tick,
+                current_effective_lighting=current_effective_lighting,
+                current_spot_id=current_spot_id,
             )
             if not ok:
                 return False, msg
@@ -170,6 +181,8 @@ class SpotInteractionService:
         current_time_of_day_phase: Optional[str] = None,
         current_weather_type: Optional[str] = None,
         current_tick: Optional[WorldTick] = None,
+        current_effective_lighting: Optional[LightingEnum] = None,
+        current_spot_id: Optional[SpotId] = None,
     ) -> Tuple[bool, Optional[str]]:
         t = cond.condition_type
         if t == InteractionConditionTypeEnum.ALWAYS:
@@ -483,6 +496,74 @@ class SpotInteractionService:
                 )
             return True, None
 
+        if t == InteractionConditionTypeEnum.TARGET_PLAYER_STATE_IS:
+            # PR 3: 対象プレイヤーの自由 state を判定する。PLAYER_STATE_IS の
+            # 対象版で、「crew だけ殺せる」「まだ印が無い相手だけ」を書く。
+            if cond.required_state is None:
+                return False, cond.failure_message or (
+                    "TARGET_PLAYER_STATE_IS に required_state がありません"
+                )
+            if target_player_status is None:
+                return False, (
+                    cond.failure_message
+                    or "TARGET_PLAYER_STATE_IS は対象プレイヤーを必要とします"
+                )
+            for k, v in cond.required_state.items():
+                if target_player_status.state.get(k) != v:
+                    return False, cond.failure_message or "相手の状態が条件を満たしません"
+            return True, None
+
+        if t in (
+            InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
+            InteractionConditionTypeEnum.SPOT_LIGHTING_IS_NOT,
+        ):
+            # PR 3: 実効照明による制限。current_effective_lighting は
+            # SpotPerceptionService で合成済みの値を application 層から受け取る
+            # (spot の静的 atmosphere ではない)。未配線 (None) は silent pass を
+            # 避けて拒否する — 明るい場所で暗所限定の行為が通るほうが害が大きい。
+            if not cond.required_lighting:
+                return False, cond.failure_message or (
+                    f"{t.value} に required_lighting がありません"
+                )
+            if current_effective_lighting is None:
+                return False, cond.failure_message or (
+                    f"{t.value} は実効照明の解決を必要とします"
+                )
+            matches = current_effective_lighting.value == cond.required_lighting
+            ok = (
+                matches
+                if t == InteractionConditionTypeEnum.SPOT_LIGHTING_IS
+                else not matches
+            )
+            if not ok:
+                return False, cond.failure_message or (
+                    f"ここの明るさではこの行動はできない (要求: {cond.required_lighting})"
+                )
+            return True, None
+
+        if t in (
+            InteractionConditionTypeEnum.AT_SPOT_IS,
+            InteractionConditionTypeEnum.AT_SPOT_IS_NOT,
+        ):
+            # PR 3: 行為者の現在地による制限。
+            if cond.required_spot_id is None:
+                return False, cond.failure_message or (
+                    f"{t.value} に required_spot がありません"
+                )
+            if current_spot_id is None:
+                return False, cond.failure_message or (
+                    f"{t.value} は行為者の現在地を必要とします"
+                )
+            matches = current_spot_id == cond.required_spot_id
+            ok = (
+                matches
+                if t == InteractionConditionTypeEnum.AT_SPOT_IS
+                else not matches
+            )
+            if not ok:
+                return False, cond.failure_message or "ここではこの行動はできない"
+            return True, None
+
         return False, cond.failure_message or "未対応の前提条件です"
 
     def execute_interaction(
@@ -505,6 +586,9 @@ class SpotInteractionService:
         # PR-F: 看板の書き手名。WRITE_PLAYER_TEXT effect が object.state に
         # 保存するために effect_service まで配線する。
         acting_player_display_name: Optional[str] = None,
+        # PR 3: 場所条件 (SPOT_LIGHTING_IS / AT_SPOT_IS) の評価用。
+        current_effective_lighting: Optional[LightingEnum] = None,
+        current_spot_id: Optional[SpotId] = None,
     ) -> InteractionExecutionResult:
         obj = interior.get_object(object_id)
         if obj is None:
@@ -523,6 +607,8 @@ class SpotInteractionService:
             current_time_of_day_phase=current_time_of_day_phase,
             current_weather_type=current_weather_type,
             current_tick=current_tick,
+            current_effective_lighting=current_effective_lighting,
+            current_spot_id=current_spot_id,
         )
         if not ok:
             raise InteractionNotAllowedException(reason or "Interaction not allowed")

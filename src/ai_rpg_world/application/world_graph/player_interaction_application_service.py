@@ -95,6 +95,12 @@ class PlayerInteractionApplicationService:
         interaction_service: Optional[SpotInteractionService] = None,
         effect_service: Optional[WorldGraphEffectService] = None,
         event_publisher: Optional[Any] = None,
+        # PR 3: 場所・時間・天候の前提条件を評価するための現在値。いずれも
+        # 未注入なら該当条件は成立しない (silent pass させない)。物体経路
+        # (SpotInteractionApplicationService) と揃える。
+        effective_lighting_resolver: Optional[Any] = None,
+        time_of_day_phase_provider: Optional[Any] = None,
+        weather_type_provider: Optional[Any] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_inventory_repository = player_inventory_repository
@@ -107,9 +113,37 @@ class PlayerInteractionApplicationService:
             self._effect_service
         )
         self._event_publisher = event_publisher
+        self._effective_lighting_resolver = effective_lighting_resolver
+        self._time_of_day_phase_provider = time_of_day_phase_provider
+        self._weather_type_provider = weather_type_provider
         self._by_action_name: Dict[str, InteractionDef] = {
             idef.action_name: idef for idef in player_interactions
         }
+
+    def set_effective_lighting_resolver(self, resolver: Optional[Any]) -> None:
+        """実効照明 resolver を後付けで注入する (二段構築用)。"""
+        self._effective_lighting_resolver = resolver
+
+    def set_time_of_day_phase_provider(self, provider: Optional[Any]) -> None:
+        """時間帯 provider を後付けで注入する (二段構築用)。"""
+        self._time_of_day_phase_provider = provider
+
+    def set_weather_type_provider(self, provider: Optional[Any]) -> None:
+        """天候 provider を後付けで注入する (二段構築用)。"""
+        self._weather_type_provider = provider
+
+    def _current_value_from(self, provider: Optional[Any]) -> Optional[str]:
+        """provider から現在値を取る。未注入 / 失敗なら None。
+
+        None は「その条件を成立させない」に倒れる。物体経路と同じ判断で、
+        provider の配線漏れを「常に失敗する」形で表に出す。
+        """
+        if provider is None:
+            return None
+        try:
+            return provider()
+        except Exception:
+            return None
 
     def set_event_publisher(self, event_publisher: Any) -> None:
         """event_publisher を後付けで注入する (二段構築用)。
@@ -207,6 +241,18 @@ class PlayerInteractionApplicationService:
             target_player_status=target_status,
             target_owned_item_spec_ids=target_owned,
             current_tick=current_tick,
+            current_time_of_day_phase=self._current_value_from(
+                self._time_of_day_phase_provider
+            ),
+            current_weather_type=self._current_value_from(
+                self._weather_type_provider
+            ),
+            current_effective_lighting=(
+                self._effective_lighting_resolver.resolve(actor_spot)
+                if self._effective_lighting_resolver is not None
+                else None
+            ),
+            current_spot_id=actor_spot,
         )
         if not ok:
             raise InteractionNotAllowedException(reason or "この行為はできない")

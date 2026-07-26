@@ -1253,6 +1253,17 @@ class ScenarioLoader:
                 "item_spec_id_parameter_key; どちらも無いと条件は常に不成立に"
                 f"なります: {raw!r}"
             )
+        required_lighting = self._parse_required_lighting(raw)
+        required_spot_id = self._parse_required_spot_id(raw, mapper)
+        # TARGET_PLAYER_STATE_IS は required_state が無いと常に不成立になる。
+        if (
+            raw.get("condition_type") == "TARGET_PLAYER_STATE_IS"
+            and raw.get("required_state") is None
+        ):
+            raise ScenarioLoadError(
+                "TARGET_PLAYER_STATE_IS requires required_state; "
+                f"無いと条件は常に不成立になります: {raw!r}"
+            )
         # 脱出ゲーム拡張フィールド
         required_items_raw = raw.get("required_items")
         required_item_spec_ids = None
@@ -1284,7 +1295,74 @@ class ScenarioLoader:
             # 対人 interaction: TARGET_HAS_ITEM / TARGET_HAS_NO_ITEM が判定
             # する品目を、interaction_parameters のどのキーから取るか。
             item_spec_id_parameter_key=parameter_key,
+            # PR 3: 場所条件。SPOT_LIGHTING_IS{_NOT} / AT_SPOT_IS{_NOT} 用。
+            required_lighting=required_lighting,
+            required_spot_id=required_spot_id,
         )
+
+    #: ``required_lighting`` / ``required_spot`` を書ける condition_type。
+    #: これ以外に書かれていたら「書いたのに効かない」宣言なので落とす。
+    _LIGHTING_CONDITIONS = ("SPOT_LIGHTING_IS", "SPOT_LIGHTING_IS_NOT")
+    _AT_SPOT_CONDITIONS = ("AT_SPOT_IS", "AT_SPOT_IS_NOT")
+
+    @classmethod
+    def _parse_required_lighting(cls, raw: Dict[str, Any]) -> Optional[str]:
+        """``required_lighting`` を検証して返す。
+
+        値は ``LightingEnum`` のメンバ名に限る。タイポを実行時まで持ち越すと
+        「照明が一致しないので不成立」と区別がつかず、シナリオ作者が書いた
+        failure_message の裏にタイポが隠れる。
+        """
+        condition_type = raw.get("condition_type")
+        value = raw.get("required_lighting")
+        if value is None:
+            if condition_type in cls._LIGHTING_CONDITIONS:
+                raise ScenarioLoadError(
+                    f"{condition_type} requires required_lighting; "
+                    f"無いと条件は常に不成立になります: {raw!r}"
+                )
+            return None
+        if condition_type not in cls._LIGHTING_CONDITIONS:
+            raise ScenarioLoadError(
+                f"required_lighting is only valid on {cls._LIGHTING_CONDITIONS}, "
+                f"got condition_type={condition_type!r}: {raw!r}"
+            )
+        valid = tuple(level.value for level in LightingEnum)
+        if value not in valid:
+            raise ScenarioLoadError(
+                f"required_lighting must be one of {valid}, got {value!r}: {raw!r}"
+            )
+        return value
+
+    @classmethod
+    def _parse_required_spot_id(
+        cls, raw: Dict[str, Any], mapper: ScenarioIdMapper
+    ) -> Optional[SpotId]:
+        """``required_spot`` (シナリオ上の文字列 ID) を SpotId に解決する。"""
+        condition_type = raw.get("condition_type")
+        value = raw.get("required_spot")
+        if value is None:
+            if condition_type in cls._AT_SPOT_CONDITIONS:
+                raise ScenarioLoadError(
+                    f"{condition_type} requires required_spot; "
+                    f"無いと条件は常に不成立になります: {raw!r}"
+                )
+            return None
+        if condition_type not in cls._AT_SPOT_CONDITIONS:
+            raise ScenarioLoadError(
+                f"required_spot is only valid on {cls._AT_SPOT_CONDITIONS}, "
+                f"got condition_type={condition_type!r}: {raw!r}"
+            )
+        # 未知のスポット ID は mapper が独自の例外を投げる。同じ「シナリオの
+        # 書き間違い」なのに例外型が変わると、呼び出し側の except が漏れる。
+        try:
+            return SpotId.create(mapper.get_int("spot", str(value)))
+        except ScenarioLoadError:
+            raise
+        except Exception as exc:
+            raise ScenarioLoadError(
+                f"required_spot={value!r} に対応する spot がシナリオにありません: {raw!r}"
+            ) from exc
 
     @staticmethod
     def _parse_item_spec_id_parameter_key(raw: Dict[str, Any]) -> Optional[str]:
