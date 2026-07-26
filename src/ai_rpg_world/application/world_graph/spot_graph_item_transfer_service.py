@@ -121,24 +121,22 @@ class TargetNotInSameSpotError(ItemTransferException):
 
 
 class SlotIsEmptyError(ItemTransferException):
-    """drop_item / give_item で指定した inventory スロットが空だった。
+    """drop_item / give_item で指定したアイテムが既に無い。
 
-    LLM が「持っていないアイテムのスロット番号」を指定した典型ケース。
-    resolver の label→slot 変換が古い状態を参照した場合や、LLM が hallucinate
-    した slot 番号でも起きる。message で inspect_target による inventory 再確認
-    を促す。
+    agent 向け経路では item_label から実行時に slot を引き直すため、LLM が
+    slot 番号を指定することはない。message でも存在しない引数を案内せず、
+    所持品欄の名前を再確認するよう促す。
 
-    ``slot_id`` を kwargs で受けて message に埋めるので、executor 側で
-    再構築しなくても LLM が「どの slot が空だったか」を読める。
+    ``slot_id`` は内部診断用に保持するが、LLM 向け message には出さない。
     """
 
     error_code = "ITEM_TRANSFER_SLOT_IS_EMPTY"
 
     def __init__(self, *, slot_id: int) -> None:
         msg = (
-            f"スロット {slot_id} には何も入っていません。"
-            f"inspect_target で自分のインベントリを確認してから、"
-            f"アイテムが実際に入っているスロット番号を指定してください。"
+            "その名前のアイテムをもう持っていません。"
+            "inspect_target で自分の所持品を確認してから、"
+            "所持品欄に表示されているアイテム名を指定してください。"
         )
         super().__init__(msg)
         self.slot_id = slot_id

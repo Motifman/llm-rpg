@@ -170,7 +170,7 @@ class TestResolveDropItemDisplayNameFallback:
     """spot_graph_drop_item も同じ display_name fallback を持つ。"""
 
     def test_display_name_drop(self) -> None:
-        """display name で drop できる。"""
+        """display name で drop 対象を spec に解決し、slot は実行時解決に残す。"""
         resolver = SpotGraphArgumentResolver()
         result = resolver.resolve_args(
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
@@ -178,8 +178,9 @@ class TestResolveDropItemDisplayNameFallback:
             _make_inventory_context(),
         )
         assert result is not None
-        assert result["slot_id"] == 11
-        assert result["item_instance_id"] == 2001
+        assert result["item_spec_id"] == 1001
+        assert "slot_id" not in result
+        assert "item_instance_id" not in result
 
 
 class TestResolvePickupItemDisplayNameFallback:

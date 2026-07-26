@@ -88,6 +88,7 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     ItemEffect,
     SatisfyNeedEffect,
 )
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
@@ -230,6 +231,30 @@ class SpotGraphToolExecutor:
     #   passive decay も同時に 0 にしたので、1 wait で「重い 1 ターン分の蓄積」を
     #   完全に消せる強度。連続待機の必要が消える。
     FATIGUE_RECOVERY_WAIT = 20
+
+    def _find_owned_slot_by_item_spec_id_and_spoilage(
+        self,
+        player_id: int,
+        item_spec_id_raw: Any,
+        is_spoiled_raw: Any,
+    ):
+        """所持中の同種・同腐敗状態アイテムから、その時点で空でない slot を 1 件引く。
+
+        inventory 表示は同種アイテムを 1 行に集約するため、prompt 構築時の
+        代表 slot を持ち回ると、batch give の 2 件目以降が空 slot を指して
+        しまう。一方、表示側は ``(item_spec_id, is_spoiled)`` で新鮮品と
+        腐敗品を分けるので、実行時解決も同じキーに揃える。
+        """
+        try:
+            spec_id = ItemSpecId.create(int(item_spec_id_raw))
+        except (TypeError, ValueError):
+            return None
+        inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
+        if inv is None:
+            return None
+        return inv.find_slot_by_item_spec_id_and_spoilage(
+            spec_id, bool(is_spoiled_raw), self._item_repository,
+        )
 
     def _get_status(self, player_id: int):
         """疲労チェック / 蓄積 / 回復用に PlayerStatusAggregate を取得する。
@@ -784,29 +809,28 @@ class SpotGraphToolExecutor:
                 detail="正の整数を指定してください",
             )
         try:
-            from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId as ISpecId
             inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
             if inv is None:
                 return LlmCommandResultDto(
                     success=False,
-                    message="インベントリが見つかりません。",
+                    message="プレイヤー情報が見つかりません。",
                     error_code="PLAYER_NOT_FOUND",
                     remediation=get_remediation("PLAYER_NOT_FOUND"),
                 )
-            target_spec = ISpecId.create(item_spec_id_int)
             # インベントリからアイテムインスタンスを探す。
             # 実験 #26 で発覚: 旧コードは `inv.slots` (存在しない属性) を iter して
             # 全 use_item が AttributeError → SYSTEM_ERROR (72 件) で死んでいた。
-            # PR #385 で `_inventory_slots.items()` 直接 iter に hot fix した後、
-            # 本 PR で aggregate 側の公開 API `find_slot_by_item_spec_id` に
-            # 切り替え、private 属性への直接アクセスを完全廃止 (恒久対策)。
-            found = inv.find_slot_by_item_spec_id(target_spec, self._item_repository)
+            # さらに同 spec の新鮮品 / 腐敗品は prompt 上で別ラベルになるため、
+            # resolver が渡す is_spoiled も含めて実行時に slot を引く。
+            found = self._find_owned_slot_by_item_spec_id_and_spoilage(
+                player_id, item_spec_id_int, args.get("is_spoiled", False),
+            )
             item_instance = None
             matched_slot_id = None
             if found is not None:
                 matched_slot_id, iid = found
                 item_instance = self._item_repository.find_by_id(iid)
-            if item_instance is None:
+            if item_instance is None or inv is None:
                 return LlmCommandResultDto(
                     success=False,
                     message="指定したアイテムは持っていません。",
@@ -1025,7 +1049,8 @@ class SpotGraphToolExecutor:
     def _drop_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_drop_item`: 所持アイテムを現在地の地面に置く。
 
-        resolver で slot_id / item_instance_id / target_display_name まで解決済み。
+        resolver は item_spec_id だけを解決する。同名アイテムを複数持つ場合に
+        prompt 構築時の代表 slot が古くなるため、slot は実行時に引き直す。
         本ハンドラは SpotGraphItemTransferService に委譲してインベントリから地面
         への転送だけ行う。同室者への観測注入は Phase 19 で event 経由で行う。
         """
@@ -1036,20 +1061,22 @@ class SpotGraphToolExecutor:
                 error_code="NOT_WIRED",
                 remediation=get_remediation("NOT_WIRED"),
             )
-        slot_id_raw = args.get("slot_id")
-        if slot_id_raw is None:
+        item_spec_id_raw = args.get("item_spec_id")
+        if item_spec_id_raw is None:
             return build_invalid_arg_failure(
-                arg_name="slot_id",
-                detail="resolver が slot_id を埋めませんでした (label 解決失敗の可能性)",
+                arg_name="item_spec_id",
+                detail="resolver が item_spec_id を埋めませんでした (label 解決失敗の可能性)",
             )
-        try:
-            slot_id_int = int(slot_id_raw)
-        except (TypeError, ValueError):
+        found = self._find_owned_slot_by_item_spec_id_and_spoilage(
+            player_id, item_spec_id_raw, args.get("is_spoiled", False),
+        )
+        if found is None:
             return build_invalid_arg_failure(
-                arg_name="slot_id", detail="slot_id は整数で指定してください"
+                arg_name="item_label",
+                detail="指定した名前のアイテムをもう持っていません。所持品欄の名前を確認してください。",
             )
-        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
         from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+        slot_id, _item_instance_id = found
         # Phase C: stealth=true なら ACTOR_ONLY、それ以外は従来通り SAME_SPOT
         policy = (
             WitnessPolicy.ACTOR_ONLY if bool(args.get("stealth", False))
@@ -1057,7 +1084,7 @@ class SpotGraphToolExecutor:
         )
         try:
             result = self._item_transfer_service.drop_item(
-                PlayerId(player_id), SlotId(slot_id_int),
+                PlayerId(player_id), slot_id,
                 witness_policy=policy,
             )
             self._maybe_emit_say_inline(player_id, args)
@@ -1176,8 +1203,6 @@ class SpotGraphToolExecutor:
                 "配列で渡してください。",
             )
 
-        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-
         ok_lines: list[str] = []
         ng_lines: list[str] = []
         # partial success で最も深刻な (LLM に伝えたい) 失敗 error_code を残す。
@@ -1201,7 +1226,8 @@ class SpotGraphToolExecutor:
                     first_ng_code = str(entry.get("error_code"))
                 continue
             try:
-                slot_int = int(entry["slot_id"])
+                item_spec_id = entry["item_spec_id"]
+                is_spoiled = bool(entry.get("is_spoiled", False))
                 to_int = int(entry["target_player_id"])
             except (KeyError, TypeError, ValueError):
                 ng_lines.append(
@@ -1210,9 +1236,22 @@ class SpotGraphToolExecutor:
                 if first_ng_code is None:
                     first_ng_code = "INVALID_ARGUMENT"
                 continue
+            found = self._find_owned_slot_by_item_spec_id_and_spoilage(
+                player_id, item_spec_id, is_spoiled,
+            )
+            if found is None:
+                msg = (
+                    f"{item_disp} をもう持っていません。"
+                    "所持品欄に表示されているアイテム名を確認してください。"
+                )
+                ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
+                if first_ng_code is None:
+                    first_ng_code = "ITEM_TRANSFER_SLOT_IS_EMPTY"
+                continue
+            slot_id, _item_instance_id = found
             try:
                 self._item_transfer_service.give_item(
-                    PlayerId(player_id), PlayerId(to_int), SlotId(slot_int),
+                    PlayerId(player_id), PlayerId(to_int), slot_id,
                 )
                 ok_lines.append(f"{item_disp} → {target_disp}: OK")
             except TargetIsSelfError as e:
@@ -1267,6 +1306,12 @@ class SpotGraphToolExecutor:
                     first_ng_code = "ITEM_TRANSFER_FAILED"
 
         # 全失敗の場合は success=False で返し、LLM に「何 1 つ渡せなかった」を明示
+        trace_payload = {
+            "give_item_total_count": len(gives_resolved),
+            "give_item_success_count": len(ok_lines),
+            "give_item_failure_count": len(ng_lines),
+            "give_item_partial_failure": bool(ok_lines and ng_lines),
+        }
         if not ok_lines:
             code = first_ng_code or "ITEM_TRANSFER_FAILED"
             return LlmCommandResultDto(
@@ -1274,6 +1319,7 @@ class SpotGraphToolExecutor:
                 message="give_item: 全て失敗\n" + "\n".join(ng_lines),
                 error_code=code,
                 remediation=get_remediation(code),
+                trace_payload=trace_payload,
             )
 
         # 1 件でも成功したら success=True とし、say_inline を発火する
@@ -1284,6 +1330,7 @@ class SpotGraphToolExecutor:
         return LlmCommandResultDto(
             success=True,
             message=append_inner_thought_to_message(msg, args),
+            trace_payload=trace_payload,
         )
 
     def _attack(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:

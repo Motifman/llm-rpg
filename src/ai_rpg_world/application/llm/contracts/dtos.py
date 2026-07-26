@@ -62,6 +62,9 @@ class LlmCommandResultDto:
     should_reschedule: bool = False
     was_no_op: bool = False
     omit_result_in_prompt: bool = False
+    # trace にだけ載せる追加構造情報。LLM prompt / action_result_store へは
+    # 流さない。例: batch tool の部分成功件数。
+    trace_payload: Optional[Dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.success, bool):
@@ -78,6 +81,8 @@ class LlmCommandResultDto:
             raise TypeError("was_no_op must be bool")
         if not isinstance(self.omit_result_in_prompt, bool):
             raise TypeError("omit_result_in_prompt must be bool")
+        if self.trace_payload is not None and not isinstance(self.trace_payload, dict):
+            raise TypeError("trace_payload must be dict or None")
 
 
 @dataclass(frozen=True)
@@ -285,6 +290,7 @@ class ToolRuntimeTargetDto:
     # 旧 item_instance_id フィールドを整理する想定 (TODO: rename or migrate)。
     real_item_instance_id: Optional[int] = None
     inventory_slot_id: Optional[int] = None
+    is_spoiled: bool = False
     chest_world_object_id: Optional[int] = None
     conversation_choice_index: Optional[int] = None
     skill_loadout_id: Optional[int] = None
@@ -353,6 +359,8 @@ class ToolRuntimeTargetDto:
             raise TypeError("real_item_instance_id must be int or None")
         if self.inventory_slot_id is not None and not isinstance(self.inventory_slot_id, int):
             raise TypeError("inventory_slot_id must be int or None")
+        if not isinstance(self.is_spoiled, bool):
+            raise TypeError("is_spoiled must be bool")
         if self.chest_world_object_id is not None and not isinstance(self.chest_world_object_id, int):
             raise TypeError("chest_world_object_id must be int or None")
         if self.conversation_choice_index is not None and not isinstance(

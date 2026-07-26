@@ -74,7 +74,7 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "GIVE_ITEM_TARGET_DOWN": "倒れている相手はアイテムを受け取れません。先に tend_to_player で手当てするか、生存して動ける別の相手を選んでください。",
     # PR-ε (Y_after_pr639_640 audit 後続): drop / pickup 系の頻発失敗を汎用
     # ITEM_TRANSFER_FAILED から分離し、LLM が次アクションを判断できる粒度に
-    "ITEM_TRANSFER_SLOT_IS_EMPTY": "指定したスロットに何も入っていません。inspect_target で自分のインベントリを確認し、実際にアイテムが入っているスロットを指定してください。",
+    "ITEM_TRANSFER_SLOT_IS_EMPTY": "その名前のアイテムをもう持っていない可能性があります。inspect_target で自分の所持品を確認し、所持品欄に表示されているアイテム名を指定してください。",
     "PICKUP_ITEM_GROUND_ITEM_GONE": "そのアイテムはもう地面にありません。他のプレイヤーが先に拾ったか、あなたの観測が古い可能性があります。explore で周囲を見直すか、別の目的に切り替えてください。",
     "PICKUP_ITEM_SELF_INVENTORY_FULL": "自分のインベントリが満杯です。drop_item で不要なアイテムを 1 つ手放して空きを作ってから、再度 pickup してください。",
     # PR-γ (Y_after_pr639_640 後続): audit で未登録が発覚した 5 code に
