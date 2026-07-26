@@ -33,6 +33,9 @@ from ai_rpg_world.application.llm.services.in_memory_stagnation_reasoning_latch 
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
+    TOOL_NAME_MEMORY_EXPLORE_RELATED,
+    TOOL_NAME_MEMORY_RECALL_EPISODES,
+    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
@@ -1341,6 +1344,7 @@ def test_episodic_on_exposes_episode_recall_with_semantic_default_off(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """episodic stack だけでは能動記憶ツールを露出せず、露出フラグを実験条件にする。"""
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
     runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
 
@@ -1356,7 +1360,172 @@ def test_episodic_on_exposes_episode_recall_with_semantic_default_off(
     assert stack.memory_link_store is None
 
     tool_names = [definition.name for definition in runtime.get_tool_definitions()]
-    assert "memory_recall_episodes" in tool_names
+    assert TOOL_NAME_MEMORY_RECALL_EPISODES not in tool_names
+    assert TOOL_NAME_MEMORY_EXPLORE_RELATED not in tool_names
+    assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC not in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
+
+
+@pytest.mark.parametrize(
+    ("flag_name", "tool_name"),
+    [
+        ("episodic_recall_enabled", TOOL_NAME_MEMORY_RECALL_EPISODES),
+        ("episodic_explore_related_enabled", TOOL_NAME_MEMORY_EXPLORE_RELATED),
+        ("semantic_search_enabled", TOOL_NAME_MEMORY_SEARCH_SEMANTIC),
+    ],
+)
+def test_memory_tool_exposure_flags_hide_tools_when_false(
+    clean_runtime_env: None,
+    flag_name: str,
+    tool_name: str,
+) -> None:
+    """各能動記憶ツールは対応する露出フラグが false のとき LLM に出ない。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True,
+            **{flag_name: False},
+        )
+    )
+
+    tool_names = {definition.name for definition in runtime.get_tool_definitions()}
+
+    assert tool_name not in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
+
+
+@pytest.mark.parametrize(
+    ("flag_name", "tool_name"),
+    [
+        ("episodic_recall_enabled", TOOL_NAME_MEMORY_RECALL_EPISODES),
+        ("episodic_explore_related_enabled", TOOL_NAME_MEMORY_EXPLORE_RELATED),
+        ("semantic_search_enabled", TOOL_NAME_MEMORY_SEARCH_SEMANTIC),
+    ],
+)
+def test_memory_tool_exposure_flags_show_tools_when_executor_is_wired(
+    clean_runtime_env: None,
+    flag_name: str,
+    tool_name: str,
+) -> None:
+    """露出フラグ true かつ必要な記憶スタックがあるときだけ能動記憶ツールを LLM に出す。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True,
+            **{flag_name: True},
+        )
+    )
+
+    tool_names = {definition.name for definition in runtime.get_tool_definitions()}
+
+    assert tool_name in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
+
+
+@pytest.mark.parametrize(
+    ("flag_name", "tool_name", "env_name"),
+    [
+        (
+            "episodic_recall_enabled",
+            TOOL_NAME_MEMORY_RECALL_EPISODES,
+            "EPISODIC_RECALL_ENABLED",
+        ),
+        (
+            "episodic_explore_related_enabled",
+            TOOL_NAME_MEMORY_EXPLORE_RELATED,
+            "EPISODIC_EXPLORE_RELATED_ENABLED",
+        ),
+        (
+            "semantic_search_enabled",
+            TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+            "SEMANTIC_SEARCH_ENABLED",
+        ),
+    ],
+)
+def test_memory_tool_flag_true_without_memory_stack_fails_fast(
+    clean_runtime_env: None,
+    flag_name: str,
+    tool_name: str,
+    env_name: str,
+) -> None:
+    """露出フラグ true なのに前提 executor が無い構成は、黙って無効化せず起動時に落とす。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=False,
+            **{flag_name: True},
+        )
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        runtime.get_tool_definitions()
+
+    message = str(exc_info.value)
+    assert env_name in message
+    assert tool_name in message
+
+
+def test_memory_tool_flag_true_without_executor_fails_during_wiring_validation(
+    clean_runtime_env: None,
+) -> None:
+    """露出設定の不整合は runtime_manager の整合性検証でも警告に丸めず起動を止める。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=False,
+            semantic_search_enabled=True,
+        )
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            llm_client=StubLlmClient(None),
+        )
+
+    message = str(exc_info.value)
+    assert "SEMANTIC_SEARCH_ENABLED" in message
+    assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in message
+
+
+def test_pure_spot_graph_mode_hides_memory_tools_before_individual_flags(
+    clean_runtime_env: None,
+) -> None:
+    """pure_spot_graph mode では個別フラグより粗い補助ツール遮断を優先する。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(
+            tool_mode="pure_spot_graph",
+            episodic_enabled=False,
+            semantic_search_enabled=True,
+        )
+    )
+
+    tool_names = {definition.name for definition in runtime.get_tool_definitions()}
+
+    assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC not in tool_names
+    assert TOOL_NAME_MEMORY_RECALL_EPISODES not in tool_names
+    assert TOOL_NAME_MEMORY_EXPLORE_RELATED not in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
+
+
+def test_scenario_and_config_tool_exposure_gates_share_get_tool_definitions(
+    clean_runtime_env: None,
+) -> None:
+    """シナリオ由来の prepare_action 除外と設定由来の記憶ツール露出を同じ一覧で決める。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True,
+            semantic_search_enabled=True,
+        ),
+        scenario_path=_SCENARIOS_DIR / "survival_island_v4_coop.json",
+    )
+
+    tool_names = {definition.name for definition in runtime.get_tool_definitions()}
+
+    assert TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION not in tool_names
+    assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
 
 
 def test_semantic_config_wires_world_runtime_stack_and_prompt_learning(

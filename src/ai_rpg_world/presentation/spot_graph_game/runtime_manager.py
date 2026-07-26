@@ -86,8 +86,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
+    TOOL_NAME_MEMORY_EXPLORE_RELATED,
     TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
     TOOL_NAME_MEMORY_RECALL_EPISODES,
+    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
     TOOL_NAME_TODO_LIST,
@@ -1101,6 +1103,12 @@ class _WorldLlmWiring:
             TOOL_NAME_MEMORY_RECALL_EPISODES: self._make_auxiliary_tool_handler(
                 TOOL_NAME_MEMORY_RECALL_EPISODES
             ),
+            TOOL_NAME_MEMORY_EXPLORE_RELATED: self._make_auxiliary_tool_handler(
+                TOOL_NAME_MEMORY_EXPLORE_RELATED
+            ),
+            TOOL_NAME_MEMORY_SEARCH_SEMANTIC: self._make_auxiliary_tool_handler(
+                TOOL_NAME_MEMORY_SEARCH_SEMANTIC
+            ),
             # PR-D (#588) 後続 fix: memory_recall_by_handle も同じ aux 経路に
             # 載せる。SSOT である本テーブルにエントリが無いと
             # ``execute_tool`` の dispatcher が UNSUPPORTED_TOOL を返す silent
@@ -1363,7 +1371,9 @@ class _WorldLlmWiring:
         """
         try:
             definitions = self.runtime.get_tool_definitions()
-        except Exception:
+        except Exception as exc:
+            if exc.__class__.__name__ == "ToolExposureConfigurationError":
+                raise
             logger.warning(
                 "_validate_tool_handler_consistency: get_tool_definitions が "
                 "失敗したため整合性検証をスキップする",
