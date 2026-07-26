@@ -464,3 +464,253 @@ class TestCoopMetricsIncludedInComputeMetrics:
         assert m["coop_hearsay_by_speaker"]["by_speaker"] == {"リオ": 1}
         assert m["coop_pending_prediction"]["by_kind"] == {"created": 1}
         assert m["coop_give_item"]["success"] == 1
+
+
+def _action(tick: int, pid: int, tool: str) -> dict:
+    return {"kind": "action", "tick": tick, "player_id": pid, "payload": {"tool": tool}}
+
+
+class TestActionBudget:
+    """_extract_action_budget が行動を用途別に束ね、世界を変える行動の割合を出す挙動を保証する。"""
+
+    def test_categorises_tools_and_computes_shares(self, em) -> None:
+        """speak/memo_add/travel_to/explore/interact を 1 件ずつ渡すと、各カテゴリ 1 件・
+        世界を変える行動 (移動 + 探索 + 世界操作) が 5 件中 3 件で 60.0% になる。"""
+        events = [
+            _action(0, 1, "speak"),
+            _action(1, 1, "memo_add"),
+            _action(2, 1, "travel_to"),
+            _action(3, 1, "explore"),
+            _action(4, 1, "interact"),
+        ]
+        out = em._extract_action_budget(events)
+        assert out["total_actions"] == 5
+        assert out["per_category"] == {
+            "conversation": 1,
+            "memo": 1,
+            "movement": 1,
+            "exploration": 1,
+            "world_change": 1,
+        }
+        assert out["world_changing_actions"] == 3
+        assert out["world_changing_share"] == 60.0
+
+    def test_conversation_includes_listen_and_recall_excluded_from_world_change(
+        self, em
+    ) -> None:
+        """listen は会話に、memory_recall_episodes は想起に入り、どちらも
+        世界を変える行動には数えない (= 世界を変える行動 0 件で 0.0%)。"""
+        events = [
+            _action(0, 1, "listen"),
+            _action(1, 1, "memory_recall_episodes"),
+        ]
+        out = em._extract_action_budget(events)
+        assert out["per_category"] == {"conversation": 1, "recall": 1}
+        assert out["world_changing_share"] == 0.0
+
+    def test_unknown_tool_is_surfaced_as_unclassified_with_its_real_name(
+        self, em
+    ) -> None:
+        """分類表に無いツールは総数から消えず、unclassified として実名と件数が残る。"""
+        events = [_action(0, 1, "speak"), _action(1, 1, "brand_new_tool")]
+        out = em._extract_action_budget(events)
+        assert out["total_actions"] == 2
+        assert out["per_category"]["unclassified"] == 1
+        assert out["unclassified_tools"] == {"brand_new_tool": 1}
+
+    def test_no_tool_is_classified_into_two_categories(self, em) -> None:
+        """同じツールを 2 つのカテゴリに入れると割合の分母が壊れるため、
+        ACTION_BUDGET_CATEGORIES の全ツールは重複なく 1 カテゴリだけに属する。"""
+        seen: dict[str, str] = {}
+        for category, tools in em.ACTION_BUDGET_CATEGORIES.items():
+            for tool in tools:
+                assert tool not in seen, (
+                    f"{tool} が {seen.get(tool)} と {category} の両方に入っている"
+                )
+                seen[tool] = category
+
+    def test_per_player_share_is_relative_to_that_player(self, em) -> None:
+        """割合は player ごとの総数で正規化する。P1 が speak 2 件・travel_to 2 件なら
+        会話 50.0% で、他 player の件数には影響されない。"""
+        events = [
+            _action(0, 1, "speak"),
+            _action(1, 1, "speak"),
+            _action(2, 1, "travel_to"),
+            _action(3, 1, "travel_to"),
+            _action(4, 2, "speak"),
+        ]
+        out = em._extract_action_budget(events)
+        assert out["per_player_share"]["1"]["conversation"] == 50.0
+        assert out["per_player_share"]["2"]["conversation"] == 100.0
+
+    def test_empty_trace_returns_zero_share_without_dividing_by_zero(self, em) -> None:
+        """action が 1 件も無い trace でも例外を投げず、割合は 0.0 を返す。"""
+        out = em._extract_action_budget([])
+        assert out["total_actions"] == 0
+        assert out["world_changing_share"] == 0.0
+
+
+class TestSpeakChains:
+    """_extract_speak_chains が speak の直後の行動と speak 連鎖の長さを出す挙動を保証する。"""
+
+    def test_counts_speak_to_speak_share(self, em) -> None:
+        """P1 が speak→speak→travel_to のとき、後続を持つ speak 2 件のうち
+        1 件が speak なので speak→speak は 50.0%。"""
+        events = [
+            _action(0, 1, "speak"),
+            _action(1, 1, "speak"),
+            _action(2, 1, "travel_to"),
+        ]
+        out = em._extract_speak_chains(events)
+        assert out["speak_with_following_action"] == 2
+        assert out["speak_to_speak"] == 1
+        assert out["speak_to_speak_share"] == 50.0
+        assert out["next_action_after_speak"] == {"speak": 1, "travel_to": 1}
+
+    def test_trailing_speak_has_no_following_action(self, em) -> None:
+        """列の最後の speak は「直後の行動」を持たないため分母に入れない。
+        speak 1 件だけの trace では分母 0 で 0.0% を返す。"""
+        out = em._extract_speak_chains([_action(0, 1, "speak")])
+        assert out["speak_with_following_action"] == 0
+        assert out["speak_to_speak_share"] == 0.0
+
+    def test_chains_do_not_cross_players(self, em) -> None:
+        """別 player の speak は連鎖として繋げない。P1 と P2 が交互に speak しても
+        最長連続はそれぞれ 1 に留まる。"""
+        events = [
+            _action(0, 1, "speak"),
+            _action(0, 2, "speak"),
+            _action(1, 1, "travel_to"),
+            _action(1, 2, "travel_to"),
+        ]
+        out = em._extract_speak_chains(events)
+        assert out["longest_consecutive_speak_per_player"] == {"1": 1, "2": 1}
+        assert out["speak_to_speak"] == 0
+
+    def test_longest_run_resets_after_other_action(self, em) -> None:
+        """speak が他の行動で中断されると連続数は 0 に戻る。
+        speak→speak→explore→speak なら最長は 2。"""
+        events = [
+            _action(0, 1, "speak"),
+            _action(1, 1, "speak"),
+            _action(2, 1, "explore"),
+            _action(3, 1, "speak"),
+        ]
+        out = em._extract_speak_chains(events)
+        assert out["longest_consecutive_speak_per_player"]["1"] == 2
+
+
+class TestSpatialDispersion:
+    """_extract_spatial_dispersion が tick ごとの分散度と死亡前の切り分けを出す挙動を保証する。"""
+
+    def _tick(self, tick: int) -> dict:
+        return {"kind": "tick_start", "tick": tick, "payload": {}}
+
+    def _pos(self, tick: int, pid: int, spot: str) -> dict:
+        return {
+            "kind": "position_change",
+            "tick": tick,
+            "player_id": pid,
+            "payload": {"to_spot_id": spot, "spot_name": spot, "player_name": f"P{pid}"},
+        }
+
+    def _death(self, tick: int, pid: int, outcome: str = "DEAD") -> dict:
+        return {
+            "kind": "observation",
+            "tick": tick,
+            "player_id": pid,
+            "payload": {
+                "prose": "死亡した。",
+                "structured": {
+                    "type": "player_outcome_resolved",
+                    "player_id": pid,
+                    "old_outcome": "UNRESOLVED",
+                    "new_outcome": outcome,
+                },
+            },
+        }
+
+    def test_all_together_gives_mean_one(self, em) -> None:
+        """全 tick で 2 人が同じスポットにいると、分散は毎 tick 1 箇所で平均 1.0。"""
+        events = [
+            self._tick(0), self._tick(1),
+            self._pos(0, 1, "浜"), self._pos(0, 2, "浜"),
+        ]
+        out = em._extract_spatial_dispersion(events)
+        assert out["mean_distinct_spots"] == 1.0
+        assert out["distinct_spot_histogram"] == {"1": 2}
+
+    def test_split_raises_mean_and_is_carried_forward(self, em) -> None:
+        """tick1 で P2 が森へ移ると tick1 以降は 2 箇所になる。移動しない tick も
+        直前のスポットに居続けたとみなすので、3 tick の平均は (1+2+2)/3 = 1.67。"""
+        events = [
+            self._tick(0), self._tick(1), self._tick(2),
+            self._pos(0, 1, "浜"), self._pos(0, 2, "浜"),
+            self._pos(1, 2, "森"),
+        ]
+        out = em._extract_spatial_dispersion(events)
+        assert out["distinct_spot_histogram"] == {"1": 1, "2": 2}
+        assert out["mean_distinct_spots"] == 1.67
+
+    def test_before_first_death_excludes_ticks_from_the_death_onward(self, em) -> None:
+        """死体の位置が carry-forward で分散を膨らませるため、最初の死亡 tick 以降を
+        除いた値も返す。tick2 で死亡なら死亡前は tick0-1 の 2 tick だけを見る。"""
+        events = [
+            self._tick(0), self._tick(1), self._tick(2), self._tick(3),
+            self._pos(0, 1, "浜"), self._pos(0, 2, "浜"),
+            self._pos(2, 2, "森"),
+            self._death(2, 2),
+        ]
+        out = em._extract_spatial_dispersion(events)
+        assert out["first_death_tick"] == 2
+        assert out["before_first_death"]["tick_count"] == 2
+        assert out["before_first_death"]["mean_distinct_spots"] == 1.0
+
+    def test_ejected_counts_as_terminal_outcome(self, em) -> None:
+        """追放された player の位置も残り続けるため、EJECTED も死亡と同じ扱いにする。"""
+        events = [
+            self._tick(0), self._tick(1),
+            self._pos(0, 1, "浜"),
+            self._death(1, 1, outcome="EJECTED"),
+        ]
+        out = em._extract_spatial_dispersion(events)
+        assert out["first_death_tick"] == 1
+
+    def test_run_without_death_reports_none_instead_of_zero(self, em) -> None:
+        """誰も死ななかった run では first_death_tick を None にし、死亡前の
+        切り分けも返さない (= tick 0 で死んだと読める 0 を返さない)。"""
+        events = [self._tick(0), self._pos(0, 1, "浜")]
+        out = em._extract_spatial_dispersion(events)
+        assert out["first_death_tick"] is None
+        assert out["before_first_death"] is None
+
+    def test_revive_does_not_count_as_death(self, em) -> None:
+        """DEAD 以外の outcome 遷移 (蘇生・生存確定) は死亡として拾わない。"""
+        events = [
+            self._tick(0),
+            self._pos(0, 1, "浜"),
+            self._death(0, 1, outcome="SURVIVED"),
+        ]
+        out = em._extract_spatial_dispersion(events)
+        assert out["first_death_tick"] is None
+
+
+class TestClusteringMetricsIncludedInComputeMetrics:
+    def test_compute_metrics_exposes_the_three_clustering_metrics(
+        self, em, tmp_path
+    ) -> None:
+        """compute_metrics の戻り値に action_budget / speak_chains /
+        spatial_dispersion が揃う (= 分析側が個別に呼ばずに済む)。"""
+        events = [
+            {"kind": "tick_start", "tick": 0, "payload": {}},
+            {
+                "kind": "position_change", "tick": 0, "player_id": 1,
+                "payload": {"to_spot_id": "浜", "spot_name": "浜", "player_name": "エイダ"},
+            },
+            _action(0, 1, "speak"),
+            _action(0, 1, "travel_to"),
+        ]
+        m = em.compute_metrics(_write_trace(tmp_path, events))
+        assert m["action_budget"]["world_changing_share"] == 50.0
+        assert m["speak_chains"]["next_action_after_speak"] == {"travel_to": 1}
+        assert m["spatial_dispersion"]["mean_distinct_spots"] == 1.0
