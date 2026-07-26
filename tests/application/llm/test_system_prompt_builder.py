@@ -46,6 +46,14 @@ class TestDefaultSystemPromptBuilder:
         assert "【世界とのやり取りの規約】" in text
         assert "ツール" in text
 
+    def test_build_can_hide_memo_tool_guidance(self, player_info):
+        """memo tool を露出しない構成では、既定 system prompt から memo 説明を消せる。"""
+        text = DefaultSystemPromptBuilder(include_memo_tools=False).build(player_info)
+
+        assert "memo_add" not in text
+        assert "memo_list" not in text
+        assert "memo_done" not in text
+
     def test_build_frames_relevant_memories_as_subjective(self, builder, player_info):
         """「関連する記憶」が主観的記憶として読むよう誘導されている"""
         text = builder.build(player_info)

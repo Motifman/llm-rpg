@@ -32,6 +32,12 @@ DEFAULT_SYSTEM_PROMPT_TEMPLATE = """あなたは「{{player_name}}」という�
 - memo ツール（memo_add / memo_list / memo_done）が利用可能であれば、ターンを跨いで覚えておきたい目標 / 戦略 / 観察などを context に固定できます。完了したら memo_done で記録してください。
 """
 
+_MEMO_TOOL_GUIDANCE_LINE = (
+    "- memo ツール（memo_add / memo_list / memo_done）が利用可能であれば、"
+    "ターンを跨いで覚えておきたい目標 / 戦略 / 観察などを context に固定できます。"
+    "完了したら memo_done で記録してください。"
+)
+
 # Template 内で許容する変数名。SystemPromptPlayerInfoDto の field と一致させる。
 # 新しい変数を template に足すときはここにも追加すること (未知変数なら
 # DefaultSystemPromptBuilder.__init__ で ValueError)。
@@ -68,15 +74,26 @@ def _validate_template_strict(template: str) -> None:
 class DefaultSystemPromptBuilder(ISystemPromptBuilder):
     """SystemPromptPlayerInfoDto からシステムプロンプト文字列を生成する。
 
+    実験 run の spot graph 経路は WorldSystemPromptBuilder を使うため、この builder の
+    include_memo_tools は主に demo script / 既定テンプレート経路向けの保険である。
+    tool を隠した構成で、存在しない memo tool の説明だけが残る混乱を避ける。
+
     Issue #227 後続レビュー Prompt MEDIUM-7:
         __init__ で template 内の `{{var}}` を全て scan し、未知変数を発見したら
         即時 ValueError を投げる (strict mode)。これにより typo は construction
         time に検出され、実 LLM 呼び出し直前まで気付かないという旧挙動を解消する。
     """
 
-    def __init__(self, template: str = DEFAULT_SYSTEM_PROMPT_TEMPLATE) -> None:
+    def __init__(
+        self,
+        template: str = DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+        *,
+        include_memo_tools: bool = True,
+    ) -> None:
         if not isinstance(template, str):
             raise TypeError("template must be str")
+        if not include_memo_tools and template == DEFAULT_SYSTEM_PROMPT_TEMPLATE:
+            template = template.replace(f"{_MEMO_TOOL_GUIDANCE_LINE}\n", "")
         _validate_template_strict(template)
         self._template = template
 

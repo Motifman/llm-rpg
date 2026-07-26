@@ -56,6 +56,7 @@ class TestFromEnvDefaults:
         assert cfg.episodic_reinterpretation_enabled is False
         assert cfg.belief_evidence_enabled is False
         assert cfg.memo_distill_enabled is True
+        assert cfg.memo_tools_enabled is True
         assert cfg.goal_reflect_enabled is False
         assert cfg.stagnation_reasoning_enabled is False
         assert cfg.tool_mode == "default"
@@ -294,6 +295,7 @@ class TestFromEnvExplicit:
                 "BELIEF_ATTRIBUTION_ENABLED": "1",
                 "SALIENCE_STRUCTURED_FAILURE_ENABLED": "1",
                 "MEMO_DISTILL_ENABLED": "1",
+                "MEMO_TOOLS_ENABLED": "0",
                 "UNCONSCIOUS_CONTEXT_ENABLED": "1",
                 "ERROR_DRIVEN_REINTERPRETATION_ENABLED": "1",
                 "RECALL_HIT_BOOST_ENABLED": "1",
@@ -342,6 +344,7 @@ class TestFromEnvExplicit:
         assert cfg.belief_attribution_enabled is True
         assert cfg.salience_structured_failure_enabled is True
         assert cfg.memo_distill_enabled is True
+        assert cfg.memo_tools_enabled is False
         assert cfg.unconscious_context_enabled is True
         assert cfg.error_driven_reinterpretation_enabled is True
         assert cfg.recall_hit_boost_enabled is True
