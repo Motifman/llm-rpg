@@ -179,7 +179,9 @@ class GamePhaseStore:
         """会議中か。toolset の選択と tool の fail-fast が参照する。"""
         return self._current.phase is GamePhase.MEETING
 
-    def begin_meeting(self, *, tick: int, trigger: str) -> GamePhaseState:
+    def begin_meeting(
+        self, *, tick: int, trigger: str, initiator_player_id: Optional[int] = None
+    ) -> GamePhaseState:
         """会議を始める。既に会議中なら例外。
 
         黙って 2 回目を通すと開始 tick が上書きされ、会議の tick 上限が
@@ -195,7 +197,10 @@ class GamePhaseStore:
         # して扱われ、会議が始まった瞬間に閉じることがある。
         self.clear_ballots()
         return self._transition_to(
-            GamePhase.MEETING, tick=tick, trigger=trigger
+            GamePhase.MEETING,
+            tick=tick,
+            trigger=trigger,
+            initiator_player_id=initiator_player_id,
         )
 
     def end_meeting(self, *, tick: int, reason: str) -> GamePhaseState:
@@ -249,13 +254,19 @@ class GamePhaseStore:
         self._reported_bodies = {int(pid) for pid in reported_bodies}
 
     def _transition_to(
-        self, phase: GamePhase, *, tick: int, trigger: str
+        self,
+        phase: GamePhase,
+        *,
+        tick: int,
+        trigger: str,
+        initiator_player_id: "Optional[int]" = None,
     ) -> GamePhaseState:
         state = GamePhaseState(
             phase=phase,
             started_at_tick=tick,
             last_activity_tick=tick,
             trigger=trigger,
+            initiator_player_id=initiator_player_id,
         )
         self._current = state
         self._history.append(state)

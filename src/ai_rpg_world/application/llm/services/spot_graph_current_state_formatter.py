@@ -70,6 +70,14 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
             dark_hint = " (暗い)" if tod.is_dark else ""
             lines.append(f"時刻帯: {tod.display_text}{dark_hint}")
 
+        # 会議中であることは、観測ではなく現在状態に置く。
+        #
+        # 観測は流れて消えるが、ツールセットは会議のあいだずっと切り替わって
+        # いる。**「なぜ移動できないのか」を説明する情報が文脈から消える**の
+        # を避ける。現在状態は毎ターン組み直されるので消えない。
+        if dto.meeting_status_line:
+            lines.append(dto.meeting_status_line)
+
         # シナリオに TICK_LIMIT lose_condition があれば「残り猶予」だけ伝える。
         # 勝利条件には触れない (171a: meta-info のみ。導線はシナリオ責務で別途整備)。
         if dto.tick_budget_remaining is not None:

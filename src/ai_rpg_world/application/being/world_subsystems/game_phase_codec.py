@@ -33,6 +33,9 @@ def _encode(state: GamePhaseState) -> dict[str, Any]:
         "started_at_tick": state.started_at_tick,
         "last_activity_tick": state.last_activity_tick,
         "trigger": state.trigger,
+        # 招集者も保存する。落とすと、再開後の現在状態から
+        # 「誰が呼びかけたか」が消えて議論の出発点が失われる。
+        "initiator_player_id": state.initiator_player_id,
     }
 
 
@@ -52,6 +55,11 @@ def _decode(raw: Any) -> GamePhaseState:
         started_at_tick=int(raw.get("started_at_tick", 0)),
         last_activity_tick=int(raw.get("last_activity_tick", 0)),
         trigger=raw.get("trigger"),
+        initiator_player_id=(
+            int(raw["initiator_player_id"])
+            if raw.get("initiator_player_id") is not None
+            else None
+        ),
     )
 
 
