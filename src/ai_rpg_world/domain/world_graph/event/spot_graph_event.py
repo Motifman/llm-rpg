@@ -160,6 +160,16 @@ class PlayerInteractedWithPlayerEvent(BaseDomainEvent[SpotGraphId, str]):
     # そうなる)。倒された事実は PlayerDownedEvent 由来の観測で本人に即座に
     # 届くので、目覚めの申し送りにも入れると同じ一撃が二重に語られる。
     target_was_down: bool = False
+    # InteractionDef.notify_target 由来。可視性の 3 軸目で、「対象本人に
+    # 行為が届くか」だけを決める (第三者に届くかは witness_policy)。
+    #
+    # ACTOR_ONLY と組み合わせたときだけ配信先が変わる。SAME_SPOT では対象は
+    # 既に「同スポットの他プレイヤー」として含まれている。
+    notify_target: bool = False
+    # InteractionDef.target_observation_message 由来の、対象本人にだけ見せる
+    # prose。秘匿行為では「誰にやられたか」を伏せたいことがあるので、目撃者
+    # 向け文面とは別に書けるようにする。
+    target_observation_message: str = ""
 
 
 @dataclass(frozen=True)
