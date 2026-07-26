@@ -1159,6 +1159,30 @@ def _render_timeline_viewer_html(trace_path: Path, *, title: str) -> str:
     return render_timeline_html(events, title)
 
 
+def _render_prompt_viewer_html(run_dir: Path) -> str:
+    """prompt.html の HTML 文字列を返す。
+
+    他 Viewer と違い trace ではなく ``prompt_dataset/calls.jsonl`` を読む。
+    capture 無効の run では calls.jsonl 自体が無く FileNotFoundError になり、
+    ``_write_html_artifact`` が warning にして次へ進む (= 他の成果物を
+    巻き込まない)。
+    """
+    from scripts.build_prompt_viewer import _load_calls  # noqa: WPS433
+    from scripts.build_prompt_viewer import render_html as render_prompt_html
+
+    calls = _load_calls(run_dir)
+    profile = ""
+    run_json = run_dir / "prompt_dataset" / "run.json"
+    if run_json.exists():
+        try:
+            profile = str(
+                json.loads(run_json.read_text(encoding="utf-8")).get("profile") or ""
+            )
+        except json.JSONDecodeError:
+            profile = ""
+    return render_prompt_html(calls, run_id=run_dir.name, profile=profile)
+
+
 def _write_html_artifact(
     *,
     name: str,
@@ -1218,6 +1242,13 @@ def _emit_html_artifacts(
             name="timeline.html",
             path=run_dir / "timeline.html",
             render=lambda: _render_timeline_viewer_html(trace_path, title=title),
+        )
+    )
+    artifacts.append(
+        _write_html_artifact(
+            name="prompt.html",
+            path=run_dir / "prompt.html",
+            render=lambda: _render_prompt_viewer_html(run_dir),
         )
     )
     return artifacts
