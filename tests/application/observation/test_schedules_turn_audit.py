@@ -15,6 +15,13 @@ audit 表 (#404 後続):
 | HarvestCancelledEvent | True | 予約行動が失敗 |
 | HarvestCompletedEvent | True | 採集完了で再び動ける |
 | LocationEnteredEvent (self, 特殊 location) | True | summit / shore 等の到達 |
+| PlayerDroppedItemEvent | True | 目の前に資材が現れた = 拾える |
+| PlayerPickedUpItemEvent | True | 狙っていた資材が消えた = 計画変更 |
+| PlayerGaveItemEvent | True | 受け手は所持品が増えた = 次の手が変わる |
+
+アイテム移動 3 種は初回 audit から漏れていた (v4 第 3 回 run で発覚)。
+`say_inline` を伴わない drop / give は同席者を起こさないため、相手が
+idle_timeout まで気づかず、渡した資材が使われないまま停滞する。
 """
 
 from __future__ import annotations
@@ -39,6 +46,17 @@ from ai_rpg_world.application.observation.services.formatters.harvest_formatter 
 from ai_rpg_world.application.observation.services.formatters.world_formatter import (
     WorldObservationFormatter,
 )
+from ai_rpg_world.application.observation.services.formatters._spot_graph_object_handler import (
+    SpotGraphObjectHandler,
+)
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    PlayerDroppedItemEvent,
+    PlayerGaveItemEvent,
+    PlayerPickedUpItemEvent,
+)
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.event.monster_events import MonsterRespawnedEvent
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.event.inventory_events import (
@@ -144,6 +162,68 @@ class TestHarvestFormatterAudit:
             loot_table_id=LootTableId.create(1),
         )
         out = formatter.format(event, PlayerId(1))
+        assert out is not None
+        assert out.schedules_turn is True
+
+
+class TestItemTransferAudit:
+    """アイテム移動 3 種 (drop / pickup / give) の起床経路の回帰テスト。
+
+    say_inline を伴わない受け渡しでも同席者が即座に気づけることを保証する。
+    """
+
+    def _handler(self) -> SpotGraphObjectHandler:
+        return SpotGraphObjectHandler(_context())
+
+    def test_item_dropped_schedules_turn_true(self) -> None:
+        """同席者の目の前に資材が置かれた → 拾う判断をさせるため即起床。"""
+        out = self._handler().format(
+            PlayerDroppedItemEvent.create(
+                aggregate_id=SpotGraphId.create(999),
+                aggregate_type="SpotGraphAggregate",
+                entity_id=EntityId.create(1),
+                spot_id=SpotId(1),
+                item_instance_id=ItemInstanceId.create(7),
+                item_spec_id=ItemSpecId.create(100),
+                item_name="流木",
+            ),
+            PlayerId(2),
+        )
+        assert out is not None
+        assert out.schedules_turn is True
+
+    def test_item_picked_up_schedules_turn_true(self) -> None:
+        """狙っていた地面の資材が他人に拾われた → 計画変更のため即起床。"""
+        out = self._handler().format(
+            PlayerPickedUpItemEvent.create(
+                aggregate_id=SpotGraphId.create(999),
+                aggregate_type="SpotGraphAggregate",
+                entity_id=EntityId.create(1),
+                spot_id=SpotId(1),
+                item_instance_id=ItemInstanceId.create(7),
+                item_spec_id=ItemSpecId.create(100),
+                item_name="流木",
+            ),
+            PlayerId(2),
+        )
+        assert out is not None
+        assert out.schedules_turn is True
+
+    def test_item_given_schedules_turn_true(self) -> None:
+        """アイテムを渡された / 受け渡しを目撃した → 所持品が変わるため即起床。"""
+        out = self._handler().format(
+            PlayerGaveItemEvent.create(
+                aggregate_id=SpotGraphId.create(999),
+                aggregate_type="SpotGraphAggregate",
+                entity_id=EntityId.create(1),
+                recipient_entity_id=EntityId.create(2),
+                spot_id=SpotId(1),
+                item_instance_id=ItemInstanceId.create(7),
+                item_spec_id=ItemSpecId.create(100),
+                item_name="貝",
+            ),
+            PlayerId(2),
+        )
         assert out is not None
         assert out.schedules_turn is True
 
