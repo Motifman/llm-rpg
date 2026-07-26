@@ -691,8 +691,8 @@ class TestSmokeBeliefEvidenceWiring:
     def test_flag_off_belief_evidence_buffer_store_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """flag OFF なら belief evidence buffer store は None。"""
-        runtime = _build_runtime(enabled=True)
+        """evidence 系 flag がすべて OFF なら belief evidence buffer store は None。"""
+        runtime = _build_runtime(enabled=True, memo_distill_enabled=False)
         assert runtime._episodic_stack.belief_evidence_buffer_store is None
 
     def test_flag_belief_evidence_buffer_store(
@@ -725,8 +725,8 @@ class TestSmokeMemoDistillWiring:
     def test_flag_off_todo_tool_executor_transcriber_not_injected(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """flag OFF なら todo tool executor に transcriber が注入されない。"""
-        runtime = _build_runtime(enabled=True)
+        """flag を明示 OFF にすると todo tool executor に transcriber が注入されない。"""
+        runtime = _build_runtime(enabled=True, memo_distill_enabled=False)
         assert runtime._todo_tool_executor._memo_distill_transcriber is None
 
     def test_flag_todo_tool_executor_transcriber_injected(
