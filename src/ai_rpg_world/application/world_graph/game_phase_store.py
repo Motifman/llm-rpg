@@ -39,6 +39,18 @@ class GamePhaseStore:
     #: 死体発見による招集は対象外 (死体は世界の事実であって濫用ではない)。
     MEETING_COOLDOWN_TICKS = 20
 
+    #: 最後の発言から何 tick 黙ったら会議を流すか。
+    #:
+    #: 発話駆動だけだと、全員が黙った瞬間に会議が止まって二度と進まない。
+    #: 短すぎると議論が始まる前に閉じるので、考える間は残す。
+    MEETING_SILENCE_LIMIT_TICKS = 6
+
+    #: 会議の開始から何 tick で打ち切るか。
+    #:
+    #: 沈黙上限だけだと、喋り続けるだけで投票を避けられる。襲う側が議論を
+    #: 引き延ばして決着を防ぐ、という手が通ってしまう。
+    MEETING_TICK_LIMIT = 30
+
     def __init__(self, *, initial_tick: int = 0) -> None:
         initial = GamePhaseState(
             phase=GamePhase.FREE_ROAM,
@@ -116,6 +128,21 @@ class GamePhaseStore:
     def mark_body_reported(self, target_player_id) -> None:
         """その死体を報告済みにする。"""
         self._reported_bodies.add(int(target_player_id))
+
+    def meeting_timeout_reason(self, *, tick: int) -> Optional[str]:
+        """会議を打ち切るべきなら、その理由を返す。会議中でなければ None。
+
+        沈黙を先に見るのは、**議論が尽きたことのほうが自然な終わり方**
+        だから。同じ tick で両方に当たった場合、「時間切れ」より「流れた」の
+        ほうが起きたことを正しく表す。
+        """
+        if self._current.phase is not GamePhase.MEETING:
+            return None
+        if tick - self._current.last_activity_tick >= self.MEETING_SILENCE_LIMIT_TICKS:
+            return "silence"
+        if tick - self._current.started_at_tick >= self.MEETING_TICK_LIMIT:
+            return "tick_limit"
+        return None
 
     def is_meeting_on_cooldown(self, *, tick: int) -> bool:
         """会議直後で、まだ緊急ボタンによる招集ができないか。
