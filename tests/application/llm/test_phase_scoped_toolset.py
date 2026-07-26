@@ -44,7 +44,7 @@ _MEETING_ALLOWED = {"speak", "listen", "wait", "tend_to_player"}
 _FREE_ROAM_ONLY = {
     "travel_to", "set_sub_location", "explore", "interact",
     "use_item", "drop_item", "pickup_item", "give_item",
-    "attack",
+    "attack", "report_body",
 }
 
 #: 会議中は出さないが、**シナリオが宣言したときだけ**出る tool。

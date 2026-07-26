@@ -871,7 +871,10 @@ class WorldRuntime:
         )
 
     def get_tool_definitions(
-        self, *, tool_schema_mode: str = "legacy"
+        self,
+        *,
+        tool_schema_mode: str = "legacy",
+        as_meeting_phase: Optional[bool] = None,
     ) -> List[ToolDefinitionDto]:
         """LLM に渡されるツール定義（OpenAI tools 形式）を返す。
 
@@ -946,11 +949,17 @@ class WorldRuntime:
         ]
         # フェーズ固有ブロックは同じ位置 (共通 + memo の後ろ) で差し替える。
         # 位置を揃えておくと、先頭の共通部分は両フェーズで一致したままになる。
-        phase_spot = (
-            meeting_only_spot
-            if self._game_phase_store.is_meeting()
-            else free_roam_only_spot
+        # ``as_meeting_phase`` は「いま」ではなく「そのフェーズだったら何が
+        # 出るか」を訊くための口。起動時の dispatch 整合検査が使う。
+        # 検査が現在フェーズしか見ないと、**会議中にしか出ない tool は検査を
+        # 素通りする**。vote が handler 未登録のまま検査を通っていたのが実例で、
+        # 会議が始まって初めて UNSUPPORTED_TOOL になる。
+        in_meeting = (
+            self._game_phase_store.is_meeting()
+            if as_meeting_phase is None
+            else bool(as_meeting_phase)
         )
+        phase_spot = meeting_only_spot if in_meeting else free_roam_only_spot
         if not self._include_todo_tools:
             tools = common_spot + phase_spot
             if assessment_tool is None:

@@ -549,6 +549,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+    TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
     TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
@@ -652,6 +653,8 @@ class SpotGraphArgumentResolver:
             return self._resolve_tend_to_player(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_VOTE:
             return self._resolve_vote(args, runtime_context)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_REPORT_BODY:
+            return self._resolve_report_body(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
             return self._resolve_use_item(args, runtime_context)
         return None
@@ -950,6 +953,34 @@ class SpotGraphArgumentResolver:
             kind="spot_graph_player",
             expected_types=(PlayerToolRuntimeTargetDto,),
             label_name="投票する相手の名前",
+            invalid_label_code="INVALID_TARGET_LABEL",
+            invalid_kind_code="INVALID_TARGET_KIND",
+        )
+        return {**args, "target_player_id": target.player_id}
+
+    def _resolve_report_body(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """`spot_graph_report_body` の target_player_label を player_id に解決する。
+
+        **投票と違って空ラベルを通さない。** 投票の空欄は棄権という意思表示
+        だが、報告に対応するものは無い。誰を見つけたのかが会議の出発点なので、
+        空のまま通すと招集の理由が定まらない。
+        """
+        label = args.get("target_player_label")
+        if not isinstance(label, str) or not label.strip():
+            raise ToolArgumentResolutionException(
+                "倒れている相手の名前が指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = _resolve_target_with_display_name_fallback(
+            label,
+            runtime_context,
+            kind="spot_graph_player",
+            expected_types=(PlayerToolRuntimeTargetDto,),
+            label_name="倒れている相手の名前",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
         )

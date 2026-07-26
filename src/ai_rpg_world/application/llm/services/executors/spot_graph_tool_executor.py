@@ -38,6 +38,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+    TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
     TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
@@ -371,6 +372,7 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
             TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER: self._tend_to_player,
             TOOL_NAME_SPOT_GRAPH_VOTE: self._vote,
+            TOOL_NAME_SPOT_GRAPH_REPORT_BODY: self._report_body,
         }
 
     def _travel_to(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
@@ -1626,6 +1628,27 @@ class SpotGraphToolExecutor:
         raw = args.get("target_player_id")
         target = PlayerId(int(raw)) if raw is not None else None
         return self._runtime.cast_vote(PlayerId(player_id), target)
+
+    def _report_body(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None
+    ) -> LlmCommandResultDto:
+        """`spot_graph_report_body` の handler。
+
+        resolver が ``target_player_id`` まで解決済み。同席しているか、相手が
+        本当に倒れているか、同じ相手を二度報告していないかは runtime が見る。
+
+        自由時間かどうかも runtime が判定する。toolset から外すだけでは悪性
+        クライアントや provider の変換崩れで届きうるので、実行側でも弾く
+        (設計 doc H-6)。vote と同じ形。
+        """
+        raw = args.get("target_player_id")
+        if raw is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="誰を見つけたのかが分からない。",
+                error_code="INVALID_TARGET_LABEL",
+            )
+        return self._runtime.report_body(PlayerId(player_id), PlayerId(int(raw)))
 
     def _tend_to_player(
         self, player_id: int, args: Dict[str, Any], runtime_context: Any = None

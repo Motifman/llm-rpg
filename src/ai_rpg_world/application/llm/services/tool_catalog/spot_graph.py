@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+    TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
     TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
@@ -541,6 +542,31 @@ VOTE_DEFINITION = ToolDefinitionDto(
 )
 
 
+REPORT_BODY_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
+    description=(
+        "同じ場所で倒れている相手を見つけたと、その場の全員に知らせる。"
+        "**自由時間だけ使える。**"
+        "知らせると全員がここへ集まり、話し合いが始まる。"
+        "集まる先はあなたが今いる場所なので、倒れている相手のそばで"
+        "話し合うことになる。"
+        "呼べるのは倒れている相手が同じ場所にいるときだけで、同じ相手に"
+        "ついて二度は呼べない。緊急招集と違って回数の制限は無い。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "target_player_label": {
+                "type": "string",
+                "description": "倒れている相手の名前 (例: \"アオイ\")。",
+            },
+            "inner_thought": inner_thought_property(),
+        },
+        "required": ["target_player_label", "inner_thought"],
+    },
+)
+
+
 def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (TRAVEL_TO_DEFINITION, _RESOLVER),
@@ -557,6 +583,7 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (WAIT_DEFINITION, _RESOLVER),
         (TEND_TO_PLAYER_DEFINITION, _RESOLVER),
         (VOTE_DEFINITION, _RESOLVER),
+        (REPORT_BODY_DEFINITION, _RESOLVER),
         (SPEECH_DEFINITION, _RESOLVER),
     ]
 
@@ -577,6 +604,7 @@ __all__ = [
     "WAIT_DEFINITION",
     "TEND_TO_PLAYER_DEFINITION",
     "VOTE_DEFINITION",
+    "REPORT_BODY_DEFINITION",
     "SPEECH_DEFINITION",
     "SPEECH_CHANNEL_WHISPER",
     "SPEECH_CHANNEL_SAY",

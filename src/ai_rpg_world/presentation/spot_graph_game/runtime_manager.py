@@ -83,6 +83,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+    TOOL_NAME_SPOT_GRAPH_VOTE,
+    TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
@@ -1282,6 +1284,12 @@ class _WorldLlmWiring:
             # 副作用 (_record_action_result + subjective 記録) を保持しつつ、
             # 新経路の付加価値 (疲労回復 = FATIGUE_RECOVERY_WAIT) も引き継ぐ。
             TOOL_NAME_SPOT_GRAPH_WAIT,
+            # 会議と投票 PR 6 / PR 8。**どちらも露出だけ足して dispatch を
+            # 忘れていた。** vote は会議中にしか出ないので、現在フェーズ
+            # だけを見る起動時検査を素通りしていた (検査自体もこの PR で
+            # 両フェーズを見るように直した)。
+            TOOL_NAME_SPOT_GRAPH_VOTE,
+            TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
         )
         # #356 実験 #25 OFF で発覚: use_item / drop_item / give_item /
         # pickup_item は tool catalog 上 ``item_label`` (= I1, I2 など) を
@@ -1320,6 +1328,12 @@ class _WorldLlmWiring:
             # 同じく resolver 例外時の「有効な target_label 一覧」 message は
             # invalid_label_failure_builder で構築する。
             TOOL_NAME_SPOT_GRAPH_INTERACT,
+            # vote / report_body はどちらも `target_player_label='アオイ'`
+            # を `target_player_id` に解決してから executor に渡す。
+            # resolver を挟まないと executor が None を読んで必ず失敗する
+            # (#618 の attack と同じ形)。
+            TOOL_NAME_SPOT_GRAPH_VOTE,
+            TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
         })
         argument_resolver = SpotGraphArgumentResolver()
         for tool_name in targets:
@@ -1369,6 +1383,31 @@ class _WorldLlmWiring:
         # 止めるのは過剰なので例外なら警告だけ残す。
         self._validate_tool_handler_consistency()
 
+    def _definitions_across_phases(self) -> list:
+        """**どのフェーズでも**露出しうる tool 定義をまとめて返す。
+
+        現在フェーズだけを見ると、会議中にしか出ない tool (vote) が検査を
+        素通りする。実際 vote は handler 未登録のまま起動時検査を通っていて、
+        会議が始まって初めて UNSUPPORTED_TOOL になる状態だった。PR #589 /
+        #590 で潰したはずの silent failure が、フェーズという新しい軸で
+        戻ってきた形になる。
+
+        フェーズを問わない tool は両方に出るので、名前で重複を除く。
+        """
+        seen: dict = {}
+        for as_meeting in (False, True):
+            try:
+                definitions = self.runtime.get_tool_definitions(
+                    as_meeting_phase=as_meeting
+                )
+            except TypeError:
+                # フェーズ機構を持たない runtime (= 引数を知らない) は
+                # 現在フェーズだけで検査する。
+                definitions = self.runtime.get_tool_definitions()
+            for definition in definitions:
+                seen.setdefault(definition.name, definition)
+        return list(seen.values())
+
     def _validate_tool_handler_consistency(self) -> None:
         """runtime が expose する tool 定義集合と _tool_handlers のキー集合が
         矛盾していないか確認する。expose されているのに handler 未登録の tool
@@ -1379,7 +1418,7 @@ class _WorldLlmWiring:
         ことが直接の動機。
         """
         try:
-            definitions = self.runtime.get_tool_definitions()
+            definitions = self._definitions_across_phases()
         except Exception as exc:
             if exc.__class__.__name__ == "ToolExposureConfigurationError":
                 raise
