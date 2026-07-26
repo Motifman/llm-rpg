@@ -29,6 +29,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPublicEffectObservedEvent,
     TimeOfDayChangedEvent,
     GamePhaseChangedEvent,
+    MeetingVoteResolvedEvent,
 )
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
@@ -72,6 +73,8 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_time_of_day_changed(event, recipient_player_id)
         if isinstance(event, GamePhaseChangedEvent):
             return self._format_game_phase_changed(event, recipient_player_id)
+        if isinstance(event, MeetingVoteResolvedEvent):
+            return self._format_meeting_vote_resolved(event, recipient_player_id)
         return None
 
     _MEETING_TRIGGER_PROSE = {
@@ -83,6 +86,44 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         "silence": "誰も口を開かなくなった。話し合いは流れた。",
         "tick_limit": "時間切れだ。話し合いは打ち切られた。",
     }
+
+    def _format_meeting_vote_resolved(
+        self, event: "MeetingVoteResolvedEvent", recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """投票の集計を全員に届ける。
+
+        **追放が起きなかった場合も同じ文を出す。** 出さないと「誰も追放
+        されなかった」のか「誰かが追放されたが自分は見ていなかった」のかを
+        区別できない (設計 doc §6.4)。
+
+        誰が誰に入れたかまで出すのは、投票行動そのものが次の会議の材料に
+        なるため。
+        """
+        tally = "、".join(
+            f"{name} {n} 票" for name, n in event.counts_by_display_name.items()
+        )
+        parts = ["投票が終わった。"]
+        if tally:
+            parts.append(f"{tally}")
+        if event.skip_count:
+            parts.append(f"棄権 {event.skip_count} 票")
+        head = "。".join(p for p in parts if p)
+        if event.ejected_display_name:
+            tail = f"{event.ejected_display_name}が追放された。"
+        else:
+            tail = "票が割れ、誰も追放されなかった。"
+        return ObservationOutput(
+            prose=f"{head}。{tail}" if not head.endswith("。") else f"{head}{tail}",
+            structured={
+                "type": "meeting_vote_resolved",
+                "ejected_display_name": event.ejected_display_name,
+                "counts": dict(event.counts_by_display_name),
+                "skip_count": event.skip_count,
+                "ballots": dict(event.ballots_by_display_name),
+            },
+            observation_category="social",
+            schedules_turn=True,
+        )
 
     def _format_game_phase_changed(
         self, event: "GamePhaseChangedEvent", recipient_id: PlayerId,

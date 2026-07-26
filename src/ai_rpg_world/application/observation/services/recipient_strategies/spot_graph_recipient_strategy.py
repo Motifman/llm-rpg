@@ -42,6 +42,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotSoundHeardEvent,
     TimeOfDayChangedEvent,
     GamePhaseChangedEvent,
+    MeetingVoteResolvedEvent,
     SpotExploredEvent,
     PlayerInteractedWithPlayerEvent,
     SpotObjectInteractedEvent,
@@ -149,6 +150,10 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             self._resolve_at_spot_excluding_actor(
                 event.spot_id, event.entity_id, add
             )
+        elif isinstance(event, MeetingVoteResolvedEvent):
+            # 投票結果は全員に届ける。追放が起きなかった場合も同じ経路を
+            # 通す (設計 doc §6.4)。
+            self._resolve_all_players(add)
         elif isinstance(event, GamePhaseChangedEvent):
             # 世界のモード変化は全プレイヤーに届ける。会議が始まったことが
             # 届かない人が居ると、その人だけ議論に参加できないまま進む。

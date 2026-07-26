@@ -911,13 +911,24 @@ class WorldRuntime:
         # フェーズ境界での変化は対象外 (コストの判断であって正しさの判断では
         # ない) だが、被害は抑えられるなら抑える。
         common_spot = [d for d in spot if d.name in self._PHASE_COMMON_SPOT_TOOLS]
-        free_roam_only_spot = [
-            d for d in spot if d.name not in self._PHASE_COMMON_SPOT_TOOLS
+        meeting_only_spot = [
+            d for d in spot if d.name in self._MEETING_ONLY_SPOT_TOOLS
         ]
-        if self._game_phase_store.is_meeting():
-            free_roam_only_spot = []
+        free_roam_only_spot = [
+            d
+            for d in spot
+            if d.name not in self._PHASE_COMMON_SPOT_TOOLS
+            and d.name not in self._MEETING_ONLY_SPOT_TOOLS
+        ]
+        # フェーズ固有ブロックは同じ位置 (共通 + memo の後ろ) で差し替える。
+        # 位置を揃えておくと、先頭の共通部分は両フェーズで一致したままになる。
+        phase_spot = (
+            meeting_only_spot
+            if self._game_phase_store.is_meeting()
+            else free_roam_only_spot
+        )
         if not self._include_todo_tools:
-            tools = common_spot + free_roam_only_spot
+            tools = common_spot + phase_spot
             if assessment_tool is None:
                 return tools
             return tools + [assessment_tool]
@@ -971,7 +982,7 @@ class WorldRuntime:
                 recall_by_handle_enabled=recall_by_handle_enabled,
             )
         ]
-        tools = common_spot + memo + free_roam_only_spot
+        tools = common_spot + memo + phase_spot
         if assessment_tool is not None:
             tools.append(assessment_tool)
         return tools
@@ -982,6 +993,12 @@ class WorldRuntime:
     #: 様子を見る」を潰さないために残す (棄権や保留を選べることは
     #: agent_design_principles の「取れる手段の質」に効く)。
     _PHASE_COMMON_SPOT_TOOLS = frozenset({"speak", "listen", "wait"})
+
+    #: 会議中だけ出す spot tool。自由時間では出さない。
+    #:
+    #: 共通ブロックには入れない。自由時間に vote が並ぶと「いつでも投票
+    #: できる」と読め、会議の外で試して失敗し続ける (#860 で潰した形)。
+    _MEETING_ONLY_SPOT_TOOLS = frozenset({"vote"})
 
     @staticmethod
     def _resolve_requested_memory_tool_enabled(
@@ -2216,6 +2233,107 @@ class WorldRuntime:
         return result
 
     # ── フェーズ遷移 (会議と投票) ──
+
+    def eligible_voters(self) -> List[PlayerId]:
+        """投票できる player。行動可能な生存者だけ。
+
+        退場した相手 (DEAD / EJECTED) と倒れている相手を外す。倒れている
+        相手は観測が届かないので投票する機会が無く、母数に残すと**永久に
+        待つ**ことになる。過半数の計算も狂い、「誰も追放できない」が
+        「同点で追放なし」と区別できなくなる (設計 doc H-1)。
+        """
+        voters: List[PlayerId] = []
+        for pid in self.get_player_ids():
+            registry = self._player_outcome_registry
+            if registry is not None and registry.get_outcome(pid).is_eliminated:
+                continue
+            if self._is_incapacitated(pid):
+                continue
+            voters.append(pid)
+        return voters
+
+    def cast_vote(self, voter_player_id: PlayerId, target_player_id=None):
+        """会議で 1 票を投じる。``target_player_id`` が None なら棄権。
+
+        全員が投じ終えたら、その場で集計して会議を閉じる。
+
+        会議中でなければ拒否する。toolset から外すだけでは、悪性クライアント
+        や provider の変換崩れで届く可能性がある (設計 doc H-6)。
+        """
+        from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+
+        store = self._game_phase_store
+        if not store.is_meeting():
+            return LlmCommandResultDto(
+                success=False,
+                message="いまは話し合いの最中ではない。",
+                error_code="NOT_IN_MEETING",
+            )
+        if store.has_voted(voter_player_id):
+            return LlmCommandResultDto(
+                success=False,
+                message="もう投票した。二度は変えられない。",
+                error_code="ALREADY_VOTED",
+            )
+        store.cast_vote(voter_player_id, target_player_id)
+        if self._all_eligible_voters_have_voted():
+            self._resolve_meeting_vote()
+        return LlmCommandResultDto(success=True, message="投票した。")
+
+    def _all_eligible_voters_have_voted(self) -> bool:
+        store = self._game_phase_store
+        return all(store.has_voted(pid) for pid in self.eligible_voters())
+
+    def _resolve_meeting_vote(self) -> None:
+        """票を集計し、追放を確定させ、結果を全員に配って会議を閉じる。
+
+        **追放の有無にかかわらず結果を配る** (設計 doc §6.4)。同点や棄権最多
+        では世界に何も起きないのでドメインイベントが自然には出ず、この経路は
+        実装から漏れる。漏れると「誰も追放されなかった」のか「誰かが追放
+        されたが自分は見ていなかった」のかを区別できない。
+        """
+        from ai_rpg_world.domain.world_graph.service.vote_tally import resolve_vote
+
+        store = self._game_phase_store
+        ballots = {
+            PlayerId(voter): (None if target is None else PlayerId(target))
+            for voter, target in store.ballots.items()
+        }
+        result = resolve_vote(ballots)
+        if result.ejected_player_id is not None:
+            self.eject_player(result.ejected_player_id)
+        self._publish_vote_result(result)
+        self.end_meeting(reason="vote_concluded")
+
+    def _publish_vote_result(self, result) -> None:
+        """集計結果を全員に観測として配る。"""
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            MeetingVoteResolvedEvent,
+        )
+
+        if self._speech_event_publisher is None:
+            return
+        graph = self._spot_graph_repo.find_graph()
+        name = self.get_player_name
+        self._speech_event_publisher.publish_all([
+            MeetingVoteResolvedEvent.create(
+                aggregate_id=graph.graph_id,
+                aggregate_type="SpotGraphAggregate",
+                ejected_display_name=(
+                    name(result.ejected_player_id)
+                    if result.ejected_player_id is not None
+                    else ""
+                ),
+                counts_by_display_name={
+                    name(pid): n for pid, n in result.counts.items()
+                },
+                skip_count=result.skip_count,
+                ballots_by_display_name={
+                    name(voter): (name(target) if target is not None else "")
+                    for voter, target in result.ballots.items()
+                },
+            )
+        ])
 
     def eject_player(self, player_id: PlayerId) -> bool:
         """投票の結果として player を追放する。

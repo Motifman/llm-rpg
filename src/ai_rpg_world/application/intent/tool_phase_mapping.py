@@ -51,6 +51,9 @@ _EXPLICIT_TOOL_PHASE: dict[str, IntentPhase] = {
     # PR-α (Y_after_pr639_640 後続): 旧 give_items は give_item に統合
     # (batch-always)。dict の dead entry は残さない。
     "tend_to_player": IntentPhase.SOCIAL,
+    # 投票は「誰を追放するか」を全員で決める行為。移動や採取ではなく、
+    # 他者との関係を動かす手なので SOCIAL に置く。
+    "vote": IntentPhase.SOCIAL,
     "prepare_action": IntentPhase.INTERACTION,
 }
 

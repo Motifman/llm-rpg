@@ -46,8 +46,13 @@ def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     )
 
 
-def test_get_spot_graph_specs_has_fourteen_tools() -> None:
-    """spot_graph 系ツールの数を検証する。
+def test_get_spot_graph_specs_exposes_the_expected_tools() -> None:
+    """spot_graph 系ツールの顔ぶれを検証する。
+
+    **件数はテスト名にも assert にも書かない。** ツールを 1 つ足すたびに
+    リネームと数値更新が要るうえ、「14 個ある」は「正しい 14 個がある」を
+    保証しない。名前の集合で見れば、増減も入れ替わりも同じ 1 つの assert が
+    捕まえる (PR #858 で世界 snapshot の同型の写経を消したのと同じ判断)。
 
     変遷:
     - Issue #264 後続: SAY/WHISPER を統合し 1 つの speech_speak に減って 10
@@ -60,8 +65,13 @@ def test_get_spot_graph_specs_has_fourteen_tools() -> None:
       batch-always (gives 配列常時) に統合 → 14 に戻る
     """
     specs = get_spot_graph_specs()
-    assert len(specs) == 14
     names = {s[0].name for s in specs}
+    assert names == {
+        "travel_to", "set_sub_location", "explore", "interact",
+        "prepare_action", "use_item", "drop_item", "pickup_item",
+        "give_item", "attack", "listen", "wait", "tend_to_player",
+        "vote", "speak",
+    }
     # PR-CC: spot_graph_ prefix 廃止 → bare 名
     # PR-DD: speech_speak → speak
     # PR-α: give_items 廃止 (give_item に batch 統合)

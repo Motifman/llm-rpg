@@ -14,7 +14,7 @@ world snapshot 側 (`GamePhaseSubsystemCodec`) に載せる。
 
 from __future__ import annotations
 
-from typing import List, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -54,6 +54,9 @@ class GamePhaseStore:
         #: 既に報告された死体 (対象の player_id)。塞がないと同じ死体で
         #: 何度でも会議を開ける。
         self._reported_bodies: Set[int] = set()
+        #: 現在の会議で投じられた票。投票者 player_id -> 投票先 player_id
+        #: (None は棄権)。会議のたびに空にする。
+        self._ballots: Dict[int, Optional[int]] = {}
 
     @property
     def current(self) -> GamePhaseState:
@@ -74,6 +77,29 @@ class GamePhaseStore:
     def reported_bodies(self) -> Tuple[int, ...]:
         """既に報告された死体の player_id (snapshot 用)。"""
         return tuple(sorted(self._reported_bodies))
+
+    @property
+    def ballots(self) -> Dict[int, Optional[int]]:
+        """現在の会議で投じられた票 (投票者 -> 投票先 / None は棄権)。"""
+        return dict(self._ballots)
+
+    def has_voted(self, player_id) -> bool:
+        """その player が既に投票済みか。"""
+        return int(player_id) in self._ballots
+
+    def cast_vote(self, voter_player_id, target_player_id) -> None:
+        """票を記録する。``target_player_id`` が None なら棄権。"""
+        self._ballots[int(voter_player_id)] = (
+            None if target_player_id is None else int(target_player_id)
+        )
+
+    def clear_ballots(self) -> None:
+        """票を空にする。
+
+        会議を始めるたびに呼ぶ。残すと前回の票が次の会議に持ち越され、
+        投票していない人が投票済みとして扱われる。
+        """
+        self._ballots = {}
 
     def has_emergency_button(self, player_id) -> bool:
         """その player がまだ緊急ボタンを持っているか。"""
@@ -126,6 +152,9 @@ class GamePhaseStore:
                 "会議はすでに始まっています "
                 f"(started_at_tick={self._current.started_at_tick})"
             )
+        # 前回の票を持ち越さない。持ち越すと、投票していない人が投票済みと
+        # して扱われ、会議が始まった瞬間に閉じることがある。
+        self.clear_ballots()
         return self._transition_to(
             GamePhase.MEETING, tick=tick, trigger=trigger
         )

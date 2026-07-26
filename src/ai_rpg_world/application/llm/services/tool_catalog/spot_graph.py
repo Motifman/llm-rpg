@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+    TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
@@ -510,6 +511,36 @@ TEND_TO_PLAYER_DEFINITION = ToolDefinitionDto(
 )
 
 
+VOTE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_VOTE,
+    description=(
+        "話し合いの場で、追放する相手に 1 票を投じる。**会議中だけ使える。**"
+        "最も多く票を集めた 1 人が追放される。同数で並んだ場合は誰も追放され"
+        "ない。"
+        "確信が持てないときは target_player_label を空にして棄権できる。"
+        "**棄権も 1 票として数える。** 棄権が最多なら誰も追放されない。"
+        "情報が足りないのに誰かを名指しするより、保留するほうが良いことも"
+        "ある。"
+        "一度投じたら変えられない。全員が投じ終えた時点で集計され、結果は"
+        "誰が誰に入れたかまで全員に伝わる。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "target_player_label": {
+                "type": "string",
+                "description": (
+                    "追放したい相手の名前 (例: \"エイダ\")。"
+                    "棄権する場合は空文字にする。"
+                ),
+            },
+            "inner_thought": inner_thought_property(),
+        },
+        "required": ["inner_thought"],
+    },
+)
+
+
 def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (TRAVEL_TO_DEFINITION, _RESOLVER),
@@ -525,6 +556,7 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (LISTEN_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
         (TEND_TO_PLAYER_DEFINITION, _RESOLVER),
+        (VOTE_DEFINITION, _RESOLVER),
         (SPEECH_DEFINITION, _RESOLVER),
     ]
 
@@ -544,6 +576,7 @@ __all__ = [
     "LISTEN_DEFINITION",
     "WAIT_DEFINITION",
     "TEND_TO_PLAYER_DEFINITION",
+    "VOTE_DEFINITION",
     "SPEECH_DEFINITION",
     "SPEECH_CHANNEL_WHISPER",
     "SPEECH_CHANNEL_SAY",

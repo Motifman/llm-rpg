@@ -206,3 +206,28 @@ class TestReasonFirstCombinedWithMeeting:
 
         assert not (_FREE_ROAM_ONLY & legacy)
         assert not (_FREE_ROAM_ONLY & reason_first)
+
+
+class TestVoteIsMeetingOnly:
+    """投票 tool は会議中だけ出る。
+
+    自由時間に並ぶと「いつでも投票できる」と読め、会議の外で試して失敗し
+    続ける (#860 で潰した形)。逆に会議中に出ないと、話し合いが決着しない。
+    """
+
+    def test_absent_during_free_roam(self, runtime) -> None:
+        """自由時間には出ない。"""
+        assert "vote" not in _tool_names(runtime)
+
+    def test_present_during_a_meeting(self, runtime) -> None:
+        """会議中には出る。"""
+        runtime.begin_meeting(initiator_player_id=_KUZE, trigger="emergency_button")
+
+        assert "vote" in _tool_names(runtime)
+
+    def test_gone_again_after_the_meeting(self, runtime) -> None:
+        """会議が終われば消える。"""
+        runtime.begin_meeting(initiator_player_id=_KUZE, trigger="emergency_button")
+        runtime.end_meeting(reason="vote_concluded")
+
+        assert "vote" not in _tool_names(runtime)
