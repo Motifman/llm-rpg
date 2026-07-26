@@ -405,24 +405,15 @@ def _write_dataset_infos(
     turns_by_split: Mapping[str, list[dict[str, Any]]],
     runs_by_split: Mapping[str, list[dict[str, Any]]],
 ) -> None:
-    turns_features = _dataset_info_features(
-        row for rows in turns_by_split.values() for row in rows
-    )
-    runs_features = _dataset_info_features(
-        row for rows in runs_by_split.values() for row in rows
-    )
     infos: dict[str, dict[str, Any]] = {}
     for config_name in _TABLE_DIRS:
         if config_name == "default":
             description = "1 row = 1 LLM call joined with its turn result"
-            features = turns_features
         elif config_name == "runs":
             description = "run provenance sidecar"
-            features = runs_features
         else:
             description = f"{config_name} sidecar"
-            features = None
-        info: dict[str, Any] = {
+        infos[config_name] = {
             "description": description,
             "citation": "",
             "homepage": "",
@@ -430,54 +421,10 @@ def _write_dataset_infos(
             "download_size": None,
             "dataset_size": None,
         }
-        if features:
-            info["features"] = features
-        infos[config_name] = info
     (out_dir / "dataset_infos.json").write_text(
         json.dumps(infos, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
     )
-
-
-def _dataset_info_features(rows: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, str]]:
-    """dataset_infos.json に書く簡易 features を Parquet 行から作る。
-
-    `datasets.load_dataset()` は `dataset_infos.json` があるとそこに書かれた
-    features を Parquet の実カラムへ cast する。prompt dataset に `phase` などの
-    新カラムを足したとき、features 側が古いままだと読み込み時に列不一致で落ちる。
-    """
-
-    dtypes_by_key: dict[str, str] = {}
-    for row in rows:
-        for key, value in _json_stringify_nested(row).items():
-            dtype = _dataset_info_dtype(value)
-            existing = dtypes_by_key.get(key)
-            if existing is None or existing == "null":
-                dtypes_by_key[key] = dtype
-            elif dtype == "null" or dtype == existing:
-                continue
-            elif "string" in (existing, dtype):
-                dtypes_by_key[key] = "string"
-            elif {existing, dtype} <= {"int64", "float64"}:
-                dtypes_by_key[key] = "float64"
-            else:
-                dtypes_by_key[key] = "string"
-    return {
-        key: {"dtype": dtype, "_type": "Value"}
-        for key, dtype in dtypes_by_key.items()
-    }
-
-
-def _dataset_info_dtype(value: Any) -> str:
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "bool"
-    if isinstance(value, int) and not isinstance(value, bool):
-        return "int64"
-    if isinstance(value, float):
-        return "float64"
-    return "string"
 
 
 def _read_json(path: Path) -> Any:

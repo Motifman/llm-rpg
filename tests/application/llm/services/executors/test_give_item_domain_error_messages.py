@@ -72,7 +72,7 @@ class TestGiveItemTargetIsSelf:
         stub = MagicMock()
         stub.give_item.side_effect = TargetIsSelfError()
         executor = _make_executor(stub)
-        executor._find_owned_slot_by_item_spec_id = MagicMock(return_value=(SlotId(1), object()))
+        executor._find_owned_slot_by_item_spec_id_and_spoilage = MagicMock(return_value=(SlotId(1), object()))
 
         result = executor._give_item(
             1,
@@ -97,7 +97,7 @@ class TestGiveItemTargetNotInSameSpot:
         stub = MagicMock()
         stub.give_item.side_effect = TargetNotInSameSpotError()
         executor = _make_executor(stub)
-        executor._find_owned_slot_by_item_spec_id = MagicMock(return_value=(SlotId(1), object()))
+        executor._find_owned_slot_by_item_spec_id_and_spoilage = MagicMock(return_value=(SlotId(1), object()))
 
         result = executor._give_item(
             1,
@@ -125,7 +125,7 @@ class TestGiveItemTargetInventoryFull:
         stub = MagicMock()
         stub.give_item.side_effect = TargetInventoryFullError()
         executor = _make_executor(stub)
-        executor._find_owned_slot_by_item_spec_id = MagicMock(return_value=(SlotId(1), object()))
+        executor._find_owned_slot_by_item_spec_id_and_spoilage = MagicMock(return_value=(SlotId(1), object()))
 
         result = executor._give_item(
             1,
@@ -166,7 +166,7 @@ class TestGiveItemSlotIsEmpty:
         stub = MagicMock()
         stub.give_item.side_effect = SlotIsEmptyError(slot_id=5)
         executor = _make_executor(stub)
-        executor._find_owned_slot_by_item_spec_id = MagicMock(return_value=(SlotId(5), object()))
+        executor._find_owned_slot_by_item_spec_id_and_spoilage = MagicMock(return_value=(SlotId(5), object()))
 
         result = executor._give_item(
             1,
@@ -202,7 +202,7 @@ class TestGiveItemPartialSuccess:
             TargetIsSelfError(),                # 2 件目 NG
         ]
         executor = _make_executor(stub)
-        executor._find_owned_slot_by_item_spec_id = MagicMock(
+        executor._find_owned_slot_by_item_spec_id_and_spoilage = MagicMock(
             side_effect=[(SlotId(1), object()), (SlotId(2), object())]
         )
 
@@ -249,7 +249,7 @@ class TestGiveItemAllFail:
             TargetNotInSameSpotError(),        # 2 件目 NG
         ]
         executor = _make_executor(stub)
-        executor._find_owned_slot_by_item_spec_id = MagicMock(
+        executor._find_owned_slot_by_item_spec_id_and_spoilage = MagicMock(
             side_effect=[(SlotId(1), object()), (SlotId(2), object())]
         )
 

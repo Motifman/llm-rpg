@@ -290,6 +290,7 @@ class ToolRuntimeTargetDto:
     # 旧 item_instance_id フィールドを整理する想定 (TODO: rename or migrate)。
     real_item_instance_id: Optional[int] = None
     inventory_slot_id: Optional[int] = None
+    is_spoiled: bool = False
     chest_world_object_id: Optional[int] = None
     conversation_choice_index: Optional[int] = None
     skill_loadout_id: Optional[int] = None
@@ -358,6 +359,8 @@ class ToolRuntimeTargetDto:
             raise TypeError("real_item_instance_id must be int or None")
         if self.inventory_slot_id is not None and not isinstance(self.inventory_slot_id, int):
             raise TypeError("inventory_slot_id must be int or None")
+        if not isinstance(self.is_spoiled, bool):
+            raise TypeError("is_spoiled must be bool")
         if self.chest_world_object_id is not None and not isinstance(self.chest_world_object_id, int):
             raise TypeError("chest_world_object_id must be int or None")
         if self.conversation_choice_index is not None and not isinstance(

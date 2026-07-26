@@ -88,6 +88,7 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     ItemEffect,
     SatisfyNeedEffect,
 )
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
@@ -231,25 +232,29 @@ class SpotGraphToolExecutor:
     #   完全に消せる強度。連続待機の必要が消える。
     FATIGUE_RECOVERY_WAIT = 20
 
-    def _find_owned_slot_by_item_spec_id(self, player_id: int, item_spec_id_raw: Any):
-        """所持中の同種アイテムから、その時点で空でない slot を 1 件引く。
+    def _find_owned_slot_by_item_spec_id_and_spoilage(
+        self,
+        player_id: int,
+        item_spec_id_raw: Any,
+        is_spoiled_raw: Any,
+    ):
+        """所持中の同種・同腐敗状態アイテムから、その時点で空でない slot を 1 件引く。
 
         inventory 表示は同種アイテムを 1 行に集約するため、prompt 構築時の
         代表 slot を持ち回ると、batch give の 2 件目以降が空 slot を指して
-        しまう。use_item と同じく executor 境界で毎回引き直す。
+        しまう。一方、表示側は ``(item_spec_id, is_spoiled)`` で新鮮品と
+        腐敗品を分けるので、実行時解決も同じキーに揃える。
         """
         try:
-            from ai_rpg_world.domain.item.value_object.item_spec_id import (
-                ItemSpecId as ISpecId,
-            )
-
-            spec_id = ISpecId.create(int(item_spec_id_raw))
+            spec_id = ItemSpecId.create(int(item_spec_id_raw))
         except (TypeError, ValueError):
             return None
         inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
         if inv is None:
             return None
-        return inv.find_slot_by_item_spec_id(spec_id, self._item_repository)
+        return inv.find_slot_by_item_spec_id_and_spoilage(
+            spec_id, bool(is_spoiled_raw), self._item_repository,
+        )
 
     def _get_status(self, player_id: int):
         """疲労チェック / 蓄積 / 回復用に PlayerStatusAggregate を取得する。
@@ -804,29 +809,21 @@ class SpotGraphToolExecutor:
                 detail="正の整数を指定してください",
             )
         try:
-            from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId as ISpecId
-            inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
-            if inv is None:
-                return LlmCommandResultDto(
-                    success=False,
-                    message="インベントリが見つかりません。",
-                    error_code="PLAYER_NOT_FOUND",
-                    remediation=get_remediation("PLAYER_NOT_FOUND"),
-                )
-            target_spec = ISpecId.create(item_spec_id_int)
             # インベントリからアイテムインスタンスを探す。
             # 実験 #26 で発覚: 旧コードは `inv.slots` (存在しない属性) を iter して
             # 全 use_item が AttributeError → SYSTEM_ERROR (72 件) で死んでいた。
-            # PR #385 で `_inventory_slots.items()` 直接 iter に hot fix した後、
-            # 本 PR で aggregate 側の公開 API `find_slot_by_item_spec_id` に
-            # 切り替え、private 属性への直接アクセスを完全廃止 (恒久対策)。
-            found = inv.find_slot_by_item_spec_id(target_spec, self._item_repository)
+            # さらに同 spec の新鮮品 / 腐敗品は prompt 上で別ラベルになるため、
+            # resolver が渡す is_spoiled も含めて実行時に slot を引く。
+            found = self._find_owned_slot_by_item_spec_id_and_spoilage(
+                player_id, item_spec_id_int, args.get("is_spoiled", False),
+            )
+            inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
             item_instance = None
             matched_slot_id = None
             if found is not None:
                 matched_slot_id, iid = found
                 item_instance = self._item_repository.find_by_id(iid)
-            if item_instance is None:
+            if item_instance is None or inv is None:
                 return LlmCommandResultDto(
                     success=False,
                     message="指定したアイテムは持っていません。",
@@ -1063,7 +1060,9 @@ class SpotGraphToolExecutor:
                 arg_name="item_spec_id",
                 detail="resolver が item_spec_id を埋めませんでした (label 解決失敗の可能性)",
             )
-        found = self._find_owned_slot_by_item_spec_id(player_id, item_spec_id_raw)
+        found = self._find_owned_slot_by_item_spec_id_and_spoilage(
+            player_id, item_spec_id_raw, args.get("is_spoiled", False),
+        )
         if found is None:
             return build_invalid_arg_failure(
                 arg_name="item_label",
@@ -1221,6 +1220,7 @@ class SpotGraphToolExecutor:
                 continue
             try:
                 item_spec_id = entry["item_spec_id"]
+                is_spoiled = bool(entry.get("is_spoiled", False))
                 to_int = int(entry["target_player_id"])
             except (KeyError, TypeError, ValueError):
                 ng_lines.append(
@@ -1229,7 +1229,9 @@ class SpotGraphToolExecutor:
                 if first_ng_code is None:
                     first_ng_code = "INVALID_ARGUMENT"
                 continue
-            found = self._find_owned_slot_by_item_spec_id(player_id, item_spec_id)
+            found = self._find_owned_slot_by_item_spec_id_and_spoilage(
+                player_id, item_spec_id, is_spoiled,
+            )
             if found is None:
                 msg = (
                     f"{item_disp} をもう持っていません。"

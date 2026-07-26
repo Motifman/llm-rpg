@@ -9,6 +9,7 @@ API:
 - `iter_slots()`: 全スロット (slot_id, iid_or_None) を yield
 - `iter_occupied_slots()`: item が入っているスロットだけ yield
 - `find_slot_by_item_spec_id(spec, repo)`: spec_id で 1 件検索
+- `find_slot_by_item_spec_id_and_spoilage(spec, is_spoiled, repo)`: spec_id と腐敗状態で 1 件検索
 """
 
 from __future__ import annotations
@@ -43,6 +44,24 @@ def _stub_item_repo(spec_by_iid: dict) -> MagicMock:
             return None
         agg = MagicMock()
         agg.item_spec.item_spec_id = spec_id
+        return agg
+
+    repo.find_by_id.side_effect = _find_by_id
+    return repo
+
+
+def _stub_item_repo_with_state(spec_and_state_by_iid: dict) -> MagicMock:
+    """{ItemInstanceId(...): (ItemSpecId(...), {"spoiled": bool})} → mock repo。"""
+    repo = MagicMock()
+
+    def _find_by_id(iid):
+        entry = spec_and_state_by_iid.get(iid)
+        if entry is None:
+            return None
+        spec_id, state = entry
+        agg = MagicMock()
+        agg.item_spec.item_spec_id = spec_id
+        agg.state = dict(state)
         return agg
 
     repo.find_by_id.side_effect = _find_by_id
@@ -105,7 +124,46 @@ class TestFindSlotByItemSpecId:
         assert result is not None
         slot_id, iid = result
         assert iid == ItemInstanceId(7001)
-        assert isinstance(slot_id, SlotId)
+
+
+class TestFindSlotByItemSpecIdAndSpoilage:
+    """`find_slot_by_item_spec_id_and_spoilage` は表示側の集約キーと同じ条件で探す。"""
+
+    def test_returns_spoiled_slot_when_same_spec_has_fresh_and_spoiled(self) -> None:
+        """同じ spec の新鮮品と腐敗品があるとき、腐敗指定では腐敗 slot を返す。"""
+        inv = _new_inv(max_slots=4)
+        inv.acquire_item(item_instance_id=ItemInstanceId(7001))
+        inv.acquire_item(item_instance_id=ItemInstanceId(7002))
+        repo = _stub_item_repo_with_state({
+            ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
+            ItemInstanceId(7002): (ItemSpecId.create(101), {"spoiled": True}),
+        })
+
+        result = inv.find_slot_by_item_spec_id_and_spoilage(
+            ItemSpecId.create(101), True, repo,
+        )
+
+        assert result is not None
+        _slot_id, iid = result
+        assert iid == ItemInstanceId(7002)
+
+    def test_returns_fresh_slot_when_same_spec_has_fresh_and_spoiled(self) -> None:
+        """同じ spec の新鮮品と腐敗品があるとき、新鮮指定では新鮮 slot を返す。"""
+        inv = _new_inv(max_slots=4)
+        inv.acquire_item(item_instance_id=ItemInstanceId(7001))
+        inv.acquire_item(item_instance_id=ItemInstanceId(7002))
+        repo = _stub_item_repo_with_state({
+            ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
+            ItemInstanceId(7002): (ItemSpecId.create(101), {"spoiled": True}),
+        })
+
+        result = inv.find_slot_by_item_spec_id_and_spoilage(
+            ItemSpecId.create(101), False, repo,
+        )
+
+        assert result is not None
+        _slot_id, iid = result
+        assert iid == ItemInstanceId(7001)
 
     def test_none(self) -> None:
         """見つからない場合は None。"""

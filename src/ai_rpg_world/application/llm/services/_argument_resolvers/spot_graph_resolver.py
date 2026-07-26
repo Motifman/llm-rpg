@@ -695,6 +695,7 @@ class SpotGraphArgumentResolver:
         return _with_inner_thought(
             {
                 "item_spec_id": target.item_instance_id,
+                "is_spoiled": target.is_spoiled,
                 "item_display_name": target.display_name,
             },
             args,
@@ -757,6 +758,7 @@ class SpotGraphArgumentResolver:
         return _with_inner_thought(
             {
                 "item_spec_id": item_target.item_instance_id,
+                "is_spoiled": item_target.is_spoiled,
                 "target_player_id": player_target.player_id,
                 "target_display_name": player_target.display_name,
                 "item_display_name": item_target.display_name,
@@ -813,6 +815,7 @@ class SpotGraphArgumentResolver:
                 resolved.append({
                     "index": i,
                     "item_spec_id": resolved_entry["item_spec_id"],
+                    "is_spoiled": resolved_entry["is_spoiled"],
                     "target_player_id": resolved_entry["target_player_id"],
                     "target_display_name": resolved_entry["target_display_name"],
                     "item_display_name": resolved_entry["item_display_name"],
@@ -875,6 +878,7 @@ class SpotGraphArgumentResolver:
         return _with_inner_thought(
             {
                 "item_spec_id": target.item_instance_id,
+                "is_spoiled": target.is_spoiled,
                 "target_display_name": target.display_name,
                 # Phase C: stealth フラグを bool として executor に渡す
                 # (executor 側で WitnessPolicy に変換する)。LLM が省略したら

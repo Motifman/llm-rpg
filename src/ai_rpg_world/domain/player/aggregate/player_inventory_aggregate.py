@@ -250,6 +250,29 @@ class PlayerInventoryAggregate(AggregateRoot):
                 return slot_id, iid
         return None
 
+    def find_slot_by_item_spec_id_and_spoilage(
+        self,
+        item_spec_id: "ItemSpecId",
+        is_spoiled: bool,
+        item_repository: "ItemRepository",
+    ) -> Optional[tuple["SlotId", ItemInstanceId]]:
+        """指定 spec_id かつ腐敗状態が一致するスロットを 1 件返す。
+
+        spot graph の所持品表示は ``(item_spec_id, is_spoiled)`` で集約する。
+        executor も同じキーで実行時解決しないと、「腐敗品を捨てる」と決めた
+        行動が同 spec の新鮮品へすり替わる。
+        """
+        expected_spoiled = bool(is_spoiled)
+        for slot_id, iid in self._inventory_slots.items():
+            if iid is None:
+                continue
+            agg = item_repository.find_by_id(iid)
+            if agg is None or agg.item_spec.item_spec_id != item_spec_id:
+                continue
+            if bool(agg.state.get("spoiled")) == expected_spoiled:
+                return slot_id, iid
+        return None
+
     def get_item_instance_id_by_equipment_slot(self, equipment_slot: EquipmentSlotType) -> Optional[ItemInstanceId]:
         """装備スロットタイプからItemInstanceIdを取得"""
         return self._equipment_slots.get(equipment_slot)

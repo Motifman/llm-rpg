@@ -112,6 +112,17 @@ class _CapturingTraceRecorder:
 
 def _label_for_item(runtime, pid: PlayerId, item_spec_str: str) -> str:
     """ada の prompt context から指定 spec のアイテム label (I1/I2/...) を引く。"""
+    return _label_for_item_with_spoilage(runtime, pid, item_spec_str)
+
+
+def _label_for_item_with_spoilage(
+    runtime,
+    pid: PlayerId,
+    item_spec_str: str,
+    *,
+    is_spoiled: bool = False,
+) -> str:
+    """指定 spec かつ腐敗状態の item_label を prompt context から引く。"""
     target_spec_id = runtime.id_mapper.get_int("item_spec", item_spec_str)
     prompt = runtime.build_full_prompt(pid)
     ctx = prompt["tool_runtime_context"]
@@ -119,12 +130,82 @@ def _label_for_item(runtime, pid: PlayerId, item_spec_str: str) -> str:
         if getattr(target, "kind", None) != "inventory_item":
             continue
         # 慣習: item_instance_id field に item_spec_id が入る (DTO コメント)
-        if getattr(target, "item_instance_id", None) == target_spec_id:
+        if (
+            getattr(target, "item_instance_id", None) == target_spec_id
+            and getattr(target, "is_spoiled", False) is is_spoiled
+        ):
             return label
     raise AssertionError(
-        f"{item_spec_str} (spec_id={target_spec_id}) ラベルが見つからない: "
-        f"{[(l, t.kind, getattr(t, 'item_instance_id', None)) for l, t in ctx.targets.items()]}"
+        f"{item_spec_str} (spec_id={target_spec_id}, spoiled={is_spoiled}) "
+        f"ラベルが見つからない: "
+        f"{[(l, t.kind, getattr(t, 'item_instance_id', None), getattr(t, 'is_spoiled', None)) for l, t in ctx.targets.items()]}"
     )
+
+
+def _set_one_owned_item_spoiled(
+    runtime,
+    pid: PlayerId,
+    item_spec_str: str,
+    *,
+    is_spoiled: bool,
+) -> None:
+    """pid が持つ item_spec_str の 1 instance の spoiled state を設定する。"""
+    spec_id = ItemSpecId.create(runtime.id_mapper.get_int("item_spec", item_spec_str))
+    inv = runtime._player_inventory_repo.find_by_id(pid)
+    assert inv is not None
+    for _slot_id, iid in inv.iter_occupied_slots():
+        item = runtime._item_repo.find_by_id(iid)
+        if item is None or item.item_spec.item_spec_id != spec_id:
+            continue
+        item.merge_state({"spoiled": is_spoiled})
+        runtime._item_repo.save(item)
+        return
+    raise AssertionError(f"{item_spec_str} の所持 instance が見つからない")
+
+
+def _count_owned_spec_by_spoilage(
+    runtime,
+    pid: PlayerId,
+    item_spec_str: str,
+    *,
+    is_spoiled: bool,
+) -> int:
+    """pid が持つ item_spec_str のうち spoiled 状態が一致する個数。"""
+    spec_id = ItemSpecId.create(runtime.id_mapper.get_int("item_spec", item_spec_str))
+    inv = runtime._player_inventory_repo.find_by_id(pid)
+    assert inv is not None
+    count = 0
+    for _slot_id, iid in inv.iter_occupied_slots():
+        item = runtime._item_repo.find_by_id(iid)
+        if item is None or item.item_spec.item_spec_id != spec_id:
+            continue
+        if bool(item.state.get("spoiled")) is is_spoiled:
+            count += 1
+    return count
+
+
+def _count_ground_spec_by_spoilage(
+    runtime,
+    spot_str: str,
+    item_spec_str: str,
+    *,
+    is_spoiled: bool,
+) -> int:
+    """spot に落ちている item_spec_str のうち spoiled 状態が一致する個数。"""
+    from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
+    spot_id = SpotId.create(runtime.id_mapper.get_int("spot", spot_str))
+    interior = runtime._spot_interior_repo.find_by_spot_id(spot_id)
+    assert interior is not None
+    spec_id_value = runtime.id_mapper.get_int("item_spec", item_spec_str)
+    count = 0
+    for ground_item in interior.ground_items:
+        if ground_item.item_spec_id.value != spec_id_value:
+            continue
+        item = runtime._item_repo.find_by_id(ground_item.item_instance_id)
+        if item is not None and bool(item.state.get("spoiled")) is is_spoiled:
+            count += 1
+    return count
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +285,28 @@ class TestUseItemEndToEnd:
         # SYSTEM_ERROR (= AttributeError 等) が出ていないことを明示
         assert result.error_code != "SYSTEM_ERROR"
 
+    def test_use_spoiled_label_consumes_spoiled_item_and_keeps_fresh_item(self, session) -> None:
+        """同じ食料の新鮮品と腐敗品を持つとき、腐敗ラベルの use_item は腐敗品を消費する。"""
+        runtime = session.runtime
+        ada = _player_id(runtime, "ada")
+        _grant(runtime, ada, "coconut")
+        _grant(runtime, ada, "coconut")
+        _set_one_owned_item_spoiled(runtime, ada, "coconut", is_spoiled=True)
+        spoiled_label = _label_for_item_with_spoilage(
+            runtime, ada, "coconut", is_spoiled=True,
+        )
+
+        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
+            "name": TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+            "arguments": {"item_label": spoiled_label, "inner_thought": "腐った方を食べる"},
+        })
+
+        result = session.llm_wiring.run_turn(ada)
+
+        assert result.success is True, result.message
+        assert _count_owned_spec_by_spoilage(runtime, ada, "coconut", is_spoiled=False) == 1
+        assert _count_owned_spec_by_spoilage(runtime, ada, "coconut", is_spoiled=True) == 0
+
 
 # ---------------------------------------------------------------------------
 # drop_item: PR #385 で resolver 経由になった
@@ -250,6 +353,31 @@ class TestDropItemEndToEnd:
         second = session.llm_wiring.run_turn(ada)
         assert second.success is True, second.message
         assert not _owns_spec(runtime, ada, "coconut")
+
+    def test_drop_spoiled_label_drops_spoiled_item_and_keeps_fresh_item(self, session) -> None:
+        """同じ食料の新鮮品と腐敗品を持つとき、腐敗ラベルの drop_item は腐敗品を地面へ置く。"""
+        runtime = session.runtime
+        ada = _player_id(runtime, "ada")
+        spot = "shipwreck_beach"
+        _teleport(runtime, int(ada), spot)
+        _grant(runtime, ada, "coconut")
+        _grant(runtime, ada, "coconut")
+        _set_one_owned_item_spoiled(runtime, ada, "coconut", is_spoiled=True)
+        spoiled_label = _label_for_item_with_spoilage(
+            runtime, ada, "coconut", is_spoiled=True,
+        )
+
+        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
+            "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+            "arguments": {"item_label": spoiled_label, "inner_thought": "腐った方を捨てる"},
+        })
+
+        result = session.llm_wiring.run_turn(ada)
+
+        assert result.success is True, result.message
+        assert _count_owned_spec_by_spoilage(runtime, ada, "coconut", is_spoiled=False) == 1
+        assert _count_owned_spec_by_spoilage(runtime, ada, "coconut", is_spoiled=True) == 0
+        assert _count_ground_spec_by_spoilage(runtime, spot, "coconut", is_spoiled=True) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +534,40 @@ class TestGiveItemEndToEnd:
         assert _owns_spec(runtime, noah, "coconut")
         assert _owns_spec(runtime, rio, "coconut")
         assert not _owns_spec(runtime, kai, "coconut")
+
+    def test_give_fresh_label_transfers_fresh_item_and_keeps_spoiled_item(self, session) -> None:
+        """同じ食料の新鮮品と腐敗品を持つとき、新鮮ラベルの give_item は新鮮品を渡す。"""
+        runtime = session.runtime
+        ada = _player_id(runtime, "ada")
+        noah = _player_id(runtime, "noah")
+        for pid in (ada, noah):
+            _teleport(runtime, int(pid), "shipwreck_beach")
+        _grant(runtime, ada, "coconut")
+        _grant(runtime, ada, "coconut")
+        _set_one_owned_item_spoiled(runtime, ada, "coconut", is_spoiled=True)
+        fresh_label = _label_for_item_with_spoilage(
+            runtime, ada, "coconut", is_spoiled=False,
+        )
+        target_player_label = self._player_target_label(runtime, ada, noah)
+
+        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
+            "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            "arguments": {
+                "gives": [{
+                    "item_label": fresh_label,
+                    "target_player_label": target_player_label,
+                }],
+                "inner_thought": "新鮮な方を渡す",
+            },
+        })
+
+        result = session.llm_wiring.run_turn(ada)
+
+        assert result.success is True, result.message
+        assert _count_owned_spec_by_spoilage(runtime, ada, "coconut", is_spoiled=False) == 0
+        assert _count_owned_spec_by_spoilage(runtime, ada, "coconut", is_spoiled=True) == 1
+        assert _count_owned_spec_by_spoilage(runtime, noah, "coconut", is_spoiled=False) == 1
+        assert _count_owned_spec_by_spoilage(runtime, noah, "coconut", is_spoiled=True) == 0
 
     def test_give_dead_target_returns_learnable_failure(self, session) -> None:
         """死亡済みの相手へ give_item すると、日本語理由を返して所有は移らない。"""

@@ -878,6 +878,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     inventory_slot_id=(
                         entry.slot_id if entry.slot_id >= 0 else None
                     ),
+                    is_spoiled=entry.is_spoiled,
                 ),
             )
 
