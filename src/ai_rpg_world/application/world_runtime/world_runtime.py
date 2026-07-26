@@ -897,16 +897,37 @@ class WorldRuntime:
             assessment_tool = assess_situation_definition(
                 expected_result_policy=self._expected_result_policy
             )
+        # フェーズで出し分ける (会議と投票 PR 3)。
+        #
+        # 会議中は物理的な行為の tool を **そもそも出さない**。前提条件で弾く
+        # 形にすると、全 interaction に「会議中は不可」を書いて回ることになり、
+        # LLM から見ても「選べるのに必ず失敗する手」が並ぶ (#860 で潰した形の
+        # 再生産)。
+        #
+        # 並びは [全フェーズ共通] → [自由時間のみ] にする。会議で落ちるのが
+        # 後ろのブロックだけになり、先頭の共通部分は prefix cache に残る
+        # (reason-first が assess_situation を末尾に置いたのと同じ技法)。
+        # design_decisions #1 が禁じているのは「毎 tick 変わる動的注入」で、
+        # フェーズ境界での変化は対象外 (コストの判断であって正しさの判断では
+        # ない) だが、被害は抑えられるなら抑える。
+        common_spot = [d for d in spot if d.name in self._PHASE_COMMON_SPOT_TOOLS]
+        free_roam_only_spot = [
+            d for d in spot if d.name not in self._PHASE_COMMON_SPOT_TOOLS
+        ]
+        if self._game_phase_store.is_meeting():
+            free_roam_only_spot = []
         if not self._include_todo_tools:
+            tools = common_spot + free_roam_only_spot
             if assessment_tool is None:
-                return spot
-            return spot + [assessment_tool]
+                return tools
+            return tools + [assessment_tool]
         # Issue #526 後続: tool を expose するタイミングで auxiliary stack を
         # 確実に wire しておく (= 「定義は出すが handler が無い」状態を防ぐ)。
         # idempotent なので毎回呼んで OK。
         if self._episodic_stack is not None:
             self._wire_auxiliary_tool_stack()
         cfg = self._runtime_config
+        memo_tools_enabled = bool(getattr(cfg, "memo_tools_enabled", True))
         episodic_recall_requested = bool(
             getattr(cfg, "episodic_recall_enabled", False)
         )
@@ -943,16 +964,24 @@ class WorldRuntime:
             defn
             for defn, _ in get_memory_specs(
                 todo_enabled=True,
+                memo_enabled=memo_tools_enabled,
                 episodic_explore_related_enabled=episodic_explore_related_enabled,
                 semantic_search_enabled=semantic_search_enabled,
                 episodic_recall_enabled=episodic_recall_enabled,
                 recall_by_handle_enabled=recall_by_handle_enabled,
             )
         ]
-        tools = spot + memo
+        tools = common_spot + memo + free_roam_only_spot
         if assessment_tool is not None:
             tools.append(assessment_tool)
         return tools
+
+    #: フェーズを問わず出す spot tool。会議中に残すのはこれだけ。
+    #:
+    #: 話す手段が無いと会議そのものが成立しない。listen と wait は「黙って
+    #: 様子を見る」を潰さないために残す (棄権や保留を選べることは
+    #: agent_design_principles の「取れる手段の質」に効く)。
+    _PHASE_COMMON_SPOT_TOOLS = frozenset({"speak", "listen", "wait"})
 
     @staticmethod
     def _resolve_requested_memory_tool_enabled(
@@ -975,8 +1004,16 @@ class WorldRuntime:
                 f"{flag_name}=true requires an executor for {tool_name}, "
                 "but the runtime memory stack is not wired. Enable the required "
                 "episodic/semantic prerequisites or turn the flag off."
-            )
+        )
         return True
+
+    def _memo_tools_enabled(self) -> bool:
+        """memo ツールを LLM に露出する設定か。
+
+        露出を切る実験腕では、tool 定義だけでなく prompt の未完了 memo section
+        も同時に止める。存在しない memo_done への誘導を残さないため。
+        """
+        return bool(getattr(self._runtime_config, "memo_tools_enabled", True))
 
     # Prediction (#526 v0): expected_result 露出の対象 tool。記録経路 (do_* →
     # _record_action_result) に subjective を配線済みの core action だけに限定する
@@ -1946,7 +1983,7 @@ class WorldRuntime:
                 pid, self._resolve_player_objective_text(pid, resolved_objective_text)
             ),
             inventory_text_provider=lambda pid: self._format_inventory_evidence(pid),
-            memo_store=self._todo_store,
+            memo_store=self._todo_store if self._memo_tools_enabled() else None,
         )
         limits = PromptLimits(
             tile_map_enabled=False,
@@ -2179,6 +2216,199 @@ class WorldRuntime:
         return result
 
     # ── フェーズ遷移 (会議と投票) ──
+
+    def eject_player(self, player_id: PlayerId) -> bool:
+        """投票の結果として player を追放する。
+
+        outcome を EJECTED で確定させる。DEAD と分けるのは、分析で
+        「殺されたのか追放されたのか」を読み分けたいのと、陣営の勝敗条件が
+        両者を同じ「退場」として数える必要があるため (どちらも
+        ``is_eliminated`` が True)。
+
+        集計と投票そのものは PR 6。ここは確定させる口だけを用意する
+        (届かない enum メンバを残さないため、この PR で実行経路まで通す)。
+        """
+        from ai_rpg_world.domain.player.enum.player_outcome_enum import (
+            PlayerOutcomeEnum,
+        )
+
+        registry = self._player_outcome_registry
+        if registry is None:
+            return False
+        return bool(registry.set_outcome(player_id, PlayerOutcomeEnum.EJECTED))
+
+    def call_emergency_meeting(self, player_id: PlayerId):
+        """緊急ボタンで会議を招集する。
+
+        押せないときは理由を文で返す。返さないと LLM は同じ手を繰り返す
+        (#860 で潰した「使えない候補を試し続ける」形と同じ)。
+
+        **拒否されたときは持ち札を減らさない。** 減らすと、クールダウンに
+        当たっただけで持ち札を失う。
+        """
+        from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+
+        store = self._game_phase_store
+        if store.is_meeting():
+            return LlmCommandResultDto(
+                success=False,
+                message="すでに話し合いが始まっている。",
+                error_code="MEETING_ALREADY_STARTED",
+            )
+        if not store.has_emergency_button(player_id):
+            return LlmCommandResultDto(
+                success=False,
+                message="緊急招集はもう使ってしまった。二度は呼べない。",
+                error_code="EMERGENCY_BUTTON_SPENT",
+            )
+        if store.is_meeting_on_cooldown(tick=int(self.current_tick())):
+            return LlmCommandResultDto(
+                success=False,
+                message="さっき話し合いが終わったばかりだ。今は誰も応じない。",
+                error_code="MEETING_ON_COOLDOWN",
+            )
+        if not self._is_placed_in_graph(player_id):
+            # 位置が引けない状態で消費すると、会議は始まらないのに持ち札だけ
+            # 失う。消費の前に確かめる。
+            return LlmCommandResultDto(
+                success=False,
+                message="いまは呼びかけられない。",
+                error_code="INITIATOR_NOT_PLACED",
+            )
+        store.consume_emergency_button(player_id)
+        self._gather_for_meeting(player_id)
+        self.begin_meeting(
+            initiator_player_id=player_id, trigger="emergency_button"
+        )
+        return LlmCommandResultDto(success=True, message="緊急招集をかけた。")
+
+    def report_body(self, reporter_player_id: PlayerId, target_player_id: PlayerId):
+        """倒れている相手を見つけたと報告し、会議を招集する。
+
+        **クールダウンの対象外**。死体は世界の事実であって、招集の濫用では
+        ない (設計 doc §6.3)。ただし同じ相手は 1 度だけ。塞がないと同じ死体で
+        何度でも会議を開ける。
+
+        対象は「同じ場所に居て行動不能」であることを要求する。どちらも
+        同席者行に既に見えている公開事実なので、判定に使ってよい (#860 の
+        不変条件)。
+        """
+        from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+
+        store = self._game_phase_store
+        if store.is_meeting():
+            return LlmCommandResultDto(
+                success=False,
+                message="すでに話し合いが始まっている。",
+                error_code="MEETING_ALREADY_STARTED",
+            )
+        if store.is_body_reported(target_player_id):
+            return LlmCommandResultDto(
+                success=False,
+                message="それはもう報告済みだ。",
+                error_code="BODY_ALREADY_REPORTED",
+            )
+        graph = self._spot_graph_repo.find_graph()
+        try:
+            reporter_spot = graph.get_entity_spot(
+                EntityId.create(int(reporter_player_id))
+            )
+            target_spot = graph.get_entity_spot(
+                EntityId.create(int(target_player_id))
+            )
+        except Exception:
+            return LlmCommandResultDto(
+                success=False,
+                message="その相手が見つからない。",
+                error_code="TARGET_NOT_FOUND",
+            )
+        if reporter_spot != target_spot:
+            return LlmCommandResultDto(
+                success=False,
+                message="その相手はここには居ない。",
+                error_code="TARGET_NOT_HERE",
+            )
+        if not self._is_incapacitated(target_player_id):
+            return LlmCommandResultDto(
+                success=False,
+                message="その相手は動いている。報告することは何もない。",
+                error_code="TARGET_NOT_INCAPACITATED",
+            )
+        store.mark_body_reported(target_player_id)
+        self._gather_for_meeting(reporter_player_id)
+        self.begin_meeting(
+            initiator_player_id=reporter_player_id, trigger="body_report"
+        )
+        return LlmCommandResultDto(success=True, message="倒れている者を見つけたと知らせた。")
+
+    def _is_placed_in_graph(self, player_id: PlayerId) -> bool:
+        """graph 上に位置が引けるか。集合の起点にできるかの判定。"""
+        try:
+            graph = self._spot_graph_repo.find_graph()
+            graph.get_entity_spot(EntityId.create(int(player_id)))
+            return True
+        except Exception:
+            return False
+
+    def _is_incapacitated(self, player_id: PlayerId) -> bool:
+        """行動不能 (倒れている / 死亡) か。同席者行に出ている公開事実。"""
+        status = self._player_status_repo.find_by_id(player_id)
+        return bool(status is not None and getattr(status, "is_down", False))
+
+    def _gather_for_meeting(self, initiator_player_id: PlayerId) -> None:
+        """招集者の場所へ、動ける全員を集める。
+
+        集めないと、発話が hop 越しに届かない相手が出る。**議論に参加でき
+        ない人が構造的に生まれる**ので、会議として成立しない (設計 doc H-3)。
+
+        倒れている相手は運ばない。会議に参加できない (観測が届かない) うえ、
+        死体の位置という手がかりが消える。誰がどこで倒れていたかは推理の
+        材料になる。
+        """
+        graph = self._spot_graph_repo.find_graph()
+        target_spot = graph.get_entity_spot(
+            EntityId.create(int(initiator_player_id))
+        )
+        for pid in self.get_player_ids():
+            if int(pid) == int(initiator_player_id):
+                continue
+            if self._is_incapacitated(pid):
+                continue
+            try:
+                graph.teleport_entity(EntityId.create(int(pid)), target_spot)
+                self._settle_navigation_at(pid, target_spot)
+            except Exception:
+                logger.warning(
+                    "会議への集合に失敗した player_id=%s", int(pid), exc_info=True
+                )
+        self._spot_graph_repo.save(graph)
+
+    def _settle_navigation_at(self, player_id: PlayerId, spot_id) -> None:
+        """移動中の経路を畳んで、その場に居る状態にする。
+
+        **テレポートだけでは足りない。** 経路の途中で飛ばすと
+        ``PlayerSpotNavigationState`` に古い出発地と残り leg が残り、次の
+        travel stage が「entity は接続の起点に居ない」で例外を投げて
+        **world tick のループごと落ちる** (SpotGraphAggregate.teleport_entity
+        の docstring が「呼び出し側で移動状態を先に解消すること」と警告して
+        いるのはこの件)。
+
+        設計 doc H-2 は観測の ``breaks_movement`` で解消する想定だったが、
+        現在の pipeline publisher はそのフラグを見ていない (見ているのは
+        ObservationEventHandlerRegistry 経由の経路だけで、フェーズ変化の
+        event はそこに載っていない)。テレポートを持ち込んだ本 PR で閉じる。
+        """
+        from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (  # noqa: E501
+            PlayerSpotNavigationState,
+        )
+
+        status = self._player_status_repo.find_by_id(player_id)
+        if status is None:
+            return
+        status.set_spot_navigation_state(
+            PlayerSpotNavigationState.at_rest(spot_id)
+        )
+        self._player_status_repo.save(status)
 
     def begin_meeting(
         self,
@@ -4503,7 +4733,7 @@ def create_world_runtime(
     # ため、DEAD 判定を state_builder に配線する。state_builder は outcome_registry
     # より先に構築されるので、構築時ではなく setter で後付けする。
     state_builder.set_dead_player_checker(
-        lambda pid: outcome_registry.get_outcome(pid) is PlayerOutcomeEnum.DEAD
+        lambda pid: outcome_registry.get_outcome(pid).is_eliminated
     )
     item_transfer_service.set_player_outcome_registry(outcome_registry)
 
@@ -4705,6 +4935,10 @@ def create_world_runtime(
             # 死者を救助対象にし続ける原因になった (観察: リオ 145 tick)。
             # 婉曲を避け「死亡した」と直接的に伝え、復活不可であることを明示する。
             message = f"{actor_name}は死亡した。もう蘇生できない。"
+        elif new_outcome is PlayerOutcomeEnum.EJECTED:
+            # 死亡と分けて伝える。「死亡した」と出ると、追放を殺害と誤読して
+            # 犯人探しの推理がずれる。追放は全員の合意の結果である。
+            message = f"{actor_name}は投票で追放された。もう戻らない。"
         elif new_outcome is PlayerOutcomeEnum.RESCUED:
             message = f"{actor_name}は救助された。"
         elif new_outcome is PlayerOutcomeEnum.STRANDED:

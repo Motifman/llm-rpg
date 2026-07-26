@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     ENV_ERROR_DRIVEN_REINTERPRETATION_ENABLED,
     ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
     ENV_MEMO_DISTILL_ENABLED,
+    ENV_MEMO_TOOLS_ENABLED,
     ENV_PREDICTION_CONTEXT_ID_ENABLED,
     ENV_RECALL_HIT_BOOST_ENABLED,
     ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED,
@@ -38,6 +39,7 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     log_error_driven_reinterpretation_enabled_state,
     log_episodic_explore_related_state,
     log_memo_distill_enabled_state,
+    log_memo_tools_enabled_state,
     log_prediction_context_id_state,
     log_semantic_passive_top_k_state,
     log_semantic_search_state,
@@ -51,6 +53,7 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     resolve_error_driven_reinterpretation_enabled,
     resolve_episodic_explore_related_enabled,
     resolve_memo_distill_enabled,
+    resolve_memo_tools_enabled,
     resolve_prediction_context_id_enabled,
     resolve_recall_hit_boost_enabled,
     resolve_salience_structured_failure_enabled,
@@ -531,6 +534,37 @@ class TestResolveMemoDistillEnabled:
             log_memo_distill_enabled_state(False)
         messages = [rec.message for rec in caplog.records]
         assert any("ENABLED" in m for m in messages)
+
+
+class TestResolveMemoToolsEnabled:
+    """``MEMO_TOOLS_ENABLED`` の env パース。"""
+
+    def test_env_unset_default_on(self) -> None:
+        """env 未設定なら既存 run 互換で memo tool を露出する。"""
+        assert resolve_memo_tools_enabled(env={}) is True
+
+    @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
+    def test_truthy_value_on(self, raw: str) -> None:
+        """truthy な値は memo tool 露出 ON。"""
+        assert resolve_memo_tools_enabled(env={ENV_MEMO_TOOLS_ENABLED: raw}) is True
+
+    @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
+    def test_falsy_value_off(self, raw: str) -> None:
+        """falsy な値は memo tool 露出 OFF。"""
+        assert resolve_memo_tools_enabled(env={ENV_MEMO_TOOLS_ENABLED: raw}) is False
+
+    def test_unknown_raises_value_error(self) -> None:
+        """未知の値は ValueError で落とし、実験 profile の typo を黙って受けない。"""
+        with pytest.raises(ValueError):
+            resolve_memo_tools_enabled(env={ENV_MEMO_TOOLS_ENABLED: "maybe"})
+
+    def test_log_state_log(self, caplog: pytest.LogCaptureFixture) -> None:
+        """log state はレベル情報でログを出す。"""
+        with caplog.at_level(logging.INFO):
+            log_memo_tools_enabled_state(True)
+            log_memo_tools_enabled_state(False)
+        messages = [rec.message for rec in caplog.records]
+        assert any("MEMO_TOOLS_ENABLED" in m for m in messages)
 
 
 class TestResolveBeliefAttributionEnabled:

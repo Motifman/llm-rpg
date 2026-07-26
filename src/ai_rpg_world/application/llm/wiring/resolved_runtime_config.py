@@ -94,6 +94,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "LLM_TURN_PARALLEL_WORKERS",
     "LLM_WALL_TIME_CAP_SECONDS",
     "MEMO_DISTILL_ENABLED",
+    "MEMO_TOOLS_ENABLED",
     "OPENAI_API_BASE",
     "OPENROUTER_PROVIDER",
     "OPENROUTER_QUANTIZATION",
@@ -281,6 +282,7 @@ class ResolvedLlmRuntimeConfig:
     # 実験条件として trace に残す。``escape_llm_ssot_enabled`` は system prompt
     # 文字列を変えるため同じく実験条件。
     tool_mode: str = "default"
+    memo_tools_enabled: bool = True
     escape_llm_ssot_enabled: bool = False
     scenario_random_seed: Optional[int] = None
     prompt_dataset_capture_enabled: bool = False
@@ -423,6 +425,7 @@ class ResolvedLlmRuntimeConfig:
             resolve_goal_store_enabled,
             resolve_hearsay_enabled,
             resolve_memo_distill_enabled,
+            resolve_memo_tools_enabled,
             resolve_pending_prediction_enabled,
             resolve_prediction_context_id_enabled,
             resolve_recall_hit_boost_enabled,
@@ -555,6 +558,7 @@ class ResolvedLlmRuntimeConfig:
             resolve_salience_structured_failure_enabled(env=source)
         )
         memo_distill_enabled = resolve_memo_distill_enabled(env=source)
+        memo_tools_enabled = resolve_memo_tools_enabled(env=source)
         unconscious_context_enabled = resolve_unconscious_context_enabled(env=source)
         error_driven_reinterpretation_enabled = (
             resolve_error_driven_reinterpretation_enabled(env=source)
@@ -664,6 +668,7 @@ class ResolvedLlmRuntimeConfig:
             stagnation_pressure_enabled=stagnation_pressure_enabled,
             stagnation_reasoning_enabled=stagnation_reasoning_enabled,
             tool_mode=tool_mode,
+            memo_tools_enabled=memo_tools_enabled,
             escape_llm_ssot_enabled=escape_llm_ssot_enabled,
             scenario_random_seed=scenario_random_seed,
             prompt_dataset_capture_enabled=prompt_dataset_capture_enabled,
@@ -753,6 +758,7 @@ class ResolvedLlmRuntimeConfig:
             stagnation_pressure_enabled=False,
             stagnation_reasoning_enabled=False,
             tool_mode="default",
+            memo_tools_enabled=True,
             escape_llm_ssot_enabled=False,
             scenario_random_seed=None,
             prompt_dataset_capture_enabled=False,

@@ -467,7 +467,7 @@ class SpotGraphItemTransferService:
         registry = self._player_outcome_registry
         if registry is None:
             return False
-        return registry.get_outcome(player_id) is PlayerOutcomeEnum.DEAD
+        return registry.get_outcome(player_id).is_eliminated
 
     def _is_target_down(self, player_id: PlayerId) -> bool:
         """is_down の相手は give_item の受け取り対象にできない。"""
