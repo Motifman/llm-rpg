@@ -49,7 +49,19 @@ class GamePhaseStore:
     #:
     #: 沈黙上限だけだと、喋り続けるだけで投票を避けられる。襲う側が議論を
     #: 引き延ばして決着を防ぐ、という手が通ってしまう。
-    MEETING_TICK_LIMIT = 30
+    #:
+    #: **倒れた人が死ぬまでの猶予より必ず短くする。**
+    #: (PlayerDeathGraceTickStage.DEFAULT_GRACE_TICKS = 30)
+    #:
+    #: 当初この値も 30 で、猶予とちょうど一致していた。倒れている相手を
+    #: 報告すると会議が上限まで走り、閉じた瞬間にその相手が死ぬ。
+    #: **報告するという行為そのものが相手を死体に変えていた**。
+    #:
+    #: 会議中に tend_to_player を出すだけでは足りない。誰も手当てを選ば
+    #: なければ同じことが起きるし、緊急ボタン経由の招集では倒れている人が
+    #: 別の場所に置き去りになる。会議が閉じたあとに駆けつける時間そのものを
+    #: 残す。差分は test_meeting_does_not_outlive_rescue.py が固定している。
+    MEETING_TICK_LIMIT = 20
 
     def __init__(self, *, initial_tick: int = 0) -> None:
         initial = GamePhaseState(

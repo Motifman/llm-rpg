@@ -33,15 +33,26 @@ _SCENARIO = (
 
 _KUZE = PlayerId(3)
 
-#: 会議中でも使える tool。話す・聞く・待つと、記憶系。
-_MEETING_ALLOWED = {"speak", "listen", "wait"}
+#: 会議中でも使える tool。話す・聞く・待つと、手当てと、記憶系。
+#:
+#: tend_to_player が入っているのは #864 のマージ後レビューの結果。倒れて
+#: いる相手を報告すると全員がその場所に集まるのに、手当てだけできない
+#: 状態だった (test_meeting_does_not_outlive_rescue.py を参照)。
+_MEETING_ALLOWED = {"speak", "listen", "wait", "tend_to_player"}
 
 #: 会議中は出さない tool (物理的な行為)。
 _FREE_ROAM_ONLY = {
     "travel_to", "set_sub_location", "explore", "interact",
     "use_item", "drop_item", "pickup_item", "give_item",
-    "attack", "tend_to_player",
+    "attack",
 }
+
+#: 会議中は出さないが、**シナリオが宣言したときだけ**出る tool。
+#:
+#: このシナリオには同時行動の宣言が無いので自由時間でも並ばない。
+#: 「自由時間には必ず出る」の集合とは分けておかないと、シナリオを
+#: 差し替えたときに落ちる。分類の網羅だけがこちらを見る。
+_FREE_ROAM_ONLY_WHEN_DECLARED = {"prepare_action"}
 
 
 @pytest.fixture()
@@ -231,3 +242,54 @@ class TestVoteIsMeetingOnly:
         runtime.end_meeting(reason="vote_concluded")
 
         assert "vote" not in _tool_names(runtime)
+
+
+class TestEveryToolIsExplicitlyClassified:
+    """すべての spot tool が、3 分類のどれかに明示的に入っている。
+
+    実装の free_roam_only は「共通でも会議専用でもないもの全部」という
+    引き算で決まる。放っておくと、**今後追加される tool は自動的に会議中は
+    非露出になる**。安全側ではあるが、「会議でも使えるべき tool」を足した
+    人が気づけない。分類の宣言を強制して、足した人が必ず判断するようにする
+    (#859 と同じ形)。
+    """
+
+    def test_no_tool_is_left_unclassified(self) -> None:
+        """3 分類のどれにも入っていない tool は無い。
+
+        落ちたら、増やした tool を _MEETING_ALLOWED か _FREE_ROAM_ONLY の
+        どちらかに書き足す。**どちらでもよいから片方に書く**のではなく、
+        会議中にその手を使わせるべきかを決めてから書く。
+        """
+        from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+            get_spot_graph_specs,
+        )
+
+        exposed = {defn.name for defn, _ in get_spot_graph_specs()}
+        classified = (
+            _MEETING_ALLOWED
+            | _FREE_ROAM_ONLY
+            | _FREE_ROAM_ONLY_WHEN_DECLARED
+            | {"vote"}
+        )
+
+        assert not (exposed - classified)
+
+    def test_the_classification_does_not_name_tools_that_vanished(self) -> None:
+        """消えた tool 名が分類に残り続けない。
+
+        残っていると、分類表を読んだ人が「会議中も使える」と誤解する。
+        """
+        from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+            get_spot_graph_specs,
+        )
+
+        exposed = {defn.name for defn, _ in get_spot_graph_specs()}
+        classified = (
+            _MEETING_ALLOWED
+            | _FREE_ROAM_ONLY
+            | _FREE_ROAM_ONLY_WHEN_DECLARED
+            | {"vote"}
+        )
+
+        assert not (classified - exposed)
