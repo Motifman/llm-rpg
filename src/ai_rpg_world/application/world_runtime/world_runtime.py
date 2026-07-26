@@ -3503,6 +3503,9 @@ def create_world_runtime(
     from ai_rpg_world.application.world_graph.player_interaction_application_service import (
         PlayerInteractionApplicationService,
     )
+    from ai_rpg_world.application.world_graph.spot_effective_lighting_resolver import (
+        SpotEffectiveLightingResolver,
+    )
     player_interaction_service = PlayerInteractionApplicationService(
         spot_graph_repository=spot_graph_repo,
         player_inventory_repository=player_inventory_repo,
@@ -4584,12 +4587,39 @@ def create_world_runtime(
         interaction_service.set_time_of_day_phase_provider(
             lambda: day_night_stage.current_time_of_day().phase_name
         )
-    interaction_service.set_weather_type_provider(
-        lambda: (
-            weather_holder["state"].weather_type.value
-            if weather_holder.get("state") is not None
-            else None
+    _weather_type_provider = lambda: (
+        weather_holder["state"].weather_type.value
+        if weather_holder.get("state") is not None
+        else None
+    )
+    interaction_service.set_weather_type_provider(_weather_type_provider)
+    # PR 3: 対人経路にも同じ provider を配線する。物体経路にだけ入れると
+    # 「夜だけ襲える」を宣言した対人 action が常に失敗する (条件は provider
+    # 不在で拒否されるため、失敗文の裏に配線漏れが隠れる)。
+    if day_night_stage is not None:
+        player_interaction_service.set_time_of_day_phase_provider(
+            lambda: day_night_stage.current_time_of_day().phase_name
         )
+    player_interaction_service.set_weather_type_provider(_weather_type_provider)
+    # PR 3: SPOT_LIGHTING_IS の判定に使う実効照明 resolver。現在状態の表示
+    # (SpotGraphCurrentStateBuilder) と同じ計算を共有するので、prompt の
+    # 「暗い」と前提条件の「暗い」が食い違わない。
+    _effective_lighting_resolver = SpotEffectiveLightingResolver(
+        spot_graph_repository=spot_graph_repo,
+        entity_has_light_source=lambda entity_id: bool(
+            light_source_item_spec_ids
+            & _owned_item_spec_ids_provider(entity_id)
+        ),
+        time_of_day_provider=(
+            day_night_stage.current_time_of_day
+            if day_night_stage is not None
+            else None
+        ),
+        weather_provider=lambda: weather_holder.get("state"),
+    )
+    interaction_service.set_effective_lighting_resolver(_effective_lighting_resolver)
+    player_interaction_service.set_effective_lighting_resolver(
+        _effective_lighting_resolver
     )
     # drop / pickup の witness 配信用。publisher は同じ pipeline を共有し、
     # SpotGraphRecipientStrategy が PlayerDroppedItemEvent / PlayerPickedUpItemEvent

@@ -135,7 +135,7 @@ instance 層 6 種 (`ITEM_INSTANCE_STATE` / `TARGET_ITEM_INSTANCE_STATE` /
        "failure_message": "あなたにそんな真似はできない。"},
       {"condition_type": "HAS_ITEM", "required_item": "knife",
        "failure_message": "素手では無理だ。"},
-      {"condition_type": "SPOT_LIGHTING_IS", "lighting": ["DARK", "PITCH_BLACK"],
+      {"condition_type": "SPOT_LIGHTING_IS", "required_lighting": "DARK",
        "failure_message": "明るすぎる。誰かに見られる。"},
       {"condition_type": "TARGET_PLAYER_STATE_IS", "required_state": {"role": "crew"},
        "failure_message": "その相手は同じ側の人間だ。"}
@@ -155,8 +155,8 @@ instance 層 6 種 (`ITEM_INSTANCE_STATE` / `TARGET_ITEM_INSTANCE_STATE` /
 | 条件 | 用途 |
 |---|---|
 | `TARGET_PLAYER_STATE_IS` | 「crew だけ殺せる」「まだ印が無い相手だけ」 |
-| `SPOT_LIGHTING_IS` | 暗所限定の行為全般 |
-| `AT_SPOT_IS` | 場所限定の行為全般 |
+| `SPOT_LIGHTING_IS` / `_IS_NOT` | 暗所限定の行為全般 |
+| `AT_SPOT_IS` / `_IS_NOT` | 場所限定の行為全般 |
 
 既存の `PLAYERS_AT_SPOT` (人数) / `TIME_OF_DAY_IS` / `WEATHER_IS` / `FLAG_SET` /
 `HAS_ITEM` と組み合わせれば「夜に」「二人きりのときだけ」「停電中に」が書ける。
@@ -450,22 +450,39 @@ typo には fail-fast するのに status effect 名には何もしていない�
 Optional 化は `_resolve_object_name` と `_build_public_observable_events` に
 分岐を増やす。
 
-**PR 3 で必ず決めること**: `SPOT_LIGHTING_IS` が **raw か effective か**。
-raw (spot の atmosphere そのまま) なら #815 の停電は効くが松明を持った同席者は
-無視される。effective (`SpotPerceptionService.compute_effective_lighting`) なら
-屋外・昼夜・天候・光源持ちまで合成されるが、光源持ち判定は
-`spot_attack_orchestrator` が「inventory 解決のコストが高い」として TODO で
-放置している。**「明るすぎる。誰かに見られる」という意図を満たすには
-effective が要る。** 決めずに出すと宣言したのに効かない静かな失敗になる。
+**PR 3 で決めたこと (実装済み)**
 
-また `"lighting": ["DARK", "PITCH_BLACK"]` の配列形は既存条件 (すべて単一値 +
-`_IS_NOT` 対) と揃っていない。`SPOT_LIGHTING_IS` / `SPOT_LIGHTING_IS_NOT` の
-単一値に揃えるか、配列形を意図的に導入するか決める。
+1. **`SPOT_LIGHTING_IS` は effective で判定する。** raw (spot の atmosphere
+   そのまま) だと、灯りを掲げた相手の目の前で「暗がりだから」襲えてしまい、
+   「明るすぎる。誰かに見られる」という宣言の意図が崩れる。
+   `spot_attack_orchestrator` が TODO で放置していた光源持ち判定は、現在状態
+   の生成 (`SpotGraphCurrentStateBuilder`) が既に解決しているので、そこから
+   `SpotEffectiveLightingResolver` に切り出して共有した。**表示と条件が同じ
+   resolver を使う**ことが要点で、2 か所に同じ合成を書くと「prompt は暗いと
+   言っているのに条件は明るいと判定する」状態が静かに生まれる。
+2. **配列形は採らない。単一値 + `_IS_NOT` 対に揃えた。** `["DARK",
+   "PITCH_BLACK"]` は条件を 2 行並べれば書けるうえ、配列形だけ他の条件と
+   作法が違うと、シナリオ作者もパーサも分岐が増える。
+3. **現在値が渡っていなければ拒否する** (`TIME_OF_DAY_IS` と同じ)。黙って
+   成立させると、明るい場所で暗所限定の行為が**成功として**通り、trace にも
+   異常が出ない。常に失敗するほうが気付ける。
 
-**PR 3 に入れるテスト**: `_evaluate_condition` の最終行は未対応の条件を
+このとき、対人経路には `TIME_OF_DAY_IS` / `WEATHER_IS` の provider が最初から
+配線されていなかった (PR 2 の漏れ) ことが分かったので、同じ PR で塞いだ。
+物体経路にだけ provider を入れると、「夜だけ襲える」を宣言した対人 action が
+常に失敗し、その原因が作者の書いた失敗文の裏に隠れる。
+
+**PR 3 に入れたテスト**: `_evaluate_condition` の最終行は未対応の条件を
 `return False` で落とす。enum に値を足して分岐を書き忘れると**その条件を使う
 interaction が永久に実行不能**になる。「全 `InteractionConditionTypeEnum`
-メンバに分岐があること」を assert するテストを入れる。
+メンバに分岐があること」を assert するテストを入れた
+(`tests/domain/world_graph/test_interaction_place_conditions.py`)。
+
+**PR 3 で残した宿題**: 同席者行 (`[strike_down, tend]`) には条件ヒントが付か
+ない。物体行の `gather(夜のみ)` に相当する表示が対人 action には無いので、
+「暗い場所でだけ襲える」ことは**失敗して初めて**分かる。失敗文で学べるので
+致命的ではないが、§3.3 が描いた
+`strike_down(暗い場所・ナイフが要る)` の形にはまだ届いていない。
 
 **永続化**: `player_interactions` は静的なのでシナリオ再読込で復元でき、
 SQLite codec の変更は不要。per-Being store も増えないので checklist #27 の

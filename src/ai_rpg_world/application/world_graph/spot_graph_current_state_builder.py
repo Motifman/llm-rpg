@@ -40,7 +40,11 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import Entit
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.stock_pool_regen import compute_stock_regen
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.service.spot_perception_service import SpotPerceptionService
+from ai_rpg_world.application.world_graph.spot_effective_lighting_resolver import (
+    SpotEffectiveLightingResolver,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
@@ -183,6 +187,19 @@ def _label_weather_type(value: str) -> str:
     return _WEATHER_TYPE_LABELS.get(value, value)
 
 
+_LIGHTING_LABELS = {
+    "BRIGHT": "明るい場所",
+    "DIM": "薄暗い場所",
+    "DARK": "暗い場所",
+    "PITCH_BLACK": "真っ暗な場所",
+}
+
+
+def _label_lighting(value: str) -> str:
+    """明るさの内部値を prompt 用の短い日本語へ変換する。未知値はそのまま出す。"""
+    return _LIGHTING_LABELS.get(value, value)
+
+
 def _interaction_condition_hints(
     interaction,
     interior=None,
@@ -194,6 +211,9 @@ def _interaction_condition_hints(
     HAS_ITEM は他の表示や remediation と重複するためここでは扱わない。
     OBJECT_STATE は現在失敗している場合だけ failure_message を添え、action
     候補自体は残す。候補集合を消すと存在しない操作名の発明につながるため。
+
+    ``AT_SPOT_IS`` も扱わない。物体の action 候補は「その物体が在るスポット」
+    でしか表示されないので、場所を添えても常に自明な情報になる。
     """
     hints: list[str] = []
     for cond in interaction.preconditions:
@@ -217,6 +237,14 @@ def _interaction_condition_hints(
         if t == InteractionConditionTypeEnum.WEATHER_IS_NOT:
             if cond.required_weather_type:
                 hints.append(f"{_label_weather_type(cond.required_weather_type)}不可")
+            continue
+        if t == InteractionConditionTypeEnum.SPOT_LIGHTING_IS:
+            if cond.required_lighting:
+                hints.append(f"{_label_lighting(cond.required_lighting)}のみ")
+            continue
+        if t == InteractionConditionTypeEnum.SPOT_LIGHTING_IS_NOT:
+            if cond.required_lighting:
+                hints.append(f"{_label_lighting(cond.required_lighting)}不可")
             continue
     if interior is not None:
         hints.extend(_object_state_precondition_failure_hints(interaction, interior))
@@ -341,6 +369,16 @@ class SpotGraphCurrentStateBuilder:
         self._visible_monster_observer = visible_monster_observer
         self._player_action_names_provider = player_action_names_provider
         self._perception = SpotPerceptionService()
+        # 実効照明は前提条件 (SPOT_LIGHTING_IS) と同じ resolver で求める。
+        # 2 か所に同じ合成ロジックを置くと、片方だけ直したときに「prompt は
+        # 暗いと言っているのに条件は明るいと判定する」状態になる。
+        self._lighting_resolver = SpotEffectiveLightingResolver(
+            spot_graph_repository=spot_graph_repository,
+            entity_has_light_source=self._entity_has_light_source,
+            time_of_day_provider=time_of_day_provider,
+            weather_provider=weather_provider,
+            perception=self._perception,
+        )
 
     def _resolve_player_action_names(self) -> tuple:
         """同席者行に出す対人 action 名。provider 未注入なら空。
@@ -786,6 +824,9 @@ class SpotGraphCurrentStateBuilder:
         ground_items: list[SpotGraphGroundItemEntry] = []
 
         # --- 知覚判定: 照明 + 光源 ---
+        # 実効照明の算出は SpotEffectiveLightingResolver に集約する。
+        # SPOT_LIGHTING_IS の判定も同じ resolver を使うので、prompt の「暗い」
+        # と前提条件の「暗い」が食い違わない。
         presence = graph.presence_at(spot_id)
         viewer_has_light = self._entity_has_light_source(player_id)
         spot_has_any_light_bearer = viewer_has_light or any(
@@ -793,33 +834,13 @@ class SpotGraphCurrentStateBuilder:
             for other_eid in presence.present_entity_ids
             if other_eid != eid
         )
-        # Phase: 夜 / 悪天候で屋外の視界を 1 段下げる。
-        # provider が居なければ「明るい / 良天候」とみなす (= 既存挙動)。
-        time_of_day_is_dark = False
-        if self._time_of_day_provider is not None:
-            try:
-                tod = self._time_of_day_provider()
-                if tod is not None:
-                    time_of_day_is_dark = bool(tod.is_dark)
-            except Exception:
-                time_of_day_is_dark = False
-        weather_obscures_vision = False
-        if self._weather_provider is not None:
-            try:
-                ws = self._weather_provider()
-                if ws is not None:
-                    # STORM / FOG は視界減衰扱い。weather_type.value の文字列で
-                    # 判定して enum 直接依存を避ける。RAIN は微減なので含めない。
-                    wt = getattr(ws.weather_type, "value", None) or str(ws.weather_type)
-                    weather_obscures_vision = wt in ("STORM", "FOG")
-            except Exception:
-                weather_obscures_vision = False
-        effective_lighting = self._perception.compute_effective_lighting(
-            node.atmosphere,
-            spot_has_any_light_bearer,
-            is_outdoor=node.is_outdoor,
-            time_of_day_is_dark=time_of_day_is_dark,
-            weather_obscures_vision=weather_obscures_vision,
+        # resolve() が None を返すのは「その spot が graph に無い」場合だけ。
+        # ここは spot から node を引けている文脈なので実際には起きないが、
+        # 型としては Optional なので atmosphere 未宣言と同じ BRIGHT に倒す。
+        # 想定外の失敗は resolve() が例外のまま上げる (握りつぶすと表示は
+        # 「明るい」・前提条件は「暗くない」に食い違って倒れる)。
+        effective_lighting = (
+            self._lighting_resolver.resolve(spot_id) or LightingEnum.BRIGHT
         )
         can_see = self._perception.can_see_objects(effective_lighting)
 

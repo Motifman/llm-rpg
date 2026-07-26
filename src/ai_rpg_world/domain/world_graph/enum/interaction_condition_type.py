@@ -60,3 +60,20 @@ class InteractionConditionTypeEnum(Enum):
     # 経路で使う。
     TARGET_HAS_ITEM = "TARGET_HAS_ITEM"
     TARGET_HAS_NO_ITEM = "TARGET_HAS_NO_ITEM"
+    # 対象プレイヤーの自由 state を判定する。``PLAYER_STATE_IS`` は行為者しか
+    # 見ないので、「crew だけ殺せる」「まだ印が無い相手だけ」を書くには
+    # 対象側を見る条件が要る。
+    TARGET_PLAYER_STATE_IS = "TARGET_PLAYER_STATE_IS"
+    # 場所の明るさによる制限。「暗い場所ならどこでも襲える」を 1 回の宣言で
+    # 書くための条件で、特定の部屋に紐付ける代わりに使う。
+    #
+    # 判定するのは **実効照明** (SpotPerceptionService.compute_effective_lighting)
+    # であって spot の静的 atmosphere ではない。屋外の昼夜・悪天候・同席者の
+    # 光源まで合成した値を見る。「明るすぎる。誰かに見られる」という意図は
+    # 松明を持った同席者が居れば崩れるべきなので、raw では足りない。
+    SPOT_LIGHTING_IS = "SPOT_LIGHTING_IS"
+    SPOT_LIGHTING_IS_NOT = "SPOT_LIGHTING_IS_NOT"
+    # 行為者の現在地による制限。場所は「成立条件のひとつ」であって、行為の
+    # 置き場所ではない (設計 doc §3.2)。
+    AT_SPOT_IS = "AT_SPOT_IS"
+    AT_SPOT_IS_NOT = "AT_SPOT_IS_NOT"
