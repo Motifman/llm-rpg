@@ -141,7 +141,8 @@
 
 **どうしないと壊れるか**:
 - event 駆動の起床経路 (`schedules_turn=True` 観測) が網羅されていないと、idle_timeout (デフォルト 6 tick) まで重要な変化に気づかない
-- `schedules_turn` の audit は重要 (#412): HP 変化 / モンスター出現 / 発話 / アイテム overflow / 救助到達 / etc. を漏れなく `schedules_turn=True` に揃える必要がある
+- `schedules_turn` の audit は重要 (#412): HP 変化 / モンスター出現 / 発話 / アイテム overflow / 救助到達 / アイテムの受け渡し (drop / pickup / give) / etc. を漏れなく `schedules_turn=True` に揃える必要がある
+- アイテム移動 3 種は初回 audit から漏れていた。v4 第 3 回 run で「`say_inline` を伴う受け渡しは発話観測が同席者を起こすので回るが、黙って渡すと相手が idle_timeout まで気づかない」と判明して追加した。audit 表の正本は `tests/application/observation/test_schedules_turn_audit.py` の docstring
 
 **どこでこの判断が出てきたか**:
 - 実験 #28 wall time スパイクの分析 → #407 (per-agent idle timer) + #412 (schedules_turn audit)

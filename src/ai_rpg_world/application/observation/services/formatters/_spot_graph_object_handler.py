@@ -101,6 +101,11 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         が呼ばれる時点で recipient_id は送り手ではない。受け手本人 (recipient_id
         == event.recipient_entity_id) には自分宛の動作だが、prose は三人称的に
         統一する (LLM 視点で観測ログは一貫した語り口を取りたいため)。
+
+        schedules_turn=True: 受け手は所持品が増えた時点で次の手が変わる
+        (受け取った食料を食べる / 資材を火起こしに使う)。say_inline を伴わない
+        give は #412 の audit 漏れで同席者を起こせておらず、渡した資材が
+        idle_timeout まで使われない停滞を生んでいた。
         """
         if self._is_self(event.entity_id, recipient_id):
             return None
@@ -116,13 +121,20 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             "item_spec_id": event.item_spec_id.value,
         }
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social",
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
         )
 
     def _format_item_dropped(
         self, event: PlayerDroppedItemEvent, recipient_id: PlayerId,
     ) -> Optional[ObservationOutput]:
-        """「ミラが流木を地面に置いた」を同室の他プレイヤーに観測として届ける。"""
+        """「ミラが流木を地面に置いた」を同室の他プレイヤーに観測として届ける。
+
+        schedules_turn=True: 目の前に資材が現れた = 拾える状態への遷移なので、
+        harvest 完了と同じ扱いで即起床させる。
+        """
         if self._is_self(event.entity_id, recipient_id):
             return None
         actor = self._resolve_entity_name(event.entity_id)
@@ -135,13 +147,20 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             "item_spec_id": event.item_spec_id.value,
         }
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social",
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
         )
 
     def _format_item_picked_up(
         self, event: PlayerPickedUpItemEvent, recipient_id: PlayerId,
     ) -> Optional[ObservationOutput]:
-        """「トマが流木を拾い上げた」を同室の他プレイヤーに観測として届ける。"""
+        """「トマが流木を拾い上げた」を同室の他プレイヤーに観測として届ける。
+
+        schedules_turn=True: 狙っていた地面の資材が消えた = 計画の前提が崩れた
+        ので、harvest 中断と同じ扱いで即起床させ別の手を選ばせる。
+        """
         if self._is_self(event.entity_id, recipient_id):
             return None
         actor = self._resolve_entity_name(event.entity_id)
@@ -154,7 +173,10 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             "item_spec_id": event.item_spec_id.value,
         }
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social",
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
         )
 
     def _format_object_interacted(
