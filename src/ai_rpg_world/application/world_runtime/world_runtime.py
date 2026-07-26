@@ -399,6 +399,10 @@ class WorldRuntime:
     _game_phase_store: "GamePhaseStore" = field(
         default_factory=lambda: GamePhaseStore(), repr=False
     )
+    # 会議機構を使うシナリオか (scenario の `meeting` block 由来)。
+    # False なら招集・投票の tool を出さず、runtime のメソッドも拒否する。
+    # 宣言していない世界のプロンプトを 1 バイトも変えないための切り分け。
+    _meeting_enabled: bool = field(default=False, repr=False)
     # LLM 脱出用（セッション単位で構築）
     # _world_llm_system_prompt: 全プレイヤー共通の system prompt (legacy / 単体プレイ用)
     # _world_llm_system_prompts_by_player_id: Issue #264 第16回実験で発見された
@@ -937,6 +941,12 @@ class WorldRuntime:
         # design_decisions #1 が禁じているのは「毎 tick 変わる動的注入」で、
         # フェーズ境界での変化は対象外 (コストの判断であって正しさの判断では
         # ない) だが、被害は抑えられるなら抑える。
+        if not self._meeting_enabled:
+            # 宣言していないシナリオからは会議系を丸ごと落とす。会議を開け
+            # ない世界に「報告する」「投票する」が並ぶと、選べるのに必ず
+            # 失敗する手が増える (#860 で潰した形)。同時に、過去 run との
+            # プロンプト比較も保てる。
+            spot = [d for d in spot if d.name not in self._MEETING_SPOT_TOOLS]
         common_spot = [d for d in spot if d.name in self._PHASE_COMMON_SPOT_TOOLS]
         meeting_only_spot = [
             d for d in spot if d.name in self._MEETING_ONLY_SPOT_TOOLS
@@ -1041,6 +1051,14 @@ class WorldRuntime:
     #: 共通ブロックには入れない。自由時間に vote が並ぶと「いつでも投票
     #: できる」と読め、会議の外で試して失敗し続ける (#860 で潰した形)。
     _MEETING_ONLY_SPOT_TOOLS = frozenset({"vote"})
+
+    #: 会議機構を宣言したシナリオでだけ出す spot tool。
+    #:
+    #: `_MEETING_ONLY_SPOT_TOOLS` (= 会議フェーズでだけ出す) とは軸が違う。
+    #: report_body は自由時間に出るが、会議を持たない世界では出したくない。
+    #: 2 つを 1 つの集合で兼ねると、report_body を会議中に出すか自由時間に
+    #: 出すかの判断と、そもそも会議がある世界かの判断が混ざる。
+    _MEETING_SPOT_TOOLS = frozenset({"vote", "report_body"})
 
     @staticmethod
     def _resolve_requested_memory_tool_enabled(
@@ -2304,6 +2322,14 @@ class WorldRuntime:
         """
         from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 
+        # 会議機構を宣言していない世界では、届いても始めない。tool から
+        # 外すのは露出の制御であって防御ではない (設計 doc H-6)。
+        if not self._meeting_enabled:
+            return LlmCommandResultDto(
+                success=False,
+                message="ここには皆を集めて話し合う仕組みが無い。",
+                error_code="MEETING_NOT_AVAILABLE",
+            )
         store = self._game_phase_store
         if not store.is_meeting():
             return LlmCommandResultDto(
@@ -2408,6 +2434,14 @@ class WorldRuntime:
         """
         from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 
+        # 会議機構を宣言していない世界では、届いても始めない。tool から
+        # 外すのは露出の制御であって防御ではない (設計 doc H-6)。
+        if not self._meeting_enabled:
+            return LlmCommandResultDto(
+                success=False,
+                message="ここには皆を集めて話し合う仕組みが無い。",
+                error_code="MEETING_NOT_AVAILABLE",
+            )
         store = self._game_phase_store
         if store.is_meeting():
             return LlmCommandResultDto(
@@ -2455,6 +2489,14 @@ class WorldRuntime:
         """
         from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 
+        # 会議機構を宣言していない世界では、届いても始めない。tool から
+        # 外すのは露出の制御であって防御ではない (設計 doc H-6)。
+        if not self._meeting_enabled:
+            return LlmCommandResultDto(
+                success=False,
+                message="ここには皆を集めて話し合う仕組みが無い。",
+                error_code="MEETING_NOT_AVAILABLE",
+            )
         store = self._game_phase_store
         if store.is_meeting():
             return LlmCommandResultDto(
@@ -4971,6 +5013,7 @@ def create_world_runtime(
 
     runtime = WorldRuntime(
         scenario=scenario,
+        _meeting_enabled=scenario.meeting_enabled,
         _spot_graph_repo=spot_graph_repo,
         _spot_interior_repo=spot_interior_repo,
         _player_status_repo=player_status_repo,
