@@ -11,7 +11,12 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     chunk_encoding_episode_generation_allowed,
     format_unified_timeline_as_recent_events_bullets,
 )
-from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
+from ai_rpg_world.application.llm.contracts.dtos import (
+    ActionResultEntry,
+    PlayerToolRuntimeTargetDto,
+    ToolRuntimeContextDto,
+    ToolRuntimeTargetDto,
+)
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput, ObservationEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -124,6 +129,61 @@ class TestChunkEpisodeDraftBuilder:
         canon = {c.to_canonical() for c in ep.cues}
         assert "place_spot:77" in canon
         assert any(k.startswith("entity:") for k in canon)
+
+    def test_secret_target_observation_hides_actor_in_chunk_who_and_cues(self) -> None:
+        """秘匿された対象本人向け観測を含む chunk は、犯人の実 actor を who/cue に保存しない。"""
+        t = datetime(2026, 5, 4, 13, 30, 0, tzinfo=timezone.utc)
+        obs = ObservationEntry(
+            occurred_at=t,
+            output=ObservationOutput(
+                prose="喉の奥が焼けるように熱い。",
+                structured={
+                    "type": "player_interacted_with_player",
+                    "actor": "spot_graph_player_1",
+                    "target": "spot_graph_player_2",
+                    "is_target": True,
+                    "witness_observation_source": "scenario_target",
+                },
+                observation_category="social",
+            ),
+        )
+        act = ActionResultEntry(
+            occurred_at=t + timedelta(minutes=1),
+            action_summary="異変を確かめた",
+            result_summary="異変に気づいた。",
+            tool_name="wait",
+        )
+        inp = build_chunk_encoding_input(PlayerId(2), (obs,), (act,))
+        context = ToolRuntimeContextDto(
+            targets={
+                "P1": PlayerToolRuntimeTargetDto(
+                    label="P1",
+                    kind="spot_graph_player",
+                    display_name="カイ",
+                    player_id=1,
+                ),
+                "O1": ToolRuntimeTargetDto(
+                    label="O1",
+                    kind="world_object",
+                    display_name="古い端末",
+                    world_object_id=42,
+                ),
+            }
+        )
+
+        ep = ChunkEpisodeDraftBuilder(
+            runtime_context_provider=lambda pid: context
+        ).build(inp)
+
+        canon = {c.to_canonical() for c in ep.cues}
+        assert "entity:spot_graph_player_1" not in canon
+        assert "entity:actor_spot_graph_player_1" not in canon
+        assert "entity:actor_unknown_secret_target" in canon
+        assert "object:world_object_42" in canon
+        assert "entity:spot_graph_player:1" not in ep.who
+        assert "entity:actor:spot_graph_player_1" not in ep.who
+        assert "entity:actor_unknown_secret_target" in ep.who
+        assert ep.co_present == ()
 
     def test_overflow_observation_contributes_cues_timeline(self) -> None:
         """

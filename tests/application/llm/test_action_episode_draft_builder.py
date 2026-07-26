@@ -338,3 +338,61 @@ class TestEpisodicCueIntegrationOptional:
             result_summary="ok",
         )
         assert ep.cues == ()
+
+    def test_secret_target_observation_episode_cues_hide_actor_identity(self) -> None:
+        """対象専用の秘匿観測から episode を組むと、犯人の実 actor cue は保存されない。
+
+        structured["actor"] は観測 DTO に残るが、エピソード検索用の entity cue は
+        匿名 cue に置き換える。これにより、後日その人物と同席しただけで
+        「誰にやられたか」を想起の相関から推測できる漏れを防ぐ。
+        """
+        obs = ObservationEntry(
+            occurred_at=_utc(2026, 5, 3, 22, 30),
+            output=ObservationOutput(
+                prose="喉の奥が焼けるように熱い。",
+                structured={
+                    "type": "player_interacted_with_player",
+                    "actor": "spot_graph_player_1",
+                    "target": "spot_graph_player_2",
+                    "is_target": True,
+                    "witness_observation_source": "scenario_target",
+                },
+            ),
+        )
+
+        ep = ActionEpisodeDraftBuilder().build(
+            player_id=2,
+            occurred_at=None,
+            tool_name="interact_with_player",
+            canonical_arguments=None,
+            runtime_context=ToolRuntimeContextDto(
+                targets={
+                    "P1": ToolRuntimeTargetDto(
+                        label="P1",
+                        kind="spot_graph_player",
+                        display_name="カイ",
+                        player_id=1,
+                    ),
+                    "O1": ToolRuntimeTargetDto(
+                        label="O1",
+                        kind="world_object",
+                        display_name="古い端末",
+                        world_object_id=42,
+                    ),
+                }
+            ),
+            command_result=LlmCommandResultDto(success=True, message="異変に気づいた。"),
+            action_summary="何かをされた",
+            result_summary="異変に気づいた。",
+            recent_observation=obs,
+        )
+
+        canon = {c.to_canonical() for c in ep.cues}
+        assert "entity:spot_graph_player_1" not in canon
+        assert "entity:actor_spot_graph_player_1" not in canon
+        assert "entity:actor_unknown_secret_target" in canon
+        assert "object:world_object_42" in canon
+        assert "entity:spot_graph_player:1" not in ep.who
+        assert "entity:actor:spot_graph_player_1" not in ep.who
+        assert "entity:actor_unknown_secret_target" in ep.who
+        assert "object:world_object:42" in ep.who

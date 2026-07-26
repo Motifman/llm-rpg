@@ -49,6 +49,10 @@ TOPIC_CUE_AXIS = "topic"
 MAX_TOPIC_CUES = 32
 # value は索引キーとして短く保つ（canonical は axis:value のため value 側のみが対象）
 MAX_CUE_VALUE_CHARS = 96
+# 秘匿対人行為の対象本人向け観測では、structured["actor"] に実 actor が
+# 残っていても、episode の entity cue には実名を載せない。代わりに
+# 「正体不明の誰か」同士を束ねられる固定 cue を使う。
+SECRET_TARGET_ACTOR_ENTITY_CUE_VALUE = "actor_unknown_secret_target"
 
 
 def build_episodic_cues_for_tool_turn(
@@ -226,7 +230,15 @@ def _collect_situation_episodic_cues(
             out.extend(_cues_from_observation_prose(raw, noun_matcher))
 
     if rt is not None:
-        out.extend(_cues_from_runtime_targets(rt.targets))
+        include_player_target_entities = not (
+            obs is not None and is_secret_target_actor_observation(obs)
+        )
+        out.extend(
+            _cues_from_runtime_targets(
+                rt.targets,
+                include_player_entities=include_player_target_entities,
+            )
+        )
         out.extend(_cues_from_runtime_tile_areas(rt))
 
     return out
@@ -389,7 +401,11 @@ def _kind_slug(kind: str) -> str:
     return cleaned if cleaned else "target"
 
 
-def _cues_from_runtime_targets(targets: Mapping[str, ToolRuntimeTargetDto]) -> list[EpisodicCue]:
+def _cues_from_runtime_targets(
+    targets: Mapping[str, ToolRuntimeTargetDto],
+    *,
+    include_player_entities: bool = True,
+) -> list[EpisodicCue]:
     out: list[EpisodicCue] = []
     src = EpisodicCueSource.RUNTIME_CONTEXT
     for label in sorted(targets.keys()):
@@ -397,7 +413,7 @@ def _cues_from_runtime_targets(targets: Mapping[str, ToolRuntimeTargetDto]) -> l
         if not isinstance(t, ToolRuntimeTargetDto):
             continue
         pid = _strict_int(t.player_id)
-        if pid is not None:
+        if include_player_entities and pid is not None:
             slug = _kind_slug(t.kind)
             val = _sanitize_id_segment(slug, pid)
             out.append(EpisodicCue(axis="entity", value=val, source=src))
@@ -635,11 +651,23 @@ def _cues_from_observation_structured(structured: Mapping[str, Any]) -> list[Epi
     if wi is not None:
         val = _sanitize_id_segment("world_object", wi)
         out.append(EpisodicCue(axis="object", value=val, source=src))
-    actor = structured.get("actor")
-    av = _coerce_actor_entity(actor)
+    if is_secret_target_actor_observation(structured):
+        av = SECRET_TARGET_ACTOR_ENTITY_CUE_VALUE
+    else:
+        actor = structured.get("actor")
+        av = _coerce_actor_entity(actor)
     if av is not None:
         out.append(EpisodicCue(axis="entity", value=av, source=src))
     return out
+
+
+def is_secret_target_actor_observation(structured: Mapping[str, Any]) -> bool:
+    """対象専用文面で秘匿された対人観測かどうかを判定する。"""
+    return (
+        structured.get("type") == "player_interacted_with_player"
+        and structured.get("is_target") is True
+        and structured.get("witness_observation_source") == "scenario_target"
+    )
 
 
 def _validate_and_dedupe(cues: Iterable[EpisodicCue]) -> list[EpisodicCue]:
