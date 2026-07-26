@@ -1263,6 +1263,7 @@
       "name": "隠し入江",
       "description": "干潟の奥、岩陰に隠れた小さな入江。古い宝箱が砂に半分埋まっている。",
       "category": "FIELD",
+      "is_outdoor": true,
       "atmosphere": {
         "lighting": "DIM",
         "sound_ambient": "岩肌に当たる小波の音",

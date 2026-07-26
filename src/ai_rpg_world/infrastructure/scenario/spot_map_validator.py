@@ -103,6 +103,7 @@ def validate_spot_map(
     positions = _positions(raw)
     area_ids = _check_areas(raw, positions, collector)
     _check_spot_area_refs(raw, area_ids, collector)
+    indoor_spots, undeclared_is_outdoor_spots = _check_indoor_spots(raw, collector)
     object_ids = _object_ids(raw)
     distant_cue_count = _check_distant_cues(raw, area_ids, object_ids, collector)
     edges = _edges(raw, spot_set, collector)
@@ -167,6 +168,9 @@ def validate_spot_map(
         "positioned_spot_count": len(positions),
         "area_count": len(area_ids),
         "distant_cue_count": distant_cue_count,
+        "indoor_spot_count": len(indoor_spots),
+        "indoor_spots": indoor_spots,
+        "is_outdoor_undeclared_spots": undeclared_is_outdoor_spots,
     }
     return MapValidationResult(
         ok=not collector.errors,
@@ -631,6 +635,40 @@ def _check_spot_area_refs(
                 spots=(spot_id,),
                 details={"area_id": area_id},
             )
+
+
+def _check_indoor_spots(
+    raw: Mapping[str, Any],
+    collector: _IssueCollector,
+) -> tuple[list[str], list[str]]:
+    indoor_spots: list[str] = []
+    undeclared_is_outdoor_spots: list[str] = []
+    for spot in _list_value(raw, "spots"):
+        if not isinstance(spot, Mapping):
+            continue
+        spot_id = spot.get("id")
+        if not isinstance(spot_id, str) or not spot_id:
+            continue
+        raw_is_outdoor = spot.get("is_outdoor")
+        if raw_is_outdoor is True:
+            continue
+        indoor_spots.append(spot_id)
+        if raw_is_outdoor is None:
+            undeclared_is_outdoor_spots.append(spot_id)
+    indoor_spots = sorted(indoor_spots)
+    undeclared_is_outdoor_spots = sorted(undeclared_is_outdoor_spots)
+    if indoor_spots:
+        collector.add(
+            "INDOOR_SPOTS",
+            "info",
+            "is_outdoor=false または未宣言により屋内扱いになる spot があります",
+            spots=tuple(indoor_spots),
+            details={
+                "indoor_spot_count": len(indoor_spots),
+                "undeclared_is_outdoor_spots": undeclared_is_outdoor_spots,
+            },
+        )
+    return indoor_spots, undeclared_is_outdoor_spots
 
 
 def _check_distant_cues(

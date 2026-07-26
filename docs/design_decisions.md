@@ -1054,3 +1054,24 @@ docs/memory_system/short_term_memory_design.md が想定していた「memo = �
 `MEMO_TOOLS_ENABLED` の1キーだけにする。#33 で OFF にした
 `SEMANTIC_SEARCH_ENABLED=false` / `EPISODIC_EXPLORE_RELATED_ENABLED=false` は両腕で維持し、
 能動想起ツールの増加を memo 実験に混ぜない。
+
+## 35. `is_outdoor` 未宣言の屋内扱いは validator で見える化する
+
+`SpotNode.is_outdoor` は既定 false のまま維持する。洞窟・廃屋・小屋など、空や
+遠景が見えない spot を壊さないためである。一方で、未宣言が黙って屋内扱いになると、
+遠景 (`distant_view`) や天候表示が抑止され、症状は「なぜか目標が見えない」として
+しか表れない。
+
+v4 第3回 run では、最長滞在拠点だった `hidden_cove` が `is_outdoor` 未宣言で屋内扱い
+になり、拠点から山影が一度も見えていなかった。description 上は海に開けた入江であり、
+屋内意図は読み取れないため、v3/v4 では `is_outdoor: true` を明示する。ただし v3 は
+position / area / distant cue が未整備なので、この宣言だけでは遠景は出ない。v3 側の
+宣言は、将来 v3 に遠景材料を足したときに同じ屋内抑止を再発させないための前準備である。
+
+v4 ではこの変更により、次の本命 run で拠点から「切り立った山影」が見える。run 003
+との比較では、この目標 cue の露出条件が変わったことを明記する。
+
+既定値は変えず、`validate_spot_map` が屋内扱い spot と `is_outdoor` 未宣言 spot を
+info / metrics に出す。シナリオ作者が map 検査時に「本当に屋内扱いでよいか」を確認
+できるようにし、既存シナリオの意味を反転させない。
+

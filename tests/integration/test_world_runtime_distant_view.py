@@ -74,6 +74,27 @@ class TestDistantViewRuntimePrompt:
         )
         assert lines[description_index + 1] == "  北東の遠くに切り立った山影が見える。"
 
+    def test_v4_hidden_cove_renders_mountain_distant_view(self) -> None:
+        """隠し入江は海に開けた屋外拠点なので、屋内扱いで山影の遠景を抑止しない。"""
+        runtime = create_world_runtime(
+            _V4,
+            config=runtime_config(distant_view_trace_enabled=True),
+        )
+        recorder = _TraceRecorderSpy()
+        runtime.set_trace_recorder(recorder)
+        player_id = PlayerId(1)
+        _teleport_player(runtime, int(player_id.value), "hidden_cove")
+
+        text = runtime.build_llm_context(player_id).current_state_text
+
+        assert "切り立った山影が見える" in text
+        skipped_payloads = [
+            payload
+            for kind, payload in recorder.events
+            if kind == TraceEventKind.DISTANT_VIEW_SKIPPED
+        ]
+        assert not any("indoor" in payload["skipped_reasons"] for payload in skipped_payloads)
+
     def test_scenario_without_areas_keeps_distant_view_empty(self) -> None:
         """areas 未定義の既存シナリオでは常時遠景を出さず、現行 prompt を汚さない。"""
         runtime = create_world_runtime(_V3, config=runtime_config())
