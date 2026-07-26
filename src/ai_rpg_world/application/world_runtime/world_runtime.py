@@ -1016,7 +1016,16 @@ class WorldRuntime:
     #: 話す手段が無いと会議そのものが成立しない。listen と wait は「黙って
     #: 様子を見る」を潰さないために残す (棄権や保留を選べることは
     #: agent_design_principles の「取れる手段の質」に効く)。
-    _PHASE_COMMON_SPOT_TOOLS = frozenset({"speak", "listen", "wait"})
+    #:
+    #: tend_to_player も共通に置く。倒れている相手を報告すると全員がその
+    #: 場所に集まる (report_body は報告者と対象が同席していることを要求
+    #: する) のに、手当てだけできない状態になっていた。隣に倒れている人が
+    #: 居るのに助け起こせないのは、#848 で置いた「倒れているだけの相手は
+    #: 蘇生できる」という判断と衝突する。#860 の行ゲートが「同席かつ行動
+    #: 不能な相手が居るときだけ」に絞っているので、露出は広がらない。
+    _PHASE_COMMON_SPOT_TOOLS = frozenset(
+        {"speak", "listen", "wait", "tend_to_player"}
+    )
 
     #: 会議中だけ出す spot tool。自由時間では出さない。
     #:
@@ -4895,7 +4904,7 @@ def create_world_runtime(
     death_grace_stage = PlayerDeathGraceTickStage(
         outcome_registry=outcome_registry,
         grace_timer=death_grace_timer,
-        grace_ticks=30,
+        grace_ticks=PlayerDeathGraceTickStage.DEFAULT_GRACE_TICKS,
     )
 
     # ── Phase E-3b: outcome_resolution_stage ──
