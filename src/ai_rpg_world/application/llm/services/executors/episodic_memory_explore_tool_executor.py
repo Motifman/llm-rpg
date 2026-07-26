@@ -8,6 +8,11 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.services.afterglow_store import (
+    IAfterglowStore,
+    make_afterglow_handle,
+    resolve_episode_id_prefix_from_handle,
+)
 from ai_rpg_world.domain.being.service.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
@@ -37,6 +42,7 @@ class EpisodicMemoryExploreToolExecutor:
     episode_store: EpisodicEpisodeRepository
     link_store: MemoryLinkRepository
     link_service: EpisodicMemoryLinkApplicationService
+    afterglow_store: Optional[IAfterglowStore] = None
     # Phase 3 Step 3c-3: legacy player_id 経路は撤去済。constructor 上は
     # Optional のまま (= 既存テスト互換) だが、tool 実行時に未注入 / Being
     # 未 provision なら ``INVALID_STATE`` で fail-fast する。tool は LLM-visible
@@ -76,7 +82,15 @@ class EpisodicMemoryExploreToolExecutor:
         player_id: int,
         arguments: Dict[str, Any],
     ) -> LlmCommandResultDto:
-        eid = str(arguments.get("episode_id", "")).strip()
+        handle_raw = arguments.get("handle")
+        try:
+            resolve_episode_id_prefix_from_handle(handle_raw or "")
+        except (TypeError, ValueError) as e:
+            return LlmCommandResultDto(
+                success=False,
+                message=str(e),
+                error_code="INVALID_ARGUMENT",
+            )
         raw_top = arguments.get("top_k", 5)
         try:
             top_k = int(raw_top)
@@ -86,12 +100,6 @@ class EpisodicMemoryExploreToolExecutor:
             top_k = 5
         if top_k > 64:
             top_k = 64
-        if not eid:
-            return LlmCommandResultDto(
-                success=False,
-                message="episode_id が空です。",
-                error_code="INVALID_ARGUMENT",
-            )
         now = datetime.now(timezone.utc)
         being_id = self._resolve_being_id(player_id)
         if being_id is None:
@@ -106,6 +114,23 @@ class EpisodicMemoryExploreToolExecutor:
                 ),
                 error_code="INVALID_STATE",
             )
+        if self.afterglow_store is None:
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    "EpisodicMemoryExploreToolExecutor requires afterglow_store "
+                    "to resolve prompt handles."
+                ),
+                error_code="INVALID_STATE",
+            )
+        entry = self.afterglow_store.find_by_handle(being_id, str(handle_raw))
+        if entry is None:
+            return LlmCommandResultDto(
+                success=False,
+                message=self._unknown_handle_message(being_id),
+                error_code="INVALID_ARGUMENT",
+            )
+        eid = entry.episode_id
         links = self.link_store.list_links_for_episode_by_being(
             being_id, eid, now=now, limit=256
         )
@@ -142,4 +167,21 @@ class EpisodicMemoryExploreToolExecutor:
         return LlmCommandResultDto(
             success=True,
             message=json.dumps(payload, ensure_ascii=False),
+        )
+
+    def _unknown_handle_message(self, being_id: BeingId) -> str:
+        if self.afterglow_store is None:
+            return "指定された handle は見つかりません。"
+        handles = [
+            make_afterglow_handle(entry.episode_id)
+            for entry in self.afterglow_store.get_index(being_id)
+        ]
+        if not handles:
+            return (
+                "指定された handle は見つかりません。"
+                "現在使える記憶の見出し handle はありません。"
+            )
+        return (
+            "指定された handle は見つかりません。"
+            f"有効な handle: {' / '.join(handles)}"
         )

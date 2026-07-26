@@ -1408,10 +1408,19 @@ def test_memory_tool_exposure_flags_show_tools_when_executor_is_wired(
     tool_name: str,
 ) -> None:
     """露出フラグ true かつ必要な記憶スタックがあるときだけ能動記憶ツールを LLM に出す。"""
+    extra_config: dict[str, object] = {}
+    if flag_name == "episodic_explore_related_enabled":
+        # memory_explore_related は prompt に出る afterglow handle を入口にする。
+        # そのため executor 構築には link store だけでなく afterglow store も必要。
+        extra_config = {
+            "recall_slot_enabled": True,
+            "afterglow_enabled": True,
+        }
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
             episodic_enabled=True,
             **{flag_name: True},
+            **extra_config,
         )
     )
 
@@ -1462,6 +1471,27 @@ def test_memory_tool_flag_true_without_memory_stack_fails_fast(
     message = str(exc_info.value)
     assert env_name in message
     assert tool_name in message
+
+
+def test_memory_explore_related_flag_true_without_afterglow_fails_fast(
+    clean_runtime_env: None,
+) -> None:
+    """memory_explore_related は prompt の handle を解決するため、afterglow 無しでは露出しない。"""
+    runtime = _create_runtime(
+        ResolvedLlmRuntimeConfig.for_tests(
+            episodic_enabled=True,
+            episodic_explore_related_enabled=True,
+            recall_slot_enabled=True,
+            afterglow_enabled=False,
+        )
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        runtime.get_tool_definitions()
+
+    message = str(exc_info.value)
+    assert "EPISODIC_EXPLORE_RELATED_ENABLED" in message
+    assert TOOL_NAME_MEMORY_EXPLORE_RELATED in message
 
 
 def test_memory_tool_flag_true_without_executor_fails_during_wiring_validation(
