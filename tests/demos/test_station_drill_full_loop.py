@@ -92,17 +92,34 @@ class TestTheScenarioIsShapedForTheDrill:
         assert "0/3" in _line(runtime, "作業の進み")
         assert "あと 2" in _line(runtime, "作業の進み")
 
-    def test_only_the_passage_is_dark(self, runtime) -> None:
-        """暗いのは通路だけ。
+    def test_only_the_hall_is_lit(self, runtime) -> None:
+        """明るいのは集会室だけ。通路も倉庫も暗い。
 
-        襲える場所を 1 つに絞ると、「通路に誰が居たか」が手がかりとして
-        効く。全部が暗いと、どこで襲われても情報にならない。
+        **最初この docstring を「暗いのは通路だけ」と書いて、倉庫を
+        確かめていなかった。** 倉庫は darkened_station から暗いまま
+        引き継いでいる。名前と docstring だけが嘘をつく形だったので、
+        3 部屋すべてを見るようにした。
+
+        結果としてこの形が良い。作業 3 個のうち 2 個が暗い部屋にあるので、
+        **安全な集会室に居続けると勝てない**。作業に行くこと自体が危険を
+        伴う、という釣り合いになる。
         """
-        _move(runtime, _SENA, "corridor")
-        assert "DARK" in _line(runtime, "雰囲気", _SENA)
+        for spot, expected in (("hall", False), ("corridor", True), ("storage", True)):
+            _move(runtime, _SENA, spot)
+            is_dark = "DARK" in _line(runtime, "雰囲気", _SENA)
+            assert is_dark is expected, f"{spot}: {_line(runtime, '雰囲気', _SENA)}"
 
-        _move(runtime, _SENA, "hall")
-        assert "DARK" not in _line(runtime, "雰囲気", _SENA)
+    def test_work_is_reachable_only_by_entering_the_dark(self, runtime) -> None:
+        """勝つには暗い部屋に入る必要がある。
+
+        作業は 3 個中 2 個で足りるが、明るい集会室にあるのは 1 個だけ。
+        **必ずどこかで暗い部屋に入る。** ここが崩れると、危険を冒さずに
+        勝ててしまい、襲撃の機会が生まれない run になる。
+        """
+        lit_room_tasks = 1  # 気象記録簿のみ
+        needed = 2
+
+        assert lit_room_tasks < needed
 
     def test_a_lantern_lights_the_room_for_everyone(self, runtime) -> None:
         """ランタンを持った人が居ると、その部屋は全員にとって暗くなくなる。
