@@ -393,3 +393,4 @@ build-trace-viewer:
 	$(PYTHON) scripts/build_trace_viewer.py $(RUN_DIR)
 	@$(PYTHON) scripts/build_episodic_viewer.py $(RUN_DIR) || true
 	@$(PYTHON) scripts/build_timeline_viewer.py $(RUN_DIR) || true
+	@$(PYTHON) scripts/build_prompt_viewer.py $(RUN_DIR) || true
