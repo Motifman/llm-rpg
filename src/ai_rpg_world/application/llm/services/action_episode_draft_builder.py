@@ -26,6 +26,11 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
+from ai_rpg_world.application.llm.services.episodic_cue_rules import (
+    SECRET_TARGET_ACTOR_ENTITY_CUE_VALUE,
+    is_secret_target_actor_observation,
+    secret_target_actor_player_id,
+)
 
 _EMOTION_HINT_SET = frozenset(EMOTION_HINT_VALUES)
 _SAFE_SEGMENT_RE = re.compile(r"[^a-z0-9_]+")
@@ -77,28 +82,9 @@ def _actor_from_observation_structured(structured: Mapping[str, Any]) -> str | N
     残っていても who に実名を載せない。who は belief evidence の cue_signature
     にも使われるため、cues だけでなく who 側も同じ匿名 marker に寄せる。
     """
-    try:
-        from ai_rpg_world.application.llm.services.episodic_cue_rules import (
-            SECRET_TARGET_ACTOR_ENTITY_CUE_VALUE,
-            is_secret_target_actor_observation,
-        )
-    except ImportError:
-        return _actor_from_structured(structured.get("actor"))
-
     if is_secret_target_actor_observation(structured):
         return f"entity:{SECRET_TARGET_ACTOR_ENTITY_CUE_VALUE}"
     return _actor_from_structured(structured.get("actor"))
-
-
-def _is_secret_target_actor_observation(structured: Mapping[str, Any]) -> bool:
-    """episode の who/runtime target 抑止に使う秘匿対象観測判定。"""
-    try:
-        from ai_rpg_world.application.llm.services.episodic_cue_rules import (
-            is_secret_target_actor_observation,
-        )
-    except ImportError:
-        return False
-    return is_secret_target_actor_observation(structured)
 
 
 def _collect_who(
@@ -109,8 +95,14 @@ def _collect_who(
     structured = observation.output.structured if observation else {}
     secret_target_observation = (
         isinstance(structured, dict)
-        and _is_secret_target_actor_observation(structured)
+        and is_secret_target_actor_observation(structured)
     )
+    suppressed_player_id = (
+        secret_target_actor_player_id(structured)
+        if isinstance(structured, dict)
+        else None
+    )
+    suppress_all_player_targets = secret_target_observation and suppressed_player_id is None
 
     targets = runtime_context.targets
     for label in sorted(targets.keys()):
@@ -118,7 +110,11 @@ def _collect_who(
         if not isinstance(t, ToolRuntimeTargetDto):
             continue
         pid = t.player_id
-        if isinstance(pid, int) and not secret_target_observation:
+        if (
+            isinstance(pid, int)
+            and not suppress_all_player_targets
+            and pid != suppressed_player_id
+        ):
             markers.append(f"entity:{_slug_kind(t.kind)}:{pid}")
         woid = t.world_object_id
         if isinstance(woid, int):

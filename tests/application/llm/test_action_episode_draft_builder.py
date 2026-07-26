@@ -373,6 +373,12 @@ class TestEpisodicCueIntegrationOptional:
                         display_name="カイ",
                         player_id=1,
                     ),
+                    "P2": ToolRuntimeTargetDto(
+                        label="P2",
+                        kind="spot_graph_player",
+                        display_name="セナ",
+                        player_id=2,
+                    ),
                     "O1": ToolRuntimeTargetDto(
                         label="O1",
                         kind="world_object",
@@ -389,10 +395,12 @@ class TestEpisodicCueIntegrationOptional:
 
         canon = {c.to_canonical() for c in ep.cues}
         assert "entity:spot_graph_player_1" not in canon
+        assert "entity:spot_graph_player_2" in canon
         assert "entity:actor_spot_graph_player_1" not in canon
         assert "entity:actor_unknown_secret_target" in canon
         assert "object:world_object_42" in canon
         assert "entity:spot_graph_player:1" not in ep.who
+        assert "entity:spot_graph_player:2" in ep.who
         assert "entity:actor:spot_graph_player_1" not in ep.who
         assert "entity:actor_unknown_secret_target" in ep.who
         assert "object:world_object:42" in ep.who

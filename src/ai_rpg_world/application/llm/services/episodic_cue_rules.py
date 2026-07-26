@@ -53,6 +53,7 @@ MAX_CUE_VALUE_CHARS = 96
 # 残っていても、episode の entity cue には実名を載せない。代わりに
 # 「正体不明の誰か」同士を束ねられる固定 cue を使う。
 SECRET_TARGET_ACTOR_ENTITY_CUE_VALUE = "actor_unknown_secret_target"
+_SECRET_TARGET_SPOT_GRAPH_PLAYER_RE = re.compile(r"^spot_graph_player_(\d+)$")
 
 
 def build_episodic_cues_for_tool_turn(
@@ -230,13 +231,21 @@ def _collect_situation_episodic_cues(
             out.extend(_cues_from_observation_prose(raw, noun_matcher))
 
     if rt is not None:
-        include_player_target_entities = not (
-            obs is not None and is_secret_target_actor_observation(obs)
-        )
+        excluded_player_ids: frozenset[int] = frozenset()
+        exclude_all_player_entities = False
+        if obs is not None and is_secret_target_actor_observation(obs):
+            actor_player_id = secret_target_actor_player_id(obs)
+            if actor_player_id is None:
+                # actor を player_id に対応付けられない秘匿観測では、誤って
+                # 犯人 cue を残すより安全側に倒して人物 target をすべて抑止する。
+                exclude_all_player_entities = True
+            else:
+                excluded_player_ids = frozenset({actor_player_id})
         out.extend(
             _cues_from_runtime_targets(
                 rt.targets,
-                include_player_entities=include_player_target_entities,
+                excluded_player_ids=excluded_player_ids,
+                exclude_all_player_entities=exclude_all_player_entities,
             )
         )
         out.extend(_cues_from_runtime_tile_areas(rt))
@@ -404,7 +413,8 @@ def _kind_slug(kind: str) -> str:
 def _cues_from_runtime_targets(
     targets: Mapping[str, ToolRuntimeTargetDto],
     *,
-    include_player_entities: bool = True,
+    excluded_player_ids: frozenset[int] = frozenset(),
+    exclude_all_player_entities: bool = False,
 ) -> list[EpisodicCue]:
     out: list[EpisodicCue] = []
     src = EpisodicCueSource.RUNTIME_CONTEXT
@@ -413,7 +423,11 @@ def _cues_from_runtime_targets(
         if not isinstance(t, ToolRuntimeTargetDto):
             continue
         pid = _strict_int(t.player_id)
-        if include_player_entities and pid is not None:
+        if (
+            pid is not None
+            and not exclude_all_player_entities
+            and pid not in excluded_player_ids
+        ):
             slug = _kind_slug(t.kind)
             val = _sanitize_id_segment(slug, pid)
             out.append(EpisodicCue(axis="entity", value=val, source=src))
@@ -668,6 +682,27 @@ def is_secret_target_actor_observation(structured: Mapping[str, Any]) -> bool:
         and structured.get("is_target") is True
         and structured.get("witness_observation_source") == "scenario_target"
     )
+
+
+def secret_target_actor_player_id(structured: Mapping[str, Any]) -> int | None:
+    """秘匿対象観測の actor が指す player_id を返す。
+
+    structured["actor"] は ``spot_graph_player_1`` 形式で来る。ここで取れた
+    actor だけを runtime target から抑止し、無関係な同席者の記憶索引は残す。
+    """
+    if not is_secret_target_actor_observation(structured):
+        return None
+    raw = structured.get("actor")
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    if not isinstance(raw, str):
+        return None
+    m = _SECRET_TARGET_SPOT_GRAPH_PLAYER_RE.fullmatch(raw.strip())
+    if m is None:
+        return None
+    return int(m.group(1))
 
 
 def _validate_and_dedupe(cues: Iterable[EpisodicCue]) -> list[EpisodicCue]:

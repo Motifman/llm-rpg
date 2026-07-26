@@ -162,6 +162,12 @@ class TestChunkEpisodeDraftBuilder:
                     display_name="カイ",
                     player_id=1,
                 ),
+                "P2": PlayerToolRuntimeTargetDto(
+                    label="P2",
+                    kind="spot_graph_player",
+                    display_name="セナ",
+                    player_id=2,
+                ),
                 "O1": ToolRuntimeTargetDto(
                     label="O1",
                     kind="world_object",
@@ -177,13 +183,14 @@ class TestChunkEpisodeDraftBuilder:
 
         canon = {c.to_canonical() for c in ep.cues}
         assert "entity:spot_graph_player_1" not in canon
+        assert "entity:spot_graph_player_2" in canon
         assert "entity:actor_spot_graph_player_1" not in canon
         assert "entity:actor_unknown_secret_target" in canon
         assert "object:world_object_42" in canon
         assert "entity:spot_graph_player:1" not in ep.who
         assert "entity:actor:spot_graph_player_1" not in ep.who
         assert "entity:actor_unknown_secret_target" in ep.who
-        assert ep.co_present == ()
+        assert ep.co_present == ("セナ",)
 
     def test_overflow_observation_contributes_cues_timeline(self) -> None:
         """

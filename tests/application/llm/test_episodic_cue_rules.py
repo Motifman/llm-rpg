@@ -309,6 +309,12 @@ class TestSecretTargetActorCue:
                         display_name="カイ",
                         player_id=1,
                     ),
+                    "P2": ToolRuntimeTargetDto(
+                        label="P2",
+                        kind="spot_graph_player",
+                        display_name="セナ",
+                        player_id=2,
+                    ),
                     "O1": ToolRuntimeTargetDto(
                         label="O1",
                         kind="world_object",
@@ -328,6 +334,7 @@ class TestSecretTargetActorCue:
         )
         canon = {c.to_canonical() for c in cues}
         assert "entity:spot_graph_player_1" not in canon
+        assert "entity:spot_graph_player_2" in canon
         assert "entity:actor_spot_graph_player_1" not in canon
         assert "entity:actor_unknown_secret_target" in canon
         assert "object:world_object_42" in canon
