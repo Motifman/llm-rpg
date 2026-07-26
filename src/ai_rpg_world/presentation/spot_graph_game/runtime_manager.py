@@ -3013,10 +3013,9 @@ class _WorldLlmWiring:
                     PlayerOutcomeEnum,
                 )
 
-                if (
-                    outcome_registry.get_outcome(target_player_id_obj)
-                    is PlayerOutcomeEnum.DEAD
-                ):
+                if outcome_registry.get_outcome(
+                    target_player_id_obj
+                ).is_eliminated:
                     target_name = getattr(target, "display_name", "") or "相手"
                     return LlmCommandResultDto(
                         success=False,

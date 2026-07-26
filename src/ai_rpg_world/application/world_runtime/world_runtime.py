@@ -2207,6 +2207,26 @@ class WorldRuntime:
 
     # ── フェーズ遷移 (会議と投票) ──
 
+    def eject_player(self, player_id: PlayerId) -> bool:
+        """投票の結果として player を追放する。
+
+        outcome を EJECTED で確定させる。DEAD と分けるのは、分析で
+        「殺されたのか追放されたのか」を読み分けたいのと、陣営の勝敗条件が
+        両者を同じ「退場」として数える必要があるため (どちらも
+        ``is_eliminated`` が True)。
+
+        集計と投票そのものは PR 6。ここは確定させる口だけを用意する
+        (届かない enum メンバを残さないため、この PR で実行経路まで通す)。
+        """
+        from ai_rpg_world.domain.player.enum.player_outcome_enum import (
+            PlayerOutcomeEnum,
+        )
+
+        registry = self._player_outcome_registry
+        if registry is None:
+            return False
+        return bool(registry.set_outcome(player_id, PlayerOutcomeEnum.EJECTED))
+
     def call_emergency_meeting(self, player_id: PlayerId):
         """緊急ボタンで会議を招集する。
 
@@ -4703,7 +4723,7 @@ def create_world_runtime(
     # ため、DEAD 判定を state_builder に配線する。state_builder は outcome_registry
     # より先に構築されるので、構築時ではなく setter で後付けする。
     state_builder.set_dead_player_checker(
-        lambda pid: outcome_registry.get_outcome(pid) is PlayerOutcomeEnum.DEAD
+        lambda pid: outcome_registry.get_outcome(pid).is_eliminated
     )
     item_transfer_service.set_player_outcome_registry(outcome_registry)
 
@@ -4905,6 +4925,10 @@ def create_world_runtime(
             # 死者を救助対象にし続ける原因になった (観察: リオ 145 tick)。
             # 婉曲を避け「死亡した」と直接的に伝え、復活不可であることを明示する。
             message = f"{actor_name}は死亡した。もう蘇生できない。"
+        elif new_outcome is PlayerOutcomeEnum.EJECTED:
+            # 死亡と分けて伝える。「死亡した」と出ると、追放を殺害と誤読して
+            # 犯人探しの推理がずれる。追放は全員の合意の結果である。
+            message = f"{actor_name}は投票で追放された。もう戻らない。"
         elif new_outcome is PlayerOutcomeEnum.RESCUED:
             message = f"{actor_name}は救助された。"
         elif new_outcome is PlayerOutcomeEnum.STRANDED:
