@@ -105,6 +105,9 @@ _DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
     InteractionEffectTypeEnum.DESTROY_CONNECTION: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.CHANGE_PASSAGE_STATE: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.SATISFY_NEED: EffectVisibility.ACTOR_DIRECT,
+    # ボタンを押す行為はその場の全員に見える。誰が押したかは会議の
+    # 出発点になる情報なので隠さない。
+    InteractionEffectTypeEnum.CALL_MEETING: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.SET_FLAG: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.SHOW_MESSAGE: EffectVisibility.ACTOR_DIRECT,
     InteractionEffectTypeEnum.GIVE_ITEM: EffectVisibility.ACTOR_DIRECT,
@@ -265,6 +268,9 @@ class WorldGraphEffectService:
         destroy_connection_specs: List[DestroyConnectionSpec] = []
         satisfy_need_specs: List[SatisfyNeedSpec] = []
         passage_specs: List[PassageStateUpdateSpec] = []
+        # CALL_MEETING の発火記録。application 層が実際の招集を行う
+        # (誰を集めるか / フェーズ遷移は domain の担当ではない)。
+        meeting_calls: List[str] = []
         # Phase 4-E: visibility 別バケットに集計する効果サマリ。各 _apply_effect
         # 呼び出しで visibility を解決して append する。
         summaries: List[AppliedEffectSummary] = []
@@ -305,6 +311,7 @@ class WorldGraphEffectService:
                 destroy_connection_specs,
                 satisfy_need_specs,
                 passage_specs,
+                meeting_calls,
             ) = self._apply_effect(
                 interior=current_interior,
                 acting_object=current_object,
@@ -325,6 +332,7 @@ class WorldGraphEffectService:
                 destroy_connection_specs=destroy_connection_specs,
                 satisfy_need_specs=satisfy_need_specs,
                 passage_specs=passage_specs,
+                meeting_calls=meeting_calls,
                 summaries=summaries,
                 current_tick=current_tick,
                 acting_item_aggregate=acting_item_aggregate,
@@ -375,6 +383,7 @@ class WorldGraphEffectService:
             destroy_connection_specs=tuple(destroy_connection_specs),
             satisfy_need_specs=tuple(satisfy_need_specs),
             passage_state_updates=tuple(passage_specs),
+            meeting_call_triggers=tuple(meeting_calls),
             item_instance_state_changed=item_instance_state_changed,
             target_item_instance_state_changed=target_item_instance_state_changed,
             acting_player_state_changed=acting_player_state_changed,
@@ -455,6 +464,7 @@ class WorldGraphEffectService:
         destroy_connection_specs: List[DestroyConnectionSpec],
         satisfy_need_specs: List[SatisfyNeedSpec],
         passage_specs: List[PassageStateUpdateSpec],
+        meeting_calls: List[str],
         summaries: List[AppliedEffectSummary],
         current_tick: Optional[WorldTick] = None,
         acting_item_aggregate: Optional[ItemAggregate] = None,
@@ -484,8 +494,16 @@ class WorldGraphEffectService:
         visibility = _resolve_visibility(effect)
         _all = (
             interior, acting_object, flags, grant, remove, messages,
-            damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
+            damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
         )
+
+        if et == InteractionEffectTypeEnum.CALL_MEETING:
+            # 押した事実だけを記録する。集合とフェーズ遷移は application 層が
+            # 行う (TELEPORT_ENTITY / APPLY_DAMAGE と同じ越境の作法)。
+            # domain がプレイヤー全員の位置や会議の状態を触り始めると、
+            # world_graph が player / phase に依存することになる。
+            meeting_calls.append(str(p.get("trigger") or "emergency_button"))
+            return _all
 
         if et == InteractionEffectTypeEnum.SET_FLAG:
             name = p.get("flag_name")
@@ -612,7 +630,7 @@ class WorldGraphEffectService:
             )
             _all = (
                 interior, acting_object, flags, grant, remove, messages,
-                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
+                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
             )
             return _all
 
@@ -663,7 +681,7 @@ class WorldGraphEffectService:
             )
             _all = (
                 interior, acting_object, flags, grant, remove, messages,
-                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
+                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
             )
             return _all
 
@@ -695,7 +713,7 @@ class WorldGraphEffectService:
                 )
                 _all = (
                     interior, acting_object, flags, grant, remove, messages,
-                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
+                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
                 )
             return _all
 
@@ -709,7 +727,7 @@ class WorldGraphEffectService:
                     acting_object = revealed
                 _all = (
                     interior, acting_object, flags, grant, remove, messages,
-                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
+                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
                 )
             return _all
 
@@ -720,7 +738,7 @@ class WorldGraphEffectService:
                     interior = interior.replace_sub_location(sl.revealed())
                     _all = (
                         interior, acting_object, flags, grant, remove, messages,
-                        damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
+                        damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
                     )
                     break
             return _all
@@ -1101,7 +1119,7 @@ class WorldGraphEffectService:
                 acting_object = updated_target
             _all = (
                 interior, acting_object, flags, grant, remove, messages,
-                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
+                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
             )
             return _all
 
@@ -1196,7 +1214,7 @@ class WorldGraphEffectService:
             )
             _all = (
                 interior, acting_object, flags, grant, remove, messages,
-                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
+                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
             )
             return _all
 

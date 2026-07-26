@@ -49,6 +49,9 @@ class WorldGraphEffectResult:
     destroy_connection_specs: Tuple[DestroyConnectionSpec, ...] = ()
     satisfy_need_specs: Tuple[SatisfyNeedSpec, ...] = ()
     passage_state_updates: Tuple[PassageStateUpdateSpec, ...] = ()
+    # CALL_MEETING が発火した回数ぶんの trigger 名。application 層が
+    # これを見て招集する。domain 側は「押された」以上のことを知らない。
+    meeting_call_triggers: Tuple[str, ...] = ()
     # Phase 4-A: acting item instance に対して state 変更が起きたかどうか。
     # True なら caller (app service) が item_aggregate を save する責務を持つ。
     # acting_item_aggregate を渡さなかった呼び出しでは常に False。

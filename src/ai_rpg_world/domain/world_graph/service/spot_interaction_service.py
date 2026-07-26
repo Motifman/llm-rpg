@@ -634,6 +634,7 @@ class SpotInteractionService:
             damage_specs=effect_result.damage_specs,
             status_effect_specs=effect_result.status_effect_specs,
             teleport_specs=effect_result.teleport_specs,
+            meeting_call_triggers=effect_result.meeting_call_triggers,
             atmosphere_update_specs=effect_result.atmosphere_update_specs,
             create_connection_specs=effect_result.create_connection_specs,
             destroy_connection_specs=effect_result.destroy_connection_specs,
