@@ -827,11 +827,27 @@ class SpotGraphToolExecutor:
             # 同 slot の instance が「腐敗 / 新鮮」のどちらかに確定している前提。
             is_spoiled = bool(item_instance.state.get("spoiled"))
             item_instance.use()
-            # ItemUsedEvent / ItemBrokenEvent は ItemAggregate.use() で aggregate
-            # に積まれる。これらは publish しないと durability ベースの
-            # observation / metrics が silent に落ちるため、ここで drain して
-            # event_publisher に流す。新鮮パスでは下流で ConsumableUsedEvent も
-            # 別途 publish される。
+            # ItemAggregate.use() が aggregate に積んだ event を drain して流す。
+            #
+            # **drain が要る理由は「観測が落ちるから」ではない。** かつてこの
+            # コメントは「publish しないと durability ベースの observation /
+            # metrics が silent に落ちる」と書いていたが、その observation も
+            # metrics も存在しない。ItemUsedEvent / ItemBrokenEvent には
+            # ObservedEventRegistry の登録も handler も無く、publish された値は
+            # どこにも届かない (アイテムを使った事実は、新鮮パスで別途 publish
+            # される ConsumableUsedEvent が扱う)。
+            #
+            # それでも drain するのは、集約が event を抱えたまま save されるのを
+            # 避けるため。次に同じ instance を find して get_events() すると、
+            # 陳腐化した event が別の文脈で流れる (Phase G #3 と同じ罠)。
+            # 「積んだら必ず drain して clear する」を例外なく守るほうが、
+            # 消費者の有無で扱いを変えるより壊れにくい。
+            #
+            # ItemBrokenEvent は現状**到達不能**でもある。use() を呼ぶ経路は
+            # CONSUMABLE 限定で、かつ scenario_loader は durability を一切
+            # パースしないため、どのアイテムも durability=None になる。
+            # 装備の破損を実装するときは、ここではなく loader と
+            # ObservedEventRegistry の両方に手を入れることになる。
             instance_events = list(item_instance.get_events())
             item_instance.clear_events()
             if instance_events and self._event_publisher is not None:

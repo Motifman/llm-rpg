@@ -197,9 +197,18 @@ class TestUseItemSilentFailures:
     """use_item の silent failure 回帰テスト。"""
 
     def test_item_used_event_publish_all_via_event_publisher(self) -> None:
-        """ItemAggregate.use() で積まれた ItemUsedEvent が publish されないと、
-        durability ベースの観測やメトリクスが silent に落ちる。get_events を
-        drain して publish_all に流すことを保証する。"""
+        """ItemAggregate.use() が積んだ ItemUsedEvent を drain して publish する。
+
+        守っているのは「観測が届くこと」ではない (この event を受け取る
+        handler は存在しない)。**集約が event を抱えたまま save されないこと**
+        である。抱えたまま保存すると、次に同じ instance を find して
+        get_events() したときに陳腐化した event が別の文脈で流れる
+        (Phase G #3 と同じ罠)。
+
+        publish 先が無くても drain だけすれば足りるが、「積んだら drain して
+        publish」を例外なく守るほうが、消費者の有無で扱いを変えるより
+        壊れにくい。
+        """
         from ai_rpg_world.domain.item.event.item_event import ItemUsedEvent
         executor, _, event_publisher = _build_executor_with_item({})
 
@@ -212,6 +221,22 @@ class TestUseItemSilentFailures:
         ]
         assert any(isinstance(e, ItemUsedEvent) for e in all_published), (
             f"ItemUsedEvent が publish_all に流れていない: {all_published!r}"
+        )
+
+    def test_aggregate_does_not_keep_the_event_after_use(self) -> None:
+        """use() 後の集約に event が残らない。
+
+        publish のテストだけだと clear_events を消しても通ってしまう。
+        陳腐化 event の再放出を防いでいるのは publish ではなく clear のほう
+        なので、そちらを直接固定する。
+        """
+        executor, _, _ = _build_executor_with_item({})
+        item = executor._item_repository.find_by_id(ItemInstanceId(7001))
+
+        executor._use_item(player_id=1, args={"item_spec_id": 101})
+
+        assert tuple(item.get_events()) == (), (
+            f"use() 後も集約が event を抱えている: {item.get_events()!r}"
         )
 
     def test_calls_quantity_zero_inventory_save_item_delete(self) -> None:
