@@ -88,6 +88,29 @@ class GameEndConditionEvaluator:
         player_outcomes: Optional[Mapping[int, PlayerOutcomeEnum]] = None,
     ) -> GameEndResult:
         t = condition.condition_type
+        if t == GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST:
+            declared = tuple(condition.required_flags or ())
+            need = condition.min_set_count
+            if not declared or need is None:
+                # VO の __post_init__ が弾いているはずだが、直接組まれた
+                # 条件が黙って未成立になると勝敗が永久に決まらない。
+                raise GameEndConditionValidationException(
+                    "FLAGS_SET_AT_LEAST に required_flags / min_set_count が"
+                    "ありません"
+                )
+            # **宣言した作業だけを数える。** 立っているフラグ全体を数えると、
+            # シナリオが別の用途で立てたフラグ (照明・救難信号) で勝ててしまう。
+            done = sum(1 for name in declared if name in world_flags)
+            if done >= need:
+                return GameEndResult(
+                    True,
+                    GameResultEnum.WIN,
+                    f"作業が {done}/{len(declared)} 完了 (必要 {need})",
+                )
+            return GameEndResult(
+                False, None, f"作業は {done}/{len(declared)} (必要 {need})"
+            )
+
         if t == GameEndConditionTypeEnum.FLAG_SET:
             name = condition.target_flag
             if not name:

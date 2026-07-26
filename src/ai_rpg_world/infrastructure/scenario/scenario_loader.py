@@ -2893,6 +2893,12 @@ class ScenarioLoader:
                 tick_limit=item.get("tick_limit"),
                 required_state=item.get("required_state"),
                 max_surviving=item.get("max_surviving"),
+                required_flags=(
+                    tuple(item["required_flags"])
+                    if isinstance(item.get("required_flags"), list)
+                    else None
+                ),
+                min_set_count=item.get("min_set_count"),
             ))
         return conditions
 
@@ -2904,6 +2910,33 @@ class ScenarioLoader:
         index: int,
     ) -> None:
         """game_end_conditions の条件型ごとの必須フィールドをロード時に検査する。"""
+        if ctype is GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST:
+            required_flags = item.get("required_flags")
+            if not isinstance(required_flags, list) or not required_flags:
+                raise ScenarioLoadError(
+                    f"game_end_conditions の {ctype.value} には required_flags の"
+                    "配列が必要です (空だと開始した瞬間に成立します)"
+                    f" [index={index}]"
+                )
+            if not all(
+                isinstance(name, str) and name.strip() for name in required_flags
+            ):
+                raise ScenarioLoadError(
+                    f"game_end_conditions の {ctype.value} の required_flags は"
+                    "空でない文字列の配列である必要があります"
+                    f" [index={index}]"
+                )
+            min_set_count = item.get("min_set_count")
+            if not isinstance(min_set_count, int) or isinstance(min_set_count, bool):
+                raise ScenarioLoadError(
+                    f"game_end_conditions の {ctype.value} には整数の min_set_count"
+                    "が必要です (既定を『全部』にすると書き忘れと区別できません)"
+                    f" [index={index}]"
+                )
+            # 数の整合 (0 以下 / 上限超え / 重複) は GameEndCondition の
+            # __post_init__ が見る。ここで二重に書くと判断が 2 箇所に散る。
+            return
+
         if ctype == GameEndConditionTypeEnum.FLAG_SET:
             target_flag = item.get("target_flag")
             if not isinstance(target_flag, str) or not target_flag.strip():

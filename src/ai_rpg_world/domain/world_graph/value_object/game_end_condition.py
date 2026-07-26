@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
+from typing import Tuple, Any, Mapping, Optional
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
@@ -22,9 +22,44 @@ class GameEndCondition:
     # 「これ以下になったら成立」の閾値。
     required_state: Optional[Mapping[str, Any]] = None
     max_surviving: Optional[int] = None
+    # FLAGS_SET_AT_LEAST 用。数える対象の作業フラグと、成立に要る個数。
+    required_flags: Optional[Tuple[str, ...]] = None
+    min_set_count: Optional[int] = None
 
     def __post_init__(self) -> None:
         """条件型ごとの必須フィールド欠落を構築時に拒否する。"""
+        if self.condition_type is GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST:
+            flags = tuple(self.required_flags or ())
+            if not flags:
+                # 空を許すと「0 個中 0 個」で開始した瞬間に勝つ。
+                raise GameEndConditionValidationException(
+                    "FLAGS_SET_AT_LEAST には required_flags が必要です"
+                )
+            if len(set(flags)) != len(flags):
+                # 重複を数えると 1 個の作業で 2 進む。
+                raise GameEndConditionValidationException(
+                    f"FLAGS_SET_AT_LEAST の required_flags が重複しています: {flags}"
+                )
+            if self.min_set_count is None:
+                # 既定を「全部」にすると、書き忘れと全部指定が区別できない
+                # (SURVIVING_PLAYERS_WITH_STATE_AT_MOST と同じ判断)。
+                raise GameEndConditionValidationException(
+                    "FLAGS_SET_AT_LEAST には min_set_count が必要です"
+                )
+            if self.min_set_count <= 0:
+                raise GameEndConditionValidationException(
+                    "FLAGS_SET_AT_LEAST の min_set_count は 1 以上である必要が"
+                    f"あります: {self.min_set_count}"
+                )
+            if self.min_set_count > len(flags):
+                # **絶対に成立しない条件**。書いた本人は勝てるつもりでいるので、
+                # run が終わるまで気付けない。
+                raise GameEndConditionValidationException(
+                    "FLAGS_SET_AT_LEAST の min_set_count が required_flags の数を"
+                    f"超えています: {self.min_set_count} > {len(flags)}"
+                )
+            return
+
         if self.condition_type == GameEndConditionTypeEnum.FLAG_SET:
             if not isinstance(self.target_flag, str) or not self.target_flag.strip():
                 raise GameEndConditionValidationException(
