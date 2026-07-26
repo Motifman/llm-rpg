@@ -684,7 +684,7 @@
     "win": [
       {
         "type": "FLAG_SET",
-        "flag_name": "distress_sent",
+        "target_flag": "distress_sent",
         "description": "救難信号が届いた。"
       }
     ],

@@ -1,3 +1,5 @@
+import pytest
+
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
@@ -6,6 +8,9 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotG
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    GameEndConditionValidationException,
+)
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import GameEndConditionEvaluator
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
@@ -61,3 +66,13 @@ def test_tick_limit_lose() -> None:
     )
     r = ev.evaluate(g, cond, frozenset(), [PlayerId(1)], current_tick=WorldTick(10))
     assert r.is_ended and r.result == GameResultEnum.LOSE
+
+
+def test_invalid_flag_set_condition_raises_domain_exception() -> None:
+    """FLAG_SET に target_flag が無い条件が評価器へ届いたら、未達扱いせず大きく失敗する。"""
+    ev = GameEndConditionEvaluator()
+    g = SpotGraphAggregate.empty(SpotGraphId.create(1))
+    cond = GameEndCondition(condition_type=GameEndConditionTypeEnum.FLAG_SET)
+
+    with pytest.raises(GameEndConditionValidationException, match="target_flag"):
+        ev.evaluate(g, cond, frozenset({"escaped"}), [PlayerId(1)])

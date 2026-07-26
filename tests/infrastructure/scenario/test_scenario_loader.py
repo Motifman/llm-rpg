@@ -10,6 +10,9 @@ from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
+    GameEndConditionEvaluator,
+)
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
@@ -541,6 +544,40 @@ class TestScenarioLoaderMinimal:
         assert result.lose_conditions[0].condition_type == GameEndConditionTypeEnum.TICK_LIMIT
         assert result.lose_conditions[0].tick_limit == 50
 
+    def test_flag_set_game_end_condition_requires_target_flag_not_flag_name(self) -> None:
+        """game_end_conditions の FLAG_SET は flag_name を別名扱いせず target_flag 欠落として弾く。"""
+        scenario = _minimal_scenario()
+        scenario["game_end_conditions"]["win"] = {
+            "type": "FLAG_SET",
+            "flag_name": "escaped",
+        }
+
+        with pytest.raises(ScenarioLoadError) as excinfo:
+            ScenarioLoader().load_from_dict(scenario)
+
+        message = str(excinfo.value)
+        assert "target_flag" in message
+        assert "flag_name" in message
+
+    @pytest.mark.parametrize(
+        ("condition", "required_field"),
+        [
+            ({"type": "FLAG_SET"}, "target_flag"),
+            ({"type": "TICK_LIMIT"}, "tick_limit"),
+            ({"type": "ALL_AT_SPOT"}, "target_spot"),
+            ({"type": "ANY_AT_SPOT"}, "target_spot"),
+        ],
+    )
+    def test_game_end_condition_required_fields_fail_fast(
+        self, condition: dict, required_field: str
+    ) -> None:
+        """game_end_conditions の条件型ごとの必須フィールド欠落はロード時に失敗する。"""
+        scenario = _minimal_scenario()
+        scenario["game_end_conditions"]["win"] = condition
+
+        with pytest.raises(ScenarioLoadError, match=required_field):
+            ScenarioLoader().load_from_dict(scenario)
+
     def test_interior_objects_and_interactions(self) -> None:
         result = ScenarioLoader().load_from_dict(_minimal_scenario())
         for spot_id, interior in result.interiors.items():
@@ -885,3 +922,56 @@ class TestScenarioLoaderReactiveBindings:
         b = result.reactive_passage_bindings[0]
         assert b.predicate.condition_type == "AND"
         assert b.predicate.children[1].condition_type == "NOT"
+
+
+class TestGameEndConditionScenarioData:
+    """data/scenarios 配下の game_end_conditions が評価可能な形で読まれることを保証する。"""
+
+    def test_all_repository_scenarios_have_evaluable_game_end_conditions(self) -> None:
+        """全シナリオの終了条件は、条件型ごとの必須フィールドをロード後に持っている。"""
+        loader = ScenarioLoader()
+        for path in sorted(SCENARIO_DIR.glob("*.json")):
+            result = loader.load_from_file(path)
+            conditions = (*result.win_conditions, *result.lose_conditions)
+            for cond in conditions:
+                if cond.condition_type == GameEndConditionTypeEnum.FLAG_SET:
+                    assert cond.target_flag, f"{path.name}: FLAG_SET target_flag is missing"
+                elif cond.condition_type == GameEndConditionTypeEnum.TICK_LIMIT:
+                    assert cond.tick_limit is not None, (
+                        f"{path.name}: TICK_LIMIT tick_limit is missing"
+                    )
+                elif cond.condition_type in (
+                    GameEndConditionTypeEnum.ALL_AT_SPOT,
+                    GameEndConditionTypeEnum.ANY_AT_SPOT,
+                ):
+                    assert cond.target_spot_id is not None, (
+                        f"{path.name}: {cond.condition_type.value} target_spot is missing"
+                    )
+
+    def test_darkened_station_distress_flag_satisfies_win_condition(self) -> None:
+        """darkened_station は distress_sent が立つと勝利条件が成立する。"""
+        result = ScenarioLoader().load_from_file(SCENARIO_DIR / "darkened_station.json")
+        condition = result.win_conditions[0]
+
+        evaluated = GameEndConditionEvaluator().evaluate(
+            result.graph,
+            condition,
+            frozenset({"distress_sent"}),
+            player_ids=(),
+        )
+
+        assert evaluated.is_ended is True
+
+    def test_survival_island_rescue_flag_satisfies_win_condition(self) -> None:
+        """survival_island は rescue_completed が立つと勝利条件が成立する。"""
+        result = ScenarioLoader().load_from_file(SCENARIO_DIR / "survival_island.json")
+        condition = result.win_conditions[0]
+
+        evaluated = GameEndConditionEvaluator().evaluate(
+            result.graph,
+            condition,
+            frozenset({"rescue_completed"}),
+            player_ids=(),
+        )
+
+        assert evaluated.is_ended is True

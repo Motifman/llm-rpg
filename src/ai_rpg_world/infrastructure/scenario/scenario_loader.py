@@ -2805,8 +2805,9 @@ class ScenarioLoader:
             return []
         items = raw if isinstance(raw, list) else [raw]
         conditions: List[GameEndCondition] = []
-        for item in items:
+        for index, item in enumerate(items):
             ctype = GameEndConditionTypeEnum[item["type"]]
+            self._validate_end_condition_required_fields(item, ctype, index=index)
             target_spot = None
             if "target_spot" in item:
                 target_spot = SpotId.create(mapper.get_int("spot", item["target_spot"]))
@@ -2817,3 +2818,39 @@ class ScenarioLoader:
                 tick_limit=item.get("tick_limit"),
             ))
         return conditions
+
+    def _validate_end_condition_required_fields(
+        self,
+        item: Dict[str, Any],
+        ctype: GameEndConditionTypeEnum,
+        *,
+        index: int,
+    ) -> None:
+        """game_end_conditions の条件型ごとの必須フィールドをロード時に検査する。"""
+        if ctype == GameEndConditionTypeEnum.FLAG_SET:
+            target_flag = item.get("target_flag")
+            if not isinstance(target_flag, str) or not target_flag.strip():
+                raise ScenarioLoadError(
+                    "game_end_conditions の FLAG_SET には target_flag が必要です "
+                    "(scenario_events の FLAG_SET は flag_name ですが、"
+                    "こちらは target_flag です)"
+                    f" [index={index}]"
+                )
+            return
+        if ctype == GameEndConditionTypeEnum.TICK_LIMIT:
+            if item.get("tick_limit") is None:
+                raise ScenarioLoadError(
+                    "game_end_conditions の TICK_LIMIT には tick_limit が必要です"
+                    f" [index={index}]"
+                )
+            return
+        if ctype in (
+            GameEndConditionTypeEnum.ALL_AT_SPOT,
+            GameEndConditionTypeEnum.ANY_AT_SPOT,
+        ):
+            target_spot = item.get("target_spot")
+            if not isinstance(target_spot, str) or not target_spot.strip():
+                raise ScenarioLoadError(
+                    f"game_end_conditions の {ctype.value} には target_spot が必要です"
+                    f" [index={index}]"
+                )
