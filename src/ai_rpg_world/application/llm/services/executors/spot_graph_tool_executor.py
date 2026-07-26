@@ -1020,6 +1020,17 @@ class SpotGraphToolExecutor:
             return _use_item_unexpected_exception_result(e, stage="effect_application")
 
     def _prepare_action(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        if not self._sync_action_groups:
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    "このシナリオでは prepare_action を使う同期アクションが"
+                    "定義されていません。利用可能なツール一覧を確認して、"
+                    "別の行動を選んでください。"
+                ),
+                error_code="UNSUPPORTED_TOOL",
+                remediation=get_remediation("UNSUPPORTED_TOOL"),
+            )
         action_id = str(args.get("action_id", "")).strip()
         if not action_id:
             return build_invalid_arg_failure(

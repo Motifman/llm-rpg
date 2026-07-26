@@ -27,9 +27,14 @@ from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
 )
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import (
+    SynchronizedActionGroup,
+)
 
 
-def _build_executor() -> SpotGraphToolExecutor:
+def _build_executor(
+    *, sync_action_groups: tuple[SynchronizedActionGroup, ...] = ()
+) -> SpotGraphToolExecutor:
     """最小限の wiring で executor を構築する (state mutation はテストしない)。"""
     movement = MagicMock()
     services = SpotGraphWorldServices(
@@ -45,6 +50,17 @@ def _build_executor() -> SpotGraphToolExecutor:
         spot_graph_world_services=services,
         player_inventory_repository=MagicMock(),
         item_repository=MagicMock(),
+        sync_action_groups=sync_action_groups,
+    )
+
+
+def _sync_group() -> SynchronizedActionGroup:
+    """prepare_action を有効化する最小の同期グループ定義。"""
+    return SynchronizedActionGroup(
+        group_id="test_sync",
+        required_action_ids=("left", "right"),
+        window_ticks=2,
+        on_complete=(MagicMock(),),
     )
 
 
@@ -164,9 +180,18 @@ class TestUseItemInventoryResolutionFailures:
 class TestPrepareActionValidationLeak:
     """``_prepare_action`` の ValueError が str(exc) で LLM に漏れないこと。"""
 
+    def test_prepare_action_without_sync_groups_is_unsupported_tool(self) -> None:
+        """同期グループが無い構成で無理に prepare_action を呼んでも、学習可能に拒否する。"""
+        executor = _build_executor()
+
+        result = executor._prepare_action(player_id=1, args={"action_id": "left"})
+
+        _assert_learnable_failure(result, "UNSUPPORTED_TOOL")
+        assert "同期アクション" in result.message
+
     def test_empty_action_id_is_learnable_arg_failure(self) -> None:
         """空 action_id は build_invalid_arg_failure 経由で安全に返る。"""
-        executor = _build_executor()
+        executor = _build_executor(sync_action_groups=(_sync_group(),))
         result = executor._prepare_action(player_id=1, args={"action_id": ""})
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
         assert "action_id" in result.message
@@ -177,7 +202,7 @@ class TestPrepareActionValidationLeak:
         PR #170 と同じ pattern: 内部 path/ID を含みうる ValueError メッセージ
         を漏らさず、サーバログには warning レベルで全文脈を残す。
         """
-        executor = _build_executor()
+        executor = _build_executor(sync_action_groups=(_sync_group(),))
         # PreparedActionRegistry.prepare をモンキーパッチして機微 ValueError を投げる
         sensitive = "/internal/secret_action_path: token=xyz"
         import ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor as mod
