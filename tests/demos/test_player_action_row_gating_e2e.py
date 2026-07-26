@@ -132,7 +132,11 @@ class TestHiddenStateIsNotUsedForGating:
         crew_row = _row_for(runtime, _KUZE, "セナ")     # role=crew
         keeper_row = _row_for(runtime, _MORI, "クゼ")   # role=keeper
 
-        assert ("strike_down" in crew_row) == ("strike_down" in keeper_row)
+        # 「両方に出ている」ことまで見る。等価だけを見ると、**両方から消えても
+        # 通ってしまう** (claude の指摘)。全行から隠すのは情報漏れではないが
+        # 能力の喪失なので、それはそれで検出したい。
+        assert "strike_down" in crew_row
+        assert "strike_down" in keeper_row
 
 
 class TestBuiltInPlayerToolsAreDiscoverable:
