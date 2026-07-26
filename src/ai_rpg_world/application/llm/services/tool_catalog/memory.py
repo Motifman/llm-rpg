@@ -117,23 +117,27 @@ TODO_COMPLETE_DEFINITION = MEMO_DONE_DEFINITION
 MEMORY_EXPLORE_RELATED_PARAMETERS = {
     "type": "object",
     "properties": {
-        "episode_id": {
+        "handle": {
             "type": "string",
-            "description": "起点となる主観エピソード ID",
+            "description": (
+                "prompt 上の「【さっき思い出した記憶の見出し】」に並んでいる "
+                "``ep_`` で始まる handle 文字列をそのまま渡す (例: ``ep_3f2a7b``)。"
+            ),
         },
         "top_k": {
             "type": "integer",
             "description": "返す隣接エピソードの最大件数（既定 5、最大 64）",
         },
     },
-    "required": ["episode_id"],
+    "required": ["handle"],
 }
 
 MEMORY_EXPLORE_RELATED_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_MEMORY_EXPLORE_RELATED,
     description=(
-        "リンクされた関連エピソード記憶を列挙します。"
-        "結果はプロンプト文脈向けの JSON であり、世界状態は変えません。"
+        "prompt の「【さっき思い出した記憶の見出し】」section に並んでいる "
+        "handle (例: ``ep_3f2a7b``) を起点に、リンクされた関連エピソード記憶を"
+        "列挙します。結果はプロンプト文脈向けの JSON であり、世界状態は変えません。"
     ),
     parameters=MEMORY_EXPLORE_RELATED_PARAMETERS,
     category=ToolCategory.META_COGNITIVE,

@@ -53,6 +53,32 @@ class TestGetMemorySpecsFlags:
         assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in names
 
 
+class TestExploreRelatedSpec:
+    """関連記憶探索ツールが prompt に出る handle だけを入口にすることを保証する。"""
+
+    def test_tool_parameters_require_handle_not_episode_id(self) -> None:
+        """LLM に見えない内部 episode_id ではなく、見出し欄の handle を必須引数にする。"""
+        from ai_rpg_world.application.llm.services.tool_catalog.memory import (
+            MEMORY_EXPLORE_RELATED_DEFINITION,
+        )
+
+        params = MEMORY_EXPLORE_RELATED_DEFINITION.parameters
+
+        assert params["required"] == ["handle"]
+        assert "handle" in params["properties"]
+        assert "episode_id" not in params["properties"]
+
+    def test_tool_description_mentions_prompt_handle(self) -> None:
+        """description は「主観エピソード ID」ではなく prompt 上の handle を指す。"""
+        from ai_rpg_world.application.llm.services.tool_catalog.memory import (
+            MEMORY_EXPLORE_RELATED_DEFINITION,
+        )
+
+        assert "handle" in MEMORY_EXPLORE_RELATED_DEFINITION.description
+        assert "ep_" in MEMORY_EXPLORE_RELATED_DEFINITION.description
+        assert "主観エピソード ID" not in MEMORY_EXPLORE_RELATED_DEFINITION.description
+
+
 class TestRecallByHandleSpec:
     """afterglow 用の能動想起ツールが flag で expose されることを保証する。"""
 
