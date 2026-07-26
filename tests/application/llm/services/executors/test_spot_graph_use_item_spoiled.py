@@ -26,7 +26,11 @@ from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceI
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
+    PlayerInventoryAggregate,
+)
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
 
 SPEC_ID = ItemSpecId.create(101)
@@ -76,13 +80,23 @@ def _build_executor_with_item(state: dict) -> tuple[SpotGraphToolExecutor, Magic
     item_repo = MagicMock()
     item_repo.find_by_id.return_value = item
 
-    # インベントリにスロット 1 つ。aggregate 公開 API `find_slot_by_item_spec_id`
-    # を mock する (実コードは executor でこの API を呼んで item_instance を探す)。
-    from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-    inv = MagicMock()
-    inv.find_slot_by_item_spec_id = MagicMock(
-        return_value=(SlotId(0), ItemInstanceId(7001))
-    )
+    # インベントリにスロット 1 つ。aggregate 公開 API
+    # `find_slot_by_item_spec_id_and_spoilage` を mock する。is_spoiled を
+    # 見て返す fake にし、腐敗 / 新鮮の撃ち分けをテスト側でも保証する。
+    inv = MagicMock(spec=PlayerInventoryAggregate)
+
+    def find_slot_by_spoilage(
+        item_spec_id: ItemSpecId,
+        is_spoiled: bool,
+        item_repository: MagicMock,
+    ):
+        assert item_spec_id == SPEC_ID
+        assert item_repository is item_repo
+        if bool(is_spoiled) != bool(state.get("spoiled")):
+            return None
+        return (SlotId(0), ItemInstanceId(7001))
+
+    inv.find_slot_by_item_spec_id_and_spoilage.side_effect = find_slot_by_spoilage
     inv_repo = MagicMock()
     inv_repo.find_by_id.return_value = inv
 
@@ -109,7 +123,7 @@ class TestSpoiledFoodDamage:
         """腐敗食は10ダメージを受けるが、空腹回復だけは通常効果の半分が入る。"""
         executor, status, _ = _build_executor_with_item({"spoiled": True})
 
-        result = executor._use_item(player_id=1, args={"item_spec_id": 101})
+        result = executor._use_item(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
 
         assert result.success is True
         status.apply_damage.assert_called_once_with(SPOILED_FOOD_DAMAGE_HP)
@@ -119,7 +133,7 @@ class TestSpoiledFoodDamage:
         """腐敗食では consume_effect の heal_hp は適用せず、空腹の一部回復だけを直接適用する。"""
         executor, status, _ = _build_executor_with_item({"spoiled": True})
 
-        executor._use_item(player_id=1, args={"item_spec_id": 101})
+        executor._use_item(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
 
         status.heal_hp.assert_not_called()
 
@@ -127,7 +141,7 @@ class TestSpoiledFoodDamage:
         """腐敗食では ConsumableUsedEvent は発行されない。"""
         executor, _, event_publisher = _build_executor_with_item({"spoiled": True})
 
-        executor._use_item(player_id=1, args={"item_spec_id": 101})
+        executor._use_item(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
 
         # 通常パスでは publish が呼ばれるが、腐敗パスでは ConsumableUsedEvent
         # は出さない (回復効果を捨てるため)
@@ -149,7 +163,7 @@ class TestSpoiledFoodDamage:
         )
         status.get_events.return_value = [downed]
 
-        executor._use_item(player_id=1, args={"item_spec_id": 101})
+        executor._use_item(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
 
         # publish_all で status events が流れる (実 callable 引数は list で来る)。
         # 別途 ItemUsedEvent も publish_all で流れるため、複数回呼ばれる可能性が
@@ -164,7 +178,7 @@ class TestSpoiledFoodDamage:
         """腐敗食の messageにダメージ表記が含まれる。"""
         executor, _, _ = _build_executor_with_item({"spoiled": True})
 
-        result = executor._use_item(player_id=1, args={"item_spec_id": 101})
+        result = executor._use_item(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
 
         assert "腐っていた" in result.message
         assert f"{SPOILED_FOOD_DAMAGE_HP}" in result.message
