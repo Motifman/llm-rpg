@@ -5,6 +5,8 @@ from __future__ import annotations
 import threading
 import time
 
+import pytest
+
 from ai_rpg_world.application.ui.contracts.dtos import (
     GameSceneSnapshotDto,
     SceneActorDto,
@@ -19,6 +21,7 @@ from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
 from ai_rpg_world.infrastructure.ui.in_memory_game_scene_event_broker import (
     InMemoryGameSceneEventBroker,
 )
+import ai_rpg_world.infrastructure.ui.in_process_simulation_runtime_control_port as runtime_control_port_module
 from ai_rpg_world.infrastructure.ui.in_process_simulation_runtime_control_port import (
     InProcessSimulationRuntimeControlPort,
 )
@@ -165,6 +168,44 @@ def test_runtime_control_port_pause_waits_until_loop_observes_paused_state():
 
         time.sleep(0.05)
         assert time_provider.get_current_tick().value == paused_tick
+    finally:
+        release_tick_callback.set()
+        runtime.stop()
+
+
+def test_runtime_control_port_pause_times_out_when_tick_loop_is_stuck(monkeypatch):
+    """tick 中に固まった場合、pause() は無限待ちせず明示的に失敗する。"""
+    monkeypatch.setattr(
+        runtime_control_port_module,
+        "_PAUSE_OBSERVED_TIMEOUT_SECONDS",
+        0.05,
+    )
+    projection = GameSceneProjection()
+    projection.upsert_snapshot(_make_snapshot())
+    broker = InMemoryGameSceneEventBroker()
+    time_provider = InMemoryGameTimeProvider(initial_tick=10)
+    tick_callback_entered = threading.Event()
+    release_tick_callback = threading.Event()
+
+    def _block_first_tick(current_tick: int) -> None:
+        if current_tick == 11:
+            tick_callback_entered.set()
+            release_tick_callback.wait(timeout=2.0)
+
+    runtime = InProcessSimulationRuntimeControlPort(
+        time_provider=time_provider,
+        projection=projection,
+        broker=broker,
+        tick_interval_ms=10,
+        tick_advanced_callback=_block_first_tick,
+    )
+
+    runtime.start()
+    try:
+        assert tick_callback_entered.wait(timeout=1.0)
+
+        with pytest.raises(TimeoutError, match="did not observe pause state"):
+            runtime.pause()
     finally:
         release_tick_callback.set()
         runtime.stop()

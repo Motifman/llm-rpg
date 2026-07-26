@@ -15,6 +15,8 @@ from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
 )
 
+_PAUSE_OBSERVED_TIMEOUT_SECONDS = 2.0
+
 
 class InProcessSimulationRuntimeControlPort(ISimulationRuntimeControlPort):
     """Background tick loop used by the web runtime."""
@@ -77,7 +79,11 @@ class InProcessSimulationRuntimeControlPort(ISimulationRuntimeControlPort):
         if thread is None or not thread.is_alive():
             self._pause_observed.set()
             return
-        self._pause_observed.wait()
+        if not self._pause_observed.wait(timeout=_PAUSE_OBSERVED_TIMEOUT_SECONDS):
+            raise TimeoutError(
+                "simulation tick loop did not observe pause state within "
+                f"{_PAUSE_OBSERVED_TIMEOUT_SECONDS:.1f} seconds"
+            )
 
     def resume(self) -> None:
         with self._lock:
