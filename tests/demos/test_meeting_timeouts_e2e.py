@@ -56,13 +56,13 @@ class TestSilenceEndsTheMeeting:
 
         考える間が取れないと、議論が始まる前に閉じてしまう。
         """
-        _pass_ticks(runtime, GamePhaseStore.MEETING_SILENCE_LIMIT_TICKS - 1)
+        _pass_ticks(runtime, GamePhaseStore.DEFAULT_MEETING_SILENCE_LIMIT_TICKS - 1)
 
         assert runtime._game_phase_store.current.phase is GamePhase.MEETING
 
     def test_prolonged_silence_closes_it(self, runtime) -> None:
         """沈黙が続けば閉じる。"""
-        _pass_ticks(runtime, GamePhaseStore.MEETING_SILENCE_LIMIT_TICKS)
+        _pass_ticks(runtime, GamePhaseStore.DEFAULT_MEETING_SILENCE_LIMIT_TICKS)
 
         assert runtime._game_phase_store.current.phase is GamePhase.FREE_ROAM
 
@@ -71,7 +71,7 @@ class TestSilenceEndsTheMeeting:
 
         投票で決着したのか流れたのかは、会議が機能しているかの指標になる。
         """
-        _pass_ticks(runtime, GamePhaseStore.MEETING_SILENCE_LIMIT_TICKS)
+        _pass_ticks(runtime, GamePhaseStore.DEFAULT_MEETING_SILENCE_LIMIT_TICKS)
 
         assert runtime._game_phase_store.current.trigger == "silence"
 
@@ -81,9 +81,9 @@ class TestSilenceEndsTheMeeting:
         ここが効かないと、活発に議論していても開始からの経過だけで
         打ち切られる。
         """
-        _pass_ticks(runtime, GamePhaseStore.MEETING_SILENCE_LIMIT_TICKS - 1)
+        _pass_ticks(runtime, GamePhaseStore.DEFAULT_MEETING_SILENCE_LIMIT_TICKS - 1)
         runtime.do_say(_MORI, "まだ話すことがある")
-        _pass_ticks(runtime, GamePhaseStore.MEETING_SILENCE_LIMIT_TICKS - 1)
+        _pass_ticks(runtime, GamePhaseStore.DEFAULT_MEETING_SILENCE_LIMIT_TICKS - 1)
 
         assert runtime._game_phase_store.current.phase is GamePhase.MEETING
 
@@ -97,7 +97,7 @@ class TestTickLimitEndsTheMeeting:
         沈黙上限だけだと、喋り続けるだけで投票を避けられる。襲う側が
         議論を引き延ばして決着を防ぐ、という手が通ってしまう。
         """
-        for _ in range(GamePhaseStore.MEETING_TICK_LIMIT + 1):
+        for _ in range(GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT + 1):
             runtime.do_say(_MORI, "まだ結論は出ない")
             runtime.advance_tick()
 
@@ -105,7 +105,7 @@ class TestTickLimitEndsTheMeeting:
 
     def test_the_end_reason_is_recorded_as_tick_limit(self, runtime) -> None:
         """終わり方が「時間切れ」として残る。"""
-        for _ in range(GamePhaseStore.MEETING_TICK_LIMIT + 1):
+        for _ in range(GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT + 1):
             runtime.do_say(_MORI, "まだ結論は出ない")
             runtime.advance_tick()
 
@@ -127,7 +127,7 @@ class TestTimeoutStillResolvesTheVote:
 
         for voter in (_MORI, _SENA, _AOI):
             runtime.cast_vote(voter, _KUZE)
-        _pass_ticks(runtime, GamePhaseStore.MEETING_SILENCE_LIMIT_TICKS)
+        _pass_ticks(runtime, GamePhaseStore.DEFAULT_MEETING_SILENCE_LIMIT_TICKS)
 
         assert (
             runtime._player_outcome_registry.get_outcome(_KUZE)
@@ -142,7 +142,7 @@ class TestTimeoutStillResolvesTheVote:
         """
         for voter in (_MORI, _SENA, _AOI):
             runtime.cast_vote(voter, _KUZE)
-        _pass_ticks(runtime, GamePhaseStore.MEETING_SILENCE_LIMIT_TICKS)
+        _pass_ticks(runtime, GamePhaseStore.DEFAULT_MEETING_SILENCE_LIMIT_TICKS)
 
         delivered = [
             e
@@ -159,7 +159,7 @@ class TestFreeRoamIsUnaffected:
         """会議を開いていなければ、いくら tick が進んでも何も起きない。"""
         rt = create_world_runtime(_SCENARIO)
 
-        _pass_ticks(rt, GamePhaseStore.MEETING_TICK_LIMIT + 5)
+        _pass_ticks(rt, GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT + 5)
 
         assert rt._game_phase_store.current.phase is GamePhase.FREE_ROAM
         assert rt._game_phase_store.current.trigger is None

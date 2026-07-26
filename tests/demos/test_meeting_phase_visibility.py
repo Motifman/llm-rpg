@@ -106,7 +106,7 @@ class TestDuringAMeeting:
         runtime.begin_meeting(initiator_player_id=_KUZE, trigger="emergency_button")
 
         assert (
-            f"残り {GamePhaseStore.MEETING_TICK_LIMIT} tick"
+            f"残り {GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT} tick"
             in _meeting_line(runtime, _MORI)
         )
 
@@ -123,8 +123,8 @@ class TestDuringAMeeting:
         second = _meeting_line(runtime, _MORI)
 
         assert first and second
-        assert f"残り {GamePhaseStore.MEETING_TICK_LIMIT} tick" in first
-        assert f"残り {GamePhaseStore.MEETING_TICK_LIMIT - 2} tick" in second
+        assert f"残り {GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT} tick" in first
+        assert f"残り {GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT - 2} tick" in second
 
     def test_who_called_it_is_shown(self, runtime) -> None:
         """誰が呼んだのかが分かる。

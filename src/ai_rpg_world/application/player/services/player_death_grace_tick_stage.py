@@ -38,7 +38,7 @@ class PlayerDeathGraceTickStage:
     #: ちょうど死ぬ、という穴が見つかった。呼び出し側の数値リテラルだと
     #: 突き合わせようが無い。
     #:
-    #: この猶予を短くするときは、会議の上限 (GamePhaseStore.MEETING_TICK_LIMIT)
+    #: この猶予を短くするときは、会議の上限 (GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT)
     #: との関係を壊していないか確認すること。関係は
     #: tests/application/world_graph/test_meeting_does_not_outlive_rescue.py
     #: が固定している。

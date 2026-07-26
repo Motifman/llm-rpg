@@ -40,7 +40,7 @@ class TestMeetingEndsBeforeTheGraceExpires:
         どちらの定数を後から動かしても、この関係が壊れた時点で落ちる。
         """
         assert (
-            GamePhaseStore.MEETING_TICK_LIMIT
+            GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT
             < PlayerDeathGraceTickStage.DEFAULT_GRACE_TICKS
         )
 
@@ -52,7 +52,7 @@ class TestMeetingEndsBeforeTheGraceExpires:
         """
         remaining = (
             PlayerDeathGraceTickStage.DEFAULT_GRACE_TICKS
-            - GamePhaseStore.MEETING_TICK_LIMIT
+            - GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT
         )
 
         assert remaining >= 5
@@ -138,7 +138,7 @@ class TestReportingDoesNotKillTheReported:
 
         # 誰も投票しないまま、議論だけが続く。発言し続けるので沈黙上限では
         # 終わらず、tick 上限まで走る。
-        for _ in range(GamePhaseStore.MEETING_TICK_LIMIT + 1):
+        for _ in range(GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT + 1):
             runtime.do_say(reporter, "まだ結論は出ない")
             runtime.advance_tick()
 

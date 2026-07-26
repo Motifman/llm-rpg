@@ -886,7 +886,7 @@ class WorldRuntime:
             return None
         current = store.current
         elapsed = int(self.current_tick()) - current.started_at_tick
-        remaining = max(0, store.MEETING_TICK_LIMIT - elapsed)
+        remaining = max(0, store.meeting_tick_limit - elapsed)
         parts = ["話し合いの最中。全員がこの場に集まっている"]
         initiator = self._meeting_initiator_display_name()
         if initiator:
@@ -5105,6 +5105,12 @@ def create_world_runtime(
     runtime = WorldRuntime(
         scenario=scenario,
         _meeting_enabled=scenario.meeting_enabled,
+        _game_phase_store=GamePhaseStore(
+            meeting_tick_limit=scenario.meeting_tick_limit,
+            meeting_silence_limit_ticks=scenario.meeting_silence_limit_ticks,
+            meeting_cooldown_ticks=scenario.meeting_cooldown_ticks,
+            emergency_buttons_per_player=scenario.emergency_buttons_per_player,
+        ),
         _spot_graph_repo=spot_graph_repo,
         _spot_interior_repo=spot_interior_repo,
         _player_status_repo=player_status_repo,

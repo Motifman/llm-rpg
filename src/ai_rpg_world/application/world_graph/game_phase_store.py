@@ -37,13 +37,13 @@ class GamePhaseStore:
     #: 個人の使用回数を 1 回にすると個人単位のクールダウンは一度も発動しない
     #: (2 回目が無いので)。連続招集を防ぐ役目は世界共通のこちらが持つ。
     #: 死体発見による招集は対象外 (死体は世界の事実であって濫用ではない)。
-    MEETING_COOLDOWN_TICKS = 20
+    DEFAULT_MEETING_COOLDOWN_TICKS = 20
 
     #: 最後の発言から何 tick 黙ったら会議を流すか。
     #:
     #: 発話駆動だけだと、全員が黙った瞬間に会議が止まって二度と進まない。
     #: 短すぎると議論が始まる前に閉じるので、考える間は残す。
-    MEETING_SILENCE_LIMIT_TICKS = 6
+    DEFAULT_MEETING_SILENCE_LIMIT_TICKS = 6
 
     #: 会議の開始から何 tick で打ち切るか。
     #:
@@ -61,20 +61,62 @@ class GamePhaseStore:
     #: なければ同じことが起きるし、緊急ボタン経由の招集では倒れている人が
     #: 別の場所に置き去りになる。会議が閉じたあとに駆けつける時間そのものを
     #: 残す。差分は test_meeting_does_not_outlive_rescue.py が固定している。
-    MEETING_TICK_LIMIT = 20
+    DEFAULT_MEETING_TICK_LIMIT = 20
 
-    def __init__(self, *, initial_tick: int = 0) -> None:
+    #: 一人が握れる緊急ボタンの回数。
+    #:
+    #: 既定 1。連続招集を防ぐ役目は世界共通のクールダウンが持つので、個人の
+    #: 回数はあくまで「切り札を切った」を情報にするための仕組み。
+    DEFAULT_EMERGENCY_BUTTONS_PER_PLAYER = 1
+
+    def __init__(
+        self,
+        *,
+        initial_tick: int = 0,
+        meeting_tick_limit: Optional[int] = None,
+        meeting_silence_limit_ticks: Optional[int] = None,
+        meeting_cooldown_ticks: Optional[int] = None,
+        emergency_buttons_per_player: Optional[int] = None,
+    ) -> None:
+        """既定はクラス定数。シナリオが `meeting` block で上書きできる。
+
+        **シナリオごとに変えられる必要がある。** 会議の上限 20 tick は
+        `darkened_station` のような 40 tick 級の run を想定した値で、機構の
+        確認用に 20 tick で回す run では会議 1 回で run の大半が消える。
+        定数のままだと、確認のたびにコードを書き換えることになる。
+        """
         initial = GamePhaseState(
             phase=GamePhase.FREE_ROAM,
             started_at_tick=initial_tick,
             last_activity_tick=initial_tick,
             trigger=None,
         )
+        self.meeting_tick_limit = (
+            self.DEFAULT_MEETING_TICK_LIMIT
+            if meeting_tick_limit is None
+            else int(meeting_tick_limit)
+        )
+        self.meeting_silence_limit_ticks = (
+            self.DEFAULT_MEETING_SILENCE_LIMIT_TICKS
+            if meeting_silence_limit_ticks is None
+            else int(meeting_silence_limit_ticks)
+        )
+        self.meeting_cooldown_ticks = (
+            self.DEFAULT_MEETING_COOLDOWN_TICKS
+            if meeting_cooldown_ticks is None
+            else int(meeting_cooldown_ticks)
+        )
+        self.emergency_buttons_per_player = (
+            self.DEFAULT_EMERGENCY_BUTTONS_PER_PLAYER
+            if emergency_buttons_per_player is None
+            else int(emergency_buttons_per_player)
+        )
         self._current: GamePhaseState = initial
         self._history: List[GamePhaseState] = [initial]
         #: 緊急ボタンを使い切った player_id。誰が持ち札を切ったかが情報に
         #: なるので、共有カウンタではなく人ごとに持つ。
-        self._used_emergency_buttons: Set[int] = set()
+        # 回数制にするため list で持つ (同じ人が複数回押せる設定もある)。
+        self._used_emergency_buttons: List[int] = []
         #: 既に報告された死体 (対象の player_id)。塞がないと同じ死体で
         #: 何度でも会議を開ける。
         self._reported_bodies: Set[int] = set()
@@ -127,11 +169,12 @@ class GamePhaseStore:
 
     def has_emergency_button(self, player_id) -> bool:
         """その player がまだ緊急ボタンを持っているか。"""
-        return int(player_id) not in self._used_emergency_buttons
+        used = sum(1 for pid in self._used_emergency_buttons if pid == int(player_id))
+        return used < self.emergency_buttons_per_player
 
     def consume_emergency_button(self, player_id) -> None:
         """緊急ボタンを 1 回ぶん使う。"""
-        self._used_emergency_buttons.add(int(player_id))
+        self._used_emergency_buttons.append(int(player_id))
 
     def is_body_reported(self, target_player_id) -> bool:
         """その死体が既に報告済みか。"""
@@ -150,9 +193,9 @@ class GamePhaseStore:
         """
         if self._current.phase is not GamePhase.MEETING:
             return None
-        if tick - self._current.last_activity_tick >= self.MEETING_SILENCE_LIMIT_TICKS:
+        if tick - self._current.last_activity_tick >= self.meeting_silence_limit_ticks:
             return "silence"
-        if tick - self._current.started_at_tick >= self.MEETING_TICK_LIMIT:
+        if tick - self._current.started_at_tick >= self.meeting_tick_limit:
             return "tick_limit"
         return None
 
@@ -173,7 +216,7 @@ class GamePhaseStore:
         if self._current.trigger is None:
             return False
         elapsed = tick - self._current.started_at_tick
-        return elapsed < self.MEETING_COOLDOWN_TICKS
+        return elapsed < self.meeting_cooldown_ticks
 
     def is_meeting(self) -> bool:
         """会議中か。toolset の選択と tool の fail-fast が参照する。"""
