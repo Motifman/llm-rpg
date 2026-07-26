@@ -1210,6 +1210,11 @@ class _WorldLlmWiring:
             attack_orchestrator=getattr(runtime, "_attack_orchestrator", None),
             item_transfer_service=runtime._item_transfer_service,
             time_provider=getattr(runtime, "_time_provider", None),
+            sync_action_groups=getattr(
+                getattr(runtime, "scenario", None),
+                "synchronized_action_groups",
+                (),
+            ),
             # 実験 #29 後続: travel/give/drop/pickup の say_inline 短発話用。
             speech_service=getattr(runtime, "_speech_service", None),
             # PR-θ1 (経路統合): travel_to を旧 _handle_travel_to から新経路

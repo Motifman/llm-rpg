@@ -158,6 +158,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
@@ -849,6 +850,12 @@ class WorldRuntime:
             )
             for defn, _ in get_spot_graph_specs()
         ]
+        if not self.scenario.synchronized_action_groups:
+            spot = [
+                defn
+                for defn in spot
+                if defn.name != TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION
+            ]
         assessment_tool: ToolDefinitionDto | None = None
         if tool_schema_mode == "reason_first":
             spot = [

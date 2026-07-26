@@ -36,6 +36,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
+    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
@@ -65,6 +66,7 @@ _SCENARIO_PATH = (
     / "scenarios"
     / "forbidden_library_demo.json"
 )
+_SCENARIOS_DIR = _SCENARIO_PATH.parent
 
 
 @pytest.fixture()
@@ -83,13 +85,17 @@ def clean_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(key, raising=False)
 
 
-def _create_runtime(config: ResolvedLlmRuntimeConfig | None = None):
+def _create_runtime(
+    config: ResolvedLlmRuntimeConfig | None = None,
+    *,
+    scenario_path: Path = _SCENARIO_PATH,
+):
     from ai_rpg_world.application.world_runtime.world_runtime import (
         create_world_runtime,
     )
 
     return create_world_runtime(
-        _SCENARIO_PATH,
+        scenario_path,
         config=config or ResolvedLlmRuntimeConfig.for_tests(),
     )
 
@@ -477,6 +483,34 @@ def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
     assert "travel_to" in tool_names
     assert "memory_recall_episodes" not in tool_names
     assert runtime._episodic_stack is None
+
+
+def test_prepare_action_is_hidden_when_scenario_has_no_synchronized_action_groups(
+    clean_runtime_env: None,
+) -> None:
+    """同期アクショングループを宣言しないシナリオでは prepare_action を LLM に露出しない。"""
+    runtime = _create_runtime(
+        scenario_path=_SCENARIOS_DIR / "survival_island_v4_coop.json"
+    )
+
+    tool_names = [definition.name for definition in runtime.get_tool_definitions()]
+
+    assert TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION not in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
+
+
+def test_prepare_action_is_exposed_when_scenario_has_synchronized_action_groups(
+    clean_runtime_env: None,
+) -> None:
+    """同期アクショングループを宣言するシナリオでは prepare_action を LLM に露出する。"""
+    runtime = _create_runtime(
+        scenario_path=_SCENARIOS_DIR / "sync_levers_demo.json"
+    )
+
+    tool_names = [definition.name for definition in runtime.get_tool_definitions()]
+
+    assert TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION in tool_names
 
 
 def _tool_by_name(runtime, name: str):
