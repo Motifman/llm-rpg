@@ -136,12 +136,12 @@ class TestScenariosWithoutTasks:
 
         assert _progress_line(other) == ""
 
-    def test_the_base_scenario_is_untouched(self) -> None:
-        """darkened_station 自体もまだ作業を持たないので出ない。
+    def test_the_base_scenario_now_shows_its_own_progress(self) -> None:
+        """darkened_station には作業が置かれたので進みが出る。
 
-        作業の配置は次の PR。ここで先に出ると、宣言していない進捗を
-        見せることになる。
+        作業を配置した PR でこのテストを反転させた。「宣言の無いシナリオ
+        では出ない」を保証しているのは上の test_no_progress_line のほう。
         """
         base = create_world_runtime(_BASE)
 
-        assert _progress_line(base) == ""
+        assert "0/5" in _progress_line(base)

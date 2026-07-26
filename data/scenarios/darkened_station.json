@@ -195,7 +195,67 @@
       },
       "is_outdoor": false,
       "interior": {
-        "objects": []
+        "objects": [
+          {
+            "id": "junction_box",
+            "name": "配線箱",
+            "description": "廊下の壁にある配線箱。緩んだ結束を締め直す必要がある。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "tighten_wiring",
+                "display_label": "配線の結束を締め直す",
+                "witness_observation_message": "{actor}が配線箱の中をいじっている。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "crew"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "task_wiring"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手順どおりに終えた。記録に残る。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "tighten_wiring_pretend",
+                "display_label": "配線の結束を締め直す",
+                "witness_observation_message": "{actor}が配線箱の中をいじっている。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "keeper"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手を動かしただけだ。記録には何も残らない。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -287,6 +347,65 @@
                       "state_updates": {
                         "hall_lit": true
                       }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "fuel_gauge",
+            "name": "燃料計",
+            "description": "発電機の燃料計。日ごとの残量を帳面に書き写す決まりになっている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "log_fuel",
+                "display_label": "燃料の残量を記録する",
+                "witness_observation_message": "{actor}が燃料計を覗き込んで帳面に書き込んでいる。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "crew"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "task_fuel"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手順どおりに終えた。記録に残る。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "log_fuel_pretend",
+                "display_label": "燃料の残量を記録する",
+                "witness_observation_message": "{actor}が燃料計を覗き込んで帳面に書き込んでいる。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "keeper"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手を動かしただけだ。記録には何も残らない。"
                     }
                   }
                 ]
@@ -384,6 +503,65 @@
                       "state_updates": {
                         "cutter_taken": true
                       }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "inventory_ledger",
+            "name": "棚卸し帳",
+            "description": "棚の備品を数えて書き込む帳面。定期的に確認する決まりになっている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "count_supplies",
+                "display_label": "備品の数を数える",
+                "witness_observation_message": "{actor}が棚の備品を数えている。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "crew"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "task_supplies"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手順どおりに終えた。記録に残る。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "count_supplies_pretend",
+                "display_label": "備品の数を数える",
+                "witness_observation_message": "{actor}が棚の備品を数えている。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "keeper"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手を動かしただけだ。記録には何も残らない。"
                     }
                   }
                 ]
@@ -493,6 +671,65 @@
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
                       "message": "応答があった。救援は夜明けに来る。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "antenna_panel",
+            "name": "アンテナ調整盤",
+            "description": "屋外アンテナの向きを微調整する盤。目盛りと固定ねじが並んでいる。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "align_antenna",
+                "display_label": "アンテナの向きを調整する",
+                "witness_observation_message": "{actor}がアンテナ調整盤の目盛りを合わせている。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "crew"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "task_antenna"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手順どおりに終えた。記録に残る。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "align_antenna_pretend",
+                "display_label": "アンテナの向きを調整する",
+                "witness_observation_message": "{actor}がアンテナ調整盤の目盛りを合わせている。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "keeper"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手を動かしただけだ。記録には何も残らない。"
                     }
                   }
                 ]
@@ -713,9 +950,16 @@
   "game_end_conditions": {
     "win": [
       {
-        "type": "FLAG_SET",
-        "target_flag": "distress_sent",
-        "description": "救難信号が届いた。"
+        "type": "FLAGS_SET_AT_LEAST",
+        "required_flags": [
+          "task_antenna",
+          "task_fuel",
+          "task_supplies",
+          "task_wiring",
+          "distress_sent"
+        ],
+        "min_set_count": 4,
+        "description": "観測所の点検と救難の手立てが揃い、外に助けを求められる状態になった。"
       }
     ],
     "lose": [
