@@ -131,6 +131,34 @@ def _extract_hunger_satisfaction_amount(effect: ItemEffect | None) -> int:
     return 0
 
 
+def _use_item_unexpected_exception_result(
+    exc: Exception,
+    *,
+    stage: str,
+) -> LlmCommandResultDto:
+    """_use_item の想定外例外を LLM には伏せ、trace に原因特定情報だけ残す。"""
+    base = exception_result(exc)
+    trace_payload = dict(base.trace_payload or {})
+    trace_payload.update(
+        {
+            "tool_exception_location": "_use_item",
+            "tool_exception_stage": stage,
+            "tool_exception_type": type(exc).__name__,
+            "tool_exception_module": type(exc).__module__,
+        }
+    )
+    return LlmCommandResultDto(
+        success=base.success,
+        message=base.message,
+        error_code=base.error_code,
+        remediation=base.remediation,
+        should_reschedule=base.should_reschedule,
+        was_no_op=base.was_no_op,
+        omit_result_in_prompt=base.omit_result_in_prompt,
+        trace_payload=trace_payload,
+    )
+
+
 class SpotGraphToolExecutor:
     """spot_graph_* ツールのハンドラを提供する。"""
 
@@ -810,41 +838,59 @@ class SpotGraphToolExecutor:
             )
         try:
             inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
-            if inv is None:
-                return LlmCommandResultDto(
-                    success=False,
-                    message="プレイヤー情報が見つかりません。",
-                    error_code="PLAYER_NOT_FOUND",
-                    remediation=get_remediation("PLAYER_NOT_FOUND"),
-                )
-            # インベントリからアイテムインスタンスを探す。
-            # 実験 #26 で発覚: 旧コードは `inv.slots` (存在しない属性) を iter して
-            # 全 use_item が AttributeError → SYSTEM_ERROR (72 件) で死んでいた。
-            # さらに同 spec の新鮮品 / 腐敗品は prompt 上で別ラベルになるため、
-            # resolver が渡す is_spoiled も含めて実行時に slot を引く。
+        except Exception as e:
+            return _use_item_unexpected_exception_result(e, stage="inventory_lookup")
+        if inv is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="プレイヤー情報が見つかりません。",
+                error_code="PLAYER_NOT_FOUND",
+                remediation=get_remediation("PLAYER_NOT_FOUND"),
+            )
+        # インベントリからアイテムインスタンスを探す。
+        # 実験 #26 で発覚: 旧コードは `inv.slots` (存在しない属性) を iter して
+        # 全 use_item が AttributeError → SYSTEM_ERROR (72 件) で死んでいた。
+        # さらに同 spec の新鮮品 / 腐敗品は prompt 上で別ラベルになるため、
+        # resolver が渡す is_spoiled も含めて実行時に slot を引く。
+        try:
             found = self._find_owned_slot_by_item_spec_id_and_spoilage(
                 player_id, item_spec_id_int, args.get("is_spoiled", False),
             )
-            item_instance = None
-            matched_slot_id = None
-            if found is not None:
-                matched_slot_id, iid = found
-                item_instance = self._item_repository.find_by_id(iid)
-            if item_instance is None or inv is None:
-                return LlmCommandResultDto(
-                    success=False,
-                    message="指定したアイテムは持っていません。",
-                    error_code="ITEM_NOT_FOUND",
-                    remediation=get_remediation("ITEM_NOT_FOUND"),
-                )
-            from ai_rpg_world.domain.item.enum.item_enum import ItemType
-            if item_instance.item_spec.item_type != ItemType.CONSUMABLE:
-                return LlmCommandResultDto(
-                    success=False,
-                    message="このアイテムは消費できません (CONSUMABLE 種別ではない)。",
-                    error_code="ITEM_NOT_CONSUMABLE",
-                    remediation=get_remediation("ITEM_NOT_CONSUMABLE"),
-                )
+        except Exception as e:
+            return _use_item_unexpected_exception_result(e, stage="slot_resolution")
+        if found is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="指定したアイテムは持っていません。",
+                error_code="ITEM_NOT_FOUND",
+                remediation=get_remediation("ITEM_NOT_FOUND"),
+            )
+        try:
+            matched_slot_id, iid = found
+        except (TypeError, ValueError) as e:
+            return _use_item_unexpected_exception_result(
+                e, stage="slot_resolution_result"
+            )
+        try:
+            item_instance = self._item_repository.find_by_id(iid)
+        except Exception as e:
+            return _use_item_unexpected_exception_result(e, stage="item_lookup")
+        if item_instance is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="指定したアイテムは持っていません。",
+                error_code="ITEM_NOT_FOUND",
+                remediation=get_remediation("ITEM_NOT_FOUND"),
+            )
+        from ai_rpg_world.domain.item.enum.item_enum import ItemType
+        if item_instance.item_spec.item_type != ItemType.CONSUMABLE:
+            return LlmCommandResultDto(
+                success=False,
+                message="このアイテムは消費できません (CONSUMABLE 種別ではない)。",
+                error_code="ITEM_NOT_CONSUMABLE",
+                remediation=get_remediation("ITEM_NOT_CONSUMABLE"),
+            )
+        try:
             # Phase F: 腐敗食を食べたか判定する。use() で quantity が減って
             # state がリセットされる前に読む必要があるのでここで取る。
             # 集約は (spec, spoiled) ベースで slot に分かれて入っているはずなので、
@@ -971,7 +1017,7 @@ class SpotGraphToolExecutor:
                 message=append_inner_thought_to_message(base, args),
             )
         except Exception as e:
-            return exception_result(e)
+            return _use_item_unexpected_exception_result(e, stage="effect_application")
 
     def _prepare_action(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         action_id = str(args.get("action_id", "")).strip()
