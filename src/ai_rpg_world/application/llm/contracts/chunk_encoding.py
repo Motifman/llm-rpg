@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Literal, Sequence, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
+from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PendingPrediction,
@@ -50,11 +51,19 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
     # の順で並べ、失敗 / omit_result 行にも付ける (予測と実際のズレを読み取れるように)。
     prediction = (entry.expected_result or "").strip()
     prediction_label = f" [予測: {prediction}]" if prediction else ""
+    inner_thought = (entry.inner_thought or "").strip()
+    inner_thought_line = f"\n  心の声: {inner_thought}" if inner_thought else ""
     if entry.success:
         if entry.omit_result_in_prompt:
-            return f"{time_prefix}[行動] {entry.action_summary}{prediction_label}"
+            return f"{time_prefix}[行動] {entry.action_summary}{prediction_label}{inner_thought_line}"
+        if entry.tool_name == TOOL_NAME_SPEECH and entry.result_summary:
+            return (
+                f"{time_prefix}[行動] {entry.action_summary}{prediction_label}"
+                f"{entry.result_summary}{inner_thought_line}"
+            )
         return (
             f"{time_prefix}[行動] {entry.action_summary}{prediction_label} → [結果] {entry.result_summary}"
+            f"{inner_thought_line}"
         )
     parts = [
         f"{time_prefix}[行動] {entry.action_summary}{prediction_label} → [失敗]",
@@ -65,7 +74,7 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
     if entry.should_reschedule:
         parts.append("次tick再試行の可能性あり")
     parts.append(entry.result_summary)
-    return " | ".join(parts)
+    return " | ".join(parts) + inner_thought_line
 
 
 @dataclass(frozen=True)

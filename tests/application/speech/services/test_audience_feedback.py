@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from ai_rpg_world.application.speech.services.audience_feedback import (
     audience_summary_text,
+    compact_audience_summary_text,
     zero_audience_text,
 )
 from ai_rpg_world.application.speech.services.speech_audience_resolver import (
@@ -134,3 +135,29 @@ class TestAudienceSummaryText:
         assert "明瞭=0" in text
         assert "ぼんやり=1" in text
         assert "かすか=0" in text
+
+
+class TestCompactAudienceSummaryText:
+    """直近出来事向けには一様な明瞭内訳を省き、ばらつきだけを残す。"""
+
+    def test_all_clear_omits_breakdown(self) -> None:
+        """全員が明瞭なら「明瞭=N / ぼんやり=0 / かすか=0」は情報量ゼロなので出さない。"""
+        members = [
+            _member(2, SoundClarityEnum.CLEAR),
+            _member(3, SoundClarityEnum.CLEAR),
+            _member(4, SoundClarityEnum.CLEAR),
+        ]
+        text = compact_audience_summary_text(SpeechChannel.SAY, members)
+        assert text == "3 名に届いた"
+        assert "明瞭=" not in text
+
+    def test_degraded_delivery_keeps_only_low_clarity_counts(self) -> None:
+        """ぼんやり / かすかが混ざる場合は、次手に効く低明瞭度の内訳だけ残す。"""
+        members = [
+            _member(2, SoundClarityEnum.CLEAR),
+            _member(3, SoundClarityEnum.MUFFLED),
+            _member(4, SoundClarityEnum.FAINT),
+        ]
+        text = compact_audience_summary_text(SpeechChannel.SHOUT, members)
+        assert text == "3 名に届いた。ぼんやり=1 / かすか=1"
+        assert "明瞭=" not in text

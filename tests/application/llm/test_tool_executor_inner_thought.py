@@ -1,23 +1,23 @@
 """tool_executor_helpers（心の声・警告）のテスト。"""
 
+from pathlib import Path
+
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
-    append_inner_thought_to_message,
     with_inner_thought_empty_warning,
 )
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_EXPLORE
 
 
-def test_append_inner_thought_appends_when_present() -> None:
-    out = append_inner_thought_to_message("操作した。", {"inner_thought": " 胸騒ぎがした。  "})
-    assert "操作した。" in out
-    assert "【心の声】" in out
-    assert "胸騒ぎがした。" in out
-
-
-def test_append_inner_thought_unchanged_when_empty() -> None:
-    assert append_inner_thought_to_message("同上", {}) == "同上"
-    assert append_inner_thought_to_message("同上", {"inner_thought": "   "}) == "同上"
+def test_source_does_not_use_section_heading_style_for_inner_thought() -> None:
+    """行動内の心の声は section 見出し風の「【心の声】」ではなく表示層の「心の声:」へ集約する。"""
+    source_root = Path("src")
+    offenders = [
+        str(path)
+        for path in source_root.rglob("*.py")
+        if "【心の声】" in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == []
 
 
 def test_inner_thought_warning_prepends_on_success_when_missing() -> None:

@@ -27,9 +27,6 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     SPEECH_CHANNEL_VALUES,
     SPEECH_CHANNEL_WHISPER,
 )
-from ai_rpg_world.application.llm.services.tool_executor_helpers import (
-    append_inner_thought_to_message,
-)
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.application.speech.services.player_speech_service import (
@@ -250,7 +247,7 @@ class SpeechToolExecutor:
 
         if self._audience_resolver is None:
             return (
-                append_inner_thought_to_message(legacy_base, args),
+                legacy_base,
                 True,
             )
 
@@ -262,24 +259,17 @@ class SpeechToolExecutor:
             )
         except Exception:
             return (
-                append_inner_thought_to_message(legacy_base, args),
+                legacy_base,
                 True,
             )
 
         from ai_rpg_world.application.speech.services.audience_feedback import (
-            audience_summary_text,
+            compact_audience_summary_text,
         )
 
-        # action verb を前置きしつつ audience 詳細を続ける。0 audience でも
-        # 「発言した / 叫んだ」事実は伝えてから理由を述べる。
-        action_verb_past = {
-            SpeechChannel.WHISPER: "囁いた",
-            SpeechChannel.SAY: "発言した",
-            SpeechChannel.SHOUT: "叫んだ",
-        }[channel]
-        body = audience_summary_text(channel, members)
-        message = f"{action_verb_past}。{body}"
+        body = compact_audience_summary_text(channel, members)
+        message = f"（{body}）"
         return (
-            append_inner_thought_to_message(message, args),
+            message,
             False,  # 重要情報なので prompt 表示する
         )

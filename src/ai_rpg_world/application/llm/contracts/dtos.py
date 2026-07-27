@@ -135,6 +135,7 @@ class ActionResultEntry:
     # episode.expected / emotion_hint→episode.felt に配線する。どれも既定 None で
     # 後方互換 (= world-action 以外の tool / 旧 snapshot)。
     expected_result: Optional[str] = None
+    inner_thought: Optional[str] = None
     intention: Optional[str] = None
     emotion_hint: Optional[str] = None
     # Issue #311 後続: エピソード記憶のチャンク境界判定で「シーン切り替え」を
@@ -191,6 +192,8 @@ class ActionResultEntry:
             raise TypeError("omit_result_in_prompt must be bool")
         if self.expected_result is not None and not isinstance(self.expected_result, str):
             raise TypeError("expected_result must be str or None")
+        if self.inner_thought is not None and not isinstance(self.inner_thought, str):
+            raise TypeError("inner_thought must be str or None")
         if self.intention is not None and not isinstance(self.intention, str):
             raise TypeError("intention must be str or None")
         if self.emotion_hint is not None and not isinstance(self.emotion_hint, str):

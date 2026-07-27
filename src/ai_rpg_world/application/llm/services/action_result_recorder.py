@@ -19,7 +19,7 @@ semantic_promotion.on_after_tool_turn」を共有コアに抽出する。escape 
 - **episodic_stack は呼び出しごとに受ける**: stack は runtime 構築後に遅延配線
   されるため、recorder は保持せず record() の引数で受ける。``None`` なら記憶 hook
   を skip (= episodic OFF)。
-- subjective fields (expected_result / intention / emotion_hint) や fingerprint 等は
+- subjective fields (inner_thought / expected_result / intention / emotion_hint) や fingerprint 等は
   optional 引数として通す口を用意する。escape は当面 subset しか渡さない (U2 で配線)。
 - **prediction_context_id の consume (U1)**: ``prediction_context_ledger`` が
   注入されていれば、record() の中で ``ledger.consume(player_id)`` した id を
@@ -78,6 +78,7 @@ class ActionResultRecorder:
         scene_boundary: bool = False,
         occurred_tick: Optional[int] = None,
         game_time_label: Optional[str] = None,
+        inner_thought: Optional[str] = None,
         expected_result: Optional[str] = None,
         intention: Optional[str] = None,
         emotion_hint: Optional[str] = None,
@@ -113,6 +114,7 @@ class ActionResultRecorder:
             omit_result_in_prompt=omit_result_in_prompt,
             prediction_context_id=prediction_context_id,
             in_context_belief_ids=in_context_belief_ids,
+            inner_thought=inner_thought,
             expected_result=expected_result,
             intention=intention,
             emotion_hint=emotion_hint,

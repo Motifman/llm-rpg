@@ -106,6 +106,7 @@ class IActionResultStore(ABC):
         tool_name: Optional[str] = None,
         argument_fingerprint: Optional[str] = None,
         should_reschedule: bool = False,
+        inner_thought: Optional[str] = None,
         expected_result: Optional[str] = None,
         intention: Optional[str] = None,
         emotion_hint: Optional[str] = None,

@@ -34,6 +34,7 @@ class DefaultActionResultStore(IActionResultStore):
         should_reschedule: bool = False,
         game_time_label: Optional[str] = None,
         omit_result_in_prompt: bool = False,
+        inner_thought: Optional[str] = None,
         expected_result: Optional[str] = None,
         intention: Optional[str] = None,
         emotion_hint: Optional[str] = None,
@@ -66,6 +67,8 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("game_time_label must be str or None")
         if not isinstance(omit_result_in_prompt, bool):
             raise TypeError("omit_result_in_prompt must be bool")
+        if inner_thought is not None and not isinstance(inner_thought, str):
+            raise TypeError("inner_thought must be str or None")
         if expected_result is not None and not isinstance(expected_result, str):
             raise TypeError("expected_result must be str or None")
         if intention is not None and not isinstance(intention, str):
@@ -98,6 +101,7 @@ class DefaultActionResultStore(IActionResultStore):
             should_reschedule=should_reschedule,
             game_time_label=game_time_label,
             omit_result_in_prompt=omit_result_in_prompt,
+            inner_thought=inner_thought,
             expected_result=expected_result,
             intention=intention,
             emotion_hint=emotion_hint,

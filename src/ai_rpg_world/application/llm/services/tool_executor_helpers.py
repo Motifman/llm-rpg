@@ -167,17 +167,6 @@ def invalid_arg_result(field_name: str) -> LlmCommandResultDto:
     )
 
 
-def append_inner_thought_to_message(message: str, args: Dict[str, Any]) -> str:
-    """LlmCommandResultDto.message 末尾に、ツール引数の inner_thought を表示用に付与する。"""
-    raw = args.get("inner_thought", "")
-    if not isinstance(raw, str):
-        raw = str(raw) if raw is not None else ""
-    s = raw.strip()
-    if not s:
-        return message
-    return f"{message.rstrip()}\n【心の声】{s}"
-
-
 def invalid_arg_value_result(field_name: str, allowed: str) -> LlmCommandResultDto:
     """列挙値など、引数の値が不正なときの失敗結果を返す。"""
     return LlmCommandResultDto(
