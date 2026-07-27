@@ -37,8 +37,8 @@ SPEECH_CHANNEL_VALUES = (SPEECH_CHANNEL_WHISPER, SPEECH_CHANNEL_SAY, SPEECH_CHAN
 
 _RESOLVER = SpotGraphToolsAvailabilityResolver()
 _IT = inner_thought_property()
-# 実験 #29 後続: 移動 / アイテム系ツールで「立ち去り際 / 受け渡し際の一言」を
-# 任意で発話できるようにする。同 spot の他プレイヤーにだけ届く SAY 相当。
+# 実験 #29 後続: 行動ツールで報告・段取り・呼びかけを任意で同時発話
+# できるようにする。同 spot + 隣接 spot に届く SAY 相当。
 from ai_rpg_world.application.llm.services.tool_catalog.say_inline import (
     say_inline_property,
 )
@@ -48,7 +48,7 @@ TRAVEL_TO_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     description=(
         "スポットグラフ上で、指定した接続先へ移動を開始する（経路は最短・通行条件を満たす必要がある）。"
-        "立ち去り際に同 spot の他者へ短く声をかけたい場合は say_inline に一言を書ける。"
+        "移動しながら仲間へ報告・呼びかけをしたい場合は say_inline に一言を書ける。"
     ),
     parameters={
         "type": "object",
@@ -95,10 +95,14 @@ SET_SUB_LOCATION_DEFINITION = ToolDefinitionDto(
 
 EXPLORE_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    description="現在のスポットを探索する（発見・ドロップ等はシナリオ依存）。",
+    description=(
+        "現在のスポットを探索する（発見・ドロップ等はシナリオ依存）。"
+        "探索しながら発見状況や方針を仲間へ伝えたい場合は say_inline に一言を書ける。"
+    ),
     parameters={
         "type": "object",
         "properties": {
+            "say_inline": _SAY,
             "inner_thought": _IT,
         },
         "required": ["inner_thought"],
@@ -162,7 +166,10 @@ INTERACT_DEFINITION = ToolDefinitionDto(
 
 WAIT_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_WAIT,
-    description="その場で短く待機し、時間経過に伴う環境変化や出来事を観測する。",
+    description=(
+        "その場で短く待機し、時間経過に伴う環境変化や出来事を観測する。"
+        "留まりながら仲間へ報告・相談・呼びかけをしたい場合は say_inline に一言を書ける。"
+    ),
     parameters={
         "type": "object",
         "properties": {
@@ -170,6 +177,7 @@ WAIT_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": "待機する理由（任意）。",
             },
+            "say_inline": _SAY,
             "inner_thought": _IT,
         },
         "required": ["inner_thought"],
@@ -194,7 +202,12 @@ SPEECH_DEFINITION = ToolDefinitionDto(
         "周囲に向けて発話する。channel で音量と到達範囲を選ぶ:\n"
         "- whisper: 同じスポット内の特定 1 人にだけ届く (target_label 必須)\n"
         "- say: 同じスポットと隣接スポット (1 hop) に届く (通常会話)\n"
-        "- shout: 同じスポット + 隣接 + さらに 1 hop 先 (2 hop) まで届く (大声で叫ぶ)"
+        "- shout: 同じスポット + 隣接 + さらに 1 hop 先 (2 hop) まで届く (大声で叫ぶ)\n"
+        "このツールは発話だけに 1 手を使う。同じ場所より遠くへ届かせたい "
+        "(shout) / 1 人にだけ内密に伝えたい (whisper) / 行動に添えるには"
+        "長すぎる話をしたいときに使う。ふだんの報告・段取り・呼びかけは、"
+        "何かの行動の say_inline に添える方が同じ時間で行動も進むため、"
+        "そちらを優先する。"
     ),
     parameters={
         "type": "object",
@@ -361,7 +374,8 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
         "受取り側のインベントリが満杯だと受け取れない (相手が drop するのを待つか、"
         "別の相手を指定する)。**部分成功**: 1 件失敗しても他の "
         "項目は独立に実行され、結果メッセージに OK / NG がまとめて返る。"
-        "受け渡し際に一言かけたい場合は say_inline を書ける (全 give 完了後に 1 度だけ発火)。"
+        "受け渡しながら報告・段取り・呼びかけをしたい場合は say_inline を書ける "
+        "(全 give 完了後に 1 度だけ発火)。"
     ),
     parameters={
         "type": "object",

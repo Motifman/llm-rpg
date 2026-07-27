@@ -364,6 +364,7 @@ class TestExploreEmptyMessageAugmented:
                 has_remaining_discoverable_items=False,
             )
         )
+        executor._speech_service = None
         runtime_context = SimpleNamespace(
             targets={
                 "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),
@@ -386,6 +387,7 @@ class TestExploreEmptyMessageAugmented:
                 has_remaining_discoverable_items=True,
             )
         )
+        executor._speech_service = None
         runtime_context = SimpleNamespace(
             targets={
                 "OBJ1": _make_target("OBJ1", "spot_graph_object", "操作盤"),

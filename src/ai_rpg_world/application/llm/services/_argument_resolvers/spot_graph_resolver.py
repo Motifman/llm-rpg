@@ -586,7 +586,7 @@ def _with_inner_thought(base: Dict[str, Any], args: Dict[str, Any]) -> Dict[str,
     キー」を merge する。
 
     PR-θ1 (経路統合) 修正: 旧 _with_inner_thought は ``inner_thought`` だけを
-    transparent に通していたが、``say_inline`` (立ち去り際の一言) が resolver
+    transparent に通していたが、``say_inline`` (行動しながらの一言) が resolver
     通過後の args から抜け落ちて執行 executor に届かず 100% silent failure して
     いた (t=18 の P1 travel_to say_inline が誰にも届かない = 前実験で observation
     ゼロ)。
