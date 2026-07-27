@@ -36,6 +36,7 @@ def build_item_spec(*, row: object, effect_rows: Iterable[object]) -> ItemSpec:
         placeable_object_type=row["placeable_object_type"],
         consume_effect=effect,
         usage_hint=_non_empty_text(row["usage_hint"]),
+        category=str(row["category"] or ""),
     )
 
 
@@ -76,6 +77,7 @@ def item_spec_to_payload(item_spec: ItemSpec) -> dict[str, Any]:
         "placeable_object_type": item_spec.placeable_object_type,
         "consume_effect": _effect_to_payload(item_spec.consume_effect),
         "usage_hint": item_spec.usage_hint or "",
+        "category": item_spec.category or "",
     }
 
 
@@ -96,6 +98,7 @@ def payload_to_item_spec(payload: dict[str, Any]) -> ItemSpec:
         placeable_object_type=payload.get("placeable_object_type"),
         consume_effect=_payload_to_effect(payload.get("consume_effect")),
         usage_hint=_non_empty_text(payload.get("usage_hint")),
+        category=str(payload.get("category") or ""),
     )
 
 
