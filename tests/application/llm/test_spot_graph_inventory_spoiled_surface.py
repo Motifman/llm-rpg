@@ -358,6 +358,38 @@ class TestInventoryCategoryTag:
         assert "食べられない" not in line
         assert "interact" not in line
 
+    def test_consumable_key_item_does_not_claim_interact_usage(self) -> None:
+        """消費可能な KEY_ITEM は、対応オブジェクトで interact する品とは表示しない。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=15,
+                name="救急用品",
+                quantity=1,
+                item_type="consumable",
+                category="KEY_ITEM",
+            )
+        )
+
+        assert "重要品・そのまま使える" in line
+        assert "食べられない" not in line
+        assert "interact" not in line
+
+    def test_consumable_unknown_category_falls_back_to_consumable_tag(self) -> None:
+        """消費可能品の未知 category は、非消費品文言ではなく consumable 表示へ戻す。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=16,
+                name="未知分類の薬",
+                quantity=1,
+                item_type="consumable",
+                category="UNKNOWN_NEW_CATEGORY",
+            )
+        )
+
+        assert "(食料)" in line
+        assert "食べられない" not in line
+        assert "interact" not in line
+
     def test_declared_item_categories_in_scenarios_are_covered(self) -> None:
         """data/scenarios の item_specs で使う category は表示表に必ず定義する。"""
         scenario_dir = Path(__file__).resolve().parents[3] / "data" / "scenarios"
@@ -369,6 +401,31 @@ class TestInventoryCategoryTag:
                     used.add(str(item["category"]).strip().upper())
 
         assert used == set(ITEM_CATEGORY_DISPLAY)
+
+    def test_consumable_items_in_scenarios_never_get_non_consumable_usage_text(self) -> None:
+        """consume_effect を持つ item には「食べられない」「interact して使う」を表示しない。"""
+        scenario_dir = Path(__file__).resolve().parents[3] / "data" / "scenarios"
+        checked = 0
+        for path in scenario_dir.glob("*.json"):
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            for idx, item in enumerate(raw.get("item_specs", ())):
+                if item.get("consume_effect") is None:
+                    continue
+                checked += 1
+                line = self._last_line(
+                    SpotGraphInventoryItemEntry(
+                        item_spec_id=idx + 1,
+                        name=str(item.get("name") or item.get("id") or "item"),
+                        quantity=1,
+                        item_type="consumable",
+                        category=str(item.get("category") or ""),
+                        usage_hint=str(item.get("usage_hint") or ""),
+                    )
+                )
+                assert "食べられない" not in line, (path.name, item.get("id"), line)
+                assert "interact して使う" not in line, (path.name, item.get("id"), line)
+
+        assert checked > 0
 
 
 class TestInventoryUsageHint:

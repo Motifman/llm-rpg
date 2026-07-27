@@ -147,6 +147,11 @@ ITEM_CATEGORY_DISPLAY = {
     "DOCUMENT": " (記録・読んで手がかりを得る)",
 }
 
+_CONSUMABLE_ITEM_CATEGORY_DISPLAY = {
+    "FOOD": " (食料)",
+    "KEY_ITEM": " (重要品・そのまま使える)",
+}
+
 
 # PR β (実験 #29 後続): fatigue tier → 仲間表示用の suffix。
 # 「ok」「tired」は静かに省略 (ノイズになる)、「fatigued」以上だけ表示。
@@ -215,6 +220,20 @@ def _format_item_category_tag(category: str) -> str:
     return ITEM_CATEGORY_DISPLAY.get(key, "")
 
 
+def _format_consumable_item_category_tag(category: str) -> str:
+    """消費可能 item 用の category 表示。
+
+    category は物語上の分類で、消費可能性とは別軸。消費できる item に
+    非消費品向けの「食べられない」「interact して使う」を出さない。
+    """
+    if not category:
+        return ""
+    key = str(category).strip().upper()
+    if not key:
+        return ""
+    return _CONSUMABLE_ITEM_CATEGORY_DISPLAY.get(key, "")
+
+
 def _format_item_usage_hint(usage_hint: str) -> str:
     """ItemSpec の作者文による用途ヒントを所持品行向けに整形する。
 
@@ -237,6 +256,11 @@ def _format_inventory_item_mark(
     usage_mark = _format_item_usage_hint(usage_hint)
     if usage_mark:
         return usage_mark
+    if item_type == "consumable":
+        consumable_category_mark = _format_consumable_item_category_tag(category)
+        if consumable_category_mark:
+            return consumable_category_mark
+        return _format_item_type_tag(item_type)
     category_mark = _format_item_category_tag(category)
     if category_mark:
         return category_mark
