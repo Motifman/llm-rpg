@@ -14,8 +14,8 @@
       "lighting",
       "social-deduction"
     ],
-    "llm_public_intro": "吹雪で外は白一色、扉は開かない。無線室の送信機が壊れていて救援を呼べない。部品は物資庫にあるらしいが、そこは灯りが届かず暗い。発電室のレバーで各室の照明を落とせるようになっているのは、本来は節電のためだ。",
-    "llm_objective_text": "- 無線室の送信機を直し、二人以上で操作して救難信号を送れば全員が助かる。\n- 送信には二人が同時に無線室に居る必要がある。\n- 観測所の中には、暗い場所でだけ起こせることがある。灯りを絶やさないこと。\n- 誰が何をしているかは、その場に居なければ分からない。"
+    "llm_public_intro": "吹雪で外は白一色、扉は開かない。本土との定時連絡までに観測所の点検を終えなければ、異常ありと見なされて救援の判断が遅れる。連絡通路と物資庫は照明が壊れたままで、灯りが届かない。",
+    "llm_objective_text": "- 観測所の点検を 2 つ終えれば、本土に無事を知らせられる。\n- 点検箇所は集会室の気象記録簿、連絡通路の配線箱、物資庫の棚卸し帳の 3 つ。\n- 連絡通路と物資庫は暗い。暗い場所には一人で入らないこと。\n- 誰が何をしているかは、その場に居合わせた者にしか見えない。"
   },
   "item_specs": [
     {
@@ -30,12 +30,6 @@
       "name": "解体用カッター",
       "description": "配線を切るための刃物。人にも使えてしまう。",
       "category": "TOOL"
-    },
-    {
-      "id": "radio_part",
-      "name": "送信機の真空管",
-      "description": "無線室の送信機に欠けている部品。",
-      "category": "KEY_ITEM"
     }
   ],
   "environment": {
@@ -85,7 +79,7 @@
           {
             "id": "duty_board",
             "name": "当番表",
-            "description": "壁に貼られた当番表。誰がどの部屋を見回るかが書かれている。余白に書き込めるスペースがある。",
+            "description": "壁に貼られた当番表。今週の点検項目と、照明が壊れている区画が書かれている。余白に書き込めるスペースがある。",
             "object_type": "OTHER",
             "state": {},
             "interactions": [
@@ -102,7 +96,7 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "当番表。物資庫は照明が壊れたままで、修理の目処は立っていない。発電室のレバーで各室の照明を落とせる。"
+                      "message": "当番表。今週の点検は三つ——配線箱・棚卸し・気象記録。物資庫と連絡通路は照明が壊れたままで、修理の目処は立っていない。暗い場所へは二人以上で入ること。"
                     }
                   }
                 ]
@@ -320,7 +314,7 @@
     {
       "id": "storage",
       "name": "物資庫",
-      "description": "照明が壊れたままの物資庫。手探りで棚を探ることになる。送信機の部品と、配線用のカッターがどこかにあるはずだ。",
+      "description": "照明が壊れたままの物資庫。手探りで棚を探ることになる。工具と保存食、それに棚卸し用の帳面がある。",
       "category": "OTHER",
       "area_id": "utility",
       "position": {
@@ -338,45 +332,13 @@
           {
             "id": "supply_shelf",
             "name": "資材棚",
-            "description": "暗くて中身がよく見えない棚。手を伸ばせば何か掴めそうだ。",
+            "description": "工具と保存食が並ぶ棚。奥に作業用のカッターが差してある。",
             "object_type": "OTHER",
             "state": {
               "part_taken": false,
               "cutter_taken": false
             },
             "interactions": [
-              {
-                "action_name": "find_part",
-                "display_label": "真空管を探す",
-                "witness_observation_message": "{actor}が棚を手探りしている。",
-                "preconditions": [
-                  {
-                    "condition_type": "OBJECT_STATE",
-                    "target_object": "supply_shelf",
-                    "required_state": {
-                      "part_taken": false
-                    },
-                    "failure_message": "真空管はもう誰かが持ち出した。"
-                  }
-                ],
-                "effects": [
-                  {
-                    "effect_type": "GIVE_ITEM",
-                    "parameters": {
-                      "item_spec": "radio_part"
-                    }
-                  },
-                  {
-                    "effect_type": "CHANGE_OBJECT_STATE",
-                    "parameters": {
-                      "target_object": "supply_shelf",
-                      "state_updates": {
-                        "part_taken": true
-                      }
-                    }
-                  }
-                ]
-              },
               {
                 "action_name": "find_cutter",
                 "display_label": "カッターを探す",
@@ -389,6 +351,13 @@
                       "cutter_taken": false
                     },
                     "failure_message": "カッターはもう棚に無い。"
+                  },
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "keeper"
+                    },
+                    "failure_message": "工具は当番の担当が管理している。勝手に持ち出すものではない。"
                   }
                 ],
                 "effects": [
@@ -631,7 +600,7 @@
       "initial_state": {
         "role": "keeper"
       },
-      "persona_prompt": "あなたはクゼ、越冬管理人。ここを離れるわけにはいかない事情がある。救援が来れば全部が明るみに出る。表向きは誰よりも協力的に振る舞うこと。\n\nあなたは暗い場所でだけ人を襲える。明るい場所では必ず誰かに見られる。灯りを落とす手段は発電室にある。",
+      "persona_prompt": "あなたはクゼ、越冬管理人。ここを離れるわけにはいかない事情がある。点検が終わって本土に連絡が行けば、全部が明るみに出る。表向きは誰よりも協力的に振る舞うこと。\n\nあなたは暗い場所でだけ人を襲える。明るい集会室では必ず誰かに見られる。刃物は物資庫の棚にある。",
       "objective": "点検を終わらせない。ただし疑われれば何もできなくなる。"
     },
     {
