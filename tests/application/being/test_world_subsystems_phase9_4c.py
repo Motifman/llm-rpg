@@ -55,6 +55,7 @@ def _action_entry(action: str = "walk") -> ActionResultEntry:
         success=True,
         tool_name=action,
         game_time_label="Day 1",
+        inner_thought=f"{action} の前に状況を整理する",
         expected_result=f"{action} で道が開ける",
         intention=f"{action} で先へ進む",
         emotion_hint="determination",
@@ -123,6 +124,7 @@ class TestActionResultStoreCodec:
         assert captured["schema_version"] == 5
         assert len(captured["entries"][0]["entries"]) == 2
         first_captured = captured["entries"][0]["entries"][0]
+        assert first_captured["inner_thought"] == "walk の前に状況を整理する"
         assert first_captured["expected_result"] == "walk で道が開ける"
         assert first_captured["intention"] == "walk で先へ進む"
         assert first_captured["emotion_hint"] == "determination"
@@ -140,6 +142,7 @@ class TestActionResultStoreCodec:
             "walk_summary",
             "attack_summary",
         ]
+        assert results[0].inner_thought == "walk の前に状況を整理する"
         assert results[0].expected_result == "walk で道が開ける"
         assert results[0].intention == "walk で先へ進む"
         assert results[0].emotion_hint == "determination"
