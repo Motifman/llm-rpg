@@ -94,6 +94,16 @@ def _load_raw_scenarios() -> list[tuple[Path, Mapping[str, Any]]]:
     return loaded
 
 
+def _count_action_name_dicts(value: Any) -> int:
+    """JSON 全体から action_name キーを持つ dict を再帰的に数える。"""
+    if isinstance(value, Mapping):
+        count = 1 if "action_name" in value else 0
+        return count + sum(_count_action_name_dicts(child) for child in value.values())
+    if isinstance(value, list):
+        return sum(_count_action_name_dicts(child) for child in value)
+    return 0
+
+
 def find_missing_or_empty_display_labels(
     entries: Iterable[InteractionAuditEntry],
 ) -> list[InteractionAuditEntry]:
@@ -166,6 +176,21 @@ class TestScenarioInteractionDisplayLabels:
         """監査対象の全シナリオは ScenarioLoader でも読み込める。"""
         for path, _raw in _load_raw_scenarios():
             ScenarioLoader().load_from_file(path)
+
+    def test_explicit_interaction_iterator_matches_recursive_action_name_count(self) -> None:
+        """明示的な走査は新しい入れ子を静かに取りこぼすため、再帰数と一致させる。"""
+        mismatches: list[str] = []
+        for path, raw in _load_raw_scenarios():
+            explicit_count = len(list(_iter_interactions(raw, scenario=path.name)))
+            recursive_count = _count_action_name_dicts(raw)
+            if explicit_count != recursive_count:
+                mismatches.append(
+                    f"{path.name}: _iter_interactions={explicit_count}, "
+                    f"recursive_action_name_dicts={recursive_count}, "
+                    f"diff={recursive_count - explicit_count}"
+                )
+
+        assert not mismatches, "\n".join(mismatches)
 
 
 class TestInteractionDisplayLabelAuditMutationFixtures:
