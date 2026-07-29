@@ -138,6 +138,21 @@ _ITEM_TYPE_DISPLAY = {
 }
 
 
+ITEM_CATEGORY_DISPLAY = {
+    "FOOD": " (食料)",
+    "MATERIAL": " (素材・そのままは食べられない。焚き火など interact の材料)",
+    "TOOL": " (道具・そのままは食べられない。近くのオブジェクトに interact して使う)",
+    "KEY_ITEM": " (重要品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)",
+    "LORE": " (手がかり・使う物ではない)",
+    "DOCUMENT": " (記録・読んで手がかりを得る)",
+}
+
+_CONSUMABLE_ITEM_CATEGORY_DISPLAY = {
+    "FOOD": " (食料)",
+    "KEY_ITEM": " (重要品・そのまま使える)",
+}
+
+
 # PR β (実験 #29 後続): fatigue tier → 仲間表示用の suffix。
 # 「ok」「tired」は静かに省略 (ノイズになる)、「fatigued」以上だけ表示。
 _FATIGUE_DISPLAY = {
@@ -191,6 +206,34 @@ def _format_item_type_tag(item_type: str) -> str:
     return _ITEM_TYPE_DISPLAY.get(item_type, "")
 
 
+def _format_item_category_tag(category: str) -> str:
+    """scenario item_specs[].category 由来の prompt 用タグ。
+
+    category は ItemType と別軸の作者分類。未知 / 空なら item_type 由来表示へ
+    フォールバックできるよう空文字を返す。
+    """
+    if not category:
+        return ""
+    key = str(category).strip().upper()
+    if not key:
+        return ""
+    return ITEM_CATEGORY_DISPLAY.get(key, "")
+
+
+def _format_consumable_item_category_tag(category: str) -> str:
+    """消費可能 item 用の category 表示。
+
+    category は物語上の分類で、消費可能性とは別軸。消費できる item に
+    非消費品向けの「食べられない」「interact して使う」を出さない。
+    """
+    if not category:
+        return ""
+    key = str(category).strip().upper()
+    if not key:
+        return ""
+    return _CONSUMABLE_ITEM_CATEGORY_DISPLAY.get(key, "")
+
+
 def _format_item_usage_hint(usage_hint: str) -> str:
     """ItemSpec の作者文による用途ヒントを所持品行向けに整形する。
 
@@ -201,6 +244,27 @@ def _format_item_usage_hint(usage_hint: str) -> str:
     if not text:
         return ""
     return f" (用途: {text})"
+
+
+def _format_inventory_item_mark(
+    *,
+    usage_hint: str,
+    category: str,
+    item_type: str,
+) -> str:
+    """所持品の用途・種別表示を usage_hint > category > item_type の順に決める。"""
+    usage_mark = _format_item_usage_hint(usage_hint)
+    if usage_mark:
+        return usage_mark
+    if item_type == "consumable":
+        consumable_category_mark = _format_consumable_item_category_tag(category)
+        if consumable_category_mark:
+            return consumable_category_mark
+        return _format_item_type_tag(item_type)
+    category_mark = _format_item_category_tag(category)
+    if category_mark:
+        return category_mark
+    return _format_item_type_tag(item_type)
 
 
 def _format_object_state(state: Dict[str, Any]) -> str:
@@ -856,16 +920,19 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # Phase D-3a: 腐敗食は (腐敗) を付ける。runtime 側で (spec, is_spoiled)
             # 単位で集約しているので、quantity と (腐敗) の関係は一意に決まる。
             spoiled_mark = " (腐敗)" if entry.is_spoiled else ""
-            # item_type を日本語タグで表示し、LLM が「食べられるもの」と
-            # 「近くのオブジェクトに interact して使う素材・道具」を
-            # リストだけで判断できるようにする。
-            type_mark = _format_item_type_tag(entry.item_type)
-            usage_mark = _format_item_usage_hint(entry.usage_hint)
+            # usage_hint があれば作者文を最優先で表示する。無ければ scenario
+            # item_specs[].category 由来の既定文、category が未知 / 空なら従来の
+            # item_type 由来文へフォールバックする。
+            item_mark = _format_inventory_item_mark(
+                usage_hint=entry.usage_hint,
+                category=entry.category,
+                item_type=entry.item_type,
+            )
             # ``""`` 規約 (PR #639 後続): item 名のみ ``""`` で囲み、
             # x{量} / 種別タグ / 腐敗 タグは囲まない。LLM は「``""`` 内の
             # 値が item_label に渡すべき値」と読み取れる。
             lines.append(
-                f"  - \"{disambiguated_name}\"{qty}{type_mark}{usage_mark}{spoiled_mark}"
+                f"  - \"{disambiguated_name}\"{qty}{item_mark}{spoiled_mark}"
             )
             # 後方互換: 既存 use_item は target.item_instance_id に item_spec_id を
             # 入れる慣習 (名前と内容が乖離しているが、リスクを取らないため触らない)。

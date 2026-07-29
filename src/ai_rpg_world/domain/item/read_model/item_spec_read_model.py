@@ -36,6 +36,9 @@ class ItemSpecReadModel:
     fatigue_recovery: int = 0
     # Issue #794 D: 作者が item spec に書く一般用途ヒント。None なら非表示。
     usage_hint: Optional[str] = None
+    # scenario item_specs[].category。物語上の分類であり、ItemType
+    # (= consume_effect の有無に基づく domain 上の種類) とは別軸。
+    category: str = ""
 
     @classmethod
     def create_from_item_spec(
@@ -55,6 +58,7 @@ class ItemSpecReadModel:
         spoils_after_ticks: Optional[int] = None,
         fatigue_recovery: int = 0,
         usage_hint: Optional[str] = None,
+        category: str = "",
     ) -> "ItemSpecReadModel":
         """ItemSpecからReadModelを作成"""
         return cls(
@@ -73,6 +77,7 @@ class ItemSpecReadModel:
             spoils_after_ticks=spoils_after_ticks,
             fatigue_recovery=fatigue_recovery,
             usage_hint=usage_hint,
+            category=category,
         )
 
     @property
@@ -109,4 +114,5 @@ class ItemSpecReadModel:
             spoils_after_ticks=self.spoils_after_ticks,
             fatigue_recovery=self.fatigue_recovery,
             usage_hint=self.usage_hint,
+            category=self.category,
         )

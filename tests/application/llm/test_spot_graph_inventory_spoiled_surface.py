@@ -6,9 +6,13 @@ inventory_builder が (spec, is_spoiled) で集約することを確認する。
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
+    ITEM_CATEGORY_DISPLAY,
     LabelAllocator,
     RuntimeTargetCollector,
     SpotGraphUiContextBuilder,
@@ -156,6 +160,11 @@ class TestDtoDefaults:
         entry = SpotGraphInventoryItemEntry(item_spec_id=1, name="x", quantity=1)
         assert entry.usage_hint == ""
 
+    def test_inventory_entry_category_default_empty_string(self) -> None:
+        """旧呼び出し側 (category を渡さない) は item_type 由来表示へフォールバックする。"""
+        entry = SpotGraphInventoryItemEntry(item_spec_id=1, name="x", quantity=1)
+        assert entry.category == ""
+
 
 class TestInventoryItemTypeTag:
     """``item_type`` を渡すと所持品行に「食料」「素材」等の用途タグが付与される。
@@ -249,6 +258,174 @@ class TestInventoryItemTypeTag:
         )
         assert "(食料)" in line
         assert "(腐敗)" in line
+
+
+class TestInventoryCategoryTag:
+    """scenario item_specs[].category が ItemType より優先して所持品の種別文言を決める。"""
+
+    def _last_line(self, entry: SpotGraphInventoryItemEntry) -> str:
+        snap = _empty_snapshot(inventory_items=(entry,))
+        builder = SpotGraphUiContextBuilder()
+        allocator = LabelAllocator()
+        collector = RuntimeTargetCollector()
+        lines: list[str] = []
+        builder._build_inventory_section(snap, allocator, collector, lines)
+        return lines[-1]
+
+    @pytest.mark.parametrize(
+        ("category", "expected"),
+        [
+            ("FOOD", " (食料)"),
+            ("MATERIAL", " (素材・そのままは食べられない。焚き火など interact の材料)"),
+            ("TOOL", " (道具・そのままは食べられない。近くのオブジェクトに interact して使う)"),
+            ("KEY_ITEM", " (重要品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)"),
+            ("LORE", " (手がかり・使う物ではない)"),
+            ("DOCUMENT", " (記録・読んで手がかりを得る)"),
+        ],
+    )
+    def test_declared_category_controls_inventory_tag(
+        self, category: str, expected: str
+    ) -> None:
+        """6 種の item category は ItemType 由来ではなく category 由来の文言で表示される。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=10,
+                name="品物",
+                quantity=1,
+                item_type="quest",
+                category=category,
+            )
+        )
+
+        assert expected in line
+
+    def test_usage_hint_overrides_category(self) -> None:
+        """usage_hint があれば category 由来の既定文ではなく作者文を表示する。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=11,
+                name="流木",
+                quantity=1,
+                item_type="quest",
+                category="MATERIAL",
+                usage_hint="火を起こす材料。焚き火跡で interact の材料になる",
+            )
+        )
+
+        assert "用途: 火を起こす材料。焚き火跡で interact の材料になる" in line
+        assert "素材・そのままは食べられない" not in line
+
+    def test_unset_category_falls_back_to_item_type(self) -> None:
+        """category が無ければ従来の item_type 由来タグへフォールバックする。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=12,
+                name="謎の任務品",
+                quantity=1,
+                item_type="quest",
+            )
+        )
+
+        assert "(任務品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)" in line
+
+    def test_unknown_category_falls_back_without_crashing(self) -> None:
+        """未知 category はクラッシュせず item_type 由来タグへフォールバックする。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=13,
+                name="未知分類の品",
+                quantity=1,
+                item_type="quest",
+                category="UNKNOWN_NEW_CATEGORY",
+            )
+        )
+
+        assert "(任務品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)" in line
+
+    def test_lore_does_not_claim_food_or_interact_usage(self) -> None:
+        """LORE は使う物ではないため、食べられない / interact して使うとは案内しない。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=14,
+                name="古い徽章",
+                quantity=1,
+                item_type="quest",
+                category="LORE",
+            )
+        )
+
+        assert "手がかり・使う物ではない" in line
+        assert "食べられない" not in line
+        assert "interact" not in line
+
+    def test_consumable_key_item_does_not_claim_interact_usage(self) -> None:
+        """消費可能な KEY_ITEM は、対応オブジェクトで interact する品とは表示しない。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=15,
+                name="救急用品",
+                quantity=1,
+                item_type="consumable",
+                category="KEY_ITEM",
+            )
+        )
+
+        assert "重要品・そのまま使える" in line
+        assert "食べられない" not in line
+        assert "interact" not in line
+
+    def test_consumable_unknown_category_falls_back_to_consumable_tag(self) -> None:
+        """消費可能品の未知 category は、非消費品文言ではなく consumable 表示へ戻す。"""
+        line = self._last_line(
+            SpotGraphInventoryItemEntry(
+                item_spec_id=16,
+                name="未知分類の薬",
+                quantity=1,
+                item_type="consumable",
+                category="UNKNOWN_NEW_CATEGORY",
+            )
+        )
+
+        assert "(食料)" in line
+        assert "食べられない" not in line
+        assert "interact" not in line
+
+    def test_declared_item_categories_in_scenarios_are_covered(self) -> None:
+        """data/scenarios の item_specs で使う category は表示表に必ず定義する。"""
+        scenario_dir = Path(__file__).resolve().parents[3] / "data" / "scenarios"
+        used: set[str] = set()
+        for path in scenario_dir.glob("*.json"):
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            for item in raw.get("item_specs", ()):
+                if "category" in item:
+                    used.add(str(item["category"]).strip().upper())
+
+        assert used == set(ITEM_CATEGORY_DISPLAY)
+
+    def test_consumable_items_in_scenarios_never_get_non_consumable_usage_text(self) -> None:
+        """consume_effect を持つ item には「食べられない」「interact して使う」を表示しない。"""
+        scenario_dir = Path(__file__).resolve().parents[3] / "data" / "scenarios"
+        checked = 0
+        for path in scenario_dir.glob("*.json"):
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            for idx, item in enumerate(raw.get("item_specs", ())):
+                if item.get("consume_effect") is None:
+                    continue
+                checked += 1
+                line = self._last_line(
+                    SpotGraphInventoryItemEntry(
+                        item_spec_id=idx + 1,
+                        name=str(item.get("name") or item.get("id") or "item"),
+                        quantity=1,
+                        item_type="consumable",
+                        category=str(item.get("category") or ""),
+                        usage_hint=str(item.get("usage_hint") or ""),
+                    )
+                )
+                assert "食べられない" not in line, (path.name, item.get("id"), line)
+                assert "interact して使う" not in line, (path.name, item.get("id"), line)
+
+        assert checked > 0
 
 
 class TestInventoryUsageHint:

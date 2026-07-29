@@ -118,6 +118,10 @@ class SpotGraphInventoryItemEntry:
     # Issue #794 D: item spec 作者文の一般用途ヒント。具体 spot / object 名では
     # なく、所持品欄で「どういう用途か」だけを伝える。空なら非表示。
     usage_hint: str = ""
+    # scenario item_specs[].category。ItemType とは別軸の物語上の分類で、
+    # 所持品欄の既定文言を決めるためだけに使う。空なら item_type 表示へ
+    # フォールバックする。
+    category: str = ""
 
 
 @dataclass(frozen=True)

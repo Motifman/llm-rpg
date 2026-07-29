@@ -157,8 +157,8 @@ class SqliteItemSpecWriter(ItemSpecWriter):
             INSERT INTO game_item_specs (
                 item_spec_id, name, item_type, rarity, is_tradeable, description,
                 max_stack_size, durability_max, equipment_type, is_placeable, placeable_object_type,
-                usage_hint
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                usage_hint, category
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(item_spec_id) DO UPDATE SET
                 name = excluded.name,
                 item_type = excluded.item_type,
@@ -170,7 +170,8 @@ class SqliteItemSpecWriter(ItemSpecWriter):
                 equipment_type = excluded.equipment_type,
                 is_placeable = excluded.is_placeable,
                 placeable_object_type = excluded.placeable_object_type,
-                usage_hint = excluded.usage_hint
+                usage_hint = excluded.usage_hint,
+                category = excluded.category
             """,
             (
                 item_spec_id,
@@ -185,6 +186,7 @@ class SqliteItemSpecWriter(ItemSpecWriter):
                 1 if item_spec.is_placeable else 0,
                 item_spec.placeable_object_type,
                 item_spec.usage_hint or "",
+                item_spec.category or "",
             ),
         )
         self._conn.execute("DELETE FROM game_item_spec_consume_effects WHERE item_spec_id = ?", (item_spec_id,))

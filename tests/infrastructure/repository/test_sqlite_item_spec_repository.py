@@ -66,6 +66,18 @@ def _quest_spec_with_usage_hint(item_spec_id: int, name: str) -> ItemSpec:
     )
 
 
+def _quest_spec_with_category(item_spec_id: int, name: str) -> ItemSpec:
+    return ItemSpec(
+        item_spec_id=ItemSpecId(item_spec_id),
+        name=name,
+        item_type=ItemType.QUEST,
+        rarity=Rarity.RARE,
+        description=f"{name} description",
+        max_stack_size=MaxStackSize(1),
+        category="LORE",
+    )
+
+
 @pytest.fixture
 def sqlite_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
@@ -104,6 +116,20 @@ class TestSqliteItemSpecRepository:
 
         assert loaded is not None
         assert loaded.usage_hint == "火を扱う場所で interact して使う"
+
+    def test_writer_replace_and_find_roundtrip_with_category(
+        self, sqlite_conn: sqlite3.Connection
+    ) -> None:
+        """category は ItemType と別軸の静的定義として SQLite に保存復元される。"""
+        writer = SqliteItemSpecWriter.for_standalone_connection(sqlite_conn)
+        repo = SqliteItemSpecRepository.for_connection(sqlite_conn)
+        writer.replace_spec(_quest_spec_with_category(11, "古い徽章"))
+
+        loaded = repo.find_by_id(ItemSpecId(11))
+
+        assert loaded is not None
+        assert loaded.item_type == ItemType.QUEST
+        assert loaded.category == "LORE"
 
     def test_finders_use_index_columns(
         self, sqlite_conn: sqlite3.Connection

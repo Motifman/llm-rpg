@@ -1924,6 +1924,18 @@ def _migration_v29(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v30(connection: sqlite3.Connection) -> None:
+    """item spec の作者分類 category を静的マスタへ追加する。
+
+    category は ItemType と別軸の物語上の分類で、prompt の所持品表示に使う。
+    既存行は空文字にし、表示側では item_type 由来文言へフォールバックする。
+    """
+    connection.execute(
+        "ALTER TABLE game_item_specs "
+        "ADD COLUMN category TEXT NOT NULL DEFAULT ''"
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -1954,6 +1966,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=27, apply=_migration_v27),
     SqliteMigration(version=28, apply=_migration_v28),
     SqliteMigration(version=29, apply=_migration_v29),
+    SqliteMigration(version=30, apply=_migration_v30),
 )
 
 

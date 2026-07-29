@@ -52,6 +52,21 @@ class TestItemSpec:
 
         assert spec.usage_hint == "火を起こす道具。火を扱う場所で interact して使う"
 
+    def test_create_with_category(self):
+        """category を渡すと、ItemType とは別軸の作者分類として ItemSpec に保持する。"""
+        spec = ItemSpec(
+            item_spec_id=ItemSpecId(103),
+            name="古い徽章",
+            item_type=ItemType.QUEST,
+            rarity=Rarity.COMMON,
+            description="削り跡のある徽章",
+            max_stack_size=MaxStackSize(1),
+            category="LORE",
+        )
+
+        assert spec.item_type == ItemType.QUEST
+        assert spec.category == "LORE"
+
     def test_usage_hint_rejects_whitespace_only(self):
         """usage_hint が空白だけなら、用途文を出したつもりで空表示になるのを防ぐ。"""
         with pytest.raises(ItemSpecValidationException):

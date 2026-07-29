@@ -49,6 +49,9 @@ class ItemSpec:
     # Issue #794 D: 作者が ItemSpec に書く、一般常識としての用途ヒント。
     # 具体 spot / object 名は発見済み情報の領分なのでここには入れない。
     usage_hint: Optional[str] = None
+    # scenario item_specs[].category。ItemType (= 消費可能性や装備性の domain
+    # 分類) とは別軸の作者分類。prompt 表示など読み取り用途に使う。
+    category: str = ""
 
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
@@ -58,6 +61,8 @@ class ItemSpec:
             raise ItemSpecValidationException(f"Item spec: description must not be empty, got '{self.description}'")
         if self.usage_hint is not None and not self.usage_hint.strip():
             raise ItemSpecValidationException("Item spec: usage_hint must not be blank when set")
+        if self.category and not self.category.strip():
+            raise ItemSpecValidationException("Item spec: category must not be blank when set")
         if self.durability_max is not None and self.durability_max <= 0:
             raise ItemSpecValidationException(f"Item spec: durability_max must be positive, got {self.durability_max}")
         if self.spoils_after_ticks is not None and self.spoils_after_ticks <= 0:

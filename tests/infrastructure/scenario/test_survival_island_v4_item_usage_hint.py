@@ -112,3 +112,27 @@ class TestSurvivalIslandV4ItemUsageHint:
             "signal_fire_pit",
         ):
             assert token not in inventory_line
+
+    def test_lore_category_reaches_inventory_prompt_without_false_interact_usage(self) -> None:
+        """古い徽章は LORE として表示し、存在しない interact 用途を案内しない。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        scenario = _load_v4()
+        noah_id = PlayerId(scenario.id_mapper.get_int("player", "noah"))
+        emblem = next(
+            item
+            for item in scenario.item_spec_definitions
+            if item.string_id == "military_emblem"
+        )
+        grant_item_specs_to_inventory(
+            noah_id,
+            (emblem.spec_id,),
+            runtime._item_repo,
+            runtime._item_spec_repo,
+            runtime._player_inventory_repo,
+        )
+        text = runtime.build_llm_context(noah_id).current_state_text
+        inventory_line = next(line for line in text.splitlines() if '"古い徽章"' in line)
+
+        assert "手がかり・使う物ではない" in inventory_line
+        assert "食べられない" not in inventory_line
+        assert "interact" not in inventory_line

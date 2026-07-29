@@ -4076,6 +4076,8 @@ def create_world_runtime(
             fatigue_recovery=item_def.fatigue_recovery,
             # Issue #794 D: item spec 作者文の一般用途ヒント。
             usage_hint=item_def.usage_hint or None,
+            # item_type とは別軸の作者分類。prompt 表示の既定文言にだけ使う。
+            category=item_def.category,
         )
         item_spec_repo.save(spec)
 
@@ -4447,11 +4449,21 @@ def create_world_runtime(
             key = (sid, is_spoiled)
             if key not in seen_groups:
                 name = item.item_spec.name
+                item_spec_definition = item_spec_repo.find_by_id(item.item_spec.item_spec_id)
                 # 実験 #29 後続: item_type を持ち回って prompt 側で type タグ
                 # 表示できるようにする。ItemType.value は "consumable" 等の
                 # 小文字列。enum 経由なので未設定リスクはない。
                 item_type_value = item.item_spec.item_type.value
-                usage_hint_value = item.item_spec.usage_hint or ""
+                usage_hint_value = (
+                    (getattr(item_spec_definition, "usage_hint", None) or "")
+                    if item_spec_definition is not None
+                    else (item.item_spec.usage_hint or "")
+                )
+                category_value = (
+                    str(getattr(item_spec_definition, "category", "") or "")
+                    if item_spec_definition is not None
+                    else ""
+                )
                 seen_groups[key] = [
                     name,
                     0,
@@ -4459,6 +4471,7 @@ def create_world_runtime(
                     iid.value,
                     item_type_value,
                     usage_hint_value,
+                    category_value,
                 ]
             seen_groups[key][1] += 1
         return tuple(
@@ -4471,6 +4484,7 @@ def create_world_runtime(
                 is_spoiled=is_spoiled,
                 item_type=info[4],
                 usage_hint=info[5],
+                category=info[6],
             )
             for (sid, is_spoiled), info in seen_groups.items()
         )
