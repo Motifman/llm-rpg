@@ -19,6 +19,9 @@ class SpotGraphInteractionEntry:
     # prompt 表示専用の前提条件ヒント。tool 解決に使う action_name とは分ける。
     # 例: ("夜不可", "嵐不可") → [fish_deep(夜不可・嵐不可)]
     condition_hints: Tuple[str, ...] = ()
+    # prompt 表示専用の「この瞬間に満たしていない理由」。候補自体は残すが、
+    # 選べる行動の角括弧からは分けて「いまできない」行に表示する。
+    blocking_hints: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

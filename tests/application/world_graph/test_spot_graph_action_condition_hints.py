@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
+    _format_interaction_action_name_with_hints,
 )
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
@@ -134,7 +135,7 @@ def test_unknown_time_and_weather_values_are_not_silently_dropped() -> None:
 
 
 def test_failing_object_state_precondition_remains_with_failure_reason_hint() -> None:
-    """OBJECT_STATE が現在失敗していても action を残し、失敗理由を表示ヒントにする。"""
+    """OBJECT_STATE が現在失敗していても action を残し、失敗理由は blocking_hints にする。"""
     interaction = InteractionDef(
         action_name="open_chest",
         display_label="箱を開ける",
@@ -168,11 +169,12 @@ def test_failing_object_state_precondition_remains_with_failure_reason_hint() ->
 
     assert snap is not None
     assert snap.objects[0].interactions[0].action_name == "open_chest"
-    assert snap.objects[0].interactions[0].condition_hints == ("箱はすでに空っぽだ。",)
+    assert snap.objects[0].interactions[0].condition_hints == ()
+    assert snap.objects[0].interactions[0].blocking_hints == ("箱はすでに空っぽだ。",)
 
 
 def test_failing_object_stock_precondition_remains_with_failure_reason_hint() -> None:
-    """OBJECT_STOCK_AT_LEAST が未達なら action を残し、枯渇理由を表示ヒントにする。"""
+    """OBJECT_STOCK_AT_LEAST が未達なら action を残し、枯渇理由は blocking_hints にする。"""
     object_id = SpotObjectId.create(10)
     interaction = InteractionDef(
         action_name="gather_shellfish",
@@ -212,7 +214,8 @@ def test_failing_object_stock_precondition_remains_with_failure_reason_hint() ->
 
     assert snap is not None
     assert snap.objects[0].interactions[0].action_name == "gather_shellfish"
-    assert snap.objects[0].interactions[0].condition_hints == (
+    assert snap.objects[0].interactions[0].condition_hints == ()
+    assert snap.objects[0].interactions[0].blocking_hints == (
         "貝は採り尽くした。時間が経てば戻る。",
     )
 
@@ -258,3 +261,88 @@ def test_recovered_object_stock_precondition_does_not_show_failure_hint() -> Non
 
     assert snap is not None
     assert snap.objects[0].interactions[0].condition_hints == ()
+    assert snap.objects[0].interactions[0].blocking_hints == ()
+
+
+def test_declarative_and_failing_state_hints_are_split() -> None:
+    """宣言由来制約と現在の失敗理由が同時にある action は、別フィールドに分けて保持する。"""
+    interaction = InteractionDef(
+        action_name="search_beam",
+        display_label="梁を探す",
+        preconditions=(
+            InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT,
+                required_time_of_day_phase="night",
+            ),
+            InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.OBJECT_STATE,
+                target_object_id=SpotObjectId.create(10),
+                required_state={"shelf_searched": False},
+                failure_message="棚を調べた後",
+            ),
+        ),
+        effects=(),
+    )
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=SpotObjectId.create(10),
+                name="崩れた梁",
+                description="太い梁が斜めに崩れている。",
+                object_type=SpotObjectTypeEnum.OTHER,
+                state={"shelf_searched": True},
+                interactions=(interaction,),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    snap = _build_builder(interior).build_snapshot(1)
+
+    assert snap is not None
+    entry = snap.objects[0].interactions[0]
+    assert entry.condition_hints == ("夜不可",)
+    assert entry.blocking_hints == ("棚を調べた後",)
+
+
+def test_fallback_action_text_separates_blocking_reason_from_condition_hints() -> None:
+    """fallback テキストでも、現在失敗している action は「いまできない」表記に分ける。"""
+    interaction = InteractionDef(
+        action_name="search",
+        display_label="棚を探す",
+        preconditions=(
+            InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT,
+                required_time_of_day_phase="night",
+            ),
+            InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.OBJECT_STATE,
+                target_object_id=SpotObjectId.create(10),
+                required_state={"shelf_searched": False},
+                failure_message="棚を調べた後",
+            ),
+        ),
+        effects=(),
+    )
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=SpotObjectId.create(10),
+                name="崩れた梁",
+                description="太い梁が斜めに崩れている。",
+                object_type=SpotObjectTypeEnum.OTHER,
+                state={"shelf_searched": True},
+                interactions=(interaction,),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    assert (
+        _format_interaction_action_name_with_hints(interaction, interior)
+        == "いまできない: search (棚を調べた後)"
+    )
