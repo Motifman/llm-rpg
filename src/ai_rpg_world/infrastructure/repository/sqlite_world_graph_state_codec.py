@@ -44,6 +44,9 @@ from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtm
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
+    StateDisplayRule,
+)
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -398,6 +401,10 @@ def _spot_object_to_dict(o: SpotObject) -> dict[str, Any]:
     }
     if o.unavailable_hint is not None:
         out["unavailable_hint"] = o.unavailable_hint
+    if o.hidden_state_keys:
+        out["hidden_state_keys"] = sorted(o.hidden_state_keys)
+    if o.state_display:
+        out["state_display"] = [_state_display_rule_to_dict(rule) for rule in o.state_display]
     return out
 
 
@@ -411,7 +418,17 @@ def _spot_object_from_dict(d: dict[str, Any]) -> SpotObject:
         interactions=tuple(_interaction_def_from_dict(x) for x in d["interactions"]),
         is_visible=bool(d.get("is_visible", True)),
         unavailable_hint=d.get("unavailable_hint"),
+        hidden_state_keys=frozenset(d.get("hidden_state_keys", ())),
+        state_display=tuple(_state_display_rule_from_dict(x) for x in d.get("state_display", ())),
     )
+
+
+def _state_display_rule_to_dict(rule: StateDisplayRule) -> dict[str, Any]:
+    return {"key": rule.key, "value": rule.value, "text": rule.text}
+
+
+def _state_display_rule_from_dict(d: dict[str, Any]) -> StateDisplayRule:
+    return StateDisplayRule(key=d["key"], value=d.get("value"), text=d["text"])
 
 
 def _interaction_def_to_dict(i: InteractionDef) -> dict[str, Any]:

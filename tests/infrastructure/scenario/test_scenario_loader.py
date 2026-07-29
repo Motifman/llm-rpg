@@ -612,6 +612,74 @@ class TestScenarioLoaderMinimal:
         with pytest.raises(ScenarioLoadError, match="unavailable_hint"):
             ScenarioLoader().load_from_dict(raw)
 
+    def test_object_state_display_rules_are_loaded(self) -> None:
+        """object.state_display は ScenarioLoader 後も SpotObject の表示ルールとして保持される。"""
+        raw = _minimal_scenario()
+        raw["spots"][0]["interior"]["objects"][0]["state"] = {"opened": False}
+        raw["spots"][0]["interior"]["objects"][0]["state_display"] = [
+            {"key": "opened", "value": False, "text": "蓋は閉じたまま"},
+            {"key": "opened", "value": True, "text": "蓋が開いている"},
+        ]
+
+        result = ScenarioLoader().load_from_dict(raw)
+        interior = next(iter(result.interiors.values()))
+        obj = interior.objects[0]
+
+        assert [rule.key for rule in obj.state_display] == ["opened", "opened"]
+        assert [rule.value for rule in obj.state_display] == [False, True]
+        assert [rule.text for rule in obj.state_display] == [
+            "蓋は閉じたまま",
+            "蓋が開いている",
+        ]
+
+    def test_object_hidden_state_keys_are_loaded(self) -> None:
+        """object.hidden_state_keys は ScenarioLoader 後も SpotObject に保持される。"""
+        raw = _minimal_scenario()
+        raw["spots"][0]["interior"]["objects"][0]["hidden_state_keys"] = [
+            "examined",
+            "read",
+        ]
+
+        result = ScenarioLoader().load_from_dict(raw)
+        interior = next(iter(result.interiors.values()))
+
+        assert interior.objects[0].hidden_state_keys == frozenset({"examined", "read"})
+
+    @pytest.mark.parametrize(
+        ("state_display", "message"),
+        [
+            ({}, "state_display"),
+            ([[]], "state_display\\[0\\]"),
+            ([{"value": False, "text": "蓋は閉じたまま"}], "key"),
+            ([{"key": "opened", "value": False}], "text"),
+            ([{"key": "  ", "value": False, "text": "蓋は閉じたまま"}], "key"),
+            ([{"key": "opened", "value": False, "text": "  "}], "text"),
+            ([{"key": "opened", "value": {"raw": False}, "text": "蓋"}], "value"),
+        ],
+    )
+    def test_invalid_object_state_display_raises(
+        self,
+        state_display,
+        message: str,
+    ) -> None:
+        """object.state_display の形が不正なら、ロード時に原因が読める ScenarioLoadError を投げる。"""
+        raw = _minimal_scenario()
+        raw["spots"][0]["interior"]["objects"][0]["state_display"] = state_display
+
+        with pytest.raises(ScenarioLoadError, match=message):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_duplicate_object_state_display_rule_raises(self) -> None:
+        """object.state_display に同じ key/value の rule が複数ある場合は曖昧なので拒否する。"""
+        raw = _minimal_scenario()
+        raw["spots"][0]["interior"]["objects"][0]["state_display"] = [
+            {"key": "opened", "value": False, "text": "蓋は閉じたまま"},
+            {"key": "opened", "value": False, "text": "まだ閉じている"},
+        ]
+
+        with pytest.raises(ScenarioLoadError, match="duplicates"):
+            ScenarioLoader().load_from_dict(raw)
+
     def test_parses_scenario_events(self) -> None:
         result = ScenarioLoader().load_from_dict(_minimal_scenario())
         assert len(result.scenario_events) == 1

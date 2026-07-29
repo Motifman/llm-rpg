@@ -86,7 +86,14 @@ from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtm
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
+from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
+    StateDisplayRule,
+    state_display_value_identity,
+)
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    StateDisplayRuleValidationException,
+)
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import (
     ScenarioIdMapper,
     ScenarioIdMappingError,
@@ -98,6 +105,64 @@ SUPPORTED_FORMAT_VERSIONS = ("1.0",)
 
 class ScenarioLoadError(Exception):
     """シナリオ読み込み中のエラー。"""
+
+
+def _parse_object_state_display(raw: Mapping[str, Any]) -> Tuple[StateDisplayRule, ...]:
+    """object.state_display を StateDisplayRule の列へ変換する。"""
+
+    object_id = raw.get("id")
+    raw_rules = raw.get("state_display", ())
+    if raw_rules == ():
+        return ()
+    if not isinstance(raw_rules, list):
+        raise ScenarioLoadError(f"object {object_id}.state_display must be a list")
+
+    parsed: list[StateDisplayRule] = []
+    seen: set[tuple[str, tuple[type, Any]]] = set()
+    for index, item in enumerate(raw_rules):
+        path = f"object {object_id}.state_display[{index}]"
+        if not isinstance(item, dict):
+            raise ScenarioLoadError(f"{path} must be an object")
+        if "key" not in item:
+            raise ScenarioLoadError(f"{path}.key is required")
+        if "text" not in item:
+            raise ScenarioLoadError(f"{path}.text is required")
+        try:
+            rule = StateDisplayRule(
+                key=item["key"],
+                value=item.get("value"),
+                text=item["text"],
+            )
+        except StateDisplayRuleValidationException as exc:
+            raise ScenarioLoadError(f"{path}: {exc}") from exc
+        duplicate_key = (rule.key, state_display_value_identity(rule.value))
+        if duplicate_key in seen:
+            raise ScenarioLoadError(
+                f"{path} duplicates state_display rule for key={rule.key!r} "
+                f"value={rule.value!r}"
+            )
+        seen.add(duplicate_key)
+        parsed.append(rule)
+    return tuple(parsed)
+
+
+def _parse_object_hidden_state_keys(raw: Mapping[str, Any]) -> frozenset[str]:
+    """object.hidden_state_keys を文字列集合へ変換する。"""
+
+    object_id = raw.get("id")
+    raw_keys = raw.get("hidden_state_keys", ())
+    if raw_keys == ():
+        return frozenset()
+    if not isinstance(raw_keys, list):
+        raise ScenarioLoadError(f"object {object_id}.hidden_state_keys must be a list")
+    parsed: set[str] = set()
+    for index, key in enumerate(raw_keys):
+        if not isinstance(key, str) or not key.strip():
+            raise ScenarioLoadError(
+                f"object {object_id}.hidden_state_keys[{index}] must be a non-empty string"
+            )
+        parsed.add(key)
+    return frozenset(parsed)
 
 
 @dataclass(frozen=True)
@@ -1279,6 +1344,8 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     f"object {raw.get('id')}.unavailable_hint must be a non-empty string"
                 )
+        state_display = _parse_object_state_display(raw)
+        hidden_state_keys = _parse_object_hidden_state_keys(raw)
         return SpotObject(
             object_id=SpotObjectId.create(oid),
             name=raw["name"],
@@ -1289,6 +1356,8 @@ class ScenarioLoader:
             description_variants=variants,
             is_visible=bool(raw.get("is_visible", True)),
             unavailable_hint=unavailable_hint,
+            hidden_state_keys=hidden_state_keys,
+            state_display=state_display,
         )
 
     def _parse_interaction_def(

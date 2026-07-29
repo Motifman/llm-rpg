@@ -564,6 +564,18 @@
             "state": {
               "opened": false
             },
+            "state_display": [
+              {
+                "key": "opened",
+                "value": false,
+                "text": "漂着物はまだ漁られていない"
+              },
+              {
+                "key": "opened",
+                "value": true,
+                "text": "漂着物はすでに漁られている"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "search_debris",
@@ -613,6 +625,18 @@
             "state": {
               "opened": false
             },
+            "state_display": [
+              {
+                "key": "opened",
+                "value": false,
+                "text": "船倉はまだ漁られていない"
+              },
+              {
+                "key": "opened",
+                "value": true,
+                "text": "船倉は漁り終えられている"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "search",
@@ -700,6 +724,21 @@
               "lit": false,
               "last_lit_tick": -100
             },
+            "hidden_state_keys": [
+              "last_lit_tick"
+            ],
+            "state_display": [
+              {
+                "key": "lit",
+                "value": false,
+                "text": "焚き火は消えている"
+              },
+              {
+                "key": "lit",
+                "value": true,
+                "text": "焚き火が燃えている"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "build_fire",
@@ -871,6 +910,18 @@
             "state": {
               "built": false
             },
+            "state_display": [
+              {
+                "key": "built",
+                "value": false,
+                "text": "避難所はまだ組み上がっていない"
+              },
+              {
+                "key": "built",
+                "value": true,
+                "text": "避難所は組み上がっている"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "build_shelter",
@@ -1279,6 +1330,18 @@
             "state": {
               "opened": false
             },
+            "state_display": [
+              {
+                "key": "opened",
+                "value": false,
+                "text": "箱はまだ開いていない"
+              },
+              {
+                "key": "opened",
+                "value": true,
+                "text": "箱は開いている"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "open_chest",
@@ -1333,6 +1396,9 @@
             "state": {
               "read": false
             },
+            "hidden_state_keys": [
+              "read"
+            ],
             "interactions": [
               {
                 "action_name": "read_carving",
@@ -1697,6 +1763,9 @@
               "last_harvest_tick": -100,
               "harvest_count": 0
             },
+            "hidden_state_keys": [
+              "harvest_count"
+            ],
             "interactions": [
               {
                 "action_name": "gather_mushroom",
@@ -1936,6 +2005,9 @@
             "state": {
               "climbed": false
             },
+            "hidden_state_keys": [
+              "climbed"
+            ],
             "interactions": [
               {
                 "action_name": "climb",
@@ -2249,6 +2321,9 @@
             "state": {
               "watched": false
             },
+            "hidden_state_keys": [
+              "watched"
+            ],
             "interactions": [
               {
                 "action_name": "scout_sea",
@@ -2355,6 +2430,18 @@
             "state": {
               "opened": false
             },
+            "state_display": [
+              {
+                "key": "opened",
+                "value": false,
+                "text": "宝箱はまだ開いていない"
+              },
+              {
+                "key": "opened",
+                "value": true,
+                "text": "宝箱は開いている"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "open_chest",
@@ -2456,6 +2543,18 @@
             "state": {
               "lit": false
             },
+            "state_display": [
+              {
+                "key": "lit",
+                "value": false,
+                "text": "狼煙台に火はついていない"
+              },
+              {
+                "key": "lit",
+                "value": true,
+                "text": "狼煙台から煙が上がっている"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "light_signal",
@@ -2667,6 +2766,18 @@
             "state": {
               "opened": false
             },
+            "state_display": [
+              {
+                "key": "opened",
+                "value": false,
+                "text": "コックピットはまだ漁られていない"
+              },
+              {
+                "key": "opened",
+                "value": true,
+                "text": "コックピットは漁り終えられている"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "search_cockpit",
@@ -2742,6 +2853,9 @@
             "state": {
               "examined": false
             },
+            "hidden_state_keys": [
+              "examined"
+            ],
             "interactions": [
               {
                 "action_name": "examine",
@@ -2796,6 +2910,18 @@
             "state": {
               "opened": false
             },
+            "state_display": [
+              {
+                "key": "opened",
+                "value": false,
+                "text": "机の引き出しはまだ漁られていない"
+              },
+              {
+                "key": "opened",
+                "value": true,
+                "text": "机の引き出しは漁り終えられている"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "search_desk",
@@ -2844,6 +2970,9 @@
             "state": {
               "examined": false
             },
+            "hidden_state_keys": [
+              "examined"
+            ],
             "interactions": [
               {
                 "action_name": "examine_photo",
@@ -2878,6 +3007,9 @@
             "state": {
               "shelf_searched": false
             },
+            "hidden_state_keys": [
+              "shelf_searched"
+            ],
             "interactions": [
               {
                 "action_name": "duck_under",
@@ -2962,6 +3094,18 @@
             "state": {
               "opened": false
             },
+            "state_display": [
+              {
+                "key": "opened",
+                "value": false,
+                "text": "床板はまだ剥がされていない"
+              },
+              {
+                "key": "opened",
+                "value": true,
+                "text": "床板は剥がされている"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "pry_floorboard",

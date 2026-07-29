@@ -17,12 +17,16 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SpotObjectValidationException,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
+    StateDisplayRule,
+)
 
 
 def _make(
     state: dict,
     hidden: frozenset = frozenset(),
     unavailable_hint: str | None = None,
+    state_display: tuple[StateDisplayRule, ...] = (),
 ) -> SpotObject:
     return SpotObject(
         object_id=SpotObjectId.create(1),
@@ -33,6 +37,7 @@ def _make(
         interactions=(),
         hidden_state_keys=hidden,
         unavailable_hint=unavailable_hint,
+        state_display=state_display,
     )
 
 
@@ -100,3 +105,65 @@ class TestVisibleState:
         """unavailable_hint が空白だけなら、次の一手が読める表示にならないため拒否する。"""
         with pytest.raises(SpotObjectValidationException):
             _make({"available": False}, unavailable_hint="  ")
+
+    def test_state_display_rule_renders_matching_value_as_tag(self) -> None:
+        """state_display に key/value が一致する rule があれば、生値ではなく作者文言だけを表示する。"""
+        obj = _make(
+            {"opened": False},
+            state_display=(
+                StateDisplayRule("opened", False, "蓋は閉じたまま"),
+            ),
+        )
+
+        assert obj.visible_state() == {
+            VISIBLE_STATE_TAGS_KEY: ("蓋は閉じたまま",)
+        }
+
+    def test_state_display_value_mismatch_remains_raw(self) -> None:
+        """key に rule があっても現在値に対応する rule が無ければ、生値を残して宣言漏れを見える化する。"""
+        obj = _make(
+            {"opened": True},
+            state_display=(
+                StateDisplayRule("opened", False, "蓋は閉じたまま"),
+            ),
+        )
+
+        assert obj.visible_state() == {"opened": True}
+
+    def test_state_display_for_available_overrides_legacy_unavailable_hint(self) -> None:
+        """available に明示 rule があれば、unavailable_hint より作者の state_display を優先する。"""
+        obj = _make(
+            {"available": False},
+            unavailable_hint="今は採れない・時間を置けば戻る",
+            state_display=(
+                StateDisplayRule("available", False, "貝は採り尽くされている"),
+            ),
+        )
+
+        assert obj.visible_state() == {
+            VISIBLE_STATE_TAGS_KEY: ("貝は採り尽くされている",)
+        }
+
+    def test_hidden_state_key_suppresses_state_display_rule(self) -> None:
+        """hidden_state_keys に含まれる key は、state_display rule があっても第三者 prompt に出さない。"""
+        obj = _make(
+            {"read": False},
+            hidden=frozenset({"read"}),
+            state_display=(
+                StateDisplayRule("read", False, "まだ読まれていない"),
+            ),
+        )
+
+        assert obj.visible_state() == {}
+
+    def test_bool_state_display_rule_does_not_match_zero_or_one(self) -> None:
+        """False/True 用 rule は、Python の等価性に引きずられて 0/1 の数値 state に当たらない。"""
+        obj = _make(
+            {"count": 0, "switch": 1},
+            state_display=(
+                StateDisplayRule("count", False, "数値 0 を false と誤認した"),
+                StateDisplayRule("switch", True, "数値 1 を true と誤認した"),
+            ),
+        )
+
+        assert obj.visible_state() == {"count": 0, "switch": 1}

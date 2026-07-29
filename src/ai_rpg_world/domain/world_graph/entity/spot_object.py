@@ -14,6 +14,10 @@ from ai_rpg_world.domain.world_graph.value_object.object_description_variant imp
 )
 from ai_rpg_world.domain.world_graph.value_object.puzzle_state import PuzzleState
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
+    StateDisplayRule,
+    state_display_values_equal,
+)
 from ai_rpg_world.domain.world_graph.value_object.trap_def import TrapDef
 
 
@@ -54,6 +58,9 @@ class SpotObject:
     # effect の visibility (HIDDEN) とは独立で、こちらは「state 値そのもの
     # を周囲のプレイヤーに常に見せない」という静的な視認性属性。
     hidden_state_keys: FrozenSet[str] = frozenset()
+    # state の生値を prompt 用の作者文言へ変換するルール。宣言の無い state は
+    # 従来どおり生値を出し、宣言漏れを検出できるようにする。
+    state_display: Tuple[StateDisplayRule, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -95,10 +102,28 @@ class SpotObject:
             | _STOCK_POOL_STATE_KEYS
             | frozenset({_REACTIVE_LAST_HARVEST_TICK_STATE_KEY})
         )
+        rules_by_key: dict[str, list[StateDisplayRule]] = {}
+        for rule in self.state_display:
+            rules_by_key.setdefault(rule.key, []).append(rule)
+
         visible: Dict[str, Any] = {}
         tags: list[str] = []
         for key, value in self.state.items():
             if key in excluded:
+                continue
+            rules = rules_by_key.get(key, ())
+            if rules:
+                matched_rule = next(
+                    (rule for rule in rules if state_display_values_equal(rule.value, value)),
+                    None,
+                )
+                if matched_rule is not None:
+                    tags.append(matched_rule.text)
+                    continue
+                # ルールがある key でも、現在値に対応する宣言が無ければ生値を出す。
+                # ここで隠すと、シナリオ作者の宣言漏れが prompt からもテストからも
+                # 見えなくなる。
+                visible[key] = value
                 continue
             if key == _REACTIVE_AVAILABILITY_STATE_KEY:
                 if value is False:

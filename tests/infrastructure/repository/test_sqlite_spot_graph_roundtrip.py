@@ -23,6 +23,9 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
+from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
+    StateDisplayRule,
+)
 from ai_rpg_world.infrastructure.repository.spot_graph_persistence_exceptions import (
     SpotGraphConnectionRecordInvariantError,
     SpotGraphSnapshotNotInitializedError,
@@ -278,6 +281,103 @@ def test_sqlite_roundtrip_preserves_object_unavailable_hint() -> None:
 
     assert spot_interior_to_json_dict(loaded) == payload
     assert loaded.objects[0].unavailable_hint == "今は汲めない・時間を置けば戻る"
+
+
+def test_sqlite_encode_includes_object_state_display_rules_and_hidden_keys() -> None:
+    """SpotObject.state_display / hidden_state_keys は SQLite payload へ書き出される。"""
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=SpotObjectId.create(1),
+                name="箱",
+                description="蓋のある箱。",
+                object_type=SpotObjectTypeEnum.CHEST,
+                state={"opened": False, "read": False},
+                interactions=(),
+                hidden_state_keys=frozenset({"read"}),
+                state_display=(
+                    StateDisplayRule("opened", False, "蓋は閉じたまま"),
+                    StateDisplayRule("opened", True, "蓋が開いている"),
+                ),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    payload = spot_interior_to_json_dict(interior)
+
+    assert payload["objects"][0]["hidden_state_keys"] == ["read"]
+    assert payload["objects"][0]["state_display"] == [
+        {"key": "opened", "value": False, "text": "蓋は閉じたまま"},
+        {"key": "opened", "value": True, "text": "蓋が開いている"},
+    ]
+
+
+def test_sqlite_decode_restores_object_state_display_rules_and_hidden_keys() -> None:
+    """SQLite payload から読むと、state_display / hidden_state_keys が prompt 表示に再び効く。"""
+    payload = {
+        "schema_version": 1,
+        "sub_locations": [],
+        "objects": [
+            {
+                "object_id": 1,
+                "name": "箱",
+                "description": "蓋のある箱。",
+                "object_type": "CHEST",
+                "state": {"opened": False, "read": False},
+                "interactions": [],
+                "is_visible": True,
+                "hidden_state_keys": ["read"],
+                "state_display": [
+                    {"key": "opened", "value": False, "text": "蓋は閉じたまま"},
+                    {"key": "opened", "value": True, "text": "蓋が開いている"},
+                ],
+                "ground_items": [],
+            }
+        ],
+        "ground_items": [],
+        "discoverable_items": [],
+    }
+
+    loaded = loads_spot_interior(json.dumps(payload, ensure_ascii=False))
+    obj = loaded.objects[0]
+
+    assert obj.hidden_state_keys == frozenset({"read"})
+    assert [(rule.key, rule.value, rule.text) for rule in obj.state_display] == [
+        ("opened", False, "蓋は閉じたまま"),
+        ("opened", True, "蓋が開いている"),
+    ]
+    assert obj.visible_state() == {"__tags__": ("蓋は閉じたまま",)}
+
+
+def test_sqlite_roundtrip_preserves_object_state_display_rules_and_hidden_keys() -> None:
+    """state_display / hidden_state_keys は保存と読み戻しの両方を通っても失われない。"""
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=SpotObjectId.create(1),
+                name="箱",
+                description="蓋のある箱。",
+                object_type=SpotObjectTypeEnum.CHEST,
+                state={"opened": False, "read": False},
+                interactions=(),
+                hidden_state_keys=frozenset({"read"}),
+                state_display=(
+                    StateDisplayRule("opened", False, "蓋は閉じたまま"),
+                ),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    loaded = loads_spot_interior(dumps_spot_interior(interior))
+
+    assert spot_interior_to_json_dict(loaded) == spot_interior_to_json_dict(interior)
+    assert loaded.objects[0].visible_state() == {"__tags__": ("蓋は閉じたまま",)}
 
 
 def test_find_graph_without_snapshot_raises_specific_exception() -> None:
