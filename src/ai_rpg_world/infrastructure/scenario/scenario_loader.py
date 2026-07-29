@@ -1369,6 +1369,14 @@ class ScenarioLoader:
     ) -> InteractionDef:
         from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 
+        action_name = raw.get("action_name")
+        display_label = raw.get("display_label")
+        if not isinstance(display_label, str) or not display_label.strip():
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}].display_label must be a non-empty string"
+            )
+        display_label = display_label.strip()
+
         preconds = tuple(
             self._parse_interaction_condition(c, mapper)
             for c in raw.get("preconditions", [])
@@ -1411,7 +1419,7 @@ class ScenarioLoader:
         )
         return InteractionDef(
             action_name=raw["action_name"],
-            display_label=raw["display_label"],
+            display_label=display_label,
             preconditions=preconds,
             effects=effects,
             on_failure_observation=on_failure_observation,
