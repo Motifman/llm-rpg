@@ -1,4 +1,9 @@
-"""全シナリオの object.state 生値表示を手動品質確認用に棚卸しする。"""
+"""全シナリオの object.state 生値表示を手動品質確認用に棚卸しする。
+
+一覧を読むときは `uv run pytest tests/quality/test_scenario_state_display_inventory.py
+-m quality -rs` で実行する。`-rs` が無いと pytest の既定表示では件数だけになり、
+棚卸し対象の中身が見えない。
+"""
 
 from __future__ import annotations
 
@@ -14,7 +19,7 @@ _SCENARIOS = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 
 @pytest.mark.quality
 def test_list_raw_visible_state_values_in_all_scenarios() -> None:
-    """v4 以外の scenario に残る raw key=value 表示を、手動品質確認時に一覧化する。"""
+    """v4 以外に残る raw key=value 表示を、`-m quality -rs` 実行で一覧化する。"""
     leaks: list[str] = []
     for path in sorted(_SCENARIOS.glob("*.json")):
         result = ScenarioLoader().load_from_file(path)
@@ -29,4 +34,9 @@ def test_list_raw_visible_state_values_in_all_scenarios() -> None:
                     )
 
     if leaks:
-        pytest.skip("raw visible state values remain:\n" + "\n".join(leaks))
+        pytest.skip(
+            "raw visible state values remain; list with "
+            "`uv run pytest tests/quality/test_scenario_state_display_inventory.py "
+            "-m quality -rs`:\n"
+            + "\n".join(leaks)
+        )
