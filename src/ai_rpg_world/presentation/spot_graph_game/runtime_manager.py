@@ -3080,18 +3080,12 @@ class _WorldLlmWiring:
 
         self.runtime.do_speech(player_id, content, channel_enum, target_player_id_obj)
 
-        # audience フィードバック付き message
-        action_verb = {
-            SpeechChannel.WHISPER: "囁いた",
-            SpeechChannel.SAY: "発言した",
-            SpeechChannel.SHOUT: "叫んだ",
-        }[channel_enum]
         audience_suffix = self._build_audience_summary(
             player_id, channel_enum, target_player_id_obj
         )
         return LlmCommandResultDto(
             success=True,
-            message=f"{action_verb}: {content}{audience_suffix}",
+            message=audience_suffix or "（発話した）",
         )
 
     def _resolve_whisper_target(
@@ -3145,7 +3139,7 @@ class _WorldLlmWiring:
         if self.speech_audience_resolver is None:
             return ""
         from ai_rpg_world.application.speech.services.audience_feedback import (
-            audience_summary_text,
+            compact_audience_summary_text,
         )
         try:
             members = self.speech_audience_resolver.resolve_audience_with_clarity(
@@ -3160,7 +3154,7 @@ class _WorldLlmWiring:
         except Exception:
             logger.exception("speech_audience_resolver.resolve_audience_with_clarity failed")
             return ""
-        return f"（{audience_summary_text(channel, members)}）"
+        return f"（{compact_audience_summary_text(channel, members)}）"
 
     # PR-θ6 (経路統合): _handle_set_sub_location は削除。脱出ランタイムでは
     # set_sub_location は意図的に未対応 (ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS

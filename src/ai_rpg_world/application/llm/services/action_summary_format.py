@@ -1,52 +1,255 @@
-"""行動ログ (直近の出来事) の action_summary を表示用に整形する共有 sanitizer (#552 PR-A)。
+"""行動ログ (直近の出来事) の action_summary を表示用に整形する。
 
 # 何のため
 
-``_format_action_summary`` (full orchestrator) と ``runtime_manager`` (escape の失敗 /
-wait / listen 等の経路) は raw tool args 全体を ``json.dumps`` して action_summary に
-していた。結果 ``target_label`` / ``action_name`` のような outcome args が、
-``intention`` / ``expected_result`` / ``emotion_hint`` の主観入力の生 JSON に埋もれて
-読みにくかった。
+``_format_action_summary`` (full orchestrator) と ``runtime_manager`` は raw tool
+args 全体を ``json.dumps`` して action_summary にしていた。結果として、発話本文・
+メモ本文・心の声など、別の自然文位置に出る情報が JSON にも重複表示されていた。
 
-本 sanitizer は raw args から主観入力 4 つを落とし、``inner_thought`` (従来から常時
-表示) と outcome args だけを残す。``expected_result`` は chunk_encoding 側で
-``[予測: ...]`` として別表記するので、ここで落として二重表示を避ける。
+本モジュールは tool 名ごとの表示関数で、行動を短い自然文にする。表に無い tool
+名は従来の JSON 形式へフォールバックする。これは LLM が ``look_around`` などの
+存在しない tool 名を返す実データがあるためで、表示の失敗で prompt 構築を落とさない。
 
 # 注意 (canonical args ではない)
 
-これは **表示用** の整形であり、``ActionResultEntry.action_summary`` に保存はされるが、
-loop_guard の引数 fingerprint や tool 実行に使う canonical args とは別物。
-fingerprint は ``build_argument_fingerprint`` が raw args から narrative を strip して
-計算するので、本整形の有無に依存しない。
+これは **表示用** の整形であり、``ActionResultEntry.action_summary`` に保存は
+されるが、loop_guard の引数 fingerprint や tool 実行に使う canonical args とは
+別物。fingerprint は ``build_argument_fingerprint`` が raw args から narrative を
+strip して計算するので、本整形の有無に依存しない。
 """
 
 from __future__ import annotations
 
 import json
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
-# action_summary の JSON から落とす主観入力フィールド。
-# - expected_result: chunk_encoding が [予測: ...] で別表記するので二重表示回避で隠す
-# - intention / emotion_hint: episode の why/felt 側の材料で、recent-events の生 JSON には不要
-# - reason: 主に spot_graph_wait の任意理由。escape の do_wait は「待機した（理由: ...）」
-#   という自然言語を action_summary に直接渡す経路 (sanitizer を通らない) なので、raw args
-#   の JSON からこのフィールドを落としても情報は消えない。full orchestrator 等で reason が
-#   raw args に乗る場合も、現状 reason は意思決定に効かない補足なので落として読みやすくする。
-#   将来 outcome に効く reason が出たら hidden から外す (一般名なので注意)。
-# inner_thought は従来から常時プロンプトに出ており、外すと挙動が大きく変わるため残す
-# (削除するなら別 PR / 別判断)。
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MEMO_ADD,
+    TOOL_NAME_MEMO_DONE,
+    TOOL_NAME_MEMO_LIST,
+    TOOL_NAME_MEMORY_EXPLORE_RELATED,
+    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
+    TOOL_NAME_MEMORY_RECALL_EPISODES,
+    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+    TOOL_NAME_SPEECH,
+    TOOL_NAME_SPOT_GRAPH_ATTACK,
+    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_LISTEN,
+    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
+    TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
+    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
+    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_VOTE,
+    TOOL_NAME_SPOT_GRAPH_WAIT,
+)
+
+# action_summary の JSON fallback から落とす主観入力・冗長入力フィールド。
+# - expected_result: chunk_encoding が [予測: ...] で別表記するので二重表示回避
+# - inner_thought: ActionResultEntry.inner_thought から「心の声: ...」として出す
+# - content: speak / memo_add では自然文または別 section に出るため JSON から落とす
+# - reason / intention / emotion_hint: recent-events の生 JSON には不要
 ACTION_SUMMARY_HIDDEN_FIELDS = frozenset(
-    {"reason", "intention", "expected_result", "emotion_hint"}
+    {
+        "content",
+        "reason",
+        "inner_thought",
+        "intention",
+        "expected_result",
+        "emotion_hint",
+    }
+)
+
+ActionSummaryFormatter = Callable[[Mapping[str, Any]], str]
+
+
+def _text(args: Mapping[str, Any], key: str) -> str:
+    raw = args.get(key)
+    if raw is None:
+        return ""
+    return str(raw).strip()
+
+
+def _quote(text: str) -> str:
+    return f"「{text}」" if text else "対象"
+
+
+def _format_speak(args: Mapping[str, Any]) -> str:
+    content = _text(args, "content")
+    channel = _text(args, "channel")
+    if channel == "whisper":
+        target = _text(args, "target_label")
+        if target:
+            return f"{_quote(target)}に囁いた: {_quote(content)}"
+        return f"あなたは囁いた: {_quote(content)}"
+    if channel == "shout":
+        return f"あなたは叫んだ: {_quote(content)}"
+    return f"あなたは言った: {_quote(content)}"
+
+
+def _format_memo_add(args: Mapping[str, Any]) -> str:
+    return "メモを書いた"
+
+
+def _format_memo_done(args: Mapping[str, Any]) -> str:
+    raw_ids = args.get("memo_ids")
+    if isinstance(raw_ids, list):
+        ids = [str(v).strip() for v in raw_ids if str(v).strip()]
+    else:
+        ids = []
+    if not ids:
+        return "メモを完了にした"
+    joined = ", ".join(ids)
+    return f"メモ {len(ids)} 件を完了にした ({joined})"
+
+
+def _format_memo_list(args: Mapping[str, Any]) -> str:
+    return "メモ一覧を確認した"
+
+
+def _format_interact(args: Mapping[str, Any]) -> str:
+    target = _text(args, "target_label")
+    action = _text(args, "action_name")
+    if target and action:
+        return f"{_quote(target)}に {action} した"
+    if target:
+        return f"{_quote(target)}に働きかけた"
+    return "目の前の対象に働きかけた"
+
+
+def _format_travel_to(args: Mapping[str, Any]) -> str:
+    destination = _text(args, "destination_label") or _text(args, "destination_spot_id")
+    return f"{destination}へ移動した" if destination else "移動した"
+
+
+def _format_set_sub_location(args: Mapping[str, Any]) -> str:
+    sub_location = _text(args, "sub_location_label") or _text(args, "sub_location_id")
+    return f"{sub_location}へ位置を移した" if sub_location else "位置を移した"
+
+
+def _format_use_item(args: Mapping[str, Any]) -> str:
+    item = _text(args, "item_label")
+    return f"{_quote(item)}を使った"
+
+
+def _format_drop_item(args: Mapping[str, Any]) -> str:
+    item = _text(args, "item_label")
+    return f"{_quote(item)}を地面に置いた"
+
+
+def _format_pickup_item(args: Mapping[str, Any]) -> str:
+    item = _text(args, "ground_item_label")
+    return f"{_quote(item)}を拾った"
+
+
+def _format_give_item(args: Mapping[str, Any]) -> str:
+    target = _text(args, "target_player_label")
+    item = _text(args, "item_label")
+    if not item:
+        gives = args.get("gives")
+        if isinstance(gives, list) and gives:
+            first = gives[0]
+            if isinstance(first, Mapping):
+                item = _text(first, "item_label")
+                target = target or _text(first, "target_player_label")
+    if target and item:
+        return f"{_quote(target)}に{_quote(item)}を渡した"
+    if target:
+        return f"{_quote(target)}にアイテムを渡した"
+    return "アイテムを渡した"
+
+
+def _format_attack(args: Mapping[str, Any]) -> str:
+    target = _text(args, "target_label")
+    return f"{_quote(target)}を攻撃した"
+
+
+def _format_tend_to_player(args: Mapping[str, Any]) -> str:
+    target = _text(args, "target_player_label")
+    return f"{_quote(target)}を介抱した"
+
+
+def _format_listen(args: Mapping[str, Any]) -> str:
+    return "耳を澄ました"
+
+
+def _format_explore(args: Mapping[str, Any]) -> str:
+    return "この場所を探索した"
+
+
+def _format_wait(args: Mapping[str, Any]) -> str:
+    return "その場で待機した"
+
+
+def _format_prepare_action(args: Mapping[str, Any]) -> str:
+    action_id = _text(args, "action_id")
+    return f"{action_id} を準備した" if action_id else "協力行動を準備した"
+
+
+def _format_vote(args: Mapping[str, Any]) -> str:
+    target = _text(args, "target_player_label")
+    return f"{_quote(target)}へ投票した" if target else "投票した"
+
+
+def _format_report_body(args: Mapping[str, Any]) -> str:
+    target = _text(args, "target_player_label")
+    return f"{_quote(target)}が倒れていると知らせた" if target else "倒れている人を知らせた"
+
+
+ACTION_SUMMARY_FORMATTERS: dict[str, ActionSummaryFormatter] = {
+    TOOL_NAME_MEMO_ADD: _format_memo_add,
+    TOOL_NAME_MEMO_DONE: _format_memo_done,
+    TOOL_NAME_MEMO_LIST: _format_memo_list,
+    TOOL_NAME_SPEECH: _format_speak,
+    TOOL_NAME_SPOT_GRAPH_ATTACK: _format_attack,
+    TOOL_NAME_SPOT_GRAPH_DROP_ITEM: _format_drop_item,
+    TOOL_NAME_SPOT_GRAPH_EXPLORE: _format_explore,
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM: _format_give_item,
+    TOOL_NAME_SPOT_GRAPH_INTERACT: _format_interact,
+    TOOL_NAME_SPOT_GRAPH_LISTEN: _format_listen,
+    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM: _format_pickup_item,
+    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION: _format_prepare_action,
+    TOOL_NAME_SPOT_GRAPH_REPORT_BODY: _format_report_body,
+    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION: _format_set_sub_location,
+    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER: _format_tend_to_player,
+    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO: _format_travel_to,
+    TOOL_NAME_SPOT_GRAPH_USE_ITEM: _format_use_item,
+    TOOL_NAME_SPOT_GRAPH_VOTE: _format_vote,
+    TOOL_NAME_SPOT_GRAPH_WAIT: _format_wait,
+}
+
+# 能動想起系は結果文が本体で、行動名と引数を短く自然文化しても情報量が増えない。
+# JSON fallback を意図的に使うツールとして明示分類し、追加時の判断漏れをテストで
+# 捕まえる。
+INTENTIONAL_ACTION_SUMMARY_FALLBACK_TOOLS = frozenset(
+    {
+        TOOL_NAME_MEMORY_EXPLORE_RELATED,
+        TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+        TOOL_NAME_MEMORY_RECALL_EPISODES,
+        TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
+    }
 )
 
 
 def format_action_summary_for_display(
     tool_name: str, args: Optional[Mapping[str, Any]] = None
 ) -> str:
-    """tool 名 + (主観ノイズを落とした) args から「直近の出来事」用の行動要約文を作る。
+    """tool 名 + args から「直近の出来事」用の行動要約文を作る。"""
+    formatter = ACTION_SUMMARY_FORMATTERS.get(tool_name)
+    if formatter is not None:
+        return formatter(args or {})
+    return _format_action_summary_fallback(tool_name, args)
 
-    主観入力 4 フィールドを除いた args を JSON 化する。残る args が無ければ tool 名だけ。
-    """
+
+def _format_action_summary_fallback(
+    tool_name: str, args: Optional[Mapping[str, Any]] = None
+) -> str:
+    """表に無い tool 名を従来の JSON 形式で安全に表示する。"""
     if not args:
         return f"{tool_name} を実行しました。"
     visible = {k: v for k, v in args.items() if k not in ACTION_SUMMARY_HIDDEN_FIELDS}
@@ -59,4 +262,9 @@ def format_action_summary_for_display(
     return f"{tool_name}({args_str}) を実行しました。"
 
 
-__all__ = ["ACTION_SUMMARY_HIDDEN_FIELDS", "format_action_summary_for_display"]
+__all__ = [
+    "ACTION_SUMMARY_FORMATTERS",
+    "ACTION_SUMMARY_HIDDEN_FIELDS",
+    "INTENTIONAL_ACTION_SUMMARY_FALLBACK_TOOLS",
+    "format_action_summary_for_display",
+]

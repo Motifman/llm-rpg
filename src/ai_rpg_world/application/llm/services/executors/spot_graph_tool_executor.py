@@ -20,7 +20,6 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotFoundException,
 )
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
-    append_inner_thought_to_message,
     exception_result,
     with_inner_thought_empty_warning,
 )
@@ -460,7 +459,7 @@ class SpotGraphToolExecutor:
                 args,
                 LlmCommandResultDto(
                     success=True,
-                    message=append_inner_thought_to_message(base, args),
+                    message=base,
                 ),
             )
         except Exception as e:
@@ -539,9 +538,7 @@ class SpotGraphToolExecutor:
             self._svc.movement.move_to_sub_location(PlayerId(player_id), sub)
             return LlmCommandResultDto(
                 success=True,
-                message=append_inner_thought_to_message(
-                    "サブロケーションを更新しました。", args
-                ),
+                message="サブロケーションを更新しました。",
             )
         except Exception as e:
             return exception_result(e)
@@ -696,7 +693,7 @@ class SpotGraphToolExecutor:
                 args,
                 LlmCommandResultDto(
                     success=True,
-                    message=append_inner_thought_to_message(msg, args),
+                    message=msg,
                 ),
             )
         except InteractionNotAllowedException as exc:
@@ -796,7 +793,7 @@ class SpotGraphToolExecutor:
                 args,
                 LlmCommandResultDto(
                     success=True,
-                    message=append_inner_thought_to_message(msg, args),
+                    message=msg,
                 ),
             )
         except InteractionNotAllowedException as exc:
@@ -960,10 +957,7 @@ class SpotGraphToolExecutor:
                 if self._player_status_repository is None:
                     return LlmCommandResultDto(
                         success=True,
-                        message=append_inner_thought_to_message(
-                            f"{name}を食べてしまった。腐っていたが体への効果は記録されなかった。",
-                            args,
-                        ),
+                        message=f"{name}を食べてしまった。腐っていたが体への効果は記録されなかった。",
                     )
                 status = self._player_status_repository.find_by_id(PlayerId(player_id))
                 if status is not None:
@@ -991,7 +985,7 @@ class SpotGraphToolExecutor:
                 self._maybe_emit_say_inline(player_id, args)
                 return LlmCommandResultDto(
                     success=True,
-                    message=append_inner_thought_to_message(base, args),
+                    message=base,
                 )
             # 通常 (新鮮) パス: ConsumableUsedEvent を発行
             # → ConsumableEffectHandler が HP/MP 回復等を適用
@@ -1019,7 +1013,7 @@ class SpotGraphToolExecutor:
             self._maybe_emit_say_inline(player_id, args)
             return LlmCommandResultDto(
                 success=True,
-                message=append_inner_thought_to_message(base, args),
+                message=base,
             )
         except Exception as e:
             return _use_item_unexpected_exception_result(e, stage="effect_application")
@@ -1051,7 +1045,7 @@ class SpotGraphToolExecutor:
             base = f"アクション「{action_id}」の準備をした。他のプレイヤーが対応する操作を実行できるようになった。"
             return LlmCommandResultDto(
                 success=True,
-                message=append_inner_thought_to_message(base, args),
+                message=base,
             )
         except ValueError as ve:
             # ValueError は registry の引数検証 (action_id 空など) で起きる想定。
@@ -1168,7 +1162,7 @@ class SpotGraphToolExecutor:
             self._maybe_emit_say_inline(player_id, args)
             msg = "; ".join(result.messages) if result.messages else "地面に置いた。"
             return LlmCommandResultDto(
-                success=True, message=append_inner_thought_to_message(msg, args)
+                success=True, message=msg
             )
         except ItemTransferException as e:
             # PR-ε: subclass (SlotIsEmptyError 等) の error_code / message を
@@ -1223,7 +1217,7 @@ class SpotGraphToolExecutor:
             self._maybe_emit_say_inline(player_id, args)
             msg = "; ".join(result.messages) if result.messages else "拾い上げた。"
             return LlmCommandResultDto(
-                success=True, message=append_inner_thought_to_message(msg, args)
+                success=True, message=msg
             )
         except ItemTransferException as e:
             # PR-ε: subclass (GroundItemGoneError / PickupSelfInventoryFullError)
@@ -1407,7 +1401,7 @@ class SpotGraphToolExecutor:
         msg = "give_item 結果:\n" + "\n".join(parts)
         return LlmCommandResultDto(
             success=True,
-            message=append_inner_thought_to_message(msg, args),
+            message=msg,
             trace_payload=trace_payload,
         )
 
@@ -1494,7 +1488,7 @@ class SpotGraphToolExecutor:
             self._apply_fatigue_safe(player_id, self.FATIGUE_COST_ATTACK)
             return LlmCommandResultDto(
                 success=True,
-                message=append_inner_thought_to_message(base, args),
+                message=base,
             )
         except Exception as e:
             return exception_result(e)
@@ -1555,7 +1549,7 @@ class SpotGraphToolExecutor:
             args,
             LlmCommandResultDto(
                 success=True,
-                message=append_inner_thought_to_message(base, args),
+                message=base,
             ),
         )
 
@@ -1595,7 +1589,7 @@ class SpotGraphToolExecutor:
                 args,
                 LlmCommandResultDto(
                     success=True,
-                    message=append_inner_thought_to_message(base, args),
+                    message=base,
                 ),
             )
         except Exception as e:
@@ -1778,7 +1772,7 @@ class SpotGraphToolExecutor:
             self._maybe_emit_say_inline(player_id, args)
             return LlmCommandResultDto(
                 success=True,
-                message=append_inner_thought_to_message(base, args),
+                message=base,
             )
         except Exception as e:
             return exception_result(e)

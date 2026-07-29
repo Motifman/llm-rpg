@@ -1,4 +1,4 @@
-"""subjective_args (U2): raw tool arguments から主観入力 (予測 / 目的 / 感情) を
+"""subjective_args (U2): raw tool arguments から主観入力 (心の声 / 予測 / 目的 / 感情) を
 取り出す共有ヘルパの単体テスト。
 
 full wiring (agent_orchestrator) と escape (runtime_manager) の両経路がこの
@@ -33,19 +33,20 @@ class TestExtractSubjectiveText:
 
 
 class TestExtractSubjectiveActionFields:
-    """3 フィールド一括抽出 (do_* / recorder へ渡す形)。"""
+    """4 フィールド一括抽出 (do_* / recorder へ渡す形)。"""
 
-    def test_extracts_all_three(self) -> None:
-        """expected_result / intention / emotion_hint を dict で返す。"""
+    def test_extracts_all_four(self) -> None:
+        """inner_thought / expected_result / intention / emotion_hint を dict で返す。"""
         out = extract_subjective_action_fields(
             {
                 "expected_result": "封印が解ける",
                 "intention": "封印を調べる",
                 "emotion_hint": "curiosity",
-                "inner_thought": "別フィールドは含めない",
+                "inner_thought": "何か手掛かりがある。",
             }
         )
         assert out == {
+            "inner_thought": "何か手掛かりがある。",
             "expected_result": "封印が解ける",
             "intention": "封印を調べる",
             "emotion_hint": "curiosity",
@@ -55,12 +56,18 @@ class TestExtractSubjectiveActionFields:
         """露出 OFF (キー無し) の現状では全 None になる。"""
         out = extract_subjective_action_fields({"inner_thought": "考えごと"})
         assert out == {
+            "inner_thought": "考えごと",
             "expected_result": None,
             "intention": None,
             "emotion_hint": None,
         }
 
     def test_only_subjective_keys_returned(self) -> None:
-        """inner_thought 等の他キーは返り値に含めない (do_* の余計な kwargs を避ける)。"""
+        """主観入力以外のキーは返り値に含めない (do_* の余計な kwargs を避ける)。"""
         out = extract_subjective_action_fields({"inner_thought": "x", "object_label": "OBJ1"})
-        assert set(out.keys()) == {"expected_result", "intention", "emotion_hint"}
+        assert set(out.keys()) == {
+            "inner_thought",
+            "expected_result",
+            "intention",
+            "emotion_hint",
+        }

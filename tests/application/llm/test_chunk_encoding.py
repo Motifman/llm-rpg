@@ -24,6 +24,7 @@ from ai_rpg_world.application.llm.services.recent_events_formatter import (
 from ai_rpg_world.application.llm.services.sliding_window_memory import (
     DefaultSlidingWindowMemory,
 )
+from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
     ObservationEntry,
@@ -259,6 +260,50 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         text = format_action_result_line_for_recent_events(entry)
         assert "[予測: 相手が振り向く]" in text
         assert "→ [結果]" not in text
+
+    def test_inner_thought_is_rendered_once_as_own_line(self) -> None:
+        """inner_thought は action_summary の JSON ではなく「心の声:」行に 1 回だけ出る。"""
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary='look_around({"target_label":"周囲"}) を実行しました。',
+            result_summary="失敗した",
+            success=False,
+            error_code="UNSUPPORTED_TOOL",
+            inner_thought="周囲を見回したい。",
+        )
+        text = format_action_result_line_for_recent_events(entry)
+        assert text.count("心の声:") == 1
+        assert "心の声: 周囲を見回したい。" in text
+        assert "inner_thought" not in text
+        assert "【心の声】" not in text
+
+    def test_speech_line_keeps_content_in_action_and_compact_audience_in_parentheses(
+        self,
+    ) -> None:
+        """speak は発話本文を action 側に置き、結果行の重複した「発言した: X」は出さない。"""
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="あなたは言った: 「北へ行く」",
+            result_summary="（3 名に届いた）",
+            success=True,
+            tool_name=TOOL_NAME_SPEECH,
+        )
+        text = format_action_result_line_for_recent_events(entry)
+        assert text == "[行動] あなたは言った: 「北へ行く」（3 名に届いた）"
+        assert "→ [結果]" not in text
+
+    def test_speech_line_keeps_degraded_audience_counts(self) -> None:
+        """speak の到達内訳は、ぼんやり / かすかが混ざる場合だけ短く残る。"""
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="あなたは叫んだ: 「集合」",
+            result_summary="（3 名に届いた。ぼんやり=1 / かすか=1）",
+            success=True,
+            tool_name=TOOL_NAME_SPEECH,
+        )
+        text = format_action_result_line_for_recent_events(entry)
+        assert "ぼんやり=1 / かすか=1" in text
+        assert "明瞭=" not in text
 
     def test_naive_and_utc_aware_unified_timeline_sorted_without_type_error(
         self,

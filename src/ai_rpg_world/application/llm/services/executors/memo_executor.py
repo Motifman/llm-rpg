@@ -263,11 +263,7 @@ class MemoToolExecutor:
             )
             return LlmCommandResultDto(
                 success=True,
-                message=(
-                    f"メモを追加しました（ID: {short_memo_id(memo_id)}）。"
-                    "完了したら memo_done でこの ID を指定してください "
-                    "(短縮形でも full ID でも受け付けます)。"
-                ),
+                message=f"メモを追加しました（ID: {short_memo_id(memo_id)}）。",
             )
         except Exception as e:
             return exception_result(e)

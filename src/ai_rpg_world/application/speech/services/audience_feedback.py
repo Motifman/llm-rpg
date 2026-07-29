@@ -93,3 +93,35 @@ def audience_summary_text(
         else ""
     )
     return f"あなたの声は {n} 名に届きました。内訳: {detail}{note}。"
+
+
+def compact_audience_summary_text(
+    channel: SpeechChannel,
+    members: Iterable[SpeechAudienceMember],
+) -> str:
+    """直近出来事向けの短い audience フィードバック。
+
+    全員が明瞭に聞いた場合は人数だけを残す。ぼんやり / かすかが混ざる場合は、
+    次の行動判断に効く低明瞭度の内訳だけを残す。
+    """
+    members_list = list(members)
+    n = len(members_list)
+    if n == 0:
+        return zero_audience_text(channel)
+
+    if channel == SpeechChannel.WHISPER:
+        return "囁きが届いた"
+
+    c_clear = sum(1 for m in members_list if m.clarity == SoundClarityEnum.CLEAR)
+    c_muffled = sum(1 for m in members_list if m.clarity == SoundClarityEnum.MUFFLED)
+    c_faint = sum(1 for m in members_list if m.clarity == SoundClarityEnum.FAINT)
+    if c_clear == n:
+        return f"{n} 名に届いた"
+    if c_faint == n:
+        return f"{n} 名の聴覚範囲には届いたが、内容は伝わっていない"
+    details: list[str] = []
+    if c_muffled:
+        details.append(f"ぼんやり={c_muffled}")
+    if c_faint:
+        details.append(f"かすか={c_faint}")
+    return f"{n} 名に届いた。" + " / ".join(details)

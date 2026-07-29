@@ -1,4 +1,4 @@
-"""raw tool arguments から主観入力 (予測 / 目的 / 感情) を取り出す共有ヘルパ (U2)。
+"""raw tool arguments から主観入力 (心の声 / 予測 / 目的 / 感情) を取り出す共有ヘルパ (U2)。
 
 full wiring の ``agent_orchestrator._extract_subjective_text`` をここに移し、
 escape (runtime_manager) 経路からも同じ抽出ルールを使えるようにする。full wiring は
@@ -13,7 +13,12 @@ from __future__ import annotations
 from typing import Any, Dict, Mapping, Optional
 
 # 露出スキーマと一致させる正規キー名 (tool_catalog.subjective_action と対応)。
-SUBJECTIVE_ACTION_FIELD_KEYS = ("expected_result", "intention", "emotion_hint")
+SUBJECTIVE_ACTION_FIELD_KEYS = (
+    "inner_thought",
+    "expected_result",
+    "intention",
+    "emotion_hint",
+)
 
 
 def extract_subjective_text(arguments: Mapping[str, Any], key: str) -> Optional[str]:
@@ -31,7 +36,7 @@ def extract_subjective_text(arguments: Mapping[str, Any], key: str) -> Optional[
 def extract_subjective_action_fields(
     arguments: Mapping[str, Any],
 ) -> Dict[str, Optional[str]]:
-    """expected_result / intention / emotion_hint を一括抽出して dict で返す。
+    """inner_thought / expected_result / intention / emotion_hint を一括抽出して dict で返す。
 
     ``do_*`` / recorder にそのまま ``**fields`` で渡せる形。露出 OFF (キー無し)
     の現状では全 None になる。

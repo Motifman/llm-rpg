@@ -82,6 +82,7 @@ class TestTodoToolExecutorAdd:
         assert result.success is True
         assert "メモを追加しました" in result.message
         assert "ID:" in result.message
+        assert "完了したら memo_done" not in result.message
 
     def test_add_empty_content_returns_todo_error(self, executor_with_store):
         result = executor_with_store._execute_memo_add(1, {"content": "   "})

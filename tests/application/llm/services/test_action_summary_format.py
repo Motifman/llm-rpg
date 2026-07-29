@@ -1,17 +1,27 @@
-"""action_summary の表示整形 (#552 PR-A 再実装)。
-
-行動ログ (直近の出来事) の action_summary から主観入力 (intention /
-expected_result / emotion_hint / reason) の生 JSON ノイズを落とし、inner_thought と
-結果に効く args は残す共有 sanitizer。expected_result は chunk_encoding 側で
-``[予測: ...]`` として別表記するので、ここでは隠す (二重表示を避ける)。
-"""
+"""直近出来事に保存する action_summary の自然文整形を保証する。"""
 
 from ai_rpg_world.application.llm.llm_argument_fingerprint import (
     build_argument_fingerprint,
 )
 from ai_rpg_world.application.llm.services.action_summary_format import (
+    ACTION_SUMMARY_FORMATTERS,
     ACTION_SUMMARY_HIDDEN_FIELDS,
+    INTENTIONAL_ACTION_SUMMARY_FALLBACK_TOOLS,
     format_action_summary_for_display,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
+from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+    get_spot_graph_specs,
+)
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MEMO_ADD,
+    TOOL_NAME_MEMO_DONE,
+    TOOL_NAME_SPEECH,
+    TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_LISTEN,
+    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
 )
 
 
@@ -25,60 +35,122 @@ _FULL_ARGS = {
 }
 
 
-class TestFormatActionSummaryForDisplay:
-    """主観ノイズを落とし inner_thought と outcome args を残す。"""
-
-    def test_hides_subjective_noise_keeps_inner_thought_and_outcome_args(self) -> None:
-        """intention/expected_result/emotion_hint は出ず、inner_thought と outcome は残る。"""
-        out = format_action_summary_for_display("interact", _FULL_ARGS)
-        assert "target_label" in out
-        assert "OBJ1" in out
-        assert "action_name" in out
-        # inner_thought は常時表示の挙動を維持するため残す
-        assert "inner_thought" in out
-        assert "何か手がかりがあるはずだ" in out
-        # 主観ノイズは行動ログに出さない
-        assert "intention" not in out
-        assert "祭壇の封印の手がかりを探す" not in out
-        assert "expected_result" not in out
-        assert "祭壇から封印の手がかりが得られる" not in out
-        assert "emotion_hint" not in out
-        assert "curiosity" not in out
-
-    def test_hidden_fields_set_is_the_four_subjective_inputs(self) -> None:
-        """隠すのは reason / intention / expected_result / emotion_hint の4つ (inner_thought は含まない)。"""
-        assert ACTION_SUMMARY_HIDDEN_FIELDS == frozenset(
-            {"reason", "intention", "expected_result", "emotion_hint"}
+def _all_declared_tool_names() -> set[str]:
+    spot = {definition.name for definition, _ in get_spot_graph_specs()}
+    memory = {
+        definition.name
+        for definition, _ in get_memory_specs(
+            memo_enabled=True,
+            episodic_recall_enabled=True,
+            recall_by_handle_enabled=True,
+            episodic_explore_related_enabled=True,
+            semantic_search_enabled=True,
         )
-        assert "inner_thought" not in ACTION_SUMMARY_HIDDEN_FIELDS
+    }
+    return spot | memory
 
-    def test_reason_is_hidden(self) -> None:
-        """reason (主に spot_graph_wait の任意理由) は action JSON から落とす。
 
-        wait の result_summary 側に「理由: ...」が残るので情報は消えにくい。
-        将来 outcome-affecting な reason が出たら再検討する。
-        """
-        out = format_action_summary_for_display("wait", {"reason": "様子を見る"})
-        assert out == "wait を実行しました。"
+class TestFormatActionSummaryForDisplay:
+    """各 tool の行動要約が自然文か明示フォールバックのどちらかになることを保証する。"""
+
+    def test_all_tools_are_explicitly_classified_for_natural_text_or_fallback(
+        self,
+    ) -> None:
+        """新 tool を足したら自然文あり / 意図的フォールバックのどちらかに分類しないと落ちる。"""
+        natural = set(ACTION_SUMMARY_FORMATTERS)
+        fallback = set(INTENTIONAL_ACTION_SUMMARY_FALLBACK_TOOLS)
+        all_tools = _all_declared_tool_names()
+
+        assert natural | fallback == all_tools
+        assert natural & fallback == set()
+
+    def test_natural_text_examples_for_high_volume_tools(self) -> None:
+        """speak / memo / spot action は JSON ではなく短い自然文になる。"""
+        assert (
+            format_action_summary_for_display(
+                TOOL_NAME_SPEECH,
+                {"channel": "say", "content": "北へ行く"},
+            )
+            == "あなたは言った: 「北へ行く」"
+        )
+        assert (
+            format_action_summary_for_display(TOOL_NAME_MEMO_ADD, {"content": "長い本文"})
+            == "メモを書いた"
+        )
+        assert (
+            format_action_summary_for_display(
+                TOOL_NAME_MEMO_DONE,
+                {"memo_ids": ["bb0aaa", "88cd0a", "bda741"]},
+            )
+            == "メモ 3 件を完了にした (bb0aaa, 88cd0a, bda741)"
+        )
+        assert (
+            format_action_summary_for_display(
+                TOOL_NAME_SPOT_GRAPH_INTERACT,
+                {"target_label": "流木の山", "action_name": "gather"},
+            )
+            == "「流木の山」に gather した"
+        )
+        assert (
+            format_action_summary_for_display(
+                TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+                {"destination_label": "干潟"},
+            )
+            == "干潟へ移動した"
+        )
+        assert (
+            format_action_summary_for_display(
+                TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+                {"item_label": "貝"},
+            )
+            == "「貝」を使った"
+        )
+        assert (
+            format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_LISTEN, {})
+            == "耳を澄ました"
+        )
+        assert (
+            format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_EXPLORE, {})
+            == "この場所を探索した"
+        )
+
+    def test_hidden_fields_include_inner_thought_and_duplicate_content(self) -> None:
+        """JSON フォールバックから心の声・発話本文・メモ本文・予測などの重複入力を落とす。"""
+        assert ACTION_SUMMARY_HIDDEN_FIELDS == frozenset(
+            {
+                "content",
+                "reason",
+                "inner_thought",
+                "intention",
+                "expected_result",
+                "emotion_hint",
+            }
+        )
+
+    def test_unknown_tool_falls_back_without_exposing_hidden_fields(self) -> None:
+        """look_around のような幻覚 tool 名でも例外を投げず、隠すべき入力は JSON に出さない。"""
+        out = format_action_summary_for_display(
+            "look_around",
+            {
+                "content": "本文",
+                "inner_thought": "考え",
+                "expected_result": "予測",
+                "target_label": "周囲",
+            },
+        )
+        assert out == 'look_around({"target_label": "周囲"}) を実行しました。'
+        assert "content" not in out
+        assert "inner_thought" not in out
+        assert "expected_result" not in out
 
     def test_no_args_returns_bare_summary(self) -> None:
-        """args が空なら tool 名だけ。"""
-        assert (
-            format_action_summary_for_display("wait", None)
-            == "wait を実行しました。"
-        )
-
-    def test_only_subjective_args_collapses_to_bare_summary(self) -> None:
-        """outcome args が無く主観だけなら、落とした結果 tool 名だけになる。"""
-        out = format_action_summary_for_display(
-            "noop_tool", {"intention": "x", "emotion_hint": "neutral"}
-        )
-        assert out == "noop_tool を実行しました。"
+        """args が空なら自然文 formatter は空入力向けの短文を返す。"""
+        assert format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_EXPLORE, None) == "この場所を探索した"
 
     def test_does_not_mutate_input_args(self) -> None:
-        """入力 args を破壊しない (sanitizer は新 dict を作る / immutable)。"""
+        """入力 args を破壊しない。"""
         args = dict(_FULL_ARGS)
-        format_action_summary_for_display("interact", args)
+        format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_INTERACT, args)
         assert args == _FULL_ARGS
 
     def test_fingerprint_is_independent_of_display(self) -> None:
@@ -87,5 +159,4 @@ class TestFormatActionSummaryForDisplay:
         fp_outcome_only = build_argument_fingerprint(
             {"target_label": "OBJ1", "action_name": "inspect"}
         )
-        # narrative strip 後は同一 = 表示をどう整形しても loop_guard は不変
         assert fp_full == fp_outcome_only
