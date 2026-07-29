@@ -320,6 +320,16 @@ def _format_action_name_with_condition_hints(interaction: Any) -> str:
     return f"{action_name}({'・'.join(rendered_hints)})"
 
 
+def _format_blocked_action_name_with_hints(interaction: Any) -> str:
+    """いま満たしていない理由付きで action_name を整形する。"""
+    action_name = str(getattr(interaction, "action_name", ""))
+    hints = tuple(getattr(interaction, "blocking_hints", ()) or ())
+    rendered_hints = tuple(str(h).strip() for h in hints if str(h).strip())
+    if not rendered_hints:
+        return action_name
+    return f"{action_name} ({'・'.join(rendered_hints)})"
+
+
 class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     """スポットグラフのスナップショットにラベルを付与する UiContextBuilder。
 
@@ -592,6 +602,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             action_labels: list[str] = [
                 _format_action_name_with_condition_hints(inter)
                 for inter in entry.interactions
+                if not tuple(getattr(inter, "blocking_hints", ()) or ())
+            ]
+            blocked_action_labels: list[str] = [
+                _format_blocked_action_name_with_hints(inter)
+                for inter in entry.interactions
+                if tuple(getattr(inter, "blocking_hints", ()) or ())
             ]
             act_str = f" [{', '.join(action_labels)}]" if action_labels else ""
             desc_part = f" — {entry.description}" if entry.description else ""
@@ -604,6 +620,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             lines.append(
                 f"  - \"{disambiguated_name}\"{state_part}{desc_part}{act_str}"
             )
+            if blocked_action_labels:
+                lines.append(f"      いまできない: {'、'.join(blocked_action_labels)}")
             collector.add(
                 label,
                 ToolRuntimeTargetDto(
@@ -666,7 +684,10 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             return
         # PR 6 (#404 後続): "P1: リン" → "リン"。同名 player は scenario で
         # 避ける運用だが、防御的に ``#N`` 区別を入れておく。
-        lines.append("同じ場所にいるプレイヤー:")
+        lines.append(
+            "同じ場所にいるプレイヤー: "
+            "(倒れていない相手には give_item で所持品を直接渡せる)"
+        )
         entity_names = [
             (e.display_name or f"プレイヤー({e.entity_id})")
             for e in snap.nearby_entities
@@ -697,16 +718,6 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 # 見せず、バンドに応じた様子の suffix だけを足す。
                 stagnation_suffix = _format_stagnation_suffix(entry.stagnation_band)
                 suffix = fatigue_suffix + stagnation_suffix
-            # P1-D (#785 後続): 同席者は give_item の有効な相手でもある。
-            # 発話の相手として名前が見えても、所持アイテムを直接渡せる手がかり
-            # として読まれず、食料や回復アイテムの共有が行動候補に上がらない
-            # 失敗があったため、同席者行に明示する。ただし死亡 / ダウン中の
-            # 相手は give_item の対象にできないので affordance を出さない。
-            give_item_suffix = (
-                " (give_item で所持アイテムを直接渡せる相手)"
-                if not is_dead and not entry.is_down
-                else ""
-            )
             # 行動不能 (死亡 / ダウン) の相手が持っているものを見せる。
             #
             # 実 run では、山頂で倒れた仲間が狼煙に要る流木を持ったままで、
@@ -753,7 +764,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             )
             lines.append(
                 f"  - \"{disambiguated_name}\""
-                f"{suffix}{carried_suffix}{give_item_suffix}{familiarity_suffix}"
+                f"{suffix}{carried_suffix}{familiarity_suffix}"
                 f"{action_suffix}"
             )
             collector.add(

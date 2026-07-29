@@ -1079,3 +1079,26 @@ v4 ではこの変更により、次の本命 run で拠点から「切り立っ
 既定値は変えず、`validate_spot_map` が屋内扱い spot と `is_outdoor` 未宣言 spot を
 info / metrics に出す。シナリオ作者が map 検査時に「本当に屋内扱いでよいか」を確認
 できるようにし、既存シナリオの意味を反転させない。
+
+## 36. いまできない object action は候補から消さず、選べる行動とは別行に出す
+
+object 行の `[...]` は LLM にとって「ここから action_name を選ぶ」欄として働く。
+その中に `search(棚を調べた後)` のような現在必ず失敗する action を並べると、
+選べる行動に見える。一方で、候補から消すと説明文だけが操作を誘う状態になり、
+存在しない action_name を発明する実測がある。
+
+そのため、`SpotGraphInteractionEntry` ではヒントを 2 種に分ける。
+
+- `condition_hints`: 時刻・天候・明るさのような宣言由来の制約。選べる行動欄の
+  `action(夜不可)` に残す
+- `blocking_hints`: OBJECT_STATE や OBJECT_STOCK_AT_LEAST のように、現在値を読んだ
+  結果いま満たしていない理由。`[...]` から外し、`いまできない:` 行へ出す
+
+`ToolRuntimeTargetDto.available_interactions` は表示とは独立して、従来どおり全
+action_name を持つ。これは resolver の入力候補であり、prompt の整形都合で削っては
+いけない。表示は「選べるもの」と「いまできないもの」を分けるが、解決可能な候補集合は
+変えない。
+
+同席者への `give_item` 手がかりも、各 player 行に同じ文を繰り返さず見出しへ集約する。
+ただし死亡・ダウン中の相手には渡せないため、見出し文は「倒れていない相手には」と
+条件を含める。行ごとの死亡・ダウン表示と所持品表示は維持する。
