@@ -97,9 +97,9 @@ class TestNearbyEntityIsDown:
         text = dto.current_state_text
         # エイダだけにダウン接尾辞が付く。
         assert '"エイダ" (倒れて動かない)' in text
-        # ノア行には P1-D の give_item 手がかりは付くが、ダウン接尾辞は付かない。
-        assert (
-            '"ノア" (give_item で所持アイテムを直接渡せる相手)' in text
-        )
+        # give_item 手がかりは見出しに集約し、ノア行にはダウン接尾辞を付けない。
+        assert "倒れていない相手には give_item で所持品を直接渡せる" in text
+        assert '"ノア"' in text
         noah_line = next(line for line in text.splitlines() if '"ノア"' in line)
         assert "倒れて動かない" not in noah_line
+        assert "give_item" not in noah_line

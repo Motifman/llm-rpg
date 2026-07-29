@@ -170,7 +170,7 @@ class TestObjectSectionQuotesAndActionSimplification:
         )
 
     def test_failed_object_state_condition_hint_is_prompt_only(self) -> None:
-        """OBJECT_STATE 失敗理由は prompt の action 表示だけに付き、tool 候補は action_name のまま残る。"""
+        """OBJECT_STATE 失敗理由は「いまできない」行に出し、tool 候補は action_name のまま残る。"""
         snap = SpotGraphPlayerSnapshotDto(
             current_spot_id=1,
             current_spot_name="船倉",
@@ -185,7 +185,11 @@ class TestObjectSectionQuotesAndActionSimplification:
                         SpotGraphInteractionEntry(
                             action_name="open_chest",
                             display_label="箱を開ける",
-                            condition_hints=("箱はすでに空っぽだ。",),
+                            blocking_hints=("箱はすでに空っぽだ。",),
+                        ),
+                        SpotGraphInteractionEntry(
+                            action_name="examine",
+                            display_label="調べる",
                         ),
                     ),
                 ),
@@ -193,9 +197,13 @@ class TestObjectSectionQuotesAndActionSimplification:
         )
         result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
 
-        assert '[open_chest(箱はすでに空っぽだ。)]' in result.current_state_text
+        assert '"古い箱" — ふたの開いた箱。 [examine]' in result.current_state_text
+        assert "      いまできない: open_chest (箱はすでに空っぽだ。)" in (
+            result.current_state_text
+        )
         assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
             "open_chest",
+            "examine",
         )
         assert all(
             "箱はすでに空っぽ" not in action
@@ -205,7 +213,7 @@ class TestObjectSectionQuotesAndActionSimplification:
         )
 
     def test_failed_object_stock_condition_hint_is_prompt_only(self) -> None:
-        """OBJECT_STOCK_AT_LEAST 失敗理由は prompt の action 表示だけに付く。"""
+        """OBJECT_STOCK_AT_LEAST 失敗理由は選べる行動欄から分けて表示する。"""
         snap = SpotGraphPlayerSnapshotDto(
             current_spot_id=1,
             current_spot_name="干潟",
@@ -220,7 +228,7 @@ class TestObjectSectionQuotesAndActionSimplification:
                         SpotGraphInteractionEntry(
                             action_name="gather_shellfish",
                             display_label="貝を採る",
-                            condition_hints=("貝は採り尽くした。時間が経てば戻る。",),
+                            blocking_hints=("貝は採り尽くした。時間が経てば戻る。",),
                         ),
                     ),
                 ),
@@ -229,9 +237,10 @@ class TestObjectSectionQuotesAndActionSimplification:
         result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
 
         assert (
-            "[gather_shellfish(貝は採り尽くした。時間が経てば戻る。)]"
+            "いまできない: gather_shellfish (貝は採り尽くした。時間が経てば戻る。)"
             in result.current_state_text
         )
+        assert "[gather_shellfish" not in result.current_state_text
         assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
             "gather_shellfish",
         )
@@ -241,6 +250,101 @@ class TestObjectSectionQuotesAndActionSimplification:
                 "OBJ1"
             ].available_interactions
         )
+
+    def test_action_with_condition_and_blocking_hints_is_rendered_as_blocked(self) -> None:
+        """宣言由来制約と現在の失敗理由を両方持つ action は、いまできない側にだけ出す。"""
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="小屋",
+            current_spot_description="",
+            travel_status_line=None,
+            objects=(
+                SpotGraphObjectEntry(
+                    object_id=10,
+                    name="崩れた梁",
+                    description="太い梁が斜めに崩れている。",
+                    interactions=(
+                        SpotGraphInteractionEntry(
+                            action_name="search",
+                            display_label="棚を探す",
+                            condition_hints=("夜不可",),
+                            blocking_hints=("棚を調べた後",),
+                        ),
+                        SpotGraphInteractionEntry(
+                            action_name="examine",
+                            display_label="調べる",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
+
+        assert (
+            '"崩れた梁" — 太い梁が斜めに崩れている。 [examine]'
+            in result.current_state_text
+        )
+        assert "      いまできない: search (棚を調べた後)" in result.current_state_text
+        assert "search(夜不可" not in result.current_state_text
+        assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
+            "search",
+            "examine",
+        )
+
+    def test_all_blocked_actions_do_not_render_empty_brackets(self) -> None:
+        """全 action がいまできない側に回るとき、空の `[]` は表示しない。"""
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="小屋",
+            current_spot_description="",
+            travel_status_line=None,
+            objects=(
+                SpotGraphObjectEntry(
+                    object_id=10,
+                    name="崩れた梁",
+                    description="太い梁が斜めに崩れている。",
+                    interactions=(
+                        SpotGraphInteractionEntry(
+                            action_name="search",
+                            display_label="棚を探す",
+                            blocking_hints=("棚を調べた後",),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        text = _build(snap)
+
+        assert '"崩れた梁" — 太い梁が斜めに崩れている。' in text
+        assert "[]" not in text
+        assert "[ ]" not in text
+        assert "      いまできない: search (棚を調べた後)" in text
+
+    def test_no_blocked_actions_do_not_render_blocked_line(self) -> None:
+        """いまできない action が無ければ、追加行自体を出さない。"""
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="浜辺",
+            current_spot_description="",
+            travel_status_line=None,
+            objects=(
+                SpotGraphObjectEntry(
+                    object_id=10,
+                    name="流木の山",
+                    description="",
+                    interactions=(
+                        SpotGraphInteractionEntry(
+                            action_name="gather",
+                            display_label="拾う",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        text = _build(snap)
+
+        assert "[gather]" in text
+        assert "いまできない:" not in text
 
     def test_action(self) -> None:
         """interactions が空の object は ``[]`` や ``[-]`` を出さず、シンプル

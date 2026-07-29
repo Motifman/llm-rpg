@@ -77,7 +77,7 @@ class TestNearbyEntityLabeling:
         assert targets["P2"].player_id == 3
 
     def test_same_spot_players_show_give_item_affordance(self) -> None:
-        """同席者の行には、所持アイテムを直接渡せる相手であることを明示する。"""
+        """同席者の見出しには、倒れていない相手へ所持品を直接渡せることを 1 回だけ示す。"""
         dto = _make_dto(
             SpotGraphNearbyEntityEntry(entity_id=2, display_name="リン"),
         )
@@ -85,13 +85,34 @@ class TestNearbyEntityLabeling:
         result = SpotGraphUiContextBuilder().build("base", dto)
 
         assert (
-            '- "リン" (give_item で所持アイテムを直接渡せる相手)'
+            "同じ場所にいるプレイヤー: "
+            "(倒れていない相手には give_item で所持品を直接渡せる)"
             in result.current_state_text
+        )
+        assert '- "リン"' in result.current_state_text
+        assert (
+            '- "リン" (give_item で所持アイテムを直接渡せる相手)'
+            not in result.current_state_text
         )
         assert "他のプレイヤーはこのスポットにいない" not in result.current_state_text
 
+    def test_give_item_affordance_header_is_rendered_once_for_multiple_players(self) -> None:
+        """同席者が複数人いても、give_item 注記は見出しに 1 回だけ出る。"""
+        dto = _make_dto(
+            SpotGraphNearbyEntityEntry(entity_id=2, display_name="リン"),
+            SpotGraphNearbyEntityEntry(entity_id=3, display_name="カイト"),
+            SpotGraphNearbyEntityEntry(entity_id=4, display_name="ミナ", is_down=True),
+        )
+
+        result = SpotGraphUiContextBuilder().build("base", dto)
+
+        assert result.current_state_text.count("give_item で所持品を直接渡せる") == 1
+        assert '- "リン"' in result.current_state_text
+        assert '- "カイト"' in result.current_state_text
+        assert '- "ミナ" (倒れて動かない) 〔手ぶら〕' in result.current_state_text
+
     def test_dead_or_down_players_do_not_show_give_item_affordance(self) -> None:
-        """死亡・ダウン中の同席者には、直接渡せる相手という affordance を出さない。"""
+        """死亡・ダウン中の行には、直接渡せる相手という affordance を出さない。"""
         dto = _make_dto(
             SpotGraphNearbyEntityEntry(
                 entity_id=2, display_name="リン", is_dead=True
@@ -106,6 +127,13 @@ class TestNearbyEntityLabeling:
         assert '- "リン" (死亡している)' in result.current_state_text
         assert '- "カイト" (倒れて動かない)' in result.current_state_text
         assert "give_item で所持アイテムを直接渡せる相手" not in result.current_state_text
+
+    def test_absent_players_do_not_show_give_item_affordance_header(self) -> None:
+        """同席者がいなければ、give_item 注記も出さない。"""
+        result = SpotGraphUiContextBuilder().build("base", _make_dto())
+
+        assert "他のプレイヤーはこのスポットにいない" in result.current_state_text
+        assert "give_item" not in result.current_state_text
 
     def test_display_name_empty_fallback_label(self) -> None:
         """display name が空でも fallback ラベルになる。"""

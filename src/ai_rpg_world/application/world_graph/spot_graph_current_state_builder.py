@@ -164,34 +164,44 @@ _STATUS_EFFECT_LABELS: dict[str, str] = {
 
 def _interaction_condition_hints(
     interaction,
-    interior=None,
-    *,
-    current_tick: Optional[int] = None,
 ) -> tuple[str, ...]:
-    """物体 action 表示用のヒントを組む。
+    """物体 action 表示用の宣言由来ヒントを組む。
 
     宣言だけから決まるぶん (時刻 / 天候 / 明るさ) は
     ``declarative_condition_hints`` に委譲する。同席者行の対人 action も
     同じ関数を使うので、書式と語彙が経路ごとにずれない。
+    """
+    return tuple(declarative_condition_hints(interaction))
+
+
+def _interaction_blocking_hints(
+    interaction,
+    interior=None,
+    *,
+    current_tick: Optional[int] = None,
+) -> tuple[str, ...]:
+    """物体 action 表示用の「いま満たしていない理由」を組む。
 
     HAS_ITEM は他の表示や remediation と重複するため物体行では出さない
-    (= resolver を渡さない)。OBJECT_STATE は現在失敗している場合だけ
-    failure_message を添え、action 候補自体は残す。候補集合を消すと存在
-    しない操作名の発明につながるため。
+    (= resolver を渡さない)。OBJECT_STATE / OBJECT_STOCK_AT_LEAST は現在
+    失敗している場合だけ failure_message を添え、action 候補自体は残す。
+    候補集合を消すと存在しない操作名の発明につながるため。
 
     ``AT_SPOT_IS`` も扱わない。物体の action 候補は「その物体が在るスポット」
     でしか表示されないので、場所を添えても常に自明な情報になる。
     """
-    hints: list[str] = list(declarative_condition_hints(interaction))
-    if interior is not None:
-        hints.extend(_object_state_precondition_failure_hints(interaction, interior))
-        hints.extend(
-            _object_stock_precondition_failure_hints(
-                interaction,
-                interior,
-                current_tick=current_tick,
-            )
+    if interior is None:
+        return ()
+    hints: list[str] = list(
+        _object_state_precondition_failure_hints(interaction, interior)
+    )
+    hints.extend(
+        _object_stock_precondition_failure_hints(
+            interaction,
+            interior,
+            current_tick=current_tick,
         )
+    )
     return tuple(hints)
 
 
@@ -201,11 +211,16 @@ def _format_interaction_action_name_with_hints(
     *,
     current_tick: Optional[int] = None,
 ) -> str:
-    """fallback テキスト用に action_name と condition hints を同じ規則で整形する。"""
-    hints = _interaction_condition_hints(
+    """fallback テキスト用に action_name と表示ヒントを同じ規則で整形する。"""
+    blocking_hints = _interaction_blocking_hints(
         interaction,
         interior,
         current_tick=current_tick,
+    )
+    if blocking_hints:
+        return f"いまできない: {interaction.action_name} ({'・'.join(blocking_hints)})"
+    hints = _interaction_condition_hints(
+        interaction,
     )
     if not hints:
         return interaction.action_name
@@ -836,16 +851,19 @@ class SpotGraphCurrentStateBuilder:
                 for obj in interior.objects:
                     if not obj.is_visible:
                         continue
-                    # P0-1: OBJECT_STATE precondition が現在失敗していても action
-                    # は落とさない。落とすと「操作名一覧が空なのに説明は操作を
-                    # 誘う」状態になり、LLM が存在しない action_name を発明する。
-                    # 代わりに failure_message を condition_hints として添え、候補
-                    # 集合を保ったまま「今は通らない理由」を見せる。
+                    # P0-1/4b: OBJECT_STATE / OBJECT_STOCK_AT_LEAST が現在失敗
+                    # していても action は落とさない。落とすと「操作名一覧が空
+                    # なのに説明は操作を誘う」状態になり、LLM が存在しない
+                    # action_name を発明する。代わりに blocking_hints として
+                    # 分け、候補集合を保ったまま「今は通らない理由」を見せる。
                     interactions = tuple(
                         SpotGraphInteractionEntry(
                             action_name=i.action_name,
                             display_label=i.display_label,
                             condition_hints=_interaction_condition_hints(
+                                i,
+                            ),
+                            blocking_hints=_interaction_blocking_hints(
                                 i,
                                 interior,
                                 current_tick=current_tick,
@@ -865,8 +883,8 @@ class SpotGraphCurrentStateBuilder:
                         interactions=interactions,
                         state=visible_state,
                     ))
-                    # フォールバック行 (interactions DTO と整合): 同じ条件ヒントを
-                    # 使い、OBJECT_STATE 失敗 action も理由付きで残す。
+                    # フォールバック行 (interactions DTO と整合): 同じヒント分離を
+                    # 使い、失敗 action も「いまできない」として残す。
                     actions = [
                         _format_interaction_action_name_with_hints(
                             i,
