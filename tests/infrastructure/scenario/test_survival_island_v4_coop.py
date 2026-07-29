@@ -25,6 +25,7 @@ from ai_rpg_world.infrastructure.scenario.spot_map_validator import (
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.entity.spot_object import VISIBLE_STATE_TAGS_KEY
 
 
 _SCENARIOS = Path(__file__).resolve().parents[3] / "data" / "scenarios"
@@ -271,6 +272,58 @@ class TestSurvivalIslandV4WaterSources:
         assert condition["condition_type"] == "OBJECT_STATE"
         assert condition["required_state"] == {"available": True}
         assert condition["failure_message"] == "今汲んだばかりだ。少し時間を置こう。"
+
+
+class TestSurvivalIslandV4ObjectStateDisplay:
+    """v4 の object.state は prompt に生の key=value で漏らさず、作者文言か明示非表示にする。"""
+
+    def test_objects_do_not_leave_raw_visible_state_values(self, loaded_v4) -> None:
+        """v4 の全 object は visible_state に raw key を残さず、日本語 tag か非表示で状態を表す。"""
+        failures: list[str] = []
+        for interior in loaded_v4.interiors.values():
+            for obj in interior.objects:
+                visible = obj.visible_state()
+                raw_keys = [key for key in visible if key != VISIBLE_STATE_TAGS_KEY]
+                if raw_keys:
+                    failures.append(
+                        f"{_V4_PATH.name}: object={obj.name!r} id={obj.object_id.value} "
+                        f"raw_keys={raw_keys!r} visible={visible!r}"
+                    )
+
+        assert failures == []
+
+    def test_fire_and_openable_objects_render_state_display_tags(self, loaded_v4) -> None:
+        """焚き火・箱・狼煙台の見た目 state は state_display の日本語 tag として表示される。"""
+        objects_by_name = {
+            obj.name: obj
+            for interior in loaded_v4.interiors.values()
+            for obj in interior.objects
+        }
+
+        assert objects_by_name["焚き火跡"].visible_state() == {
+            VISIBLE_STATE_TAGS_KEY: ("焚き火は消えている",)
+        }
+        assert objects_by_name["砂に埋もれた箱"].visible_state() == {
+            VISIBLE_STATE_TAGS_KEY: ("箱はまだ開いていない",)
+        }
+        assert objects_by_name["狼煙台"].visible_state() == {
+            VISIBLE_STATE_TAGS_KEY: ("狼煙台に火はついていない",)
+        }
+
+    def test_per_actor_history_state_is_hidden_instead_of_rendered_as_raw_value(
+        self,
+        loaded_v4,
+    ) -> None:
+        """read/examined など個人の行為履歴 state は、第三者 prompt では表示しない。"""
+        objects_by_name = {
+            obj.name: obj
+            for interior in loaded_v4.interiors.values()
+            for obj in interior.objects
+        }
+
+        assert objects_by_name["岩肌の刻み跡"].visible_state() == {}
+        assert objects_by_name["錆びた標識"].visible_state() == {}
+        assert objects_by_name["壁の写真"].visible_state() == {}
 
 
 class TestSurvivalIslandV4FoodEconomy:

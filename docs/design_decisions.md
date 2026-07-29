@@ -1079,3 +1079,23 @@ v4 ではこの変更により、次の本命 run で拠点から「切り立っ
 既定値は変えず、`validate_spot_map` が屋内扱い spot と `is_outdoor` 未宣言 spot を
 info / metrics に出す。シナリオ作者が map 検査時に「本当に屋内扱いでよいか」を確認
 できるようにし、既存シナリオの意味を反転させない。
+
+## 36. object.state の prompt 表示は scenario 側で宣言し、未宣言値は隠さない
+
+`SpotObject.state` は interaction の前提条件や effect の真実源であり、`opened=false`
+や `lit=false` のような値がそのまま prompt に出ると、エージェントには意味の薄い
+内部表現として見える。一方で、状態表示をコード側で key ごとに決めると、シナリオ固有の
+文脈 (「宝箱はまだ開いていない」「狼煙台に火はついていない」など) を失う。
+
+そのため `StateDisplayRule(key, value, text)` を scenario の object に宣言し、
+`visible_state()` が一致する key/value を日本語 tag に変換する。`available=false`
+だけを `unavailable_hint` で特別扱いしていた既存設計を一般化した形であり、
+`available` も明示 `state_display` があればそちらを優先する。
+
+重要なのは、宣言の無い key/value を隠さないこと。key に rule があっても現在値に
+対応する rule が無い場合は、従来どおり raw state を出す。ここで隠すと、
+シナリオ作者の宣言漏れが prompt からもテストからも見えなくなり、再び静かな失敗になる。
+v4 だけは hard audit で raw state を禁止し、他シナリオは quality テストで棚卸しする。
+
+値比較では `False == 0` / `True == 1` を同一扱いしない。bool state と数値 state は
+別概念なので、型を含む同一性キーで rule を照合する。
