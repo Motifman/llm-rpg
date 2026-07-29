@@ -192,6 +192,11 @@ class TestScenarioInteractionDisplayLabels:
 
         assert not mismatches, "\n".join(mismatches)
 
+    def test_action_names_do_not_use_ambiguous_bare_verbs(self) -> None:
+        """多義語の裸 action_name は名前だけで誤解を作るため、通常監査で落とす。"""
+        violations = find_ambiguous_bare_action_names(_scenario_entries())
+        assert not violations, _format_violations(violations)
+
 
 class TestInteractionDisplayLabelAuditMutationFixtures:
     """違反片を直接渡すと監査 helper が落とすことを保証する。"""

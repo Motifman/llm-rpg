@@ -2299,7 +2299,6 @@ class WorldRuntime:
             "search": "探す",
             "read": "読む",
             "use": "使う",
-            "take": "取る",
             "push": "押す",
             "pull": "引く",
         }

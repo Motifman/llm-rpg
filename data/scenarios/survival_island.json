@@ -176,7 +176,7 @@
             "state": {"opened": false},
             "interactions": [
               {
-                "action_name": "search",
+                "action_name": "search_wreck_hold",
                 "display_label": "船倉を漁る",
                 "preconditions": [{"condition_type": "OBJECT_STATE", "target_object": "wreck_hold", "required_state": {"opened": false}, "failure_message": "船倉はもう漁り尽くした。"}],
                 "effects": [

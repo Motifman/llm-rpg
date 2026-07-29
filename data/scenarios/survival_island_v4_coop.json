@@ -2,7 +2,7 @@
   "scenario_format_version": "1.0",
   "player_interactions": [
     {
-      "action_name": "take",
+      "action_name": "loot_from_downed",
       "display_label": "持ち物を奪う",
       "preconditions": [
         {
@@ -639,7 +639,7 @@
             ],
             "interactions": [
               {
-                "action_name": "search",
+                "action_name": "search_wreck_hold",
                 "display_label": "船倉を漁る",
                 "witness_observation_message": "{actor}が難破船の船倉を漁った。",
                 "preconditions": [

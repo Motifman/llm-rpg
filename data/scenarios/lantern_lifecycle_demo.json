@@ -38,7 +38,7 @@
             "state": {"lit": false},
             "interactions": [
               {
-                "action_name": "light",
+                "action_name": "light_lamp_a",
                 "display_label": "火を入れる",
                 "preconditions": [
                   {
@@ -85,7 +85,7 @@
             "state": {"lit": false},
             "interactions": [
               {
-                "action_name": "light",
+                "action_name": "light_lamp_b",
                 "display_label": "火を入れる",
                 "preconditions": [
                   {

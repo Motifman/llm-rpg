@@ -238,7 +238,7 @@ class TestLootingLeavesATrace:
         _strike_until_down(runtime, _KUZE, _SENA)
 
         runtime.do_interact_with_player(
-            _KUZE, _SENA, "take", interaction_parameters={"item": "送信機の真空管"}
+            _KUZE, _SENA, "loot_from_downed", interaction_parameters={"item": "送信機の真空管"}
         )
 
         assert _owns(runtime, _KUZE, "radio_part")
@@ -256,7 +256,7 @@ class TestLootingLeavesATrace:
         _gather_cutter(runtime, _KUZE)
         _strike_until_down(runtime, _KUZE, _SENA)
         runtime.do_interact_with_player(
-            _KUZE, _SENA, "take", interaction_parameters={"item": "送信機の真空管"}
+            _KUZE, _SENA, "loot_from_downed", interaction_parameters={"item": "送信機の真空管"}
         )
 
         incidents = runtime._downed_incident_log.peek(_SENA)

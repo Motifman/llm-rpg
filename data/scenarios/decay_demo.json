@@ -36,7 +36,7 @@
             "state": {"rust_level": "clean", "last_cleaned_tick": 0},
             "interactions": [
               {
-                "action_name": "clean",
+                "action_name": "clean_iron_sword",
                 "display_label": "手入れする",
                 "preconditions": [],
                 "effects": [

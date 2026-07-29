@@ -867,7 +867,7 @@
       ]
     },
     {
-      "action_name": "take",
+      "action_name": "loot_from_downed",
       "display_label": "持ち物を奪う",
       "witness_observation_message": "{actor}が倒れている{target}の荷を探っている。",
       "preconditions": [

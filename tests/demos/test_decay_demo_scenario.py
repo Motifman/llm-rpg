@@ -2,7 +2,7 @@
 
 `data/scenarios/decay_demo.json` を読み込み、ReactiveObjectStateBinding
 が OBJECT_STATE_TICK_AT_LEAST predicate で last_cleaned_tick からの
-経過を見て rust_level を clean → rusty に劣化させ、interaction "clean"
+経過を見て rust_level を clean → rusty に劣化させ、interaction "clean_iron_sword"
 が timestamp を更新することで rust_level がリセットされる流れを保証する。
 
 新 primitive は導入していない。PR #98 (reactive 基盤) と PR #100
@@ -119,7 +119,7 @@ def _clean_sword(interaction_svc, interior_repo, loaded, *, current_tick: int) -
     result = interaction_svc.execute_interaction(
         interior,
         _sword_id(loaded),
-        "clean",
+        "clean_iron_sword",
         frozenset(),
         frozenset(),
         current_tick=WorldTick(current_tick),
