@@ -31,7 +31,7 @@ _VICTIM = PlayerId(2)
 _BYSTANDER = PlayerId(3)
 
 _TAKE_DEF = {
-    "action_name": "take",
+    "action_name": "loot_from_downed",
     "display_label": "持ち物を奪う",
     "preconditions": [
         {
@@ -159,7 +159,7 @@ class TestTakeFromFallenPlayer:
         _knock_out(runtime, _VICTIM)
 
         runtime.do_interact_with_player(
-            _ACTOR, _VICTIM, "take",
+            _ACTOR, _VICTIM, "loot_from_downed",
             interaction_parameters={"item": item_name},
         )
 
@@ -176,7 +176,7 @@ class TestTakeFromFallenPlayer:
 
         with pytest.raises(InteractionNotAllowedException):
             runtime.do_interact_with_player(
-                _ACTOR, _VICTIM, "take",
+                _ACTOR, _VICTIM, "loot_from_downed",
                 interaction_parameters={"item": item_name},
             )
         assert spec_id not in _owned_spec_ids(runtime, _ACTOR)
@@ -194,7 +194,7 @@ class TestTakeFromFallenPlayer:
 
         with pytest.raises(InteractionNotAllowedException):
             runtime.do_interact_with_player(
-                _ACTOR, _VICTIM, "take",
+                _ACTOR, _VICTIM, "loot_from_downed",
                 interaction_parameters={"item": "存在しない架空の道具"},
             )
 
@@ -237,7 +237,7 @@ class TestActorInventoryFull:
 
         with pytest.raises(InteractionNotAllowedException):
             runtime.do_interact_with_player(
-                _ACTOR, _VICTIM, "take",
+                _ACTOR, _VICTIM, "loot_from_downed",
                 interaction_parameters={"item": item_name},
             )
         # 対象の持ち物は減っていない
@@ -276,7 +276,7 @@ class TestTheftIsObserved:
         _knock_out(rt, _VICTIM)
 
         rt.do_interact_with_player(
-            _ACTOR, _VICTIM, "take",
+            _ACTOR, _VICTIM, "loot_from_downed",
             interaction_parameters={"item": item_name},
         )
 
@@ -295,7 +295,7 @@ class TestTheftIsObserved:
         _knock_out(rt, _VICTIM)
 
         rt.do_interact_with_player(
-            _ACTOR, _VICTIM, "take",
+            _ACTOR, _VICTIM, "loot_from_downed",
             interaction_parameters={"item": item_name},
         )
 
@@ -310,7 +310,7 @@ class TestTheftIsObserved:
         _knock_out(rt, _VICTIM)
 
         rt.do_interact_with_player(
-            _ACTOR, _VICTIM, "take",
+            _ACTOR, _VICTIM, "loot_from_downed",
             interaction_parameters={"item": item_name},
         )
 
@@ -348,7 +348,7 @@ class TestVictimLearnsOnWaking:
         _, item_name = _give_victim_an_item(runtime)
         _knock_out(runtime, _VICTIM)
         runtime.do_interact_with_player(
-            _ACTOR, _VICTIM, "take",
+            _ACTOR, _VICTIM, "loot_from_downed",
             interaction_parameters={"item": item_name},
         )
 

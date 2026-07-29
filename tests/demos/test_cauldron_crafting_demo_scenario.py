@@ -225,7 +225,7 @@ class TestCauldronCraftingDemoScenario:
             )
 
     def test_collect_blocked_until_ready(self, cauldron) -> None:
-        """製錬完了前に collect しようとすると InteractionNotAllowedException で拒否される。"""
+        """製錬完了前に gather_ingot しようとすると InteractionNotAllowedException で拒否される。"""
         loaded, _, _, _, app, binding_stage = cauldron
         app.execute_interaction(
             _player_id(loaded), _furnace_id(loaded), "stoke", current_tick=WorldTick(2),
@@ -233,7 +233,7 @@ class TestCauldronCraftingDemoScenario:
         binding_stage.run(WorldTick(3))  # まだ ready=false
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _furnace_id(loaded), "collect",
+                _player_id(loaded), _furnace_id(loaded), "gather_ingot",
                 current_tick=WorldTick(4),
             )
 
@@ -252,7 +252,7 @@ class TestCauldronCraftingDemoScenario:
         assert _furnace_state(interior_repo, loaded)["ready"] is True
 
     def test_full_cycle_yields_ingot_and_resets_furnace(self, cauldron) -> None:
-        """stoke → 経過 → collect でインゴット入手し、炉は再利用可能な状態に戻る。"""
+        """stoke → 経過 → gather_ingot でインゴット入手し、炉は再利用可能な状態に戻る。"""
         loaded, interior_repo, inventory_repo, item_repo, app, binding_stage = cauldron
         app.execute_interaction(
             _player_id(loaded), _furnace_id(loaded), "stoke", current_tick=WorldTick(2),
@@ -262,7 +262,7 @@ class TestCauldronCraftingDemoScenario:
         assert _furnace_state(interior_repo, loaded)["ready"] is True
 
         app.execute_interaction(
-            _player_id(loaded), _furnace_id(loaded), "collect", current_tick=WorldTick(8),
+            _player_id(loaded), _furnace_id(loaded), "gather_ingot", current_tick=WorldTick(8),
         )
         # インゴット入手、鉱石 1 個残
         assert sorted(_owned_spec_strs(inventory_repo, item_repo, loaded)) == [
@@ -278,7 +278,7 @@ class TestCauldronCraftingDemoScenario:
         assert _furnace_state(interior_repo, loaded)["ready"] is False
 
     def test_second_cycle_reuses_furnace(self, cauldron) -> None:
-        """2 周目: 残った鉱石でもう一度 stoke → ready → collect が回せる。"""
+        """2 周目: 残った鉱石でもう一度 stoke → ready → gather_ingot が回せる。"""
         loaded, interior_repo, inventory_repo, item_repo, app, binding_stage = cauldron
         # 1 周目
         app.execute_interaction(
@@ -287,7 +287,7 @@ class TestCauldronCraftingDemoScenario:
         for t in range(3, 8):
             binding_stage.run(WorldTick(t))
         app.execute_interaction(
-            _player_id(loaded), _furnace_id(loaded), "collect", current_tick=WorldTick(8),
+            _player_id(loaded), _furnace_id(loaded), "gather_ingot", current_tick=WorldTick(8),
         )
         # 2 周目
         app.execute_interaction(
@@ -297,7 +297,7 @@ class TestCauldronCraftingDemoScenario:
             binding_stage.run(WorldTick(t))
         assert _furnace_state(interior_repo, loaded)["ready"] is True
         app.execute_interaction(
-            _player_id(loaded), _furnace_id(loaded), "collect", current_tick=WorldTick(16),
+            _player_id(loaded), _furnace_id(loaded), "gather_ingot", current_tick=WorldTick(16),
         )
         # インゴット 2 個 / 鉱石 0 個
         assert sorted(_owned_spec_strs(inventory_repo, item_repo, loaded)) == [

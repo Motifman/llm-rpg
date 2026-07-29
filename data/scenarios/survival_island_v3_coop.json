@@ -583,7 +583,7 @@
             },
             "interactions": [
               {
-                "action_name": "search",
+                "action_name": "search_wreck_hold",
                 "display_label": "船倉を漁る",
                 "witness_observation_message": "{actor}が難破船の船倉を漁った。",
                 "preconditions": [

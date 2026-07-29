@@ -295,7 +295,7 @@
             },
             "interactions": [
               {
-                "action_name": "record",
+                "action_name": "record_suture_match",
                 "display_label": "縫合痕の一致を記録する",
                 "preconditions": [],
                 "effects": [
@@ -459,7 +459,7 @@
             },
             "interactions": [
               {
-                "action_name": "search",
+                "action_name": "open_desk_drawer",
                 "display_label": "引き出しを開ける",
                 "preconditions": [],
                 "effects": [
@@ -545,7 +545,7 @@
             },
             "interactions": [
               {
-                "action_name": "search",
+                "action_name": "search_shift_memo",
                 "display_label": "古いメモを漁る",
                 "preconditions": [],
                 "effects": [
@@ -651,7 +651,7 @@
             },
             "interactions": [
               {
-                "action_name": "search",
+                "action_name": "open_pharmacist_locker",
                 "display_label": "ロッカーを開ける",
                 "preconditions": [],
                 "effects": [

@@ -1142,3 +1142,6 @@ interaction には `display_label` が既に宣言されており、観測側で
 
 改名前の段階では、多義語 denylist を quality 棚卸しとして置く。既存シナリオにはまだ
 違反が残るため通常 CI では落とさず、改名 PR で違反を消してから hard audit に昇格する。
+改名後は `take` / `search` / `light` などの裸動詞を通常監査で落とす。新しい
+interaction を足すときは、`search_wreck_hold` や `loot_from_downed` のように
+動詞と対象を名前に含める。

@@ -48,7 +48,7 @@
             },
             "interactions": [
               {
-                "action_name": "claim",
+                "action_name": "claim_ancient_relic",
                 "display_label": "遺物に触れる",
                 "preconditions": [
                   {

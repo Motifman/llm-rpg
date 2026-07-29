@@ -580,7 +580,7 @@
             },
             "interactions": [
               {
-                "action_name": "search",
+                "action_name": "search_wreck_hold",
                 "display_label": "船倉を漁る",
                 "preconditions": [
                   {

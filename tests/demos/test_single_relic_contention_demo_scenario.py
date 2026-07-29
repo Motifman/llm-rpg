@@ -74,12 +74,12 @@ class TestSingleRelicContentionResolution:
     """同一遺物への 2 連続アクションで先勝・後敗が確定する挙動。"""
 
     def test_first_claim_succeeds_and_triggers_win_end(self, runtime) -> None:
-        """先に claim した側は成功し relic_claimed フラグが立ち、ゲームが WIN で終了する。"""
+        """先に claim_ancient_relic した側は成功し relic_claimed フラグが立つ。"""
         # ゲーム開始前は終了していない
         assert runtime.check_game_end().is_ended is False
 
-        # Player 1 が claim
-        result = runtime.do_interact(PlayerId(1), "ancient_relic", "claim")
+        # Player 1 が claim_ancient_relic
+        result = runtime.do_interact(PlayerId(1), "ancient_relic", "claim_ancient_relic")
         combined = " ".join(result.messages or [])
         # 成功時のメッセージ (SHOW_MESSAGE effect 由来) が乗る
         assert "光を放ち" in combined or "記録が刻まれた" in combined, (
@@ -107,10 +107,10 @@ class TestSingleRelicContentionResolution:
         )
 
         # Player 1 が先に成功
-        runtime.do_interact(PlayerId(1), "ancient_relic", "claim")
+        runtime.do_interact(PlayerId(1), "ancient_relic", "claim_ancient_relic")
 
-        # Player 2 が後追いで claim → 例外
+        # Player 2 が後追いで claim_ancient_relic → 例外
         with pytest.raises(InteractionNotAllowedException) as excinfo:
-            runtime.do_interact(PlayerId(2), "ancient_relic", "claim")
+            runtime.do_interact(PlayerId(2), "ancient_relic", "claim_ancient_relic")
         # シナリオで定義した failure_message が例外メッセージに反映される
         assert "失っている" in str(excinfo.value)

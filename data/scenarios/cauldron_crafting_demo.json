@@ -94,7 +94,7 @@
                 ]
               },
               {
-                "action_name": "collect",
+                "action_name": "gather_ingot",
                 "display_label": "インゴットを取り出す",
                 "preconditions": [
                   {

@@ -87,22 +87,22 @@ def _knock_down(runtime, player_id: PlayerId) -> None:
 class TestIncapacitatedOnlyActionsAreGated:
     """倒れている相手にしか使えない action は、その行にだけ出る。"""
 
-    def test_standing_target_row_has_no_take(self, runtime) -> None:
-        """立っている相手の行に take が出ない。
+    def test_standing_target_row_has_no_loot_from_downed(self, runtime) -> None:
+        """立っている相手の行に loot_from_downed が出ない。
 
         出ていたぶんが v4 第 3 回 run の take 16 回全失敗になった。
         """
-        assert "take" not in _row_for(runtime, _MORI, "セナ")
+        assert "loot_from_downed" not in _row_for(runtime, _MORI, "セナ")
 
-    def test_downed_target_row_has_take(self, runtime) -> None:
-        """倒れている相手の行には take が出る。
+    def test_downed_target_row_has_loot_from_downed(self, runtime) -> None:
+        """倒れている相手の行には loot_from_downed が出る。
 
         まったく出さないと、対人行為が宣言されていても発見されない。
         使える相手の行にだけ出すのが要件。
         """
         _knock_down(runtime, _SENA)
 
-        assert "take" in _row_for(runtime, _MORI, "セナ")
+        assert "loot_from_downed" in _row_for(runtime, _MORI, "セナ")
 
     def test_gating_is_per_row_not_per_snapshot(self, runtime) -> None:
         """同じ prompt の中で、行ごとに違う一覧が出る。
@@ -114,8 +114,8 @@ class TestIncapacitatedOnlyActionsAreGated:
         downed_row = _row_for(runtime, _MORI, "セナ")
         standing_row = _row_for(runtime, _MORI, "クゼ")
 
-        assert "take" in downed_row
-        assert "take" not in standing_row
+        assert "loot_from_downed" in downed_row
+        assert "loot_from_downed" not in standing_row
 
 
 class TestHiddenStateIsNotUsedForGating:

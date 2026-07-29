@@ -41,7 +41,7 @@ def _take_def(**overrides) -> dict:
     spec id への解決は application 層が対象のインベントリを見て行う。
     """
     base = {
-        "action_name": "take",
+        "action_name": "loot_from_downed",
         "display_label": "持ち物を奪う",
         "preconditions": [
             {
@@ -88,7 +88,7 @@ class TestPlayerInteractionsParsing:
         )
         assert len(result.player_interactions) == 1
         idef = result.player_interactions[0]
-        assert idef.action_name == "take"
+        assert idef.action_name == "loot_from_downed"
         assert idef.display_label == "持ち物を奪う"
 
     def test_effect_target_player_is_allowed_here(self) -> None:
@@ -113,7 +113,7 @@ class TestPlayerInteractionsParsing:
             ScenarioLoader().load_from_dict(
                 _scenario_with_player_interactions(_take_def(), _take_def())
             )
-        assert "take" in str(exc_info.value)
+        assert "loot_from_downed" in str(exc_info.value)
 
     def test_missing_action_name_fails_to_load(self) -> None:
         """action_name の無い定義は ScenarioLoadError になる。"""
@@ -192,7 +192,7 @@ class TestUnwiredTargetPlayerEffectsAreRejected:
             )
         )
         result = ScenarioLoader().load_from_dict(scenario)
-        assert result.player_interactions[0].action_name == "take"
+        assert result.player_interactions[0].action_name == "loot_from_downed"
 
 
 class TestTargetHasItemRequiresAnItemSource:
@@ -232,4 +232,4 @@ class TestTargetHasItemRequiresAnItemSource:
             )
         )
         result = ScenarioLoader().load_from_dict(scenario)
-        assert result.player_interactions[0].action_name == "take"
+        assert result.player_interactions[0].action_name == "loot_from_downed"

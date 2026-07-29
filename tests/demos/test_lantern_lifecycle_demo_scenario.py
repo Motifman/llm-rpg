@@ -186,7 +186,7 @@ class TestLanternLifecycleDemo:
 
         # initial state は JSON 側で {used: false} を仕込み済み
         app.execute_interaction(
-            _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light",
+            _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light_lamp_a",
             current_tick=WorldTick(2),
             acting_item_instance_id=match_a,
         )
@@ -206,7 +206,7 @@ class TestLanternLifecycleDemo:
 
         # 中央ランプ点火 (initial state は JSON 側で仕込み済み)
         app.execute_interaction(
-            _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light",
+            _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light_lamp_a",
             current_tick=WorldTick(1),
             acting_item_instance_id=match_a,
         )
@@ -214,7 +214,7 @@ class TestLanternLifecycleDemo:
         # 同じマッチで奥のランプを点けようとする → 拒否
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _lamp_id(loaded, "lamp_b"), "light",
+                _player_id(loaded), _lamp_id(loaded, "lamp_b"), "light_lamp_b",
                 current_tick=WorldTick(2),
                 acting_item_instance_id=match_a,
             )
@@ -233,14 +233,14 @@ class TestLanternLifecycleDemo:
 
         # 中央ランプ点火 → マッチ A.used=true
         app.execute_interaction(
-            _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light",
+            _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light_lamp_a",
             current_tick=WorldTick(1),
             acting_item_instance_id=match_a,
         )
 
         # 奥ランプ点火 → マッチ B.used=true (B は別 instance なのでまだ unused)
         app.execute_interaction(
-            _player_id(loaded), _lamp_id(loaded, "lamp_b"), "light",
+            _player_id(loaded), _lamp_id(loaded, "lamp_b"), "light_lamp_b",
             current_tick=WorldTick(3),
             acting_item_instance_id=match_b,
         )
@@ -282,7 +282,7 @@ class TestLanternLifecycleDemo:
         # マッチ A は used=true なので ITEM_INSTANCE_STATE(required={used: false}) で拒否
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light",
+                _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light_lamp_a",
                 current_tick=WorldTick(1),
                 acting_item_instance_id=match_a,
             )
