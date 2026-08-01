@@ -65,6 +65,28 @@ class SpotInteractionResultDto:
     direct_effects: Tuple[AppliedEffectSummary, ...] = ()
 
 
+def _hidden_precondition_failed(interaction, actor_state) -> bool:
+    """秘匿すべき前提条件で弾かれたか (役割など)。
+
+    #905 の `ConditionVisibility` をそのまま使う。候補に出さないのと同じ
+    条件を、失敗観測でも配らない。
+    """
+    from ai_rpg_world.domain.world_graph.enum.interaction_condition_visibility import (
+        is_hidden,
+    )
+
+    state = dict(actor_state or {})
+    for cond in getattr(interaction, "preconditions", ()) or ():
+        if not is_hidden(cond.condition_type):
+            continue
+        required = getattr(cond, "required_state", None)
+        if not required:
+            continue
+        if any(state.get(k) != v for k, v in required.items()):
+            return True
+    return False
+
+
 class SpotInteractionApplicationService:
     """スポット内オブジェクト操作（ドメインサービス + 永続化・フラグ・アイテム・接続状態）。"""
 
@@ -776,6 +798,23 @@ class SpotInteractionApplicationService:
         idef = next(
             (i for i in obj.interactions if i.action_name == action_name), None,
         )
+        # **役割で弾かれた失敗は、目撃者に配らない。**
+        #
+        # 理由の文 (「その手順は自分の担当ではない」) が、その人の役割を
+        # 明かしてしまう。表示をラベルに直しても理由は残るので、観測ごと
+        # 落とす。本人にはツール結果として返るので、学習材料は失われない。
+        # #905 で候補一覧に置いたのと同じ原則。
+        actor_state = {}
+        if self._player_status_repository is not None:
+            from ai_rpg_world.domain.player.value_object.player_id import (
+                PlayerId as _PlayerId,
+            )
+            status = self._player_status_repository.find_by_id(
+                _PlayerId(int(entity_id))
+            )
+            actor_state = dict(getattr(status, "state", {}) or {}) if status else {}
+        if idef is not None and _hidden_precondition_failed(idef, actor_state):
+            return
         # シナリオ著者が override を宣言している場合は失敗 reason より優先する
         override = idef.on_failure_observation if idef is not None else None
         # 両方とも空ならそもそも観測 prose を組めないので silent (legacy fallback)
@@ -817,6 +856,7 @@ class SpotInteractionApplicationService:
             action_name=action_name,
             observation_message=override or "",
             failure_reason=failure_reason if not override else "",
+                    display_label=(idef.display_label if idef is not None else ""),
         )
         self._event_publisher.publish_all([failed_event])
 

@@ -332,6 +332,13 @@ class SpotObjectInteractionFailedEvent(BaseDomainEvent[SpotGraphId, str]):
     # #356 後続: domain 例外の reason をそのまま運ぶ。formatter が他者向け
     # prose の自動構築に使う。None / 空文字なら自動構築しない。
     failure_reason: Optional[str] = None
+    # シナリオが書いた表示名。**目撃文にはこちらを使う。**
+    #
+    # action_name は engine の識別子で、人が口にする言葉ではない。さらに
+    # 秘匿役職のシナリオでは偽装版の識別子 (`..._pretend`) がそのまま漏れる。
+    # 本物と偽装は同じ display_label を持つので、ラベルで書けば失敗文も
+    # 見分けがつかなくなる。
+    display_label: str = ""
 
 
 @dataclass(frozen=True)
