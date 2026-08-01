@@ -110,6 +110,18 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         head = "。".join(p for p in parts if p)
         if event.ejected_display_name:
             tail = f"{event.ejected_display_name}が追放された。"
+        elif not event.counts_by_display_name and not event.skip_count:
+            # **1 票も入っていないのに「割れた」と言わない。** 「割れた」は
+            # 票が入って拮抗したという意味なので、読んだ側は「他の誰かは
+            # 投票したが意見が分かれた」と受け取る。実際は全員が投票しな
+            # かっただけで、次に取るべき手はまったく違う。
+            # 実 run (station_drill_003) で実際にこの食い違いが出た。
+            tail = "誰も票を投じないまま終わった。"
+        elif not event.counts_by_display_name:
+            # 全員が棄権した場合。棄権は保留するという意思表示であって
+            # 票の不在ではない (設計 doc §2.3) が、名指しが 1 つも無い以上
+            # 「割れた」でもない。
+            tail = "誰も追放されなかった。"
         else:
             tail = "票が割れ、誰も追放されなかった。"
         return ObservationOutput(
