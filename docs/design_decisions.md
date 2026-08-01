@@ -648,7 +648,7 @@ memory_link / recall_buffer / reinterpretation_journal の 4 store がそもそ�
 | 26. 勝敗は runtime でなくシナリオ専管 → game_end_conditions を書かなければ「永続世界」 | 2026-06-25 | U5 経路統一 |
 | 27. 新しい per-Being store は snapshot に乗せる前提で実装する (4 step checklist) | 2026-06-27 | PR #593 / #594 (PR-F + PR-G) |
 | 30. ローカルLLMはレプリカ単位で常駐管理し、実験を同じレプリカへ固定する | 2026-07-25 | v108 夜間実験基盤 |
-| 39. 実験モデルは版固定 ID を使い、接続先の能力は実呼び出しで確かめる | 2026-08-01 | 本 PR |
+| 39. 実験モデルは版固定 ID を使い、接続先の能力は実呼び出しで確かめる | 2026-08-01 | PR #898 |
 
 ---
 
@@ -1187,4 +1187,4 @@ DeepSeek V4 Flash の 2026-07-31 更新版は
 
 **どこで出てきたか**: DeepSeek V4 Flash 0731 への更新調査と接続先の総当たりを
 行い、公開メタデータと実際の `tool_choice=required` 対応が一致しないことを確認した
-本 PR。
+PR #898。
