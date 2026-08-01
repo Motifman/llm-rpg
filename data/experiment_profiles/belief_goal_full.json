@@ -6,9 +6,9 @@
   "snapshot_save": true,
   "runtime_config": {
     "LLM_CLIENT": "litellm",
-    "LLM_MODEL": "openrouter/deepseek/deepseek-v4-flash",
+    "LLM_MODEL": "openrouter/deepseek/deepseek-v4-flash-0731",
     "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
-    "OPENROUTER_PROVIDER": "DeepSeek",
+    "OPENROUTER_PROVIDER": "Cloudflare",
     "OPENROUTER_REQUIRE_PARAMS": false,
     "LLM_REASONING_EFFORT": "none",
     "LLM_TURN_PARALLEL_WORKERS": 2,

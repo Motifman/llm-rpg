@@ -410,6 +410,15 @@ class TestMaxWorldTicksRename:
 class TestExperimentProfileManifest:
     """実験 profile/config が解決済み成果物として保存されることを保証する。"""
 
+    _DEEPSEEK_0731_PROFILES = (
+        "belief_goal_full",
+        "ablation_base",
+        "belief_goal_memo_ab_keep_memo",
+        "belief_goal_memo_ab_hide_memo",
+        "station_drill",
+        "station_drill_lean",
+    )
+
     @staticmethod
     def _load_profile(profile_name: str) -> dict:
         return json.loads(
@@ -430,6 +439,17 @@ class TestExperimentProfileManifest:
             assert runtime_config["SEMANTIC_SEARCH_ENABLED"] is False
             assert runtime_config["EPISODIC_EXPLORE_RELATED_ENABLED"] is False
             assert runtime_config["EPISODIC_RECALL_ENABLED"] is True
+
+    def test_all_deepseek_profiles_pin_0731_to_cloudflare(self) -> None:
+        """比較対象6 profile は 0731 版と Cloudflare に揃い、旧版の混在を許さない。"""
+        for profile_name in self._DEEPSEEK_0731_PROFILES:
+            runtime_config = self._load_profile(profile_name)["runtime_config"]
+
+            assert (
+                runtime_config["LLM_MODEL"]
+                == "openrouter/deepseek/deepseek-v4-flash-0731"
+            ), profile_name
+            assert runtime_config["OPENROUTER_PROVIDER"] == "Cloudflare", profile_name
 
     def test_memo_ab_profiles_differ_only_by_memo_tool_exposure(self) -> None:
         """memo A/B の2腕は MEMO_TOOLS_ENABLED 以外の runtime_config を揃える。"""

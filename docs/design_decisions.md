@@ -648,6 +648,7 @@ memory_link / recall_buffer / reinterpretation_journal の 4 store がそもそ�
 | 26. 勝敗は runtime でなくシナリオ専管 → game_end_conditions を書かなければ「永続世界」 | 2026-06-25 | U5 経路統一 |
 | 27. 新しい per-Being store は snapshot に乗せる前提で実装する (4 step checklist) | 2026-06-27 | PR #593 / #594 (PR-F + PR-G) |
 | 30. ローカルLLMはレプリカ単位で常駐管理し、実験を同じレプリカへ固定する | 2026-07-25 | v108 夜間実験基盤 |
+| 39. 実験モデルは版固定 ID を使い、接続先の能力は実呼び出しで確かめる | 2026-08-01 | 本 PR |
 
 ---
 
@@ -1145,3 +1146,45 @@ interaction には `display_label` が既に宣言されており、観測側で
 改名後は `take` / `search` / `light` などの裸動詞を通常監査で落とす。新しい
 interaction を足すときは、`search_wreck_hold` や `loot_from_downed` のように
 動詞と対象を名前に含める。
+
+## 39. 実験モデルは版固定 ID を使い、接続先の能力は実呼び出しで確かめる
+
+**何を**: OpenRouter 経由の実験では、特定の版を指すモデル ID を profile に固定する。
+DeepSeek V4 Flash の 2026-07-31 更新版は
+`deepseek/deepseek-v4-flash-0731` を使う。接続先は、同モデルを fp8 で提供し、
+`tool_choice=required` の実呼び出しに成功する Cloudflare に固定する。
+
+**なぜ**:
+
+- DeepSeek 直結 API の `deepseek-v4-flash` は常に最新版を指す。一方、OpenRouter は
+  4月版を `deepseek/deepseek-v4-flash`、7月31日版を
+  `deepseek/deepseek-v4-flash-0731` と別 ID にしている。この版固定により、実験の
+  途中で同じ ID の中身が黙って変わり、過去 run と比較できなくなる事故を避けられる。
+- 7月31日版の DeepSeek 公式 endpoint は `supported_parameters` に
+  `tool_choice` を掲げながら、`required` と特定関数指定を 404 で拒否した。
+  `supported_parameters` は接続先の宣言であって、値ごとの動作保証ではない。
+  実験で必須の値は、本番と同じ provider 固定・reasoning 無効・tool schema で
+  実際に呼び出して確かめる必要がある。
+- `tool_choice=auto` に下げると tool call の無い応答を許し、エージェントが1回の
+  起動を黙って失う静かな失敗になる。Cloudflare は総当たりした接続先のうち、
+  fp8 と `required` を両立した唯一の選択肢だった。DeepInfra も `required` は通るが
+  fp4 のため、モデル品質を上げる目的に合わない。
+- Cloudflare の cache read 単価は DeepSeek 公式の10倍だが、run 004 の実測量では
+  200 tick あたり約 0.10 USD の増加に収まる。速度、prompt 単価、completion 単価、
+  キャッシュ動作は同等だったため許容した。
+
+**どうしないと壊れるか**:
+
+- 日付の無い可変 ID を固定版だとみなすと、モデル更新時点を後から特定できず、
+  同じ profile 名の run 同士が比較不能になる。
+- `supported_parameters` だけを見て対応済みと判断すると、実行時の 404 を
+  profile 読み込みや単体テストで検出できない。外部 endpoint の能力差には、通常の
+  試験から除外した `tests/quality/` の実呼び出しプローブを置く。
+- DeepSeek 公式が `required` に対応した後も Cloudflare 固定を惰性で残さない。
+  プローブは「まだ拒否される」間だけ成功し、対応した瞬間に失敗して再検討を促す。
+- 比較用 profile の一部だけモデルや provider を変えると、差分が機能ではなく
+  推論条件から生じる。対象 profile は集合としてテストし、旧版の混在を許さない。
+
+**どこで出てきたか**: DeepSeek V4 Flash 0731 への更新調査と接続先の総当たりを
+行い、公開メタデータと実際の `tool_choice=required` 対応が一致しないことを確認した
+本 PR。
