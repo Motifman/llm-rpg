@@ -1150,9 +1150,10 @@ interaction を足すときは、`search_wreck_hold` や `loot_from_downed` の�
 ## 39. 実験モデルは版固定 ID を使い、接続先の能力は実呼び出しで確かめる
 
 **何を**: OpenRouter 経由の実験では、特定の版を指すモデル ID を profile に固定する。
-DeepSeek V4 Flash の 2026-07-31 更新版は
+DeepSeek V4 Flash の 2026-07-31 更新版は、新しい `belief_goal_v4` profile から
 `deepseek/deepseek-v4-flash-0731` を使う。接続先は、同モデルを fp8 で提供し、
-`tool_choice=required` の実呼び出しに成功する Cloudflare に固定する。
+`tool_choice=required` の実呼び出しに成功する Cloudflare に固定する。既存 profile は
+過去の実験意図を表す記録なので書き換えず、新しい実験条件には新しい profile を足す。
 
 **なぜ**:
 
@@ -1177,13 +1178,16 @@ DeepSeek V4 Flash の 2026-07-31 更新版は
 
 - 日付の無い可変 ID を固定版だとみなすと、モデル更新時点を後から特定できず、
   同じ profile 名の run 同士が比較不能になる。
+- 既存 profile を新しいモデルへ上書きすると、過去 run がどの条件と意図で設計されたかを
+  profile 自体から読めなくなる。`experiment.config.resolved.json` が実測条件を残していても、
+  profile が担う実験計画の履歴は代替できない。
 - `supported_parameters` だけを見て対応済みと判断すると、実行時の 404 を
   profile 読み込みや単体テストで検出できない。外部 endpoint の能力差には、通常の
   試験から除外した `tests/quality/` の実呼び出しプローブを置く。
 - DeepSeek 公式が `required` に対応した後も Cloudflare 固定を惰性で残さない。
   プローブは「まだ拒否される」間だけ成功し、対応した瞬間に失敗して再検討を促す。
-- 比較用 profile の一部だけモデルや provider を変えると、差分が機能ではなく
-  推論条件から生じる。対象 profile は集合としてテストし、旧版の混在を許さない。
+- 新しいモデル条件を既存 profile 群へ一括反映しない。新しい profile と継承元の差を
+  テストで限定し、意図していない設定差や継承元の書き換えを許さない。
 
 **どこで出てきたか**: DeepSeek V4 Flash 0731 への更新調査と接続先の総当たりを
 行い、公開メタデータと実際の `tool_choice=required` 対応が一致しないことを確認した

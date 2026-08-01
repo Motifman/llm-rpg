@@ -410,15 +410,6 @@ class TestMaxWorldTicksRename:
 class TestExperimentProfileManifest:
     """実験 profile/config が解決済み成果物として保存されることを保証する。"""
 
-    _DEEPSEEK_0731_PROFILES = (
-        "belief_goal_full",
-        "ablation_base",
-        "belief_goal_memo_ab_keep_memo",
-        "belief_goal_memo_ab_hide_memo",
-        "station_drill",
-        "station_drill_lean",
-    )
-
     @staticmethod
     def _load_profile(profile_name: str) -> dict:
         return json.loads(
@@ -440,16 +431,32 @@ class TestExperimentProfileManifest:
             assert runtime_config["EPISODIC_EXPLORE_RELATED_ENABLED"] is False
             assert runtime_config["EPISODIC_RECALL_ENABLED"] is True
 
-    def test_all_deepseek_profiles_pin_0731_to_cloudflare(self) -> None:
-        """比較対象6 profile は 0731 版と Cloudflare に揃い、旧版の混在を許さない。"""
-        for profile_name in self._DEEPSEEK_0731_PROFILES:
-            runtime_config = self._load_profile(profile_name)["runtime_config"]
+    def test_belief_goal_v4_inherits_keep_memo_with_new_model_routing(self) -> None:
+        """v4 標準 profile は既存 A 腕を変えず、識別情報とモデル経路だけを更新する。"""
+        base = self._load_profile("belief_goal_memo_ab_keep_memo")
+        new_profile = self._load_profile("belief_goal_v4")
+        expected = dict(base)
+        expected["profile"] = "belief_goal_v4"
+        expected["description"] = (
+            "v4 の標準的な観察 run。memo tool と記憶・信念・目的・停滞系を有効化する。"
+        )
+        expected["runtime_config"] = dict(base["runtime_config"])
+        expected["runtime_config"]["LLM_MODEL"] = (
+            "openrouter/deepseek/deepseek-v4-flash-0731"
+        )
+        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "Cloudflare"
 
-            assert (
-                runtime_config["LLM_MODEL"]
-                == "openrouter/deepseek/deepseek-v4-flash-0731"
-            ), profile_name
-            assert runtime_config["OPENROUTER_PROVIDER"] == "Cloudflare", profile_name
+        assert base["runtime_config"]["LLM_MODEL"] == (
+            "openrouter/deepseek/deepseek-v4-flash"
+        )
+        assert base["runtime_config"]["OPENROUTER_PROVIDER"] == "DeepSeek"
+        assert new_profile == expected
+
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            _runtime_config_mapping_from_source(new_profile)
+        )
+        assert cfg.llm_model == "openrouter/deepseek/deepseek-v4-flash-0731"
+        assert cfg.openrouter_provider == "Cloudflare"
 
     def test_memo_ab_profiles_differ_only_by_memo_tool_exposure(self) -> None:
         """memo A/B の2腕は MEMO_TOOLS_ENABLED 以外の runtime_config を揃える。"""

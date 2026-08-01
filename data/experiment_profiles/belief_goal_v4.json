@@ -1,14 +1,14 @@
 {
-  "profile": "station_drill",
-  "description": "秘匿役職の機構が一周するかを確かめる小規模 run。3 部屋 / 4 人 / 作業 3 個中 2 個 / 会議上限 6 tick / 20 tick。質感の評価には使わない (それは darkened_station の役目)。",
-  "scenario": "data/scenarios/station_drill.json",
-  "max_world_ticks": 20,
+  "profile": "belief_goal_v4",
+  "description": "v4 の標準的な観察 run。memo tool と記憶・信念・目的・停滞系を有効化する。",
+  "scenario": "data/scenarios/survival_island_v4_coop.json",
+  "max_world_ticks": 200,
   "snapshot_save": true,
   "runtime_config": {
     "LLM_CLIENT": "litellm",
-    "LLM_MODEL": "openrouter/deepseek/deepseek-v4-flash",
+    "LLM_MODEL": "openrouter/deepseek/deepseek-v4-flash-0731",
     "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
-    "OPENROUTER_PROVIDER": "DeepSeek",
+    "OPENROUTER_PROVIDER": "Cloudflare",
     "OPENROUTER_REQUIRE_PARAMS": false,
     "LLM_REASONING_EFFORT": "none",
     "LLM_TURN_PARALLEL_WORKERS": 2,
@@ -60,6 +60,11 @@
     "LLM_EXPECTED_RESULT_POLICY": "required",
     "LLM_TOOL_MODE": "default",
     "ESCAPE_LLM_SSOT": false,
-    "SCENARIO_RANDOM_SEED": 42
+    "SCENARIO_RANDOM_SEED": 42,
+    "MEMO_TOOLS_ENABLED": true,
+    "DISTANT_VIEW_TRACE_ENABLED": true,
+    "PROMPT_DATASET_CAPTURE_ENABLED": true,
+    "PROMPT_DATASET_CAPTURE_FAILURE_POLICY": "warn",
+    "END_ON_ALL_DOWN": true
   }
 }
