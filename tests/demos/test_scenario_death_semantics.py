@@ -245,3 +245,54 @@ class TestTheConfirmedDeathIsAlsoHidden:
         assert any(
             "追放" in prose for prose in _new_prose(runtime, before, _MORI)
         )
+
+
+class TestTheDeclarationReachesTheStructuredSideToo:
+    """匿名の宣言は、機械可読な側にも効く。
+
+    `victim_learns_killer: false` が prose にしか効いておらず、structured に
+    `killer_player_id` が残っていた。いまは cue 抽出がこの key を読んで
+    いないので実害は無いが、**読む側が 1 つ増えた瞬間に静かに破れる**。
+
+    「読まれていないから残してよい」は、消費者の一覧を人が覚えていることを
+    前提にしている。#914 / #917 で 2 回続けて外した前提と同じ形なので、
+    宣言の側に揃えておく。
+    """
+
+    def test_the_victim_view_omits_the_killer_id(self, killed) -> None:
+        """匿名の世界では、被害者の structured に加害者の id が入らない。"""
+        runtime, before = killed
+
+        downed = [
+            e.output.structured
+            for e in runtime._obs_buffer.get_observations(_SENA)[
+                int(before[int(_SENA)]) :
+            ]
+            if e.output.structured.get("type") == "player_downed"
+        ]
+
+        assert downed
+        for structured in downed:
+            assert "killer_player_id" not in structured, structured
+
+    def test_scenarios_without_the_declaration_keep_the_killer_id(self) -> None:
+        """宣言の無い世界では今までどおり残る。
+
+        消しすぎると、解析用に持っていた情報がどの世界でも失われる。
+        """
+        from unittest.mock import MagicMock
+
+        from ai_rpg_world.application.observation.services.formatters.player_formatter import (  # noqa: E501
+            PlayerObservationFormatter,
+        )
+
+        context = MagicMock()
+        context.name_resolver.player_name.return_value = "クゼ"
+        # 宣言の無い世界 = context に death_semantics が付いていない状態。
+        context.death_semantics = None
+        formatter = PlayerObservationFormatter(context=context)
+        event = MagicMock(aggregate_id=_SENA, killer_player_id=_KUZE)
+
+        output = formatter._format_player_downed(event, _SENA)
+
+        assert output.structured["killer_player_id"] == int(_KUZE)
