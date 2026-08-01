@@ -14,11 +14,15 @@ from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+    InteractionEffectTypeEnum,
+)
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
     InteractionCondition,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
+from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 
@@ -90,6 +94,71 @@ def test_time_and_weather_preconditions_become_action_condition_hints() -> None:
 
     assert snap is not None
     assert snap.objects[0].interactions[0].condition_hints == ("夜不可", "嵐不可")
+
+
+def test_write_player_text_effect_becomes_required_parameter_hint() -> None:
+    """WRITE_PLAYER_TEXT は effect 宣言の text_param_key を必須入力として表示する。"""
+    interaction = InteractionDef(
+        action_name="write_notice",
+        display_label="板切れに書き残す",
+        preconditions=(),
+        effects=(
+            InteractionEffect(
+                effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
+                parameters={},
+            ),
+        ),
+    )
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=SpotObjectId.create(10),
+                name="板切れの掲示",
+                description="伝言を書き残せる。",
+                object_type=SpotObjectTypeEnum.SIGN,
+                state={},
+                interactions=(interaction,),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    snap = _build_builder(interior).build_snapshot(1)
+
+    assert snap is not None
+    assert snap.objects[0].interactions[0].condition_hints == ("text が要る",)
+
+
+def test_action_without_required_parameter_effect_has_no_parameter_hint() -> None:
+    """必須入力を要求しない action には、存在しないパラメータのヒントを足さない。"""
+    interaction = InteractionDef(
+        action_name="read_notice",
+        display_label="板切れを読む",
+        preconditions=(),
+        effects=(),
+    )
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=SpotObjectId.create(10),
+                name="板切れの掲示",
+                description="伝言を読める。",
+                object_type=SpotObjectTypeEnum.SIGN,
+                state={},
+                interactions=(interaction,),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    snap = _build_builder(interior).build_snapshot(1)
+
+    assert snap is not None
+    assert snap.objects[0].interactions[0].condition_hints == ()
 
 
 def test_unknown_time_and_weather_values_are_not_silently_dropped() -> None:

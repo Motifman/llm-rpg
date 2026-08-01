@@ -45,6 +45,7 @@ from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
     declarative_condition_hints,
     format_action_display_with_hints,
+    required_parameter_hints,
 )
 from ai_rpg_world.domain.world_graph.service.spot_perception_service import SpotPerceptionService
 from ai_rpg_world.application.world_graph.spot_effective_lighting_resolver import (
@@ -171,7 +172,9 @@ def _interaction_condition_hints(
     ``declarative_condition_hints`` に委譲する。同席者行の対人 action も
     同じ関数を使うので、書式と語彙が経路ごとにずれない。
     """
-    return tuple(declarative_condition_hints(interaction))
+    return tuple(
+        (*declarative_condition_hints(interaction), *required_parameter_hints(interaction))
+    )
 
 
 def _interaction_blocking_hints(
