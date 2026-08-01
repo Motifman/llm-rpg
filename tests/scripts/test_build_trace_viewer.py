@@ -509,6 +509,123 @@ class TestFormatEventBody:
         assert "水を探そう" in out
         assert "player_spoke" not in out
 
+    def test_observed_speech_row_is_owned_by_speaker_not_recipient(self) -> None:
+        """他者発話の観測行は受信者ではなく structured の発話者名を中央列に出す。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.OBSERVATION,
+                tick=97,
+                player_id=3,
+                payload={
+                    "player_name": "リオ",
+                    "prose": "カイが言った: 「無事だったか」",
+                    "structured": {
+                        "type": "player_spoke",
+                        "speaker": "カイ",
+                        "speaker_player_id": 4,
+                        "channel": "say",
+                        "content": "無事だったか",
+                    },
+                },
+            )
+        ]
+
+        out = render_viewer_html(
+            title="x",
+            events=events,
+            scenario_topology={"spots": [], "connections": []},
+            cytoscape_js_src="/* fake */",
+        )
+
+        assert '<span class="event-player">カイ</span>' in out
+        assert '<span class="event-player">リオ</span>' not in out
+
+    def test_self_and_observed_speech_use_each_actual_speaker(self) -> None:
+        """自分の発話 action と他者発話の観測は、どちらも実際の発話者を行の主にする。"""
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.ACTION,
+                tick=1,
+                player_id=1,
+                payload={
+                    "player_name": "エイダ",
+                    "tool": "speak",
+                    "arguments": {"channel": "say", "content": "水を探します"},
+                },
+            ),
+            TraceEvent(
+                seq=2,
+                timestamp="t",
+                kind=TraceEventKind.OBSERVATION,
+                tick=2,
+                player_id=1,
+                payload={
+                    "player_name": "エイダ",
+                    "prose": "ノアが言った: 「火を起こす」",
+                    "structured": {
+                        "type": "player_spoke",
+                        "speaker": "ノア",
+                        "speaker_player_id": 2,
+                        "channel": "say",
+                        "content": "火を起こす",
+                    },
+                },
+            ),
+        ]
+
+        out = render_viewer_html(
+            title="x",
+            events=events,
+            scenario_topology={"spots": [], "connections": []},
+            cytoscape_js_src="/* fake */",
+        )
+
+        assert '<span class="event-player">エイダ</span>' in out
+        assert '<span class="event-player">ノア</span>' in out
+
+    def test_say_inline_observation_shows_inline_source(self) -> None:
+        """行動と同時の say_inline は専用発話ターンと区別できる表示にする。"""
+        content = "無事だったか"
+        events = [
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind=TraceEventKind.ACTION,
+                tick=97,
+                player_id=4,
+                payload={
+                    "tool": "explore",
+                    "arguments": {"inner_thought": "探す", "say_inline": content},
+                },
+            ),
+            TraceEvent(
+                seq=2,
+                timestamp="t",
+                kind=TraceEventKind.OBSERVATION,
+                tick=97,
+                player_id=3,
+                payload={
+                    "prose": f"カイが言った: 「{content}」",
+                    "structured": {
+                        "type": "player_spoke",
+                        "speaker": "カイ",
+                        "speaker_player_id": 4,
+                        "channel": "say",
+                        "content": content,
+                    },
+                },
+            ),
+        ]
+
+        grouped = group_events_by_tick(events)
+        speech = next(e for e in grouped[97] if e.kind == TraceEventKind.OBSERVATION)
+
+        assert "[say_inline]" in _format_event_body(speech)
+
     def test_semantic_passive_recall_uses_compact_summary(self) -> None:
         """semantic_passive_recall は cue 配列ではなく件数と候補本文を表示する。"""
         e = TraceEvent(
