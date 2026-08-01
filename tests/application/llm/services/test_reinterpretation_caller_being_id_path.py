@@ -275,7 +275,7 @@ class TestPromptBuilderRecallBufferDualPath:
             setup.journal,
             being_id=being_id,
         )
-        assert result == "REINTERPRETED"
+        assert result == "[12:00] REINTERPRETED"
 
     def test_append_recall_observation_being_id_none_skip(self) -> None:
         """Phase 3 Step 3d-3: legacy 撤去後、Being 未解決時は silent skip。"""
@@ -324,5 +324,5 @@ class TestPromptBuilderRecallBufferDualPath:
             setup.journal,
             being_id=None,
         )
-        # being_id 未指定 → 生 recall_text を返す
-        assert result == "raw recall"
+        # being_id 未指定 → 生 recall_text を使い、保持済み世界内時刻を添える
+        assert result == "[12:00] raw recall"

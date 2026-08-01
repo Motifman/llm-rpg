@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from ai_rpg_world.application.llm.services.memo_id_display import (
     SHORT_MEMO_ID_LENGTH,
+    memo_handle,
     resolve_memo_id_prefix,
     short_memo_id,
 )
@@ -34,6 +35,10 @@ class TestShortMemoId:
     def test_short_memo_id_length_6(self) -> None:
         """定数が他のコードベースから参照される可能性に備えて固定。"""
         assert SHORT_MEMO_ID_LENGTH == 6
+
+    def test_memo_handle_prefixes_short_id(self) -> None:
+        """表示handleは短縮IDの先頭へ ``memo_`` を付ける。"""
+        assert memo_handle("a3b9f1c2-aaaa") == "memo_a3b9f1…"
 
 
 class TestResolveMemoIdPrefix:
@@ -72,6 +77,15 @@ class TestResolveMemoIdPrefix:
         ids = ["a3b9f1c2-aaaa"]
         resolved, _ = resolve_memo_id_prefix("a3b9f1…", ids)
         assert resolved == "a3b9f1c2-aaaa"
+
+    def test_prefixed_display_handle_resolves(self) -> None:
+        """``memo_`` 付き表示handleは、裸の短縮IDと同じmemoへ解決される。"""
+        ids = ["a3b9f1c2-aaaa"]
+
+        resolved, ambiguous = resolve_memo_id_prefix("memo_a3b9f1…", ids)
+
+        assert resolved == ids[0]
+        assert ambiguous == []
 
     def test_empty_prefix_none(self) -> None:
         """空 prefix は None。"""

@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Iterable, Optional, Sequence
 
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-from ai_rpg_world.application.llm.services.memo_id_display import short_memo_id
+from ai_rpg_world.application.llm.services.memo_id_display import memo_handle
 
 
 DEFAULT_STALE_AGE_TICKS = 20
@@ -25,7 +25,7 @@ def format_active_memos(
 ) -> str:
     """未完了 memo のリストを「進行中のメモ」section 用テキストに整形する。
 
-    各 memo は ``- [STALE] [tick=N, 経過 M tick] content (id: X)`` の形式に変換される。
+    各 memo は ``- [memo_X] [STALE] [tick=N, 経過 M tick] content`` の形式に変換される。
     entries が空なら空文字を返す (section ごと表示しない用途を想定)。
 
     Args:
@@ -55,6 +55,7 @@ def format_active_memos(
             else memo.added_at.strftime("%H:%M")
         )
         lines.append(
-            f"- {stale_prefix}[{tick_part}{age_part}] {memo.content} (id: {short_memo_id(memo.id)})"
+            f"- [{memo_handle(memo.id)}] {stale_prefix}"
+            f"[{tick_part}{age_part}] {memo.content}"
         )
     return "\n".join(lines)

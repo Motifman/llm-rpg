@@ -39,11 +39,10 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
 
     1. **【現在の目的】** — objective_text (scenario 固定の目標文)
     2. **【進行中のメモ】** — active_memos_text (memo 操作時のみ変動)
-    3. **【所持・判明した物証】** — inventory_text (mid-volatile)
-    4. **【直近の出来事】** — recent_events_text (append 中心で head 安定)
-    5. **【前回の予測と実際】** — prediction_feedback_text (毎ターン直前 action 依存)
-    6. **【関連する記憶】** — relevant_memories_text (cue 再計算で全変動しうる volatile)
-    7. **【現在地と周囲】** — current_state_text (毎ターン更新の最 volatile / 必須)
+    3. **【直近の出来事】** — recent_events_text (append 中心で head 安定)
+    4. **【前回の予測と実際】** — prediction_feedback_text (毎ターン直前 action 依存)
+    5. **【関連する記憶】** — relevant_memories_text (cue 再計算で全変動しうる volatile)
+    6. **【現在地と周囲】** — current_state_text (所持品を含む最 volatile / 必須)
 
     意図:
       - prefix cache は ④ までで止めたい (= 末尾 append の直近の出来事 は head 安定)。
@@ -60,8 +59,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
     3. **【進行中のメモ】**
     4. **【直近の出来事】**
     5. **【関連する記憶】**
-    6. **【所持・判明した物証】**
-
     Issue #227 chore β で導入された順序。「現在地」を上部に置いていたため
     prefix cache が user content 序盤で切れる課題があった。
     """
@@ -268,15 +265,6 @@ def _emit_relevant_memories(sections: list, relevant_memories_text: str) -> None
         ])
 
 
-def _emit_inventory(sections: list, inventory_text: str) -> None:
-    if inventory_text.strip():
-        sections.extend([
-            "",
-            "【所持・判明した物証】",
-            inventory_text.strip(),
-        ])
-
-
 def _emit_learned(sections: list, learned_text: str) -> None:
     """Phase 1c: ``【関連する学び】`` (semantic top-K) を legacy 順序で挿入。
 
@@ -414,17 +402,7 @@ def _format_stable_to_volatile(
         "",
     ])
 
-    # 6. 所持・判明した物証 (mid-volatile、空なら省略)
-    # 実測で 11-19% 変動 (= survival シナリオで pickup が断続的)。
-    # recent_events の head 安定 cache を守るため下に集約。
-    if inventory_text.strip():
-        sections.extend([
-            "【所持・判明した物証】",
-            inventory_text.strip(),
-            "",
-        ])
-
-    # 7. 進行中のメモ (high-volatile、空なら省略)
+    # 6. 進行中のメモ (high-volatile、空なら省略)
     # 旧設計では「memo 操作時のみ」と semi-static 扱いで上位 (memos →
     # inventory → recent_events の順) に置いていたが、Y_after_pr612 実測で
     # 23-43% 変動 (= agent が頻繁に memo_add/done を呼ぶと tick 単位で
@@ -473,7 +451,6 @@ def _format_stable_to_volatile(
         "【現在地と周囲】",
         current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
     ])
-
     return "\n".join(sections)
 
 
@@ -495,7 +472,7 @@ def _format_legacy(
 
     順序: objective → long_summary (Phase 3) → learned (Phase 1c) →
     mid_summary (Phase 2) → current_state → memos → recent_events →
-    memories → inventory。
+    memories。所持品は current_state に一本化する。
     """
     sections: list[str] = []
 
@@ -509,6 +486,5 @@ def _format_legacy(
     _emit_pending_predictions(sections, pending_predictions_text)
     _emit_recent_events(sections, recent_events_text)
     _emit_relevant_memories(sections, relevant_memories_text)
-    _emit_inventory(sections, inventory_text)
 
     return "\n".join(sections)
