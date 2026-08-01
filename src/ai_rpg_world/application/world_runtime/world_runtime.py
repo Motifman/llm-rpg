@@ -5296,6 +5296,20 @@ def create_world_runtime(
             schedules_turn=True,
             breaks_movement=False,
         )
+        # 死は世界の設定に従う。追放は常に全員へ。
+        #
+        # **#914 で `player_downed` の到達範囲は塞いだが、こちらが残っていた。**
+        # `grace_ticks: 0` の世界では倒れた次の tick に DEAD が確定するので、
+        # 隠したはずの殺害がこの broadcast で全員に漏れる (実 run 007 で
+        # 別室の 2 人に「アオイは死亡した」が届いた)。
+        #
+        # 追放は会議の場で全員が見て決めたことなので、隠す理由が無い。
+        # 殺害と追放で扱いを分ける。
+        if (
+            new_outcome is PlayerOutcomeEnum.DEAD
+            and not scenario.death_semantics.announce_globally
+        ):
+            return
         for pid in runtime.get_player_ids():
             runtime._emit_observation_directly(pid, output)
 

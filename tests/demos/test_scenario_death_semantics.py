@@ -207,3 +207,41 @@ class TestValidation:
             ScenarioLoader().load_from_file(
                 self._scenario(tmp_path, {"announce_globally": "no"})
             )
+
+
+class TestTheConfirmedDeathIsAlsoHidden:
+    """死の確定も、その場に居ない者へ届かない。
+
+    **#914 の穴。** `player_downed` の到達範囲は塞いだが、outcome の確定
+    (`player_outcome_resolved`) は無条件で全員に配られていた。
+
+    `grace_ticks: 0` の世界では倒れた次の tick に DEAD が確定するので、
+    隠したはずの殺害が 1 イベント遅れて全員に漏れる。実 run 007 で、別室に
+    居た 2 人に「アオイは死亡した。もう蘇生できない。」が届いていた。
+
+    観測の到達範囲は**イベントごとに手書き**なので、1 つ塞いでも同じ穴が
+    別の名前で残る。今回はそれが出た形。
+    """
+
+    def test_players_elsewhere_are_not_told_of_the_death(self, killed) -> None:
+        """別の部屋に居る者に、死の確定が届かない。"""
+        runtime, before = killed
+        runtime.advance_tick()
+
+        for pid in (_MORI, _AOI):
+            for prose in _new_prose(runtime, before, pid):
+                assert "死亡した" not in prose, prose
+
+    def test_an_ejection_is_still_announced_to_everyone(self, killed) -> None:
+        """追放は今までどおり全員に届く。
+
+        **殺害と追放で扱いが違う。** 追放は会議の場で全員が見て決めた
+        ことなので、隠す理由が無い。隠すと「誰が居なくなったのか」が
+        分からなくなる。
+        """
+        runtime, before = killed
+        runtime.eject_player(_KUZE)
+
+        assert any(
+            "追放" in prose for prose in _new_prose(runtime, before, _MORI)
+        )
