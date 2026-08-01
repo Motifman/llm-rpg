@@ -94,13 +94,19 @@ class TestTheScenarioIsShapedForTheDrill:
         """
         assert len(runtime.get_player_ids()) == 4
 
-    def test_two_of_three_tasks_win(self, runtime) -> None:
-        """作業は 3 個中 2 個で勝てる。
+    def test_all_three_tasks_are_required(self, runtime) -> None:
+        """作業は 3 個すべて要る。
 
-        全部を要求すると 1 人倒れただけで詰む。
+        当初は 2 個で勝てるようにしていた (1 人倒れても詰まないように)。
+        **実 run でクルーが速すぎた。** 7 tick で終わり、キーパーは刃物を
+        取りに行く途中だった。
+
+        全部を要求しても詰まない。誰でもどの作業もできるので、生存者が
+        1 人でも居れば終えられる。0〜1 人まで減った時点でキーパーの勝ちが
+        確定しているので、余白は要らなかった。
         """
         assert "0/3" in _line(runtime, "作業の進み")
-        assert "あと 2" in _line(runtime, "作業の進み")
+        assert "あと 3" in _line(runtime, "作業の進み")
 
     def test_only_the_hall_is_lit(self, runtime) -> None:
         """明るいのは集会室だけ。通路も倉庫も暗い。
@@ -197,6 +203,8 @@ class TestTheWholeLoopRuns:
 
         # 5. 自由時間に戻って作業を続けられる
         _finish_task(runtime, _AOI, "weather_log", "log_weather")
+        _move(runtime, _AOI, "storage")
+        _finish_task(runtime, _AOI, "inventory_ledger", "count_supplies")
         assert "必要数に到達" in _line(runtime, "作業の進み", _AOI)
 
     def test_the_run_can_end_by_finishing_the_work(self, runtime) -> None:
@@ -209,5 +217,7 @@ class TestTheWholeLoopRuns:
         _finish_task(runtime, _MORI, "junction_box", "tighten_wiring")
         _move(runtime, _MORI, "hall")
         _finish_task(runtime, _MORI, "weather_log", "log_weather")
+        _move(runtime, _MORI, "storage")
+        _finish_task(runtime, _MORI, "inventory_ledger", "count_supplies")
 
         assert runtime.check_game_end().is_ended is True
