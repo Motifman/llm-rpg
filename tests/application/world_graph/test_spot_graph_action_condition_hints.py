@@ -344,5 +344,5 @@ def test_fallback_action_text_separates_blocking_reason_from_condition_hints() -
 
     assert (
         _format_interaction_action_name_with_hints(interaction, interior)
-        == "いまできない: search (棚を調べた後)"
+        == "いまできない: 棚を探す (search・棚を調べた後)"
     )

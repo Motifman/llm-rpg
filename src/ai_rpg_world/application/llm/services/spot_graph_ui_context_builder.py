@@ -26,6 +26,9 @@ from ai_rpg_world.application.llm.contracts.interfaces import ILlmUiContextBuild
 from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
 from ai_rpg_world.application.llm.services._runtime_target_collector import RuntimeTargetCollector
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
+from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
+    format_action_display_with_hints,
+)
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphPlayerSnapshotDto,
 )
@@ -306,28 +309,36 @@ def _format_object_state(state: Dict[str, Any]) -> str:
     return f" ({', '.join(parts)})"
 
 
-def _format_action_name_with_condition_hints(interaction: Any) -> str:
-    """action_name に表示専用の前提条件ヒントを添える。
+def _format_action_with_hints(interaction: Any, *, hints_attribute: str) -> str:
+    """display_label・action_name・表示専用ヒントを一続きに整形する。
 
     ToolRuntimeTargetDto.available_interactions には action_name だけを渡すため、
     ここで作る文字列は prompt 表示専用。
     """
     action_name = str(getattr(interaction, "action_name", ""))
-    hints = tuple(getattr(interaction, "condition_hints", ()) or ())
-    rendered_hints = tuple(str(h).strip() for h in hints if str(h).strip())
-    if not rendered_hints:
-        return action_name
-    return f"{action_name}({'・'.join(rendered_hints)})"
+    display_label = str(getattr(interaction, "display_label", "") or "").strip()
+    hints = tuple(getattr(interaction, hints_attribute, ()) or ())
+    return format_action_display_with_hints(
+        action_name,
+        hints,
+        display_label=display_label,
+    )
+
+
+def _format_action_name_with_condition_hints(interaction: Any) -> str:
+    """選べる action を意味ラベル・識別子・条件ヒントの順に整形する。"""
+    return _format_action_with_hints(
+        interaction,
+        hints_attribute="condition_hints",
+    )
 
 
 def _format_blocked_action_name_with_hints(interaction: Any) -> str:
-    """いま満たしていない理由付きで action_name を整形する。"""
-    action_name = str(getattr(interaction, "action_name", ""))
-    hints = tuple(getattr(interaction, "blocking_hints", ()) or ())
-    rendered_hints = tuple(str(h).strip() for h in hints if str(h).strip())
-    if not rendered_hints:
-        return action_name
-    return f"{action_name} ({'・'.join(rendered_hints)})"
+    """いまできない action を意味ラベル・識別子・理由の順に整形する。"""
+    return _format_action_with_hints(
+        interaction,
+        hints_attribute="blocking_hints",
+    )
 
 
 class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
@@ -594,10 +605,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         for i, entry in enumerate(snap.objects):
             label = allocator.next(PREFIX_OBJECT)
             disambiguated_name = disamb[i]
-            # PR-EE (Y_after_pr639_640 後続): action 表示は action_name の
-            # カンマ区切りに簡略化。旧
-            # ``[gather(action_name="gather") / examine(action_name="examine")]``
-            # は冗長で認知負荷が高く、LLM の action 誤発明を招いていた。
+            # action は意味を示す display_label と tool に渡す action_name を
+            # 対にして表示する。前提条件ヒントも同じ括弧内へ中黒で連ねる。
             action_names: list[str] = [inter.action_name for inter in entry.interactions]
             action_labels: list[str] = [
                 _format_action_name_with_condition_hints(inter)

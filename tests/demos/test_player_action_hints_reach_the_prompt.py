@@ -2,7 +2,7 @@
 
 サービスがラベルを返せても、state builder → UI builder のどこかで素の名前に
 戻っていれば LLM には届かない。逆に、executor の「使える操作」列挙にラベルが
-混ざると、LLM が ``strike_down(暗い場所のみ)`` をそのまま action_name として
+混ざると、LLM が表示文字列をそのまま action_name として
 渡す往復が生まれる。**両方向**を固定する。
 """
 
@@ -73,7 +73,7 @@ class TestHintsReachTheCoLocatedPlayerRow:
     """同席者行に、条件つきの action 候補が出る。"""
 
     def test_row_shows_the_conditions_alongside_the_action(self, runtime) -> None:
-        """相手の行末に ``strike_down(暗い場所のみ・ナイフが要る)`` が並ぶ。
+        """相手の行末に意味・識別子・条件ヒントが一続きで並ぶ。
 
         ラベルは **行ごと** に持つ (snapshot 単位の 1 本のタプルではない)。
         全員に同じ一覧を出すと、使えない相手の行にも並んでしまう。
@@ -84,8 +84,14 @@ class TestHintsReachTheCoLocatedPlayerRow:
         )
 
         assert (
-            "strike_down(暗い場所のみ・ナイフが要る)"
+            "背後から襲う (strike_down・暗い場所のみ・ナイフが要る)"
             in target_entry.available_action_labels
+        )
+
+        observation = runtime.build_observation(_ACTOR)
+        assert (
+            "[背後から襲う (strike_down・暗い場所のみ・ナイフが要る)]"
+            in observation
         )
 
 

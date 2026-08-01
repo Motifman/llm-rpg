@@ -60,7 +60,7 @@ from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
     declarative_condition_hints,
-    format_action_name_with_hints,
+    format_action_display_with_hints,
 )
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
@@ -225,31 +225,33 @@ class PlayerInteractionApplicationService:
         return True
 
     def _format_label(self, action_name: str, idef: InteractionDef) -> str:
-        return format_action_name_with_hints(
+        return format_action_display_with_hints(
             action_name,
             declarative_condition_hints(
                 idef,
                 item_spec_name_resolver=self._resolve_item_spec_name_for_hint,
             ),
+            display_label=idef.display_label,
         )
 
     def available_action_labels(self) -> Tuple[str, ...]:
         """同席者行に出す**表示用**の action 文字列を宣言順で返す。
 
         前提条件のうち宣言だけから決まるもの (明るさ / 時刻 / 天候 / 所持品)
-        を ``strike_down(暗い場所のみ・ナイフが要る)`` の形で添える。物体行の
-        ``gather(夜のみ)`` と同じ書式に揃えてある。
+        を ``背後から襲う (strike_down・暗い場所のみ・ナイフが要る)`` の形で
+        添える。物体行の ``採取する (gather・夜のみ)`` と同じ書式に揃えてある。
 
         添えないと「暗い場所でだけ襲える」ことは**失敗して初めて**分かる。
         失敗文からも学べるが、行動 1 回とターン 1 つを必ず捨てることになる。
         """
         return tuple(
-            format_action_name_with_hints(
+            format_action_display_with_hints(
                 action_name,
                 declarative_condition_hints(
                     idef,
                     item_spec_name_resolver=self._resolve_item_spec_name_for_hint,
                 ),
+                display_label=idef.display_label,
             )
             for action_name, idef in self._by_action_name.items()
         )
