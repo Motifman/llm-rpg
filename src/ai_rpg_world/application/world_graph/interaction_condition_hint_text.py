@@ -14,6 +14,9 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
+from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
+    LEGACY_NEGATED_ALIASES,
+)
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
@@ -86,56 +89,106 @@ def declarative_condition_hints(
     """
     hints: list[str] = []
     for cond in interaction.preconditions:
-        t = cond.condition_type
-        if t == InteractionConditionTypeEnum.TIME_OF_DAY_IS:
-            if cond.required_time_of_day_phase:
-                hints.append(
-                    f"{label_time_of_day_phase(cond.required_time_of_day_phase)}のみ"
-                )
+        renderers = _HINT_RENDERERS.get(cond.condition_type)
+        if renderers is None:
             continue
-        if t == InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT:
-            if cond.required_time_of_day_phase:
-                hints.append(
-                    f"{label_time_of_day_phase(cond.required_time_of_day_phase)}不可"
-                )
+        positive, negative = renderers
+        render = negative if getattr(cond, "negate", False) else positive
+        if render is None:
             continue
-        if t == InteractionConditionTypeEnum.WEATHER_IS:
-            if cond.required_weather_type:
-                hints.append(f"{label_weather_type(cond.required_weather_type)}のみ")
-            continue
-        if t == InteractionConditionTypeEnum.WEATHER_IS_NOT:
-            if cond.required_weather_type:
-                hints.append(f"{label_weather_type(cond.required_weather_type)}不可")
-            continue
-        if t == InteractionConditionTypeEnum.SPOT_LIGHTING_IS:
-            if cond.required_lighting:
-                hints.append(f"{label_lighting(cond.required_lighting)}のみ")
-            continue
-        if t == InteractionConditionTypeEnum.SPOT_LIGHTING_IS_NOT:
-            if cond.required_lighting:
-                hints.append(f"{label_lighting(cond.required_lighting)}不可")
-            continue
-        if t == InteractionConditionTypeEnum.HAS_ITEM:
-            if item_spec_name_resolver is None or cond.target_item_spec_id is None:
-                continue
-            name = item_spec_name_resolver(cond.target_item_spec_id)
-            if name:
-                hints.append(f"{name}が要る")
-            continue
-        if t == InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST:
-            text = (
-                object_state_requirement_text_resolver(cond)
-                if object_state_requirement_text_resolver is not None
-                else None
-            )
-            if text:
-                hints.append(text)
-            else:
-                hints.append(
-                    f"対象の蓄積が{max(1, int(cond.required_quantity))}以上必要"
-                )
-            continue
+        text = render(
+            cond,
+            item_spec_name_resolver,
+            object_state_requirement_text_resolver,
+        )
+        if text:
+            hints.append(text)
     return tuple(hints)
+
+
+def _time_of_day(cond, _items, _objstate, *, suffix: str) -> Optional[str]:
+    if not cond.required_time_of_day_phase:
+        return None
+    return f"{label_time_of_day_phase(cond.required_time_of_day_phase)}{suffix}"
+
+
+def _weather(cond, _items, _objstate, *, suffix: str) -> Optional[str]:
+    if not cond.required_weather_type:
+        return None
+    return f"{label_weather_type(cond.required_weather_type)}{suffix}"
+
+
+def _lighting(cond, _items, _objstate, *, suffix: str) -> Optional[str]:
+    if not cond.required_lighting:
+        return None
+    return f"{label_lighting(cond.required_lighting)}{suffix}"
+
+
+def _has_item(cond, item_spec_name_resolver, _objstate, *, suffix: str) -> Optional[str]:
+    if item_spec_name_resolver is None or cond.target_item_spec_id is None:
+        return None
+    name = item_spec_name_resolver(cond.target_item_spec_id)
+    return f"{name}{suffix}" if name else None
+
+
+def _object_state_int(cond, _items, object_state_requirement_text_resolver, **_):
+    text = (
+        object_state_requirement_text_resolver(cond)
+        if object_state_requirement_text_resolver is not None
+        else None
+    )
+    if text:
+        return text
+    return f"対象の蓄積が{max(1, int(cond.required_quantity))}以上必要"
+
+
+#: 条件の種別 → (肯定のときの文, 否定のときの文)。
+#:
+#: **否定の文は肯定の機械的な反転ではない** (「朝のみ」に対して「朝不可」)。
+#: だから分岐の中で `negate` を読む形にはしない。読む形にすると、書き忘れた
+#: 分岐は否定を無視して肯定の文を出す。**出ないのではなく嘘が出る。**
+#: v4 の「夜不可・嵐不可」が「夜のみ・嵐のみ」と表示された実例がある
+#: (この表を入れる前の実装で、既存テストが捕まえた)。
+#:
+#: `None` は「その組み合わせではヒントを出さない」。表に載っていない種別は
+#: `_NO_HINT_CONDITIONS` に理由と共に列挙する。どちらにも無い種別があれば
+#: `test_interaction_condition_hint_table.py` が落ちる。
+_HINT_RENDERERS: dict = {
+    InteractionConditionTypeEnum.TIME_OF_DAY_IS: (
+        lambda c, i, o: _time_of_day(c, i, o, suffix="のみ"),
+        lambda c, i, o: _time_of_day(c, i, o, suffix="不可"),
+    ),
+    InteractionConditionTypeEnum.WEATHER_IS: (
+        lambda c, i, o: _weather(c, i, o, suffix="のみ"),
+        lambda c, i, o: _weather(c, i, o, suffix="不可"),
+    ),
+    InteractionConditionTypeEnum.SPOT_LIGHTING_IS: (
+        lambda c, i, o: _lighting(c, i, o, suffix="のみ"),
+        lambda c, i, o: _lighting(c, i, o, suffix="不可"),
+    ),
+    InteractionConditionTypeEnum.HAS_ITEM: (
+        lambda c, i, o: _has_item(c, i, o, suffix="が要る"),
+        lambda c, i, o: _has_item(c, i, o, suffix="を持っていると不可"),
+    ),
+    InteractionConditionTypeEnum.TARGET_HAS_ITEM: (
+        lambda c, i, o: _has_item(c, i, o, suffix="を相手が持っていること"),
+        lambda c, i, o: _has_item(c, i, o, suffix="を相手が持っていないこと"),
+    ),
+    InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST: (
+        _object_state_int,
+        None,
+    ),
+}
+
+# 否定専用の旧種別も表に載せる。
+#
+# **loader を通らない経路がある。** テストや codec が条件を直接組む場合、
+# 畳まれないまま旧種別で届く。表に無いと肯定側に落ちて「夜不可」が消えるか、
+# 悪くすると「夜のみ」に化ける。畳み先の否定 renderer をそのまま指す。
+for _legacy, _base in LEGACY_NEGATED_ALIASES.items():
+    _renderers = _HINT_RENDERERS.get(_base)
+    if _renderers is not None and _renderers[1] is not None:
+        _HINT_RENDERERS[_legacy] = (_renderers[1], _renderers[1])
 
 
 def required_parameter_hints(interaction) -> tuple[str, ...]:

@@ -12,6 +12,14 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 @dataclass(frozen=True)
 class InteractionCondition:
     condition_type: InteractionConditionTypeEnum
+    #: 条件の成否を反転する。「倒れていない相手だけ」のような否定形を、
+    #: 専用の enum を足さずに書くための旗。
+    #:
+    #: **許可した種別でしか使えない** (`NEGATABLE_CONDITIONS`)。条件の評価には
+    #: 「満たしていない」と「評価できない」(provider 未配線 / 対象が解決でき
+    #: ない) が混ざっていて、後者を機械的に反転すると配線ミスが「条件を
+    #: 満たした」に化ける。読み込み時に許可外を落とす。
+    negate: bool = False
     target_item_spec_id: Optional[ItemSpecId] = None
     target_object_id: Optional[SpotObjectId] = None
     required_state: Optional[Dict[str, Any]] = None
@@ -59,3 +67,42 @@ class InteractionCondition:
     #   AT_SPOT_IS{_NOT} → required_spot_id
     required_lighting: Optional[str] = None
     required_spot_id: Optional[SpotId] = None
+
+
+#: `negate` を付けてよい条件の種別。
+#:
+#: 既存の否定専用 enum が在る 5 種は、否定して安全だと実績で確認済み
+#: (loader が base + negate に畳む)。`TARGET_PLAYER_IS_INCAPACITATED` は
+#: 「倒れていない相手だけ」を書くために足した。
+#:
+#: **足すときは、その種別の「評価できない」経路を確かめてから足すこと。**
+#: 例えば `OBJECT_STATE_INT_AT_LEAST` は対象オブジェクトを解決できないとき
+#: False を返すので、反転すると「見つからない = 条件成立」になる。だから
+#: 入れていない (#908 の作者に確認済み)。
+NEGATABLE_CONDITIONS = frozenset({
+    InteractionConditionTypeEnum.TIME_OF_DAY_IS,
+    InteractionConditionTypeEnum.WEATHER_IS,
+    InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
+    InteractionConditionTypeEnum.AT_SPOT_IS,
+    InteractionConditionTypeEnum.TARGET_HAS_ITEM,
+    InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED,
+})
+
+
+#: 否定専用の旧種別 → (畳んだあとの種別)。
+#:
+#: **シナリオ JSON は書き換えない。** resolved.json がシナリオ hash を記録
+#: しているので、書き換えると過去 run と突き合わせられなくなる。loader が
+#: 読み込み時に 1 通りへ畳む。
+LEGACY_NEGATED_ALIASES = {
+    InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT:
+        InteractionConditionTypeEnum.TIME_OF_DAY_IS,
+    InteractionConditionTypeEnum.WEATHER_IS_NOT:
+        InteractionConditionTypeEnum.WEATHER_IS,
+    InteractionConditionTypeEnum.SPOT_LIGHTING_IS_NOT:
+        InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
+    InteractionConditionTypeEnum.AT_SPOT_IS_NOT:
+        InteractionConditionTypeEnum.AT_SPOT_IS,
+    InteractionConditionTypeEnum.TARGET_HAS_NO_ITEM:
+        InteractionConditionTypeEnum.TARGET_HAS_ITEM,
+}

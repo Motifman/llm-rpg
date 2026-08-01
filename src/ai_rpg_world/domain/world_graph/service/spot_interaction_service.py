@@ -20,7 +20,10 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotFoundException,
     UnknownSpotObjectException,
 )
-from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
+from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
+    NEGATABLE_CONDITIONS,
+    InteractionCondition,
+)
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_execution_result import InteractionExecutionResult
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
@@ -164,7 +167,30 @@ class SpotInteractionService:
         except (TypeError, ValueError):
             return None
 
-    def _evaluate_condition(
+    def _evaluate_condition(self, cond, *args, **kwargs) -> Tuple[bool, Optional[str]]:
+        """条件を評価し、`negate` が立っていれば結果を反転する。
+
+        **反転は各分岐の中でやらない。** 分岐の中で `cond.negate` を読む形に
+        すると、書き忘れた分岐は否定を無視して肯定として通る。「嵐不可」の
+        規則が「嵐のとき成立」に化ける。ここ 1 箇所で反転すれば、そもそも
+        書き忘れようがない。
+
+        許可外の種別に `negate` が付くことは無い (loader が読み込み時に
+        落とす)。それでも防御的に確認する。届いた時点で設計違反なので、
+        黙って肯定として扱わず例外にする。
+        """
+        ok, message = self._evaluate_condition_raw(cond, *args, **kwargs)
+        if not getattr(cond, "negate", False):
+            return ok, message
+        if cond.condition_type not in NEGATABLE_CONDITIONS:
+            raise InteractionNotAllowedException(
+                f"{cond.condition_type.value} は negate に対応していません"
+            )
+        if ok:
+            return False, (cond.failure_message or None)
+        return True, None
+
+    def _evaluate_condition_raw(
         self,
         cond: InteractionCondition,
         spot_object: Optional[SpotObject],
