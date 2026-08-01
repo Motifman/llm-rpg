@@ -196,3 +196,74 @@ class TestIncapacitatedPlayersDoNotBlockTheVote:
             runtime.cast_vote(voter, _KUZE)
 
         assert runtime._game_phase_store.current.phase is GamePhase.FREE_ROAM
+
+
+class TestTheProseMatchesWhatActuallyHappened:
+    """結果の文が、実際に起きたことと食い違わない。
+
+    **実 run で食い違いが出た。** 誰も投票しないまま会議が時間切れになった
+    とき、「投票が終わった。票が割れ、誰も追放されなかった。」と届いていた。
+    票は 1 つも入っていない (counts も skip_count も空)。
+
+    「割れた」は**票が入って拮抗した**という意味なので、これを読んだ
+    エージェントは「他の誰かは投票したが意見が分かれた」と受け取る。実際は
+    全員が投票しなかっただけで、次の会議で取るべき手はまったく違う
+    (議論が拮抗しているのか、そもそも誰も動いていないのか)。
+    """
+
+    def _prose(self, runtime) -> str:
+        return _vote_observations(runtime, _MORI)[0].output.prose
+
+    def _let_it_time_out(self, runtime) -> None:
+        """誰も喋らず投票もしないまま会議を時間切れにする。
+
+        `end_meeting` を直接呼ぶと集計を通らない。**実 run で起きたのは
+        時間切れ経路**なので、そこを通す。
+        """
+        from ai_rpg_world.application.world_graph.game_phase_store import (
+            GamePhaseStore,
+        )
+
+        for _ in range(GamePhaseStore.DEFAULT_MEETING_SILENCE_LIMIT_TICKS + 1):
+            runtime.advance_tick()
+
+    def test_nobody_voting_is_not_described_as_a_split(self, runtime) -> None:
+        """1 票も入らなければ「割れた」とは言わない。"""
+        self._let_it_time_out(runtime)
+
+        prose = self._prose(runtime)
+        assert "割れ" not in prose, prose
+
+    def test_nobody_voting_says_so(self, runtime) -> None:
+        """1 票も入らなかったことが読み取れる。
+
+        「投票が終わった」だけだと、静かに投票が行われた末の結果に読める。
+        """
+        self._let_it_time_out(runtime)
+
+        assert "誰も票を投じ" in self._prose(runtime)
+
+    def test_a_real_tie_is_still_described_as_a_split(self, runtime) -> None:
+        """本当に割れたときは「割れた」と言う。
+
+        直しすぎて、同数の拮抗まで「誰も投票しなかった」になっては困る。
+        """
+        runtime.cast_vote(_MORI, _KUZE)
+        runtime.cast_vote(_SENA, _KUZE)
+        runtime.cast_vote(_KUZE, _MORI)
+        runtime.cast_vote(_AOI, _MORI)
+
+        prose = self._prose(runtime)
+        assert "割れ" in prose, prose
+
+    def test_all_skipping_is_not_described_as_nobody_voting(self, runtime) -> None:
+        """全員が棄権したのは「誰も投票しなかった」ではない。
+
+        棄権は**保留するという意思表示**で、票の不在ではない (設計 doc
+        §2.3)。混ぜると、全員が判断を保留した事実が消える。
+        """
+        for voter in (_MORI, _SENA, _KUZE, _AOI):
+            runtime.cast_vote(voter, None)
+
+        prose = self._prose(runtime)
+        assert "棄権" in prose, prose
