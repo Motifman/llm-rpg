@@ -130,6 +130,58 @@ class TestVisibleState:
 
         assert obj.visible_state() == {"opened": True}
 
+    def test_state_display_exact_match_wins_over_at_least_rule(self) -> None:
+        """完全一致と at_least が同時に該当する値は、具体的な完全一致文を表示する。"""
+        obj = _make(
+            {"count": 3},
+            state_display=(
+                StateDisplayRule("count", 3, "ちょうど 3 個ある"),
+                StateDisplayRule(
+                    "count", None, "3 個以上ある", at_least=3
+                ),
+            ),
+        )
+
+        assert obj.visible_state() == {
+            VISIBLE_STATE_TAGS_KEY: ("ちょうど 3 個ある",)
+        }
+
+    def test_state_display_uses_largest_matching_at_least_threshold(self) -> None:
+        """完全一致が無い整数値は、該当する at_least のうち最大閾値の文を表示する。"""
+        obj = _make(
+            {"count": 6},
+            state_display=(
+                StateDisplayRule("count", None, "3 個以上ある", at_least=3),
+                StateDisplayRule("count", None, "5 個以上ある", at_least=5),
+            ),
+        )
+
+        assert obj.visible_state() == {
+            VISIBLE_STATE_TAGS_KEY: ("5 個以上ある",)
+        }
+
+    def test_state_display_without_matching_at_least_rule_remains_raw(self) -> None:
+        """完全一致も at_least も該当しない値は、生値を残して宣言漏れを見える化する。"""
+        obj = _make(
+            {"count": -1},
+            state_display=(
+                StateDisplayRule("count", None, "3 個以上ある", at_least=3),
+            ),
+        )
+
+        assert obj.visible_state() == {"count": -1}
+
+    def test_state_display_at_least_does_not_treat_bool_as_int(self) -> None:
+        """bool state は int の一種として at_least に一致させず、生値で宣言漏れを示す。"""
+        obj = _make(
+            {"count": True},
+            state_display=(
+                StateDisplayRule("count", None, "1 個以上ある", at_least=1),
+            ),
+        )
+
+        assert obj.visible_state() == {"count": True}
+
     def test_state_display_for_available_overrides_legacy_unavailable_hint(self) -> None:
         """available に明示 rule があれば、unavailable_hint より作者の state_display を優先する。"""
         obj = _make(

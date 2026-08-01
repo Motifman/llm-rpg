@@ -680,6 +680,55 @@ class TestScenarioLoaderMinimal:
         with pytest.raises(ScenarioLoadError, match="duplicates"):
             ScenarioLoader().load_from_dict(raw)
 
+    def test_object_state_display_at_least_rule_is_loaded(self) -> None:
+        """at_least は完全一致の value と別種の下限表示ルールとして保持する。"""
+        raw = _minimal_scenario()
+        raw["spots"][0]["interior"]["objects"][0]["state"] = {"count": 4}
+        raw["spots"][0]["interior"]["objects"][0]["state_display"] = [
+            {"key": "count", "at_least": 3, "text": "3 個以上ある"},
+        ]
+
+        result = ScenarioLoader().load_from_dict(raw)
+        interior = next(iter(result.interiors.values()))
+
+        assert interior.objects[0].state_display[0].at_least == 3
+
+    @pytest.mark.parametrize(
+        ("rules", "message"),
+        [
+            (
+                [
+                    {"key": "count", "value": 3, "at_least": 3, "text": "曖昧"},
+                ],
+                "value.*at_least",
+            ),
+            (
+                [
+                    {"key": "count", "at_least": "3", "text": "文字列閾値"},
+                ],
+                "at_least",
+            ),
+            (
+                [
+                    {"key": "count", "at_least": 3, "text": "3 個以上"},
+                    {"key": "count", "at_least": 3, "text": "三つ以上"},
+                ],
+                "duplicates",
+            ),
+        ],
+    )
+    def test_invalid_object_state_display_at_least_rule_raises(
+        self,
+        rules,
+        message: str,
+    ) -> None:
+        """value との同時指定・非整数閾値・同じ閾値の重複は読み込み時に拒否する。"""
+        raw = _minimal_scenario()
+        raw["spots"][0]["interior"]["objects"][0]["state_display"] = rules
+
+        with pytest.raises(ScenarioLoadError, match=message):
+            ScenarioLoader().load_from_dict(raw)
+
     def test_parses_scenario_events(self) -> None:
         result = ScenarioLoader().load_from_dict(_minimal_scenario())
         assert len(result.scenario_events) == 1

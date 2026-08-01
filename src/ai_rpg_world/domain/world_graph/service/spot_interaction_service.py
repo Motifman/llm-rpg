@@ -79,6 +79,7 @@ class SpotInteractionService:
         #   current_spot_id: 行為者の現在地。
         current_effective_lighting: Optional[LightingEnum] = None,
         current_spot_id: Optional[SpotId] = None,
+        interior: Optional[SpotInterior] = None,
     ) -> Tuple[bool, Optional[str]]:
         # Phase 4-B: 同一 instance を acting / target 両方として渡すのは
         # wiring バグ。precondition 段階で弾く（apply_effects と同じガード）。
@@ -132,6 +133,7 @@ class SpotInteractionService:
                 current_tick=current_tick,
                 current_effective_lighting=current_effective_lighting,
                 current_spot_id=current_spot_id,
+                interior=interior,
             )
             if not ok:
                 return False, msg
@@ -183,8 +185,12 @@ class SpotInteractionService:
         current_tick: Optional[WorldTick] = None,
         current_effective_lighting: Optional[LightingEnum] = None,
         current_spot_id: Optional[SpotId] = None,
+        interior: Optional[SpotInterior] = None,
     ) -> Tuple[bool, Optional[str]]:
         t = cond.condition_type
+        condition_object = spot_object
+        if cond.target_object_id is not None and interior is not None:
+            condition_object = interior.get_object(cond.target_object_id)
         if t == InteractionConditionTypeEnum.ALWAYS:
             return True, None
         if t == InteractionConditionTypeEnum.HAS_ITEM:
@@ -256,6 +262,26 @@ class SpotInteractionService:
             for k, v in cond.required_state.items():
                 if spot_object.state.get(k) != v:
                     return False, cond.failure_message or "オブジェクトの状態が条件を満たしません"
+            return True, None
+        if t == InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST:
+            if condition_object is None:
+                return False, (
+                    cond.failure_message
+                    or "この行為には対象オブジェクトが必要な条件が書かれています"
+                )
+            if not cond.state_key:
+                return False, (
+                    cond.failure_message
+                    or "OBJECT_STATE_INT_AT_LEAST に state_key がありません"
+                )
+            required = max(1, int(cond.required_quantity))
+            current = condition_object.state.get(cond.state_key, 0)
+            if not isinstance(current, int):
+                current = 0
+            if current < required:
+                return False, cond.failure_message or (
+                    f"必要な量が足りません (必要: {required}, いま: {current})"
+                )
             return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST:
             if spot_object is None:
@@ -609,6 +635,7 @@ class SpotInteractionService:
             current_tick=current_tick,
             current_effective_lighting=current_effective_lighting,
             current_spot_id=current_spot_id,
+            interior=interior,
         )
         if not ok:
             raise InteractionNotAllowedException(reason or "Interaction not allowed")
@@ -624,6 +651,7 @@ class SpotInteractionService:
             acting_player_status=acting_player_status,
             interaction_parameters=interaction_parameters,
             acting_player_display_name=acting_player_display_name,
+            owned_item_spec_counts=owned_item_spec_counts,
         )
         return InteractionExecutionResult(
             new_interior=effect_result.new_interior,

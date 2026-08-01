@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, FrozenSet, Iterable, List, Optional, Tuple
+from typing import Any, FrozenSet, Iterable, List, Mapping, Optional, Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -77,6 +77,9 @@ SIGN_HIDDEN_STATE_KEYS = frozenset(
 _DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
     InteractionEffectTypeEnum.CHANGE_OBJECT_STATE: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE: EffectVisibility.HIDDEN,
+    # 投入の進捗は object.state / state_display を真実源にする。別途
+    # witness_observation_message が行為を伝えるため、効果サマリは重複させない。
+    InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT: EffectVisibility.HIDDEN,
     # 備蓄消費は内部 bookkeeping。観測は対の GIVE_ITEM / SHOW_MESSAGE 側で出る。
     InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE: EffectVisibility.ACTOR_DIRECT,
@@ -235,6 +238,9 @@ class WorldGraphEffectService:
         # PR-F: 看板の書き手名として state に残す表示名。
         # None ならフォールバック名 ("名無し") を使う。
         acting_player_display_name: Optional[str] = None,
+        # DEPOSIT_ITEM_TO_OBJECT が、実際に所持している数と同じ数だけ
+        # remove 予約と object.state 加算を作るための所持数スナップショット。
+        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
     ) -> WorldGraphEffectResult:
         # Phase 4-B: 同一 instance を acting と target の両方として渡すのは
         # 作家ミスかコール元の wiring バグ。両側に同じ参照を入れると
@@ -340,6 +346,7 @@ class WorldGraphEffectService:
                 acting_player_status=acting_player_status,
                 interaction_parameters=interaction_parameters,
                 acting_player_display_name=acting_player_display_name,
+                owned_item_spec_counts=owned_item_spec_counts,
             )
 
         item_instance_state_changed = (
@@ -472,6 +479,7 @@ class WorldGraphEffectService:
         acting_player_status: Optional[PlayerStatusAggregate] = None,
         interaction_parameters: Optional[dict] = None,
         acting_player_display_name: Optional[str] = None,
+        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
     ) -> Tuple[
         SpotInterior,
         SpotObject | None,
@@ -572,6 +580,75 @@ class WorldGraphEffectService:
             )
             for _ in range(quantity):
                 bucket.append(sid)
+            return _all
+
+        if et == InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT:
+            if owned_item_spec_counts is None:
+                raise InteractionEffectValidationException(
+                    "DEPOSIT_ITEM_TO_OBJECT は行為者の所持数を必要とします"
+                )
+            sid = self._resolve_item_spec_for_transfer(
+                p, interaction_parameters, "DEPOSIT_ITEM_TO_OBJECT"
+            )
+            state_key = p.get("state_key")
+            if not isinstance(state_key, str) or not state_key:
+                raise InteractionEffectValidationException(
+                    "DEPOSIT_ITEM_TO_OBJECT: state_key is required"
+                )
+            target = self._resolve_target_object(interior, acting_object, p)
+            if target is None:
+                raise InteractionEffectValidationException(
+                    "DEPOSIT_ITEM_TO_OBJECT: target object is not resolvable"
+                )
+            owned = max(0, int(owned_item_spec_counts.get(sid, 0)))
+            raw_quantity = p.get("quantity")
+            if raw_quantity == "all":
+                deposited = owned
+            else:
+                try:
+                    requested = int(raw_quantity)
+                except (TypeError, ValueError) as exc:
+                    raise InteractionEffectValidationException(
+                        "DEPOSIT_ITEM_TO_OBJECT: quantity must be a positive integer or 'all'"
+                    ) from exc
+                if requested <= 0:
+                    raise InteractionEffectValidationException(
+                        "DEPOSIT_ITEM_TO_OBJECT: quantity must be a positive integer or 'all'"
+                    )
+                deposited = min(owned, requested)
+            if deposited == 0:
+                return _all
+
+            current = target.state.get(state_key, 0)
+            if not isinstance(current, int):
+                current = 0
+            new_state = dict(target.state)
+            new_state[state_key] = current + deposited
+            updated_target = target.with_state(new_state)
+            interior = interior.replace_object(updated_target)
+            if (
+                acting_object is not None
+                and updated_target.object_id == acting_object.object_id
+            ):
+                acting_object = updated_target
+            for _ in range(deposited):
+                remove.append(sid)
+            summaries.append(
+                AppliedEffectSummary(
+                    kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
+                    visibility=visibility,
+                    description=f"{updated_target.name} の {state_key} が変化した。",
+                    target_ref=updated_target.name,
+                    state_delta=_state_delta_entries(target.state, new_state),
+                )
+            )
+            _all = (
+                interior, acting_object, flags, grant, remove, messages,
+                damage_specs, status_effect_specs, teleport_specs,
+                atmosphere_update_specs, create_connection_specs,
+                destroy_connection_specs, satisfy_need_specs, passage_specs,
+                meeting_calls,
+            )
             return _all
 
         if et == InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE:

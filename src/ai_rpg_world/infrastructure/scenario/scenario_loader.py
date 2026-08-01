@@ -118,7 +118,7 @@ def _parse_object_state_display(raw: Mapping[str, Any]) -> Tuple[StateDisplayRul
         raise ScenarioLoadError(f"object {object_id}.state_display must be a list")
 
     parsed: list[StateDisplayRule] = []
-    seen: set[tuple[str, tuple[type, Any]]] = set()
+    seen: set[tuple[Any, ...]] = set()
     for index, item in enumerate(raw_rules):
         path = f"object {object_id}.state_display[{index}]"
         if not isinstance(item, dict):
@@ -127,19 +127,27 @@ def _parse_object_state_display(raw: Mapping[str, Any]) -> Tuple[StateDisplayRul
             raise ScenarioLoadError(f"{path}.key is required")
         if "text" not in item:
             raise ScenarioLoadError(f"{path}.text is required")
+        if "value" in item and "at_least" in item:
+            raise ScenarioLoadError(
+                f"{path} cannot specify both value and at_least"
+            )
         try:
             rule = StateDisplayRule(
                 key=item["key"],
                 value=item.get("value"),
                 text=item["text"],
+                at_least=item.get("at_least"),
             )
         except StateDisplayRuleValidationException as exc:
             raise ScenarioLoadError(f"{path}: {exc}") from exc
-        duplicate_key = (rule.key, state_display_value_identity(rule.value))
+        duplicate_key = (
+            (rule.key, "at_least", rule.at_least)
+            if rule.at_least is not None
+            else (rule.key, "value", state_display_value_identity(rule.value))
+        )
         if duplicate_key in seen:
             raise ScenarioLoadError(
-                f"{path} duplicates state_display rule for key={rule.key!r} "
-                f"value={rule.value!r}"
+                f"{path} duplicates state_display rule for key={rule.key!r}"
             )
         seen.add(duplicate_key)
         parsed.append(rule)
@@ -1493,6 +1501,13 @@ class ScenarioLoader:
             )
         required_lighting = self._parse_required_lighting(raw)
         required_spot_id = self._parse_required_spot_id(raw, mapper)
+        if raw.get("condition_type") == "OBJECT_STATE_INT_AT_LEAST":
+            state_key = raw.get("state_key")
+            if not isinstance(state_key, str) or not state_key.strip():
+                raise ScenarioLoadError(
+                    "OBJECT_STATE_INT_AT_LEAST requires a non-empty state_key; "
+                    f"無いと条件は常に不成立になります: {raw!r}"
+                )
         # TARGET_PLAYER_STATE_IS は required_state が無いと常に不成立になる。
         if (
             raw.get("condition_type") == "TARGET_PLAYER_STATE_IS"
@@ -1521,6 +1536,11 @@ class ScenarioLoader:
             puzzle_input_key=raw.get("puzzle_input_key"),
             required_item_spec_ids=required_item_spec_ids,
             required_quantity=self._parse_required_quantity(raw),
+            state_key=(
+                raw.get("state_key", "").strip()
+                if isinstance(raw.get("state_key"), str)
+                else raw.get("state_key")
+            ),
             need_type=self._parse_need_type(raw),
             need_threshold=raw.get("need_threshold"),
             hp_ratio=self._parse_hp_ratio(raw),
@@ -1851,6 +1871,37 @@ class ScenarioLoader:
                 "loot_table", params.pop("loot_table"),
             )
         effect_type = InteractionEffectTypeEnum[raw["effect_type"]]
+        if effect_type is InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT:
+            if actor_context != "interaction":
+                raise ScenarioLoadError(
+                    "DEPOSIT_ITEM_TO_OBJECT requires an acting player and is only "
+                    f"valid in interactions: actor_context={actor_context!r}"
+                )
+            if "item_spec_id" not in params:
+                raise ScenarioLoadError(
+                    "DEPOSIT_ITEM_TO_OBJECT requires parameters.item_spec"
+                )
+            state_key = params.get("state_key")
+            if not isinstance(state_key, str) or not state_key.strip():
+                raise ScenarioLoadError(
+                    "DEPOSIT_ITEM_TO_OBJECT requires parameters.state_key"
+                )
+            params["state_key"] = state_key.strip()
+            if "quantity" not in params:
+                raise ScenarioLoadError(
+                    "DEPOSIT_ITEM_TO_OBJECT requires parameters.quantity; "
+                    "正の整数または 'all' を明示してください"
+                )
+            quantity = params["quantity"]
+            if quantity != "all" and (
+                isinstance(quantity, bool)
+                or not isinstance(quantity, int)
+                or quantity <= 0
+            ):
+                raise ScenarioLoadError(
+                    "DEPOSIT_ITEM_TO_OBJECT parameters.quantity must be a "
+                    f"positive integer or 'all' (got {quantity!r})"
+                )
         # TELEPORT_ENTITY は行き先が無いと domain 側で「spot_id <= 0 なら spec を
         # 作らない」に落ち、書いたのに何も起きない静かな失敗になる。行き先は
         # ``parameters.target_spot`` に書く決まりで、effect の直下に書いても

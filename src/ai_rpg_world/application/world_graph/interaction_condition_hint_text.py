@@ -22,6 +22,7 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
 )
 
 ItemSpecNameResolver = Callable[[object], Optional[str]]
+ObjectStateRequirementTextResolver = Callable[[object], Optional[str]]
 
 _TIME_OF_DAY_PHASE_LABELS: dict[str, str] = {
     "morning": "朝",
@@ -69,6 +70,9 @@ def declarative_condition_hints(
     interaction,
     *,
     item_spec_name_resolver: Optional[ItemSpecNameResolver] = None,
+    object_state_requirement_text_resolver: Optional[
+        ObjectStateRequirementTextResolver
+    ] = None,
 ) -> tuple[str, ...]:
     """宣言だけから決まる前提条件を、宣言順のヒント列にする。
 
@@ -117,6 +121,19 @@ def declarative_condition_hints(
             name = item_spec_name_resolver(cond.target_item_spec_id)
             if name:
                 hints.append(f"{name}が要る")
+            continue
+        if t == InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST:
+            text = (
+                object_state_requirement_text_resolver(cond)
+                if object_state_requirement_text_resolver is not None
+                else None
+            )
+            if text:
+                hints.append(text)
+            else:
+                hints.append(
+                    f"対象の蓄積が{max(1, int(cond.required_quantity))}以上必要"
+                )
             continue
     return tuple(hints)
 

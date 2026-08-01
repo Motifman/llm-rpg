@@ -4,6 +4,9 @@ class InteractionConditionTypeEnum(Enum):
     ALWAYS = "ALWAYS"
     HAS_ITEM = "HAS_ITEM"
     OBJECT_STATE = "OBJECT_STATE"
+    # object.state の整数値が required_quantity 以上であることを要求する。
+    # キー不在・整数以外は 0 とみなし、ScenarioEventCondition と意味を揃える。
+    OBJECT_STATE_INT_AT_LEAST = "OBJECT_STATE_INT_AT_LEAST"
     FLAG_SET = "FLAG_SET"
     # 脱出ゲーム拡張
     PLAYERS_AT_SPOT = "PLAYERS_AT_SPOT"
