@@ -118,7 +118,8 @@ INTERACT_DEFINITION = ToolDefinitionDto(
         "(例: 一度取り尽くした場所をもう一度漁る / 既に開けた箱をまた開ける)。"
         "利用可能な action_name と現在の object 状態は『現在の状況』section の"
         "各オブジェクト行に出ているので、そこから読み取って渡すこと。"
-        "パズル操作の場合は parameters に入力値を指定する。"
+        "追加入力を要求する action では、各オブジェクト行の action 候補に"
+        "必要なキーが『text が要る』のように表示されるため、そのキーを parameters に指定する。"
         "物を触りながら同 spot の他者へ短く声をかけたい場合は say_inline に"
         "一言を書ける。"
     ),
@@ -155,7 +156,11 @@ INTERACT_DEFINITION = ToolDefinitionDto(
             },
             "parameters": {
                 "type": "object",
-                "description": "パズル入力等の追加パラメータ（例: {\"code\": \"1234\"}）。パズルでない操作では省略可。",
+                "description": (
+                    "action が要求する追加入力。必要なキーは『現在の状況』の action 候補に"
+                    "『text が要る』のように表示される（例: {\"text\": \"山頂へ向かった\"}）。"
+                    "必要なキーが表示されない action では省略できる。"
+                ),
             },
             "say_inline": _SAY,
             "inner_thought": _IT,

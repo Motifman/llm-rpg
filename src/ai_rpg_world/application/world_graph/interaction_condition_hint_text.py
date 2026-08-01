@@ -17,6 +17,9 @@ from typing import Callable, Optional
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+    InteractionEffectTypeEnum,
+)
 
 ItemSpecNameResolver = Callable[[object], Optional[str]]
 
@@ -115,6 +118,25 @@ def declarative_condition_hints(
             if name:
                 hints.append(f"{name}が要る")
             continue
+    return tuple(hints)
+
+
+def required_parameter_hints(interaction) -> tuple[str, ...]:
+    """effect 宣言が必須にする interaction parameter を表示用ヒントにする。
+
+    ``WRITE_PLAYER_TEXT`` の実行側と同じく ``text_param_key`` の既定値は
+    ``text``。同じキーを要求する effect が複数あっても表示は一度にする。
+    """
+    hints: list[str] = []
+    for effect in interaction.effects:
+        if effect.effect_type != InteractionEffectTypeEnum.WRITE_PLAYER_TEXT:
+            continue
+        raw_key = effect.parameters.get("text_param_key", "text")
+        if not isinstance(raw_key, str) or not raw_key.strip():
+            continue
+        hint = f"{raw_key.strip()} が要る"
+        if hint not in hints:
+            hints.append(hint)
     return tuple(hints)
 
 

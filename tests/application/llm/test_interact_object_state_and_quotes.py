@@ -164,6 +164,44 @@ class TestObjectSectionQuotesAndActionSimplification:
             ].available_interactions
         )
 
+    def test_required_interaction_parameter_hint(self) -> None:
+        """必須入力は意味ラベル・action_name と同じ括弧内に中黒で表示する。"""
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="浜辺の野営地",
+            current_spot_description="",
+            travel_status_line=None,
+            objects=(
+                SpotGraphObjectEntry(
+                    object_id=10,
+                    name="板切れの掲示",
+                    description="伝言を書き残せる。",
+                    interactions=(
+                        SpotGraphInteractionEntry(
+                            action_name="write_notice",
+                            display_label="板切れに書き残す",
+                            condition_hints=("text が要る",),
+                        ),
+                        SpotGraphInteractionEntry(
+                            action_name="read_notice",
+                            display_label="板切れを読む",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
+
+        assert (
+            '[板切れに書き残す (write_notice・text が要る), '
+            '板切れを読む (read_notice)]' in result.current_state_text
+        )
+        assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
+            "write_notice",
+            "read_notice",
+        )
+
     def test_failed_object_state_condition_hint_is_prompt_only(self) -> None:
         """OBJECT_STATE 失敗理由は「いまできない」行に出し、tool 候補は action_name のまま残る。"""
         snap = SpotGraphPlayerSnapshotDto(
