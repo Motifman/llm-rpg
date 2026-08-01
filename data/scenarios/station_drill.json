@@ -96,7 +96,7 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "当番表。今週の点検は三つ——配線箱・棚卸し・気象記録。物資庫と連絡通路は照明が壊れたままで、修理の目処は立っていない。暗い場所へは二人以上で入ること。"
+                      "message": "当番表。今週の点検は三つ——配線箱はセナ、棚卸しはアオイ、気象記録はモリ。物資庫と連絡通路は照明が壊れたままで、修理の目処は立っていない。暗い場所へは二人以上で入ること。"
                     }
                   }
                 ]
@@ -186,7 +186,8 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew"
+                      "role": "crew",
+                      "duty": "weather"
                     },
                     "failure_message": "その手順は自分の担当ではない。"
                   },
@@ -222,7 +223,8 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew"
+                      "role": "crew",
+                      "duty": "weather"
                     },
                     "failure_message": "その手順は自分の担当ではない。"
                   },
@@ -258,7 +260,8 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew"
+                      "role": "crew",
+                      "duty": "weather"
                     },
                     "failure_message": "その手順は自分の担当ではない。"
                   },
@@ -376,7 +379,8 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew"
+                      "role": "crew",
+                      "duty": "wiring"
                     },
                     "failure_message": "その手順は自分の担当ではない。"
                   },
@@ -412,7 +416,8 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew"
+                      "role": "crew",
+                      "duty": "wiring"
                     },
                     "failure_message": "その手順は自分の担当ではない。"
                   },
@@ -448,7 +453,8 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew"
+                      "role": "crew",
+                      "duty": "wiring"
                     },
                     "failure_message": "その手順は自分の担当ではない。"
                   },
@@ -617,7 +623,8 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew"
+                      "role": "crew",
+                      "duty": "supplies"
                     },
                     "failure_message": "その手順は自分の担当ではない。"
                   },
@@ -653,7 +660,8 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew"
+                      "role": "crew",
+                      "duty": "supplies"
                     },
                     "failure_message": "その手順は自分の担当ではない。"
                   },
@@ -689,7 +697,8 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew"
+                      "role": "crew",
+                      "duty": "supplies"
                     },
                     "failure_message": "その手順は自分の担当ではない。"
                   },
@@ -911,10 +920,11 @@
         "lantern"
       ],
       "initial_state": {
-        "role": "crew"
+        "role": "crew",
+        "duty": "weather"
       },
       "persona_prompt": "あなたはモリ、観測所の気象観測員。几帳面で、手順を決めてから動く。人を疑うのは苦手だが、辻褄の合わない話は覚えている。ランタンを 1 つ持っている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。",
-      "objective": "タスクを 2 つ終わらせる、またはインポスターを追放する。"
+      "objective": "自分の担当である気象記録の点検を終わらせる。三つの点検がすべて終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
       "id": "sena",
@@ -922,10 +932,11 @@
       "spawn_spot": "hall",
       "initial_items": [],
       "initial_state": {
-        "role": "crew"
+        "role": "crew",
+        "duty": "wiring"
       },
       "persona_prompt": "あなたはセナ、通信技師。手が早く、機械のことなら任せてほしい。焦りやすく、一人で先に動いてしまう癖がある。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。",
-      "objective": "タスクを 2 つ終わらせる、またはインポスターを追放する。"
+      "objective": "自分の担当である配線箱の点検を終わらせる。三つの点検がすべて終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
       "id": "kuze",
@@ -946,10 +957,11 @@
       "spawn_spot": "hall",
       "initial_items": [],
       "initial_state": {
-        "role": "crew"
+        "role": "crew",
+        "duty": "supplies"
       },
       "persona_prompt": "あなたはアオイ、越冬隊の調理担当。物怖じせず誰にでも話しかける。人の出入りをよく覚えているが、暗い場所は苦手で一人では行きたがらない。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。",
-      "objective": "タスクを 2 つ終わらせる、またはインポスターを追放する。"
+      "objective": "自分の担当である棚卸しの点検を終わらせる。三つの点検がすべて終わればクルーの勝ち。またはインポスターを追放する。"
     }
   ],
   "game_end_conditions": {

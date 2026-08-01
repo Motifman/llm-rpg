@@ -43,7 +43,8 @@ _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
 
-_MORI = PlayerId(1)   # crew
+_MORI = PlayerId(1)   # crew (気象記録の担当)
+_SENA = PlayerId(2)   # crew (配線箱の担当)
 _KUZE = PlayerId(3)   # keeper
 
 
@@ -51,7 +52,7 @@ _KUZE = PlayerId(3)   # keeper
 def runtime():
     rt = create_world_runtime(_SCENARIO)
     graph = rt._spot_graph_repo.find_graph()
-    for pid in (_MORI, _KUZE):
+    for pid in (_MORI, _SENA, _KUZE):
         graph.unplace_entity(EntityId.create(int(pid)))
         graph.place_entity(
             EntityId.create(int(pid)),
@@ -104,15 +105,20 @@ class TestTheFakeActionIsHiddenFromCrew:
 class TestUnrelatedActionsAreUntouched:
     """役割と関係の無い行動は今までどおり出る。"""
 
-    def test_both_roles_see_the_real_task(self, runtime) -> None:
-        """本物の作業は crew にも keeper にも出る。
+    def test_the_assigned_crew_sees_the_real_task(self, runtime) -> None:
+        """本物の作業は、担当のクルーには出る。
 
-        本物も `PLAYER_STATE_IS {role: crew}` で守られているので、
-        **keeper には出ない**のが正しい。crew には出る。
+        本物は `PLAYER_STATE_IS {role: crew, duty: wiring}` で守られている。
+        keeper に出ないだけでなく、**担当外のクルーにも出ない**。
+        ここで確かめるのは、守りすぎて担当者にも出なくなっていないこと。
         """
-        assert "tighten_wiring (" in _object_lines(runtime, _MORI) or (
-            "tighten_wiring," in _object_lines(runtime, _MORI)
-        ) or "tighten_wiring)" in _object_lines(runtime, _MORI)
+        line = _object_lines(runtime, _SENA)
+
+        assert (
+            "tighten_wiring (" in line
+            or "tighten_wiring," in line
+            or "tighten_wiring)" in line
+        )
 
     def test_the_keeper_does_not_see_the_real_task(self, runtime) -> None:
         """keeper には本物の作業が出ない。

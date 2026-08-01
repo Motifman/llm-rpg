@@ -47,6 +47,11 @@ _MORI = PlayerId(1)   # crew
 _SENA = PlayerId(2)   # crew
 _KUZE = PlayerId(3)   # keeper
 
+#: 配線箱はセナの担当。担当でない者は候補にすら出ない (担当制)。
+_OWNER = _SENA
+#: 担当外のクルー。「あとから来た人にも進捗が見える」側を演じる。
+_BYSTANDER = _MORI
+
 #: 配線箱の作業を 1 手進める action を、進捗の順に並べたもの。
 _WIRING_STEPS = ("tighten_wiring", "tighten_wiring_2", "tighten_wiring_3")
 #: 偽装は 1 つを繰り返す。**段を作る必要が無い。** 目撃者に届く文は全段で
@@ -88,21 +93,21 @@ class TestOneActionIsNotEnough:
 
         ここが立つと多段になっていない。
         """
-        runtime.do_interact(_MORI, "junction_box", _WIRING_STEPS[0])
+        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[0])
 
         assert "task_wiring" not in _flags(runtime)
 
     def test_the_second_step_does_not_complete_it_either(self, runtime) -> None:
         """2 手目でもまだ立たない。"""
-        runtime.do_interact(_MORI, "junction_box", _WIRING_STEPS[0])
-        runtime.do_interact(_MORI, "junction_box", _WIRING_STEPS[1])
+        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[0])
+        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[1])
 
         assert "task_wiring" not in _flags(runtime)
 
     def test_the_third_step_completes_it(self, runtime) -> None:
         """3 手目で完了する。"""
         for step in _WIRING_STEPS:
-            runtime.do_interact(_MORI, "junction_box", step)
+            runtime.do_interact(_OWNER, "junction_box", step)
 
         assert "task_wiring" in _flags(runtime)
 
@@ -115,7 +120,7 @@ class TestOnlyOneStepIsOfferedAtATime:
 
         3 つ並ぶと「どれを選べばいいか」で迷い、順番を飛ばそうとする。
         """
-        line = _offered(runtime, _MORI)
+        line = _offered(runtime, _OWNER)
 
         assert _WIRING_STEPS[0] in line
         assert _WIRING_STEPS[1] not in line
@@ -123,8 +128,8 @@ class TestOnlyOneStepIsOfferedAtATime:
 
     def test_the_next_step_replaces_it(self, runtime) -> None:
         """1 手進めると、次の手に入れ替わる。"""
-        runtime.do_interact(_MORI, "junction_box", _WIRING_STEPS[0])
-        line = _offered(runtime, _MORI)
+        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[0])
+        line = _offered(runtime, _OWNER)
 
         assert _WIRING_STEPS[1] in line
         assert f"{_WIRING_STEPS[0]})" not in line
@@ -136,25 +141,62 @@ class TestOnlyOneStepIsOfferedAtATime:
         残ると、終わった作業を何度もやり直す。
         """
         for step in _WIRING_STEPS:
-            runtime.do_interact(_MORI, "junction_box", step)
+            runtime.do_interact(_OWNER, "junction_box", step)
 
-        assert "tighten_wiring" not in _offered(runtime, _MORI)
+        assert "tighten_wiring" not in _offered(runtime, _OWNER)
 
 
-class TestAnyoneCanTakeOver:
-    """途中から他人が引き継げる。"""
+class TestOnlyTheAssignedCrewCanDoIt:
+    """点検は担当者しか進められない。
 
-    def test_a_different_crew_member_can_continue(self, runtime) -> None:
-        """モリが 2 手、セナが 1 手で完了する。
+    **以前の判断を反転させた。** かつては「進捗は object にあるので自然に
+    引き継げる。禁じる理由が無い」としていた。実 run 007 で理由が出た。
+    49 手のうち **13 手** が「いまその手順に取りかかる段ではない」で消えて
+    いた。1 tick で全員が同時に動くので、候補一覧を組んだ時点と実行する
+    時点で進捗がずれる。誰でも触れると、この衝突が起き続ける。
 
-        進捗は object にあるので自然に引き継げる。禁じる理由が無いし、
-        手分けの意味も増える。
-        """
-        runtime.do_interact(_MORI, "junction_box", _WIRING_STEPS[0])
-        runtime.do_interact(_MORI, "junction_box", _WIRING_STEPS[1])
-        runtime.do_interact(_SENA, "junction_box", _WIRING_STEPS[2])
+    担当を分ければ衝突は**起きようがない**。代償として、担当者が死ぬと
+    その点検は永久に終わらない。それは受け入れる。クルーの勝ち筋が追放
+    だけになり、会議が起きる圧力になる (run 007 は会議ゼロで終わった)。
+    """
+
+    def test_the_owner_can_finish_it_alone(self, runtime) -> None:
+        """担当者が 3 手で完了させられる。"""
+        for step in _WIRING_STEPS:
+            runtime.do_interact(_OWNER, "junction_box", step)
 
         assert "task_wiring" in _flags(runtime)
+
+    def test_another_crew_member_cannot_take_over(self, runtime) -> None:
+        """担当外のクルーは、途中からでも引き継げない。"""
+        from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+            InteractionNotAllowedException,
+        )
+
+        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[0])
+
+        with pytest.raises(InteractionNotAllowedException):
+            runtime.do_interact(_BYSTANDER, "junction_box", _WIRING_STEPS[1])
+
+    def test_the_step_is_not_even_offered_to_others(self, runtime) -> None:
+        """担当外には、そもそも候補として出ない。
+
+        出したうえで弾くと、**その 1 手が丸ごと無駄になる**。run 007 で
+        消えた 13 手はこの形だった。候補から消すことが要点。
+        """
+        assert "tighten_wiring" not in _offered(runtime, _BYSTANDER)
+
+    def test_the_refusal_does_not_reveal_whose_job_it_is(self, runtime) -> None:
+        """断り文句が、誰の担当かを明かさない。
+
+        `PLAYER_STATE_IS` は HIDDEN (#905) なので「いまできない」にも
+        出ない。誰の担当かは当番表を読んで知るもので、**行動一覧から
+        逆算できてはいけない**。
+        """
+        line = _offered(runtime, _BYSTANDER)
+
+        assert "セナ" not in line
+        assert "担当" not in line
 
 
 class TestTheFakeLeavesNoTrace:
@@ -170,7 +212,7 @@ class TestTheFakeLeavesNoTrace:
             runtime.do_interact(_KUZE, "junction_box", _WIRING_FAKE)
 
         assert "task_wiring" not in _flags(runtime)
-        assert _WIRING_STEPS[0] in _offered(runtime, _MORI)
+        assert _WIRING_STEPS[0] in _offered(runtime, _OWNER)
 
     def test_the_fake_can_be_repeated_as_many_times_as_the_real_one(
         self, runtime
@@ -190,16 +232,16 @@ class TestTheFakeLeavesNoTrace:
         手数を揃えても文が違えば見分けられる。
         """
         def _prose(actor, step):
-            before = len(runtime._obs_buffer.get_observations(_SENA))
+            before = len(runtime._obs_buffer.get_observations(_BYSTANDER))
             runtime.do_interact(actor, "junction_box", step)
-            after = runtime._obs_buffer.get_observations(_SENA)[before:]
+            after = runtime._obs_buffer.get_observations(_BYSTANDER)[before:]
             return [e.output.prose for e in after if "配線箱" in e.output.prose]
 
-        real = _prose(_MORI, _WIRING_STEPS[0])
+        real = _prose(_OWNER, _WIRING_STEPS[0])
         fake = _prose(_KUZE, _WIRING_FAKE)
 
         assert real and fake, (real, fake)
-        assert real[-1].replace("モリ", "＿") == fake[-1].replace("クゼ", "＿")
+        assert real[-1].replace("セナ", "＿") == fake[-1].replace("クゼ", "＿")
 
 
 class TestTheProgressIsVisibleToEveryone:
@@ -211,19 +253,19 @@ class TestTheProgressIsVisibleToEveryone:
         見えないと「検証可能な主張」が成立しない。あとから来た人が
         確かめられることが要点。
         """
-        runtime.do_interact(_MORI, "junction_box", _WIRING_STEPS[0])
+        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[0])
 
-        assert "途中" in _offered(runtime, _SENA)
+        assert "途中" in _offered(runtime, _BYSTANDER)
 
     def test_it_does_not_say_who_advanced_it(self, runtime) -> None:
         """誰が進めたかは出さない。
 
         出すと偽装が成立しない (作業のふりをしても即座に割れる)。
         """
-        runtime.do_interact(_MORI, "junction_box", _WIRING_STEPS[0])
+        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[0])
 
-        line = _offered(runtime, _SENA)
-        assert "モリ" not in line
+        line = _offered(runtime, _BYSTANDER)
+        assert "セナ" not in line
 
 
 class TestNoEngineVocabularyLeaksIntoTheProse:
@@ -239,7 +281,7 @@ class TestNoEngineVocabularyLeaksIntoTheProse:
         「進んでいる状態だけ宣言すれば十分」と考えて 0 を飛ばしたのが
         最初の形で、実際に `(progress=0)` と出ていた。
         """
-        assert "progress=" not in runtime.build_observation(_MORI)
+        assert "progress=" not in runtime.build_observation(_OWNER)
 
     def test_every_step_of_the_way_reads_as_japanese(self, runtime) -> None:
         """どの段でも日本語で読める。
@@ -248,7 +290,7 @@ class TestNoEngineVocabularyLeaksIntoTheProse:
         気付きにくいので全段を通す。
         """
         for step in _WIRING_STEPS:
-            assert "progress=" not in runtime.build_observation(_MORI)
-            runtime.do_interact(_MORI, "junction_box", step)
+            assert "progress=" not in runtime.build_observation(_OWNER)
+            runtime.do_interact(_OWNER, "junction_box", step)
 
-        assert "progress=" not in runtime.build_observation(_MORI)
+        assert "progress=" not in runtime.build_observation(_OWNER)

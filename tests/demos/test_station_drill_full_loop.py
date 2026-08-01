@@ -165,9 +165,9 @@ class TestTheWholeLoopRuns:
         フェーズが切り替わったまま作業ができなくなる、追放後に会議が開け
         なくなる、といった噛み合わせの崩れは単体テストでは出ない。
         """
-        # 1. 作業が進む
-        _move(runtime, _MORI, "corridor")
-        _finish_task(runtime, _MORI, "junction_box", "tighten_wiring")
+        # 1. 作業が進む (配線箱はセナの担当)
+        _move(runtime, _SENA, "corridor")
+        _finish_task(runtime, _SENA, "junction_box", "tighten_wiring")
         assert "1/3" in _line(runtime, "作業の進み")
 
         # 2. 刃物を手に入れてから、暗い通路で襲う。
@@ -176,7 +176,6 @@ class TestTheWholeLoopRuns:
         _move(runtime, _KUZE, "storage")
         runtime.do_interact(_KUZE, "supply_shelf", "find_cutter")
         _move(runtime, _MORI, "hall")
-        _move(runtime, _SENA, "corridor")
         _move(runtime, _KUZE, "corridor")
         #    一撃では倒れない (damage 70 / HP 100)。**わざとそうしてある**
         #    ので、襲撃は 2 手かかる。その間に逃げられる・目撃されるという
@@ -201,8 +200,9 @@ class TestTheWholeLoopRuns:
         )
         assert runtime._game_phase_store.current.phase is GamePhase.FREE_ROAM
 
-        # 5. 自由時間に戻って作業を続けられる
-        _finish_task(runtime, _AOI, "weather_log", "log_weather")
+        # 5. 自由時間に戻って作業を続けられる。
+        #    **担当制なので、それぞれ自分の点検しか進められない。**
+        _finish_task(runtime, _MORI, "weather_log", "log_weather")
         _move(runtime, _AOI, "storage")
         _finish_task(runtime, _AOI, "inventory_ledger", "count_supplies")
         assert "必要数に到達" in _line(runtime, "作業の進み", _AOI)
@@ -213,11 +213,12 @@ class TestTheWholeLoopRuns:
         終われないシナリオで run を回すと、tick 上限まで走って何も
         分からないまま費用だけかかる。
         """
-        _move(runtime, _MORI, "corridor")
-        _finish_task(runtime, _MORI, "junction_box", "tighten_wiring")
-        _move(runtime, _MORI, "hall")
+        # 担当制なので 1 人ではやり切れない。三人がそれぞれ自分の点検を
+        # 終えて初めて終わる。**手分けが必須になった**のが以前との違い。
+        _move(runtime, _SENA, "corridor")
+        _finish_task(runtime, _SENA, "junction_box", "tighten_wiring")
         _finish_task(runtime, _MORI, "weather_log", "log_weather")
-        _move(runtime, _MORI, "storage")
-        _finish_task(runtime, _MORI, "inventory_ledger", "count_supplies")
+        _move(runtime, _AOI, "storage")
+        _finish_task(runtime, _AOI, "inventory_ledger", "count_supplies")
 
         assert runtime.check_game_end().is_ended is True
