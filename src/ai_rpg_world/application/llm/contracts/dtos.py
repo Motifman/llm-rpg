@@ -15,6 +15,12 @@ _RESCHEDULE_ERROR_CODES = frozenset({
     "LLM_API_CALL_FAILED",    # 一時的 API 失敗
     "LLM_RATE_LIMIT",         # レート制限
     "INVALID_DESTINATION_LABEL",  # ラベル未解決（次 tick で解消の可能性）
+    # 前提不足は失敗理由に必要品・状態が出るため、別の行動へ即座に切り替えられる。
+    "INTERACTION_PRECONDITION_FAILED",
+    # 対象名の未解決は移動先名の未解決と同質で、現在の候補一覧から選び直せる。
+    "INVALID_TARGET_LABEL",
+    # 未定義 action は失敗結果に利用可能な action 一覧が出るため、即座に修正できる。
+    "INTERACTION_ACTION_NOT_FOUND",
     # PR-J: LLM の tool 名 typo (e.g. speech_speech / spot_graph_gather) を救済
     # する。エラーメッセージに fuzzy suggestion + valid 一覧を載せて agent に
     # 修正させるため、次 tick での起床が必須。5 連続 typo すれば PR-I の
