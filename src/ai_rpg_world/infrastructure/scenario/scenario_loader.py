@@ -515,6 +515,17 @@ class ScenarioLoadResult:
     player_interactions: Tuple[InteractionDef, ...] = ()
     monster_templates: Tuple[ScenarioMonsterTemplate, ...] = ()
     monster_placements: Tuple[ScenarioMonsterPlacement, ...] = ()
+    # この世界では出さないツール。**世界の中身に無いものを出さないため**の宣言。
+    #
+    # モンスターの居ない世界に ``spot_graph_attack`` が並び続けるのが動機。
+    # 対象候補が永久に空なのに毎ターン選択肢に載るので、実 run 007 では
+    # インポスターが 3 手を捨てた。会議を宣言しない世界から投票系を落とす
+    # のと同じ判断 (#860) だが、あちらは engine 側に条件を書いていた。
+    # 何を出さないかは世界ごとに違うので、シナリオが決める。
+    #
+    # 名前は spot_graph 系ツールの実名で書く。記憶系ツールの露出は実験
+    # profile の管轄なので、ここでは扱わない。
+    disabled_tools: Tuple[str, ...] = ()
     # Phase E-3b: プレイヤー個別 outcome 解決設定 (RESCUED / STRANDED 自動判定)。
     # None なら個別 outcome を使わない (= 既存の集団 win/lose 経路のみ)。
     outcome_resolution_config: Optional[ScenarioOutcomeResolutionConfig] = None
@@ -584,6 +595,7 @@ class ScenarioLoader:
         win_conds = self._parse_end_conditions(raw.get("game_end_conditions", {}).get("win", []), mapper)
         lose_conds = self._parse_end_conditions(raw.get("game_end_conditions", {}).get("lose", []), mapper)
         initial_flags = tuple(raw.get("initial_flags", []))
+        disabled_tools = self._parse_disabled_tools(raw.get("disabled_tools"))
         scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
         weather_config = self._parse_weather_config(raw.get("environment", {}))
         day_night_config = self._parse_day_night_config(raw.get("environment", {}))
@@ -623,6 +635,7 @@ class ScenarioLoader:
             id_mapper=mapper,
             metadata=metadata,
             initial_flags=initial_flags,
+            disabled_tools=disabled_tools,
             scenario_events=scenario_events,
             weather_config=weather_config,
             day_night_config=day_night_config,
@@ -3091,6 +3104,34 @@ class ScenarioLoader:
             "(outcome_resolution モードは全員の outcome 確定だけを終了条件に"
             "します)"
         )
+
+    def _parse_disabled_tools(self, raw: Any) -> Tuple[str, ...]:
+        """``disabled_tools`` を読む。
+
+        ここでは形だけを見る。**名前が実在するかは runtime 側で確かめる。**
+        ツール名の一覧は application 層にあり、infrastructure から参照すると
+        依存が逆向きになる。実在しない名前を書いても黙って無視されると
+        「無効化したつもりが出たまま」になるので、起動時に落とす
+        (``ToolExposureConfigurationError``)。
+
+        重複はエラーにする。同じ名前が 2 度書かれているのは、多くの場合
+        片方が消し忘れか書き換え漏れで、意図が読めない。
+        """
+        if raw is None:
+            return ()
+        if not isinstance(raw, list):
+            raise ScenarioLoadError("disabled_tools はリストで書いてください")
+        names: list[str] = []
+        for entry in raw:
+            if not isinstance(entry, str) or not entry.strip():
+                raise ScenarioLoadError(
+                    f"disabled_tools の要素は空でない文字列にしてください: {entry!r}"
+                )
+            name = entry.strip()
+            if name in names:
+                raise ScenarioLoadError(f"disabled_tools に重複があります: {name}")
+            names.append(name)
+        return tuple(names)
 
     def _parse_end_conditions(
         self,
