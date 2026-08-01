@@ -2577,6 +2577,11 @@
                 "text": "流木が 3 本積まれている"
               },
               {
+                "key": "driftwood_stacked",
+                "at_least": 3,
+                "text": "流木が 3 本以上積まれている"
+              },
+              {
                 "key": "dry_leaves_stacked",
                 "value": 0,
                 "text": "枯れ葉はまだ敷かれていない"
@@ -2590,6 +2595,11 @@
                 "key": "dry_leaves_stacked",
                 "value": 2,
                 "text": "枯れ葉が 2 掴み敷かれている"
+              },
+              {
+                "key": "dry_leaves_stacked",
+                "at_least": 2,
+                "text": "枯れ葉が 2 掴み以上敷かれている"
               }
             ],
             "interactions": [

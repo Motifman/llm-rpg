@@ -58,8 +58,8 @@ class SpotObject:
     # effect の visibility (HIDDEN) とは独立で、こちらは「state 値そのもの
     # を周囲のプレイヤーに常に見せない」という静的な視認性属性。
     hidden_state_keys: FrozenSet[str] = frozenset()
-    # state の生値を prompt 用の作者文言へ変換するルール。宣言の無い state は
-    # 従来どおり生値を出し、宣言漏れを検出できるようにする。
+    # state の生値を prompt 用の作者文言へ変換する完全一致 / 整数下限ルール。
+    # どちらにも該当しない state は従来どおり生値を出し、宣言漏れを検出する。
     state_display: Tuple[StateDisplayRule, ...] = ()
 
     def __post_init__(self) -> None:
@@ -114,15 +114,31 @@ class SpotObject:
             rules = rules_by_key.get(key, ())
             if rules:
                 matched_rule = next(
-                    (rule for rule in rules if state_display_values_equal(rule.value, value)),
+                    (
+                        rule
+                        for rule in rules
+                        if rule.at_least is None
+                        and state_display_values_equal(rule.value, value)
+                    ),
                     None,
                 )
+                if matched_rule is None and type(value) is int:
+                    matched_rule = max(
+                        (
+                            rule
+                            for rule in rules
+                            if rule.at_least is not None
+                            and value >= rule.at_least
+                        ),
+                        key=lambda rule: rule.at_least,
+                        default=None,
+                    )
                 if matched_rule is not None:
                     tags.append(matched_rule.text)
                     continue
-                # ルールがある key でも、現在値に対応する宣言が無ければ生値を出す。
-                # ここで隠すと、シナリオ作者の宣言漏れが prompt からもテストからも
-                # 見えなくなる。
+                # 完全一致にも at_least にも該当しなければ生値を出す。ここで
+                # 隠したり最近傍へ丸めたりすると、シナリオ作者の宣言漏れが
+                # prompt からもテストからも見えなくなる。
                 visible[key] = value
                 continue
             if key == _REACTIVE_AVAILABILITY_STATE_KEY:

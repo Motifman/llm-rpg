@@ -40,3 +40,14 @@ class TestStateDisplayRule:
         """text が空白または文字列以外なら、prompt の表示文として使えないため拒否する。"""
         with pytest.raises(StateDisplayRuleValidationException, match="text"):
             StateDisplayRule(key="opened", value=False, text=text)
+
+    @pytest.mark.parametrize("at_least", [True, 3.0, "3"])
+    def test_rejects_non_integer_at_least(self, at_least) -> None:
+        """at_least は bool・浮動小数・文字列へ暗黙変換せず、整数だけを受け付ける。"""
+        with pytest.raises(StateDisplayRuleValidationException, match="at_least"):
+            StateDisplayRule(
+                key="count",
+                value=None,
+                text="3 個以上ある",
+                at_least=at_least,
+            )

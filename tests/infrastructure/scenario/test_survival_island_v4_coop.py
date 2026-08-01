@@ -574,6 +574,33 @@ class TestSurvivalIslandV4ActionConditionHints:
             "light_signal",
         )
 
+    def test_signal_pit_prompt_uses_threshold_text_above_required_quantity(
+        self,
+        loaded_v4,
+    ) -> None:
+        """流木が4本以上でも内部 key を漏らさず、行動判断に必要な3本以上の表示へ丸める。"""
+        summit_id = SpotId(loaded_v4.id_mapper.get_int("spot", "summit"))
+        interior = loaded_v4.interiors[summit_id]
+        pit = next(obj for obj in interior.objects if obj.name == "狼煙台")
+        updated_pit = pit.with_state(
+            {
+                **pit.state,
+                "driftwood_stacked": 4,
+                "dry_leaves_stacked": 3,
+            }
+        )
+        updated_interior = interior.replace_object(updated_pit)
+        snapshot = _build_snapshot_for_spot(loaded_v4, summit_id, updated_interior)
+        result = SpotGraphUiContextBuilder().build(
+            "survival_island_v4_coop",
+            _make_player_state(snapshot),
+        )
+
+        assert "流木が 3 本以上積まれている" in result.current_state_text
+        assert "枯れ葉が 2 掴み以上敷かれている" in result.current_state_text
+        assert "driftwood_stacked=4" not in result.current_state_text
+        assert "dry_leaves_stacked=3" not in result.current_state_text
+
 
 class TestSurvivalIslandV4SurvivalEconomy:
     """v4 の移動時間変更が救助窓に対して破綻しないことを粗く固定する。"""

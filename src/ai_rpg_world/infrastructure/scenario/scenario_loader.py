@@ -118,7 +118,7 @@ def _parse_object_state_display(raw: Mapping[str, Any]) -> Tuple[StateDisplayRul
         raise ScenarioLoadError(f"object {object_id}.state_display must be a list")
 
     parsed: list[StateDisplayRule] = []
-    seen: set[tuple[str, tuple[type, Any]]] = set()
+    seen: set[tuple[Any, ...]] = set()
     for index, item in enumerate(raw_rules):
         path = f"object {object_id}.state_display[{index}]"
         if not isinstance(item, dict):
@@ -127,19 +127,27 @@ def _parse_object_state_display(raw: Mapping[str, Any]) -> Tuple[StateDisplayRul
             raise ScenarioLoadError(f"{path}.key is required")
         if "text" not in item:
             raise ScenarioLoadError(f"{path}.text is required")
+        if "value" in item and "at_least" in item:
+            raise ScenarioLoadError(
+                f"{path} cannot specify both value and at_least"
+            )
         try:
             rule = StateDisplayRule(
                 key=item["key"],
                 value=item.get("value"),
                 text=item["text"],
+                at_least=item.get("at_least"),
             )
         except StateDisplayRuleValidationException as exc:
             raise ScenarioLoadError(f"{path}: {exc}") from exc
-        duplicate_key = (rule.key, state_display_value_identity(rule.value))
+        duplicate_key = (
+            (rule.key, "at_least", rule.at_least)
+            if rule.at_least is not None
+            else (rule.key, "value", state_display_value_identity(rule.value))
+        )
         if duplicate_key in seen:
             raise ScenarioLoadError(
-                f"{path} duplicates state_display rule for key={rule.key!r} "
-                f"value={rule.value!r}"
+                f"{path} duplicates state_display rule for key={rule.key!r}"
             )
         seen.add(duplicate_key)
         parsed.append(rule)
