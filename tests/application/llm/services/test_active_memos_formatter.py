@@ -43,10 +43,10 @@ class TestFormatActiveMemos:
         assert result == ""
 
     def test_renders_single_memo_with_tick(self) -> None:
-        """tick 付き memo が ``- [tick=N, 経過 M tick] content (id: X)`` に整形される。"""
+        """tick 付き memo は時刻の直後に ``memo_`` handleを表示する。"""
         memo = _make_memo("m1", "鍵を探す", added_at_tick=5)
         result = format_active_memos([memo], current_tick=12)
-        assert result == "- [tick=5, 経過 7 tick] 鍵を探す (id: m1)"
+        assert result == "- [memo_m1] [tick=5, 経過 7 tick] 鍵を探す"
 
     def test_marks_stale_when_elapsed_exceeds_threshold(self) -> None:
         """elapsed が stale_age_ticks 以上なら [STALE] プレフィックスが付く。"""
@@ -54,7 +54,7 @@ class TestFormatActiveMemos:
         result = format_active_memos(
             [memo], current_tick=25, stale_age_ticks=20
         )
-        assert result.startswith("- [STALE] ")
+        assert result.startswith("- [memo_m1] [STALE] ")
 
     def test_does_not_mark_stale_below_threshold(self) -> None:
         """elapsed < stale_age_ticks なら [STALE] が付かない。"""

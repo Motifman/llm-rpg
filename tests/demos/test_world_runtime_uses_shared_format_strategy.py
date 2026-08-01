@@ -59,23 +59,20 @@ class TestWorldRuntimeUsesSharedFormatStrategy:
         # 旧 hardcoded が再混入していないことを保証
         assert "廃墟から外へ脱出する" not in user
 
-    def test_prompt_renders_inventory_section(self) -> None:
-        """forbidden_library で初期インベントリ空でも ``【所持・判明した物証】`` は出る。
-
-        section は空文字を渡さない限り出力されるため、provider が「（なし）」を
-        返す形なら section ごと出る。
-        """
+    def test_prompt_omits_duplicate_inventory_section(self) -> None:
+        """所持品は現在地と周囲へ一本化し、旧inventory sectionは出さない。"""
         runtime = create_world_runtime(_FORBIDDEN_LIBRARY)
         kaito = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(kaito)
         user = prompt["messages"][1]["content"]
 
-        assert "【所持・判明した物証】" in user
+        assert "【所持・判明した物証】" not in user
+        assert "【現在地と周囲】" in user
 
     def test_section_ordering_matches_shared_strategy(self) -> None:
         """section 順序が strategy default (stable_to_volatile) と一致する。
 
-        Issue #356 Phase 0 で並び順を変更: 目的 → 物証 → 出来事 → 現在地。
+        Issue #356 Phase 0 で並び順を変更: 目的 → 出来事 → 現在地。
         詳細は ``docs/memory_system/short_term_memory_design.md`` §5。
         """
         runtime = create_world_runtime(_FORBIDDEN_LIBRARY)
@@ -84,14 +81,12 @@ class TestWorldRuntimeUsesSharedFormatStrategy:
         user = prompt["messages"][1]["content"]
 
         idx_obj = user.index("【現在の目的】")
-        idx_inventory = user.index("【所持・判明した物証】")
         idx_events = user.index("【直近の出来事】")
         idx_state = user.index("【現在地と周囲】")
 
-        # stable_to_volatile: 目的 → 出来事 (head 安定 append) → 物証 (mid) → 現在地 (最 volatile)
-        # Y_after_pr612 実測で inventory も memos も volatile と判明したため、
-        # recent_events の head 安定 cache を守るために events を inventory より前に置く。
-        assert idx_obj < idx_events < idx_inventory < idx_state
+        # 所持品は現在地へ一本化されるため、独立したinventory sectionはない。
+        assert "【所持・判明した物証】" not in user
+        assert idx_obj < idx_events < idx_state
 
     def test_action_instruction_appears_at_tail(self) -> None:
         """指示文が末尾に来る (現在地より後ろ)。"""

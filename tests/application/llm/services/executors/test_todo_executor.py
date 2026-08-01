@@ -234,6 +234,22 @@ class TestMemoExecutorBatchComplete:
         # 完了済み
         assert todo_store.list_uncompleted_by_being(being_setup.being_id_for(1)) == []
 
+    def test_prefixed_handle_can_complete(
+        self, executor_with_store, todo_store, being_setup
+    ) -> None:
+        """表示どおりの ``memo_`` handleを渡しても対象memoを完了できる。"""
+        executor_with_store._execute_memo_add(1, {"content": "A"})
+        full_id = todo_store.list_uncompleted_by_being(
+            being_setup.being_id_for(1)
+        )[0].id
+
+        result = executor_with_store._execute_memo_done(
+            1, {"memo_ids": [f"memo_{full_id[:6]}…"]}
+        )
+
+        assert result.success is True
+        assert todo_store.list_uncompleted_by_being(being_setup.being_id_for(1)) == []
+
     def test_prefix_ambiguous_error(self, executor_with_store, todo_store, being_setup):
         """同じ先頭文字で始まる 2 つの memo に短縮形が一致すると、ambiguous
         として個別報告される。"""

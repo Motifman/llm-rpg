@@ -437,6 +437,9 @@ def _join_passive_recall_texts(
         raw = active.current_recall_text if active is not None else cand.episode.recall_text
         text = raw.strip() if isinstance(raw, str) else ""
         if text:
+            game_time_label = cand.episode.game_time_label
+            if isinstance(game_time_label, str) and game_time_label.strip():
+                text = f"[{game_time_label.strip()}] {text}"
             parts.append(text)
     return "\n".join(parts)
 

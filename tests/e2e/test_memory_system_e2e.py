@@ -384,24 +384,22 @@ class TestPromptSectionsE2E:
         assert "【関連する学び】" in text    # Phase 1c
         assert "【最近の流れ】" in text       # Phase 2
         assert "【進行中のメモ】" in text
-        assert "【所持・判明した物証】" in text
+        assert "【所持・判明した物証】" not in text
         assert "【関連する記憶】" in text
         assert "【直近の出来事】" in text
         assert "【現在地と周囲】" in text
 
         # stable_to_volatile 順序: Y_after_pr612 実測で memos (23-43%) も
-        # inventory (11-19%) も volatile と判明。recent_events は head 安定
-        # (append-only) なので、静的群の直後に置いて head 安定 prefix を
-        # 最大化し、inventory / memos は recent_events の下に集約する。
+        # recent_events は head 安定 (append-only) なので、静的群の直後に
+        # 置いて head 安定 prefix を最大化する。所持品はcurrent_stateへ一本化。
         # 順序:
-        # objective → L5 → learned → L4 → events → inventory → memos → memories → current
+        # objective → L5 → learned → L4 → events → memos → memories → current
         idx = {
             "obj": text.index("【現在の目的】"),
             "l5": text.index("【自己像と世界観】"),
             "learned": text.index("【関連する学び】"),
             "l4": text.index("【最近の流れ】"),
             "events": text.index("【直近の出来事】"),
-            "inv": text.index("【所持・判明した物証】"),
             "memos": text.index("【進行中のメモ】"),
             "mem": text.index("【関連する記憶】"),
             "current": text.index("【現在地と周囲】"),
@@ -409,7 +407,7 @@ class TestPromptSectionsE2E:
         # 「最も安定」→「最も volatile」の順
         assert (
             idx["obj"] < idx["l5"] < idx["learned"] < idx["l4"]
-            < idx["events"] < idx["inv"] < idx["memos"] < idx["mem"] < idx["current"]
+            < idx["events"] < idx["memos"] < idx["mem"] < idx["current"]
         )
 
     def test_l5_l4_section(self) -> None:

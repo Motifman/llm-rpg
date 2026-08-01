@@ -1615,28 +1615,6 @@ class WorldRuntime:
             )
         return handler(int(player_id), arguments)
 
-    def _format_inventory_evidence(self, player_id: PlayerId) -> str:
-        inv = self._player_inventory_repo.find_by_id(player_id)
-        if inv is None:
-            return "（なし）"
-        lines: List[str] = []
-        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-
-        for slot_idx in range(inv._max_slots):
-            iid = inv.get_item_instance_id_by_slot(SlotId(slot_idx))
-            if iid is None:
-                continue
-            item = self._item_repo.find_by_id(iid)
-            if item is None:
-                continue
-            name = item.item_spec.name
-            desc = (item.item_spec.description or "").strip()
-            if desc:
-                lines.append(f"- {name}（{desc[:120]}…）" if len(desc) > 120 else f"- {name}（{desc}）")
-            else:
-                lines.append(f"- {name}")
-        return "\n".join(lines) if lines else "（なし）"
-
     def _format_active_memos(self, player_id: PlayerId, *, stale_age_ticks: int = 20) -> str:
         """LLM が memo_add で固定した未完了 memo を整形する。空なら ""。
 
@@ -2146,7 +2124,6 @@ class WorldRuntime:
             objective_text_provider=lambda pid: self._resolve_objective_via_goal_store(
                 pid, self._resolve_player_objective_text(pid, resolved_objective_text)
             ),
-            inventory_text_provider=lambda pid: self._format_inventory_evidence(pid),
             memo_store=self._todo_store if self._memo_tools_enabled() else None,
         )
         limits = PromptLimits(

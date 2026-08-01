@@ -83,12 +83,13 @@ def _episode(
     occurred_at: datetime,
     recall_text: str,
     cues: tuple[EpisodicCue, ...],
+    game_time_label: str | None = None,
 ) -> SubjectiveEpisode:
     return SubjectiveEpisode(
         episode_id=episode_id,
         player_id=player_id,
         occurred_at=occurred_at,
-        game_time_label=None,
+        game_time_label=game_time_label,
         source=EpisodeSource(event_ids=("evt-x",)),
         location=EpisodeLocation(),
         action=EpisodeAction(tool_name="t"),
@@ -200,6 +201,7 @@ class TestPromptBuilderPassiveRecall:
                 occurred_at=base + timedelta(hours=1),
                 recall_text="最近の出来事",
                 cues=(place_c,),
+                game_time_label="Day 2 09:00",
             ),
         )
         store.put_by_being(
@@ -276,9 +278,9 @@ class TestPromptBuilderPassiveRecall:
         out = builder.build(PlayerId(player_num))
         user = out["messages"][1]["content"]
         section = user.split("【関連する記憶】", 1)[1]
-        assert "最近の出来事" in section
+        assert "[Day 2 09:00] 最近の出来事" in section
         assert "古いが cue で拾える" in section
-        expected_joined = "最近の出来事\n古いが cue で拾える"
+        expected_joined = "[Day 2 09:00] 最近の出来事\n古いが cue で拾える"
         assert expected_joined in user
         assert out["current_beliefs_snapshot"] == expected_joined
 

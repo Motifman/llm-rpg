@@ -14,6 +14,7 @@ from typing import Optional
 # git の `--short=6` と同等。UUID4 は hex 16 進なので 6 文字で 16^6 = 約 1670
 # 万通り、典型的なシナリオ (memo 数十件) では衝突は実質ゼロ。
 SHORT_MEMO_ID_LENGTH = 6
+MEMO_HANDLE_PREFIX = "memo_"
 
 
 def short_memo_id(memo_id: str) -> str:
@@ -27,6 +28,11 @@ def short_memo_id(memo_id: str) -> str:
     if len(memo_id) <= SHORT_MEMO_ID_LENGTH:
         return memo_id
     return memo_id[:SHORT_MEMO_ID_LENGTH] + "…"
+
+
+def memo_handle(memo_id: str) -> str:
+    """LLMへ見せるmemo識別子を ``memo_<短縮ID>`` の形にする。"""
+    return f"{MEMO_HANDLE_PREFIX}{short_memo_id(memo_id)}"
 
 
 def resolve_memo_id_prefix(
@@ -51,11 +57,16 @@ def resolve_memo_id_prefix(
     """
     if not prefix:
         return None, []
+    normalized = prefix.strip()
+    if normalized.startswith(MEMO_HANDLE_PREFIX):
+        normalized = normalized[len(MEMO_HANDLE_PREFIX):]
+    if not normalized:
+        return None, []
     # exact match 優先 (full UUID で送られたケース)
-    if prefix in candidate_ids:
-        return prefix, []
+    if normalized in candidate_ids:
+        return normalized, []
     # 末尾 `…` は trim する (LLM が表示形をそのまま返すケース対策)
-    cleaned = prefix.rstrip("…").rstrip(".")
+    cleaned = normalized.rstrip("…").rstrip(".")
     if not cleaned:
         return None, []
     matches = [c for c in candidate_ids if c.startswith(cleaned)]

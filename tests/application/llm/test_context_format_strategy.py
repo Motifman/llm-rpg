@@ -88,19 +88,17 @@ class TestSectionBasedContextFormatStrategyDefault:
             inventory_text="物証d",
         )
         idx_current_state = text.index("【現在地と周囲】")
-        for other in ["【現在の目的】", "【進行中のメモ】", "【所持・判明した物証】",
+        for other in ["【現在の目的】", "【進行中のメモ】",
                        "【関連する記憶】", "【直近の出来事】"]:
             assert text.index(other) < idx_current_state, (
                 f"{other} は【現在地と周囲】より前に出るべき"
             )
 
     def test_stable_volatile_order(self, strategy):
-        """objective → recent_events → inventory → memos → memories → current_state。
+        """objective → recent_events → memos → memories → current_state。
 
-        Y_after_pr612 実測で memos (23-43%) も inventory (11-19%) も volatile
-        と判明。recent_events は head 安定 (= append-only) なので、静的群の
-        直後に置いて head 安定 prefix を最大化し、inventory / memos は
-        その下に集約する。
+        recent_events は head 安定 (= append-only) なので静的群の直後に置く。
+        所持品は current_state に一本化され、この独立sectionには出さない。
         """
         text = strategy.format(
             current_state_text="現在地",
@@ -113,12 +111,12 @@ class TestSectionBasedContextFormatStrategyDefault:
         idx = {
             "obj":      text.index("【現在の目的】"),
             "events":   text.index("【直近の出来事】"),
-            "inv":      text.index("【所持・判明した物証】"),
             "memos":    text.index("【進行中のメモ】"),
             "mem":      text.index("【関連する記憶】"),
             "current":  text.index("【現在地と周囲】"),
         }
-        assert idx["obj"] < idx["events"] < idx["inv"] < idx["memos"] < idx["mem"] < idx["current"]
+        assert "【所持・判明した物証】" not in text
+        assert idx["obj"] < idx["events"] < idx["memos"] < idx["mem"] < idx["current"]
 
     def test_prediction_feedback_recent_events_memories_rendered(self, strategy):
         """【前回の予測と実際】は直近出来事の直後、関連する記憶の直前に置く (prefix cache 順)。"""
@@ -162,15 +160,17 @@ class TestSectionBasedContextFormatStrategyDefault:
         )
         assert "【保留中の予測】" not in text
 
-    def test_inventory_order(self, strategy):
-        """inventory は memories の前。"""
+    def test_duplicate_inventory_section_is_omitted(self, strategy):
+        """旧 inventory section は省略し、現在地と周囲にある所持品だけを残す。"""
         text = strategy.format(
-            current_state_text="x",
+            current_state_text='所持アイテム:\n  - "鍵" x2 (道具)',
             recent_events_text="y",
-            inventory_text="- 鍵",
+            inventory_text="- 鍵\n- 鍵",
             relevant_memories_text="思い出",
         )
-        assert text.index("【所持・判明した物証】") < text.index("【関連する記憶】")
+        assert "【所持・判明した物証】" not in text
+        assert '  - "鍵" x2 (道具)' in text
+        assert "- 鍵\n- 鍵" not in text
 
     def test_empty_current_state_placeholder(self, strategy):
         """current_state_text が空なら「（情報なし）」が出る。"""
@@ -287,7 +287,7 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
         return SectionBasedContextFormatStrategy(section_order=SECTION_ORDER_LEGACY)
 
     def test_legacy_order(self, strategy):
-        """legacy モードでは旧来の section 並び順を保つ。"""
+        """legacy モードでも重複 inventory を除き、残る section の順序を保つ。"""
         text = strategy.format(
             current_state_text="現在地",
             recent_events_text="出来事",
@@ -302,9 +302,9 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
             "memos":    text.index("【進行中のメモ】"),
             "events":   text.index("【直近の出来事】"),
             "mem":      text.index("【関連する記憶】"),
-            "inv":      text.index("【所持・判明した物証】"),
         }
-        assert idx["obj"] < idx["current"] < idx["memos"] < idx["events"] < idx["mem"] < idx["inv"]
+        assert "【所持・判明した物証】" not in text
+        assert idx["obj"] < idx["current"] < idx["memos"] < idx["events"] < idx["mem"]
 
     def test_legacy_empty_section(self, strategy):
         """空 section の挙動は default と同じ。"""
