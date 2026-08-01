@@ -426,7 +426,9 @@ class SpotGraphCurrentStateBuilder:
             perception=self._perception,
         )
 
-    def _resolve_player_action_labels(self, *, is_incapacitated: bool) -> tuple:
+    def _resolve_player_action_labels(
+        self, *, is_incapacitated: bool, is_eliminated: bool = False
+    ) -> tuple:
         """その相手に**いま使える**対人 action ラベル。provider 未注入なら空。
 
         絞り込みの入力は、その行に既に見えている事実だけにする
@@ -441,7 +443,8 @@ class SpotGraphCurrentStateBuilder:
             try:
                 labels.extend(
                     self._player_action_labels_provider(
-                        target_is_incapacitated=is_incapacitated
+                        target_is_incapacitated=is_incapacitated,
+                        target_is_eliminated=is_eliminated,
                     )
                     or ()
                 )
@@ -458,8 +461,20 @@ class SpotGraphCurrentStateBuilder:
         # 定義されていない」と結論する (v4 第 3 回 run で実際に起きた)。
         # tend_to_player は倒れている相手にしか使えないので、同じ公開事実で
         # ゲートできる。
-        if is_incapacitated:
-            labels.append(TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER)
+        # 退場が確定した相手には出さない。engine の普遍則が実行時に必ず弾く
+        # ので、出すと「選べるのに必ず失敗する手」になる。旧実装は is_down と
+        # is_dead を同じ「行動不能」に畳んでいたため、死体にも手当てが出ていた。
+        if is_incapacitated and not is_eliminated:
+            # シナリオ宣言の interaction は日本語のラベルつきで並ぶのに、
+            # engine の tool だけ生の識別子で出ていた。#892 の「engine の
+            # 語彙をプロンプトに出さない」に揃える。
+            labels.append(
+                format_action_display_with_hints(
+                    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+                    (),
+                    display_label="介抱して起こす",
+                )
+            )
         return tuple(labels)
 
     def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
@@ -1116,6 +1131,7 @@ class SpotGraphCurrentStateBuilder:
                     ),
                     available_action_labels=self._resolve_player_action_labels(
                         is_incapacitated=other_is_down or other_is_dead,
+                        is_eliminated=other_is_dead,
                     ),
                 ))
 

@@ -170,7 +170,7 @@ class PlayerInteractionApplicationService:
         return tuple(self._by_action_name.keys())
 
     def available_action_labels_for(
-        self, *, target_is_incapacitated: bool
+        self, *, target_is_incapacitated: bool, target_is_eliminated: bool = False
     ) -> Tuple[str, ...]:
         """**その相手にいま使える** action の表示ラベルを返す。
 
@@ -201,28 +201,47 @@ class PlayerInteractionApplicationService:
             self._format_label(action_name, idef)
             for action_name, idef in self._by_action_name.items()
             if self._is_offerable(
-                idef, target_is_incapacitated=target_is_incapacitated
+                idef,
+                target_is_incapacitated=target_is_incapacitated,
+                target_is_eliminated=target_is_eliminated,
             )
         )
 
     @staticmethod
-    def _is_offerable(idef: InteractionDef, *, target_is_incapacitated: bool) -> bool:
+    def _is_offerable(
+        idef: InteractionDef,
+        *,
+        target_is_incapacitated: bool,
+        target_is_eliminated: bool = False,
+    ) -> bool:
         """公開の対象状態だけを見て、その行に出してよいかを決める。
 
-        該当条件が無ければ「出す」に倒れる。新しい対象状態の条件型が増えても
-        既定で出る方向になるので、秘匿の観点では安全側である。ただし
-        「公開なのでゲートできる」条件型が増えたとき、誰も気づかないまま
-        絞られずに残る (claude のレビュー指摘 / LOW)。条件型ごとに公開性
-        クラスを宣言させる検査を別途入れる。
+        ``target_is_eliminated`` も**公開事実**である。行に「死亡している」と
+        出ているので、これで絞っても新たな情報は漏れない (この関数の不変条件
+        を確認したうえで足している)。
+
+        ## 要求は対称に見る
+
+        以前は「倒れた相手を要求する行動」を立っている相手から隠すだけで、
+        **逆が無かった**。実 run で死体の行に「背後から襲う」「持ち物を奪う」
+        が並んだのはそのため。
+
+        宣言から要求を導く。``TARGET_PLAYER_IS_INCAPACITATED`` を持つ行動は
+        倒れた相手を要求し、持たない行動は立っている相手を要求する。倒れた
+        相手を殴れるようにしたいシナリオは、その条件を宣言すれば出せる。
+
+        退場が確定した相手には何も出さない。engine の普遍則
+        (`validate_actionable_target`) が実行時に必ず弾くので、出すと
+        「選べるのに必ず失敗する手」になる (#860 で潰した形)。
         """
-        for cond in idef.preconditions:
-            t = cond.condition_type
-            if (
-                t is InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED
-                and not target_is_incapacitated
-            ):
-                return False
-        return True
+        if target_is_eliminated:
+            return False
+        requires_incapacitated = any(
+            cond.condition_type
+            is InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED
+            for cond in idef.preconditions
+        )
+        return requires_incapacitated == target_is_incapacitated
 
     def _format_label(self, action_name: str, idef: InteractionDef) -> str:
         return format_action_display_with_hints(
