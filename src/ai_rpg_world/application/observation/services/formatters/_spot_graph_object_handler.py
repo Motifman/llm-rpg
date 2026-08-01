@@ -446,7 +446,11 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         if override:
             prose = override
         elif reason:
-            prose = f"{actor}が{obj_name}の{event.action_name}を試みたが、{reason}"
+            # **識別子ではなくラベルを出す。** action_name は engine の語彙で、
+            # 偽装版では `..._pretend` がそのまま漏れる (実 run で確認)。
+            # 宣言の無い旧シナリオ向けに action_name へ落とす。
+            shown = getattr(event, "display_label", "") or event.action_name
+            prose = f"{actor}が{obj_name}の「{shown}」を試みたが、{reason}"
         else:
             return None
         structured = {
