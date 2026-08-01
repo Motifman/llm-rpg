@@ -243,11 +243,88 @@ class TestSurvivalIslandV4SignalHints:
         driftwood_condition = next(
             condition
             for condition in interaction["preconditions"]
-            if condition.get("required_item") == "driftwood"
+            if condition.get("state_key") == "driftwood_stacked"
         )
 
         assert driftwood_condition["failure_message"] == "流木が足りない。3 本は要る。"
         assert "太い" not in driftwood_condition["failure_message"]
+
+
+class TestSurvivalIslandV4SignalDeposits:
+    """狼煙台が持ち寄り式の材料蓄積を宣言し、旧個人所持経路を残さない。"""
+
+    def test_signal_pit_declares_deposit_actions_and_object_state_gate(
+        self, raw_v4
+    ) -> None:
+        """流木・枯れ葉は all 投入 action を持ち、点火は object.state の累積数を見る。"""
+        driftwood = _find_interaction(
+            raw_v4, "summit", "signal_fire_pit", "add_driftwood"
+        )
+        leaves = _find_interaction(
+            raw_v4, "summit", "signal_fire_pit", "add_dry_leaves"
+        )
+        light = _find_interaction(
+            raw_v4, "summit", "signal_fire_pit", "light_signal"
+        )
+
+        assert driftwood["display_label"] == "流木を狼煙台に積む"
+        assert driftwood["witness_observation_message"] == (
+            "{actor}が狼煙台に流木を積み上げた。"
+        )
+        assert driftwood["effects"][0] == {
+            "effect_type": "DEPOSIT_ITEM_TO_OBJECT",
+            "parameters": {
+                "item_spec": "driftwood",
+                "target_object": "signal_fire_pit",
+                "state_key": "driftwood_stacked",
+                "quantity": "all",
+            },
+        }
+        assert leaves["display_label"] == "枯れ葉を狼煙台に敷く"
+        assert leaves["witness_observation_message"] == (
+            "{actor}が狼煙台に枯れ葉を敷いた。"
+        )
+        assert [condition["condition_type"] for condition in light["preconditions"]] == [
+            "OBJECT_STATE",
+            "OBJECT_STATE_INT_AT_LEAST",
+            "OBJECT_STATE_INT_AT_LEAST",
+            "HAS_ITEM",
+            "PLAYERS_AT_SPOT",
+        ]
+        assert not {
+            effect["parameters"].get("item_spec")
+            for effect in light["effects"]
+            if effect["effect_type"] == "REMOVE_ITEM"
+        } & {"driftwood", "dry_leaves"}
+
+    def test_signal_pit_has_no_action_that_removes_deposited_materials(
+        self, raw_v4
+    ) -> None:
+        """投入は一方通行というユーザ判断を固定し、積んだ材料を降ろす action を置かない。"""
+        pit = next(
+            obj
+            for spot in raw_v4["spots"]
+            if spot["id"] == "summit"
+            for obj in spot["interior"]["objects"]
+            if obj["id"] == "signal_fire_pit"
+        )
+
+        assert [i["action_name"] for i in pit["interactions"]] == [
+            "add_driftwood",
+            "add_dry_leaves",
+            "light_signal",
+        ]
+
+    def test_public_intro_and_objective_do_not_explain_the_solution(
+        self, raw_v4
+    ) -> None:
+        """持ち寄り方は世界の object 表示から発見させ、公開導入と目的文へ答えを書かない。"""
+        for text in (
+            raw_v4["metadata"]["llm_public_intro"],
+            raw_v4["metadata"]["llm_objective_text"],
+        ):
+            assert "持ち寄" not in text
+            assert "狼煙台に積" not in text
 
 
 class TestSurvivalIslandV4WaterSources:
@@ -307,7 +384,11 @@ class TestSurvivalIslandV4ObjectStateDisplay:
             VISIBLE_STATE_TAGS_KEY: ("箱はまだ開いていない",)
         }
         assert objects_by_name["狼煙台"].visible_state() == {
-            VISIBLE_STATE_TAGS_KEY: ("狼煙台に火はついていない",)
+            VISIBLE_STATE_TAGS_KEY: (
+                "狼煙台に火はついていない",
+                "流木はまだ積まれていない",
+                "枯れ葉はまだ敷かれていない",
+            )
         }
 
     def test_per_actor_history_state_is_hidden_instead_of_rendered_as_raw_value(
@@ -447,6 +528,50 @@ class TestSurvivalIslandV4ActionConditionHints:
         assert result.tool_runtime_context.targets["OBJ1"].display_name == "沖の釣り場"
         assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
             "fish_deep",
+        )
+
+    def test_signal_pit_prompt_shows_state_requirements_and_blocked_action(
+        self,
+        loaded_v4,
+    ) -> None:
+        """狼煙台は蓄積数・投入候補・点火要件を日本語で示し、tool 候補は識別子のまま保つ。"""
+        summit_id = SpotId(loaded_v4.id_mapper.get_int("spot", "summit"))
+        interior = loaded_v4.interiors[summit_id]
+        snapshot = _build_snapshot_for_spot(loaded_v4, summit_id, interior)
+        pit = next(obj for obj in snapshot.objects if obj.name == "狼煙台")
+        light = next(
+            interaction
+            for interaction in pit.interactions
+            if interaction.action_name == "light_signal"
+        )
+        result = SpotGraphUiContextBuilder().build(
+            "survival_island_v4_coop",
+            _make_player_state(snapshot),
+        )
+
+        assert light.condition_hints == (
+            "流木が 3 本積まれていること",
+            "枯れ葉が 2 掴み敷かれていること",
+        )
+        assert "流木はまだ積まれていない" in result.current_state_text
+        assert "枯れ葉はまだ敷かれていない" in result.current_state_text
+        assert "流木を狼煙台に積む (add_driftwood)" in result.current_state_text
+        assert "枯れ葉を狼煙台に敷く (add_dry_leaves)" in result.current_state_text
+        assert (
+            "いまできない: 狼煙を上げる "
+            "(light_signal・流木が足りない。3 本は要る。・"
+            "枯れ葉が足りない。乾いたものを 2 掴みは要る。)"
+            in result.current_state_text
+        )
+        signal_target = next(
+            target
+            for target in result.tool_runtime_context.targets.values()
+            if target.display_name == "狼煙台"
+        )
+        assert signal_target.available_interactions == (
+            "add_driftwood",
+            "add_dry_leaves",
+            "light_signal",
         )
 
 

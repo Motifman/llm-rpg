@@ -53,6 +53,9 @@ from ai_rpg_world.application.world_graph.spot_effective_lighting_resolver impor
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
+    state_display_values_equal,
+)
 
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
@@ -144,6 +147,33 @@ def _object_stock_precondition_failure_hints(
     return tuple(hints)
 
 
+def _object_state_int_precondition_failure_hints(
+    interaction,
+    interior,
+) -> tuple[str, ...]:
+    """未達の OBJECT_STATE_INT_AT_LEAST を、必要数と現在数つきで返す。"""
+    hints: list[str] = []
+    for cond in interaction.preconditions:
+        if cond.condition_type != InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST:
+            continue
+        if cond.target_object_id is None or not cond.state_key:
+            continue
+        target = interior.get_object(cond.target_object_id)
+        if target is None:
+            continue
+        required = max(1, int(cond.required_quantity))
+        current = target.state.get(cond.state_key, 0)
+        if not isinstance(current, int):
+            current = 0
+        if current < required:
+            message = str(cond.failure_message).strip()
+            hints.append(
+                message
+                or f"必要な量が足りません (必要: {required}, いま: {current})"
+            )
+    return tuple(hints)
+
+
 # PR #2 状態異常 surface: StatusEffectType.value → 日本語ラベル。
 # enum.value (英語) のままだと LLM が「これは何の状態異常?」と混乱するので
 # プロンプト表示用に日本語化する。未知の effect_type は value をそのまま出す。
@@ -165,6 +195,7 @@ _STATUS_EFFECT_LABELS: dict[str, str] = {
 
 def _interaction_condition_hints(
     interaction,
+    interior=None,
 ) -> tuple[str, ...]:
     """物体 action 表示用の宣言由来ヒントを組む。
 
@@ -172,9 +203,31 @@ def _interaction_condition_hints(
     ``declarative_condition_hints`` に委譲する。同席者行の対人 action も
     同じ関数を使うので、書式と語彙が経路ごとにずれない。
     """
-    return tuple(
-        (*declarative_condition_hints(interaction), *required_parameter_hints(interaction))
-    )
+    def resolve_state_requirement(cond) -> Optional[str]:
+        if interior is None or cond.target_object_id is None or not cond.state_key:
+            return None
+        target = interior.get_object(cond.target_object_id)
+        if target is None:
+            return None
+        required = max(1, int(cond.required_quantity))
+        rule = next(
+            (
+                rule
+                for rule in target.state_display
+                if rule.key == cond.state_key
+                and state_display_values_equal(rule.value, required)
+            ),
+            None,
+        )
+        return f"{rule.text}こと" if rule is not None else None
+
+    return tuple((
+        *declarative_condition_hints(
+            interaction,
+            object_state_requirement_text_resolver=resolve_state_requirement,
+        ),
+        *required_parameter_hints(interaction),
+    ))
 
 
 def _hidden_condition_blocks_actor(interaction, player) -> bool:
@@ -215,7 +268,8 @@ def _interaction_blocking_hints(
     """物体 action 表示用の「いま満たしていない理由」を組む。
 
     HAS_ITEM は他の表示や remediation と重複するため物体行では出さない
-    (= resolver を渡さない)。OBJECT_STATE / OBJECT_STOCK_AT_LEAST は現在
+    (= resolver を渡さない)。OBJECT_STATE / OBJECT_STATE_INT_AT_LEAST /
+    OBJECT_STOCK_AT_LEAST は現在
     失敗している場合だけ failure_message を添え、action 候補自体は残す。
     候補集合を消すと存在しない操作名の発明につながるため。
 
@@ -227,6 +281,7 @@ def _interaction_blocking_hints(
     hints: list[str] = list(
         _object_state_precondition_failure_hints(interaction, interior)
     )
+    hints.extend(_object_state_int_precondition_failure_hints(interaction, interior))
     hints.extend(
         _object_stock_precondition_failure_hints(
             interaction,
@@ -257,6 +312,7 @@ def _format_interaction_action_name_with_hints(
         )
     hints = _interaction_condition_hints(
         interaction,
+        interior,
     )
     return format_action_display_with_hints(
         interaction.action_name,
@@ -900,6 +956,7 @@ class SpotGraphCurrentStateBuilder:
                             display_label=i.display_label,
                             condition_hints=_interaction_condition_hints(
                                 i,
+                                interior,
                             ),
                             blocking_hints=_interaction_blocking_hints(
                                 i,

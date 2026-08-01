@@ -2538,10 +2538,12 @@
           {
             "id": "signal_fire_pit",
             "name": "狼煙台",
-            "description": "古い石組みの狼煙台。山頂の風は強く、組んだ薪はすぐに崩れる。一人が火を熾し、もう一人が風下を塞ぐ — 二人がかりでなければ点火できない。",
+            "description": "古い石組みの狼煙台。材料はここに積んでおける。山頂の風は強く、一人が火を熾し、もう一人が風下を塞ぐ — 二人がかりでなければ点火できない。",
             "object_type": "OTHER",
             "state": {
-              "lit": false
+              "lit": false,
+              "driftwood_stacked": 0,
+              "dry_leaves_stacked": 0
             },
             "state_display": [
               {
@@ -2553,9 +2555,104 @@
                 "key": "lit",
                 "value": true,
                 "text": "狼煙台から煙が上がっている"
+              },
+              {
+                "key": "driftwood_stacked",
+                "value": 0,
+                "text": "流木はまだ積まれていない"
+              },
+              {
+                "key": "driftwood_stacked",
+                "value": 1,
+                "text": "流木が 1 本積まれている"
+              },
+              {
+                "key": "driftwood_stacked",
+                "value": 2,
+                "text": "流木が 2 本積まれている"
+              },
+              {
+                "key": "driftwood_stacked",
+                "value": 3,
+                "text": "流木が 3 本積まれている"
+              },
+              {
+                "key": "dry_leaves_stacked",
+                "value": 0,
+                "text": "枯れ葉はまだ敷かれていない"
+              },
+              {
+                "key": "dry_leaves_stacked",
+                "value": 1,
+                "text": "枯れ葉が 1 掴み敷かれている"
+              },
+              {
+                "key": "dry_leaves_stacked",
+                "value": 2,
+                "text": "枯れ葉が 2 掴み敷かれている"
               }
             ],
             "interactions": [
+              {
+                "action_name": "add_driftwood",
+                "display_label": "流木を狼煙台に積む",
+                "witness_observation_message": "{actor}が狼煙台に流木を積み上げた。",
+                "preconditions": [
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "driftwood",
+                    "required_quantity": 1,
+                    "failure_message": "積める流木を持っていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "DEPOSIT_ITEM_TO_OBJECT",
+                    "parameters": {
+                      "item_spec": "driftwood",
+                      "target_object": "signal_fire_pit",
+                      "state_key": "driftwood_stacked",
+                      "quantity": "all"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "流木を狼煙台に組んだ。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "add_dry_leaves",
+                "display_label": "枯れ葉を狼煙台に敷く",
+                "witness_observation_message": "{actor}が狼煙台に枯れ葉を敷いた。",
+                "preconditions": [
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "dry_leaves",
+                    "required_quantity": 1,
+                    "failure_message": "敷ける枯れ葉を持っていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "DEPOSIT_ITEM_TO_OBJECT",
+                    "parameters": {
+                      "item_spec": "dry_leaves",
+                      "target_object": "signal_fire_pit",
+                      "state_key": "dry_leaves_stacked",
+                      "quantity": "all"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "枯れ葉を狼煙台に敷いた。"
+                    }
+                  }
+                ]
+              },
               {
                 "action_name": "light_signal",
                 "display_label": "狼煙を上げる",
@@ -2569,14 +2666,16 @@
                     "failure_message": "狼煙はすでに燃え上がっている。"
                   },
                   {
-                    "condition_type": "HAS_ITEM",
-                    "required_item": "driftwood",
+                    "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+                    "target_object": "signal_fire_pit",
+                    "state_key": "driftwood_stacked",
                     "failure_message": "流木が足りない。3 本は要る。",
                     "required_quantity": 3
                   },
                   {
-                    "condition_type": "HAS_ITEM",
-                    "required_item": "dry_leaves",
+                    "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+                    "target_object": "signal_fire_pit",
+                    "state_key": "dry_leaves_stacked",
                     "failure_message": "枯れ葉が足りない。乾いたものを 2 掴みは要る。",
                     "required_quantity": 2
                   },
@@ -2593,20 +2692,6 @@
                   }
                 ],
                 "effects": [
-                  {
-                    "effect_type": "REMOVE_ITEM",
-                    "parameters": {
-                      "item_spec": "driftwood",
-                      "quantity": 3
-                    }
-                  },
-                  {
-                    "effect_type": "REMOVE_ITEM",
-                    "parameters": {
-                      "item_spec": "dry_leaves",
-                      "quantity": 2
-                    }
-                  },
                   {
                     "effect_type": "CHANGE_OBJECT_STATE",
                     "parameters": {
