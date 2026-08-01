@@ -1,13 +1,17 @@
 """SpotGraphRecipientStrategy のユニットテスト。
 
 方針確認:
-- 行為者本人は配信先から除外される
+- 原則として行為者本人は配信先から除外される
+- 物体操作の失敗は、本人の再判断用に行為者へも配信される
 - 同一スポットの他プレイヤーが配信先に含まれる
 - 環境変化は影響スポットの全プレイヤーが対象
 """
 
 import pytest
 from unittest.mock import MagicMock
+
+# application.llm と observation の相互 import を、実アプリと同じ順序で解決する。
+import ai_rpg_world.application.llm  # noqa: F401
 
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
@@ -26,6 +30,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerDroppedItemEvent,
     PlayerPickedUpItemEvent,
     SpotExploredEvent,
+    SpotObjectInteractionFailedEvent,
     SpotObjectInteractedEvent,
     SpotObjectStateChangedEvent,
     SpotPlayerStateChangedInSpotEvent,
@@ -68,6 +73,7 @@ def _make_strategy(
         EntityEnteredSpotEvent,
         EntityLeftSpotEvent,
         SpotObjectInteractedEvent,
+        SpotObjectInteractionFailedEvent,
         SpotExploredEvent,
         ConnectionStateChangedEvent,
         SpotObjectStateChangedEvent,
@@ -190,6 +196,28 @@ class TestSpotObjectInteracted:
         )
         recipients = strategy.resolve(event)
         assert list(recipients) == []
+
+
+class TestSpotObjectInteractionFailed:
+    """物体操作の失敗は本人と同席者へ配り、遠隔の人物には配らない。"""
+
+    def test_includes_actor_and_same_spot_witness(self) -> None:
+        """失敗した本人と同席者を配信先に含め、別 spot の人物は含めない。"""
+        strategy = _make_strategy({1: 1, 2: 1, 3: 2})
+        event = SpotObjectInteractionFailedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            object_id=OBJECT_1,
+            action_name="light_signal",
+            observation_message="",
+            failure_reason="流木が足りない。",
+        )
+
+        ids = {recipient.value for recipient in strategy.resolve(event)}
+
+        assert ids == {1, 2}
 
 
 class TestPlayerDroppedItem:

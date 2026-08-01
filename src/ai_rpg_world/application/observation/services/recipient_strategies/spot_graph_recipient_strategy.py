@@ -1,7 +1,8 @@
 """スポットグラフ固有イベントの観測配信先解決。
 
 方針:
-- 行為者本人は配信先から除外する（ツール結果で十分）
+- 原則として行為者本人は配信先から除外する（ツール結果で十分）
+- 物体操作の失敗だけは、本人の再判断を起こすため本人にも配信する
 - 同一スポットの他プレイヤーに social として配信する
 - 環境変化（Connection/ObjectState）は影響スポットの全プレイヤーに配信する
 """
@@ -64,7 +65,8 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
     """スポットグラフ固有イベントの配信先解決。
 
-    行為者は配信先から除外し、同一スポットの他プレイヤーのみに配信する。
+    原則として行為者を除外して同一スポットの他プレイヤーへ配信する。
+    物体操作の失敗は、本人の再判断用に行為者も配信先へ含める。
     """
 
     _STRATEGY_KEY = "spot_graph"
@@ -126,8 +128,10 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
                 # 「同スポットの他プレイヤー」として足されている。
                 add(PlayerId(int(event.target_entity_id)))
         elif isinstance(event, SpotObjectInteractionFailedEvent):
-            # 失敗観測は同じスポットの他プレイヤーにのみ届ける（actor 本人には
-            # ツール結果として個別メッセージが返るので除外）。
+            # 本人には tool 結果とは別に observation を届け、失敗直後の再判断を
+            # 起こす。同席者にも従来どおり届けるが、formatter 側で他人の失敗は
+            # schedules_turn=False のままにする。
+            add(PlayerId(int(event.entity_id)))
             self._resolve_at_spot_excluding_actor(
                 event.spot_id, event.entity_id, add
             )

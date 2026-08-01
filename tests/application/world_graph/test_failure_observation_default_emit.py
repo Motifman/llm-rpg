@@ -134,8 +134,8 @@ class TestFormatterAutoComposesProse:
         out = handler._format_interaction_failed(ev, PlayerId(2))
         assert out is None
 
-    def test_returns_none_actor_self(self, handler):
-        """actor 本人には None を返す。"""
+    def test_actor_failure_schedules_next_turn(self, handler):
+        """失敗した本人への観測は次の判断機会を起こす。"""
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
         ev = SpotObjectInteractionFailedEvent.create(
@@ -149,7 +149,30 @@ class TestFormatterAutoComposesProse:
             failure_reason="火打ち石が無い",
         )
         out = handler._format_interaction_failed(ev, PlayerId(1))
-        assert out is None
+        assert out is not None
+        assert out.schedules_turn is True
+        assert out.observation_category == "self_only"
+        assert "火打ち石が無い" in out.prose
+
+    def test_witness_failure_does_not_schedule_turn(self, handler):
+        """同席者は失敗を観測できるが、他人の失敗では次の判断機会を起こさない。"""
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        ev = SpotObjectInteractionFailedEvent.create(
+            aggregate_id=SpotGraphId.create(1),
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(1),
+            spot_id=SpotId.create(1),
+            object_id=SpotObjectId.create(100),
+            action_name="light_signal",
+            observation_message="",
+            failure_reason="火打ち石が無い",
+        )
+
+        out = handler._format_interaction_failed(ev, PlayerId(2))
+
+        assert out is not None
+        assert out.schedules_turn is False
 
 
 class TestServiceDedupThrottle:

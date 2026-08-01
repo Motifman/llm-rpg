@@ -420,9 +420,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
     def _format_interaction_failed(
         self, event: SpotObjectInteractionFailedEvent, recipient_id: PlayerId,
     ) -> Optional[ObservationOutput]:
-        # アクター本人にはツール結果として失敗が返るため、観測は他者にのみ。
-        if self._is_self(event.entity_id, recipient_id):
-            return None
+        is_self = self._is_self(event.entity_id, recipient_id)
         actor = self._resolve_entity_name(event.entity_id)
         obj_name = self._resolve_object_name(event.spot_id, event.object_id)
         # #356 後続: prose の優先順位
@@ -434,7 +432,10 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         if override:
             prose = override
         elif reason:
-            prose = f"{actor}が{obj_name}の{event.action_name}を試みたが、{reason}"
+            if is_self:
+                prose = f"{obj_name}の{event.action_name}を試みたが、{reason}"
+            else:
+                prose = f"{actor}が{obj_name}の{event.action_name}を試みたが、{reason}"
         else:
             return None
         structured = {
@@ -444,9 +445,13 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             "action_name": event.action_name,
             "message": prose,
             "failure_reason": reason,
+            "is_self": is_self,
         }
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social",
+            prose=prose,
+            structured=structured,
+            observation_category="self_only" if is_self else "social",
+            schedules_turn=is_self,
         )
 
     def _format_connection_changed(
