@@ -52,10 +52,14 @@ def _service(*definitions: InteractionDef, item_names=None):
     )
 
 
-def _definition(action_name: str, *conditions: InteractionCondition) -> InteractionDef:
+def _definition(
+    action_name: str,
+    *conditions: InteractionCondition,
+    display_label: str = "",
+) -> InteractionDef:
     return InteractionDef(
         action_name=action_name,
-        display_label=action_name,
+        display_label=display_label,
         preconditions=tuple(conditions),
         effects=(),
     )
@@ -72,8 +76,11 @@ class TestActionLabelsCarryConditionHints:
                 condition_type=InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
                 required_lighting="DARK",
             ),
+            display_label="背後から襲う",
         ))
-        assert svc.available_action_labels() == ("strike_down(暗い場所のみ)",)
+        assert svc.available_action_labels() == (
+            "背後から襲う (strike_down・暗い場所のみ)",
+        )
 
     def test_required_item_becomes_a_hint(self) -> None:
         """HAS_ITEM は品目名つきで「ナイフが要る」として添う。

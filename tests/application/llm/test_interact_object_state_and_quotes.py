@@ -78,7 +78,7 @@ def _build(snap: SpotGraphPlayerSnapshotDto) -> str:
 
 
 class TestObjectSectionQuotesAndActionSimplification:
-    """object 名の quote + action 表示簡略化 (PR-FF + PR-EE)。"""
+    """object 名の quote と、意味ラベルつき action 表示を保証する。"""
 
     def test_object_quote(self) -> None:
         """object 名が quote で囲まれる。"""
@@ -102,9 +102,7 @@ class TestObjectSectionQuotesAndActionSimplification:
         assert '"流木の山"' in text, "object 名が \"\" で囲まれていない"
 
     def test_action_name(self) -> None:
-        """旧: ``[gather(action_name="gather") / examine(action_name="examine")]``
-        新: ``[gather, examine]``。冗長表記を排除し「action_name の列」を
-        直接示す。"""
+        """action は日本語の意味と tool に渡す識別子を対にして表示する。"""
         snap = SpotGraphPlayerSnapshotDto(
             current_spot_id=1,
             current_spot_name="浜辺",
@@ -123,16 +121,12 @@ class TestObjectSectionQuotesAndActionSimplification:
             ),
         )
         text = _build(snap)
-        assert "[gather, examine]" in text, (
-            "action 一覧が action_name のカンマ区切り簡略表記になっていない"
+        assert "[採取する (gather), 調べる (examine)]" in text, (
+            "action 一覧に display_label と action_name の対応が出ていない"
         )
         # 旧 (action_name="gather") 冗長表記が消えている
         assert 'action_name="gather"' not in text
         assert 'action_name="examine"' not in text
-        # 日本語 display_label はここでは出さない (LLM が action_name を渡す
-        # ときに ambiguity を生まないため)
-        assert "採取する" not in text
-        assert "調べる" not in text
 
     def test_action_condition_hints(self) -> None:
         """時刻・天候の前提条件ヒントは action_name に短く添えて表示する。"""
@@ -158,7 +152,8 @@ class TestObjectSectionQuotesAndActionSimplification:
         )
         result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
         text = result.current_state_text
-        assert '[fish_deep(夜不可・嵐不可)]' in text
+        assert '[沖で釣りをする (fish_deep・夜不可・嵐不可)]' in text
+        assert "fish_deep(夜不可" not in text
         assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
             "fish_deep",
         )
@@ -197,9 +192,14 @@ class TestObjectSectionQuotesAndActionSimplification:
         )
         result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
 
-        assert '"古い箱" — ふたの開いた箱。 [examine]' in result.current_state_text
-        assert "      いまできない: open_chest (箱はすでに空っぽだ。)" in (
-            result.current_state_text
+        assert (
+            '"古い箱" — ふたの開いた箱。 [調べる (examine)]'
+            in result.current_state_text
+        )
+        assert (
+            "      いまできない: 箱を開ける "
+            "(open_chest・箱はすでに空っぽだ。)"
+            in result.current_state_text
         )
         assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
             "open_chest",
@@ -237,7 +237,8 @@ class TestObjectSectionQuotesAndActionSimplification:
         result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
 
         assert (
-            "いまできない: gather_shellfish (貝は採り尽くした。時間が経てば戻る。)"
+            "いまできない: 貝を採る "
+            "(gather_shellfish・貝は採り尽くした。時間が経てば戻る。)"
             in result.current_state_text
         )
         assert "[gather_shellfish" not in result.current_state_text
@@ -281,10 +282,13 @@ class TestObjectSectionQuotesAndActionSimplification:
         result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
 
         assert (
-            '"崩れた梁" — 太い梁が斜めに崩れている。 [examine]'
+            '"崩れた梁" — 太い梁が斜めに崩れている。 [調べる (examine)]'
             in result.current_state_text
         )
-        assert "      いまできない: search (棚を調べた後)" in result.current_state_text
+        assert (
+            "      いまできない: 棚を探す (search・棚を調べた後)"
+            in result.current_state_text
+        )
         assert "search(夜不可" not in result.current_state_text
         assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
             "search",
@@ -318,7 +322,7 @@ class TestObjectSectionQuotesAndActionSimplification:
         assert '"崩れた梁" — 太い梁が斜めに崩れている。' in text
         assert "[]" not in text
         assert "[ ]" not in text
-        assert "      いまできない: search (棚を調べた後)" in text
+        assert "      いまできない: 棚を探す (search・棚を調べた後)" in text
 
     def test_no_blocked_actions_do_not_render_blocked_line(self) -> None:
         """いまできない action が無ければ、追加行自体を出さない。"""
@@ -343,8 +347,34 @@ class TestObjectSectionQuotesAndActionSimplification:
         )
         text = _build(snap)
 
-        assert "[gather]" in text
+        assert "[拾う (gather)]" in text
         assert "いまできない:" not in text
+
+    def test_empty_display_label_falls_back_to_action_name(self) -> None:
+        """display_label が空でも、表示側は落ちず action_name を候補に残す。"""
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="浜辺",
+            current_spot_description="",
+            travel_status_line=None,
+            objects=(
+                SpotGraphObjectEntry(
+                    object_id=10,
+                    name="流木の山",
+                    description="",
+                    interactions=(
+                        SpotGraphInteractionEntry(
+                            action_name="gather_driftwood",
+                            display_label="",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        text = _build(snap)
+
+        assert "[gather_driftwood]" in text
 
     def test_action(self) -> None:
         """interactions が空の object は ``[]`` や ``[-]`` を出さず、シンプル

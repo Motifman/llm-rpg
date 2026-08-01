@@ -1,8 +1,9 @@
 """前提条件を、action 候補の行末に添える短い日本語ヒントに変換する。
 
-物体行の ``gather(夜のみ)`` と同席者行の ``strike_down(暗い場所のみ)`` は
-同じ書式で出す。書式と語彙が経路ごとにずれると、LLM から見て「同じ意味の
-表示なのに読み方が違う」ものが増える。
+物体行の ``採取する (gather・夜のみ)`` と同席者行の
+``背後から襲う (strike_down・暗い場所のみ)`` は同じ書式で出す。書式と
+語彙が経路ごとにずれると、LLM から見て「同じ意味の表示なのに読み方が違う」
+ものが増える。
 
 ここが扱うのは **宣言だけから決まる** 条件に限る (時刻 / 天候 / 明るさ /
 所持品)。「今この物体の state が条件を満たしていない」のような実行時の値に
@@ -117,15 +118,24 @@ def declarative_condition_hints(
     return tuple(hints)
 
 
-def format_action_name_with_hints(action_name: str, hints) -> str:
-    """action 名にヒントを添えた**表示用**文字列を作る。
+def format_action_display_with_hints(
+    action_name: str,
+    hints,
+    *,
+    display_label: str = "",
+) -> str:
+    """action の意味ラベル・識別子・ヒントを含む**表示用**文字列を作る。
 
     戻り値は識別子ではない。executor が「使える操作」を列挙する経路には
     素の action_name を渡すこと。装飾込みの文字列を出すと、LLM が
-    ``strike_down(暗い場所のみ)`` をそのまま action_name として渡し、
+    ``背後から襲う (strike_down・暗い場所のみ)`` をそのまま action_name として渡し、
     「そんな操作は無い」の往復になる。
     """
     rendered = tuple(str(h).strip() for h in (hints or ()) if str(h).strip())
+    label = str(display_label or "").strip()
+    if label:
+        inside = "・".join((action_name, *rendered))
+        return f"{label} ({inside})"
     if not rendered:
         return action_name
     return f"{action_name}({'・'.join(rendered)})"

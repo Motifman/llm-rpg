@@ -438,7 +438,10 @@ class TestSurvivalIslandV4ActionConditionHints:
             _make_player_state(snapshot),
         )
 
-        assert '[fish_deep(夜不可・嵐不可)]' in result.current_state_text
+        assert (
+            '[沖で釣りをする (fish_deep・夜不可・嵐不可)]'
+            in result.current_state_text
+        )
         assert "night" not in result.current_state_text
         assert "STORM" not in result.current_state_text
         assert result.tool_runtime_context.targets["OBJ1"].display_name == "沖の釣り場"

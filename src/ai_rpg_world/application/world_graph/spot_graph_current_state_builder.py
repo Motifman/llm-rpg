@@ -44,7 +44,7 @@ from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_TEN
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
     declarative_condition_hints,
-    format_action_name_with_hints,
+    format_action_display_with_hints,
 )
 from ai_rpg_world.domain.world_graph.service.spot_perception_service import SpotPerceptionService
 from ai_rpg_world.application.world_graph.spot_effective_lighting_resolver import (
@@ -218,13 +218,19 @@ def _format_interaction_action_name_with_hints(
         current_tick=current_tick,
     )
     if blocking_hints:
-        return f"いまできない: {interaction.action_name} ({'・'.join(blocking_hints)})"
+        return "いまできない: " + format_action_display_with_hints(
+            interaction.action_name,
+            blocking_hints,
+            display_label=interaction.display_label,
+        )
     hints = _interaction_condition_hints(
         interaction,
     )
-    if not hints:
-        return interaction.action_name
-    return f"{interaction.action_name}({'・'.join(hints)})"
+    return format_action_display_with_hints(
+        interaction.action_name,
+        hints,
+        display_label=interaction.display_label,
+    )
 
 EntityNameResolver = Callable[[int], str]
 WeatherProvider = Callable[[], Optional[WeatherState]]
