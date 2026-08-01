@@ -250,8 +250,9 @@ def _render_body(content: str) -> str:
         body = "\n".join(rendered)
         heading = html.escape(title) if title else "(見出しなし)"
         marked = " data-marked=\"1\"" if any(_line_class(x) for x in lines) else ""
+        opened = " open" if marked else ""
         parts.append(
-            f'<details class="section" open{marked}>'
+            f'<details class="section"{opened}{marked}>'
             f"<summary>{heading}</summary>"
             f'<pre class="section-body">{body}</pre>'
             f"</details>"

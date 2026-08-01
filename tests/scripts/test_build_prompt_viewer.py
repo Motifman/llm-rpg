@@ -192,6 +192,16 @@ class TestRenderBody:
         """注目行が無い section には data-marked を付けない。"""
         assert 'data-marked="1"' not in _render_body("【現在地と周囲】\n現在地: 干潟")
 
+    def test_section_containing_a_notable_line_is_open_initially(self) -> None:
+        """注目行を含む section は open 属性を持ち、初期表示で内容を見せる。"""
+        out = _render_body("【身体の状態】\n  → 同じことばかり繰り返している焦りが拭えない。")
+        assert '<details class="section" open data-marked="1">' in out
+
+    def test_section_without_notable_lines_is_closed_initially(self) -> None:
+        """注目行が無い section は open 属性を持たず、初期表示で折りたたむ。"""
+        out = _render_body("【現在地と周囲】\n現在地: 干潟")
+        assert '<details class="section"><summary>現在地と周囲</summary>' in out
+
     def test_html_in_body_is_escaped(self) -> None:
         """本文に山括弧が入っても HTML として解釈させない。"""
         out = _render_body("【所持】\n<script>alert(1)</script>")
