@@ -174,7 +174,9 @@
             "name": "気象記録簿",
             "description": "毎時の気温と風速を書き込む帳面。集会室の隅に置かれている。",
             "object_type": "OTHER",
-            "state": {},
+            "state": {
+              "progress": 0
+            },
             "interactions": [
               {
                 "action_name": "log_weather",
@@ -187,9 +189,95 @@
                       "role": "crew"
                     },
                     "failure_message": "その手順は自分の担当ではない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "weather_log",
+                    "required_state": {
+                      "progress": 0
+                    },
+                    "failure_message": "いまその手順に取りかかる段ではない。"
                   }
                 ],
                 "effects": [
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "state_key": "progress"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ここまでは済んだ。まだ途中だ。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "log_weather_2",
+                "display_label": "気象を記録する（続き）",
+                "witness_observation_message": "{actor}が気象記録簿に書き込んでいる。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "crew"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "weather_log",
+                    "required_state": {
+                      "progress": 1
+                    },
+                    "failure_message": "いまその手順に取りかかる段ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "state_key": "progress"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ここまでは済んだ。まだ途中だ。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "log_weather_3",
+                "display_label": "気象を記録する（仕上げ）",
+                "witness_observation_message": "{actor}が気象記録簿に書き込んでいる。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "crew"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "weather_log",
+                    "required_state": {
+                      "progress": 2
+                    },
+                    "failure_message": "いまその手順に取りかかる段ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "state_key": "progress"
+                    }
+                  },
                   {
                     "effect_type": "SET_FLAG",
                     "parameters": {
@@ -226,6 +314,28 @@
                   }
                 ]
               }
+            ],
+            "state_display": [
+              {
+                "key": "progress",
+                "value": 0,
+                "text": "まだ手つかず"
+              },
+              {
+                "key": "progress",
+                "value": 1,
+                "text": "途中まで進んでいる"
+              },
+              {
+                "key": "progress",
+                "value": 2,
+                "text": "あと少しで終わる"
+              },
+              {
+                "key": "progress",
+                "value": 3,
+                "text": "点検は終わっている"
+              }
             ]
           }
         ]
@@ -254,7 +364,9 @@
             "name": "配線箱",
             "description": "廊下の壁にある配線箱。緩んだ結束を締め直す必要がある。",
             "object_type": "OTHER",
-            "state": {},
+            "state": {
+              "progress": 0
+            },
             "interactions": [
               {
                 "action_name": "tighten_wiring",
@@ -267,9 +379,95 @@
                       "role": "crew"
                     },
                     "failure_message": "その手順は自分の担当ではない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "junction_box",
+                    "required_state": {
+                      "progress": 0
+                    },
+                    "failure_message": "いまその手順に取りかかる段ではない。"
                   }
                 ],
                 "effects": [
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "state_key": "progress"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ここまでは済んだ。まだ途中だ。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "tighten_wiring_2",
+                "display_label": "配線の結束を締め直す（続き）",
+                "witness_observation_message": "{actor}が配線箱の中をいじっている。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "crew"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "junction_box",
+                    "required_state": {
+                      "progress": 1
+                    },
+                    "failure_message": "いまその手順に取りかかる段ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "state_key": "progress"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ここまでは済んだ。まだ途中だ。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "tighten_wiring_3",
+                "display_label": "配線の結束を締め直す（仕上げ）",
+                "witness_observation_message": "{actor}が配線箱の中をいじっている。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "crew"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "junction_box",
+                    "required_state": {
+                      "progress": 2
+                    },
+                    "failure_message": "いまその手順に取りかかる段ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "state_key": "progress"
+                    }
+                  },
                   {
                     "effect_type": "SET_FLAG",
                     "parameters": {
@@ -305,6 +503,28 @@
                     }
                   }
                 ]
+              }
+            ],
+            "state_display": [
+              {
+                "key": "progress",
+                "value": 0,
+                "text": "まだ手つかず"
+              },
+              {
+                "key": "progress",
+                "value": 1,
+                "text": "途中まで進んでいる"
+              },
+              {
+                "key": "progress",
+                "value": 2,
+                "text": "あと少しで終わる"
+              },
+              {
+                "key": "progress",
+                "value": 3,
+                "text": "点検は終わっている"
               }
             ]
           }
@@ -385,7 +605,9 @@
             "name": "棚卸し帳",
             "description": "棚の備品を数えて書き込む帳面。定期的に確認する決まりになっている。",
             "object_type": "OTHER",
-            "state": {},
+            "state": {
+              "progress": 0
+            },
             "interactions": [
               {
                 "action_name": "count_supplies",
@@ -398,9 +620,95 @@
                       "role": "crew"
                     },
                     "failure_message": "その手順は自分の担当ではない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "inventory_ledger",
+                    "required_state": {
+                      "progress": 0
+                    },
+                    "failure_message": "いまその手順に取りかかる段ではない。"
                   }
                 ],
                 "effects": [
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "state_key": "progress"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ここまでは済んだ。まだ途中だ。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "count_supplies_2",
+                "display_label": "備品の数を数える（続き）",
+                "witness_observation_message": "{actor}が棚の備品を数えている。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "crew"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "inventory_ledger",
+                    "required_state": {
+                      "progress": 1
+                    },
+                    "failure_message": "いまその手順に取りかかる段ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "state_key": "progress"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ここまでは済んだ。まだ途中だ。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "count_supplies_3",
+                "display_label": "備品の数を数える（仕上げ）",
+                "witness_observation_message": "{actor}が棚の備品を数えている。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "crew"
+                    },
+                    "failure_message": "その手順は自分の担当ではない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "inventory_ledger",
+                    "required_state": {
+                      "progress": 2
+                    },
+                    "failure_message": "いまその手順に取りかかる段ではない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "state_key": "progress"
+                    }
+                  },
                   {
                     "effect_type": "SET_FLAG",
                     "parameters": {
@@ -436,6 +744,28 @@
                     }
                   }
                 ]
+              }
+            ],
+            "state_display": [
+              {
+                "key": "progress",
+                "value": 0,
+                "text": "まだ手つかず"
+              },
+              {
+                "key": "progress",
+                "value": 1,
+                "text": "途中まで進んでいる"
+              },
+              {
+                "key": "progress",
+                "value": 2,
+                "text": "あと少しで終わる"
+              },
+              {
+                "key": "progress",
+                "value": 3,
+                "text": "点検は終わっている"
               }
             ]
           }

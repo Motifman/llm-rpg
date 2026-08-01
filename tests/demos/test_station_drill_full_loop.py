@@ -55,6 +55,16 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
     runtime._spot_graph_repo.save(graph)
 
 
+def _finish_task(runtime, player_id: PlayerId, obj: str, base: str) -> None:
+    """作業を 3 手ぶん進めて完了させる。
+
+    作業は多段になった (1 手では終わらない)。暗い部屋に留まる時間を延ばし、
+    襲撃の機会を作るための変更なので、通しテストもその手数を通す。
+    """
+    for step in (base, f"{base}_2", f"{base}_3"):
+        runtime.do_interact(player_id, obj, step)
+
+
 def _line(runtime, keyword: str, player_id: PlayerId = _MORI) -> str:
     for line in runtime.build_observation(player_id).splitlines():
         if keyword in line:
@@ -151,7 +161,7 @@ class TestTheWholeLoopRuns:
         """
         # 1. 作業が進む
         _move(runtime, _MORI, "corridor")
-        runtime.do_interact(_MORI, "junction_box", "tighten_wiring")
+        _finish_task(runtime, _MORI, "junction_box", "tighten_wiring")
         assert "1/3" in _line(runtime, "作業の進み")
 
         # 2. 刃物を手に入れてから、暗い通路で襲う。
@@ -186,7 +196,7 @@ class TestTheWholeLoopRuns:
         assert runtime._game_phase_store.current.phase is GamePhase.FREE_ROAM
 
         # 5. 自由時間に戻って作業を続けられる
-        runtime.do_interact(_AOI, "weather_log", "log_weather")
+        _finish_task(runtime, _AOI, "weather_log", "log_weather")
         assert "必要数に到達" in _line(runtime, "作業の進み", _AOI)
 
     def test_the_run_can_end_by_finishing_the_work(self, runtime) -> None:
@@ -196,8 +206,8 @@ class TestTheWholeLoopRuns:
         分からないまま費用だけかかる。
         """
         _move(runtime, _MORI, "corridor")
-        runtime.do_interact(_MORI, "junction_box", "tighten_wiring")
+        _finish_task(runtime, _MORI, "junction_box", "tighten_wiring")
         _move(runtime, _MORI, "hall")
-        runtime.do_interact(_MORI, "weather_log", "log_weather")
+        _finish_task(runtime, _MORI, "weather_log", "log_weather")
 
         assert runtime.check_game_end().is_ended is True
