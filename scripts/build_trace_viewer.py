@@ -202,8 +202,12 @@ def group_events_by_tick(
     # 受信者情報だけ observation から集約する。
     speech_action_keys: set[tuple[Any, ...]] = set()
     speech_action_result_keys: set[tuple[Any, ...]] = set()
+    inline_speech_keys: set[tuple[Any, ...]] = set()
     recipients_by_speech_key: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
     for e in events:
+        inline_key = _say_inline_action_key(e)
+        if inline_key is not None:
+            inline_speech_keys.add(inline_key)
         action_key = _speech_action_key(e)
         if action_key is not None:
             speech_action_keys.add(action_key)
@@ -241,6 +245,18 @@ def group_events_by_tick(
             by_tick.setdefault(e.tick, []).append(e)
             continue
         obs_key = _player_spoke_observation_key(e)
+        inline_observation_key = _player_spoke_speaker_content_key(e)
+        if (
+            inline_observation_key is not None
+            and inline_observation_key in inline_speech_keys
+        ):
+            e = replace(
+                e,
+                payload={
+                    **(e.payload if isinstance(e.payload, dict) else {}),
+                    "_viewer_speech_source": "say_inline",
+                },
+            )
         if obs_key is not None and obs_key in speech_action_keys:
             # 対応する speak action がある場合、player_spoke observation は受信者
             # 情報として action 行に畳み込む。action が無い古い trace では従来どおり
@@ -1620,11 +1636,7 @@ def _build_event_log_html(
             default_visible = _event_category_default_visible(category)
             if default_visible:
                 visible_row_count += 1
-            pname = (
-                name_by_pid.get(e.player_id, f"#{e.player_id}")
-                if e.player_id is not None
-                else "—"
-            )
+            pname = _event_player_label(e, name_by_pid)
             body = _format_event_body(e)
             classes = (
                 f"event-row kind-{html.escape(kind)} "
@@ -1739,6 +1751,28 @@ def _is_player_spoke_observation(e: TraceEvent) -> bool:
     return isinstance(structured, dict) and structured.get("type") == "player_spoke"
 
 
+def _event_player_label(e: TraceEvent, name_by_pid: dict[int, str]) -> str:
+    """timeline 行の主を返す。発話観測だけは受信者でなく発話者を使う。"""
+    if _is_player_spoke_observation(e) and isinstance(e.payload, dict):
+        structured = e.payload.get("structured")
+        if isinstance(structured, dict):
+            speaker_name = structured.get("speaker") or structured.get("speaker_name")
+            if speaker_name:
+                return str(speaker_name)
+            speaker_id = structured.get("speaker_player_id")
+            if speaker_id is None:
+                speaker_id = e.payload.get("speaker_player_id")
+            if speaker_id is not None:
+                try:
+                    normalized_id = int(speaker_id)
+                except (TypeError, ValueError):
+                    return f"#{speaker_id}"
+                return name_by_pid.get(normalized_id, f"#{normalized_id}")
+    if e.player_id is None:
+        return "—"
+    return name_by_pid.get(e.player_id, f"#{e.player_id}")
+
+
 def _speech_action_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
     """timeline 上で同一発言を突き合わせる speak action key を返す。"""
     if not _is_speak_action(e) or not isinstance(e.payload, dict):
@@ -1751,6 +1785,35 @@ def _speech_action_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
         return None
     channel = args.get("channel") or e.payload.get("tool") or "speak"
     return (e.tick, e.player_id, str(channel), str(content))
+
+
+def _say_inline_action_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
+    """通常 action に添えた say_inline と発話観測を突き合わせる key を返す。"""
+    if e.kind != TraceEventKind.ACTION or not isinstance(e.payload, dict):
+        return None
+    args = e.payload.get("arguments")
+    if not isinstance(args, dict):
+        return None
+    content = args.get("say_inline")
+    if not content:
+        return None
+    return (e.tick, e.player_id, str(content))
+
+
+def _player_spoke_speaker_content_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
+    """player_spoke 観測を発話者・本文で action の say_inline と照合する。"""
+    if not _is_player_spoke_observation(e) or not isinstance(e.payload, dict):
+        return None
+    structured = e.payload.get("structured")
+    if not isinstance(structured, dict):
+        return None
+    speaker_id = structured.get("speaker_player_id")
+    if speaker_id is None:
+        speaker_id = e.payload.get("speaker_player_id")
+    content = structured.get("content") or e.payload.get("content")
+    if speaker_id is None or not content:
+        return None
+    return (e.tick, speaker_id, str(content))
 
 
 def _speech_action_result_match_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
@@ -1855,7 +1918,12 @@ def _format_event_body(e: TraceEvent) -> str:
                 or payload.get("speaker_player_id")
                 or "?"
             )
-            channel = structured.get("channel") or payload.get("channel") or "speak"
+            channel = (
+                payload.get("_viewer_speech_source")
+                or structured.get("channel")
+                or payload.get("channel")
+                or "speak"
+            )
             content = structured.get("content") or payload.get("content") or payload.get("prose") or ""
             recipients = payload.get("_viewer_recipients")
             recipient_part = ""
