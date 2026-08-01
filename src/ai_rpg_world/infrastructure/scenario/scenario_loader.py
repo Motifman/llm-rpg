@@ -41,6 +41,7 @@ from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
@@ -535,6 +536,8 @@ class ScenarioLoadResult:
     # 比較可能性が切れていた。同時行動 (prepare_action) と同じく、宣言した
     # シナリオにだけ出す。
     meeting_enabled: bool = False
+    # 死の扱い。宣言が無ければ engine の既定 (蘇生できる世界)。
+    death_semantics: DeathSemantics = field(default_factory=DeathSemantics)
     # 会議の調整値。None は既定 (GamePhaseStore のクラス定数) を使う。
     # シナリオごとに変えられないと、機構の確認用に短く回す run で会議 1 回
     # に run の大半を持っていかれる。
@@ -607,6 +610,7 @@ class ScenarioLoader:
         )
 
         meeting_enabled = self._parse_meeting_enabled(raw)
+        death_semantics = self._parse_death_semantics(raw)
         meeting_tuning = self._parse_meeting_tuning(raw)
 
         return ScenarioLoadResult(
@@ -633,6 +637,7 @@ class ScenarioLoader:
             areas=areas,
             distant_cues=distant_cues,
             meeting_enabled=meeting_enabled,
+            death_semantics=death_semantics,
             **meeting_tuning,
         )
 
@@ -674,6 +679,33 @@ class ScenarioLoader:
             )
             parsed[field] = value
         return parsed
+
+    @staticmethod
+    def _parse_death_semantics(raw: Dict[str, Any]) -> DeathSemantics:
+        """`death` block を読む。書かれていない項目は engine の既定。
+
+        `grace_ticks` は 0 を許す (即死の世界)。負は拒否する。0 と「書き
+        忘れ」を区別するため、既定は None で持つ。
+        """
+        block = raw.get("death")
+        if block is None:
+            return DeathSemantics()
+        if not isinstance(block, dict):
+            raise ScenarioLoadError("death は object で指定してください。")
+        grace = block.get("grace_ticks")
+        if grace is not None:
+            if not isinstance(grace, int) or isinstance(grace, bool) or grace < 0:
+                raise ScenarioLoadError(
+                    f"death.grace_ticks は 0 以上の整数で指定してください: {grace!r}"
+                )
+        for key in ("announce_globally", "victim_learns_killer"):
+            if key in block and not isinstance(block[key], bool):
+                raise ScenarioLoadError(f"death.{key} は真偽値で指定してください。")
+        return DeathSemantics(
+            grace_ticks=grace,
+            announce_globally=bool(block.get("announce_globally", True)),
+            victim_learns_killer=bool(block.get("victim_learns_killer", True)),
+        )
 
     @staticmethod
     def _parse_meeting_enabled(raw: Dict[str, Any]) -> bool:

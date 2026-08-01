@@ -33,6 +33,17 @@ class PlayerObservationFormatter:
     def __init__(self, context: ObservationFormatterContext) -> None:
         self._context = context
 
+    def _death_semantics(self):
+        return getattr(self._context, "death_semantics", None)
+
+    def _announce_globally(self) -> bool:
+        semantics = self._death_semantics()
+        return True if semantics is None else bool(semantics.announce_globally)
+
+    def _victim_learns_killer(self) -> bool:
+        semantics = self._death_semantics()
+        return True if semantics is None else bool(semantics.victim_learns_killer)
+
     def format(
         self,
         event: Any,
@@ -110,7 +121,11 @@ class PlayerObservationFormatter:
         if is_self:
             # 本人視点では誰に倒されたかは当然分かる。
             prose = "倒れて動けなくなりました。"
-            if killer_name:
+            # シナリオが匿名の通知文を宣言している世界では、直後に加害者名が
+            # 届くと**匿名にした意味が消える**。実 run で衝突した
+            # (「闇の中で強い衝撃を受けた。誰にやられたのか分からない。」の
+            # 次の行に「クゼに倒されました。」が並んだ)。
+            if killer_name and self._victim_learns_killer():
                 prose = f"{killer_name}に倒されました。"
             structured = {"type": "player_downed", "role": "self", "killer_player_id": killer_id}
             return ObservationOutput(
@@ -129,6 +144,10 @@ class PlayerObservationFormatter:
                 "killer_visible_to_recipient": False,
                 "proximity": "remote_or_unknown",
             }
+            if not self._announce_globally():
+                # 隠密殺人のある世界。倒れた瞬間に全員が知るなら、死体を
+                # 見つける意味も通報する意味も無い。
+                return None
             return ObservationOutput(
                 prose="遠くで誰かが倒れた気配がした。",
                 structured=structured,

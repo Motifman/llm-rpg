@@ -94,6 +94,7 @@ class ObservationFormatter(IObservationFormatter):
         # 実験 #26 で発覚: object_name resolver が graph 経由で interior を
         # 引けず "何か" fallback に落ちていた。interior は別 repo にある。
         spot_interior_repository: Optional[Any] = None,
+        death_semantics: Optional[Any] = None,
     ) -> None:
         self._name_resolver = ObservationNameResolver(
             spot_repository=spot_repository,
@@ -119,6 +120,7 @@ class ObservationFormatter(IObservationFormatter):
             spot_graph_repository=spot_graph_repository,
             sound_propagation_service=sound_propagation_service,
             spot_interior_repository=spot_interior_repository,
+            death_semantics=death_semantics,
         )
         self._formatters = [
             ConversationObservationFormatter(self._context),
