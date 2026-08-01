@@ -2486,7 +2486,28 @@ class WorldRuntime:
         registry = self._player_outcome_registry
         if registry is None:
             return False
-        return bool(registry.set_outcome(player_id, PlayerOutcomeEnum.EJECTED))
+        if not registry.set_outcome(player_id, PlayerOutcomeEnum.EJECTED):
+            return False
+        # 追放された者はその場から居なくなる。
+        #
+        # **キルとは違う。** 殺された者の死体はその場に残り、見つけた人が
+        # 通報できる。追放は全員の前で行われ、結果も全員に届いているので、
+        # 死体を残す理由が無い。残すと同席者行に出続け、漁る・襲うといった
+        # 「必ず失敗する手」の対象になる (実 run で実際にそう出ていた)。
+        try:
+            graph = self._spot_graph_repo.find_graph()
+            graph.unplace_entity(EntityId.create(int(player_id)))
+            self._spot_graph_repo.save(graph)
+        except Exception:
+            # 追放そのものは outcome で確定済み。配置の後始末に失敗しても
+            # 追放を取り消さない。ただし黙って進むと「追放したのに居る」
+            # 状態に気付けないので記録は残す。
+            logger.warning(
+                "追放した player を graph から外せなかった player_id=%s",
+                int(player_id),
+                exc_info=True,
+            )
+        return True
 
     def call_emergency_meeting(self, player_id: PlayerId):
         """緊急ボタンで会議を招集する。
@@ -2640,6 +2661,12 @@ class WorldRuntime:
             if int(pid) == int(initiator_player_id):
                 continue
             if self._is_incapacitated(pid):
+                continue
+            # 退場した者は集めない。倒れている相手と違って graph 上にも
+            # 居ないので、teleport が例外になる。
+            if self._player_outcome_registry is not None and (
+                self._player_outcome_registry.get_outcome(pid).is_eliminated
+            ):
                 continue
             try:
                 graph.teleport_entity(EntityId.create(int(pid)), target_spot)
