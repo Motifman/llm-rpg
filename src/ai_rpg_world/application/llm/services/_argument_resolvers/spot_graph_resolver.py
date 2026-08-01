@@ -571,6 +571,12 @@ _SPOT_GRAPH_TOOLS = frozenset({
     # PR-α (Y_after_pr639_640 後続): 旧 GIVE_ITEMS は削除、GIVE_ITEM が
     # batch-always で吸収した。
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+    # 会議と投票 (#869 / #874)。**分岐だけ書いて、この許可リストに足すのを
+    # 忘れていた。** resolve_args は入口でここを見るので分岐に到達せず None を
+    # 返し、presentation 経路では RESOLVER_DISPATCH_MISSING になる。どの run
+    # でも誰も投票しなかったため、一度も発火せず 4 本走らせても気付けなかった。
+    TOOL_NAME_SPOT_GRAPH_VOTE,
+    TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
 })
 
 
@@ -610,6 +616,13 @@ def _with_inner_thought(base: Dict[str, Any], args: Dict[str, Any]) -> Dict[str,
         "expected_result",
         "intention",
         "emotion_hint",
+        # interact の自由入力 (看板の本文 / パズルの暗証番号)。
+        #
+        # **say_inline とまったく同じ取りこぼしが再発していた。** 実 run で
+        # キーパーが text を渡して当番表に書こうとし、4 回とも「text
+        # パラメータで指定してください」で拒否された。渡しているのに
+        # 「渡していない」と言われるので、モデルは同じ手を繰り返す。
+        "parameters",
     ):
         if passthrough_key in args and passthrough_key not in out:
             out[passthrough_key] = args[passthrough_key]
