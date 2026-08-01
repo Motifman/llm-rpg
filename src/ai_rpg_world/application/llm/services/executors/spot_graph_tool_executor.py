@@ -93,6 +93,11 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.service.actionable_target import (
+    TargetRequirement,
+    validate_actionable_target,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -158,6 +163,31 @@ def _use_item_unexpected_exception_result(
         omit_result_in_prompt=base.omit_result_in_prompt,
         trace_payload=trace_payload,
     )
+
+
+#: tend_to_player の拒否理由 → 既存の error_code。
+#:
+#: 普遍則へ括り出しても、外に見える code は変えない。remediation の対応表と
+#: trace の分析がこの値で分岐している。
+_TEND_ERROR_CODES = {
+    "TARGET_IS_SELF": "INVALID_TARGET_KIND",
+    "ACTOR_IS_DOWN": "EXHAUSTED",
+}
+
+#: tend_to_player 専用の失敗文。**判定は普遍則、文言はここ。**
+#:
+#: 負債マップが「共通ヘルパへ載せ替えると専用の失敗文面が汎用に落ちる」と
+#: 警告していた点。汎用の「ここには居ない」だと次に何をすればよいかが
+#: 消える。載せ替えで実際に落ちかけ、既存テストが捕まえた。
+_TEND_MESSAGES = {
+    "NOT_IN_SAME_SPOT": (
+        "{name} は同じ場所にいない。"
+        "介抱するにはまず相手のいる場所へ向かう必要がある。"
+    ),
+    "TARGET_IS_NOT_DOWN": "{name} は倒れていない。介抱の必要はない。",
+    "ACTOR_IS_DOWN": "自分も倒れているので他人を介抱できない。",
+    "TARGET_IS_ELIMINATED": "{name} はもう息をしていない。介抱しても戻らない。",
+}
 
 
 class SpotGraphToolExecutor:
@@ -1707,33 +1737,47 @@ class SpotGraphToolExecutor:
                     message=f"対象のプレイヤーが見つかりません: {display_name}",
                     error_code="TARGET_NOT_FOUND",
                 )
-            if actor.is_down:
-                return LlmCommandResultDto(
-                    success=False,
-                    message="自分も倒れているので他人を介抱できない。",
-                    error_code="EXHAUSTED",
-                )
-            if not target.is_down:
-                return LlmCommandResultDto(
-                    success=False,
-                    message=f"{display_name} は倒れていない。介抱の必要はない。",
-                    error_code="INTERACTION_PRECONDITION_FAILED",
-                )
-            # 同 spot 制約: 介抱は物理的接触が必要なので spot_id が一致するか確認
-            actor_spot = actor.current_spot_id
-            target_spot = target.current_spot_id
-            if (
-                actor_spot is None
-                or target_spot is None
-                or actor_spot != target_spot
-            ):
+            # 相手が対象として使えるかは、engine の普遍則に委ねる
+            # (負債マップ #2)。ここに書くと、行動を 1 つ足すたびに
+            # 「死んだ相手をどう扱うか」を書き直すことになる。
+            #
+            # **outcome まで見るのは、この載せ替えで足りるようになった点。**
+            # 旧実装は is_down しか見ておらず、猶予が切れて死亡が確定した
+            # 相手を蘇生できた (この関数の docstring が「将来 PR」として
+            # 触れていた穴)。
+            registry = getattr(self._runtime, "_player_outcome_registry", None)
+            outcome = (
+                registry.get_outcome(target_id)
+                if registry is not None
+                else PlayerOutcomeEnum.UNRESOLVED
+            )
+            rejection = validate_actionable_target(
+                actor_player_id=player_id,
+                target_player_id=target_player_id_raw,
+                actor_status=actor,
+                target_status=target,
+                target_outcome=outcome,
+                same_spot=(
+                    actor.current_spot_id is not None
+                    and actor.current_spot_id == target.current_spot_id
+                ),
+                requirement=TargetRequirement.INCAPACITATED,
+                target_display_name=display_name,
+            )
+            if rejection is not None:
+                # 既存の error_code を保つ。呼び出し側 (remediation / 分析) が
+                # 種別で分岐しているので、括り出しで変えない。
+                template = _TEND_MESSAGES.get(rejection.code)
                 return LlmCommandResultDto(
                     success=False,
                     message=(
-                        f"{display_name} は同じ場所にいない。"
-                        "介抱するにはまず相手のいる場所へ向かう必要がある。"
+                        template.format(name=display_name)
+                        if template
+                        else rejection.message
                     ),
-                    error_code="INTERACTION_PRECONDITION_FAILED",
+                    error_code=_TEND_ERROR_CODES.get(
+                        rejection.code, "INTERACTION_PRECONDITION_FAILED"
+                    ),
                 )
 
             # Phase 5: caregiver_player_id を渡すことで PlayerRevivedEvent に
