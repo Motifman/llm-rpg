@@ -14,9 +14,6 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
-    LEGACY_NEGATED_ALIASES,
-)
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
@@ -92,8 +89,7 @@ def declarative_condition_hints(
         renderers = _HINT_RENDERERS.get(cond.condition_type)
         if renderers is None:
             continue
-        positive, negative = renderers
-        render = negative if getattr(cond, "negate", False) else positive
+        render, _negative = renderers
         if render is None:
             continue
         text = render(
@@ -153,6 +149,20 @@ def _object_state_int(cond, _items, object_state_requirement_text_resolver, **_)
 #: `None` は「その組み合わせではヒントを出さない」。表に載っていない種別は
 #: `_NO_HINT_CONDITIONS` に理由と共に列挙する。どちらにも無い種別があれば
 #: `test_interaction_condition_hint_table.py` が落ちる。
+#: 否定専用の種別 → 対になる肯定側の種別。表の組み立てにだけ使う。
+_LEGACY_NEGATED_PAIRS = {
+    InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT:
+        InteractionConditionTypeEnum.TIME_OF_DAY_IS,
+    InteractionConditionTypeEnum.WEATHER_IS_NOT:
+        InteractionConditionTypeEnum.WEATHER_IS,
+    InteractionConditionTypeEnum.SPOT_LIGHTING_IS_NOT:
+        InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
+    InteractionConditionTypeEnum.AT_SPOT_IS_NOT:
+        InteractionConditionTypeEnum.AT_SPOT_IS,
+    InteractionConditionTypeEnum.TARGET_HAS_NO_ITEM:
+        InteractionConditionTypeEnum.TARGET_HAS_ITEM,
+}
+
 _HINT_RENDERERS: dict = {
     InteractionConditionTypeEnum.TIME_OF_DAY_IS: (
         lambda c, i, o: _time_of_day(c, i, o, suffix="のみ"),
@@ -180,15 +190,14 @@ _HINT_RENDERERS: dict = {
     ),
 }
 
-# 否定専用の旧種別も表に載せる。
+# 否定専用の種別は、否定の文を「肯定側」として持つ。
 #
-# **loader を通らない経路がある。** テストや codec が条件を直接組む場合、
-# 畳まれないまま旧種別で届く。表に無いと肯定側に落ちて「夜不可」が消えるか、
-# 悪くすると「夜のみ」に化ける。畳み先の否定 renderer をそのまま指す。
-for _legacy, _base in LEGACY_NEGATED_ALIASES.items():
+# 表の 2 列目は将来 negate を入れるときの置き場として空けてある。いまは
+# 種別が別々なので 1 列目だけを使う。
+for _legacy, _base in _LEGACY_NEGATED_PAIRS.items():
     _renderers = _HINT_RENDERERS.get(_base)
     if _renderers is not None and _renderers[1] is not None:
-        _HINT_RENDERERS[_legacy] = (_renderers[1], _renderers[1])
+        _HINT_RENDERERS[_legacy] = (_renderers[1], None)
 
 
 def required_parameter_hints(interaction) -> tuple[str, ...]:

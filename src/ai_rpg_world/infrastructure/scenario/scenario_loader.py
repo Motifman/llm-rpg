@@ -61,11 +61,7 @@ from ai_rpg_world.domain.world_graph.value_object.connection_id import Connectio
 from ai_rpg_world.domain.world_graph.value_object.discoverable_item import DiscoverableItem
 from ai_rpg_world.domain.world_graph.value_object.discovery_condition import DiscoveryCondition
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
-from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
-    LEGACY_NEGATED_ALIASES,
-    NEGATABLE_CONDITIONS,
-    InteractionCondition,
-)
+from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
@@ -1528,28 +1524,8 @@ class ScenarioLoader:
             required_item_spec_ids = tuple(
                 ItemSpecId.create(mapper.get_int("item_spec", s)) for s in required_items_raw
             )
-        declared_type = InteractionConditionTypeEnum[raw["condition_type"]]
-        negate = bool(raw.get("negate", False))
-        # 否定専用の旧種別は、ここで base + negate に畳む。
-        #
-        # **シナリオ JSON は書き換えない。** resolved.json がシナリオ hash を
-        # 記録しているので、書き換えると過去 run と突き合わせられなくなる
-        # (profile の書き換えを取り消した #898 と同じ理由)。表記が 2 通り
-        # 残っても、読み込みで 1 通りに畳むなら実害が無い。
-        if declared_type in LEGACY_NEGATED_ALIASES:
-            declared_type = LEGACY_NEGATED_ALIASES[declared_type]
-            negate = True
-        if negate and declared_type not in NEGATABLE_CONDITIONS:
-            raise ScenarioLoadError(
-                f"{raw['condition_type']} は negate に対応していません。"
-                "条件の評価には「満たしていない」と「評価できない」が混ざって"
-                "いて、後者を反転すると配線ミスが条件成立に化けます。"
-                "対応させる場合は NEGATABLE_CONDITIONS に足す前に、その種別の"
-                "「評価できない」経路を確かめてください"
-            )
         return InteractionCondition(
-            condition_type=declared_type,
-            negate=negate,
+            condition_type=InteractionConditionTypeEnum[raw["condition_type"]],
             target_item_spec_id=item_spec_id,
             target_object_id=obj_id,
             required_state=raw.get("required_state"),

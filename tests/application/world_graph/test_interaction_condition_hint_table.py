@@ -28,10 +28,6 @@ from ai_rpg_world.application.world_graph.interaction_condition_hint_text import
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
-from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
-    LEGACY_NEGATED_ALIASES,
-    NEGATABLE_CONDITIONS,
-)
 
 #: ヒントを出さないと決めた種別と、その理由。
 #:
@@ -96,38 +92,52 @@ class TestEveryConditionTypeIsAccountedFor:
         assert not stale, f"実在しない条件が残っています: {stale}"
 
 
-class TestNegatableConditionsHaveBothForms:
-    """否定できる条件は、否定の文も持っている。"""
+class TestNegatedTypesRenderTheNegatedWording:
+    """否定専用の種別は、否定の文を出す。
 
-    def test_every_negatable_condition_can_render_its_negation(self) -> None:
-        """`negate` を許した種別に、否定の文が無い状態を作らない。
+    **ここが今回の発端。** 否定を「結果の反転」で扱おうとしたとき、表が
+    無いと肯定の文が出た。v4 の「夜不可」が「夜のみ」と表示された。
+    種別ごとに文を持たせておけば、その化け方が起こらない。
+    """
 
-        **これが今回の嘘の直接の原因だった。** 否定できるのに否定の文が
-        無いと、肯定の文が出るか、何も出ない。前者なら嘘になる。
-        """
-        missing = []
-        for condition_type in NEGATABLE_CONDITIONS:
-            renderers = _HINT_RENDERERS.get(condition_type)
-            if renderers is None:
-                # ヒントを出さないと決めた種別なら、否定でも出さないので問題ない。
-                if condition_type.value in _NO_HINT_CONDITIONS:
-                    continue
-                missing.append(condition_type.value)
-                continue
-            if renderers[1] is None:
-                missing.append(condition_type.value)
-
-        assert not missing, f"否定の文が無いのに negate を許している条件: {missing}"
-
-    def test_every_legacy_alias_folds_into_a_negatable_base(self) -> None:
-        """旧種別の畳み先が、すべて否定を許された種別になっている。
-
-        畳み先が許可外だと、既存シナリオが読み込み時に落ちる。
-        """
-        bad = sorted(
-            base.value
-            for base in LEGACY_NEGATED_ALIASES.values()
-            if base not in NEGATABLE_CONDITIONS
+    def test_each_negated_type_has_its_own_wording(self) -> None:
+        """否定専用の種別すべてに、専用の文がある。"""
+        from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (  # noqa: E501
+            _LEGACY_NEGATED_PAIRS,
         )
 
-        assert not bad, f"畳み先が negate 非対応: {bad}"
+        missing = []
+        for negated, base in _LEGACY_NEGATED_PAIRS.items():
+            if _HINT_RENDERERS.get(base) is None:
+                continue  # 肯定側もヒントを出さない種別
+            if _HINT_RENDERERS.get(negated) is None:
+                missing.append(negated.value)
+
+        assert not missing, f"否定の文が無い種別: {missing}"
+
+    def test_the_negated_wording_differs_from_the_positive_one(self) -> None:
+        """否定の文が、肯定の文と別物になっている。
+
+        同じ文が出るなら、否定を表現できていない。
+        """
+        from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (  # noqa: E501
+            _LEGACY_NEGATED_PAIRS,
+        )
+
+        class _Cond:
+            required_time_of_day_phase = "NIGHT"
+            required_weather_type = "STORM"
+            required_lighting = "DARK"
+            target_item_spec_id = None
+            required_quantity = 1
+
+        for negated, base in _LEGACY_NEGATED_PAIRS.items():
+            base_renderers = _HINT_RENDERERS.get(base)
+            negated_renderers = _HINT_RENDERERS.get(negated)
+            if base_renderers is None or negated_renderers is None:
+                continue
+            positive = base_renderers[0](_Cond(), None, None)
+            negative = negated_renderers[0](_Cond(), None, None)
+            if positive is None and negative is None:
+                continue
+            assert positive != negative, negated.value
