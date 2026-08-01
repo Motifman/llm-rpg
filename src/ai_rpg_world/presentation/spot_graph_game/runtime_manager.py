@@ -44,6 +44,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
     ToolRuntimeTargetDto,
     is_reschedulable_error_code,
+    should_reschedule_for_next_tick,
 )
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     with_inner_thought_empty_warning,
@@ -629,8 +630,8 @@ class _WorldLlmTurnTrigger:
     ## 2. の影響範囲
 
     調査済み: ``should_reschedule=True`` を実際に返す経路は
-    ``_RESCHEDULE_ERROR_CODES`` (= ``NO_TOOL_CALL`` / ``LLM_API_CALL_FAILED`` /
-    ``LLM_RATE_LIMIT`` / ``INVALID_DESTINATION_LABEL``) に該当する失敗のみ。
+    ``_RESCHEDULE_ERROR_CODES`` に明示された API 一時失敗・名前解決失敗・
+    修正可能な interaction 失敗のみ。
     通常成功は ``should_reschedule=False`` がデフォルト。よって「auto-stay 5
     turns に暗黙的に依存するコード」は事実上存在せず、本変更は実走の挙動を
     変えない。Y 実走で観測された「**player 1 が 75 wave 連続活動**」は
@@ -2943,7 +2944,17 @@ class _WorldLlmWiring:
                 error_code="UNSUPPORTED_TOOL",
                 should_reschedule=is_reschedulable_error_code("UNSUPPORTED_TOOL"),
             )
-        return handler(player_id, arguments, runtime_context)
+        result = handler(player_id, arguments, runtime_context)
+        # 個別 handler が should_reschedule を立て忘れても、error_code の
+        # 共通方針を実行結果へ反映する。ActionFailedObservationEmitter はこの
+        # field を schedules_turn に写すため、ここが既存の本人向け失敗観測と
+        # self-reschedule streak をつなぐ共通出口になる。
+        if (
+            not result.should_reschedule
+            and should_reschedule_for_next_tick(result)
+        ):
+            return dataclass_replace(result, should_reschedule=True)
+        return result
 
     # ── per-tool handlers (PR 7) ──
 

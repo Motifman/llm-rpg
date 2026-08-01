@@ -12,8 +12,8 @@ intent が失敗したとき (`dto.success=False`) に、LLM に「お前の行�
 ----
 - `IntentResolutionService.submit_and_resolve_immediately` から失敗 DTO が
   返ったときに、本 emitter が呼び出される
-- 観測は `self_only` カテゴリ + `schedules_turn=True` で投入。失敗を見た LLM
-  が即座にリカバー行動を取れるようにする
+- 観測は `self_only` カテゴリで投入し、`schedules_turn` は DTO の共通再予約
+  方針に従う。修正可能な失敗だけ、LLM が即座にリカバー行動を取れる
 - 観測 buffer への append が失敗しても resolve 自体は妨げない (best-effort)
 """
 
@@ -132,11 +132,11 @@ class ActionFailedObservationEmitter:
         # 拒否された」体験で、他エージェントには本質的に観測されない (副作用
         # としての観測は別途 environment カテゴリで投入される想定)。
         #
-        # schedules_turn は DTO の should_reschedule に従う: ハンドラが
-        # 「次 tick で再試行しても意味がない」と判断した失敗 (例: 同じラベル
-        # を再度指定するだけ) はターンを積まずに次の観測 / heartbeat を待つ。
-        # これで「失敗 → 即同じ行動 → 失敗 → ...」の無限ループを集約レベルで
-        # 抑止する。
+        # schedules_turn は DTO の should_reschedule に従う: 共通の error_code
+        # 方針が修正可能と判断しない失敗はターンを積まず、次の観測 / heartbeat
+        # を待つ。
+        # 再予約が連続した場合は _WorldLlmTurnTrigger の self-reschedule streak
+        # が既定 5 回で止めるため、ここでは別の回数制限を重ねない。
         return ObservationOutput(
             prose=prose,
             structured={
