@@ -125,9 +125,18 @@ class PlayerObservationFormatter:
             # 届くと**匿名にした意味が消える**。実 run で衝突した
             # (「闇の中で強い衝撃を受けた。誰にやられたのか分からない。」の
             # 次の行に「クゼに倒されました。」が並んだ)。
-            if killer_name and self._victim_learns_killer():
+            learns_killer = self._victim_learns_killer()
+            if killer_name and learns_killer:
                 prose = f"{killer_name}に倒されました。"
-            structured = {"type": "player_downed", "role": "self", "killer_player_id": killer_id}
+            structured = {"type": "player_downed", "role": "self"}
+            # 宣言は prose と structured の両方に効かせる。
+            #
+            # 片方だけだと、**読む側が増えたときに静かに破れる**。いまは
+            # cue 抽出 (episodic_cue_rules) がこの key を読んでいないので
+            # 実害は無いが、「読まれていないから残してよい」は消費者が
+            # 1 つ増えた瞬間に成り立たなくなる。
+            if learns_killer:
+                structured["killer_player_id"] = killer_id
             return ObservationOutput(
                 prose=prose,
                 structured=structured,
