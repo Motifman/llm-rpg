@@ -59,3 +59,4 @@ class InteractionCondition:
     #   AT_SPOT_IS{_NOT} → required_spot_id
     required_lighting: Optional[str] = None
     required_spot_id: Optional[SpotId] = None
+
