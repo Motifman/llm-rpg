@@ -93,6 +93,11 @@ class ObservationFormatterContext:
     # formatter が object_name を解決する経路として spot_interior_repository
     # を必要とする。注入されない場合は fallback "何か" になる (既存挙動)。
     spot_interior_repository: Optional[Any] = None
+    # 死の扱い (シナリオ宣言)。既定は従来の挙動。
+    #
+    # **観測の到達範囲は世界の設定である。** 「倒れた気配が全員に届くか」を
+    # formatter にべた書きすると、隠密殺人のある世界を書けない。
+    death_semantics: Any = None
 
     def lookup_recipient_spot(
         self, recipient_player_id: PlayerId

@@ -4630,6 +4630,7 @@ def create_world_runtime(
     # "リオが何かのsearchを試みた" のような object placeholder 漏出が
     # 失敗観測 prose に出ていた (#373 経路で 92/92 件)。
     obs_formatter = ObservationFormatter(
+        death_semantics=scenario.death_semantics,
         spot_graph_repository=spot_graph_repo,
         monster_repository=monster_repo if scenario.monster_placements else None,
         spot_interior_repository=spot_interior_repo,
@@ -5050,7 +5051,13 @@ def create_world_runtime(
     death_grace_stage = PlayerDeathGraceTickStage(
         outcome_registry=outcome_registry,
         grace_timer=death_grace_timer,
-        grace_ticks=PlayerDeathGraceTickStage.DEFAULT_GRACE_TICKS,
+        # シナリオが宣言していればそれを使う。0 を許すのは「殺したら死ぬ」
+        # 世界のため。書き忘れと 0 を区別するため、既定は None で持っている。
+        grace_ticks=(
+            scenario.death_semantics.grace_ticks
+            if scenario.death_semantics.grace_ticks is not None
+            else PlayerDeathGraceTickStage.DEFAULT_GRACE_TICKS
+        ),
     )
 
     # ── Phase E-3b: outcome_resolution_stage ──

@@ -814,6 +814,11 @@
       }
     }
   ],
+  "death": {
+    "grace_ticks": 0,
+    "announce_globally": false,
+    "victim_learns_killer": false
+  },
   "meeting": {
     "enabled": true,
     "tick_limit": 6,
