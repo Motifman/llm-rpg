@@ -702,6 +702,7 @@ def _drive_scenario(
             state.llm_wiring.llm_turn_trigger.schedule_turn(pid)
 
         outcome = "TIMEOUT"
+        end_reason: Optional[str] = None
         last_tick = 0
         t0 = time.monotonic()
         # Phase 6: Ctrl+C で snapshot save まで届かせるため、SIGINT を flag
@@ -825,6 +826,7 @@ def _drive_scenario(
                     outcome = (
                         str(getattr(end_check, "result", None) or "ENDED").upper()
                     )
+                    end_reason = str(getattr(end_check, "reason", "") or "") or None
                     if reporter is not None:
                         reporter.message(
                             f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
@@ -982,6 +984,7 @@ def _drive_scenario(
                 )
         return {
             "outcome": outcome,
+            "end_reason": end_reason,
             "last_tick": last_tick,
             "elapsed_sec": elapsed,
             "max_world_ticks": max_world_ticks,
@@ -1054,6 +1057,8 @@ def _build_report(
     lines.append("")
     lines.append(f"- scenario: `{scenario_path}`")
     lines.append(f"- outcome: **{summary['outcome']}**")
+    if summary.get("end_reason"):
+        lines.append(f"- end reason: {summary['end_reason']}")
     lines.append(
         f"- last tick: {summary['last_tick']} / max world ticks: {summary['max_world_ticks']}"
     )

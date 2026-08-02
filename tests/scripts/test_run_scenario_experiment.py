@@ -86,6 +86,37 @@ class TestBuildReport:
         assert "| 1 | 1 | 1 | 0 | 0 | 0 | 0 |" in report
         assert "| 2 | 1 | 0 | 1 | 1 | 0 | 0 |" in report
 
+    def test_includes_distinct_end_reason(self, tmp_path: Path) -> None:
+        """世界内終了と外的停止を区別できるよう、終了理由をreportへ残す。"""
+        scenario = tmp_path / "demo.json"
+        scenario.write_text("{}", encoding="utf-8")
+        trace_path = tmp_path / "trace.jsonl"
+        with JsonlTraceRecorder(trace_path) as recorder:
+            recorder.record(
+                TraceEventKind.RUN_END,
+                outcome="ENDED",
+                end_reason="外的停止 END_ON_ALL_DOWN: 行動可能プレイヤーがいない",
+            )
+
+        report = _build_report(
+            scenario_path=scenario,
+            trace_path=trace_path,
+            summary={
+                "outcome": "ENDED",
+                "end_reason": (
+                    "外的停止 END_ON_ALL_DOWN: 行動可能プレイヤーがいない"
+                ),
+                "last_tick": 3,
+                "max_world_ticks": 30,
+                "elapsed_sec": 0.1,
+            },
+        )
+
+        assert (
+            "end reason: 外的停止 END_ON_ALL_DOWN: 行動可能プレイヤーがいない"
+            in report
+        )
+
     def test_position_change_event_moves_column_aggregated(
         self, tmp_path: Path
     ) -> None:
