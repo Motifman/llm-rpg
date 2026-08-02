@@ -1,6 +1,6 @@
 """スポットグラフ用の現在状態テキスト（ICurrentStateFormatter）"""
 
-from typing import List
+from typing import Any, List
 
 from ai_rpg_world.application.llm.contracts.interfaces import ICurrentStateFormatter
 from ai_rpg_world.application.llm.services.current_state_formatter import DefaultCurrentStateFormatter
@@ -34,7 +34,10 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         if snap.atmosphere is not None:
             a = snap.atmosphere
             atmo_parts: List[str] = []
-            atmo_parts.append(f"明るさ: {a.lighting}")
+            # enum の生値を出さない (#892)。呼び名は world_briefing が持つ
+            # ものを使い回す。**別々に持つと、地図の「暗い」と雰囲気の
+            # 「DARK」が食い違う。**
+            atmo_parts.append(f"明るさ: {_lighting_display(a.lighting)}")
             if a.sound_ambient:
                 atmo_parts.append(f"音: {a.sound_ambient}")
             atmo_parts.append(f"気温: {a.temperature}")
@@ -125,13 +128,63 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         # Phase 4-E: 自分の自由 state (毒・呪い・隠しフラグも含む全項目)。
         # 第三者には流れない HIDDEN も本人プロンプトには載せて自己認識させる。
         if snap.player_state:
+            # engine のキーをそのまま出さない (#892)。``duty=weather`` は
+            # 読み手にとって意味が無く、``role=crew`` は陣営の識別子。
+            # 呼び名の出所はシナリオの宣言 (metadata.role_labels /
+            # interaction の display_label) で、**ここに新しい辞書を作らない**。
             rendered = ", ".join(
-                f"{k}={_render_value(v)}"
-                for k, v in sorted(snap.player_state.items())
+                _render_own_state(
+                    snap.player_state, getattr(snap, "state_display_names", None)
+                )
             )
-            lines.append(f"自分の状態: {rendered}")
+            if rendered:
+                lines.append(f"自分の状態: {rendered}")
 
         return "\n".join(lines)
+
+
+
+def _lighting_display(lighting: Any) -> str:
+    """明るさを世界の言葉で返す。知らない値はそのまま返す。
+
+    呼び名は world_briefing と共有する。**別々に持つと、地図の「暗い」と
+    雰囲気の「DARK」が食い違う。**
+    """
+    from ai_rpg_world.application.llm.services.world_briefing import (
+        LIGHTING_DISPLAY,
+    )
+
+    key = getattr(lighting, "value", lighting)
+    return LIGHTING_DISPLAY.get(str(key), str(key))
+
+
+def _render_own_state(
+    player_state: Any, display_names: Any = None
+) -> "list[str]":
+    """自分の自由 state を、読める形の列にする。
+
+    宣言のあるキーは呼び名に置き換える (``duty=weather`` → ``担当: 気象を
+    記録する``)。呼び名の出所はシナリオ (metadata.role_labels / interaction の
+    display_label) で、**ここに新しい辞書を作らない**。
+
+    **宣言の無いキーは従来どおり ``key=value`` で残す。** 一度は落とす実装に
+    したが、それだと ``cursed=true`` のような自由 state を持つ世界で
+    「自分の状態」の節が丸ごと消えた。毒や呪いは本人が自己認識するために
+    載せている情報で、消してよいものではない。
+
+    そもそも ``cursed`` はシナリオが決めたキーで engine の語彙ではない。
+    直したかったのは呼び名のある ``duty`` / ``role`` のほうだけだった。
+    """
+    names = dict(display_names or {})
+    rendered: list[str] = []
+    for key, value in sorted(dict(player_state or {}).items()):
+        entry = names.get(f"{key}={_render_value(value)}")
+        if entry:
+            heading, label = entry
+            rendered.append(f"{heading}: {label}")
+        else:
+            rendered.append(f"{key}={_render_value(value)}")
+    return rendered
 
 
 def _render_value(value: object) -> str:

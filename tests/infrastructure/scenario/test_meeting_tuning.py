@@ -86,7 +86,7 @@ class TestOverridesTakeEffect:
         line = next(
             l for l in runtime.build_observation(_MORI).splitlines() if "話し合い" in l
         )
-        assert "残り 4 tick" in line
+        assert "あと 20 分" in line
 
     def test_more_emergency_buttons_can_be_granted(self, tmp_path) -> None:
         """緊急ボタンの回数を 2 にすると二度押せる。"""

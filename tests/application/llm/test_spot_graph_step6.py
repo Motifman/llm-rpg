@@ -147,7 +147,7 @@ def test_spot_graph_formatter_outputs_base_info() -> None:
     text = SpotGraphCurrentStateFormatter().format(dto)
     assert "地下室" in text
     assert "暗い" in text
-    assert "DIM" in text
+    assert "薄暗い" in text
     assert "水滴の音" in text
     assert "COLD" in text
     assert "カビ" in text

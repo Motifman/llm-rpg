@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
     STAGNATION_PRESSURE_BAND_NONE,
@@ -276,6 +276,11 @@ class SpotGraphPlayerSnapshotDto:
     #: シナリオが give_item を無効化した世界で案内だけ残ると、**存在しない
     #: 手段を勧める**ことになる。tend_to_player で実際に起きた形。
     can_give_item: bool = True
+    #: 自由 state のキー=値 → (見出し, 呼び名)。宣言の無いキーは載らない。
+    #:
+    #: engine のキー (``duty=weather``) をプロンプトに出さないため (#892)。
+    #: 呼び名の出所はシナリオの宣言で、ここで新しく作らない。
+    state_display_names: Mapping[str, Any] = field(default_factory=dict)
     monsters_at_spot: Tuple[SpotGraphMonsterEntry, ...] = ()
     inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
     # 現在地の地面に落ちているアイテム (drop された / モンスター死亡時ドロップ /

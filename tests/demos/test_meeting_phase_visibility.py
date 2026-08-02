@@ -61,6 +61,10 @@ def _meeting_line(runtime, player_id: PlayerId) -> str:
     return ""
 
 
+#: 昼夜サイクルを宣言していない世界の 1 tick。時計の表示と同じ換算。
+_MINUTES_PER_TICK = 5
+
+
 class TestFreeRoamSaysNothing:
     """自由時間には何も足さない。"""
 
@@ -109,7 +113,9 @@ class TestDuringAMeeting:
         runtime.begin_meeting(initiator_player_id=_KUZE, trigger="emergency_button")
 
         assert (
-            f"残り {GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT} tick"
+            # 単位は世界の時計に揃えてある (tick は engine の語彙・#892)。
+            # 換算まで焼き付けず、定数から導く。
+            f"あと {GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT * _MINUTES_PER_TICK} 分"
             in _meeting_line(runtime, _MORI)
         )
 
@@ -126,8 +132,14 @@ class TestDuringAMeeting:
         second = _meeting_line(runtime, _MORI)
 
         assert first and second
-        assert f"残り {GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT} tick" in first
-        assert f"残り {GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT - 2} tick" in second
+        assert (
+            f"あと {GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT * _MINUTES_PER_TICK} 分"
+            in first
+        )
+        assert (
+            f"あと {(GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT - 2) * _MINUTES_PER_TICK} 分"
+            in second
+        )
 
     def test_who_called_it_is_shown(self, runtime) -> None:
         """誰が呼んだのかが分かる。

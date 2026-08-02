@@ -77,6 +77,17 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_meeting_vote_resolved(event, recipient_player_id)
         return None
 
+    #: 会議が始まったときに全員へ届く文。
+    #:
+    #: **できることが変わったことを、切り替わった瞬間に伝える。** 状態行は
+    #: 「いまも会議中」を伝えるが、切り替わりは 1 度きりで、そのときに一番
+    #: 強く読まれる。実 run 009 では会議中に作業を試みる者が続き、思考にも
+    #: 「話し合い中だけど、私の担当の棚卸しをまず進めたい」と出ていた。
+    #:
+    #: 具体的なツール名は書かない。会議で出るツールは世界によって違い、
+    #: 名前を書くと落とした世界で嘘になる (#892 / #920)。
+    _MEETING_START_SUFFIX = "ここでできるのは、話すことと投票だけになった。"
+
     _MEETING_TRIGGER_PROSE = {
         "emergency_button": "{who}が緊急招集をかけた。全員が集まる。",
         "body_report": "{who}が倒れている者を見つけたと知らせた。全員が集まる。",
@@ -156,6 +167,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
                 event.trigger, "招集がかかった。全員が集まる。"
             )
             prose = template.format(who=who) if who else "招集がかかった。全員が集まる。"
+            prose = f"{prose}{self._MEETING_START_SUFFIX}"
         else:
             prose = self._MEETING_END_PROSE.get(
                 event.trigger, "話し合いが終わった。各自の持ち場に戻る。"

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from typing import Dict, List, Set, Optional, TYPE_CHECKING
 from datetime import datetime
 
@@ -529,6 +530,11 @@ class PlayerCurrentStateDto:
     tick_budget_remaining: Optional[int] = None
     # 会議中だけ入る 1 行。自由時間と、会議機構を宣言していない
     # シナリオでは None (= 行ごと出ない)。
+    #: いまのフェーズ。プロンプトの節をどの並びで出すかがこれで決まる。
+    #:
+    #: **未設定を会議中と誤らない**よう Optional にして、読む側が自由時間へ
+    #: 倒す。載せるのは runtime の責務。
+    game_phase: Optional["GamePhase"] = None
     meeting_status_line: Optional[str] = None
     # 作業 (FLAGS_SET_AT_LEAST) の進み具合。宣言の無いシナリオでは None。
     task_progress_line: Optional[str] = None

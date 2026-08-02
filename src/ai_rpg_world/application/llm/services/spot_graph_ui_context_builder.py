@@ -24,6 +24,11 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 )
 from ai_rpg_world.application.llm.contracts.interfaces import ILlmUiContextBuilder
 from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
+from ai_rpg_world.application.llm.services.prompt_section_layout import (
+    PromptSection,
+    sections_for,
+)
+from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.application.llm.services._runtime_target_collector import RuntimeTargetCollector
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
@@ -376,6 +381,17 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         self._current_tick_provider = current_tick_provider
         self._spot_str_id_resolver = spot_str_id_resolver
 
+    @staticmethod
+    def _phase_of(current_state: Optional[PlayerCurrentStateDto]) -> GamePhase:
+        """いまのフェーズ。分からなければ自由時間。
+
+        snapshot に載っていない経路 (テスト用の直接構築など) の挙動を
+        変えないため。**会議中なのに自由時間と誤ると使えない対象が並ぶ**
+        ので、載せるのは runtime の責務。
+        """
+        phase = getattr(current_state, "game_phase", None)
+        return phase if isinstance(phase, GamePhase) else GamePhase.FREE_ROAM
+
     def build(
         self,
         current_state_text: str,
@@ -399,18 +415,45 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             except Exception:
                 viewer_player_id = None
 
-        self._build_connection_section(snap, allocator, collector, extra_lines)
-        self._build_object_section(snap, allocator, collector, extra_lines)
-        self._build_sub_location_section(snap, allocator, collector, extra_lines)
-        self._build_entity_section(
-            snap, allocator, collector, extra_lines, viewer_player_id
-        )
-        self._build_monster_section(snap, allocator, collector, extra_lines)
-        self._build_inventory_section(snap, allocator, collector, extra_lines)
-        self._build_ground_items_section(snap, allocator, collector, extra_lines)
-        self._build_needs_section(snap, extra_lines)
-        self._build_active_effects_section(snap, extra_lines)
-        self._build_agent_status_section(snap, extra_lines)
+        # どの節をどの順で出すかは prompt_section_layout が持つ。
+        # **ここで is_meeting を見ない。** ビルダごとに分岐を書くと、節を
+        # 1 つ足した人が忘れる (死の観測・ツールの出し分けで踏んだ形)。
+        builders = {
+            PromptSection.CONNECTIONS: lambda: self._build_connection_section(
+                snap, allocator, collector, extra_lines
+            ),
+            PromptSection.OBJECTS: lambda: self._build_object_section(
+                snap, allocator, collector, extra_lines
+            ),
+            PromptSection.SUB_LOCATIONS: lambda: self._build_sub_location_section(
+                snap, allocator, collector, extra_lines
+            ),
+            PromptSection.ENTITIES_WITH_ACTIONS: lambda: self._build_entity_section(
+                snap, allocator, collector, extra_lines, viewer_player_id
+            ),
+            PromptSection.ENTITIES_PLAIN: lambda: self._build_entity_section(
+                snap, allocator, collector, extra_lines, viewer_player_id,
+                with_actions=False,
+            ),
+            PromptSection.MONSTERS: lambda: self._build_monster_section(
+                snap, allocator, collector, extra_lines
+            ),
+            PromptSection.INVENTORY: lambda: self._build_inventory_section(
+                snap, allocator, collector, extra_lines
+            ),
+            PromptSection.GROUND_ITEMS: lambda: self._build_ground_items_section(
+                snap, allocator, collector, extra_lines
+            ),
+            PromptSection.NEEDS: lambda: self._build_needs_section(snap, extra_lines),
+            PromptSection.ACTIVE_EFFECTS: lambda: self._build_active_effects_section(
+                snap, extra_lines
+            ),
+            PromptSection.AGENT_STATUS: lambda: self._build_agent_status_section(
+                snap, extra_lines
+            ),
+        }
+        for section in sections_for(self._phase_of(current_state)):
+            builders[section]()
 
         # PR4: 「現在地」行に spot familiarity 注記を埋め込む。
         annotated_current_state_text = self._annotate_current_spot_familiarity(
@@ -679,8 +722,14 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         collector: RuntimeTargetCollector,
         lines: List[str],
         viewer_player_id: Optional[PlayerId] = None,
+        *,
+        with_actions: bool = True,
     ) -> None:
         """同じ場所にいる他プレイヤーを列挙する。
+
+        ``with_actions=False`` は会議中の形。名前と生死だけを出し、行動と
+        受け渡しの案内は落とす。**会議中はどちらも選べない。** 誰に投票
+        できるかを読む手がかりとしては、名前と生死で足りる。
 
         Issue #283 後続の五感対称化: 旧実装は「居れば列挙、居なければ section
         ごと省略」だったため、LLM は「section 無し = 誰もいない」を暗黙推論
@@ -695,13 +744,15 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         # 避ける運用だが、防御的に ``#N`` 区別を入れておく。
         # 案内はツールが在る世界でだけ書く。無い世界で勧めると、選べない
         # 手段を勧めることになる。
-        if getattr(snap, "can_give_item", True):
+        if with_actions and getattr(snap, "can_give_item", True):
             lines.append(
                 "同じ場所にいるプレイヤー: "
                 "(倒れていない相手には give_item で所持品を直接渡せる)"
             )
-        else:
+        elif with_actions:
             lines.append("同じ場所にいるプレイヤー:")
+        else:
+            lines.append("この場に居る人:")
         entity_names = [
             (e.display_name or f"プレイヤー({e.entity_id})")
             for e in snap.nearby_entities
@@ -770,8 +821,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # 1 本のタプルだと全員の行に同じ一覧が並び、倒れている相手にしか
             # 使えない take が立っている相手の行にも出る (v4 第 3 回 run で
             # take 16 回全失敗の原因)。
-            player_actions = tuple(
-                getattr(entry, "available_action_labels", ()) or ()
+            # 会議中は行動を付けない。選べない手を並べると、#860 で潰した
+            # 「選べるのに必ず失敗する」形に戻る。
+            player_actions = (
+                tuple(getattr(entry, "available_action_labels", ()) or ())
+                if with_actions
+                else ()
             )
             action_suffix = (
                 f" [{', '.join(player_actions)}]" if player_actions else ""

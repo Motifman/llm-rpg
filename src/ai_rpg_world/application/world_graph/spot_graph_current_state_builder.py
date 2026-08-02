@@ -392,6 +392,8 @@ class SpotGraphCurrentStateBuilder:
         # この世界にそのツールが存在するかを訊く口。組み込みツールを行に
         # 宣伝する前に必ず通す。未注入なら従来どおり全部出す。
         is_tool_exposed: Optional[Callable[[str], bool]] = None,
+        # 自由 state の呼び名。engine のキーをプロンプトへ出さないため。
+        state_display_names: Optional[Mapping[str, Any]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -428,6 +430,7 @@ class SpotGraphCurrentStateBuilder:
         self._fallen_body_observer = fallen_body_observer
         self._player_action_labels_provider = player_action_labels_provider
         self._is_tool_exposed = is_tool_exposed
+        self._state_display_names = dict(state_display_names or {})
         self._perception = SpotPerceptionService()
         # 実効照明は前提条件 (SPOT_LIGHTING_IS) と同じ resolver で求める。
         # 2 か所に同じ合成ロジックを置くと、片方だけ直したときに「prompt は
@@ -1302,6 +1305,7 @@ class SpotGraphCurrentStateBuilder:
             atmosphere=atmosphere,
             weather=weather,
             nearby_entities=tuple(nearby_entities),
+            state_display_names=self._state_display_names,
             can_give_item=self._tool_is_exposed(
                 TOOL_NAME_SPOT_GRAPH_GIVE_ITEM
             ),

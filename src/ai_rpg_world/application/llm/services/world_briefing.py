@@ -35,7 +35,10 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 #: 明るさの生値をプロンプトに出さない (#892)。
-_LIGHTING_TEXT = {
+#:
+#: **雰囲気の行 (spot_graph_current_state_formatter) と共有する。** 別々に
+#: 持つと、地図の「暗い」と雰囲気の「DARK」が食い違う。
+LIGHTING_DISPLAY = {
     "BRIGHT": "明るい",
     "DIM": "薄暗い",
     "DARK": "暗い",
@@ -50,7 +53,7 @@ def _lighting_of(spot: Any) -> str:
     atmosphere = getattr(spot, "atmosphere", None)
     lighting = getattr(atmosphere, "lighting", None) if atmosphere else None
     key = getattr(lighting, "value", lighting)
-    return _LIGHTING_TEXT.get(str(key), "")
+    return LIGHTING_DISPLAY.get(str(key), "")
 
 
 def build_world_map_text(
@@ -287,3 +290,31 @@ def build_world_briefing(
         ),
     ]
     return "\n\n".join(s for s in sections if s)
+
+
+def build_own_state_display_names(
+    spots: Sequence[Any],
+    interiors: Any = None,
+    role_labels: Optional[Dict[str, str]] = None,
+    *,
+    duty_state_key: str = "duty",
+    role_key: str = "role",
+) -> Dict[str, Tuple[str, str]]:
+    """自由 state のキー=値 → (見出し, 呼び名)。
+
+    ``自分の状態: duty=weather, role=crew`` のように engine のキーが
+    プロンプトへ漏れていた (#892)。読み手はその語で何も探せない。
+
+    **新しい辞書を作らない。** 呼び名は既にシナリオが持っている。
+
+    - 役割 → ``metadata.role_labels``
+    - 担当 → その担当を要求する interaction の display_label
+
+    宣言の無いキーは載せない。載せると、また engine の語彙が出る。
+    """
+    names: Dict[str, Tuple[str, str]] = {}
+    for role, label in (role_labels or {}).items():
+        names[f"{role_key}={role}"] = ("立場", label)
+    for duty, (task_label, _place) in _duty_places(spots, interiors, duty_state_key).items():
+        names[f"{duty_state_key}={duty}"] = ("担当", task_label)
+    return names
