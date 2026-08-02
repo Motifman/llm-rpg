@@ -254,7 +254,7 @@ class _ContractRuntime:
             "tool_runtime_context": ToolRuntimeContextDto.empty(),
         }
 
-    def get_tool_definitions(self) -> list[ToolDefinitionDto]:
+    def get_tool_definitions(self, *, player_id=None) -> list[ToolDefinitionDto]:
         """自由時間の runtime が出すツール一式を返す。
 
         **explore だけを返していたが、それでは現実と食い違う。** この
@@ -366,7 +366,7 @@ class _ReasonFirstRuntime(_ContractRuntime):
         self.reasoning_effort_calls = 0
 
     def get_tool_definitions(
-        self, *, tool_schema_mode: str = "legacy"
+        self, *, tool_schema_mode: str = "legacy", player_id=None
     ) -> list[ToolDefinitionDto]:
         self.tool_schema_modes.append(tool_schema_mode)
         tools = [
@@ -749,7 +749,9 @@ def test_reason_first_action_phase_omits_assessment_tool_and_keeps_action_schema
     ]
     legacy_tools = [
         tool["function"]["name"]
-        for tool in wiring._build_tools_payload(tool_schema_mode="legacy")
+        for tool in wiring._build_tools_payload(
+            PlayerId(1), tool_schema_mode="legacy"
+        )
     ]
     assert TOOL_NAME_ASSESS_SITUATION in assess_tools
     assert assess_tools[-1] == TOOL_NAME_ASSESS_SITUATION

@@ -858,7 +858,7 @@ class WorldRuntime:
 
     def build_available_tools(self, player_id: PlayerId) -> str:
         """E2E テスト用のツール一覧テキスト。"""
-        names = [d.name for d in self.get_tool_definitions()]
+        names = [d.name for d in self.get_tool_definitions(player_id=player_id)]
         return ", ".join(names)
 
     def build_system_prompt(self, player_id: PlayerId) -> str:
@@ -1124,6 +1124,7 @@ class WorldRuntime:
         *,
         tool_schema_mode: str = "legacy",
         as_meeting_phase: Optional[bool] = None,
+        player_id: Optional[PlayerId] = None,
     ) -> List[ToolDefinitionDto]:
         """LLM に渡されるツール定義（OpenAI tools 形式）を返す。
 
@@ -1161,7 +1162,13 @@ class WorldRuntime:
         # 2 つの問いを両方通す入口を使う。片方だけ呼ぶと無効化が効かない。
         by_name = {d.name: d for d in spot}
         common_names, phase_names = self.tool_exposure.split_for_phase(
-            by_name.keys(), in_meeting=in_meeting
+            by_name.keys(),
+            in_meeting=in_meeting,
+            voting_completed=(
+                player_id is not None
+                and in_meeting
+                and self._game_phase_store.has_voted(player_id)
+            ),
         )
         common_spot = [by_name[n] for n in common_names]
         phase_spot = [by_name[n] for n in phase_names]
@@ -2372,7 +2379,9 @@ class WorldRuntime:
 
         return {
             "messages": result["messages"],
-            "tools": [d.name for d in self.get_tool_definitions()],
+            "tools": [
+                d.name for d in self.get_tool_definitions(player_id=player_id)
+            ],
             "tool_runtime_context": ctx.tool_runtime_context,
             # U1: このターンに発行された prediction_context_id をそのまま
             # 露出する (実際の consume は _record_action_result → ledger 経由
@@ -2511,9 +2520,34 @@ class WorldRuntime:
                 error_code="ALREADY_VOTED",
             )
         store.cast_vote(voter_player_id, target_player_id)
+        self._publish_vote_progress(voter_player_id)
         if self._all_eligible_voters_have_voted():
             self._resolve_meeting_vote()
         return LlmCommandResultDto(success=True, message="投票した。")
+
+    def _publish_vote_progress(self, voter_player_id: PlayerId) -> None:
+        """投票先を伏せたまま、投票済みの人物と残り人数を知らせる。"""
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            MeetingVoteCastEvent,
+        )
+
+        if self._speech_event_publisher is None:
+            return
+        graph = self._spot_graph_repo.find_graph()
+        remaining = sum(
+            1
+            for player_id in self.eligible_voters()
+            if not self._game_phase_store.has_voted(player_id)
+        )
+        self._speech_event_publisher.publish_all([
+            MeetingVoteCastEvent.create(
+                aggregate_id=graph.graph_id,
+                aggregate_type="SpotGraphAggregate",
+                voter_player_id=voter_player_id,
+                voter_display_name=self.get_player_name(voter_player_id),
+                remaining_voter_count=remaining,
+            )
+        ])
 
     def _all_eligible_voters_have_voted(self) -> bool:
         store = self._game_phase_store

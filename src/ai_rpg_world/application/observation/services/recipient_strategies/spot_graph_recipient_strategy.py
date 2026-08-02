@@ -43,6 +43,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotSoundHeardEvent,
     TimeOfDayChangedEvent,
     GamePhaseChangedEvent,
+    MeetingVoteCastEvent,
     MeetingVoteResolvedEvent,
     SpotExploredEvent,
     PlayerInteractedWithPlayerEvent,
@@ -151,6 +152,13 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             self._resolve_at_spot_excluding_actor(
                 event.spot_id, event.entity_id, add
             )
+        elif isinstance(event, MeetingVoteCastEvent):
+            # 投票した本人にはツール結果が返るので、進捗観測は他の参加者へ
+            # だけ届ける。本人を再起床すると、投票直後に余分な会話ターンを
+            # 1 回増やすことになる。
+            for status in self._player_status_repository.find_all():
+                if status.player_id != event.voter_player_id:
+                    add(status.player_id)
         elif isinstance(event, MeetingVoteResolvedEvent):
             # 投票結果は全員に届ける。追放が起きなかった場合も同じ経路を
             # 通す (設計 doc §6.4)。

@@ -27,6 +27,8 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
+from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
@@ -50,6 +52,14 @@ def _vote_observations(runtime, player_id: PlayerId) -> list:
         e
         for e in runtime._obs_buffer.get_observations(player_id)
         if e.output.structured.get("type") == "meeting_vote_resolved"
+    ]
+
+
+def _vote_progress_observations(runtime, player_id: PlayerId) -> list:
+    return [
+        e
+        for e in runtime._obs_buffer.get_observations(player_id)
+        if e.output.structured.get("type") == "meeting_vote_cast"
     ]
 
 
@@ -98,6 +108,84 @@ class TestVotingClosesTheMeeting:
         result = runtime.cast_vote(_MORI, _SENA)
 
         assert result.success is False
+
+    def test_vote_tool_disappears_for_the_player_who_already_voted(
+        self, runtime
+    ) -> None:
+        """投票済みの本人には vote を出さず、会議で話す手段は残す。
+
+        投票先は変更できないため、投票後の vote は選べても必ず
+        ALREADY_VOTED になる手である。run 011 では実際に 2 回選ばれた。
+        """
+        runtime.cast_vote(_MORI, _KUZE)
+
+        offered = {
+            definition.name
+            for definition in runtime.get_tool_definitions(player_id=_MORI)
+        }
+
+        assert "vote" not in offered
+        assert "speak" in offered
+
+    def test_llm_payload_hides_vote_after_the_player_voted(self, runtime) -> None:
+        """実際に LLM へ渡すツール一覧でも、投票済み本人の vote を隠す。"""
+        runtime.cast_vote(_MORI, _KUZE)
+        wiring = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            llm_client=StubLlmClient(None),
+        )
+
+        offered = {
+            tool["function"]["name"]
+            for tool in wiring._build_tools_payload(_MORI)
+        }
+
+        assert "vote" not in offered
+        assert "speak" in offered
+
+    def test_vote_tool_remains_for_a_player_who_has_not_voted(self, runtime) -> None:
+        """他人が投票しても、未投票の本人には vote を残す。"""
+        runtime.cast_vote(_MORI, _KUZE)
+
+        offered = {
+            definition.name
+            for definition in runtime.get_tool_definitions(player_id=_SENA)
+        }
+
+        assert "vote" in offered
+
+
+class TestVotingProgressIsPublicWithoutRevealingTheTarget:
+    """投票の進み具合だけを全員へ知らせ、投票先は締切まで伏せる。"""
+
+    def test_voter_name_and_remaining_count_are_delivered(self, runtime) -> None:
+        """1 人が投票すると、誰が済ませたかと残り人数が全員へ届く。"""
+        runtime.cast_vote(_MORI, _KUZE)
+
+        observation = _vote_progress_observations(runtime, _SENA)[0]
+        assert observation.output.prose == "モリが投票を済ませた。まだ 3 人が投票していない。"
+
+    def test_progress_does_not_reveal_the_vote_target(self, runtime) -> None:
+        """締切前の進捗観測には投票先の名前も識別子も含めない。"""
+        runtime.cast_vote(_MORI, _KUZE)
+
+        observation = _vote_progress_observations(runtime, _SENA)[0]
+        assert "クゼ" not in observation.output.prose
+        assert "target" not in observation.output.structured
+        assert observation.output.structured == {
+            "type": "meeting_vote_cast",
+            "voter_display_name": "モリ",
+            "remaining_voter_count": 3,
+        }
+
+    def test_voter_does_not_receive_a_duplicate_progress_observation(
+        self, runtime
+    ) -> None:
+        """投票した本人はツール結果で知るため、同じ進捗観測を重ねない。"""
+        runtime.cast_vote(_MORI, _KUZE)
+
+        assert _vote_progress_observations(runtime, _MORI) == []
 
 
 class TestEjection:
@@ -255,6 +343,37 @@ class TestTheProseMatchesWhatActuallyHappened:
 
         prose = self._prose(runtime)
         assert "割れ" in prose, prose
+
+    def test_a_real_tie_names_the_tie_as_the_reason(self, runtime) -> None:
+        """名指し票の首位が同数なら、同点で決まらなかったと伝える。"""
+        runtime.cast_vote(_MORI, _KUZE)
+        runtime.cast_vote(_SENA, _KUZE)
+        runtime.cast_vote(_KUZE, _MORI)
+        runtime.cast_vote(_AOI, _MORI)
+
+        assert "最多票が同数" in self._prose(runtime)
+
+    def test_skips_outnumbering_a_named_target_are_not_called_a_split(
+        self, runtime
+    ) -> None:
+        """棄権が名指しの最多票以上なら、票割れではなく棄権を理由にする。"""
+        runtime.cast_vote(_MORI, _KUZE)
+        runtime.cast_vote(_SENA, None)
+        runtime.cast_vote(_KUZE, None)
+        runtime.cast_vote(_AOI, None)
+
+        prose = self._prose(runtime)
+        assert "棄権が最多票を上回り" in prose
+        assert "票が割れ" not in prose
+
+    def test_vote_result_has_no_double_full_stop(self, runtime) -> None:
+        """集計の見出しと票数をつないでも二重句点を出さない。"""
+        runtime.cast_vote(_MORI, _KUZE)
+        runtime.cast_vote(_SENA, None)
+        runtime.cast_vote(_KUZE, None)
+        runtime.cast_vote(_AOI, None)
+
+        assert "。。" not in self._prose(runtime)
 
     def test_all_skipping_is_not_described_as_nobody_voting(self, runtime) -> None:
         """全員が棄権したのは「誰も投票しなかった」ではない。

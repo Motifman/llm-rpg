@@ -1833,14 +1833,16 @@ class _WorldLlmWiring:
             logger.exception("reason-first gate: stagnation latch consume failed")
 
     def _build_tools_payload(
-        self, *, tool_schema_mode: str = "legacy"
+        self, player_id: PlayerId, *, tool_schema_mode: str = "legacy"
     ) -> list[dict[str, Any]]:
         """runtime tool 定義を LLM API の tools payload へ変換する。"""
 
         definitions = (
-            self.runtime.get_tool_definitions()
+            self.runtime.get_tool_definitions(player_id=player_id)
             if tool_schema_mode == "legacy"
-            else self.runtime.get_tool_definitions(tool_schema_mode=tool_schema_mode)
+            else self.runtime.get_tool_definitions(
+                tool_schema_mode=tool_schema_mode, player_id=player_id
+            )
         )
         return [
             {
@@ -1874,7 +1876,7 @@ class _WorldLlmWiring:
         # PR-A: 脱出ランタイムで恒久的に UNSUPPORTED_TOOL になる tool は LLM に
         # 見せない。Y_after_issue621 trace で set_sub_location が 3 回叩かれて
         # 全部失敗していた問題を入口で塞ぐ。
-        tools_payload = self._build_tools_payload()
+        tools_payload = self._build_tools_payload(player_id)
         # 実験 #356 対応: LLM 1 呼び出しごとに metrics (wall_latency / tokens / TPS)
         # を trace に流す。Phase A の中で player_id / tick の context を sink に閉
         # じ込めて、後で集計スクリプトが per-agent / per-model 分布を出せるよう
@@ -2001,7 +2003,9 @@ class _WorldLlmWiring:
         実行へ進めない。
         """
 
-        assess_tools_payload = self._build_tools_payload(tool_schema_mode="reason_first")
+        assess_tools_payload = self._build_tools_payload(
+            player_id, tool_schema_mode="reason_first"
+        )
         action_tools_payload = [
             tool
             for tool in assess_tools_payload

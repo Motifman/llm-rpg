@@ -81,12 +81,12 @@ class ToolExposure:
     問いは 2 つあり、混ぜない。
 
     - ``is_exposed``: そもそもこの世界に在るか (run 中ずっと同じ)
-    - ``is_phase_common`` / ``is_available_in_phase``: いまのフェーズで
-      どのブロックに置くか (会議境界で変わる)
+    - ``split_for_phase``: いまのフェーズと本人の投票状態から、どの
+      ブロックに置くか
 
-    世界の側の判断だけがインスタンスの状態を要る。フェーズの側はツール名
-    だけで決まるので静的メソッドにしてある。**この非対称がそのまま
-    「run 中変わらないのはどちらか」を表している。**
+    静的な世界宣言と、フェーズ・本人ごとに変わる利用可否を同じ入口で合成する。
+    個別判定を呼び出し側へ散らすと、実際の LLM payload だけが条件を通らない
+    経路が再び生まれる。
     """
 
     disabled_by_scenario: FrozenSet[str] = frozenset()
@@ -136,7 +136,13 @@ class ToolExposure:
         """この世界に在るツール名だけを宣言順で返す。"""
         return tuple(name for name in names if self.is_exposed(name))
 
-    def split_for_phase(self, names: Iterable[str], *, in_meeting: bool) -> tuple:
+    def split_for_phase(
+        self,
+        names: Iterable[str],
+        *,
+        in_meeting: bool,
+        voting_completed: bool = False,
+    ) -> tuple:
         """(共通ブロック, フェーズ固有ブロック) を返す。**通常はこれを使う。**
 
         2 つの問いを両方通す入口。``is_available_in_phase`` だけを呼ぶと
@@ -154,6 +160,7 @@ class ToolExposure:
                 n
                 for n in exposed
                 if self.is_available_in_phase(n, in_meeting=in_meeting)
+                and not (n == "vote" and voting_completed)
             ),
         )
 
