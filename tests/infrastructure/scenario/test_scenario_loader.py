@@ -16,15 +16,10 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 )
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
-from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     ScenarioLoadError,
     ScenarioLoader,
 )
-
-#: この単体試験は「成立したか」だけを見る。勝敗はシナリオがどちらのリストに
-#: 書いたかで決まるので、ここでは片側に固定して構わない。
-_SIDE = GameResultEnum.LOSE
 
 SCENARIO_DIR = Path(__file__).resolve().parents[3] / "data" / "scenarios"
 HOSPITAL_SCENARIO = SCENARIO_DIR / "abandoned_hospital.json"
@@ -1263,8 +1258,7 @@ class TestGameEndConditionScenarioData:
             condition,
             frozenset({"distress_sent"}),
             player_ids=(),
-        result_on_match=_SIDE,
-    )
+        )
 
         assert evaluated.is_ended is False
 
@@ -1281,8 +1275,7 @@ class TestGameEndConditionScenarioData:
             condition,
             frozenset({"task_antenna", "task_fuel", "task_supplies", "distress_sent"}),
             player_ids=(),
-        result_on_match=_SIDE,
-    )
+        )
 
         assert evaluated.is_ended is True
 
@@ -1296,7 +1289,6 @@ class TestGameEndConditionScenarioData:
             condition,
             frozenset({"rescue_completed"}),
             player_ids=(),
-        result_on_match=_SIDE,
-    )
+        )
 
         assert evaluated.is_ended is True

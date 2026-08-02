@@ -102,7 +102,7 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "当番表。今週の点検は四つ——配線箱はセナ、棚卸しはアオイ、気象記録はモリ、発電機はハギ。四つのうち三つ終われば報告できる。照明が壊れているのは連絡通路・物資庫・機関室。暗い場所へは二人以上で入ること。"
+                      "message": "当番表。今週の点検は三つ——配線箱はセナ、棚卸しはアオイ、気象記録はモリ。物資庫と連絡通路は照明が壊れたままで、修理の目処は立っていない。暗い場所へは二人以上で入ること。"
                     }
                   }
                 ]
@@ -786,199 +786,6 @@
           }
         ]
       }
-    },
-    {
-      "id": "machine_room",
-      "name": "機関室",
-      "description": "発電機が据えられた機関室。ここも照明が落ちていて、唸り続ける機械の音で足音がかき消される。",
-      "category": "OTHER",
-      "area_id": "living",
-      "position": {
-        "x": 2.0,
-        "y": 0.0
-      },
-      "atmosphere": {
-        "lighting": "DARK",
-        "sound_ambient": "発電機の重い唸り",
-        "temperature": "WARM"
-      },
-      "is_outdoor": false,
-      "interior": {
-        "objects": [
-          {
-            "id": "generator",
-            "name": "発電機",
-            "description": "観測所の電源をまかなう発電機。定期的に燃料と軸受けを見る必要がある。",
-            "object_type": "OTHER",
-            "state": {
-              "progress": 0
-            },
-            "interactions": [
-              {
-                "action_name": "check_generator",
-                "display_label": "発電機を点検する",
-                "witness_observation_message": "{actor}が発電機の脇にかがみ込んでいる。",
-                "preconditions": [
-                  {
-                    "condition_type": "PLAYER_STATE_IS",
-                    "required_state": {
-                      "role": "crew",
-                      "duty": "generator"
-                    },
-                    "failure_message": "その手順は自分の担当ではない。"
-                  },
-                  {
-                    "condition_type": "OBJECT_STATE",
-                    "target_object": "generator",
-                    "required_state": {
-                      "progress": 0
-                    },
-                    "failure_message": "いまその手順に取りかかる段ではない。"
-                  }
-                ],
-                "effects": [
-                  {
-                    "effect_type": "INCREMENT_OBJECT_STATE",
-                    "parameters": {
-                      "state_key": "progress"
-                    }
-                  },
-                  {
-                    "effect_type": "SHOW_MESSAGE",
-                    "parameters": {
-                      "message": "ここまでは済んだ。まだ途中だ。"
-                    }
-                  }
-                ]
-              },
-              {
-                "action_name": "check_generator_2",
-                "display_label": "発電機を点検する（続き）",
-                "witness_observation_message": "{actor}が発電機の脇にかがみ込んでいる。",
-                "preconditions": [
-                  {
-                    "condition_type": "PLAYER_STATE_IS",
-                    "required_state": {
-                      "role": "crew",
-                      "duty": "generator"
-                    },
-                    "failure_message": "その手順は自分の担当ではない。"
-                  },
-                  {
-                    "condition_type": "OBJECT_STATE",
-                    "target_object": "generator",
-                    "required_state": {
-                      "progress": 1
-                    },
-                    "failure_message": "いまその手順に取りかかる段ではない。"
-                  }
-                ],
-                "effects": [
-                  {
-                    "effect_type": "INCREMENT_OBJECT_STATE",
-                    "parameters": {
-                      "state_key": "progress"
-                    }
-                  },
-                  {
-                    "effect_type": "SHOW_MESSAGE",
-                    "parameters": {
-                      "message": "ここまでは済んだ。まだ途中だ。"
-                    }
-                  }
-                ]
-              },
-              {
-                "action_name": "check_generator_3",
-                "display_label": "発電機を点検する（仕上げ）",
-                "witness_observation_message": "{actor}が発電機の脇にかがみ込んでいる。",
-                "preconditions": [
-                  {
-                    "condition_type": "PLAYER_STATE_IS",
-                    "required_state": {
-                      "role": "crew",
-                      "duty": "generator"
-                    },
-                    "failure_message": "その手順は自分の担当ではない。"
-                  },
-                  {
-                    "condition_type": "OBJECT_STATE",
-                    "target_object": "generator",
-                    "required_state": {
-                      "progress": 2
-                    },
-                    "failure_message": "いまその手順に取りかかる段ではない。"
-                  }
-                ],
-                "effects": [
-                  {
-                    "effect_type": "INCREMENT_OBJECT_STATE",
-                    "parameters": {
-                      "state_key": "progress"
-                    }
-                  },
-                  {
-                    "effect_type": "SET_FLAG",
-                    "parameters": {
-                      "flag_name": "task_generator"
-                    }
-                  },
-                  {
-                    "effect_type": "SHOW_MESSAGE",
-                    "parameters": {
-                      "message": "手順どおりに終えた。記録に残る。"
-                    }
-                  }
-                ]
-              },
-              {
-                "action_name": "check_generator_pretend",
-                "display_label": "発電機を点検する",
-                "witness_observation_message": "{actor}が発電機の脇にかがみ込んでいる。",
-                "preconditions": [
-                  {
-                    "condition_type": "PLAYER_STATE_IS",
-                    "required_state": {
-                      "role": "keeper"
-                    },
-                    "failure_message": "その手順は自分の担当ではない。"
-                  }
-                ],
-                "effects": [
-                  {
-                    "effect_type": "SHOW_MESSAGE",
-                    "parameters": {
-                      "message": "手を動かしただけだ。記録には何も残らない。"
-                    }
-                  }
-                ]
-              }
-            ],
-            "state_display": [
-              {
-                "key": "progress",
-                "value": 0,
-                "text": "まだ手つかず"
-              },
-              {
-                "key": "progress",
-                "value": 1,
-                "text": "途中まで進んでいる"
-              },
-              {
-                "key": "progress",
-                "value": 2,
-                "text": "あと少しで終わる"
-              },
-              {
-                "key": "progress",
-                "value": 3,
-                "text": "点検は終わっている"
-              }
-            ]
-          }
-        ]
-      }
     }
   ],
   "connections": [
@@ -1019,32 +826,6 @@
       "passage": {
         "kind": "OPEN",
         "sound_permeability": 0.15
-      }
-    },
-    {
-      "id": "hall_to_machine_room",
-      "from": "hall",
-      "to": "machine_room",
-      "name": "機関室の扉",
-      "description": "集会室の東側、機関室へ続く扉。",
-      "travel_ticks": 1,
-      "is_bidirectional": true,
-      "passage": {
-        "kind": "OPEN",
-        "sound_permeability": 0.5
-      }
-    },
-    {
-      "id": "machine_room_to_storage",
-      "from": "machine_room",
-      "to": "storage",
-      "name": "機関室の渡り",
-      "description": "機関室から物資庫へ抜ける短い渡り。",
-      "travel_ticks": 1,
-      "is_bidirectional": true,
-      "passage": {
-        "kind": "OPEN",
-        "sound_permeability": 0.25
       }
     }
   ],
@@ -1150,7 +931,7 @@
         "duty": "weather"
       },
       "persona_prompt": "あなたはモリ、観測所の気象観測員。几帳面で、手順を決めてから動く。人を疑うのは苦手だが、辻褄の合わない話は覚えている。ランタンを 1 つ持っている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。",
-      "objective": "自分の担当である気象記録の点検を終わらせる。四つの点検のうち三つが終わればクルーの勝ち。またはインポスターを追放する。"
+      "objective": "自分の担当である気象記録の点検を終わらせる。三つの点検がすべて終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
       "id": "sena",
@@ -1162,7 +943,7 @@
         "duty": "wiring"
       },
       "persona_prompt": "あなたはセナ、通信技師。手が早く、機械のことなら任せてほしい。焦りやすく、一人で先に動いてしまう癖がある。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。",
-      "objective": "自分の担当である配線箱の点検を終わらせる。四つの点検のうち三つが終わればクルーの勝ち。またはインポスターを追放する。"
+      "objective": "自分の担当である配線箱の点検を終わらせる。三つの点検がすべて終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
       "id": "kuze",
@@ -1187,19 +968,7 @@
         "duty": "supplies"
       },
       "persona_prompt": "あなたはアオイ、越冬隊の調理担当。物怖じせず誰にでも話しかける。人の出入りをよく覚えているが、暗い場所は苦手で一人では行きたがらない。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。",
-      "objective": "自分の担当である棚卸しの点検を終わらせる。四つの点検のうち三つが終わればクルーの勝ち。またはインポスターを追放する。"
-    },
-    {
-      "id": "hagi",
-      "name": "ハギ",
-      "spawn_spot": "hall",
-      "initial_items": [],
-      "initial_state": {
-        "role": "crew",
-        "duty": "generator"
-      },
-      "persona_prompt": "あなたはハギ、越冬隊の機関担当。無口で、機械の音の変化には人一倍敏感。人の顔色を読むのは得意ではないが、辻褄の合わない話は黙って覚えている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。",
-      "objective": "自分の担当である発電機の点検を終わらせる。四つの点検のうち三つが終わればクルーの勝ち。またはインポスターを追放する。"
+      "objective": "自分の担当である棚卸しの点検を終わらせる。三つの点検がすべて終わればクルーの勝ち。またはインポスターを追放する。"
     }
   ],
   "game_end_conditions": {
@@ -1209,11 +978,10 @@
         "required_flags": [
           "task_wiring",
           "task_supplies",
-          "task_weather",
-          "task_generator"
+          "task_weather"
         ],
         "min_set_count": 3,
-        "description": "四つの点検のうち三つが終わり、本土に無事を知らせられる。"
+        "description": "点検がすべて終わり、本土に無事を知らせられる。"
       },
       {
         "type": "SURVIVING_PLAYERS_WITH_STATE_AT_MOST",

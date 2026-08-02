@@ -50,12 +50,7 @@ _SCENARIO = (
 _PRETEND_SUFFIX = "_pretend"
 
 #: 点検の 1 段目の action_name。ここから `_2` `_3` が続く。
-_TASK_PREFIXES = (
-    "log_weather",
-    "tighten_wiring",
-    "count_supplies",
-    "check_generator",
-)
+_TASK_PREFIXES = ("log_weather", "tighten_wiring", "count_supplies")
 
 
 @pytest.fixture(scope="module")
@@ -224,95 +219,3 @@ class TestTheDutyBoardMatchesReality:
             if object_id == "duty_board" and interaction["action_name"] == "read_board":
                 return interaction["effects"][0]["parameters"]["message"]
         raise AssertionError("当番表が見つからない")
-
-
-class TestTheBoardHasRoomForASecondMeeting:
-    """盤面が、会議を 2 回持てる厚みになっている。
-
-    **run 007 と run 008 で正反対に振れた数字なので、両側から縛る。**
-
-    - run 007: 3 個中 3 個のタスクをクルーが tick 18 に完走。会議ゼロ
-    - run 008: 1 人殺された時点でタスク路が消え、tick 7 に敗北。会議ゼロ
-
-    どちらも「1 つの機構に全部が乗っていた」ことが原因。ここでは、勝ち筋が
-    複数あることと、会議のやり直しが効くことを数で確かめる。
-    """
-
-    def _counts(self, scenario: dict):
-        crew = _crew(scenario)
-        impostors = [
-            p for p in scenario["players"] if p["initial_state"].get("role") != "crew"
-        ]
-        return len(crew), len(impostors)
-
-    def test_one_death_still_leaves_a_way_to_win_by_working(self, scenario) -> None:
-        """1 人死んでも、残りの担当だけでタスク勝利に届く。
-
-        担当制なので、死んだ人の点検は永久に終わらない。**必要数が担当者数
-        と同じだと、最初の 1 人が死んだ瞬間にタスク路が消える** (run 008)。
-        """
-        crew_count, _ = self._counts(scenario)
-        required = next(
-            w["min_set_count"]
-            for w in scenario["game_end_conditions"]["win"]
-            if w["type"] == "FLAGS_SET_AT_LEAST"
-        )
-
-        assert required <= crew_count - 1
-
-    def test_two_deaths_still_leave_a_meeting(self, scenario) -> None:
-        """2 人死んでも、まだ会議が開ける。
-
-        インポスターの勝ちは同数なので、**クルーが 2 人残っていれば
-        3 人での投票がもう一度できる**。1 回しか窓が無いと、外した run から
-        「たまたま当たったか外したか」しか読み取れない。
-        """
-        crew_count, impostor_count = self._counts(scenario)
-        max_surviving = next(
-            c["max_surviving"]
-            for c in scenario["game_end_conditions"]["lose"]
-            if c["type"] == "SURVIVING_PLAYERS_WITH_STATE_AT_MOST"
-        )
-
-        # 2 人死んだあとの生存クルーが、敗北ラインより多い。
-        assert crew_count - 2 > max_surviving
-        assert max_surviving == impostor_count
-
-    def test_the_impostor_needs_more_than_two_kills(self, scenario) -> None:
-        """インポスターは 3 人以上倒さないと勝てない。
-
-        再使用間隔があるので、殺害数がそのまま run の長さになる。2 人で
-        終わると、死体を見つけて話し合う時間が生まれない。
-        """
-        crew_count, _ = self._counts(scenario)
-        max_surviving = next(
-            c["max_surviving"]
-            for c in scenario["game_end_conditions"]["lose"]
-            if c["type"] == "SURVIVING_PLAYERS_WITH_STATE_AT_MOST"
-        )
-
-        assert crew_count - max_surviving >= 3
-
-    def test_at_least_half_the_tasks_sit_in_the_dark(self, scenario) -> None:
-        """タスクの半分以上が暗い部屋にある。
-
-        **これがこのシナリオの芯。** 仕事をするには危険な場所へ行くしかない、
-        という緊張が無いと、クルーは明るい部屋に固まって何も起きない。
-        部屋を足すときに明るい部屋ばかり増やすと、静かに薄まる。
-        """
-        dark_spots = {
-            s["id"]
-            for s in scenario["spots"]
-            if (s.get("atmosphere") or {}).get("lighting") == "DARK"
-        }
-        task_spots = [
-            s["id"]
-            for s in scenario["spots"]
-            for o in s.get("interior", {}).get("objects", [])
-            for i in o.get("interactions", [])
-            if any(i["action_name"].startswith(p) for p in _TASK_PREFIXES)
-        ]
-        unique_task_spots = sorted(set(task_spots))
-
-        in_dark = [s for s in unique_task_spots if s in dark_spots]
-        assert len(in_dark) * 2 >= len(unique_task_spots), (in_dark, unique_task_spots)

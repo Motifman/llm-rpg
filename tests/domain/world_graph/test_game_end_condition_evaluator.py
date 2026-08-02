@@ -16,17 +16,6 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
-from ai_rpg_world.domain.world_graph.enum.game_result_enum import (
-    GameResultEnum,
-)
-
-#: 「成立したか」だけを見る試験で使う既定。勝敗はシナリオがどちらのリストに
-#: 書いたかで決まるので、成立の有無しか見ないなら片側に固定して構わない。
-#:
-#: 返り値が WIN であることまで見る試験は、**呼び出し側で WIN を渡す**。
-#: ここを共有の既定にすると、勝敗が呼び出し側で決まるという要点が消える。
-_SIDE = GameResultEnum.LOSE
-
 
 
 def _node(i: int) -> SpotNode:
@@ -48,9 +37,7 @@ def test_flag_set_win() -> None:
         condition_type=GameEndConditionTypeEnum.FLAG_SET,
         target_flag="escaped",
     )
-    r = ev.evaluate(g, cond, frozenset({"escaped"}), [PlayerId(1)],
-        result_on_match=GameResultEnum.WIN,
-    )
+    r = ev.evaluate(g, cond, frozenset({"escaped"}), [PlayerId(1)])
     assert r.is_ended and r.result == GameResultEnum.WIN
 
 
@@ -65,9 +52,7 @@ def test_all_at_spot_win() -> None:
         condition_type=GameEndConditionTypeEnum.ALL_AT_SPOT,
         target_spot_id=SpotId.create(2),
     )
-    r = ev.evaluate(g, cond, frozenset(), [PlayerId(1), PlayerId(2)],
-        result_on_match=GameResultEnum.WIN,
-    )
+    r = ev.evaluate(g, cond, frozenset(), [PlayerId(1), PlayerId(2)])
     assert r.is_ended and r.result == GameResultEnum.WIN
 
 
@@ -80,9 +65,7 @@ def test_tick_limit_lose() -> None:
         condition_type=GameEndConditionTypeEnum.TICK_LIMIT,
         tick_limit=10,
     )
-    r = ev.evaluate(g, cond, frozenset(), [PlayerId(1)], current_tick=WorldTick(10),
-        result_on_match=_SIDE,
-    )
+    r = ev.evaluate(g, cond, frozenset(), [PlayerId(1)], current_tick=WorldTick(10))
     assert r.is_ended and r.result == GameResultEnum.LOSE
 
 
