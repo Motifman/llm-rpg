@@ -41,6 +41,7 @@ _SCENARIO = (
 
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
+_KUZE = PlayerId(3)   # keeper
 
 
 @pytest.fixture()
@@ -65,8 +66,14 @@ class TestStandingTarget:
     """立っている相手には、生きた相手向けの行動だけ出る。"""
 
     def test_attacking_is_offered(self, runtime) -> None:
-        """襲うは出る。"""
-        assert "strike_down" in _row(runtime)
+        """襲うは出る。
+
+        見る側はクゼ (keeper) にする。**自分にできない行為は自分の一覧に
+        出ない**ようになったので、crew の視点では確かめられない。ここで
+        見たいのは「立っている相手には生きた相手向けの行動が出る」ことで、
+        誰が襲えるかではない。
+        """
+        assert "strike_down" in _row(runtime, viewer=_KUZE)
 
     def test_looting_is_not_offered(self, runtime) -> None:
         """倒れた相手向けの行動は出ない (従来どおり)。"""

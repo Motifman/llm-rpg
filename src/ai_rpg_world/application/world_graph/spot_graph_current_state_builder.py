@@ -427,13 +427,21 @@ class SpotGraphCurrentStateBuilder:
         )
 
     def _resolve_player_action_labels(
-        self, *, is_incapacitated: bool, is_eliminated: bool = False
+        self,
+        *,
+        is_incapacitated: bool,
+        is_eliminated: bool = False,
+        actor_state: Mapping[str, Any] | None = None,
     ) -> tuple:
         """その相手に**いま使える**対人 action ラベル。provider 未注入なら空。
 
-        絞り込みの入力は、その行に既に見えている事実だけにする
-        (`is_down` / `is_dead`)。見えていない事実で絞ると、ラベルの有無
+        **対象**についての絞り込みの入力は、その行に既に見えている事実だけに
+        する (`is_down` / `is_dead`)。見えていない事実で絞ると、ラベルの有無
         そのものが情報漏れになる。
+
+        ``actor_state`` は**見ている本人**の自由 state。自分の役割は自分が
+        知っている事実なので、これで絞っても新たな情報は漏れない。対象の
+        秘密を守る不変条件とは別の軸で、混同しないこと。
 
         provider が落ちても現在状態の生成そのものは止めない。action 候補が
         出ないぶん対人行為が発見されなくなるが、prompt 全体を失うより軽い。
@@ -445,6 +453,7 @@ class SpotGraphCurrentStateBuilder:
                     self._player_action_labels_provider(
                         target_is_incapacitated=is_incapacitated,
                         target_is_eliminated=is_eliminated,
+                        actor_state=dict(actor_state or {}),
                     )
                     or ()
                 )
@@ -1132,6 +1141,7 @@ class SpotGraphCurrentStateBuilder:
                     available_action_labels=self._resolve_player_action_labels(
                         is_incapacitated=other_is_down or other_is_dead,
                         is_eliminated=other_is_dead,
+                        actor_state=getattr(player, "state", None),
                     ),
                 ))
 

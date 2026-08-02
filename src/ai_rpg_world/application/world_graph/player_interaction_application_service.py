@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
@@ -70,7 +70,36 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_def import Interac
 _logger = logging.getLogger(__name__)
 
 
+def _actor_meets_own_state_conditions(
+    idef: "InteractionDef", actor_state: Mapping[str, Any]
+) -> bool:
+    """行動者自身の state 条件をすべて満たすか。
+
+    ``PLAYER_STATE_IS`` **だけ**を見る。この条件が参照するのは行動者自身の
+    自由 state で、本人が知っている情報しか使わない。
+
+    ``TARGET_PLAYER_STATE_IS`` をここで扱ってはいけない。対象の秘匿された
+    役割でラベルの有無が変わり、**誰がクルーかが行動一覧から読める**。
+
+    宣言に required_state が無いものは判定材料が無いので満たさない扱いに
+    する。黙って通すと、書き損じた条件が効かないまま静かに素通りする。
+    """
+    for cond in idef.preconditions:
+        if cond.condition_type is not InteractionConditionTypeEnum.PLAYER_STATE_IS:
+            continue
+        required = cond.required_state
+        if not required:
+            return False
+        for key, value in required.items():
+            if actor_state.get(key) != value:
+                return False
+    return True
+
+
+
 @dataclass(frozen=True)
+
+
 class PlayerInteractionResultDto:
     """対人 interaction の実行結果。"""
 
@@ -170,7 +199,11 @@ class PlayerInteractionApplicationService:
         return tuple(self._by_action_name.keys())
 
     def available_action_labels_for(
-        self, *, target_is_incapacitated: bool, target_is_eliminated: bool = False
+        self,
+        *,
+        target_is_incapacitated: bool,
+        target_is_eliminated: bool = False,
+        actor_state: Optional[Mapping[str, Any]] = None,
     ) -> Tuple[str, ...]:
         """**その相手にいま使える** action の表示ラベルを返す。
 
@@ -193,6 +226,20 @@ class PlayerInteractionApplicationService:
         | 役割 (TARGET_PLAYER_STATE_IS) | 秘匿 | 使わない |
         | 対象の所持 (TARGET_HAS_ITEM) | 行動不能なら行に出ている | いまは使わない |
 
+        ## 行動者自身の状態は別の軸
+
+        ``actor_state`` は**見ている本人**の自由 state で、上の表とは別の話。
+        自分の役割は自分が知っている事実なので、これで絞っても新たな情報は
+        漏れない。**対象の秘密を守る不変条件と混同しないこと。**
+
+        これが無かったために、クルーの同席者行に「背後から襲う」が全員ぶん
+        毎ターン並んでいた。実行すれば「あなたにそんな真似はできない。」で
+        必ず失敗する手で、しかもクルーに「自分は人を殺せる」と誤解させる。
+
+        オブジェクトへの行動は候補を組む段階で ``PLAYER_STATE_IS`` を見て
+        いるのに、対人行為だけ見ていなかった。**対象の秘密を守る設計が、
+        行動者自身の情報まで締め出していた**形になる。
+
         対象の所持を使わないのは、``item_spec_id_parameter_key`` 形式だと
         判定する品目が実行時にしか決まらないため。「何も持っていない相手に
         take が出る」は残るが、〔手ぶら〕が同じ行に出ているので読み取れる。
@@ -204,6 +251,7 @@ class PlayerInteractionApplicationService:
                 idef,
                 target_is_incapacitated=target_is_incapacitated,
                 target_is_eliminated=target_is_eliminated,
+                actor_state=actor_state,
             )
         )
 
@@ -213,8 +261,9 @@ class PlayerInteractionApplicationService:
         *,
         target_is_incapacitated: bool,
         target_is_eliminated: bool = False,
+        actor_state: Optional[Mapping[str, Any]] = None,
     ) -> bool:
-        """公開の対象状態だけを見て、その行に出してよいかを決める。
+        """公開の対象状態と、行動者自身の状態を見て、その行に出すかを決める。
 
         ``target_is_eliminated`` も**公開事実**である。行に「死亡している」と
         出ているので、これで絞っても新たな情報は漏れない (この関数の不変条件
@@ -233,8 +282,26 @@ class PlayerInteractionApplicationService:
         退場が確定した相手には何も出さない。engine の普遍則
         (`validate_actionable_target`) が実行時に必ず弾くので、出すと
         「選べるのに必ず失敗する手」になる (#860 で潰した形)。
+
+        ## 自分にできない行為は出さない
+
+        ``PLAYER_STATE_IS`` は**行動者自身**の自由 state を見る条件なので、
+        候補を組む段階で判定してよい。自分の役割は自分が知っている。
+
+        見るのは ``PLAYER_STATE_IS`` だけに限る。``TARGET_PLAYER_STATE_IS``
+        を同じように扱うと、**対象の秘匿された役割でラベルの有無が変わり、
+        誰がクルーかが行動一覧から読めてしまう**。条件の種類を増やすときは
+        「その条件が誰の情報を見るか」を必ず確認すること。
+
+        ``actor_state`` が渡らない経路 (既存の呼び出し・テスト) では
+        絞り込まない。役割条件を持つ行為が出たままになるだけで、いままでと
+        同じ挙動に留まる。
         """
         if target_is_eliminated:
+            return False
+        if actor_state is not None and not _actor_meets_own_state_conditions(
+            idef, actor_state
+        ):
             return False
         requires_incapacitated = any(
             cond.condition_type
