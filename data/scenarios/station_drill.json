@@ -18,7 +18,9 @@
     "llm_objective_text": "- タスクは 3 つ。すべて終えればクルーの勝ち。\n- 連絡通路と物資庫は暗い。\n- 誰が何をしているかは、その場に居合わせた者にしか見えない。"
   },
   "disabled_tools": [
-    "attack"
+    "attack",
+    "set_sub_location",
+    "use_item"
   ],
   "item_specs": [
     {
