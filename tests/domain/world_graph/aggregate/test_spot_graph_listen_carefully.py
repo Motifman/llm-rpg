@@ -99,7 +99,7 @@ class TestEmitListenCarefullySelfSpot:
         g.place_entity(eid, SPOT_A)
         g.clear_events()
 
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
 
         events = _events(g)
         assert len(events) == 1
@@ -117,7 +117,7 @@ class TestEmitListenCarefullySelfSpot:
         g.place_entity(eid, SPOT_A)
         g.clear_events()
 
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
         assert _events(g) == []
 
 
@@ -134,7 +134,7 @@ class TestEmitListenCarefullyAdjacent:
         g.place_entity(eid, SPOT_A)
         g.clear_events()
 
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
 
         events = _events(g)
         assert len(events) == 1
@@ -154,7 +154,7 @@ class TestEmitListenCarefullyAdjacent:
         g.place_entity(eid, SPOT_A)
         g.clear_events()
 
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
         assert _events(g) == []  # FAINT - 1 = SILENT なので発火しない
 
     def test_traversable_permeability(
@@ -181,7 +181,7 @@ class TestEmitListenCarefullyAdjacent:
         g.place_entity(eid, SPOT_A)
         g.clear_events()
 
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
 
         events = _events(g)
         assert len(events) == 1
@@ -204,7 +204,7 @@ class TestEmitListenCarefullyDedup:
         g.place_entity(eid, SPOT_A)
         g.clear_events()
 
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
 
         events = _events(g)
         assert len(events) == 1
@@ -226,7 +226,7 @@ class TestEmitListenCarefullyCombined:
         g.place_entity(eid, SPOT_A)
         g.clear_events()
 
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
 
         events = _events(g)
         # A (自 spot MODERATE) + B (LOUD -> MODERATE) + C (MODERATE -> FAINT)
@@ -248,4 +248,4 @@ class TestEmitListenCarefullyErrors:
         g.add_spot(_node(SPOT_A))
 
         with pytest.raises(EntityNotInGraphException):
-            g.emit_listen_carefully(EntityId.create(999))
+            g.emit_listen_carefully(EntityId.create(999), moving_entity_ids=frozenset())

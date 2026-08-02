@@ -19,6 +19,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionDestroyedEvent,
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
+    SpotPresenceListenedEvent,
     SpotSoundHeardEvent,
     EntityLeftSpotEvent,
     MonsterAppearedAtSpotEvent,
@@ -453,11 +454,18 @@ class SpotGraphAggregate(AggregateRoot):
         """
         self._emit_sound_heard(entity_id, spot_id, spot_id)
 
-    def emit_listen_carefully(self, entity_id: EntityId) -> None:
+    def emit_listen_carefully(
+        self,
+        entity_id: EntityId,
+        *,
+        moving_entity_ids: FrozenSet[EntityId],
+    ) -> None:
         """「耳を澄ます」ツール (Phase 5 PR-2 / PR-3) の event 発火。
 
         entity が居る spot および全隣接 spot の sound_intensity を観測する
-        `SpotSoundHeardEvent` を `add_event` する。
+        `SpotSoundHeardEvent` と、隣接 spot の行動可能者を粗く伝える
+        `SpotPresenceListenedEvent` を `add_event` する。``moving_entity_ids`` は
+        player 状態を知る呼び出し側が作り、graph はその位置だけを数える。
 
         伝搬モデル:
         - 自 spot: `SoundIntensityEnum` をそのまま (減衰なし)
@@ -494,6 +502,32 @@ class SpotGraphAggregate(AggregateRoot):
                 listener_spot_id=current_spot,
                 source_spot_id=adj_spot,
                 attenuation_hops=hops,
+            )
+            moving_count = sum(
+                1
+                for moving_entity_id in moving_entity_ids
+                if moving_entity_id != entity_id
+                and self._entity_spot.get(moving_entity_id) == adj_spot
+            )
+            if hops == 1:
+                moving_occupants: Optional[int] = moving_count
+            elif hops == 2:
+                moving_occupants = None if moving_count > 0 else 0
+            else:
+                moving_occupants = None
+            # モンスターは PlayerStatusAggregate の行動可能性を持たず、足音と
+            # 生態音の区別も未設計なので対象外とする。別途、聴覚上の生物表現を
+            # 設計するまでは player の気配に混ぜない。
+            self.add_event(
+                SpotPresenceListenedEvent.create(
+                    aggregate_id=self._graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    entity_id=entity_id,
+                    spot_id=current_spot,
+                    source_spot_id=adj_spot,
+                    hops=hops,
+                    moving_occupants=moving_occupants,
+                )
             )
 
     def _emit_sound_heard(

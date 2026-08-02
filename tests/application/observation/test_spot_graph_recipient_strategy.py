@@ -29,6 +29,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectInteractedEvent,
     SpotObjectStateChangedEvent,
     SpotPlayerStateChangedInSpotEvent,
+    SpotPresenceListenedEvent,
     SpotSoundHeardEvent,
 )
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
@@ -591,6 +592,26 @@ class TestSpotSoundHeardRecipientResolution:
         recipients = strategy.resolve(event)
         ids = {p.value for p in recipients}
         assert ids == {1}
+
+    def test_presence_is_delivered_only_to_listener(self):
+        """隣接地点の気配は同席者ではなく、耳を澄ませた本人だけに届ける。"""
+        strategy = self._make_with_sound_event({1: 1, 2: 1})
+        strategy._registry = ObservedEventRegistry(
+            event_to_strategy={SpotPresenceListenedEvent: "spot_graph"},
+        )
+        event = SpotPresenceListenedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=ENTITY_1,
+            spot_id=SPOT_A,
+            source_spot_id=SPOT_B,
+            hops=1,
+            moving_occupants=1,
+        )
+
+        recipients = strategy.resolve(event)
+
+        assert {player_id.value for player_id in recipients} == {1}
 
 
 class TestDownPlayerExcluded:

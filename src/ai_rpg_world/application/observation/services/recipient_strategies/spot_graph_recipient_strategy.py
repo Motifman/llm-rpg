@@ -39,6 +39,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
     PlayerPickedUpItemEvent,
+    SpotPresenceListenedEvent,
     SpotSoundHeardEvent,
     TimeOfDayChangedEvent,
     GamePhaseChangedEvent,
@@ -262,7 +263,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             # pack 警戒共有: responder の現在 spot 全員に「仲間の警戒を
             # 察知した」観測。
             self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, SpotSoundHeardEvent):
+        elif isinstance(event, (SpotSoundHeardEvent, SpotPresenceListenedEvent)):
             # Phase 5: 環境音観測。聞いた本人 (entity_id) だけに届ける。
             # entity_id が known player の ID と一致する場合のみ追加。
             # monster の入退場 (= 自分が聞いた音) は player 観測しない。

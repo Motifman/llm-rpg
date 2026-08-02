@@ -35,6 +35,7 @@ from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
 )
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    SpotPresenceListenedEvent,
     SpotSoundHeardEvent,
 )
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
@@ -97,6 +98,80 @@ def _events(g: SpotGraphAggregate) -> list[SpotSoundHeardEvent]:
     return [e for e in g.get_events() if isinstance(e, SpotSoundHeardEvent)]
 
 
+def _presence_events(g: SpotGraphAggregate) -> list[SpotPresenceListenedEvent]:
+    return [e for e in g.get_events() if isinstance(e, SpotPresenceListenedEvent)]
+
+
+class TestAdjacentMovingOccupants:
+    """隣接地点の人の気配は、音の通りやすさに応じて情報量を落とす。"""
+
+    @pytest.mark.parametrize(
+        "permeability,moving_count,expected",
+        [
+            (1.0, 0, 0),
+            (1.0, 1, 1),
+            (0.5, 0, 0),
+            (0.5, 1, None),
+            (0.5, 3, None),
+            (0.1, 0, None),
+            (0.1, 1, None),
+        ],
+    )
+    def test_presence_detail_follows_permeability(
+        self, permeability: float, moving_count: int, expected: int | None,
+    ) -> None:
+        """通りやすい接続は人数、中程度は在否、壁は在否も伏せる。"""
+        graph, listener = _build_AB(
+            intensity_B=SoundIntensityEnum.SILENT,
+            passage=Passage.open(sound_permeability=permeability),
+        )
+        moving = frozenset(EntityId.create(20 + i) for i in range(moving_count))
+        for entity_id in moving:
+            graph.place_entity(entity_id, SPOT_B)
+        graph.clear_events()
+
+        graph.emit_listen_carefully(listener, moving_entity_ids=moving)
+
+        events = _presence_events(graph)
+        assert len(events) == 1
+        assert events[0].source_spot_id == SPOT_B
+        assert events[0].moving_occupants == expected
+
+    def test_listener_and_current_spot_are_not_reported(self) -> None:
+        """聞き手自身と現在地は人数にも観測行にも含めない。"""
+        graph, listener = _build_AB(
+            intensity_B=SoundIntensityEnum.SILENT,
+            passage=Passage.open(sound_permeability=1.0),
+        )
+
+        graph.emit_listen_carefully(
+            listener, moving_entity_ids=frozenset({listener}),
+        )
+
+        events = _presence_events(graph)
+        assert len(events) == 1
+        assert events[0].source_spot_id != SPOT_A
+        assert events[0].moving_occupants == 0
+
+    def test_non_adjacent_spot_is_not_reported(self) -> None:
+        """接続のない地点に居る人の気配は観測しない。"""
+        graph, listener = _build_AB(
+            intensity_B=SoundIntensityEnum.SILENT,
+            passage=Passage.open(sound_permeability=1.0),
+        )
+        spot_c = SpotId.create(3)
+        remote = EntityId.create(30)
+        graph.add_spot(_node(spot_c))
+        graph.place_entity(remote, spot_c)
+        graph.clear_events()
+
+        graph.emit_listen_carefully(
+            listener, moving_entity_ids=frozenset({remote}),
+        )
+
+        assert all(event.source_spot_id != spot_c for event in _presence_events(graph))
+
+
 class TestSoundPermeabilityToHops:
     """量子化関数の境界値挙動。"""
 
@@ -128,7 +203,7 @@ class TestOpenPassage1Hop:
             intensity_B=SoundIntensityEnum.LOUD,
             passage=Passage.open(),
         )
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
         events = _events(g)
         assert len(events) == 1
         assert events[0].intensity == "MODERATE"
@@ -139,7 +214,7 @@ class TestOpenPassage1Hop:
             intensity_B=SoundIntensityEnum.LOUD,
             passage=Passage.wall(WallStateEnum.BROKEN),
         )
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
         events = _events(g)
         assert len(events) == 1
         assert events[0].intensity == "MODERATE"
@@ -150,7 +225,7 @@ class TestOpenPassage1Hop:
             intensity_B=SoundIntensityEnum.MODERATE,
             passage=Passage.door(DoorStateEnum.OPEN),
         )
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
         events = _events(g)
         assert len(events) == 1
         assert events[0].intensity == "FAINT"
@@ -165,7 +240,7 @@ class TestClosedDoorAndCrackedWall2Hops:
             intensity_B=SoundIntensityEnum.LOUD,
             passage=Passage.door(DoorStateEnum.CLOSED),
         )
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
         events = _events(g)
         assert len(events) == 1
         assert events[0].intensity == "FAINT"  # LOUD(3) - 2 = FAINT(1)
@@ -176,7 +251,7 @@ class TestClosedDoorAndCrackedWall2Hops:
             intensity_B=SoundIntensityEnum.MODERATE,
             passage=Passage.door(DoorStateEnum.CLOSED),
         )
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
         assert _events(g) == []  # MODERATE(2) - 2 = SILENT
 
     def test_wall_cracked_loud_faint(self) -> None:
@@ -185,7 +260,7 @@ class TestClosedDoorAndCrackedWall2Hops:
             intensity_B=SoundIntensityEnum.LOUD,
             passage=Passage.wall(WallStateEnum.CRACKED),
         )
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
         events = _events(g)
         assert len(events) == 1
         assert events[0].intensity == "FAINT"
@@ -200,7 +275,7 @@ class TestIntactWall3Hops:
             intensity_B=SoundIntensityEnum.LOUD,
             passage=Passage.wall(WallStateEnum.INTACT),
         )
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
         # permeability 0.1 → 3 hops → LOUD(3) - 3 = SILENT
         assert _events(g) == []
 
@@ -235,12 +310,15 @@ class TestMultiConnectionPicksBestPath:
         g.place_entity(eid, SPOT_A)
         g.clear_events()
 
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
 
         events = _events(g)
         assert len(events) == 1  # B への観測は 1 件に集約
         # 扉経由 (1 hop) で MODERATE(2) - 1 = FAINT(1)
         assert events[0].intensity == "FAINT"
+        presence_events = _presence_events(g)
+        assert len(presence_events) == 1
+        assert presence_events[0].hops == 1
 
 
 class TestSelfSpotIgnoresPermeability:
@@ -263,7 +341,7 @@ class TestSelfSpotIgnoresPermeability:
         g.place_entity(eid, SPOT_A)
         g.clear_events()
 
-        g.emit_listen_carefully(eid)
+        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
 
         events = _events(g)
         assert len(events) == 1
