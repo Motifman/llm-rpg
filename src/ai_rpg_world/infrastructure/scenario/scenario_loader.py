@@ -49,6 +49,7 @@ from ai_rpg_world.domain.monster.value_object.monster_template_id import Monster
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.player.enum.player_enum import Race
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
@@ -78,6 +79,9 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
+from ai_rpg_world.domain.world_graph.value_object.player_outcome_rule import (
+    PlayerOutcomeRule,
+)
 from ai_rpg_world.domain.world_graph.value_object.reactive_object_state_binding import (
     ReactiveObjectStateBinding,
 )
@@ -105,6 +109,7 @@ from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
 )
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    PlayerOutcomeRuleValidationException,
     StateDisplayRuleValidationException,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import (
@@ -564,6 +569,7 @@ class ScenarioLoadResult:
     metadata: ScenarioMetadata
     initial_flags: Tuple[str, ...]
     scenario_events: Tuple[ScenarioEventDef, ...] = ()
+    player_outcome_rules: Tuple[PlayerOutcomeRule, ...] = ()
     weather_config: Optional[ScenarioWeatherConfig] = None
     day_night_config: Optional[ScenarioDayNightConfig] = None
     reactive_passage_bindings: Tuple[ReactivePassageBinding, ...] = ()
@@ -656,6 +662,9 @@ class ScenarioLoader:
         initial_flags = tuple(raw.get("initial_flags", []))
         disabled_tools = self._parse_disabled_tools(raw.get("disabled_tools"))
         scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
+        player_outcome_rules = self._parse_player_outcome_rules(
+            raw.get("player_outcome_rules", []), mapper,
+        )
         weather_config = self._parse_weather_config(raw.get("environment", {}))
         day_night_config = self._parse_day_night_config(raw.get("environment", {}))
         monster_templates, monster_placements = self._parse_monsters_block(
@@ -676,6 +685,11 @@ class ScenarioLoader:
         outcome_resolution_config = self._parse_outcome_resolution_config(
             raw.get("outcome_resolution"), mapper,
         )
+        if outcome_resolution_config is not None and player_outcome_rules:
+            raise ScenarioLoadError(
+                "player_outcome_rules と廃止予定の outcome_resolution は同時に"
+                "宣言できません"
+            )
         self._reject_end_conditions_with_outcome_resolution(
             outcome_resolution_config, win_conds, lose_conds,
         )
@@ -696,6 +710,7 @@ class ScenarioLoader:
             initial_flags=initial_flags,
             disabled_tools=disabled_tools,
             scenario_events=scenario_events,
+            player_outcome_rules=player_outcome_rules,
             weather_config=weather_config,
             day_night_config=day_night_config,
             reactive_passage_bindings=reactive_bindings,
@@ -2247,6 +2262,85 @@ class ScenarioLoader:
                     delay_ticks=int(raw.get("delay_ticks", 0)),
                 )
             )
+        return tuple(parsed)
+
+    def _parse_player_outcome_rules(
+        self,
+        raw_rules: Any,
+        mapper: ScenarioIdMapper,
+    ) -> Tuple[PlayerOutcomeRule, ...]:
+        """個人結果規則を既存の ScenarioEventCondition AST へ変換する。"""
+        if not isinstance(raw_rules, list):
+            raise ScenarioLoadError("player_outcome_rules must be a list")
+
+        parsed: list[PlayerOutcomeRule] = []
+        seen_ids: set[str] = set()
+        for index, raw in enumerate(raw_rules):
+            path = f"player_outcome_rules[{index}]"
+            if not isinstance(raw, dict):
+                raise ScenarioLoadError(f"{path} must be an object")
+
+            rule_id = raw.get("id")
+            if not isinstance(rule_id, str) or not rule_id.strip():
+                raise ScenarioLoadError(f"{path}.id must be a non-empty string")
+            if rule_id in seen_ids:
+                raise ScenarioLoadError(
+                    f"player_outcome_rules id {rule_id!r} が重複しています"
+                )
+            seen_ids.add(rule_id)
+
+            trigger_raw = raw.get("trigger")
+            if not isinstance(trigger_raw, dict):
+                raise ScenarioLoadError(f"{path}.trigger must be a condition object")
+            player_conditions_raw = raw.get("player_conditions")
+            if not isinstance(player_conditions_raw, list):
+                raise ScenarioLoadError(f"{path}.player_conditions must be a list")
+            for condition_index, condition_raw in enumerate(player_conditions_raw):
+                if not isinstance(condition_raw, dict):
+                    raise ScenarioLoadError(
+                        f"{path}.player_conditions[{condition_index}] must be a "
+                        "condition object"
+                    )
+
+            once = raw.get("once")
+            if not isinstance(once, bool):
+                raise ScenarioLoadError(f"{path}.once must be an explicit boolean")
+
+            outcome_raw = raw.get("outcome")
+            try:
+                outcome = PlayerOutcomeEnum(outcome_raw)
+            except (TypeError, ValueError) as exc:
+                raise ScenarioLoadError(
+                    f"{path}.outcome is unknown: {outcome_raw!r}"
+                ) from exc
+
+            try:
+                parsed.append(
+                    PlayerOutcomeRule(
+                        rule_id=rule_id,
+                        trigger=self._parse_scenario_event_condition(
+                            trigger_raw,
+                            mapper,
+                            path=f"{path}.trigger",
+                        ),
+                        player_conditions=tuple(
+                            self._parse_scenario_event_condition(
+                                condition_raw,
+                                mapper,
+                                path=(
+                                    f"{path}.player_conditions[{condition_index}]"
+                                ),
+                            )
+                            for condition_index, condition_raw in enumerate(
+                                player_conditions_raw
+                            )
+                        ),
+                        outcome=outcome,
+                        once=once,
+                    )
+                )
+            except PlayerOutcomeRuleValidationException as exc:
+                raise ScenarioLoadError(f"{path}: {exc}") from exc
         return tuple(parsed)
 
     def _optional_spot_id(self, value: Any, mapper: ScenarioIdMapper) -> Optional[int]:
