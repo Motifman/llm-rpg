@@ -3787,6 +3787,7 @@ class WorldRuntime:
             result = self._game_end_evaluator.evaluate(
                 graph, ec, flags, player_ids, tick,
                 player_states=player_states, player_outcomes=player_outcomes,
+                result_on_match=None,
             )
             if result.is_ended:
                 return result

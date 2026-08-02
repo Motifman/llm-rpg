@@ -128,6 +128,7 @@ class TestAllPlayerOutcomesResolved:
             frozenset(),
             player_ids,
             player_outcomes=outcomes,
+            result_on_match=None,
         )
 
     def test_mixed_resolved_outcomes_end_without_collective_result(self) -> None:
