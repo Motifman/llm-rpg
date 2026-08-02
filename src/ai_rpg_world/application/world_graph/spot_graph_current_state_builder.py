@@ -338,6 +338,9 @@ TimeOfDayProvider = Callable[[], Optional[TimeOfDay]]
 # None を返した場合は builder 側で当該個体を snapshot から黙って除外する（既に死んで掃除されたケース等）。
 MonsterViewProvider = Callable[[MonsterId], Optional[SpotGraphMonsterEntry]]
 VisibleMonsterObserver = Callable[[int, SpotGraphMonsterEntry], None]
+#: 同じ場所で倒れている / 死んでいる人を見た、という通知。
+#: 引数は (見た人の player_id, 倒れている人の entity_id, 表示名, 退場が確定したか)。
+FallenBodyObserver = Callable[[int, int, str, bool], None]
 # P-U3/P-U4 (停滞感の表出): player_id (int) → 停滞感バンド (``none`` /
 # ``light`` / ``strong``、P-U2 の resolve_stagnation_pressure_band と同型)。
 # 自己 (own_stagnation_band) と他者 (nearby_entities の stagnation_band) の
@@ -379,6 +382,9 @@ class SpotGraphCurrentStateBuilder:
         distant_view_trace_enabled: bool = False,
         trace_recorder_provider: Optional[Callable[[], Any]] = None,
         visible_monster_observer: Optional[VisibleMonsterObserver] = None,
+        # 倒れている人を見たことを runtime へ通知する hook。初回判定と観測の
+        # 生成は runtime 側の責務で、builder は「目に入った」事実だけを渡す。
+        fallen_body_observer: Optional[FallenBodyObserver] = None,
         # 人を対象にできる action 名を返す provider (シナリオ直下
         # ``player_interactions``)。未注入なら空 = 同席者行に action を出さない
         # (対人行為を宣言していない世界での挙動と一致)。
@@ -419,6 +425,7 @@ class SpotGraphCurrentStateBuilder:
         self._distant_view_trace_enabled = distant_view_trace_enabled
         self._trace_recorder_provider = trace_recorder_provider
         self._visible_monster_observer = visible_monster_observer
+        self._fallen_body_observer = fallen_body_observer
         self._player_action_labels_provider = player_action_labels_provider
         self._is_tool_exposed = is_tool_exposed
         self._perception = SpotPerceptionService()
@@ -863,6 +870,45 @@ class SpotGraphCurrentStateBuilder:
                     exc_info=True,
                 )
 
+    def _notify_fallen_bodies(
+        self,
+        player_id: int,
+        nearby_entities: Sequence[SpotGraphNearbyEntityEntry],
+    ) -> None:
+        """同じ場所で倒れている人を観測 hook へ渡す。
+
+        **同席者行に出ているのに、気づいた瞬間が無かった。** 行は「見えて
+        いる状態」で、毎 tick そこにある。観測は「気づいた瞬間」で一度きり。
+        両方要る。観測が無いと ``schedules_turn`` が立たず、死体を見つけても
+        エージェントが起きない (run 008 で通報が始まらなかった直接の原因)。
+
+        暗さは見ない。同席者行が暗所でも死体を出しているので、ここだけ
+        隠すと**行と観測が食い違う**。
+
+        monster と同じく、初回判定は runtime 側。hook の失敗で prompt 構築を
+        壊さないよう、例外は warning に落とす。
+        """
+        observer = self._fallen_body_observer
+        if observer is None:
+            return
+        for entry in nearby_entities:
+            if not (entry.is_down or entry.is_dead):
+                continue
+            try:
+                observer(
+                    player_id,
+                    int(entry.entity_id),
+                    str(entry.display_name or ""),
+                    bool(entry.is_dead),
+                )
+            except Exception:
+                logger.warning(
+                    "fallen_body_observer failed for player_id=%s entity_id=%s",
+                    player_id,
+                    entry.entity_id,
+                    exc_info=True,
+                )
+
     def build_snapshot(self, player_id: int) -> SpotGraphPlayerSnapshotDto | None:
         """プレイヤーがグラフに載っていない場合は None。"""
         graph = self._spot_graph_repository.find_graph()
@@ -1179,6 +1225,8 @@ class SpotGraphCurrentStateBuilder:
                         actor_state=getattr(player, "state", None),
                     ),
                 ))
+
+        self._notify_fallen_bodies(player_id, nearby_entities)
 
         inventory_items: tuple[SpotGraphInventoryItemEntry, ...] = ()
         if self._inventory_builder is not None:
