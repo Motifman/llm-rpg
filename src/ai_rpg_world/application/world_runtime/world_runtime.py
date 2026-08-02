@@ -3696,7 +3696,10 @@ class WorldRuntime:
 
     def _all_players_unable_to_act(self, registry: Any) -> bool:
         """全 player が outcome 確定済み、または unresolved でも down 済みかを返す。"""
-        for player_id in self.get_player_ids():
+        player_ids = self.get_player_ids()
+        if not player_ids:
+            return False
+        for player_id in player_ids:
             outcome = registry.get_outcome(player_id)
             if outcome.is_resolved:
                 continue

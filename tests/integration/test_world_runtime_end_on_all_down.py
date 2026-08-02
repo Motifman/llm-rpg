@@ -97,3 +97,16 @@ class TestWorldRuntimeEndOnAllDown:
 
         assert result.is_ended is True
         assert result.reason.startswith("外的停止 END_ON_ALL_DOWN:")
+
+    def test_flag_on_does_not_stop_empty_player_set(self, monkeypatch) -> None:
+        """対象者0人を空集合の論理で「全員行動不能」とみなして終了しない。"""
+        runtime = create_world_runtime(
+            _PERSISTENT_SCENARIO_PATH,
+            config=runtime_config(end_on_all_down=True),
+        )
+        monkeypatch.setattr(runtime, "get_player_ids", lambda: [])
+
+        result = runtime.check_game_end()
+
+        assert result.is_ended is False
+        assert result.reason == "ゲーム続行中"
