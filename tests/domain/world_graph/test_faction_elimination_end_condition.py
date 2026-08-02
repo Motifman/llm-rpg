@@ -42,6 +42,14 @@ from ai_rpg_world.domain.world_graph.value_object.game_end_condition import (
     GameEndCondition,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.enum.game_result_enum import (
+    GameResultEnum,
+)
+
+#: この単体試験は「成立したか」だけを見る。勝敗はシナリオがどちらの
+#: リストに書いたかで決まるので、ここでは片側に固定して構わない。
+_SIDE = GameResultEnum.LOSE
+
 
 _CREW_A, _CREW_B, _KEEPER = PlayerId(1), PlayerId(2), PlayerId(3)
 _ALL = [_CREW_A, _CREW_B, _KEEPER]
@@ -86,6 +94,7 @@ def _evaluate(condition, outcomes, states=None):
         None,
         player_states=_ROLES if states is None else states,
         player_outcomes=outcomes,
+        result_on_match=_SIDE,
     )
 
 
@@ -186,7 +195,8 @@ class TestMissingInputsFailLoudly:
                 _graph(), _condition(), frozenset(), _ALL, None,
                 player_states=None,
                 player_outcomes=_outcomes(),
-            )
+        result_on_match=_SIDE,
+    )
 
     def test_missing_outcomes_raises(self) -> None:
         """player_outcomes が渡っていなければ例外にする。"""
@@ -195,7 +205,8 @@ class TestMissingInputsFailLoudly:
                 _graph(), _condition(), frozenset(), _ALL, None,
                 player_states=_ROLES,
                 player_outcomes=None,
-            )
+        result_on_match=_SIDE,
+    )
 
 
 class TestConditionValidation:
