@@ -66,7 +66,10 @@ from ai_rpg_world.domain.world_graph.value_object.discovery_condition import Dis
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
-from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
+from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
+    CALL_MEETING_EFFECT_TRIGGERS,
+    InteractionEffect,
+)
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.reactive_object_state_binding import (
     ReactiveObjectStateBinding,
@@ -2086,6 +2089,14 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     "DEPOSIT_ITEM_TO_OBJECT parameters.quantity must be a "
                     f"positive integer or 'all' (got {quantity!r})"
+                )
+        if effect_type is InteractionEffectTypeEnum.CALL_MEETING:
+            trigger = params.get("trigger")
+            if trigger not in CALL_MEETING_EFFECT_TRIGGERS:
+                raise ScenarioLoadError(
+                    "CALL_MEETING parameters.trigger must be one of "
+                    f"{sorted(CALL_MEETING_EFFECT_TRIGGERS)!r} "
+                    f"(got {trigger!r})"
                 )
         # TELEPORT_ENTITY は行き先が無いと domain 側で「spot_id <= 0 なら spec を
         # 作らない」に落ち、書いたのに何も起きない静かな失敗になる。行き先は

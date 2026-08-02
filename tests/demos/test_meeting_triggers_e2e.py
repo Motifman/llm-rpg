@@ -62,6 +62,12 @@ class TestEmergencyButton:
         assert result.success is True
         assert runtime._game_phase_store.current.phase is GamePhase.MEETING
 
+    def test_requested_trigger_is_recorded_in_the_phase(self, runtime) -> None:
+        """招集入口へ渡したtriggerは固定値で上書きせず、会議状態に記録する。"""
+        runtime.call_emergency_meeting(_KUZE, trigger="scenario_alarm")
+
+        assert runtime._game_phase_store.current.trigger == "scenario_alarm"
+
     def test_the_card_is_spent(self, runtime) -> None:
         """一度押すと持ち札が減る。"""
         runtime.call_emergency_meeting(_KUZE)

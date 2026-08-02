@@ -140,6 +140,7 @@ class SpotInteractionApplicationService:
         ] = {}
         self._player_display_name_resolver = player_display_name_resolver
         self._effective_lighting_resolver = effective_lighting_resolver
+        self._meeting_caller: Optional[Callable[[PlayerId, str], Any]] = None
 
     def set_effective_lighting_resolver(self, resolver: Optional[Any]) -> None:
         """PR 3: 実効照明 resolver を後付け bind する (二段構築用)。"""
@@ -171,12 +172,15 @@ class SpotInteractionApplicationService:
         """
         self._weather_type_provider = provider
 
-    def set_meeting_caller(self, caller: Optional[Any]) -> None:
+    def set_meeting_caller(
+        self,
+        caller: Optional[Callable[[PlayerId, str], Any]],
+    ) -> None:
         """CALL_MEETING effect を実際の招集につなぐ callback を差す。
 
         誰を集めるか / フェーズをどう遷移させるかは application 層の判断な
         ので、domain の effect service には持たせない。runtime 組み立て時に
-        `runtime.call_emergency_meeting` を差す。
+        第二引数で effect が宣言した trigger を渡す。
         """
         self._meeting_caller = caller
 
@@ -388,14 +392,14 @@ class SpotInteractionApplicationService:
         # 同じ轍を踏まないよう、宣言されたのに招集できない構成は例外で止める。
         meeting_messages: list[str] = []
         if result.meeting_call_triggers:
-            caller = getattr(self, "_meeting_caller", None)
+            caller = self._meeting_caller
             if caller is None:
                 raise ApplicationException(
                     "CALL_MEETING が宣言されていますが、招集の配線 "
                     "(set_meeting_caller) がありません。"
                 )
-            for _trigger in result.meeting_call_triggers:
-                outcome = caller(player_id)
+            for trigger in result.meeting_call_triggers:
+                outcome = caller(player_id, trigger)
                 # **拒否されたら黙って飲み込まない。** ボタンは持ち札 1 回 /
                 # クールダウンつきなので、押しても始まらないことがある。
                 # 何も返さないと「押した。以上」だけが残り、なぜ集まらな

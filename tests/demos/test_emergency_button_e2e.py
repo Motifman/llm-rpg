@@ -19,6 +19,7 @@ TELEPORT_ENTITY は長らく「spec を組み立てるだけで消費者が居�
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -58,6 +59,30 @@ class TestPressingTheButton:
         _press(runtime, _KUZE)
 
         assert runtime._game_phase_store.current.phase is GamePhase.MEETING
+
+    def test_effect_result_trigger_reaches_the_callback(
+        self,
+        runtime,
+        monkeypatch,
+    ) -> None:
+        """効果結果のtriggerは固定値に置き換えずapplicationのcallbackへ渡す。"""
+        execute = runtime._interaction_service._interaction.execute_interaction
+        monkeypatch.setattr(
+            runtime._interaction_service._interaction,
+            "execute_interaction",
+            lambda *args, **kwargs: replace(
+                execute(*args, **kwargs),
+                meeting_call_triggers=("scenario_alarm",),
+            ),
+        )
+        received = []
+        runtime._interaction_service.set_meeting_caller(
+            lambda player_id, trigger: received.append((player_id, trigger))
+        )
+
+        _press(runtime, _KUZE)
+
+        assert received == [(_KUZE, "scenario_alarm")]
 
     def test_everyone_gathers_at_the_button(self, runtime) -> None:
         """押した人の場所に全員が集まる。

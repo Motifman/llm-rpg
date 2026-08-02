@@ -2524,7 +2524,12 @@ class WorldRuntime:
             )
         return True
 
-    def call_emergency_meeting(self, player_id: PlayerId):
+    def call_emergency_meeting(
+        self,
+        player_id: PlayerId,
+        *,
+        trigger: str = "emergency_button",
+    ):
         """緊急ボタンで会議を招集する。
 
         押せないときは理由を文で返す。返さないと LLM は同じ手を繰り返す
@@ -2573,7 +2578,8 @@ class WorldRuntime:
         store.consume_emergency_button(player_id)
         self._gather_for_meeting(player_id)
         self.begin_meeting(
-            initiator_player_id=player_id, trigger="emergency_button"
+            initiator_player_id=player_id,
+            trigger=trigger,
         )
         return LlmCommandResultDto(success=True, message="緊急招集をかけた。")
 
@@ -5578,7 +5584,10 @@ def create_world_runtime(
     # CALL_MEETING effect を実際の招集につなぐ。宣言していないシナリオでは
     # runtime 側が MEETING_NOT_AVAILABLE で拒否するので、ここは常に差してよい。
     interaction_service.set_meeting_caller(
-        lambda player_id: runtime.call_emergency_meeting(player_id)
+        lambda player_id, trigger: runtime.call_emergency_meeting(
+            player_id,
+            trigger=trigger,
+        )
     )
     player_interaction_service.set_effective_lighting_resolver(
         _effective_lighting_resolver
