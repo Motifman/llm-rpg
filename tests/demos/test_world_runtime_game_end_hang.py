@@ -31,7 +31,7 @@ class TestGameEndShortCircuit:
         wiring = state.llm_wiring
         trigger = wiring.llm_turn_trigger
 
-        # シナリオの outcome_resolution_config に依存しないよう check_game_end
+        # シナリオの終了条件宣言に依存しないよう check_game_end
         # を直接 mock する (= 「全員終了したと runtime が報告した」状態)。
         ended_result = MagicMock()
         ended_result.is_ended = True

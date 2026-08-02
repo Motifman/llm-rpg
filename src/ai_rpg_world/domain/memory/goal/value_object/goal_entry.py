@@ -8,8 +8,8 @@ seed 直後は従来の静的テキストと同一)。
 
 - status: active | achieved | abandoned | superseded
   (belief と違い、改訂できるのは意識 (G2) だけ。無意識は監査するが書かない)
-- locked: True なら意識 (G2) でも改訂不可。seed 時の値はシナリオが勝敗条件
-  (win/lose や outcome_resolution) を宣言しているかに連動する
+- locked: True なら意識 (G2) でも改訂不可。seed 時の値はシナリオが終了条件
+  (win/lose/end や player_outcome_rules) を宣言しているかに連動する
   (``world_runtime._scenario_has_goal``): 勝敗条件のあるシナリオは
   locked=True (従来どおり、達成/失敗はシナリオの終了条件が決める)。勝敗条件
   を持たない open world は locked=False (エージェント自身が goal_update /

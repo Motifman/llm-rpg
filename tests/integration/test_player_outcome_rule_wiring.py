@@ -15,7 +15,6 @@ _SOURCE = Path("data/scenarios/survival_island_v4_coop.json")
 
 def _declared_scenario(tmp_path: Path) -> Path:
     raw = json.loads(_SOURCE.read_text(encoding="utf-8"))
-    raw.pop("outcome_resolution")
     raw["player_outcome_rules"] = [
         {
             "id": "rescue_ship_144",

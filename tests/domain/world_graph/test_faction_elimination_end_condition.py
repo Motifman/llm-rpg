@@ -247,22 +247,11 @@ class TestConditionValidation:
             )
 
 
-class TestOutcomeResolutionAndEndConditionsCannotCoexist:
-    """outcome_resolution と game_end_conditions の同時宣言を読み込み時に落とす。
-
-    ``outcome_resolution`` を宣言したシナリオでは、runtime は「全員の outcome が
-    確定したら終わり」だけを見る経路に分岐し、**win / lose 条件を一切評価
-    しない** (`WorldRuntime.check_game_end`)。
-
-    両方書けてしまうと、陣営の敗北条件を書いたのに永久に成立しない。しかも
-    その状態は「まだゲームが続いている」と区別が付かないので、実 run が最後
-    まで走り切ってから気付くことになる。**この機能が乗りそうなのは協力・
-    裏切り系のシナリオ (`*_coop`) で、それらはまさに outcome_resolution を
-    使っている**ため、放置すると踏む可能性が高い。
-    """
+class TestRemovedOutcomeResolutionFormat:
+    """個人結果は宣言型規則だけを入口とし、廃止形式を読み込まない。"""
 
     def test_declaring_both_fails_to_load(self) -> None:
-        """両方書いたシナリオは ScenarioLoadError で落ちる。"""
+        """廃止形式は game_end_conditions の有無にかかわらず拒否する。"""
         import copy
 
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
@@ -292,24 +281,3 @@ class TestOutcomeResolutionAndEndConditionsCannotCoexist:
             ScenarioLoader().load_from_dict(scenario)
 
         assert "outcome_resolution" in str(exc_info.value)
-
-    def test_outcome_resolution_alone_still_loads(self) -> None:
-        """outcome_resolution だけなら従来どおり読める (既存シナリオは不変)。"""
-        import copy
-
-        from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
-        from tests.infrastructure.scenario.test_scenario_loader import (
-            _minimal_scenario,
-        )
-
-        scenario = copy.deepcopy(_minimal_scenario())
-        scenario["outcome_resolution"] = {
-            "stranded_at_tick": 100,
-            "summit_spot": "room_a",
-            "signal_fire_flag": "signal",
-        }
-        scenario["game_end_conditions"] = {"win": [], "lose": []}
-
-        result = ScenarioLoader().load_from_dict(scenario)
-
-        assert result.outcome_resolution_config is not None

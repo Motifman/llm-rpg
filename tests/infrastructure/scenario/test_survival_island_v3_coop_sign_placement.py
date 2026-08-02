@@ -157,8 +157,14 @@ class TestSignPlacementDoesNotTouchDifficulty:
         assert qty == {"driftwood": 3, "dry_leaves": 2, "flint": 1}
 
     def test_rescue_ticks_unchanged(self, loaded) -> None:
-        assert loaded.outcome_resolution_config.rescue_at_ticks == (144, 192)
-        assert loaded.outcome_resolution_config.stranded_at_tick == 240
+        assert tuple(
+            rule.trigger.tick for rule in loaded.player_outcome_rules
+            if rule.outcome.value == "RESCUED"
+        ) == (144, 192)
+        assert next(
+            rule.trigger.tick for rule in loaded.player_outcome_rules
+            if rule.outcome.value == "STRANDED"
+        ) == 240
 
     def test_estimated_ticks_unchanged(self, loaded) -> None:
         assert loaded.metadata.estimated_ticks == 240
@@ -170,9 +176,15 @@ class TestBaseScenariosNotModified:
     def test_v2_unchanged(self) -> None:
         v2 = ScenarioLoader().load_from_file(str(_V2_PATH))
         assert v2.metadata.estimated_ticks == 384
-        assert v2.outcome_resolution_config.rescue_at_ticks == (192, 288, 336)
+        assert tuple(
+            rule.trigger.tick for rule in v2.player_outcome_rules
+            if rule.outcome.value == "RESCUED"
+        ) == (192, 288, 336)
 
     def test_v2_short_unchanged(self) -> None:
         short = ScenarioLoader().load_from_file(str(_V2_SHORT_PATH))
         assert short.metadata.estimated_ticks == 192
-        assert short.outcome_resolution_config.rescue_at_ticks == (96, 144)
+        assert tuple(
+            rule.trigger.tick for rule in short.player_outcome_rules
+            if rule.outcome.value == "RESCUED"
+        ) == (96, 144)
