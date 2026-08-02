@@ -166,6 +166,22 @@ class TestTakeFromFallenPlayer:
         assert spec_id in _owned_spec_ids(runtime, _ACTOR)
         assert spec_id not in _owned_spec_ids(runtime, _VICTIM)
 
+    def test_action_result_uses_declared_display_label(self, runtime) -> None:
+        """対人行為の直近記録もaction_nameでなくシナリオの意味表示を使う。"""
+        _, item_name = _give_victim_an_item(runtime)
+        _knock_out(runtime, _VICTIM)
+
+        result = runtime.do_interact_with_player(
+            _ACTOR,
+            _VICTIM,
+            "loot_from_downed",
+            interaction_parameters={"item": item_name},
+        )
+
+        entry = runtime._action_result_store.get_recent(_ACTOR, 1)[0]
+        assert result.action_display_label == "持ち物を奪う"
+        assert entry.action_summary == "「リン」に対して「持ち物を奪う」"
+
     def test_standing_player_cannot_be_looted(self, runtime) -> None:
         """起きて動いている相手からは奪えない。
 

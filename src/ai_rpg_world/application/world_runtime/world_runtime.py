@@ -2296,21 +2296,6 @@ class WorldRuntime:
 
     # ── アクション実行 ──
 
-    @staticmethod
-    def _interaction_action_label_ja(action_name: str) -> str:
-        key = (action_name or "").strip().lower()
-        known = {
-            "open": "開く",
-            "close": "閉じる",
-            "examine": "調べる",
-            "search": "探す",
-            "read": "読む",
-            "use": "使う",
-            "push": "押す",
-            "pull": "引く",
-        }
-        return known.get(key, action_name or "操作")
-
     def _object_display_name_at_player_spot(
         self, player_id: PlayerId, object_str_id: str,
     ) -> str:
@@ -2342,13 +2327,12 @@ class WorldRuntime:
         obj_int = self.id_mapper.get_int("object", object_str_id)
         obj_id = SpotObjectId.create(obj_int)
         obj_label = self._object_display_name_at_player_spot(player_id, object_str_id)
-        action_ja = self._interaction_action_label_ja(action_name)
         # NOTE: graph / entity_id / spot_id / display_label /
         # witness_observation_message をここで引き直していたが、それらは 2 件目の
         # SpotObjectInteractedEvent を組み立てるためだけに使われていた。その発火は
         # 下記 NOTE のとおり削除したので、引き直しも不要になった (canonical な
-        # 解決は SpotInteractionApplicationService 側が行う)。obj_label /
-        # action_ja は _record_action_result 用なので残す。
+        # 解決は SpotInteractionApplicationService 側が行う)。obj_label は
+        # _record_action_result 用なので残し、行動表示は実行結果から受け取る。
         # 備蓄プール (OBJECT_STOCK_AT_LEAST / CONSUME_OBJECT_STOCK) の lazy 再生は
         # 現在 tick が無いと働かない。LLM の採取主経路 (spot_graph_interact →
         # do_interact) はここを通るので、current_tick を必ず渡す。渡し忘れると
@@ -2359,6 +2343,7 @@ class WorldRuntime:
             interaction_parameters=interaction_parameters,
             current_tick=WorldTick(self.current_tick()),
         )
+        action_display_label = result.action_display_label
         result_text = "; ".join(result.messages) if result.messages else "完了"
         # NOTE: ここで SpotObjectInteractedEvent を積んではいけない。
         # `SpotInteractionApplicationService.execute_interaction` が既に同じ
@@ -2377,7 +2362,7 @@ class WorldRuntime:
         # しか判定できない)。fail 検出経路がドメイン側に出来るまで暫定で True 固定。
         self._record_action_result(
             player_id,
-            f"「{obj_label}」に対して{action_ja}を行った",
+            f"「{obj_label}」で「{action_display_label}」",
             result_text,
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
             inner_thought=inner_thought,
@@ -2855,10 +2840,9 @@ class WorldRuntime:
             ),
             f"プレイヤー({int(target_player_id)})",
         )
-        action_ja = self._interaction_action_label_ja(action_name)
         self._record_action_result(
             actor_player_id,
-            f"「{target_label}」に対して{action_ja}を行った",
+            f"「{target_label}」に対して「{result.action_display_label}」",
             "; ".join(result.messages) if result.messages else "完了",
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
             inner_thought=inner_thought,

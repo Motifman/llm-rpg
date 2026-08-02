@@ -27,6 +27,7 @@ class InteractionExecutionResult:
     new_interior: SpotInterior
     new_flags: FrozenSet[str]
     messages: Tuple[str, ...]
+    action_display_label: str
     item_spec_ids_to_grant: Tuple[ItemSpecId, ...]
     item_spec_ids_to_remove: Tuple[ItemSpecId, ...]
     # クロスドメイン効果（WorldGraphEffectResult から伝播）

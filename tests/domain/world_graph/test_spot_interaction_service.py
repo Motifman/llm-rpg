@@ -73,6 +73,35 @@ class TestSpotInteractionService:
         assert r.new_interior.get_object(SpotObjectId.create(1)).state["open"] is True
         assert "開いた" in r.messages
         assert r.new_flags == frozenset()
+        assert r.action_display_label == "開ける"
+
+    def test_blank_display_label_falls_back_to_action_name(self):
+        """loaderを迂回した空ラベルでも、結果表示は落ちずaction_nameへ戻る。"""
+        obj = SpotObject(
+            object_id=SpotObjectId.create(2),
+            name="操作盤",
+            description="",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={},
+            interactions=(
+                InteractionDef(
+                    action_name="inspect_panel",
+                    display_label="  ",
+                    preconditions=(),
+                    effects=(),
+                ),
+            ),
+        )
+
+        result = SpotInteractionService().execute_interaction(
+            _make_interior(obj),
+            SpotObjectId.create(2),
+            "inspect_panel",
+            frozenset(),
+            frozenset(),
+        )
+
+        assert result.action_display_label == "inspect_panel"
 
     def test_execute_without_key_raises(self):
         interior = _make_interior(_door_object())

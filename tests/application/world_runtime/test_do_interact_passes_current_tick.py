@@ -46,14 +46,30 @@ def _fake_runtime() -> MagicMock:
     interior = MagicMock()
     interior.get_object.return_value = obj
     rt._spot_interior_repo.find_by_spot_id.return_value = interior
-    rt._interaction_service.execute_interaction.return_value = MagicMock(messages=[])
+    rt._interaction_service.execute_interaction.return_value = MagicMock(
+        messages=[],
+        action_display_label="貝を採る",
+    )
     rt.current_tick.return_value = 42
     rt._object_display_name_at_player_spot.return_value = "貝の岩棚"
-    rt._interaction_action_label_ja.return_value = "採る"
     return rt
 
 
 class TestDoInteractPassesCurrentTick:
+    def test_declared_display_label_is_used_in_action_result(self) -> None:
+        """直近の出来事にはaction_nameでなく実行したInteractionDefの意味表示を残す。"""
+        rt = _fake_runtime()
+
+        WorldRuntime.do_interact(
+            rt,
+            PlayerId(1),
+            "shellfish_rocks",
+            "gather_shellfish",
+        )
+
+        action_summary = rt._record_action_result.call_args.args[1]
+        assert action_summary == "「貝の岩棚」で「貝を採る」"
+
     def test_current_tick_forwarded_to_execute_interaction(self) -> None:
         """do_interact は execute_interaction に WorldTick(current_tick()) を渡す。"""
         rt = _fake_runtime()
