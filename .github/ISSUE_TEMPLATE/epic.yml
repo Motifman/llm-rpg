@@ -1,0 +1,79 @@
+name: 大型機能計画
+description: 複数の Issue と PR に分割する大型機能の目的と完了条件を定義します。
+title: "feat: "
+labels:
+  - kind:epic
+body:
+  - type: markdown
+    attributes:
+      value: |
+        この Issue 自体を一つの PR で実装せず、子 Issue の目的・依存関係・進捗を集約してください。
+
+  - type: textarea
+    id: why
+    attributes:
+      label: なぜ必要か
+      description: 現状できないことと、先送りした場合に困ることを具体的に書いてください。
+      placeholder: 現状は…のため、利用者は…を確認できない。このままでは…が難しい。
+    validations:
+      required: true
+
+  - type: textarea
+    id: experience
+    attributes:
+      label: 実現したい体験
+      description: 完成後に利用者やAIエージェントが何をできるようになるかを書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: success
+    attributes:
+      label: 成功条件
+      description: 大型機能全体が完了したと判断できる、観測可能な条件をチェックリストで書いてください。
+      placeholder: |
+        - [ ] …を公開入口から確認できる
+        - [ ] 失敗時に…が trace へ残る
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: 非目標
+      description: この大型機能では扱わないことを明示してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: principles
+    attributes:
+      label: 設計原則と制約
+      description: 関連する設計判断、守るべき入口、互換性、性能、運用上の制約を書いてください。
+      placeholder: docs/design_decisions.md の #…、docs/agent_design_principles.md の…に従う。
+    validations:
+      required: true
+
+  - type: textarea
+    id: phases
+    attributes:
+      label: 分割案
+      description: 子 Issue に切り出す段階と、各段階が独立して価値を持つ理由を書いてください。
+      placeholder: |
+        1. 契約を固定する
+        2. 最小の実装経路を通す
+        3. 結合試験と観測性を追加する
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 依存関係
+      description: 着手不能にする依存だけを `Blocked by #123` の形式で書いてください。推奨順序は分割案へ書きます。
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: 未解決事項とリスク
+      description: 追加の設計判断が必要な点、検証が必要な仮説、外部条件を書いてください。

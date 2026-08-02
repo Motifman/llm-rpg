@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 設計原則を確認する
+    url: https://github.com/Motifman/llm-rpg/blob/main/docs/agent_design_principles.md
+    about: 新しい機能や世界の振る舞いを設計する前に確認してください。
+  - name: Issue 運用ルールを確認する
+    url: https://github.com/Motifman/llm-rpg/blob/main/docs/project_management.md
+    about: 親子関係、依存関係、着手可能条件の使い分けを確認してください。

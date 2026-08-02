@@ -1,0 +1,96 @@
+name: 実験
+description: 仮説、再現可能な実験条件、観測点、判定基準を固定します。
+title: "experiment: "
+labels:
+  - kind:experiment
+body:
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: 仮説
+      description: 何を変えると、どの観測値や振る舞いが、なぜ変わると予想するかを書いてください。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: run_type
+    attributes:
+      label: run の型
+      options:
+        - 探索
+        - 観察
+        - 比較
+    validations:
+      required: true
+
+  - type: input
+    id: profile
+    attributes:
+      label: 実験 profile
+      placeholder: belief_goal_full
+    validations:
+      required: true
+
+  - type: input
+    id: scenario
+    attributes:
+      label: scenario
+      description: profile 既定を使う場合も、その旨を書いてください。
+      placeholder: profile 既定
+    validations:
+      required: true
+
+  - type: input
+    id: max_ticks
+    attributes:
+      label: 最大 world tick
+      placeholder: "200"
+    validations:
+      required: true
+
+  - type: textarea
+    id: traces
+    attributes:
+      label: 見たい trace
+      description: 発火、効果判断に必要な値、未発火理由を列挙してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: criteria
+    attributes:
+      label: 判定基準
+      description: 仮説を支持・棄却・保留とする条件を実行前に決めてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: smoke
+    attributes:
+      label: 低コスト確認
+      description: 本命 run 前に profile 読み込み、fail-fast、trace 配線を確認するコマンドを書いてください。
+      render: shell
+      placeholder: make experiment EXPERIMENT_PROFILE=smoke_stub OUT=/tmp/llm-rpg-smoke
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: 本命 run
+      description: 実験条件を再現できるコマンドを書いてください。
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: 確認する成果物
+      description: resolved config、trace、report など、判断に使うファイルと確認内容を書いてください。
+      placeholder: |
+        - experiment.config.resolved.json: profile、scenario hash、tick数
+        - trace.jsonl: …の発火と未発火理由
+        - report.md: …の集計
+    validations:
+      required: true

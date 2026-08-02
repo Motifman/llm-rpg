@@ -1,0 +1,105 @@
+name: 実装タスク
+description: 原則として一つの PR で完了する、独立した振る舞いを定義します。
+title: "feat: "
+labels:
+  - kind:task
+body:
+  - type: textarea
+    id: why
+    attributes:
+      label: なぜ必要か
+      description: 親 Issue の説明を繰り返さず、この単位を今切り出す理由を書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 実現する振る舞い
+      description: 入力、処理、利用者から観測できる結果を具体的に書いてください。
+    validations:
+      required: true
+
+  - type: input
+    id: parent
+    attributes:
+      label: 親 Issue
+      description: "`#123` の形式で書き、作成後に GitHub の親子関係も設定してください。"
+      placeholder: "#925"
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 依存関係
+      description: 着手不能にする依存だけを `Blocked by #123` の形式で書いてください。無ければ「なし」と書きます。
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 変更範囲
+      description: 所有する層、バウンデッドコンテキスト、主要ファイル、公開入口を書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: 対象外
+      description: 隣接するがこの PR に含めない変更を書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: 設計上の制約
+      description: 関連する設計判断、既存契約、避けるべき静かな失敗を書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: test_list
+    attributes:
+      label: テストリスト
+      description: Red → Green で一件ずつ進められる振る舞いをチェックリストにしてください。
+      placeholder: |
+        - [ ] 条件Aのとき結果Bになる
+        - [ ] 条件Cのとき理由Dを伴って失敗する
+    validations:
+      required: true
+
+  - type: textarea
+    id: observability
+    attributes:
+      label: trace と観測性
+      description: 発火、効果判断の値、未発火理由をどこで確認できるかを書いてください。不要なら理由を書きます。
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: 完了条件
+      description: コードを読まずに完了を判定できる条件と検証コマンドを書いてください。
+      placeholder: |
+        - [ ] 公開入口から…を確認できる
+        - [ ] `uv run pytest tests/...` が成功する
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: ready
+    attributes:
+      label: AIエージェントへ渡せる状態
+      description: すべて満たしたら `agent-ready` を付けます。
+      options:
+        - label: 依存が解消され、追加の設計判断なしに着手できる
+          required: true
+        - label: 他の作業と競合しない所有範囲が明確である
+          required: true
+        - label: 完了条件と検証方法が具体的である
+          required: true

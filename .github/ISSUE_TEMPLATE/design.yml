@@ -1,0 +1,73 @@
+name: 設計判断
+description: 実装前に契約・責務・選択肢を比較し、採用方針を確定します。
+title: "design: "
+labels:
+  - kind:design
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: 決めたいこと
+      description: この Issue を閉じると何が確定するのか、一つの問いとして書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: 背景と現状
+      description: 現在の経路、既存の制約、判断が必要になったきっかけを書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: 選択肢
+      description: 各案の利点・欠点・失敗時の見え方を比較してください。
+      placeholder: |
+        ### 案A
+        - 利点:
+        - 欠点:
+        - 失敗の検出方法:
+    validations:
+      required: true
+
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: 推奨案と理由
+      description: 採用したい案と、他案を採らない理由を書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: contracts
+    attributes:
+      label: 固定する契約・不変条件
+      description: 型、責務の境界、順序、失敗の扱い、観測点を具体的に書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: 判断を確かめる方法
+      description: 小さな試作、試験、trace、計測値など、判断の妥当性を確かめる方法を書いてください。
+    validations:
+      required: true
+
+  - type: input
+    id: parent
+    attributes:
+      label: 親 Issue
+      description: 大型機能の一部なら `#123` の形式で書いてください。
+      placeholder: "#925"
+
+  - type: checkboxes
+    id: decision_record
+    attributes:
+      label: 完了時の記録
+      options:
+        - label: 新しい設計判断を `docs/design_decisions.md` または該当文書へ反映する
+          required: true
