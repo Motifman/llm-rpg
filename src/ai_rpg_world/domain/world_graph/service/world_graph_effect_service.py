@@ -155,7 +155,7 @@ def _resolve_visibility(effect: InteractionEffect) -> EffectVisibility:
                     raw,
                     effect.effect_type.value,
                 )
-    return _DEFAULT_VISIBILITY.get(effect.effect_type, EffectVisibility.ACTOR_DIRECT)
+    return _DEFAULT_VISIBILITY[effect.effect_type]
 
 
 _MISSING = object()
