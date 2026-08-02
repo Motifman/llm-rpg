@@ -26,7 +26,7 @@ class GameEndConditionEvaluator:
         player_ids: Sequence[PlayerId],
         player_states: Optional[Mapping[int, Mapping[str, Any]]],
         player_outcomes: Optional[Mapping[int, PlayerOutcomeEnum]],
-        result_on_match: GameResultEnum,
+        result_on_match: Optional[GameResultEnum],
     ) -> GameEndResult:
         """``required_state`` を満たす生存者が閾値以下かを判定する。
 
@@ -87,7 +87,8 @@ class GameEndConditionEvaluator:
         # (勝敗が永久に成立しないまま実験が走り続けるのを避ける)。
         player_states: Optional[Mapping[int, Mapping[str, Any]]] = None,
         player_outcomes: Optional[Mapping[int, PlayerOutcomeEnum]] = None,
-        # 成立したときに返す勝敗。**呼び出し側が決める。**
+        # 成立したときに返す勝敗。**呼び出し側が決める。** 中立の ``end``
+        # 配列だけは None を明示し、個人結果の混在を WIN / LOSE に畳まない。
         #
         # 以前は条件の型ごとに固定していた (陣営全滅なら LOSE、フラグ成立なら
         # WIN)。そのため win に書いた陣営条件が LOSE として返り、**インポスター
@@ -97,7 +98,7 @@ class GameEndConditionEvaluator:
         # 型は「何が起きたか」しか表さない。それが勝ちか負けかは、シナリオが
         # どちらのリストに書いたかで決まる。既定値を置かないのは、新しい
         # 呼び出し側が黙ってどちらかに倒れるのを防ぐため。
-        result_on_match: GameResultEnum,
+        result_on_match: Optional[GameResultEnum],
     ) -> GameEndResult:
         t = condition.condition_type
         if t == GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST:
