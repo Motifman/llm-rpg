@@ -2,6 +2,8 @@
 
 エージェント数や世界の規模を増やしていく前提で「いま壁になっていること」「どの順で解いていくか」をまとめた作業ノート。会話内で議論した内容を散逸させないために永続化する。実装はまだ着手していない (このドキュメントは設計段階)。
 
+> **上位アーキテクチャ（MMO サーバ・外部エージェント・マルチワールド）**: [agent_continuity_roadmap/mmo_world_server_architecture.md](./agent_continuity_roadmap/mmo_world_server_architecture.md)
+
 ## 文脈
 
 - 4 人のエージェントが survival_island_v2 を最大 14 日 (140-336 tick) 走る前提のシナリオを評価中
