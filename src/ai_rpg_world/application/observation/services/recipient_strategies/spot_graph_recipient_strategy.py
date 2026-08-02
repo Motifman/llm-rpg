@@ -268,26 +268,14 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             # monster の入退場 (= 自分が聞いた音) は player 観測しない。
             self._resolve_known_player_entity(event.entity_id, add)
 
-        # Issue #621 Phase 4: 倒れている (is_down=True) player は LLM ターンが
-        # 回らず観測を消化できない。revive 時に observation_buffer を clear
-        # する仕様 (= 復活直前の他者発話を引きずらない) と整合させるため、
-        # 最初から recipient に含めない。speech 等 ConversationRecipientStrategy
-        # 経路のイベントはこの strategy を通らないので、別経路で同等の制御
-        # (= 必要ならその strategy 側で除外) を入れる。
-        return [pid for pid in result if not self._is_player_down(pid)]
-
-    def _is_player_down(self, player_id: PlayerId) -> bool:
-        """``player_id`` の player が ``is_down=True`` か。
-
-        ``is_down`` はドメイン上 bool。MagicMock 等で非 bool が返った場合は
-        「down ではない」扱いにする (= 観測を届ける fail-safe)。これにより
-        既存の MagicMock ベースのテストは is_down を明示しない限り影響を
-        受けない。
-        """
-        status = self._player_status_repository.find_by_id(player_id)
-        if status is None:
-            return False
-        return getattr(status, "is_down", False) is True
+        # 倒れている player の除外は **resolver の出口** で行う
+        # (ObservationRecipientResolver._without_the_fallen)。
+        #
+        # かつてはここに書いていたが、上のコメント自身が「speech 等は別経路
+        # なので、必要ならその strategy 側で除外」と認めていて、**書かれない
+        # まま実 run 008 で漏れた** (死んだセナが生者の声を拾った)。
+        # strategy ごとに配ると、strategy を 1 つ足した人が忘れる。
+        return result
 
     def _resolve_known_player_entity(self, entity_id: EntityId, add) -> None:
         """`entity_id` が known player の ID と一致するなら recipient に追加。

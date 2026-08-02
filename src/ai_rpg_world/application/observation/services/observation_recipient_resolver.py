@@ -67,6 +67,13 @@ from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
 )
 
 
+#: 「自分のこと」と判断してよい event の集約種別。
+#:
+#: 倒れた / 復帰した は player 集約から出る。spot graph の event は
+#: aggregate_id が graph を指すので、ここに含めてはいけない。
+_PLAYER_AGGREGATE_TYPE = "PlayerStatusAggregate"
+
+
 class ObservationRecipientResolver(IObservationRecipientResolver):
     """
     ドメインイベントから観測の配信先プレイヤーID一覧を解決する。
@@ -77,16 +84,87 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
     def __init__(
         self,
         strategies: Sequence[IRecipientResolutionStrategy],
+        # 倒れている人を配信先から外すために要る。未注入なら外さない
+        # (この口を知らない既存の組み立て経路の挙動を変えないため)。
+        player_status_repository: Optional[PlayerStatusRepository] = None,
     ) -> None:
         self._strategies = list(strategies)
+        self._player_status_repository = player_status_repository
 
     def resolve(self, event: Any) -> List[PlayerId]:
         """イベント種別に応じて配信先を返す。観測対象外または未知のイベントは空リスト。"""
         for strategy in self._strategies:
             if strategy.supports(event):
                 raw = strategy.resolve(event)
-                return self._deduplicate(raw)
+                return self._without_the_fallen(event, self._deduplicate(raw))
         return []
+
+    def _without_the_fallen(self, event: Any, player_ids: List[PlayerId]) -> List[PlayerId]:
+        """倒れている人を、**自分以外のこと**の配信先から外す。
+
+        倒れている player は LLM ターンが回らず観測を消化できない。復帰時に
+        buffer を clear する仕様 (復活直前の他者発話を引きずらない) とも
+        整合しない。
+
+        ## なぜ strategy ではなくここに置くか
+
+        以前は SpotGraphRecipientStrategy の中だけにあった。当時のコメント
+        自身が「speech 等は別経路なので、必要ならその strategy 側で除外」と
+        認めていて、**実際に漏れていた**。実 run 008 で、死んだセナが t=5 に
+        生者の声を拾っている。
+
+        各 strategy に同じ判定を配ると、strategy を 1 つ足した人が忘れる。
+        **出口は 1 つしかないので、ここに置けば忘れようがない。**
+
+        ## 自分のことは届く
+
+        一律に落とすと、倒れた本人に「倒れて動けなくなりました」が届かなく
+        なる。復帰の通知も同じ。**規則は「倒れている人は周りのことを観測
+        しない」であって「何も観測しない」ではない。**
+
+        event の主体 (``aggregate_id``) と一致する相手だけは残す。
+        """
+        if not player_ids:
+            return player_ids
+        subject = self._subject_player_id(event)
+        return [
+            pid
+            for pid in player_ids
+            if pid.value == subject or not self._is_player_down(pid)
+        ]
+
+    @staticmethod
+    def _subject_player_id(event: Any) -> Optional[int]:
+        """その event が「誰のこと」か。player を指していなければ None。
+
+        **``aggregate_type`` を必ず見る。** spot graph の event は
+        ``aggregate_id`` が graph の id で、その値も int なので、見ないと
+        **graph の id と同じ番号の player が「主体」に化ける**。
+        graph id が 1 なら player 1 だけが観測を受け取り続ける、という
+        気付きにくい形になる。テストがこれを捕まえた。
+        """
+        if getattr(event, "aggregate_type", None) != _PLAYER_AGGREGATE_TYPE:
+            return None
+        value = getattr(getattr(event, "aggregate_id", None), "value", None)
+        return int(value) if isinstance(value, int) else None
+
+    def _is_player_down(self, player_id: PlayerId) -> bool:
+        """``player_id`` が倒れているか。
+
+        ``is_down`` はドメイン上 bool。非 bool が返った場合は「倒れていない」
+        扱いにして観測を届ける。塞ぐ側に倒すと、テスト用の代役を使った
+        既存テストが黙って観測を失う。
+        """
+        repository = getattr(self, "_player_status_repository", None)
+        if repository is None:
+            return False
+        try:
+            status = repository.find_by_id(player_id)
+        except Exception:
+            return False
+        if status is None:
+            return False
+        return getattr(status, "is_down", False) is True
 
     def _deduplicate(self, player_ids: List[PlayerId]) -> List[PlayerId]:
         """順序を保ちつつ重複を除去する。"""
@@ -221,4 +299,7 @@ def create_observation_recipient_resolver(
             spot_graph_repository=spot_graph_repository,
         ),
     ]
-    return ObservationRecipientResolver(strategies=strategies)
+    return ObservationRecipientResolver(
+        strategies=strategies,
+        player_status_repository=player_status_repository,
+    )

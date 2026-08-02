@@ -594,17 +594,46 @@ class TestSpotSoundHeardRecipientResolution:
 
 
 class TestDownPlayerExcluded:
-    """Issue #621 Phase 4: 倒れている (is_down=True) player は recipient から除外する。
+    """倒れている player は recipient から除外される。
 
     観測を届けてもダウン中の player は LLM ターンを回さないので消化されず、
     revive 時に observation_buffer を clear する仕様 (= 復活直前の他者発話を
-    引きずらない) と整合させるため、最初から届けないのが最も静かな実装。
+    引きずらない) と整合しない。
+
+    ## 判定は strategy ではなく resolver の出口にある
+
+    かつてはこの strategy の末尾で除外していた。当時のコメント自身が
+    「speech 等は別経路なので、必要ならその strategy 側で除外」と認めて
+    いて、**書かれないまま実 run 008 で漏れた** (死んだセナが生者の声を
+    拾った)。
+
+    strategy ごとに配ると、strategy を 1 つ足した人が忘れる。出口は 1 つ
+    しかないので、そこに置けば忘れようがない。**このクラスは strategy 単体
+    ではなく resolver 越しに見る。** strategy 単体を見ていると、判定が
+    どこにあっても通ってしまう。
     """
+
+    @staticmethod
+    def _resolve_through_resolver(strategy, event, down_player_ids):
+        from unittest.mock import MagicMock
+
+        from ai_rpg_world.application.observation.services.observation_recipient_resolver import (  # noqa: E501
+            ObservationRecipientResolver,
+        )
+
+        repository = MagicMock()
+        repository.find_by_id.side_effect = lambda pid: MagicMock(
+            is_down=int(pid) in down_player_ids
+        )
+        resolver = ObservationRecipientResolver(
+            strategies=[strategy], player_status_repository=repository
+        )
+        return {r.value for r in resolver.resolve(event)}
 
     def test_spot_down_player_actor_event(self):
         """drop 観測: 同 spot にいる元気な P2 と倒れた P3 がいるとき、
         recipient は P2 のみ。倒れた P3 は除外される。"""
-        strategy = _make_strategy({1: 1, 2: 1, 3: 1}, down_player_ids={3})
+        strategy = _make_strategy({1: 1, 2: 1, 3: 1})
         event = PlayerDroppedItemEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -614,13 +643,13 @@ class TestDownPlayerExcluded:
             item_spec_id=ItemSpecId.create(100),
             item_name="流木",
         )
-        ids = {r.value for r in strategy.resolve(event)}
-        assert ids == {2}
+
+        assert self._resolve_through_resolver(strategy, event, {3}) == {2}
 
     def test_all_players_event_down_player_excluded(self):
         """SpotObjectStateChangedEvent (actor_entity_id=None) は同 spot 全員に
         届く _resolve_all_at_spot 経路。倒れた player はここでも除外する。"""
-        strategy = _make_strategy({1: 1, 2: 1, 3: 1}, down_player_ids={2})
+        strategy = _make_strategy({1: 1, 2: 1, 3: 1})
         event = SpotObjectStateChangedEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -630,13 +659,13 @@ class TestDownPlayerExcluded:
             new_state={"available": False},
             actor_entity_id=None,
         )
-        ids = {r.value for r in strategy.resolve(event)}
-        assert ids == {1, 3}
+
+        assert self._resolve_through_resolver(strategy, event, {2}) == {1, 3}
 
     def test_down_player_actor_event_other(self):
         """down 中に actor になることは無い前提だが、防御的に: actor 自身は
         actor-exclude で除かれ、他者のうち down している人も除外される。"""
-        strategy = _make_strategy({1: 1, 2: 1, 3: 1}, down_player_ids={3})
+        strategy = _make_strategy({1: 1, 2: 1, 3: 1})
         event = SpotExploredEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -644,9 +673,9 @@ class TestDownPlayerExcluded:
             spot_id=SPOT_A,
             discoveries=("item",),
         )
-        ids = {r.value for r in strategy.resolve(event)}
+
         # P1 = actor 除外, P3 = down 除外 → P2 のみ残る
-        assert ids == {2}
+        assert self._resolve_through_resolver(strategy, event, {3}) == {2}
 
 
 class TestSupports:
