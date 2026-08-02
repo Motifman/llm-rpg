@@ -53,11 +53,30 @@ def _lighting_of(spot: Any) -> str:
     return _LIGHTING_TEXT.get(str(key), "")
 
 
-def build_world_map_text(spots: Sequence[Any], connections: Sequence[Any]) -> str:
-    """部屋の隣接と移動 tick を 1 節にまとめる。空なら空文字。
+def build_world_map_text(
+    spots: Sequence[Any],
+    connections: Sequence[Any],
+    *,
+    minutes_per_tick: Optional[int] = None,
+) -> str:
+    """部屋の隣接と、そこへ移るのにかかる時間を 1 節にまとめる。空なら空文字。
 
-    座標は出さない。**プレイヤーが使うのは「隣か / 何 tick か」だけ**で、
+    座標は出さない。**プレイヤーが使うのは「隣か / どれだけかかるか」だけ**で、
     x/y を出しても engine の内部表現が漏れるだけになる。
+
+    ## 単位は世界の時計に揃える
+
+    最初は ``機関室 1`` と数字だけを並べ、脚注で「tick 数」と説明していた。
+    **数字より後ろに説明があるので、読む時点では意味が分からない。**
+    個数にも識別子にも読める。しかも ``tick`` は engine の語彙で、世界の
+    中に無い単位 (#892)。
+
+    エージェントは毎ターン「現在時刻: 深夜 0:05」を見ている。同じ分単位で
+    書けば、**アリバイの検算がそのままできる**。「0:10 に出たなら 0:15 に
+    しか着けない」。
+
+    ``minutes_per_tick`` が渡らない世界 (時計を宣言していない) では、
+    数えられる単位で書く。engine の tick は出さない。
     """
     if not spots:
         return ""
@@ -97,11 +116,21 @@ def build_world_map_text(spots: Sequence[Any], connections: Sequence[Any]) -> st
             lines.append(f"{head} — 行き来できる先は無い")
             continue
         rendered = " / ".join(
-            f"{name_by_id.get(other, other)} {ticks}" for other, ticks in exits
+            f"{name_by_id.get(other, other)} まで {_travel_cost_text(ticks, minutes_per_tick)}"
+            for other, ticks in exits
         )
         lines.append(f"{head} → {rendered}")
-    lines.append("  ※ 数字はその先へ移るのにかかる tick 数")
     return "\n".join(lines)
+
+
+def _travel_cost_text(ticks: int, minutes_per_tick: Optional[int]) -> str:
+    """移動にかかる時間を、その世界の言葉で書く。
+
+    **単位を必ず数字に添える。** 脚注に逃がすと、読む時点で意味が分からない。
+    """
+    if minutes_per_tick and minutes_per_tick > 0:
+        return f"{ticks * minutes_per_tick} 分"
+    return f"{ticks} 手ぶん"
 
 
 def build_duty_roster_text(
@@ -234,6 +263,7 @@ def build_world_briefing(
     connections: Sequence[Any],
     players: Sequence[Any],
     show_world_map: bool,
+    minutes_per_tick: Optional[int] = None,
     interiors: Any = None,
     role_labels: Optional[Dict[str, str]] = None,
     required_task_count: Optional[int] = None,
@@ -245,7 +275,9 @@ def build_world_briefing(
     """
     sections = [
         build_faction_summary_text(players, role_labels),
-        build_world_map_text(spots, connections) if show_world_map else "",
+        build_world_map_text(spots, connections, minutes_per_tick=minutes_per_tick)
+        if show_world_map
+        else "",
         build_duty_roster_text(
             players,
             spots,

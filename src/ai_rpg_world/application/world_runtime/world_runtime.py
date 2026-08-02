@@ -323,6 +323,29 @@ def _other_explorer_names_for_world_system_prompt(
     return tuple(s.name for s in spawns if s is not self_spawn)
 
 
+#: 昼夜サイクルを宣言していない世界の 1 tick あたりの分数。
+#:
+#: ``_time_label`` の後方互換フォールバックと同じ値。**別々に持つと、地図の
+#: 「5 分」と時計の進み方が静かにずれる。**
+_FALLBACK_MINUTES_PER_TICK = 5
+
+
+def _minutes_per_tick(scenario) -> Optional[int]:
+    """1 tick が世界の時計で何分か。
+
+    現在時刻の表示 (`深夜 0:05`) と同じ換算を使う。エージェントはその時計を
+    毎ターン見ているので、**同じ単位で書けばアリバイの検算がそのままできる**。
+
+    昼夜サイクルを宣言していない世界は ``_time_label`` と同じ 5 分/tick に
+    倒す。時計だけ進んで地図が別単位、という食い違いを作らない。
+    """
+    day_night = getattr(scenario, "day_night_config", None)
+    ticks_per_day = getattr(day_night, "ticks_per_day", None) if day_night else None
+    if isinstance(ticks_per_day, int) and ticks_per_day > 0:
+        return (24 * 60) // ticks_per_day
+    return _FALLBACK_MINUTES_PER_TICK
+
+
 def _required_task_count(scenario) -> Optional[int]:
     """勝利条件が要求する点検の数。宣言が無ければ None。
 
@@ -4041,6 +4064,7 @@ def create_world_runtime(
         connections=list(scenario.graph.all_connections()),
         players=scenario.player_spawns,
         show_world_map=metadata.show_world_map,
+        minutes_per_tick=_minutes_per_tick(scenario),
         interiors=scenario.interiors,
         role_labels=metadata.role_labels,
         required_task_count=_required_task_count(scenario),

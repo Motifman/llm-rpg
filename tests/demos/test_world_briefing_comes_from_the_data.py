@@ -117,16 +117,48 @@ class TestTheMapIsThereForSpatialReasoning:
         for room in ("集会室", "連絡通路", "物資庫", "機関室"):
             assert room in prompt
 
-    def test_travel_time_is_shown(self) -> None:
-        """移動にかかる tick が出る。
+    def test_travel_time_is_shown_in_the_worlds_own_clock(self) -> None:
+        """移動にかかる時間が、世界の時計と同じ単位で出る。
 
         **これが無いとアリバイを検証できない。** 「集会室から物資庫は
-        2 tick かかる」を全員が知っていて初めて、時刻の食い違いを突ける。
+        10 分かかる」を全員が知っていて初めて、時刻の食い違いを突ける。
+
+        最初は `物資庫 2` と数字だけを並べ、脚注で「tick 数」と説明して
+        いた。**数字より後ろに説明があるので、読む時点では意味が分からない。**
+        個数にも識別子にも読める。しかも tick は engine の語彙で、世界の
+        中に無い単位 (#892)。
+
+        エージェントは毎ターン「現在時刻: 深夜 0:05」を見ている。そこに
+        揃える。
         """
         prompt = _system_prompt(_DRILL)
         line = next(l for l in prompt.splitlines() if l.strip().startswith("集会室"))
 
-        assert "物資庫 2" in line
+        assert "物資庫 まで 10 分" in line
+        assert "tick" not in line
+
+    def test_the_unit_matches_the_clock_the_agent_sees(self) -> None:
+        """地図の分数が、時刻表示の進み方と一致する。
+
+        **別々に計算すると静かにずれる。** 地図は「5 分」なのに時計が
+        1 tick で 15 分進む世界では、アリバイの検算が全部狂う。
+        """
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        runtime = create_world_runtime(_DRILL)
+
+        def _clock() -> str:
+            return next(
+                l for l in runtime.build_observation(PlayerId(1)).splitlines()
+                if "現在時刻" in l
+            )
+
+        before = _clock()
+        runtime.advance_tick()
+        after = _clock()
+
+        # 0:00 -> 0:05 のように 5 分進む。地図の最短も 5 分。
+        assert "0:00" in before and "0:05" in after
 
     def test_a_two_way_door_is_not_listed_twice(self) -> None:
         """双方向の通路が、同じ行き先を 2 度並べない。
@@ -164,8 +196,8 @@ class TestTheMapIsThereForSpatialReasoning:
             [_Conn("a", "b", 2), _Conn("a", "b", 5)],
         )
 
-        assert "奥 2" in text
-        assert "奥 5" not in text
+        assert "奥 まで 2 手ぶん" in text
+        assert "5 手ぶん" not in text
 
     def test_raw_engine_words_are_absent(self) -> None:
         """engine の識別子が出ない (#892)。
