@@ -5498,6 +5498,45 @@ def create_world_runtime(
         PlayerRevivedOutcomeHandler,
     )
     from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
+    class _MarkKillerAsHavingSeenTheBody:
+        """倒した本人に「その死体を見つけた」を出さないようにする。
+
+        **加害者は現場に残る**ので、死体発見の観測はまず本人へ届く。実 run
+        010 では 3 人殺されて発見の観測が 3 回出たが、**3 回とも殺した本人に
+        しか届いていない**。文面としても「自分が作った死体を見つけた。
+        動かない。」は成立していない。
+
+        新しい state は作らない。Encounter Memory に「もう見た」と刻めば、
+        既存の一度きり判定がそのまま働く。**意味の上でも正しい** — 加害者は
+        その体を誰よりも先に見ている。
+
+        倒した相手が居ない死け (餓死・事故) では何もしない。
+        """
+
+        def handle(self, event: Any) -> None:
+            killer = getattr(event, "killer_player_id", None)
+            if killer is None:
+                return
+            victim = getattr(event, "aggregate_id", None)
+            if victim is None:
+                return
+            try:
+                encounter_memory.observe(
+                    PlayerId(int(killer)),
+                    EncounterKey(kind="body", identifier=f"player_{int(victim)}"),
+                    int(runtime.current_tick()),
+                )
+            except Exception:
+                logger.warning(
+                    "加害者への死体発見抑止に失敗した (killer=%s victim=%s)",
+                    killer, victim, exc_info=True,
+                )
+
+    # **PlayerDownedOutcomeHandler より先に登録する。** あとに回すと、猶予 0 の
+    # 世界で先に DEAD が確定して observation 経路が動き、抑止が間に合わない。
+    pipeline_event_publisher.register_handler(
+        PlayerDownedEvent, _MarkKillerAsHavingSeenTheBody()
+    )
     pipeline_event_publisher.register_handler(
         PlayerDownedEvent,
         PlayerDownedOutcomeHandler(

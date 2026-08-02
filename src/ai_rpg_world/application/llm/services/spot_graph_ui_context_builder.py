@@ -346,6 +346,22 @@ def _format_blocked_action_name_with_hints(interaction: Any) -> str:
     )
 
 
+#: これより暗いと物が見えない。``spot_perception_service`` の判定と揃える。
+_UNSEEABLE_LIGHTING = frozenset({"DARK", "PITCH_BLACK"})
+
+
+def _is_too_dark_to_see(snap: Any) -> bool:
+    """明るさのせいで物が見えない状態か。
+
+    **「何も無い」と「見えない」を区別するためだけに使う。** 見え方そのものの
+    判定は snapshot を組む側が済ませており、ここではその結果を読むだけ。
+    """
+    atmosphere = getattr(snap, "atmosphere", None)
+    lighting = getattr(atmosphere, "lighting", None) if atmosphere else None
+    key = getattr(lighting, "value", lighting)
+    return str(key) in _UNSEEABLE_LIGHTING
+
+
 class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     """スポットグラフのスナップショットにラベルを付与する UiContextBuilder。
 
@@ -641,6 +657,19 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         # PR 6 (#404 後続): "OBJ1: 焚き火跡 ..." → "焚き火跡 ..."。
         # 同 spot に同名 object が複数ある場合 (例: 茂み x2) は ``#N`` で区別。
         if not snap.objects:
+            # **無いことを明示する。** 節ごと消すと、LLM は「節が無い = 何も
+            # 無い」と推論するしかない。同席者とモンスターの節は #283 後続で
+            # 既にこの形に直してあり、**オブジェクトだけ漏れていた**。
+            #
+            # さらに悪いことに、ここでは「何も無い」と「暗くて見えない」と
+            # いう**別の事実が同じ沈黙に潰れていた**。実 run 010 でハギは
+            # 「照明が落ちてるから、もっと調べないと見つからないのか」と
+            # 推測し、explore と listen に手番を溶かした。
+            lines.append(
+                "オブジェクト: (暗くて何も見えない。灯りが要る)"
+                if _is_too_dark_to_see(snap)
+                else "オブジェクト: (ここには何も無い)"
+            )
             return
         lines.append("オブジェクト:")
         obj_names = [e.name for e in snap.objects]
