@@ -312,3 +312,102 @@ class TestEngineWordsAreGone:
         assert "明るい" in line
         for raw in ("BRIGHT", "DARK", "DIM"):
             assert raw not in line
+
+
+class TestEveryEnumValueHasAName:
+    """表示辞書が、対応する enum の全件を持っている。
+
+    ## なぜ要るか
+
+    明るさの呼び名を共有定数に出したとき、**表と enum の対応を縛らなかった**。
+
+    - ``LightingEnum`` は 4 件なのに表は 3 件で、``PITCH_BLACK`` だけ生値が
+      出た。しかも夜 + 嵐の屋外で実際に到達する。**この仕組みが消しに来た
+      生値が、一番暗いときにだけ残っていた**
+    - ``気温: WARM`` は 2 行下にあったのに手つかずだった
+    - 天候の呼び名が関数の中で組み立てられ、別モジュールにも同じ表があった
+
+    どれも「表を作ったが、抜けを検出する仕組みが無い」1 つの形 (claude の
+    指摘)。``PromptSection`` / ``GamePhase`` に付けたのと同じ網羅をここにも
+    付ける。
+
+    **特定の値を列挙して「無いこと」を見る形では駄目。** 元のテストは
+    ``("BRIGHT", "DARK", "DIM")`` の 3 つしか見ておらず、PITCH_BLACK を
+    素通りさせていた。enum 側から引く。
+    """
+
+    def test_no_value_is_missing_from_its_table(self) -> None:
+        """どの enum 値にも呼び名がある。"""
+        from ai_rpg_world.application.llm.services.world_vocabulary import (
+            DISPLAY_TABLES,
+        )
+
+        for enum_cls, table in DISPLAY_TABLES:
+            missing = [e.value for e in enum_cls if e.value not in table]
+            assert missing == [], (enum_cls.__name__, missing)
+
+    def test_no_table_has_a_stale_key(self) -> None:
+        """表に、enum から消えたキーが残っていない。
+
+        残っていても害は無いが、**消えた概念の呼び名が残っている**のは
+        読み手を惑わせる。
+        """
+        from ai_rpg_world.application.llm.services.world_vocabulary import (
+            DISPLAY_TABLES,
+        )
+
+        for enum_cls, table in DISPLAY_TABLES:
+            known = {e.value for e in enum_cls}
+            assert set(table) <= known, (enum_cls.__name__, set(table) - known)
+
+    def test_an_unknown_value_does_not_leak(self) -> None:
+        """表に無い値は、生値ではなく空を返す。
+
+        生値を返すと「載せ忘れた」ことが誰にも見えないまま漏れ続ける。
+        **行が薄くなるほうが、enum が出るよりまし。**
+        """
+        from ai_rpg_world.application.llm.services.world_vocabulary import (
+            lighting_display,
+        )
+
+        assert lighting_display("SOMETHING_NEW") == ""
+
+    def test_the_atmosphere_line_has_no_raw_enum_at_all(self) -> None:
+        """雰囲気の行に、どの enum の生値も出ない。
+
+        **生値の集合そのものから作る。** 特定の 3 つを列挙する形だと、
+        気温も、次に増える軸も素通りする。
+        """
+        from ai_rpg_world.application.llm.services.world_vocabulary import (
+            DISPLAY_TABLES,
+        )
+
+        runtime = create_world_runtime(_DRILL)
+        line = next(
+            l for l in runtime.build_observation(_MORI).splitlines()
+            if l.startswith("雰囲気")
+        )
+
+        for enum_cls, _table in DISPLAY_TABLES:
+            for member in enum_cls:
+                assert member.value not in line, (member.value, line)
+
+
+class TestTheDeadlineSaysHowManyTurnsAreLeft:
+    """締切が、残り時間と残り手番の両方を伝える。"""
+
+    def test_both_the_clock_and_the_turns_are_shown(self, in_a_meeting) -> None:
+        """「あと 30 分 (あと 6 回ぶん)」の形で出る。
+
+        run 009 の失敗は「時間」ではなく**手番の読み違い**だった。24 回喋って
+        9 回 `wait` が出たのは「待てば次がある」と読んだから。30 分と言われても、
+        自分があと何回動けるかは分からない (claude の指摘)。
+        """
+        line = next(
+            l for l in in_a_meeting.build_observation(_MORI).splitlines()
+            if "話し合い" in l
+        )
+
+        assert "分" in line
+        assert "回ぶん" in line
+        assert "tick" not in line

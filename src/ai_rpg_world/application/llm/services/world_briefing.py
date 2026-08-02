@@ -34,15 +34,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-#: 明るさの生値をプロンプトに出さない (#892)。
-#:
-#: **雰囲気の行 (spot_graph_current_state_formatter) と共有する。** 別々に
-#: 持つと、地図の「暗い」と雰囲気の「DARK」が食い違う。
-LIGHTING_DISPLAY = {
-    "BRIGHT": "明るい",
-    "DIM": "薄暗い",
-    "DARK": "暗い",
-}
+from ai_rpg_world.application.llm.services.world_vocabulary import (
+    lighting_display,
+)
 
 
 def _spot_name(spot: Any) -> str:
@@ -52,8 +46,7 @@ def _spot_name(spot: Any) -> str:
 def _lighting_of(spot: Any) -> str:
     atmosphere = getattr(spot, "atmosphere", None)
     lighting = getattr(atmosphere, "lighting", None) if atmosphere else None
-    key = getattr(lighting, "value", lighting)
-    return LIGHTING_DISPLAY.get(str(key), "")
+    return lighting_display(lighting) if lighting is not None else ""
 
 
 def build_world_map_text(

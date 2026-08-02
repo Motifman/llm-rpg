@@ -2,6 +2,12 @@
 
 from typing import Any, List
 
+from ai_rpg_world.application.llm.services.world_vocabulary import (
+    lighting_display,
+    temperature_display,
+    weather_display,
+)
+
 from ai_rpg_world.application.llm.contracts.interfaces import ICurrentStateFormatter
 from ai_rpg_world.application.llm.services.current_state_formatter import DefaultCurrentStateFormatter
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
@@ -37,22 +43,20 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
             # enum の生値を出さない (#892)。呼び名は world_briefing が持つ
             # ものを使い回す。**別々に持つと、地図の「暗い」と雰囲気の
             # 「DARK」が食い違う。**
-            atmo_parts.append(f"明るさ: {_lighting_display(a.lighting)}")
+            atmo_parts.append(f"明るさ: {lighting_display(a.lighting)}")
             if a.sound_ambient:
                 atmo_parts.append(f"音: {a.sound_ambient}")
-            atmo_parts.append(f"気温: {a.temperature}")
+            atmo_parts.append(f"気温: {temperature_display(a.temperature)}")
             if a.smell:
                 atmo_parts.append(f"匂い: {a.smell}")
             lines.append("雰囲気: " + " / ".join(atmo_parts))
 
         if snap.weather is not None:
             w = snap.weather
-            _WEATHER_JP = {
-                "CLEAR": "晴れ", "CLOUDY": "曇り", "RAIN": "雨",
-                "HEAVY_RAIN": "大雨", "SNOW": "雪", "BLIZZARD": "吹雪",
-                "FOG": "霧", "STORM": "嵐",
-            }
-            wname = _WEATHER_JP.get(w.weather_type, w.weather_type)
+            # 呼び名は world_vocabulary に集約してある。**関数の中で辞書を
+            # 組むと、別モジュールの表と静かにずれる。** 明るさを共有定数に
+            # 出したのに、2 行下でこれをやっていた (claude の指摘)。
+            wname = weather_display(w.weather_type)
             intensity_label = ""
             if w.weather_intensity < 0.3:
                 intensity_label = "弱い"
@@ -143,19 +147,6 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         return "\n".join(lines)
 
 
-
-def _lighting_display(lighting: Any) -> str:
-    """明るさを世界の言葉で返す。知らない値はそのまま返す。
-
-    呼び名は world_briefing と共有する。**別々に持つと、地図の「暗い」と
-    雰囲気の「DARK」が食い違う。**
-    """
-    from ai_rpg_world.application.llm.services.world_briefing import (
-        LIGHTING_DISPLAY,
-    )
-
-    key = getattr(lighting, "value", lighting)
-    return LIGHTING_DISPLAY.get(str(key), str(key))
 
 
 def _render_own_state(

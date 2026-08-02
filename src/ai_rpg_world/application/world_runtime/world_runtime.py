@@ -959,11 +959,16 @@ class WorldRuntime:
         # 単位は世界の時計に揃える。**tick は engine の語彙で、世界の中に
         # 無い** (#892)。地図で直したのと同じ形が、ここに残っていた。
         # 換算は _minutes_per_tick を通す (地図と時計と別々に持つとずれる)。
+        # 時間と**手番の残り**を両方出す。
+        #
+        # run 009 の失敗は「時間」ではなく手番の読み違いだった。24 回喋って
+        # 9 回 `wait` が出たのは「待てば次がある」と読んだから。**30 分と
+        # 言われても、自分があと何回動けるかは分からない** (claude の指摘)。
         minutes = _minutes_per_tick(self.scenario)
         if minutes:
-            parts.append(f"打ち切りまであと {remaining * minutes} 分")
+            parts.append(f"打ち切りまであと {remaining * minutes} 分 (あと {remaining} 回ぶん)")
         else:
-            parts.append(f"打ち切りまであと {remaining} 手ぶん")
+            parts.append(f"打ち切りまであと {remaining} 回ぶん")
         # 締切が近いほど強く言う。
         #
         # 実 run 009 は 6 tick を使い切って 24 回喋り、**投票は 1 票だけ**
