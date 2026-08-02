@@ -110,7 +110,6 @@ class TestDefaultVisibilityCoverage:
         with pytest.raises(AssertionError, match="SHOW_MESSAGE"):
             _validate_default_visibility_coverage()
 
-
 def _make_item(state: dict | None = None) -> ItemAggregate:
     spec = ItemSpec(
         item_spec_id=ItemSpecId(7),
