@@ -40,11 +40,12 @@ def scenario_path(tmp_path: Path) -> Path:
         placement.pop("spawn_condition", None)
 
     neutral_template = deepcopy(monsters["templates"][0])
-    neutral_template["id"] = "neutral_beast"
-    neutral_template["name"] = "比較用の獣"
+    neutral_template["id"] = "effectless_beast"
+    neutral_template["name"] = "状態異常能力を持たない獣"
+    neutral_template.pop("attack_status_effects", None)
     monsters["templates"].append(neutral_template)
     monsters["initial_placements"].append(
-        {"template": "neutral_beast", "spot": "deep_forest"}
+        {"template": "effectless_beast", "spot": "deep_forest"}
     )
 
     path = tmp_path / "monster_attack_effects.json"
@@ -149,14 +150,14 @@ class TestMonsterAttackEffectsThroughRuntimeWiring:
         assert outcome.executed is True
         assert effects == []
 
-    def test_unregistered_template_has_no_attack_effect(
+    def test_template_without_effect_declaration_has_no_attack_effect(
         self,
         scenario_path: Path,
     ) -> None:
-        """固定対応の無いテンプレートは、攻撃に成功しても状態異常を付けない。"""
+        """状態異常能力を宣言しないテンプレートは、攻撃成功時も効果を付けない。"""
         outcome, effects = _execute_attack(
             scenario_path,
-            template_name="neutral_beast",
+            template_name="effectless_beast",
             roll=0.0,
         )
 
