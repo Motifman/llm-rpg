@@ -42,6 +42,14 @@ from ai_rpg_world.domain.world_graph.value_object.game_end_condition import (
     GameEndCondition,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.enum.game_result_enum import (
+    GameResultEnum,
+)
+
+#: この単体試験は「成立したか」だけを見る。勝敗はシナリオがどちらの
+#: リストに書いたかで決まるので、ここでは片側に固定して構わない。
+_SIDE = GameResultEnum.LOSE
+
 
 _TASKS = ("task_radio", "task_fuel", "task_wiring", "task_scan")
 
@@ -71,7 +79,8 @@ def _graph() -> SpotGraphAggregate:
 
 def _evaluate(condition: GameEndCondition, flags: set[str]) -> bool:
     return GameEndConditionEvaluator().evaluate(
-        _graph(), condition, frozenset(flags), [PlayerId(1)]
+        _graph(), condition, frozenset(flags), [PlayerId(1)],
+        result_on_match=_SIDE,
     ).is_ended
 
 
