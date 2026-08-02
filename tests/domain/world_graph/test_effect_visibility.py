@@ -7,6 +7,8 @@ AppliedEffectSummary を仕分けして返すことを検証する。
 
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -34,6 +36,9 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
+    _DEFAULT_VISIBILITY,
+    _resolve_visibility,
+    _validate_default_visibility_coverage,
 )
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
@@ -67,6 +72,43 @@ def _player_status(state: dict | None = None) -> PlayerStatusAggregate:
         state=state,
     )
 
+
+class TestDefaultVisibilityCoverage:
+    """すべての効果が意図した既定可視性を持ち、暗黙の縮退を起こさない。"""
+
+    def test_every_effect_type_has_an_explicit_default_visibility(self) -> None:
+        """効果の列挙を追加したら、既定可視性を宣言するまで試験を失敗させる。"""
+        assert set(_DEFAULT_VISIBILITY) == set(InteractionEffectTypeEnum)
+
+    def test_missing_default_visibility_raises_instead_of_falling_back(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """可視性表の欠落はACTOR_DIRECTへ縮退させず、その場で失敗させる。"""
+        monkeypatch.delitem(
+            _DEFAULT_VISIBILITY,
+            InteractionEffectTypeEnum.SHOW_MESSAGE,
+        )
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.SHOW_MESSAGE,
+            parameters={"message": "見えるべき結果"},
+        )
+
+        with pytest.raises(KeyError):
+            _resolve_visibility(effect)
+
+    def test_missing_default_visibility_fails_startup_validation(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """可視性表の欠落は効果実行を待たず、起動時検査で失敗させる。"""
+        monkeypatch.delitem(
+            _DEFAULT_VISIBILITY,
+            InteractionEffectTypeEnum.SHOW_MESSAGE,
+        )
+
+        with pytest.raises(AssertionError, match="SHOW_MESSAGE"):
+            _validate_default_visibility_coverage()
 
 def _make_item(state: dict | None = None) -> ItemAggregate:
     spec = ItemSpec(
