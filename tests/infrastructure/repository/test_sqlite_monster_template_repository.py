@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 
 import pytest
 
+from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+from ai_rpg_world.domain.monster.value_object.attack_status_effect_chance import (
+    AttackStatusEffectChance,
+)
 from ai_rpg_world.domain.monster.value_object.monster_template_id import (
     MonsterTemplateId,
 )
@@ -44,6 +49,33 @@ def sqlite_conn() -> sqlite3.Connection:
 
 
 class TestSqliteMonsterTemplateRepository:
+    def test_attack_status_effects_round_trip_and_replace_removes_stale_rows(
+        self, sqlite_conn: sqlite3.Connection,
+    ) -> None:
+        """状態異常宣言は順序と値を保存し、置換時に古い子行を残さない。"""
+        writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
+        repo = SqliteMonsterTemplateRepository.for_connection(sqlite_conn)
+        template = _template(90, "VenomBeast")
+        template = replace(
+            template,
+            attack_status_effects=(
+                AttackStatusEffectChance(StatusEffectType.POISON, 0.6, 10, 1.5),
+                AttackStatusEffectChance(StatusEffectType.BLEEDING, 0.25, 4, 2.0),
+            ),
+        )
+        writer.replace_template(template)
+
+        loaded = repo.find_by_id(MonsterTemplateId(90))
+        assert loaded is not None
+        assert loaded.attack_status_effects == template.attack_status_effects
+
+        effectless = replace(template, attack_status_effects=())
+        writer.replace_template(effectless)
+
+        replaced = repo.find_by_id(MonsterTemplateId(90))
+        assert replaced is not None
+        assert replaced.attack_status_effects == ()
+
     def test_find_by_id_returns_none_when_empty(
         self, sqlite_conn: sqlite3.Connection
     ) -> None:

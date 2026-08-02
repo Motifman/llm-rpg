@@ -1,17 +1,13 @@
-"""G1 (#343 trace 分析): モンスター攻撃 → 状態異常付与経路の検証。
-
-scenario の monster_attack_orchestrator に attack_status_effect_provider を
-注入したとき、確率 roll が hit すれば target に StatusEffect が add される。
-"""
+"""モンスターテンプレート宣言から状態異常を付与する攻撃経路の検証。"""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
 
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
-    AttackStatusEffectChance,
     SpotAttackOrchestrator,
 )
+from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
     MonsterAggregate,
@@ -21,6 +17,9 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
     MonsterStatusEnum,
 )
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.monster.value_object.attack_status_effect_chance import (
+    AttackStatusEffectChance,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
@@ -60,7 +59,18 @@ def _make_graph() -> SpotGraphAggregate:
     return g
 
 
-def _make_monster(attack: int = 7) -> MagicMock:
+def _effect(
+    chance: float,
+    duration_ticks: int = 12,
+    effect_type: StatusEffectType = StatusEffectType.BLEEDING,
+) -> AttackStatusEffectChance:
+    return AttackStatusEffectChance(effect_type, chance, duration_ticks)
+
+
+def _make_monster(
+    attack: int = 7,
+    effects: tuple[AttackStatusEffectChance, ...] = (),
+) -> MagicMock:
     monster = MagicMock(spec=MonsterAggregate)
     monster.monster_id = MonsterId.create(101)
     monster.template = MagicMock()
@@ -69,6 +79,7 @@ def _make_monster(attack: int = 7) -> MagicMock:
     monster.template.base_stats.attack = attack
     monster.template.template_id = MagicMock()
     monster.template.template_id.value = 1001  # 任意
+    monster.template.attack_status_effects = effects
     monster.status = MonsterStatusEnum.ALIVE
     monster.can_attack_now.return_value = True
     return monster
@@ -92,7 +103,6 @@ def _make_orchestrator(
     monster,
     player,
     *,
-    provider=None,
     random_source=None,
 ):
     spot_repo = MagicMock()
@@ -105,20 +115,19 @@ def _make_orchestrator(
         spot_graph_repository=spot_repo,
         monster_repository=monster_repo,
         player_status_repository=player_repo,
-        attack_status_effect_provider=provider,
         random_source=random_source,
     )
 
 
 class TestAttackStatusEffectApplication:
-    """provider が返す効果が確率で付与される。"""
+    """テンプレートが宣言した効果が確率で付与される。"""
 
-    def test_does_not_call_provider_add_status_effect(self) -> None:
-        """provider 未注入なら add status effect は呼ばれない。"""
+    def test_effectless_template_does_not_add_status_effect(self) -> None:
+        """状態異常宣言が空なら add status effect は呼ばれない。"""
         graph = _make_graph()
         monster = _make_monster()
         player = _make_player()
-        orch = _make_orchestrator(graph, monster, player, provider=None)
+        orch = _make_orchestrator(graph, monster, player)
 
         outcome = orch.execute_monster_attack(
             attacker_monster=monster, target_player=player,
@@ -130,13 +139,12 @@ class TestAttackStatusEffectApplication:
     def test_calls_chance_one_zero_add_status_effect(self) -> None:
         """chance 1 0 なら 必ず add status effect が呼ばれる。"""
         graph = _make_graph()
-        monster = _make_monster()
+        monster = _make_monster(effects=(_effect(1.0),))
         player = _make_player()
-        provider = lambda m: [AttackStatusEffectChance("bleeding", 1.0, 12)]
         # random_source は random() → 0.5 を返す → chance=1.0 > 0.5 で hit
         orch = _make_orchestrator(
             graph, monster, player,
-            provider=provider, random_source=lambda: 0.5,
+            random_source=lambda: 0.5,
         )
 
         orch.execute_monster_attack(
@@ -151,12 +159,11 @@ class TestAttackStatusEffectApplication:
     def test_does_not_call_chance_zero_add_status_effect(self) -> None:
         """chance 0 0 なら add status effect は呼ばれない。"""
         graph = _make_graph()
-        monster = _make_monster()
+        monster = _make_monster(effects=(_effect(0.0),))
         player = _make_player()
-        provider = lambda m: [AttackStatusEffectChance("bleeding", 0.0, 12)]
         orch = _make_orchestrator(
             graph, monster, player,
-            provider=provider, random_source=lambda: 0.0,
+            random_source=lambda: 0.0,
         )
 
         orch.execute_monster_attack(
@@ -168,12 +175,11 @@ class TestAttackStatusEffectApplication:
     def test_chance_zero_five_random_zero_three_hit(self) -> None:
         """random < chance で hit。0.3 < 0.5 → 付与される。"""
         graph = _make_graph()
-        monster = _make_monster()
+        monster = _make_monster(effects=(_effect(0.5),))
         player = _make_player()
-        provider = lambda m: [AttackStatusEffectChance("bleeding", 0.5, 12)]
         orch = _make_orchestrator(
             graph, monster, player,
-            provider=provider, random_source=lambda: 0.3,
+            random_source=lambda: 0.3,
         )
 
         orch.execute_monster_attack(
@@ -185,12 +191,11 @@ class TestAttackStatusEffectApplication:
     def test_chance_zero_five_random_zero_7_miss(self) -> None:
         """random >= chance で miss。0.7 >= 0.5 → 付与されない。"""
         graph = _make_graph()
-        monster = _make_monster()
+        monster = _make_monster(effects=(_effect(0.5),))
         player = _make_player()
-        provider = lambda m: [AttackStatusEffectChance("bleeding", 0.5, 12)]
         orch = _make_orchestrator(
             graph, monster, player,
-            provider=provider, random_source=lambda: 0.7,
+            random_source=lambda: 0.7,
         )
 
         orch.execute_monster_attack(
@@ -202,15 +207,14 @@ class TestAttackStatusEffectApplication:
     def test_multiple_chance_independently_roll(self) -> None:
         """BLEEDING (1.0) + POISON (0.0) → BLEEDING のみ付与。"""
         graph = _make_graph()
-        monster = _make_monster()
+        monster = _make_monster(effects=(
+            _effect(1.0),
+            _effect(0.0, 10, StatusEffectType.POISON),
+        ))
         player = _make_player()
-        provider = lambda m: [
-            AttackStatusEffectChance("bleeding", 1.0, 12),
-            AttackStatusEffectChance("poison", 0.0, 10),
-        ]
         orch = _make_orchestrator(
             graph, monster, player,
-            provider=provider, random_source=lambda: 0.5,
+            random_source=lambda: 0.5,
         )
 
         orch.execute_monster_attack(
@@ -225,12 +229,11 @@ class TestAttackStatusEffectApplication:
     def test_target_incapacitated_status_effect(self) -> None:
         """HP 0 になった瞬間は status effect 不要 (蘇生後の蓄積を避ける設計)。"""
         graph = _make_graph()
-        monster = _make_monster(attack=999)  # 即死
+        monster = _make_monster(attack=999, effects=(_effect(1.0),))  # 即死
         player = _make_player(is_down_after=True)
-        provider = lambda m: [AttackStatusEffectChance("bleeding", 1.0, 12)]
         orch = _make_orchestrator(
             graph, monster, player,
-            provider=provider, random_source=lambda: 0.0,
+            random_source=lambda: 0.0,
         )
 
         outcome = orch.execute_monster_attack(
@@ -239,42 +242,3 @@ class TestAttackStatusEffectApplication:
         )
         assert outcome.target_incapacitated is True
         player.add_status_effect.assert_not_called()
-
-    def test_provider_attack_raises_exception(self) -> None:
-        """provider が raise しても attack の世界 mutation は完了する。"""
-        graph = _make_graph()
-        monster = _make_monster()
-        player = _make_player()
-
-        def boom(m):
-            raise RuntimeError("provider broken")
-
-        orch = _make_orchestrator(graph, monster, player, provider=boom)
-        outcome = orch.execute_monster_attack(
-            attacker_monster=monster, target_player=player,
-            graph=graph, spot_id=SPOT_A, current_tick=WorldTick(10),
-        )
-        # attack は executed = True、event も発火、status effect だけ skip
-        assert outcome.executed is True
-        player.add_status_effect.assert_not_called()
-
-    def test_emits_warning_for_unknown_effect_type_skip(self) -> None:
-        """provider が未登録の effect_type_name を返したら warning して skip。"""
-        graph = _make_graph()
-        monster = _make_monster()
-        player = _make_player()
-        provider = lambda m: [
-            AttackStatusEffectChance("unknown_effect", 1.0, 12),
-            AttackStatusEffectChance("bleeding", 1.0, 12),
-        ]
-        orch = _make_orchestrator(
-            graph, monster, player,
-            provider=provider, random_source=lambda: 0.0,
-        )
-
-        orch.execute_monster_attack(
-            attacker_monster=monster, target_player=player,
-            graph=graph, spot_id=SPOT_A, current_tick=WorldTick(10),
-        )
-        # bleeding だけ通る
-        assert player.add_status_effect.call_count == 1

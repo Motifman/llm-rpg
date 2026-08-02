@@ -48,6 +48,20 @@ def scenario_path(tmp_path: Path) -> Path:
         {"template": "effectless_beast", "spot": "deep_forest"}
     )
 
+    declared_template = deepcopy(neutral_template)
+    declared_template["id"] = "scenario_only_jellyfish"
+    declared_template["name"] = "宣言だけで毒を持つクラゲ"
+    declared_template["attack_status_effects"] = [{
+        "effect_type": "poison",
+        "chance": 1.0,
+        "duration_ticks": 6,
+        "value": 2.5,
+    }]
+    monsters["templates"].append(declared_template)
+    monsters["initial_placements"].append(
+        {"template": "scenario_only_jellyfish", "spot": "deep_forest"}
+    )
+
     path = tmp_path / "monster_attack_effects.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     return path
@@ -163,3 +177,23 @@ class TestMonsterAttackEffectsThroughRuntimeWiring:
 
         assert outcome.executed is True
         assert effects == []
+
+    def test_new_template_uses_only_its_scenario_effect_declaration(
+        self,
+        scenario_path: Path,
+    ) -> None:
+        """新規識別子でもJSONの宣言だけで種別・強度・期限を攻撃へ反映する。"""
+        outcome, effects = _execute_attack(
+            scenario_path,
+            template_name="scenario_only_jellyfish",
+            roll=0.5,
+        )
+
+        assert outcome.executed is True
+        assert effects == [
+            StatusEffect(
+                effect_type=StatusEffectType.POISON,
+                value=2.5,
+                expiry_tick=WorldTick(_ATTACK_TICK.value + 6),
+            )
+        ]

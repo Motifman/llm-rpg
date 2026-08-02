@@ -14,6 +14,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from ai_rpg_world.application.llm.tool_exposure import ToolExposure
 
+from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.item.value_object.item_effect import (
     CompositeItemEffect,
     ExpEffect,
@@ -37,6 +38,12 @@ from ai_rpg_world.domain.world_graph.value_object.day_night_phase_def import (
     DayNightPhaseDef,
 )
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
+from ai_rpg_world.domain.monster.exception.monster_exceptions import (
+    MonsterTemplateValidationException,
+)
+from ai_rpg_world.domain.monster.value_object.attack_status_effect_chance import (
+    AttackStatusEffectChance,
+)
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
@@ -2904,8 +2911,42 @@ class ScenarioLoader:
             skill_ids=[],  # Phase B-2a ではスキル無し
             vision_range=int(raw.get("vision_range", 5)),
             flee_threshold=float(raw.get("flee_threshold", 0.2)),
+            attack_status_effects=self._parse_monster_attack_status_effects(
+                raw.get("attack_status_effects", []), index,
+            ),
         )
         return ScenarioMonsterTemplate(string_id=string_id, template=template)
+
+    def _parse_monster_attack_status_effects(
+        self, raw: Any, template_index: int,
+    ) -> tuple[AttackStatusEffectChance, ...]:
+        """攻撃時状態異常のJSON宣言を、検証済みドメイン値へ変換する。"""
+        path = f"monsters.templates[{template_index}].attack_status_effects"
+        if not isinstance(raw, list):
+            raise ScenarioLoadError(f"{path} must be a list")
+        parsed: list[AttackStatusEffectChance] = []
+        for effect_index, item in enumerate(raw):
+            item_path = f"{path}[{effect_index}]"
+            if not isinstance(item, dict):
+                raise ScenarioLoadError(f"{item_path} must be an object")
+            effect_type_raw = item.get("effect_type")
+            try:
+                effect_type = StatusEffectType(effect_type_raw)
+            except (TypeError, ValueError) as exc:
+                raise ScenarioLoadError(
+                    f"{item_path}.effect_type must be a StatusEffectType value, "
+                    f"got {effect_type_raw!r}"
+                ) from exc
+            try:
+                parsed.append(AttackStatusEffectChance(
+                    effect_type=effect_type,
+                    chance=item.get("chance"),
+                    duration_ticks=item.get("duration_ticks"),
+                    value=item.get("value", 1.0),
+                ))
+            except MonsterTemplateValidationException as exc:
+                raise ScenarioLoadError(f"{item_path}: {exc}") from exc
+        return tuple(parsed)
 
     def _parse_monster_placement(
         self, raw: Any, index: int,

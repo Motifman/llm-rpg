@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 from typing import List, Optional, Set, TYPE_CHECKING
+
+from ai_rpg_world.domain.monster.value_object.attack_status_effect_chance import (
+    AttackStatusEffectChance,
+)
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage, MAX_GROWTH_STAGES
@@ -63,6 +68,8 @@ class MonsterTemplate:
     #   1 にすると毎 tick 攻撃可能。0 以下は不正。
     has_dark_vision: bool = False
     attack_cooldown_ticks: int = 1
+    # 攻撃成功時に付与しうる状態異常。シナリオ宣言を実行時まで型付きで保持する。
+    attack_status_effects: tuple[AttackStatusEffectChance, ...] = ()
     # スポットグラフ徘徊の確率 (0.0 〜 1.0)。tick service が「攻撃しない時」
     # にこの確率で隣接スポットへランダム移動を試みる。0.0 で完全静止、1.0 で
     # 毎 tick 必ず移動を試みる。`ecology_type=AMBUSH` なら本値によらず
@@ -188,6 +195,15 @@ class MonsterTemplate:
             raise MonsterTemplateValidationException(
                 f"attack_cooldown_ticks must be >= 1, got {self.attack_cooldown_ticks}"
             )
+        if not isinstance(self.attack_status_effects, tuple):
+            raise MonsterTemplateValidationException(
+                "attack_status_effects must be a tuple"
+            )
+        for index, effect in enumerate(self.attack_status_effects):
+            if not isinstance(effect, AttackStatusEffectChance):
+                raise MonsterTemplateValidationException(
+                    f"attack_status_effects[{index}] must be AttackStatusEffectChance"
+                )
         if not isinstance(self.idle_wander_chance, (int, float)) or isinstance(
             self.idle_wander_chance, bool
         ):
