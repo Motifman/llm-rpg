@@ -134,7 +134,7 @@ class TestTheScenarioIsShapedForTheDrill:
         """
         for spot, expected in (("hall", False), ("corridor", True), ("storage", True)):
             _move(runtime, _SENA, spot)
-            is_dark = "DARK" in _line(runtime, "雰囲気", _SENA)
+            is_dark = "暗い" in _line(runtime, "雰囲気", _SENA)
             assert is_dark is expected, f"{spot}: {_line(runtime, '雰囲気', _SENA)}"
 
     def test_work_is_reachable_only_by_entering_the_dark(self, runtime) -> None:
@@ -160,11 +160,11 @@ class TestTheScenarioIsShapedForTheDrill:
         続ける run になる。drill の前提として固定しておく。
         """
         _move(runtime, _SENA, "corridor")
-        assert "DARK" in _line(runtime, "雰囲気", _SENA)
+        assert "暗い" in _line(runtime, "雰囲気", _SENA)
 
         _move(runtime, _MORI, "corridor")
-        assert "DIM" in _line(runtime, "雰囲気", _SENA)
-        assert "DIM" in _line(runtime, "雰囲気", _MORI)
+        assert "薄暗い" in _line(runtime, "雰囲気", _SENA)
+        assert "薄暗い" in _line(runtime, "雰囲気", _MORI)
 
 
 class TestTheWholeLoopRuns:
@@ -198,7 +198,7 @@ class TestTheWholeLoopRuns:
         _move(runtime, _KUZE, "hall")
         assert runtime.call_emergency_meeting(_KUZE).success
         assert runtime._game_phase_store.current.phase is GamePhase.MEETING
-        assert "残り 6 tick" in _line(runtime, "話し合い", _MORI)
+        assert "あと 30 分" in _line(runtime, "話し合い", _MORI)
 
         # 4. 投票して追放する (倒れているセナは母数に入らない)
         #    **生きている全員が投票しないと締まらない。** ハギを足し忘れると

@@ -208,6 +208,7 @@ from ai_rpg_world.application.llm.services.world_llm_prompt import (
     safe_world_intro_text,
 )
 from ai_rpg_world.application.llm.services.world_briefing import (
+    build_own_state_display_names,
     build_world_briefing,
 )
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
@@ -328,6 +329,12 @@ def _other_explorer_names_for_world_system_prompt(
 #: ``_time_label`` の後方互換フォールバックと同じ値。**別々に持つと、地図の
 #: 「5 分」と時計の進み方が静かにずれる。**
 _FALLBACK_MINUTES_PER_TICK = 5
+
+#: 「まもなく打ち切られる」に切り替える残り tick。
+#:
+#: 最後の 1 tick では遅い。移動も相談もできないまま終わる。2 tick あれば
+#: 「誰に入れるか」を一度やり取りできる。
+_MEETING_URGENT_REMAINING_TICKS = 2
 
 
 def _minutes_per_tick(scenario) -> Optional[int]:
@@ -949,7 +956,29 @@ class WorldRuntime:
         initiator = self._meeting_initiator_display_name()
         if initiator:
             parts.append(f"呼びかけたのは{initiator}")
-        parts.append(f"打ち切りまで残り {remaining} tick")
+        # 単位は世界の時計に揃える。**tick は engine の語彙で、世界の中に
+        # 無い** (#892)。地図で直したのと同じ形が、ここに残っていた。
+        # 換算は _minutes_per_tick を通す (地図と時計と別々に持つとずれる)。
+        # 時間と**手番の残り**を両方出す。
+        #
+        # run 009 の失敗は「時間」ではなく手番の読み違いだった。24 回喋って
+        # 9 回 `wait` が出たのは「待てば次がある」と読んだから。**30 分と
+        # 言われても、自分があと何回動けるかは分からない** (claude の指摘)。
+        minutes = _minutes_per_tick(self.scenario)
+        if minutes:
+            parts.append(f"打ち切りまであと {remaining * minutes} 分 (あと {remaining} 回ぶん)")
+        else:
+            parts.append(f"打ち切りまであと {remaining} 回ぶん")
+        # 締切が近いほど強く言う。
+        #
+        # 実 run 009 は 6 tick を使い切って 24 回喋り、**投票は 1 票だけ**
+        # だった。9 回 `wait` が出ていて、「待てば投票の機会が来る」と読んで
+        # いるように見える。実際には待つと打ち切られて誰も追放されない。
+        # 残り回数は出ていたが、**それが何を意味するかが書かれていなかった。**
+        if remaining <= _MEETING_URGENT_REMAINING_TICKS:
+            parts.append("いま投票しないと、誰も追放されないまま終わる")
+        else:
+            parts.append("投票しないまま打ち切られると、誰も追放されない")
         return "。".join(parts) + "。"
 
     def _meeting_initiator_display_name(self) -> Optional[str]:
@@ -1015,6 +1044,7 @@ class WorldRuntime:
             tick_budget_remaining=self._compute_tick_budget_remaining(),
             meeting_status_line=self._compute_meeting_status_line(),
             task_progress_line=self._compute_task_progress_line(),
+            game_phase=self._game_phase_store.current.phase,
         )
 
     @property
@@ -4813,6 +4843,11 @@ def create_world_runtime(
         # 訊かずに出していたため、`disabled_tools` で消したはずの
         # tend_to_player が死体の行に並び続けていた。
         is_tool_exposed=lambda name: runtime.tool_exposure.is_exposed(name),
+        state_display_names=build_own_state_display_names(
+            list(scenario.graph.iter_spot_nodes()),
+            scenario.interiors,
+            metadata.role_labels,
+        ),
     )
 
     # ── 観測パイプライン構築 ──

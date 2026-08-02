@@ -1,6 +1,12 @@
 """スポットグラフ用の現在状態テキスト（ICurrentStateFormatter）"""
 
-from typing import List
+from typing import Any, List
+
+from ai_rpg_world.application.llm.services.world_vocabulary import (
+    lighting_display,
+    temperature_display,
+    weather_display,
+)
 
 from ai_rpg_world.application.llm.contracts.interfaces import ICurrentStateFormatter
 from ai_rpg_world.application.llm.services.current_state_formatter import DefaultCurrentStateFormatter
@@ -34,22 +40,23 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         if snap.atmosphere is not None:
             a = snap.atmosphere
             atmo_parts: List[str] = []
-            atmo_parts.append(f"明るさ: {a.lighting}")
+            # enum の生値を出さない (#892)。呼び名は world_briefing が持つ
+            # ものを使い回す。**別々に持つと、地図の「暗い」と雰囲気の
+            # 「DARK」が食い違う。**
+            atmo_parts.append(f"明るさ: {lighting_display(a.lighting)}")
             if a.sound_ambient:
                 atmo_parts.append(f"音: {a.sound_ambient}")
-            atmo_parts.append(f"気温: {a.temperature}")
+            atmo_parts.append(f"気温: {temperature_display(a.temperature)}")
             if a.smell:
                 atmo_parts.append(f"匂い: {a.smell}")
             lines.append("雰囲気: " + " / ".join(atmo_parts))
 
         if snap.weather is not None:
             w = snap.weather
-            _WEATHER_JP = {
-                "CLEAR": "晴れ", "CLOUDY": "曇り", "RAIN": "雨",
-                "HEAVY_RAIN": "大雨", "SNOW": "雪", "BLIZZARD": "吹雪",
-                "FOG": "霧", "STORM": "嵐",
-            }
-            wname = _WEATHER_JP.get(w.weather_type, w.weather_type)
+            # 呼び名は world_vocabulary に集約してある。**関数の中で辞書を
+            # 組むと、別モジュールの表と静かにずれる。** 明るさを共有定数に
+            # 出したのに、2 行下でこれをやっていた (claude の指摘)。
+            wname = weather_display(w.weather_type)
             intensity_label = ""
             if w.weather_intensity < 0.3:
                 intensity_label = "弱い"
@@ -125,13 +132,50 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         # Phase 4-E: 自分の自由 state (毒・呪い・隠しフラグも含む全項目)。
         # 第三者には流れない HIDDEN も本人プロンプトには載せて自己認識させる。
         if snap.player_state:
+            # engine のキーをそのまま出さない (#892)。``duty=weather`` は
+            # 読み手にとって意味が無く、``role=crew`` は陣営の識別子。
+            # 呼び名の出所はシナリオの宣言 (metadata.role_labels /
+            # interaction の display_label) で、**ここに新しい辞書を作らない**。
             rendered = ", ".join(
-                f"{k}={_render_value(v)}"
-                for k, v in sorted(snap.player_state.items())
+                _render_own_state(
+                    snap.player_state, getattr(snap, "state_display_names", None)
+                )
             )
-            lines.append(f"自分の状態: {rendered}")
+            if rendered:
+                lines.append(f"自分の状態: {rendered}")
 
         return "\n".join(lines)
+
+
+
+
+def _render_own_state(
+    player_state: Any, display_names: Any = None
+) -> "list[str]":
+    """自分の自由 state を、読める形の列にする。
+
+    宣言のあるキーは呼び名に置き換える (``duty=weather`` → ``担当: 気象を
+    記録する``)。呼び名の出所はシナリオ (metadata.role_labels / interaction の
+    display_label) で、**ここに新しい辞書を作らない**。
+
+    **宣言の無いキーは従来どおり ``key=value`` で残す。** 一度は落とす実装に
+    したが、それだと ``cursed=true`` のような自由 state を持つ世界で
+    「自分の状態」の節が丸ごと消えた。毒や呪いは本人が自己認識するために
+    載せている情報で、消してよいものではない。
+
+    そもそも ``cursed`` はシナリオが決めたキーで engine の語彙ではない。
+    直したかったのは呼び名のある ``duty`` / ``role`` のほうだけだった。
+    """
+    names = dict(display_names or {})
+    rendered: list[str] = []
+    for key, value in sorted(dict(player_state or {}).items()):
+        entry = names.get(f"{key}={_render_value(value)}")
+        if entry:
+            heading, label = entry
+            rendered.append(f"{heading}: {label}")
+        else:
+            rendered.append(f"{key}={_render_value(value)}")
+    return rendered
 
 
 def _render_value(value: object) -> str:
