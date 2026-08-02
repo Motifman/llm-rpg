@@ -164,6 +164,22 @@ _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS: Mapping[str, Optional[str]] = {
     "weather_types": _WEATHER_FEATURE,
 }
 
+# 終了条件は、置かれた配列が成立時の勝敗ラベルを決める。条件型を追加した人が
+# 「勝敗あり / 中立」のどちらかを判断するまで loader が受理しないよう全件を列挙する。
+_GAME_END_CONDITION_ALLOWED_SECTIONS: Mapping[
+    GameEndConditionTypeEnum, frozenset[str]
+] = {
+    GameEndConditionTypeEnum.ALL_AT_SPOT: frozenset({"win", "lose"}),
+    GameEndConditionTypeEnum.ANY_AT_SPOT: frozenset({"win", "lose"}),
+    GameEndConditionTypeEnum.FLAG_SET: frozenset({"win", "lose"}),
+    GameEndConditionTypeEnum.TICK_LIMIT: frozenset({"win", "lose"}),
+    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST: frozenset(
+        {"win", "lose"}
+    ),
+    GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST: frozenset({"win", "lose"}),
+    GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED: frozenset({"end"}),
+}
+
 
 SUPPORTED_FORMAT_VERSIONS = ("1.0",)
 
@@ -643,9 +659,15 @@ class ScenarioLoader:
         self._parse_connections(raw.get("connections", []), graph, mapper)
         players = self._parse_players(raw.get("players", []), mapper)
         raw_end_conditions = raw.get("game_end_conditions", {})
-        win_conds = self._parse_end_conditions(raw_end_conditions.get("win", []), mapper)
-        lose_conds = self._parse_end_conditions(raw_end_conditions.get("lose", []), mapper)
-        end_conds = self._parse_end_conditions(raw_end_conditions.get("end", []), mapper)
+        win_conds = self._parse_end_conditions(
+            raw_end_conditions.get("win", []), mapper, section="win"
+        )
+        lose_conds = self._parse_end_conditions(
+            raw_end_conditions.get("lose", []), mapper, section="lose"
+        )
+        end_conds = self._parse_end_conditions(
+            raw_end_conditions.get("end", []), mapper, section="end"
+        )
         initial_flags = tuple(raw.get("initial_flags", []))
         disabled_tools = self._parse_disabled_tools(raw.get("disabled_tools"))
         scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
@@ -3361,6 +3383,8 @@ class ScenarioLoader:
         self,
         raw: Any,
         mapper: ScenarioIdMapper,
+        *,
+        section: str,
     ) -> List[GameEndCondition]:
         if not raw:
             return []
@@ -3368,6 +3392,21 @@ class ScenarioLoader:
         conditions: List[GameEndCondition] = []
         for index, item in enumerate(items):
             ctype = GameEndConditionTypeEnum[item["type"]]
+            allowed_sections = _GAME_END_CONDITION_ALLOWED_SECTIONS.get(ctype)
+            if allowed_sections is None:
+                raise ScenarioLoadError(
+                    f"game_end_conditions の条件型 {ctype.value} は置き場所が"
+                    "未分類です"
+                )
+            if section not in allowed_sections:
+                allowed = " / ".join(
+                    name for name in ("win", "lose", "end")
+                    if name in allowed_sections
+                )
+                raise ScenarioLoadError(
+                    f"game_end_conditions.{section} に {ctype.value} は置けません。"
+                    f"{allowed} に置いてください [index={index}]"
+                )
             self._validate_end_condition_required_fields(item, ctype, index=index)
             target_spot = None
             if "target_spot" in item:

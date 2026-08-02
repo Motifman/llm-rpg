@@ -18,6 +18,7 @@ from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnu
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+    _GAME_END_CONDITION_ALLOWED_SECTIONS,
     ScenarioLoadError,
     ScenarioLoader,
 )
@@ -937,6 +938,43 @@ class TestNeutralEndAndNeedsLoading:
 
         with pytest.raises(ScenarioLoadError, match="needs must be an object"):
             ScenarioLoader().load_from_dict(raw)
+
+    @pytest.mark.parametrize("section", ["win", "lose"])
+    def test_neutral_condition_is_rejected_from_win_and_lose(
+        self, section: str
+    ) -> None:
+        """混在する個人結果へ勝敗ラベルを付けないよう、中立条件はendだけに置く。"""
+        raw = _minimal_scenario()
+        raw["game_end_conditions"][section] = [
+            {"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}
+        ]
+
+        with pytest.raises(ScenarioLoadError, match=f"{section}.*end"):
+            ScenarioLoader().load_from_dict(raw)
+
+    @pytest.mark.parametrize(
+        "condition",
+        [
+            {"type": "FLAG_SET", "target_flag": "escaped"},
+            {"type": "TICK_LIMIT", "tick_limit": 10},
+        ],
+    )
+    def test_win_loss_condition_is_rejected_from_neutral_end(
+        self, condition: dict
+    ) -> None:
+        """勝敗を表す通常条件をendへ置いて、成立時の勝敗ラベルを消せない。"""
+        raw = _minimal_scenario()
+        raw["game_end_conditions"]["end"] = [condition]
+
+        with pytest.raises(ScenarioLoadError, match="end.*win.*lose"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_every_end_condition_type_has_allowed_sections(self) -> None:
+        """終了条件enumを増やしたら、置ける配列を明示するまで読み込みを許さない。"""
+        assert set(_GAME_END_CONDITION_ALLOWED_SECTIONS) == set(
+            GameEndConditionTypeEnum
+        )
+        assert all(_GAME_END_CONDITION_ALLOWED_SECTIONS.values())
 
 
 class TestScenarioLoaderHospital:
